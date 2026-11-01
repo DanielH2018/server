@@ -1331,6 +1331,34 @@ steps are:
    step 5 as a `manual` unit, so nothing else starts it. On a host with no `docker-ce` it
    installs the pinned versions, holds them, and starts `homelab-compose.service`, which
    failed in step 5 for want of an engine.
+7. On a host whose package ships the `integrity-scans` timers, write the component's
+   one-time state, each piece behind a guard that reads it first:
+    - `rkhunter --propupd`, when `/var/lib/rkhunter/db/rkhunter.dat` is missing;
+    - `systemctl mask --now dailyaidecheck.timer`, when `systemctl is-enabled` does not
+      print `masked`. The aide package's own timer would run a second, nightly full scan.
+      The mask comes before `aideinit`, so a failed init still leaves the timer masked;
+    - `aideinit -y`, when `/var/lib/aide/aide.db` is missing. It runs for over an hour on
+      the Pi.
+
+   The step runs last, so both baselines record every package the earlier steps installed.
+   The package does not carry these as a first-run oneshot (#6674). A oneshot would
+   rebaseline any host whose database went missing, so a deleted `aide.db` would become a
+   fresh, trusted one instead of a DOWN push from the weekly check.
+
+   A rerun of the script on a live host meets the same case, for example when the operator
+   reruns it to recreate an age key. The script cannot tell a first install from a lost
+   database by the database alone, so it also reads the logs a baseline leaves behind. It
+   refuses `rkhunter --propupd` when `/var/log/rkhunter.log` or `rkhunter.log.1` exists, and
+   it refuses `aideinit` when `/var/log/aide/aideinit.log` exists. The refusal names the log
+   it found. After the operator has inspected the host, `--rebaseline` writes the new
+   baseline.
+
+   Each init writes its log while it runs, so a first init that is interrupted or fails
+   leaves a log and no database. The script therefore writes a marker,
+   `/var/lib/homelab/bootstrap/rkhunter-baseline.pending` or `aide-baseline.pending`, before
+   it starts each init, and removes it after the init succeeds. When the marker exists, the
+   log is the script's own unfinished first init, so a rerun resumes the init rather than
+   refusing it.
 
 `--until <step>` stops after a step, so a runbook can restore data before step 5 starts any
 service. The operator then adds the printed public key as a recipient (**operator-only**)
@@ -1357,7 +1385,11 @@ for a wrong hostname, a missing host var and a missing key.
    hold client private keys, so this step is **operator-only**.
 6. Run `sudo bootstrap-host.sh daniel-pi`, which installs the package and starts the Compose
    project. The package also installs pi-peer-backup's forced-command wrapper and
-   authorized key (H7.4).
+   authorized key (H7.4). The script's step 7 then writes the first rkhunter and AIDE
+   baselines and masks `dailyaidecheck.timer`, which takes over an hour. The component
+   leaves that state to bootstrap rather than carrying it (#6674). Afterwards
+   `/var/lib/aide/aide.db` and `/var/lib/rkhunter/db/rkhunter.dat` exist, and
+   `systemctl is-enabled dailyaidecheck.timer` prints `masked`.
 7. If step 3 created a key, the operator adds it as a recipient **without removing the old
    one** (**operator-only**). The old key leaves the recipient list only after the rebuild
    is accepted.

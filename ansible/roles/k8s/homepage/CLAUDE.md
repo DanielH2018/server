@@ -92,17 +92,23 @@ that bite from a config edit alone.
   a render — check both files when a group appears in the wrong place or a column count has no
   effect.
 - **`fields:` picks which blocks a widget renders, and an unknown name is dropped silently.**
-  The valid names are upstream's, not the labels the tile displays, and three tiles take their
+  The valid names are upstream's, not the labels the tile displays, and some tiles take their
   blocks from somewhere other than `fields:` — the per-widget shapes are on the docs page.
 - **A tile's `href` comes from the entry's `hostname`** through `homepage_href`. The tiles
   stay hand-placed, because their order is measured layout.
 - **A block's HEADING cannot be changed in config — it is renamed in CSS.** `block.jsx` renders
   `t(label)`, an i18n lookup against a translation file baked into the image, and `fields:`
   selects which blocks render rather than what they are called. `custom.css.j2` collapses the
-  original text and supplies the replacement as an `::after` `content`, for Uptime-Kuma,
+  original text and supplies the replacement as an `::after` `content`, for qBittorrent,
   Speedtest, Karakeep and UPS. Tiles are matched by `href` so a reorder cannot mislabel one; the
   block index within a tile is positional and must agree with that widget's `fields:` order,
-  ENFORCED by `ansible/tests/services/test_homepage_block_label_overrides.py`.
+  ENFORCED by `ansible/tests/services/test_homepage_block_label_overrides.py`. A widget that
+  takes a `label:` per block, `customapi` or `prometheusmetric`, names its blocks in config and
+  needs no rename; the Alertmanager tile is one.
+- **The Alertmanager tile's `href` is hand-written.** The observability entry's `hostname` is
+  `grafana`, and `alertmanager.local.<domain>` is a second route behind Authelia `two_factor`
+  (M6 B-4). Its three blocks count firing critical and warning alerts without `shadow="true"`
+  or `drill="true"`, the two the routing tree blackholes, and the Watchdog.
 - **The Longhorn widget is configured across TWO files, and the wrong half is silent.**
   `providers.longhorn.url` in `templates/config/settings.yaml.j2` holds the connection;
   `templates/config/widgets.yaml.j2` holds only the display options. A `url:` written beside

@@ -69,6 +69,12 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # its bridge row. A7's token PR retires the key a week after Cutover-b and deletes this
         # entry with it.
         "monitor_bridge_k8s_workloads_push_token",
+        # M6 batch B5's Cutover-1a deleted the Daniel Pi SD Health and Daniel Pi Recovery tiles,
+        # and Cutover-2 drops the Pi package's two pushes. The Pi's host SOPS file and the
+        # package's `credentials:` keep both keys until B5's token PR, which retires them a week
+        # after Cutover-1b and deletes these two entries with them.
+        "pi_sd_health_push_token",
+        "pi_recovery_push_token",
         # M6 batch B1's Cutover-1a deleted the k3s Longhorn Backup, Off-box etcd Snapshot,
         # Manifest Prune Drift, Release Staleness Drift and Live Object Drift tiles, the only
         # cluster renders of these five tokens. The k3s role's scripts push into them until

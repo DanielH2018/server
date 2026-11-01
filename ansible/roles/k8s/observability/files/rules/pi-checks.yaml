@@ -5,9 +5,9 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# SHADOW UNTIL M6's BATCH B5 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
-# each carries `shadow: "true"` and pages nobody. Severity follows the tile: "Daniel Pi SD Health"
-# carries tag-severity critical, "Daniel Pi Recovery" carries none and notifies Discord alone.
+# M6's BATCH B5 CUTOVER-1B dropped `shadow`: Alertmanager pages these rules in place of the Kuma
+# tiles that Cutover-1a deleted. Severity follows the tile: "Daniel Pi SD Health" carried
+# tag-severity critical (the rules mail), "Daniel Pi Recovery" carried none (Discord alone).
 # `service` is the host as a literal, because a node is not a workload (M3's open question 3).
 # Each pair is `<Check>Failed` and `<Check>NotReporting`, the shape M3 fixed: NotReporting reads
 # the timestamp against the deadline, falls back to absent_over_time over the same deadline, and
@@ -24,13 +24,12 @@
 groups:
   - name: pi-checks
     rules:
-      # Kuma tile "Daniel Pi SD Health".
+      # Replaces Kuma tile "Daniel Pi SD Health".
       - alert: PiSdHealthFailed
         expr: homelab_check_success{check="pi-sd-health",origin="daniel-pi"} == 0
         labels:
           severity: critical
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's SD-card health heartbeat reported a failure.
           description: >-
@@ -49,7 +48,6 @@ groups:
         labels:
           severity: critical
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's SD-card health heartbeat has stopped reporting.
           description: >-
@@ -57,13 +55,12 @@ groups:
             collector, so nothing confirms the SD card is being watched. Read
             `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-sd-health.prom.
-      # Kuma tile "Daniel Pi Recovery".
+      # Replaces Kuma tile "Daniel Pi Recovery".
       - alert: PiRecoveryFailed
         expr: homelab_check_success{check="pi-recovery-health",origin="daniel-pi"} == 0
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's container-recovery heartbeat found a container not running.
           description: >-
@@ -82,7 +79,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's container-recovery heartbeat has stopped reporting.
           description: >-

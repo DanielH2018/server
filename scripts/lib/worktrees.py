@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib import _claude_worktree  # noqa: F401
 from lib.cli_help import warn
-from lib.git import git, git_dirty, git_stdout
+from lib.git import git, git_dirty, git_stdout, merge_tree
 from lib.repo_paths import REPO
 from claude_worktree import (
     FOREIGN_UID,
@@ -331,7 +331,7 @@ def _compute_local_layer(
         return None, False
     # Exit 1 is a conflict, a settled "no verdict" that must read as not merged. Any other
     # non-zero exit is a failure, such as a git too old for --write-tree (added in 2.38).
-    merged_tree = git("merge-tree", "--write-tree", base, head, cwd=repo, check=False)
+    merged_tree = merge_tree(base, head, cwd=repo)
     if merged_tree.returncode == 0 and merge_tree_says_contained(
         merged_tree.stdout, master_tree.stdout
     ):

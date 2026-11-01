@@ -23,7 +23,7 @@ tests:
       - eval_time: 30m
         alertname: PiSdHealthNotReporting
         exp_alerts:
-          - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+          - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
               summary: daniel-pi's SD-card health heartbeat has stopped reporting.
               description: >-
@@ -37,7 +37,7 @@ tests:
       - eval_time: 30m
         alertname: PiRecoveryNotReporting
         exp_alerts:
-          - exp_labels: {check: pi-recovery-health, origin: daniel-pi, severity: warning, service: daniel-pi, shadow: "true"}
+          - exp_labels: {check: pi-recovery-health, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
               summary: daniel-pi's container-recovery heartbeat has stopped reporting.
               description: >-
@@ -66,7 +66,7 @@ tests:
       - eval_time: 4m
         alertname: PiSdHealthFailed
         exp_alerts:
-          - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+          - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
               summary: daniel-pi's SD-card health heartbeat reported a failure.
               description: >-
@@ -81,7 +81,7 @@ tests:
       - eval_time: 4m
         alertname: PiRecoveryFailed
         exp_alerts:
-          - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi, shadow: "true"}
+          - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
               summary: daniel-pi's container-recovery heartbeat found a container not running.
               description: >-
@@ -107,7 +107,7 @@ tests:
       - eval_time: 16m
         alertname: PiSdHealthNotReporting
         exp_alerts:
-          - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+          - exp_labels: {check: pi-sd-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
               summary: daniel-pi's SD-card health heartbeat has stopped reporting.
               description: >-
@@ -121,7 +121,7 @@ tests:
       - eval_time: 16m
         alertname: PiRecoveryNotReporting
         exp_alerts:
-          - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi, shadow: "true"}
+          - exp_labels: {check: pi-recovery-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
             exp_annotations:
               summary: daniel-pi's container-recovery heartbeat has stopped reporting.
               description: >-
@@ -165,7 +165,7 @@ tests:
       - eval_time: 30m
         alertname: PiSdHealthNotReporting
         exp_alerts:
-          - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi, shadow: "true"}
+          - exp_labels: {check: pi-sd-health, origin: daniel-pi, severity: critical, service: daniel-pi}
             exp_annotations:
               summary: daniel-pi's SD-card health heartbeat has stopped reporting.
               description: >-
@@ -175,14 +175,19 @@ tests:
                 /var/lib/node-exporter-textfile/pi-sd-health.prom.
 
   # The exporter is down from minute 2: `up` reads 0 and the series is gone, as in the control
-  # above. The bridge's `targets` check pages a dead exporter, so the `unless` clause keeps both
-  # NotReporting rules quiet past the point the control fires.
+  # above. PiHostDown pages a dead exporter, so the `unless` clause keeps both NotReporting rules
+  # quiet past the point the control fires. Both Failed rules read a verdict of 0 that goes stale
+  # with the scrape, so they too leave a dead Pi to PiHostDown (M6 batch B5 needs no inhibit).
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
         values: '0+60x1 stale'
       - series: 'homelab_check_last_run_timestamp_seconds{check="pi-recovery-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
         values: '0+60x1 stale'
+      - series: 'homelab_check_success{check="pi-sd-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x1 stale'
+      - series: 'homelab_check_success{check="pi-recovery-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x1 stale'
       - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
         values: '1x1 0x40'
     alert_rule_test:
@@ -191,6 +196,12 @@ tests:
         exp_alerts: []
       - eval_time: 30m
         alertname: PiRecoveryNotReporting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: PiSdHealthFailed
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: PiRecoveryFailed
         exp_alerts: []
 
   # A short gap: stale samples between fresh timestamps, as a node-exporter roll leaves. A bare
