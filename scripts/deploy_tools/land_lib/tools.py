@@ -353,7 +353,7 @@ def await_ci_verdict(
     reaches the dropped-push grace, so the merge loop's per-poll call skips the lookup.
     """
     authenticated = bool(token()) if timeout_s else True
-    interval = await_ci.poll_interval(20, authenticated)
+    interval = await_ci.poll_interval(20, authenticated, timeout_s)
     try:
         return CiVerdict(
             *wait(sha, timeout_s, interval, walk_descendants=authenticated)

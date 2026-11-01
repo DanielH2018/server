@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-01 13:18 UTC
-generated_sha: 25eb772c0e
+generated_at: 2026-11-01 18:17 UTC
+generated_sha: d9b826cb1f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -31,10 +31,10 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
 | [#6735](https://github.com/DanielH2018/server/issues/6735) | medium | gap | backup-observability | Remove the leaked eval-run textfile on daniel-server before HostCheckOverdue pages on 2026-11-01 | 2026-10-31 | 0 | - | ✓ |
 | [#6750](https://github.com/DanielH2018/server/issues/6750) | medium | gap | backup-observability | M6 B9: re-read the Pi's integrity-scan textfiles after their first packaged runs | 2026-10-31 | 0 | - | ✓ |
-| [#6764](https://github.com/DanielH2018/server/issues/6764) | medium | gap | cicd | systemd-run --user fails with a bus permission error inside a Remote Control session | 2026-10-31 | 0 | - | ✓ |
+| [#6764](https://github.com/DanielH2018/server/issues/6764) | medium | gap | cicd | systemd-run --user fails with a bus permission error inside a Remote Control session | 2026-10-31 | 0 | worktree-fanout-orchestrator-1101b | ✓ |
 | [#6795](https://github.com/DanielH2018/server/issues/6795) | medium | gap | backup-observability | M6 plan: B5 Cutover-2 and the monitor-bridge apply are not order-free | 2026-10-31 | 0 | - | - |
-| [#6831](https://github.com/DanielH2018/server/issues/6831) | medium | gap | cicd | initial_setup reads the claude_code role's defaults, which blocks #6773's move | 2026-11-01 | 0 | - | ✓ |
 | [#6846](https://github.com/DanielH2018/server/issues/6846) | medium | gap | backup-observability | The monthly etcd restore drill fails: k3s v1.37.1 rejects the scratch server's loopback advertise address | 2026-11-01 | 0 | - | ✓ |
+| [#6861](https://github.com/DanielH2018/server/issues/6861) | medium | gap | backup-observability | Triage poller in shadow mode queues about 21 episodes a day against a cap of 6, so arming it now spends the cap on warnings | 2026-11-01 | 0 | - | - |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
 | [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
@@ -65,7 +65,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6626](https://github.com/DanielH2018/server/issues/6626) | low | gap | backup-observability | No rule pages a scrape target that flaps without holding down for 10 minutes after A3's Cutover-a | 2026-10-30 | 0 | - | ✓ |
 | [#6643](https://github.com/DanielH2018/server/issues/6643) | low | improvement | security | Retire daniel-server's user-home age key once no Ansible apply runs there | 2026-10-30 | 0 | - | ✓ |
 | [#6655](https://github.com/DanielH2018/server/issues/6655) | low | improvement | backup-observability | M6 A3: retire the three scrape and log-shipper push tokens a week after the cutover | 2026-10-30 | 0 | - | ✓ |
-| [#6657](https://github.com/DanielH2018/server/issues/6657) | low | improvement | container | Jellyfin takes 5-8s per MKV font attachment at playback start | 2026-10-30 | 0 | worktree-fanout-orchestrator-1101b | ✓ |
 | [#6662](https://github.com/DanielH2018/server/issues/6662) | low | improvement | container | Choose how jellyfin pre-extracts MKV font attachments so first playback does not wait 5-8s | 2026-10-30 | 0 | - | ✓ |
 | [#6663](https://github.com/DanielH2018/server/issues/6663) | low | improvement | docs | Four comments still name Kuma's retired Cluster Scrape Targets tile as a job's pager | 2026-10-30 | 0 | - | - |
 | [#6681](https://github.com/DanielH2018/server/issues/6681) | low | improvement | backup-observability | M6 A4: retire the five edge push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
@@ -75,17 +74,14 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6702](https://github.com/DanielH2018/server/issues/6702) | low | improvement | backup-observability | M6 A5: retire the five storage push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
 | [#6705](https://github.com/DanielH2018/server/issues/6705) | low | improvement | docs | Reword comments that still name monitor-bridge's retired disk, memory, temperature and UPS checks | 2026-10-31 | 0 | - | - |
 | [#6710](https://github.com/DanielH2018/server/issues/6710) | low | improvement | backup-observability | M6 A1: retire the four host push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6714](https://github.com/DanielH2018/server/issues/6714) | low | improvement | backup-observability | Update comments and docstrings that name objects M6 batch B8 deleted | 2026-10-31 | 0 | worktree-fanout-orchestrator-1101b | - |
 | [#6720](https://github.com/DanielH2018/server/issues/6720) | low | improvement | backup-observability | M6 B8: retire the Pi Pressure push token a week after the cutover | 2026-10-31 | 0 | - | ✓ |
 | [#6741](https://github.com/DanielH2018/server/issues/6741) | low | improvement | security | Move add-secret's generated-value command to sops set --value-stdin | 2026-10-31 | 0 | - | ✓ |
 | [#6751](https://github.com/DanielH2018/server/issues/6751) | low | gap | docs | M6 B9 plan row names an initial_setup apply for the Pi, whose scans are packaged | 2026-10-31 | 0 | - | ✓ |
 | [#6754](https://github.com/DanielH2018/server/issues/6754) | low | improvement | docs | Reword four comments that cite the deleted LOG_ERROR env keys | 2026-10-31 | 0 | - | - |
-| [#6758](https://github.com/DanielH2018/server/issues/6758) | low | gap | cicd | Stop cc-wait fanout-headroom reporting room on a host a launch filled seconds earlier | 2026-10-31 | 0 | worktree-fanout-orchestrator-1101b | ✓ |
 | [#6759](https://github.com/DanielH2018/server/issues/6759) | low | improvement | backup-observability | M6 A7: retire the workload log errors push token a week after the cutover | 2026-10-31 | 0 | - | ✓ |
 | [#6762](https://github.com/DanielH2018/server/issues/6762) | low | improvement | cicd | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings | 2026-10-31 | 0 | - | ✓ |
 | [#6763](https://github.com/DanielH2018/server/issues/6763) | low | improvement | cicd | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands | 2026-10-31 | 0 | - | ✓ |
 | [#6769](https://github.com/DanielH2018/server/issues/6769) | low | improvement | cicd | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week | 2026-10-31 | 0 | - | ✓ |
-| [#6773](https://github.com/DanielH2018/server/issues/6773) | low | improvement | cicd | Move the emptied claude_code role's templates, files and defaults into hosts/components/claude-code | 2026-10-31 | 0 | worktree-fanout-orchestrator-1101b | ✓ |
 | [#6780](https://github.com/DanielH2018/server/issues/6780) | low | improvement | docs | Three docs and comments point at ufw history network.yml no longer holds | 2026-10-31 | 0 | - | ✓ |
 | [#6792](https://github.com/DanielH2018/server/issues/6792) | low | improvement | backup-observability | Remove the B7 pods' stale Kuma caller entries and comments from the inventory | 2026-10-31 | 0 | - | - |
 | [#6796](https://github.com/DanielH2018/server/issues/6796) | low | improvement | backup-observability | M6 B3: retire the GitHub ruleset drift and interaction limit push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
@@ -96,6 +92,10 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6821](https://github.com/DanielH2018/server/issues/6821) | low | gap | docs | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 | 2026-11-01 | 0 | - | ✓ |
 | [#6837](https://github.com/DanielH2018/server/issues/6837) | low | improvement | cicd | The claude_agents filter plugin has no caller once initial_setup carries its own agent list | 2026-11-01 | 0 | - | ✓ |
 | [#6845](https://github.com/DanielH2018/server/issues/6845) | low | improvement | docs | Update prometheus.yaml.j2 comments that name objects M6 batch B8 deleted | 2026-11-01 | 0 | - | ✓ |
+| [#6855](https://github.com/DanielH2018/server/issues/6855) | low | improvement | cicd | Drop the three deleted claude_code task files from the lander's approval list | 2026-11-01 | 0 | - | ✓ |
+| [#6860](https://github.com/DanielH2018/server/issues/6860) | low | improvement | backup-observability | M6 B5: retire the two Pi heartbeat push tokens a week after the cutover | 2026-11-01 | 0 | - | ✓ |
+| [#6862](https://github.com/DanielH2018/server/issues/6862) | low | gap | backup-observability | M6 Kuma retirement does not cover the triage poller's Kuma input | 2026-11-01 | 0 | - | - |
+| [#6868](https://github.com/DanielH2018/server/issues/6868) | low | gap | - | claude-rc.service running as the operator gives sessions no user-bus environment | 2026-11-01 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -125,6 +125,7 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | 2026-11-08 | withheld | [#6762](https://github.com/DanielH2018/server/issues/6762) | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings |
 | 2026-11-08 | withheld | [#6763](https://github.com/DanielH2018/server/issues/6763) | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands |
 | 2026-11-08 | withheld | [#6811](https://github.com/DanielH2018/server/issues/6811) | M6 B1: retire the five k3s-cron push tokens a week after the cutover |
+| 2026-11-08 | withheld | [#6860](https://github.com/DanielH2018/server/issues/6860) | M6 B5: retire the two Pi heartbeat push tokens a week after the cutover |
 | 2026-11-10 | withheld | [#3778](https://github.com/DanielH2018/server/issues/3778) | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it |
 | 2026-11-10 | withheld | [#3865](https://github.com/DanielH2018/server/issues/3865) | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap |
 | 2026-11-12 | withheld | [#4660](https://github.com/DanielH2018/server/issues/4660) | Workflow subagent run length has no measured outcome, so their cap stays undecided |
@@ -210,6 +211,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2807](https://github.com/DanielH2018/server/issues/2807) | accepted | The Pi's four Docker services carry 5,374 lines of Docker platform; consider native systemd units | Operator decision 2026-09-28: keep Docker on the Pi. The independent Compose-twin comment cleanup moved to #2819. |
 | [#2863](https://github.com/DanielH2018/server/issues/2863) | refuted | fake_remux: fold the 20-minute reconcile into the daily scan; keep the mkv repair at */15 | On an empty ledger, reconcile_once (fake_remux_replace.py) makes one Sonarr queue call and plans no searches, so the 20-minute cron costs almost nothing when idle. When a grab is in flight, that cadence is what confirms it before the fake is deleted, and the shared lock and Kuma max-ages are sized from it. Folding it into the daily scan saves one cron entry and turns each replacement into a multi-day wait. |
 | [#3277](https://github.com/DanielH2018/server/issues/3277) | accepted | Pin the probe alpine and exportarr images once in group_vars | Operator decision 2026-10-03, declined with evidence in PR #3309: a group_vars pin goes through Renovate's manual rule and the deployer's forward-only broad plane, so its auto-deployed consumers would lose per-service rollback. The duplicate pins stay per role. |
+| [#6657](https://github.com/DanielH2018/server/issues/6657) | accepted | Jellyfin takes 5-8s per MKV font attachment at playback start | Operator decision 2026-11-01: accept the one-time cost. Jellyfin v10.11.11 and master have no scan-time attachment extraction; each font-heavy file pays 5-8s once, on its first play, because about 40 per-font ffmpeg runs serialize on one lock per media source, and the extracted fonts persist on the jellyfin-config volume. |
 
 ### docs
 
