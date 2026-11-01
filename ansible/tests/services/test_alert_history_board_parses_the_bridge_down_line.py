@@ -3,10 +3,9 @@
 
 The board reconstructs per-check DOWN counts from `{container="monitor-bridge"}` with a parser
 stage. A stage that expects a bracketed stamp matches nothing against the unstamped line
-`bridge.common.log` prints, so both per-check panels would show one unlabelled series. The same
-reader-side break applies to `probe.py alerts`. `test_monitor_bridge_down_line_shape.py` guards
-that reader; this guards the board, by pulling the regexp out of the committed JSON and feeding
-it the real emitter's output.
+`bridge.common.log` prints, so both per-check panels would show one unlabelled series. This
+guards the board, by pulling the regexp out of the committed JSON and feeding it the real
+emitter's output.
 
 Python `re` stands in for Loki's RE2: the expression uses only a `(?P<name>)` group, a class,
 `?`, `+` and `\\S`, which the two engines read alike.

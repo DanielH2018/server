@@ -46,7 +46,7 @@ from diagnostics.probe_lib.longhorn import (
     run_b2_longhorn,
 )
 from diagnostics.probe_lib.metrics import run_query
-from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
+from diagnostics.probe_lib.monitors import run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
@@ -69,23 +69,16 @@ SUBCOMMANDS = [
     ),
     (
         "monitors",
-        "Kuma down-monitors rollup, firing ingress alerts and active Alertmanager silences "
-        "(exit 0 = all up)",
+        "firing alerts from ALERTS by severity and service, Kuma tiles not up, and active "
+        "Alertmanager silences (exit 0 = no paging alert and no Kuma tile down)",
         "monitors",
         run_monitors,
-    ),
-    (
-        "kuma-drift",
-        "declared monitors vs live ones — catches a tile that is gone rather than down, "
-        "which `monitors` counts as green (exit 0 = no drift)",
-        "monitors",
-        run_kuma_drift,
     ),
     ("loki-labels", "Loki label names", None, None),
     ("loki-query", "Loki range query", "metrics", run_query),
     (
         "alerts",
-        "monitor-bridge DOWN alert history, collapsed to episodes (Loki)",
+        "firing-alert history from Prometheus' ALERTS, collapsed to episodes",
         "alerts",
         run_alerts,
     ),
@@ -237,7 +230,6 @@ VERDICT_SUBCOMMANDS = frozenset(
     {
         "targets",
         "monitors",
-        "kuma-drift",
         "alerts",
         "b2-longhorn",
         "b2-budget",

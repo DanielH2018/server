@@ -18,7 +18,7 @@ Importing ``ansible.plugins.filter.core`` costs 100-365 ms (``python -X importti
 and cold runs on 2026-10-09), so the module has two tiers. Its TOP LEVEL is the
 light tier: it loads no ansible-core, and carries ``ansible_bool``, a copy of ``to_bool`` for
 ``lib.k8s_context``. That module cannot pay the import, for the reason its own ``DECIDED:``
-marker gives: ``probe_lib/monitors.py`` reaches it and ``probe.py monitors`` loads no
+marker gives: ``probe_lib/health.py`` reaches it and ``probe.py health`` loads no
 ansible-core. ``register_ansible_filters`` is the heavy tier, and imports ansible-core and the
 repo's filter plugins when it is first called. ``test_the_light_tier_loads_no_ansible_core``
 pins the split.

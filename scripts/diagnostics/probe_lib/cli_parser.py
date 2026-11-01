@@ -151,31 +151,11 @@ def _build_parser():
     sub.add_parser(
         "monitors",
         **_verdict_help(
-            "Kuma down-monitors rollup and firing ingress alerts",
-            "all up",
-            "a monitor is not up or an ingress alert fires",
+            "firing alerts from ALERTS by severity and service, Kuma tiles not up, and "
+            "active Alertmanager silences",
+            "no paging alert fires and no Kuma tile is down",
+            "a critical or warning alert fires, or a Kuma tile is not up",
         ),
-    )
-    kd = sub.add_parser(
-        "kuma-drift",
-        **_verdict_help(
-            "declared monitors vs live ones — catches a tile that is gone rather "
-            "than down, which `monitors` counts as green",
-            "no drift",
-            "drift",
-        ),
-    )
-    _flag(
-        kd,
-        "--no-secrets",
-        "skip the SOPS reads that resolve why a gated monitor is absent; those gates "
-        "report as unverified instead of gated/ungated",
-    )
-    _flag(
-        kd,
-        "--pi",
-        "scope to daniel-pi's declared monitors (by their static-monitors.yaml.j2 key) "
-        "instead of the whole cluster's",
     )
     ll = sub.add_parser("loki-labels", help="Loki label names")
     ll.add_argument(
@@ -226,31 +206,34 @@ def _build_parser():
     al = sub.add_parser(
         "alerts",
         **_verdict_help(
-            "monitor-bridge DOWN alert history, collapsed to episodes (Loki)",
+            "firing-alert history from Prometheus' ALERTS, collapsed to episodes",
             "the history was read, whatever it holds",
-            "never, because a DOWN episode is history rather than a failure",
+            "never, because a firing episode is history rather than a failure",
         ),
     )
     al.add_argument(
-        "--days", type=float, default=7, help="lookback window in days (default 7)"
+        "--days",
+        type=float,
+        default=7,
+        help="lookback window in days (default 7; Prometheus keeps 30)",
     )
-    al.add_argument("--check", help="filter to check names containing this substring")
+    al.add_argument(
+        "--check", help="filter to alerts whose name or service contains this substring"
+    )
     _flag(
         al,
         "--pi",
-        "scope to alerts attributable to daniel-pi: the syslog stream's own host token, "
-        "or monitor-bridge's pi_pressure check (the only one that watches the Pi remotely)",
+        "scope to alerts attributable to daniel-pi: a `job` among the Pi's scrape jobs in "
+        "observability's prometheus.yaml.j2 (the k8s_pi_client_ip targets and "
+        "blackbox-pi-ports), or `service=daniel-pi`",
     )
     al.add_argument(
         "--gap-min",
         type=float,
-        help="minutes of silence that splits one episode from the next. Left unset, each "
-        "check gets its own threshold from its own sample cadence — a fixed 30 matched the "
-        "*/30 crons exactly and split every continuous outage into one episode per tick",
+        help="minutes without a firing sample that split one episode from the next "
+        "(default two query steps)",
     )
-    al.add_argument("--limit", type=int, default=5000)
-    _flag(al, "--raw", "print the matching log lines, not episodes")
-    _flag(al, "--json", "print episodes as JSON (epoch-ns times)")
+    _flag(al, "--json", "print episodes as JSON (epoch-second times)")
     sub.add_parser("scrutiny", help="disk SMART summary")
     b2l = sub.add_parser(
         "b2-longhorn",

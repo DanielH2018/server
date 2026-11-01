@@ -263,7 +263,7 @@ Three findings the dashboards carry from this:
 - The overview board's agent tile is a ratio, `sum(up{job=~"crowdsec.*"}) / count(...)`, so 1
   means every agent reports whatever the fleet size. It plotted a raw count against a green step
   at 10, sized by the upstream for ten machines, so it read red on a healthy fleet of three and
-  could never go green (#1709). The ratio has one blind spot, the same one `kuma-drift` names: a
+  could never go green (#1709). The ratio has one blind spot: a
   job that disappears from service discovery leaves the survivors at N/N, so the tile answers "is
   an agent down," not "is an agent missing."
 - `Bucket pour time` on the per-machine board reads `{job="crowdsec"}` — the engine's AppSec pours

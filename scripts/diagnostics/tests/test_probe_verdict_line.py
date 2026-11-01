@@ -35,7 +35,6 @@ PI_SERVICE = "wg-easy"
 VERDICT_SUBCOMMANDS = (
     ("monitors",),
     ("targets",),
-    ("kuma-drift",),
     ("health",),
     ("pi",),
     ("vip-placement",),
@@ -113,33 +112,27 @@ def test_the_probe_verdicts_for_ok_fail_and_unreadable_are_distinct():
 # ── each subcommand's last line ─────────────────────────────────────────────────────────────
 
 
-def _monitor_status(status):
-    return json.dumps(
-        {
-            "status": "success",
-            "data": {
-                "resultType": "vector",
-                "result": [
-                    {"metric": {"monitor_name": "Jellyfin"}, "value": [0, status]}
-                ],
-            },
-        }
-    )
+def _alerts(*alertnames):
+    result = [
+        {"metric": {"alertname": n, "service": "jellyfin", "severity": "critical"}}
+        for n in alertnames
+    ]
+    return json.dumps({"status": "success", "data": {"result": result}})
 
 
-@pytest.mark.parametrize("status, expected_rc", [("1", OK), ("0", FAILED)])
-def test_monitors_ends_with_its_verdict(monkeypatch, capsys, status, expected_rc):
+@pytest.mark.parametrize(
+    "firing, expected_rc",
+    [(("Watchdog",), OK), (("Watchdog", "IngressProbeFailed"), FAILED)],
+)
+def test_monitors_ends_with_its_verdict(monkeypatch, capsys, firing, expected_rc):
     def run(argv, *args, **kwargs):
         # `k8s_endpoint` reads the domain from inventory, so `monitors` needs no age key.
         assert argv[0] != "sops", f"monitors decrypted: {argv}"
         if "ALERTS" in argv[-1]:
-            # No ingress alert fires, so Kuma's status alone decides the verdict.
-            return _completed(
-                argv, json.dumps({"status": "success", "data": {"result": []}})
-            )
+            return _completed(argv, _alerts(*firing))
         if argv[-1].endswith("/api/v2/silences"):
             return _completed(argv, "[]")  # no active silence
-        return _completed(argv, _monitor_status(status))
+        return _completed(argv, _alerts())  # every Kuma tile up
 
     monkeypatch.setattr(subprocess, "run", run)
     rc = _exit_code(lambda: probe.main(["monitors"]))

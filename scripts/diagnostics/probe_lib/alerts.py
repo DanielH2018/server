@@ -1,19 +1,24 @@
-"""`probe.py alerts` -- DOWN history reconstructed from Loki, since Kuma keeps only current state.
+"""`probe.py alerts` -- firing-alert history, collapsed to episodes, from Prometheus' `ALERTS`.
 
-TWO streams are read. monitor-bridge's container log covers the checks it runs; the host crons
-push Kuma directly and so leave no trace there, which is why `{job="syslog"} status=down` is read
-alongside it. Reading only the first left the whole backup/drift plane with no episode anywhere.
+One `query_range` over `--days` returns a sample for every step an alert was firing. Each
+series' consecutive samples are one episode; a gap longer than the splitting gap starts the
+next. Prometheus keeps 30 days (`observability_prometheus_retention`), so a wider window
+returns nothing older.
+
+Shadow alerts are listed and marked: their batch still pages through Kuma, and this is where
+their history is read. Watchdog fires always and is left out.
 """
 
 import json
+import math
 import re
 from collections import defaultdict
 from datetime import UTC, datetime
-from statistics import median
+from urllib.parse import urlencode
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+# needs `scripts/` on sys.path; pyproject's `pythonpath` is a pytest setting. This has to sit
+# ABOVE the imports below.
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -21,289 +26,127 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # `core.<name>` for anything the tests monkeypatch -- binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
-from diagnostics.probe_lib import core
-from diagnostics.probe_lib.core import (
-    _rows_from_loki,
-    curl_argv,
-    loki_endpoint,
-    loki_query_url,
-)
+from diagnostics.probe_lib import core, pi_plane
+from diagnostics.probe_lib.core import PI_HOST, prom_endpoint
+from lib.exit_codes import PROBE_UNREADABLE
+
+QUERY = 'ALERTS{alertstate="firing",alertname!="Watchdog"}'
+# Prometheus refuses a range query over 11,000 points per series, so the step widens with
+# the window: 60s up to ~6.9 days, then whatever keeps the count under this.
+MAX_POINTS = 10_000
+MIN_STEP_S = 60
+# Two missed steps split an episode, so one skipped rule evaluation does not.
+_GAP_STEPS = 2
+
+# A Pi job is one whose static target names the Pi: the scrape jobs `pi_plane` derives, and
+# `blackbox-pi-ports`, whose targets are the Pi's published container ports (PiPortDead).
+_JOB_NAME_RE = re.compile(r"^\s*-\s*job_name:\s*(\S+)")
+_PI_PORTS_MARKER = "hostvars['daniel-pi']"
 
 
-# alert history (pure)
-# monitor-bridge is the homelab's alert brain: every INTERVAL it pushes each check's
-# state to a Kuma push monitor and logs "[<ts>] DOWN <name> - <msg> (<n> cycles)" for
-# any check that's firing. Kuma keeps only current state; Loki keeps the log lines
-# (31d retention), so the history of *what alerted, when* is these DOWN lines. This
-# collapses the every-cycle repeats into one row per firing episode.
-#
-# It is NOT the only alert path, which is why this command reads two streams. Several host
-# crons push their own Kuma monitors directly and never pass through monitor-bridge, so
-# monitor-bridge's container log contains nothing about them — it polls no Kuma state. Reading
-# only that stream would hide the backup plane's sole DOWN signal. See SYSLOG_ALERT_LOGQL
-# below for the second stream.
-ALERT_LOGQL = '{container="monitor-bridge"} |= "DOWN"'
-# "DOWN n8n - 1 active workflow(s) failed ... (2 cycles)", optionally behind a bracketed
-# stamp.
-#
-# THE STAMP IS OPTIONAL BECAUSE THE EMITTER DROPPED IT, and requiring it cost every episode.
-# `bridge.common.log` printed `[%Y-%m-%dT%H:%M:%S]` until bec8990a removed it — that stamp was
-# the container's local Chicago clock wearing an ISO face, and the runtime already stamps each
-# line. This regex still demanded it, so from 2026-09-04 the monitor-bridge stream parsed as
-# NOTHING: `alerts --days 2 --check traefik` printed "no DOWN alerts" while `--raw` over the
-# same window showed 21 traefik_latency DOWN lines (#1782). An episode view that reads as a
-# clean bill of health is the worst shape this failure could take, so the pairing is now
-# ENFORCED by ansible/tests/services/test_monitor_bridge_down_line_shape.py, which feeds
-# `bridge.common.log`'s real output through parse_down_line. The episode's time comes from
-# Loki's own nanosecond stamp either way, so nothing here needs the prefix.
-_DOWN_RE = re.compile(r"^(?:\[[^\]]+\] )?DOWN (?P<name>\S+) - (?P<msg>.*)$")
-_CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
+def step_seconds(days):
+    """The query step for a `days` window: MIN_STEP_S, widened to stay under MAX_POINTS."""
+    return max(MIN_STEP_S, math.ceil(days * 86400 / MAX_POINTS))
 
 
-def parse_down_line(line):
-    """(check_name, msg) for a monitor-bridge DOWN log line, else None.
+def range_url(base, days, now):
+    """The `query_range` URL for QUERY over the `days` before epoch `now`."""
+    params = {
+        "query": QUERY,
+        "start": f"{now - days * 86400:.0f}",
+        "end": f"{now:.0f}",
+        "step": f"{step_seconds(days)}s",
+    }
+    return f"{base}/api/v1/query_range?" + urlencode(params)
 
-    The trailing "(N cycles)" consecutive-down counter is stripped from msg.
+
+def pi_alert_jobs(text):
+    """The scrape jobs in prometheus.yaml.j2 `text` whose targets are on daniel-pi."""
+    jobs, pending = set(pi_plane.declared_pi_job_names(text)), None
+    for line in text.splitlines():
+        m = _JOB_NAME_RE.match(line)
+        if m:
+            pending = m.group(1)
+        elif _PI_PORTS_MARKER in line and "targets:" in line and pending:
+            jobs.add(pending)
+    return jobs
+
+
+def keep_series(labels, check, pi_jobs):
+    """Whether `--check` and `--pi` admit an alert series with `labels`. Pure.
+
+    `check` is a substring of the alert name or its `service`; `pi_jobs` is None without
+    `--pi`, else the Pi's scrape jobs. A Pi alert carries one of those jobs, or names the Pi
+    as its `service` (PiHostDown, the Pi's heartbeat rules).
     """
-    m = _DOWN_RE.match(line)
-    if not m:
-        return None
-    return m["name"], _CYCLES_SUFFIX_RE.sub("", m["msg"])
-
-
-# The second alert path: host crons that push Kuma directly and log through `logger`. rsyslog
-# prefixes every one of those lines, so the shape is NOT the bare "<tag>: status=down <msg>" a
-# reading of the cron scripts suggests — it is
-#   "<iso-ts> <host> <tag>: status=down <msg>"
-# and, when the push itself fails (the case where syslog is the ONLY record, since Kuma never
-# learned),
-#   "<iso-ts> <host> <tag>: push failed (status=down: <msg>)"
-# `|= "status=down"` matches only a handful of tags — longhorn-backup-health,
-# manifest-prune-check and claude-otel-health — so
-# the filter is precise, not a net that drags in unrelated syslog traffic.
-#
-# Every pusher this reads emits the `status=` token. Their lines are the fixtures in
-# scripts/diagnostics/tests/test_probe_alerts_parsing.py.
-# What stays out of reach is heartbeat EXPIRY: a push monitor also goes
-# DOWN when nothing pushes, which writes no line anywhere, so this view is a lower bound against
-# Prometheus `monitor_status` by construction.
-#
-# daniel-pi is visible here only because each Pi cron appends an rsyslog-shaped line to
-# /var/log/pi-health/, and the Pi's Grafana Alloy tails it through its `pi_health` source
-# (hosts/components/pi-compose/services/alloy/config.alloy.j2). That stream carries
-# `job="syslog"` and `machine="daniel-pi"`, rendered from `loki_streams.pi_health` in
-# ansible/inventory/group_vars/all.yml. Two facts make that necessary:
-#   1. The Pi's two crons end at `kuma_push`, and kuma-push-lib.sh calls `logger` only when
-#      the PUSH fails. The server crons that ARE visible log their verdict themselves
-#      (longhorn-backup-health, manifest-prune-check: `logger -t <tag>
-#      "status=${STATUS} ${MSG}"`).
-#   2. The Pi has no journal path to Loki: rsyslog is not installed and optimize_pi masks it
-#      deliberately, and the Pi's Alloy does not ship the journal. Alloy can read it; the
-#      container's memory is the reason it does not, as
-#      hosts/components/pi-compose/services/alloy/compose.yaml.j2 records (#1922).
-#
-# THE TIMESTAMP FORMAT IS LOAD-BEARING. `_SYSLOG_LINE_RE` below wants exactly two
-# whitespace-free tokens before the tag, which is what rsyslog's own prefix gives. The Pi
-# emits `date -Is` (one token) to match; traditional syslog format ("Aug 29 19:12:26 host")
-# is four tokens and parses as nothing. Changing either side alone silently drops every Pi
-# episode, which is why ansible/tests/setup/test_pi_health_log_line_shape.py pins the pair.
-SYSLOG_ALERT_LOGQL = '{job="syslog"} |= "status=down"'
-# crowdsec's crowdsec-jobs sidecar runs four jobs that were host crons (H2.4b, H2.4c) and
-# prints their lines in the same rsyslog shape, with the pod name as the host, so one parser
-# reads both. Its
-# own selector, because `container` and `job` share no label name to OR on. The bouncer prune
-# has no Kuma tile, so this is the only episode view of its refusals.
-POD_ALERT_LOGQL = '{container="crowdsec-jobs"} |= "status=down"'
-_SYSLOG_LINE_RE = re.compile(
-    r"^\S+\s+\S+\s+(?P<name>[A-Za-z0-9_.-]+?)(?:\[\d+\])?:\s+(?P<rest>.*status=down.*)$"
-)
-# The closing paren is OPTIONAL because rsyslog truncates a long line: longhorn-backup-health's
-# status message runs past the limit and arrives with no closing paren at all. Anchoring on
-# `\)$` would drop those lines to the raw fallback below, printing the "push failed
-# (status=down: " scaffolding as if it were the message. The `(http=… rc=…)` pair is optional
-# for the same reason in the other direction: kuma-push-lib.sh logs it, while the Pi's
-# health.log carries none. The library's `push failed transiently` line is NOT a verdict
-# record (the final line follows it, or the push lands and the cron's own `status=` line is
-# the record), so it is dropped rather than listed as an episode of its own; monitor-bridge's
-# check_swallowed_verdicts excludes it in LogQL for the same reason. The pair may be followed
-# by further `k=v` words — ` by=kuma` when Kuma itself answered the push. The Python twin,
-# setup/common's kuma_push.py, logs `http=<code>[ by=kuma]` with no rc, or `error=<class>`.
-_SYSLOG_PUSH_FAILED_RE = re.compile(
-    r"^push failed \((?:(?:http|error)=\S+(?: [a-z]+=\S+)*\) \()?status=down:\s*(?P<msg>.*?)\)?$"
-)
-_SYSLOG_TRANSIENT_RE = re.compile(r"^push failed transiently \(")
-_SYSLOG_STATUS_RE = re.compile(r"^status=down\s*(?P<msg>.*)$")
-# The rsyslog-shaped prefix's second token, e.g. "2026-09-03T13:05:06+00:00 daniel-pi
-# pi-recovery-health: ...". Verified against the Pi's real health.log (`hostname` there prints
-# "daniel-pi", matching PI_HOST) rather than assumed.
-_SYSLOG_HOST_RE = re.compile(r"^\S+\s+(?P<host>\S+)\s+")
-
-# The one monitor-bridge check that watches daniel-pi remotely (check_pi_pressure in
-# ansible/roles/k8s/monitor-bridge/files/registry.py's check list) — every other check in that
-# registry runs against the cluster, and the monitor-bridge stream carries no host field at all to
-# filter on instead.
-PI_PRESSURE_CHECK_NAME = "pi_pressure"
-
-
-def parse_syslog_down_line(line):
-    """(cron_tag, msg) for a host cron's syslog DOWN line, else None.
-
-    The tag is the episode name, matching what `--check` filters on — `manifest-prune-check`,
-    `longhorn-backup-health`. Those are machine names like monitor-bridge's own check names,
-    not Kuma display names, so one `--check` substring keeps working across both streams.
-
-    A failed push keeps its "push failed:" prefix in the message. That is the operator's cue
-    that Kuma never learned about this DOWN, so syslog is the only place it is recorded.
-    """
-    m = _SYSLOG_LINE_RE.match(line)
-    if not m:
-        return None
-    rest = m["rest"]
-    if _SYSLOG_TRANSIENT_RE.match(rest):
-        return None
-    hit = _SYSLOG_STATUS_RE.match(rest)
-    if hit:
-        return m["name"], hit["msg"].strip()
-    hit = _SYSLOG_PUSH_FAILED_RE.match(rest)
-    if hit:
-        return m["name"], f"push failed: {hit['msg'].strip()}"
-    return m["name"], rest.strip()
-
-
-# Each alert stream with the parser that reads its line shape. run_alerts queries each and
-# merges the rows: LogQL cannot OR two stream selectors that share no label name, and
-# `container` (monitor-bridge, crowdsec-jobs) and `job` (syslog) share none.
-ALERT_SOURCES = (
-    (ALERT_LOGQL, parse_down_line),
-    (SYSLOG_ALERT_LOGQL, parse_syslog_down_line),
-    (POD_ALERT_LOGQL, parse_syslog_down_line),
-)
-
-
-def is_pi_alert(logql, line, name):
-    """Whether an alert row is attributable to daniel-pi. Pure.
-
-    The syslog stream carries rsyslog's own host field; the monitor-bridge stream carries none
-    at all, since it runs in-cluster — so the one check that watches the Pi remotely is matched
-    by name instead. See PI_PRESSURE_CHECK_NAME and _SYSLOG_HOST_RE above for where each signal
-    comes from.
-    """
-    if logql == SYSLOG_ALERT_LOGQL:
-        m = _SYSLOG_HOST_RE.match(line)
-        return bool(m) and m["host"] == core.PI_HOST
-    return name == PI_PRESSURE_CHECK_NAME
-
-
-def keep_alert_row(check, pi, logql, line, name):
-    """Whether `--check`/`--pi` admit one fetched line. Pure.
-
-    ONE predicate for both views, so `--raw` and the episode view cannot filter differently:
-    `--check traefik_latency --raw` prints only traefik_latency lines.
-
-    `name` is None for a line neither parser read. Unfiltered that line still prints, which is
-    what makes `--raw` the way to see a shape the parsers have stopped matching. Under a filter
-    it cannot be attributed to a check or a host, so it is dropped.
-    """
-    if not check and not pi:
-        return True
-    if name is None:
-        return False
-    if check and check.lower() not in name.lower():
-        return False
-    if pi and not is_pi_alert(logql, line, name):
-        return False
+    if check:
+        needle = check.lower()
+        names = (labels.get("alertname", ""), labels.get("service", ""))
+        if not any(needle in n.lower() for n in names):
+            return False
+    if pi_jobs is not None:
+        return labels.get("job") in pi_jobs or labels.get("service") == PI_HOST
     return True
 
 
-# Splitting one incident into several is a CADENCE question, not a fixed-minutes one. A fixed
-# 30-minute gap against a `*/30` cron lands consecutive DOWN ticks EXACTLY on the splitting
-# boundary, so a second of cron jitter starts a new episode: one continuous outage renders as
-# many episodes, and since the list is newest-first no row carries the onset.
-#
-# So each check gets its own threshold, derived from its own samples. The median delta is the
-# check's observed cadence: robust to a duplicate log line (which a min would take as the
-# cadence) and to a few long real gaps (which a mean would inflate).
-#
-# The clamp is what makes a SPARSE check behave. A check that fires once a day has a median
-# delta of a day, and an unclamped threshold would swallow a week of separate incidents into
-# one episode. The ceiling is 90 minutes because the slowest emitter here is hourly (the
-# loki-read-route timer) — 3600s * 1.5 is exactly 5400s, so hourly runs still merge while
-# anything sparser splits.
-_GAP_CADENCE_FACTOR = 1.5
-_GAP_FLOOR_S = 120
-_GAP_CEILING_S = 5400
+def alert_episodes(result, step_s, gap_s=None):
+    """Collapse a `query_range` matrix into firing episodes, newest-ending first. Pure.
 
-
-def episode_gap_s(sample_ns, gap_s=None):
-    """Seconds of silence that split one episode from the next, for ONE check's samples.
-
-    An explicit `gap_s` (the operator's `--gap-min`) wins unchanged. Otherwise it is derived
-    from the check's own cadence, clamped to [_GAP_FLOOR_S, _GAP_CEILING_S]. `sample_ns` is
-    that check's sample times, ascending.
+    `result` is the response's `data.result`. Series that share an alert name, `service`,
+    severity and shadow flag are merged first, so an alert firing per instance or per cgroup
+    is one row rather than several identical ones. Samples within the splitting gap of each
+    other are one episode: `gap_s` when the operator pins it, else `_GAP_STEPS` query steps.
+    `samples` counts the distinct steps the alert fired at. Returns dicts {alertname, service,
+    severity, shadow, first_s, last_s, samples}.
     """
-    if gap_s is not None:
-        return gap_s
-    deltas = [b - a for a, b in zip(sample_ns, sample_ns[1:], strict=False)]
-    if not deltas:
-        return _GAP_FLOOR_S
-    cadence_s = median(deltas) / 1e9
-    return min(_GAP_CEILING_S, max(_GAP_FLOOR_S, cadence_s * _GAP_CADENCE_FACTOR))
-
-
-def alert_episodes(rows, gap_s=None):
-    """Collapse per-cycle DOWN samples into firing episodes.
-
-    `rows` is an iterable of (epoch_ns, check_name, msg). Consecutive samples for the
-    same check within the splitting gap are one episode; a longer silence (the check
-    recovered, then fired again) starts a new one. `gap_s` pins that gap for every check;
-    left None it is derived per check by episode_gap_s. Returns episode dicts
-    {name, first_ns, last_ns, cycles, msg} newest-episode-first (by last_ns). msg is
-    the latest sample's — check messages evolve as the underlying value drifts.
-    """
-    by_name = defaultdict(list)
-    for ns, name, msg in rows:
-        by_name[name].append((int(ns), msg))
+    gap = gap_s if gap_s is not None else step_s * _GAP_STEPS
+    merged = defaultdict(set)
+    for series in result:
+        labels = series.get("metric") or {}
+        key = (
+            labels.get("alertname", "?"),
+            labels.get("service", "?"),
+            labels.get("severity", "?"),
+            labels.get("shadow") == "true",
+        )
+        merged[key].update(float(t) for t, _ in series.get("values") or [])
     episodes = []
-    for name, samples in by_name.items():
-        samples.sort()
-        gap_ns = int(episode_gap_s([ns for ns, _ in samples], gap_s) * 1e9)
+    for (alertname, service, severity, shadow), times in merged.items():
         ep = None
-        for ns, msg in samples:
-            if ep is not None and ns - ep["last_ns"] <= gap_ns:
-                ep["last_ns"] = ns
-                ep["cycles"] += 1
-                ep["msg"] = msg
-            else:
-                ep = {
-                    "name": name,
-                    "first_ns": ns,
-                    "last_ns": ns,
-                    "cycles": 1,
-                    "msg": msg,
-                }
-                episodes.append(ep)
-    episodes.sort(key=lambda e: e["last_ns"], reverse=True)
+        for t in sorted(times):
+            if ep is not None and t - ep["last_s"] <= gap:
+                ep["last_s"] = t
+                ep["samples"] += 1
+                continue
+            ep = {
+                "alertname": alertname,
+                "service": service,
+                "severity": severity,
+                "shadow": shadow,
+                "first_s": t,
+                "last_s": t,
+                "samples": 1,
+            }
+            episodes.append(ep)
+    episodes.sort(key=lambda e: (e["last_s"], e["first_s"]), reverse=True)
     return episodes
 
 
-# UTC, and SAID to be UTC on every row. daniel-box runs UTC (docs/healthchecks-io-deadman.md),
-# so the journal, the raw Loki lines and every incident timestamp an operator compares against
-# are UTC. The monitor-bridge log line's own bracketed stamp stays Chicago (the container's TZ
-# env); `--raw` prints that line verbatim, and only the episode view is restamped.
-def _fmt_utc(ns):
-    return datetime.fromtimestamp(ns / 1e9, UTC).strftime("%Y-%m-%d %H:%M")
+# UTC, and said to be UTC in the header: daniel-box runs UTC, so every incident timestamp an
+# operator compares against is UTC.
+def _fmt_utc(s):
+    return datetime.fromtimestamp(s, UTC).strftime("%Y-%m-%d %H:%M")
 
 
-def _fmt_utc_end(first_ns, last_ns):
+def _fmt_utc_end(first_s, last_s):
     """The episode's end, dropping the date when it matches the start's."""
-    start, end = _fmt_utc(first_ns), _fmt_utc(last_ns)
+    start, end = _fmt_utc(first_s), _fmt_utc(last_s)
     return end[11:] if end[:10] == start[:10] else end
 
 
-def _fmt_duration(ns):
-    secs = ns / 1e9
-    if secs < 60:
-        return "1cyc"
+def _fmt_duration(secs, step_s):
+    if secs < step_s:
+        return "1 step"
     if secs < 3600:
         return f"{round(secs / 60)}m"
     if secs < 86400:
@@ -311,179 +154,59 @@ def _fmt_duration(ns):
     return f"{secs / 86400:.1f}d"
 
 
-def format_alert_episodes(episodes, days):
-    """Human view: one aligned row per episode, newest first.
+def format_alert_episodes(episodes, days, step_s):
+    """One aligned row per episode, newest first, with both ends of each. Pure.
 
-    Each row carries both ends of the episode, because the operator's question is "when did
-    this go down" and a start alone reads as the whole answer. Times are UTC. An empty result
-    renders a clear all-clear line.
+    An empty list renders an all-clear line naming the window.
     """
     if not episodes:
-        return f"no DOWN alerts in the last {days:g}d"
-    width = max(len(e["name"]) for e in episodes)
-    header = (
-        f"{len(episodes)} DOWN episode(s), last {days:g}d, times UTC "
-        "(monitor-bridge + host crons -> Kuma):"
-    )
-    lines = [header, ""]
-    for e in episodes:
-        dur = _fmt_duration(e["last_ns"] - e["first_ns"])
-        span = (
-            f"{_fmt_utc(e['first_ns'])} -> {_fmt_utc_end(e['first_ns'], e['last_ns'])}"
-        )
-        lines.append(
-            f"{span:<36} {dur:>6}  "
-            f"{e['name']:<{width}}  {e['cycles']:>3}c  {e['msg'][:88]}"
-        )
+        return f"no firing alerts in the last {days:g}d"
+    names = [f"{e['service']}/{e['alertname']}" for e in episodes]
+    width = max(len(n) for n in names)
+    lines = [
+        f"{len(episodes)} firing episode(s), last {days:g}d, times UTC, "
+        f"{step_s}s resolution (Prometheus ALERTS):",
+        "",
+    ]
+    for e, name in zip(episodes, names, strict=True):
+        span = f"{_fmt_utc(e['first_s'])} -> {_fmt_utc_end(e['first_s'], e['last_s'])}"
+        dur = _fmt_duration(e["last_s"] - e["first_s"], step_s)
+        tag = " shadow" if e["shadow"] else ""
+        lines.append(f"{span:<36} {dur:>6}  {name:<{width}}  {e['severity']}{tag}")
     return "\n".join(lines)
 
 
-def alert_source_urls(base, days, limit, now=None):
-    """The Loki URLs `alerts` fetches, one per stream in ALERT_SOURCES.
-
-    `now` is the epoch the window ends at; None reads the clock. A test passes a fixed one
-    so its fixture rows sit at a known distance from the window edge.
-
-    `direction=backward` decides WHICH END a hit `--limit` throws away, and the answer has to be
-    the oldest. Loki applies the limit in the direction it walks, so `forward` returned the
-    OLDEST `--limit` lines of the window: a window wide enough to truncate lost its most recent
-    episodes, and a narrower window over the same log showed episodes the wider one did not.
-    Nothing needed forward — alert_episodes sorts each check's samples itself and run_alerts
-    sorts the raw rows before printing them.
-    """
-    end_s = now if now is not None else datetime.now(UTC).timestamp()
-    start_s = end_s - days * 86400
-    return [
-        loki_query_url(
-            base,
-            logql,
-            limit,
-            start=int(start_s * 1e9),
-            end=int(end_s * 1e9),
-            direction="backward",
-        )
-        for logql, _ in ALERT_SOURCES
-    ]
-
-
-# Loki rejects a `limit` above its `max_entries_limit_per_query` with a 400 whose body reads
-# `max entries limit per query exceeded, limit > max_entries_limit_per_query (20000 > 5000)`.
-# The cap is read from that body rather than pinned here: nothing in this repo sets it (5000 is
-# Loki's built-in default), so a constant would be a guess that drifts the day loki-homelab's
-# configmap overrides it.
-_LOKI_CAP_RE = re.compile(r"max_entries_limit_per_query \((\d+) > (\d+)\)")
-
-
-def loki_entries_cap(body):
-    """The `max_entries_limit_per_query` an over-limit rejection names, or None for any other body."""
-    m = _LOKI_CAP_RE.search(body or "")
-    return int(m.group(2)) if m else None
-
-
-def fetch_alert_streams(base, pin, days, limit, notice_file=None, now=None):
-    """Fetch every alert stream at `limit`, clamping to Loki's cap when it rejects the limit.
-
-    Returns `(limit_used, [(logql, parser, rows), ...])`. A limit above the server cap draws a
-    400 body that is not JSON, which would die in `json.loads` with a traceback naming the
-    probe. The clamp restarts the whole
-    fetch at the cap so every later read of the limit (the truncation test, its notice) sees
-    the value the server actually applied; clamping the URL alone would fetch 5000 rows,
-    compare them against 20000, and print an all-clear. Any other non-JSON body propagates as
-    the `core.NonJsonResponse` it is, which exits 75. The clamp notice goes to `notice_file`
-    (stdout by default; stderr under `--json`, like the truncation notice, so stdout stays
-    parseable).
-    """
-    while True:
-        urls = alert_source_urls(base, days, limit, now)
-        streams = []
-        # strict=True holds alert_source_urls to its docstring ("one per stream in
-        # ALERT_SOURCES"). A short list would otherwise drop a stream's alerts and still
-        # report success.
-        for url, (logql, parser) in zip(urls, ALERT_SOURCES, strict=True):
-            body = core.fetch(url, resolve=pin)
-            try:
-                data = json.loads(body)
-            except json.JSONDecodeError:
-                # Read the cap off the raw body rather than catching `core.NonJsonResponse`:
-                # that is an `Unreadable`, which prints the whole error body to stderr when it
-                # is built, and a rejection the clamp handles is not a failed read (#4471).
-                cap = loki_entries_cap(body)
-                if cap is not None and cap < limit:
-                    break
-                data = core.parse_json(url, body)  # raises NonJsonResponse
-            streams.append((logql, parser, _rows_from_loki(data)))
-        else:
-            return limit, streams
-        print(
-            f"(--limit {limit} is above Loki's max_entries_limit_per_query of {cap}; "
-            f"using {cap}. Narrow --days to see further back.)\n",
-            file=notice_file or _sys.stdout,
-        )
-        limit = cap
-
-
 def run_alerts(ns, now=None):
-    """Fetch DOWN log lines from every alert stream over the window and print firing episodes.
+    """Read `ALERTS` over `--days` and print its firing episodes.
 
-    Both streams are queried and their rows merged before episodes are built, so one episode
-    list covers monitor-bridge's checks and the host crons that push Kuma directly. `--check`
-    filters both, because both name episodes with a machine name rather than a Kuma display
-    name. `--pi` filters both too, on is_pi_alert() rather than a name substring. Both flags
-    also govern `--raw`, through the same keep_alert_row predicate the episode view uses.
+    Exit 0 whenever the history was read, whatever it holds; PROBE_UNREADABLE when it was not.
     """
-    base, pin = loki_endpoint()
+    base, pin = prom_endpoint()
+    now = now if now is not None else datetime.now(UTC).timestamp()
+    url = range_url(base, ns.days, now)
     if ns.dry_run:
-        for url in alert_source_urls(base, ns.days, ns.limit, now):
-            print(" ".join(curl_argv(url, resolve=pin)))
-        return 0
-    raw, rows, truncated = [], [], []
-    limit, streams = fetch_alert_streams(
-        base, pin, ns.days, ns.limit, _sys.stderr if ns.json else _sys.stdout, now
+        return core.print_dry_run(url, resolve=pin)
+    try:
+        data = core.fetch_parsed(url, resolve=pin)
+    except core.Unreadable:
+        return PROBE_UNREADABLE  # Unreadable printed its own message
+    if data.get("status") != "success":
+        detail = data.get("error") or f"status {data.get('status')!r}"
+        print(f"ALERTS history unread: {detail}", file=_sys.stderr)
+        return PROBE_UNREADABLE
+    pi_jobs = (
+        pi_alert_jobs(pi_plane.PROMETHEUS_TEMPLATE_PATH.read_text()) if ns.pi else None
     )
-    for logql, parser, fetched in streams:
-        # Per stream, not on the merged list: one stream hitting the cap says nothing about
-        # the other, and reporting the union would cry truncation whenever the totals summed
-        # past the limit.
-        # `fetched and` guards `--limit 0`, which argparse accepts: an empty result satisfies
-        # `0 >= 0` and the index would raise on a stream that returned nothing.
-        if fetched and len(fetched) >= limit:
-            truncated.append((logql, fetched[0][0]))
-        for ns_ts, line in fetched:
-            parsed = parser(line)
-            name = None if parsed is None else parsed[0]
-            if not keep_alert_row(ns.check, ns.pi, logql, line, name):
-                continue
-            raw.append((ns_ts, line))
-            if parsed is not None:
-                rows.append((ns_ts, name, parsed[1]))
-    raw.sort()
-    # BEFORE the view, not after it. A truncated window that lists no episode prints "no DOWN
-    # alerts in the last Nd", and a warning underneath that line arrives too late to stop it
-    # being read as an all-clear. On stderr under `--json`, so stdout stays parseable.
-    # "Raise --limit" only when raising it can work. After the clamp it cannot, and the notice
-    # says so. Without one, whether it can depends on a cap this run never learned — the
-    # default 5000 is the server's default too, so a plain run that truncates is AT the cap and
-    # a bare "raise --limit" would send the operator round the clamp and back here.
-    remedy = (
-        "Narrow --days"
-        if limit < ns.limit
-        else "Narrow --days, or raise --limit if it is below Loki's "
-        "max_entries_limit_per_query"
-    )
-    for logql, oldest_ns in truncated:
-        print(
-            f"(warning: hit --limit {limit} log lines on {logql} — this window is cut off "
-            f"at its OLDEST end, so only {_fmt_utc(oldest_ns)} UTC onwards is covered. "
-            f"{remedy}.)\n",
-            file=_sys.stderr if ns.json else _sys.stdout,
-        )
-    if ns.raw:
-        print("\n".join(line for _, line in raw) or "no logs")
+    result = [
+        s
+        for s in data.get("data", {}).get("result", [])
+        if keep_series(s.get("metric") or {}, ns.check, pi_jobs)
+    ]
+    step_s = step_seconds(ns.days)
+    gap_s = None if ns.gap_min is None else ns.gap_min * 60
+    episodes = alert_episodes(result, step_s, gap_s)
+    if ns.json:
+        print(json.dumps(episodes, indent=2))
     else:
-        gap_s = None if ns.gap_min is None else ns.gap_min * 60
-        episodes = alert_episodes(rows, gap_s)
-        if ns.json:
-            print(json.dumps(episodes, indent=2))
-        else:
-            print(format_alert_episodes(episodes, ns.days))
+        print(format_alert_episodes(episodes, ns.days, step_s))
     return 0

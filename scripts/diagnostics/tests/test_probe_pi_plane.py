@@ -1,6 +1,6 @@
 """`probe.py targets --pi` and `probe.py pi containers`: first-command triage for daniel-pi.
 
-The cluster gets `targets`, `kuma-drift`, `alerts` and `health --docker` for a first read of
+The cluster gets `targets`, `alerts` and `health --docker` for a first read of
 what's wrong; daniel-pi runs no kubelet and none of them see it. This is the Docker-plane
 equivalent.
 """
@@ -66,7 +66,7 @@ def test_format_pi_targets_flags_a_down_job():
 
 
 def test_format_pi_targets_flags_a_declared_job_gone_missing():
-    # The `monitors` N/N-up mistake, avoided: a job that vanished from the scrape config
+    # The N/N-up mistake, avoided: a job that vanished from the scrape config
     # entirely must not read as "1/1 up" just because the survivor is healthy.
     declared = {"node-pi", "alloy-pi"}
     active = [_target("node-pi")]
