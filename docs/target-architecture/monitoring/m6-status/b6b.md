@@ -161,7 +161,7 @@ B6b cuts over in the combined window of B2, B4 and B6b. The window has four stac
    `probe.py metric 'monitor_status{monitor_name=~"CrowdSec .*|Configarr Sync|Janitorr Errors"}'`,
    which must return no series after the `uptime-kuma` promote. The pods' own Secrets still
    render the five tokens, so none enters `PENDING_RETIREMENT`.
-2. Cutover-1b drops `shadow` from the ten rules and removes the five `CheckWithoutPager` terms.
+2. Cutover-1b drops `shadow` from the nine rules and removes the five `CheckWithoutPager` terms.
 3. The Flux-plane Cutover-2 stops the pushes from the crowdsec sidecar and the two CronJobs.
 4. B6b's token PR retires the keys a week after Cutover-1b.
 
