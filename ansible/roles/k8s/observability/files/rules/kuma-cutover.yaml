@@ -77,16 +77,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Renovate Agent — Alive"}[56h10m])
             or
-              absent_over_time(monitor_status{monitor_name="k3s Longhorn Backup"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Off-box etcd Snapshot"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Manifest Prune Drift"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Release Staleness Drift"}[2h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Live Object Drift"}[50h10m])
-            or
               absent_over_time(monitor_status{monitor_name="Daniel Pi SD Health"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Daniel Pi Recovery"}[2h])

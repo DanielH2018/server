@@ -120,9 +120,9 @@ groups:
             textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
             telemetry health` cron and `journalctl -t claude-otel-health`, then
             /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
-      # M6 BATCH B1, SHADOW UNTIL ITS CUTOVER-1B. The five k3s crons write the textfile beside
-      # their Kuma push, and Kuma's tiles page the same verdicts until Cutover-1a deletes
-      # them. Each check has the DiskHealth pair: `Failed` reads the verdict, and
+      # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B. The five k3s crons write the textfile beside
+      # their Kuma push, and Cutover-1a deleted Kuma's tiles for the same verdicts, so these
+      # rules are their pager. Each check has the DiskHealth pair: `Failed` reads the verdict, and
       # `NotReporting` reads the file's age. The deadline literal in a NotReporting rule
       # equals the DEADLINE_S its producer renders, and
       # ansible/tests/services/test_b1_rule_literals.py pins the two together. A daily check
@@ -133,7 +133,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's Longhorn backup check is red.
           description: >-
@@ -153,7 +152,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's longhorn-backup-health check has stopped reporting.
           description: >-
@@ -166,7 +164,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's off-box etcd snapshot check is red.
           description: >-
@@ -185,7 +182,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
           description: >-
@@ -198,7 +194,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box has deployed-artifact drift.
           description: >-
@@ -217,7 +212,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's manifest-prune-check has stopped reporting.
           description: >-
@@ -230,7 +224,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: A k8s service runs an older release than origin/master.
           description: >-
@@ -249,7 +242,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's release-staleness-check has stopped reporting.
           description: >-
@@ -262,7 +254,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: A live cluster object differs from its last-applied manifest.
           description: >-
@@ -280,7 +271,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's live-drift-check has stopped reporting.
           description: >-
@@ -288,17 +278,18 @@ groups:
             textfile collector, so nothing is watching live-object drift. Read the
             `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
             /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
-      # M6 BATCH B1, SHADOW UNTIL ITS CUTOVER-1B, which also adds the inhibit on
-      # ScrapeTargetDown{job="uptime-kuma"}. Prometheus scrapes Kuma's Service directly, so
-      # Authelia is not in this path. A 200 from /metrics is weaker than the
-      # `uptime-kuma-alive` ping it replaces, which proved Kuma accepted a push.
+      # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B, which also added the inhibit on
+      # ScrapeTargetDown{job="uptime-kuma"} (alertmanager-secret.yaml.j2): a dead Kuma pages
+      # once, as this critical after 5 minutes, and holds the 10-minute scrape warning.
+      # Prometheus scrapes Kuma's Service directly, so Authelia is not in this path. A 200
+      # from /metrics is weaker than the `uptime-kuma-alive` ping it replaces, which proved
+      # Kuma accepted a push. It goes in C-1a, before Kuma is removed.
       - alert: KumaDown
         expr: up{job="uptime-kuma"} == 0 or absent(up{job="uptime-kuma"})
         for: 5m
         labels:
           severity: critical
           service: uptime-kuma
-          shadow: "true"
         annotations:
           summary: Uptime Kuma has stopped serving /metrics.
           description: >-
