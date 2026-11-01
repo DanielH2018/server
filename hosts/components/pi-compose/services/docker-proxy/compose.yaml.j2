@@ -20,6 +20,7 @@ services:
     container_name: docker-proxy
     environment:
       - CONTAINERS=1  # Allow access to viewing containers
+      - ALLOW_LOGS=1  # Alloy's loki.source.docker tails /containers/<id>/logs; the proxy gates /logs on this flag apart from CONTAINERS=1
       - SERVICES=1    # Allow access to viewing services (necessary when using Docker Swarm)
       - TASKS=1       # Allow access to viewing tasks (necessary when using Docker Swarm)
       - POST=0        # Read-only: no write/lifecycle ops on this broadly-reachable proxy
