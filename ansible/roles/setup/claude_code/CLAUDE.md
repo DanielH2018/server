@@ -20,8 +20,8 @@ for what they render. The role keeps no defaults, so no other role in the play c
 `claude_code_*` variable from it.
 
 ## Rollback
-A revert of H7.40's fourth slice restores the role's tasks, and the operator then re-applies the
+The tasks read their sources from this directory, so a rollback reverts #6773's move first,
+then H7.40's fourth slice. That restores the role's tasks, and the operator then re-applies the
 role on daniel-box after `homelab_host_applied_info` shows the reverted version: `cd
 /home/ubuntu/server && uv run ansible-playbook ansible/initial_setup.yml --tags claude_code`
-(operator-only). The tasks read the sources from this directory, so that revert also moves
-`templates/`, `files/` and `defaults/` back from the component.
+(operator-only).

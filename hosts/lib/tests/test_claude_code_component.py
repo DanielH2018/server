@@ -219,6 +219,12 @@ def test_a_component_outside_the_allowlist_is_refused(tmp_path):
         render_with(tmp_path, {}, {"component": "fixture", "files": []})
 
 
+def test_a_package_naming_both_a_role_and_a_component_is_refused(tmp_path):
+    spec = {"role": "initial_setup", "component": "claude-code", "files": []}
+    with pytest.raises(RenderRefused, match="names both role"):
+        render_with(tmp_path, {}, spec)
+
+
 def test_a_borrowed_path_out_of_the_component_is_refused(tmp_path):
     files = [{"src": "component:../fixture/component.yml", "dst": "/x"}]
     with pytest.raises(RenderRefused, match="is outside the component"):
