@@ -436,8 +436,6 @@ _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
     "hosts/components/secret-rotation/templates/secret-rotate.sh.j2",
     "hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2",
     "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
 }
 
@@ -448,7 +446,7 @@ _EXPECTED_IN_CORPUS = {
 # four k3s cron scripts) keeps the slack M3 chose: 23 against 37 after its PR 5 dropped
 # disk-health.sh.j2. A slacker floor would let a third of that unnamed tail vanish before
 # anything went red.
-_MIN_CORPUS = 20
+_MIN_CORPUS = 18
 
 
 def push_corpus() -> dict[Path, str]:

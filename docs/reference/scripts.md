@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-01 14:05 UTC
-generated_sha: 2746acd62
+generated_at: 2026-11-01 14:45 UTC
+generated_sha: 6a91a78dd3
 ---
 
 !!! warning "Generated file — do not edit"
@@ -583,7 +583,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | 1 | `PUBLISH_STILL_LOCAL` | `publish`: the commit is still local and there is nothing to clean up on origin. `unlanded`: origin was unreadable. | — |
 | 2 | `PUBLISH_PUSHED_NO_PR` | `publish`: pushed but no PR was opened. `unlanded`: a PR is open. | — |
 | 3 | `UNLANDED_NO_PR` | `unlanded`: a branch with no PR. | — |
-| 4 | `UNLANDED_PR_RED` | `unlanded`: its PR failed a check. | — |
+| 4 | `UNLANDED_PR_RED` | `unlanded`: a red or conflicting PR. | — |
 
 ### `scripts/deploy_tools/narrow_setup.py`
 

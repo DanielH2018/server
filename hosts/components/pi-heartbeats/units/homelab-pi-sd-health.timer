@@ -1,7 +1,7 @@
-# Shipped by homelab-daniel-pi with its enable link. Every 5 minutes, half the Kuma monitor's
-# 600s heartbeat window, so one missed push is tolerated and a dead timer or host alerts.
+# Shipped by homelab-daniel-pi with its enable link. Every 5 minutes, a third of the 900s deadline
+# that PiSdHealthNotReporting allows, so one missed run is tolerated and a dead timer or host alerts.
 [Unit]
-Description=Push the Pi's SD-card health every 5 minutes
+Description=Check the Pi's SD-card health every 5 minutes
 
 [Timer]
 OnCalendar=*:0/5

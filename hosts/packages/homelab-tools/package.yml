@@ -48,15 +48,15 @@ tools:
   node-exporter:
     amd64:
       # renovate: datasource=github-release-attachments depName=prometheus/node_exporter
-      version: 1.12.1
+      version: v1.12.1
       sha256: b51d8a76aa2a9156a55d501aca6276fae09e262259a5e4e831d2c2222f084e63
-      url: https://github.com/prometheus/node_exporter/releases/download/v{bare}/node_exporter-{bare}.linux-amd64.tar.gz
+      url: https://github.com/prometheus/node_exporter/releases/download/{version}/node_exporter-{bare}.linux-amd64.tar.gz
       member: node_exporter-{bare}.linux-amd64/node_exporter
     arm64:
       # renovate: datasource=github-release-attachments depName=prometheus/node_exporter
-      version: 1.12.1
+      version: v1.12.1
       sha256: ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7
-      url: https://github.com/prometheus/node_exporter/releases/download/v{bare}/node_exporter-{bare}.linux-arm64.tar.gz
+      url: https://github.com/prometheus/node_exporter/releases/download/{version}/node_exporter-{bare}.linux-arm64.tar.gz
       member: node_exporter-{bare}.linux-arm64/node_exporter
   # #6699: the flux CLI the D5 takeover check runs as root on daniel-box, at the cluster's
   # `flux_version` (roles/k8s/flux; hosts/components/claude-code/tests/test_takeover_check_install.py
