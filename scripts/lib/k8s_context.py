@@ -115,9 +115,9 @@ def resolve_vars(
     # DECIDED: the shim is `ansible_jinja_env.ansible_bool`, not ansible-core's `to_bool`
     # that `lib.ansible_jinja_env.register_ansible_filters` binds for every render guard.
     # `to_bool` would make the two paths agree by identity, but importing
-    # `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/monitors.py` imports this
-    # module — `probe.py monitors` reaches no ansible-core module today (measured 2026-09-18,
-    # `python -X importtime`). The shim copies `to_bool`'s tables and fallback, and
+    # `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/health.py` imports this
+    # module — `probe.py health` reaches no ansible-core module today (measured 2026-11-01,
+    # `sys.modules` after the import). The shim copies `to_bool`'s tables and fallback, and
     # `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy to the real filter,
     # so the two paths agree by test rather than by identity (#2074).
     env.filters["bool"] = ansible_bool

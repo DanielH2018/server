@@ -87,21 +87,36 @@ def target(job, health="up", last_error=""):
     return {"labels": {"job": job}, "health": health, "lastError": last_error}
 
 
-def test_kuma_monitors_ok(monkeypatch):
-    body = json.dumps({"data": {"result": [{"value": [0, "118"]}]}})
-    respond(monkeypatch, 200, body)
-    assert postflight.check_kuma_monitors() == (
-        postflight.OK,
-        "118 monitors provisioned",
+def _alert_plane(monkeypatch, up, watchdog):
+    """Run check_alert_plane against `up{job="alertmanager"}` and Watchdog result vectors."""
+
+    def reply(url, *a, **kw):
+        result = watchdog if "Watchdog" in url else up
+        return 200, json.dumps({"data": {"result": result}})
+
+    respond(monkeypatch, reply)
+    return postflight.check_alert_plane()
+
+
+def test_alert_plane_with_alertmanager_up_and_watchdog_firing_is_clean(monkeypatch):
+    status, detail = _alert_plane(
+        monkeypatch, [{"value": [0, "1"]}], [{"value": [0, "1"]}]
     )
+    assert status == postflight.OK
+    assert "Watchdog firing" in detail
 
 
-def test_kuma_monitors_empty_result_fails(monkeypatch):
-    """No admin -> AutoKuma provisions nothing -> the metric has no series at all."""
-    respond(monkeypatch, 200, json.dumps({"data": {"result": []}}))
-    status, detail = postflight.check_kuma_monitors()
+def test_alert_plane_without_the_watchdog_is_flagged(monkeypatch):
+    """An empty ALERTS is also what a dead rule evaluator returns."""
+    status, detail = _alert_plane(monkeypatch, [{"value": [0, "1"]}], [])
     assert status == postflight.FAIL
-    assert "0 monitors" in detail
+    assert "Watchdog is not firing" in detail
+
+
+def test_alert_plane_with_alertmanager_unscraped_is_flagged(monkeypatch):
+    status, detail = _alert_plane(monkeypatch, [], [{"value": [0, "1"]}])
+    assert status == postflight.FAIL
+    assert "does not reach Alertmanager" in detail
 
 
 def test_kuma_scrape_down_reports_the_scrape_error(monkeypatch):
@@ -243,16 +258,8 @@ def test_the_service_ip_read_names_the_cluster_this_host_stands_in(
     assert stub_host == [("sonarr", "stage")]
 
 
-def test_the_kuma_pod_age_read_names_the_cluster_this_host_stands_in(monkeypatch):
-    """The drift check's other kubectl read takes the same derived cluster."""
-    on_host(monkeypatch, "daniel-stage")
-    seen = []
-    _drift_over(monkeypatch, {}, set(), pod_age=lambda c: (seen.append(c), 99999)[1])
-    assert seen == ["stage"]
-
-
-def test_the_drift_check_skips_on_a_host_in_no_known_cluster(monkeypatch):
-    """The Pi is a node of neither cluster, so the pod-age read has nothing to ask.
+def test_the_service_ip_read_skips_on_a_host_in_no_known_cluster(monkeypatch):
+    """The Pi is a node of neither cluster, so a kubectl read has nothing to ask.
 
     `Skip`, which the runner renders as a SKIP line, rather than a `MissingKubectl` it would
     count as the check's own failure. test_postflight_runner.py has the end-to-end line.
@@ -261,7 +268,7 @@ def test_the_drift_check_skips_on_a_host_in_no_known_cluster(monkeypatch):
     with pytest.raises(
         postflight.Skip, match="daniel-pi is a node of no known cluster"
     ):
-        _drift_over(monkeypatch, {}, set())
+        postflight.service_ip("sonarr")
 
 
 def test_jellyfin_key_mismatch_fails(monkeypatch):
@@ -320,112 +327,6 @@ def test_authelia_oidc_material_is_checked_on_a_node_it_cannot_reach(monkeypatch
     status, detail = postflight.check_authelia()
     assert status == postflight.FAIL
     assert "authelia_oidc_hmac_secret" in detail
-
-
-def test_kuma_drift_reads_its_constants_from_the_module_that_holds_them(monkeypatch):
-    """Postflight read four names off `probe`, which holds none of them.
-
-    Exercising the check is the point — a `hasattr` census would pass before and after the
-    fix. This raised `AttributeError: module 'probe' has no attribute 'STATIC_MONITORS_PATH'`,
-    which the runner reported as FAIL, so a check that never ran read as drift found.
-    """
-    declared = {
-        "sonarr": {"type": "http", "interval": 60, "gated": False, "gate": None}
-    }
-    status, detail = _drift_over(monkeypatch, declared, {"sonarr"})
-    assert status == postflight.OK
-    assert isinstance(detail, str)
-
-
-def test_the_drift_check_reports_a_long_interval_tile_kuma_never_created(monkeypatch):
-    """Postflight passes the status-page census too, not only `probe.py kuma-drift` (#4005).
-
-    A week-long tile inside its interval after a restart read as pending here as well.
-    """
-    declared = {
-        "Homelab Evals": {
-            "type": "push",
-            "interval": 626400,
-            "gated": False,
-            "gate": None,
-        }
-    }
-    status, detail = _drift_over(
-        monkeypatch, declared, set(), pod_age=lambda c: 3600, created=set()
-    )
-    assert status == postflight.FAIL
-    assert "Homelab Evals: declared, absent from Kuma's status page" in detail
-
-
-def _drift_over(
-    monkeypatch, declared, live, pod_age=lambda cluster: 99999, created=None
-):
-    """Drive check_kuma_drift with `declared` against a live set, returning (status, detail).
-
-    `pod_age` stands in for `kuma_live.pod_age_seconds`, so it takes the cluster.
-    `created` stands in for the status-page census, and defaults to every declared name.
-    """
-    body = json.dumps(
-        {
-            "data": {
-                "result": [
-                    {"metric": {"monitor_name": n}, "value": [0, "1"]} for n in live
-                ]
-            }
-        }
-    )
-    held = [{"name": n} for n in (set(declared) if created is None else created)]
-    page = json.dumps({"publicGroupList": [{"monitorList": held}]})
-    respond(
-        monkeypatch,
-        lambda url, **kw: (200, page if "/api/status-page/" in url else body),
-    )
-    monkeypatch.setattr(postflight.kuma_live, "pod_age_seconds", pod_age)
-    # STATIC_MONITORS_PATH is left alone: the real declaration file is tracked, and the parse
-    # is patched anyway, so the only thing it supplies here is bytes to read.
-    monkeypatch.setattr(
-        postflight.monitors, "parse_declared_monitors", lambda text: declared
-    )
-    return postflight.check_kuma_drift()
-
-
-GATED_AND_ABSENT = {
-    "Off-box etcd Snapshot": {
-        "type": "push",
-        "interval": 86400,
-        "gated": True,
-        "gate": ("etcd_snapshot_push_token | default('')",),
-    }
-}
-
-
-@pytest.mark.parametrize(
-    "gate_is_set, expected, expected_text",
-    [
-        (True, FAIL_, "Off-box etcd Snapshot: declared, not live"),
-        (False, OK_, "flag false), skipped"),
-    ],
-    ids=["set-and-absent-is-drift", "unset-is-excused"],
-)
-def test_a_gated_monitors_absence_is_judged_against_its_secret(
-    monkeypatch, gate_is_set, expected, expected_text
-):
-    """The red-proof pair, and the whole point of the section.
-
-    Without gate_states, `format_kuma_drift` falls through to its excused arm for every gated
-    monitor whatever the secret says — all seven, under an [OK]. A gated monitor is the one
-    nothing else watches, so the drift half could not see the case it exists for. A set
-    `etcd_snapshot_push_token` with a monitor that is not live must not be called correctly
-    skipped.
-
-    The unset row is not padding: without it the fix is a louder check that cries wolf on
-    every gate, and a check that fires on everything is as useless as one that fires on
-    nothing.
-    """
-    monkeypatch.setattr(postflight.monitors, "gate_var_state", lambda var: gate_is_set)
-    status, detail = _drift_over(monkeypatch, GATED_AND_ABSENT, set())
-    assert status == expected
-    assert expected_text in detail
 
 
 def test_the_route_hostname_comes_from_inventory_not_the_service_name():

@@ -30,8 +30,6 @@ from diagnostics.probe_lib import core
 from diagnostics.probe_lib import arr
 from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import ha
-from diagnostics.probe_lib import kuma_live
-from diagnostics.probe_lib import monitors
 from lib.cli_help import ArgumentParser
 from lib import k8s_roles
 from lib.kubectl import cluster_for_host
@@ -135,69 +133,53 @@ def _forward_auth_intercepted(app, status):
     )
 
 
-# §9.1 + §9.2: Uptime-Kuma
-# Both are checked through Prometheus rather than Kuma itself: Kuma 2.x drives its
-# admin wizard and API-key minting over Socket.IO only, so there is no REST route to
-# ask "does an admin exist". The scrape is the observable consequence of both steps.
+# §9.1: the alert plane. §9.2: Uptime-Kuma's scrape, until M6's C-1 deletes it.
+# Both are read through Prometheus: Kuma 2.x mints its API key over Socket.IO only, so there
+# is no REST route to ask, and the scrape is the observable consequence.
 
 
 def _cluster_prom_query(promql):
     """Query the cluster Prometheus through its LAN query route.
 
-    The uptime-kuma job moved there at the Phase D dashboard triage, PG1. VIP-pinned —
-    this host's resolver bypasses the LAN DNS, so the name alone does not reach the
-    cluster edge.
+    VIP-pinned — this host's resolver bypasses the LAN DNS, so the name alone does not reach
+    the cluster edge.
     """
     base, pin = core.prom_endpoint()
     return core.get_status(core.prom_query_url(base, promql), resolve=pin)
 
 
-def check_kuma_monitors():
-    """§9.1 — no admin means AutoKuma provisions zero monitors, so nothing is watched."""
-    status, body = _cluster_prom_query("count(monitor_status)")
+def _instant(promql):
+    """The result vector of `promql`, or a string saying why the query failed."""
+    status, body = _cluster_prom_query(promql)
     if status != 200:
-        return FAIL, f"cluster prometheus query returned {status}"
-    result = json.loads(body).get("data", {}).get("result", [])
-    if not result:
-        return FAIL, "AutoKuma has provisioned 0 monitors — create the Kuma admin"
-    count = int(float(result[0]["value"][1]))
-    return OK, f"{count} monitors provisioned"
+        return f"cluster prometheus query returned {status}"
+    return json.loads(body).get("data", {}).get("result", [])
 
 
-def check_kuma_drift():
-    """§9.1 — a monitor that is declared and never created reads as green everywhere else.
+def check_alert_plane():
+    """§9.1 — Prometheus scrapes Alertmanager, and rule evaluation fires the Watchdog.
 
-    The check above counts what the exporter emits, which is also the denominator, so a tile
-    that vanishes cannot move it. `probe.py kuma-drift` compares that set against the
-    declaration file instead; see its docstring for why a push monitor inside its own interval
-    after a Kuma restart is PENDING rather than missing.
+    An empty `ALERTS` is what a healthy estate and a dead rule evaluator both return, so the
+    Watchdog, which always fires, is what tells them apart. `up{job="alertmanager"}` is the
+    delivery half: a firing rule nothing receives pages no one.
     """
-    status, body = _cluster_prom_query('monitor_status{job="uptime-kuma"}')
-    if status != 200:
-        return FAIL, f"cluster prometheus query returned {status}"
-    live = {
-        (s.get("metric") or {}).get("monitor_name")
-        for s in json.loads(body).get("data", {}).get("result", [])
-    }
-    live.discard(None)
-    # These four names live in `probe_lib.monitors`, not in `probe.py` — reading them off
-    # `probe` raised AttributeError and the section reported FAIL, which reads as drift found
-    # rather than as a check that never ran.
-    with open(monitors.STATIC_MONITORS_PATH) as f:
-        declared = monitors.parse_declared_monitors(f.read())
-    # gate_states is not optional here. Passing none excuses EVERY gated monitor whatever its
-    # secret says: all seven gated monitors would read "gated on <var>, which could not be
-    # read" while the line said [OK]. A gated monitor is the one nothing else watches, so the
-    # drift half could not see the case it exists for. resolve_gate_states is `probe.py
-    # kuma-drift`'s own constructor — shared, so a caller cannot omit it by forgetting it.
-    text, code = monitors.format_kuma_drift(
-        declared,
-        live,
-        kuma_live.pod_age_seconds(host_cluster()),
-        gate_states=monitors.resolve_gate_states(declared, live),
-        created=kuma_live.created_monitors(),
-    )
-    return (FAIL if code else OK), text.replace("\n", "; ").strip()
+    up = _instant('up{job="alertmanager"} == 1')
+    if isinstance(up, str):
+        return FAIL, up
+    if not up:
+        return (
+            FAIL,
+            'Prometheus does not reach Alertmanager (up{job="alertmanager"} != 1)',
+        )
+    watchdog = _instant('ALERTS{alertname="Watchdog",alertstate="firing"}')
+    if isinstance(watchdog, str):
+        return FAIL, watchdog
+    if not watchdog:
+        return (
+            FAIL,
+            "Watchdog is not firing — rule evaluation is down, so no alert can fire",
+        )
+    return OK, f"{len(up)} Alertmanager target(s) up, Watchdog firing"
 
 
 def check_kuma_scrape():
@@ -375,8 +357,7 @@ def check_authelia():
 # numbering below is left alone so §9.x keeps matching ansible/README.md.
 
 CHECKS = [
-    ("9.1", "Uptime-Kuma admin", check_kuma_monitors),
-    ("9.1", "Uptime-Kuma monitor drift", check_kuma_drift),
+    ("9.1", "Alert plane (Alertmanager scraped, Watchdog firing)", check_alert_plane),
     ("9.2", "Kuma API key (prometheus scrape)", check_kuma_scrape),
     *[
         ("9.3", f"{app} API key", (lambda a: lambda: check_arr_key(a))(app))

@@ -74,9 +74,7 @@ def test_a_failed_config_get_exits_temp_fail_with_the_failure_on_stderr(
     assert "Could not resolve host" in captured.err
 
 
-def test_an_empty_monitor_status_result_is_unreadable_not_monitors_down(
-    monkeypatch, capsys
-):
+def test_an_empty_alerts_result_is_unreadable_not_all_clear(monkeypatch, capsys):
     def run(argv, *args, **kwargs):
         if argv[0] == "sops":
             return subprocess.CompletedProcess(argv, 0, "example.test\n", "")
@@ -86,7 +84,7 @@ def test_an_empty_monitor_status_result_is_unreadable_not_monitors_down(
     monkeypatch.setattr(subprocess, "run", run)
     rc = _exit_code(lambda: probe.main(["monitors"]))
     assert rc == TEMP_FAIL
-    assert "monitor_status" in capsys.readouterr().err
+    assert "Watchdog is not firing" in capsys.readouterr().err
 
 
 def test_an_ssh_failure_under_health_docker_is_not_reported_missing(

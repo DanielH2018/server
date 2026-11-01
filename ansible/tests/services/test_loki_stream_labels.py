@@ -216,7 +216,6 @@ def test_the_consumer_census_finds_its_named_members():
     consumers = _consumers()
     for name in (
         "logs.py SWALLOWED_VERDICTS_LOGQL",
-        "alerts.py SYSLOG_ALERT_LOGQL",
         "observability_deploy_annotation_expr",
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
