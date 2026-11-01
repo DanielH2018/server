@@ -461,7 +461,12 @@ def test_the_content_check_writes_nothing_into_the_object_store(tmp_path):
 
 
 def test_the_content_check_still_finds_a_squash_merged_branch(tmp_path):
-    """ACCEPT: master holds the branch's content under a different commit, so only merge-tree sees it."""
+    """Regression guard: the scratch object store still reads both commits through the real one.
+
+    Master holds the branch's content under a different commit, so only merge-tree sees it.
+    This passes on the unquarantined code too, and cannot be made to fail on it: a contained
+    merge's result is master's own tree, which is already in the store, so it writes nothing.
+    """
     repo, head = _unmerged_branch(tmp_path)
     commit(
         repo, "squash of feature, plus more", **{"b.txt": "two\n", "c.txt": "three\n"}
