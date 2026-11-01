@@ -446,8 +446,9 @@ only, where `claude_code_takeover_check_enabled` is true.
   whose builder refuses a flux tarball off its pin, and the updater installs both in one run.
   The wrapper creates the state directory.
 - **To take it back:** set `claude_code_takeover_check_enabled: false`. The next package
-  version drops the grant and the wrapper, and reconcile removes the state directory through
-  the component's `legacy:` entry. flux stays, because `homelab-tools` ships it.
+  version drops the grant and the wrapper. The state directory stays, because its per-label
+  contents are not a list reconcile can name; remove it by hand. flux stays, because
+  `homelab-tools` ships it.
 - **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.
 
 ## The root inspector

@@ -326,8 +326,8 @@ legacy:
   - {path: /usr/local/bin/sync-artifacts.sh}
   - {path: /usr/local/bin/claude-otel-health.sh}
   - {path: /var/lib/homelab/setup-render-manifest.d/claude-code-node-crons}
-  # #6699: the takeover check's flux copy, before homelab-tools shipped flux, and the wrapper's
-  # outputs once the check is switched off.
+  # #6699: the takeover check's flux copy and its pin stamp, before homelab-tools shipped flux.
+  # Reconcile only rmdirs a directory, so its two files come first.
+  - {path: /usr/local/lib/homelab-takeover-check/flux}
+  - {path: /usr/local/lib/homelab-takeover-check/flux.sha256}
   - {path: /usr/local/lib/homelab-takeover-check}
-  - path: "{{ claude_code_takeover_check_state_dir }}"
-    when: not claude_code_takeover_check_enabled

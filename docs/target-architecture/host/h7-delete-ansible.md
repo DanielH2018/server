@@ -2009,9 +2009,10 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
            `nut_host`'s do, and H7.20a moves them with its deletion. The task-structure tests
            are deleted, and the tests of what still ships read the package render.
            Amended by #6699: `homelab-tools` ships flux at `flux_version`, the wrapper runs
-           `/usr/lib/homelab/bin/flux`, and the oneshot is gone. A `legacy:` entry removes
-           `/usr/local/lib/homelab-takeover-check`, and another removes the state directory
-           while the check is off.
+           `/usr/lib/homelab/bin/flux`, and the oneshot is gone. `legacy:` entries remove
+           `/usr/local/lib/homelab-takeover-check` and its two files. Switching the check off
+           no longer removes the state directory, whose per-label contents reconcile cannot
+           name.
     - **The homelab-ui browser toolchain is a component oneshot, ruled on 2026-10-30.** The
       agent's pinned Node and its sha256, `@playwright/mcp`, its Chromium, and the `claude mcp
       add homelab-ui` registration with its off path move into the `claude-code` component as

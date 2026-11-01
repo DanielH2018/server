@@ -610,9 +610,9 @@ claude_code_otlp_port: 4317
 # ── The D5 takeover check (issue #5494) ────────────────────────────────────────────────────
 # A root-owned wrapper that runs the flip PRs' pre-merge dry runs, granted to the users below
 # through one NOPASSWD sudoers line. True only in daniel-box.yml, the node that holds the
-# cluster-admin kubeconfig. False removes the grant, the wrapper and the state directory. The
-# flux CLI it runs is homelab-tools' /usr/lib/homelab/bin/flux. CLAUDE.md, "The takeover
-# check", has the grant and its limits.
+# cluster-admin kubeconfig. False removes the grant and the wrapper, and leaves the state
+# directory. The flux CLI it runs is homelab-tools' /usr/lib/homelab/bin/flux. CLAUDE.md, "The
+# takeover check", has the grant and its limits.
 claude_code_takeover_check_enabled: false
 # Users the sudoers line names. The operator's own account, which is where sessions run.
 claude_code_takeover_check_users:

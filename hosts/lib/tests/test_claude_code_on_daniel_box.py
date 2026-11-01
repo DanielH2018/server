@@ -152,9 +152,10 @@ def test_the_takeover_check_runs_homelab_tools_flux_and_retires_its_own_copy(box
     wrapper = box.files["/usr/local/sbin/homelab-takeover-check"][0].decode()
     assert "FLUX=/usr/lib/homelab/bin/flux\n" in wrapper
     assert "homelab-tools" in box.depends
-    assert "/usr/local/lib/homelab-takeover-check" in {
-        e.get("path") for e in box.legacy
-    }
+    # Reconcile only rmdirs a directory, so each file the copy held is retired ahead of it.
+    lib = "/usr/local/lib/homelab-takeover-check"
+    paths = [e["path"] for e in box.legacy if e.get("path", "").startswith(lib)]
+    assert paths == [f"{lib}/flux", f"{lib}/flux.sha256", lib]
 
 
 def test_daniel_server_ships_the_browser_only_to_take_it_back(server):

@@ -16,7 +16,7 @@ A spec lists each secret-bearing file under `outputs:`::
         dependents: [homelab-compose.service] # units reconcile restarts when it changes
         persist: false                        # true puts it under /var/lib/homelab-secrets
         link: true                            # false ships no symlink at `path` (a drop-in)
-        format: dotenv                        # a Compose env file: only it may sit under COMPOSE_ROOT
+        format: dotenv                        # or json; dotenv alone may sit under COMPOSE_ROOT
         destination: usr/lib/homelab/compose/compose.env    # default: `path` without its `/`
 
 The renderer reads each declared secret as a placeholder, and C1's escape applies: a literal `$`
@@ -27,6 +27,10 @@ it. A `link` output also gets a symlink at `path` that points at the rendered fi
 A `format: dotenv` output is a Compose env file. Its row in `secrets.json` carries the format,
 which `homelab-secrets` checks (H5.2a2), and its `path` may sit under `/usr/lib/homelab/compose/`.
 The template reads `secret_placeholders`, each declared key mapped to its placeholder.
+
+A `format: json` output places each placeholder inside a JSON string. Its row carries the
+format too, and `homelab-secrets` escapes each value for that string and refuses a file that does
+not parse.
 
 A `files:` entry with `compose: true` is the other kind. It installs at its own `dst`, which sits
 under `/usr/lib/homelab/compose/`, because Compose does that file's substitution. It is escaped
