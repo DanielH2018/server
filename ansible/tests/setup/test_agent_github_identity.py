@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The agent user signs and pushes as its own GitHub account, and only with its own token.
 
-`roles/setup/claude_code/tasks/agent_github.yml` gives `claude` a signing key, a git config and
+The claude-code host component gives `claude` a signing key, a git config and
 gh's token for the DanielClaudeBot machine account. Each test pins one leg: a commit that does
 not carry the account's noreply address is not attributed to it, an unsigned one never reads
 Verified, and a token that reaches anywhere but the agent's 0600 file is one an operator session
@@ -12,36 +12,16 @@ Run: uv run pytest ansible/tests/setup/test_agent_github_identity.py
 
 import re
 
-import jinja2
-
+from _agent_package import agent_setup_script, render_daniel_server_with
 from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
-from lib.ansible_jinja_env import make_ansible_env
 from lib.git_testing import git
 
-TASKS = ANSIBLE / "roles" / "setup" / "claude_code" / "tasks"
+COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
 TOKEN = "sentinel-agent-gh-token"
-# daniel-box's claude-code component ships the agent user, so each agent task skips it there.
-PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
-
-
-def tasks(name: str) -> list[dict]:
-    return yaml_fast.safe_load((TASKS / name).read_text())
-
-
-def named(task_list: list[dict], name: str) -> dict:
-    found = [t for t in task_list if t.get("name") == name]
-    assert len(found) == 1, f"expected one task named {name!r}, found {len(found)}"
-    return found[0]
-
-
-def test_the_identity_is_given_only_to_an_enabled_agent_user() -> None:
-    task = named(tasks("agent.yml"), "Give the agent user its GitHub identity")
-    assert task["ansible.builtin.import_tasks"] == "agent_github.yml"
-    assert task["when"] == [PACKAGED, "claude_code_agent_user_enabled"]
 
 
 def test_gh_reads_the_token_for_the_agents_own_account() -> None:
@@ -57,53 +37,32 @@ def test_gh_reads_the_token_for_the_agents_own_account() -> None:
     assert host["git_protocol"] == "https"
 
 
-def test_the_token_file_is_the_agents_alone_and_never_printed() -> None:
-    task = named(
-        tasks("agent_github.yml"),
-        "Give the agent user gh's token for its GitHub account",
+def test_the_token_file_is_the_agents_alone_and_the_operator_only_traverses_its_directory(
+    tmp_path,
+) -> None:
+    component = yaml_fast.safe_load(COMPONENT.read_text())
+    (output,) = [o for o in component["outputs"] if o["path"].endswith("gh/hosts.yml")]
+    assert (output["owner"], output["group"], output["mode"]) == (
+        "claude",
+        "ubuntu",
+        "0600",
     )
-    assert task["ansible.builtin.template"]["mode"] == "0600"
-    assert task["diff"] is False and task["no_log"] is True
-    gh_dir = named(
-        tasks("agent_github.yml"),
-        "Create the agent user's ssh and git config directories",
-    )
-    modes = {i["path"].rsplit("/", 1)[-1]: i["mode"] for i in gh_dir["loop"]}
-    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
+    assert output["keys"] == ["claude_code_agent_gh_token"]
     # The operator's group traverses to stat the token file (#6487); it never lists or reads.
-    assert [
-        env.from_string(modes["gh"]).render(claude_code_agent_operator_read=flag)
-        for flag in (True, False)
-    ] == ["0710", "0700"]
+    for flag, mode in ((True, "0710"), (False, "0700")):
+        setup = agent_setup_script(
+            tmp_path / str(flag), claude_code_agent_operator_read=flag
+        )
+        assert f'dir {mode} "$home/.config/gh"' in setup
 
 
-def test_the_private_key_is_the_agents_alone_and_the_public_half_readable() -> None:
-    """The first apply's chown runs before ssh-keygen, so this task sets both itself."""
-    task = named(
-        tasks("agent_github.yml"),
-        "Give the signing key pair the home's group and its modes",
-    )
-    f = task["ansible.builtin.file"]
-    assert (f["owner"], f["group"]) == (
-        "{{ claude_code_agent_user }}",
-        "{{ sys_user }}",
-    )
-    modes = {
-        i["path"].removeprefix("{{ claude_code_agent_signing_key }}"): i["mode"]
-        for i in task["loop"]
-    }
-    assert modes == {"": "0600", ".pub": "0644"}
-
-
-def test_an_enabled_agent_user_without_its_token_fails_the_apply() -> None:
-    task = named(
-        tasks("agent_github.yml"),
-        "Refuse to give the agent user a GitHub identity without its token",
-    )
-    assert task["ansible.builtin.assert"]["that"] == [
-        "claude_code_agent_gh_token_value | default('') | length > 0"
-    ]
-    assert task["no_log"] is True
+def test_the_private_key_is_the_agents_alone_and_the_public_half_readable(
+    tmp_path,
+) -> None:
+    """The key pair is made as the agent, then given its modes in the same script."""
+    package = render_daniel_server_with(tmp_path)
+    home = package.files["/usr/lib/homelab/claude-agent-home"][0].decode()
+    assert '  as_agent chmod 0600 "$1"\n  as_agent chmod 0644 "$1.pub"\n' in home
 
 
 def git_config(rendered: str, tmp_path, key: str) -> list[str]:
@@ -133,18 +92,6 @@ def test_git_signs_every_commit_as_the_machine_account(tmp_path) -> None:
     assert {key: git_config(rendered, tmp_path, key) for key in expect} == expect
 
 
-def test_switching_the_agent_user_off_removes_its_token() -> None:
-    task = named(
-        tasks("agent.yml"),
-        "Remove the agent user's GitHub token when it is switched off",
-    )
-    assert task["ansible.builtin.file"] == {
-        "path": "{{ claude_code_agent_user_home }}/.config/gh/hosts.yml",
-        "state": "absent",
-    }
-    assert task["when"] == [PACKAGED, "not claude_code_agent_user_enabled"]
-
-
 def enter_worktree_branch(name: str) -> str:
     """The branch EnterWorktree gives a worktree: `/` becomes `+` (observed 2026-10-05)."""
     return "worktree-" + name.replace("/", "+")
@@ -170,16 +117,11 @@ def instructed_worktree_name(rendered: str) -> str:
     return found[0]
 
 
-def test_the_agents_claude_md_names_worktrees_whose_branches_the_fence_lets_it_push() -> (
-    None
-):
-    task = named(
-        tasks("agent_github.yml"),
-        "Tell the agent user's sessions the branch names its account may push",
-    )
-    assert task["ansible.builtin.template"]["dest"] == (
-        "{{ claude_code_agent_user_home }}/.claude/CLAUDE.md"
-    )
+def test_the_agents_claude_md_names_worktrees_whose_branches_the_fence_lets_it_push(
+    tmp_path,
+) -> None:
+    setup = agent_setup_script(tmp_path)
+    assert "put 0644 CLAUDE.md .claude/CLAUDE.md" in setup
     name = instructed_worktree_name(
         render_setup_text("claude_code", "agent-user-claude-md.j2")
     )

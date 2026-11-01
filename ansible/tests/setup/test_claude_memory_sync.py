@@ -16,6 +16,7 @@ Run: uv run pytest ansible/tests/setup/test_claude_memory_sync.py
 
 import re
 
+from _agent_package import render_daniel_server_with
 from _helpers import ANSIBLE, load_yaml
 from lib.repo_paths import HOST_VARS
 from _setup_render import render_setup_text, role_context
@@ -23,6 +24,7 @@ from _setup_render import render_setup_text, role_context
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
 SERVICE = "claude-memory-sync.service.j2"
+KEY = "claude_code_memory_sync_enabled"
 
 
 def _render(**overrides: object) -> str:
@@ -116,7 +118,7 @@ def test_an_empty_source_never_reaches_delete():
     assert "OnFailure=claude-memory-sync-alert.service" in rendered
 
 
-def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
+def test_armed_only_on_daniel_box_and_disarming_drops_the_units(tmp_path):
     assert DEFAULTS["claude_code_memory_sync_enabled"] is False
     box = load_yaml(HOST_VARS / "daniel-box.yml")
     server = load_yaml(HOST_VARS / "daniel-server.yml")
@@ -125,13 +127,13 @@ def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
         "daniel-server must never push: it would overwrite the store sessions write"
     )
 
-    tasks = load_yaml(ROLE / "tasks" / "main.yml")
-    removal = [
-        t
-        for t in tasks
-        if t.get("ansible.builtin.file", {}).get("state") == "absent"
-        and "claude-memory-sync.timer" in t.get("loop", [])
-    ]
-    assert removal and "not claude_code_memory_sync_enabled" in removal[0]["when"], (
-        "disarming must remove the units, or a stale timer keeps copying"
-    )
+    on = render_daniel_server_with(tmp_path / "on", **{KEY: True})
+    off = render_daniel_server_with(tmp_path / "off", **{KEY: False})
+    for unit in (
+        "/usr/lib/systemd/system/homelab-claude-memory-sync.timer",
+        "/usr/lib/systemd/system/homelab-claude-memory-sync.service",
+    ):
+        assert unit in on.files
+        assert unit not in off.files, (
+            "disarming must drop the units, or a stale timer keeps running"
+        )

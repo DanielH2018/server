@@ -220,11 +220,6 @@ def deadman_crons(
             "`registry_k8s_gc_cron_weekday` / `_hour` / `_minute`",
         ),
         (
-            "uptime-kuma-alive",
-            every_10,
-            "the `longhorn-backup-health` cron; the same script pings both",
-        ),
-        (
             "alertmanager-watchdog",
             f"every {observability['observability_alertmanager_watchdog_repeat_seconds']}s",
             "`observability_alertmanager_watchdog_repeat_seconds`, Alertmanager's Watchdog "

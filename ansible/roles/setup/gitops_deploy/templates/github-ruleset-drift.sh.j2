@@ -1,7 +1,7 @@
 #!/bin/bash
 # Daily drift check: does the LIVE GitHub ruleset still require the contexts this repo declares,
 # does the branch-protection ruleset still exclude Renovate's branches, and does the fence still
-# keep the agent's account to its own branches? Three arms, one push. Ahead of all three, the repo
+# keep the agent's account to its own branches? Three arms, one verdict. Ahead of all three, the repo
 # must be public: on the free plan GitHub enforces no ruleset on a private repo (#3610).
 #
 # Usage: github-ruleset-drift.sh [-h|--help]
@@ -9,11 +9,12 @@
 # kuma-check-github-ruleset-drift.timer runs it as root once a day
 # (gitops_deploy_ruleset_drift_cron_hour and _minute), and again every 30 minutes while the last
 # run failed. It reads the live rulesets with the deploy user's gh login (anonymous when there is
-# none), compares them with the values rendered into this file, and pushes to the
-# github-ruleset-drift Kuma monitor. Exit 0 = no drift; exit 1 = drift or an unverifiable read.
-# Each verdict is also written to $TEXTFILE_DIR/github-ruleset-drift.prom for node_exporter's
-# textfile collector (default /var/lib/node-exporter-textfile; a test points it elsewhere), ahead
-# of the push.
+# none), compares them with the values rendered into this file, and records the verdict. Exit 0 =
+# no drift; exit 1 = drift or an unverifiable read. Each verdict goes to the journal under the
+# github-ruleset-drift tag and to $TEXTFILE_DIR/github-ruleset-drift.prom for node_exporter's
+# textfile collector (default /var/lib/node-exporter-textfile; a test points it elsewhere).
+# Prometheus's GitHubRulesetDrift and GitHubRulesetDriftNotReporting rules page from that file.
+# Until M6 batch B3's Cutover-2 the verdict also went to a Kuma push monitor.
 #
 # The ruleset is what stops an un-CI'd commit reaching master, and the deployer trusts that: a
 # tick reads the check runs for the origin SHA and deploys on a green verdict. Nothing in the
@@ -42,15 +43,14 @@
 # anonymously rather than empty: GitHub returns the list only to a caller with admin on the repo.
 # The contexts, enforcement and the Renovate exclusion are checked either way. The bypass lists
 # are checked only on an authenticated read, and an anonymous one reports them UNVERIFIED and
-# pushes down (check_bypass below), because the fence's bypass list is the whole of what keeps
-# the agent off branches outside its own prefix. github-interaction-limit.sh already pushes down without a token.
+# records down (check_bypass below), because the fence's bypass list is the whole of what keeps
+# the agent off branches outside its own prefix. github-interaction-limit.sh already records down without a token.
 #
 # Rate limit: anonymous GitHub allows 60 req/hr per source IP, shared by EVERY caller on this
 # host (the deployer's gate, a landing's await_ci.py poll, renovate_notify). Authenticated it is
 # 5000/hr per token. Once a day is still the right cadence — rulesets change on a human clock.
 # The token never lands in argv: curl reads it from a config file handed over as a process
-# substitution (`-K <(...)`), for the same reason the push library feeds the Kuma URL on
-# stdin — /proc is mounted without hidepid here.
+# substitution (`-K <(...)`), because /proc is mounted without hidepid here.
 #
 # set -uo (not -euo): a failed curl must be captured + reported, not swallowed by an early exit.
 set -uo pipefail
@@ -68,38 +68,24 @@ export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin # cron ships a bare PAT
 export GH_PROMPT_DISABLED=1 GH_NO_UPDATE_NOTIFIER=1
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t github-ruleset-drift "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t github-ruleset-drift "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_URL="https://${KUMA_HOST}/api/push/{{ ruleset_drift_push_token }}"
-
 # The longest legitimate gap between two textfile writes: the timer fires daily (86400s), and the
-# extra hour is the margin Kuma's tile keeps (interval 90000).
+# extra hour is the margin the NotReporting rules keep.
 # ansible/tests/services/test_gitops_check_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=90000
 
-# Via the shared library, which feeds the token-bearing URL to curl on stdin (`-K -`) rather than
-# as an argv element: /proc is mounted without hidepid here.
-# The journal line comes first, on every run: the library logs only a FAILED push, so until
-# 2026-09-17 a clean run left no trace on this host and the tile's message was the only record
-# of the verdict. `journalctl -t github-ruleset-drift` now reads the outcome the way it does for
-# manifest-prune-check and the other daily drift checks (#1781).
+# Records the verdict: the journal line comes first, on every run, so `journalctl -t
+# github-ruleset-drift` reads the outcome the way it does for manifest-prune-check and the other
+# daily drift checks (#1781). The textfile write follows. A failed write logs and the run goes on
+# to its exit. The function keeps the name `push` from when it also sent the Kuma beat.
 push() { # up|down msg
   logger -t github-ruleset-drift "status=$1 $2"
-  # The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and the
-  # file must not wait on Kuma. A failed write logs and the run goes on to its push.
   write_check_textfile github-ruleset-drift "$([[ "$1" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t github-ruleset-drift "textfile write failed (status=$1)"
-  kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" github-ruleset-drift
 }
 
 # push_reachout MSG — report a failure whose cause was reaching api.github.com.
@@ -117,7 +103,7 @@ push_reachout() { # msg
   # The library is deployed by initial_setup, while this cron is rendered by its own role, so a
   # narrowed apply can put the new script on a host whose /usr/local/lib copy predates
   # reachout_verdict. Without this the read below aborts on an unbound variable under `set -u` and
-  # NO push happens at all — the tile reads stale-green to its heartbeat deadline, which is worse
+  # NO verdict is recorded at all — NotReporting pages only after its 25h deadline, which is worse
   # than the page this change exists to stop. Same guard docs-refresh.sh.j2 carries.
   if command -v reachout_verdict >/dev/null 2>&1; then
     reachout_verdict github-ruleset-drift {{ wan_probe_urls | join(' ') }}

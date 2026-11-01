@@ -49,7 +49,6 @@ INSTALLED_SRCS = {
 # is exactly what this exists to catch, and `<=` would wave it through.
 EXPECTED_CONSUMERS = frozenset(
     {
-        "claude_code",
         "deploy_ui",
         "fake_remux",
         "gitops_deploy",
@@ -73,6 +72,11 @@ POD_STAGED_CONSUMERS = {
     "configarr": "k8s/configarr/templates/health-configmap.yaml.j2",
     "janitorr": "k8s/janitorr/templates/health-configmap.yaml.j2",
 }
+
+# Consumers whose scripts a host package ships (`hosts/components/claude-code/`), next to the
+# package's own /usr/lib/homelab/host_lib.py. The role's task file installs nothing, so no
+# include applies.
+PACKAGE_SHIPPED_CONSUMERS = frozenset({"claude_code"})
 
 # roles/setup/common OWNS host_lib.py; it does not import it as a sibling. Excluded by name
 # rather than by a path heuristic so the exemption is visible.
@@ -203,7 +207,10 @@ def _role(name: str) -> Path:
 
 def test_the_census_finds_exactly_the_known_consumers():
     assert consumers(ROLES) == (
-        set(EXPECTED_CONSUMERS) | set(BORROWING_CONSUMERS) | set(POD_STAGED_CONSUMERS)
+        set(EXPECTED_CONSUMERS)
+        | set(BORROWING_CONSUMERS)
+        | set(POD_STAGED_CONSUMERS)
+        | PACKAGE_SHIPPED_CONSUMERS
     )
 
 
@@ -220,6 +227,13 @@ def test_every_borrowing_consumer_reads_a_role_that_installs_host_lib():
         assert lender in EXPECTED_CONSUMERS and includes_of(_role(lender)), (
             f"{borrower} imports host_lib from {lender}'s directory, but {lender} no longer "
             f"installs it through {SHARED_TASK}"
+        )
+
+
+def test_a_package_shipped_consumer_installs_nothing_itself():
+    for name in sorted(PACKAGE_SHIPPED_CONSUMERS):
+        assert not includes_of(_role(name)), (
+            f"{name} is shipped by a host package, but its tasks include {SHARED_TASK} again"
         )
 
 

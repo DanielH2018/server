@@ -31,7 +31,6 @@ from pathlib import Path
 _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset(
     {
-        "claude_code",
         "deploy_ui",
         "fake_remux",
         "gitops_deploy",
@@ -44,19 +43,12 @@ _K3S = frozenset({"k3s"})
 _LH = "scripts/lib/longhorn_lib"
 _STAMPED = _HOST_LIB | {"initial_setup"}
 _KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
-_ALERT_UNIT = frozenset(
-    {
-        "claude_code",
-        "gitops_deploy",
-        "renovate_agent",
-        "renovate_notify",
-    }
-)
+_ALERT_UNIT = frozenset({"gitops_deploy", "renovate_agent", "renovate_notify"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
     f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
     f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
-    f"{_COMMON}/tasks/agent_user.yml": frozenset({"claude_code", "renovate_agent"}),
+    f"{_COMMON}/tasks/agent_user.yml": frozenset({"renovate_agent"}),
     # `hosts/lib/` since H7.2e: the packages ship it, and the Ansible consumers below still copy
     # it beside their scripts until their own PRs move them. `ci_verdict.py` is the deployer's
     # alone (`gitops_deploy/tasks/code.yml` copies it), and the longhorn_lib modules are the
@@ -93,16 +85,11 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
-    # A `defaults/` file whose variable another role reads (#4303). claude_code puts each agent
-    # in `initial_setup_worktree_holders_group`, so a rename re-applied only initial_setup and
-    # moved the socket away from every agent. A change to that key applies the whole
-    # claude_code tag: its reader, `tasks/agent_access.yml`, runs only inside the agent
-    # include, whose tasks all carry that one tag. A change to keys claude_code never reads
-    # drops claude_code from the tick's run (#4361). claude_code and renovate_agent each copy
-    # the uv binary `initial_setup_uv_version` pins, and name that key where they check the
-    # copy, so a uv bump re-applies both after initial_setup (#5945).
+    # A `defaults/` file whose variable another role reads. renovate_agent copies the uv binary
+    # `initial_setup_uv_version` pins, and names that key where it checks the copy, so a uv bump
+    # re-applies it after initial_setup (#5945).
     "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
-        {"claude_code", "renovate_agent"}
+        {"renovate_agent"}
     ),
     # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
     # profile and the operator checkout from claude_code's defaults (#4357).
@@ -133,10 +120,11 @@ SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
 # imports install_host_lib.yml or stamp_deployed.yml any more.
 K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
     "hosts/lib/host_lib.py": frozenset({"configarr", "janitorr"}),
-    # autofix-bridge, configarr, crowdsec, janitorr and uptime-kuma stage it into a pod's
-    # ConfigMap (#3745); crowdsec's is its crowdsec-jobs sidecar's, since H2.4b.
+    # configarr, crowdsec, janitorr and uptime-kuma stage it into a pod's ConfigMap (#3745);
+    # crowdsec's is its crowdsec-jobs sidecar's, since H2.4b. autofix-bridge left the list at
+    # M6 batch B7's Cutover-2, when its push went.
     "hosts/lib/kuma_push.py": frozenset(
-        {"autofix-bridge", "configarr", "crowdsec", "janitorr", "uptime-kuma"}
+        {"configarr", "crowdsec", "janitorr", "uptime-kuma"}
     ),
 }
 
@@ -160,9 +148,7 @@ K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {
 # `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
 # `ansible/tests/setup/test_setup_cross_role_reads.py` holds it to the tree.
 SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
-    "ansible/filter_plugins/claude_agents.py": frozenset(
-        {"claude_code", "initial_setup"}
-    ),
+    "ansible/filter_plugins/claude_agents.py": frozenset({"initial_setup"}),
     "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
 }
 

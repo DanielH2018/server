@@ -1,0 +1,13 @@
+# Shipped by homelab-daniel-box with its enable link. Every N minutes, where
+# claude_code_artifacts_sync_minute is `*/N`; sync-artifacts.sh.j2 derives its textfile deadline
+# from the same value and refuses any other shape.
+{% set _every_n = claude_code_artifacts_sync_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+[Unit]
+Description=Sync the peers' Claude artifacts every {{ _every_n }} minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/{{ _every_n }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -6,8 +6,8 @@ own /api/v3/queue, classifies items as auto-block candidates (the narrow hard-ba
 malware-signature classes), tracks a consecutive-cycle streak in-process for a grace period,
 caps the per-cycle blast radius, then — unless DRY_RUN — DELETEs the item with blocklist=true
 (removes from client + blocklists the release) and fires a series/movie re-search so the *arr
-grabs a clean replacement. Health -> its own Uptime Kuma push monitor; each action -> the *arr
-Discord webhook. Stdlib only (python:3.14-alpine); config is env-driven so this stays testable.
+grabs a clean replacement. Health -> the `homelab_check_*` gauges Prometheus scrapes; each
+action -> the *arr Discord webhook. Stdlib only (python:3.14-alpine); config is env-driven so this stays testable.
 
 Fake-remux detection moved OUT of this sidecar (2026-07-17) to the host-plane fake_remux_scan.py:
 it needs ffprobe, which this zero-privilege container (cap_drop ALL, no docker) can't run. See the
@@ -29,7 +29,6 @@ Environment (all optional; deployment.yaml.j2 sets them, the credentials from en
     GRACE_CYCLES               consecutive cycles an item must stay bad (default 3)
     MAX_ACTIONS_PER_CYCLE      per-cycle cap on actions (default 5)
     SONARR_URL, SONARR_API_KEY, RADARR_URL, RADARR_API_KEY   the *arr endpoints
-    KUMA_URL, KUMA_PUSH_ARR_AUTOBLOCK                        the Uptime Kuma push monitor
     ARR_DISCORD_WEBHOOK_URL    Discord webhook for each action
     HEARTBEAT_FILE            file touched after every cycle (default /tmp/heartbeat)
     CHECK_EXPORTER_PORT       port that serves the cycle's verdict as `homelab_check_*` gauges
@@ -45,16 +44,12 @@ import urllib.request
 import bridge.common
 import jobs_metrics
 from bridge.common import HTTP_TIMEOUT, _env, clamp_discord, sanitize
-from kuma_push import kuma_push
 
 INTERVAL = int(_env("INTERVAL", "300"))
 HEARTBEAT_FILE = _env("HEARTBEAT_FILE", "/tmp/heartbeat")
-# No default: deployment.yaml.j2 renders it from the uptime-kuma entry's port, the only source.
-KUMA_URL = _env("KUMA_URL", "").rstrip("/")
-KUMA_PUSH = _env("KUMA_PUSH_ARR_AUTOBLOCK", "")
-# M6 batch B7: the cycle's verdict also leaves the pod as gauges, beside the Kuma push. The
-# `check` label is the Kuma tile's token name, and the deadline is three cycles: one missed
-# cycle is a slow poll and two is a hung one, so the third is the first that is not noise.
+# The cycle's verdict leaves the pod as gauges (M6 batch B7). The `check` label is the name the
+# Kuma tile's token carried, and the deadline is three cycles: one missed cycle is a slow poll
+# and two is a hung one, so the third is the first that is not noise.
 # Unset or 0 serves nothing, which keeps a hand-run and the tests off the port.
 CHECK_EXPORTER_PORT = int(_env("CHECK_EXPORTER_PORT", "0"))
 CHECK = "arr-autoblock"
@@ -249,30 +244,11 @@ def post_discord(msg):
         bridge.common.log("discord post failed (%s):" % msg, e)
 
 
-def push(ok, msg):
-    """Pushes an up/down heartbeat plus message to the Kuma push monitor.
-
-    A no-op, logged, when KUMA_URL or KUMA_PUSH is unset. Goes through setup/common's
-    `kuma_push`, the host pushers' own: it caps `msg` so a long report cannot get the DOWN alert
-    rejected by Discord, retries a rollout's 404 window three times 30s apart, and never raises,
-    so an unreachable Kuma cannot crash the poll loop (#3745). The retry fits well inside the
-    liveness probe's 1000s heartbeat window on top of the 300s INTERVAL.
-
-    Args:
-        ok: Whether the cycle succeeded (pushed as status "up") or not ("down").
-        msg: The status message to attach to the push.
-    """
-    if not KUMA_URL or not KUMA_PUSH:
-        bridge.common.log("WARN: no Kuma URL or push token set; skipping push:", msg)
-        return
-    kuma_push("up" if ok else "down", msg, KUMA_URL, KUMA_PUSH, log=bridge.common.log)
-
-
 def run_once(streaks):
     """One poll+decide+act cycle.
 
-    Returns (ok, msg) for the Kuma push. Raises on an unreachable *arr / failed mutation, which
-    main() converts to a descriptive `down`.
+    Returns (ok, msg) for the cycle's verdict. Raises on an unreachable *arr / failed mutation, which
+    cycle_verdict() converts to a descriptive `down`.
     """
     apps = [
         (
@@ -315,8 +291,9 @@ def run_once(streaks):
         app_name, base, key, item = candidates[k]
         streak = streaks.get(k, GRACE_CYCLES)
         if not DRY_RUN:
-            # Mutate FIRST: if the DELETE/search raises, it must propagate (main() renders a
-            # Kuma `down`) without a false "Blocklisted" report having already gone to Discord.
+            # Mutate FIRST: if the DELETE/search raises, it must propagate (cycle_verdict()
+            # records a `down`) without a false "Blocklisted" report having already gone to
+            # Discord.
             _request(
                 "%s/api/v3/queue/%s?removeFromClient=true&blocklist=true"
                 % (base, item["id"]),
@@ -374,25 +351,19 @@ def cycle_verdict(streaks, run=None):
         return False, "autofix-bridge error: %s" % e
 
 
-def report_cycle(exposition, ok, msg, push_fn=None):
-    """Logs a cycle's verdict, records it to the exporter, then pushes it to Kuma.
-
-    The record comes before the push, because `kuma_push` retries a rollout's 404 window for up
-    to about 90s and a scrape in that gap must not read the previous cycle's verdict.
-    `push_fn` defaults to `push`; a test passes a recorder.
-    """
+def report_cycle(exposition, ok, msg):
+    """Logs a cycle's verdict and records it to the exporter, which `--once` never starts."""
     bridge.common.log("OK  " if ok else "DOWN", msg)
     if exposition:
         exposition.record(CHECK, ok, time.time())
-    (push_fn or push)(ok, msg)
 
 
 def main():
-    """Runs the poll+decide+act loop, pushing a Kuma heartbeat after every cycle.
+    """Runs the poll+decide+act loop, reporting each cycle's verdict.
 
     Loops forever at INTERVAL seconds unless invoked with --once, in which case it runs a
-    single cycle and returns. A cycle's own exception is caught, logged, and pushed as a
-    DOWN status rather than allowed to kill the loop. Each verdict also reaches the exporter
+    single cycle and returns. A cycle's own exception is caught, logged, and recorded as a
+    DOWN verdict rather than allowed to kill the loop. Each verdict reaches the exporter
     (`report_cycle`), which `--once` never starts.
     """
     once = "--once" in sys.argv

@@ -135,6 +135,20 @@ def install_map() -> dict[str, tuple[Path, Path]]:
                             REPO / pair["src"],
                             task_file,
                         )
+    # A host component installs a role's script by its own `role-file:` entry, and a shared module
+    # beside it by a `lib:` entry, once the role's tasks no longer copy them (H7.40 emptied
+    # `claude_code`'s).
+    for component in sorted((REPO / "hosts" / "components").glob("*/component.yml")):
+        data = yaml_fast.safe_load(component.read_text(encoding="utf-8")) or {}
+        role_dirs = sorted(ROLES.glob(f"*/{data.get('role')}"))
+        if not role_dirs:
+            continue
+        for entry in data.get("files") or []:
+            name = str(entry.get("src", "")).removeprefix("role-file:")
+            if name != entry.get("src"):
+                add(entry["dst"], role_dirs[0] / "files" / name, component)
+            if entry.get("lib"):
+                add(entry["dst"], REPO / "hosts" / "lib" / entry["lib"], component)
     return found
 
 

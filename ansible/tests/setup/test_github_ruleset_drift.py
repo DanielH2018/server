@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run github-ruleset-drift.sh for real against a stubbed GitHub and a recording Kuma push.
+"""Run github-ruleset-drift.sh for real against a stubbed GitHub and a recording journal.
 
 Exercised rather than pattern-matched, for the reason the repo keeps relearning: what breaks in
 a drift check is its BRANCHING — which conditions report up, which report down, and whether an
@@ -8,7 +8,7 @@ a check that reports "no drift" when it could not look is the exact failure this
 prevent (see a-deadman-is-not-a-failure-report).
 
 Every case below drives the real script through `_ruleset_drift.run`, which repoints only the
-Kuma push helper the script sources and `curl`.
+check library the script sources and `curl`.
 """
 
 import json
@@ -47,7 +47,7 @@ def test_matching_ruleset_is_clean(tmp_path):
 
 
 def test_a_clean_run_writes_an_up_textfile_with_the_tile_deadline(tmp_path):
-    """M6 batch B3: the verdict reaches the textfile collector beside the Kuma push."""
+    """M6 batch B3: the verdict reaches the textfile collector."""
     rc, status, _ = run(tmp_path, curl_body=ruleset_body(DECLARED))
     series = textfile_series(tmp_path, "github-ruleset-drift")
     assert (rc, status) == (0, "up")
@@ -122,8 +122,8 @@ def _journal(tmp_path):
 def test_a_clean_run_reaches_the_journal(tmp_path):
     """The accepting half of the journal line: a clean run logs its verdict, not only a failed one.
 
-    The push library logs a push only when it fails, so without this line a clean run leaves no
-    trace on the host and a verify-by of "confirmed green from its journal" cannot be met.
+    Without this line a clean run leaves no trace on the host and a verify-by of "confirmed green
+    from its journal" cannot be met.
     """
     run(tmp_path, curl_body=ruleset_body(DECLARED))
     lines = _journal(tmp_path)
@@ -133,7 +133,7 @@ def test_a_clean_run_reaches_the_journal(tmp_path):
 
 
 def test_a_down_run_reaches_the_journal_with_its_reason(tmp_path):
-    """The rejecting half: a DOWN logs the same reason the tile shows."""
+    """The rejecting half: a DOWN logs the same reason the textfile verdict carries."""
     run(tmp_path, curl_body=ruleset_body(DECLARED[1:]))
     lines = _journal(tmp_path)
     assert len(lines) == 1

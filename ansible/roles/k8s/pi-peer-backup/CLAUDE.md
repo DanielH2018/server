@@ -58,37 +58,36 @@ replaced the retired Kopia scope for the Pi.
 - **sudo rsync** on the Pi is required (files are root-owned); the ubuntu user there
   has NOPASSWD sudo. The wrapper's exec'd argv stays `sudo rsync …`, so it works under a
   rule scoped to rsync as well as under `ALL`.
-- **Alerting:** the job pushes "WG Pi Peer Backup" (Kuma push monitor, 2.5-day window)
-  directly — up on success with the file count, down with the rsync error or the
-  file-count-floor breach (>= 2 files required; no `--delete`, so an empty source can
-  never wipe the copy). A host key that no longer matches the pin pushes down with
-  `daniel-pi host key differs from the committed pin` instead of the generic rsync error.
-  `ansible/tests/services/test_pi_peer_backup_host_key_failure.py` holds that branch apart
-  from an unreachable Pi, which also exits 255. The job also pings an off-premises Healthchecks.io check
-  (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured: Kuma resolves to a
-  Service in this cluster, so a cluster outage silences both the push and the monitor
-  waiting for it. See `docs/healthchecks-io-deadman.md`.
-  The script writes its verdict and any failed push to stdout in the host crons' syslog
-  shape (`<ts> <pod> pi-peer-backup: status=… ` / `push failed (http=… rc=…[ by=kuma]) (…)`)
-  so monitor-bridge's Swallowed Push Verdicts check reads this pusher too, through its
-  `{container="pi-peer-backup"}` selector (#1943) — a Kuma-rejected push here pages within one bridge cycle.
-  **What the monitor means:** "the nightly 23:00 run happened," not "some run happened
-  recently." The gate run below skips both pushes, so a routine promotion can't mask a missed
-  scheduled firing or page from a deploy-time run instead of the backup itself. `configarr`
-  takes the OPPOSITE position: its health reader counts a gate run like any other finished
-  Job, because a configarr gate run genuinely performs the reconcile, where this role's gate
-  run is a dead-man push about a specific 23:00 firing. See
+- **Alerting:** the job reports its verdict as `up` on success with the file count, or `down`
+  with the rsync error or the file-count-floor breach (>= 2 files required; no `--delete`, so
+  an empty source can never wipe the copy). A host key that no longer matches the pin reports
+  down with `daniel-pi host key differs from the committed pin` instead of the generic rsync
+  error. `ansible/tests/services/test_pi_peer_backup_host_key_failure.py` holds that branch
+  apart from an unreachable Pi, which also exits 255. The verdict reaches Prometheus through the
+  ConfigMap below, and the `pods` rules page it. The job also pings an off-premises
+  Healthchecks.io check (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured, because a
+  cluster outage silences the CronJob and every rule that reads it. See
+  `docs/healthchecks-io-deadman.md`. The Kuma push monitor went at M6 batch B7's Cutover-1a and
+  the push at Cutover-2. The script still writes its verdict to stdout in the host crons'
+  syslog shape (`<ts> <pod> pi-peer-backup: status=… `), so monitor-bridge's Swallowed Push
+  Verdicts check reads this pusher through its `{container="pi-peer-backup"}` selector (#1943)
+  until C-7 deletes it. **What the verdict means:** "the nightly 23:00 run happened," not "some
+  run happened recently." The gate run below skips the ping and the export, so a routine
+  promotion can't mask a missed scheduled firing or page from a deploy-time run instead of the
+  backup itself. `configarr` takes the OPPOSITE position: its health reader counts a gate run
+  like any other finished Job, because a configarr gate run genuinely performs the reconcile,
+  where this role's gate run is a report about a specific 23:00 firing. See
   `ansible/roles/k8s/configarr/CLAUDE.md`.
-- **The verdict is also exported** (M6 batch B7). After each scheduled run the script sends one
+- **The verdict is exported** (M6 batch B7). After each scheduled run the script sends one
   merge PATCH, with curl and the pod's ServiceAccount token, that sets `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` on the ConfigMap `pi-peer-backup-verdict`
   (`templates/verdict-configmap.yaml.j2`, rendered with no annotations so the script is their
   only writer). kube-state-metrics exports the verdict, and the `pods` rule group's
-  `PiPeerBackupFailed` and `PiPeerBackupNotReporting` read it in shadow. `templates/rbac.yaml.j2`
+  `PiPeerBackupFailed` and `PiPeerBackupNotReporting` read it and page since B7's Cutover-1b. `templates/rbac.yaml.j2`
   grants `patch` on that one name. The CronJob mounts the token for that call alone, so the
   backup pod holds an API token it did not hold before. The message is stripped of IPv4
   addresses and JSON-hostile characters. A failed export makes the run exit 1, so the CronJob's
-  last successful time stops moving. The gate run skips the export, like the pushes.
+  last successful time stops moving. The gate run skips the export, like the ping.
 - **The gate Job, in `pi-peer-backup-verify`.** `defaults/main.yml` names the CronJob in
   `flux_cronjob_gates` as a verify gate, so the renderer copies it into the Job
   `pi-peer-backup-deploy-gate-<spec digest8>` (`scripts/renderer/renderer_lib/cronjob_gate.py`).
@@ -105,7 +104,7 @@ replaced the retired Kopia scope for the Pi.
       nodes give the second a Multi-Attach wait until its 600s `activeDeadlineSeconds`, and
       the verify Kustomization's 660s `timeout` reports that as a failed gate.
 - **Manual run/proof:** `kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup`
-  (this bypasses the gate-run hostname check, so a manual proof run DOES push — same as a
+  (this bypasses the gate-run hostname check, so a manual proof run DOES report — same as a
   scheduled run).
 
 ## Editing

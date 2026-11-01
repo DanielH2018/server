@@ -1,7 +1,8 @@
 """A Claude Code session that ends on an API error can start its own Discord page (#6021).
 
-`roles/setup/claude_code/tasks/stop_alert.yml` installs `claude-stop-alert@.service` and the
-polkit rule that lets the session accounts start it. The dotfiles StopFailure hook starts it with
+The claude-code host component ships `claude-stop-alert@.service` and the polkit rule
+(`roles/setup/claude_code/templates/50-claude-stop-alert.rules.j2`) that lets the session
+accounts start it. The dotfiles StopFailure hook starts it with
 the error cause as the instance, so the rule must admit that alphabet and the message must speak
 about a session, not a fan-out batch.
 
@@ -15,16 +16,12 @@ from _helpers import ANSIBLE
 from _setup_render import render_setup_text
 from lib import yaml_fast
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
 RULE = "50-claude-stop-alert.rules.j2"
 ACCOUNTS = {
     "sys_user": "stop-sentinel-operator",
     "claude_code_agents_present": ["claude"],
 }
-
-
-def tasks() -> list[dict]:
-    return yaml_fast.safe_load((ROLE / "tasks" / "stop_alert.yml").read_text())
 
 
 def rule() -> str:
@@ -69,37 +66,13 @@ def test_the_rule_admits_the_operator_and_each_agent_and_only_the_start_verb() -
 
 
 def test_the_alert_names_a_session_not_a_fanout_batch() -> None:
-    (alert,) = [t for t in tasks() if "ansible.builtin.import_tasks" in t]
-    variables = alert["vars"]
-    assert variables["alert_unit_instanced"] is True
-    assert variables["alert_unit_name"] == "claude-stop"
-    message = variables["alert_unit_message"]
-    assert "session" in message
-    assert "fanout" not in message and "fan-out" not in message
-
-
-def test_switching_it_off_removes_everything_the_install_writes() -> None:
-    installs = [t for t in tasks() if t.get("when") == "claude_code_stop_alert_enabled"]
-    dests = set()
-    for t in installs:
-        if "ansible.builtin.import_tasks" in t:
-            dests.add(
-                f"/etc/systemd/system/{t['vars']['alert_unit_name']}-alert@.service"
-            )
-            dests.add(f"{t['vars']['alert_unit_env_dir']}/alert-webhook.env")
-            continue
-        module = t.get("ansible.builtin.template") or t["ansible.builtin.file"]
-        dests.add(module.get("dest") or module["path"])
-    assert "/etc/polkit-1/rules.d/50-claude-stop-alert.rules" in dests
-    (removal,) = [
-        t for t in tasks() if t.get("when") == "not claude_code_stop_alert_enabled"
+    unit = (COMPONENT.parent / "units" / "claude-stop-alert@.service").read_text()
+    body = "\n".join(line for line in unit.splitlines() if not line.startswith("#"))
+    assert "session" in body
+    assert "fanout" not in body and "fan-out" not in body
+    shipped = [
+        entry["dst"]
+        for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
+        if entry.get("src") == "units/claude-stop-alert@.service"
     ]
-    removed = removal["loop"]
-    for dest in dests:
-        assert any(dest == r or dest.startswith(f"{r}/") for r in removed), dest
-    assert removed[0].endswith(".rules"), "the rule goes first"
-
-
-def test_main_imports_the_stop_alert_file() -> None:
-    main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    assert any(t.get("ansible.builtin.import_tasks") == "stop_alert.yml" for t in main)
+    assert shipped == ["/usr/lib/systemd/system/claude-stop-alert@.service"]

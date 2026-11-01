@@ -1,4 +1,4 @@
-"""Guards for the */10 health crons' boot grace (kuma-push-lib.sh `boot_grace_active`).
+"""Guards for the */10 health crons' boot grace (homelab-check-lib.sh `boot_grace_active`).
 
 A cron that fires seconds after a boot evaluates a half-started cluster and sends a
 healthchecks.io `/fail`, which alerts IMMEDIATELY — the check's own period and grace never get a
@@ -7,7 +7,7 @@ the failure mode of a boot guard is silence, so nothing observes it working.
 
 Measured boot-to-Ready on daniel-box is 5m18s (boot at 07:39:48, last pod Ready at 07:45:06)
 against the 12-second head start of the */10 crons, which ran at 07:40:00. Without the guard,
-`longhorn-backup-health` and `uptime-kuma-alive` both page.
+`longhorn-backup-health` pages.
 
 Each script is read as RENDERED text. The grace is a role default, so the source carries
 `boot_grace_active {{ k3s_health_cron_boot_grace_s }}` and a guard matching that string holds
@@ -24,7 +24,7 @@ from lib.repo_paths import K3S_DEFAULTS
 from _shell_render import rendered_names_for, rendered_shell_text
 from lib.proc_testing import run
 
-LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
+LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
 K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
 
 GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]
@@ -114,39 +114,18 @@ def test_the_frequent_crons_call_the_guard():
         )
 
 
-# The scripts in FREQUENT_SCRIPTS that still feed a Kuma push tile. disk-health.sh.j2 left this
-# set when M3's PR 5 moved its verdict to the textfile and Prometheus.
-KUMA_PUSHING_SCRIPTS = ("longhorn-backup-health.sh.j2",)
-
-
-def test_a_guarded_cron_still_beats_its_kuma_tile():
-    # The half that is easy to miss: these scripts feed a Kuma push tile as well as a
-    # healthchecks.io dead-man, and the two have different tolerances. `k3s Longhorn Backup` runs
-    # a 1200s window against a 600s cron, so it tolerates exactly ONE missed push — the one a
-    # silent skip would consume, leaving the margin to cron jitter.
-    #
-    # So the guard pushes `up` with a skip message instead of exiting quietly. Asserted at the
-    # call site rather than by rendering the tile, because what breaks this is someone moving the
-    # guard back above PUSH_URL for tidiness.
-    for name in KUMA_PUSHING_SCRIPTS:
+def test_the_frequent_crons_skip_with_no_push_and_exit_clean():
+    # Neither script has a Kuma tile any more (disk-health since M3's PR 5, longhorn-backup-health
+    # since M6's B1 Cutover-2), so a skipped run has no heartbeat to keep. It must exit 0 and the
+    # script must not push anywhere. The previous textfile stays and DEADLINE_S covers the slot.
+    for name in FREQUENT_SCRIPTS:
         text = rendered_shell_text("setup", "k3s", name)
-        guard = text.index(f"boot_grace_active {GRACE_S}")
-        assert text.index('PUSH_URL="') < guard, (
-            f"{name}: the boot guard runs before PUSH_URL is set, so it cannot beat"
+        guard = text.index(f"if boot_grace_active {GRACE_S}")
+        skip_block = text[guard : text.index("\nfi\n", guard)]
+        assert "exit 0" in skip_block, name
+        assert "kuma_push" not in text.replace("kuma-push-lib.sh", ""), (
+            f"{name}: a Kuma push is back in a script whose tile is gone"
         )
-        assert 'kuma_push up "skipped — host still booting"' in text[guard:], (
-            f"{name}: the boot guard skips the run without keeping the Kuma tile's heartbeat"
-        )
-
-
-def test_the_disk_health_skip_path_pushes_nothing_and_exits_clean():
-    # disk-health has no Kuma tile since M3's PR 5, so its skip path has no heartbeat to keep.
-    # It must exit 0 without a push, and the script must not push anywhere else either.
-    text = rendered_shell_text("setup", "k3s", "disk-health.sh.j2")
-    guard = text.index(f"if boot_grace_active {GRACE_S}")
-    skip_block = text[guard : text.index("\nfi\n", guard)]
-    assert "exit 0" in skip_block
-    assert "kuma_push" not in text.replace("kuma-push-lib.sh", "")
 
 
 def test_a_skipped_run_pings_no_healthchecks_slug():
@@ -184,6 +163,6 @@ def test_the_daily_timer_checks_exit_without_a_verdict_inside_the_grace():
         assert "exit 1" in skip_block, (
             f"{name}: the boot skip must exit 1 so the timer reruns"
         )
-        assert "kuma_push" not in skip_block and "hc-ping" not in skip_block, (
-            f"{name}: the skip path must push no verdict for a run that did not happen"
+        assert "hc-ping" not in skip_block, (
+            f"{name}: the skip path must ping no slug for a run that did not happen"
         )

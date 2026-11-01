@@ -3,7 +3,7 @@
 This role holds the host writes that D5 moves out of the k8s roles before each role flips to
 Flux: docs's site directory, traefik's absent arm, registry's
 ghcr-mirror GC, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
-artifacts' three directory tasks (the star list directory among them), media-volume's media
+media-volume's media
 directories, observability's retired dashboard staging trees, uptime-kuma's stale
 autokuma-claims staging directory. A Flux-owned
 role has no Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
@@ -34,8 +34,9 @@ from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static 
 `k8s_host_files` tag reaches every task in the file. docs' conversion PR wrote the first,
 `tasks/docs.yml`, which created the site directory docs' Deployment mounts as a hostPath of
 `type: Directory`. H7.10a moved that directory into the docs-refresh component's `tmpfiles.d`
-file (`hosts/components/docs-refresh/`) and deleted the task file. artifacts' PR wrote `tasks/artifacts.yml`, which creates the three trees
-artifacts' Deployment mounts the same way. media-volume's PR wrote `tasks/media-volume.yml`,
+file (`hosts/components/docs-refresh/`) and deleted the task file. artifacts' PR wrote a task
+file for the three trees artifacts' Deployment mounts the same way, and H7.40 moved them into
+the claude-code component's `tmpfiles.d` file and deleted it. media-volume's PR wrote `tasks/media-volume.yml`,
 which creates the directory media-volume's static PersistentVolume names and its `media/` and
 `torrents/` subdirectories, with no mode. configarr's PR wrote `tasks/configarr.yml`, the
 absent arms that remove H2.5b's retired host health reader: its cron, its script, its working
@@ -75,8 +76,7 @@ because `initial_setup.yml` has no dry-run mode.
   shared key in `group_vars/all.yml` routes to the deploy plane only, which never runs
   `initial_setup.yml`.
 - **A copy sits in its task's `vars:`, not in this role's defaults, unless a template reads it.** A task file with
-  several tasks wraps them in one `block:` and puts the copies in the block's `vars:`, as
-  `tasks/artifacts.yml` does. Role defaults are play-wide in `initial_setup.yml`, so a
+  several tasks wraps them in one `block:` and puts the copies in the block's `vars:`. Role defaults are play-wide in `initial_setup.yml`, so a
   defaults copy of a key another setup role names becomes a cross-role read, which
   `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a row in the deployer's
   cross-role table (#5472). A copy of `sys_user` or another `group_vars` key would make
@@ -94,8 +94,7 @@ Two tests in `ansible/tests/setup/` hold those rules:
   the registry GC templates.
 - `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
   imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
-  that each copy equals its source. artifacts' PR added `artifacts_host_dir`, `artifacts_peer_dir`, `artifacts_peer_sources`
-  and `artifacts_stars_dir`. media-volume's PR added `media_volume_host_path` and the
+  that each copy equals its source. media-volume's PR added `media_volume_host_path` and the
   `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
   when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which
   H7.25 moved into the `pi-peer-backup-target` component's authorized-key line.

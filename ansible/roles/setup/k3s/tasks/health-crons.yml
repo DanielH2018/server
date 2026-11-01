@@ -1,5 +1,5 @@
 ---
-# Host crons that push heartbeats for the backup plane, root-disk headroom and
+# Host crons that write textfile verdicts for the backup plane, root-disk headroom and
 # manifest drift, plus the shared Healthchecks.io ping key they use.
 
 - name: Create the setup-plane state directory
@@ -32,21 +32,15 @@
 # same problem: a stamp that ran first would let a run that died partway through declare
 # every script current.
 
-- name: Deploy the Kuma push credentials for the heartbeat scripts
+# Nothing removes a file the role stops declaring. M6 batch B1's Cutover-2 stopped the four
+# shell scripts from sourcing /etc/rancher/k3s/kuma-push.env, so this retires the host copy. It
+# holds four Kuma push tokens in a 0640 file, which a retired credential must not outlive.
+- name: Retire the Kuma push credentials of the heartbeat scripts
   tags: [backup-health, disk-health, manifest-prune, etcd-snapshot, release-staleness]
-  # 0640 root:{{ sys_user }}, for the same reason as live-drift-check.env below: the scripts that
-  # consume these land 0755, so a token rendered inline is readable by every local account — and
-  # a Kuma push token is enough to forge or suppress a heartbeat, which hides a real outage. The
-  # root crons (etcd-snapshot, manifest-prune) and the {{ sys_user }} crons (backup/disk health)
-  # both read this one file; the group is what lets the latter.
-  ansible.builtin.template:
-    src: kuma-push.env.j2
-    dest: /etc/rancher/k3s/kuma-push.env
-    mode: "0640"
-    owner: root
-    group: "{{ sys_user }}"
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/kuma-push.env
+    state: absent
   become: true
-  no_log: true  # renders five Kuma push tokens
 
 - name: Create the Healthchecks.io credential directory
   tags: [backup-health, disk-health, manifest-prune]
@@ -68,9 +62,8 @@
   # covers both callers — manifest-prune-check runs as root (owner), the other two as
   # {{ sys_user }} (group). Same shape as /etc/renovate-notify/config.env.
   ansible.builtin.copy:
-    # Single-quoted for the same reason as kuma-push.env and live-drift-check.env: this file is
-    # `.`-sourced by root and {{ sys_user }} scripts, so an unquoted value is shell input rather
-    # than data.
+    # Single-quoted because this file is `.`-sourced by root and {{ sys_user }} scripts, so an
+    # unquoted value is shell input rather than data.
     content: "HC_PING_KEY='{{ healthchecks_ping_key | default('') }}'\n"
     dest: /etc/healthchecks/ping.env
     mode: "0640"
@@ -522,32 +515,25 @@
       {{ (k3s_release_file_groups | selectattr('name', 'eq', 'k3s-live-drift')
           | first).files }}
 
-- name: Deploy the live-drift check Kuma credentials
+# Nothing removes a file the role stops declaring (see the kuma-push credentials above). M6
+# batch B1's Cutover-2 stopped the live-drift check from reading its push token and host, so this
+# retires the host copy of the file that held them.
+- name: Retire the live-drift check Kuma credentials
   tags: [live-drift]
-  # 0640 root:{{ sys_user }} rather than inlined into the cron entry. /etc/cron.d is 0700
-  # root:root on this host, so a token in the cron file would not leak today — but that mode
-  # comes from the cron package, not from anything this role asserts, and a credential's
-  # protection should not rest on a default nothing here owns. Same split as ping.env for the
-  # Healthchecks key.
-  ansible.builtin.template:
-    src: live-drift-check.env.j2
-    dest: /etc/rancher/k3s/live-drift-check.env
-    mode: "0640"
-    owner: root
-    group: "{{ sys_user }}"
+  ansible.builtin.file:
+    path: /etc/rancher/k3s/live-drift-check.env
+    state: absent
   become: true
-  no_log: true  # renders the Kuma push token
 
 - name: Schedule the live-object drift check
   tags: [live-drift]
   # KUBECONFIG is set explicitly because systemd supplies neither it nor a useful PATH, as cron
   # did not — without it kubectl talks to no cluster and every kind returns an error, which the
-  # check reports as exit 2 rather than as a clean run. The env file carries the push token;
-  # EnvironmentFile= exports it the way the cron's `set -a` did.
+  # check reports as exit 2 rather than as a clean run.
   #
   # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
-  # verdict reruns every 30 min until it clears rather than sitting on the tile for a day.
-  # BOOT_GRACE_S makes a Persistent catch-up run at boot exit 1 without a push, so the restart
+  # verdict reruns every 30 min until it clears rather than sitting red for a day.
+  # BOOT_GRACE_S makes a Persistent catch-up run at boot exit 1 without a verdict, so the restart
   # carries the real verdict once the cluster is up.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
   vars:
@@ -558,7 +544,6 @@
       /usr/local/bin/uv run --no-project --no-python-downloads
       --python {{ host_python_version }} /usr/local/bin/live-drift-check.py
     kuma_check_user: "{{ sys_user }}"
-    kuma_check_env_file: /etc/rancher/k3s/live-drift-check.env
     kuma_check_environment:
       - "KUBECONFIG=/home/{{ sys_user }}/.kube/config"
       - "BOOT_GRACE_S={{ k3s_health_cron_boot_grace_s }}"

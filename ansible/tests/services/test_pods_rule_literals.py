@@ -132,11 +132,11 @@ def loki_ddns_rules(text: str) -> dict[str, dict]:
 
 
 def log_rule_problems(rules: dict[str, dict], deployments: set[str]) -> list[str]:
-    """Each cloudflare-ddns LogQL rule that is not shadow or names a pod no Deployment owns."""
+    """Each cloudflare-ddns LogQL rule that is shadow or names a pod no Deployment owns."""
     problems = [f"{a}: missing" for a in DDNS_LOG_RULES if a not in rules]
     for alert, rule in rules.items():
-        if rule["labels"].get("shadow") != "true":
-            problems.append(f"{alert}: not shadow")
+        if "shadow" in rule["labels"]:
+            problems.append(f"{alert}: shadow")
         pods = re.findall(r'pod=~"([^"]*)"', rule["expr"])
         if (
             pods != [f"{DDNS_LOG_RULES[alert]}-.*"]
@@ -148,7 +148,7 @@ def log_rule_problems(rules: dict[str, dict], deployments: set[str]) -> list[str
     return problems
 
 
-def test_the_cloudflare_ddns_log_rules_are_shadow_and_name_a_rendered_deployment():
+def test_the_cloudflare_ddns_log_rules_page_and_name_a_rendered_deployment():
     deployments = {
         d["metadata"]["name"]
         for template in ("deployment-direct.yaml.j2", "deployment-proxied.yaml.j2")
@@ -160,6 +160,12 @@ def test_the_cloudflare_ddns_log_rules_are_shadow_and_name_a_rendered_deployment
     assert log_rule_problems(rules, deployments) == []
     # The red proof: a renamed Deployment leaves the rule selecting no stream.
     assert log_rule_problems(rules, {"cloudflare-ddns-main"}) != []
+    # And a rule that regains `shadow` pages nobody.
+    shadowed = {
+        alert: {**rule, "labels": {**rule["labels"], "shadow": "true"}}
+        for alert, rule in rules.items()
+    }
+    assert log_rule_problems(shadowed, deployments) != []
 
 
 def test_the_rules_find_every_named_alert():

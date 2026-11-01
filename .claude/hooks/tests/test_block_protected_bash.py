@@ -132,10 +132,11 @@ def test_a_write_asks_rather_than_denies():
 
 # ── arm 2: reads that print a secret-bearing host script ─────────────────────────────
 
-# github-ruleset-drift.sh embeds a live push token: a
+# registry-gc.sh embeds a live push token: a
 # `grep -nE "rotate|--commit|sops set|push"` on it prints the token. (The original incident file,
-# secret-rotation-audit.sh, reads its token from a credential since H7.10c, so it stays out.)
-INCIDENT = "/usr/local/bin/github-ruleset-drift.sh"
+# secret-rotation-audit.sh, reads its token from a credential since H7.10c, so it stays out, and
+# github-ruleset-drift.sh followed it when M6 batch B3's Cutover-2 dropped its push.)
+INCIDENT = "/usr/local/bin/registry-gc.sh"
 
 FLAGGED_READS = [
     f'grep -nE "rotate|--commit|sops set|push" {INCIDENT}',
@@ -193,7 +194,7 @@ def test_the_derivation_still_finds_the_incident_file():
     """The rejecting half of the derivation itself: an empty set would make arm 2 inert."""
     paths = _mod._secret_bearing_paths(_REPO)
     assert INCIDENT in paths
-    assert "ruleset_drift_push_token" in paths[INCIDENT]
+    assert "registry_gc_push_token" in paths[INCIDENT]
 
 
 def test_a_set_held_beside_the_hook_wins_over_the_trees_derivation(tmp_path):

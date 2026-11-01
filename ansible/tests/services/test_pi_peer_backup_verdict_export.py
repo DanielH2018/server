@@ -24,7 +24,7 @@ CONFIGMAP = "pi-peer-backup-verdict"
 URL = f"https://kubernetes.default.svc/api/v1/namespaces/homelab/configmaps/{CONFIGMAP}"
 
 # A curl that records each call as one line of NUL-free JSON and answers the PATCH with
-# $PATCH_CODE; every other call is the Kuma push and gets a 200.
+# $PATCH_CODE; any other call gets a 200.
 CURL = r"""#!/bin/sh
 patch=0
 for a in "$@"; do [ "$a" = PATCH ] && patch=1; done
@@ -68,7 +68,6 @@ def _run(
         "HOME": str(tmp_path / "home"),
         "HOSTNAME": hostname,
         "PI_SRC": "ubuntu@192.0.2.1:/src/",
-        "KUMA_PUSH_URL": "http://kuma.example/api/push/token",
         "SERVICEACCOUNT_DIR": str(sa),
         "CURL_LOG": str(log),
         "PATCH_BODY": str(body),

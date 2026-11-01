@@ -82,9 +82,9 @@ the name:
   operator account and for another user. rkhunter still reads only the main `sshd_config`, so the Pi's
   `PermitRootLogin` read is unchanged by the move. `initial_setup_packaged_hosts['sshd']` names
   the hosts whose package owns the subject.
-- **The UFW LAN allow must sort above the SSH limit rule**, which is why its task declares
-  `insert: 0` / `insert_relative_to: first-ipv4`: UFW takes the first matching rule, so an
-  allow appended below the limiter is inert (#508).
+- **The UFW LAN allow must sort above the SSH limit rule**, which is why the `ssh-firewall`
+  component declares `lan-ssh` with `position: first` and `before: ssh-limit`: UFW takes the
+  first matching rule, so an allow appended below the limiter is inert (#508).
   `ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py` pins the exemption and its ordering.
   The exemption exists because `limit` REJECTs a source at 6 connections in 30 seconds on a
   rolling window, counting SUCCESSFUL ones, so retries sustain the block — parallel Claude
@@ -101,6 +101,12 @@ the name:
   H7.34 declares them. It also leaves the hand-added 45876 allow from the pod network, which
   no task writes. The live defaults already match, so the arm runs no `ufw default`, which on
   a k3s node would reload the ruleset under kube-router (the 2026-10-25 outage).
+- **On daniel-box (H7.32), the arm owns the two SSH rules beside the builder's two repository
+  allows, and initial_setup keeps no UFW task for any host.** The `k3s` role's join rules and
+  its coredns-host metrics allows carry no comment, and the `deploy_ui` role labels its allows
+  with a comment that does not start `homelab:`, so the arm leaves all of them. H7.35 declares
+  the join rules `keep`. As on daniel-server, the live defaults match and the arm runs no
+  `ufw default`.
 - **UFW owns a SECOND sysctl file**, `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in
   `/etc/default/ufw`), re-applied on every `ufw enable` or `reload`. Ubuntu ships it with
   `log_martians=0`, so before #2977 this role's loop wrote 1 and `Enable UFW firewall` wrote 0
@@ -122,14 +128,15 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
 
 ## Integrity scans, Postfix and the Pi's swap file
 
-- **On daniel-pi (H7.30) and daniel-server (H7.31), the package runs the scans and the
-  maintenance jobs.** The
+- **On every host since H7.32 (daniel-pi in H7.30, daniel-server in H7.31, daniel-box in
+  H7.32), the package runs the scans and the maintenance jobs.** The
   `integrity-scans`, `fail2ban`, `postfix`, `accounting` and `host-maintenance` components
   render this role's templates in place (`role: initial_setup`), and each cron becomes a timer
   at the cron's slot. The weekly reboot refuses while the validation flag of `homelab-reconcile` exists. The
   push tokens and the Healthchecks.io key arrive as unit credentials, not as `/etc` env files.
   The first AIDE and rkhunter baselines and the mask on `dailyaidecheck.timer` stay host state.
-  `initial_setup_packaged_hosts['fail2ban']` and `['maintenance']` name the hosts.
+  `initial_setup_packaged_hosts['fail2ban']` and `['maintenance']` name the hosts. The weekly
+  firmware update ships only where `has_fwupd` is true, which is daniel-box alone.
 - **AIDE and rkhunter are scheduled against each other, and the package's own timer is masked.**
   `dailyaidecheck.timer` duplicated the weekly cron nightly with broken mail alerting, at about
   1h20m of CPU per night on the Pi. Both weekly scans run `nice -n19 ionice -c3`, staggered to

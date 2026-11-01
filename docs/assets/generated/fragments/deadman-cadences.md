@@ -7,7 +7,6 @@
 | `manifest-prune-check` | `15 5 * * *` | `k3s_manifest_prune_cron_hour` / `_minute` |
 | `pi-peer-backup` | `0 23 * * *` | `pi_peer_backup_k8s_schedule` (a k8s CronJob, not a host cron) |
 | `registry-gc` | `20 4 * * 0` | `registry_k8s_gc_cron_weekday` / `_hour` / `_minute` |
-| `uptime-kuma-alive` | `*/10 * * * *` | the `longhorn-backup-health` cron; the same script pings both |
 | `alertmanager-watchdog` | `every 60s` | `observability_alertmanager_watchdog_repeat_seconds`, Alertmanager's Watchdog repeat, not a cron |
 | `weekly-reboot-daniel-server` | `30 7 * * 0` | `weekly_reboot_weekday` / `_hour` / `_minute`, on daniel-server |
 | `weekly-reboot-daniel-pi` | `30 7 * * 0` | `weekly_reboot_weekday` / `_hour` / `_minute`, on daniel-pi |

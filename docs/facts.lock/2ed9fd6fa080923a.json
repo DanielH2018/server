@@ -1,0 +1,12 @@
+{
+  "checksum": "7aa3df31919a0c1c058c30e48bc9d4b045f38ec42d8545e2c655b103dc70b7b0",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/k8s/observability/CLAUDE.md#The trap: an idle stack is indistinguishable from a broken one",
+  "row": {
+    "atoms": {
+      "hosts/components/claude-code/": "0c7d7c48948f71952dce53fd0751b7c0c4df73b56724f2b6883863c36ef7bfcd"
+    },
+    "python": "3.14",
+    "verified_sha": "dd4bc2a78"
+  }
+}
