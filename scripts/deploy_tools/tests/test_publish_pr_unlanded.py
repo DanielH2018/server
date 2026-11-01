@@ -55,12 +55,18 @@ def test_a_remote_head_with_an_open_pr_is_the_benign_code():
 _OPEN_PR = '[{"number": 41, "headRefName": "docs-refresh/2026-09-03-0600"}]'
 
 
-def _view(review: str, *conclusions: str) -> subprocess.CompletedProcess[str]:
-    rollup = ",".join(f'{{"conclusion": "{c}"}}' for c in conclusions)
+def _view(
+    review: str, *conclusions: str, mergeable: str = "MERGEABLE"
+) -> subprocess.CompletedProcess[str]:
+    """A PR view whose first check is the CI gate, then one unnamed-job check per conclusion."""
+    rollup = ",".join(
+        f'{{"name": "{CI_GATE_NAME if i == 0 else f"job{i}"}", "conclusion": "{c}"}}'
+        for i, c in enumerate(conclusions)
+    )
     return cp(
         0,
-        out=f'{{"headRefOid": "abc1234def", "reviewDecision": "{review}", '
-        f'"statusCheckRollup": [{rollup}]}}',
+        out=f'{{"headRefOid": "abc1234def", "mergeable": "{mergeable}", '
+        f'"reviewDecision": "{review}", "statusCheckRollup": [{rollup}]}}',
     )
 
 
@@ -210,6 +216,63 @@ def test_a_cancelled_run_does_not_excuse_a_red_check_outside_the_gate():
     out = _unlanded(rec)
     assert out.rc == publish_pr.UNLANDED_PR_RED
     assert "failed checks (image-smoke)" in out.message
+
+
+_APP_ONLY_ROLLUP = '[{"name": "GitGuardian Security Checks", "conclusion": "SUCCESS"}]'
+
+
+def _app_only_view(mergeable: str) -> subprocess.CompletedProcess[str]:
+    return cp(
+        0,
+        out=f'{{"headRefOid": "abc1234def", "mergeable": "{mergeable}", '
+        f'"reviewDecision": "", "statusCheckRollup": {_APP_ONLY_ROLLUP}}}',
+    )
+
+
+def test_a_conflicting_pr_is_the_red_code():
+    """#6847: GitHub runs no CI on a conflicting PR, so it read as 2 while blocking every run."""
+    rec = Recorder(
+        {
+            "git ls-remote": cp(0, out=_HEAD),
+            "gh pr list": cp(0, out=_OPEN_PR),
+            "gh pr view": _app_only_view("CONFLICTING"),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.UNLANDED_PR_RED
+    assert out.message.startswith(
+        "PR #41 from a previous run conflicts with its base on "
+        "docs-refresh/2026-09-03-0600; GitHub runs no CI on a conflicting PR"
+    )
+    assert out.branch == "docs-refresh/2026-09-03-0600"
+    assert not any(c[:2] == ("gh", "api") for c in rec.calls)
+
+
+@pytest.mark.parametrize("mergeable", ["MERGEABLE", "UNKNOWN"])
+def test_a_pr_github_has_not_marked_conflicting_stays_the_benign_code(mergeable):
+    """UNKNOWN is GitHub still computing mergeability, which clears on its own."""
+    rec = Recorder(
+        {
+            "git ls-remote": cp(0, out=_HEAD),
+            "gh pr list": cp(0, out=_OPEN_PR),
+            "gh pr view": _view("", "SUCCESS", "", mergeable=mergeable),
+        }
+    )
+    assert _unlanded(rec).rc == publish_pr.UNLANDED_PR_OPEN
+
+
+def test_a_rollup_without_the_ci_gate_is_not_merged():
+    """#6847: an app's lone passing check is a PR whose CI never ran, not a green one."""
+    rec = Recorder(
+        {
+            "git ls-remote": cp(0, out=_HEAD),
+            "gh pr list": cp(0, out=_OPEN_PR),
+            "gh pr view": _app_only_view("MERGEABLE"),
+        }
+    )
+    out = _unlanded(rec)
+    assert out.rc == publish_pr.UNLANDED_PR_OPEN
+    assert not any(c[:2] == ("gh", "api") for c in rec.calls)
 
 
 def test_a_refused_backstop_merge_is_reported():
