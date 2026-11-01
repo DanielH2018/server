@@ -1,8 +1,9 @@
 """The rendered `pi-heartbeats` component: the Pi's three heartbeats as packaged timers (H3.8b).
 
 The scripts' own behaviour is run against stubs in `ansible/tests/setup/test_pi_*.py`. These
-tests hold what the move added: the units that run the scripts, the credential each token
-script reads, the copied push helper, and the Autonomous-role contract, which moved from
+tests hold what the move added: the units that run the scripts, the absence of any credential
+or push in the two token heartbeats, the copied push helper the Pi's scans still source, and the
+Autonomous-role contract, which moved from
 `optimize_pi`'s `CLAUDE.md` into `component.yml`'s header with the recovery heartbeat.
 
 Run: uv run pytest hosts/lib/tests/test_pi_heartbeats_component.py
@@ -28,10 +29,10 @@ CONTRACT_PARTS = (
     "Required evidence, every cycle:",
     "Next-run review:",
 )
-# Each token script's unit and the credential it loads from /run/credstore (H4.5).
-CREDENTIALS = {
-    "homelab-pi-sd-health.service": "pi_sd_health_push_token",
-    "homelab-pi-recovery.service": "pi_recovery_push_token",
+# The two units whose scripts pushed to Kuma until M6 batch B5's Cutover-2, and their scripts.
+TOKEN_SERVICES = {
+    "homelab-pi-sd-health.service": "pi-sd-health",
+    "homelab-pi-recovery.service": "pi-recovery-health",
 }
 
 
@@ -116,33 +117,47 @@ def test_each_service_that_runs_docker_grants_the_docker_group(package):
     assert "homelab-pi-recovery.service" in runs_docker
 
 
-@pytest.mark.parametrize(("service", "key"), sorted(CREDENTIALS.items()))
-def test_each_token_script_reads_its_credential_and_embeds_no_token(
-    package, service, key
+def credential_problems(unit: str, script: str) -> list[str]:
+    """Why a heartbeat unit and its script still depend on a push credential, or nothing."""
+    problems = []
+    if "LoadCredential=" in unit:
+        problems.append("the unit loads a credential")
+    if "homelab-secrets.service" in unit:
+        problems.append("the unit waits for homelab-secrets.service")
+    if "CREDENTIALS_DIRECTORY" in script:
+        problems.append("the script reads $CREDENTIALS_DIRECTORY")
+    return problems
+
+
+@pytest.mark.parametrize("service", sorted(TOKEN_SERVICES))
+def test_a_heartbeat_unit_loads_no_credential_and_its_script_reads_none(
+    package, service
 ):
     unit = _text(package, f"{UNITS}/{service}")
-    assert f"LoadCredential={key}:/run/credstore/{key}\n" in unit
+    script = _text(package, f"{LIB}/{TOKEN_SERVICES[service]}")
+    assert credential_problems(unit, script) == []
     assert "/etc/homelab/interim" not in unit
-    assert "After=homelab-secrets.service\n" in unit
-    assert "Wants=homelab-secrets.service\n" in unit
-    script = _text(package, unit.split("ExecStart=", 1)[1].split("\n", 1)[0])
-    assert f'"${{CREDENTIALS_DIRECTORY:-}}/{key}"' in script
-    assert "/api/push/${PUSH_TOKEN}" in script
 
 
-def test_the_scripts_render_domain_from_inventory(package):
-    domain = render_context(None, "daniel-pi", inventory=REPO_INVENTORY)["domain"]
-    for script in ("pi-sd-health", "pi-recovery-health"):
-        assert f'KUMA_HOST="uptime-kuma.local.{domain}"' in _text(
-            package, f"{LIB}/{script}"
-        )
+def test_credential_problems_is_flagged_on_a_unit_that_still_loads_one():
+    unit = (
+        "After=homelab-secrets.service\nLoadCredential=pi_sd_health_push_token:/run/x\n"
+    )
+    assert credential_problems(unit, '"${CREDENTIALS_DIRECTORY:-}/x"') == [
+        "the unit loads a credential",
+        "the unit waits for homelab-secrets.service",
+        "the script reads $CREDENTIALS_DIRECTORY",
+    ]
 
 
-def test_the_push_helper_is_a_byte_copy_of_initial_setups(package):
+def test_the_push_helper_is_a_byte_copy_the_scans_still_source(package):
     source = REPO / host_mode.SHARED_FILES["kuma-push-lib.sh"]
     assert package.files[f"{LIB}/kuma-push-lib.sh"] == (source.read_bytes(), 0o644)
+    # The heartbeats stopped sourcing it in Cutover-2; the AIDE and rkhunter scans did not.
     for script in ("pi-sd-health", "pi-recovery-health"):
-        assert f"source {LIB}/kuma-push-lib.sh" in _text(package, f"{LIB}/{script}")
+        assert "kuma-push-lib.sh" not in _text(package, f"{LIB}/{script}")
+    for script in ("aide-check", "rkhunter-check"):
+        assert f"{LIB}/kuma-push-lib.sh" in _text(package, f"{LIB}/{script}")
 
 
 def test_the_check_library_is_a_byte_copy_of_initial_setups(package):
@@ -182,8 +197,10 @@ def test_the_retired_crons_and_scripts_are_legacy_entries(package):
     assert all(entry in package.legacy for entry in expected), package.legacy
 
 
-def test_the_package_ships_the_secrets_unit_and_names_both_credentials_it_loads(
-    package,
-):
+def test_the_package_keeps_both_push_credentials_until_the_token_pr(package):
+    # No unit loads them since Cutover-2, but `host_secrets.py check` pins this list to the Pi's
+    # SOPS file, so B5's token PR removes both keys from the list and the file in one step.
     assert "homelab-secrets.service" in package.units()
-    assert set(CREDENTIALS.values()) <= set(package.credentials)
+    assert {"pi_sd_health_push_token", "pi_recovery_push_token"} <= set(
+        package.credentials
+    )

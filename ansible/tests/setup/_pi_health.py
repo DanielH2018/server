@@ -7,14 +7,16 @@ Not a test module itself.
 These scripts are exercised for real rather than pattern-matched, because what breaks is
 shell logic and line formatting, neither of which a textual guard can see. The render goes
 through `_shell_render`, so what runs here cannot differ from what the shellcheck gate lints
-(#3178). Only two absolute paths are repointed at temp files -- the Kuma push helper it
-sources, and the health log it appends to -- and the push token sits in a temp directory the
-run names as `$CREDENTIALS_DIRECTORY`, as the unit's `LoadCredential=` does. Every decision the
-script makes runs unmodified.
+(#3178). Only two absolute paths are repointed at temp files -- the check library it sources,
+and the health log it appends to. Every decision the script makes runs unmodified. The scripts
+push nothing since M6 batch B5's Cutover-2, so the verdict a run reports is read back from the
+health log line it appends.
 
 The scripts are the `pi-heartbeats` host component's (H3.8b), and `COMPONENT_DEFAULTS` is its
 `component.yml` `defaults:` map.
 """
+
+import re
 
 from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.proc_testing import run as launch
@@ -25,31 +27,12 @@ from validate.shell_templates import COMPONENTS
 
 COMPONENT = COMPONENTS / "pi-heartbeats"
 COMPONENT_DEFAULTS = load_yaml(COMPONENT / "component.yml")["defaults"]
-REAL_LIB = "/usr/lib/homelab/kuma-push-lib.sh"
 # The package's copy of initial_setup's check library, M6 B5. The scripts source the package
 # path; the test sources the role's file, so it needs neither the package nor a host that has
 # installed the library.
 REAL_CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 ROLE_CHECK_LIB = SETUP_ROLES / "initial_setup" / "files" / "homelab-check-lib.sh"
 REAL_LOG = "/var/log/pi-health/health.log"
-# The credential each token script reads, by script name, as its unit's LoadCredential= names it.
-CREDENTIALS = {
-    "pi-sd-health": "pi_sd_health_push_token",
-    "pi-recovery-health": "pi_recovery_push_token",
-}
-
-# kuma_push, recording instead of pushing. Signature from
-# roles/setup/initial_setup/files/kuma-push-lib.sh: STATUS MSG PUSH_URL HOST RESOLVE_IP TAG.
-# KUMA_PUSH_OK mirrors the real lib's contract, so the push-failed branch is reachable.
-LIB_STUB = """\
-kuma_push() {
-  KUMA_PUSH_OK="${STUB_PUSH_OK:-1}"
-  printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"
-  # Whether the textfile verdict was already on disk when the push began (M6 B5 writes it first).
-  [ -f "$TEXTFILE_DIR/$6.prom" ] && : > "$KUMA_PUSH_OUT.textfile-first"
-}
-"""
-
 # Enough of the docker CLI for pi-recovery-health: the `ps -q` liveness probe, `inspect`,
 # and `start`. Running containers live in $STATE_FILE, one name per line; $UNSTARTABLE names
 # those whose start fails. `inspect` answers with the
@@ -159,7 +142,6 @@ def render(name, tmp_path, jinja_vars=None):
     )
 
     for literal, label in (
-        (REAL_LIB, "push helper"),
         (REAL_CHECK_LIB, "check library"),
         (REAL_LOG, "health log"),
     ):
@@ -168,15 +150,9 @@ def render(name, tmp_path, jinja_vars=None):
             "substitution hook is gone, so it is not exercising the real script any more"
         )
 
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(LIB_STUB)
     log = tmp_path / "health.log"
 
-    body = (
-        body.replace(REAL_LIB, str(lib))
-        .replace(REAL_CHECK_LIB, str(ROLE_CHECK_LIB))
-        .replace(REAL_LOG, str(log))
-    )
+    body = body.replace(REAL_CHECK_LIB, str(ROLE_CHECK_LIB)).replace(REAL_LOG, str(log))
 
     return write_exec(tmp_path / f"{name}.sh", body), log
 
@@ -186,7 +162,6 @@ def run(
     tmp_path,
     running=(),
     unstartable="",
-    push_ok="1",
     counter=None,
     jinja_vars=None,
     exit_code="137",
@@ -198,6 +173,9 @@ def run(
     log_fstype="tmpfs",
 ):
     """Run a heartbeat script; return (status, msg, still_running, health_log_lines).
+
+    `status` and `msg` are the verdict the script appended to the health log, which is also what
+    the textfile's success value follows.
 
     `log_fstype` is what pi-sd-health's findmnt probe reads for /var/log; `""` is no mount.
     `journal` is what the journalctl stub answers, `\\n`-separated; `journalctl_calls(tmp_path)`
@@ -229,12 +207,8 @@ def run(
 
     state = tmp_path / "running"
     state.write_text("".join(f"{c}\n" for c in running))
-    out = tmp_path / "push"
-    credentials = tmp_path / "credentials"
-    credentials.mkdir()
     textfiles = tmp_path / "textfile"
     textfiles.mkdir(exist_ok=True)
-    (credentials / CREDENTIALS[name]).write_text(f"stub-{name}-token")
 
     launch(
         ["bash", str(script)],
@@ -243,7 +217,6 @@ def run(
             "PATH": path_with(bin_dir, env={"PATH": "/usr/bin:/bin"}),
             "STATE_FILE": str(state),
             "UNSTARTABLE": unstartable,
-            "STUB_PUSH_OK": push_ok,
             "STUB_EXIT": exit_code,
             "STUB_ERROR": error,
             "STUB_DAEMON_DOWN": "1" if daemon_down else "0",
@@ -252,15 +225,14 @@ def run(
             "STUB_JOURNAL": journal,
             "STUB_LOG_FSTYPE": log_fstype,
             "JOURNALCTL_CALLS": str(tmp_path / "journalctl.calls"),
-            "KUMA_PUSH_OUT": str(out),
             "TEXTFILE_DIR": str(textfiles),
-            "CREDENTIALS_DIRECTORY": str(credentials),
         },
     )
 
-    status, msg = out.read_text().splitlines()
     lines = log.read_text().splitlines() if log.exists() else []
-    return status, msg, set(state.read_text().split()), lines
+    verdict = re.search(r": status=(up|down) ?(.*)$", lines[-1])
+    assert verdict, f"the health log's last line carries no verdict: {lines!r}"
+    return verdict[1], verdict[2], set(state.read_text().split()), lines
 
 
 def textfile(tmp_path, name) -> dict[str, float]:

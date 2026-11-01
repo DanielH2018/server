@@ -4,9 +4,10 @@
 #
 # Usage: pi-sd-health [-h|--help]
 # Takes no arguments. homelab-pi-sd-health.timer runs it every 5 minutes on daniel-pi, through
-# homelab-pi-sd-health.service, which hands it the push token. It reads the root filesystem's
-# ext4 errors_count from sysfs and the verdict file that pi-gz-integrity writes, then pushes to
-# the Daniel Pi SD Health Kuma monitor. To run it by hand, start the service; it pushes.
+# homelab-pi-sd-health.service. It reads the root filesystem's ext4 errors_count from sysfs and
+# the verdict file that pi-gz-integrity writes, then writes pi-sd-health.prom to node_exporter's
+# textfile directory and one line to /var/log/pi-health/health.log. To run it by hand, start the
+# service.
 #
 # SD cards have no SMART (no ATA/NVMe command set behind mmcblk0), so a dying card
 # only announces itself through filesystem errors. The kernel counts them per ext4
@@ -14,12 +15,9 @@
 # reliable "replace this card" signal (it persists across reboots until fsck clears
 # the superblock error state).
 #
-# Pushes status to the static "Daniel Pi SD Health" Kuma push monitor every 5 min
-# (timer). Dead-man's-switch: an explicit `down` names the problem fast, while a dead
-# timer/host simply stops pushing and trips the monitor's 600s heartbeat watchdog.
-# Route: Traefik's .local router on the server, resolved directly to the server's
-# LAN IP (no DNS dependency); Authelia bypasses ^/api/push/ on this host LAN-only —
-# the URL token is the credential.
+# Prometheus reads the textfile (pi-checks.yaml, M6 batch B5). PiSdHealthFailed names a `down`
+# verdict fast, and PiSdHealthNotReporting fires when the verdict goes stale, which is how a
+# dead timer or host shows.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -29,29 +27,12 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/lib/homelab/kuma-push-lib.sh || {
-  logger -t pi-sd-health "kuma-push-lib.sh missing — reinstall homelab-daniel-pi"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/lib/homelab/homelab-check-lib.sh || {
   logger -t pi-sd-health "homelab-check-lib.sh missing — reinstall homelab-daniel-pi"
   exit 1
 }
 
 COUNTER=/sys/fs/ext4/mmcblk0p2/errors_count
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-# The push token arrives through the unit's LoadCredential=, from a root-only file, and never
-# sits in this script. A missing token stops the push, so the monitor's watchdog trips.
-TOKEN_FILE="${CREDENTIALS_DIRECTORY:-}/pi_sd_health_push_token"
-if ! PUSH_TOKEN=$(cat "$TOKEN_FILE" 2>/dev/null) || [ -z "$PUSH_TOKEN" ]; then
-  logger -t pi-sd-health "no push token at $TOKEN_FILE — start homelab-pi-sd-health.service rather than this script"
-  exit 1
-fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
 if COUNT=$(cat "$COUNTER" 2>/dev/null); then
   if [ "$COUNT" = "0" ]; then
@@ -66,9 +47,9 @@ else
 fi
 
 # The rotated-log integrity verdict, produced daily by pi-gz-integrity and folded in here.
-# Same monitor on purpose (#2715): a rotated log that stops decompressing and a climbing ext4
-# errors_count are the same operator action on the same device, and a second Kuma monitor would
-# need its own push token, SOPS entry and rotation registry row. A verdict older than the
+# Same check on purpose (#2715): a rotated log that stops decompressing and a climbing ext4
+# errors_count are the same operator action on the same device, and a second check would need
+# its own textfile, rules and deadline literals. A verdict older than the
 # sweep's own period is itself a down — the unreachable-source rule above, applied to a source
 # that happens to be a file: a sweep that stopped running must not keep reporting yesterday.
 GZ_STATE="{{ optimize_pi_gz_integrity_state_file }}"
@@ -97,8 +78,7 @@ if [ "$LOG_FSTYPE" != "tmpfs" ]; then
   MSG="${MSG}; /var/log is not log2ram's tmpfs (fstype '${LOG_FSTYPE:-none}'), so logs write to the SD card — check systemctl status log2ram"
 fi
 
-# The textfile verdict for Prometheus, before the push: kuma_push retries for over 60s on a failed
-# push, and the verdict should not wait behind it (M6 B5, docs/target-architecture/monitoring/
+# The textfile verdict for Prometheus (M6 B5, docs/target-architecture/monitoring/
 # m6-retire-kuma.md). DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a
 # test pins the rule's literals to it. The directory is root:sys_user 2775, so this unit's user
 # can write it.
@@ -106,20 +86,14 @@ DEADLINE_S=900
 write_check_textfile pi-sd-health "$([ "$STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
   || logger -t pi-sd-health "textfile write failed (status=${STATUS})"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
-
 # Durable record of this cycle, so `probe.py alerts` can reconstruct the episode. The full
 # reasoning — why a file and not `logger`, and why the timestamp format is load-bearing —
 # is in pi-recovery-health.sh.j2, which emits the same shape under its own tag.
 #
 # A failing SD card is the one signal on this host where the history matters more than the
 # current state: `errors_count` only ever climbs, so knowing WHEN it first moved is the whole
-# diagnosis, and Kuma cannot answer that.
+# diagnosis, and the textfile keeps only the latest verdict.
 HEALTH_LOG="/var/log/pi-health/health.log"
 mkdir -p "${HEALTH_LOG%/*}" 2>/dev/null || true
-if [ "${KUMA_PUSH_OK:-1}" = "1" ]; then
-  DETAIL="status=${STATUS} ${MSG}"
-else
-  DETAIL="push failed (status=${STATUS}: ${MSG})"
-fi
+DETAIL="status=${STATUS} ${MSG}"
 printf '%s %s %s: %s\n' "$(date -Is)" "$(hostname)" pi-sd-health "$DETAIL" >>"$HEALTH_LOG"
