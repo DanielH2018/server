@@ -61,12 +61,16 @@ def _git(
 # -- host_targets ------------------------------------------------------------------------
 
 
-def _snapshots(tmp_path: Path, hosts: dict[str, list[str]], failed: str = ""):
-    """Snapshot roots holding `hosts/<host>/package.yml` for each host listed per commit."""
+def _snapshots(
+    tmp_path: Path, hosts: dict[str, list[str]], failed: str = "", packages=()
+):
+    """Snapshot roots holding `hosts/<host>/package.yml` for each host listed per commit,
+    and `hosts/packages/<pkg>/package.yml` for each shared package in `packages`.
+    """
     roots = {}
     for sha, names in hosts.items():
         root = tmp_path / sha[:1]
-        for name in names:
+        for name in [*names, *(f"packages/{p}" for p in packages)]:
             (root / "hosts" / name).mkdir(parents=True)
             (root / "hosts" / name / "package.yml").write_text("{}\n")
         (root / host_wait.SHARED_TIMER).parent.mkdir(parents=True, exist_ok=True)
@@ -81,13 +85,19 @@ def _snapshots(tmp_path: Path, hosts: dict[str, list[str]], failed: str = ""):
 
 
 def _reads(snapshot, trees: Mapping[tuple[str, str], Any], **kw) -> HostReads:
-    """Reads whose render answers `trees[(commit letter, host)]`."""
+    """Reads whose renders answer `trees[(commit letter, host or package)]`."""
     return HostReads(
         snapshot=snapshot,
         render=lambda root, host: trees[(root.name, host)],
+        render_package=lambda root, package: trees[(root.name, package)],
         git=kw.pop("git", _git()),
         **kw,
     )
+
+
+def _nfpm(*depends: str) -> dict:
+    lines = "".join(f"- {d}\n" for d in depends)
+    return {"nfpm.yaml": ("file", 0o644, f"name: x\ndepends:\n{lines}".encode())}
 
 
 def _dropin(text: str = PI_DROPIN) -> dict:
@@ -150,6 +160,56 @@ def test_a_failed_render_makes_every_host_a_target(tmp_path):
         Path("/p"), MERGE, _reads(snapshot, trees, git=git)
     )
     assert targets == [HostTarget("daniel-pi")]
+
+
+def test_a_host_independent_of_a_changed_shared_package_is_clean(tmp_path):
+    snapshot, _ = _snapshots(
+        tmp_path, {MERGE: ["daniel-box"], PARENT: ["daniel-box"]}, packages=["tools"]
+    )
+    box = _nfpm("python3 (>= 3.12)", "age")
+    trees = {
+        ("a", "daniel-box"): box,
+        ("b", "daniel-box"): box,
+        ("a", "tools"): {"x": ("file", 0o644, b"new")},
+        ("b", "tools"): {"x": ("file", 0o644, b"old")},
+    }
+    assert host_wait.host_targets(Path("/p"), MERGE, _reads(snapshot, trees)) == []
+
+
+def test_a_host_depending_on_a_changed_shared_package_is_flagged(tmp_path):
+    """#6859: a homelab-tools change reaches every host whose package depends on it."""
+    snapshot, _ = _snapshots(
+        tmp_path, {MERGE: ["daniel-pi"], PARENT: ["daniel-pi"]}, packages=["tools"]
+    )
+    pi = _nfpm("python3 (>= 3.12)", "tools", "age")
+    trees = {
+        ("a", "daniel-pi"): pi,
+        ("b", "daniel-pi"): pi,
+        ("a", "tools"): {"x": ("file", 0o644, b"new")},
+        ("b", "tools"): {"x": ("file", 0o644, b"old")},
+    }
+    targets = host_wait.host_targets(Path("/p"), MERGE, _reads(snapshot, trees))
+    assert [t.host for t in targets] == ["daniel-pi"]
+
+
+def test_a_failed_shared_package_render_makes_every_host_a_target(tmp_path):
+    snapshot, _ = _snapshots(
+        tmp_path, {MERGE: ["daniel-pi"], PARENT: ["daniel-pi"]}, packages=["tools"]
+    )
+    git = _git(stdout={"ls-tree": "hosts/daniel-pi\n"})
+    trees = {("a", "tools"): None, ("b", "tools"): {}}
+    targets = host_wait.host_targets(
+        Path("/p"), MERGE, _reads(snapshot, trees, git=git)
+    )
+    assert targets == [HostTarget("daniel-pi")]
+
+
+def test_the_real_pi_render_depends_on_the_real_shared_packages():
+    tree = host_wait.render_host_tree(REPO, "daniel-pi")
+    assert tree is not None
+    assert "homelab-tools" in host_wait.depends_of(tree)
+    assert host_wait._packages_in(REPO) >= {"homelab-tools", "homelab-updater"}
+    assert host_wait.render_package_tree(REPO, "homelab-tools")
 
 
 def test_the_enable_link_is_read_from_the_first_parent_not_the_merge(tmp_path):
