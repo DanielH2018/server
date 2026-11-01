@@ -18,6 +18,7 @@ commits and needs ``GIT_AUTHOR_*`` passes its own ``env`` to ``subprocess`` dire
 
 import os
 import subprocess
+import tempfile
 from pathlib import Path
 
 
@@ -114,6 +115,42 @@ def git_dirty(
     if paths:
         args += ["--", *paths]
     return bool(git_stdout(*args, cwd=cwd))
+
+
+def merge_tree(
+    base: str, head: str, cwd: str | Path
+) -> subprocess.CompletedProcess[str]:
+    """Run ``git merge-tree --write-tree <base> <head>`` without writing to the object store.
+
+    ``merge-tree`` writes every tree and merged blob of its result as a loose object, and a
+    content check only needs the result's OID. Each call therefore runs against a scratch
+    object directory, with the repository's own store as an alternate for reading, and the
+    scratch directory is deleted when the call returns. The exit code and output are git's:
+    0 for a clean merge, 1 for a conflict, anything else for a failure.
+
+    Every result left in the store is unreachable and inside gc's prune window, so a caller
+    that asks once per worktree per master advance would keep ``git gc --auto`` writing
+    ``gc.log`` and refusing to run.
+    """
+    common = git_stdout(
+        "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=cwd, check=False
+    )
+    args = ["merge-tree", "--write-tree", base, head]
+    if not common:
+        return git(*args, cwd=cwd, check=False)
+    with tempfile.TemporaryDirectory(prefix="merge-tree-") as scratch:
+        env = git_env() | {
+            "GIT_OBJECT_DIRECTORY": scratch,
+            "GIT_ALTERNATE_OBJECT_DIRECTORIES": str(Path(common) / "objects"),
+        }
+        return subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
 
 
 # Long enough that no live session's just-written objects are in range, short enough to bound the
