@@ -473,12 +473,8 @@ if [ -e "$ROOT$UNIT_DIR/homelab-rkhunter-check.timer" ] &&
     echo "bootstrap-host: wrote the first rkhunter baseline"
 fi
 if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
-    if [ ! -e "$ROOT/var/lib/aide/aide.db" ]; then
-        echo "bootstrap-host: writing the first AIDE database, which takes over an hour on the Pi"
-        # -y overwrites an aide.db.new an interrupted run left; -f installs it as aide.db.
-        aideinit -y -f || die "aideinit failed"
-    fi
-    # The aide package's own timer runs a second, nightly full scan. A mask survives a package
+    # The aide package's own timer runs a second, nightly full scan. It is masked before the
+    # hour-long aideinit, so a failed init still leaves it masked. A mask survives a package
     # upgrade, which a disable does not.
     if [ "$(systemctl is-enabled dailyaidecheck.timer 2> /dev/null)" != masked ]; then
         systemctl mask --now dailyaidecheck.timer || die "cannot mask dailyaidecheck.timer"
@@ -487,5 +483,10 @@ if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
     # A mask keeps a failed state the timer held before it, and only reset-failed clears it.
     if systemctl is-failed --quiet dailyaidecheck.timer; then
         systemctl reset-failed dailyaidecheck.timer
+    fi
+    if [ ! -e "$ROOT/var/lib/aide/aide.db" ]; then
+        echo "bootstrap-host: writing the first AIDE database, which takes over an hour on the Pi"
+        # -y overwrites an aide.db.new that an interrupted run left behind.
+        aideinit -y || die "aideinit failed"
     fi
 fi

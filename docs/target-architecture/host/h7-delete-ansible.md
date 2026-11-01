@@ -1334,10 +1334,11 @@ steps are:
 7. On a host whose package ships the `integrity-scans` timers, write the component's
    one-time state, each piece behind a guard that reads it first:
     - `rkhunter --propupd`, when `/var/lib/rkhunter/db/rkhunter.dat` is missing;
-    - `aideinit -y -f`, when `/var/lib/aide/aide.db` is missing. It runs for over an hour
-      on the Pi;
     - `systemctl mask --now dailyaidecheck.timer`, when `systemctl is-enabled` does not
       print `masked`. The aide package's own timer would run a second, nightly full scan.
+      The mask comes before `aideinit`, so a failed init still leaves the timer masked;
+    - `aideinit -y`, when `/var/lib/aide/aide.db` is missing. It runs for over an hour on
+      the Pi.
 
    The step runs last, so both baselines record every package the earlier steps installed.
    The package does not carry these as a first-run oneshot (#6674). A oneshot would
