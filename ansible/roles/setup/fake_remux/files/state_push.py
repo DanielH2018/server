@@ -2,7 +2,7 @@
 """Generic {ts,ok,msg} state-file reader for a host that monitor-bridge cannot see.
 
 Prints one tab-separated line per state file — `up<TAB>msg` or `down<TAB>msg` — for a wrapper to
-push to Kuma. Always exits 0: a DOWN is data to report, not a crash, and the wrapper needs the
+turn into a textfile verdict. Always exits 0: a DOWN is data to report, not a crash, and the wrapper needs the
 message either way.
 
 Why this is generic when configarr's and janitorr's readers were bespoke: those two had to be
@@ -13,7 +13,7 @@ host. `disk_prune`, `fake_remux`, `fake_remux_replace`, `verify`, `pi_peers` and
 in check.py are all literally this shape, so the port is a parameter, not a rewrite.
 
 Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml). Carries no secrets: the push URL lives in the templated wrapper.
+ansible/inventory/group_vars/all.yml). Carries no secrets.
 
 Usage: state_push.py <label> <state-file> <max-age-hours> [<label> <state-file> <max-age-hours> ...]
 """
@@ -71,7 +71,7 @@ def main(argv, now=None) -> int:
             fixed one so a fixture stamped `now` reads as exactly zero seconds old.
 
     Always returns 0: a malformed call or a DOWN verdict are both printed as data for the
-    wrapper to push to Kuma, never raised.
+    wrapper to report, never raised.
     """
     args = argv[1:]
     if not args or len(args) % 3:

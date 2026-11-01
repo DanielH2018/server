@@ -4,9 +4,9 @@
 # homelab-k3s-restart loads it to read the API. ansible/vars/hosts/daniel-box.sops.yaml carries
 # every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
-# H7.33 adds the UPS secondary (hosts/components/nut-secondary): its watchdog unit loads
-# `ups_secondary_push_token`, and its upsmon.conf output reads `nut_monitor_password`, both from
-# the same SOPS file.
+# H7.33 adds the UPS secondary (hosts/components/nut-secondary): its upsmon.conf output reads
+# `nut_monitor_password` from the same SOPS file. Its watchdog loaded `ups_secondary_push_token`
+# until M6 batch B4's Cutover-2 dropped the Kuma push.
 #
 # Since H7.29 it ships the first three subjects of initial_setup, the same components as daniel-pi
 # and daniel-server: apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits
@@ -75,6 +75,11 @@ components:
   - sops
 units:
   k3s.service: {policy: windowed}
+# No unit loads ups_secondary_push_token since M6 batch B4's Cutover-2, nor the B2 tokens the
+# docs-refresh, eval-sweep, secret-rotation and loki-route-witness components name. They stay
+# listed because `host_secrets.py check` pins this tree's names to daniel-box's SOPS file, and
+# changing that file takes the operator's `host_secrets.py sync daniel-box`. Each batch's token PR
+# removes its keys here and in the file in one step.
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token

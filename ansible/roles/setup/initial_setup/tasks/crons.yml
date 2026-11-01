@@ -566,32 +566,17 @@
         src: ansible/roles/setup/initial_setup/files/setup-drift-lib.sh
 
 # ── setup-plane drift reader for hosts with no manifest-prune-check ───────────────────────────
-- name: Create the setup-drift credentials directory
+# Nothing removes a file the role stops declaring. M6 batch B2's Cutover-2 stopped
+# setup-drift-check.sh sourcing /etc/homelab/kuma-push.env, so this retires the host copy. It
+# holds a Kuma push token in a 0640 file, which a retired credential must not outlive. No `when:`,
+# so a host that left setup_drift_check_hosts loses its copy too. /etc/homelab itself stays: the
+# etcd drill's env file lives there.
+- name: Retire the setup-drift Kuma push credentials
   tags: [crons, setup_drift]
-  when: inventory_hostname in setup_drift_check_hosts
   ansible.builtin.file:
-    path: /etc/homelab
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+    path: /etc/homelab/kuma-push.env
+    state: absent
   become: true
-
-- name: Deploy the setup-drift push credentials
-  tags: [crons, setup_drift]
-  when: inventory_hostname in setup_drift_check_hosts
-  # 0640 root:{{ sys_user }}, sourced rather than inlined: the script lands 0755, so an inlined
-  # token would be readable by every local account. Its own file rather than
-  # /etc/rancher/k3s/kuma-push.env, which roles/setup/k3s owns as a whole-content template and
-  # which does not exist on an agent node at all.
-  ansible.builtin.template:
-    src: setup-drift-kuma-push.env.j2
-    dest: /etc/homelab/kuma-push.env
-    owner: root
-    group: "{{ sys_user }}"
-    mode: "0640"
-  become: true
-  no_log: true  # renders setup_drift_push_token
 
 - name: Deploy the setup-plane drift check
   tags: [crons, setup_drift]
@@ -620,7 +605,7 @@
   vars:
     kuma_check_state: "{{ 'present' if inventory_hostname in setup_drift_check_hosts else 'absent' }}"
     kuma_check_name: setup-drift
-    kuma_check_description: Setup-plane drift check (Kuma push)
+    kuma_check_description: Setup-plane drift check
     kuma_check_exec: /usr/local/bin/setup-drift-check.sh
     kuma_check_user: root
     kuma_check_on_calendar: "*-*-* 08:20:00"
@@ -635,7 +620,6 @@
     stamp_render_name: setup-drift-check
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2
-      - ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2
 
 # ── Loki read-route witness, one per cluster node ─────────────────────────────────────────────
 # The route's only caller is a host process and nothing else watches it. See
@@ -643,34 +627,17 @@
 # not enough.
 # daniel-box's witness is the loki-route-witness component of homelab-daniel-box since H7.36, so
 # every task here skips the hosts in initial_setup_packaged_hosts['loki_route_witness'].
-- name: Create the Loki read-route witness credentials directory
+# Nothing removes a file the role stops declaring. M6 batch B2's Cutover-2 stopped the witness
+# sourcing /etc/homelab/loki-route-kuma-push.env, so this retires the host copy, which holds a
+# Kuma push token. daniel-box's copy is the loki-route-witness component's `legacy:` entry, so
+# this skips the packaged hosts like the rest of the block.
+- name: Retire the Loki read-route witness Kuma push credentials
   tags: [crons, loki_route_witness]
-  when:
-    - inventory_hostname in loki_route_witness_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
+  when: inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
   ansible.builtin.file:
-    path: /etc/homelab
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+    path: /etc/homelab/loki-route-kuma-push.env
+    state: absent
   become: true
-
-- name: Deploy the Loki read-route witness push credentials
-  tags: [crons, loki_route_witness]
-  when:
-    - inventory_hostname in loki_route_witness_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']
-  # 0640 root:{{ sys_user }}: the cron runs as {{ sys_user }} (it needs that user's uv and age
-  # key), and nothing else on the host may read a token that can suppress this heartbeat.
-  ansible.builtin.template:
-    src: loki-route-kuma-push.env.j2
-    dest: /etc/homelab/loki-route-kuma-push.env
-    owner: root
-    group: "{{ sys_user }}"
-    mode: "0640"
-  become: true
-  no_log: true  # renders a Kuma push token
 
 - name: Let the Loki read-route witness write to the node_exporter textfile directory
   tags: [crons, loki_route_witness]
@@ -745,14 +712,14 @@
   # catches is a route that has been unreachable since the last deploy, not a transient.
   #
   # A systemd timer rather than a cron, so a red verdict reruns every 15 min
-  # until it clears instead of sitting on the tile until the next slot. The task file carries
-  # the contract; the script exits 1 after a down push. `kuma_check_state` wires both
+  # until it clears instead of waiting for the next slot. The task file carries
+  # the contract; the script exits 1 after a down verdict. `kuma_check_state` wires both
   # directions: a host outside loki_route_witness_hosts loses the timer and the old cron.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
   vars:
     kuma_check_state: "{{ 'present' if inventory_hostname in loki_route_witness_hosts else 'absent' }}"
     kuma_check_name: loki-read-route
-    kuma_check_description: Loki read-route witness (Kuma push)
+    kuma_check_description: Loki read-route witness
     kuma_check_exec: /usr/local/bin/loki-read-route-health.sh
     kuma_check_user: "{{ sys_user }}"
     kuma_check_on_calendar: "*-*-* *:23:00"
@@ -769,7 +736,6 @@
     stamp_render_name: loki-route-witness
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2
-      - ansible/roles/setup/initial_setup/templates/loki-route-kuma-push.env.j2
       - ansible/roles/setup/common/templates/kuma-check.service.j2
       - ansible/roles/setup/common/templates/kuma-check.timer.j2
 

@@ -40,6 +40,10 @@ users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
 components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
+# No unit loads ups_secondary_daniel_server_push_token, because M6 batch B4's Cutover-2 dropped
+# the UPS watchdog's Kuma push. It stays listed because `host_secrets.py check` pins this list to
+# daniel-server's SOPS file, and changing that file takes the operator's `host_secrets.py sync
+# daniel-server`. B4's token PR removes the key here and in the file in one step.
 credentials:
   - ups_secondary_daniel_server_push_token
   - rkhunter_daniel_server_push_token

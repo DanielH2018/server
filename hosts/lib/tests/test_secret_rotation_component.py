@@ -1,8 +1,9 @@
 """The rendered `secret-rotation` component: the weekly rotation and the daily audit (H7.10c).
 
 The scripts' behaviour is run against stubs in `ansible/tests/setup/`. These tests hold what the
-move added: the units that run the scripts, the one credential both read, the enable links, the
-legacy entries that retire the Ansible-era cron and timer, and the Autonomous-role contract.
+move added: the units that run the scripts, which load no credential since M6 batch B2's
+Cutover-2 dropped the Kuma push, the enable links, the legacy entries that retire the Ansible-era
+cron and timer, and the Autonomous-role contract.
 
 Run: uv run pytest hosts/lib/tests/test_secret_rotation_component.py
 """
@@ -32,12 +33,11 @@ def package(tmp_path_factory):
     return render_fixture(tmp_path_factory.mktemp("daniel-box"), ("secret-rotation",))
 
 
-def test_both_scripts_install_executable_and_carry_no_token(package):
+def test_both_scripts_install_executable_and_read_no_credential(package):
     for name in ("secret-rotate", "secret-rotation-audit"):
         body = text(package, f"{LIB}/{name}")
         assert package.files[f"{LIB}/{name}"][1] == 0o755
-        # The credential is read at run time from the unit's directory, never rendered in.
-        assert "CREDENTIALS_DIRECTORY" in body
+        assert "CREDENTIALS_DIRECTORY" not in body
         assert "STUB" not in body
 
 
@@ -48,15 +48,15 @@ def test_both_scripts_install_executable_and_carry_no_token(package):
         ("homelab-secret-rotation-audit", "secret-rotation-audit"),
     ],
 )
-def test_each_service_runs_its_script_as_sys_user_with_the_credential(
+def test_each_service_runs_its_script_as_sys_user_with_no_credential(
     package, unit, script
 ):
     user = render_context(None, "daniel-box", inventory=REPO_INVENTORY)["sys_user"]
     service = text(package, f"{UNITS}/{unit}.service")
     assert f"User={user}\n" in service
     assert f"ExecStart={LIB}/{script}\n" in service
-    assert f"LoadCredential={CREDENTIAL}:/run/credstore/{CREDENTIAL}\n" in service
-    assert "Wants=network-online.target homelab-secrets.service" in service
+    assert "LoadCredential=" not in service
+    assert "Wants=network-online.target\n" in service
 
 
 def test_each_service_keeps_the_journal_tag_the_cron_logged_under(package):
@@ -92,7 +92,8 @@ def test_the_component_links_both_timers_and_the_boot_unit(package):
     } <= set(package.enable_links())
 
 
-def test_the_package_names_the_credential_once(package):
+def test_the_package_still_names_the_retired_token_for_host_secrets_check(package):
+    # B2's token PR removes it here and from daniel-box's SOPS file together.
     assert package.credentials.count(CREDENTIAL) == 1
 
 

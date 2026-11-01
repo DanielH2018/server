@@ -146,16 +146,15 @@
   become: true
   no_log: true  # renders the R2 access key and secret
 
-- name: Deploy the drill's Kuma push token
+# Nothing removes a file the role stops declaring. M6 batch B4's Cutover-2 stopped the
+# orchestrator sourcing this env file, so this retires the host copy, which holds both drill push
+# tokens.
+- name: Retire the drill's Kuma push tokens
   tags: [hypervisor-etcd-drill]
-  ansible.builtin.template:
-    src: etcd-drill-kuma-push.env.j2
-    dest: "{{ hypervisor_etcd_drill_kuma_env }}"
-    owner: root
-    group: root
-    mode: "0600"
+  ansible.builtin.file:
+    path: /etc/homelab/etcd-drill-kuma-push.env
+    state: absent
   become: true
-  no_log: true  # renders the push token
 
 - name: Install the drill script the orchestrator ships into the guest
   tags: [hypervisor-etcd-drill]

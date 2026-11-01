@@ -3,7 +3,7 @@
 The logic each subcommand runs on is tested beside it: test_secret_classify.py,
 test_secret_registry.py, test_secret_consumers.py, test_secret_git_dates.py, and
 test_rotation_tools.py for the process boundaries. What is left here is the CLI's own
-behaviour — the Kuma summary line, the unattended pick-up window, the two ways
+behaviour — the audit's summary line and verdict, the unattended pick-up window, the two ways
 `cmd_rotate` can fail partway through a batch (a crash and a hang), and that `rotate` picks
 what is due from the same git-advanced dates `audit` reads. The push-token shape check its
 audit arm calls is tested beside that module, in test_secret_sops_io.py.
@@ -15,6 +15,7 @@ import datetime as dt
 import subprocess
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest import mock
 
 from secrets_mgmt import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, named_calls, process_calls
@@ -30,9 +31,9 @@ def _reg(*entries):
     }
 
 
-# ── the Kuma summary line ───────────────────────────────────────────────────
+# ── the audit's summary line ────────────────────────────────────────────────
 def test_audit_summary_names_overdue_secrets():
-    # The pushed Kuma msg must NAME which secret is overdue — a bare count can't tell a genuine
+    # The summary line must NAME which secret is overdue — a bare count can't tell a genuine
     # cron break from one of the consumer-less known-manual auto tokens merely coming due (M1).
     today = dt.date(2026, 6, 11)
     reg = _reg(
@@ -53,38 +54,52 @@ def test_audit_summary_clean_when_nothing_overdue():
     )
 
 
-def _audit_push_args():
+def _audit_verdict_args():
     return SimpleNamespace(
-        push=True, check=False, no_derive=True, extra_down=None, all=False
+        verdict=True, check=False, no_derive=True, extra_down=None, all=False
     )
 
 
-def test_audit_push_exits_nonzero_after_pushing_down(monkeypatch):
+def test_audit_verdict_exits_nonzero_on_a_down_audit(capsys):
     # The daily audit runs under a kuma-check timer whose Restart=on-failure reruns it while
-    # red, so a pushed `down` has to reach systemd as a non-zero exit.
-    monkeypatch.setenv("SECRET_ROTATION_KUMA", "https://kuma.example/api/push/x")
-    tools, recorded = build_tools(
+    # red, and its wrapper writes the exit code as the textfile verdict, so a `down` audit has
+    # to reach both as a non-zero exit.
+    tools, _ = build_tools(
         Fakes(
             registry=_reg(("stale_push_token", "auto", "2025-01-01")),
             names=["stale_push_token"],
         )
     )
-    assert sr.cmd_audit(_audit_push_args(), tools) == 1
-    (push,) = [c for c in recorded if c[0] == "kuma_push"]
-    assert push[1][1] is False, "the push itself must say down"
+    assert sr.cmd_audit(_audit_verdict_args(), tools) == 1
+    assert "audit: verdict=down 1 secret(s) overdue" in capsys.readouterr().out
 
 
-def test_audit_push_exits_zero_after_pushing_up(monkeypatch):
-    monkeypatch.setenv("SECRET_ROTATION_KUMA", "https://kuma.example/api/push/x")
-    tools, recorded = build_tools(
+def test_audit_verdict_exits_zero_on_an_up_audit(capsys):
+    tools, _ = build_tools(
         Fakes(
             registry=_reg(("fresh_push_token", "auto", "2026-09-01")),
             names=["fresh_push_token"],
         )
     )
-    assert sr.cmd_audit(_audit_push_args(), tools) == 0
-    (push,) = [c for c in recorded if c[0] == "kuma_push"]
-    assert push[1][1] is True
+    assert sr.cmd_audit(_audit_verdict_args(), tools) == 0
+    assert (
+        "audit: verdict=up all secrets within rotation window"
+        in capsys.readouterr().out
+    )
+
+
+def test_the_wrappers_old_push_flag_still_asks_for_the_verdict():
+    """The packaged wrapper and this file land on different planes (the alias's comment)."""
+    parser_args = ["audit", "--push", "--no-derive"]
+    seen = {}
+
+    def record(args, _tools):
+        seen["verdict"] = args.verdict
+        return 0
+
+    with mock.patch.object(sr, "cmd_audit", record):
+        assert sr.main(parser_args) == 0
+    assert seen == {"verdict": True}
 
 
 def test_audit_summary_caps_the_overdue_name_list():

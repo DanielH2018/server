@@ -24,9 +24,11 @@
 #
 # - Mode (explicit and reversible): nut_host_watchdog_armed arms the timer and ships true. Setting
 #   it false in inventory drops the timer's enable link from the next package version, and
-#   reconcile stops the timer on the install that drops it. daniel-server's "UPS Secondary" tile
-#   then goes DOWN at its 1200 s deadline, which is the intended signal.
-# - The unit loads one credential, the token key nut_host_watchdog_token_key names for this host.
+#   reconcile stops the timer on the install that drops it. The host's verdict then goes stale
+#   and UpsSecondaryNotReporting fires once its 1500 s deadline passes, which is the intended
+#   signal.
+# - The unit loads no credential since M6 batch B4's Cutover-2 dropped its Kuma push. It keeps
+#   its homelab-secrets.service ordering, because it reads the upsmon.conf output that unit renders.
 role: nut_host
 defaults:
   nut_host_watchdog_packaged: true

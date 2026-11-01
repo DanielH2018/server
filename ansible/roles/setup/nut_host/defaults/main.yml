@@ -31,11 +31,5 @@ nut_host_watchdog_interval_minutes: 10
 # True only in the host-package component's render context (hosts/components/nut-secondary,
 # H4.3c), which sets it above these defaults. No task and no inventory file sets it, so every
 # host the role applies to renders the Ansible-era branch of ups-secondary-health.sh.j2. In the
-# packaged branch the script sources /usr/lib/homelab/kuma-push-lib.sh, reads its token from the
-# unit's credential and reads the endpoint from the file upsmon uses.
+# packaged branch the script reads the endpoint from the file upsmon uses.
 nut_host_watchdog_packaged: false
-
-# The secret key whose value the packaged watchdog unit loads as its `kuma_push_token`
-# credential. It names the same key the Ansible-era env file selects per host, so the unit and
-# that file cannot disagree about which tile a host reports to.
-nut_host_watchdog_token_key: "{{ 'ups_secondary_daniel_server_push_token' if inventory_hostname == ups_host else 'ups_secondary_push_token' }}"

@@ -10,25 +10,22 @@ failure report and the couplings it depends on:
   that merely took a minute; at more than twice it, a whole missed run goes unreported. 46800
   sits between a 12h period and 24h.
 - **Exactly one `trap ... EXIT`.** A second trap on the same signal REPLACES the first, so the
-  temp-file cleanup and the push cannot both hang off EXIT through separate traps.
+  temp-file cleanup and the verdict cannot both hang off EXIT through separate traps.
 - **The status defaults to down.** Eleven exit paths, one of which is a bare crash.
+
+Whether the script still pushes to Kuma is test_initial_setup_check_textfiles.py's case.
 """
 
 import re
 from itertools import pairwise
 
-from _helpers import ANSIBLE
-from _shell_render import render_shell_script, rendered_shell_text
+from _shell_render import rendered_shell_text
 from lib.repo_paths import REPO
 
-SENTINEL = "docs-refresh-render-sentinel"
-TOKEN_VAR = "docs_refresh_push_token"
-CREDENTIAL_DIR = "${CREDENTIALS_DIRECTORY:-/nonexistent}"
 SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
 TIMER = (
     REPO / "hosts/components/docs-refresh/units/homelab-docs-refresh.timer"
 ).read_text()
-ROTATION = (ANSIBLE / "secret_rotation.yml").read_text()
 
 
 def _deadline_seconds() -> int:
@@ -81,32 +78,10 @@ def test_a_whole_missed_run_still_reports_down():
     )
 
 
-def test_the_script_skips_its_push_until_the_token_exists():
-    # Which variable feeds DOCS_REFRESH_PUSH_TOKEN is asserted by rendering that variable to a
-    # SENTINEL and looking for it, not by matching the Jinja reference in the source. An unset
-    # secret renders as the same empty string a wrong variable name would, so a render at
-    # inventory values cannot tell them apart — a render at a value only this variable holds
-    # can (#3202).
-    assert SENTINEL not in render_shell_script(
-        "components",
-        "docs-refresh",
-        "docs-refresh.sh.j2",
-        overrides={TOKEN_VAR: SENTINEL},
-    ), "the token is a unit credential now: a render must never carry it"
-    assert f"{CREDENTIAL_DIR}/{TOKEN_VAR}" in SCRIPT, (
-        f"DOCS_REFRESH_PUSH_TOKEN does not read the {TOKEN_VAR} credential; the script "
-        "would push with an empty token or with somebody else's"
-    )
-    assert '[ -n "$DOCS_REFRESH_PUSH_TOKEN" ] || return 0' in SCRIPT, (
-        "the script must skip the push when the token is empty, or a host without the secret "
-        "logs a push failure every run"
-    )
-
-
 def test_exactly_one_exit_trap():
     """A second `trap ... EXIT` replaces the first rather than adding to it.
 
-    The temp-file cleanup and the push both need EXIT. Two traps here means one of the
+    The temp-file cleanup and the verdict both need EXIT. Two traps here means one of the
     two jobs is silently not happening, and which one depends on source order.
     """
     traps = re.findall(r"^\s*trap\s+.*\bEXIT\b", SCRIPT, re.M)
@@ -144,13 +119,6 @@ def test_a_generator_failure_is_not_laundered_by_a_successful_publish():
     assert re.search(r'if \[ "\$GENERATORS_OK" -eq 1 \]', SCRIPT), (
         "the terminal status must consult GENERATORS_OK, or a failing generator rides out on a "
         "successful publish"
-    )
-
-
-def test_the_token_is_registered_for_rotation():
-    assert "docs_refresh_push_token:" in ROTATION, (
-        "run scripts/secrets_mgmt/secret_rotation.py sync — an unregistered secret is never "
-        "due and never rotated"
     )
 
 
