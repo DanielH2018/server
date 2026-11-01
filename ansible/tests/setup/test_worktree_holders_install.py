@@ -144,16 +144,15 @@ def test_an_install_with_no_directory_task_before_it_is_flagged():
     assert not _parent_created_before_install([install, late_dir], HELPER)
 
 
-def _rendered_roots(tasks: list[dict]) -> dict[str, str]:
-    """The root map the role writes, from its own copy of the agent users."""
-    agents = task_named(tasks, AGENTS)["ansible.builtin.set_fact"]
+def _rendered_roots(tasks: list[dict], host: str) -> dict[str, str]:
+    """The root map the role writes on `host`, from its own per-host copy of the agent users."""
+    agents = task_named(tasks, AGENTS)
     users = task_named(tasks, USERS)["ansible.builtin.set_fact"]
-    context = {
-        "sys_user": "ubuntu",
-        "initial_setup_worktree_holders_agents": agents[
-            "initial_setup_worktree_holders_agents"
-        ],
-    }
+    context = {"sys_user": "ubuntu", "inventory_hostname": host, **agents["vars"]}
+    context["initial_setup_worktree_holders_agents"] = render_expr(
+        agents["ansible.builtin.set_fact"]["initial_setup_worktree_holders_agents"],
+        **context,
+    )
     context["initial_setup_worktree_holders_users"] = render_expr(
         users["initial_setup_worktree_holders_users"], **context
     )
@@ -183,37 +182,47 @@ def _package_agent_roots() -> dict[str, dict[str, str]]:
 
 
 def _covers_every_package_agent(
-    roots: dict[str, str], packages: dict[str, dict[str, str]]
+    tasks: list[dict], packages: dict[str, dict[str, str]]
 ) -> bool:
-    """Whether the root map names exactly each host package's agent users, at their clones."""
-    agent_roots = {user: root for user, root in roots.items() if user != "ubuntu"}
-    return all(agent_roots == declared for declared in packages.values())
+    """Whether each host's root map names exactly its package's agent users, at their clones."""
+    return all(
+        {u: r for u, r in _rendered_roots(tasks, host).items() if u != "ubuntu"}
+        == declared
+        for host, declared in packages.items()
+    )
 
 
 def test_the_root_map_names_the_operator_and_every_package_agent_is_clean():
-    # #6831: the role's copy of the agent users matches every has_claude_code host's package
-    # `users:` entry. The map is where the service looks a caller up, so an agent missing from
-    # it is refused every scan.
+    # #6831: each host's copy of the agent users matches its package's `users:` entry. The map
+    # is where the service looks a caller up, so an agent missing from it is refused every scan.
     tasks = load_tasks(CRONS)
     copy = task_named(tasks, ROOT_MAP)["ansible.builtin.copy"]
-    roots = _rendered_roots(tasks)
     packages = _package_agent_roots()
 
     assert (copy["dest"], copy["owner"]) == (WORKTREE_HOLDER_ROOTS, "root")
     assert set(packages) >= KNOWN_CLAUDE_HOSTS
-    assert roots["ubuntu"] == "/home/ubuntu/server/.claude/worktrees"
-    assert _covers_every_package_agent(roots, packages)
+    assert _rendered_roots(tasks, "daniel-box")["ubuntu"] == (
+        "/home/ubuntu/server/.claude/worktrees"
+    )
+    assert _covers_every_package_agent(tasks, packages)
 
 
 def test_a_package_agent_missing_from_the_copy_is_flagged():
-    roots = _rendered_roots(load_tasks(CRONS))
     packages = _package_agent_roots()
     packages["daniel-box"] = {
         **packages["daniel-box"],
         "claude2": "/var/lib/claude2/server/.claude/worktrees",
     }
 
-    assert not _covers_every_package_agent(roots, packages)
+    assert not _covers_every_package_agent(load_tasks(CRONS), packages)
+
+
+def test_an_agent_one_host_switched_off_but_the_copy_still_grants_is_flagged():
+    # Switching the agent off on one host deletes its `users:` entry there; the map must follow.
+    packages = _package_agent_roots()
+    packages["daniel-server"] = {}
+
+    assert not _covers_every_package_agent(load_tasks(CRONS), packages)
 
 
 def _sudoers_removed_everywhere(tasks: list[dict]) -> bool:

@@ -98,10 +98,10 @@ agent gets a lander of the same shape.
   from `SO_PEERCRED` and reports only under that user's root in `/etc/worktree-holders.json`.
   For the agent, that root is its own clone, so a worktree removal in `/var/lib/claude/server`
   sees an `ubuntu` process inside the tree. initial_setup's `worktree-sweep` tag renders the
-  map from its own copy of the agent users each host package declares under `users:` (#4295,
-  #6831), and the helper refuses a uid the map does not name. Adding an agent edits that copy
-  in `tasks/crons.yml` too, and `ansible/tests/setup/test_worktree_holders_install.py` fails
-  while the two differ. The `claude_code` role's `agent_access.yml` puts each present agent in
+  map from its own per-host copy of the agent users that host's package declares under
+  `users:` (#4295, #6831), and the helper refuses a uid the map does not name. Adding or
+  removing a host's agent edits that host's list in `tasks/crons.yml` too, and
+  `ansible/tests/setup/test_worktree_holders_install.py` fails while the two differ. The `claude_code` role's `agent_access.yml` puts each present agent in
   the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
 
