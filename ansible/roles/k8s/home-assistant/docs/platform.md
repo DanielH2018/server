@@ -59,7 +59,9 @@ automations do.
   `PyChromecastError` at the cast-status listener. Casting a dashboard still works, so the fault
   is cosmetic to HA and expensive to monitoring: each exception logs a traceback, and over the 7
   days to 2026-09-27 all 197 lines matching monitor-bridge's fatal-log pattern in this container
-  were those tracebacks. The bursts reach 21-30/hour against `LOG_ERROR_MAX=20`, which held the
+  were those tracebacks. The bursts reach 21-30/hour against a threshold of 20 per hour, which
+  the `WorkloadLogErrors` rule in
+  `ansible/roles/k8s/loki-homelab/files/rules/homelab-logs.yaml` keeps. They held the
   composite `k8s_workloads` tile red 11 times in 14 days and masked real workload failures while
   red. The connect-back itself is unfixed.
 
