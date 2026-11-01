@@ -637,8 +637,19 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   first heartbeat since it started. Kuma's keys hold while `up{job="uptime-kuma"}` is not 1, and
   the alert keys hold for 20 minutes after Prometheus starts, until its rules can fire again.
   Without these, every Kuma or Prometheus restart would read each standing red as a new fall.
-- **A storm is one run.** More than three keys falling in one poll make a single storm episode
-  that lists them all.
+- **A fall below `critical` opens no run.** Kuma exports each tile's `tag-severity` as a
+  `severity` label, so one floor covers both sources, and an untagged tile ranks below `info`.
+  The poller logs each skipped fall, and in `shadow` mode appends it to `shadow.jsonl` with
+  `"skipped": "below-floor"`. The floor is `poll_min_severity`, pinned in
+  `templates/claude-triage-pins.j2` because lowering it raises the runs a day the poller asks
+  for. An unknown value admits only `critical`.
+  Without the floor, the journal from 2026-10-31 18:21 to 2026-11-01 11:23 UTC held 15 shadow
+  episodes, about 21 a day against the six-run cap (#6861). Replayed through the floor, 3 of
+  them open a run: Kuma's `etcd Restore Drill (full)`, `ProdMovedOutsidePromote` and
+  `CheckWithoutPager`. A per-key cooldown was rejected: every repeat in that window was a
+  warning or an untagged tile, which the floor already drops.
+- **A storm is one run.** More than three keys at or above the floor falling in one poll make
+  a single storm episode that lists them all. Skipped falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window
   around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Kuma and
   Alertmanager mutes. A deferred key opens its episode once the gate lifts, if it is still down.
@@ -650,7 +661,8 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
 
 - `off` reads nothing.
 - `shadow` logs `would start <episode>` to the journal and appends the episode to
-  `/var/lib/claude/triage/shadow.jsonl`. It ships in this mode.
+  `/var/lib/claude/triage/shadow.jsonl`, with each skipped fall beside them. It ships in
+  this mode.
 - `armed` queues the episode in the inbox. Each poll starts the oldest queued episode when no
   run holds the runner's lock, so episodes run one after another. A queued episode whose run
   the poller already started is not started again: its run crashed and paged.
