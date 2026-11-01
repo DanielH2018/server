@@ -1,20 +1,19 @@
-"""The B4 producers write a homelab_check_* textfile beside their Kuma push (M6 batch B4).
+"""The B4 producers write a homelab_check_* textfile and push to nothing (M6 batch B4).
 
 docs/target-architecture/monitoring/m6-retire-kuma.md, batch B4: the UPS secondary watchdog, the
 three fake-remux heartbeats, the etcd restore drill with its egress-fence leg, and the renovate
-notifier and agent each write `<check>.prom` through homelab-check-lib.sh, so the rules in
-`other-setup-checks.yaml` can shadow the Kuma tiles. Each case runs the rendered script, or the
-rendered function or unit line that writes the verdict, against the REAL library from the role
-tree: a CI runner has no /usr/local/lib/homelab-check-lib.sh, and daniel-box does, so a case
-that ran the script as-is would pass here and fail there. The Kuma library, the env files, `uv`,
-`upsc`, `systemctl`, `date` and `logger` are stubs.
+notifier and agent each write `<check>.prom` through homelab-check-lib.sh, which the rules in
+`other-setup-checks.yaml` read. Each case runs the rendered script, or the rendered function or
+unit line that writes the verdict, against the REAL library from the role tree: a CI runner has
+no /usr/local/lib/homelab-check-lib.sh, and daniel-box does, so a case that ran the script as-is
+would pass here and fail there. `uv`, `upsc`, `systemctl`, `date` and `logger` are stubs.
 
 Properties the cases pin:
 
 - the file carries success 1 for an up verdict and 0 for a down one, the stamped time and the
   rendered deadline;
-- the file exists before the Kuma push is attempted, because a push retries for over a minute;
-- a missing push token never costs the textfile.
+- since B4's Cutover-2 no render pushes to Kuma: no library, no `kuma_push`, no push URL and no
+  push credential, so a run needs neither to write its verdict.
 
 The rule literals are pinned to the rendered deadlines in test_b4_rule_literals.py.
 
@@ -34,20 +33,54 @@ CHECK_LIB = (
     ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 )
 CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
-PUSH_LIB_PATH = "/usr/local/lib/kuma-push-lib.sh"
 EPOCH = 1760000000
 OVERRIDES = {
     "domain": "example.test",
     "k3s_metallb_ingress_vip": "10.0.0.240",
     "sys_user": "ubuntu",
 }
-# Records the status, and whether the textfile of the verdict's check already existed.
-PUSH_STUB = """\
-kuma_push() {
-  printf '%s %s\\n' "$1" "$([ -f "$TEXTFILE_DIR/$CHECK_UNDER_TEST.prom" ] && echo after-textfile || echo BEFORE-TEXTFILE)" \\
-    >> "$PUSHED"
+# What a render carries while it still pushes to Kuma: the library, its call, a push URL, or the
+# credential and env file that fed the token.
+KUMA_PUSH_MARKERS = (
+    "kuma-push-lib",
+    "kuma_push",
+    "/api/push/",
+    "PUSH_TOKEN",
+    "kuma-push.env",
+)
+# Every B4 shell producer, as (role, template), with the textfile call its render carries.
+PRODUCERS = {
+    (
+        "nut_host",
+        "ups-secondary-health.sh.j2",
+    ): "write_check_textfile ups-secondary-health ",
+    ("fake_remux", "fake-remux-health.sh.j2"): 'write_check_textfile "${CHECKS[$i]}" ',
+    ("hypervisor", "etcd-restore-drill-vm.sh.j2"): 'write_check_textfile "$check" ',
 }
-"""
+
+
+def kuma_push_markers(body: str) -> list[str]:
+    """The Kuma push markers a rendered script still carries, or nothing."""
+    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
+
+
+@pytest.mark.parametrize("producer", sorted(PRODUCERS), ids=lambda p: p[1])
+def test_no_b4_producer_pushes_to_kuma(producer):
+    # RED if a push, its library, its token or its env file returns: the tiles are gone, so a
+    # push would be refused (`by=kuma`) every run.
+    body = render_shell_script("setup", *producer, OVERRIDES)
+    # Non-vacuity: the render is the real script, which still records its verdict.
+    assert PRODUCERS[producer] in body
+    assert kuma_push_markers(body) == []
+
+
+def test_a_script_that_pushes_to_kuma_is_flagged():
+    pushing = (
+        "source /usr/local/lib/kuma-push-lib.sh\n"
+        ". /etc/nut/kuma-push.env\n"
+        'kuma_push "$1" "$2" "https://kuma/api/push/${UPS_SECONDARY_PUSH_TOKEN}"\n'
+    )
+    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
 
 def _series(textfile_dir, check) -> dict[str, str]:
@@ -60,9 +93,9 @@ def _value(textfile_dir, check, metric) -> str:
     return _series(textfile_dir, check)[f'{metric}{{check="{check}"}}']
 
 
-def _pushes(tmp_path) -> list[str]:
-    pushed = tmp_path / "pushed"
-    return pushed.read_text().splitlines() if pushed.exists() else []
+def _logged(tmp_path) -> str:
+    logged = tmp_path / "logged"
+    return logged.read_text() if logged.exists() else ""
 
 
 def _env(tmp_path, check, stubs=None):
@@ -78,43 +111,27 @@ def _env(tmp_path, check, stubs=None):
     env = {
         "TEXTFILE_DIR": str(textfile_dir),
         "LOGGED": str(tmp_path / "logged"),
-        "PUSHED": str(tmp_path / "pushed"),
         "CHECK_UNDER_TEST": check,
         "PATH": path_with(bin_dir),
     }
     return textfile_dir, env
 
 
-def _push_lib(tmp_path):
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(PUSH_STUB)
-    return lib
-
-
 # --- ups-secondary-health.sh -----------------------------------------------------------------
 
 
-def _run_ups(tmp_path, unit_state="active", token="tok"):
+def _run_ups(tmp_path, unit_state="active"):
     body = render_shell_script(
         "setup", "nut_host", "ups-secondary-health.sh.j2", OVERRIDES
     )
-    upsmon, env_file = tmp_path / "upsmon.conf", tmp_path / "kuma-push.env"
+    upsmon = tmp_path / "upsmon.conf"
     upsmon.write_text("MONITOR ups@10.43.0.9 1 user pw secondary\n")
-    env_file.write_text(f'UPS_SECONDARY_PUSH_TOKEN="{token}"\n')
-    for literal in (
-        PUSH_LIB_PATH,
-        CHECK_LIB_PATH,
-        "/etc/nut/upsmon.conf",
-        "/etc/nut/kuma-push.env",
-    ):
+    for literal in (CHECK_LIB_PATH, "/etc/nut/upsmon.conf"):
         assert literal in body, (
             f"ups-secondary-health.sh no longer references {literal}"
         )
-    body = (
-        body.replace(PUSH_LIB_PATH, str(_push_lib(tmp_path)))
-        .replace(CHECK_LIB_PATH, str(CHECK_LIB))
-        .replace("/etc/nut/upsmon.conf", str(upsmon))
-        .replace("/etc/nut/kuma-push.env", str(env_file))
+    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
+        "/etc/nut/upsmon.conf", str(upsmon)
     )
     textfile_dir, env = _env(
         tmp_path,
@@ -125,7 +142,7 @@ def _run_ups(tmp_path, unit_state="active", token="tok"):
     return textfile_dir
 
 
-def test_an_up_ups_verdict_is_written_with_the_deadline_before_the_push(tmp_path):
+def test_an_up_ups_verdict_is_written_with_the_deadline(tmp_path):
     textfile_dir = _run_ups(tmp_path)
 
     check = "ups-secondary-health"
@@ -135,14 +152,13 @@ def test_an_up_ups_verdict_is_written_with_the_deadline_before_the_push(tmp_path
     ) == str(EPOCH)
     # nut_host_watchdog_interval_minutes (10) x 2 periods + 300.
     assert _value(textfile_dir, check, "homelab_check_deadline_seconds") == "1500"
-    assert _pushes(tmp_path) == ["up after-textfile"]
 
 
-def test_a_down_ups_verdict_writes_zero_and_a_missing_token_still_writes(tmp_path):
-    textfile_dir = _run_ups(tmp_path, unit_state="inactive", token="")
+def test_a_down_ups_verdict_writes_zero_and_logs_its_status_line(tmp_path):
+    textfile_dir = _run_ups(tmp_path, unit_state="inactive")
 
     assert _value(textfile_dir, "ups-secondary-health", "homelab_check_success") == "0"
-    assert _pushes(tmp_path) == []
+    assert "status=down nut-monitor is inactive" in _logged(tmp_path)
 
 
 # --- fake-remux-health.sh --------------------------------------------------------------------
@@ -152,45 +168,23 @@ FAKE_REMUX_CHECKS = ["fake-remux-scan", "fake-remux-replace", "mkv-attachment-re
 STATE_PUSH = "printf 'up\\tscan ok\\ndown\\treplace failed\\nup\\tmkv ok\\n'\n"
 
 
-def _run_fake_remux(tmp_path, tokens=True):
+def _run_fake_remux(tmp_path):
     body = render_shell_script(
         "setup", "fake_remux", "fake-remux-health.sh.j2", OVERRIDES
     )
-    token_env = tmp_path / "kuma-push.env"
-    token_env.write_text(
-        'FAKE_REMUX_SCAN_PUSH_TOKEN="a"\nFAKE_REMUX_REPLACE_PUSH_TOKEN="b"\nMKV_ATTACHMENT_PUSH_TOKEN="c"\n'
-        if tokens
-        else ""
-    )
     uv = tmp_path / "uv"
     write_exec(uv, STATE_PUSH)
-    # kuma_push gets the tile's textfile through its status, so give the stub the loop's order.
-    push_lib = tmp_path / "kuma-push-lib.sh"
-    push_lib.write_text(
-        'kuma_push() {\n  local check="${CHECKS_IN_ORDER[$PUSH_N]}"; PUSH_N=$((PUSH_N + 1))\n'
-        '  printf \'%s %s\\n\' "$1" "$([ -f "$TEXTFILE_DIR/${check}.prom" ] && echo after-textfile '
-        '|| echo BEFORE-TEXTFILE)" >> "$PUSHED"\n}\n'
-        "PUSH_N=0\nCHECKS_IN_ORDER=(fake-remux-scan fake-remux-replace mkv-attachment-repair)\n"
-    )
-    for literal in (
-        PUSH_LIB_PATH,
-        CHECK_LIB_PATH,
-        "/etc/autofix-fake-remux/kuma-push.env",
-        "/usr/local/bin/uv",
-    ):
+    for literal in (CHECK_LIB_PATH, "/usr/local/bin/uv"):
         assert literal in body, f"fake-remux-health.sh no longer references {literal}"
-    body = (
-        body.replace(PUSH_LIB_PATH, str(push_lib))
-        .replace(CHECK_LIB_PATH, str(CHECK_LIB))
-        .replace("/etc/autofix-fake-remux/kuma-push.env", str(token_env))
-        .replace("/usr/local/bin/uv", str(uv))
+    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
+        "/usr/local/bin/uv", str(uv)
     )
     textfile_dir, env = _env(tmp_path, "unused")
     run(["bash", str(write_exec(tmp_path / "fr.sh", body))], env=env, check=True)
     return textfile_dir
 
 
-def test_each_fake_remux_state_file_gets_its_own_verdict_before_its_push(tmp_path):
+def test_each_fake_remux_state_file_gets_its_own_verdict_and_status_line(tmp_path):
     textfile_dir = _run_fake_remux(tmp_path)
 
     verdicts = {
@@ -205,26 +199,17 @@ def test_each_fake_remux_state_file_gets_its_own_verdict_before_its_push(tmp_pat
     for check in FAKE_REMUX_CHECKS:
         # fake_remux_health_cron_minute (*/10) x 2 periods + 300.
         assert _value(textfile_dir, check, "homelab_check_deadline_seconds") == "1500"
-    assert _pushes(tmp_path) == [
-        "up after-textfile",
-        "down after-textfile",
-        "up after-textfile",
-    ]
-
-
-def test_unreadable_fake_remux_tokens_skip_the_pushes_and_not_the_textfiles(tmp_path):
-    textfile_dir = _run_fake_remux(tmp_path, tokens=False)
-
-    for check in FAKE_REMUX_CHECKS:
-        assert (textfile_dir / f"{check}.prom").is_file()
-    assert _pushes(tmp_path) == []
+    assert "status=down fake-remux replace: replace failed" in _logged(tmp_path)
 
 
 # --- etcd-restore-drill-vm.sh: the two report functions --------------------------------------
 
 
 def _run_drill_reports(tmp_path):
-    """Call the rendered `report` and `report_fence` functions, lifted out of the orchestrator."""
+    """Call the rendered `report` and `report_fence` functions, lifted out of the orchestrator.
+
+    `logger` records each call, so the run's order of status lines and textfiles is readable.
+    """
     body = render_shell_script(
         "setup", "hypervisor", "etcd-restore-drill-vm.sh.j2", OVERRIDES
     )
@@ -244,9 +229,7 @@ def _run_drill_reports(tmp_path):
         "set -uo pipefail\n"
         f"source {CHECK_LIB}\n"
         + "\n".join(constants)
-        + '\nRUN_ID=r1\nFENCE_PUSH_TOKEN=""\nlog() { :; }\n'
-        # push_kuma records the status and which textfiles exist when the push starts.
-        + 'push_kuma() { printf "%s %s\\n" "$1" "$(cd "$TEXTFILE_DIR" && echo *.prom)" >> "$PUSHED"; }\n'
+        + "\nRUN_ID=r1\nlog() { :; }\n"
         + "\n".join(lifted)
         + "\nreport down 'drill failed'\nreport_fence up 'fence holds'\n"
     )
@@ -257,11 +240,9 @@ def _run_drill_reports(tmp_path):
 def test_the_drill_and_its_fence_leg_write_separate_verdicts(tmp_path):
     textfile_dir = _run_drill_reports(tmp_path)
 
-    # Each push finds its own verdict already on disk.
-    assert _pushes(tmp_path) == [
-        "down etcd-restore-drill-vm.prom",
-        "up etcd-restore-drill-egress-fence.prom etcd-restore-drill-vm.prom",
-    ]
+    logged = _logged(tmp_path)
+    assert "status=down run=r1 drill failed" in logged
+    assert "fence=up run=r1 fence holds" in logged
     assert _value(textfile_dir, "etcd-restore-drill-vm", "homelab_check_success") == "0"
     assert (
         _value(textfile_dir, "etcd-restore-drill-egress-fence", "homelab_check_success")

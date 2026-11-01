@@ -103,11 +103,12 @@ check.
 rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read-route witness
 (`loki_route_witness`).
 
-**The five scripts of M6's batch B2 write a textfile beside their Kuma push.** They are
+**The five scripts of M6's batch B2 write a textfile and push to nothing.** They are
 docs-refresh, the eval sweep, the secret-rotation audit, the setup-drift check and the witness.
 Each calls `write_check_textfile` from `ansible/roles/setup/initial_setup/files/homelab-check-lib.sh`
-with a `DEADLINE_S` that equals its Kuma tile's interval, and the rules in
-`ansible/roles/k8s/observability/files/rules/initial-setup-checks.yaml` read the files in shadow.
+with a `DEADLINE_S` equal to the interval its retired Kuma tile kept, and the rules in
+`ansible/roles/k8s/observability/files/rules/initial-setup-checks.yaml` read the files and page.
+B2's Cutover-2 removed the pushes and their credentials.
 ENFORCED: `ansible/tests/services/test_initial_setup_check_rule_literals.py` pins each rule's
 deadline literals to the rendered `DEADLINE_S`. The weekly AIDE and rkhunter scans write a
 textfile the same way on every host (#6168), and the `host-checks` rule group reads it.

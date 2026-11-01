@@ -11,10 +11,9 @@ What's specific to this unit, and what this file guards:
   (evals/README.md "Auth & fidelity"), so a tighter schedule would be a standing cost, not a
   safety margin.
 - The service's PATH, HOME and credentials are held by hosts/lib/tests/test_eval_sweep_component.py.
-- The script self-gates on an empty anthropic_api_key, and the Kuma monitor self-gates on an
-  empty homelab_eval_push_token -- a host without those SOPS secrets must install both
-  disarmed rather than red or silently non-hermetic.
-- Both secrets reach the script through systemd credentials, never through its own body
+- The script self-gates on an empty anthropic_api_key -- a host without that SOPS secret must
+  install disarmed rather than red or silently non-hermetic.
+- The key reaches the script through a systemd credential, never through its own body
   (#4607), and a run with no credential is the disarmed no-op that reports UP.
 """
 
@@ -36,7 +35,6 @@ TIMER = (COMPONENT / "units/homelab-eval-sweep.timer").read_text()
 SPEC = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
 SCRIPT = rendered_shell_text("components", "eval-sweep", "eval-run.sh.j2")
 
-TOKEN_VAR = "homelab_eval_push_token"
 KEY_VAR = "anthropic_api_key"
 # A value no secret holds, so a render that carries it carries THIS variable's value.
 KEY_SENTINEL = "eval-run-render-sentinel"
@@ -57,7 +55,7 @@ def _is_gated_on_the_api_key(text: str) -> bool:
     return bool(re.search(r'if\s+\[\s+-z\s+"\$ANTHROPIC_API_KEY"\s+\];\s+then', text))
 
 
-def test_the_script_holds_neither_secret():
+def test_the_script_does_not_hold_the_api_key():
     # Rendered at a SENTINEL. At inventory values an unset secret renders as the same empty
     # string a wrong variable name would, so only a render at a value this variable alone holds
     # separates the two (#3202). A key inside the script is printed by every grep, cat or diff
@@ -66,21 +64,19 @@ def test_the_script_holds_neither_secret():
         "components",
         "eval-sweep",
         "eval-run.sh.j2",
-        overrides={KEY_VAR: KEY_SENTINEL, TOKEN_VAR: KEY_SENTINEL},
+        overrides={KEY_VAR: KEY_SENTINEL},
     )
     assert KEY_SENTINEL not in script, (
         "eval-run.sh renders a secret into its own body; read it from $CREDENTIALS_DIRECTORY"
     )
     assert f"$CRED_DIR/{KEY_VAR}" in script
-    assert f"$CRED_DIR/{TOKEN_VAR}" in script
 
 
 def _run_script(tmp_path, key_text: str | None):
     """Run the rendered script whole, with `logger` stubbed to print what it would log.
 
     `sys_user` points at a home that does not exist, so a run that gets past the key gate stops
-    at `cd "$REPO"` before any git, gh or paid API call. The push token credential is absent, so
-    the exit hook never pushes to the live Kuma.
+    at `cd "$REPO"` before any git, gh or paid API call.
 
     The caller's environment carries another key, so the credential file is the ONLY place a key
     can come from. A script that kept an inherited key gets past the gate with no credential.

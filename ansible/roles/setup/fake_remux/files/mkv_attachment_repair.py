@@ -14,7 +14,7 @@ works — points at Jellyfin rather than at the file, so it is expensive to redi
 Runs as a cron on daniel-box under `uv run --no-project --python <pin>` (host_python_version in
 ansible/inventory/group_vars/all.yml), sharing the fake-remux lock — see the role's tasks. Writes
 the same {ts,ok,msg} state file shape as the scan and reconciler; fake-remux-health.sh turns it
-into a Kuma push.
+into a textfile verdict.
 
 Usage:
   mkv_attachment_repair.py                # sweep the configured root, repair, write state

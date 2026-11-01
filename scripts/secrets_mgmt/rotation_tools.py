@@ -21,7 +21,6 @@ import datetime as dt
 import glob
 import os
 import subprocess
-import urllib.parse
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -38,19 +37,13 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
-from lib.cli_help import warn
 from lib.git import git
-from lib.repo_paths import HOST_LIB_FILES
 from lib.repo_paths import REPO as _REPO_PATH
 from secrets_mgmt.cluster_vars import fleet_expected
 from secrets_mgmt.cluster_vars import main as cluster_vars_main
 from secrets_mgmt.cluster_vars import write as cluster_vars_write
 from secrets_mgmt.cluster_vars_check import Expected, Tree
 from secrets_mgmt.sops_io import REPO, SECRETS_FILE, sops_set
-
-# host_lib is the setup roles' shared host module, for the Kuma push below.
-_sys.path.insert(0, str(HOST_LIB_FILES))
-import host_lib
 
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
 # The per-host SOPS files (slice H4), one `<host>.sops.yaml` each.
@@ -156,24 +149,6 @@ def decrypted_values(
     return {k: v for k, v in data.items() if k != "sops"}
 
 
-def kuma_push(url: str, ok: bool, msg: str) -> None:
-    """Post one up/down beat to the Uptime Kuma push monitor `url` names.
-
-    `url` is `https://<host>/api/push/<token>`, as the audit wrapper exports it. host_lib does
-    the push, so this one retries a rollout's 404s and caps the message like every other host
-    pusher. A push still lost after the retries is printed, never raised: the audit's exit code
-    already carries its verdict to the timer.
-    """
-    parts = urllib.parse.urlsplit(url)
-    host_lib.kuma_push(
-        "up" if ok else "down",
-        msg,
-        parts.netloc,
-        parts.path.rsplit("/", 1)[-1],
-        log=warn,
-    )
-
-
 def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
     """Redeploy the rotated secrets' consumers; returns the playbook's exit code."""
     cmd = [
@@ -262,7 +237,6 @@ class RotationTools:
     host_file_keys: Callable[[], frozenset[str]] = host_file_keys
     sops_decrypt: Callable[..., dict | None] = decrypted_values
     sops_set: Callable[[str, str], None] = sops_set
-    kuma_push: Callable[[str, bool, str], None] = kuma_push
     deploy: Callable[[list[str]], int] = run_deploy
     owners: Callable[[], Mapping[str, str]] = tree_owners
     cluster_tree: Callable[[], Tree] = cluster_tree

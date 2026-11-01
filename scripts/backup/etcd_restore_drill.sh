@@ -78,9 +78,9 @@
 # libvirt guest from the reviewed cloud image, copies in the k3s binary, the cluster token and the
 # R2 env file at the paths this script reads, runs THIS script there unmodified (through
 # files/etcd-drill-guest-run.sh, which fetches the snapshot and hands it to --local-snapshot),
-# pulls restore.log and server.log out as evidence, and destroys the guest. Its verdict lands on
-# the `etcd Restore Drill (full)` Kuma tile. The weekly --list-only cron on daniel-box is
-# the cheap proof of the R2 leg on the host that owns the credentials.
+# pulls restore.log and server.log out as evidence, and destroys the guest. Its verdict is the
+# etcd-restore-drill-vm textfile, which EtcdRestoreDrillFailed reads. The weekly --list-only cron
+# on daniel-box is the cheap proof of the R2 leg on the host that owns the credentials.
 #
 # Usage:
 #   sudo ./scripts/backup/etcd_restore_drill.sh --list-only      # the part that works: prove the R2 leg

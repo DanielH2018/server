@@ -197,12 +197,12 @@ its repo source, and has any `template:`-rendered setup script's SOURCE changed 
 rendered it?
 
 It runs from `kuma-check-setup-drift.timer` since 2026-09-19. It imports the `common` role's
-`kuma_check_timer.yml`, exits 1 after a down push, and reruns every 30 min under
+`kuma_check_timer.yml`, exits 1 after a down verdict, and reruns every 30 min under
 `Restart=on-failure` until it exits 0. The import's `kuma_check_state` follows the host gate, so
 a host dropped from the list loses the timer and the cron it replaced. The daily secret-rotation
 audit used the same form until H7.36 moved it to `homelab-secret-rotation-audit.timer` in the
 `secret-rotation` component of `homelab-daniel-box`, which keeps the exit-code contract as plain
-units. Its `secret_rotation.py audit --push` returns 1 when it pushed `down`.
+units. Its `secret_rotation.py audit --verdict` returns 1 when the audit reads `down`.
 
 **Why it exists separately from `manifest-prune-check.sh`.** That check answers the same two
 questions plus an orphaned-cluster-object arm, but it is installed by
@@ -224,9 +224,10 @@ daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
   stamp and the template agree, so the arm would read green exactly when the host is furthest
   behind. Past `setup_drift_tree_max_days` (14) the age is its own DOWN; an unreadable checkout
   is a DOWN too, never a pass.
-- Pushes the "Setup Plane Drift (agent hosts)" Kuma tile. Its token is in
-  `CROSS_HOST_PUSH_TOKENS`: the cron is on daniel-server and the tile deploys from daniel-box,
-  so no single `rotate --deploy` can move both halves.
+- Writes `setup-drift-check.prom`, which `SetupDriftFailed` and `SetupDriftNotReporting`
+  read. It pushed the "Setup Plane Drift (agent hosts)" Kuma tile until M6 batch B2's
+  Cutover-2, which also retired the `/etc/homelab/kuma-push.env` token file with an `absent`
+  task. The token stays in `CROSS_HOST_PUSH_TOKENS` until B2's token PR retires the key.
 
 ### Verify a cron arm as the user cron runs it
 
@@ -244,23 +245,25 @@ inert. That file EXECUTES the library against a fixture rather than grepping it,
 ## Loki read-route witness (`loki_route_witness` tag)
 
 `loki-read-route-health.sh` runs hourly on every host in `loki_route_witness_hosts`
-(`group_vars/all.yml` — both prod cluster nodes) and pushes that host's own "Loki Read Route
-(<host>)" Kuma tile.
+(`group_vars/all.yml` — both prod cluster nodes) and writes that host's own
+`loki-read-route-health.prom` verdict, which `LokiReadRouteFailed` and
+`LokiReadRouteNotReporting` read per host. It pushed a "Loki Read Route (<host>)" Kuma tile until
+M6 batch B2's Cutover-2.
 
 **It is a systemd timer, `kuma-check-loki-read-route.timer`, not a cron, since 2026-09-19.**
 The `Schedule the Loki read-route witness` task imports the `common` role's
 `kuma_check_timer.yml`, whose service is `Restart=on-failure` with `RestartSec=15min`: the
-script exits 1 after it pushes `down`, so a red tile reruns every 15 minutes until the route
+script exits 1 after a `down` verdict, so a red check reruns every 15 minutes until the route
 answers instead of sitting red until the next hourly slot. The timer is `Persistent=true`, so a
-slot missed inside an outage runs at boot; the script's boot-grace arm exits 1 without a push,
+slot missed inside an outage runs at boot; the script's boot-grace arm exits 1 without a verdict,
 and the restart carries the real verdict. `systemctl status kuma-check-loki-read-route` shows
 `auto-restart` while it is red, and `journalctl -u kuma-check-loki-read-route` holds the runs.
 The import removes the old `Loki read-route witness` cron on every host.
 
 **daniel-box's witness is packaged since H7.36.** The `loki-route-witness` component of
 `homelab-daniel-box` ships `homelab-loki-route-witness.timer` with the same `Restart=on-failure`,
-`RestartSec=15min`, boot-rerun and `Persistent=true` shape, and reads its token from the
-credential `loki_route_witness_push_token`. The role skips daniel-box through
+`RestartSec=15min`, boot-rerun and `Persistent=true` shape, and loads no credential. The role
+skips daniel-box through
 `initial_setup_packaged_hosts['loki_route_witness']` in `defaults/main.yml` and keeps the
 Ansible-era timer on daniel-server until that host's package moves it. Until then the two copies
 of `loki_route_health.py` and of the script stay in step by hand, and
@@ -274,19 +277,18 @@ for a reason the operator never hits or has to be granted an address no real cal
 **Why both nodes.** Which address a host process arrives as depends on where the traefik pod
 sits — the same node gives that node's cni0 gateway, another node gives the sender's flannel.1
 address. #1693 left the route dead from daniel-server and healthy from daniel-box, so a single
-witness would have reported green throughout. Each host pushes its own token, for the reason the
-`nut_host` role's secondary watchdog records: two hosts on one token let either host's `up`
-satisfy the deadline.
+witness would have reported green throughout. Each host writes its own verdict, which
+Prometheus labels with the host's origin, so one host's `up` cannot satisfy the other's
+deadline.
 
 **The verdict is the response body, never the exit code.** `probe.py` builds its curl argv
 without `-f`, so a route Traefik refuses returns `404 page not found` with exit **0**.
 `files/loki_route_health.py` decides — valid JSON, `status: success`, non-empty `data` — and
 the role's `tests/test_loki_route_health.py` holds that 404 as a DOWN case.
-`ansible/tests/setup/test_loki_route_witness.py` guards the host list, the per-host tokens, the
-push deadline against the timer period, the exit-code contract (a down verdict exits 1), and the
-removal arm. Both tokens are in `CROSS_HOST_PUSH_TOKENS`
-(`scripts/secrets_mgmt/consumers.py`): the timer is in a role with no deploy tag and the tile
-deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both halves.
+`ansible/tests/setup/test_loki_route_witness.py` guards the host list, the deadline against
+the timer period, the exit-code contract (a down verdict exits 1), the removal arm, and that
+neither copy pushes to Kuma, which M6 batch B2's Cutover-2 removed. Both retired tokens stay in
+`CROSS_HOST_PUSH_TOKENS` (`scripts/secrets_mgmt/consumers.py`) until B2's token PR.
 
 ## The generated-docs refresh cron, in detail
 
@@ -320,7 +322,7 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
 - **Each failing run keeps its own log** in that directory, named `failure-<UTC start>.log`,
   and the script prunes all but the newest five (#4764). One overwritten file lost the
   2026-10-12 06:17 traceback to the 18:17 failure of a different test.
-- **A red suite pushes pytest's own verdict**: the count line and each `FAILED`/`ERROR` node id
+- **A red suite reports pytest's own verdict**: the count line and each `FAILED`/`ERROR` node id
   from the `short test summary info` block. The output's tail is only the fallback, for a run
   with no such block. On 2026-10-12 the tail was a shutdown traceback that named no test.
 - **Before adding a fourth staged path**, or a prek hook matching one of the three, check the
@@ -355,14 +357,14 @@ deploys from `k8s/uptime-kuma`, so no single `rotate --deploy` can move both hal
   fell below its threshold; `history.json` holds only the scores and each sweep's
   total cost (#4019, #4273).
 - **A failed suite or commit keeps its own log** at `/var/lib/homelab/eval-run.d/failure-<UTC
-  start>.log`, and the script prunes all but the newest five. A red suite pushes pytest's count
+  start>.log`, and the script prunes all but the newest five. A red suite reports pytest's count
   line and failing node ids. The code is docs-refresh's, and a test holds the two copies
   identical (#4764).
-- **A REGRESSED case still gets committed** — the data is real — but reports the push DOWN with
+- **A REGRESSED case still gets committed** — the data is real — but reports the run DOWN with
   the regression named, matching autofix-bridge's "act, but do not launder the result" pattern
   rather than silently dropping the regression or silently blocking the commit.
   `evals/trend.py:classify` decides what counts: a miss after a stable run, or a second miss in
-  a row. A single miss after a mixed window is FLAKY, lands in the PR body, and keeps the tile UP,
+  a row. A single miss after a mixed window is FLAKY, lands in the PR body, and keeps the verdict UP,
   because at k=3 one unlucky trial misses a 2/3 threshold (#5796).
 - **Before widening scope** (grading `run-live.mjs`, changing cadence, adding a case directory
   the loop should skip), read the last few PRs this cron opened (`evals-history/*`,

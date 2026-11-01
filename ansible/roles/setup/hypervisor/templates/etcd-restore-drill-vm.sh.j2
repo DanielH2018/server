@@ -22,21 +22,22 @@
 #   2. destroy any guest a previous run left    — an aborted run must not block the next
 #   3. fresh disk from the base image, `virsh create` (transient: never a defined domain)
 #   4. wait for ssh against the PINNED host key — the staging guest shares this bridge
-#   5. probe the egress fence FROM the guest     — before it is handed any credential, and push
-#                                                  that verdict to its OWN Kuma tile
+#   5. probe the egress fence FROM the guest     — before it is handed any credential, and write
+#                                                  that verdict to its OWN check
 #   6. stage binary + token + env + scripts in one tar over ssh, then delete the staging dir
 #   7. run the guest-side script; pull restore.log / server.log out as evidence
 #   8. destroy the guest and delete its disk    — also from the EXIT trap, pass or fail
-#   9. stamp on success, push the verdict to Kuma, log it unconditionally
+#   9. stamp on success, write the verdict, log it unconditionally
 # Evidence (the drill's stdout, k3s's two logs and the fence leg's report) is the only thing that
 # outlives a run, under LOG_ROOT/<utc-run-id>/, and it is pruned at LOG_RETENTION_DAYS. The
 # restored etcd database, the token copy and the R2 credentials live on the guest's disk, which
 # step 8 deletes.
 #
 # Exit 0 = the drill passed. Non-zero = it did not, or this script could not get as far as running
-# it; the Kuma message and the syslog line say which. Each verdict that goes to Kuma is also written
-# to $TEXTFILE_DIR/<etcd-restore-drill-vm|etcd-restore-drill-egress-fence>.prom for node_exporter's
-# textfile collector, before its push (M6 batch B4; rules in other-setup-checks.yaml run in shadow).
+# it; the syslog line says which. Each verdict is written to
+# $TEXTFILE_DIR/<etcd-restore-drill-vm|etcd-restore-drill-egress-fence>.prom for node_exporter's
+# textfile collector, which the EtcdRestoreDrill* rules in other-setup-checks.yaml read (M6 batch
+# B4). B4's Cutover-2 removed its two Kuma pushes.
 #
 # --rehearse-suc (H6.1b2) is the operator's rehearsal of the system-upgrade Plan, never scheduled.
 # It builds the same guest behind the same fence, installs k3s at --guest-version (default: the
@@ -45,8 +46,7 @@
 # guest, with --repo's checkout supplying the pins. --expect upgrade passes when the Plan moves the
 # guest to its version and the Kustomization reads Ready; --expect red passes when the Plan's Job
 # fails and the Kustomization is not Ready. The guest is handed no token and no R2 credential, and
-# the run writes no stamp, no textfile and no Kuma push, so the monthly drill's evidence is
-# untouched. docs/hypervisor-libvirt-internals.md has the long form.
+# the run writes no stamp and no textfile, so the monthly drill's evidence is untouched. docs/hypervisor-libvirt-internals.md has the long form.
 set -uo pipefail
 
 REHEARSE=0
@@ -66,11 +66,6 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t etcd-restore-drill-vm "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
 # shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t etcd-restore-drill-vm "homelab-check-lib.sh missing — run initial_setup on this host"
@@ -126,31 +121,21 @@ FENCE_LONGHORN_URL="{{ hypervisor_etcd_drill_fence_longhorn_url }}"
 # does not claim a verdict it never took.
 FENCE_VERDICT=not-checked
 TAG=etcd-restore-drill-vm
-# The run writes two textfile verdicts, one per Kuma tile: the drill's own under the script's name
-# and the egress fence's under its own, because the syslog tag is shared and a check file takes
-# one verdict. DEADLINE_S is the longest legitimate gap between two writes, which is the monthly
-# cadence plus slack that the drill's Kuma tile already carries (etcd_drill_full_kuma_interval_s).
-# ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
+# The run writes two textfile verdicts: the drill's own under the script's name and the egress
+# fence's under its own, because the syslog tag is shared and a check file takes one verdict.
+# DEADLINE_S is the longest legitimate gap between two writes, which is the monthly cadence plus
+# slack (etcd_drill_full_kuma_interval_s, named for the Kuma tile that carried it until M6 batch
+# B4). ansible/tests/setup/test_b4_rule_literals.py pins the rules' literals to this value.
 CHECK_DRILL=etcd-restore-drill-vm
 CHECK_FENCE=etcd-restore-drill-egress-fence
 DEADLINE_S={{ etcd_drill_full_kuma_interval_s }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-ETCD_DRILL_FULL_PUSH_TOKEN=""
-ETCD_DRILL_FENCE_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r "{{ hypervisor_etcd_drill_kuma_env }}" ]] && . "{{ hypervisor_etcd_drill_kuma_env }}"
-PUSH_TOKEN="$ETCD_DRILL_FULL_PUSH_TOKEN"
-# The fence leg reports to a tile of its own, so an unproven range alarms as an unproven range
-# rather than riding along in the message of a passing drill push. See report_fence.
-FENCE_PUSH_TOKEN="$ETCD_DRILL_FENCE_PUSH_TOKEN"
-# DECIDED: a rehearsal pushes to neither Kuma tile, writes no textfile verdict and no stamp. Both
-# tiles and the stamp answer "did the MONTHLY drill run", and a rehearsal that refreshed them would
-# hide a month the cron skipped. Its syslog lines carry their own tag for the same reason.
+# DECIDED: a rehearsal writes no textfile verdict and no stamp. Both verdicts and the stamp answer
+# "did the MONTHLY drill run", and a rehearsal that refreshed them would hide a month the cron
+# skipped. Its syslog lines carry their own tag for the same reason.
 if [[ "$REHEARSE" == 1 ]]; then
-  PUSH_TOKEN="" FENCE_PUSH_TOKEN="" TAG=etcd-drill-suc-rehearsal
+  TAG=etcd-drill-suc-rehearsal
 fi
 
 VIRSH=(virsh --connect qemu:///system)
@@ -161,8 +146,7 @@ KNOWN_HOSTS=""
 
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
-# write_verdict CHECK STATUS: the textfile for one verdict, written before its push, which retries
-# for over a minute and must not age the file. A failed write logs and the run goes on.
+# write_verdict CHECK STATUS: the textfile for one verdict. A failed write logs and the run goes on.
 write_verdict() {
   local check="$1" status="$2" success=0
   [[ "${REHEARSE:-0}" == 1 ]] && return 0
@@ -171,42 +155,34 @@ write_verdict() {
     || logger -t "$TAG" "textfile write to ${TEXTFILE_DIR} failed (${check} status=${status})"
 }
 
-push_kuma() {
-  local status="$1" msg="$2" token="${3:-$PUSH_TOKEN}"
-  [[ -z "$token" ]] && return 0
-  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${token}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" "$TAG"
-}
-
-# Every exit path reports through here, and the syslog line is unconditional — a push that lands
-# leaves no local record otherwise, and `probe.py alerts` reconstructs history from Loki.
+# Every exit path reports through here, and the syslog line is unconditional — it is the only
+# record of the message, and `probe.py alerts` reconstructs history from Loki.
 report() {
   local status="$1" msg="$2"
   logger -t "$TAG" "status=${status} run=${RUN_ID} ${msg}"
   log "status=${status} ${msg}"
   write_verdict "$CHECK_DRILL" "$status"
-  push_kuma "$status" "$msg"
 }
 
-# The fence leg's own report, to its own tile. The drill's tile answers "did the restore pass",
-# and it cannot also answer "was the fence measured": a run that passes with a range unmeasured
-# is `up` on that tile by construction. This one is `up` only when every fenced range was dialled
-# and refused.
+# The fence leg's own report, to its own check. The drill's verdict answers "did the restore
+# pass", and it cannot also answer "was the fence measured": a run that passes with a range
+# unmeasured is `up` on that verdict by construction. This one is `up` only when every fenced
+# range was dialled and refused.
 #
 # Called from inside fence_check, BEFORE the two fatal paths call `fail` — a leak exits the run,
-# and a push made afterwards would never happen. A run that dies before the leg ever executes
-# pushes nothing here on purpose: the tile's deadline then expires and it goes DOWN by itself,
-# which is the honest reading of a fence nobody measured this month.
+# and a report made afterwards would never happen. A run that dies before the leg ever executes
+# writes nothing here on purpose: the verdict's deadline then expires and
+# EtcdRestoreDrillEgressFenceNotReporting fires by itself, which is the honest reading of a fence
+# nobody measured this month.
 report_fence() {
   local status="$1" msg="$2"
   logger -t "$TAG" "fence=${status} run=${RUN_ID} ${msg}"
   log "fence=${status} ${msg}"
   write_verdict "$CHECK_FENCE" "$status"
-  push_kuma "$status" "$msg" "$FENCE_PUSH_TOKEN"
 }
 
-# A fence verdict that also ends the run: report it to the fence tile first, then take the
-# orchestrator's normal failure path, which reports the same text to the drill's tile and exits.
+# A fence verdict that also ends the run: report it to the fence check first, then take the
+# orchestrator's normal failure path, which reports the same text to the drill's check and exits.
 fence_fail() {
   report_fence down "$1"
   fail "$1"
@@ -294,15 +270,16 @@ ssh_guest() {
 # target answering from inside the guest is a leak whether or not it is stale, so leak detection
 # survives it — and losing a month of restore-drill coverage because a ClusterIP moved is the
 # worse trade. An unproven target is named per-target in egress-fence.log and rides along in this
-# run's own Kuma message as `fence=hold,unproven=<labels>`.
+# run's own status line as `fence=hold,unproven=<labels>`.
 #
-# DECIDED: the fence verdict pushes a Kuma tile of its own, `etcd Restore Drill (egress fence)`.
-# This reverses the "there is no separate Kuma tile; the drill's own tile carries it" decision
-# this marker used to carry (#2943), on the evidence of #3021: the drill tile cannot express the
-# non-fatal half. An unproven range leaves the drill PASSING, so the drill's tile is `up` and the
-# only record that a fenced range went unmeasured is the message text of a green push — which
-# alerts nobody. The leg exists so that an unmeasured fence does not read as a held one, and at
-# the monitor layer it did. report_fence below carries the wiring.
+# DECIDED: the fence verdict is a check of its own, etcd-restore-drill-egress-fence, which the
+# EtcdRestoreDrillEgressFence* rules read (a Kuma tile of its own until M6 batch B4's Cutover-2).
+# This reverses the "there is no separate tile; the drill's own tile carries it" decision this
+# marker used to carry (#2943), on the evidence of #3021: the drill's verdict cannot express the
+# non-fatal half. An unproven range leaves the drill PASSING, so the drill's verdict is `up` and
+# the only record that a fenced range went unmeasured is the message text of a green verdict —
+# which alerts nobody. The leg exists so that an unmeasured fence does not read as a held one, and
+# at the monitor layer it did. report_fence above carries the wiring.
 
 fence_curl() { printf 'curl -sk --max-time %s -o /dev/null %s' "$FENCE_PROBE_TIMEOUT" "$1"; }
 

@@ -16,8 +16,8 @@ Five subcommands:
            last changed — an app-side rotation that `sync` cannot date is otherwise
            invisible and ages into a false OVERDUE. Nothing is written: the registry is
            adjusted in memory only, so git stays the source of truth. With
-           --push, post up/down to an Uptime Kuma push monitor (the SECRET_ROTATION_KUMA
-           env var holds the full push URL incl. token).
+           --verdict, exit 1 when the audit reads down, which the daily audit wrapper turns
+           into its textfile verdict.
   rotate — rotate `auto`-tier secrets coming due (locally-generated push tokens — no
            external coupling). Dry-run by default; --commit writes new values via
            `sops set` and records the new date. What is due is decided the way `audit`
@@ -45,7 +45,7 @@ without an age key and are safe in CI.
 
 `audit` has one arm that DOES decrypt: the push-token shape check, which is the only way to
 see a token Uptime Kuma will refuse. It degrades to "not checked" where there is no age key,
-and it reports through the Kuma push only — never through `--check`, so the CI gate stays
+and it reports through `--verdict` only — never through `--check`, so the CI gate stays
 decrypt-free. `rotate --commit` also needs the key (it shells out to `sops set`).
 
 Tiers (and default rotation cadence):
@@ -62,7 +62,6 @@ Tiers (and default rotation cadence):
 import argparse
 import copy
 import datetime as dt
-import os
 import secrets as pysecrets
 import subprocess
 import sys
@@ -106,7 +105,7 @@ TIER_DAYS = {
 
 # The unattended rotate cron is WEEKLY (Sunday 09:00, initial_setup). Rotating only
 # already-overdue tokens would leave each one overdue up to 6 days first — with the daily
-# 08:00 audit paging the "Secret Rotation" Kuma monitor DOWN the whole time for a rotation
+# 08:30 audit paging SecretRotationAuditFailed the whole time for a rotation
 # that was always going to happen anyway. Anything due within one cron interval (+1 day
 # margin) rotates the run BEFORE its due date instead, so a working cron never lets an
 # auto token go overdue — an auto-tier OVERDUE in the audit genuinely means the weekly
@@ -157,7 +156,7 @@ def cmd_sync(args, tools: RotationTools) -> int:
 
 
 def audit_summary(res: dict, missing: list, stale: list) -> str:
-    """The one-line status pushed to the "Secret Rotation" Kuma monitor.
+    """The one-line status the audit prints last, which the daily wrapper's journal keeps.
 
     NAMES the overdue secrets (most-overdue first, capped) — a bare count reads identically whether
     a genuine cron break stranded a rotatable token or one of the consumer-less known-manual auto
@@ -185,14 +184,15 @@ def audit_summary(res: dict, missing: list, stale: list) -> str:
 
 
 def cmd_audit(args, tools: RotationTools) -> int:
-    """Print each secret's rotation status, push the summary to Kuma, and gate on drift.
+    """Print each secret's rotation status and its summary line, and gate on drift.
 
-    Exits 64 when `--push` is given without SECRET_ROTATION_KUMA set, 1 when `--check` is
-    given and the registry is out of sync with secrets.yml, and 1 when `--push` pushed
-    `down` — the daily audit runs under a systemd timer whose `Restart=on-failure` reruns it
-    every 30 min until it exits 0 (roles/setup/common/tasks/kuma_check_timer.yml). Without
-    `--push`, overdue secrets and malformed push tokens are reported but never fail this exit
-    code; those are the daily Kuma push's concern, not a CI gate's.
+    Exits 1 when `--check` is given and the registry is out of sync with secrets.yml, and 1
+    when `--verdict` is given and the audit reads down — the daily audit runs under a systemd
+    timer whose `Restart=on-failure` reruns it every 30 min until it exits 0
+    (roles/setup/common/tasks/kuma_check_timer.yml), and its wrapper writes the exit code as
+    the textfile verdict SecretRotationAuditFailed reads. Without `--verdict`, overdue secrets
+    and malformed push tokens are reported but never fail this exit code; those are the daily
+    audit's concern, not a CI gate's.
     """
     reg = tools.load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
@@ -217,7 +217,7 @@ def cmd_audit(args, tools: RotationTools) -> int:
     summary = audit_summary(res, missing, stale)
     # Push-token shape. This arm decrypts, so it runs only where an age key exists — the daily
     # cron on daniel-box, and an operator's shell. In CI `decrypted_values` returns None and the
-    # arm reports "not checked", which is why it feeds the Kuma push and NOT the --check exit
+    # arm reports "not checked", which is why it feeds --verdict and NOT the --check exit
     # code below: --check is the prek gate over secrets.yml / the registry / this file, and a
     # decrypt-dependent verdict there would pass in CI and fail on a developer's machine, turning
     # every future secrets PR red until an unrelated token was fixed.
@@ -246,26 +246,15 @@ def cmd_audit(args, tools: RotationTools) -> int:
     if extra_down:
         summary = f"{extra_down}; {summary}"
         print("audit: forced DOWN by --extra-down")
-    if args.push:
-        url = os.environ.get("SECRET_ROTATION_KUMA")
-        if not url:
-            error("--push set but SECRET_ROTATION_KUMA env missing")
-            return SECRET_ROTATION_BAD_ARGS
-        # `stale` too (a registry row for a since-removed secret), so the daily Kuma push and
-        # the CI `--check` gate below agree on registry drift — otherwise a `stale`-only drift
-        # fails CI while the monitor stays green.
-        ok = (
-            n_over == 0
-            and not missing
-            and not stale
-            and not malformed
-            and not extra_down
-        )
-        tools.kuma_push(url, ok, summary)
-        if not ok:
-            return 1
+    # `stale` too (a registry row for a since-removed secret), so the daily verdict and the CI
+    # `--check` gate below agree on registry drift — otherwise a `stale`-only drift fails CI
+    # while the daily verdict stays up.
+    ok = n_over == 0 and not missing and not stale and not malformed and not extra_down
+    print("audit: verdict=%s %s" % ("up" if ok else "down", summary))
+    if getattr(args, "verdict", False) and not ok:
+        return 1
     # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
-    # NOT on overdue (a time-based runtime state the daily Kuma push owns — blocking an unrelated
+    # NOT on overdue (a time-based runtime state the daily verdict owns — blocking an unrelated
     # commit on a due-for-rotation secret would be wrong), and NOT on push-token shape (see the
     # arm above). Read-only (no decrypt), CI-safe.
     if getattr(args, "check", False) and (missing or stale):
@@ -541,11 +530,22 @@ def main(argv=None) -> int:
     # below uniform rather than making every other subcommand carry an argument for this one.
     pc.set_defaults(func=lambda args, _tools: cmd_consumers(args))
     pa = sub.add_parser("audit")
-    pa.add_argument("--push", action="store_true", help="post status to Uptime Kuma")
+    # `--push` is the name the wrapper used while the audit pushed to Kuma (M6 batch B2's
+    # Cutover-2 removed the push). It stays an alias because the wrapper ships in the
+    # homelab-daniel-box package while this file runs from the checkout the GitOps tick
+    # fast-forwards, so for one landing a wrapper that still passes `--push` can run this file.
+    # B2's token PR deletes the alias.
+    pa.add_argument(
+        "--verdict",
+        "--push",
+        dest="verdict",
+        action="store_true",
+        help="exit 1 when the audit reads down (the daily wrapper's textfile verdict)",
+    )
     pa.add_argument(
         "--extra-down",
         metavar="REASON",
-        help="force DOWN and prefix REASON to the pushed message, while still reporting "
+        help="force DOWN and prefix REASON to the summary line, while still reporting "
         "every overdue secret (for a fault the caller detected, not the registry)",
     )
     pa.add_argument(

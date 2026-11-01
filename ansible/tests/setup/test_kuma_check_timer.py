@@ -397,7 +397,7 @@ def test_a_packaged_check_script_never_exits_zero_after_a_down_push(unit):
     text = rendered_shell_text("components", component, template)
     if template.startswith("secret-rotation-audit"):
         assert not re.search(r"^\s*exit 0\b", text, re.M)
-        assert "audit --push" in text
+        assert "audit --verdict" in text
     else:
         assert text.rstrip().endswith(EXIT_CONTRACT)
 

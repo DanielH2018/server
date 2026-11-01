@@ -8,8 +8,8 @@ GOP or a consumer re-encoder ENCODER tag — see fake_remux_logic.py for the sig
 fake is enriched with its episodeId and seeded into a persistent ledger (LEDGER_FILE, keyed by
 episodeId) that fake_remux_replace.py — the reconciler — reads to search for, grab, verify, and swap
 in a genuine replacement; this script itself never deletes a file or re-searches a series. It reports
-health the same way the other host crons do: a {ts,ok,msg} state file that monitor-bridge reads over a
-:ro bind mount and turns into the "Fake Remux Scan" Kuma monitor, plus a per-fake Discord line.
+health the same way the other host crons do: a {ts,ok,msg} state file that fake-remux-health.sh
+turns into the fake-remux-scan textfile verdict, plus a per-fake Discord line.
 
 Runs via `uv run --no-project --python <pin>` (host_python_version in
 ansible/inventory/group_vars/all.yml). Config comes from /etc/autofix-fake-remux/config.env

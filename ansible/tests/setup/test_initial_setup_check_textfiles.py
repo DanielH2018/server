@@ -1,17 +1,17 @@
-"""The initial_setup crons write a homelab_check_* textfile beside their Kuma push (M6 batch B2).
+"""The B2 host checks write a homelab_check_* textfile and push to nothing (M6 batch B2).
 
 docs/target-architecture/monitoring/m6-retire-kuma.md, batch B2: docs-refresh, the eval sweep, the
 secret-rotation audit and the setup-drift check each write `<check>.prom` through
-homelab-check-lib.sh before they push, so the rules in `initial-setup-checks.yaml` can shadow the
-Kuma tiles. (The Loki witness's cases are in test_loki_route_witness.py.) Each case runs the
-rendered script, or the rendered `on_exit` trap for the two scripts too large to run whole, with
-the real library, a `date` stub and the push library stubbed to record what it was handed.
+homelab-check-lib.sh, which the rules in `initial-setup-checks.yaml` read. (The Loki witness's
+cases are in test_loki_route_witness.py.) Each case runs the rendered script, or the rendered
+`on_exit` trap for the two scripts too large to run whole, with the real library and a `date`
+stub.
 
-Three properties each case pins:
+Two properties each case pins:
 
 - the file carries success 1 for an up verdict and 0 for a down one, and the stamped time;
-- the file exists before the Kuma push is attempted, because a push retries for over a minute;
-- a missing push token or a lost push never costs the textfile.
+- since B2's Cutover-2 no render pushes to Kuma: no library, no `kuma_push`, no push URL and no
+  push credential, so a run needs neither to write its verdict.
 
 Run: uv run pytest ansible/tests/setup/test_initial_setup_check_textfiles.py
 """
@@ -26,13 +26,31 @@ from lib.proc_testing import fake_bin, path_with, run, write_exec
 ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 COMPONENTS = ANSIBLE.parent / "hosts" / "components"
 CHECK_LIB = ROLE / "files" / "homelab-check-lib.sh"
-PUSH_LIB = "/usr/local/lib/kuma-push-lib.sh"
 CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
 EPOCH = 1760000000
 OVERRIDES = {
     "domain": "example.test",
     "k3s_metallb_ingress_vip": "10.0.0.240",
     "sys_user": "ubuntu",
+}
+# What a render carries while it still pushes to Kuma: the library, its call, a push URL, or the
+# credential that fed the token.
+KUMA_PUSH_MARKERS = (
+    "kuma-push-lib",
+    "kuma_push",
+    "/api/push/",
+    "_push_token",
+    "PUSH_TOKEN",
+    "kuma-push.env",
+)
+# Every B2 shell producer this module covers, with the check its textfile names. secret-rotate
+# writes no textfile, and the daily audit reports what it leaves behind.
+PRODUCERS = {
+    "docs-refresh.sh.j2": "docs-refresh",
+    "eval-run.sh.j2": "eval-run",
+    "secret-rotation-audit.sh.j2": "secret-rotation-audit",
+    "secret-rotate.sh.j2": None,
+    "setup-drift-check.sh.j2": "setup-drift-check",
 }
 
 
@@ -43,6 +61,36 @@ def _render(template: str) -> str:
             "components", path.parents[1].name, template, overrides=OVERRIDES
         )
     return render_shell_script("setup", "initial_setup", template, overrides=OVERRIDES)
+
+
+def kuma_push_markers(body: str) -> list[str]:
+    """The Kuma push markers a rendered script still carries, or nothing."""
+    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
+
+
+@pytest.mark.parametrize("template", sorted(PRODUCERS))
+def test_no_b2_producer_pushes_to_kuma(template):
+    # RED if a push, its library, its token or its credential returns: the tiles are gone, so a
+    # push would be refused (`by=kuma`) every run.
+    body = _render(template)
+    check = PRODUCERS[template]
+    # Non-vacuity: the render is the real script, which still records its verdict.
+    if check:
+        assert f"write_check_textfile {check}" in body
+    else:
+        assert 'logger -t secret-rotate "status=down $1"' in body
+    assert kuma_push_markers(body) == []
+
+
+def test_a_script_that_pushes_to_kuma_is_flagged():
+    pushing = (
+        "source /usr/lib/homelab/kuma-push-lib.sh\n"
+        'TOKEN="$(< "$CREDENTIALS_DIRECTORY/docs_refresh_push_token")"\n'
+        'DOCS_REFRESH_PUSH_TOKEN="$TOKEN"\n'
+        'kuma_push "$1" "$2" "https://kuma/api/push/$TOKEN"\n'
+        ". /etc/homelab/kuma-push.env\n"
+    )
+    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
 
 def _series(textfile_dir, check) -> dict[str, str]:
@@ -60,25 +108,15 @@ def _env(tmp_path, **extra):
     env = {
         "TEXTFILE_DIR": str(textfile_dir),
         "LOGGED": str(tmp_path / "logged"),
-        "PUSHED": str(tmp_path / "pushed"),
         "PATH": path_with(bin_dir),
         **extra,
     }
     return textfile_dir, env
 
 
-PUSH_STUB = """\
-kuma_push() {
-  # Records the status, and whether the textfile already existed when the push began.
-  printf '%s %s\\n' "$1" "$([ -f "$TEXTFILE_DIR/$KUMA_TAG.prom" ] && echo after-textfile || echo BEFORE-TEXTFILE)" \\
-    >> "$PUSHED"
-}
-"""
-
-
-def _pushes(tmp_path) -> list[str]:
-    pushed = tmp_path / "pushed"
-    return pushed.read_text().splitlines() if pushed.exists() else []
+def _logged(tmp_path) -> str:
+    logged = tmp_path / "logged"
+    return logged.read_text() if logged.exists() else ""
 
 
 # --- docs-refresh and eval-run: the on_exit trap, lifted out of the render -----------------
@@ -93,25 +131,23 @@ def _on_exit(script: str, name: str) -> tuple[str, int]:
 
 
 TRAP_SCRIPTS = {
-    "docs-refresh": ("docs-refresh.sh.j2", "DOCS_REFRESH_PUSH_TOKEN"),
-    "eval-run": ("eval-run.sh.j2", "EVAL_PUSH_TOKEN"),
+    "docs-refresh": "docs-refresh.sh.j2",
+    "eval-run": "eval-run.sh.j2",
 }
 
 
-def _run_trap(tmp_path, check, status, token="tok"):
-    template, token_var = TRAP_SCRIPTS[check]
+def _run_trap(tmp_path, check, status):
+    template = TRAP_SCRIPTS[check]
     body, deadline = _on_exit(_render(template), template)
-    textfile_dir, env = _env(tmp_path, KUMA_TAG=check)
+    textfile_dir, env = _env(tmp_path)
     driver = tmp_path / "driver.sh"
     write_exec(
         driver,
         "set -uo pipefail\n"
         f"source {CHECK_LIB}\n"
-        f"{PUSH_STUB}"
         f"{body}\n"
         f"DEADLINE_S={deadline}\n"
-        f'{token_var}="{token}"\n'
-        'PUSH_URL=u KUMA_HOST=h KUMA_RESOLVE_IP=i PUSH_MSG="a message"\n'
+        'PUSH_MSG="a message"\n'
         f"PUSH_STATUS={status}\n"
         "on_exit\n",
     )
@@ -120,9 +156,7 @@ def _run_trap(tmp_path, check, status, token="tok"):
 
 
 @pytest.mark.parametrize("check", sorted(TRAP_SCRIPTS))
-def test_an_up_exit_writes_success_one_with_the_deadline_before_the_push(
-    tmp_path, check
-):
+def test_an_up_exit_writes_success_one_with_the_deadline(tmp_path, check):
     textfile_dir, deadline = _run_trap(tmp_path, check, "up")
 
     series = _series(textfile_dir, check)
@@ -131,52 +165,36 @@ def test_an_up_exit_writes_success_one_with_the_deadline_before_the_push(
         f'homelab_check_last_run_timestamp_seconds{{check="{check}"}}'
     ] == str(EPOCH)
     assert series[f'homelab_check_deadline_seconds{{check="{check}"}}'] == str(deadline)
-    assert _pushes(tmp_path) == ["up after-textfile"]
+    assert "status=up a message" in _logged(tmp_path)
 
 
 @pytest.mark.parametrize("check", sorted(TRAP_SCRIPTS))
-def test_a_down_exit_writes_success_zero_and_a_missing_token_still_writes(
-    tmp_path, check
-):
-    textfile_dir, _ = _run_trap(tmp_path, check, "down", token="")
+def test_a_down_exit_writes_success_zero_and_logs_its_status_line(tmp_path, check):
+    textfile_dir, _ = _run_trap(tmp_path, check, "down")
 
     assert (
         _series(textfile_dir, check)[f'homelab_check_success{{check="{check}"}}'] == "0"
     )
-    assert _pushes(tmp_path) == []
+    assert "status=down a message" in _logged(tmp_path)
 
 
-# --- setup-drift-check: the whole script, with its two libraries stubbed ----------------------
+# --- setup-drift-check: the whole script, with the drift library stubbed ----------------------
 
 
-def _run_setup_drift(tmp_path, drifted="", token="tok"):
+def _run_setup_drift(tmp_path, drifted=""):
     body = _render("setup-drift-check.sh.j2")
-    env_file = tmp_path / "push.env"
-    env_file.write_text(f"SETUP_DRIFT_PUSH_TOKEN={token}\n" if token else "")
     drift_lib = tmp_path / "setup-drift-lib.sh"
     drift_lib.write_text(
         'setup_drift_scan() { DRIFTED="$STUB_DRIFTED"; STALE=""; DEPLOYED_NOTE=""; '
         'MANIFEST_NOTE=""; }\nsetup_drift_tree_age_days() { echo 1; }\n'
     )
-    push_lib = tmp_path / "kuma-push-lib.sh"
-    push_lib.write_text(PUSH_STUB)
-    for needle in (
-        PUSH_LIB,
-        CHECK_LIB_PATH,
-        "/usr/local/lib/setup-drift-lib.sh",
-        "/etc/homelab/kuma-push.env",
-    ):
+    for needle in (CHECK_LIB_PATH, "/usr/local/lib/setup-drift-lib.sh"):
         assert needle in body, f"setup-drift-check.sh no longer references {needle}"
-    body = (
-        body.replace(PUSH_LIB, str(push_lib))
-        .replace(CHECK_LIB_PATH, str(CHECK_LIB))
-        .replace("/usr/local/lib/setup-drift-lib.sh", str(drift_lib))
-        .replace("/etc/homelab/kuma-push.env", str(env_file))
+    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
+        "/usr/local/lib/setup-drift-lib.sh", str(drift_lib)
     )
     script = write_exec(tmp_path / "setup-drift-check.sh", body)
-    textfile_dir, env = _env(
-        tmp_path, KUMA_TAG="setup-drift-check", STUB_DRIFTED=drifted
-    )
+    textfile_dir, env = _env(tmp_path, STUB_DRIFTED=drifted)
     result = run([str(script)], env=env)
     return textfile_dir, result.returncode
 
@@ -189,7 +207,6 @@ def test_setup_drift_writes_success_one_when_nothing_drifted_and_exits_zero(tmp_
     assert (
         series['homelab_check_deadline_seconds{check="setup-drift-check"}'] == "90000"
     )
-    assert _pushes(tmp_path) == ["up after-textfile"]
     assert code == 0
 
 
@@ -202,41 +219,30 @@ def test_setup_drift_writes_success_zero_on_drift_and_exits_one_for_the_timer(tm
         ]
         == "0"
     )
-    assert _pushes(tmp_path) == ["down after-textfile"]
+    assert "status=down" in _logged(tmp_path)
     assert code == 1
-
-
-def test_setup_drift_without_a_push_token_still_writes_the_textfile(tmp_path):
-    textfile_dir, code = _run_setup_drift(tmp_path, token="")
-
-    assert (
-        _series(textfile_dir, "setup-drift-check")[
-            'homelab_check_success{check="setup-drift-check"}'
-        ]
-        == "1"
-    )
-    assert _pushes(tmp_path) == []
-    assert code == 0
 
 
 # --- secret-rotation-audit: the audit's exit code is the verdict ------------------------------
 
 
-def _run_audit(tmp_path, audit_rc=0, dirty=False, credential=True):
-    """Run the rendered wrapper in a scratch checkout with `uv` standing in for the audit."""
+def _run_audit(tmp_path, audit_rc=0, dirty=False):
+    """Run the rendered wrapper in a scratch checkout with `uv` standing in for the audit.
+
+    The stub records its argv, so a case can read which flag the wrapper asked for.
+    """
     repo = tmp_path / "server"
     (repo / "ansible" / "vars").mkdir(parents=True)
     (repo / "ansible" / "vars" / "secrets.yml").write_text("a: 1\n")
     (repo / "ansible" / "secret_rotation.yml").write_text("b: 1\n")
-    uv = write_exec(tmp_path / "uv", "#!/usr/bin/env bash\nexit $STUB_AUDIT_RC\n")
-    push_lib = tmp_path / "kuma-push-lib.sh"
-    push_lib.write_text(PUSH_STUB)
+    uv = write_exec(
+        tmp_path / "uv",
+        '#!/usr/bin/env bash\necho "$*" >> "$UV_ARGV"\nexit $STUB_AUDIT_RC\n',
+    )
     body = _render("secret-rotation-audit.sh.j2")
-    # The packaged script (H7.36) sources both libraries from /usr/lib/homelab.
-    audit_push_lib = "/usr/lib/homelab/kuma-push-lib.sh"
+    # The packaged script (H7.36) sources the check library from /usr/lib/homelab.
     audit_check_lib = "/usr/lib/homelab/homelab-check-lib.sh"
     for needle in (
-        audit_push_lib,
         audit_check_lib,
         "/home/ubuntu/server",
         "/home/ubuntu/.local/bin/uv",
@@ -246,12 +252,11 @@ def _run_audit(tmp_path, audit_rc=0, dirty=False, credential=True):
         # The checkout path first: the library path substituted below sits under /home/ubuntu/server.
         body.replace("/home/ubuntu/server", str(repo))
         .replace("/home/ubuntu/.local/bin/uv", str(uv))
-        .replace(audit_push_lib, str(push_lib))
         .replace(audit_check_lib, str(CHECK_LIB))
     )
     script = write_exec(tmp_path / "secret-rotation-audit.sh", body)
     textfile_dir, env = _env(
-        tmp_path, KUMA_TAG="secret-rotation-audit", STUB_AUDIT_RC=str(audit_rc)
+        tmp_path, STUB_AUDIT_RC=str(audit_rc), UV_ARGV=str(tmp_path / "uv-argv")
     )
     # `gh` answers the token check, and `git` reports a dirty tree or a clean one.
     stubs = fake_bin(
@@ -267,12 +272,6 @@ def _run_audit(tmp_path, audit_rc=0, dirty=False, credential=True):
     )
     env["PATH"] = path_with(stubs)
     env["STUB_GIT_STATUS"] = " M ansible/vars/secrets.yml" if dirty else ""
-    # The unit's LoadCredential= directory; the script reads its push token from there.
-    creds = tmp_path / "credentials"
-    creds.mkdir()
-    if credential:
-        (creds / "secret_rotation_push_token").write_text("rotation-token")
-    env["CREDENTIALS_DIRECTORY"] = str(creds)
     result = run([str(script)], env=env, check=False)
     return textfile_dir, result.returncode
 
@@ -287,6 +286,8 @@ def test_a_clean_audit_writes_success_one_and_exits_zero(tmp_path):
         == "90000"
     )
     assert code == 0
+    # The audit is asked for its verdict, which no longer means a push.
+    assert "secret_rotation.py audit --verdict" in (tmp_path / "uv-argv").read_text()
 
 
 def test_a_failed_audit_writes_success_zero_and_keeps_its_exit_code_for_the_timer(
@@ -303,15 +304,7 @@ def test_a_failed_audit_writes_success_zero_and_keeps_its_exit_code_for_the_time
     assert code == 1
 
 
-def test_an_audit_without_its_credential_exits_one_and_pushes_nothing(tmp_path):
-    """Rejecting half of the credential move: the unit's directory is the only token source."""
-    textfile_dir, code = _run_audit(tmp_path, audit_rc=0, credential=False)
-    assert code == 1
-    assert _pushes(tmp_path) == []
-    assert not (textfile_dir / "secret-rotation-audit.prom").exists()
-
-
-def test_a_dirty_tree_short_circuit_writes_success_zero_before_it_pushes(tmp_path):
+def test_a_dirty_tree_short_circuit_writes_success_zero_and_logs_its_reason(tmp_path):
     textfile_dir, code = _run_audit(tmp_path, dirty=True)
 
     assert (
@@ -320,5 +313,5 @@ def test_a_dirty_tree_short_circuit_writes_success_zero_before_it_pushes(tmp_pat
         ]
         == "0"
     )
-    assert _pushes(tmp_path) == ["down after-textfile"]
+    assert "status=down secret-rotate left uncommitted changes" in _logged(tmp_path)
     assert code == 1

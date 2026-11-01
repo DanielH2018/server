@@ -1,8 +1,8 @@
 """The rendered `docs-refresh` component: the generated-docs refresh in daniel-box's package (H7.10a).
 
 Until H7.36 `initial_setup` installed the refresh as a cron and `k8s_host_files` created the docs
-site directory. These tests hold what the move carries: the credential that replaces the token
-rendered into the script, the `+` ExecStartPre that creates the directories as root for a service
+site directory. These tests hold what the move carries: a unit that loads no credential since the
+Kuma push went (M6 batch B2's Cutover-2), the `+` ExecStartPre that creates the directories as root for a service
 that runs as `sys_user`, the tmpfiles line that equals docs' `docs_host_site_dir`, the timer's
 slots, and the legacy entries.
 
@@ -79,16 +79,12 @@ def test_the_service_creates_directories_as_root_and_runs_as_sys_user(package):
     assert "ProtectHome" not in unit
 
 
-def test_the_token_is_a_credential_and_never_in_the_script(package):
+def test_the_service_loads_no_credential_and_the_script_reads_none(package):
+    """M6 batch B2's Cutover-2 dropped the Kuma push, the only reader of the push token."""
     unit = _text(package, f"{UNITS}/homelab-docs-refresh.service")
-    assert (
-        "LoadCredential=docs_refresh_push_token:/run/credstore/docs_refresh_push_token\n"
-        in unit
-    )
-    assert "Wants=homelab-secrets.service\n" in unit
-    spec = yaml_fast.safe_load(COMPONENT.read_text())
-    assert spec["credentials"] == ["docs_refresh_push_token"]
-    assert "CREDENTIALS_DIRECTORY" in _text(package, SCRIPT)
+    assert "LoadCredential=" not in unit
+    assert "homelab-secrets.service" not in unit
+    assert "CREDENTIALS_DIRECTORY" not in _text(package, SCRIPT)
 
 
 def test_the_tmpfiles_file_creates_the_directory_docs_mounts_and_the_stamp_directory(

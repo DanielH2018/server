@@ -68,7 +68,8 @@ aborts the run with nothing staged.
 - **The control target is load-bearing**: the two allocated targets (Longhorn's ClusterIP, a pod
   IP) carry a host-side control leg, and a refusal from BOTH sides means the target moved.
 - **An unproven target does not fail the drill**, per the `# DECIDED: a leak aborts` marker. It
-  alarms on the fence's OWN Kuma tile: the drill's tile reads `up` through an unproven range.
+  alarms on the fence's OWN check, `etcd-restore-drill-egress-fence`: the drill's verdict reads
+  `up` through an unproven range.
 
 ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which holds the filter's
 shape, and by `ansible/tests/staging/test_staging_egress_fence_fires.py`, which runs the leg
@@ -90,7 +91,7 @@ first connect.
   cluster.
 - **Mode (explicit + reversible):** `hypervisor_etcd_drill_armed` (`defaults/main.yml`, `true`)
   is the cron's `state:`; `false` removes it next run. The cadence, `etcd_drill_full_cron` in
-  `group_vars/all.yml`, is shared with `k8s/uptime-kuma`.
+  `group_vars/all.yml`, also sizes the textfile verdicts' deadline.
 - **Authoritative sources:** the snapshot listed in R2, daniel-server's own
   `/usr/local/bin/k3s`, and `K3S_TOKEN` from the k3s-agent unit's env file — a wrong token fails
   the restore loudly.
@@ -99,11 +100,13 @@ first connect.
   staged.
 - **Required evidence:** `/var/log/etcd-restore-drill/<run-id>/` — including
   `egress-fence.log`, the fence leg's per-target verdicts — retained
-  `hypervisor_etcd_drill_log_retention_days`, and the two Kuma tiles that alarm, sized
-  from `etcd_drill_full_kuma_interval_s`. Each verdict is also written to
+  `hypervisor_etcd_drill_log_retention_days`, and the two textfile verdicts that alarm,
   `etcd-restore-drill-vm.prom` (the drill) and `etcd-restore-drill-egress-fence.prom` (the fence
-  leg) in node_exporter's textfile directory before its push (M6 batch B4), and shadow rules in
-  `observability/files/rules/other-setup-checks.yaml` read them.
+  leg) in node_exporter's textfile directory, with a deadline from
+  `etcd_drill_full_kuma_interval_s`. The rules in
+  `observability/files/rules/other-setup-checks.yaml` read them (M6 batch B4), and the run's
+  `status=` and `fence=` syslog lines carry the messages. B4's Cutover-2 removed the two Kuma
+  pushes.
 - **Next-run review:** read the last run's directory before changing the cadence or what ships
   into the guest. `ansible/tests/staging/test_etcd_drill_vm.py` pins the fence, the host key, no
   `define` and the deadline.
