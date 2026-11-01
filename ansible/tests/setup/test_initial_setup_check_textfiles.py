@@ -41,6 +41,7 @@ KUMA_PUSH_MARKERS = (
     "/api/push/",
     "_push_token",
     "PUSH_TOKEN",
+    "kuma-push.env",
 )
 # Every B2 shell producer this module covers, with the check its textfile names. secret-rotate
 # writes no textfile, and the daily audit reports what it leaves behind.
@@ -87,6 +88,7 @@ def test_a_script_that_pushes_to_kuma_is_flagged():
         'TOKEN="$(< "$CREDENTIALS_DIRECTORY/docs_refresh_push_token")"\n'
         'DOCS_REFRESH_PUSH_TOKEN="$TOKEN"\n'
         'kuma_push "$1" "$2" "https://kuma/api/push/$TOKEN"\n'
+        ". /etc/homelab/kuma-push.env\n"
     )
     assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
