@@ -96,7 +96,8 @@ is the source, and its docstring lists which readings keep the wait open.
 ### `alerts [--days N --check X]`
 
 Reconstructs DOWN alert history from Loki, because Kuma keeps only current state — one row per
-firing episode. The same view is the "Alert History" Grafana board (Infrastructure folder).
+firing episode. The "Alert History" Grafana board (Infrastructure folder) answers the same
+question from Prometheus's `ALERTS` series instead, grouped by `service`.
 
 It reads **two** streams: monitor-bridge's container log, and the `{job="syslog"}` `status=down`
 lines the host crons emit, which push Kuma directly and so have no other durable record.
