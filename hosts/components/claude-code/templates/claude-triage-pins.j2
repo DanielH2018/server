@@ -17,3 +17,5 @@ the role defaults and to tasks/triage.yml's block vars.
 {%- set daily_cap = 6 -%}
 {#- Arming the poller is an operator decision too. -#}
 {%- set poll_mode = "shadow" -%}
+{#- Lowering the floor raises how many runs a day the poller asks for, so it is pinned too. -#}
+{%- set poll_min_severity = "critical" -%}

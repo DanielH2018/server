@@ -315,8 +315,8 @@ template carries why it is a host timer at all.
 - **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
   all pinned in `templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
   enforces the daily cap, because polkit lets `claude` start a run without the poller. The
-  poller opens an episode only on a fall that holds for two polls, makes one storm episode of
-  more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
+  poller opens an episode only on a `critical` fall that holds for two polls, logs a lower one
+  as skipped, makes one storm episode of more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
   reboot's mute is open. It queues episodes and starts the next only when the lock is free,
   and never restarts one whose run crashed.
 - **Evidence:** `/var/lib/claude/triage/runs/<episode>.json`, the report under

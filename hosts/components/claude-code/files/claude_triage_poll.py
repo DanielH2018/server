@@ -14,6 +14,11 @@ Three modes, from `POLL_MODE` in the root-owned config:
 - `armed`: queue the episode in the inbox, and start the oldest queued episode whenever no
   run holds the runner's lock.
 
+A fall below `POLL_MIN_SEVERITY` opens no run. The poller logs it as skipped, and in shadow
+mode appends it to `shadow.jsonl` with `"skipped": "below-floor"`, so the week of records the
+operator reads before arming shows what the floor dropped. Kuma exports a tile's `severity`
+tag as a label, so one floor covers both sources. A key with no severity ranks below `info`.
+
 The first poll after a state file is created is a baseline. It records what is already down and
 starts nothing, so arming never fires on every known red tile at once.
 
@@ -57,6 +62,8 @@ PROM_AGE_QUERY = 'time() - process_start_time_seconds{job="prometheus"}'
 ALERTS_SETTLE_S = 1200
 HOLD_ALERT = "DeployHoldActive"
 EPISODE_MAX = 63
+# POLL_MIN_SEVERITY's values, lowest first. `none` admits every fall, a key with no severity too.
+SEVERITY_RANK = {"none": 0, "info": 1, "warning": 2, "critical": 3}
 # The prefix on every journal line, as `log` writes it.
 TAG = "claude-triage-poll"
 
@@ -159,9 +166,14 @@ def down_keys(kuma: list[dict], alerts: list[dict]) -> dict[str, dict]:
     """Every source that is down now, keyed `kuma:<monitor>` or `alert:<name>:<service>`."""
     found: dict[str, dict] = {}
     for series in kuma:
-        name = series.get("metric", {}).get("monitor_name", "")
+        m = series.get("metric", {})
+        name = m.get("monitor_name", "")
         if name and value(series) == 0:
-            found[f"kuma:{name}"] = {"source": "kuma", "monitor": name}
+            found[f"kuma:{name}"] = {
+                "source": "kuma",
+                "monitor": name,
+                "severity": m.get("severity", ""),
+            }
     for series in alerts:
         m = series.get("metric", {})
         name = m.get("alertname", "")
@@ -182,6 +194,11 @@ def episode_id(key: str, now: float) -> str:
     stamp = time.strftime("%Y%m%dt%H%M", time.gmtime(now))
     body = slug(key.replace(":", " ")) or "episode"
     return f"{stamp}-{body}"[:EPISODE_MAX].rstrip("-")
+
+
+def severity_rank(entry: dict) -> int:
+    """The rank of a down key's `severity`; a missing or unknown one ranks 0, below `info`."""
+    return SEVERITY_RANK.get(entry.get("severity", ""), 0)
 
 
 def in_reboot_window(cfg: dict[str, str], now: float) -> bool:
@@ -210,6 +227,7 @@ def step(
     storm_size: int,
     unknown: set[str] | frozenset[str] = frozenset(),
     kuma_up: set[str] | frozenset[str] = frozenset(),
+    floor: int = 0,
 ) -> tuple[dict, list[dict]]:
     """Advance the per-key state by one poll; return (new state, episodes to open).
 
@@ -218,6 +236,10 @@ def step(
     waits for a poll that can judge every source, so a source that comes back later cannot
     read its standing reds as new falls. A Kuma key recovers only when it is in `kuma_up`; an
     alert key recovers when it stops firing.
+
+    A fall whose severity ranks below `floor` comes back as a `skipped` record rather than an
+    episode, and still opens its key, so it is reported once per fall. Skipped falls never
+    count towards a storm.
     """
     if down is None:
         return state, []
@@ -245,16 +267,22 @@ def step(
             del keys[key]  # recovered: the next fall is a new episode
     episodes: list[dict] = []
     if ready and not (hold or muted):
-        if len(ready) > storm_size:
+        below = sorted(k for k in ready if severity_rank(down[k]) < floor)
+        runs = sorted(k for k in ready if k not in below)
+        episodes += [
+            {"id": episode_id(k, now), "skipped": "below-floor", **down[k]}
+            for k in below
+        ]
+        if len(runs) > storm_size:
             episodes.append(
                 {
                     "id": episode_id("storm", now),
                     "storm": True,
-                    "down": [down[k] for k in sorted(ready)],
+                    "down": [down[k] for k in runs],
                 }
             )
         else:
-            episodes += [{"id": episode_id(k, now), **down[k]} for k in sorted(ready)]
+            episodes += [{"id": episode_id(k, now), **down[k]} for k in runs]
         for key in ready:
             keys[key].update(open=True, since=now)
     # While held or muted, a ready key keeps its streak and opens once the gate lifts.
@@ -363,18 +391,21 @@ def main(
         int(cfg.get("POLL_STORM_SIZE", "3")),
         unknown,
         up,
+        # An unknown floor admits only `critical`: a typo must not open every warning.
+        SEVERITY_RANK.get(cfg.get("POLL_MIN_SEVERITY", ""), SEVERITY_RANK["critical"]),
     )
     for episode in episodes:
-        if mode == "armed":
+        detail = json.dumps(episode, sort_keys=True)
+        if episode.get("skipped"):
+            log(f"skipped {episode['id']}, below POLL_MIN_SEVERITY: {detail}", tag=TAG)
+        elif mode == "armed":
             path = os.path.join(state_dir, "inbox", f"{episode['id']}.json")
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(episode, f, indent=2, sort_keys=True)
             log(f"queued {episode['id']}", tag=TAG)
         else:
-            log(
-                f"shadow: would queue {episode['id']}: {json.dumps(episode, sort_keys=True)}",
-                tag=TAG,
-            )
+            log(f"shadow: would queue {episode['id']}: {detail}", tag=TAG)
+        if mode != "armed":
             with open(
                 os.path.join(state_dir, "shadow.jsonl"), "a", encoding="utf-8"
             ) as f:

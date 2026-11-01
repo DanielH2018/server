@@ -509,6 +509,11 @@ claude_code_triage_daily_cap: 6
 # <state_dir>/shadow.jsonl, `armed` starts it. Shipped `shadow` so a week of would-be episodes
 # can be read before the first unattended run.
 claude_code_triage_poll_mode: shadow
+# A fall below this severity (`none`, `info`, `warning`, `critical`) is logged as skipped and
+# opens no run. Kuma reads a tile's `tag-severity`, so an untagged tile ranks below `info`.
+# `critical` because a week of shadow episodes at no floor came to about 21 a day against the
+# six-run cap, mostly warnings (#6861).
+claude_code_triage_poll_min_severity: critical
 claude_code_triage_poll_interval: 2min
 # Loopback first, then observability_prometheus_cluster_ip: Prometheus publishes loopback only
 # on the node it runs on. test_claude_triage.py holds the second equal to the k8s key.

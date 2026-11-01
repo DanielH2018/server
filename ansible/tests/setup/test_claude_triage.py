@@ -36,6 +36,7 @@ PINNED = {
     "run_timeout_s": "claude_code_triage_run_timeout_s",
     "daily_cap": "claude_code_triage_daily_cap",
     "poll_mode": "claude_code_triage_poll_mode",
+    "poll_min_severity": "claude_code_triage_poll_min_severity",
 }
 
 
@@ -98,6 +99,7 @@ RAISED = {
     "claude_code_triage_run_timeout_s": 99999,
     "claude_code_triage_daily_cap": 99,
     "claude_code_triage_poll_mode": "armed",
+    "claude_code_triage_poll_min_severity": "none",
 }
 
 
@@ -121,6 +123,7 @@ def test_the_config_carries_the_pins() -> None:
     assert config["BUDGET_USD"] == str(pinned["budget_usd"])
     assert config["DAILY_CAP"] == str(pinned["daily_cap"])
     assert config["POLL_MODE"] == pinned["poll_mode"]
+    assert config["POLL_MIN_SEVERITY"] == pinned["poll_min_severity"]
     assert config["STATE_DIR"] == pinned["state_dir"]
 
 
