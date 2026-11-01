@@ -3,6 +3,8 @@
 Run: uv run pytest scripts/dev/tests/test_fanout_headroom_probe.py
 """
 
+import json
+
 import pytest
 
 from fanout_lib import headroom_probe
@@ -127,6 +129,43 @@ def test_the_wait_agrees_with_what_launch_does(
     assert headroom_probe.read(_tools(box, server), 1, None, tmp_path)["state"] == state
     argv = ["launch", "--batch", "1", "--manifest-root", str(tmp_path)]
     assert place_main(argv, _tools(box, server)) == launch_exit
+
+
+def test_a_wait_right_after_a_launch_fills_the_last_slot_reads_full(tmp_path):
+    """#6758: the launch that takes daniel-box's last slot leaves the next wait `full`."""
+    earlier = [Batch(f"{n}", "daniel-box", "/w", "b", "u", [n], "t") for n in (91, 92)]
+    save(Manifest("20260101T000010Z", "o", earlier), root=tmp_path)
+    _server_at_its_cap(tmp_path)
+    issues = [Issue(n, f"issue {n}", "body", ("claude",)) for n in (1, 2)]
+
+    def tools():
+        return fake_tools(
+            answers={"daniel-box": ok(ROOMY), "daniel-server": ok(SMALLER)},
+            issues=issues,
+        )[0]
+
+    before = headroom_probe.read(tools(), 1, "daniel-box", tmp_path)
+    assert before == {
+        "state": "room",
+        "detail": "1 batch(es) would place on daniel-box",
+    }
+    root = ["--manifest-root", str(tmp_path)]
+    assert place_main(["launch", "--batch", "1", *root], tools()) == 0
+
+    after = headroom_probe.read(tools(), 1, "daniel-box", tmp_path)
+    assert after["state"] == "full"
+    assert "daniel-box already holds 3 live batch(es) (1 in run" in after["detail"]
+    assert place_main(["launch", "--batch", "2", *root], tools()) == 3
+
+
+def test_cc_wait_reads_afresh_for_every_wait(capsys):
+    """#6758: a `remote` source's reading is replayed to the next wait with the same arguments.
+
+    That next wait is the orchestrator's own, started just after it launched into the `room`
+    the replayed reading reports, so it must take its own reading.
+    """
+    assert headroom_probe.main(["--describe"]) == 0
+    assert not json.loads(capsys.readouterr().out).get("remote")
 
 
 def test_the_declared_states_keep_cc_wait_s_contract():
