@@ -74,12 +74,13 @@ DROPPED_PUSH_GRACE_S = 180
 # request against the hourly budget `fetch_check_runs` describes.
 DESCENDANT_LIMIT = 10
 
-# The poll interval with no GitHub token, in seconds (#6148). Anonymous reads share 60 per hour
-# per source IP with the deployer's gate on the same host. At the 20s default, land.sh's 1200s
-# budget is 61 polls, so one landing that times out spends the whole hour. A poll before any
-# required run registers costs 2 requests (check-runs, then check-suites), so the interval
-# is 90s rather than 60s: 15 polls, at most 30 requests. An anonymous wait also never walks
-# descendants (`wait`'s `walk_descendants`).
+# The most polls an anonymous wait makes, whatever its budget (#6148, #6857). Anonymous reads
+# share 60 per hour per source IP with the deployer's gate on the same host, and a poll before
+# any required run registers costs 2 requests (check-runs, then check-suites), so 15 polls
+# spend at most 30. `poll_interval` stretches the interval to fit the budget into them, never
+# below ANONYMOUS_INTERVAL_S. An anonymous wait also never walks descendants (`wait`'s
+# `walk_descendants`).
+ANONYMOUS_MAX_POLLS = 15
 ANONYMOUS_INTERVAL_S = 90
 
 
@@ -132,20 +133,23 @@ def lookup_token() -> str | None:
     return github_token(os.environ, subprocess.run)
 
 
-def poll_interval(requested: int, authenticated: bool) -> int:
-    """`requested`, raised to `ANONYMOUS_INTERVAL_S` when there is no token to read with.
+def poll_interval(requested: int, authenticated: bool, timeout_s: int) -> int:
+    """`requested`, or with no token, the interval that fits `timeout_s` into the anonymous polls.
 
-    Backing off rather than refusing keeps an anonymous landing working: the operator ruled
+    The anonymous interval spreads `timeout_s` over `ANONYMOUS_MAX_POLLS` polls and is never
+    below `ANONYMOUS_INTERVAL_S`. Backing off rather than refusing keeps an anonymous landing working: the operator ruled
     on #6148 that an anonymous read is a fail-safe case, not a fault to stop on.
     """
-    if authenticated or requested >= ANONYMOUS_INTERVAL_S:
+    # A wait polls once at the start and once per interval after, hence the `- 1`.
+    anonymous = max(ANONYMOUS_INTERVAL_S, -(-timeout_s // (ANONYMOUS_MAX_POLLS - 1)))
+    if authenticated or requested >= anonymous:
         return requested
     print(
         f"await_ci: no GitHub token, so reads are anonymous; polling every "
-        f"{ANONYMOUS_INTERVAL_S}s, not {requested}s. `gh auth login` restores {requested}s.",
+        f"{anonymous}s, not {requested}s. `gh auth login` restores {requested}s.",
         file=sys.stderr,
     )
-    return ANONYMOUS_INTERVAL_S
+    return anonymous
 
 
 def _github_pages(path: str, key: str) -> list[dict]:
@@ -680,7 +684,7 @@ def main(argv: list[str] | None = None) -> int:
         code, msg = wait(
             ns.sha,
             ns.timeout,
-            poll_interval(ns.interval, authenticated),
+            poll_interval(ns.interval, authenticated, ns.timeout),
             walk_descendants=authenticated,
         )
     except DisarmedGateError as e:
