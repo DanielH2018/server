@@ -197,11 +197,13 @@ def _install(
         # re-pointed `parent` shows (#5209). A path through a set item follows hash order, so
         # its target is descended into instead, like an object no walk copied (#6425). A bound
         # method's `__self__` reads as one more item, so a method re-bound to another object
-        # shows (#6433). `_cache` follows which levels were asked about, not what the logger
+        # shows (#6433). A second reference to an object no walk copied reads as the relative
+        # path that first reached it, so a method re-bound between two such objects shows
+        # (#6809). `_cache` follows which levels were asked about, not what the logger
         # is set to. A reader's `()` result is left out, because a random generator's state differs
         # between two processes that never touch it.
         parts = []
-        seen = {id(root)}
+        seen = {id(root): ""}
         level = [("", root)]
         while level:
             following = []
@@ -245,12 +247,19 @@ def _install(
                         parts.append(name + "=&" + named[kind](item))
                         if kind in selves:
                             pending.append((name + "/__self__", selves[kind].__get__(item)))
-                    elif id(item) not in seen:
-                        seen.add(id(item))
+                    elif id(item) in seen:
+                        parts.append(name + "=^" + seen[id(item)])
+                    else:
+                        seen[id(item)] = name
                         following.append((name, item))
             level = following
         parts.sort()
         return ",".join(parts)
+
+    def unindexed(path):
+        return "/".join(
+            "~" if part[:1] == "~" and part[1:].isdigit() else part for part in path.split("/")
+        )
 
     def module_writes():
         writes = []
@@ -284,8 +293,9 @@ def _install(
         for path in created:
             # An object the plugin's module code created holds whatever that code wrote to it
             # before either walk, so its state is compared between the ends, not within a run
-            # (#5107).
-            writes.append(path + "=" + signature(contents[path][0]))
+            # (#5107). A set item's index follows hash order, so it is dropped, and the sort
+            # below leaves each set path's signatures as a multiset (#6807).
+            writes.append(unindexed(path) + "=" + signature(contents[path][0]))
         for key, value in read_state().items():
             if state.get(key) != value:
                 writes.append("process." + key)
@@ -412,21 +422,8 @@ def _install(
 _install(
     os._exit,
     os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC,
-    frozenset({
-        "builtins.id", "compile", "exec", "function.__new__", "marshal.loads",
-        "object.__getattr__", "object.__setattr__", "os.listdir", "socket.getaddrinfo",
-        "sys._getframemodulename",
-        # Interpreter shutdown, after the result is printed.
-        "cpython.PyInterpreterState_Clear", "cpython._PySys_ClearAuditHooks",
-    }),
-    # Containers whose contents follow which code ran rather than what it did: the import
-    # system's caches and the stdlib's memo tables. `sys.modules` is `modules_loaded`.
-    frozenset({
-        "sys.modules", "sys.path_importer_cache", "linecache.cache", "re._cache",
-        "re._cache2", "encodings._cache", "importlib._bootstrap._module_locks",
-        "importlib._bootstrap._blocking_on", "_frozen_importlib._module_locks",
-        "_frozen_importlib._blocking_on",
-    }),
+    allowed,
+    exempt,
     sys.modules,
     unaudited,
     counted,
@@ -471,7 +468,7 @@ _install(
     ),
 )
 del _install, _process_state, unaudited, counted, readers, decimal_context, c_modules, name
-del partial, callable_names, callable_selves
+del partial, callable_names, callable_selves, allowed, exempt
 
 
 def _chain(plugins, roles, preload):
