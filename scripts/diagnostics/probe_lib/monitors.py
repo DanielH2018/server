@@ -1,15 +1,18 @@
 """`probe.py monitors` -- what is down, read from the alert plane.
 
-Three reads, in order:
+Four reads, in order:
 
 1. `ALERTS{alertstate="firing"}` from Prometheus, rolled up by `severity` and `service`. The
    Watchdog alert is the plane's own heartbeat: rule evaluation always fires it, so a result
    without it proves nothing and the read exits PROBE_UNREADABLE (failure class 3).
-2. The Kuma tiles that are not up. Batches that have not cut over still page through Kuma,
+2. The active alerts Alertmanager holds that `ALERTS` lacks, folded into the same rollup. The
+   loki-homelab ruler sends its alerts to Alertmanager directly, so `ALERTS` never carries
+   them (`HostOutOfMemoryKill`, `LokiPiLogsSilent`).
+3. The Kuma tiles that are not up. Batches that have not cut over still page through Kuma,
    and their rules here are shadows, so this arm stays until M6's C-1 deletes the
    `uptime-kuma` scrape. An empty result is clean because `KumaDown` fires on a dead or
    absent scrape, and read 1 reports it.
-3. Alertmanager's active silences (`alertmanager_api.report`).
+4. Alertmanager's active silences (`alertmanager_api.report`).
 """
 
 from collections import defaultdict
@@ -48,32 +51,52 @@ def _result(data, source):
     return data.get("data", {}).get("result", []), None
 
 
-def format_alerts(data):
+def alertmanager_only(result, held):
+    """The label sets of the alerts in `held` that no `ALERTS` series in `result` matches. Pure.
+
+    `held` is Alertmanager's active-alert list. An alert matches a series with the same alert
+    name, `service` and severity, which is how a Prometheus alert appears in both.
+    """
+
+    def key(labels):
+        return tuple(labels.get(k) for k in ("alertname", "service", "severity"))
+
+    seen = {key(s.get("metric") or {}) for s in result}
+    return [
+        a.get("labels") or {} for a in held if key(a.get("labels") or {}) not in seen
+    ]
+
+
+def format_alerts(data, held):
     """(lines, exit code) for the firing-alert rollup. Pure.
 
     `data` is the parsed response to `ALERTS_QUERY`, or a string saying why it went unread.
-    A non-shadow `critical` or `warning` alert exits 1. Shadow alerts and `info` alerts are
+    `held` is Alertmanager's active-alert list, or a string saying why it went unread; its
+    alerts that `ALERTS` lacks join the rollup marked `(Alertmanager only)`. A non-shadow `critical` or `warning` alert exits 1. Shadow alerts and `info` alerts are
     listed under their own headings and never change the code: a shadow rule is still under
     its soak, and Kuma pages for its batch. No Watchdog, or an unread response, exits
-    PROBE_UNREADABLE unless a paging alert already makes it 1.
+    PROBE_UNREADABLE unless a paging alert already makes it 1. So does an unread `held`.
     """
     result, unread = _result(data, "ALERTS")
     if unread:
         return [unread], PROBE_UNREADABLE
+    extra = [] if isinstance(held, str) else alertmanager_only(result, held)
+    sources = [(s.get("metric") or {}, "") for s in result]
+    sources += [(labels, " (Alertmanager only)") for labels in extra]
     paging, notes, shadow = defaultdict(list), [], []
     watchdog = False
-    for series in result:
-        labels = series.get("metric") or {}
+    for labels, origin in sources:
         if labels.get("alertname") == WATCHDOG:
-            watchdog = True
+            watchdog = watchdog or not origin
             continue
         service = labels.get("service", "?")
         severity = labels.get("severity", "?")
-        line = f"  {service}: {labels.get('alertname', '?')}{{severity={severity}}}"
+        name = labels.get("alertname", "?")
+        line = f"  {service}: {name}{{severity={severity}}}{origin}"
         if labels.get("shadow") == "true":
             shadow.append(line)
         elif severity in PAGING_SEVERITIES:
-            paging[severity].append(f"  {service}: {labels.get('alertname', '?')}")
+            paging[severity].append(f"  {service}: {name}{origin}")
         else:
             notes.append(line)
     count = sum(len(v) for v in paging.values())
@@ -92,7 +115,10 @@ def format_alerts(data):
             f"{WATCHDOG} is not firing: Prometheus rule evaluation is down, so an alert "
             "missing from this list may still be failing",
         )
-    return lines, 1 if count else (0 if watchdog else PROBE_UNREADABLE)
+    if isinstance(held, str):
+        lines.append(f"  Alertmanager alerts unread: {held}")
+    clean = watchdog and not isinstance(held, str)
+    return lines, 1 if count else (0 if clean else PROBE_UNREADABLE)
 
 
 def format_kuma(data):
@@ -127,6 +153,14 @@ def _read(url, pin):
         return exc.message
 
 
+def _read_held(url, pin):
+    """Alertmanager's active-alert list at `url`, or a string saying why it went unread."""
+    try:
+        return alertmanager_api.read(url, pin)
+    except core.Unreadable as exc:
+        return exc.message
+
+
 def run_monitors(ns):
     """Print the firing-alert rollup, the Kuma tiles not up, then the active silences.
 
@@ -135,14 +169,18 @@ def run_monitors(ns):
     base, pin = prom_endpoint()
     alerts_url = prom_query_url(base, ALERTS_QUERY)
     kuma_url = prom_query_url(base, KUMA_QUERY)
+    am_base, am_pin = alertmanager_api.endpoint()
+    held_url = alertmanager_api.active_alerts_url(am_base)
     if ns.dry_run:
         core.print_dry_run(alerts_url, resolve=pin)
+        core.print_dry_run(held_url, resolve=am_pin)
         core.print_dry_run(kuma_url, resolve=pin)
-        am_base, am_pin = alertmanager_api.endpoint()
         return core.print_dry_run(
             alertmanager_api.silences_url(am_base), resolve=am_pin
         )
-    alert_lines, alert_code = format_alerts(_read(alerts_url, pin))
+    alert_lines, alert_code = format_alerts(
+        _read(alerts_url, pin), _read_held(held_url, am_pin)
+    )
     kuma_lines, kuma_code = format_kuma(_read(kuma_url, pin))
     code = combine(alert_code, kuma_code)
     for lines, part in ((alert_lines, alert_code), (kuma_lines, kuma_code)):

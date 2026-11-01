@@ -7,6 +7,10 @@ returns nothing older.
 
 Shadow alerts are listed and marked: their batch still pages through Kuma, and this is where
 their history is read. Watchdog fires always and is left out.
+
+The loki-homelab ruler's alerts are missing: the ruler sends them to Alertmanager directly, so
+they never reach `ALERTS`, and Alertmanager keeps no history. `probe.py monitors` shows the
+ones firing now.
 """
 
 import json

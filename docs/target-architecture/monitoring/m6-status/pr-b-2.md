@@ -7,6 +7,10 @@ commit and the post-merge reads follow once it lands.
 - **`monitors`** rolls up `ALERTS{alertstate="firing"}` by severity and `service`, then lists
   active silences. A missing Watchdog exits 75. Shadow alerts print under their own heading and
   do not change the exit code, because five fired on 2026-11-01 while Kuma read 35/35 up.
+- **`monitors` also reads Alertmanager's active alerts**, and folds in the ones `ALERTS`
+  lacks. The loki-homelab ruler sends its alerts to Alertmanager directly, so a reader of
+  `ALERTS` alone missed `LokiPiLogsSilent` while it fired on 2026-11-01. `alerts` has no
+  history for them, because Alertmanager keeps none.
 - **`monitors` keeps one Kuma arm**, `monitor_status{job="uptime-kuma"} != 1`, because A6's
   bridge rows, B2, B4, B5, B6b and B9 still page through Kuma. The arm is not in the plan's
   B-2 row. C-1, which deletes the `uptime-kuma` scrape, removes it with `format_kuma` and its

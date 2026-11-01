@@ -103,7 +103,11 @@ Prometheus keeps 30 days, so a wider window returns nothing older.
 
 **Every episode row carries both ends, in UTC**, so a row compares directly against
 `journalctl --utc` output. Shadow alerts are listed and marked `shadow`, because their batch
-still pages through Kuma until it cuts over. Watchdog fires always and is left out. A read that
+still pages through Kuma until it cuts over. Watchdog fires always and is left out.
+
+**The `loki-homelab` ruler's alerts have no history here.** The ruler sends them to Alertmanager
+directly, so they never reach `ALERTS`, and Alertmanager keeps none. `monitors` shows the ones
+firing now; for an older episode, query the rule's LogQL with `probe.py loki-query`. A read that
 fails exits 75 rather than printing an all-clear.
 
 ### `arr <app> <api-path>` redacts the credentials it reads
@@ -125,15 +129,18 @@ raw response, and what it prints lands in the transcript.
 
 ### `monitors` answers "what is down"
 
-`monitors` reads three sources, in order:
+`monitors` reads four sources, in order:
 
 1. `ALERTS{alertstate="firing"}`, grouped by severity and `service`. A non-shadow `critical`
    or `warning` alert exits 1. `info` alerts print as notes, and shadow alerts print under their
    own heading, and neither changes the exit code.
-2. The Kuma tiles that are not up (`monitor_status{job="uptime-kuma"} != 1`). Kuma still pages
+2. The active alerts Alertmanager holds that `ALERTS` lacks, marked `(Alertmanager only)` and
+   counted the same way. The `loki-homelab` ruler sends its alerts, such as
+   `HostOutOfMemoryKill`, to Alertmanager directly, so `ALERTS` never carries them.
+3. The Kuma tiles that are not up (`monitor_status{job="uptime-kuma"} != 1`). Kuma still pages
    for the batches that have not cut over, so this arm stays until M6's C-1 deletes the scrape.
    An empty result is clean because `KumaDown` fires on a dead or absent scrape.
-3. Alertmanager's active silences.
+4. Alertmanager's active silences.
 
 **A result without the Watchdog alert exits 75.** Rule evaluation always fires the Watchdog, so
 an empty `ALERTS` without it is a dead evaluator, not a healthy estate.

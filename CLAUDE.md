@@ -207,7 +207,7 @@ denies prints its own reason.
 
 - **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt);
   `--list` prints every subcommand. `monitors` answers "what is down", from Prometheus'
-  `ALERTS`. **`health <svc>` is the k8s post-deploy gate**: its argument is a deploy
+  `ALERTS` and Alertmanager. **`health <svc>` is the k8s post-deploy gate**: its argument is a deploy
   TAG, and it gates the PRODUCTION cluster unless you pass `--cluster stage`. `ha automation
   <id-or-alias>` resolves the alias-slug≠id trap.
 - **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a

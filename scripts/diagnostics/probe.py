@@ -28,8 +28,8 @@ Everything it runs is read-only (HTTP GET / TLS handshake / kubectl get / docker
 Subcommands:
     metric '<promql>'        Prometheus instant query [--json] (prometheus :9090)
     targets                  Prometheus scrape-target health (prometheus :9090)
-    monitors                 firing alerts from ALERTS by severity and service, the
-                             Kuma tiles not up, and active silences (exit 0 = nothing
+    monitors                 firing alerts from ALERTS and Alertmanager by severity and
+                             service, the Kuma tiles not up, and active silences (exit 0 = nothing
                              paging), read through Prometheus and Alertmanager
     loki-labels              Loki label names [--loki homelab|observability]
     loki-query '<logql>'     Loki range query [--limit N] [--since 6h] [--until 1h]

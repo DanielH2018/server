@@ -151,8 +151,8 @@ def _build_parser():
     sub.add_parser(
         "monitors",
         **_verdict_help(
-            "firing alerts from ALERTS by severity and service, Kuma tiles not up, and "
-            "active Alertmanager silences",
+            "firing alerts (ALERTS, Alertmanager) by severity and service, Kuma tiles "
+            "not up, and active silences",
             "no paging alert fires and no Kuma tile is down",
             "a critical or warning alert fires, or a Kuma tile is not up",
         ),
