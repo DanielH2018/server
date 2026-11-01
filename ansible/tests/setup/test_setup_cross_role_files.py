@@ -109,7 +109,6 @@ KNOWN_K8S_EDGES = {
     "hosts/lib/host_lib.py": {"configarr", "janitorr"},
     "hosts/lib/kuma_push.py": {
         "configarr",
-        "crowdsec",
         "janitorr",
         "uptime-kuma",
     },

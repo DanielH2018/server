@@ -227,23 +227,8 @@ spec:
             # scrape job and the Service port.
             - name: JOBS_METRICS_PORT
               value: "{{ containers_list | metrics_port('crowdsec-jobs') }}"
-            - name: REMOTE_ALLOWLIST_PUSH_URL
-              valueFrom:
-                secretKeyRef:
-                  name: crowdsec-jobs
-                  key: remote_allowlist_push_url
-            - name: APPSEC_PUSH_URL
-              valueFrom:
-                secretKeyRef:
-                  name: crowdsec-jobs
-                  key: appsec_push_url
-            - name: HOME_ALLOWLIST_PUSH_URL
-              valueFrom:
-                secretKeyRef:
-                  name: crowdsec-jobs
-                  key: home_allowlist_push_url
             # The home allowlist reads the addresses the crowdsec-home-ips CronJob writes, and
-            # pushes down once their lookup time is older than three of its periods.
+            # reports down once their lookup time is older than three of its periods.
             - name: HOME_IPS_CONFIGMAP
               value: "{{ crowdsec_k8s_home_ips_configmap }}"
             - name: HOME_IPS_STALE_AFTER_S

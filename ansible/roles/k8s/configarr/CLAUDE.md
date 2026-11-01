@@ -34,8 +34,9 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   No healthcheck / AutoKuma — a batch
   job, not a service; its health signal is a second CronJob, `configarr-health`
   (`templates/health-cronjob.yaml.j2`), every 10 minutes. It reads the last Job's outcome via
-  `configarr_lib/configarr_status.py` through its own ServiceAccount and pushes the
-  "Configarr Sync" Kuma monitor. The health reader counts the gate's own Job like any other
+  `configarr_lib/configarr_status.py` through its own ServiceAccount and records the
+  verdict as a log line and on the verdict ConfigMap (below). It pushes nothing to Kuma since
+  M6 batch B6b's Cutover-2. The health reader counts the gate's own Job like any other
   finished run, because that run genuinely performs the reconcile — `pi-peer-backup`'s gate
   run does not count toward its dead-man monitor, and that role's CLAUDE.md has the other side
   of the choice.
@@ -60,31 +61,28 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   Forbid` no longer keeps a scheduled 04:30 firing off a gate run; the sync converges, so an
   overlap writes nothing twice.
 - **Both gates start together, and that is accepted, not ordered.** Flux applies the two gate
-  Jobs in one `configarr-verify` Kustomization, so the health gate can finish first and push
-  the previous run's verdict. That push repeats what the last `*/10` run already pushed, so
-  Kuma makes no transition. The next scheduled run reports the fresh sync within 10 minutes,
+  Jobs in one `configarr-verify` Kustomization, so the health gate can finish first and record
+  the previous run's verdict. That record repeats what the last `*/10` run already wrote, so
+  the rules see no transition. The next scheduled run reports the fresh sync within 10 minutes,
   the same wait the nightly 04:30 sync has. A failed sync also fails `configarr-verify`, so
-  the tile is not the only signal. The health gate stays because it is the only deploy-time
+  the verdict is not the only signal. The health gate stays because it is the only deploy-time
   proof of the reader's images and ServiceAccount, which Renovate bumps. The reasoning is at
   `ansible/roles/k8s/configarr/defaults/main.yml:DECIDED: the two gates run unordered`
   (#5617).
-- **The push URL, token included, lives in its own Secret, `configarr-health`**
-  (`templates/health-secret.yaml.j2`), and reaches the pod as `KUMA_PUSH_URL` through
-  `secretKeyRef`. It is a whole URL rather than a bare token so that it stays out of
-  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`: a change to that file fans a
-  narrowed apply out to every `k8s/manifests` caller. The reader's code ships in the
-  `configarr-health` ConfigMap, beside `host_lib.py` and `kuma_push.py` from `setup/common`, and
-  no secret goes in it (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+- **The pod holds no Secret.** M6 batch B6b's Cutover-2 removed the `configarr-health`
+  Secret and its `KUMA_PUSH_URL`. The reader's code ships in the `configarr-health` ConfigMap,
+  beside `host_lib.py` and `kuma_push.py` from `setup/common`. `host_lib.py` imports
+  `kuma_push.py` at module level, so the file stays although the reader never calls it. No
+  secret goes in the ConfigMap (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `configarr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.
   The patch passes `--field-manager=configarr-health`: under kubectl's default `kubectl-patch`
   manager, Flux's apply dropped the annotations every 10 minutes (#6746).
-  kube-state-metrics exports the verdict, and the `pod-producers` shadow rules read it. A
+  kube-state-metrics exports the verdict, and the `pod-producers` rules read it. A
   failed export makes the reader exit 1, which also fails its gate Job.
 - **The health pod carries `app: configarr-health`, never `app: configarr`.** The reader judges
-  the Jobs labelled `app=configarr`, so that label would make it judge its own runs. uptime-kuma's
-  `netpol_from` admits `configarr-health`.
+  the Jobs labelled `app=configarr`, so that label would make it judge its own runs.
 
 ## Scope — what configarr manages
 `delete_unmanaged_custom_formats` is **OFF** everywhere: Configarr never deletes a CF it did
@@ -145,7 +143,7 @@ the bespoke scheme first.
   at `configarr_lib/`, beside `configarr_lib/configarr_health_logic.py`, under the
   `configarr_health.py` reader.
 - Verify the health reader: `kubectl -n homelab logs -l app=configarr-health --tail=5` — its
-  `configarr-health: status=up` line is the verdict, and `configarr-health: pushed` is the push.
+  `configarr-health: status=up` line is the verdict. No `pushed` line follows it since Cutover-2.
 - Deploy: merge the change. `promote` publishes the revision, and Flux runs the gate Job
   `configarr-deploy-gate-<spec digest8>` in `configarr-verify`, so the edit syncs immediately.
 - Verify a sync: `kubectl -n homelab get jobs -l app=configarr`, then `kubectl -n homelab logs
