@@ -38,11 +38,11 @@ import re
 
 import pytest
 from _agent_package import render_daniel_server_with
-from _helpers import ANSIBLE, load_yaml
-from _setup_render import render_setup_text, role_context
+from _helpers import load_yaml
+from _setup_render import CLAUDE_CODE, render_component_text, role_context
 
-ROLE = "claude_code"
-ROLE_DIR = ANSIBLE / "roles" / "setup" / ROLE
+COMPONENT = "claude-code"
+ROLE_DIR = CLAUDE_CODE
 TEMPLATES = ROLE_DIR / "templates"
 DEFAULTS = ROLE_DIR / "defaults" / "main.yml"
 UNIT = "claude-rc.service.j2"
@@ -222,7 +222,7 @@ def render(template: str, **overrides: object) -> str:
     tell an armed `{% if %}` toggle from a dead one, and it matches `{{ ... }}` for any value
     that has moved into a role default (#3202).
     """
-    return render_setup_text(ROLE, template, overrides)
+    return render_component_text(COMPONENT, template, overrides)
 
 
 def test_bg_shell_pressure_reap_is_disabled_by_default(unit: str) -> None:

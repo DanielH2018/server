@@ -59,7 +59,7 @@ tools:
       url: https://github.com/prometheus/node_exporter/releases/download/{version}/node_exporter-{bare}.linux-arm64.tar.gz
       member: node_exporter-{bare}.linux-arm64/node_exporter
   # #6699: the flux CLI the D5 takeover check runs as root on daniel-box, at the cluster's
-  # `flux_version` (roles/k8s/flux; ansible/roles/setup/claude_code/tests/test_takeover_check_install.py
+  # `flux_version` (roles/k8s/flux; hosts/components/claude-code/tests/test_takeover_check_install.py
   # holds the two equal). Both digests come from the release's checksums file:
   # https://github.com/fluxcd/flux2/releases/download/v2.9.6/flux_2.9.6_checksums.txt
   flux:

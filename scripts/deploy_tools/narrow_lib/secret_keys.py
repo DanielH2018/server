@@ -153,8 +153,8 @@ def setup_reader_paths(old_ref: str, ctx, rules: Rules) -> SetupReaders:
     Paths rather than roles, so the deployer maps each through its own `setup_roles_for`, the
     edge that sends a file another role ships to that role too. A `.md`, a test file and a
     `_CENSUS_SKIP_FILES` name drop, as they do for `key_tags`. A shipped vars file is read
-    only key by key, so its shippers are checked with `reads_through`: claude_code's defaults
-    name four secrets, and `initial_setup` ships the file for one unrelated key.
+    only key by key, so its shippers are checked with `reads_through`: a defaults file may name
+    a secret while the role that ships it reads one unrelated key.
 
     Raises:
         CannotNarrow: a key some reader outside the role trees names, where this grep cannot

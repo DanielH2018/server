@@ -53,7 +53,7 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
 - **Four producers.** One is a host timer writing into the hostPath, and the other three are
   sidecars of this DaemonSet, each writing into its own directory.
 - **The host producer: `claude_cgroup.prom`.** The `setup/claude_code` role installs
-  `ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh` and
+  `hosts/components/claude-code/files/claude-cgroup-metrics.sh` and
   `claude-cgroup-metrics.timer`, which runs it as root every 30s on both nodes (every host
   with `has_claude_code: true`). The script writes a `mktemp` file in the same directory,
   sets it to 0644 and moves it over `claude_cgroup.prom`, so the collector never reads a

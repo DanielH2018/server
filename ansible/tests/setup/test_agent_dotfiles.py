@@ -18,12 +18,12 @@ from pathlib import Path
 
 import pytest
 from _agent_package import agent_setup_script
-from _helpers import ANSIBLE, HOST_VARS, load_yaml
-from _setup_render import render_setup_text
+from _helpers import HOST_VARS, load_yaml
+from _setup_render import CLAUDE_CODE, render_component_text
 from lib.git_testing import commit, git, init_repo, scrubbed_env
 from lib.proc_testing import run, write_exec
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 SCRIPT = ROLE / "files" / "claude-dotfiles-sync.sh"
 
 # Answers the subcommands the script uses. `managed` lists ~/.claude and ~/.config/gh, whose
@@ -169,8 +169,8 @@ def test_a_refused_source_leaves_the_subset_in_place(agent: Agent) -> None:
 
 
 def test_the_unit_runs_the_script_as_the_agent_with_its_seed() -> None:
-    unit = render_setup_text(
-        "claude_code",
+    unit = render_component_text(
+        "claude-code",
         "claude-dotfiles-sync.service.j2",
         {"claude_code_agent_dotfiles": True},
     )
@@ -183,7 +183,7 @@ def test_the_unit_runs_the_script_as_the_agent_with_its_seed() -> None:
 
 
 def test_the_seed_answers_agent_true() -> None:
-    seed = render_setup_text("claude_code", "agent-chezmoi-seed.toml.j2", {})
+    seed = render_component_text("claude-code", "agent-chezmoi-seed.toml.j2", {})
     assert "    agent = true\n" in seed
     assert '    profile = "server"\n' in seed
 

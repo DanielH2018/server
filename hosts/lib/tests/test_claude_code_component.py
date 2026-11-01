@@ -1,6 +1,6 @@
 """daniel-server's Claude subjects ship in its host package, and the role ends there (H7.39).
 
-The component renders the claude_code role's templates and copies its scripts in place, so
+The component holds the templates, scripts and defaults the claude_code role installed, so
 these tests hold what the package adds: the agent user and its live uid, the packaged unit
 names each unit points at, the units it leaves disabled, and the Ansible-era units it retires.
 
@@ -22,6 +22,9 @@ from secrets_mgmt import host_secrets
 from setup_lib import setup_gates
 
 ROLE = REPO / "ansible" / "roles" / "setup" / "claude_code"
+COMPONENT = REPO / "hosts" / "components" / "claude-code"
+# A role a component may name with `role:` that still ships a `files/` script.
+FILES_ROLE = REPO / "ansible" / "roles" / "setup" / "initial_setup"
 UNITS = "/usr/lib/systemd/system"
 # Every unit the role installed on daniel-server, read from `systemctl list-unit-files 'claude*'`
 # there on 2026-10-29.
@@ -123,57 +126,122 @@ def test_the_agents_github_token_is_a_host_secret_and_never_rendered(package):
     assert "${claude_code_agent_gh_token}" in template
 
 
-def render_with(tmp_path, component: dict):
-    """daniel-server rendered from a fixture `hosts/` tree holding only `component`."""
+def render_with(tmp_path, component: dict, package: dict | None = None):
+    """daniel-server rendered from a fixture `hosts/` tree holding only `component`.
+
+    `package` goes into the host's package.yml beside its component list. The tree carries a
+    copy of the real claude-code component, which a package may borrow from.
+    """
     root = tmp_path / "hosts"
     (root / "lib").mkdir(parents=True)
-    (root / "components" / "fixture").mkdir(parents=True)
+    (root / "components" / "fixture").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(COMPONENT, root / "components" / "claude-code")
     (root / "components" / "fixture" / "component.yml").write_text(
         yaml.safe_dump(component)
     )
     (root / "daniel-server").mkdir()
     (root / "daniel-server" / "package.yml").write_text(
-        yaml.safe_dump({"components": ["fixture"]})
+        yaml.safe_dump({"components": ["fixture"], **(package or {})})
     )
     return host_mode.render_host("daniel-server", root)
 
 
 def test_a_role_file_is_copied_from_the_roles_files(tmp_path):
-    files = [{"src": "role-file:rootq.sh", "dst": "/usr/lib/homelab/x"}]
-    package = render_with(tmp_path, {"role": "claude_code", "files": files})
+    files = [{"src": "role-file:host-maintenance.sh", "dst": "/usr/lib/homelab/x"}]
+    package = render_with(tmp_path, {"role": "initial_setup", "files": files})
     assert (
         package.files["/usr/lib/homelab/x"][0]
-        == (ROLE / "files" / "rootq.sh").read_bytes()
+        == (FILES_ROLE / "files" / "host-maintenance.sh").read_bytes()
     )
 
 
 def test_a_role_file_that_names_a_template_is_refused(tmp_path):
     files = [{"src": "role-file:claude-rc.service.j2", "dst": "/usr/lib/homelab/x"}]
     with pytest.raises(RenderRefused, match="is a template; name it role:"):
-        render_with(tmp_path, {"role": "claude_code", "files": files})
+        render_with(tmp_path, {"role": "initial_setup", "files": files})
 
 
 def test_a_file_whose_when_is_false_is_left_out(tmp_path):
     files = [
-        {"src": "role-file:rootq.sh", "dst": "/usr/lib/homelab/on", "when": "x_on"},
         {
-            "src": "role-file:rootq.sh",
+            "src": "component:files/rootq.sh",
+            "dst": "/usr/lib/homelab/on",
+            "when": "x_on",
+        },
+        {
+            "src": "component:files/rootq.sh",
             "dst": "/usr/lib/homelab/off",
             "when": "not x_on",
         },
     ]
-    spec = {"role": "claude_code", "defaults": {"x_on": True}, "files": files}
-    package = render_with(tmp_path, spec)
+    package = render_with(
+        tmp_path,
+        {},
+        {"component": "claude-code", "defaults": {"x_on": True}, "files": files},
+    )
     assert "/usr/lib/homelab/on" in package.files
     assert "/usr/lib/homelab/off" not in package.files
 
 
 def test_a_when_that_is_not_a_boolean_is_refused(tmp_path):
     files = [
-        {"src": "role-file:rootq.sh", "dst": "/usr/lib/homelab/x", "when": "'false'"}
+        {
+            "src": "component:files/rootq.sh",
+            "dst": "/usr/lib/homelab/x",
+            "when": "'false'",
+        }
     ]
     with pytest.raises(RenderRefused, match="not a boolean"):
-        render_with(tmp_path, {"role": "claude_code", "files": files})
+        render_with(tmp_path, {}, {"component": "claude-code", "files": files})
+
+
+def test_a_package_renders_a_borrowed_components_template_over_its_defaults(tmp_path):
+    files = [
+        {
+            "src": "component:templates/login-slice-caps.conf.j2",
+            "dst": "/usr/lib/systemd/system/user-995.slice.d/x.conf",
+            "when": "claude_code_login_caps_enabled",
+        }
+    ]
+    package = render_with(tmp_path, {}, {"component": "claude-code", "files": files})
+    text = package.files["/usr/lib/systemd/system/user-995.slice.d/x.conf"][0].decode()
+    assert "MemoryHigh=" in text
+
+
+def test_a_component_template_without_the_component_key_is_refused(tmp_path):
+    files = [{"src": "component:templates/login-slice-caps.conf.j2", "dst": "/x"}]
+    with pytest.raises(RenderRefused, match="names a component, and it lists none"):
+        render_with(tmp_path, {}, {"files": files})
+
+
+def test_a_component_outside_the_allowlist_is_refused(tmp_path):
+    with pytest.raises(RenderRefused, match="component 'fixture' is not one of"):
+        render_with(tmp_path, {}, {"component": "fixture", "files": []})
+
+
+def test_a_package_naming_both_a_role_and_a_component_is_refused(tmp_path):
+    spec = {"role": "initial_setup", "component": "claude-code", "files": []}
+    with pytest.raises(RenderRefused, match="names both role"):
+        render_with(tmp_path, {}, spec)
+
+
+def test_a_borrowed_path_out_of_the_component_is_refused(tmp_path):
+    files = [{"src": "component:../fixture/component.yml", "dst": "/x"}]
+    with pytest.raises(RenderRefused, match="is outside the component"):
+        render_with(tmp_path, {}, {"component": "claude-code", "files": files})
+
+
+def test_a_components_own_defaults_file_sits_beneath_its_defaults(tmp_path):
+    (tmp_path / "hosts" / "components" / "fixture" / "defaults").mkdir(parents=True)
+    (
+        tmp_path / "hosts" / "components" / "fixture" / "defaults" / "main.yml"
+    ).write_text("x_own: true\nx_both: false\n")
+    files = [
+        {"src": "component.yml", "dst": "/x/own", "when": "x_own"},
+        {"src": "component.yml", "dst": "/x/both", "when": "x_both"},
+    ]
+    package = render_with(tmp_path, {"defaults": {"x_both": True}, "files": files})
+    assert {"/x/own", "/x/both"} <= set(package.files)
 
 
 BG_RESUME = (

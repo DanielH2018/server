@@ -31,8 +31,8 @@ import pytest
 from _helpers import ROLES, load_defaults
 from _shell_render import render_shell_script, rendered_shell_text
 from renderer.renderer_lib import host as host_mode
+from _setup_render import CLAUDE_CODE
 
-CLAUDE_CODE = ROLES / "setup" / "claude_code"
 CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 TEMPLATE = ("components", "claude-code", "sync-artifacts.sh.j2")
 UNITS = "/usr/lib/systemd/system"

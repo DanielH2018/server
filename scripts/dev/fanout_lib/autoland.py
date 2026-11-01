@@ -93,7 +93,7 @@ OWN_PATHS = (
     "scripts/dev/fanout",
     ".github/",
     ".claude/",
-    "ansible/roles/setup/claude_code/",
+    "hosts/components/claude-code/",
     "ansible/roles/setup/gitops_deploy/",
     "ansible/vars/",
     "pyproject.toml",

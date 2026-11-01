@@ -1,0 +1,12 @@
+{
+  "checksum": "f3b726ce6682c5e4f7ea9e2cd9d573839b80a711a776bc65a986f6bb5d3cd610",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-pipeline-timeline`, a daily snapshot of the PR timeline)",
+  "row": {
+    "atoms": {
+      "scripts/dev/pipeline_timeline.py": "c9429da6e278d81dee3a9dfd94a853af4b6d0cba0b51cea29d772d42a714575c"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}

@@ -1,7 +1,7 @@
 """A stopped fan-out batch can start its Discord page, and nothing else (#4602).
 
 The claude-code host component ships `fanout-alert@.service` and the polkit rule
-(`roles/setup/claude_code/templates/50-claude-fanout-alert.rules.j2`) that lets the batch
+(`hosts/components/claude-code/templates/50-claude-fanout-alert.rules.j2`) that lets the batch
 accounts start it. `scripts/dev/fanout_lib/notify.py` is what starts
 it, so each test holds one side of that contract to the other.
 
@@ -12,7 +12,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from fanout_lib.notify import PAGED_STATES, alert_unit
 from lib import yaml_fast
 
@@ -25,7 +25,7 @@ ACCOUNTS = {
 
 
 def rule() -> str:
-    return render_setup_text("claude_code", RULE, ACCOUNTS)
+    return render_component_text("claude-code", RULE, ACCOUNTS)
 
 
 def rule_pattern(rendered: str) -> re.Pattern:

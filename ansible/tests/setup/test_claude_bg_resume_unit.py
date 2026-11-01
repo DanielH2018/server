@@ -10,9 +10,9 @@ Run: uv run pytest ansible/tests/setup/test_claude_bg_resume_unit.py
 
 import re
 
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 
-ROLE = "claude_code"
+COMPONENT = "claude-code"
 UNIT = "claude-bg-resume.service.j2"
 
 
@@ -26,7 +26,7 @@ def directive(unit_text: str, key: str) -> list[str]:
 
 
 def render(**overrides: object) -> str:
-    return render_setup_text(ROLE, UNIT, overrides)
+    return render_component_text(COMPONENT, UNIT, overrides)
 
 
 def test_the_sessions_it_starts_survive_the_unit() -> None:

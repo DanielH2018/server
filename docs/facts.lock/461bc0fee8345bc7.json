@@ -1,0 +1,12 @@
+{
+  "checksum": "2381d296441c6db7b978a059b292057991f633388357448afc58b45923c0d71b",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/claude-code/CLAUDE.md#The fleet bound, and why it lives on `user.slice`",
+  "row": {
+    "atoms": {
+      "docs/claude-code-rc-caps.md": "2d515326fa8d32d682265f2a3e8361c3bd241b199b3810fcec388c2b120e8245"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}
