@@ -230,8 +230,9 @@ data:
       # item on monitor-bridge's entry, because the deploy tags derive a change to that field
       # onto every role that reads it. The port is monitor-bridge's
       # monitor_bridge_deploy_pipeline_port, which this role cannot read, and
-      # ansible/tests/services/test_deploy_pipeline_scrape.py holds the two equal. No `origin`
-      # label, so Kuma's Cluster Scrape Targets tile pages a failed scrape (M1 convention 5).
+      # ansible/tests/services/test_deploy_pipeline_scrape.py holds the two equal.
+      # `ScrapeTargetDown` (service monitor-bridge, files/rules/scrape-targets.yaml) pages a
+      # failed scrape.
       - job_name: deploy-pipeline
         scrape_interval: 1m
         static_configs:
@@ -335,11 +336,12 @@ data:
       # M6 batch B8: the probes that replace Kuma's hand-written non-push tiles
       # (docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8"). The Pi's
       # ping tile has no target: `up{job="node-pi"}` carries it. Loki's /ready tile has none
-      # either, because M5's LokiHomelabDown covers it. Each target sets `service`, so the
-      # extra-probes rules take it from this job, and `page_tier` picks the severity, as in
-      # blackbox-ingress. The same relabel rewrite and the same no-`timeout` reasoning apply.
-      # The two Kuma tiles that carry `severity: critical` keep it: the edge all-clear and the
-      # two `service_alerting` tiles (mosquitto, pihole) that follow the home-critical tier.
+      # either, because `ScrapeTargetDown` (service loki-homelab) covers it. Each target sets
+      # `service`, so the extra-probes rules take it from this job, and `page_tier` picks the
+      # severity, as in blackbox-ingress. The same relabel rewrite and the same no-`timeout` reasoning apply.
+      # The Kuma tiles that carried `severity: critical` keep it: the edge all-clear is a
+      # literal critical, and the mosquitto and pihole targets take `page_tier` from
+      # `in_service_tier`, so they page critical while the service is in the home-critical tier.
       - job_name: blackbox-extra
         scrape_interval: 1m
         metrics_path: /probe
@@ -379,8 +381,8 @@ data:
             target_label: instance
           - target_label: __address__
             replacement: 'blackbox-exporter.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('blackbox-exporter') }}'
-      # One tcp_connect target per container the Pi publishes a port for, from the same
-      # `published_ports` selection as monitor-bridge's PI_PUBLISHED_PORTS, so a container added
+      # One tcp_connect target per container the Pi publishes a port for, from the
+      # `published_ports` selection, which this job alone reads. A container added
       # to daniel-pi's containers_list or compose_services gets a probe with no edit here. The
       # targets sort by name, so a service moving between the two keys moves no target.
       # `service` is the container name. A container recreated by a deploy closes its port for a
@@ -604,9 +606,9 @@ data:
       # unfiltered DNS (the PR #693 failure, one layer up). This job is what pays for that
       # choice: without it the only alarm is "DNS is down".
       #
-      # It needs no new monitor. `check_cluster_targets` selects `up{origin!="daniel-server"}`
-      # and `targets_verdict` fails on ANY member at 0, so a dead forwarder turns the existing
-      # **Scrape Targets** monitor red naming this job.
+      # It needs no rule of its own. `ScrapeTargetDown` (service coredns, files/rules/
+      # scrape-targets.yaml) pages a failed scrape of this job, so a dead forwarder pages
+      # naming it.
       #
       # THE SERIES WORTH KNOWING is `coredns_proxy_request_duration_seconds_count{to=...}`,
       # NOT `coredns_forward_requests_total` — 1.14.7 exports no such name, and the wrong
@@ -781,10 +783,8 @@ data:
               instance_role: observability
       # Alertmanager's own metrics: alertmanager_notifications_total, its _failed_total twin
       # and alertmanager_alerts. Alertmanager has no route, so this job is how every reader
-      # sees whether it is up and delivering. It carries NO `origin` label on purpose:
-      # monitor-bridge's check_cluster_targets selects `up{origin!="daniel-server"}`, so Kuma's
-      # Cluster Scrape Targets tile pages a failed scrape here, and is that condition's one
-      # pager until the M1 slice plan's successor rule takes it over.
+      # sees whether it is up and delivering. `ScrapeTargetDown` (service observability,
+      # files/rules/scrape-targets.yaml) is the one pager for a failed scrape here.
       - job_name: alertmanager
         scrape_interval: 1m
         static_configs:
