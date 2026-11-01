@@ -521,20 +521,21 @@ data:
             regex: "9707"
           - source_labels: [__meta_kubernetes_pod_label_app]
             target_label: arr
-          # DECIDED: no `origin` label here. `origin="daniel-server"` is the sentinel
-          # check_targets counts against TARGETS_MIN=1, and that floor assumes exactly one
-          # series: the node job. Labelling the exportarr pods too put three more series
-          # behind the same floor, so node-exporter could die and the check would still see
-          # >= 1 and read clean. See check.py:385-397, which spells the assumption out.
+          # DECIDED: no `origin` label here. `ScrapeTargetsMissing` (files/rules/scrape-targets.yaml)
+          # counts `up{origin="daniel-server"}` against a floor of 1, and that floor assumes
+          # exactly one series: the node job. Labelling the exportarr pods too would put three
+          # more series behind the same floor, so node-exporter could die and the count would
+          # still read >= 1.
       # daniel-pi, the one host outside the cluster. STATIC targets, not discovery: the two
       # jobs above use `role: pod`, which by construction only ever finds pods — so the Pi,
       # which runs no kubelet, could never appear in them however many exporters it grew.
       # That is why it contributed zero time series until these two landed.
       #
       # `origin` is set by hand here. The pod-discovery jobs derive it from the node name via
-      # relabel; a static target has no such metadata, and without the label the Pi's series
-      # would land indistinguishable from the origin-less ones and break _origin_name's
-      # "the only host there is" assumption in monitor-bridge.
+      # relabel; a static target has no such metadata. Without the label the Pi's series would
+      # be indistinguishable from the origin-less ones. The rules select the Pi by `origin`: the
+      # `Pi*` rules in files/rules/hosts.yaml and pi-checks.yaml match `origin="daniel-pi"`, and
+      # HostCoverageShortfall excludes it with `origin!~"daniel-pi"`.
       #
       # Reached at the LAN IP, not a bridge address: Docker's published-port NAT bypasses the
       # Pi's UFW INPUT chain (documented at the `ufw:` section of hosts/daniel-pi/package.yml,
