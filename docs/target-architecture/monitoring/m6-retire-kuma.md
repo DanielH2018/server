@@ -86,6 +86,8 @@ section transcludes the files in batch order. *Recording a batch's results*, und
 
 --8<-- "target-architecture/monitoring/m6-status/pr-b-7.md"
 
+--8<-- "target-architecture/monitoring/m6-status/pr-b-10.md"
+
 --8<-- "target-architecture/monitoring/m6-status/pr-c-0.md"
 
 --8<-- "target-architecture/monitoring/m6-status/pr-c-1.md"
@@ -1447,7 +1449,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
     - `.claude/hooks/hooklib/service_lines.py`;
     - the eval cases that name Kuma;
     - `ansible/roles/k8s/homelab-mcp/CLAUDE.md`.
-9. **Triage's poller** drops its Kuma source in B-9. It keeps the `ALERTS` path alone:
+9. **Triage's poller** drops its Kuma source in B-10. It keeps the `ALERTS` path alone:
     - **The code.** `KUMA_QUERY`, `KUMA_UP_QUERY`, `kuma_up_keys`, the `kuma` arm of
       `unknown_sources` and of `down_keys`, and the `kuma_up` argument of `step` go.
     - **The state.** The first poll on the new code drops every `kuma:` key from
@@ -1455,7 +1457,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
       was down stays down for good, because no source can recover it any more.
     - **The docs.** *Slice 2: the poller* in `docs/claude-agent-user.md`, the poller's
       module docstring, and the component's `CLAUDE.md` describe one input.
-    - **Order.** B-9 lands after Phase A, when every Kuma pager has an `ALERTS` rule, so the
+    - **Order.** B-10 lands after Phase A, when every Kuma pager has an `ALERTS` rule, so the
       `ALERTS` path sees each fall the Kuma path saw. It lands before C-1a, which deletes
       the scrape job the poller reads. It ships in a new version of each host package, so
       C-1a waits until both hosts have installed it.
@@ -1484,7 +1486,7 @@ here. C-1 waits for the operator's acceptance.
     - B-2 and B-4 have landed and deployed. B-4 removes homepage's
       `homepage_href('uptime-kuma', domain)` call, which raises once the entry loses
       `hostname`, and B-2 replaces postflight's Kuma reads.
-    - B-9 has landed, and both hosts run the package version that carries it. Until then
+    - B-10 has landed, and both hosts run the package version that carries it. Until then
       the triage poller reads the scrape job that C-1a deletes (*Phase B* item 9).
 
    Scope:
@@ -1956,7 +1958,7 @@ this applies to, with what the rules predict:
 | B-6a | Authelia `two_factor` rule for `alertmanager.local` and its render test | ~30 | `authelia` |
 | B-6b | Alertmanager IngressRoute | ~40 | `observability` |
 | B-7 | docs, skills, agents, evals, the ADR draft (C-0) | ~200 | none |
-| B-9 | triage's poller reads `ALERTS` alone and drops its `kuma:` keys; its docs; after Phase A | ~60 removed | a new version of the daniel-box and daniel-server host packages |
+| B-10 | triage's poller reads `ALERTS` alone and drops its `kuma:` keys; its docs; after Phase A | ~60 removed | a new version of the daniel-box and daniel-server host packages |
 | C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and D5's registry PR (a quoted `git grep -n registry_gc_push_token` over `ansible/roles/k8s/uptime-kuma/` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |

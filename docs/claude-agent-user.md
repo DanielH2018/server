@@ -639,7 +639,7 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   first heartbeat since it started. Kuma's keys hold while `up{job="uptime-kuma"}` is not 1, and
   the alert keys hold for 20 minutes after Prometheus starts, until its rules can fire again.
   Without these, every Kuma or Prometheus restart would read each standing red as a new fall.
-  M6's B-9 drops the Kuma path before Kuma's scrape job goes
+  M6's B-10 drops the Kuma path before Kuma's scrape job goes
   (`docs/target-architecture/monitoring/m6-retire-kuma.md`, *Phase B* item 9).
 - **A storm is one run.** More than three keys falling in one poll make a single storm episode
   that lists them all.
