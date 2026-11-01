@@ -174,7 +174,12 @@ from dev.findings_lib.plans import (
     plan_sync_labels,
     plan_touch,
 )
-from dev.findings_lib.boundaries import REGISTER_CHECKOUTS, FindingsTools, aimed
+from dev.findings_lib.boundaries import (
+    REGISTER_CHECKOUTS,
+    FindingsTools,
+    aimed,
+    read_peer_worktrees,
+)
 from dev.findings_lib.red_green import RED_GREEN_LABEL, red_green_eligible
 from dev.findings_lib.solo_only import solo_only_reasons
 from dev.findings_lib.verify import verification_report
@@ -474,7 +479,9 @@ def cmd_next(args: argparse.Namespace, tools: FindingsTools) -> int:
     issues = load_issues("open", tools)
     stale: dict[int, str] = {}
     if ok:
-        states = claim_states(issues, trees, dirty, merged, tools.batch_holds)
+        states = claim_states(
+            issues, trees, dirty, merged, tools.batch_holds, peer_trees=tools.peer_trees
+        )
         live = {s.number for s in states if s.live}
         stale = {s.number: s.worktree for s in states if not s.live}
     else:
@@ -605,4 +612,4 @@ if __name__ == "__main__":
     # required argument so a library caller that forgets `tools` fails with a TypeError here
     # rather than reaching real `gh` and real subprocesses. `gh_calls.load_issues` keeps its
     # own default because `scripts/docs/reference/backlog.py` is a second production entry.
-    raise SystemExit(main(None, FindingsTools()))
+    raise SystemExit(main(None, FindingsTools(peer_worktrees=read_peer_worktrees)))

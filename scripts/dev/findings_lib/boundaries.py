@@ -18,6 +18,10 @@ read, not a command, and a field for the same reason `worktree_facts` is one.
 `running_batch_holds` reads the same manifests and asks each batch's host whether its unit is
 still running. It does run a command, `systemctl --user is-active`, over ssh for a peer host,
 and it is a field so no test reads a real unit.
+`peer_worktrees` reads the other host's `git worktree list` over ssh (#6840). It is the one
+field whose default is NOT the real implementation: the shared test fake leaves it unset, and
+a default that opened ssh would make every test with a "no worktree" claim depend on reaching
+the peer. `findings.py`'s entry point passes `read_peer_worktrees` instead.
 """
 
 import dataclasses
@@ -35,6 +39,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from dev.fanout_lib.batch_holds import BatchHold, running_batch_holds
 from dev.fanout_lib.manifest import branches_launched_by
+from dev.findings_lib.peer_trees import peer_worktree_list
+from lib.repo_paths import REPO
+from lib.worktrees import Worktree, primary_checkout
 from lib.worktrees import worktree_facts as read_worktree_facts
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
@@ -51,6 +58,20 @@ REGISTER_CHECKOUTS: dict[str, str | None] = {
     "DanielH2018/server": None,
     "DanielH2018/dotfiles": str(_Path.home() / ".local/share/chezmoi"),
 }
+
+
+def read_peer_worktrees(repo: str | None) -> list[Worktree] | None:
+    """The worktrees the other host's checkout of ``repo`` registers, or None if unreadable.
+
+    This repo's checkout is the one `worktree_facts` reads locally, at the same path on the
+    peer: one user's clone sits at one path on both hosts.
+    """
+    checkout = REGISTER_CHECKOUTS.get(repo) if repo else None
+    return peer_worktree_list(checkout or primary_checkout() or str(REPO))
+
+
+def _no_peer_worktrees(_repo: str | None) -> list[Worktree] | None:
+    return []
 
 
 @dataclass(frozen=True)
@@ -78,10 +99,17 @@ class FindingsTools:
     running_batch_holds: Callable[
         [str | None, Collection[int]], Mapping[int, BatchHold]
     ] = running_batch_holds
+    # `(repo) -> worktrees` the other host's checkout registers, or None when it cannot be
+    # read. Asked only when a claim names no local worktree. None is this repo, as above.
+    peer_worktrees: Callable[[str | None], list[Worktree] | None] = _no_peer_worktrees
 
     def batch_holds(self, issues: Collection[int]) -> Mapping[int, BatchHold]:
         """`running_batch_holds` aimed at this register, as `claim_states` takes it."""
         return self.running_batch_holds(self.repo, issues)
+
+    def peer_trees(self) -> list[Worktree] | None:
+        """`peer_worktrees` aimed at this register, as `claim_states` takes it."""
+        return self.peer_worktrees(self.repo)
 
 
 def aimed(tools: FindingsTools, repo: str | None) -> FindingsTools:
