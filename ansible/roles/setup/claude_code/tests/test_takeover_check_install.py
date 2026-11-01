@@ -53,6 +53,13 @@ def test_the_defaults_leave_the_check_off_and_name_its_wrapper_and_state() -> No
         == "/var/lib/homelab-takeover-check"
     )
     assert defaults["claude_code_takeover_check_enabled"] is False
+    # homelab-tools pins the flux CLI, so no second pin or copy directory may come back here.
+    assert [
+        k
+        for k in defaults
+        if k.startswith("claude_code_takeover_check_flux")
+        or k == "claude_code_takeover_check_lib_dir"
+    ] == []
 
 
 def test_homelab_tools_pins_the_flux_the_cluster_runs() -> None:

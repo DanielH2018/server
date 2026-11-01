@@ -148,6 +148,16 @@ def test_daniel_server_ships_none_of_the_artifacts_node_timers(server):
     assert [path for path in SLICE_FOUR if path in server.files] == []
 
 
+def test_neither_host_ships_the_retired_flux_download_oneshot(box, server):
+    retired = (
+        "/usr/lib/homelab/takeover-check-flux",
+        f"{UNITS}/homelab-takeover-check-flux.service",
+    )
+    for package in (box, server):
+        assert [path for path in retired if path in package.files] == []
+        assert not [p for p in package.links if p.endswith(retired[1].rsplit("/")[-1])]
+
+
 def test_the_takeover_check_runs_homelab_tools_flux_and_retires_its_own_copy(box):
     wrapper = box.files["/usr/local/sbin/homelab-takeover-check"][0].decode()
     assert "FLUX=/usr/lib/homelab/bin/flux\n" in wrapper
