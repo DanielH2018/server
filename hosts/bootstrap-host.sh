@@ -18,6 +18,8 @@
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them)
 #   6  the Pi only: start homelab-docker-engine.service once
+#   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
+#      the mask on the aide package's dailyaidecheck.timer
 #
 # --local-build <clone> is daniel-box's way in, because it serves the repository it would
 # install from. The script reads the clone with `git archive`, so it writes nothing under the
@@ -130,7 +132,7 @@ usage() {
 
 # Validate every argument and every precondition before step 1 writes anything.
 host=""
-until_step=6
+until_step=7
 clone=""
 kit=""
 while [ $# -gt 0 ]; do
@@ -160,7 +162,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$host" ] || usage
 case "$until_step" in
-    1 | 2 | 3 | 4 | 5 | 6) ;;
+    1 | 2 | 3 | 4 | 5 | 6 | 7) ;;
     *) usage ;;
 esac
 
@@ -456,5 +458,34 @@ if [ "$host" = daniel-pi ]; then
             die "homelab-docker-engine.service failed to start"
     else
         echo "bootstrap-host: homelab-docker-engine.service is not installed, so step 6 starts nothing"
+    fi
+fi
+stop_after 6
+
+# Step 7: the integrity-scans component's one-time state. It runs last, so the baselines record
+# every package the earlier steps installed. Each baseline is guarded by the file it creates:
+# rerunning one would bless whatever changed since, and a live host whose database goes missing
+# must stay red until the operator looks.
+UNIT_DIR=/usr/lib/systemd/system
+if [ -e "$ROOT$UNIT_DIR/homelab-rkhunter-check.timer" ] &&
+    [ ! -e "$ROOT/var/lib/rkhunter/db/rkhunter.dat" ]; then
+    rkhunter --propupd --nocolors || die "rkhunter --propupd failed"
+    echo "bootstrap-host: wrote the first rkhunter baseline"
+fi
+if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
+    if [ ! -e "$ROOT/var/lib/aide/aide.db" ]; then
+        echo "bootstrap-host: writing the first AIDE database, which takes over an hour on the Pi"
+        # -y overwrites an aide.db.new an interrupted run left; -f installs it as aide.db.
+        aideinit -y -f || die "aideinit failed"
+    fi
+    # The aide package's own timer runs a second, nightly full scan. A mask survives a package
+    # upgrade, which a disable does not.
+    if [ "$(systemctl is-enabled dailyaidecheck.timer 2> /dev/null)" != masked ]; then
+        systemctl mask --now dailyaidecheck.timer || die "cannot mask dailyaidecheck.timer"
+        echo "bootstrap-host: masked dailyaidecheck.timer"
+    fi
+    # A mask keeps a failed state the timer held before it, and only reset-failed clears it.
+    if systemctl is-failed --quiet dailyaidecheck.timer; then
+        systemctl reset-failed dailyaidecheck.timer
     fi
 fi

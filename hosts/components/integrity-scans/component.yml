@@ -10,13 +10,15 @@
 # `aide_<host>_push_token`), so each host package lists its own two in `credentials:`. Two hosts on
 # one token would let one host's `up` hide another's missing check (#952).
 #
-# What the component leaves to the host or to bootstrap (H7.42):
+# What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs these once on a
+# host whose package ships the two timers, and the live hosts already hold all three.
 #
-# - The first baselines: `rkhunter --propupd` and `aideinit`. Each ran once, guarded by the file it
-#   creates, and the live hosts hold both. A rebuilt host without /var/lib/aide/aide.db makes the
-#   AIDE check push DOWN until the baseline exists.
+# - The first baselines: `rkhunter --propupd` and `aideinit`, each guarded by the file it
+#   creates. DECIDED: bootstrap, never a `ConditionPathExists=!` oneshot in this package (#6674).
+#   A oneshot would rebaseline any host whose database went missing, so a deleted aide.db would
+#   turn into a fresh, trusted one instead of a DOWN push.
 # - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full
-#   scan. A mask is a symlink in /etc/systemd/system that the live hosts already hold.
+#   scan. A mask is a symlink in /etc/systemd/system, outside what a package owns.
 #
 # `rkhunter --update` ran on every Ansible apply. It runs before every scan instead, from
 # `ExecStartPre=-`, which ignores its exit code as the task's `failed_when: false` did.

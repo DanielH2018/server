@@ -1,5 +1,6 @@
-"""`hosts/bootstrap-host.sh` steps 4 to 6 on a fake host: the Pi purge, the k3s install in the
-declared mode, and the local build from a clone, online and from the offline kit.
+"""`hosts/bootstrap-host.sh` steps 4 to 7 on a fake host: the Pi purge, the k3s install in the
+declared mode, the local build from a clone, online and from the offline kit, and the
+integrity-scans baselines.
 
 Run: uv run pytest hosts/lib/tests/test_bootstrap_host_steps.py
 """
@@ -203,3 +204,58 @@ def test_a_kit_whose_nfpm_differs_from_its_pin_is_refused_naming_the_file(tmp_pa
     assert result.returncode == 1
     assert f"{NFPM_ARCHIVE} does not match its pinned sha256" in result.stderr
     assert [c for c in host.apt_calls() if c.startswith("install")] == []
+
+
+SCANS = "rkhunter --propupd --nocolors", "aideinit -y -f"
+MASK = "systemctl mask --now dailyaidecheck.timer"
+
+
+def _scans_host(tmp_path) -> FakeHost:
+    """A Pi whose package ships both integrity-scans timers."""
+    host = FakeHost(tmp_path)
+    units = host.root / "usr/lib/systemd/system"
+    units.mkdir(parents=True)
+    for timer in ("homelab-rkhunter-check.timer", "homelab-aide-check.timer"):
+        (units / timer).touch()
+    return host
+
+
+def test_a_fresh_host_gets_both_baselines_and_the_masked_daily_aide_timer(tmp_path):
+    host = _scans_host(tmp_path)
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert [c for c in commands if c in SCANS] == list(SCANS)
+    assert MASK in commands
+
+
+def test_a_rerun_rewrites_no_baseline_and_leaves_the_mask_alone(tmp_path):
+    host = _scans_host(tmp_path)
+    for db in ("var/lib/rkhunter/db/rkhunter.dat", "var/lib/aide/aide.db"):
+        (host.root / db).parent.mkdir(parents=True)
+        (host.root / db).touch()
+    host._stub(
+        "systemctl",
+        f'echo "systemctl $*" >> {host.log}\n'
+        "case $1 in is-enabled) echo masked; exit 1 ;; is-failed) exit 1 ;; esac",
+    )
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert not [c for c in commands if c in SCANS]
+    assert MASK not in commands
+
+
+def test_a_package_without_the_scans_gets_no_baseline_and_no_mask(tmp_path):
+    host = FakeHost(tmp_path)
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert not [c for c in commands if c.startswith(("rkhunter", "aideinit"))]
+    assert MASK not in commands
