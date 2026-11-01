@@ -8,10 +8,10 @@ so nothing else reports it. This check asserts at least one enabled appsec-confi
 one enabled appsec-rule. Both are traffic-independent: the request counters read zero on a quiet
 homelab.
 
-A total crowdsec outage belongs to the monitors that already own it, the cluster scrape job and
-k3s Workload Health. When `cscli lapi status` fails, this check exits 0 with a message saying it
-deferred, so the tile's heartbeat survives an engine restart without paging the same cause three
-times.
+A total crowdsec outage belongs to the monitors that already own it: the cluster scrape job, and
+the `k8s-workloads` rules `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping` for the
+pod. When `cscli lapi status` fails, this check exits 0 with a message saying it deferred, so the
+tile's heartbeat survives an engine restart without paging the same cause three times.
 
 It was `crowdsec-appsec-verify.sh`, a daniel-box root cron that ran `cscli` through `k3s kubectl
 exec`, until H2.4b. It runs every 15 minutes in the `crowdsec-jobs` sidecar of the crowdsec pod,
