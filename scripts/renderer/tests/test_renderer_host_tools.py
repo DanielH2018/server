@@ -9,6 +9,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_host_tools.py
 """
 
 import json
+import re
 
 import pytest
 
@@ -27,6 +28,7 @@ NAMED_MEMBERS = frozenset(
 # nfpm and uv name the amd64 build x86_64, and uv names the arm64 build aarch64.
 UPSTREAM_ARCH = {"amd64": ("x86_64",), "arm64": ("aarch64",)}
 DIGEST = "a" * 64
+PACKAGE_SPEC = REPO / "hosts/packages/homelab-tools/package.yml"
 
 
 def missing_named_members(package) -> list[str]:
@@ -227,10 +229,48 @@ def test_a_file_entry_cannot_install_over_a_tool(hosts):
         host_mode.render_package("homelab-tools", root)
 
 
+RELEASE_TAG = re.compile(r"^https://github\.com/[^/]+/[^/]+/releases/download/([^/]+)/")
+# Every tool the spec fetches from a GitHub release; the census below must find each one.
+RELEASE_TOOLS = frozenset({"sops", "chezmoi", "node-exporter", "flux", "nfpm", "uv"})
+
+
+def release_tag_problem(url: str) -> str | None:
+    """Why a GitHub release URL would 404 Renovate's digest lookup, or None.
+
+    Renovate's github-release-attachments datasource fetches the release whose tag is the
+    pinned `version` exactly, so the URL's tag segment must be `{version}`, never `v{bare}`.
+    """
+    tag = RELEASE_TAG.match(url)
+    if tag and tag.group(1) != "{version}":
+        return f"release tag segment {tag.group(1)!r} is not {{version}}"
+    return None
+
+
+def test_a_release_url_tagged_by_version_is_clean():
+    url = "https://github.com/o/r/releases/download/{version}/r-{bare}.tar.gz"
+    assert release_tag_problem(url) is None
+
+
+def test_a_release_url_tagged_by_bare_version_is_flagged():
+    url = "https://github.com/o/r/releases/download/v{bare}/r-{bare}.tar.gz"
+    assert release_tag_problem(url) == "release tag segment 'v{bare}' is not {version}"
+
+
+def test_every_real_release_url_names_its_tag_as_the_pinned_version():
+    raw = yaml_fast.safe_load(PACKAGE_SPEC.read_text())
+    found, problems = set(), []
+    for tool, arches in raw["tools"].items():
+        for arch, pin in arches.items():
+            if RELEASE_TAG.match(pin["url"]):
+                found.add(tool)
+            if problem := release_tag_problem(pin["url"]):
+                problems.append(f"{tool}/{arch}: {problem}")
+    assert found >= RELEASE_TOOLS, sorted(RELEASE_TOOLS - found)
+    assert not problems, problems
+
+
 def test_the_real_spec_pins_one_version_per_tool_with_a_digest_per_architecture():
-    raw = yaml_fast.safe_load(
-        (REPO / "hosts/packages/homelab-tools/package.yml").read_text()
-    )
+    raw = yaml_fast.safe_load(PACKAGE_SPEC.read_text())
     for tool, arches in raw["tools"].items():
         assert set(arches) == set(ARCHES), tool
         assert len({a["version"] for a in arches.values()}) == 1, tool
