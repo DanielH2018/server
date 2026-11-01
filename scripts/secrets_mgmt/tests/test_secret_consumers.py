@@ -50,8 +50,8 @@ def test_consumer_tags_non_push_prefixed_token_gets_no_tile():
 
 
 def test_consumer_tags_cloudflare_ddns_tokens():
-    # B7's Cutover-1a deleted the tile, so the pusher is the only consumer left.
-    assert consumer_tags("cloudflare_ddns_proxied_push_token") == ("cloudflare-ddns",)
+    # B7's Cutover-2 removed the push, so the token is pending retirement and owes no redeploy.
+    assert consumer_tags("cloudflare_ddns_proxied_push_token") == ()
 
 
 def test_consumer_tags_cross_host_tokens_are_manual():
@@ -65,8 +65,8 @@ def test_consumer_tags_cross_host_tokens_are_manual():
 
 
 def test_consumer_tags_autofix_bridge_token():
-    # Single-host, single-redeploy auto token — must auto-rotate, not false-skip as cross-host.
-    assert consumer_tags("arr_autoblock_push_token") == ("autofix-bridge",)
+    # B7's Cutover-2 removed autofix-bridge's push, so its token is pending retirement.
+    assert consumer_tags("arr_autoblock_push_token") == ()
 
 
 def test_consumer_tags_registry_gc_token_is_manual():

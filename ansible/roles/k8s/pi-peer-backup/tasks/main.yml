@@ -1,7 +1,7 @@
 ---
 # A nightly CronJob rsyncs daniel-pi's wg-easy peer configs into a Longhorn PVC (the
-# 03:30 daily-backup group carries it to B2) and pushes the "WG Pi Peer Backup" Kuma
-# monitor directly.
+# 03:30 daily-backup group carries it to B2) and reports its verdict to Prometheus through a
+# ConfigMap.
 #
 # Flux owns this role, so no Flux path runs either include below; they stay for a handback
 # (docs/flux-deploy-plane.md). promote's `images` job builds the image, and the renderer's

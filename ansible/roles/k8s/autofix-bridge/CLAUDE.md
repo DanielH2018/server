@@ -17,9 +17,9 @@ and contract unchanged.
 - **Stdlib only**, no web UI, no Authelia
 - **Host:** daniel-box — pinned by `nodeSelector`, so a daniel-server drain or cold boot
   cannot take the remediation loop down with it
-- **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes),
-  uptime-kuma at its entry's `port` (push), and the *arr Discord webhook
-- **Depends on:** sonarr, radarr and uptime-kuma, at runtime
+- **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes) and
+  the *arr Discord webhook
+- **Depends on:** sonarr and radarr, at runtime
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
@@ -28,8 +28,8 @@ and contract unchanged.
   replica, so a roll stops the loop until the new pod starts. It has no readinessProbe, so the
   Kustomization's `wait` reads the pod Ready as soon as its container starts, as the Ansible
   rollout wait did.
-- **The env Secret substitutes from `homelab-cluster-vars`.** The Kuma push token, the
-  Discord webhook and the two *arr API keys are `${<key>}` placeholders in the published
+- **The env Secret substitutes from `homelab-cluster-vars`.** The Discord webhook and
+  the two *arr API keys are `${<key>}` placeholders in the published
   render. Flux substitutes the values from the `homelab-cluster-vars` Secret, which it
   decrypts from `ansible/vars/cluster-vars.sops.env`. The Kustomization depends on
   `cluster-vars`, so a rotated value is live before autofix-bridge reconciles, and the restart
@@ -85,20 +85,19 @@ here must satisfy this summary.
 `CLIENT_ERROR_PATTERNS`, the tunables and the policy file's selection knobs.
 
 ## Notable
-- **Two Kuma monitors, on purpose:** a liveness tile as the fast dead-man for a hard crash,
-  a push monitor as the per-cycle heartbeat on a 600s backstop.
-- **The cycle's verdict is also exported** (M6 batch B7). `files/autofix.py` serves
+- **No Kuma push** since M6 batch B7's Cutover-2. The Kuma tile that took the per-cycle
+  heartbeat went at Cutover-1a, and the push, its URL setting and the shared push module's
+  staging entry went at Cutover-2.
+- **The cycle's verdict is exported** (M6 batch B7). `files/autofix.py` serves
   `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and
   `homelab_check_deadline_seconds`, labelled `check="arr-autoblock"`, on
   `CHECK_EXPORTER_PORT` through crowdsec's `jobs_metrics.py`. The `autofix-bridge` item on this
   role's `containers_list` entry renders the scrape job, the Service in
-  `templates/service.yaml.j2` and the container port. Each cycle records its verdict before the
-  Kuma push, and a cycle that raises records 0. The `pods` rule group (`ArrAutoBlockFailing`,
+  `templates/service.yaml.j2` and the container port. A cycle that raises records 0. The `pods` rule group (`ArrAutoBlockFailing`,
   `AutofixBridgeDown`, `AutofixBridgeStale`) reads it and pages since B7's Cutover-1b.
-- **RENAME GOTCHA — don't "fix" it:** the **push monitor id, token and env are deliberately
-  kept** `arr-autoblock` / `arr_autoblock_push_token` / `KUMA_PUSH_ARR_AUTOBLOCK`, because a
-  monitor names the *check* rather than the container and renaming loses its history. A grep
-  hitting `arr-autoblock` here is CORRECT, not a missed rename.
+- **RENAME GOTCHA — don't "fix" it:** the exporter's `check` label is `arr-autoblock`, not
+  the container's name, because it names the *check* and the rules select it. A grep hitting
+  `arr-autoblock` here is CORRECT, not a missed rename.
 - **journald cap is NOT owned here.** It lives in initial_setup's `50-homelab.conf`. A `60-`
   drop-in this role once shipped silently won, because systemd merges drop-ins
   last-wins-by-filename, so the role now REMOVES any stale one.
@@ -107,12 +106,11 @@ here must satisfy this summary.
 
 ## Editing & testing
 - Sidecar: `files/autofix.py`, mounted from a ConfigMap along with monitor-bridge's
-  `bridge/common.py`, setup/common's `kuma_push.py`, the Kuma push every host pusher shares,
-  and crowdsec's `jobs_metrics.py`, the check exporter (`defaults/main.yml`'s
-  `autofix_bridge_modules` names all four). **Never fork a second copy of any of them here** —
+  `bridge/common.py` and crowdsec's `jobs_metrics.py`, the check exporter
+  (`defaults/main.yml`'s `autofix_bridge_modules` names all three). **Never fork a second copy of any of them here** —
   edit the owning role's. `templates/script-configmap.yaml.j2` embeds
   every module into the rendered ConfigMap `autofix-bridge-script`, so an edit to any of the
-  four changes this role's render, and an edit to `jobs_metrics.py` rolls the crowdsec pod too. Under Ansible the shared role's rollout restart then rolls
+  three changes this role's render, and an edit to `jobs_metrics.py` rolls the crowdsec pod too. Under Ansible the shared role's rollout restart then rolls
   the pod. Under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
   `scripts/renderer/renderer_lib/restart.py`) hashes the ConfigMap into the pod template. `scripts/renderer/tests/test_renderer_autofix_bridge_script.py` holds both the
   embed and the checksum.

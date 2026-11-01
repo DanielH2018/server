@@ -120,10 +120,11 @@ SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
 # imports install_host_lib.yml or stamp_deployed.yml any more.
 K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
     "hosts/lib/host_lib.py": frozenset({"configarr", "janitorr"}),
-    # autofix-bridge, configarr, crowdsec, janitorr and uptime-kuma stage it into a pod's
-    # ConfigMap (#3745); crowdsec's is its crowdsec-jobs sidecar's, since H2.4b.
+    # configarr, crowdsec, janitorr and uptime-kuma stage it into a pod's ConfigMap (#3745);
+    # crowdsec's is its crowdsec-jobs sidecar's, since H2.4b. autofix-bridge left the list at
+    # M6 batch B7's Cutover-2, when its push went.
     "hosts/lib/kuma_push.py": frozenset(
-        {"autofix-bridge", "configarr", "crowdsec", "janitorr", "uptime-kuma"}
+        {"configarr", "crowdsec", "janitorr", "uptime-kuma"}
     ),
 }
 

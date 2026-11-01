@@ -1,10 +1,9 @@
-"""autofix-bridge exports each cycle's verdict beside the Kuma push (M6 batch B7).
+"""autofix-bridge exports each cycle's verdict (M6 batch B7).
 
-`autofix.py` records the verdict to crowdsec's `jobs_metrics` exposition BEFORE it pushes,
-because `kuma_push` can retry a rollout's 404 window for about 90s and a scrape in that gap must
-not read the previous cycle's verdict. A cycle that raises records 0. These tests pass recorders
-through the seams `start_exporter`, `cycle_verdict` and `report_cycle` expose, so no port is
-bound and no first-party module is patched.
+`autofix.py` records the verdict to crowdsec's `jobs_metrics` exposition, the only place it
+leaves the pod since Cutover-2 stopped the Kuma push. A cycle that raises records 0. These tests
+pass recorders through the seams `start_exporter`, `cycle_verdict` and `report_cycle` expose, so
+no port is bound and no first-party module is patched.
 
 Run: uv run pytest ansible/roles/k8s/autofix-bridge/tests/test_autofix_export.py
 """
@@ -22,7 +21,7 @@ _SPEC.loader.exec_module(autofix)
 
 
 class _Recorder:
-    """Stands in for the exposition and for the Kuma push, sharing one event list."""
+    """Stands in for the exposition, sharing one event list."""
 
     def __init__(self, events, deadlines=None):
         self.events = events
@@ -35,27 +34,20 @@ class _Recorder:
     def record(self, tag, ok, now):
         self.events.append(("record", tag, ok))
 
-    def push(self, ok, msg):
-        self.events.append(("push", ok))
 
-
-def test_a_cycle_is_recorded_before_it_is_pushed():
+def test_each_cycle_is_recorded_under_the_check_name():
     events = []
     recorder = _Recorder(events)
-    autofix.report_cycle(recorder, True, "queue clean", push_fn=recorder.push)
-    autofix.report_cycle(recorder, False, "sonarr down", push_fn=recorder.push)
+    autofix.report_cycle(recorder, True, "queue clean")
+    autofix.report_cycle(recorder, False, "sonarr down")
     assert events == [
         ("record", "arr-autoblock", True),
-        ("push", True),
         ("record", "arr-autoblock", False),
-        ("push", False),
     ]
 
 
-def test_a_cycle_without_an_exporter_still_pushes():
-    events = []
-    autofix.report_cycle(None, True, "queue clean", push_fn=_Recorder(events).push)
-    assert events == [("push", True)]
+def test_a_cycle_without_an_exporter_records_nothing():
+    autofix.report_cycle(None, True, "queue clean")
 
 
 def test_a_cycle_that_raises_is_a_down_naming_the_error():
