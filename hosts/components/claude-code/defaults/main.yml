@@ -220,6 +220,9 @@ claude_code_login_caps_enabled: true
 # gets the same caps as claude-rc.service's own cgroup. Confirmed to be 1000 for {{ sys_user }}
 # on daniel-box. Override per-host if a different uid ever owns the account. It stays in place
 # while Claude sessions still run as that account (see claude_code_login_uids below).
+# claude-rc.service running as {{ sys_user }} reads it too, for the XDG_RUNTIME_DIR and
+# DBUS_SESSION_BUS_ADDRESS its sessions get (#6868). It never reads claude_code_user_uid there,
+# which names the agent's uid on a host whose rollback sets claude_code_user back to sys_user.
 claude_code_login_uid: 1000
 
 # Every uid whose login-session slice gets the caps, and whose home gets the pytest fan-out file.

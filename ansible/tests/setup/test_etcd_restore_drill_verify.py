@@ -17,6 +17,7 @@ any of that when it is sourced rather than executed. A stub `k3s` function stand
 `kuma-push-lib.sh`'s tests stub `curl`.
 """
 
+import ipaddress
 import subprocess
 
 from _helpers import REPO
@@ -92,6 +93,32 @@ def test_the_isolation_listeners_are_colocated_and_distinct():
         f"port collision: {listeners}"
     )
     assert not {6443, 6444} & set(listeners.values()), "the live k3s ports"
+
+
+def _isolation_args() -> list[str]:
+    out = run(
+        [
+            "bash",
+            "-c",
+            f'source "{_SCRIPT}"; printf "%s\\0" "${{ISOLATION_ARGS[@]}}"',
+            "_",
+        ],
+        check=True,
+    ).stdout
+    return out.split("\0")[:-1]
+
+
+def test_a_loopback_advertise_address_runs_with_the_endpoint_reconciler_off():
+    """From k3s v1.37.1 the API server refuses a loopback advertise address unless the endpoint
+    reconciler is `none`, the one reconciler whose ValidateIP accepts any address (#6846)."""
+    args = _isolation_args()
+    advertise = ipaddress.ip_address(args[args.index("--advertise-address") + 1])
+    assert advertise.is_loopback, (
+        "the scratch server must not advertise a routable address"
+    )
+    assert "--kube-apiserver-arg=endpoint-reconciler-type=none" in args, (
+        "a loopback advertise address with the endpoint reconciler on exits at startup"
+    )
 
 
 def test_the_restore_stage_hands_k3s_the_token_through_the_environment():
