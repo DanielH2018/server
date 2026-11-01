@@ -21,7 +21,7 @@ The operator chose daniel-box as the source on 2026-10-01. The copy is one-way a
   daniel-box's store, a `CLAUDE.md` rule or a `findings.py` issue.
 
 The contract (scope, mode, abort valve and evidence) is the *Autonomous-role contract
-(`claude-memory-sync` ...)* section of `ansible/roles/setup/claude_code/CLAUDE.md`. The unit runs
+(`claude-memory-sync` ...)* section of `hosts/components/claude-code/CLAUDE.md`. The unit runs
 as `sys_user`, so ssh uses that user's key and the far files keep their owner. The source is the
 agent's store when `claude_code_user` is the agent, as `docs/claude-agent-user.md` (slice 4)
 describes.

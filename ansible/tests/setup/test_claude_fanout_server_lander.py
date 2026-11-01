@@ -19,18 +19,18 @@ import re
 
 from _agent_package import render_daniel_server_with
 from _helpers import ANSIBLE, load_yaml
-from _setup_render import render_setup_text
+from _setup_render import CLAUDE_CODE, render_component_text
 from fanout_lib import autoland
 from lib.repo_paths import HOST_VARS
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
 SERVICE = "claude-fanout-server-lander.service.j2"
 TIMER = "claude-fanout-server-lander.timer.j2"
 
 
 def _render(template: str = SERVICE, **overrides: object) -> str:
-    return render_setup_text("claude_code", template, overrides)
+    return render_component_text("claude-code", template, overrides)
 
 
 def test_a_detached_landing_survives_the_oneshot_that_started_it():
@@ -101,7 +101,7 @@ def test_the_host_component_ships_both_templates():
         ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
     ).read_text()
     for name in (SERVICE, TIMER):
-        assert f'src: "role:{name}"' in component, f"{name} is not shipped"
+        assert f"src: templates/{name}" in component, f"{name} is not shipped"
 
 
 def test_the_contract_section_names_the_unit():

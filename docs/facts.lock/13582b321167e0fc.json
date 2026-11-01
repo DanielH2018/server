@@ -1,0 +1,13 @@
+{
+  "checksum": "f2d61840edbb4f472d4b33320acc46d0750716b30f811c3da9283fcf91110f9e",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/claude-code/CLAUDE.md#The root inspector",
+  "row": {
+    "atoms": {
+      "hosts/components/claude-code/files/homelab_rootq.py:COMMANDS": "1fe52bd37215fbe7d113af8deb75fc73b087c5c8d2e058907fd82b65b8fbf106",
+      "hosts/components/claude-code/files/homelab_rootq.py:PATHS": "c80590f972de318f31f00c1aad5b81443befeae2fdb9454cfd5d858597a612db"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}

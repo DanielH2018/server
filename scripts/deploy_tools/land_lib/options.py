@@ -21,6 +21,10 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from gitops_markers import STATE_DIR
 
 MERGE_POLL_S = 30
+# The master CI wait: ci.yml's longest `timeout-minutes` chain into the `prek` gate, 67 min
+# through host_packages, plus 10 min of runner queueing (#6857). A shorter budget times out
+# while CI can still go green. test_land_ci_budget.py holds it to the workflow.
+CI_TIMEOUT_S = 4620
 
 PRIMARY_ENV = "LAND_PRIMARY"
 MERGE_POLL_ENV = "LAND_MERGE_POLL"
@@ -102,7 +106,7 @@ class Options:
     pr: str
     since: str = ""
     tags: str = ""
-    ci_timeout: int = 1200
+    ci_timeout: int = CI_TIMEOUT_S
     await_merge: bool = False
     arm_merge: bool = False
     subject: str = ""
@@ -174,7 +178,10 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         "--tags", default="", help="skip derivation; comma-separated deploy tags"
     )
     parser.add_argument(
-        "--ci-timeout", type=int, default=1200, help="master CI wait budget, seconds"
+        "--ci-timeout",
+        type=int,
+        default=CI_TIMEOUT_S,
+        help="master CI wait budget, seconds",
     )
     parser.add_argument(
         "--await-merge", action="store_true", help="poll until the PR is merged first"

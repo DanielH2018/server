@@ -16,6 +16,7 @@ Secret values a caller does not override render as `STUB` (the `DECIDED:` rule i
 `lib/render_guard.py`).
 """
 
+from functools import cache
 from pathlib import Path
 
 from lib.ansible_jinja_env import template_env
@@ -24,7 +25,9 @@ from lib.render_guard import render_or_error
 from validate.setup_templates import (
     ANSIBLE_RUNTIME_CONTEXT,
     SETUP,
+    COMPONENTS,
     discover_templates,
+    template_loader,
 )
 
 
@@ -41,24 +44,26 @@ def role_context(role_dir: Path, overrides: dict | None = None) -> dict:
 
 
 def render_setup_texts(
-    overrides: dict | None = None, setup: Path = SETUP
+    overrides: dict | None = None, setup: Path = SETUP, components: Path | None = None
 ) -> tuple[tuple[str, str, str], ...]:
     """(role, template name, rendered TEXT) for every template under `setup`, uncached.
 
     The template set is `validate/setup_templates.py:discover_templates`, so what a guard here
-    covers cannot drift from what that gate renders. Raises on a render failure rather than
-    skipping it: a template that stopped rendering would otherwise drop out of every census
-    built on this. `setup` is a parameter so a test can point it at a `tmp_path` tree.
+    covers cannot drift from what that gate renders, the role-shaped host components included.
+    Raises on a render failure rather than skipping it: a template that stopped rendering would
+    otherwise drop out of every census built on this. `setup` is a parameter so a test can point
+    it at a `tmp_path` tree, and `components` defaults to the repo's only when `setup` does.
     """
+    if components is None:
+        components = COMPONENTS if setup == SETUP else setup / "components"
     contexts: dict[Path, dict] = {}
     texts = []
-    for tpl in discover_templates(setup):
+    for tpl in discover_templates(setup, components):
         role_dir = tpl.parents[1]
         if role_dir not in contexts:
             contexts[role_dir] = role_context(role_dir, overrides)
-        rendered, err = render_or_error(
-            template_env(tpl.parent), tpl.name, contexts[role_dir]
-        )
+        root, name = template_loader(tpl)
+        rendered, err = render_or_error(template_env(root), name, contexts[role_dir])
         if rendered is None:
             raise AssertionError(f"setup/{role_dir.name}/{tpl.name}: {err}")
         texts.append((role_dir.name, tpl.name, rendered))
@@ -116,3 +121,39 @@ def render_setup_text(role: str, template: str, overrides: dict | None = None) -
     if rendered is None:
         raise AssertionError(f"setup/{role}/{template}: {err}")
     return rendered
+
+
+# The component that took over the claude_code setup role's sources (#6773).
+CLAUDE_CODE = COMPONENTS / "claude-code"
+
+
+def render_component_text(
+    component: str, template: str, overrides: dict | None = None
+) -> str:
+    """One template of a host component's `templates/`, rendered as `render_setup_text` would.
+
+    The context is the component's `defaults/main.yml` beneath the inventory, with `overrides`
+    on top, the context its templates had as a setup role's. It leaves out the component.yml
+    `defaults:`, so a sibling unit name renders as its defaults/main.yml value. The loader is
+    rooted at the component, so a template imports a sibling as `templates/<name>`, the way
+    the host renderer loads it.
+
+    Fails naming the template when the component does not ship it.
+    """
+    directory = COMPONENTS / component
+    name = f"templates/{template}"
+    assert (directory / name).is_file(), (
+        f"no such component template: {directory / name}"
+    )
+    rendered, err = render_or_error(
+        template_env(directory), name, role_context(directory, overrides)
+    )
+    if rendered is None:
+        raise AssertionError(f"{component}/{name}: {err}")
+    return rendered
+
+
+@cache
+def rendered_component_text(component: str, template: str) -> str:
+    """`render_component_text` at inventory values, rendered at most once per process."""
+    return render_component_text(component, template)

@@ -13,30 +13,29 @@ Run: uv run pytest ansible/tests/setup/test_claude_lander.py
 
 import re
 import shlex
+from pathlib import Path
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text, role_context
+from _setup_render import CLAUDE_CODE, render_component_text, role_context
 from deploy_tools.land_lib import handoff, options, policy
 from fanout_lib.target import branch_name
 from lib.worktree_owner import WORKTREE_PREFIX_ENV
 from lib import yaml_fast
 from lib.ansible_jinja_env import template_env
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 UNIT = "claude-land@.service.j2"
 RULE = "50-claude-land.rules.j2"
 PATHS = "claude-land-approval-paths.j2"
 PINS = "claude-land-pins.j2"
-COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
+COMPONENT = ROLE / "component.yml"
 OPERATOR = "lander-sentinel-operator"
 AGENT = "lander-sentinel-agent"
 
 
-def defaults(role: str = "claude_code") -> dict:
-    return yaml_fast.safe_load(
-        (ANSIBLE / "roles" / "setup" / role / "defaults" / "main.yml").read_text()
-    )
+def defaults(directory: Path = ROLE) -> dict:
+    return yaml_fast.safe_load((directory / "defaults" / "main.yml").read_text())
 
 
 def pins() -> dict[str, str]:
@@ -49,7 +48,9 @@ def pins() -> dict[str, str]:
 
 def unit(overrides: dict | None = None) -> str:
     # systemd folds a backslash-newline into one line, so ExecStart reads as one directive.
-    return re.sub(r"\\\n\s*", " ", render_setup_text("claude_code", UNIT, overrides))
+    return re.sub(
+        r"\\\n\s*", " ", render_component_text("claude-code", UNIT, overrides)
+    )
 
 
 def directive(text: str, key: str) -> list[str]:
@@ -102,7 +103,7 @@ def test_the_unit_switches_on_every_leg_of_the_landing_policy() -> None:
     (write,) = [
         entry["dst"]
         for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
-        if entry.get("src") == f"role:{PATHS}"
+        if entry.get("src") == f"templates/{PATHS}"
     ]
     assert env[options.APPROVAL_PATHS_ENV] == write
 
@@ -120,7 +121,9 @@ def test_the_branch_prefix_is_the_one_the_fence_lets_the_agent_push(
     monkeypatch,
 ) -> None:
     prefix = environment(unit())[options.REQUIRE_BRANCH_PREFIX_ENV]
-    fence = defaults("gitops_deploy")["gitops_deploy_fence_ruleset_exclude"]
+    fence = defaults(ANSIBLE / "roles" / "setup" / "gitops_deploy")[
+        "gitops_deploy_fence_ruleset_exclude"
+    ]
     # Master is excluded too, so the agent's account can merge a PR; the lander still lands
     # only the agent's own branches.
     assert fence == ["refs/heads/master", f"refs/heads/{prefix}**"]
@@ -154,13 +157,13 @@ def test_the_rule_admits_only_a_landing_unit_for_a_plain_pr_number(
     name, admitted
 ) -> None:
     assert (
-        bool(rule_pattern(render_setup_text("claude_code", RULE)).search(name))
+        bool(rule_pattern(render_component_text("claude-code", RULE)).search(name))
         is admitted
     )
 
 
 def test_the_rule_admits_only_the_agent_user_and_only_the_start_verb() -> None:
-    rendered = render_setup_text("claude_code", RULE)
+    rendered = render_component_text("claude-code", RULE)
     agent = defaults()["claude_code_agent_user"]
     assert f'subject.user !== "{agent}"' in rendered
     assert 'action.lookup("verb") !== "start"' in rendered
@@ -179,8 +182,8 @@ AGENT_PROFILE_OVERRIDES = {
 def test_the_inventory_cannot_repoint_who_the_lander_serves() -> None:
     """Moving the agent profile in the inventory leaves the unit and the rule as they were."""
     assert unit(AGENT_PROFILE_OVERRIDES) == unit()
-    assert render_setup_text("claude_code", RULE, AGENT_PROFILE_OVERRIDES) == (
-        render_setup_text("claude_code", RULE)
+    assert render_component_text("claude-code", RULE, AGENT_PROFILE_OVERRIDES) == (
+        render_component_text("claude-code", RULE)
     )
 
 
@@ -197,8 +200,8 @@ OLD_LANDER_VARS = {
 
 def test_an_inventory_value_under_the_old_setting_names_moves_nothing() -> None:
     assert unit(OLD_LANDER_VARS) == unit()
-    assert render_setup_text("claude_code", RULE, OLD_LANDER_VARS) == (
-        render_setup_text("claude_code", RULE)
+    assert render_component_text("claude-code", RULE, OLD_LANDER_VARS) == (
+        render_component_text("claude-code", RULE)
     )
     assert set(OLD_LANDER_VARS).isdisjoint(defaults())
 
@@ -211,7 +214,7 @@ def test_the_unit_and_rule_carry_the_pins() -> None:
     assert env[options.REQUIRE_BRANCH_PREFIX_ENV] == pinned["branch_prefix"]
     assert env[options.APPROVER_ENV] == pinned["approver"]
     assert directive(unit(), "StateDirectory") == [pinned["unit"]]
-    rule = render_setup_text("claude_code", RULE)
+    rule = render_component_text("claude-code", RULE)
     assert f'subject.user !== "{pinned["agent_user"]}"' in rule
     assert rule_pattern(rule).pattern.startswith(f"^{pinned['unit']}@")
 
@@ -229,28 +232,28 @@ def test_the_pinned_lander_values_name_the_agent_profile() -> None:
 # The approval floor the operator chose on 2026-10-10: the grant points and the gate itself.
 FLOOR = [
     "ansible/roles/setup/claude_code/tasks/lander.yml",
-    f"ansible/roles/setup/claude_code/templates/{PATHS}",
-    f"ansible/roles/setup/claude_code/templates/{UNIT}",
-    f"ansible/roles/setup/claude_code/templates/{RULE}",
+    f"hosts/components/claude-code/templates/{PATHS}",
+    f"hosts/components/claude-code/templates/{UNIT}",
+    f"hosts/components/claude-code/templates/{RULE}",
     # The pins and the component that ships the lander joined with H7.40's second slice.
-    f"ansible/roles/setup/claude_code/templates/{PINS}",
+    f"hosts/components/claude-code/templates/{PINS}",
     "hosts/components/claude-code/component.yml",
     # Alert-triggered triage joined the floor on 2026-10-15 (test_claude_triage.py).
     "ansible/roles/setup/claude_code/tasks/triage.yml",
-    "ansible/roles/setup/claude_code/templates/claude-triage",
-    "ansible/roles/setup/claude_code/templates/50-claude-triage.rules.j2",
-    "ansible/roles/setup/claude_code/files/claude_triage_run.py",
-    "ansible/roles/setup/claude_code/files/claude_triage_poll.py",
+    "hosts/components/claude-code/templates/claude-triage",
+    "hosts/components/claude-code/templates/50-claude-triage.rules.j2",
+    "hosts/components/claude-code/files/claude_triage_run.py",
+    "hosts/components/claude-code/files/claude_triage_poll.py",
     # The root inspector joined the floor with its grant (#6323).
-    "ansible/roles/setup/claude_code/files/homelab_rootq.py",
-    "ansible/roles/setup/claude_code/files/rootq.sh",
+    "hosts/components/claude-code/files/homelab_rootq.py",
+    "hosts/components/claude-code/files/rootq.sh",
     "ansible/roles/setup/claude_code/tasks/rootq.yml",
-    "ansible/roles/setup/claude_code/templates/claude-rootq.sudoers.j2",
+    "hosts/components/claude-code/templates/claude-rootq.sudoers.j2",
     # The agent's socket to the same inspector joined it on 2026-10-29 (#6350).
-    "ansible/roles/setup/claude_code/files/homelab_rootq_socket.py",
-    "ansible/roles/setup/claude_code/files/rootq_socket.py",
-    "ansible/roles/setup/claude_code/templates/homelab-rootq.socket.j2",
-    "ansible/roles/setup/claude_code/templates/homelab-rootq@.service.j2",
+    "hosts/components/claude-code/files/homelab_rootq_socket.py",
+    "hosts/components/claude-code/files/rootq_socket.py",
+    "hosts/components/claude-code/templates/homelab-rootq.socket.j2",
+    "hosts/components/claude-code/templates/homelab-rootq@.service.j2",
     "scripts/deploy_tools/land",
     "pyproject.toml",
     "uv.lock",
@@ -267,7 +270,7 @@ FLOOR = [
 
 def floor_prefixes(tmp_path) -> list[str]:
     listed = tmp_path / "approval-paths"
-    listed.write_text(render_setup_text("claude_code", PATHS))
+    listed.write_text(render_component_text("claude-code", PATHS))
     return policy.read_approval_paths(str(listed))
 
 
@@ -279,8 +282,8 @@ def test_the_inventory_cannot_override_the_approval_list(tmp_path) -> None:
     """The list is literal in the template, so a host_vars entry has nothing to replace."""
     listed = tmp_path / "approval-paths"
     listed.write_text(
-        render_setup_text(
-            "claude_code", PATHS, {"claude_code_lander_approval_paths": ["docs/"]}
+        render_component_text(
+            "claude-code", PATHS, {"claude_code_lander_approval_paths": ["docs/"]}
         )
     )
     assert policy.read_approval_paths(str(listed)) == FLOOR
@@ -289,10 +292,10 @@ def test_the_inventory_cannot_override_the_approval_list(tmp_path) -> None:
 # Each file that decides what the lander does, or grants the agent root-level reach directly.
 # A PR changing one must not land without the operator.
 LANDER_FILES = [
-    f"ansible/roles/setup/claude_code/templates/{UNIT}",
-    f"ansible/roles/setup/claude_code/templates/{RULE}",
-    f"ansible/roles/setup/claude_code/templates/{PATHS}",
-    f"ansible/roles/setup/claude_code/templates/{PINS}",
+    f"hosts/components/claude-code/templates/{UNIT}",
+    f"hosts/components/claude-code/templates/{RULE}",
+    f"hosts/components/claude-code/templates/{PATHS}",
+    f"hosts/components/claude-code/templates/{PINS}",
     "hosts/components/claude-code/component.yml",
     "ansible/roles/setup/initial_setup/tasks/access.yml",
     "scripts/deploy_tools/land.sh",
@@ -335,7 +338,7 @@ def test_a_pr_changing_a_role_named_like_cluster_base_lands_without_the_operator
 # Off the floor since 2026-10-10: the agent's own roles, the deployer and the inventory.
 OFF_THE_FLOOR = [
     "docs/landing.md",
-    "ansible/roles/setup/claude_code/defaults/main.yml",
+    "hosts/components/claude-code/defaults/main.yml",
     "ansible/roles/setup/claude_code/tasks/main.yml",
     "ansible/roles/setup/gitops_deploy/defaults/main.yml",
     "ansible/inventory/host_vars/daniel-box.yml",
@@ -349,8 +352,8 @@ def test_a_pr_off_the_floor_lands_without_the_operator(path, tmp_path) -> None:
 
 
 def profile_exports(lander_enabled: bool) -> dict[str, str]:
-    rendered = render_setup_text(
-        "claude_code",
+    rendered = render_component_text(
+        "claude-code",
         "agent-user-profile.j2",
         {"claude_code_lander_enabled": lander_enabled},
     )
@@ -368,8 +371,8 @@ def test_the_agents_land_sh_hands_off_to_the_unit_the_rule_lets_it_start() -> No
         for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
         if "src" in entry
     }
-    assert shipped[f"role:{UNIT}"] == f"/usr/lib/systemd/system/{name}@.service"
-    assert rule_pattern(render_setup_text("claude_code", RULE)).search(
+    assert shipped[f"templates/{UNIT}"] == f"/usr/lib/systemd/system/{name}@.service"
+    assert rule_pattern(render_component_text("claude-code", RULE)).search(
         f"{name}@3633.service"
     )
     rendered = unit()
@@ -390,8 +393,8 @@ def test_the_lander_unit_never_hands_off_to_itself() -> None:
 
 def test_the_agents_claude_md_names_the_approval_list_the_lander_reads() -> None:
     doc = " ".join(
-        render_setup_text(
-            "claude_code",
+        render_component_text(
+            "claude-code",
             "agent-user-claude-md.j2",
             {"claude_code_lander_enabled": True},
         ).split()

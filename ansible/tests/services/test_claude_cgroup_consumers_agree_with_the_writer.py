@@ -3,7 +3,7 @@
 
 The two consumers are the `ClaudeCgroup*` rules in observability's `hosts.yaml` and the
 `AI/claude-code-host-cgroups` Grafana board. Both select by metric name across a tree boundary —
-the names are written by `roles/setup/claude_code/files/claude-cgroup-metrics.sh` — and a
+the names are written by `hosts/components/claude-code/files/claude-cgroup-metrics.sh` — and a
 name-based selector that stops matching returns an EMPTY vector rather than an error. The board
 then renders "No data" behind a healthy Grafana pod, and the alert arm's third verdict is the only
 thing standing between that and a silent green.
@@ -22,11 +22,10 @@ import json
 import re
 
 from _helpers import ANSIBLE
+from _setup_render import CLAUDE_CODE
 
 
-WRITER = (
-    ANSIBLE / "roles" / "setup" / "claude_code" / "files" / "claude-cgroup-metrics.sh"
-)
+WRITER = CLAUDE_CODE / "files" / "claude-cgroup-metrics.sh"
 ARM = ANSIBLE / "roles" / "k8s" / "observability" / "files" / "rules" / "hosts.yaml"
 BOARD = (
     ANSIBLE

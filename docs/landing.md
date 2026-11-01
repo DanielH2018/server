@@ -44,7 +44,7 @@ event. The kill arrives as a task notification rather than an error in the logfi
 session reads clean while the PR has merged and nothing followed it through. Re-running the same
 command is the fix: it is idempotent, and a PR already `MERGED` is left alone. On `daniel-box`
 the host unit turns the reaper off (`CLAUDE_CODE_DISABLE_BG_SHELL_PRESSURE_REAP=1` in
-`roles/setup/claude_code/templates/claude-rc.service.j2`), so only a session started some other
+`hosts/components/claude-code/templates/claude-rc.service.j2`), so only a session started some other
 way meets it.
 
 ### Exit codes and verdicts
@@ -437,7 +437,7 @@ Instead it reads the cluster every 30 seconds:
   starts by which the landing must print its verdict. The wait then gives up 10 minutes
   before that deadline, whatever is in flight, and the landing still ends `deferred` with a
   ledger line (#5199). So on a lander unit the wait can give up before twice `verify`'s wait.
-  `homelab-claude-land@.service` and `renovate-agent-land@.service` each set 28800. After the merge
+  `homelab-claude-land@.service` and `renovate-agent-land@.service` each set 32220. After the merge
   and master CI budgets, that leaves the wait room for `verify`'s wait on the rendered soak,
   once, and the `promote` workflow's `render`, `images` and `publish` jobs at their
   timeouts. It also covers one measured rebuild of every built image by a commit queued ahead
@@ -452,7 +452,11 @@ Instead it reads the cluster every 30 seconds:
   pi-peer-backup and media-volume to Flux added karakeep's 1200s budget, its snapshot and
   three verify Kustomizations. That put the soak's `timeout` at 18114s and left the wait 388
   seconds short, so the flip raised the deadline to 28800, which leaves 3212 seconds of
-  headroom (#5512, #5566, #5546, #5652).
+  headroom (#5512, #5566, #5546, #5652). The master CI budget then rose from 1200s to
+  4620s, which is `ci.yml`'s longest `timeout-minutes` chain into the `prek` gate plus 10
+  minutes of queueing (`land_lib/options.py:CI_TIMEOUT_S`). Every host-package landing had
+  ended on `ci-timeout`, because the `host_packages` jobs alone run about 20 minutes. The
+  deadline and every bound above it rose by the same 3420s, to 32220 (#6857).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
   Inside the no-promotion window around the weekly reboot, `decide` defers every promotion (D5.2b2),
@@ -460,7 +464,7 @@ Instead it reads the cluster every 30 seconds:
   promotion starts. The first poll inside the window moves the cap by the window's remaining
   length, up to the unit's `LAND_WINDOW_GRACE`. Both lander units set the window's full
   length, and every bound above `LAND_DEADLINE` covers it: homelab-claude-land's `TimeoutStartSec` of
-  15h, and the 860min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
+  16h, and the 917min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
   Renovate lander needs it too: its unit runs on after the session ends, so a landing started
   late on a Saturday can still be waiting on Sunday's window (#5457).
 

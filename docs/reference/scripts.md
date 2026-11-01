@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-01 13:18 UTC
-generated_sha: 25eb772c0e
+generated_at: 2026-11-01 14:45 UTC
+generated_sha: 6a91a78dd3
 ---
 
 !!! warning "Generated file — do not edit"
@@ -52,7 +52,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run automatically, on a commit, CI run, deploy or session
 
-52 script(s) — every commit, CI run, deploy or Claude session runs it.
+49 script(s) — every commit, CI run, deploy or Claude session runs it.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -73,7 +73,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/digest_provable.py` | deploy_tools | Which k8s roles act ONLY through the bytes their render digest covers. | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_digest_provable.py` | — |
 | `scripts/backup/etcd_restore_drill.sh` | backup | prove an off-box etcd snapshot actually restores, without an outage. | deploy: ansible/roles/setup/hypervisor/tasks/etcd_drill.yml | — | — |
 | `scripts/dev/fact_status.py` | dev | Status, verification and lint for the fact stores — the one entry point. | prek hook (every commit) | — | [0, 1, 64, 2](#scriptsdevfactstatuspy) |
-| `scripts/dev/fanout.py` | dev | The issue-fanout tooling: place batches, wait on them, run a review unit, sum the reviews. | deploy: ansible/roles/setup/claude_code/templates/claude-fanout-server-lander.service.j2 | — | — |
 | `scripts/dev/gen_hook_settings.py` | dev | Render the `hooks` key of `.claude/settings.json` from the hook files' own declarations. | prek hook (every commit) | `test_gen_hook_settings.py` | — |
 | `scripts/docs/gen_role_glance.py` | docs | Generate the mechanical half of every role's `## At a glance` block, in place. | prek hook (every commit) | `test_gen_role_glance.py` | — |
 | `scripts/deploy_tools/gitops_state.py` | deploy_tools | Operate on the GitOps deployer's own state markers, from the deploy host's shell. | deploy: ansible/roles/k8s/monitor-bridge/files/gitops_markers.py | `test_gitops_state.py` | — |
@@ -88,7 +87,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land.sh` | deploy_tools | the entry point every doc, skill and hook names; it execs land.py beside it. | Claude hook: fanout-stop.py | — | [0, 1, 64, 75](#scriptsdeploytoolslandsh) |
 | `scripts/deploy_tools/land_lib/land_tags.py` | deploy_tools | Derive deploy tags from a merged PR's own file list. | setup_reach_hosts.py (every commit, CI run, deploy or Claude session runs it) | `test_land_tags.py` | — |
 | `scripts/deploy_tools/narrow_setup.py` | deploy_tools | Which narrow `--tags` value a setup-role change needs, or a refusal to guess. | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_narrow_setup.py` | [0, 1, 5](#scriptsdeploytoolsnarrowsetuppy) |
-| `scripts/dev/pipeline_timeline.py` | dev | Join each merged PR's stage timestamps into one row, and keep a dated snapshot of them. | deploy: ansible/roles/setup/claude_code/templates/claude-pipeline-timeline.service.j2 | `test_pipeline_timeline.py` | — |
 | `scripts/deploy_tools/promote.py` | deploy_tools | Decide which published master commit the cluster's `prod` tag moves to, wait on it, prune. | CI: promote.yml | — | — |
 | `scripts/deploy_tools/prune_releases.py` | deploy_tools | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` | — |
 | `scripts/deploy_tools/render_targets.py` | deploy_tools | The k8s services a render-record run renders on one host, derived from the tree. | deploy: ansible/roles/setup/render_records/files/render_records.py | `test_render_targets.py` | — |
@@ -102,7 +100,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/validate/shell_templates.py` | validate | Render every Jinja-templated shell script under ansible/roles/ and hosts/components/, then lint. | prek hook (every commit) | — | — |
 | `scripts/dev/smoke_extract.py` | dev | Extract newly-added container image references from a unified git diff. | CI: image-smoke.yml | `test_smoke_extract.py` | — |
 | `scripts/deploy_tools/deploy_lib/staleness.py` | deploy_tools | Refuse a deploy from a git tree that is behind origin/master. | deploy_cli.py (every commit, CI run, deploy or Claude session runs it) | `test_deploy_staleness.py` | — |
-| `scripts/dev/takeover_census.py` | dev | List the managed fields a Flux takeover strips or leaves behind, from two JSON inputs (H1.1j). | deploy: ansible/roles/setup/claude_code/files/homelab-takeover-check.sh | `test_takeover_census.py` | — |
 | `scripts/dev/tested_tree.py` | dev | Say whether a master push carries a tree that a green PR run already tested. | CI: ci.yml | `test_tested_tree.py` | — |
 | `scripts/dev/tighten_ratchets.py` | dev | Lower every ratchet allowlist entry to what its file is today. | prek hook (every commit) | — | — |
 | `scripts/validate/unit_templates.py` | validate | Render every systemd unit under ansible/roles/ and hosts/, and verify the output. | prek hook (every commit) | — | — |
@@ -111,7 +108,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-364 script(s) — imported by another script — not an entry point.
+365 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -203,6 +200,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/exit_codes.py` | lib | Every exit-code contract this repo's entry points share, named once. | imported by _land_fakes.py, alertmanager_api.py, alerts.py, applied.py, await_ci.py, b2_drain.py, backups.py, bootstrap_drill.py, broad.py, build_docs.py, builder.py, bundle_census.py, ci.py, ci_contexts.py, claim_cli.py, classify.py, cli_help.py, cli_parser.py, cluster_vars.py, core.py, deletion_drill.py, deploy.py, detach_notify.py, detach_run.py, exit_messages.py, fact_status.py, fanout.py, findings.py, flags.py, flux.py, flux_probe.py, fragments_deploy.py, gate_runner.py, gen_infra_map.py, gitops_view.py, handoff.py, headroom_probe.py, health.py, health_backup_targets.py, history_cli.py, homelab_render.py, host_secrets.py, label_worktree.py, land.py, land_tags.py, lander.py, longhorn_reap.py, merge.py, monitors.py, narrow_setup.py, notify.py, outcome.py, owners.py, pi_plane.py, place.py, playbook.py, probe.py, promote.py, promotion.py, prune.py, prune_worktrees.py, publish_pr.py, push_rules.py, readonly_rbac.py, renovate_branch_sweep.py, renovate_rebase.py, reset.py, review_unit.py, roundtrip.py, run.py, runbook_gates.py, scripts.py, secret_rotation.py, secret_setup_readers.py, setup_reach_hosts.py, shadow.py, shadow_diff.py, snapshots.py, stale_retarget.py, staleness.py, standalone_map.py, stateful.py, status.py, tags.py, takeover_census.py, tick.py, tools.py, under_locks.py, vendor_manifest.py, verify_promotion.py, vip_placement.py, wait.py, wait_probe.py | `test_exit_codes.py` | — |
 | `scripts/lib/exit_messages.py` | lib | What an entry point prints about its own exit code, read from `lib.exit_codes.CONTRACTS`. | imported by messages.py, probe.py | — | — |
 | `scripts/dev/findings_lib/export_cli.py` | dev | The `export` subcommand: the whole `claude` register, every state, written as one JSON file. | imported by findings.py | — | — |
+| `scripts/dev/fanout.py` | dev | The issue-fanout tooling: place batches, wait on them, run a review unit, sum the reviews. | imported by fanout_place.py, fanout_probe.py, fanout_review.py, fanout_review_stats.py | — | — |
 | `scripts/deploy_tools/narrow_lib/filters.py` | deploy_tools | What a filter plugin defines, and which grep hits for its filter names are callers (#3843). | imported by broad.py, digest_covers.py, narrow_setup.py | — | — |
 | `scripts/deploy_tools/deploy_lib/flags.py` | deploy_tools | What `deploy.sh` refuses a command line over, and the exception its gates refuse with. | imported by owners.py, run.py | `test_deploy_flags.py` | — |
 | `scripts/diagnostics/probe_lib/flux.py` | diagnostics | `probe.py flux [tag...]` — each Flux Kustomization's Ready, applied commit and suspension. | imported by cli_parser.py, flux_wait.py, subcommands.py | `test_probe_flux.py` | — |
@@ -482,7 +480,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run by hand
 
-35 script(s) — a person runs it.
+37 script(s) — a person runs it.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -504,6 +502,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land_lib/land_tags_cli.py` | deploy_tools | Print what `land.sh` derives from a PR's file list -- tags, plane note, or self-applied flag. | no automated caller in the tree | `test_land_tags_cli.py` | — |
 | `scripts/backup/longhorn_reap.py` | backup | Delete Longhorn Backup and Snapshot objects that no RecurringJob will ever prune. | backups.py (a person runs it) | — | — |
 | `scripts/dev/new_k8s_service.py` | dev | Scaffold a k3s service role from its name, image and port, instead of copying a sibling. | no automated caller in the tree | `test_new_k8s_service.py` | — |
+| `scripts/dev/pipeline_timeline.py` | dev | Join each merged PR's stage timestamps into one row, and keep a dated snapshot of them. | no automated caller in the tree | `test_pipeline_timeline.py` | — |
 | `scripts/diagnostics/postflight.py` | diagnostics | Verify the post-deploy setup that Ansible can't do (ansible/README.md §9). | playbook: ansible/bring-up.sh | `test_postflight.py` | — |
 | `scripts/dev/pr_changed_files.sh` | dev | List the files a pull request changes, and say whether its scoped CI run can be trusted. | no automated caller in the tree | — | — |
 | `scripts/validate/refresh_vendored_schemas.py` | validate | Re-download the vendored JSON schemas this repo checks rendered config against. | no automated caller in the tree | `test_refresh_vendored_schemas.py` | — |
@@ -518,6 +517,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/setup_lib/setup_census.py` | deploy_tools | Print the items the setup roles still own on each host, and where each must go (H7.2f). | no automated caller in the tree | — | — |
 | `scripts/dev/split_module.py` | dev | Split a large Python module along its seams: show the references, then move names by spec. | no automated caller in the tree | `test_split_module.py` | — |
 | `scripts/renderer/standalone_map.py` | renderer | Write the standalone-value guard's key map from a placeholder render (target slice R2). | no automated caller in the tree | — | — |
+| `scripts/dev/takeover_census.py` | dev | List the managed fields a Flux takeover strips or leaves behind, from two JSON inputs (H1.1j). | no automated caller in the tree | `test_takeover_census.py` | — |
 | `scripts/diagnostics/ui_login.py` | diagnostics | Mint a Playwright storage-state file holding a logged-in Authelia session. | ui_mcp.sh (a person runs it) | `test_ui_login.py` | — |
 | `scripts/diagnostics/ui_mcp.sh` | diagnostics | Launch @playwright/mcp against this homelab's LAN routes. | no automated caller in the tree | — | — |
 | `scripts/dev/vendor_manifest.py` | dev | Vendor an upstream manifest into a role, pinned to the sha256 of the bytes it fetched. | no automated caller in the tree | `test_vendor_manifest.py` | — |
@@ -583,7 +583,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | 1 | `PUBLISH_STILL_LOCAL` | `publish`: the commit is still local and there is nothing to clean up on origin. `unlanded`: origin was unreadable. | — |
 | 2 | `PUBLISH_PUSHED_NO_PR` | `publish`: pushed but no PR was opened. `unlanded`: a PR is open. | — |
 | 3 | `UNLANDED_NO_PR` | `unlanded`: a branch with no PR. | — |
-| 4 | `UNLANDED_PR_RED` | `unlanded`: its PR failed a check. | — |
+| 4 | `UNLANDED_PR_RED` | `unlanded`: a red or conflicting PR. | — |
 
 ### `scripts/deploy_tools/narrow_setup.py`
 

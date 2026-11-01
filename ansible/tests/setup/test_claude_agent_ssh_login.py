@@ -10,13 +10,12 @@ Run: uv run pytest ansible/tests/setup/test_claude_agent_ssh_login.py
 """
 
 from _agent_package import SETUP, agent_setup_script, render_daniel_server_with
-from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 from lib.repo_paths import ALL_VARS, HOST_VARS
 from renderer.renderer_lib import host as host_mode
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 HOME = "/usr/lib/homelab/claude-agent-home"
 PLACE_KEY = "place root root 0644 "
 KEY = (
@@ -83,8 +82,8 @@ def peer_config(peers: dict[str, bool]) -> str:
         name: {"server_ip": f"10.0.0.{n}", "claude_agent_ssh_login_enabled": enabled}
         for n, (name, enabled) in enumerate(peers.items(), start=10)
     }
-    return render_setup_text(
-        "claude_code",
+    return render_component_text(
+        "claude-code",
         "agent-ssh-config.j2",
         {
             "groups": {"all": list(peers)},

@@ -1,0 +1,14 @@
+{
+  "checksum": "11de5dd83f66ce9f9498e9a7c8c32274ddcf968e1456a9a9eb76da7516936aac",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "hosts/components/claude-code/CLAUDE.md#`hosts/components/claude-code` — Claude Code's host half (daniel-server and daniel-box)",
+  "row": {
+    "atoms": {
+      "ansible/roles/setup/claude_code/CLAUDE.md": "ce65dd0ec3c55c2822a8ee68270ffdf4ae8249d756413e55ccf641845c2d0071",
+      "ansible/roles/setup/claude_code/tasks/main.yml": "a65d3431db1d87e790e31043b8b60b592866f38c5796f9154292087b6812b81c",
+      "docs/claude-code-rc-caps.md": "2d515326fa8d32d682265f2a3e8361c3bd241b199b3810fcec388c2b120e8245"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}

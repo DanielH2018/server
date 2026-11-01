@@ -17,11 +17,11 @@ Run: uv run pytest ansible/tests/setup/test_claude_memory_sync.py
 import re
 
 from _agent_package import render_daniel_server_with
-from _helpers import ANSIBLE, load_yaml
+from _helpers import load_yaml
 from lib.repo_paths import HOST_VARS
-from _setup_render import render_setup_text, role_context
+from _setup_render import CLAUDE_CODE, render_component_text, role_context
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
 SERVICE = "claude-memory-sync.service.j2"
 KEY = "claude_code_memory_sync_enabled"
@@ -34,7 +34,7 @@ def _render(**overrides: object) -> str:
     themselves Jinja (`claude_code_memory_sync_dir` derives from the checkout path), and the
     harness resolves them the way Ansible does (#3202).
     """
-    return render_setup_text("claude_code", SERVICE, overrides)
+    return render_component_text("claude-code", SERVICE, overrides)
 
 
 def _var(name: str, **overrides: object) -> str:

@@ -162,7 +162,7 @@ filtered by `citations.in_tree`, run section by section and over the whole file.
     - `scripts/diagnostics/probe_lib/landing_blockers.py`;
     - `scripts/deploy_tools/land_lib/outcome.py`;
     - `scripts/dev/fanout_lib/brief.py`;
-    - `ansible/roles/setup/claude_code/defaults/main.yml`;
+    - `hosts/components/claude-code/defaults/main.yml`;
     - `ansible/roles/setup/renovate_agent/templates/prompt.txt.j2`;
     - `ansible/roles/setup/deploy_ui/files/deploy_ui_writes.py`.
 - *After a PR Merges — Pull, Deploy, Verify*: the `deploy` and `land-after-merge` skills.

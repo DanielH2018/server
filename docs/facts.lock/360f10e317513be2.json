@@ -1,5 +1,5 @@
 {
-  "checksum": "209047d39f4a34cbe239f8fc99ac035b98ad88c12f321a9f25ab16eb0c327a43",
+  "checksum": "a324c69616ca2a0b547064183960c6efb5f5e3ccf508e166dae272cae42ccb94",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/node-exporter/CLAUDE.md#The textfile collector directory",
   "row": {
@@ -9,14 +9,14 @@
       "ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py::test_both_not_reporting_rules_carry_the_scripts_deadline": "bafc29e454750235e90a61a9a8adc26be0ad2552529bad57b3339a84d4e7452d",
       "ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py::test_every_check_file_producer_writes_the_same_help_text": "63ceef04c7dd6d1832a8a29be9b528df4aef72b52a7ac8578a4b56eca4ae139f",
       "ansible/roles/k8s/observability/files/rules/hosts.yaml": "3981c2c4e11133366da9a522af34d026b1df6eab05c2308a123383f82bb17a37",
-      "ansible/roles/setup/claude_code/files/claude-cgroup-metrics.sh": "adf67bf461ffe963f724f451b7592ce67863d9d8972e42a7d16f3fd54aab45b5",
       "ansible/roles/setup/k3s/templates/disk-health.sh.j2": "6fb1ba35020be293857abc0fdab059db0cb0879bf79983944a98cac1c7e3e99f",
       "ansible/tests/services/test_claude_cgroup_consumers_agree_with_the_writer.py": "3db0e2588083694969d87fb10e67f39280c102991539a723f034cb2c39703773",
-      "ansible/tests/services/test_host_check_rule_literals.py::test_the_cgroup_pairs_follow_the_inventory": "63b614ef8d458c0251f42e049fb3152a003239fea97f6ebff9e3970c7bf1b924",
+      "ansible/tests/services/test_host_check_rule_literals.py::test_the_cgroup_pairs_follow_the_inventory": "50793a4e981ff540145d0fd50d47ff6b243dfc3405b34c383b33582164ba1df9",
       "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3",
-      "docs/target-architecture/monitoring/m3-textfile-timer.md": "402f3a50127fa4d5c5e118f35c17cfbe9c7b73a5d58fb938703fcd801959e2ab"
+      "docs/target-architecture/monitoring/m3-textfile-timer.md": "402f3a50127fa4d5c5e118f35c17cfbe9c7b73a5d58fb938703fcd801959e2ab",
+      "hosts/components/claude-code/files/claude-cgroup-metrics.sh": "cf992faf00b70ceb11079e0266003978b6d9d9d79faf5cb0f728ae386e46a7b8"
     },
     "python": "3.14",
-    "verified_sha": "f5382de1c"
+    "verified_sha": "7069ccbd4"
   }
 }

@@ -148,20 +148,13 @@ def _timer_schedule(name: str, keys: list[tuple[str, str]], monotonic: list[str]
     return calendar_schedule(name, calendars[-1], width)
 
 
-def role_schedules(
-    monotonic: list[str], packaged: frozenset[str] = frozenset()
-) -> list[Schedule]:
-    """Every setup role's crons and timers, less each timer whose `homelab-` twin is in `packaged`.
-
-    A role keeps a timer's template after the box package ships it, and skips it on daniel-box.
-    """
+def role_schedules(monotonic: list[str]) -> list[Schedule]:
+    """Every setup role's crons and timers."""
     found = []
     for role in glance_facts.setup_role_dirs():
         for name, expr in glance_facts.cron_jobs(role):
             found.append(cron_schedule(name, expr))
         for unit, keys in glance_facts.timer_units(role):
-            if f"homelab-{unit}" in packaged:
-                continue
             pairs = [(k.split("=", 1)[0], k.split("=", 1)[1]) for k in keys]
             schedule = _timer_schedule(unit, pairs, monotonic)
             if schedule:
@@ -283,7 +276,7 @@ def test_the_window_is_found_in_the_box_package_and_runs_on_weekdays_only(box_pa
 def test_no_schedule_that_reads_the_cluster_fires_inside_the_box_window(box_package):
     window, span = _window(box_package)
     monotonic: list[str] = []
-    others = role_schedules(monotonic, box_timers(box_package))
+    others = role_schedules(monotonic)
     others += package_schedules(box_package, monotonic)
     others += package_schedules(host_mode.render_package("homelab-updater"), monotonic)
     jobs, _, _ = job_schedules()
@@ -357,25 +350,6 @@ def test_a_restart_timer_without_accuracysec_carries_1132_to_1140():
     assert violations(window, span, [cron_schedule("fixture", "40 11 * * *")])
     window, span = _box_window(accuracy=1)
     assert violations(window, span, [cron_schedule("fixture", "40 11 * * *")]) == []
-
-
-def test_a_role_timer_drops_out_only_once_the_box_package_ships_its_twin():
-    # claude-rc-restart.timer is the role's one calendar timer the claude-code component ships.
-    assert "claude-rc-restart.timer" in {s.name for s in role_schedules([])}
-    twin = frozenset({"homelab-claude-rc-restart.timer"})
-    assert "claude-rc-restart.timer" not in {s.name for s in role_schedules([], twin)}
-
-
-def test_the_real_box_package_drops_only_the_role_timers_it_ships(box_package):
-    monotonic: list[str] = []
-    role_schedules(monotonic, box_timers(box_package))
-    assert {
-        "claude-cgroup-metrics.timer",
-        "claude-memory-sync.timer",
-        "claude-triage-poll.timer",
-    }.isdisjoint(monotonic)
-    # A role timer the package does not ship is still checked.
-    assert "gitops-deploy.timer" in set(monotonic)
 
 
 def test_an_unlisted_monotonic_timer_is_reported():
