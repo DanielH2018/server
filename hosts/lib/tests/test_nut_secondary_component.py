@@ -194,6 +194,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         {"path": "/etc/healthchecks/ping.env"},
         {"path": "/etc/healthchecks"},
         {"cron": "Update Crowdsec Hub", "user": "root"},
+        {"path": "/var/lib/node-exporter-textfile/eval-run.prom"},
         {"cron_file": "ups-secondary-health"},
         {"path": "/usr/local/bin/ups-secondary-health.sh"},
         {"path": "/etc/nut/kuma-push.env"},
