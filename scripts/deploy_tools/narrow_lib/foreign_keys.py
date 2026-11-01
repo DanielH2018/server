@@ -3,10 +3,10 @@
 
 `narrow_setup.foreign_key_tags` asks the reading role about each changed key it names, and a
 key it never names adds no tag. That skip holds only once every name whose value is built
-from the key has been asked about too. `claude_code_agent_primary_profile` interpolates
-thirteen other `claude_code` defaults, and `initial_setup` names it and none of those, so an
-edit to `claude_code_agent_user_home` alone reached `initial_setup` through a word it never
-wrote. Once the tick drops a role whose answer is empty, that miss is a change nothing
+from the key has been asked about too. In #4361, `claude_code_agent_primary_profile`
+interpolated thirteen other `claude_code` defaults, and `initial_setup` named it and none of
+those, so an edit to `claude_code_agent_user_home` alone reached `initial_setup` through a word
+it never wrote. Once the tick drops a role whose answer is empty, that miss is a change nothing
 applies.
 
 Three kinds of name carry a value onward, and the walk follows each to a fixed point:
