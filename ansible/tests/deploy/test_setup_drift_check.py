@@ -378,8 +378,7 @@ def test_the_library_is_stamped_as_deployed_code():
 
 def test_the_tile_is_gated_on_the_token():
     """An ungated tile sits red from creation until /add-secret runs, because the cron skips its
-    push while the token is empty — and kuma-drift counts a declared-but-never-beating monitor
-    as missing. The gate is `is defined`, so the tile is absent while the key is undeclared."""
+    push while the token is empty. The gate is `is defined`, so the tile is absent while the key is undeclared."""
 
     def tile(overrides: dict) -> str:
         return render_role_template("uptime-kuma", "static-monitors.yaml.j2", overrides)

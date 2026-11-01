@@ -1,7 +1,7 @@
 """Alertmanager's silences and inhibitions, which Prometheus' `ALERTS` series cannot show.
 
 Two readers: `probe.py health <tag>` names the silence or inhibition on a gated alert, and
-`probe.py monitors` lists the active silences. Both read through Alertmanager's GET-only LAN
+`probe.py monitors` lists the active silences and the alerts `ALERTS` lacks. Both read through Alertmanager's GET-only LAN
 door (`ansible/roles/k8s/observability/templates/alertmanager-read-ingressroute.yaml.j2`),
 which admits `/api/v2/alerts` and `/api/v2/silences` alone. The design is answer 2 of
 docs/target-architecture/monitoring/alertmanager-ui-and-readers.md.
@@ -31,6 +31,11 @@ def endpoint():
 def alerts_url(base, tag):
     """Every alert Alertmanager holds for `tag`, silenced and inhibited ones included."""
     return f"{base}/api/v2/alerts?" + urlencode({"filter": f'service="{tag}"'})
+
+
+def active_alerts_url(base):
+    """Every active alert Alertmanager holds, silenced and inhibited ones included."""
+    return f"{base}/api/v2/alerts?" + urlencode({"active": "true"})
 
 
 def silences_url(base):
