@@ -16,19 +16,19 @@ from ansible.errors import AnsibleFilterError
 from py_table import FilterModule, py_table
 
 SOURCE = """
-from checks import host
+from checks import service
 
 ROWS: tuple[Row, ...] = (
-    Row(name="disk", fn=host.check_disk, critical=True, display="Root" " Disk"),
-    Row(name="memory", fn=host.check_mem, runbook=None),
+    Row(name="n8n", fn=service.check_n8n, critical=True, display="n8" "n"),
+    Row(name="bazarr", fn=service.check_bazarr, runbook=None),
 )
 """
 
 
 def test_literal_keywords_are_read_and_code_is_left_out():
     assert py_table(SOURCE, "ROWS") == [
-        {"name": "disk", "critical": True, "display": "Root Disk"},
-        {"name": "memory", "runbook": None},
+        {"name": "n8n", "critical": True, "display": "n8n"},
+        {"name": "bazarr", "runbook": None},
     ]
 
 

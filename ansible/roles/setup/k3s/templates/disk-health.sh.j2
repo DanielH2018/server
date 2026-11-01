@@ -17,11 +17,12 @@
 #
 # Independent of Prometheus BY DESIGN: this is the leg that survives a node-exporter or Prometheus
 # outage. node-exporter has been a DaemonSet on both nodes since Phase F (this comment claimed
-# "no node-exporter runs here" until 2026-08-23), so check_disk does normally see this filesystem
-# — but on 2026-08-23 a one-directional UFW rule made daniel-box unscrapable for 5.4h and this
-# cron was the only thing still watching its root disk. Covers / ONLY; memory and the boot
-# partitions have no such fallback, which is why check_disk/check_mem now fail closed when a host
-# stops reporting (HOST_ORIGINS_MIN in monitor-bridge check.py). Do not delete this as redundant.
+# "no node-exporter runs here" until 2026-08-23), so observability's HostDiskFull rule does
+# normally see this filesystem — but on 2026-08-23 a one-directional UFW rule made daniel-box
+# unscrapable for 5.4h and this cron was the only thing still watching its root disk. Covers /
+# ONLY; memory and the boot partitions have no such fallback, which is why a host that stops
+# reporting pages through ScrapeTargetDown and HostCoverageShortfall (observability's
+# hosts.yaml). Those page the lost coverage, not the disk. Do not delete this as redundant.
 #
 # The threshold is Longhorn's, not the fleet's 90%: with storageMinimalAvailablePercentage=25
 # (Longhorn default) replica scheduling stops once the disk passes 75% used, so paging at 90
