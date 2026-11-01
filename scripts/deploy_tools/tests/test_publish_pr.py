@@ -311,6 +311,30 @@ def test_cli_publish_drives_real_processes_in_order(tmp_path):
         assert call.startswith(prefix), (call, prefix)
 
 
+@pytest.mark.parametrize(
+    ("cgroup", "starts_with"),
+    [
+        ("0::/system.slice/homelab-docs-refresh.service\n", "systemd-run"),
+        ("0::/user.slice/user-1000.slice/session-4.scope\n", sys.executable),
+    ],
+)
+def test_a_cron_units_landing_starts_in_the_user_manager(tmp_path, cgroup, starts_with):
+    """Issue #6864: in a system unit, the detached landing died when the cron exited."""
+    seen: list[list[str]] = []
+
+    def fake_run(argv, **_kw):
+        seen.append(argv)
+        return cp(0)
+
+    tools = publish_pr.real_tools(
+        tmp_path, tmp_path / "land.py", read_cgroup=lambda: cgroup, run_process=fake_run
+    )
+    tools.land("--pr", "7", "--detach")
+    [argv] = seen
+    assert argv[0] == starts_with
+    assert argv[-3:] == ["--pr", "7", "--detach"]
+
+
 def test_cli_publish_exit_code_reaches_the_shell(tmp_path):
     proc, calls = _run_cli(
         tmp_path,

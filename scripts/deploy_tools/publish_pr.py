@@ -15,7 +15,9 @@ then deploys the merge. ``land.py --arm-merge --await-merge`` waits for CI and m
 the REST endpoint, pinned to that SHA. ``--detach`` matters as much as the merge. The callers hold the git-tree lock on
 fd 9 and read this script's output through a pipe, so a landing that inherited either would
 keep the lock for the whole CI wait. The detached landing closes every inherited descriptor
-from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``).
+from 3 up and rebinds its stdio to its own log (``land_lib/detach.py``). The callers are
+system units, and a system unit kills its whole cgroup when its script exits, so the landing
+starts in the operator's user manager instead (``lib/detach_fork.py:in_user_manager``, #6864).
 
 ``publish`` expects the commit to already be at HEAD of the primary checkout; the caller
 made it, because what to stage and how to word it is the cron's business. It prints ONE
@@ -92,6 +94,7 @@ from lib.exit_codes import (
     UNLANDED_PR_OPEN,
     UNLANDED_PR_RED,
 )
+from lib import detach_fork
 from lib import gh as gh_mod
 from lib import git as git_mod
 from lib.repo_paths import HOST_LIB_FILES
@@ -156,7 +159,12 @@ class PublishTools:
     land: Runner
 
 
-def real_tools(repo: Path, land_script: Path = LAND_SCRIPT) -> PublishTools:
+def real_tools(
+    repo: Path,
+    land_script: Path = LAND_SCRIPT,
+    read_cgroup: Callable[[], str] | None = None,
+    run_process: Runner = subprocess.run,
+) -> PublishTools:
     def git(
         *args: str, timeout: float | None = None
     ) -> subprocess.CompletedProcess[str]:
@@ -176,8 +184,12 @@ def real_tools(repo: Path, land_script: Path = LAND_SCRIPT) -> PublishTools:
                 env.get("PATH", "/usr/bin:/bin"),
             ]
         )
-        return subprocess.run(
-            [sys.executable, str(land_script), *args],
+        # A cron's system unit would kill the detached landing when the cron exits (#6864).
+        argv, env = detach_fork.in_user_manager(
+            [sys.executable, str(land_script), *args], repo, env, read_cgroup
+        )
+        return run_process(
+            argv,
             cwd=repo,
             env=env,
             capture_output=True,
