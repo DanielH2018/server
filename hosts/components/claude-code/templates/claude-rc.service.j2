@@ -9,6 +9,14 @@ OnFailure={{ claude_code_rc_alert_unit }}
 {% else %}
 OnFailure=claude-rc-alert.service
 {% endif %}
+{% if claude_code_user != sys_user %}
+# The runtime directory BindPaths= below exposes is created when the agent's user manager
+# starts. The agent lingers, so logind starts that manager at boot, but nothing orders it
+# before this unit: a bind whose source is missing fails the unit's start. Wants= also starts
+# the manager if linger is ever off.
+Wants=user@{{ claude_code_user_uid }}.service
+After=user@{{ claude_code_user_uid }}.service
+{% endif %}
 
 [Service]
 Type=simple
@@ -19,13 +27,30 @@ Group={{ claude_code_user }}
 WorkingDirectory={{ claude_code_rc_workdir }}
 
 {% if claude_code_user != sys_user %}
-# DECIDED: hardening only for a non-operator user. ProtectHome=yes hides /home, which holds
+# DECIDED: hardening only for a non-operator user. ProtectHome= hides /home, which holds
 # the operator's own home, so the operator's unit would lose its own files. NoNewPrivileges=yes
 # blocks setuid, which the operator's phone sessions need for sudo. The agent's home sits
 # under /var/lib and stays visible. Slice 4 of docs/claude-agent-user.md.
-ProtectHome=yes
+#
+# DECIDED: ProtectHome=tmpfs plus one BindPaths=, not ProtectHome=yes. ProtectHome=yes hides
+# /run/user as well as /home and /root (systemd.exec(5)), so a session could not reach its own
+# user bus at /run/user/<uid>/bus. `systemd-run --user`, which starts every local fan-out
+# batch, failed there with "Failed to connect to bus: Permission denied", sandbox on or off
+# (#6764). tmpfs mounts the same three directories as empty and read-only, and BindPaths=
+# puts back the agent's runtime directory alone, so /home stays hidden. ProtectHome=read-only
+# would re-expose /home and is rejected for that reason. The bus lets a session start a user
+# unit outside this unit's sandbox, under user-<uid>.slice's caps. An ssh login as the agent
+# can already do that, and the agent's own permissions, not this sandbox, keep it out of
+# /home/{{ sys_user }}.
+ProtectHome=tmpfs
+BindPaths=/run/user/{{ claude_code_user_uid }}
 NoNewPrivileges=yes
 PrivateTmp=yes
+
+# A system unit gets neither variable, and sd-bus finds the user bus through one of them. With
+# both unset, `systemd-run --user` and `systemctl --user` fail with "No medium found".
+Environment=XDG_RUNTIME_DIR=/run/user/{{ claude_code_user_uid }}
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ claude_code_user_uid }}/bus
 
 # DECIDED: UMask=0027, for a non-operator user only. The unit set no UMask=, so a session
 # inherited systemd's default 0022 (`systemctl show -p UMask` on daniel-box). That
