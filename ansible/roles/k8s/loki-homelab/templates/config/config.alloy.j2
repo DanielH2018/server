@@ -192,8 +192,8 @@ loki.source.file "authlog" {
 //
 // THE LINE IS NOT REWRITTEN. stage.regex only fills the extracted map and stage.labels only
 // promotes a key to a label; there is no stage.output or stage.replace here. probe.py's
-// SYSLOG_ALERT_LOGQL and the alert-history dashboard parse the raw rsyslog line, so a stage
-// that changed it would blind both. A line the expression does not match passes unlabelled.
+// SYSLOG_ALERT_LOGQL parses the raw rsyslog line, so a stage that changed it would blind it.
+// A line the expression does not match passes unlabelled.
 loki.process "host" {
   forward_to = [loki.write.homelab.receiver]
 
