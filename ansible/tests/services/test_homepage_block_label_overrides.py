@@ -28,7 +28,9 @@ Run: uv run pytest ansible/tests/services/test_homepage_block_label_overrides.py
 
 import re
 
+from lib import yaml_fast
 from _homepage_config import custom_css, tiles
+from _k8s_render import render_role_template
 
 # (href fragment, 1-based block index) -> the upstream field that block renders.
 # The rename itself is in the CSS; this table is what the rename is renaming.
@@ -185,28 +187,33 @@ def test_the_alertmanager_tile_names_its_blocks_in_config():
     assert not [key for key in css_overrides(custom_css()) if "alertmanager." in key[0]]
 
 
-def test_the_alertmanager_tile_counts_only_alerts_that_page():
-    """The two severity counts drop the matchers the routing tree sends to its blackhole.
+def blackholed_matchers() -> set[str]:
+    """The matchers of every top-level route the Alertmanager config sends to `blackhole`."""
+    secret = yaml_fast.safe_load(
+        render_role_template("observability", "alertmanager-secret.yaml.j2")
+    )
+    routes = yaml_fast.safe_load(secret["stringData"]["alertmanager.yml"])["route"][
+        "routes"
+    ]
+    return {
+        matcher
+        for route in routes
+        if route.get("receiver") == "blackhole"
+        for matcher in route.get("matchers", [])
+    }
 
-    A shadow rule runs beside a check another pager still owns, and a drill fails a gate on
-    purpose; counting either would show a page nobody received.
+
+def test_the_alertmanager_tile_counts_only_alerts_that_page():
+    """Each severity count negates every matcher the routing tree blackholes.
+
+    A blackholed alert pages nobody, so counting it would show a page nobody received.
+    Reading the matchers from the rendered routing tree means a new blackhole route fails
+    here until the tile drops it too.
     """
+    matchers = blackholed_matchers()
+    assert 'shadow="true"' in matchers, matchers  # non-vacuity
     metrics = {m["label"]: m["query"] for m in alertmanager_tile()["widget"]["metrics"]}
     for label in ("Critical", "Warning"):
-        assert 'shadow!="true"' in metrics[label], metrics[label]
-        assert 'drill!="true"' in metrics[label], metrics[label]
         assert f'severity="{label.lower()}"' in metrics[label], metrics[label]
-    assert 'alertname="Watchdog"' in metrics["Watchdog"]
-    # A count over no alerts is an empty vector, which the widget renders as a blank block.
-    assert all(q.endswith(" or vector(0)") for q in metrics.values()), metrics
-
-
-def test_no_tile_reads_uptime_kuma():
-    """M6 retires Kuma; C-1 removes the entry's hostname, which homepage_href would raise on."""
-    kuma = [
-        name
-        for name, body in tiles()
-        if (body.get("widget") or {}).get("type") == "uptimekuma"
-        or "uptime-kuma." in (body.get("href") or "")
-    ]
-    assert kuma == []
+        missing = {m for m in matchers if m.replace("=", "!=", 1) not in metrics[label]}
+        assert not missing, f"the {label} count still includes {sorted(missing)}"

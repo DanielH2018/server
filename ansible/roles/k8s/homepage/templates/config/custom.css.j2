@@ -123,9 +123,8 @@ li.service:not(#my-calendar) .service-container > div {
 /* A THREE-STAT WIDGET SPANS ITS THREE BOXES ACROSS THE FULL WIDTH.
  *
  * At two per row an odd count leaves the last box alone on a half-empty row. Two and four
- * divide evenly; three does not. No widget carries three stats since the 2026-09-10 field
- * pruning, so this rule matches nothing today — it stays because it costs nothing and applies
- * itself the moment a widget's stat count lands on three again.
+ * divide evenly; three does not. The Alertmanager tile is the one three-stat widget: Critical,
+ * Warning and Watchdog on one row.
  *
  * `:has(> :nth-child(3):last-child)` is "exactly three children": a third child that is also
  * the last. It matches nothing on a two- or four-stat widget, so those keep the 50% basis

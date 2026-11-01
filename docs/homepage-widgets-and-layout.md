@@ -91,7 +91,8 @@ height — every widget carries two to four stats, so all of them occupy two sta
 and three span the full width. Two and four divide evenly at a 50% basis; one and three do not,
 so `custom.css.j2` gives those their own basis via `:has(> :first-child:last-child)` and
 `:has(> :nth-child(3):last-child)` — an only child, and a third child that is also the last. A widget whose stat count changes moves between these automatically; nothing needs
-updating by hand. Since the 2026-09-10 pruning only the one- and two-stat cases occur.
+updating by hand. The Alertmanager tile is the one three-stat widget; every other widget
+holds one or two.
 
 **Reserve a stat row or a whole grid row shrinks.** `.services-list` sizes each grid row to its
 tallest member, so a row whose tiles all hold fewer stat rows than the rows below it drops on its
@@ -115,10 +116,14 @@ request, and two of the requested stats do not exist: the Karakeep widget has no
 count (`bookmarks` and `archived` are the two numbers it subtracts from, and no widget type here
 can express arithmetic), and the `peanut` widget names its two `battery_charge` and `ups_status`.
 
-Two tiles take a different shape. The Home Assistant widget has no `fields:` at all — its
+Three tiles take a different shape. The Home Assistant widget has no `fields:` at all — its
 `custom:` entries ARE the blocks, so pruning it means deleting entries. The Headlamp tile's
 blocks come from `mappings:` paired positionally to the PromQL operands in `defaults/main.yml`,
-so pruning it means editing both files together.
+so pruning it means editing both files together. The Alertmanager tile is a `prometheusmetric`
+widget: each entry under `metrics:` is one block, with its own `label:` and PromQL `query:`, so
+its headings need no CSS rename. Its Critical and Warning counts drop every matcher the
+Alertmanager routing tree sends to its `blackhole` receiver (`shadow="true"` and
+`drill="true"`), and its Watchdog reads 1 while Prometheus evaluates rules.
 
 The `::after` rename in `custom.css.j2` uses `font-size: 0` rather than `visibility: hidden`,
 because the box must be sized by the NEW text: "Battery Charge" wrapped to two lines in an 85px

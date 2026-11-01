@@ -92,7 +92,7 @@ that bite from a config edit alone.
   a render — check both files when a group appears in the wrong place or a column count has no
   effect.
 - **`fields:` picks which blocks a widget renders, and an unknown name is dropped silently.**
-  The valid names are upstream's, not the labels the tile displays, and three tiles take their
+  The valid names are upstream's, not the labels the tile displays, and some tiles take their
   blocks from somewhere other than `fields:` — the per-widget shapes are on the docs page.
 - **A tile's `href` comes from the entry's `hostname`** through `homepage_href`. The tiles
   stay hand-placed, because their order is measured layout.
