@@ -202,15 +202,15 @@ def test_deploy_tags_refuses_most_of_the_fleet_naming_it(tree: Tree, capsys):
 SHIPPED_DEFAULTS = "ansible/roles/setup/initial_setup/defaults/main.yml"
 
 
-def _ship_defaults(tree: Tree, renovate_agent_reads: str) -> None:
-    """initial_setup's defaults build one key from a secret, and renovate_agent reads the file.
+def _ship_initial_setup_defaults(tree: Tree, renovate_agent_reads: str) -> None:
+    """initial_setup's defaults build one key from a secret, and renovate_agent ships the file.
 
-    The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#5945), which
+    The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#4303), which
     this reads unpatched: a change to that row changes what these tests exercise.
     """
     tree.write(
         SHIPPED_DEFAULTS,
-        'shipped_built_token: "{{ setup_only_token }}"\nshipped_plain: 1\n',
+        'setup_built_token: "{{ setup_only_token }}"\nsetup_plain: 1\n',
     )
     tree.write(
         "ansible/roles/setup/renovate_agent/tasks/main.yml",
@@ -221,15 +221,15 @@ def _ship_defaults(tree: Tree, renovate_agent_reads: str) -> None:
 
 
 def test_a_shipper_reading_none_of_the_secrets_keys_is_unread(tree: Tree, capsys):
-    """renovate_agent reads initial_setup's defaults for one plain key, so a secret skips it."""
-    _ship_defaults(tree, "shipped_plain")
+    """renovate_agent ships initial_setup's defaults for one plain key, so a secret skips it."""
+    _ship_initial_setup_defaults(tree, "setup_plain")
     rc, out = _setup_readers(tree, capsys)
     assert rc == 0 and out["unread"] == {SHIPPED_DEFAULTS: ["renovate_agent"]}
 
 
 def test_a_shipper_reading_a_key_built_from_the_secret_is_a_reader(tree: Tree, capsys):
     """The rejecting half: the key built from the secret reaches renovate_agent's task."""
-    _ship_defaults(tree, "shipped_built_token")
+    _ship_initial_setup_defaults(tree, "setup_built_token")
     rc, out = _setup_readers(tree, capsys)
     assert rc == 0 and SHIPPED_DEFAULTS in out["paths"] and out["unread"] == {}
 
@@ -282,7 +282,7 @@ def test_a_shipper_reading_none_of_the_secrets_keys_keeps_its_narrow_answer(
     tree: Tree,
 ):
     """`role_tags` takes the routing's rule: renovate_agent's prose edit still needs nothing."""
-    _ship_defaults(tree, "shipped_plain")
+    _ship_initial_setup_defaults(tree, "setup_plain")
     tree.write(
         "ansible/initial_setup.yml", SETUP_PLAY.replace("claude_code", "renovate_agent")
     )
