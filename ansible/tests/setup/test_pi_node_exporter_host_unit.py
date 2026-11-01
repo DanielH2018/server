@@ -89,7 +89,9 @@ def test_the_host_binary_pins_the_version_the_cluster_pins() -> None:
     versions = {arch: str(pin["version"]) for arch, pin in tool.items()}
     image = yaml_fast.safe_load(CLUSTER_DEFAULTS.read_text())["node_exporter_k8s_image"]
     # The cluster pin may carry a `@sha256:` digest after the tag; the host binary has no digest.
-    cluster = image.rsplit(":v", 1)[1].split("@", 1)[0]
+    # The tag keeps its `v`: Renovate looks the host pin up as a release tag, and a bare
+    # `1.12.1` 404s (#6850).
+    cluster = image.split("@", 1)[0].rsplit(":", 1)[1]
     assert set(versions.values()) == {cluster}, (
         f"homelab-tools pins node_exporter {versions}, the cluster DaemonSet {cluster}; "
         "bump both, and the digests beside the host versions"
