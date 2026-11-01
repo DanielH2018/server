@@ -189,8 +189,8 @@ def cap_push_msg(msg: str, limit: int = PUSH_MSG_MAX) -> str:
     """`msg` verbatim when it fits `limit`, else cut with a ` …(+N chars)` marker. Pure.
 
     A trailing ` (N cycles)` — what `streaks.down_streak` appends to a paging message —
-    survives the cut at the end, because `probe_lib/alerts.py` strips that suffix with an
-    end-anchored regex when it reads the message back out of the log.
+    survives the cut at the end, so a long paging message still says how long it has been
+    down.
     """
     if len(msg) <= limit:
         return msg

@@ -84,7 +84,7 @@ push_healthchecks() {
 # pattern. Short version: the `|| logger` inside the ping helper only fires when the curl itself
 # fails, so a successfully-pinged status leaves no durable local record. That makes journald
 # silence ambiguous — a run that succeeded quietly and a cron that never fired look identical —
-# and it is what `probe.py alerts` reads to reconstruct a monitor's history from Loki. Bit for
+# and that line is the monitor's only history in Loki. Bit for
 # real on 2026-08-16: the first manual run of this script produced no output and no journal entry,
 # and proving it had worked needed root and a `kubectl get etcdsnapshotfile`.
 report() {

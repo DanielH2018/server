@@ -201,7 +201,7 @@ def test_kuma_reason_is_logged_on_its_own_line_with_the_token_redacted(tmp_path)
         "test-tag push failed (http=404 rc=0 by=kuma) (status=up: test-msg)",
     ]
     assert not any("secret-token" in line for line in logs)
-    # `probe.py alerts` counts `status=down` lines as episodes; the reason line carries none.
+    # A `status=` token marks a verdict line; the reason line carries none.
     assert "status=" not in logs[-2]
 
 

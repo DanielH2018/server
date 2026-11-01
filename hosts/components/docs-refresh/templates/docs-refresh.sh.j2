@@ -121,8 +121,8 @@ DEGRADED_MSG=""
 # "${LOG:-}".
 on_exit() {
   rm -f "${LOG:-}"
-  # `status=` prefix, matching secret-rotate.sh: probe.py alerts reconstructs DOWN episodes for
-  # host checks by matching that token in syslog, and the message lives only in this line.
+  # `status=` prefix, matching secret-rotate.sh: that token marks a host check's verdict in
+  # syslog and Loki, and the message lives only in this line.
   logger -t docs-refresh "status=${PUSH_STATUS} ${PUSH_MSG}"
   # The textfile verdict, which DocsRefreshFailed and DocsRefreshNotReporting read. Every exit
   # path reaches this trap, so every run writes.

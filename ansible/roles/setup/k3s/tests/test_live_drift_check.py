@@ -454,7 +454,7 @@ def test_the_up_path_logs_at_a_level_this_host_stores(monkeypatch):
 
 
 def test_the_down_path_logs_at_a_level_this_host_stores(monkeypatch):
-    # The down line is what `probe.py alerts` matches on to reconstruct episodes.
+    # The down line is the verdict's durable record in syslog.
     assert _level_log_verdict_uses("down", monkeypatch) <= _journald_store_cap()
 
 

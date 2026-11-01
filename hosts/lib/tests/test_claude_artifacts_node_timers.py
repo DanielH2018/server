@@ -44,7 +44,7 @@ TWINS = {
     "claude_code_otlp_host_ip": (OBSERVABILITY, "observability_otlp_host_ip"),
     "claude_code_otlp_port": (OBSERVABILITY, "observability_otlp_port"),
 }
-# Each timer, the script its service runs, the syslog tag Loki and `probe.py alerts` read, and the
+# Each timer, the script its service runs, the syslog tag Loki keeps its lines under, and the
 # minute default it fires on.
 TIMERS = {
     "homelab-sync-artifacts": (

@@ -91,8 +91,8 @@ else
   MSG="${MSG}${TREE_NOTE}${DEPLOYED_NOTE}${MANIFEST_NOTE}"
 fi
 
-# Unconditional: this line is the durable record of the verdict's message, and `probe.py alerts`
-# reconstructs DOWN episodes from it. NOTICE rather than INFO — journald here caps
+# Unconditional: this line is the durable record of the verdict's message, and Loki keeps it.
+# NOTICE rather than INFO — journald here caps
 # MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
 logger -p daemon.notice -t setup-drift-check "status=${STATUS} ${MSG}"
 

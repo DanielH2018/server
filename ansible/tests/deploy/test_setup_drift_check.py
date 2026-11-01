@@ -400,8 +400,7 @@ def test_the_reader_does_not_claim_the_orphan_arm():
 
 
 def test_the_reader_logs_its_verdict_line_before_it_writes_the_verdict():
-    """The status line is the durable record of the message, and `probe.py alerts` reconstructs
-    host-check episodes by matching status=down in syslog. NOTICE, not INFO: journald here caps
+    """The status line is the durable record of the message, and Loki keeps it. NOTICE, not INFO: journald here caps
     MaxLevelStore=notice."""
     text = _check_body()
     logger_at = text.index("logger -p daemon.notice -t setup-drift-check")

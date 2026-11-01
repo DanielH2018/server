@@ -350,8 +350,7 @@ else
 fi
 
 # Unconditional, before the textfile write — see longhorn-backup-health.sh.j2 for the full
-# rationale. Short version: a DOWN that leaves no durable record can never be reconstructed by
-# `probe.py alerts`.
+# rationale. Short version: a DOWN must leave a durable record in syslog, which Loki keeps.
 logger -t manifest-prune-check "status=${STATUS} ${MSG}"
 
 # The textfile, before the ping: the verdict must not wait on the network. The producer metric
