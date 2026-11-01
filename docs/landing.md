@@ -782,7 +782,11 @@ renderer and the other members `renderer_lib/host_inputs.py` lists) is a host ca
 sets the flag from the file list and renders nothing, because it reads the merge commit before
 master CI and must not run that commit's code. After master CI is green, `host_wait.host_targets`
 renders every host package at the merge commit and at its first parent, and keeps the hosts whose
-trees differ. When no host differs, the candidate is cleared and the landing ends
+trees differ. It renders every shared package under `hosts/packages/` the same way. A host is a
+target too when its rendered `nfpm.yaml` depends on a shared package whose render differs,
+because that host's updater installs the new shared package (#6859). Before that rule, a
+`homelab-tools` change landed `nothing-to-deploy` while every host was about to install it.
+When no host differs, the candidate is cleared and the landing ends
 `nothing-to-deploy`. A render or snapshot that fails makes every host a target, so a failure
 waits rather than skips.
 
