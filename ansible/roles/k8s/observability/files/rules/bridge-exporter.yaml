@@ -93,9 +93,10 @@ groups:
             the console. Fix the console, or change docs/healthchecks-io-deadman.md and
             monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.
           runbook_url: https://docs.local.daniel-hunter.com/healthchecks-io-deadman/
-      # SHADOW UNTIL A6-7b. Kuma's Cluster Scrape Targets tile pages a failed scrape of this job
-      # today, because the job carries no `origin` label (M1 convention 5 allows one pager). The
-      # absent() arm is what that tile cannot see: a scrape job removed from prometheus.yml.
+      # SHADOW UNTIL A6-7b. `ScrapeTargetDown` (service monitor-bridge, files/rules/
+      # scrape-targets.yaml) pages a failed scrape of this job, and M1 convention 5 allows one
+      # pager. The absent() arm is what that rule cannot see: a scrape job removed from
+      # prometheus.yml. Nothing pages that case until this rule drops `shadow`.
       - alert: MonitorBridgeDown
         expr: up{job="monitor-bridge"} == 0 or absent(up{job="monitor-bridge"})
         for: 10m
