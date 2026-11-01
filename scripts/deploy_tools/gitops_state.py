@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Operate on the GitOps deployer's own state markers, from the deploy host's shell.
 
+To apply a `manual_plane` line and clear it in one checked step, run `owed_run.py <role>`
+beside this file instead (#6881).
+
 Three subcommands. `clear-owed <class> <subject>` drops one line of `/var/lib/gitops-deploy/owed.jsonl`, the deployer's owed-work
 ledger, for any class an operator may clear: `manual_plane`, `k8s_deferred` or `k8s_unapplied` (#3544). `hold_plane` is not one of
 them, because a hold clears only once an apply covers each plane it lists. Every surface prints this command through
