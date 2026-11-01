@@ -25,8 +25,6 @@
 # Read the interval from the tile's declaration. Every monitor-bridge tile shares
 # uptime_kuma_k8s_bridge_push_interval (1200s), so its range is [2h].
 # A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
-# B7's WG Pi Peer Backup has a 216000s interval (2.5 days), so its range is [120h10m]. B7's other
-# three tiles (360s and 600s) use [2h].
 # B9's three AIDE tiles (626400s) use [348h10m] and its three rkhunter tiles (612000s) use
 # [340h10m], both inside the 30d retention.
 # B4's two etcd drill tiles have no term: a monthly push tile's range would be 70d10m, which
@@ -79,20 +77,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Renovate Agent — Alive"}[56h10m])
             or
-              absent_over_time(monitor_status{monitor_name="k3s Longhorn Backup"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Off-box etcd Snapshot"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Manifest Prune Drift"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Release Staleness Drift"}[2h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Live Object Drift"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="Artifacts Peer Sync"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="k3s Telemetry OTLP Door"}[2h])
-            or
               absent_over_time(monitor_status{monitor_name="Daniel Pi SD Health"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Daniel Pi Recovery"}[2h])
@@ -119,10 +103,6 @@ groups:
             or
               absent_over_time(monitor_status{monitor_name="Swallowed Push Verdicts"}[2h])
             or
-              absent_over_time(monitor_status{monitor_name="GitHub Ruleset Drift"}[50h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="GitHub Interaction Limit"}[50h10m])
-            or
               absent_over_time(monitor_status{monitor_name="WAN Reachable"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Discord Delivery"}[2h])
@@ -148,14 +128,6 @@ groups:
               absent_over_time(monitor_status{monitor_name="Home Assistant Automations"}[2h])
             or
               absent_over_time(monitor_status{monitor_name="Host Packages — Status"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Arr Auto-Block"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Cloudflare DDNS Direct"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Cloudflare DDNS Proxied"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="WG Pi Peer Backup"}[120h10m])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:

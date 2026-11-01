@@ -1,8 +1,8 @@
 """The rendered longhorn-backup-health shim: arm states, env-var parity, and real runs.
 
 The tests here render `longhorn-backup-health.sh.j2` and — for most of them — RUN the
-rendered script, with every external seam (the Python reader, `kuma_push`,
-`boot_grace_active`, the token files, `curl`) replaced by a fixture. `conftest.py` in this
+rendered script, with every external seam (the Python reader, the check library,
+`boot_grace_active`, the ping-key file, `curl`) replaced by a fixture. `conftest.py` in this
 directory puts a stubbed `logger` first on PATH, which is what keeps these runs out of the
 host's syslog.
 
@@ -19,7 +19,6 @@ from lib.repo_paths import K3S_FILES, K3S_ROLE
 
 BACKUP_HEALTH = K3S_ROLE / "templates" / "longhorn-backup-health.sh.j2"
 BACKUP_HEALTH_READER = K3S_FILES / "longhorn_backup_health.py"
-KUMA_PUSH_LIB = v.ROLES / "setup" / "initial_setup" / "files" / "kuma-push-lib.sh"
 
 
 def test_backup_health_renders_clean_shell(tmp_path):
@@ -117,30 +116,26 @@ def _run_rendered_shim(
     tmp_path,
     fake_reader_body: str,
     *,
-    push_ok_unset: bool = False,
     extra_stub_files: dict[str, str] | None = None,
 ):
     """Run the real rendered backup-health shim with every external seam pointed at a fixture.
 
-    The seams: the reader invocation becomes `fake_reader_body`; `kuma_push` and
-    `boot_grace_active` are shadowed by shell functions; the Kuma token file and the
-    healthchecks.io key file are swapped for tmp copies; and `curl` is a stub on PATH that
-    records its argv. Returns `(proc, kuma_status, curl_calls)` where `kuma_status` is the
-    string the `kuma_push` stub received (None when never called) and `curl_calls` is one
-    argv line per curl invocation.
+    The seams: the reader invocation becomes `fake_reader_body`; the shared check library is a
+    stub whose `write_check_textfile` records the success flag it receives and whose
+    `boot_grace_active` always reports "not booting"; the healthchecks.io key file is swapped
+    for a tmp copy; and `curl` is a stub on PATH that records its argv. Returns
+    `(proc, verdict, curl_calls)` where `verdict` is `up` or `down` as the textfile write
+    received it (None when never called) and `curl_calls` is one argv line per curl invocation.
 
-    `push_ok_unset` reproduces an older kuma-push-lib.sh that never set KUMA_PUSH_OK at all —
-    the injected `kuma_push` stub omits that assignment. `extra_stub_files` places additional
-    executables (name -> script body) on the same PATH directory as the `curl` stub, ahead of
-    the real binaries — e.g. a `mktemp` that fails.
+    `extra_stub_files` places additional executables (name -> script body) on the same PATH
+    directory as the `curl` stub, ahead of the real binaries — e.g. a `mktemp` that fails.
 
     The healthchecks.io seam is not optional on this host: `/etc/healthchecks/ping.env` is
     0640 root:ubuntu, so the test user CAN read the real key, and until this seam existed a
-    test run sourced it and sent a fixture `up` ping to the real off-site dead-man for both
-    `longhorn-backup-health` and `uptime-kuma-alive`. Two independent guards: the path is
-    replaced, and `curl` is stubbed so a missed replacement leaks a real key into a file
-    under tmp_path rather than onto the wire. The assertions on `curl_calls` never print a
-    URL for that reason.
+    test run sourced it and sent a fixture `up` ping to the real off-site dead-man for
+    `longhorn-backup-health`. Two independent guards: the path is replaced, and `curl` is
+    stubbed so a missed replacement leaks a real key into a file under tmp_path rather than
+    onto the wire. The assertions on `curl_calls` never print a URL for that reason.
     """
     ctx = v.template_context(BACKUP_HEALTH)
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
@@ -149,11 +144,9 @@ def _run_rendered_shim(
         tmp_path / "fake-reader.sh", "#!/usr/bin/env bash\n" + fake_reader_body
     )
 
-    push_token_env = tmp_path / "kuma-push.env"
-    push_token_env.write_text("LONGHORN_BACKUP_PUSH_TOKEN='test-token'\n")
     hc_ping_env = tmp_path / "ping.env"
     hc_ping_env.write_text(f"HC_PING_KEY='{FAKE_HC_PING_KEY}'\n")
-    kuma_push_call = tmp_path / "kuma-push-call.txt"
+    textfile_call = tmp_path / "textfile-call.txt"
 
     curl_calls = tmp_path / "bin" / "curl-calls"
     stub_bin = fake_bin(
@@ -164,15 +157,16 @@ def _run_rendered_shim(
     curl_calls.touch()
 
     script = rendered
-    script = script.replace(
-        "source /usr/local/lib/kuma-push-lib.sh ||", f"source {KUMA_PUSH_LIB} ||"
-    )
-    # The shared check library is stubbed to a no-op textfile write: the real file is absent on a
-    # CI runner, and its textfile cases are in ansible/tests/setup/test_k3s_cron_textfiles.py.
+    # The shared check library is stubbed: the real file is absent on a CI runner, and its
+    # textfile cases are in ansible/tests/setup/test_k3s_cron_textfiles.py. The stub records the
+    # success flag (the second argument) as the run's verdict. boot_grace_active is a shell
+    # FUNCTION bash resolves at call time, so the stub shadows the real one.
     check_lib = tmp_path / "homelab-check-lib.sh"
-    check_lib.write_text("write_check_textfile() { :; }\n")
+    check_lib.write_text(
+        "boot_grace_active() { return 1; }\n"
+        f'write_check_textfile() {{ printf "%s" "$2" > {textfile_call}; }}\n'
+    )
     script = script.replace("/usr/local/lib/homelab-check-lib.sh", str(check_lib))
-    script = script.replace("/etc/rancher/k3s/kuma-push.env", str(push_token_env))
     script = script.replace("/etc/healthchecks/ping.env", str(hc_ping_env))
     reader_invocation = re.search(
         r"/usr/local/bin/uv run --no-project --no-python-downloads --python \S+ "
@@ -181,33 +175,19 @@ def _run_rendered_shim(
     )
     assert reader_invocation, "the reader invocation line moved; update this test"
     script = script.replace(reader_invocation.group(0), str(fake_reader))
-    # boot_grace_active/kuma_push are shell FUNCTIONS bash resolves at call time, so defining our
-    # own here — after the real `source` above, before either is actually called further down —
-    # shadows the sourced versions for the rest of this run without needing to fake the library.
-    push_ok_assignment = "" if push_ok_unset else "KUMA_PUSH_OK=1;"
-    script = script.replace(
-        "if boot_grace_active ",
-        f"boot_grace_active() {{ return 1; }}\n"
-        # KUMA_PUSH_OK is set by the real kuma_push and read further down by the healthchecks
-        # block (`(( ${{KUMA_PUSH_OK:-1}} ))` under `set -u`) — `push_ok_unset` reproduces an
-        # older lib that never made that assignment at all.
-        f'kuma_push() {{ printf "%s" "$1" > {kuma_push_call}; '
-        f'printf "%s" "$2" > {kuma_push_call}.msg; {push_ok_assignment} }}\n'
-        "if boot_grace_active ",
-        1,
-    )
 
     script_path = write_exec(tmp_path / "longhorn-backup-health.sh", script)
 
     proc = run(["bash", str(script_path)], stub_bin=stub_bin, timeout=30)
-    kuma_status = kuma_push_call.read_text() if kuma_push_call.exists() else None
-    return proc, kuma_status, curl_calls.read_text().splitlines()
+    flag = textfile_call.read_text() if textfile_call.exists() else None
+    verdict = {"1": "up", "0": "down", None: None}[flag]
+    return proc, verdict, curl_calls.read_text().splitlines()
 
 
 def _assert_pings_carry_only_the_fixture_key(curl_calls: list[str]) -> None:
     # Deliberately no URL in the failure message: a missed ping.env replacement means these
     # lines hold the REAL healthchecks key.
-    assert len(curl_calls) == 2, f"expected both hc-ping calls, got {len(curl_calls)}"
+    assert len(curl_calls) == 1, f"expected the one hc-ping call, got {len(curl_calls)}"
     assert all(FAKE_HC_PING_KEY in call for call in curl_calls), (
         "a healthchecks ping did not carry the fixture key: the ping.env path replacement "
         "in _run_rendered_shim missed, and the real key was sourced"
@@ -223,23 +203,23 @@ def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(
     `logger: socket /dev/log: ...`, e.g. — lands ahead of the reader's real stdout line once the
     two streams are merged, silently turning `up` into garbage that Kuma reads as DOWN and pings
     healthchecks.io `/fail` on a backup plane that was fine. This patches in a fake reader that
-    writes junk to stderr before printing `up<TAB>ok` and asserts on the status the `kuma_push`
-    stub actually receives — proving the fix at the point that matters (what reaches Kuma)
-    rather than just that the fix's source text exists.
+    writes junk to stderr before printing `up<TAB>ok` and asserts on the verdict the textfile
+    write actually receives — proving the fix at the point that matters (what reaches
+    Prometheus) rather than just that the fix's source text exists.
 
     On this path the shim DOES call `logger`. A shim that called it only on the failure branch
     would silently drop this exact stderr (a green run with something on stderr); see
     test_backup_health_logs_stderr_on_a_successful_run right below for that half in isolation.
     """
-    proc, kuma_status, curl_calls = _run_rendered_shim(
+    proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path,
         "printf 'logger: socket /dev/log: No such file or directory\\n' >&2\n"
         "printf 'up\\tbackup target(s) default available, 1 backed-up volume(s) covered\\n'\n",
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status is not None, "kuma_push was never called"
-    assert kuma_status == "up", (
-        f"stderr contamination reached STATUS: got {kuma_status!r}, "
+    assert verdict is not None, "write_check_textfile was never called"
+    assert verdict == "up", (
+        f"stderr contamination reached STATUS: got {verdict!r}, "
         f"stdout={proc.stdout!r} stderr={proc.stderr!r}"
     )
     lines = logger_calls.read_text().splitlines()
@@ -256,13 +236,13 @@ def test_backup_health_logs_stderr_on_a_successful_run(tmp_path, logger_calls):
     one case where "the run succeeded, but something on stderr is worth knowing" is exactly the
     signal a warning exists to carry.
     """
-    proc, kuma_status, _curl_calls = _run_rendered_shim(
+    proc, verdict, _curl_calls = _run_rendered_shim(
         tmp_path,
         "printf 'uv: warning: pin resolution took a fallback path\\n' >&2\n"
         "printf 'up\\tall clean\\n'\n",
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "up"
+    assert verdict == "up"
     lines = logger_calls.read_text().splitlines()
     assert any("pin resolution took a fallback path" in line for line in lines), lines
 
@@ -273,11 +253,11 @@ def test_backup_health_logs_nothing_on_a_clean_run_with_empty_stderr(
     """The clean half of the pair above: no stderr, no logger call — the guard must not fire on
     nothing, which would otherwise mask the one case (an actual failure) it exists to explain.
     """
-    proc, kuma_status, _curl_calls = _run_rendered_shim(
+    proc, verdict, _curl_calls = _run_rendered_shim(
         tmp_path, "printf 'up\\tall clean\\n'\n"
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "up"
+    assert verdict == "up"
     assert logger_calls.read_text() == ""
 
 
@@ -292,11 +272,11 @@ def test_backup_health_reader_failure_is_logged_through_the_stub(
     is the one call on any tested path, so an empty `logger_calls` here would mean the stub is
     no longer first on PATH and the real syslog took it.
     """
-    proc, kuma_status, curl_calls = _run_rendered_shim(
+    proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'Traceback: the reader broke\\n' >&2\nexit 1\n"
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "down"
+    assert verdict == "down"
     lines = logger_calls.read_text().splitlines()
     assert lines == [
         "-t longhorn-backup-health status=down longhorn backup health reader failed: "
@@ -312,11 +292,11 @@ def test_backup_health_a_recognized_down_status_reaches_kuma_unchanged(
     tmp_path, logger_calls
 ):
     """The clean half: a real DOWN from the reader must reach Kuma verbatim."""
-    proc, kuma_status, curl_calls = _run_rendered_shim(
+    proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'down\\tbackup target unavailable\\n'\n"
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "down"
+    assert verdict == "down"
     _assert_pings_carry_only_the_fixture_key(curl_calls)
 
 
@@ -327,11 +307,11 @@ def test_backup_health_a_tabless_last_line_is_flagged_not_pushed_as_is(
     line — neither "up" nor "down" — pushed to Kuma as-is; `[[ "$STATUS" == "up" ]]` then
     reads false and pings healthchecks.io `/fail` on a status string Kuma never defined.
     """
-    proc, kuma_status, curl_calls = _run_rendered_shim(
+    proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'a stray line with no tab at all\\n'\n"
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "down"
+    assert verdict == "down"
     lines = logger_calls.read_text().splitlines()
     assert any("unrecognized status" in line for line in lines), lines
     # And it must page — the whole point of catching this rather than pushing it as-is.
@@ -346,14 +326,14 @@ def test_backup_health_a_verdict_split_across_lines_still_names_its_cause(
     The 2026-10-06 shape (#3883): a kubectl error's newline left `(+N more ...)` as the last
     line, and the tile read "unrecognized status:" for 70 hours of a dead k3s API.
     """
-    proc, kuma_status, _curl_calls = _run_rendered_shim(
+    proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path,
         "printf 'down\\tbackup target default unavailable: The connection to the server "
         "127.0.0.1:6443 was refused\\n (+7 more: see journalctl -t longhorn-backup-health)\\n'\n",
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "down"
-    pushed = (tmp_path / "kuma-push-call.txt.msg").read_text()
+    assert verdict == "down"
+    pushed = " ".join(curl_calls)
     assert "127.0.0.1:6443 was refused" in pushed
     assert "unrecognized status" not in pushed
 
@@ -367,49 +347,47 @@ def test_backup_health_a_failing_mktemp_is_named_in_the_pushed_message(
     """A full or read-only /tmp must be reported as ITSELF, not as an opaque reader failure with
     no clue why. `mktemp` is stubbed to fail — the same PATH seam `curl` already uses.
     """
-    proc, kuma_status, curl_calls = _run_rendered_shim(
+    proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path,
         "printf 'up\\tall clean\\n'\n",
         extra_stub_files={"mktemp": "#!/bin/sh\nexit 1\n"},
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "down"
+    assert verdict == "down"
     lines = logger_calls.read_text().splitlines()
     assert any("mktemp" in line for line in lines), lines
     _assert_pings_carry_only_the_fixture_key(curl_calls)
 
 
-# ── KUMA_PUSH_OK must not be a bare reference under `set -u` ─────────────────────────────────
+# ── the uptime-kuma-alive ping is gone ───────────────────────────────────────────────────────
 
 
-def test_backup_health_kuma_alive_ping_has_no_fail_suffix_when_the_push_succeeded(
-    tmp_path, logger_calls
-):
-    proc, kuma_status, curl_calls = _run_rendered_shim(
+def test_backup_health_pings_only_its_own_healthchecks_slug(tmp_path, logger_calls):
+    """M6 batch B1's Cutover-2 removed the second ping. `KumaDown` watches Kuma now, so the
+    script sends the one `longhorn-backup-health` ping and nothing that names `uptime-kuma-alive`
+    or reads `KUMA_PUSH_OK`."""
+    proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'up\\tall clean\\n'\n"
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "up"
-    alive_calls = [c for c in curl_calls if "uptime-kuma-alive" in c]
-    assert len(alive_calls) == 1
-    assert "/fail" not in alive_calls[0]
+    assert verdict == "up"
+    assert len(curl_calls) == 1
+    assert "longhorn-backup-health" in curl_calls[0]
+    assert "/fail" not in curl_calls[0]
+    assert not [c for c in curl_calls if "uptime-kuma-alive" in c]
+    rendered = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
+    assert "KUMA_PUSH_OK" not in rendered and "uptime-kuma-alive" not in rendered
 
 
-def test_backup_health_an_older_lib_that_never_sets_kuma_push_ok_does_not_abort(
+def test_backup_health_writes_its_verdict_with_no_kuma_credentials(
     tmp_path, logger_calls
 ):
-    """The regression guarded: under `set -u`, a bare `(( KUMA_PUSH_OK ))` reference is fatal
-    the instant kuma-push-lib.sh doesn't set it — an older lib on the host, predating this var.
-    That would kill the script before the hc-ping call even ran, silencing the off-site deadman
-    rather than reddening it. `${KUMA_PUSH_OK:-1}` must let the script keep running (with the
-    default-success reading, matching pi-sd-health.sh.j2's own `${KUMA_PUSH_OK:-1}` convention)
-    and still reach both curl calls.
-    """
-    proc, kuma_status, curl_calls = _run_rendered_shim(
-        tmp_path, "printf 'up\\tall clean\\n'\n", push_ok_unset=True
+    """The token-gate early exit went with the push: a host with no `kuma-push.env` still
+    writes the textfile, so the NotReporting rule has something to read."""
+    proc, verdict, _curl_calls = _run_rendered_shim(
+        tmp_path, "printf 'down\\tbackup target unavailable\\n'\n"
     )
     assert proc.returncode == 0, proc.stderr
-    assert kuma_status == "up"
-    assert "unbound variable" not in proc.stderr
-    assert any("longhorn-backup-health" in c for c in curl_calls)
-    assert any("uptime-kuma-alive" in c for c in curl_calls)
+    assert verdict == "down"
+    rendered = sl.render_template(BACKUP_HEALTH, v.template_context(BACKUP_HEALTH))
+    assert "kuma-push.env" not in rendered and "PUSH_TOKEN" not in rendered

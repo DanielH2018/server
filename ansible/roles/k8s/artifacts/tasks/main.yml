@@ -1,7 +1,7 @@
 ---
-# The trees the pod mounts are host writes, so roles/setup/k8s_host_files/tasks/artifacts.yml
-# creates them through the setup plane (D5's conversion PR for artifacts). A Flux-owned role runs
-# no task, so a host write left here would stop at the flip.
+# The trees the pod mounts are host writes, so daniel-box's host package creates them from
+# hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2. A Flux-owned role runs no
+# task, so a host write left here would stop at the flip.
 - name: Deploy the artifacts browser to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

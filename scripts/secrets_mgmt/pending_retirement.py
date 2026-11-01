@@ -37,6 +37,14 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "monitor_bridge_restarts_push_token",
         "monitor_bridge_oom_push_token",
         "monitor_bridge_cpu_push_token",
+        # M6 batch B7's Cutover-1a deleted the Arr Auto-Block, Cloudflare DDNS Direct, Cloudflare
+        # DDNS Proxied and WG Pi Peer Backup tiles, and Cutover-2 removed the pods' pushes.
+        # B7's token PR retires the keys a week after Cutover-1b and deletes these four entries
+        # with them.
+        "arr_autoblock_push_token",
+        "cloudflare_ddns_direct_push_token",
+        "cloudflare_ddns_proxied_push_token",
+        "monitor_bridge_pi_peers_push_token",
         # M6 batch A5's Cutover-a1 deleted the Longhorn Volume Redundancy, k3s PVC Fullness,
         # Longhorn Snapshot Headroom, Kubelet CSI Mount Read-Only and etcd DB Size tiles, and
         # Cutover-a2 deleted their bridge rows. A5's token PR retires the keys a week after
@@ -67,10 +75,26 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # after Cutover-1b and deletes these two entries with them.
         "pi_sd_health_push_token",
         "pi_recovery_push_token",
+        # M6 batch B1's Cutover-1a deleted the k3s Longhorn Backup, Off-box etcd Snapshot,
+        # Manifest Prune Drift, Release Staleness Drift and Live Object Drift tiles, the only
+        # cluster renders of these five tokens. The k3s role's scripts push into them until
+        # Cutover-2 stops the push. B1's token PR retires the keys a week after Cutover-1b and
+        # deletes these five entries with them.
+        "longhorn_backup_push_token",
+        "etcd_snapshot_push_token",
+        "manifest_prune_push_token",
+        "release_staleness_push_token",
+        "live_drift_push_token",
+        # M6 batch B3's Cutover-1a deleted the GitHub Ruleset Drift and GitHub Interaction Limit
+        # tiles. The cluster file holds both keys for the tile render, and the two gitops_deploy
+        # scripts render them from secrets.yml until B3's Cutover-2 drops the push. B3's token PR
+        # retires the keys a week after Cutover-2 and deletes these two entries with it.
+        "ruleset_drift_push_token",
+        "interaction_limit_push_token",
         # M6 batch B6a's Cutover-1a deleted the Artifacts Peer Sync and k3s Telemetry OTLP Door
-        # tiles. The two host crons keep pushing into the deleted tokens until Cutover-2 drops the
-        # push. B6a's token PR retires the keys a week after Cutover-1b and deletes these two
-        # entries with them.
+        # tiles, and Cutover-2 dropped the two timers' pushes and their package credentials. B6a's
+        # token PR retires the keys a week after Cutover-1b and deletes these two entries with
+        # them.
         "artifacts_sync_push_token",
         "claude_otel_push_token",
     }

@@ -225,7 +225,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^loki-read-route-"
   - name: Backups & Storage
     match:
-      - "^longhorn-backup$"
       # The registry PVC's only space reclaim: a storage tile, not an automation one.
       - "^registry-gc$"
       - "^etcd-"
@@ -239,9 +238,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^aide-"
       # The weekly rkhunter scan, one tile per host, grouped with AIDE for the same reason.
       - "^rkhunter-"
-  - name: Raspberry Pi
-    match:
-      - "^wg-easy-pi-peers$"
   - name: Media Automation
     match:
       - "^configarr$"
@@ -249,17 +245,12 @@ uptime_kuma_k8s_status_page_groups:
       - "^monitor-bridge-janitorr$"
       - "^autofix-fake-remux"
       - "^mkv-attachment-repair$"
-      - "^arr-autoblock$"
   - name: Automation & Drift
     match:
       - "^renovate-"
       - "-drift-check$"
-      - "^github-ruleset-drift$"
-      - "^github-interaction-limit$"
       - "^secret-rotation$"
       - "^docs-refresh$"
-      - "^manifest-prune-check$"
-      - "^release-staleness-check$"
       - "^homelab-eval-sweep$"
       - "^status-page-sync$"
   - name: Other

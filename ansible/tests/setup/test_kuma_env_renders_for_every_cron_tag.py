@@ -1,162 +1,87 @@
-"""Every cron script that sources kuma-push.env must ship under a tag the env task also carries.
+"""The k3s heartbeat scripts read no Kuma credential file, and every tag family retires it.
 
-WHY. `health-crons.yml` renders `/etc/rancher/k3s/kuma-push.env` (the Kuma push tokens) under one
-task, tagged with the tag families of every heartbeat script that sources it. Each of those
-scripts is deployed by its own `release_bin.yml` import, tagged with its OWN tag family — so the
-two tag lists are two places that must agree, and nothing forced them to.
+HISTORY. Until M6 batch B1's Cutover-2, `health-crons.yml` rendered `/etc/rancher/k3s/kuma-push.env`
+(the Kuma push tokens) under one task tagged with the tag families of every heartbeat script that
+sourced it, and this file held those two tag lists in agreement. A script installed under a tag
+the env task did not carry read green behind a dead tile.
 
-If they disagree, a script such as `release-staleness-check.sh.j2` (tagged
-`release-staleness`, sourcing `kuma-push.env`) installs under `--tags release-staleness`
-while the env file is never re-rendered, so the script logs `RELEASE_STALENESS_PUSH_TOKEN
-not set — skipping push` and the Kuma tile stays dead behind a green play — a tag-scoped run
-that installs a consumer without rendering its input reads green.
+Cutover-2 removed every reader, so the same task became one that removes the file. The invariant
+turned around: the file holds four push tokens at 0640 and Ansible does not remove a file a role
+stops declaring, so a tag-scoped run of ANY of the families that used to read it has to remove it,
+or the credential outlives the cutover on a host that was applied tag by tag.
 
 Run: uv run pytest ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.py
 """
 
-from pathlib import Path
-
-from _helpers import REPO
 from _helpers import load_tasks
-from lib import release_bin_groups
+from _shell_render import render_shell_script
 from lib.repo_paths import K3S_ROLE
 
 CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
-ENV_TASK_NAME = "Deploy the Kuma push credentials for the heartbeat scripts"
+TEMPLATES = K3S_ROLE / "templates"
+RETIRE_TASK_NAME = "Retire the Kuma push credentials of the heartbeat scripts"
 KUMA_ENV_PATH = "/etc/rancher/k3s/kuma-push.env"
+# The families whose scripts sourced the file before Cutover-2. Named, so a retire task that
+# lost one of them fails here and not on a host that was applied tag by tag.
+FORMER_READER_TAGS = frozenset(
+    {
+        "backup-health",
+        "disk-health",
+        "manifest-prune",
+        "etcd-snapshot",
+        "release-staleness",
+    }
+)
 
 
-def _env_task_tags() -> set[str]:
-    task = next((t for t in load_tasks(CRONS) if t.get("name") == ENV_TASK_NAME), None)
+def _retire_task() -> dict:
+    task = next(
+        (t for t in load_tasks(CRONS) if t.get("name") == RETIRE_TASK_NAME), None
+    )
     assert task is not None, (
-        f"{ENV_TASK_NAME!r} is missing from health-crons.yml — nothing renders the Kuma push "
-        "tokens the heartbeat scripts source"
+        f"{RETIRE_TASK_NAME!r} is missing from health-crons.yml — nothing removes the Kuma "
+        "push tokens the retired scripts used to source"
     )
-    return set(task.get("tags") or [])
+    return task
 
 
-def _script_paths_for_task(task: dict, task_file: Path) -> list[Path]:
-    """Every `*.sh.j2` this task renders, direct or via a `release_bin.yml` group.
-
-    Both forms are checked because a future cron could render a script straight with
-    `ansible.builtin.template:` instead of going through the versioned-release indirection every
-    heartbeat here uses today.
-    """
-    paths = []
-    template = task.get("ansible.builtin.template")
-    if isinstance(template, dict):
-        src = str(template.get("src", ""))
-        if src.endswith(".sh.j2"):
-            paths.append(task_file.parent.parent / "templates" / src)
-    for src in release_bin_groups.task_sources(task, task_file):
-        if src.endswith(".sh.j2"):
-            paths.append(REPO / src)
-    return paths
-
-
-def _missing_env_tags(
-    tasks: list[dict], env_tags: set[str], task_file: Path
-) -> dict[str, set[str]]:
-    """Map task name -> tags that task carries but the env task does not.
-
-    Only tasks rendering a script that actually sources kuma-push.env are considered — a task
-    tagged `live-drift`, say, renders no such script and must not be flagged for lacking a tag
-    the env task has no reason to carry.
-    """
-    violations = {}
-    for task in tasks:
-        for path in _script_paths_for_task(task, task_file):
-            if not path.is_file():
-                continue
-            if KUMA_ENV_PATH not in path.read_text():
-                continue
-            gap = set(task.get("tags") or []) - env_tags
-            if gap:
-                violations.setdefault(task.get("name", "<unnamed>"), set()).update(gap)
-    return violations
-
-
-def test_every_kuma_consuming_cron_tag_renders_the_env_file():
-    env_tags = _env_task_tags()
-    violations = _missing_env_tags(load_tasks(CRONS), env_tags, CRONS)
-    assert not violations, (
-        "these health-crons.yml tasks render a script that sources kuma-push.env under a tag "
-        f"the env task ({ENV_TASK_NAME!r}, tags={sorted(env_tags)}) does not carry, so a "
-        "tag-scoped run installs the cron without the token it needs: "
-        f"{ {name: sorted(tags) for name, tags in violations.items()} }"
+def test_the_retire_task_removes_the_file_under_every_former_reader_tag():
+    task = _retire_task()
+    removal = task["ansible.builtin.file"]
+    assert removal["path"] == KUMA_ENV_PATH
+    assert removal["state"] == "absent"
+    assert FORMER_READER_TAGS <= set(task.get("tags") or []), sorted(
+        FORMER_READER_TAGS - set(task.get("tags") or [])
     )
 
 
-def test_census_finds_the_known_cron_families():
-    """A census that silently found nothing would pass regardless of what drifted.
-
-    Names two families deliberately: `manifest-prune` is a correctly tagged family, and
-    `release-staleness` is the family that drifted — both must survive
-    whatever the census logic becomes.
-    """
-    env_tags = _env_task_tags()
-    found = set()
-    for task in load_tasks(CRONS):
-        for path in _script_paths_for_task(task, CRONS):
-            if path.is_file() and KUMA_ENV_PATH in path.read_text():
-                found.update(task.get("tags") or [])
-    assert {"manifest-prune", "release-staleness"} <= found, (
-        f"expected the census to find at least manifest-prune and release-staleness; found "
-        f"{sorted(found)}. If it found fewer, the discovery walk stopped seeing tasks."
+def test_no_k3s_template_or_task_reads_or_renders_the_file_any_more():
+    # The rejecting half: a script that sources the file again would read an empty token, and a
+    # task that renders it again would undo the retirement above.
+    readers = sorted(
+        path.name
+        for path in TEMPLATES.glob("*")
+        if path.name.endswith(".sh.j2")
+        and KUMA_ENV_PATH in render_shell_script("setup", "k3s", path.name)
     )
-    assert {"manifest-prune", "release-staleness"} <= env_tags, (
-        "the env task itself must carry both families' tags"
+    assert readers == [], readers
+    assert not (TEMPLATES / "kuma-push.env.j2").exists()
+    rendering = [
+        task.get("name")
+        for task in load_tasks(CRONS)
+        if "kuma-push.env.j2"
+        in str(task.get("ansible.builtin.template", {}).get("src", ""))
+    ]
+    assert rendering == [], rendering
+
+
+def test_the_live_drift_credential_file_is_retired_under_its_tag():
+    task = next(
+        t
+        for t in load_tasks(CRONS)
+        if t.get("name") == "Retire the live-drift check Kuma credentials"
     )
-
-
-# ── red proofs ───────────────────────────────────────────────────────────────────────────────
-
-
-def test_task_missing_the_env_tag_is_flagged():
-    """The rejecting half: a task whose script sources kuma-push.env under an untagged family."""
-    fixture_task = {
-        "name": "Deploy a fixture script as a versioned release",
-        "tags": ["totally-untagged-fixture"],
-        "ansible.builtin.import_tasks": "release_bin.yml",
-        "vars": {
-            "release_bin_templates": [
-                "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
-            ],
-        },
-    }
-    env_tags = {"backup-health", "disk-health", "manifest-prune"}
-    violations = _missing_env_tags([fixture_task], env_tags, CRONS)
-    assert violations == {
-        "Deploy a fixture script as a versioned release": {"totally-untagged-fixture"}
-    }
-
-
-def test_task_carrying_a_tag_the_env_task_has_is_clean():
-    """The accepting half, so the rejecting half above proves something."""
-    fixture_task = {
-        "name": "Deploy a fixture script as a versioned release",
-        "tags": ["disk-health"],
-        "ansible.builtin.import_tasks": "release_bin.yml",
-        "vars": {
-            "release_bin_templates": [
-                "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
-            ],
-        },
-    }
-    env_tags = {"backup-health", "disk-health", "manifest-prune"}
-    assert _missing_env_tags([fixture_task], env_tags, CRONS) == {}
-
-
-def test_task_whose_script_does_not_read_the_env_file_is_ignored():
-    """A task tagged with something the env task lacks is fine when its script needs no token."""
-    fixture_task = {
-        "name": "Deploy a fixture script that reads no Kuma env",
-        "tags": ["totally-untagged-fixture"],
-        "ansible.builtin.import_tasks": "release_bin.yml",
-        "vars": {
-            "release_bin_templates": [
-                "ansible/roles/setup/k3s/templates/longhorn-trim-volumes.sh.j2",
-            ],
-        },
-    }
-    assert _missing_env_tags([fixture_task], set(), CRONS) == {}
+    removal = task["ansible.builtin.file"]
+    assert removal["state"] == "absent"
+    assert removal["path"].endswith("live-drift-check.env")
+    assert set(task["tags"]) == {"live-drift"}

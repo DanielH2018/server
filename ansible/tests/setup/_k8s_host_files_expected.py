@@ -32,42 +32,8 @@ CROWDSEC_ARMS: dict[str, tuple[str, dict[str, str | bool]]] = {
 }
 
 # {task file: {task name: (module, its args)}}, one file per source role. The args are the
-# task's whole argument map, so an owner, group or mode change fails the row as well as a path:
-# the artifacts directories exist to be owned by sys_user, which the artifacts sync writes as.
+# task's whole argument map, so an owner, group or mode change fails the row as well as a path.
 EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
-    "artifacts.yml": {
-        "Ensure the local artifacts directory exists": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ artifacts_host_dir }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0750",
-            },
-        ),
-        "Ensure a peer directory exists for every synced host": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ artifacts_peer_dir }}/{{ item.name }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0750",
-            },
-        ),
-        # 0755, not 0750: the agent user's prune reads the star list as `claude`.
-        "Ensure the star list directory exists": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ artifacts_stars_dir }}",
-                "state": "directory",
-                "owner": "{{ sys_user }}",
-                "group": "{{ sys_user }}",
-                "mode": "0755",
-            },
-        ),
-    },
     "configarr.yml": {
         "Remove the retired configarr sync heartbeat cron": (
             "ansible.builtin.cron",
@@ -241,10 +207,6 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
 # media-volume's hardlink probe links between media/ and torrents/, so both must exist.
 # configarr's arm removes three host paths.
 EXPECTED_LOOPS: dict[tuple[str, str], object] = {
-    (
-        "artifacts.yml",
-        "Ensure a peer directory exists for every synced host",
-    ): "{{ artifacts_peer_sources }}",
     ("configarr.yml", "Remove the retired configarr health reader from the host"): [
         "/usr/local/bin/configarr-health.sh",
         "/opt/configarr-health",

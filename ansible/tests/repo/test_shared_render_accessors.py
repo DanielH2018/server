@@ -184,7 +184,7 @@ def test_an_unrendered_dockerfile_is_named_rather_than_missed() -> None:
 # member rather than as a guard over an empty set.
 GUARDED_SHELL_TEMPLATES = frozenset(
     {
-        ("setup", "claude_code", "sync-artifacts.sh.j2"),
+        ("components", "claude-code", "sync-artifacts.sh.j2"),
         ("k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2"),
         ("setup", "k3s", "longhorn-backup-health.sh.j2"),
     }
@@ -211,7 +211,7 @@ def test_a_rendered_shell_template_has_its_role_defaults_expanded() -> None:
     dropped. `"{{" not in text` passes just as happily on that emptied render, so the assertion
     that catches it is the loop body being THERE, at the threshold the defaults declare.
     """
-    script = rendered_shell_text("setup", "claude_code", "sync-artifacts.sh.j2")
+    script = rendered_shell_text("components", "claude-code", "sync-artifacts.sh.j2")
     assert "{{" not in script
     peer = CLAUDE_CODE_DEFAULTS["claude_code_artifacts_peer_sources"][0]["name"]
     assert f"{peer} failed (consecutive run" in script
@@ -221,14 +221,14 @@ def test_a_rendered_shell_template_has_its_role_defaults_expanded() -> None:
 
 def test_an_unrendered_shell_template_is_named_rather_than_missed() -> None:
     with pytest.raises(AssertionError, match=r"sync-artifact\.sh\.j2"):
-        rendered_shell_text("setup", "claude_code", "sync-artifact.sh.j2")
+        rendered_shell_text("components", "claude-code", "sync-artifact.sh.j2")
 
 
 def test_a_shell_render_takes_an_override_the_inventory_does_not_hold() -> None:
     """The artifacts guard runs the script for real, so its peer tree must be a tmp_path."""
     script = render_shell_script(
-        "setup",
-        "claude_code",
+        "components",
+        "claude-code",
         "sync-artifacts.sh.j2",
         overrides={"claude_code_artifacts_peer_dir": "/tmp/peer"},
     )

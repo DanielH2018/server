@@ -5,8 +5,7 @@
 the helper the role installs. If those drift apart, every caller falls back to the
 unprivileged scan, or every removal is refused. The root map both the helper and the caller
 read names each user's worktree root, and it must name every present agent (#4295). The
-sudo grant the socket replaced must be gone from every host (#4297). A switched-off agent
-leaves the socket's group (#4304).
+sudo grant the socket replaced must be gone from every host (#4297).
 
 Run: uv run pytest ansible/tests/setup/test_worktree_holders_install.py
 """
@@ -21,7 +20,6 @@ from claude_agents import claude_agent_profiles
 from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
 
 CRONS = SETUP_ROLES / "initial_setup" / "tasks" / "crons.yml"
-AGENT_TASKS = SETUP_ROLES / "claude_code" / "tasks" / "agent.yml"
 HELPER = "/usr/local/libexec/worktree-holders"
 INSTALL = "Install the root-run worktree holder scan"
 AGENTS = "Name the agent users granted the worktree holder scan"
@@ -29,8 +27,6 @@ USERS = "List the worktree holder scan's users"
 ROOT_MAP = "Map each user of the worktree holder scan"
 SUDOERS = "Remove the worktree holder scan's old sudoers rule"
 GROUP = "initial_setup_worktree_holders_group"
-# daniel-box's claude-code component ships the agent user, so the role's agent tasks skip it there.
-PACKAGED = "inventory_hostname not in claude_code_packaged_hosts['agent']"
 
 PRIMARY = {
     "state": "present",
@@ -115,8 +111,8 @@ def _only_the_group_may_connect(socket: dict) -> bool:
 
 def test_only_the_sockets_group_may_connect_is_clean():
     # The operator's ruling (2026-10-10): a group-restricted socket mode decides who may
-    # connect. The group is the role's variable, the one claude_code's agent_access.yml gives
-    # each agent user.
+    # connect. The group is the role's variable, the one the claude-code
+    # component's claude-agent-setup gives each agent user.
     socket, _ = _socket_and_service()
     moved = _directives(
         render_setup_text(
@@ -254,38 +250,3 @@ def test_a_sudoers_removal_only_off_claude_hosts_is_flagged():
     gated = [{**t, "when": "not has_claude_code"} if t is task else t for t in tasks]
 
     assert not _sudoers_removed_everywhere(gated)
-
-
-def test_a_switched_off_agent_leaves_the_sockets_group():
-    """agent_access.yml runs only for an enabled agent, so its exact group list never takes
-    the group back, and the switched-off arm in agent.yml has to (#4304)."""
-    tasks = load_tasks(AGENT_TASKS)
-    look = task_named(
-        tasks,
-        "Look up the worktree holder scan's socket group for a switched-off agent user",
-    )
-    assert look["ansible.builtin.getent"] == {
-        "database": "group",
-        "key": f"{{{{ {GROUP} }}}}",
-        "fail_key": False,
-    }
-    drop = task_named(
-        tasks,
-        "Take the switched-off agent user out of the worktree holder scan's socket group",
-    )
-    assert drop["ansible.builtin.command"]["argv"] == [
-        "gpasswd",
-        "--delete",
-        "{{ claude_code_agent_user }}",
-        f"{{{{ {GROUP} }}}}",
-    ]
-    assert drop["become"] is True
-    members = f"ansible_facts.getent_group[{GROUP}]"
-    # The membership read is what keeps a second apply from running gpasswd again.
-    assert drop["when"] == [
-        PACKAGED,
-        "not claude_code_agent_user_enabled",
-        f"{members} is not none",
-        f"claude_code_agent_user in {members}[2].split(',')",
-    ]
-    assert tasks.index(look) < tasks.index(drop)
