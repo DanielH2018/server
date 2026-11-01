@@ -185,9 +185,12 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     assert "homelab-ups-watchdog.timer" in manifest["enable_links"]
     # These components retire their own entries; the rest are the package's and nut's.
     others = ("claude-code", "host-maintenance", "integrity-scans")
-    # claude-code's one templated entry names daniel-server's sys_user.
+    # claude-code's one templated entry names daniel-server's sys_user, and a `when:` never
+    # reaches the manifest.
     theirs = [
-        json.dumps(e, sort_keys=True).replace("{{ sys_user }}", "ubuntu")
+        json.dumps({k: v for k, v in e.items() if k != "when"}, sort_keys=True).replace(
+            "{{ sys_user }}", "ubuntu"
+        )
         for name in others
         for e in yaml.safe_load(
             (REPO / f"hosts/components/{name}/component.yml").read_text()
