@@ -1,8 +1,8 @@
 """Tests for `probe.py applied` (`probe_lib/applied.py` and `probe_lib/applied_tasks.py`).
 
 Most tests walk a small role written to `tmp_path`, one task per shape the walk reads or
-skips. One walks the real `claude_code` role, so a walk that stopped finding the role's units
-fails by name.
+skips. One walks the real `claude_code` role, which both hosts' packages emptied, so a walk
+that found a task in it fails by name.
 """
 
 import hashlib
@@ -14,9 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
 from diagnostics.probe_lib import applied, applied_hosts, applied_tasks
-from lib.ansible_jinja_env import template_env
 from lib.exit_codes import PROBE_FAILED, PROBE_OK, PROBE_UNREADABLE
-from lib.render_guard import render_or_error
 
 TASKS = """\
 - name: Install the script
@@ -139,23 +137,15 @@ def test_a_false_gate_drops_the_task_and_an_unreadable_one_is_skipped(tmp_path):
     assert "/etc/x/box" not in {w.path for w in pi_wants}
 
 
-def test_the_real_claude_code_role_yields_its_units_with_content():
+def test_the_emptied_claude_code_role_runs_on_no_host_and_expects_no_file():
+    """Both hosts' packages ship what the role installed, and its `end_role` leaves no task."""
     role = applied.SETUP / "claude_code"
-    wants, _ = applied_tasks.expected(
-        role, "daniel-box", applied.context(role, "daniel-box")
-    )
-    by_path = {w.path: w for w in wants}
-    for unit in ("claude-triage-poll.timer", "claude-triage@.service"):
-        want = by_path[f"/etc/systemd/system/{unit}"]
-        assert want.sha256 is not None and want.mode == "0644"
-    # daniel-box's package ships these, so the role skips them there.
-    for unit in (
-        "claude-rc.service",
-        "claude-cgroup-metrics.timer",
-        "claude-memory-sync.timer",
-        "claude-fanout-server-lander.service",
-    ):
-        assert f"/etc/systemd/system/{unit}" not in by_path
+    assert applied_hosts.task_files("claude_code", role) == {}
+    for host in ("daniel-box", "daniel-server"):
+        assert applied_tasks.expected(role, host, applied.context(role, host)) == (
+            [],
+            [],
+        )
 
 
 @pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
@@ -165,23 +155,6 @@ def test_a_rescue_that_withdraws_a_file_is_not_an_absent_arm(host):
     wants, _ = applied_tasks.expected(role, host, applied.context(role, host))
     path = "/etc/rsyslog.d/49-homelab-info-filter.conf"
     assert [w.present for w in wants if w.path == path] == [True]
-
-
-def test_the_agent_ssh_config_renders_its_peers_from_the_inventory():
-    """The template loops over `groups['all']` and reads each peer's `hostvars` flag (#6484)."""
-    role = applied.SETUP / "claude_code"
-    ctx = applied.context(role, "daniel-box")
-    wants, _ = applied_tasks.expected(role, "daniel-box", ctx)
-    want = {w.path: w for w in wants}["/var/lib/claude/.ssh/config"]
-    assert not want.unchecked and want.sha256 is not None
-    text, err = render_or_error(
-        template_env(role / "templates"), "agent-ssh-config.j2", ctx
-    )
-    assert text is not None, err
-    assert hashlib.sha256(text.encode()).hexdigest() == want.sha256
-    # daniel-server sets claude_agent_ssh_login_enabled; the Pi does not, and daniel-box holds the key.
-    hosts = [line.split()[1] for line in text.splitlines() if line.startswith("Host ")]
-    assert hosts == ["daniel-server"]
 
 
 def _live(want, **changes):
@@ -313,9 +286,9 @@ def test_every_jinja_import_in_the_real_setup_roles_resolves():
     """A census: an import the walk cannot find hides its tasks, so none may exist today.
 
     Only a path that does not resolve counts here. A gate or loop that reads a run-time value
-    is UNCHECKED too, and `claude_code` has three by design (#6356). `claude_code` reaching
-    `common/tasks/alert_unit.yml` through `{{ role_path }}` is the member
-    `test_the_real_claude_code_role_walks_its_shared_alert_import` pins.
+    is UNCHECKED too. `gitops_deploy` reaching `common/tasks/alert_unit.yml` through
+    `{{ role_path }}` is the member `test_the_real_gitops_deploy_role_walks_its_shared_alert_import`
+    pins.
     """
     walked, lost = [], []
     for role in sorted(p for p in applied.SETUP.iterdir() if (p / "tasks" / "main.yml").is_file()):  # fmt: skip
@@ -329,24 +302,6 @@ def test_every_jinja_import_in_the_real_setup_roles_resolves():
         walked.append(role.name)
     assert "claude_code" in walked and len(walked) > 10
     assert lost == []
-
-
-def test_the_real_node_crons_gate_resolves_for_each_host():
-    """`node_crons.yml` is gated on `claude_code_artifacts_node`, which is `{{ k8s_primary_node }}`."""
-    role = applied.SETUP / "claude_code"
-    walked = {
-        host: applied_tasks.expected(role, host, applied.context(role, host))
-        for host in ("daniel-box", "daniel-server")
-    }
-    box_paths = {w.path for w in walked["daniel-box"][0]}
-    assert {"/usr/local/bin/sync-artifacts.sh", "/usr/local/bin/claude-otel-health.sh"} <= box_paths  # fmt: skip
-    for host, (_, skips) in walked.items():
-        node_crons = [s for s in skips if "node_crons.yml" in s.task]
-        assert all("does not apply" in s.reason for s in node_crons), (host, node_crons)
-    assert any("node_crons" in s.task for s in walked["daniel-server"][1])
-    # The three task files #6359 tracked read static set_facts, which the walk evaluates.
-    for host, (_, skips) in walked.items():
-        assert [s.task for s in skips if s.unchecked] == [], host
 
 
 GATED = """\
@@ -429,14 +384,14 @@ def test_a_remote_src_copy_is_compared_by_metadata_not_the_local_file(tmp_path):
     assert binary.mode == "0755"
 
 
-def test_the_real_claude_code_role_walks_its_shared_alert_import():
-    """claude_code reaches common/tasks/alert_unit.yml through `{{ role_path }}`."""
-    role = applied.SETUP / "claude_code"
+def test_the_real_gitops_deploy_role_walks_its_shared_alert_import():
+    """gitops_deploy reaches common/tasks/alert_unit.yml through `{{ role_path }}`."""
+    role = applied.SETUP / "gitops_deploy"
     wants, skips = applied_tasks.expected(
         role, "daniel-box", applied.context(role, "daniel-box")
     )
     named = {w.path for w in wants} | {s.task for s in skips}
-    assert any("claude-triage-poll-alert" in n for n in named), sorted(named)
+    assert "/etc/systemd/system/gitops-deploy-alert.service" in named, sorted(named)
 
 
 def test_an_include_loop_walks_the_file_once_per_item_under_its_loop_var(tmp_path):

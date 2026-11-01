@@ -29,7 +29,6 @@ RULE = "50-claude-land.rules.j2"
 PATHS = "claude-land-approval-paths.j2"
 PINS = "claude-land-pins.j2"
 COMPONENT = ANSIBLE.parent / "hosts" / "components" / "claude-code" / "component.yml"
-INSTALLED = "claude_code_agent_user_enabled and claude_code_lander_enabled"
 OPERATOR = "lander-sentinel-operator"
 AGENT = "lander-sentinel-agent"
 
@@ -40,22 +39,12 @@ def defaults(role: str = "claude_code") -> dict:
     )
 
 
-def lander_block() -> dict:
-    (block,) = yaml_fast.safe_load((ROLE / "tasks" / "lander.yml").read_text())
-    return block
-
-
 def pins() -> dict[str, str]:
     """What claude-land-pins.j2 exports to the templates that import it, by name."""
     env = template_env(ROLE / "templates")
     module = env.get_template(PINS).make_module(role_context(ROLE))
     names = ("unit", "checkout", "branch_prefix", "author", "agent_user", "approver")
     return {name: getattr(module, name) for name in names}
-
-
-def tasks() -> list[dict]:
-    """The lander's install and removal tasks, which tasks/lander.yml holds in one block."""
-    return lander_block()["block"]
 
 
 def unit(overrides: dict | None = None) -> str:
@@ -73,14 +62,6 @@ def directive(text: str, key: str) -> list[str]:
 
 def environment(text: str) -> dict[str, str]:
     return dict(e.split("=", 1) for e in directive(text, "Environment"))
-
-
-def install_dest(task: dict) -> str:
-    if "ansible.builtin.import_tasks" in task:
-        # An import of common/tasks/alert_unit.yml, which installs the alert unit.
-        return f"/etc/systemd/system/{task['vars']['alert_unit_name']}-alert.service"
-    module = task.get("ansible.builtin.template") or task["ansible.builtin.file"]
-    return module.get("dest") or module["path"]
 
 
 def test_the_unit_runs_land_sh_as_the_operator_from_the_primary_checkout() -> None:
@@ -119,9 +100,11 @@ def test_the_unit_switches_on_every_leg_of_the_landing_policy() -> None:
     )
     assert env[options.REQUIRE_BRANCH_PREFIX_ENV] == "worktree-claude+"
     (write,) = [
-        t for t in tasks() if t.get("ansible.builtin.template", {}).get("src") == PATHS
+        entry["dst"]
+        for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
+        if entry.get("src") == f"role:{PATHS}"
     ]
-    assert env[options.APPROVAL_PATHS_ENV] == install_dest(write)
+    assert env[options.APPROVAL_PATHS_ENV] == write
 
 
 def test_only_the_operators_approval_lifts_the_approval_path_refusal() -> None:
@@ -201,7 +184,7 @@ def test_the_inventory_cannot_repoint_who_the_lander_serves() -> None:
     )
 
 
-# The names the role's defaults and tasks/lander.yml's block vars gave the lander's settings
+# The names the role's defaults gave the lander's settings
 # before the pins moved into a template, set to values that are not the agent's.
 OLD_LANDER_VARS = {
     "claude_code_lander_checkout": "/srv/lander-sentinel",
@@ -218,7 +201,6 @@ def test_an_inventory_value_under_the_old_setting_names_moves_nothing() -> None:
         render_setup_text("claude_code", RULE)
     )
     assert set(OLD_LANDER_VARS).isdisjoint(defaults())
-    assert "vars" not in lander_block()
 
 
 def test_the_unit_and_rule_carry_the_pins() -> None:
@@ -312,7 +294,6 @@ LANDER_FILES = [
     f"ansible/roles/setup/claude_code/templates/{PATHS}",
     f"ansible/roles/setup/claude_code/templates/{PINS}",
     "hosts/components/claude-code/component.yml",
-    "ansible/roles/setup/claude_code/tasks/lander.yml",
     "ansible/roles/setup/initial_setup/tasks/access.yml",
     "scripts/deploy_tools/land.sh",
     "scripts/deploy_tools/land.py",
@@ -367,28 +348,6 @@ def test_a_pr_off_the_floor_lands_without_the_operator(path, tmp_path) -> None:
     assert policy.approval_hits([{"filename": path}], floor_prefixes(tmp_path)) == []
 
 
-def test_main_imports_the_lander_file() -> None:
-    main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    assert any(t.get("ansible.builtin.import_tasks") == "lander.yml" for t in main)
-
-
-def test_switching_either_flag_off_removes_everything_the_install_writes() -> None:
-    installs = [t for t in tasks() if t.get("when") == INSTALLED]
-    assert {install_dest(t) for t in installs} >= {
-        "/etc/claude-land/approval-paths",
-        "/etc/systemd/system/homelab-claude-land@.service",
-        "/etc/polkit-1/rules.d/50-claude-land.rules",
-    }
-    (removal,) = [t for t in tasks() if t.get("when") == f"not ({INSTALLED})"]
-    removed = removal["loop"]
-    assert removal["ansible.builtin.file"]["state"] == "absent"
-    for dest in map(install_dest, installs):
-        assert any(dest == r or dest.startswith(f"{r}/") for r in removed), dest
-    assert removed[0].endswith(".rules"), (
-        "the rule goes first, so the agent loses the start"
-    )
-
-
 def profile_exports(lander_enabled: bool) -> dict[str, str]:
     rendered = render_setup_text(
         "claude_code",
@@ -407,6 +366,7 @@ def test_the_agents_land_sh_hands_off_to_the_unit_the_rule_lets_it_start() -> No
     shipped = {
         entry["src"]: entry["dst"]
         for entry in yaml_fast.safe_load(COMPONENT.read_text())["files"]
+        if "src" in entry
     }
     assert shipped[f"role:{UNIT}"] == f"/usr/lib/systemd/system/{name}@.service"
     assert rule_pattern(render_setup_text("claude_code", RULE)).search(

@@ -1,0 +1,13 @@
+# Shipped by homelab-daniel-box with its enable link. Every N minutes, where
+# claude_code_telemetry_health_minute is `*/N`; claude-otel-health.sh.j2 derives its textfile
+# deadline from the same value and refuses any other shape.
+{% set _every_n = claude_code_telemetry_health_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+[Unit]
+Description=Check the OTLP door every {{ _every_n }} minutes
+
+[Timer]
+OnCalendar=*-*-* *:00/{{ _every_n }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

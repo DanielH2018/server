@@ -2,11 +2,11 @@
 
 M6's batch A6-5 ports the `startup_grace` rows to rules. `bridge.streaks.apply_startup_grace`
 holds such a row `up` through one extra 300s cycle today, and the exporter writes its gauge
-before that hold, so the rule's `for: 5m` carries the grace once. Four things must hold, and the
+before that hold, so the rule's `for: 10m` needs two down cycles. Four things must hold, and the
 table is the only source for each:
 
 - every `startup_grace` row has one rule selecting its `check` label;
-- a rule has `for: 5m` exactly when its row is `startup_grace`, so a row that loses its grace,
+- a rule has `for: 10m` exactly when its row is `startup_grace`, so a row that loses its grace,
   or a row that gains a `for:` on top of an in-body streak, fails;
 - no such rule carries `requires`, since a `startup_grace` row names no gate;
 - severity follows the row's `critical` flag, and `swallowed_verdicts` is the warning that
@@ -23,8 +23,8 @@ from lib.repo_paths import K8S_ROLES
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 GRACE = "startup_grace"
-# The grace is (GRACE_CYCLES - 1) x 300s with GRACE_CYCLES at 2.
-GRACE_FOR = "5m"
+# Two bridge cycles (operator ruling 2026-10-31): a one-cycle blip must not fire.
+GRACE_FOR = "10m"
 # The `service` label names the thing checked (operator ruling, 2026-10-23), except for the one
 # row whose subject is the bridge's own log read.
 BRIDGE_SERVICE_ROW = "swallowed_verdicts"
@@ -78,7 +78,7 @@ def test_each_family_row_has_one_rule():
         assert len(rules_for(row.name, rules)) == 1, row.name
 
 
-def test_a_rule_has_for_5m_exactly_when_its_row_is_startup_grace():
+def test_a_rule_has_for_10m_exactly_when_its_row_is_startup_grace():
     assert for_problems(all_rules()) == []
 
 

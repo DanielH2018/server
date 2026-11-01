@@ -1,25 +1,19 @@
-"""`claude_code_agents` builds one checked profile per agent user, and agent.yml reads all of it.
+"""`claude_code_agents` builds one checked profile per agent user.
 
 `filter_plugins/claude_agents.py` fills each entry's defaults and refuses a malformed one.
-`tasks/main.yml` includes `tasks/agent.yml` once per profile and maps each field onto the
-`claude_code_agent_*` name the task files read. The primary agent's profile comes from those
-same scalars, so a host that lists no further agent builds exactly what it built before.
+The primary agent's profile comes from the `claude_code_agent_*` scalars, so a host that lists
+no further agent builds exactly what it built before.
 
 Run: uv run pytest ansible/tests/setup/test_claude_agent_profiles.py
 """
-
-import re
 
 import pytest
 from _helpers import ANSIBLE
 from _setup_render import role_context
 from ansible.errors import AnsibleFilterError
 from claude_agents import PROFILE_FIELDS, claude_agent_profiles
-from lib import yaml_fast
 
 ROLE_DIR = ANSIBLE / "roles" / "setup" / "claude_code"
-MAIN = ROLE_DIR / "tasks" / "main.yml"
-INCLUDE = "Build each agent user, or take it back"
 
 PRIMARY = {
     "state": "present",
@@ -42,14 +36,6 @@ SECOND = {
     "github_id": 1,
     "github_token_var": "claude2_gh_token",
 }
-
-
-def include_task() -> dict:
-    found = [
-        t for t in yaml_fast.safe_load(MAIN.read_text()) if t.get("name") == INCLUDE
-    ]
-    assert len(found) == 1
-    return found[0]
 
 
 def test_the_default_list_is_the_primary_agent_built_from_the_scalars() -> None:
@@ -103,7 +89,7 @@ def test_an_absent_further_agent_needs_no_identity() -> None:
 
 
 def test_the_homelab_ui_browser_is_the_primarys_alone() -> None:
-    """main.yml installs it from the scalars, so agent_browser.yml stays a static import."""
+    """The host package installs it from the claude_code_agent_* scalars, for the primary alone."""
     with pytest.raises(AnsibleFilterError, match="unknown fields \\['homelab_ui'\\]"):
         claude_agent_profiles([SECOND | {"homelab_ui": True}], "claude", PRIMARY)
 
@@ -140,22 +126,4 @@ def test_a_malformed_list_is_refused(agents: list, message: str) -> None:
 def test_a_well_formed_pair_is_accepted() -> None:
     assert (
         len(claude_agent_profiles([{"name": "claude"}, SECOND], "claude", PRIMARY)) == 2
-    )
-
-
-def test_the_include_maps_every_profile_field() -> None:
-    """A field the include drops would leave agent.yml reading the primary's scalar."""
-    mapped = " ".join(str(v) for v in include_task()["vars"].values())
-    read = set(re.findall(r"claude_code_agent\.(\w+)", mapped))
-    assert read == PROFILE_FIELDS | {"primary"}
-
-
-def test_the_include_looks_the_token_up_by_name() -> None:
-    """A profile names the SOPS variable, so no secret sits in a loop item or its label."""
-    task = include_task()
-    assert task["loop_control"]["label"] == "{{ claude_code_agent.name }}"
-    variables = task["vars"]
-    assert (
-        "lookup('vars', claude_code_agent.github_token_var"
-        in (variables["claude_code_agent_gh_token_value"])
     )

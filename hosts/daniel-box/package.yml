@@ -13,6 +13,20 @@
 # and login hardening. initial_setup skips each on this host through `initial_setup_packaged_hosts`.
 # No file needs a credential. The rsyslog info filter stays an Ansible task gated on has_rsyslog.
 #
+# Since H7.32 it ships the rest of initial_setup's subjects, the same components as daniel-pi and
+# daniel-server: the fail2ban group (fail2ban, integrity-scans for rkhunter and AIDE, postfix and
+# accounting), the maintenance timers (host-maintenance: the weekly reboot, apt autoremove, dpkg
+# purge and, as `has_fwupd` is true only here, the firmware update; this host has no Docker) and
+# ufw (ssh-firewall). initial_setup skips each subject on every host through
+# `initial_setup_packaged_hosts`. The scans and the reboot read three more credentials,
+# `rkhunter_daniel_box_push_token`, `aide_daniel_box_push_token` and `healthchecks_ping_key`
+# (`host_secrets.py sync daniel-box`, operator-only).
+#
+# The package declares no ufw rule beyond the SSH pair and the builder's two repository allows.
+# Every other live rule belongs to a role that still writes it: the k3s join rules and the
+# coredns-host metrics allows to `setup/k3s` (H7.35 declares the join rules `keep`), and the
+# deploy-ui allows to `setup/deploy_ui`. None carries a `homelab:` label, so the arm leaves them.
+#
 # The builder and the repository moved in H7.41b (hosts/components/builder). Other timers stay with
 # Ansible until H7. H6.4a adds the k3s-server component, whose first k3s.service drop-in lets the
 # package mark k3s.service `windowed` (the renderer refuses a unit policy that no package installs
@@ -38,6 +52,12 @@ components:
   - kuma-push
   - nut-secondary
   - check-lib
+  - fail2ban
+  - integrity-scans
+  - postfix
+  - accounting
+  - host-maintenance
+  - ssh-firewall
   - docs-refresh
   - infra-map
   - eval-sweep
@@ -58,6 +78,39 @@ units:
 credentials:
   - k3s_readonly_token
   - ups_secondary_push_token
+  - rkhunter_daniel_box_push_token
+  - aide_daniel_box_push_token
+  - healthchecks_ping_key
+# Two claude-code secrets only this host uses (H7.40's third slice). They sit here rather than in
+# the component, because host_secrets.py names every output key a component declares for each
+# host that lists it, and daniel-server's SOPS file must not carry them.
+outputs:
+  # Triage's own Claude credential, read by systemd as root. It stays out of the agent's files, so
+  # a session cannot copy it into the clone or a report.
+  - src: "role:claude-triage-oauth-token.j2"
+    path: /etc/claude-triage/oauth-token
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [claude_code_triage_claude_oauth_token]
+    persist: false
+    link: true
+    when: claude_code_agent_user_enabled and claude_code_triage_enabled
+  # The agent's login for the homelab-ui MCP server. `format: json` makes homelab-secrets
+  # JSON-escape the password and refuse a file that does not parse. The file renders under /run, outside the agent's home. `path` is where the agent looks:
+  # claude-agent-setup links it there (its `ui_login` names the destination), because the
+  # package must not install into a directory the agent owns.
+  - src: "role:agent-homelab-ui-credentials.json.j2"
+    path: /var/lib/claude/.config/homelab-ui/credentials.json
+    destination: claude-agent/homelab-ui-credentials.json
+    owner: claude
+    group: ubuntu
+    mode: "0600"
+    keys: [authelia_agent_password]
+    persist: false
+    link: false
+    format: json
+    when: claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled
 maintainer_scripts: [preinst, postinst, prerm]
 # #6218: arms the shared updater schedule here, as daniel-server and the Pi do. daniel-box ships
 # no drop-in on the timer. See docs/target-architecture/host/h6-k3s-suc.md, H6.2's amendment.
@@ -76,3 +129,8 @@ files:
 legacy:
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
+  # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's
+  # own legacy list cannot name because only a `has_fwupd` host carries it. /etc/healthchecks
+  # stays: the k3s role's health crons on this host read the key file in it.
+  - {path: /usr/local/bin/host-maintenance.sh}
+  - {cron: "Weekly firmware update", user: root}

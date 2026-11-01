@@ -165,11 +165,16 @@ def _host_layer(inventory: Inventory, host: str | None) -> dict:
 
 
 # The host_vars `hostvars` carries for each host, each only while its value holds no Jinja.
-_HOSTVARS_KEYS = ("server_ip", "containers_list", "compose_services")
+_HOSTVARS_KEYS = (
+    "server_ip",
+    "containers_list",
+    "compose_services",
+    "claude_agent_ssh_login_enabled",
+)
 
 
 def _hostvars(inventory: Inventory) -> dict[str, dict]:
-    """Each host's literal ``server_ip``, ``containers_list`` and ``compose_services``, as Ansible's ``hostvars`` has them.
+    """Each host's literal values of ``_HOSTVARS_KEYS``, as Ansible's ``hostvars`` has them.
 
     ``group_vars``' ``k8s_pi_client_ip`` reads the Pi's address this way (#3719), and
     observability's ``alloy-pi`` scrape job reads the Pi's ``alloy`` port from its

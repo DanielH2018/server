@@ -1,25 +1,25 @@
-"""`probe.py monitors` and `probe.py kuma-drift` -- what is down, and what is missing.
+"""`probe.py monitors` -- what is down, read from the alert plane.
 
-Split out of probe.py, which had grown to 1349 lines across thirteen subcommands.
+Four reads, in order:
 
-The two answer different questions. `monitors` counts the exporter's own set, so a monitor
-that is GONE rather than down leaves the ratio at N/N up; `kuma-drift` diffs that set against
-the declared one, which is the only way a missing monitor surfaces at all.
-
-Both also read each monitor's newest stored beat from Kuma's status page. The exporter holds
-only beats since Kuma started, so a weekly tile whose last push was DOWN has no series for a
-week after a restart; the stored beat is where that DOWN is still readable (#4541).
+1. `ALERTS{alertstate="firing"}` from Prometheus, rolled up by `severity` and `service`. The
+   Watchdog alert is the plane's own heartbeat: rule evaluation always fires it, so a result
+   without it proves nothing and the read exits PROBE_UNREADABLE (failure class 3).
+2. The active alerts Alertmanager holds that `ALERTS` lacks, folded into the same rollup. The
+   loki-homelab ruler sends its alerts to Alertmanager directly, so `ALERTS` never carries
+   them (`HostOutOfMemoryKill`, `LokiPiLogsSilent`).
+3. The Kuma tiles that are not up. Batches that have not cut over still page through Kuma,
+   and their rules here are shadows, so this arm stays until M6's C-1 deletes the
+   `uptime-kuma` scrape. An empty result is clean because `KumaDown` fires on a dead or
+   absent scrape, and read 1 reports it.
+4. Alertmanager's active silences (`alertmanager_api.report`).
 """
 
-import functools
-import json
-import os
-import re
-import subprocess
+from collections import defaultdict
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
-# needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
-# pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+# needs `scripts/` on sys.path; pyproject's `pythonpath` is a pytest setting. This has to sit
+# ABOVE the imports below.
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -27,578 +27,164 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 # `core.<name>` for anything the tests monkeypatch -- binding those into this module's
 # globals with a `from core import ...` would take a snapshot the patch never reaches.
-from diagnostics.probe_lib import core
-
-from diagnostics.probe_lib.core import SECRETS_PATH, prom_endpoint, prom_query_url
-
-import yaml
-from jinja2 import StrictUndefined, TemplateError
-
-from lib import yaml_fast
+from diagnostics.probe_lib import alertmanager_api, core
+from diagnostics.probe_lib.core import prom_endpoint, prom_query_url
 from lib.exit_codes import PROBE_UNREADABLE
-from lib.kubectl import DEFAULT_CLUSTER
-from lib.k8s_roles import K8S_ROLES
-from lib.render_context import render_context
-from lib.render_guard import make_env
-from lib.repo_paths import ANSIBLE, REPO
-from diagnostics.probe_lib import alertmanager_api, firing_ingress, kuma_live, kuma_pi
-from diagnostics.probe_lib.kuma_table_loop import TableLoop
+
+ALERTS_QUERY = 'ALERTS{alertstate="firing"}'
+KUMA_QUERY = 'monitor_status{job="uptime-kuma"} != 1'
+WATCHDOG = "Watchdog"
+# The severities that make `monitors` exit 1. `info` alerts are listed as notes.
+PAGING_SEVERITIES = ("critical", "warning")
 
 # Kuma's own numeric status codes, from the exporter that feeds monitor_status.
-_MONITOR_STATUS_LABELS = {"0": "DOWN", "1": "UP", "2": "PENDING", "3": "MAINTENANCE"}
-_NO_SERIES = "no monitor_status series returned (uptime-kuma scrape target down?)"
+_MONITOR_STATUS_LABELS = {"0": "DOWN", "2": "PENDING", "3": "MAINTENANCE"}
 
 
-def format_monitor_status(data, declared_total=None, stored=None):
-    """Format Kuma's monitor_status vector (Prometheus job=uptime-kuma) into a down-monitors rollup.
+def _result(data, source):
+    """(series list, None), or (None, a line saying why `data` is unusable). Pure."""
+    if isinstance(data, str):
+        return None, f"  {source} unread: {data}"
+    if data.get("status") != "success":
+        detail = data.get("error") or f"status {data.get('status')!r}"
+        return None, f"  {source} unread: {detail}"
+    return data.get("data", {}).get("result", []), None
 
-    Pure: takes the parsed instant-query response, returns (text, exit_code). `declared_total`
-    is how many monitors the static-monitors template declares, or None to skip the coverage
-    line below.
 
-    Kuma keeps no history of its own — that's why `alerts` reconstructs the past from Loki instead
-    of asking Kuma for it — but it does hold live state, and Prometheus already scrapes that state
-    (postflight.py's check_kuma_monitors uses the same metric). No Kuma API credential is needed for
-    "what's down right now".
+def alertmanager_only(result, held):
+    """The label sets of the alerts in `held` that no `ALERTS` series in `result` matches. Pure.
 
-    exit_code is 0 only when every monitor reports UP (1); PENDING and MAINTENANCE count as not-up
-    too, same as DOWN, since neither means "confirmed healthy".
-
-    The ratio's denominator is the EXPORTED set, not the declared one. Kuma exports a push
-    monitor only once a heartbeat has landed since the process started (see
-    `format_kuma_drift`), so for up to 25h after a pod replacement the `interval: 90000`
-    monitors have no series at all and "89/89 up" reads as full coverage while 16 tiles are
-    unreported. The coverage line names the shortfall so the ratio cannot be read that
-    way; it does not change the exit code, because absence is `kuma-drift`'s verdict — that
-    command knows which absences are pending, gated or real drift, and this one does not.
-
-    `stored` is `kuma_live.last_stored_beats()`, or None to skip it. A tile with no series whose
-    stored beat is DOWN is listed, labelled, counted and failed like a live DOWN (#4541).
-    A failed stored read adds a line saying so.
+    `held` is Alertmanager's active-alert list. An alert matches a series with the same alert
+    name, `service` and severity, which is how a Prometheus alert appears in both.
     """
-    result = data.get("data", {}).get("result", [])
-    if not result:
-        # No series at all is a scrape that failed, not monitors that are down (#4444).
-        return _NO_SERIES, PROBE_UNREADABLE
-    problems, up, live = [], 0, set()
+
+    def key(labels):
+        return tuple(labels.get(k) for k in ("alertname", "service", "severity"))
+
+    seen = {key(s.get("metric") or {}) for s in result}
+    return [
+        a.get("labels") or {} for a in held if key(a.get("labels") or {}) not in seen
+    ]
+
+
+def format_alerts(data, held):
+    """(lines, exit code) for the firing-alert rollup. Pure.
+
+    `data` is the parsed response to `ALERTS_QUERY`, or a string saying why it went unread.
+    `held` is Alertmanager's active-alert list, or a string saying why it went unread; its
+    alerts that `ALERTS` lacks join the rollup marked `(Alertmanager only)`. A non-shadow `critical` or `warning` alert exits 1. Shadow alerts and `info` alerts are
+    listed under their own headings and never change the code: a shadow rule is still under
+    its soak, and Kuma pages for its batch. No Watchdog, or an unread response, exits
+    PROBE_UNREADABLE unless a paging alert already makes it 1. So does an unread `held`.
+    """
+    result, unread = _result(data, "ALERTS")
+    if unread:
+        return [unread], PROBE_UNREADABLE
+    extra = [] if isinstance(held, str) else alertmanager_only(result, held)
+    sources = [(s.get("metric") or {}, "") for s in result]
+    sources += [(labels, " (Alertmanager only)") for labels in extra]
+    paging, notes, shadow = defaultdict(list), [], []
+    watchdog = False
+    for labels, origin in sources:
+        if labels.get("alertname") == WATCHDOG:
+            watchdog = watchdog or not origin
+            continue
+        service = labels.get("service", "?")
+        severity = labels.get("severity", "?")
+        name = labels.get("alertname", "?")
+        line = f"  {service}: {name}{{severity={severity}}}{origin}"
+        if labels.get("shadow") == "true":
+            shadow.append(line)
+        elif severity in PAGING_SEVERITIES:
+            paging[severity].append(f"  {service}: {name}{origin}")
+        else:
+            notes.append(line)
+    count = sum(len(v) for v in paging.values())
+    lines = [f"{count} paging alert(s) firing"]
+    for severity in PAGING_SEVERITIES:
+        if paging[severity]:
+            lines += [f"{severity}:", *sorted(paging[severity])]
+    if notes:
+        lines += ["notes (not paging):", *sorted(notes)]
+    if shadow:
+        lines += ["shadow rules firing (Kuma still pages their batch; not counted):"]
+        lines += sorted(shadow)
+    if not watchdog:
+        lines.insert(
+            0,
+            f"{WATCHDOG} is not firing: Prometheus rule evaluation is down, so an alert "
+            "missing from this list may still be failing",
+        )
+    if isinstance(held, str):
+        lines.append(f"  Alertmanager alerts unread: {held}")
+    clean = watchdog and not isinstance(held, str)
+    return lines, 1 if count else (0 if clean else PROBE_UNREADABLE)
+
+
+def format_kuma(data):
+    """(lines, exit code) for the Kuma tiles that are not up. Pure.
+
+    `data` is the parsed response to `KUMA_QUERY`, or a string saying why it went unread. Any
+    series is a tile not up, so it exits 1; an unread response exits PROBE_UNREADABLE.
+    """
+    result, unread = _result(data, "Kuma monitor_status")
+    if unread:
+        return [unread], PROBE_UNREADABLE
+    lines = []
     for series in result:
         name = (series.get("metric") or {}).get("monitor_name", "?")
-        live.add(name)
         status = (series.get("value") or [None, None])[1]
-        if status == "1":
-            up += 1
-        else:
-            problems.append(f"  {name}: {_MONITOR_STATUS_LABELS.get(status, status)}")
-    downs = kuma_live.stored_down(stored or {}, live)
-    problems.extend(
-        f"  {name}: {kuma_live.stored_down_label(b)}" for name, b in downs.items()
-    )
-    lines = [f"{up}/{len(result) + len(downs)} monitors up"] + sorted(problems)
-    if declared_total is not None and declared_total > len(result):
-        lines.append(
-            f"  {declared_total - len(result)} of {declared_total} declared monitors have no "
-            "monitor_status series — `probe.py kuma-drift` says which and why"
-        )
-    if isinstance(stored, str):
-        lines.append(f"  stored beats of monitors with no series unread: {stored}")
-    return "\n".join(lines), 1 if problems else 0
+        lines.append(f"  {name}: {_MONITOR_STATUS_LABELS.get(status, status)}")
+    if not lines:
+        return [], 0
+    return ["Kuma tiles not up (batches not yet cut over):", *sorted(lines)], 1
 
 
-# kuma-drift: declared monitors vs live ones
-#
-# `monitors` divides the exporter's monitor count by itself, so it reports "N/N up" over
-# whatever Kuma happens to be exporting. A monitor that is declared and never created, or
-# created and then paused, is absent from that set and therefore absent from the ratio — it
-# reads as green. `test_kuma_static_monitors.py` has the same blind spot from the other end:
-# it validates the declaration file against itself and never asks what is live.
-#
-# Declared names are read straight out of the template rather than rendered through Jinja: every
-# `"name"` in it is a literal, or a field of a row in the table loop
-# `kuma_table_loop` reads, and parsing beats standing up a Jinja environment with a stub for every push token
-# just to recover strings that were never templated.
-STATIC_MONITORS_PATH = os.path.join(
-    REPO,
-    "ansible",
-    "roles",
-    "k8s",
-    "uptime-kuma",
-    "templates",
-    "static-monitors.yaml.j2",
-)
-
-# Seconds of grace on top of a monitor's own interval before its absence counts as drift: Kuma's
-# exporter and Prometheus's scrape each sit between a heartbeat landing and this query seeing it.
-KUMA_EXPORT_SLACK = 120
-
-_ENTITY_NAME_RE = re.compile(r'"name":\s*"([^"]+)"')
-_ENTITY_TYPE_RE = re.compile(r'"type":\s*"([a-z]+)"')
-# A literal, or the whole `{{ ... }}` an interval is templated from. Most push tiles carry
-# `{{ uptime_kuma_k8s_bridge_push_interval }}`, two carry an arithmetic expression, and the monthly etcd
-# drill carries a group_var — a digits-only match read every one of those as None, which the
-# `pending` branch of format_kuma_drift cannot absorb.
-_ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+|\{\{[^{}]*\}\})')
-_INTERVAL_EXPR_RE = re.compile(r"^\{\{\s*(.+?)\s*\}\}$")
-_JINJA_IF_RE = re.compile(r"{%-?\s*if\b")
-_JINJA_ENDIF_RE = re.compile(r"{%-?\s*endif\b")
-# The condition itself, so a gated monitor can be checked against its variables rather than
-# excused on the strength of the `{% if %}` existing. The whole condition, not its first
-# identifier: a gate may be a secret (`{% if <secret_name> is defined %}`), an inventory
-# flag (`traefik_k8s_manage_crowdsec | default(true)`), or an `and` of both (the Renovate
-# agent's tile, #3414). Reading only the leading token judged that last one on its token alone,
-# so a disarmed agent's withdrawn tile read as missing.
-_JINJA_IF_COND_RE = re.compile(r"{%-?\s*if\s+(.+?)\s*-?%}")
-_GATE_AND_RE = re.compile(r"\s+and\s+")
-# One conjunct this check can resolve: an identifier, piped through filters or tested `is defined`.
-# An `or` or a `not` makes the gate something other than "every conjunct must hold", so a conjunct
-# carrying either is left unresolvable and reads as "could not be read" rather than guessed at.
-_GATE_CONJUNCT_RE = re.compile(r"([a-zA-Z_][a-zA-Z0-9_]*)(?:\s+is\s+defined|\s*\|.*)?")
-_GATE_OR_NOT_RE = re.compile(r"\b(?:or|not)\b")
+def combine(*codes):
+    """One exit code from several reads: any 1 wins, then any unread, then 0."""
+    return 1 if 1 in codes else max(codes)
 
 
-@functools.cache
-def monitor_vars():
-    """The variables the static-monitors template renders its intervals with.
-
-    `lib.render_context`'s, the context `validate/k8s_manifests.py` renders the role with —
-    the uptime-kuma role's own defaults under the inventory — because that is where the
-    intervals live: `uptime_kuma_k8s_bridge_push_interval` is a role default,
-    `etcd_drill_full_kuma_interval_s` a group_var, and the UPS tiles read a nut_host default
-    through `| default(10)`. A group_vars-only lookup would resolve one tile in fifty.
-    """
-    # Not strict: a variable that will not expand is dropped with a note, and the interval
-    # that reads it comes back None, which format_kuma_drift files under `missing`. A raise
-    # would take down every tile's check for the sake of one.
-    return render_context(K8S_ROLES / "uptime-kuma")
-
-
-def interval_seconds(raw, variables):
-    """`raw` is the interval as written in the template: digits, or one `{{ expr }}`.
-
-    A templated interval is evaluated as a Jinja EXPRESSION, not rendered to text, so
-    `{{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}` comes back as the
-    integer Ansible would write. One that does not resolve to an integer — an undefined name,
-    a value that is not a number — reads as None, which format_kuma_drift files under
-    `missing`: an interval this check cannot read must fail loud, not excuse the tile.
-    """
-    if raw.isdigit():
-        return int(raw)
-    expr = _INTERVAL_EXPR_RE.match(raw)
-    if not expr:
-        return None
+def _read(url, pin):
+    """The parsed response at `url`, or a string saying why it went unread."""
     try:
-        value = make_env([]).compile_expression(expr.group(1))(**variables)
-        return None if value is None else int(value)
-    except ValueError, TypeError, TemplateError:
-        return None
+        return core.fetch_parsed(url, resolve=pin)
+    except core.Unreadable as exc:
+        return exc.message
 
 
-def parse_declared_monitors(text, variables=None, root=ANSIBLE):
-    """Monitor declarations from the static-monitors template.
-
-    Returns {name: {"type": str, "interval": int|None, "gated": bool, "gate": tuple|None}}.
-    `gated` marks an entity inside a `{% if %}` block and `gate` holds every conjunct of every
-    enclosing condition, outermost first: `{% if a | default('') and b %}` gives
-    `("a | default('')", "b")`. The tile renders only when all of them hold.
-
-    `variables` is the render context a `{{ ... }}` interval is evaluated against; it defaults
-    to the template's real one (`monitor_vars`), read lazily on the first templated interval
-    so a literal-only fixture never touches the inventory. The default is deliberate: both
-    `kuma-drift` and `postflight` call this, and an opt-in would leave whichever caller forgot
-    it reading every templated interval as None.
-
-    `root` is the `ansible/` directory a table loop's `playbook_dir` path resolves under; a
-    test passes its own tree.
-
-    `gate` exists because `gated` alone was a licence to ignore. A gated monitor's absence
-    must not be excused unconditionally on the reasoning that it "renders away when the secret
-    is unset" — that is an assumption about the secret, not a reading of it. A gated monitor
-    that vanishes is invisible twice over — absent from the exporter, and excused by the drift
-    check written to catch exactly that. Naming the variable lets the caller resolve it and
-    tell the two cases apart.
-    """
-    declared, gates, loop = {}, [], TableLoop(root)
-    for line in text.splitlines():
-        loop.see(line)
-        for cond in _JINJA_IF_COND_RE.findall(line):
-            gates.append(tuple(_GATE_AND_RE.split(cond)))
-        # An `{% if %}` whose condition did not parse (split across lines) still opens a
-        # scope; keep the stack aligned with the nesting rather than with what we could parse.
-        gates.extend(
-            [None]
-            * (len(_JINJA_IF_RE.findall(line)) - len(_JINJA_IF_COND_RE.findall(line)))
-        )
-        for _ in range(len(_JINJA_ENDIF_RE.findall(line))):
-            if gates:
-                gates.pop()
-        name = _ENTITY_NAME_RE.search(line)
-        kind = _ENTITY_TYPE_RE.search(line)
-        names = [name.group(1)] if name else loop.names(line)
-        if not names or not kind:
-            continue
-        if kind.group(1) in (
-            "notification",
-            "tag",
-        ):  # not monitors; never in monitor_status
-            continue
-        interval = _ENTITY_INTERVAL_RE.search(line)
-        if interval and variables is None and not interval.group(1).isdigit():
-            variables = monitor_vars()
-        conjuncts = tuple(c for g in gates if g for c in g)
-        for each in names:
-            declared[each] = {
-                "type": kind.group(1),
-                "interval": interval_seconds(interval.group(1), variables)
-                if interval
-                else None,
-                "gated": bool(gates),
-                "gate": conjuncts or None,
-            }
-    return declared
-
-
-def declared_secret_names():
-    """The secrets file's top-level key names. No value is decrypted.
-
-    SOPS encrypts values, not keys, so the key list is plaintext in the committed file and a
-    plain YAML parse answers "is this key declared" without touching the age key. Same read as
-    `secrets_mgmt/rotation_tools.sops_names`, which the rotation registry has used since it
-    existed — duplicated rather than imported, because `probe_lib` reaching into
-    `secrets_mgmt` for one function would drag that module's git and registry helpers in with
-    it.
-
-    Returns None when the file cannot be read or parsed at all. That is not "no keys are
-    declared": a caller must not read an unreadable file as an absent key, which is the whole
-    distinction `gate_var_state` exists to keep.
-    """
+def _read_held(url, pin):
+    """Alertmanager's active-alert list at `url`, or a string saying why it went unread."""
     try:
-        with open(SECRETS_PATH) as fh:
-            data = yaml_fast.safe_load(fh)
-    except OSError, yaml.YAMLError:
-        return None
-    if not isinstance(data, dict):
-        return None
-    return {name for name in data if name != "sops"}
-
-
-def judge_gate_read(var, extracted, declared):
-    """The three-way gate verdict, pure. `extracted` is the value or None if the read failed.
-
-    None means "could not be read" — no age key on this host, the secret tool missing, the
-    file unparseable — and is deliberately distinct from False. Reporting an unreadable gate
-    as unset is what made the old check silent; an unreadable input and an empty one must not
-    look alike.
-
-    A key that is not DECLARED in the store is the third case, and it is routine rather than a
-    failure: `homelab_eval_push_token` is deliberately absent (static-monitors.yaml.j2
-    explains why), so its monitor correctly renders away. The value read exits non-zero for
-    that and for a broken host alike, which left two permanently-unverified §9.1 lines and
-    trained the reader to skim the arm that catches a real failure to read a secret.
-    An undeclared key is therefore False — an unset gate, excused.
-
-    `declared` is consulted only when `extracted` is None, and never decides on its own.
-    Reading it first would turn a host with no age key into "every gate is unset", since the
-    plaintext key-list parse succeeds there — the exact regression the paragraph above forbids.
-    A `declared` of None is that parse having failed, which proves nothing either way.
-    """
-    if extracted is not None:
-        return bool(extracted.strip())
-    if declared is not None and var not in declared:
-        return False
-    return None
-
-
-def gate_var(conjunct):
-    """The variable one gate conjunct reads, or None when it is not a shape this check resolves."""
-    match = _GATE_CONJUNCT_RE.fullmatch(conjunct)
-    if not match or _GATE_OR_NOT_RE.search(conjunct):
-        return None
-    return match.group(1)
-
-
-def eval_gate_conjunct(conjunct, variables):
-    """True / False for a conjunct evaluated as the template would, None if it will not evaluate.
-
-    StrictUndefined rather than the render guards' stub: `| default(...)` still applies to an
-    undefined name, but a bare undefined one raises instead of reading as a truthy `STUB`.
-    """
-    try:
-        env = make_env([], undefined_cls=StrictUndefined)
-        return bool(env.compile_expression(conjunct)(**variables))
-    except TemplateError:
-        return None
-
-
-def gate_conjunct_state(conjunct, no_secrets=False, read_secret=None):
-    """True / False / None for one gate conjunct, read from wherever its variable lives.
-
-    An inventory variable (host_vars, group_vars, the uptime-kuma role's defaults — the
-    template's own render context) is evaluated against that context: `renovate_agent_enabled`
-    is a host_var, not a secret, and asking SOPS for it got "undeclared", which reads False.
-    A secret goes through `gate_var_state`, except under `is defined`: Ansible defines every
-    declared key, so that is True with no decrypt. A name that is neither is evaluated with
-    nothing bound, so the template decides as at render: `x | default(true)` is True.
-
-    Inventory is consulted first and the secrets file's plaintext key list second, so only a
-    name the store declares costs a decrypt, and `no_secrets` withholds only that decrypt.
-    A key list that will not parse proves nothing, so the name is then treated as a secret.
-    `read_secret` replaces `gate_var_state` for that one call, so a test can prove no decrypt.
-    """
-    var = gate_var(conjunct)
-    if var is None:
-        return None
-    variables = monitor_vars()
-    if var in variables:
-        return eval_gate_conjunct(conjunct, variables)
-    names = declared_secret_names()
-    if names is not None and (var not in names or conjunct.endswith(" defined")):
-        return var in names or eval_gate_conjunct(conjunct, variables)
-    return None if no_secrets else (read_secret or gate_var_state)(var)
-
-
-def gate_var_state(var):
-    """True / False / None for whether a gating secret has a non-empty value.
-
-    The reads; `judge_gate_read` holds the decision and its reasoning.
-    """
-    out = subprocess.run(
-        ["sops", "-d", "--extract", f'["{var}"]', SECRETS_PATH],
-        capture_output=True,
-        text=True,
-    )
-    extracted = out.stdout if out.returncode == 0 else None
-    return judge_gate_read(
-        var, extracted, None if extracted is not None else declared_secret_names()
-    )
-
-
-def resolve_gate_states(declared, live, no_secrets=False):
-    """{conjunct: True/False/None} for the gates format_kuma_drift has to judge.
-
-    Resolved only for gates whose monitor is actually absent — a sops call per gate is the
-    cost, and a monitor that is live needs no explanation for why it might not be.
-
-    Shared by `run_kuma_drift` and `postflight.check_kuma_drift`. postflight called
-    format_kuma_drift with no gate_states until 2026-09-10, which excused all seven gated
-    monitors unconditionally (#1632) — the same miss the one below records, reintroduced by a
-    second caller rather than by the default. One constructor is what stops a third caller
-    repeating it.
-
-    DECIDED: the decrypt stays ON by default, and `no_secrets` is the opt-out — not the
-    reverse. `probe.py kuma-drift` is allow-listed and so runs unprompted, which is a fair
-    reason to want no SOPS read on the path; but assuming a gate was unset is exactly the miss
-    16cf5721 fixed on 2026-08-22, and defaulting to no_secrets would reinstate it. The read is
-    narrow: `var` comes from `gate_var`, constrained to [a-zA-Z_][a-zA-Z0-9_]*, and is
-    passed as an argv element rather than through a shell, so no value and no injection point
-    escapes gate_var_state — only bool(stdout) does. Reach for no_secrets when the age key
-    should not be touched at all; accept "unverified" as the cost.
-    """
-    conjuncts = {
-        conjunct
-        for name, spec in declared.items()
-        if spec["gate"] and name not in live
-        for conjunct in spec["gate"]
-    }
-    return {c: gate_conjunct_state(c, no_secrets=no_secrets) for c in sorted(conjuncts)}
-
-
-def judge_gate(gate, gate_states):
-    """A whole gate from its conjuncts' states: False if any is False, else None if any is None.
-
-    False wins over None because the tile renders only when every conjunct holds, so one that
-    is known false withdraws it whatever the unreadable ones say. A disarmed Renovate agent's
-    tile is gated off even on a host that cannot decrypt its push token.
-    """
-    states = [gate_states.get(c) for c in gate]
-    if False in states:
-        return False
-    if None in states:
-        return None
-    return True
-
-
-def format_kuma_drift(
-    declared, live, kuma_age_seconds, gate_states=None, *, created, stored=None
-):
-    """Compare declared monitor names against the live exporter's. Pure.
-
-    `live` is the set of monitor_name labels; `kuma_age_seconds` is how long the Kuma pod has
-    been up, or None when that could not be read. `created` is `kuma_live.created_monitors()`:
-    the names Kuma holds, or a string saying why they could not be read. It has no default,
-    so a caller cannot drop it and bring back the blind spot below.
-
-    Kuma's exporter emits a monitor only once it has received a heartbeat since the process
-    started, so a restart empties the series for EVERY monitor — http and port tiles included,
-    not just push ones — and each returns on its next beat. A monitor whose interval has not
-    elapsed since the restart is therefore PENDING, not missing; reporting it as drift would
-    make this check cry wolf after every deploy. After a restart, 24 of 82 monitors were
-    exported 88 seconds in, and the absent ones spanned every type.
-
-    KUMA_EXPORT_SLACK covers the two lags between a beat and this query seeing it: Kuma's own
-    scrape endpoint and Prometheus's scrape interval. Without it a 60s http monitor reads as
-    missing at 88s of uptime, which is what the first run of this check did.
-
-    An unreadable pod age is treated as a long uptime: it fails loud rather than quiet, matching
-    `health_rollout`'s unreadable-restart-time rule.
-
-    PENDING applies only to a monitor Kuma holds, since the exporter cannot tell "never
-    created" from "not yet due" (`kuma_live` has why). A declared name absent from `created`
-    is missing once Kuma has been up past `kuma_live.census_settle_seconds()`; before that a
-    new tile is legitimately absent. An unreadable `created` keeps a tile pending and adds a
-    line saying its existence went unverified.
-
-    `stored` is `kuma_live.last_stored_beats()`, or None to skip it. A pending tile whose
-    newest stored beat is DOWN says so on its line (#4541). The exit code ignores it, because
-    it is not drift; `probe.py monitors` fails on it.
-    """
-    gate_states = gate_states or {}
-    unreadable = created if isinstance(created, str) else None
-    settled = kuma_age_seconds is None or (
-        kuma_age_seconds >= kuma_live.census_settle_seconds()
-    )
-    downs = kuma_live.stored_down(stored or {}, live)
-    missing, pending, gated, unverified = [], [], [], []
-    for name, spec in sorted(declared.items()):
-        if name in live:
-            continue
-        state = judge_gate(spec["gate"] or (), gate_states) if spec["gated"] else False
-        if spec["gated"] and state is None:
-            unread = [c for c in spec["gate"] or () if gate_states.get(c) is None]
-            unverified.append(
-                f"  {name}: gated on {' and '.join(unread) or 'an unparsed condition'}, "
-                "which could not be read"
-            )
-        elif spec["gated"] and state is False:
-            gated.append(name)
-        elif settled and unreadable is None and name not in created:
-            missing.append(
-                f"  {name}: declared, absent from Kuma's status page (never created, "
-                "or added since kuma-status-page-sync last succeeded)"
-            )
-        elif (
-            kuma_age_seconds is not None
-            and spec["interval"] is not None
-            and kuma_age_seconds < spec["interval"] + KUMA_EXPORT_SLACK
-        ):
-            pending.append(
-                f"  {name}: no beat due yet ({spec['interval']}s interval)"
-                + (
-                    f"; {kuma_live.stored_down_label(downs[name])}"
-                    if name in downs
-                    else ""
-                )
-            )
-        else:
-            missing.append(f"  {name}: declared, not live")
-    orphans = [f"  {n}: live, not declared" for n in sorted(live - set(declared))]
-
-    lines = [f"{len(live)} live / {len(declared)} declared"]
-    if kuma_age_seconds is not None and pending:
-        lines.append(
-            f"  (kuma up {int(kuma_age_seconds)}s — monitors below not yet due)"
-        )
-    lines.extend(missing + orphans + pending + unverified)
-    if unreadable is not None and pending:
-        lines.append(f"  existence of the pending monitors unverified: {unreadable}")
-    if gated:
-        lines.append(
-            f"  {len(gated)} gated off (a secret genuinely unset or a flag false), skipped: "
-            f"{', '.join(gated)}"
-        )
-    if missing or orphans:
-        return "\n".join(lines), 1
-    return "\n".join(lines), 0
-
-
-def run_kuma_drift(ns, now=None):
-    """Reconcile the declared monitor set against the live one (exit 0 = no drift).
-
-    `--pi` scopes both the declared and live sets to daniel-pi's own monitors before handing
-    them to the same format_kuma_drift() the cluster path uses — the comparison logic doesn't
-    change, only which names it sees.
-    """
-    base, pin = prom_endpoint()
-    url = prom_query_url(base, 'monitor_status{job="uptime-kuma"}')
-    if ns.dry_run:
-        core.print_dry_run(url, resolve=pin)
-        core.print_dry_run(*kuma_live.status_page_url())
-        return core.print_dry_run(*kuma_live.heartbeat_url())
-    with open(STATIC_MONITORS_PATH) as f:
-        text = f.read()
-    declared = parse_declared_monitors(text)
-    if ns.pi:
-        pi_names = kuma_pi.pi_monitor_names(text)
-        declared = {name: spec for name, spec in declared.items() if name in pi_names}
-    try:
-        data = json.loads(core.fetch(url, resolve=pin))
-    except json.JSONDecodeError:
-        print("prometheus returned non-JSON (query endpoint down?)", file=_sys.stderr)
-        return PROBE_UNREADABLE
-    live = {
-        (s.get("metric") or {}).get("monitor_name")
-        for s in data.get("data", {}).get("result", [])
-    }
-    live.discard(None)
-    if ns.pi:
-        live &= pi_names
-    gate_states = resolve_gate_states(declared, live, no_secrets=ns.no_secrets)
-    text, code = format_kuma_drift(
-        declared,
-        live,
-        kuma_live.pod_age_seconds(getattr(ns, "cluster", DEFAULT_CLUSTER), now=now),
-        gate_states=gate_states,
-        created=kuma_live.created_monitors(),
-        stored=kuma_live.last_stored_beats(),
-    )
-    print(text)
-    if ns.no_secrets and None in gate_states.values():
-        # Without this the gates read "could not be read", which is the wording for a genuine
-        # failure — no age key, sops missing. Deliberately not reading and failing to read must
-        # not look alike; that conflation is the recurring shape this estate keeps paying for.
-        print("  (gates unverified by request: --no-secrets, no SOPS read attempted)")
-    return code
+        return alertmanager_api.read(url, pin)
+    except core.Unreadable as exc:
+        return exc.message
 
 
 def run_monitors(ns):
-    """Print Kuma's down-monitors rollup, the firing ingress alerts, then the active silences.
+    """Print the firing-alert rollup, the Kuma tiles not up, then the active silences.
 
-    Exit 0 = all up and every source read.
+    Exit 0 = no paging alert fires, no Kuma tile is down, and every source was read.
     """
     base, pin = prom_endpoint()
-    url = prom_query_url(base, "monitor_status")
+    alerts_url = prom_query_url(base, ALERTS_QUERY)
+    kuma_url = prom_query_url(base, KUMA_QUERY)
+    am_base, am_pin = alertmanager_api.endpoint()
+    held_url = alertmanager_api.active_alerts_url(am_base)
     if ns.dry_run:
-        core.print_dry_run(url, resolve=pin)
-        core.print_dry_run(firing_ingress.query_url(base), resolve=pin)
-        am_base, am_pin = alertmanager_api.endpoint()
-        core.print_dry_run(alertmanager_api.silences_url(am_base), resolve=am_pin)
-        core.print_dry_run(*kuma_live.status_page_url())
-        return core.print_dry_run(*kuma_live.heartbeat_url())
-    data, err = core.fetch_json(url, resolve=pin)
-    if err:
-        return err
-    text, code = format_monitor_status(
-        data,
-        declared_monitor_count(),
-        kuma_live.last_stored_beats() if data.get("data", {}).get("result") else None,
+        core.print_dry_run(alerts_url, resolve=pin)
+        core.print_dry_run(held_url, resolve=am_pin)
+        core.print_dry_run(kuma_url, resolve=pin)
+        return core.print_dry_run(
+            alertmanager_api.silences_url(am_base), resolve=am_pin
+        )
+    alert_lines, alert_code = format_alerts(
+        _read(alerts_url, pin), _read_held(held_url, am_pin)
     )
-    print(text, file=_sys.stderr if code == PROBE_UNREADABLE else _sys.stdout)
-    return alertmanager_api.report(firing_ingress.report(base, pin, code))
-
-
-def declared_monitor_count(path=STATIC_MONITORS_PATH):
-    """How many UNGATED monitors the static-monitors template declares, or None if unreadable.
-
-    Gated declarations are left out on purpose. A monitor behind `{% if <secret> %}` whose
-    secret is genuinely unset is never live, so counting it would print the coverage line on
-    every run in steady state (a permanent "2 of 105") — and a line that always prints is the
-    one nobody reads when it says 16. Resolving the gates would need a SOPS read, which
-    `kuma-drift` does and this allow-listed command must not. The cost is that a gated monitor
-    whose secret IS set is not counted either, so its absence after a replacement goes
-    unreported here; `kuma-drift` still reports it. None rather than a raise: `monitors` answers
-    "what is down" and must still answer it from a checkout with no template.
-    """
-    try:
-        with open(path) as f:
-            declared = parse_declared_monitors(f.read())
-    except OSError:
-        return None
-    return sum(1 for spec in declared.values() if not spec["gated"])
+    kuma_lines, kuma_code = format_kuma(_read(kuma_url, pin))
+    code = combine(alert_code, kuma_code)
+    for lines, part in ((alert_lines, alert_code), (kuma_lines, kuma_code)):
+        if lines:
+            out = _sys.stderr if part == PROBE_UNREADABLE else _sys.stdout
+            print("\n".join(lines), file=out)
+    return alertmanager_api.report(code)

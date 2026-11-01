@@ -5,7 +5,7 @@
 # wrote it. The step numbers are H7's.
 #
 # Usage, as root, with homelab-archive-keyring.gpg beside this script:
-#   ./bootstrap-host.sh <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>]
+#   ./bootstrap-host.sh <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--rebaseline]
 #   ./bootstrap-host.sh --help        print this header and exit
 #
 # Steps, in order. Each is idempotent, and --until <step> stops after one so a runbook can
@@ -18,6 +18,10 @@
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them)
 #   6  the Pi only: start homelab-docker-engine.service once
+#   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
+#      the mask on the aide package's dailyaidecheck.timer. A missing database on a host whose
+#      logs show it had one is refused; --rebaseline writes a new one after the operator looks.
+#      A first init this script started and did not finish leaves a marker, and a rerun resumes it
 #
 # --local-build <clone> is daniel-box's way in, because it serves the repository it would
 # install from. The script reads the clone with `git archive`, so it writes nothing under the
@@ -124,15 +128,16 @@ die() {
 }
 
 usage() {
-    echo "usage: $0 <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>]" >&2
+    echo "usage: $0 <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--rebaseline]" >&2
     exit 64
 }
 
 # Validate every argument and every precondition before step 1 writes anything.
 host=""
-until_step=6
+until_step=7
 clone=""
 kit=""
+rebaseline=no
 while [ $# -gt 0 ]; do
     case "$1" in
         --until)
@@ -150,6 +155,10 @@ while [ $# -gt 0 ]; do
             kit=$2
             shift 2
             ;;
+        --rebaseline)
+            rebaseline=yes
+            shift
+            ;;
         -*) usage ;;
         *)
             [ -z "$host" ] || usage
@@ -160,7 +169,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$host" ] || usage
 case "$until_step" in
-    1 | 2 | 3 | 4 | 5 | 6) ;;
+    1 | 2 | 3 | 4 | 5 | 6 | 7) ;;
     *) usage ;;
 esac
 
@@ -456,5 +465,67 @@ if [ "$host" = daniel-pi ]; then
             die "homelab-docker-engine.service failed to start"
     else
         echo "bootstrap-host: homelab-docker-engine.service is not installed, so step 6 starts nothing"
+    fi
+fi
+stop_after 6
+
+# Step 7: the integrity-scans component's one-time state. It runs last, so the baselines record
+# every package the earlier steps installed. Each baseline is guarded by the file it creates:
+# rerunning one would bless whatever changed since, and a live host whose database goes missing
+# must stay red until the operator looks.
+UNIT_DIR=/usr/lib/systemd/system
+# A <name>.pending file here records a first baseline this script started and has not finished.
+PENDING_DIR=/var/lib/homelab/bootstrap
+
+# first_baseline <name> <database> <log>...: refuse to write <database> when one of the logs
+# exists, because a host that logged an init or a scan had a baseline, and its loss is a finding.
+# The init writes its log while it runs, so an interrupted or failed first init also leaves one.
+# The <name>.pending marker tells that case apart: this script writes it before the init and
+# removes it after the init succeeds, so a marker means the log is our own unfinished first init,
+# and the rerun resumes it. On a pass, the function writes the marker.
+first_baseline() {
+    marker=$ROOT$PENDING_DIR/$1.pending
+    database=$2
+    shift 2
+    if [ "$rebaseline" = no ] && [ ! -e "$marker" ]; then
+        for log in "$@"; do
+            [ -e "$ROOT$log" ] || continue
+            die "$database is missing, but $log shows this host had one; inspect the host before trusting it, then rerun with --rebaseline"
+        done
+    fi
+    mkdir -p "$ROOT$PENDING_DIR"
+    : > "$marker" || die "cannot write $marker"
+}
+
+# baseline_written <name>: the init succeeded, so its marker goes.
+baseline_written() {
+    rm -f "$ROOT$PENDING_DIR/$1.pending"
+}
+
+if [ -e "$ROOT$UNIT_DIR/homelab-rkhunter-check.timer" ] &&
+    [ ! -e "$ROOT/var/lib/rkhunter/db/rkhunter.dat" ]; then
+    first_baseline rkhunter-baseline /var/lib/rkhunter/db/rkhunter.dat /var/log/rkhunter.log /var/log/rkhunter.log.1
+    rkhunter --propupd --nocolors || die "rkhunter --propupd failed"
+    baseline_written rkhunter-baseline
+    echo "bootstrap-host: wrote the first rkhunter baseline"
+fi
+if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
+    # The aide package's own timer runs a second, nightly full scan. It is masked before the
+    # hour-long aideinit, so a failed init still leaves it masked. A mask survives a package
+    # upgrade, which a disable does not.
+    if [ "$(systemctl is-enabled dailyaidecheck.timer 2> /dev/null)" != masked ]; then
+        systemctl mask --now dailyaidecheck.timer || die "cannot mask dailyaidecheck.timer"
+        echo "bootstrap-host: masked dailyaidecheck.timer"
+    fi
+    # A mask keeps a failed state the timer held before it, and only reset-failed clears it.
+    if systemctl is-failed --quiet dailyaidecheck.timer; then
+        systemctl reset-failed dailyaidecheck.timer
+    fi
+    if [ ! -e "$ROOT/var/lib/aide/aide.db" ]; then
+        first_baseline aide-baseline /var/lib/aide/aide.db /var/log/aide/aideinit.log
+        echo "bootstrap-host: writing the first AIDE database, which takes over an hour on the Pi"
+        # -y overwrites an aide.db.new that an interrupted run left behind.
+        aideinit -y || die "aideinit failed"
+        baseline_written aide-baseline
     fi
 fi

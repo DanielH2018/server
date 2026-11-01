@@ -228,7 +228,7 @@ prowlarr that was 2026-10-09 10:40, 13 h after the skip. A volume in the daily t
 the next night's run.
 
 **How the skip surfaces (#3968).** Check 11 of `longhorn-backup-health.sh` reads the logs of each
-RecurringJob's newest pod on every 10-minute tick. It turns the `k3s Longhorn Backup` tile DOWN
+RecurringJob's newest pod on every 10-minute tick. It turns `LonghornBackupHealthFailed` on
 for each skipped volume in the weekly tier that has no backup newer than the skip. Any backup
 clears it, including a seed. Longhorn keeps one pod per RecurringJob, so the evidence lasts until
 that shard's next run replaces the pod, a week later. Skips in the daily tier are not flagged,

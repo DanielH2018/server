@@ -20,7 +20,7 @@
       }
     ]
   },
-  "description": "Historical view of which checks alerted (pushed DOWN to Uptime-Kuma) and when, reconstructed from Loki (31-day retention). Kuma itself keeps only current state; this is the history. TWO alert paths are read, because monitor-bridge polls no Kuma state and so logs nothing about the crons that push Kuma themselves: query A is monitor-bridge's container log, query B is `{job=\"syslog\"} |= \"status=down\"` from the host crons (longhorn-backup-health, manifest-prune-check, claude-otel-health, and daniel-pi's pi-recovery-health + pi-sd-health). NOT covered: secret-rotation-audit and live-drift-check emit no `status=` token, so they are invisible to B until their scripts log one. CLI equivalent: `uv run python scripts/diagnostics/probe.py alerts`.",
+  "description": "Which alerts fired, when, and for how long, grouped by the `service` label every rule carries. Every panel reads Prometheus's `ALERTS` series, so the history spans Prometheus's retention (`observability_prometheus_retention`). `Watchdog` is left out because it always fires. Alerts still in `shadow` are counted and marked in the tables. M6 B-5 rebuilt this board on `ALERTS` in place of the Loki reconstruction of Uptime Kuma DOWN pushes.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -29,10 +29,10 @@
   "panels": [
     {
       "datasource": {
-        "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "How many cycles each check spent DOWN over the dashboard's time range. A cycle is one evaluation (~5 min for monitor-bridge, the cron's own period for a host cron), so this is firing *duration*, not distinct incidents. Two queries because two alert paths exist: A reads monitor-bridge's container log, B reads the host crons that push Kuma directly and log through `logger` — monitor-bridge polls no Kuma state, so its log carries nothing about them.",
+      "description": "Minutes each service spent with an alert firing over the dashboard's time range, read from Prometheus's `ALERTS` series at one-minute resolution. Each firing alert counts its own minutes, so two alerts on one service for an hour read 120. `Watchdog` is left out because it always fires.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -48,7 +48,7 @@
               }
             ]
           },
-          "unit": "short"
+          "unit": "m"
         },
         "overrides": []
       },
@@ -84,38 +84,26 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "bf4q19tuivta8e"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "direction": "backward",
           "editorMode": "code",
-          "expr": "sum by (name) (count_over_time({container=\"monitor-bridge\"} |~ `^(\\[[^\\]]+\\] )?DOWN ` |~ \"$check\" | regexp `^(\\[[^\\]]+\\] )?DOWN (?P<name>\\S+) - ` [$__range]))",
-          "legendFormat": "{{name}}",
-          "queryType": "instant",
+          "expr": "sort_desc(sum by (service) (count_over_time(ALERTS{alertstate=\"firing\", alertname!=\"Watchdog\", service=~\"$service\"}[$__range:1m])))",
+          "instant": true,
+          "legendFormat": "{{service}}",
+          "range": false,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "bf4q19tuivta8e"
-          },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "sum by (name) (count_over_time({job=\"syslog\"} |= \"status=down\" |~ \"$check\" | regexp `^\\S+ \\S+ (?P<name>[\\w.-]+):` [$__range]))",
-          "legendFormat": "{{name}}",
-          "queryType": "instant",
-          "refId": "B"
         }
       ],
-      "title": "DOWN cycles by check (range total)",
+      "title": "Firing minutes by service (range total)",
       "type": "bargauge"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "Stacked per-check DOWN cycles over time — shows when alerts fired and which checks clustered together (a shared spike usually means one root cause, e.g. a host reboot). A covers monitor-bridge's checks, B the host crons that push Kuma directly.",
+      "description": "How many alerts were firing at each moment, stacked by service. A shared spike across services usually means one root cause, such as a node reboot.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -154,6 +142,7 @@
               "mode": "off"
             }
           },
+          "decimals": 0,
           "mappings": [],
           "thresholds": {
             "mode": "absolute",
@@ -192,84 +181,184 @@
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "bf4q19tuivta8e"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "direction": "backward",
           "editorMode": "code",
-          "expr": "sum by (name) (count_over_time({container=\"monitor-bridge\"} |~ `^(\\[[^\\]]+\\] )?DOWN ` |~ \"$check\" | regexp `^(\\[[^\\]]+\\] )?DOWN (?P<name>\\S+) - ` [$__auto]))",
-          "legendFormat": "{{name}}",
-          "queryType": "range",
+          "expr": "sum by (service) (ALERTS{alertstate=\"firing\", alertname!=\"Watchdog\", service=~\"$service\"})",
+          "instant": false,
+          "legendFormat": "{{service}}",
+          "range": true,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "bf4q19tuivta8e"
-          },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "sum by (name) (count_over_time({job=\"syslog\"} |= \"status=down\" |~ \"$check\" | regexp `^\\S+ \\S+ (?P<name>[\\w.-]+):` [$__auto]))",
-          "legendFormat": "{{name}}",
-          "queryType": "range",
-          "refId": "B"
         }
       ],
-      "title": "DOWN cycles over time, by check",
+      "title": "Firing alerts over time, by service",
       "type": "timeseries"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "bf4q19tuivta8e"
+        "type": "prometheus",
+        "uid": "prometheus"
       },
-      "description": "Every DOWN log line from both alert paths: monitor-bridge's own checks (A) and the host crons that push Kuma directly (B). Each check re-pushes every evaluation while firing, so a single incident repeats many lines. Use the `check` filter to narrow to one.",
+      "description": "Every alert that fired in the time range, with its firing minutes. A `shadow` value of `true` marks a rule whose M6 batch has not cut over yet: Alertmanager does not page it, and Uptime Kuma still does.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Firing minutes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "m"
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
-        "h": 13,
+        "h": 12,
         "w": 24,
         "x": 0,
         "y": 9
       },
       "id": 3,
       "options": {
-        "dedupStrategy": "none",
-        "enableInfiniteScrolling": true,
-        "enableLogDetails": true,
-        "showControls": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": true
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Firing minutes"
+          }
+        ]
       },
       "pluginVersion": "12.3.1",
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "bf4q19tuivta8e"
+            "type": "prometheus",
+            "uid": "prometheus"
           },
-          "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=\"monitor-bridge\"} |~ `^(\\[[^\\]]+\\] )?DOWN ` |~ \"$check\"",
+          "expr": "sum by (service, alertname, severity, shadow) (count_over_time(ALERTS{alertstate=\"firing\", alertname!=\"Watchdog\", service=~\"$service\"}[$__range:1m]))",
+          "format": "table",
+          "instant": true,
           "legendFormat": "",
-          "queryType": "range",
+          "range": false,
           "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "bf4q19tuivta8e"
-          },
-          "direction": "backward",
-          "editorMode": "code",
-          "expr": "{job=\"syslog\"} |= \"status=down\" |~ \"$check\"",
-          "legendFormat": "",
-          "queryType": "range",
-          "refId": "B"
         }
       ],
-      "title": "DOWN alert log (raw)",
-      "type": "logs"
+      "title": "Alerts that fired in the range",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "Value": 4,
+              "alertname": 1,
+              "service": 0,
+              "severity": 2,
+              "shadow": 3
+            },
+            "renameByName": {
+              "Value": "Firing minutes"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "description": "The alerts firing at the end of the time range, one row per series. `probe.py monitors` lists the same set from the command line once M6 B-2 lands.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "editorMode": "code",
+          "expr": "max by (service, alertname, severity, shadow, instance, job) (ALERTS{alertstate=\"firing\", alertname!=\"Watchdog\", service=~\"$service\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Firing now",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Value": true
+            },
+            "indexByName": {
+              "alertname": 1,
+              "service": 0,
+              "severity": 2,
+              "shadow": 3
+            },
+            "renameByName": {}
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
   "preload": false,
@@ -278,28 +367,37 @@
   "tags": [
     "homelab",
     "alerts",
-    "monitor-bridge",
-    "loki"
+    "alertmanager",
+    "prometheus"
   ],
   "templating": {
     "list": [
       {
+        "allValue": ".*",
         "current": {
-          "text": "",
-          "value": ""
+          "text": "All",
+          "value": "$__all"
         },
-        "description": "Regex to filter to one check (matches the DOWN line, so a check name works). Empty = all.",
-        "label": "Check filter",
-        "name": "check",
-        "options": [
-          {
-            "selected": true,
-            "text": "",
-            "value": ""
-          }
-        ],
-        "query": "",
-        "type": "textbox"
+        "datasource": {
+          "type": "prometheus",
+          "uid": "prometheus"
+        },
+        "definition": "label_values(ALERTS, service)",
+        "description": "Narrow every panel to one or more `service` values.",
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "qryType": 1,
+          "query": "label_values(ALERTS, service)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 2,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
       }
     ]
   },

@@ -78,7 +78,7 @@ loki.write "homelab" {
 //
 // Through docker-proxy, never the raw socket: the proxy is already on this host serving
 // this source (glances read it too until it retired 2026-09-18), it is read-only (POST=0,
-// EXEC=0), and CONTAINERS=1 covers both the container list and the log stream. Handing a
+// EXEC=0), and CONTAINERS=1 plus ALLOW_LOGS=1 cover the container list and the log stream. Handing a
 // log shipper the bare socket would give it full control of the daemon.
 discovery.docker "pi" {
   host = "tcp://docker-proxy:2375"

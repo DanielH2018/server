@@ -18,8 +18,10 @@
 # selects alertmanager; NetworkPolicies add up, so this file only widens it:
 #   - prometheus, its only alert source before the ruler, and its own scrape of the
 #     `alertmanager` job: the intra-namespace `podSelector: {}`.
-#   - traefik, for the GET-only read door (observability/templates/
-#     alertmanager-read-ingressroute.yaml.j2): the baseline's homelab-namespace traefik peer.
+#   - traefik, for the two routes on alertmanager.local: the UI behind Authelia
+#     (observability/templates/alertmanager-ingressroute.yaml.j2) and the GET-only read door
+#     (alertmanager-read-ingressroute.yaml.j2). The baseline's homelab-namespace traefik peer
+#     admits both.
 #
 # 9093 is the containerPort AND the Service targetPort (observability/templates/alertmanager.yaml.j2).
 #

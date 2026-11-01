@@ -57,12 +57,11 @@ def test_bridge_checks_renders_one_row_per_check_in_order():
 
 
 def test_gate_sets_group_members_by_the_gate_column():
-    names = {"prometheus": "PROM_DEPENDENT", "startup_grace": "STARTUP_GRACE"}
-    assert fb.render_gate_sets(ROWS, names).splitlines() == [
-        "| Set | Held by | Members | Checks |",
+    assert fb.render_gate_sets(ROWS).splitlines() == [
+        "| Gate value | Held by | Members | Checks |",
         "|---|---|---|---|",
-        "| `PROM_DEPENDENT` | Prometheus Reachable gate, which suppresses them | 1 | `disk` |",
-        "| `STARTUP_GRACE` | startup grace, which holds them `up` through their first "
+        "| `prometheus` | Prometheus Reachable gate, which suppresses them | 1 | `disk` |",
+        "| `startup_grace` | startup grace, which holds them `up` through their first "
         "down cycles | 1 | `n8n` |",
         "| ungated | nothing | 1 | `etcd_restore_drill` |",
     ]
@@ -108,11 +107,6 @@ def test_tunables_never_carry_a_value_built_from_a_variable():
     assert not keys & {"BUILDER_MAX_LAG_S", "LOG_ERROR_MAX", "TZ"}
 
 
-def test_gate_set_names_come_from_the_members_assignments():
-    source = 'PROM_DEPENDENT = _members("prometheus")\nOTHER = frozenset()\n'
-    assert fb.read_gate_set_names(source) == {"prometheus": "PROM_DEPENDENT"}
-
-
 # --- the fragments against the real tree ----------------------------------------------------
 
 
@@ -125,9 +119,10 @@ def test_every_check_row_reaches_the_checks_fragment():
 
 def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
-    names = fb.read_gate_set_names(fb.GATES.read_text())
-    body = fb.render_gate_sets(rows, names)
-    assert {"prometheus", "b2_reachable", "wan_reachable"} <= set(names)
+    body = fb.render_gate_sets(rows)
+    assert {"prometheus", "b2_reachable", "wan_reachable"} <= {
+        row["name"] for row in rows if row.get("is_gate")
+    }
     for row in rows:
         if not row.get("is_gate"):
             assert body.count(f"`{row['name']}`") == 1, row["name"]

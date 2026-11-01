@@ -50,7 +50,6 @@ def _direct_fetches(source: str) -> list[str]:
 def _check_modules() -> dict[str, str]:
     paths = sorted((FILES / "checks").glob("*.py")) + [
         FILES / "check.py",
-        FILES / "gates.py",
     ]
     return {p.relative_to(FILES).as_posix(): p.read_text() for p in paths}
 

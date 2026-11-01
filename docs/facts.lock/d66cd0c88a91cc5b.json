@@ -1,13 +1,13 @@
 {
-  "checksum": "5dabb16c311396a4ee5dbbb9acf09e9ef19d2f2e22f9475435614768fb7b8b5f",
+  "checksum": "30352bc30848ba2be5d21002a4da79fd072faf4369c02627a615c788602e4b00",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/artifacts/CLAUDE.md#The peer sync runs from daniel-box, and the direction is not arbitrary",
   "row": {
     "atoms": {
-      "ansible/roles/setup/claude_code/tasks/node_crons.yml": "d6debbc1ff13ef29a4f8aeef11f6599a7991f034146e5430eacdd7b2da895892",
-      "ansible/tests/setup/test_claude_code_artifacts_node_crons.py": "6b00542c60402e663b0483cfc6f37a4650e61a91ae949b14f0ea4e1c85581a65"
+      "hosts/components/claude-code/templates/sync-artifacts.sh.j2": "f1706c2de8d6d5fa05f5326b6ee0ce65c8ff4db6f576fb2881b2a4e84144309a",
+      "hosts/lib/tests/test_claude_artifacts_node_timers.py": "e8dc749ce8b978aeb467c6a7e0fde526c83bb85c46a5631ee4db5f21fae82998"
     },
     "python": "3.14",
-    "verified_sha": "3b11cce69"
+    "verified_sha": "dd4bc2a78"
   }
 }

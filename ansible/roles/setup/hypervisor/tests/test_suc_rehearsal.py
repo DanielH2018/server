@@ -51,6 +51,13 @@ def test_the_pins_come_from_the_checkout_whichever_role_holds_them():
     assert len(pins["installer_sha256"]) == len(pins["flux_sha256"]) == 64
 
 
+def test_the_flux_tarball_digest_is_homelab_tools_amd64_pin():
+    tool = yaml.safe_load((REPO / suc_rehearsal.TOOLS).read_text())["tools"]["flux"]
+    pins = suc_rehearsal.pins(str(REPO))
+    assert pins["flux_sha256"] == tool["amd64"]["sha256"]
+    assert f"/download/{tool['amd64']['version']}/" in pins["flux_url"]
+
+
 @pytest.mark.parametrize("holders", [0, 2], ids=["none", "two"])
 def test_a_pin_held_by_none_or_two_defaults_files_is_refused(tmp_path, holders):
     for name in ("a", "b")[:holders]:

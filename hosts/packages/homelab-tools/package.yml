@@ -58,6 +58,24 @@ tools:
       sha256: ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7
       url: https://github.com/prometheus/node_exporter/releases/download/v{bare}/node_exporter-{bare}.linux-arm64.tar.gz
       member: node_exporter-{bare}.linux-arm64/node_exporter
+  # #6699: the flux CLI the D5 takeover check runs as root on daniel-box, at the cluster's
+  # `flux_version` (roles/k8s/flux; ansible/roles/setup/claude_code/tests/test_takeover_check_install.py
+  # holds the two equal). Both digests come from the release's checksums file:
+  # https://github.com/fluxcd/flux2/releases/download/v2.9.6/flux_2.9.6_checksums.txt
+  flux:
+    amd64:
+      # renovate: datasource=github-release-attachments depName=fluxcd/flux2
+      version: v2.9.6
+      sha256: b4d22673e9246cbd628881f1a9ef3b090085dced291e42d804555cee8e8d42c5
+      url: https://github.com/fluxcd/flux2/releases/download/{version}/flux_{bare}_linux_amd64.tar.gz
+      member: flux
+    arm64:
+      # renovate: datasource=github-release-attachments depName=fluxcd/flux2
+      version: v2.9.6
+      sha256: 6663c154755b732f43dc993d72321f71c2fc1ff0bcb94b2696e0a8638fa562b4
+      url: https://github.com/fluxcd/flux2/releases/download/{version}/flux_{bare}_linux_arm64.tar.gz
+      member: flux
+  # nfpm and uv stay the last two blocks: hosts/bootstrap-host.sh embeds this tail byte for byte.
   # H7.24a: daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
   # Both digests come from the release's checksums.txt:
   # https://github.com/goreleaser/nfpm/releases/download/v2.48.0/checksums.txt

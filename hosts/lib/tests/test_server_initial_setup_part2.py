@@ -77,6 +77,11 @@ def test_each_cron_this_host_stops_writing_is_retired_and_a_timer_runs_at_its_sl
     assert "/usr/lib/homelab/docker-prune" not in package.files
 
 
+def test_reconcile_retires_the_compose_era_crowdsec_hub_cron(manifest):
+    retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
+    assert retired.get("Update Crowdsec Hub") == "root"
+
+
 def test_the_scans_read_this_hosts_own_tokens(package):
     for scan in ("rkhunter", "aide"):
         unit = _text(package, f"/usr/lib/systemd/system/homelab-{scan}-check.service")

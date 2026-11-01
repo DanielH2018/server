@@ -467,7 +467,7 @@ The exit criterion is seven observations:
 | `k3s` (host halves) | — | `agent.yml`, `agent_verify.yml`, `static-address.yml`, the node files and the agent ufw rules | node files, netplan, `coredns-host.service`, disk health, etcd list drill, kubeconfig oneshot, the join-firewall rules | install moves to bootstrap step 4 |
 | `nut_host` (box half) | — | — | `nut-secondary` with the pinned ClusterIP | — |
 | `common` | the alert unit, resolver template | the alert unit | the alert unit, resolver template | `host_lib.py` and `kuma_push.py` move to `hosts/lib/`; `stamp_*` and `release_bin` are deleted |
-| `claude_code`, `renovate_agent`, `renovate_notify`, `fake_remux`, `deploy_ui`, `homelab_builder` | — | `claude_code` units and the agent users | all of them | per-user tooling goes to chezmoi |
+| `claude_code`, `renovate_agent`, `renovate_notify`, `fake_remux`, `deploy_ui`, `homelab_builder` | — | `claude_code` units and the agent users | all of them | per-user tooling goes to chezmoi, except the agent's homelab-ui browser toolchain (pinned Node, `@playwright/mcp`, its Chromium and the MCP registration), which is a `claude-code` component oneshot run as the agent (ruled 2026-10-30) |
 | `config_files` | `/etc/profile.d/homelab.sh` | — | — | the Pi's tracked `~/.bashrc` reverts to Ubuntu's |
 | `github_cli`, `chezmoi_setup` | — | — | — | chezmoi, which bootstrap step 5 installs |
 | `gitops_deploy` | — | — | the two GitHub check timers; `homelab-checkout-sync` replaces the fast-forward | H7.19a retires the deployer and empties the role; H7.20a deletes the role |
@@ -1331,6 +1331,34 @@ steps are:
    step 5 as a `manual` unit, so nothing else starts it. On a host with no `docker-ce` it
    installs the pinned versions, holds them, and starts `homelab-compose.service`, which
    failed in step 5 for want of an engine.
+7. On a host whose package ships the `integrity-scans` timers, write the component's
+   one-time state, each piece behind a guard that reads it first:
+    - `rkhunter --propupd`, when `/var/lib/rkhunter/db/rkhunter.dat` is missing;
+    - `systemctl mask --now dailyaidecheck.timer`, when `systemctl is-enabled` does not
+      print `masked`. The aide package's own timer would run a second, nightly full scan.
+      The mask comes before `aideinit`, so a failed init still leaves the timer masked;
+    - `aideinit -y`, when `/var/lib/aide/aide.db` is missing. It runs for over an hour on
+      the Pi.
+
+   The step runs last, so both baselines record every package the earlier steps installed.
+   The package does not carry these as a first-run oneshot (#6674). A oneshot would
+   rebaseline any host whose database went missing, so a deleted `aide.db` would become a
+   fresh, trusted one instead of a DOWN push from the weekly check.
+
+   A rerun of the script on a live host meets the same case, for example when the operator
+   reruns it to recreate an age key. The script cannot tell a first install from a lost
+   database by the database alone, so it also reads the logs a baseline leaves behind. It
+   refuses `rkhunter --propupd` when `/var/log/rkhunter.log` or `rkhunter.log.1` exists, and
+   it refuses `aideinit` when `/var/log/aide/aideinit.log` exists. The refusal names the log
+   it found. After the operator has inspected the host, `--rebaseline` writes the new
+   baseline.
+
+   Each init writes its log while it runs, so a first init that is interrupted or fails
+   leaves a log and no database. The script therefore writes a marker,
+   `/var/lib/homelab/bootstrap/rkhunter-baseline.pending` or `aide-baseline.pending`, before
+   it starts each init, and removes it after the init succeeds. When the marker exists, the
+   log is the script's own unfinished first init, so a rerun resumes the init rather than
+   refusing it.
 
 `--until <step>` stops after a step, so a runbook can restore data before step 5 starts any
 service. The operator then adds the printed public key as a recipient (**operator-only**)
@@ -1357,7 +1385,11 @@ for a wrong hostname, a missing host var and a missing key.
    hold client private keys, so this step is **operator-only**.
 6. Run `sudo bootstrap-host.sh daniel-pi`, which installs the package and starts the Compose
    project. The package also installs pi-peer-backup's forced-command wrapper and
-   authorized key (H7.4).
+   authorized key (H7.4). The script's step 7 then writes the first rkhunter and AIDE
+   baselines and masks `dailyaidecheck.timer`, which takes over an hour. The component
+   leaves that state to bootstrap rather than carrying it (#6674). Afterwards
+   `/var/lib/aide/aide.db` and `/var/lib/rkhunter/db/rkhunter.dat` exist, and
+   `systemctl is-enabled dailyaidecheck.timer` prints `masked`.
 7. If step 3 created a key, the operator adds it as a recipient **without removing the old
    one** (**operator-only**). The old key leaves the recipient list only after the rebuild
    is accepted.
@@ -1950,9 +1982,37 @@ the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback
         3. Triage, then the agent's home: the peer key, the ssh config, the operator config,
            the memory seed, the homelab-ui login and the browser oneshot, with the *What goes
            where* amendment below.
+           As landed (#6677): triage's units keep their names except the poller, which is
+           `homelab-claude-triage-poll`, and its caps are literals in the role's
+           `claude-triage-pins.j2`, for the lander's reason. The poller pages through a packaged
+           unit that keeps its one-hour quiet window; the run pages through `homelab-alert@`.
+           `claude-agent-setup` generates the peer key and installs the ssh config on the key
+           host, and seeds the memory store where the Remote Control host runs as the agent.
+           The homelab-ui login and triage's credential are outputs of daniel-box's SOPS file.
+           The operator config subset needed nothing: it runs only where
+           `claude_code_agent_dotfiles` is false, which no host sets. The browser oneshot is
+           `homelab-claude-agent-browser.service`, and the role's `agent_browser.yml` is deleted
+           with the pins it read. `asset_pins.py` reads a component's `defaults:` map.
         4. The artifacts `tmpfiles.d` lines and the two crons. Then the sources move into
            `hosts/components/claude-code/`, the role empties, and the Ansible-only tests are
            deleted.
+           As landed (#6678): the crons are `homelab-sync-artifacts.timer` and
+           `homelab-claude-otel-health.timer`, whose units load the push tokens as
+           credentials of daniel-box's `package.yml`, and whose `SyslogIdentifier=` keeps the
+           cron tags Kuma and Loki read. Their cron files and token-bearing scripts are legacy
+           entries. The flux copy is `homelab-takeover-check-flux.service`, a root oneshot
+           that ships on both hosts and removes the copy while the check is off. The artifacts
+           directories are `tmpfiles.d/homelab-artifacts.conf`, and `k8s_host_files` drops
+           its artifacts task file. The role's `tasks/main.yml` is one unconditional
+           `end_role`. Only the two cron templates moved: the role's other templates, files
+           and defaults stay in the role and render through `role: claude_code`, as
+           `nut_host`'s do, and H7.20a moves them with its deletion. The task-structure tests
+           are deleted, and the tests of what still ships read the package render.
+           Amended by #6699: `homelab-tools` ships flux at `flux_version`, the wrapper runs
+           `/usr/lib/homelab/bin/flux`, and the oneshot is gone. `legacy:` entries remove
+           `/usr/local/lib/homelab-takeover-check` and its two files. Switching the check off
+           no longer removes the state directory, whose per-label contents reconcile cannot
+           name.
     - **The homelab-ui browser toolchain is a component oneshot, ruled on 2026-10-30.** The
       agent's pinned Node and its sha256, `@playwright/mcp`, its Chromium, and the `claude mcp
       add homelab-ui` registration with its off path move into the `claude-code` component as

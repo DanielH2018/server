@@ -1,7 +1,7 @@
-# {{ ansible_managed }}
+# Shipped by the claude-code host component (roles/setup/claude_code's template).
 # The agent reaches each peer as that peer's own agent user, `{{ claude_code_agent_user }}`, which
 # has no sudo. A peer appears here while its host_vars set claude_agent_ssh_login_enabled.
-{% for peer in groups['all'] if peer != claude_agent_ssh_key_host and hostvars[peer].claude_agent_ssh_login_enabled | default(false) | bool %}
+{% for peer in hostvars | sort if peer != claude_agent_ssh_key_host and hostvars[peer].claude_agent_ssh_login_enabled | default(false) | bool %}
 
 Host {{ peer }}
     HostName {{ hostvars[peer].server_ip }}

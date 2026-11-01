@@ -132,9 +132,9 @@ uptime_kuma_k8s_push_resend_down_beats: 90
 # the window costs none of that: no PENDING state, and an explicit `down` push still flips the tile
 # immediately and carries its message.
 #
-# The four 600s push monitors that are NOT bridge-fed keep their own interval, because their
-# feeders run on their own cadences: CrowdSec Home Allowlist, Daniel Pi SD Health, Daniel Pi
-# Recovery, Arr Auto-Block. `test_bridge_push_monitors_share_one_interval` is what keeps the split
+# The 600s push monitors that are NOT bridge-fed keep their own interval, because their
+# feeders run on their own cadences: CrowdSec Home Allowlist, Arr Auto-Block.
+# `test_bridge_push_monitors_share_one_interval` is what keeps the split
 # honest, deriving bridge membership from the bridge's own env-secret rather than from a list here.
 uptime_kuma_k8s_bridge_push_interval: 1200
 
@@ -149,8 +149,8 @@ uptime_kuma_k8s_bridge_push_interval: 1200
 # test_kuma_static_monitors.py's RESEND_HELD, and write the condition that lifts it.
 
 # ── status page group sync ─────────────────────────────────────────────────────────────────
-# Kuma's status page at /status/<slug> — the one Homepage's `uptimekuma` widget reads
-# (roles/k8s/homepage/templates/config/services.yaml.j2). The CronJob below owns its group list; the
+# Kuma's status page at /status/<slug>, which Homepage's tile read until M6 B-4 moved the tile to
+# Alertmanager. The CronJob below owns its group list; the
 # page object itself is hand-created and stays that way. Do NOT declare it as an AutoKuma
 # `status_page` entity: AutoKuma at the pinned tag CREATES a status page and never edits one
 # (sync.rs's `match (merge, current)` has no StatusPage arm, on the pin and on master), and
@@ -220,13 +220,11 @@ uptime_kuma_k8s_status_page_groups:
       - "^crowdsec-"
   - name: Observability
     match:
-      - "^claude-otel-health$"
       # One tile per cluster node, both watching the same route from different source addresses.
       # An edge/observability signal rather than a per-app tile.
       - "^loki-read-route-"
   - name: Backups & Storage
     match:
-      - "^longhorn-backup$"
       # The registry PVC's only space reclaim: a storage tile, not an automation one.
       - "^registry-gc$"
       - "^etcd-"
@@ -240,10 +238,6 @@ uptime_kuma_k8s_status_page_groups:
       - "^aide-"
       # The weekly rkhunter scan, one tile per host, grouped with AIDE for the same reason.
       - "^rkhunter-"
-  - name: Raspberry Pi
-    match:
-      - "^daniel-pi-"
-      - "^wg-easy-pi-peers$"
   - name: Media Automation
     match:
       - "^configarr$"
@@ -251,20 +245,14 @@ uptime_kuma_k8s_status_page_groups:
       - "^monitor-bridge-janitorr$"
       - "^autofix-fake-remux"
       - "^mkv-attachment-repair$"
-      - "^arr-autoblock$"
   - name: Automation & Drift
     match:
       - "^renovate-"
       - "-drift-check$"
-      - "^github-ruleset-drift$"
-      - "^github-interaction-limit$"
       - "^secret-rotation$"
       - "^docs-refresh$"
-      - "^manifest-prune-check$"
-      - "^release-staleness-check$"
       - "^homelab-eval-sweep$"
       - "^status-page-sync$"
-      - "^artifacts-sync$"
   - name: Other
     match:
       - ".*"

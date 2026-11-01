@@ -106,6 +106,12 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   file removed, but never stopped, because `systemctl` refuses a template's own name. While any
   instance is active, activating or reloading, the entry stays and counts as drift, as a running
   legacy service does. A run therefore never ends an instance mid-run.
+- **A toggle-gated legacy entry.** A `legacy:` entry may carry `when:`, and ships only while it
+  holds. The claude-code component uses it to remove the textfile metrics a disarmed timer
+  wrote: the toggle that drops the timer adds the entry. Step 1 stops the dropped timer and service before step 4
+  removes the file, so a run in flight cannot write it back. Reconcile rebuilds its retired set
+  from each manifest, so an entry that drops out when the timer is re-armed retires its path
+  again on the next disarm.
 
 ## Activation, pending state and drift
 
@@ -196,9 +202,8 @@ arm sets both, which reloads nothing. Last, on an active UFW, the arm reads
 `iptables -S ufw-before-input`. When the chain lacks `-A ufw-before-input -i lo -j ACCEPT`,
 the run fails, and the failure holds the host. The check only reads and restarts nothing. The
 repair is an operator's `ufw reload`, which opens the same window again. The check reads once,
-straight after the arm's commands, so it misses a restore that lands later. initial_setup's
-`Enable UFW firewall` task has the same gate and the same check
-(`ansible/roles/setup/initial_setup/tasks/network.yml`).
+straight after the arm's commands, so it misses a restore that lands later. The arm owns
+the enable on every host since H7.32, which deleted initial_setup's `Enable UFW firewall` task.
 
 A rule add, relabel or delete on an active firewall still reloads the user chains. Those
 chains sit below the before chains, so loopback and established traffic survive that window.

@@ -17,7 +17,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **A separate `ingressroute-push` router** is daniel-pi's push-only door.
 - **Persists:** `loki-homelab-data` (`longhorn-nobackup`, 5Gi) — logs, `744h` retention; treated
   as bulky and reconstructible in spirit, so the retention window is the real bound, not backup.
-- **The monitors that read from here:** the Alert History reconstruction, the ruler's own
+- **The monitors that read from here:** `probe.py alerts`'s DOWN history, the ruler's own
   rules and monitor-bridge's remaining LogQL checks. A broken apply blinds the first and the
   last without paging.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
@@ -52,18 +52,21 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `group_vars/all.yml`, shared with the Pi's Alloy and with every selector that reads them
   (#3740). `ansible/tests/services/test_loki_stream_labels.py` fails when an emitted value
   and the consumers' values drift apart.
-- **Two `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
-  `refresh_token`, which HA logs on a failed cast (issue #3015), and Prowlarr's `apikey=` in the
-  *arr Torznab error URLs (#6276). Each substitutes the capture group only, so the rest of the
-  record survives. `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` and
-  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` fail on either half. The stage is
+- **Three `stage.replace` stages redact credentials on the way in:** Home Assistant's cast
+  `refresh_token`, which HA logs on a failed cast (issue #3015), Prowlarr's `apikey=` in the
+  *arr Torznab error URLs (#6276), and the Uptime Kuma push token in any `/api/push/<token>`
+  path (#6749). The push-token stage is scoped by a `|= "/api/push/"` line filter, not by
+  container, because any container may log a push URL. Each substitutes the capture group
+  only, so the rest of the record survives.
+  `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py`,
+  `ansible/tests/k8s/test_alloy_redacts_arr_apikey.py` and
+  `ansible/tests/k8s/test_alloy_redacts_kuma_push_token.py` fail on either half. Each stage is
   prospective: a record shipped before it still carries the token for the 744h retention window.
 - **Host lines carry a `program` label, and the line itself is untouched.** The
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
   `HostOutOfMemoryKill` pages on the first host-wide OOM kill. The stage runs
-  only `stage.regex` and `stage.labels`, because probe.py and the alert-history dashboard parse
-  the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
+  only `stage.regex` and `stage.labels`, because probe.py parses the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
   label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.
 - **k3s's own log ships warnings and worse only, as `{job="k3s"}` on each node** (#6177).
   `/var/log/k3s.log` is kept out of the journal and syslog on purpose, and Alloy tails the file

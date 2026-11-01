@@ -67,6 +67,8 @@ class BatchStatus:
             though the unit may have exited 0.
         permission_denials: how many tool calls the session was denied.
         terminal_reason: why the session ended, when it says.
+        unit_result: systemd's `Result` for the unit, such as `oom-kill` when the batch hit
+            its MemoryMax or `timeout` when RuntimeMaxSec= expired.
     """
 
     batch: str
@@ -78,6 +80,7 @@ class BatchStatus:
     is_error: bool = False
     permission_denials: int = 0
     terminal_reason: str = ""
+    unit_result: str = ""
 
 
 def _one(b: Batch) -> str:
@@ -240,6 +243,7 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
                 is_error=is_error,
                 permission_denials=len(result.get("permission_denials") or []),
                 terminal_reason=str(result.get("terminal_reason") or ""),
+                unit_result=props.get("Result", ""),
             )
         )
     return out
@@ -328,6 +332,10 @@ def status_line(
     if state in ("failed", NO_REPORT):
         exit_text = "unknown" if s.exit_code is None else str(s.exit_code)
         line += f" (exit {exit_text})"
+        # The page carries only the state, and polkit admits a fixed set of state names, so
+        # an OOM kill or a runtime-cap stop is named here rather than as a state of its own.
+        if s.unit_result and s.unit_result != "success":
+            line += f" result={s.unit_result}"
         if s.terminal_reason:
             line += f" {s.terminal_reason}"
         line += f" {s.stderr_tail[-300:]}"

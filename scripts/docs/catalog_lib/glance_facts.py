@@ -234,7 +234,9 @@ def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list
     """The block's bullet lines for one setup role, unwrapped.
 
     A role whose first task is a guarded `meta: end_role` adds the guard's text to the
-    *Applied by* line, read by `setup_gates.role_end_guard`.
+    *Applied by* line, read by `setup_gates.role_end_guard`. A role whose leading `end_role`
+    has no guard runs nothing anywhere, so it lists no cron or timer, even where it keeps a
+    timer template a host package renders.
     """
     appliers = setup_appliers(role_dir.name, playbooks_dir)
     if appliers:
@@ -259,6 +261,11 @@ def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list
             f"; ends on hosts where `{_when_text(guard)}` (leading `meta: end_role`)"
         )
 
+    if guard == "True":
+        lines.append(
+            "- **Crons / timers:** none (the role ends on every host before its first task)"
+        )
+        return lines
     jobs = cron_jobs(role_dir)
     if jobs:
         # One sub-bullet per cron: k3s installs twelve and initial_setup seventeen, and a

@@ -54,6 +54,24 @@ c_modules = frozenset({
     "unicodedata", "zlib",
 })
 
+# The audit events the real chain raises, beyond those `audit` reads (#4846).
+allowed = frozenset({
+    "builtins.id", "compile", "exec", "function.__new__", "marshal.loads",
+    "object.__getattr__", "object.__setattr__", "os.listdir", "socket.getaddrinfo",
+    "sys._getframemodulename",
+    # Interpreter shutdown, after the result is printed.
+    "cpython.PyInterpreterState_Clear", "cpython._PySys_ClearAuditHooks",
+})
+
+# Containers whose contents follow which code ran rather than what it did: the import
+# system's caches and the stdlib's memo tables. `sys.modules` is `modules_loaded`.
+exempt = frozenset({
+    "sys.modules", "sys.path_importer_cache", "linecache.cache", "re._cache",
+    "re._cache2", "encodings._cache", "importlib._bootstrap._module_locks",
+    "importlib._bootstrap._blocking_on", "_frozen_importlib._module_locks",
+    "_frozen_importlib._blocking_on",
+})
+
 # C objects whose state no descriptor the walk reads exposes, each with a C-level reader. The
 # walk stores what the reader returns, as its `repr`, under the key `()` (#5107).
 readers = []
@@ -142,6 +160,12 @@ callable_names = _callable_names(
     types.MethodType.__dict__["__func__"],
 )
 del _callable_names
+# The object a bound method or a bound built-in carries, which `signature` records beside the
+# callable's name (#6433).
+callable_selves = {
+    types.MethodType: types.MethodType.__dict__["__self__"],
+    types.BuiltinFunctionType: types.BuiltinFunctionType.__dict__["__self__"],
+}
 
 
 def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, prio,

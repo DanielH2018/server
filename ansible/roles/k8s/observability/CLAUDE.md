@@ -43,13 +43,23 @@ The working-out lives in `docs/observability-dashboards.md`.
 
 **`probe.py health observability` gates every workload in the role**, none of them named observability.
 
-**A second route, `alertmanager.local.<domain>`, is a GET-only read door with no Authelia.**
-`templates/alertmanager-read-ingressroute.yaml.j2` admits `/api/v2/alerts` and
-`/api/v2/silences` from the LAN and the node addresses, so `probe.py health` can name a
-silenced or inhibited gated alert and `probe.py monitors` can list active silences. The *At a
-glance* block lists `ingressroute.yaml.j2` alone, so it does not show this route.
-`ansible/tests/k8s/test_alertmanager_read_route.py` holds the matcher to `GET` and the two
-paths.
+**Two more routers share `alertmanager.local.<domain>`, and the *At a glance* block shows
+neither.** It reads `ingressroute.yaml.j2` alone.
+
+- `templates/alertmanager-ingressroute.yaml.j2` is Alertmanager's UI, where the operator lists
+  alerts and inhibitions and manages silences. It names the `authelia` chain, and the
+  authelia role's hand-written rule gives the host `two_factor` for `group:admins` and `deny`
+  to everyone else. The Deployment's `--web.external-url` names the same host, so the UI's
+  links resolve to the route.
+- `templates/alertmanager-read-ingressroute.yaml.j2` is a GET-only read door with no Authelia.
+  It admits `/api/v2/alerts` and `/api/v2/silences`, so `probe.py health` can name a silenced
+  or inhibited gated alert and `probe.py monitors` can list active silences.
+
+Both admit the LAN and the node addresses only, whatever `k8s_public_route` says. Traefik ranks
+the two by rule length, and the read door's rule is the longer, so a GET on its two paths skips
+Authelia. `ansible/tests/k8s/test_alertmanager_read_route.py` holds the door to `GET` and the two
+paths, the UI behind the `authelia` chain, the door's rank above the UI, and the external URL
+to the UI's host.
 
 **The `observability-prepull` Kustomization pulls Grafana's image before its `Recreate`**, so the
 dashboards serve through a 482 MB Docker Hub pull (`flux_prepull_timeout` in
@@ -193,10 +203,18 @@ pages once (`ansible/tests/services/test_alertmanager_blackbox_inhibit.py`).
 `PiHostDown` holds back `PiPortDead`, so a dead Pi pages as the host and not once per published
 port (`ansible/tests/services/test_alertmanager_pi_inhibit.py`). The inhibit has no `equal` list,
 because the two alerts share no `instance`, and the estate has one Pi.
+`KumaDown`'s `up == 0` arm holds back `ScrapeTargetDown` for the same `job` and `instance`, so a
+dead Kuma pages once, as a critical (`ansible/tests/services/test_alertmanager_kuma_inhibit.py`).
+`KumaDown` and the five k3s-cron rule pairs in `files/rules/host-checks.yaml` page since M6's
+batch B1 Cutover-1b.
 `files/rules/extra-probes.yaml` holds the rules that replaced Kuma's 14 hand-written probe tiles
 and the Pi's port arm. Its per-target alerts take `service` from the `blackbox-extra` and
 `blackbox-pi-ports` scrape jobs, so their rule labels carry none, and they page since M6's batch B8
 Cutover-b.
+`files/rules/pods.yaml` holds the rules that replaced the Kuma tiles of autofix-bridge, the two
+cloudflare-ddns Deployments and the pi-peer-backup CronJob, and they page since M6's batch B7
+Cutover-1b. An inhibit in `alertmanager-secret.yaml.j2` lets `AutofixBridgeDown` hold the
+`ScrapeTargetDown` rule for the same job, so one dead exporter pages once.
 `files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
 while its rule is still shadow, and the last M6 Phase A cutover deletes it.
 
@@ -292,9 +310,9 @@ The stack can run for days fully green — every pod Ready, zero export failures
 heartbeat — while carrying no real signal. **Run `claude -p` on the quiet host before
 investigating its collector**, and read the logs before the metrics, not from counters alone.
 The four behaviours behind it are on the docs page.
-`telemetry-health.sh` checks OTLP reachability, and the `OtelCollectorExportFailing` rule
+`claude-otel-health` checks OTLP reachability, and the `OtelCollectorExportFailing` rule
 arms export failures — neither can detect "nobody is using it". The heartbeat is a daniel-box
-cron that `roles/setup/claude_code` installs (H2.7), not this role. `TempoBlocklistPollFailing`
+timer that its host package ships (`hosts/components/claude-code/`), not this role. `TempoBlocklistPollFailing`
 pages when Tempo's blocklist poll fails: stored traces go unsearchable behind a Ready pod.
 
 ## Content logging is on

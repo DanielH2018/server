@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
-"""Fetch every pinned download in the roles' `defaults/` and check its checksum.
+"""Fetch every pinned download in the roles' and host components' defaults and check its checksum.
 
 A Renovate PR that bumps a version used to build a download URL is green whether or not the URL
 it wrote exists: nothing in CI fetches it. A `jellyfin-ani-sync` bump can leave a 404 URL
 beside a checksum from the old release, with green CI. This script is the fetch-and-check over
 every pin at once.
 
-A pin is a URL and the digest the role checks the download against. Two shapes carry one:
+A pin is a URL and the digest the role checks the download against. A role's `defaults/main.yml`
+and a host component's `defaults:` map carry them alike. Two shapes carry one:
 
   * A flat pair in `defaults/main.yml`: `<prefix>_url` beside `<prefix>_sha256` or
     `<prefix>_md5` (`jellyfin_k8s_anisync_url` / `_md5`, `k3s_install_script_url` /
@@ -98,6 +99,7 @@ KNOWN_PINS = frozenset(
         "chezmoi_setup_installer",
         "initial_setup_uv_installer",
         "code_server_k8s_node",
+        "claude_code_agent_node",
         "valheim_k8s_mods[Server_devcommands]",
     }
 )
@@ -243,23 +245,50 @@ def annotated_versions(text: str, managers: list[dict]) -> dict[str, str]:
     }
 
 
+COMPONENTS = REPO / "hosts" / "components"
+
+
+def defaults_sources(
+    roles: _Path = ROLES, components: _Path = COMPONENTS
+) -> Iterator[tuple[_Path, str, dict]]:
+    """Each defaults file as `(path, text, defaults)`, sorted.
+
+    A role's `defaults/main.yml` is the whole file. A host component's `component.yml` carries its
+    defaults under `defaults:`, as the claude-code component's Node pins do since H7.40.
+    """
+    for path in sorted(roles.glob("*/*/defaults/main.yml")):
+        text = path.read_text()
+        loaded = yaml_fast.safe_load(text)
+        if isinstance(loaded, dict):
+            yield path, text, loaded
+    for path in sorted(components.glob("*/component.yml")):
+        text = path.read_text()
+        loaded = yaml_fast.safe_load(text)
+        if isinstance(loaded, dict) and isinstance(loaded.get("defaults"), dict):
+            yield path, text, loaded["defaults"]
+
+
 def annotated_dep_names(
-    roles: _Path = ROLES, managers: list[dict] | None = None
+    roles: _Path = ROLES,
+    managers: list[dict] | None = None,
+    components: _Path = COMPONENTS,
 ) -> set[str]:
-    """Every depName annotated in `<roles>/*/*/defaults/main.yml`, with or without a digest."""
+    """Every depName annotated in a role's or a component's defaults, with or without a digest."""
     if managers is None:
         managers = annotation_managers()
     return {
         dep
-        for defaults_file in roles.glob("*/*/defaults/main.yml")
-        for dep in annotated_versions(defaults_file.read_text(), managers).values()
+        for _, text, _ in defaults_sources(roles, components)
+        for dep in annotated_versions(text, managers).values()
     }
 
 
 def discover_pins(
-    roles: _Path = ROLES, managers: list[dict] | None = None
+    roles: _Path = ROLES,
+    managers: list[dict] | None = None,
+    components: _Path = COMPONENTS,
 ) -> tuple[list[Pin], list[str]]:
-    """Every pin under `<roles>/*/*/defaults/main.yml`, and the unpaired digest keys.
+    """Every pin in the roles' and the host components' defaults, and the unpaired digest keys.
 
     Each pin carries the depNames annotated on the keys its URL renders from. `managers` are
     the annotation managers to read them with, renovate.json's by default.
@@ -268,13 +297,14 @@ def discover_pins(
         managers = annotation_managers()
     pins: list[Pin] = []
     unpaired: list[str] = []
-    for defaults_file in sorted(roles.glob("*/*/defaults/main.yml")):
-        text = defaults_file.read_text()
-        loaded = yaml_fast.safe_load(text)
-        if not isinstance(loaded, dict):
-            continue
-        source = str(defaults_file.relative_to(roles.parent.parent))
-        found, missing = pins_in(loaded, source)
+    for path, text, defaults in defaults_sources(roles, components):
+        base = (
+            roles.parent.parent
+            if path.is_relative_to(roles)
+            else components.parent.parent
+        )
+        source = str(path.relative_to(base))
+        found, missing = pins_in(defaults, source)
         annotated = annotated_versions(text, managers)
         pins.extend(
             dataclasses.replace(

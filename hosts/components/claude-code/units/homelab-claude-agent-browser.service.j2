@@ -1,0 +1,20 @@
+# Shipped by the claude-code component. homelab-claude-agent-browser.timer starts it after boot
+# and every six hours, so a Node or @playwright/mcp pin bump, a failed download and a host where
+# Claude Code arrived after the last run all converge without a reboot. A run that changes
+# nothing downloads nothing.
+[Unit]
+Description=Give the {{ claude_code_agent_user }} agent user its homelab-ui browser, or take it back
+OnFailure=homelab-alert@%n.service
+# It writes into the home homelab-claude-agent.service sets up, and it downloads.
+Wants=network-online.target homelab-claude-agent.service
+After=network-online.target homelab-claude-agent.service
+
+[Service]
+Type=oneshot
+# The agent, never root: every path it writes is in the agent's home.
+User={{ claude_code_agent_user }}
+NoNewPrivileges=yes
+# A first run downloads Node and Chromium.
+TimeoutStartSec=30min
+SyslogLevel=notice
+ExecStart=/usr/lib/homelab/claude-agent-browser

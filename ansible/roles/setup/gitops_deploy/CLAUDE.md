@@ -57,14 +57,18 @@ cluster, and roll the tree and service back on a failed health gate.
   board plots the duration and the outcomes. A k8s deploy that fails writes a
   `result=rollback` or `result=fail` deploy annotation beside its Discord post (`files/deployer_lib/deploy_io.py:emit_deploy_annotation`).
 
-**The two GitHub timers write a textfile beside their Kuma push (M6 batch B3).** The ruleset-drift
-and interaction-limit scripts call `write_check_textfile` from
+**The two GitHub timers record a journal line and a textfile, and push to nothing (M6 batch B3).**
+The ruleset-drift and interaction-limit scripts call `write_check_textfile` from
 `ansible/roles/setup/initial_setup/files/homelab-check-lib.sh` in `push()`, with a `DEADLINE_S` of
-90000 that equals their Kuma tiles' interval. The rules in
-`ansible/roles/k8s/observability/files/rules/gitops-checks.yaml` read the files in shadow.
+90000 that equals their former Kuma tiles' interval. The four GitHub rules in
+`ansible/roles/k8s/observability/files/rules/gitops-checks.yaml` read the files and page.
 ENFORCED: `ansible/tests/services/test_gitops_check_rule_literals.py` pins each rule's deadline
-literals to the rendered `DEADLINE_S`. Both scripts source the check library with `|| exit 1`, so
-a host that lacks the library fails its timer unit instead of skipping the file.
+literals to the rendered `DEADLINE_S`, and
+`ansible/tests/services/test_gitops_check_rule_literals.py::test_neither_producer_pushes_to_kuma`
+holds both scripts to no Kuma library, `kuma_push` or push URL. Both scripts source the check
+library with `|| exit 1`, so a host that lacks the library fails its timer unit instead of
+skipping the file. The timers keep their `kuma-check-` names, because a rename would orphan the
+installed units.
 
 ## Safety
 

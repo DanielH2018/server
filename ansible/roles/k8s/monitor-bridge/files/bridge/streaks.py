@@ -61,8 +61,8 @@ class State:
       down_streaks: Consecutive-down count per check name, advanced through `down_streak()` and
         reset to 0 by each check on an `ok` result.
       n8n_streaks: Per-workflow consecutive-failure streaks (`checks.service.check_n8n`).
-      grace_streaks: The startup grace's consecutive-down count per check (`STARTUP_GRACE` in
-        gates.py), advanced by `apply_startup_grace` from `run_once`. Keyed by a set of names
+      grace_streaks: The startup grace's consecutive-down count per check (rows whose `gate` is
+        `startup_grace`, `check.STARTUP_GRACE`), advanced by `apply_startup_grace` from `run_once`. Keyed by a set of names
         disjoint from `down_streaks`', and a different mechanism: it holds `up` through the
         first GRACE_CYCLES-1 cycles after the bridge itself starts, rather than through a
         transient at any time.

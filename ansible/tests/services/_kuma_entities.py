@@ -59,15 +59,14 @@ _HOST = "daniel-box"
 
 # Tiles that exist only because `_token_seed()` seeds their gate. Named rather than counted: a
 # count that fell from 115 to 104 would read as a template edit, where a named member names the
-# gate that stopped opening. These five are the shapes the gate hides — a drift check, the sync
+# gate that stopped opening. These four are the shapes the gate hides — a drift check, the sync
 # CronJob, a per-host secondary — so one of them going missing is the whole class going missing.
 GATED_MEMBERS = frozenset(
     {
-        "manifest-prune-check.json",
+        "setup-drift-check.json",
         "status-page-sync.json",
         "ups-secondary.json",
         "loki-read-route-daniel-box.json",
-        "etcd-snapshot-offbox.json",
     }
 )
 

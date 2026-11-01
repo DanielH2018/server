@@ -94,8 +94,8 @@ def test_a_notify_with_no_handler_is_flagged() -> None:
 
 def test_no_two_roles_in_the_play_define_one_handler_name() -> None:
     owners = handler_owners(play_roles())
-    assert owners.get("Reload systemd for claude_code") == ["claude_code"], (
-        "the census no longer finds claude_code's own reload handler"
+    assert owners.get("Reload systemd for gitops_deploy") == ["gitops_deploy"], (
+        "the census no longer finds gitops_deploy's own reload handler"
     )
     assert duplicated(owners) == {}
 

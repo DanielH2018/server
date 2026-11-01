@@ -66,6 +66,8 @@ def test_discover_templates_finds_the_known_set():
     # caught, not just "fewer templates checked" sliding by unnoticed.
     names = {p.name for p in v.discover_templates()}
     assert names == {
+        "claude-agent-browser.sh.j2",
+        "claude-agent-home.sh.j2",
         "secret-rotate.sh.j2",
         "secret-rotation-audit.sh.j2",
         "ups-secondary-health.sh.j2",
@@ -90,7 +92,7 @@ def test_discover_templates_finds_the_known_set():
         "etcd-snapshot-offbox.sh.j2",
         "github-ruleset-drift.sh.j2",
         "github-interaction-limit.sh.j2",
-        "telemetry-health.sh.j2",
+        "claude-otel-health.sh.j2",
         "fake-remux-health.sh.j2",
         "registry-gc.sh.j2",
         "claude-agent-setup.sh.j2",
@@ -183,8 +185,9 @@ def test_main_fails_closed_when_shellcheck_missing():
 def test_role_defaults_reach_the_render_context():
     # The gate lints what the host runs only if a role's own defaults are in the context: the
     # artifacts sync script is almost entirely a `{% for peer in claude_code_artifacts_peer_sources %}`
-    # body, and StubUndefined iterates empty (#3178).
-    path = v.ROLES / "setup" / "claude_code" / "templates" / "sync-artifacts.sh.j2"
+    # body, and StubUndefined iterates empty (#3178). The template sits in a component, which
+    # reads the defaults of the role it names through `role:`.
+    path = v.COMPONENTS / "claude-code" / "templates" / "sync-artifacts.sh.j2"
     ctx = v.template_context(path)
     assert ctx["claude_code_artifacts_peer_sources"], ctx.get(
         "claude_code_artifacts_peer_sources"
@@ -230,7 +233,7 @@ def test_a_component_no_package_lists_has_no_host():
 
 
 def test_an_override_beats_the_role_default():
-    path = v.ROLES / "setup" / "claude_code" / "templates" / "sync-artifacts.sh.j2"
+    path = v.COMPONENTS / "claude-code" / "templates" / "sync-artifacts.sh.j2"
     ctx = v.template_context(
         path, overrides={"claude_code_artifacts_peer_dir": "/tmp/peer"}
     )

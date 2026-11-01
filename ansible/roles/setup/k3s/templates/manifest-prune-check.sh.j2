@@ -4,9 +4,10 @@
 # Usage: manifest-prune-check.sh [-h|--help]
 # Takes no arguments. systemd timer kuma-check-manifest-prune.timer runs it as root daily at
 # k3s_manifest_prune_cron_hour:k3s_manifest_prune_cron_minute, and again on failure. It reads the
-# Kuma push token from /etc/rancher/k3s/kuma-push.env and the optional healthchecks ping URL from
-# /etc/healthchecks/ping.env. Running it by hand is read-only against the cluster, but it pushes
-# to the Kuma monitor.
+# optional healthchecks ping URL from /etc/healthchecks/ping.env, writes its verdict to
+# $TEXTFILE_DIR/manifest-prune-check.prom for node_exporter's textfile collector, and Prometheus
+# rules in host-checks.yaml page it through Alertmanager. Running it by hand is read-only against
+# the cluster, but it pings Healthchecks.io.
 #
 # Three arms, all answering "is what is live still what the repo says?": orphaned cluster objects
 # that no staged manifest declares (below); copy:-deployed setup code that differs byte-for-byte
@@ -72,11 +73,6 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t manifest-prune-check "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t manifest-prune-check "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
@@ -106,44 +102,22 @@ MANIFEST_ROOT=/etc/rancher/k3s/manifests
 # A non-root `stat`/`-d` test on MANIFEST_ROOT itself still succeeds (only traverse permission
 # on the parent is needed), but MANIFEST_ROOT is mode 0700, so manifest-declares.py reads no
 # objects from it and exits 1. The orphan arm then reports DECLARED_ERR, a read failure whose
-# real cause is the wrong user. Both push blocks below are unconditional, so a hand-run as a
-# non-root user would push that false DOWN to the real Kuma monitor and fire the healthchecks.io
-# dead-man's switch. Must precede PUSH_TOKEN handling, the declared-set read, the early -d push
-# path, and both push blocks, so a non-root run pushes nothing at all.
+# real cause is the wrong user. The textfile write and the ping below are unconditional, so a
+# hand-run as a non-root user would write that false DOWN to the real textfile and fire the
+# healthchecks.io dead-man's switch. Must precede the declared-set read, the early -d verdict
+# path, and the ping, so a non-root run reports nothing at all.
 if [[ $EUID -ne 0 ]]; then
   echo "must run as root: the staged manifest dirs under $MANIFEST_ROOT are mode 0700 (try: sudo $0)" >&2
   exit 64
 fi
 
-# The longest legitimate gap between two textfile writes: a day plus an hour, the interval that
-# the check's Kuma tile carries. `k3s_daily_check_deadline_s` names it in defaults/main.yml, and
+# The longest legitimate gap between two textfile writes: a day plus an hour.
+# `k3s_daily_check_deadline_s` names it in defaults/main.yml, and
 # ansible/tests/services/test_b1_rule_literals.py pins the rule's literal to this value.
 DEADLINE_S={{ k3s_daily_check_deadline_s }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-# Sourced, never inlined: this script lands 0755, so an inlined token is readable by every local
-# account. 0640 root:{{ sys_user }} env file, same split as ping.env further down.
-MANIFEST_PRUNE_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
-PUSH_TOKEN="$MANIFEST_PRUNE_PUSH_TOKEN"
-
-# The role must deploy cleanly before the operator has registered this secret (/add-secret) —
-# skip the push rather than fail the cron until the token exists. Both this comment and the
-# logger line below name the ENV VAR rather than the registry secret: the secrets guard on a
-# release group whole-word matches registry names against raw template text and cannot tell a
-# log string from an assignment, and a matcher that skipped comments would miss a secret in one.
-if [[ -z "$PUSH_TOKEN" ]]; then
-  logger -t manifest-prune-check "MANIFEST_PRUNE_PUSH_TOKEN not set — skipping push (see /add-secret)"
-  exit 0
-fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
-
-# A Persistent catch-up run at boot would read a cluster still coming up and push a false down.
+# A Persistent catch-up run at boot would read a cluster still coming up and write a false down.
 # Exit 1 without a verdict instead: the timer's Restart=on-failure reruns this in RestartSec,
 # which is what carries the real verdict. This is why a daily check now carries the guard the
 # */10 crons have — under cron a skipped slot cost a day, under the timer it costs 30 minutes.
@@ -154,14 +128,13 @@ fi
 if [[ ! -d "$MANIFEST_ROOT" ]]; then
   STATUS=down
   MSG="${MANIFEST_ROOT} missing — no staged manifests to compare against"
-  # The textfile, before the push: the verdict must not wait on Kuma. The producer metric contract is
-  # docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh writes the
-  # file atomically. A failed write logs and the run goes on to its push.
+  # The producer metric contract is docs/target-architecture/monitoring/m3-textfile-timer.md, and
+  # homelab-check-lib.sh writes the file atomically. A failed write logs and the run exits.
+  logger -t manifest-prune-check "status=${STATUS} ${MSG}"
   SUCCESS=0
   [[ "$STATUS" == "up" ]] && SUCCESS=1
   write_check_textfile manifest-prune-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
     || logger -t manifest-prune-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
-  kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
   exit 1
 fi
 
@@ -376,24 +349,23 @@ else
   MSG="${MSG}${DEPLOYED_NOTE}${MANIFEST_NOTE}"
 fi
 
-# Unconditional, before the push — see longhorn-backup-health.sh.j2 for the full rationale.
-# Short version: the `|| logger` below only fires when the curl fails, so a successfully-pushed
-# DOWN leaves no durable record and `probe.py alerts` can never reconstruct this monitor.
+# Unconditional, before the textfile write — see longhorn-backup-health.sh.j2 for the full
+# rationale. Short version: a DOWN that leaves no durable record can never be reconstructed by
+# `probe.py alerts`.
 logger -t manifest-prune-check "status=${STATUS} ${MSG}"
 
-# The textfile, before the push: the verdict must not wait on Kuma. The producer metric contract is
-# docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh writes the
-# file atomically. A failed write logs and the run goes on to its push.
+# The textfile, before the ping: the verdict must not wait on the network. The producer metric
+# contract is docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh
+# writes the file atomically. A failed write logs and the run goes on to its ping.
 SUCCESS=0
 [[ "$STATUS" == "up" ]] && SUCCESS=1
 write_check_textfile manifest-prune-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
   || logger -t manifest-prune-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" manifest-prune-check
-
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
-# Short version: Kuma runs on the cluster this watches, so an outage silences both the push and
-# the monitor. hc-ping.com alerts on the silence instead. Skipped when no key is configured.
+# Short version: Prometheus runs on the cluster this watches, so an outage silences both the
+# textfile and the rules. hc-ping.com alerts on the silence instead. Skipped when no key is
+# configured.
 # Sourced rather than inlined: this script is 0755, so an inlined key would be readable by
 # every local account. The env file is 0640 root:{{ sys_user }} and this cron runs as root.
 HC_PING_KEY=""
@@ -405,15 +377,15 @@ if [[ -n "$HC_PING_KEY" ]]; then
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
   # Deliberately NOT $MSG. That names live IngressRoute/Middleware objects — internal service
   # and hostname fragments — and Healthchecks.io stores ping bodies (first 100 kB). The status
-  # is what has to escape the house; the detail stays in Kuma, which is on the LAN.
+  # is what has to escape the house; the detail stays in the alert, which is on the LAN.
   # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511).
-  curl -fs --max-time 10 --retry 3 --data-raw "drift detected; object names withheld, see Kuma" \
+  curl -fs --max-time 10 --retry 3 --data-raw "drift detected; object names withheld, see the alert" \
     "$HC_URL" >/dev/null 2>&1 \
     || logger -t manifest-prune-check "healthchecks ping failed (status=${STATUS})"
 fi
 
 # The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
-# a down push so Restart=on-failure reruns the check until the drift is gone, 0 after up. The
+# a down verdict so Restart=on-failure reruns the check until the drift is gone, 0 after up. The
 # reruns repeat the `/fail` ping above every 30 min while red; healthchecks.io notifies on a
 # status CHANGE, so a check already down is not paged again, and the first `up` clears it.
 [[ "$STATUS" == up ]] || exit 1

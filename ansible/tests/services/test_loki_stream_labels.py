@@ -216,7 +216,6 @@ def test_the_consumer_census_finds_its_named_members():
     consumers = _consumers()
     for name in (
         "logs.py SWALLOWED_VERDICTS_LOGQL",
-        "alerts.py SYSLOG_ALERT_LOGQL",
         "observability_deploy_annotation_expr",
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
@@ -228,7 +227,7 @@ def test_the_consumer_census_finds_its_named_members():
     ):
         assert name in consumers, f"{name} is no longer found, so it is unchecked"
     boards = {name.split(" #")[0] for name in _dashboard_queries()}
-    assert "alert-history.json" in boards, sorted(boards)
+    assert "landings.json" in boards, sorted(boards)
 
 
 def test_every_consumer_selects_only_owner_values():

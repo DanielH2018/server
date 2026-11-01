@@ -21,7 +21,7 @@ MUST_FIND = frozenset(
     {
         "roles/setup/k3s/templates/registries.yaml.j2",
         "roles/setup/k3s/templates/host-corefile.j2",
-        "roles/setup/k3s/templates/kuma-push.env.j2",
+        "roles/setup/gitops_deploy/templates/config.env.j2",
         "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
         "roles/setup/common/templates/resolv.conf.j2",
         "roles/setup/nut_host/templates/host-upsmon.conf.j2",
@@ -77,7 +77,7 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
     tpl.parent.mkdir(parents=True)
     tpl.write_text(
         'secret: "{{ longhorn_b2_key_id }}"\n'  # SOPS registry
-        'runtime: "{{ claude_code_login_caps_uids }}"\n'  # set_fact in a setup-plane task
+        'runtime: "{{ hypervisor_staging_net_uuid }}"\n'  # set_fact in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
         'required: "{{ ups_secondary_push_token | mandatory }}"\n'  # the Ansible filter
@@ -137,7 +137,7 @@ def test_runtime_vars_reads_both_set_fact_spellings():
     by returning a set narrower than the tree, which only a named member catches.
     """
     names = v.runtime_vars()
-    assert "claude_code_login_caps_uids" in names  # ansible.builtin.set_fact
+    assert "hypervisor_staging_net_uuid" in names  # ansible.builtin.set_fact
     assert (
         "common_resolver_nameservers" in names
     )  # ansible.builtin.set_fact, another role
@@ -157,3 +157,28 @@ def test_the_secret_registry_is_read_by_name_only():
     names = v.secret_names()
     assert "longhorn_b2_key_id" in names
     assert len(names) >= 50
+
+
+def test_a_component_supplies_its_defaults_and_secret_values_to_its_roles_templates(
+    tmp_path,
+):
+    """Both halves: the component's role gets the names, another role does not."""
+    component = tmp_path / "widget"
+    component.mkdir()
+    (component / "component.yml").write_text(
+        "role: widget_role\n"
+        "defaults: {widget_agents_present: [a]}\n"
+        "outputs:\n"
+        "  - {src: templates/x.j2, keys: [widget_token]}\n"
+    )
+    supplied = v.component_supplied("widget_role", tmp_path)
+    assert supplied == {"widget_agents_present", "widget_token_value"}
+    assert v.component_supplied("other_role", tmp_path) == frozenset()
+
+
+def test_the_claude_code_templates_get_the_names_its_component_supplies():
+    supplied = v.component_supplied("claude_code")
+    assert {
+        "claude_code_agents_present",
+        "claude_code_agent_gh_token_value",
+    } <= supplied

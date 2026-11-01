@@ -1,7 +1,7 @@
 ---
 # The tag stays alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:8d3c2826b708c18be7fb46c1afebc6bb3b1ab7c519473df1be89f5ecaa8bb31f
+speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:14d56d7c4ff0af18f0a09be8494352ba40d23196e78c5f812cee69afaa1edc45
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Auto-deploy is on although strategy is Recreate and speedtest_k8s_claim below is seeded

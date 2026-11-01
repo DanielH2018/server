@@ -10,9 +10,10 @@ The Kuma side, that each row's token reaches a push tile, is
 """
 
 import dataclasses
+import inspect
 from pathlib import Path
 
-import gates
+import check
 import registry
 from bridge.types import PushCheck, push_env
 from check_table import CHECKS
@@ -40,34 +41,69 @@ def test_each_name_and_kuma_id_appears_once():
     assert len(ids) == len(set(ids)), sorted(i for i in ids if ids.count(i) > 1)
 
 
-def test_the_registry_runs_every_row_but_the_gates_in_table_order():
+def test_the_registry_runs_every_row_gate_rows_first_in_table_order():
     registered = [c.name for c in registry.build_checks({})]
     # Named members, so an empty table cannot make both sides equal and empty.
     assert {"n8n", "host_packages"} <= set(registered)
-    assert registered == [row.name for row in CHECKS if not row.is_gate]
-    assert {c.fn for c in registry.build_checks({})} == {
-        row.fn for row in CHECKS if not row.is_gate
+    gates = [row.name for row in CHECKS if row.is_gate]
+    assert registered == gates + [row.name for row in CHECKS if not row.is_gate]
+    assert {c.fn for c in registry.build_checks({})} == {row.fn for row in CHECKS}
+
+
+def test_the_gate_rows_are_the_three_gates_the_run_loop_skips_by():
+    assert {row.name for row in CHECKS if row.is_gate} == _GATES == set(check.GATE_SKIP)
+
+
+def test_every_registered_check_carries_its_rows_gate():
+    assert {c.name: c.gate for c in registry.build_checks({})} == {
+        row.name: row.gate for row in CHECKS
+    }
+    assert {"host_packages"} <= {row.name for row in CHECKS if row.gate == "prometheus"}
+
+
+def test_a_row_that_names_a_gate_comes_after_that_gate_in_the_registry():
+    names = [c.name for c in registry.build_checks({})]
+    for c in registry.build_checks({}):
+        if c.gate in check.GATE_SKIP:
+            assert names.index(c.gate) < names.index(c.name), c.name
+
+
+def _prometheus_readers(checks) -> set[str]:
+    """Registry names, gate rows aside, whose check body names prom_vector or prom_scalar.
+
+    Direct calls only: a check reaching Prometheus through a helper of its own passes vacuously.
+    """
+    return {
+        c.name
+        for c in checks
+        if c.name not in check.GATE_SKIP
+        and any(t in inspect.getsource(c.fn) for t in ("prom_vector", "prom_scalar"))
     }
 
 
-def test_the_gate_rows_are_the_three_gates_with_the_probes_run_once_uses():
-    rows = {row.name: row.fn for row in CHECKS if row.is_gate}
-    assert set(rows) == _GATES == set(gates.GATE_DEPENDENTS)
-    probes = gates.Gates()
-    assert rows == {
-        "prometheus": probes.probe_prometheus,
-        "b2_reachable": probes.probe_b2,
-        "wan_reachable": probes.probe_wan,
+def _ungated_readers(checks) -> set[str]:
+    return {
+        c.name
+        for c in checks
+        if c.name in _prometheus_readers(checks) and c.gate != "prometheus"
     }
 
 
-def test_every_gate_set_is_its_column():
-    assert {"host_packages"} <= gates.PROM_DEPENDENT
-    assert gates.STARTUP_GRACE == {
-        row.name for row in CHECKS if row.gate == "startup_grace"
-    }
-    for gate, members in gates.GATE_DEPENDENTS.items():
-        assert members == {row.name for row in CHECKS if row.gate == gate}, gate
+def test_every_prometheus_reader_is_gated_on_prometheus():
+    """A reader outside the `prometheus` column pages on its own during a Prometheus outage,
+    alongside the gate that already reported it."""
+    checks = registry.build_checks({})
+    # Non-vacuity: an empty derivation would make the assertion below pass on nothing.
+    assert {"host_packages"} <= _prometheus_readers(checks)
+    assert _ungated_readers(checks) == set()
+
+
+def test_a_prometheus_reader_that_loses_its_gate_is_flagged():
+    checks = [
+        dataclasses.replace(c, gate=None) if c.name == "host_packages" else c
+        for c in registry.build_checks({})
+    ]
+    assert _ungated_readers(checks) == {"host_packages"}
 
 
 def test_every_gate_value_names_a_gate_or_the_startup_grace_is_clean():

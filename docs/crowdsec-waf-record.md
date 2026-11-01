@@ -148,8 +148,11 @@ Nothing in this repo fixes it. `CompleteLines` is not an `acquis.yaml` key, Trae
 2026-10-19, and v1.8.2 is the first release that carries it. The v1.8.2 source release was
 published on 2026-10-26. Upstream publishes the Docker image through a separate, manually
 dispatched workflow (`publish-docker-release.yml`). On 2026-10-28 neither Docker Hub nor GHCR
-carried a v1.8.2 image, so `crowdsec_k8s_image` stays on v1.8.1. For comparison, the v1.8.1
-image was published 100 minutes after its release. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
+carried a v1.8.2 image. For comparison, the v1.8.1 image was published 100 minutes after its
+release. Docker Hub carried the v1.8.2 image by 2026-11-01, and #2124 moved
+`crowdsec_k8s_image` to it that day, ahead of Renovate's 7-day soak. Between v1.8.1 and v1.8.2
+the image's Dockerfile changed only its Go base image, so the build that links `cscli`
+statically is unchanged. Building a patched image through `k8s/image-builder` was rejected: it would take the WAF
 binary out of Renovate's view for a 0.05% loss.
 
 ## The Metabase dashboard was removed (2026-08-22)
@@ -260,7 +263,7 @@ Three findings the dashboards carry from this:
 - The overview board's agent tile is a ratio, `sum(up{job=~"crowdsec.*"}) / count(...)`, so 1
   means every agent reports whatever the fleet size. It plotted a raw count against a green step
   at 10, sized by the upstream for ten machines, so it read red on a healthy fleet of three and
-  could never go green (#1709). The ratio has one blind spot, the same one `kuma-drift` names: a
+  could never go green (#1709). The ratio has one blind spot: a
   job that disappears from service discovery leaves the survivors at N/N, so the tile answers "is
   an agent down," not "is an agent missing."
 - `Bucket pour time` on the per-machine board reads `{job="crowdsec"}` — the engine's AppSec pours

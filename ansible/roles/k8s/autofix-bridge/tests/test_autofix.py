@@ -1,7 +1,6 @@
 import importlib.util
 import json
 import pathlib
-import urllib.parse
 import urllib.request
 
 # Load the bind-mounted script directly (not a package), mirroring monitor-bridge/test_check.py.
@@ -275,7 +274,6 @@ def test_dry_run_enabled_false_for_explicit_disable_values():
 
 def _configure_sonarr_only(monkeypatch):
     monkeypatch.setattr(autofix, "post_discord", lambda msg: None)
-    monkeypatch.setattr(autofix, "push", lambda ok, msg: None)
     monkeypatch.setattr(autofix, "SONARR_API_KEY", "sonarr-key")
     monkeypatch.setattr(autofix, "RADARR_API_KEY", "")
 
@@ -365,11 +363,10 @@ def test_run_once_no_api_keys_is_disabled_with_no_requests(monkeypatch):
     assert (ok, msg) == (True, "arr auto-block disabled (no API keys)")
 
 
-# --- the two outbound messages are capped on the wire path ------------------------------------
-# The Discord cap lives in monitor-bridge's bridge/common.py, the push cap in setup/common's
-# kuma_push.py. These drive the real `post_discord` and
-# `push` through a stub of the stdlib `urlopen`, on a copy of the module loaded with the webhook
-# and push settings in its environment, so no first-party name is patched.
+# --- the Discord report is capped on the wire path --------------------------------------------
+# The cap lives in monitor-bridge's bridge/common.py. This drives the real `post_discord` through
+# a stub of the stdlib `urlopen`, on a copy of the module loaded with the webhook in its
+# environment, so no first-party name is patched.
 
 
 class _NoBody:
@@ -384,10 +381,8 @@ class _NoBody:
 
 
 def _wired_autofix(monkeypatch):
-    """A fresh autofix module whose Discord webhook and Kuma push are set, plus what it sends."""
+    """A fresh autofix module whose Discord webhook is set, plus what it sends."""
     monkeypatch.setenv("ARR_DISCORD_WEBHOOK_URL", "https://discord.example/webhook")
-    monkeypatch.setenv("KUMA_PUSH_ARR_AUTOBLOCK", "tok")
-    monkeypatch.setenv("KUMA_URL", "http://uptime-kuma.example:3001")
     assert _SPEC and _SPEC.loader
     module = importlib.util.module_from_spec(_SPEC)
     _SPEC.loader.exec_module(module)
@@ -407,12 +402,3 @@ def test_post_discord_caps_an_over_long_report(monkeypatch):
     content = json.loads(sent[0].data)["content"]
     assert len(content) <= 2000
     assert content.endswith("…(truncated)")
-
-
-def test_push_caps_an_over_long_msg(monkeypatch):
-    module, sent = _wired_autofix(monkeypatch)
-    module.push(False, "m" * 3000)
-    # kuma_push hands `urlopen` the URL itself, not a Request.
-    msg = urllib.parse.parse_qs(urllib.parse.urlsplit(sent[0]).query)["msg"][0]
-    assert len(msg) == 900
-    assert " …(+" in msg

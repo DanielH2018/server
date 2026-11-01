@@ -1,0 +1,30 @@
+# Shipped by the claude-code component: homelab-claude-triage-poll.service's OnFailure= page. Its
+# own unit rather than homelab-alert@, because a broken poller fails on every two-minute tick: a
+# delivered page silences the next 60 minutes, and the text says so.
+[Unit]
+Description=Alert when the triage poller fails
+After=homelab-secrets.service
+Wants=homelab-secrets.service
+
+[Service]
+Type=oneshot
+LoadCredential=discord_webhook:/run/credstore/gitops_deploy_discord_webhook
+Restart=on-failure
+RestartSec=5min
+RestartPreventExitStatus=3
+RuntimeDirectory=homelab-claude-triage-poll-alert
+RuntimeDirectoryPreserve=restart
+StateDirectory=homelab-claude-triage-poll-alert
+# An exit of 1 to 254 here leaves the unit inactive, not failed, so a skipped page is not retried.
+ExecCondition=/bin/sh -c 'test -z "$$(find %S/homelab-claude-triage-poll-alert/delivered -mmin -60 2>/dev/null)"'
+ExecStartPre=/bin/sh -c 'test -s %t/homelab-claude-triage-poll-alert/failed-at || date --utc "+%%Y-%%m-%%d %%H:%%M UTC" > %t/homelab-claude-triage-poll-alert/failed-at'
+ExecStart=/usr/bin/curl -fsS -m 10 --retry 5 --retry-delay 10 --retry-all-errors \
+  -H "Content-Type: application/json" \
+  --variable 'failed_at@%t/homelab-claude-triage-poll-alert/failed-at' \
+  --variable 'host=%H' \
+  --variable 'webhook@%d/discord_webhook' \
+  --expand-data '{"content":"homelab-claude-triage-poll failed on {{host:json}}: no monitor that goes down starts triage until it is fixed. `journalctl -u homelab-claude-triage-poll` has the error, and /var/lib/claude/triage/poll-state.json holds its state. Further failures in the next hour are not paged. Failed at {{failed_at:trim:json}}."}' \
+  --expand-url '{{webhook:trim}}'
+SyslogLevel=notice
+ExecStartPost=/bin/echo homelab-claude-triage-poll failure alert delivered
+ExecStartPost=/usr/bin/touch %S/homelab-claude-triage-poll-alert/delivered

@@ -1,41 +1,36 @@
-# `setup/claude_code` — Claude Code install + the Remote Control host
+# `setup/claude_code` — emptied; the host packages own Claude Code's host half
 
-Five things live here: the **install** (native installer, per-user, auto-updating),
-**`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone,
-**`claude-bg-resume.service`**, which respawns the operator's background sessions at boot,
-**`homelab-claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to
-daniel-server, and **the artifacts node's two crons**, the peer artifact sync and the OTLP-door heartbeat.
-
-Runs on every host with `has_claude_code: true` (daniel-box and daniel-server, with per-host cap
-numbers in host_vars). The unit is enabled only where `claude_code_rc_enabled` is also true
-(daniel-box). Invoked from `initial_setup.yml`, **not** `deploy.yml` — the role is not in
-`containers_list`, so `./scripts/deploy.sh --tags claude_code` exits 2 on an unmatched tag:
-
-```bash
-uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
-```
+The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` marker in
+`ansible/roles/setup/claude_code/tasks/main.yml`. H7.40's fourth slice emptied it. It stays
+until H7.20a, because `ansible/initial_setup.yml` names it and an edit to that playbook parks
+the deployer. Its `templates/`, `files/` and `defaults/main.yml` stay beside this file, because
+`hosts/components/claude-code/` renders them in place (`role: claude_code`) until H7.20a moves
+them. This file holds the rules for what they render.
 
 `docs/claude-code-rc-caps.md` holds the record behind the rules below.
 
-## The host packages own most of it
+## At a glance
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
+- **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`; ends on
+  hosts where `True` (leading `meta: end_role`)
+- **Crons / timers:** none (the role ends on every host before its first task)
+<!-- /generated_from -->
 
-The role ends on daniel-server with a leading `meta: end_role` (H7.39). There
-`hosts/components/claude-code/` ships what the role installed, in `homelab-daniel-server`. On
-daniel-box the same component ships the subjects H7.40's first slice moved, in
-`homelab-daniel-box`: the Remote Control host, the background resume, the cgroup metrics, the
-caps, the two alerts, rootq and the agent user. The second slice added the agent's lander, the
-server-batch lander, the pipeline timeline, the memory store copy, and the takeover check's
-wrapper and sudoers grant. The role skips each there through `claude_code_packaged_hosts` in
-`defaults/main.yml`, and applies the rest to daniel-box until H7.40's later slices move them:
-triage, the agent's home, the artifacts node's crons and the takeover check's flux copy.
+## The host packages own it
+
+`hosts/components/claude-code/` ships Claude Code's host half in `homelab-daniel-server` (H7.39)
+and `homelab-daniel-box` (H7.40): the Remote Control host, the background resume, the cgroup
+metrics, the caps, the two alerts, rootq, the agent user and its home, the agent's lander, the
+server-batch lander, the pipeline timeline, the memory store copy, the takeover check, triage,
+the homelab-ui browser toolchain, and the artifacts node's peer sync and OTLP-door heartbeat.
+The operator's own Claude Code install is the dotfiles repo's (H7.38).
 
 - **The component renders this role's templates and copies its scripts in place**, through
-  `role: claude_code`. An edit here changes both hosts: the next apply on daniel-box and the
-  next package version on daniel-server.
+  `role: claude_code`. An edit here changes both hosts' next package version.
 - **The packaged units are named `homelab-*`**, such as `homelab-claude-rc.service` and
   `homelab-claude-clone-sync.timer`. A template that names a sibling unit reads the name from a
-  variable, and the Ansible-era name is the fallback daniel-box renders. The component's
-  `defaults:` give the packaged names. Two instanced alerts keep their names,
+  variable whose role default is the Ansible-era name. The component's `defaults:` give the
+  packaged names. Two instanced alerts keep their names,
   `claude-stop-alert@` and `fanout-alert@`, because the dotfiles hook and the fan-out tooling
   start them by name.
 - **The agent user is declared to the users arm** in each host's `package.yml`, with its live
@@ -51,12 +46,7 @@ triage, the agent's home, the artifacts node's crons and the takeover check's fl
   exception: the users arm takes no `when:`, so switching the agent off means deleting the
   host's `users:` entry, which the arm then expires. A test holds the two together.
 - **A toggle takes a packaged subject back through the package, not an apply.** Set it false in
-  the host's host_vars, and the next package version drops the subject. Where a section below
-  says "apply the role" for one of the subjects above, that is the step.
-- **Two writers are refused.** Every role task that writes a template or file the package
-  ships names `claude_code_packaged_hosts` in its `when:`, or sits in a block or import that
-  does. The role's render stamp is `claude-code-ansible`, because the component retires the
-  `claude-code` fragment.
+  the host's host_vars, and the next package version drops the subject.
 - **The Remote Control host ships without an enable link** while `claude_code_rc_enabled` is
   false, and reconcile never restarts it (`policy: manual`).
 - **The peer login follows `claude_agent_ssh_login_enabled`.** The package cannot read
@@ -69,27 +59,46 @@ triage, the agent's home, the artifacts node's crons and the takeover check's fl
   lander. A block var would pin nothing here, because the host package renderer puts the
   inventory above a component's defaults. The pins file and `component.yml` are on the
   lander's approval list.
+- **Triage's caps and identity are pinned in `templates/claude-triage-pins.j2`**, for the
+  lander's reason. Every triage template imports it. The poller
+  is `homelab-claude-triage-poll`, and its page,
+  `hosts/components/claude-code/units/homelab-claude-triage-poll-alert.service`, keeps the
+  one-hour quiet window a poller failing every tick needs. `claude-triage@` and
+  `claude-triage-report-alert@` keep their names, because the poller, the runner and the polkit
+  rule start them by name.
+- **Root writes nothing in the agent's home that the agent could have replaced with a link.**
+  `claude-agent-setup` calls `claude-agent-home`, which writes the signing key, the
+  `allowed_signers` file, the peer key on `claude_agent_ssh_key_host`, and the memory seed, all
+  as the agent. The seed is the one step that reads as root: root copies the operator's store
+  into a private staging directory, and the agent copies it from there. It runs once, while the
+  agent has no `MEMORY.md`, where `claude_code_user` is the agent. Root still has to set the
+  operator's group and the setgid bit on the agent's directories and to place a few files, so
+  `claude-agent-setup` opens each directory first (`pin`) and refuses unless the opened directory
+  is the one its path names. It creates, owns, modes and writes through that open handle, and a
+  link on any of those paths fails the run. `install -T` places each file, which replaces a link
+  at the file rather than writing through it. `hosts/lib/tests/test_claude_agent_home.py` scans
+  both rendered scripts for a root command that names such a path, and runs the setup over
+  planted links. The homelab-ui login is
+  an output of the host's SOPS file that renders under `/run/homelab-secrets`, outside the
+  agent's home. The package ships no link into the home: `claude-agent-setup` links
+  `~/.config/homelab-ui/credentials.json` to it with `point`, and `drop` removes the link while
+  homelab-ui is off. The agent takes the operator's config from the dotfiles repo, and no host
+  sets `claude_code_agent_dotfiles` false.
+- **The homelab-ui browser is `homelab-claude-agent-browser.service`**, a oneshot run as the
+  agent, which `homelab-claude-agent-browser.timer` starts 10 minutes after boot and every six
+  hours. Its script installs the pinned Node, `@playwright/mcp` and Chromium and registers the
+  MCP server, or removes all of it while `claude_code_agent_homelab_ui_enabled` is false. The
+  timer ships wherever the agent exists, so the way out runs, and a pin bump or a failed run
+  converges on the next run. The Node and `@playwright/mcp` pins are in the component's
+  `defaults:`, where Renovate and `asset_pins.py --refresh node` read them.
+- **Triage's token is a `LoadCredential=` file, `/etc/claude-triage/oauth-token`.** The runner
+  joins the whole file without whitespace, so a token pasted across `setup-token`'s line wrap
+  still reaches the session whole.
 - **Not packaged:** the operator's own Claude Code install, which the dotfiles repo owns since
   H7.38.
   ENFORCED: `hosts/lib/tests/test_claude_code_component.py`,
-  `hosts/lib/tests/test_claude_code_on_daniel_box.py`.
-
-## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
-- **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`; ends on
-  hosts where `inventory_hostname == 'daniel-server'` (leading `meta: end_role`)
-- **Crons (2):**
-  - `Sync peer Claude artifacts` — `*/5 * * * *`
-  - `Claude Code telemetry health` — `*/10 * * * *`
-- **Timers (8):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
-  `claude-clone-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
-  `claude-dotfiles-sync.timer` (`OnBootSec=10min`, `OnUnitActiveSec=15min`),
-  `claude-fanout-server-lander.timer` (`OnBootSec=5min`, `OnUnitActiveSec=10min`),
-  `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
-  `claude-pipeline-timeline.timer` (`OnBootSec=15min`, `OnUnitActiveSec=1440min`),
-  `claude-rc-restart.timer` (`OnCalendar=weekly`), `claude-triage-poll.timer`
-  (`OnBootSec=5min`, `OnUnitActiveSec=2min`)
-<!-- /generated_from -->
+  `hosts/lib/tests/test_claude_code_on_daniel_box.py`,
+  `hosts/lib/tests/test_claude_agent_browser.py`.
 
 ## The two Remote Control modes are different features
 
@@ -118,7 +127,7 @@ directory.
 - **It pages a login dead at start, not one that dies mid-run**, which leaves the host
   `active`. `docs/claude-code-rc-caps.md` has why (#4618).
 - **A session that ends on an API error pages through `claude-stop-alert@<cause>.service`**
-  (#6021), which `tasks/stop_alert.yml` installs and `templates/50-claude-stop-alert.rules.j2`
+  (#6021), which the package ships with `templates/50-claude-stop-alert.rules.j2`, which
   lets the operator and each agent user start. The StopFailure hook in the dotfiles repo runs as
   a user that cannot read the webhook, so it starts the instance, named by the error cause in
   `[a-z0-9_]+`. `claude_code_stop_alert_enabled: false` removes the unit, the rule and the
@@ -211,51 +220,55 @@ What it does not restore:
 
 ## The agent user
 
-`tasks/agent.yml` builds one agent user per `claude_code_agents` entry; the include maps each
-profile field (`ansible/filter_plugins/claude_agents.py`) onto the `claude_code_agent_*` name
-the tasks read. `docs/claude-agent-user.md` has the rest. `claude` lands a PR through
+`homelab-claude-agent.service` builds the agent user each host's `package.yml` declares, from the
+`claude_code_agent_*` values the role's defaults and the host's host_vars give.
+`docs/claude-agent-user.md` has the rest. `claude` lands a PR through
 `homelab-claude-land@<n>.service`.
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
-leaves a report (`tasks/triage.yml`, shipped off behind `claude_code_triage_enabled`).
-`claude-triage-poll.timer` starts one when a monitor goes down, and ships in `shadow` mode,
-which only logs. The task file, templates, runner and poller are on the lander's approval
-list, and the caps and the poll mode are pinned block vars. `docs/claude-agent-user.md`,
+leaves a report (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
+`homelab-claude-triage-poll.timer` starts one when a monitor goes down, and ships in `shadow`
+mode, which only logs. The task file, templates, runner and poller are on the lander's approval
+list, and the caps and the poll mode are pinned in `templates/claude-triage-pins.j2`. `docs/claude-agent-user.md`,
 *Alert-triggered triage*, has the design.
 
 `claude_code_user` (default `sys_user`) is the account `claude-rc.service` runs as; its home and
 `claude_code_rc_workdir` follow it, and the unit is sandboxed only when it is not `sys_user`.
 
-## The artifacts node's two crons
+## The artifacts node's two timers
 
-`Sync peer Claude artifacts` and `Claude Code telemetry health` run only on
-`claude_code_artifacts_node` (daniel-box); every task in `tasks/node_crons.yml` skips on
-daniel-server. A skip removes nothing, so the task after the import removes the crons, their
-scripts, their check files and their render stamp from every other host. daniel-server held a
-stale `sync-artifacts.prom` until that task existed (#6355). H2.7 moved them here from the k8s artifacts and observability roles under the
-same cron file names and script paths. `ansible/roles/k8s/artifacts/CLAUDE.md` documents how
-the sync behaves, and the heartbeat's template carries why it is a host cron at all.
+`homelab-sync-artifacts.timer` (the peer artifact sync) and `homelab-claude-otel-health.timer`
+(the OTLP-door heartbeat) ship only on `claude_code_artifacts_node` (daniel-box), in its host
+package. They were the role's crons `Sync peer Claude artifacts` and `Claude Code telemetry
+health` until H7.40's fourth slice, whose `legacy:` entries in
+`hosts/components/claude-code/component.yml` retire the cron files and the scripts that
+embedded the push tokens. Each timer fires every N minutes of its `*/N` minute default, and its
+unit's `SyslogIdentifier=` keeps the tag the cron's `logger -t` wrote, `sync-artifacts` or
+`claude-otel-health`. Loki and `probe.py alerts` read that tag.
+`ansible/roles/k8s/artifacts/CLAUDE.md` documents how the sync behaves, and the heartbeat's
+template carries why it is a host timer at all.
 
 - **Every key the k8s roles also read has a twin there.** `claude_code_artifacts_node`,
-  `claude_code_artifacts_peer_sources`, `claude_code_artifacts_peer_dir`,
-  `claude_code_artifacts_stars_file`, `claude_code_otlp_host_ip` and `claude_code_otlp_port`
-  are each held equal to the k8s key by
-  `ansible/tests/setup/test_claude_code_artifacts_node_crons.py`. A change edits both roles and
-  needs both applies. One key in `group_vars/all.yml` would route as a deploy-plane change and
-  never re-apply this role.
-- **A push-token rotation is manual.** `artifacts_sync_push_token` and
-  `claude_otel_push_token` are in `CROSS_HOST_PUSH_TOKENS`
-  (`scripts/secrets_mgmt/consumers.py`), because no deploy tag re-renders these scripts.
-- **No task here notifies `Restart claude-rc`**, so an apply that changes only these crons
-  leaves every Remote Control session running.
-- **Each cron also writes a check file** to `/var/lib/node-exporter-textfile/`,
-  `sync-artifacts.prom` and `claude-otel-health.prom`, through `write_check_textfile` in
-  `homelab-check-lib.sh` (M6 batch B6). The `ArtifactsSync*` and `OtlpDoor*` rules in
-  observability's `host-checks.yaml` page them in shadow beside the Kuma tiles until their
-  cutover. Each script renders its deadline from its own cron minute, so that minute must stay
-  `*/N`, and `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it. The
-  directory task in `tasks/node_crons.yml` sets the same owner, group and mode as the k3s
-  role's disk-health task, so the crons do not wait on a hand apply of `k3s-bringup.yml`.
+  `claude_code_artifacts_peer_sources`, `claude_code_artifacts_host_dir`,
+  `claude_code_artifacts_peer_dir`, `claude_code_artifacts_stars_file`,
+  `claude_code_otlp_host_ip` and `claude_code_otlp_port` are each held equal to the k8s key by
+  `hosts/lib/tests/test_claude_artifacts_node_timers.py`. A change edits both roles. One key in
+  `group_vars/all.yml` would route as a deploy-plane change only.
+- **The package creates the directories the artifacts pod mounts.**
+  `hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2` declares the local tree,
+  each peer directory, the star list directory and the textfile directory, and the sync's
+  `ExecStartPre=+` runs `systemd-tmpfiles --create` on it.
+- **Neither timer pushes to Kuma, and neither unit loads a credential** (M6 batch B6a's
+  Cutover-2). Each run logs a `status=<up|down>` line under its own syslog tag and writes a check
+  file to `/var/lib/node-exporter-textfile/`, `sync-artifacts.prom` or `claude-otel-health.prom`,
+  through `write_check_textfile` in `homelab-check-lib.sh`. The `ArtifactsSync*` and `OtlpDoor*`
+  rules in observability's `host-checks.yaml` page from those files. Each script renders its
+  deadline from its own minute default, so that default must stay `*/N`, and
+  `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it.
+  ENFORCED: `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`
+  holds both shipped scripts to no Kuma library, `kuma_push` or push URL. The two push tokens,
+  `artifacts_sync_push_token` and `claude_otel_push_token`, are no longer package credentials. They stay in
+  `PENDING_RETIREMENT` (`scripts/secrets_mgmt/pending_retirement.py`) until B6a's token PR.
 
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 
@@ -263,13 +276,15 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
   `claude_code_artifacts_peer_dir/<name>` on daniel-box, then a copy of
   `claude_code_artifacts_stars_file` to the peer's `stars_path`. It deletes on daniel-box only
   what the peer has already deleted.
-- **Mode:** always on where it is installed; removing the entry from
-  `claude_code_artifacts_peer_sources` (and its twin) stops that peer's sync.
+- **Mode:** always on where it is installed, which is `claude_code_artifacts_node` alone;
+  removing the entry from `claude_code_artifacts_peer_sources` (and its twin) stops that peer's
+  sync.
 - **Abort valve:** a `flock` holds runs to one at a time, and ssh runs in `BatchMode` with a
   10-second connect timeout, so an unreachable peer fails the run rather than hanging it.
-- **Evidence:** `journalctl -t sync-artifacts`, the `Artifacts Peer Sync` Kuma tile, which
-  goes DOWN at `claude_code_artifacts_sync_alert_after_failures` consecutive failures, and
-  `sync-artifacts.prom`, which carries the same verdict for the shadow rules.
+- **Evidence:** `journalctl -t sync-artifacts`, whose `status=down` line starts at
+  `claude_code_artifacts_sync_alert_after_failures` consecutive failures, and
+  `sync-artifacts.prom`, which carries the same verdict for the `ArtifactsSyncFailed` and
+  `ArtifactsSyncNotReporting` rules.
 
 ## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
 
@@ -292,9 +307,9 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Mode:** `claude_code_triage_enabled`, false by default; false stops the poller, then removes
   the rule, the units, the code and the config, and keeps the records.
   `claude_code_triage_poll_mode` is `off`, `shadow` or `armed`, pinned at `shadow` in
-  `tasks/triage.yml`, so arming the trigger needs the operator's approval.
+  `templates/claude-triage-pins.j2`, so arming the trigger needs the operator's approval.
 - **Abort valves:** `$10`, 60 turns and a 30-minute wall clock per run, and six runs a UTC day,
-  all pinned in `tasks/triage.yml`, plus a lock that holds runs to one at a time. The runner
+  all pinned in `templates/claude-triage-pins.j2`, plus a lock that holds runs to one at a time. The runner
   enforces the daily cap, because polkit lets `claude` start a run without the poller. The
   poller opens an episode only on a fall that holds for two polls, makes one storm episode of
   more than three falls at once, and opens nothing while `DeployHoldActive` fires or the weekly
@@ -303,7 +318,7 @@ the sync behaves, and the heartbeat's template carries why it is a host cron at 
 - **Evidence:** `/var/lib/claude/triage/runs/<episode>.json`, the report under
   `/a/<host>-claude/`, and a Discord page for every run; a crash pages separately, and a
   poller failure pages at most once an hour. In shadow
-  mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u claude-triage-poll` list each
+  mode, `/var/lib/claude/triage/shadow.jsonl` and `journalctl -u homelab-claude-triage-poll` list each
   run the poller would have started. `claude-triage-poll.prom` pages a poller that stopped.
 - **Next-run review:** before widening the scope or a cap, read the last week's records for
   what the runs diagnosed and what they cost.
@@ -358,8 +373,10 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   `homelab_awaiting_operator{reason}` and its `_oldest_seconds` twin to
   `/var/lib/node-exporter-textfile/fanout_operator_waits.prom`: the PRs and batches that wait
   on a person, and the owed manual-plane applies (`scripts/dev/fanout_lib/operator_waits.py`).
-  Disarming leaves the file in place, so it is removed by hand. Each clean run also writes
-  `claude-fanout-server-lander.prom`, which pages a timer that stopped.
+  Each clean run also writes `claude-fanout-server-lander.prom`, which pages a timer that
+  stopped. Disarming adds both files to the component's toggle-gated `legacy:` entries, so the
+  reconcile that drops the timer also removes them. The NotReporting rule still fires on the
+  absent series until it is deleted.
 - **Next-run review:** before raising the pace cap or widening the rule, read a week of
   `ineligible` reasons and the verdicts of the landings it started.
 
@@ -387,7 +404,8 @@ nobody ran the joiner was lost. This timer runs it daily as `ubuntu`.
   no repository, cluster or GitHub state.
 - **Mode:** `claude_code_pipeline_timeline_enabled`, true only in daniel-box's host_vars. False
   drops the timer and its units from the next package version, and keeps the snapshots. The
-  heartbeat file then stays until it is removed by hand.
+  same version's toggle-gated `legacy:` entry removes the heartbeat file, and
+  `ClaudePipelineTimelineNotReporting` fires on the absent series until it is deleted.
   `--days` is `claude_code_pipeline_timeline_days`; a window of N days survives N-1 missed runs,
   because a later snapshot's rows supersede an earlier one's for the same PR.
 - **Abort valves:** the unit's `TimeoutStartSec=30min`. A pull that fails warns and joins the
@@ -410,9 +428,9 @@ the server-side `kubectl diff`, then the RBAC takeover census (issue #5494). The
 granted it on 2026-10-17 ("Let's add those 3 to your allowed commands"). It exists on daniel-box
 only, where `claude_code_takeover_check_enabled` is true.
 
-- **What root runs:** `/usr/local/bin/k3s kubectl` and a root-owned `flux` copy at
-  `/usr/local/lib/homelab-takeover-check/flux`, pinned to the operator's chezmoi release and
-  checksum. Every flag is written in the script. The only caller input that reaches either binary
+- **What root runs:** `/usr/local/bin/k3s kubectl` and `/usr/lib/homelab/bin/flux`, the
+  root-owned flux CLI that `homelab-tools` pins at the cluster's `flux_version`
+  (`hosts/packages/homelab-tools/package.yml`). Every flag is written in the script. The only caller input that reaches either binary
   is a validated tag, and a path to a root-owned copy of the user's render.
 - **What root never runs:** anything the invoking user can write, and kustomize over the user's
   files. `kubectl kustomize` builds each tag as `SUDO_USER`, and root diffs only the built file.
@@ -424,11 +442,13 @@ only, where `claude_code_takeover_check_enabled` is true.
 - **What it prints:** object names, field paths and exit codes. Full outputs stay in
   `/var/lib/homelab-takeover-check/<label>/`, mode 0700.
 - **Who installs what:** daniel-box's host package ships the wrapper and the grant in one
-  version, so the grant never names a missing command. The role still downloads the flux copy
-  and creates the state directory, and the wrapper creates that directory too.
+  version, so the grant never names a missing command. The package depends on `homelab-tools`,
+  whose builder refuses a flux tarball off its pin, and the updater installs both in one run.
+  The wrapper creates the state directory.
 - **To take it back:** set `claude_code_takeover_check_enabled: false`. The next package
-  version drops the grant and the wrapper, and the next apply of the role removes the flux copy
-  and the state directory.
+  version drops the grant and the wrapper. The state directory stays, because its per-label
+  contents are not a list reconcile can name; remove it by hand. flux stays, because
+  `homelab-tools` ships it.
 - **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.
 
 ## The root inspector

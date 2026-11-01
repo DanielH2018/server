@@ -17,6 +17,18 @@ T0 = 1792089000.0
 HOSTILE = '<script>alert(1)</script>"><img src=x onerror=alert(2)>'
 
 
+def test_a_token_pasted_across_a_wrapped_line_reaches_the_session_whole(
+    tmp_path,
+) -> None:
+    # The credential file as homelab-secrets writes a wrapped paste: a newline and an indent.
+    (tmp_path / run.TOKEN_CREDENTIAL).write_text("sk-ant-oat01-abc\n  def\n")
+    env = run.session_env({"CREDENTIALS_DIRECTORY": str(tmp_path), "HOME": "/h"})
+    assert env[run.TOKEN_ENV] == "sk-ant-oat01-abcdef"
+    env = run.session_env({run.TOKEN_ENV: "sk-ant-oat01-abc  def\n", "HOME": "/h"})
+    assert env == {run.TOKEN_ENV: "sk-ant-oat01-abcdef", "HOME": "/h"}
+    assert run.session_env({"HOME": "/h"}) == {"HOME": "/h"}
+
+
 def test_the_session_is_diagnose_only_capped_and_kept_for_resume() -> None:
     argv = run.build_argv(
         {"CLAUDE_BIN": "claude", "BUDGET_USD": "10", "MAX_TURNS": "60"}, "prompt"

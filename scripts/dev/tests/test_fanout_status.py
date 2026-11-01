@@ -103,6 +103,11 @@ TIMED_OUT = (
     "=== b\nActiveState=failed\nResult=timeout\nExecMainStatus=0\n"
     "--- stderr\n\n--- report\n"
 )
+# The kernel killed the batch at its unit's MemoryMax; systemd records the kill as the Result.
+OOM_KILLED = (
+    "=== b\nActiveState=failed\nResult=oom-kill\nExecMainStatus=9\n"
+    "--- stderr\n\n--- report\n"
+)
 
 
 def _launch(tools, tmp_path, *extra):
@@ -228,6 +233,19 @@ def test_a_unit_stopped_by_its_runtime_cap_is_failed_not_tidied_up():
     # `no-report`.
     assert parse_status([B], TIMED_OUT)[0].state == "failed"
     assert parse_status([B], FINISHED_AND_TIDIED)[0].state == "no-report"
+
+
+def test_an_oom_killed_batch_names_the_kill_on_its_failed_line():
+    st = parse_status([B], OOM_KILLED)[0]
+    line, tier = status_line(st, "daniel-box", B.branch, lambda *_: "", str)
+    assert st.state == "failed" and tier == 5
+    assert "(exit 9) result=oom-kill" in line
+
+
+def test_a_session_error_under_a_successful_unit_names_no_result():
+    st = parse_status([B], DONE_SHAPED_BUT_ERRORED)[0]
+    line, _ = status_line(st, "daniel-box", B.branch, lambda *_: "", str)
+    assert st.state == "failed" and "result=" not in line
 
 
 def test_a_clean_finish_without_a_pr_prints_its_final_text_and_exits_1():

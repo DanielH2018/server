@@ -421,18 +421,11 @@ def test_host_sets_names_every_host_check_rule():
         "TextfileCollectorError AideCheckFailed AideCheckNotReporting RkhunterScanFailed "
         "RkhunterScanNotReporting"
     ).split()
-    box_only = (
-        "FanoutSlotsIdleWithFreeWork ArtifactsSyncFailed ArtifactsSyncNotReporting "
-        "OtlpDoorClosed OtlpDoorNotReporting LonghornBackupHealthFailed "
-        "LonghornBackupHealthNotReporting EtcdSnapshotOffboxFailed "
-        "EtcdSnapshotOffboxNotReporting ManifestPruneCheckFailed "
-        "ManifestPruneCheckNotReporting ReleaseStalenessCheckFailed "
-        "ReleaseStalenessCheckNotReporting LiveDriftCheckFailed LiveDriftCheckNotReporting"
-    ).split()
+    box_only = ("FanoutSlotsIdleWithFreeWork").split()
     assert set(host_sets(shadow=True)) == (
         {f"{alert}/{host}" for alert in every_host for host in hosts}
         | {f"{alert}/daniel-box" for alert in box_only}
-        | {"ComposeUpFailed/daniel-pi", "KumaDown/uptime-kuma"}
+        | {"ComposeUpFailed/daniel-pi"}
     )
     assert set(host_sets(shadow=False)) >= {
         "DiskHealthFailed/daniel-box",
@@ -458,13 +451,11 @@ def test_loki_sets_name_every_m5_rule():
         "LokiRulerEvaluationFailing",
         "LokiRulerNotEvaluating",
         "LokiRulerNotificationsFailing",
-    }
-    # A7's Cutover-b dropped `shadow` from WorkloadLogErrors. B7's two rules still carry it.
-    assert set(loki_sets(shadow=True)) >= {
         "CloudflareDdnsDirectUpdateSilent",
         "CloudflareDdnsProxiedUpdateSilent",
     }
-    assert "WorkloadLogErrors" not in loki_sets(shadow=True)
+    # A7's Cutover-b dropped `shadow` from WorkloadLogErrors, B7's Cutover-1b from its two rules.
+    assert loki_sets(shadow=True) == {}
     assert "LokiHomelabDown" not in loki_sets(shadow=True) | loki_sets(shadow=False)
 
 

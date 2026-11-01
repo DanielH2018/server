@@ -439,3 +439,37 @@ def test_the_cache_lives_in_the_git_common_dir_not_a_worktree(tmp_path):
     expected = repo.resolve() / ".git" / VERDICT_CACHE
     assert verdict_cache_path(str(wt)) == expected
     assert verdict_cache_path(str(repo)) == expected
+
+
+def _loose_objects(repo: Path) -> set[Path]:
+    return {p for p in (repo / ".git" / "objects").glob("??/*")}
+
+
+def test_the_content_check_writes_nothing_into_the_object_store(tmp_path):
+    """REJECT: an unlanded branch's merge result is computed, then thrown away.
+
+    Every master advance re-asks this for every unlanded worktree, so a result that stayed
+    behind as loose objects filled the primary checkout's store faster than gc could clear it.
+    """
+    repo, head = _unmerged_branch(tmp_path)
+    commit(repo, "master moves on", **{"c.txt": "three\n"})
+    before = _loose_objects(repo)
+
+    assert local_landed_layer(str(repo), head, base="master") is None
+
+    assert _loose_objects(repo) == before
+
+
+def test_the_content_check_still_finds_a_squash_merged_branch(tmp_path):
+    """Regression guard: the scratch object store still reads both commits through the real one.
+
+    Master holds the branch's content under a different commit, so only merge-tree sees it.
+    This passes on the unquarantined code too, and cannot be made to fail on it: a contained
+    merge's result is master's own tree, which is already in the store, so it writes nothing.
+    """
+    repo, head = _unmerged_branch(tmp_path)
+    commit(
+        repo, "squash of feature, plus more", **{"b.txt": "two\n", "c.txt": "three\n"}
+    )
+
+    assert local_landed_layer(str(repo), head, base="master") == "content"

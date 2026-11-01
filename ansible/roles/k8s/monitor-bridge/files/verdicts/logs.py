@@ -76,10 +76,10 @@ def parse_push_line(line: str) -> tuple[str, str, str, str, str] | None:
 # The crons that read KUMA_PUSH_OK and route a healthchecks.io `/fail` on a lost push, which
 # alerts at once. Their lost DOWN already pages, so counting it here is one root cause twice;
 # their `status=` lines still count as landed siblings. Pinned against the tree by
-# tests/test_check_swallowed_verdicts.py: a fourth reader has to be added here too.
-HC_ROUTED_TAGS = frozenset(
-    {"longhorn-backup-health", "pi-sd-health", "pi-recovery-health"}
-)
+# tests/test_check_swallowed_verdicts.py: a third reader has to be added here too.
+# longhorn-backup-health left in M6 batch B1's Cutover-2, when its push and its
+# uptime-kuma-alive ping went; it stays in KUMA_RETIRING_TAGS below.
+HC_ROUTED_TAGS = frozenset({"pi-sd-health", "pi-recovery-health"})
 
 # The producers whose Kuma tile M6 is deleting (docs/target-architecture/monitoring/m6-retire-kuma.md,
 # "The cutover order"). From a batch's Cutover-1a until its Cutover-2, the producer still pushes
@@ -147,7 +147,7 @@ def swallowed_verdicts(
     Pages ONLY when some other tag landed a push in the same window. When nothing lands, the
     cause is fleet-wide — Kuma unreachable, the edge answering 404 for every route, the host
     that runs Kuma down — and another tile already pages for it; a second page for one root
-    cause is the rule gates.py applies everywhere else, and it is the population
+    cause is the rule the gate skip in check.py applies everywhere else, and it is the population
     uptime-kuma/CLAUDE.md measured when it rejected a plain count of push failures. The one
     case this exists for — one tag's DOWN lost while the rest of the fleet pushes fine — is
     the one that count could not separate. Measured: release-staleness-check's http=500 on

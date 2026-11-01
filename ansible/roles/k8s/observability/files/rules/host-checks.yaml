@@ -52,20 +52,21 @@ groups:
             textfile collector, so nothing is watching the root disk. Read the `daniel-box disk
             health` cron and the `disk-health` syslog tag, then
             /var/lib/node-exporter-textfile/disk-health.prom on the host.
-      # SHADOW UNTIL M6's BATCH B6 CUTOVER-1b. The next four rules replace Kuma's `Artifacts Peer
-      # Sync` and `k3s Telemetry OTLP Door` tiles, so they carry shadow="true" while the tiles
-      # page (docs/target-architecture/monitoring/m6-retire-kuma.md, "The cutover order").
+      # M6 BATCH B6a, PAGING SINCE CUTOVER-1b. The next four rules replaced Kuma's `Artifacts
+      # Peer Sync` and `k3s Telemetry OTLP Door` tiles, which Cutover-1a deleted
+      # (docs/target-architecture/monitoring/m6-retire-kuma.md, "The cutover order").
       # Both producers are daniel-box crons that write a check file through
       # homelab-check-lib.sh. Each NotReporting pair mirrors DiskHealthNotReporting, and its two
       # literals equal the deadline the producer renders from its own cron minute:
-      # ansible/tests/services/test_b6a_rule_literals.py pins them. Both tiles notify Discord
-      # only, so the rules are `warning`.
+      # ansible/tests/services/test_b6a_rule_literals.py pins them. Both tiles notified Discord
+      # only, so the rules are `warning`. No inhibit: each NotReporting rule carries its own
+      # `unless on (origin) (up{job="node"} == 0)`, and a dead exporter leaves each Failed rule
+      # no series, so `ScrapeTargetDown` is the one page.
       - alert: ArtifactsSyncFailed
         expr: homelab_check_success{check="sync-artifacts",origin="daniel-box"} == 0
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The peer artifact sync on daniel-box is failing.
           description: >-
@@ -83,7 +84,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The peer artifact sync on daniel-box has stopped reporting.
           description: >-
@@ -96,7 +96,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The telemetry OTLP receiver on daniel-box's loopback refuses connections.
           description: >-
@@ -114,7 +113,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The telemetry OTLP-door check on daniel-box has stopped reporting.
           description: >-
@@ -122,9 +120,9 @@ groups:
             textfile collector, so nothing is watching the OTLP door. Read the `Claude Code
             telemetry health` cron and `journalctl -t claude-otel-health`, then
             /var/lib/node-exporter-textfile/claude-otel-health.prom on the host.
-      # M6 BATCH B1, SHADOW UNTIL ITS CUTOVER-1B. The five k3s crons write the textfile beside
-      # their Kuma push, and Kuma's tiles page the same verdicts until Cutover-1a deletes
-      # them. Each check has the DiskHealth pair: `Failed` reads the verdict, and
+      # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B. The five k3s crons write the textfile beside
+      # their Kuma push, and Cutover-1a deleted Kuma's tiles for the same verdicts, so these
+      # rules are their pager. Each check has the DiskHealth pair: `Failed` reads the verdict, and
       # `NotReporting` reads the file's age. The deadline literal in a NotReporting rule
       # equals the DEADLINE_S its producer renders, and
       # ansible/tests/services/test_b1_rule_literals.py pins the two together. A daily check
@@ -135,7 +133,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's Longhorn backup check is red.
           description: >-
@@ -155,7 +152,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's longhorn-backup-health check has stopped reporting.
           description: >-
@@ -168,7 +164,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's off-box etcd snapshot check is red.
           description: >-
@@ -187,7 +182,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
           description: >-
@@ -200,7 +194,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box has deployed-artifact drift.
           description: >-
@@ -219,7 +212,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's manifest-prune-check has stopped reporting.
           description: >-
@@ -232,7 +224,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: A k8s service runs an older release than origin/master.
           description: >-
@@ -251,7 +242,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's release-staleness-check has stopped reporting.
           description: >-
@@ -264,7 +254,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: A live cluster object differs from its last-applied manifest.
           description: >-
@@ -282,7 +271,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's live-drift-check has stopped reporting.
           description: >-
@@ -290,17 +278,18 @@ groups:
             textfile collector, so nothing is watching live-object drift. Read the
             `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
             /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
-      # M6 BATCH B1, SHADOW UNTIL ITS CUTOVER-1B, which also adds the inhibit on
-      # ScrapeTargetDown{job="uptime-kuma"}. Prometheus scrapes Kuma's Service directly, so
-      # Authelia is not in this path. A 200 from /metrics is weaker than the
-      # `uptime-kuma-alive` ping it replaces, which proved Kuma accepted a push.
+      # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B, which also added the inhibit on
+      # ScrapeTargetDown{job="uptime-kuma"} (alertmanager-secret.yaml.j2): a dead Kuma pages
+      # once, as this critical after 5 minutes, and holds the 10-minute scrape warning.
+      # Prometheus scrapes Kuma's Service directly, so Authelia is not in this path. A 200
+      # from /metrics is weaker than the `uptime-kuma-alive` ping it replaces, which proved
+      # Kuma accepted a push. It goes in C-1a, before Kuma is removed.
       - alert: KumaDown
         expr: up{job="uptime-kuma"} == 0 or absent(up{job="uptime-kuma"})
         for: 5m
         labels:
           severity: critical
           service: uptime-kuma
-          shadow: "true"
         annotations:
           summary: Uptime Kuma has stopped serving /metrics.
           description: >-
@@ -1071,7 +1060,7 @@ groups:
             No claude-triage-poll verdict newer than 660s reached Prometheus from daniel-box's textfile
             collector, so the monitor triage poll has not completed a clean run: the timer stopped firing, or
             every run since failed and OnFailure has posted to Discord. Read `systemctl status
-            claude-triage-poll.timer` and `journalctl -u claude-triage-poll` on daniel-box. If `claude_code_triage_enabled` was set false on purpose,
+            homelab-claude-triage-poll.timer` and `journalctl -u homelab-claude-triage-poll` on daniel-box. If `claude_code_triage_enabled` was set false on purpose,
             delete this rule.
       - alert: ClaudeFanoutLanderNotReporting
         expr: |

@@ -190,7 +190,7 @@ def test_ansible_bool_agrees_with_ansible_core_to_bool(value):
 def test_the_light_tier_loads_no_ansible_core():
     """`lib.k8s_context`'s `DECIDED:` marker costs ~190 ms if ansible-core leaks into it.
 
-    `probe_lib/monitors.py` imports `k8s_context`, and `probe.py monitors` loads no
+    `probe_lib/health.py` imports `k8s_context`, and `probe.py health` loads no
     ansible-core today. `k8s_context` takes `ansible_bool` from this module, so importing
     `lib.ansible_jinja_env` must load none either: ansible-core waits for the first
     `register_ansible_filters` call. A subprocess rather than `sys.modules` in-process, because pytest has

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-10-31 18:17 UTC
-generated_sha: 224a2ac08b
+generated_at: 2026-11-01 13:18 UTC
+generated_sha: 25eb772c0e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,39 +12,39 @@ generated_sha: 224a2ac08b
 
 # Doc freshness
 
-151 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+152 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
 | [target-architecture/host/h1-cluster-config-to-flux.md](../target-architecture/host/h1-cluster-config-to-flux.md) | 2026-10-23 | 126 | 65 | `CLAUDE.md` (2026-10-31) |
 | [target-architecture/render/r2-secret-placeholders.md](../target-architecture/render/r2-secret-placeholders.md) | 2026-10-15 | 90 | 53 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-31) |
-| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-10-30 | 217 | 53 | `scripts/dev/pytest_shard_weights.json` (2026-10-31) |
+| [target-architecture/monitoring/m6-retire-kuma.md](../target-architecture/monitoring/m6-retire-kuma.md) | 2026-10-30 | 210 | 51 | `scripts/dev/pytest_shard_weights.json` (2026-10-31) |
 | [target-architecture/deploy/d2-first-leaf.md](../target-architecture/deploy/d2-first-leaf.md) | 2026-10-22 | 80 | 49 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-31) |
 | [target-architecture/render/r1-shadow-render.md](../target-architecture/render/r1-shadow-render.md) | 2026-10-14 | 74 | 48 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-31) |
-| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-10-25 | 76 | 48 | `ansible/tests/services/test_loki_stream_labels.py` (2026-10-31) |
 | [target-architecture/docs-guard/g5-shrink-root-claude-md.md](../target-architecture/docs-guard/g5-shrink-root-claude-md.md) | 2026-10-17 | 64 | 47 | `CLAUDE.md` (2026-10-31) |
-| [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-10-17 | 62 | 45 | `ansible/roles/k8s/authelia/defaults/main.yml` (2026-10-31) |
+| [target-architecture/monitoring/m5-loki-ruler.md](../target-architecture/monitoring/m5-loki-ruler.md) | 2026-10-25 | 71 | 45 | `ansible/tests/services/test_loki_stream_labels.py` (2026-10-31) |
+| [target-architecture/render/r3-remove-live-reads.md](../target-architecture/render/r3-remove-live-reads.md) | 2026-10-17 | 61 | 44 | `ansible/roles/k8s/authelia/defaults/main.yml` (2026-10-31) |
 | [target-architecture/host/h2-shrink-host-plane.md](../target-architecture/host/h2-shrink-host-plane.md) | 2026-10-24 | 103 | 44 | `CLAUDE.md` (2026-10-31) |
 | [target-architecture/deploy/d3-secrets.md](../target-architecture/deploy/d3-secrets.md) | 2026-10-16 | 51 | 37 | `.github/workflows/ci.yml` (2026-10-31) |
 | [target-architecture/render/r4-delete-k8s-ansible-path.md](../target-architecture/render/r4-delete-k8s-ansible-path.md) | 2026-10-25 | 102 | 35 | `CLAUDE.md` (2026-10-31) |
-| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-10-29 | 68 | 31 | `ansible/roles/k8s/monitor-bridge/files/check_table.py` (2026-10-31) |
+| [target-architecture/monitoring/m2-first-bridge-family.md](../target-architecture/monitoring/m2-first-bridge-family.md) | 2026-10-29 | 67 | 31 | `ansible/roles/k8s/monitor-bridge/files/check_table.py` (2026-10-31) |
 | [target-architecture/deploy/d4-ordering.md](../target-architecture/deploy/d4-ordering.md) | 2026-10-17 | 51 | 30 | `CLAUDE.md` (2026-10-31) |
-| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-10-29 | 189 | 30 | `mkdocs.yml` (2026-10-31) |
-| [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-10-25 | 64 | 29 | `.github/workflows/ci.yml` (2026-10-31) |
-| [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-10-25 | 47 | 27 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-31) |
+| [target-architecture/deploy/d6-delete-old-path.md](../target-architecture/deploy/d6-delete-old-path.md) | 2026-10-29 | 188 | 30 | `mkdocs.yml` (2026-10-31) |
+| [target-architecture/host/h4-secrets-unit.md](../target-architecture/host/h4-secrets-unit.md) | 2026-10-25 | 63 | 29 | `.github/workflows/ci.yml` (2026-10-31) |
+| [target-architecture/monitoring/m3-textfile-timer.md](../target-architecture/monitoring/m3-textfile-timer.md) | 2026-10-25 | 46 | 27 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-31) |
 | [target-architecture/monitoring/m1-alertmanager.md](../target-architecture/monitoring/m1-alertmanager.md) | 2026-10-28 | 67 | 27 | `ansible/roles/k8s/observability/CLAUDE.md` (2026-10-31) |
 | [target-architecture/host/h6-k3s-suc.md](../target-architecture/host/h6-k3s-suc.md) | 2026-10-29 | 85 | 25 | `CLAUDE.md` (2026-10-31) |
 | [target-architecture/docs-guard/g2-retire-lock.md](../target-architecture/docs-guard/g2-retire-lock.md) | 2026-10-17 | 52 | 24 | `CLAUDE.md` (2026-10-31) |
 | [target-architecture/deploy/d5-bulk-move.md](../target-architecture/deploy/d5-bulk-move.md) | 2026-10-29 | 115 | 21 | `CLAUDE.md` (2026-10-31) |
 | [target-architecture/host/h5-pi-compose.md](../target-architecture/host/h5-pi-compose.md) | 2026-10-29 | 77 | 19 | `CLAUDE.md` (2026-10-31) |
-| [target-architecture/design.md](../target-architecture/design.md) | 2026-10-25 | 29 | 18 | `CLAUDE.md` (2026-10-31) |
-| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-10-30 | 118 | 17 | `ansible/roles/k8s/observability/files/rules/host-checks.yaml` (2026-10-31) |
+| [target-architecture/design.md](../target-architecture/design.md) | 2026-10-25 | 28 | 17 | `CLAUDE.md` (2026-10-31) |
 | [homelab-render.md](../homelab-render.md) | 2026-10-23 | 60 | 16 | `scripts/renderer/renderer_lib/host.py` (2026-10-31) |
 | [python-code-organization.md](../python-code-organization.md) | 2026-10-24 | 38 | 16 | `ansible/roles/k8s/monitor-bridge/files/bridge/common.py` (2026-10-31) |
+| [target-architecture/host/h3-pi-pilot.md](../target-architecture/host/h3-pi-pilot.md) | 2026-10-30 | 115 | 16 | `ansible/roles/k8s/observability/files/rules/host-checks.yaml` (2026-10-31) |
 | [target-architecture/docs-guard/g1-diff-notice.md](../target-architecture/docs-guard/g1-diff-notice.md) | 2026-10-17 | 28 | 14 | `CLAUDE.md` (2026-10-31) |
 | [target-architecture/docs-guard/g3-freshness-reviewer.md](../target-architecture/docs-guard/g3-freshness-reviewer.md) | 2026-10-17 | 25 | 14 | `CLAUDE.md` (2026-10-31) |
-| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-10-29 | 108 | 14 | `ansible/roles/setup/initial_setup/defaults/main.yml` (2026-10-31) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-10-25 | 36 | 13 | `ansible/roles/k8s/authelia/templates/config-secret.yaml.j2` (2026-10-31) |
+| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-10-29 | 107 | 13 | `ansible/roles/setup/initial_setup/defaults/main.yml` (2026-10-31) |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-10-11 | 13 | 11 | `CLAUDE.md` (2026-10-31) |
 | [uptime-kuma-autokuma-record.md](../uptime-kuma-autokuma-record.md) | 2026-10-25 | 25 | 11 | `ansible/tests/services/test_kuma_push_resend_beats.py` (2026-10-31) |
 | [setup-role-loop-measurement.md](../setup-role-loop-measurement.md) | 2026-10-11 | 12 | 10 | `ansible/roles/setup/initial_setup/tasks/crons.yml` (2026-10-31) |
@@ -64,6 +64,8 @@ generated_sha: 224a2ac08b
 | [deploying.md](../deploying.md) | 2026-10-25 | 16 | 5 | `docs/claude-tooling.md` (2026-10-31) |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-10-25 | 19 | 5 | `docs/k3s-upgrade.md` (2026-10-30) |
 | [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-10-25 | 10 | 5 | `CLAUDE.md` (2026-10-31) |
+| [break-glass.md](../break-glass.md) | 2026-10-30 | 43 | 5 | `docs/reference/secrets.md` (2026-10-31) |
+| [adr/0027-fanout-batches-stay-on-host-cgroups.md](../adr/0027-fanout-batches-stay-on-host-cgroups.md) | — | 5 | 4 | `scripts/dev/fanout_lib/placement.py` (2026-10-29) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-09-02 | 4 | 4 | `CLAUDE.md` (2026-10-31) |
 | [homepage-widgets-and-layout.md](../homepage-widgets-and-layout.md) | 2026-10-10 | 10 | 4 | `scripts/diagnostics/probe.py` (2026-10-30) |
 | [n8n-community-packages.md](../n8n-community-packages.md) | 2026-10-10 | 4 | 4 | `scripts/diagnostics/probe_lib/core.py` (2026-10-30) |
@@ -75,7 +77,6 @@ generated_sha: 224a2ac08b
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-10-29 | 21 | 4 | `ansible/roles/k8s/observability/templates/alertmanager-secret.yaml.j2` (2026-10-31) |
 | [observability-dashboards.md](../observability-dashboards.md) | 2026-10-29 | 15 | 4 | `ansible/roles/k8s/observability/CLAUDE.md` (2026-10-31) |
 | [target-architecture/contracts.md](../target-architecture/contracts.md) | 2026-10-29 | 25 | 4 | `docs/failure-classes.md` (2026-10-31) |
-| [break-glass.md](../break-glass.md) | 2026-10-30 | 43 | 4 | `scripts/dev/findings.py` (2026-10-31) |
 | [target-architecture/deploy/d1-flux-installed.md](../target-architecture/deploy/d1-flux-installed.md) | 2026-10-30 | 70 | 4 | `CLAUDE.md` (2026-10-31) |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-12 | 3 | 3 | `ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2` (2026-10-29) |
 | [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-10-03 | 4 | 3 | `ansible/vars/secrets.yml` (2026-10-30) |
@@ -86,6 +87,7 @@ generated_sha: 224a2ac08b
 | [adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md](../adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md) | 2026-10-24 | 8 | 3 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-10-30) |
 | [hypervisor-libvirt-internals.md](../hypervisor-libvirt-internals.md) | 2026-10-24 | 12 | 3 | `ansible/roles/setup/initial_setup/tasks/network.yml` (2026-10-31) |
 | [flux-deploy-plane.md](../flux-deploy-plane.md) | 2026-10-30 | 96 | 3 | `CLAUDE.md` (2026-10-31) |
+| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-10-30 | 20 | 3 | `scripts/dev/findings.py` (2026-10-31) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-10-11) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-09-21 | 2 | 2 | `.github/claude-cli/package-lock.json` (2026-10-31) |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 2 | `scripts/secrets_mgmt/git_dates.py` (2026-10-29) |
@@ -95,7 +97,7 @@ generated_sha: 224a2ac08b
 | [adr/0023-fact-support-is-a-diff-notice.md](../adr/0023-fact-support-is-a-diff-notice.md) | 2026-10-17 | 5 | 2 | `CLAUDE.md` (2026-10-31) |
 | [adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md](../adr/0021-the-host-package-builder-trusts-master-plus-green-ci.md) | 2026-10-25 | 4 | 2 | `ansible/inventory/host_vars/daniel-pi.yml` (2026-10-29) |
 | [pihole-dns-continuity-record.md](../pihole-dns-continuity-record.md) | 2026-10-25 | 4 | 2 | `docs/flux-deploy-plane.md` (2026-10-30) |
-| [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-10-30 | 20 | 2 | `scripts/dev/findings.py` (2026-10-31) |
+| [target-architecture/monitoring/m6-status/a6.md](../target-architecture/monitoring/m6-status/a6.md) | 2026-10-30 | 2 | 2 | `ansible/roles/k8s/observability/files/rules/bridge-exporter.yaml` (2026-10-31) |
 | [adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) | 2026-08-24 | 1 | 1 | `scripts/diagnostics/probe.py` (2026-10-30) |
 | [adr/0005-traefik-is-the-edge-with-ingressroute-crds.md](../adr/0005-traefik-is-the-edge-with-ingressroute-crds.md) | 2026-08-24 | 1 | 1 | `ansible/templates/ingressroute.yml.j2` (2026-10-01) |
 | [adr/0009-networkpolicy-default-deny-ingress.md](../adr/0009-networkpolicy-default-deny-ingress.md) | 2026-08-24 | 1 | 1 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-10-29) |
@@ -111,6 +113,8 @@ generated_sha: 224a2ac08b
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-10-29 | 10 | 1 | `ansible/roles/k8s/n8n/templates/networkpolicy.yaml.j2` (2026-10-30) |
 | [docker-engine-pins-and-runtime.md](../docker-engine-pins-and-runtime.md) | 2026-10-30 | 9 | 1 | `docs/host-packages.md` (2026-10-31) |
 | [target-architecture/monitoring/m6-status/a3.md](../target-architecture/monitoring/m6-status/a3.md) | 2026-10-30 | 3 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-10-31) |
+| [target-architecture/monitoring/m6-status/pr-b-2.md](../target-architecture/monitoring/m6-status/pr-b-2.md) | 2026-10-30 | 2 | 1 | `scripts/diagnostics/tests/test_probe_monitors.py` (2026-10-31) |
+| [target-architecture/monitoring/m6-status/pr-b-6.md](../target-architecture/monitoring/m6-status/pr-b-6.md) | 2026-10-30 | 2 | 1 | `ansible/roles/k8s/authelia/templates/config-secret.yaml.j2` (2026-10-31) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [index.md](../index.md) | 2026-09-28 | 0 | 0 | — |
 | [adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md](../adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md) | 2026-10-12 | 1 | 0 | — |
@@ -120,14 +124,11 @@ generated_sha: 224a2ac08b
 | [alert-triggered-diagnosis.md](../alert-triggered-diagnosis.md) | 2026-10-30 | 8 | 0 | — |
 | [jellyfin-attachment-latency.md](../jellyfin-attachment-latency.md) | 2026-10-30 | 0 | 0 | — |
 | [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-10-30 | 21 | 0 | — |
-| [k3s-upgrade.md](../k3s-upgrade.md) | 2026-10-30 | 25 | 0 | — |
-| [target-architecture/monitoring/m6-status/a6.md](../target-architecture/monitoring/m6-status/a6.md) | 2026-10-30 | 0 | 0 | — |
+| [k3s-upgrade.md](../k3s-upgrade.md) | 2026-10-30 | 26 | 0 | — |
 | [target-architecture/monitoring/m6-status/b0.md](../target-architecture/monitoring/m6-status/b0.md) | 2026-10-30 | 0 | 0 | — |
 | [target-architecture/monitoring/m6-status/pr-b-1.md](../target-architecture/monitoring/m6-status/pr-b-1.md) | 2026-10-30 | 1 | 0 | — |
-| [target-architecture/monitoring/m6-status/pr-b-2.md](../target-architecture/monitoring/m6-status/pr-b-2.md) | 2026-10-30 | 0 | 0 | — |
-| [target-architecture/monitoring/m6-status/pr-b-4.md](../target-architecture/monitoring/m6-status/pr-b-4.md) | 2026-10-30 | 0 | 0 | — |
-| [target-architecture/monitoring/m6-status/pr-b-5.md](../target-architecture/monitoring/m6-status/pr-b-5.md) | 2026-10-30 | 0 | 0 | — |
-| [target-architecture/monitoring/m6-status/pr-b-6.md](../target-architecture/monitoring/m6-status/pr-b-6.md) | 2026-10-30 | 0 | 0 | — |
+| [target-architecture/monitoring/m6-status/pr-b-4.md](../target-architecture/monitoring/m6-status/pr-b-4.md) | 2026-10-30 | 2 | 0 | — |
+| [target-architecture/monitoring/m6-status/pr-b-5.md](../target-architecture/monitoring/m6-status/pr-b-5.md) | 2026-10-30 | 3 | 0 | — |
 | [target-architecture/monitoring/m6-status/pr-b-7.md](../target-architecture/monitoring/m6-status/pr-b-7.md) | 2026-10-30 | 0 | 0 | — |
 | [target-architecture/monitoring/m6-status/pr-c-0.md](../target-architecture/monitoring/m6-status/pr-c-0.md) | 2026-10-30 | 0 | 0 | — |
 | [target-architecture/monitoring/m6-status/pr-c-1.md](../target-architecture/monitoring/m6-status/pr-c-1.md) | 2026-10-30 | 0 | 0 | — |
@@ -138,32 +139,32 @@ generated_sha: 224a2ac08b
 | [target-architecture/monitoring/m6-status/pr-c-6.md](../target-architecture/monitoring/m6-status/pr-c-6.md) | 2026-10-30 | 0 | 0 | — |
 | [target-architecture/monitoring/m6-status/pr-c-7.md](../target-architecture/monitoring/m6-status/pr-c-7.md) | 2026-10-30 | 0 | 0 | — |
 | [traefik-plugins-and-startup.md](../traefik-plugins-and-startup.md) | 2026-10-30 | 11 | 0 | — |
-| [claude-agent-user.md](../claude-agent-user.md) | 2026-10-31 | 55 | 0 | — |
+| [claude-agent-user.md](../claude-agent-user.md) | 2026-10-31 | 46 | 0 | — |
 | [claude-memory-sync.md](../claude-memory-sync.md) | 2026-10-31 | 4 | 0 | — |
-| [claude-tooling.md](../claude-tooling.md) | 2026-10-31 | 86 | 0 | — |
+| [claude-tooling.md](../claude-tooling.md) | 2026-10-31 | 83 | 0 | — |
 | [failure-classes.md](../failure-classes.md) | 2026-10-31 | 19 | 0 | — |
 | [host-baseline-record.md](../host-baseline-record.md) | 2026-10-31 | 49 | 0 | — |
-| [host-packages.md](../host-packages.md) | 2026-10-31 | 33 | 0 | — |
-| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-10-31 | 21 | 0 | — |
+| [host-packages.md](../host-packages.md) | 2026-10-31 | 32 | 0 | — |
+| [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-10-31 | 22 | 0 | — |
 | [landing.md](../landing.md) | 2026-10-31 | 52 | 0 | — |
-| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-10-31 | 48 | 0 | — |
-| [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-10-31 | 33 | 0 | — |
+| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-10-31 | 49 | 0 | — |
+| [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-10-31 | 31 | 0 | — |
 | [registry-push-store-gc.md](../registry-push-store-gc.md) | 2026-10-31 | 5 | 0 | — |
-| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-10-31 | 246 | 0 | — |
-| [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-10-31 | 26 | 0 | — |
-| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-10-31 | 45 | 0 | — |
+| [target-architecture/host/h7-delete-ansible.md](../target-architecture/host/h7-delete-ansible.md) | 2026-10-31 | 242 | 0 | — |
+| [target-architecture/monitoring/alertmanager-ui-and-readers.md](../target-architecture/monitoring/alertmanager-ui-and-readers.md) | 2026-10-31 | 27 | 0 | — |
+| [target-architecture/monitoring/m4-blackbox-ingress.md](../target-architecture/monitoring/m4-blackbox-ingress.md) | 2026-10-31 | 43 | 0 | — |
 | [target-architecture/monitoring/m6-status/a1.md](../target-architecture/monitoring/m6-status/a1.md) | 2026-10-31 | 7 | 0 | — |
 | [target-architecture/monitoring/m6-status/a2.md](../target-architecture/monitoring/m6-status/a2.md) | 2026-10-31 | 5 | 0 | — |
 | [target-architecture/monitoring/m6-status/a4.md](../target-architecture/monitoring/m6-status/a4.md) | 2026-10-31 | 5 | 0 | — |
 | [target-architecture/monitoring/m6-status/a5.md](../target-architecture/monitoring/m6-status/a5.md) | 2026-10-31 | 5 | 0 | — |
 | [target-architecture/monitoring/m6-status/a7.md](../target-architecture/monitoring/m6-status/a7.md) | 2026-10-31 | 5 | 0 | — |
-| [target-architecture/monitoring/m6-status/b1.md](../target-architecture/monitoring/m6-status/b1.md) | 2026-10-31 | 1 | 0 | — |
+| [target-architecture/monitoring/m6-status/b1.md](../target-architecture/monitoring/m6-status/b1.md) | 2026-10-31 | 11 | 0 | — |
 | [target-architecture/monitoring/m6-status/b2.md](../target-architecture/monitoring/m6-status/b2.md) | 2026-10-31 | 4 | 0 | — |
-| [target-architecture/monitoring/m6-status/b3.md](../target-architecture/monitoring/m6-status/b3.md) | 2026-10-31 | 2 | 0 | — |
+| [target-architecture/monitoring/m6-status/b3.md](../target-architecture/monitoring/m6-status/b3.md) | 2026-10-31 | 13 | 0 | — |
 | [target-architecture/monitoring/m6-status/b4.md](../target-architecture/monitoring/m6-status/b4.md) | 2026-10-31 | 2 | 0 | — |
-| [target-architecture/monitoring/m6-status/b5.md](../target-architecture/monitoring/m6-status/b5.md) | 2026-10-31 | 3 | 0 | — |
-| [target-architecture/monitoring/m6-status/b6a.md](../target-architecture/monitoring/m6-status/b6a.md) | 2026-10-31 | 2 | 0 | — |
+| [target-architecture/monitoring/m6-status/b5.md](../target-architecture/monitoring/m6-status/b5.md) | 2026-10-31 | 5 | 0 | — |
+| [target-architecture/monitoring/m6-status/b6a.md](../target-architecture/monitoring/m6-status/b6a.md) | 2026-10-31 | 16 | 0 | — |
 | [target-architecture/monitoring/m6-status/b6b.md](../target-architecture/monitoring/m6-status/b6b.md) | 2026-10-31 | 1 | 0 | — |
-| [target-architecture/monitoring/m6-status/b7.md](../target-architecture/monitoring/m6-status/b7.md) | 2026-10-31 | 5 | 0 | — |
+| [target-architecture/monitoring/m6-status/b7.md](../target-architecture/monitoring/m6-status/b7.md) | 2026-10-31 | 9 | 0 | — |
 | [target-architecture/monitoring/m6-status/b8.md](../target-architecture/monitoring/m6-status/b8.md) | 2026-10-31 | 9 | 0 | — |
 | [target-architecture/monitoring/m6-status/b9.md](../target-architecture/monitoring/m6-status/b9.md) | 2026-10-31 | 5 | 0 | — |

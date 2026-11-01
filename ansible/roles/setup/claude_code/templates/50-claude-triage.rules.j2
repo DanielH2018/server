@@ -1,4 +1,5 @@
-// Managed by Ansible (roles/setup/claude_code) — edits here are overwritten.
+{% import 'claude-triage-pins.j2' as pins with context -%}
+// Shipped by the claude-code host component (roles/setup/claude_code's template).
 //
 // Lets the agent user START a triage run and the page that reports one, and nothing else.
 // The run is claude-triage@<episode>.service, which runs as the agent itself, so this grants
@@ -11,7 +12,7 @@ polkit.addRule(function (action, subject) {
     if (action.id !== "org.freedesktop.systemd1.manage-units") {
         return undefined;
     }
-    if (subject.user !== "{{ claude_code_triage_agent_user }}") {
+    if (subject.user !== "{{ pins.agent_user }}") {
         return undefined;
     }
     var unit = action.lookup("unit");

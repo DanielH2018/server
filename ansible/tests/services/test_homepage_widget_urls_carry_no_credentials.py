@@ -30,7 +30,8 @@ Run: uv run pytest ansible/tests/services/test_homepage_widget_urls_carry_no_cre
 
 import re
 
-from _homepage_config import config_urls, domain, namespace
+from _homepage_config import config_urls, namespace
+from _k8s_render import host_context
 
 # A query parameter whose NAME says it carries a credential. `?query=` (the Headlamp tile's
 # PromQL) is not one of these, and must stay unflagged.
@@ -49,7 +50,7 @@ def known_urls() -> frozenset[str]:
     """
     return frozenset(
         {
-            f"https://uptime-kuma.local.{domain()}",
+            f"http://prometheus.{host_context()['k8s_observability_namespace']}.svc.cluster.local:9090",
             f"http://scrutiny.{namespace()}.svc.cluster.local:8080",
             f"http://sonarr.{namespace()}.svc.cluster.local:8989",
         }

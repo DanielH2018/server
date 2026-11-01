@@ -307,7 +307,7 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
     assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
     assert "| `etcd-snapshot-offbox` | `45 2 * * *` |" in out
     assert "| `registry-gc` | `20 4 * * 0` |" in out
-    assert "| `uptime-kuma-alive` | `*/10 * * * *` |" in out
+    assert "| `uptime-kuma-alive` |" not in out
     assert "| `weekly-reboot-box` | `30 7 * * 0` |" in out
     assert "| `weekly-reboot-pi` | `30 7 * * 0` |" in out
     assert "| `pi-docker-prune` | `30 6 * * *` |" in out

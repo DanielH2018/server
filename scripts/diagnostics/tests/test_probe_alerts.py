@@ -1,12 +1,4 @@
-"""`probe.py alerts`: reconstructing DOWN history from Loki.
-
-Kuma keeps only current state, so an episode that has ended exists nowhere else. The reader
-takes TWO streams — monitor-bridge's own log, and the `{job="syslog"}` status=down lines the
-host crons emit, which push Kuma directly and so leave no other durable record. Reading only the
-first leaves the whole backup/drift plane with no episode history anywhere.
-"""
-
-import json
+"""`probe.py alerts`, firing history from `ALERTS`, and the Loki transport `loki-query` uses."""
 
 import pytest
 
@@ -14,7 +6,13 @@ from diagnostics.probe_lib import alerts
 from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib import core
-from _alert_fixtures import NOW, _query_params, _route_alert_fetch, _two_day_log
+from diagnostics.probe_lib import pi_plane
+from lib.exit_codes import PROBE_UNREADABLE
+from urllib.parse import parse_qs, urlparse
+
+
+def _query_params(url):
+    return parse_qs(urlparse(url).query)
 
 
 def test_loki_query_url_with_range_adds_start_end_direction():
@@ -167,329 +165,113 @@ def test_run_query_serves_metric_which_has_no_since_flag(monkeypatch):
     assert "/api/v1/query?" in seen[0]
 
 
-# monitor-bridge polls no Kuma state, so its container log says nothing about the host crons
-# that push Kuma directly. Reading only that log would leave the backup plane's sole DOWN
-# signal unrecorded: `longhorn-backup-health: status=down` lines would appear in no episode
-# list, while `alerts --check manifest` printed "no DOWN alerts" with
-# `monitor_status{monitor_name="Manifest Prune Drift"}` reading 0.
+# ── `probe.py alerts`: firing history from ALERTS ─────────────────────────────────────────
 
-SYSLOG_DOWN = (
-    "2026-08-19T13:50:03.382504+00:00 daniel-box longhorn-backup-health: "
-    "status=down backed-up volumes stale or missing: homelab/tdarr-server (weekly-d1)"
-)
-SYSLOG_PUSH_FAILED = (
-    "2026-08-16T07:40:04.188815+00:00 daniel-box claude-otel-health: "
-    "push failed (status=down: loki 0/1 ready; prometheus not answering queries)"
-)
-SYSLOG_PUSH_FAILED_TRUNCATED = (
-    "2026-08-16T10:36:02.000000+00:00 daniel-box longhorn-backup-health: "
-    "push failed (status=down: backups in Error state: backup-4a471c15 backup-9818b9cc"
-)
+NOW = 1_780_000_000.0
 
 
-def test_alerts_queries_the_host_cron_stream_as_well_as_the_bridge(monkeypatch):
-    seen = _route_alert_fetch(monkeypatch, {})
-    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3"])
-    assert alerts.run_alerts(ns) == 0
-    queries = [_query_params(u)["query"][0] for u in seen]
-    assert alerts.ALERT_LOGQL in queries
-    assert alerts.SYSLOG_ALERT_LOGQL in queries
+def _series(name, service, times, severity="critical", **extra):
+    labels = {"alertname": name, "service": service, "severity": severity, **extra}
+    return {"metric": labels, "values": [[t, "1"] for t in times]}
 
 
-def test_alerts_surfaces_a_host_cron_episode_the_bridge_stream_cannot_see(
-    monkeypatch, capsys
-):
-    """The acceptance case: monitor-bridge's stream is EMPTY and the episode still appears."""
-    minute = int(60 * 1e9)
-    _route_alert_fetch(
-        monkeypatch,
-        {
-            alerts.ALERT_LOGQL: [],
-            alerts.SYSLOG_ALERT_LOGQL: [
-                (minute, SYSLOG_DOWN),
-                (11 * minute, SYSLOG_DOWN),
-            ],
-        },
-    )
-    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3"])
-    assert alerts.run_alerts(ns) == 0
-    out = capsys.readouterr().out
-    assert "1 DOWN episode(s)" in out
-    assert "longhorn-backup-health" in out
-    assert "backed-up volumes stale or missing" in out
+def test_the_step_widens_past_a_week_to_stay_under_the_point_cap():
+    assert alerts.step_seconds(1) == alerts.MIN_STEP_S
+    assert alerts.step_seconds(30) * alerts.MAX_POINTS >= 30 * 86400
 
 
-# crowdsec's crowdsec-jobs sidecar (H2.4b): the syslog shape with the pod name as host, a
-# bouncer-prune refusal (no Kuma tile) and a lost push in kuma_push.py's no-rc form.
-SIDECAR_PRUNE_DOWN = (
-    "2026-10-18T13:17:02Z crowdsec-6f9c-x2 crowdsec-bouncer-prune: "
-    "status=down refused: no k8straefik row pulled in the last 50 minutes"
-)
-SIDECAR_PUSH_LOST = (
-    "2026-10-18T13:15:40Z crowdsec-6f9c-x2 crowdsec-appsec-verify: "
-    "push failed (http=404 by=kuma) (status=down: no enabled appsec-configs)"
-)
+def test_the_range_url_reads_alerts_over_the_whole_window():
+    params = _query_params(alerts.range_url("https://p", 2, NOW))
+    assert params["query"] == [alerts.QUERY]
+    assert float(params["end"][0]) - float(params["start"][0]) == 2 * 86400
+    assert params["step"] == ["60s"]
 
 
-def test_alerts_reads_the_crowdsec_jobs_sidecar_stream(monkeypatch, capsys):
-    minute = int(60 * 1e9)
-    seen = _route_alert_fetch(
-        monkeypatch,
-        {
-            alerts.ALERT_LOGQL: [],
-            alerts.SYSLOG_ALERT_LOGQL: [],
-            alerts.POD_ALERT_LOGQL: [
-                (minute, SIDECAR_PRUNE_DOWN),
-                (2 * minute, SIDECAR_PUSH_LOST),
-            ],
-        },
-    )
-    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3"])
-    assert alerts.run_alerts(ns) == 0
-    assert alerts.POD_ALERT_LOGQL in [_query_params(u)["query"][0] for u in seen]
-    out = capsys.readouterr().out
-    assert "crowdsec-bouncer-prune" in out
-    assert "no k8straefik row pulled" in out
-    assert alerts.parse_syslog_down_line(SIDECAR_PUSH_LOST) == (
-        "crowdsec-appsec-verify",
-        "push failed: no enabled appsec-configs",
+def test_samples_one_step_apart_are_one_episode():
+    times = [NOW, NOW + 60, NOW + 120]
+    (episode,) = alerts.alert_episodes([_series("A", "x", times)], 60)
+    assert (episode["first_s"], episode["last_s"], episode["samples"]) == (
+        NOW,
+        NOW + 120,
+        3,
     )
 
 
-def test_alerts_check_filter_matches_a_host_cron_tag(monkeypatch, capsys):
-    # `--check` has to keep working across both streams, which it does only because the syslog
-    # tag is a machine name like monitor-bridge's own check names. Kuma's monitor_name is a
-    # DISPLAY name ("Manifest Prune Drift"), so an episode set keyed on it would silently
-    # break `--check manifest-prune-check` for every caller.
-    minute = int(60 * 1e9)
-    _route_alert_fetch(
-        monkeypatch,
-        {
-            alerts.ALERT_LOGQL: [
-                (
-                    minute,
-                    "[2026-08-19T13:50:03] DOWN n8n - 1 workflow failed (2 cycles)",
-                )
-            ],
-            alerts.SYSLOG_ALERT_LOGQL: [(minute, SYSLOG_DOWN)],
-        },
+def test_a_gap_longer_than_two_steps_splits_the_episode():
+    times = [NOW, NOW + 60, NOW + 3600]
+    episodes = alerts.alert_episodes([_series("A", "x", times)], 60)
+    assert [e["first_s"] for e in episodes] == [NOW + 3600, NOW]
+
+
+def test_a_pinned_gap_merges_what_the_step_gap_would_split():
+    times = [NOW, NOW + 3600]
+    assert len(alerts.alert_episodes([_series("A", "x", times)], 60, gap_s=3600)) == 1
+
+
+def test_series_differing_only_in_unshown_labels_are_one_episode():
+    """A per-cgroup alert fires as several series; printed apart they read as duplicates."""
+    a = _series("ClaudeCgroupMemoryEvent", "daniel-server", [NOW], cgroup="a")
+    b = _series("ClaudeCgroupMemoryEvent", "daniel-server", [NOW, NOW + 60], cgroup="b")
+    (episode,) = alerts.alert_episodes([a, b], 60)
+    assert episode["samples"] == 2
+
+
+def test_check_matches_the_service_as_well_as_the_alert_name():
+    labels = {"alertname": "IngressProbeFailed", "service": "jellyfin"}
+    assert alerts.keep_series(labels, "jelly", None)
+    assert not alerts.keep_series(labels, "sonarr", None)
+
+
+def test_pi_keeps_a_pi_job_or_a_pi_service_and_drops_the_rest():
+    jobs = {"node-pi", "blackbox-pi-ports"}
+    assert alerts.keep_series(
+        {"job": "blackbox-pi-ports", "service": "wg-easy"}, None, jobs
     )
-    ns = cli_parser._build_parser().parse_args(
-        ["alerts", "--days", "3", "--check", "longhorn"]
-    )
-    assert alerts.run_alerts(ns) == 0
-    out = capsys.readouterr().out
-    assert "longhorn-backup-health" in out
-    assert "n8n" not in out
+    assert alerts.keep_series({"service": "daniel-pi"}, None, jobs)
+    assert not alerts.keep_series({"job": "node", "service": "daniel-box"}, None, jobs)
 
 
-#
-# `alerts --pi`: attributing an alert row to daniel-pi. The syslog stream carries the host's
-# own hostname (verified live against the Pi's health.log, not assumed — `hostname` there
-# prints "daniel-pi"); the monitor-bridge stream carries no host field at all, so its one
-# check that watches the Pi remotely (pi_pressure) is matched by name instead.
-
-PI_SYSLOG_LINE = (
-    "2026-09-02T19:24:00+00:00 daniel-pi pi-recovery-health: "
-    "status=down not running: autoheal; restarted: autoheal"
-)
-NON_PI_SYSLOG_LINE = SYSLOG_DOWN  # host is daniel-box
+def test_the_pi_jobs_include_the_published_port_probes():
+    """PiPortDead's job targets the Pi through `hostvars`, not `k8s_pi_client_ip`."""
+    jobs = alerts.pi_alert_jobs(pi_plane.PROMETHEUS_TEMPLATE_PATH.read_text())
+    assert {"node-pi", "alloy-pi", "blackbox-pi-ports"} <= jobs
+    assert "node" not in jobs
 
 
-def test_is_pi_alert_accepts_the_pi_syslog_host_token():
-    assert alerts.is_pi_alert(
-        alerts.SYSLOG_ALERT_LOGQL, PI_SYSLOG_LINE, "pi-recovery-health"
-    )
+def test_no_episode_renders_an_all_clear_naming_the_window():
+    assert alerts.format_alert_episodes([], 3, 60) == "no firing alerts in the last 3d"
 
 
-def test_is_pi_alert_rejects_a_non_pi_syslog_host_token():
-    assert not alerts.is_pi_alert(
-        alerts.SYSLOG_ALERT_LOGQL, NON_PI_SYSLOG_LINE, "longhorn-backup-health"
-    )
+def test_a_shadow_episode_is_marked():
+    series = _series("EvalSweepFailed", "daniel-box", [NOW], "warning", shadow="true")
+    text = alerts.format_alert_episodes(alerts.alert_episodes([series], 60), 1, 60)
+    assert text.splitlines()[-1].endswith("daniel-box/EvalSweepFailed  warning shadow")
 
 
-def test_is_pi_alert_accepts_the_pi_pressure_check_on_the_bridge_stream():
-    line = "[2026-09-02T19:05:00] DOWN pi_pressure - load5 2.40/core (5 cycles)"
-    assert alerts.is_pi_alert(alerts.ALERT_LOGQL, line, "pi_pressure")
+def _fetch_returns(monkeypatch, reply):
+    def fetch_parsed(url, resolve=None):
+        if isinstance(reply, BaseException):
+            raise reply
+        return reply
+
+    monkeypatch.setattr(core, "fetch_parsed", fetch_parsed)
 
 
-def test_is_pi_alert_rejects_a_different_bridge_check():
-    line = "[2026-08-19T13:50:03] DOWN n8n - 1 workflow failed (2 cycles)"
-    assert not alerts.is_pi_alert(alerts.ALERT_LOGQL, line, "n8n")
-
-
-def test_alerts_pi_scopes_to_pi_attributed_rows_across_both_streams(
-    monkeypatch, capsys
-):
-    minute = int(60 * 1e9)
-    _route_alert_fetch(
-        monkeypatch,
-        {
-            alerts.ALERT_LOGQL: [
-                (
-                    minute,
-                    "[2026-08-19T13:50:03] DOWN n8n - 1 workflow failed (2 cycles)",
-                ),
-                (
-                    2 * minute,
-                    "[2026-09-02T19:05:00] DOWN pi_pressure - load5 2.40/core (5 cycles)",
-                ),
-            ],
-            alerts.SYSLOG_ALERT_LOGQL: [
-                (minute, NON_PI_SYSLOG_LINE),
-                (2 * minute, PI_SYSLOG_LINE),
-            ],
-        },
-    )
-    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "3", "--pi"])
-    assert alerts.run_alerts(ns) == 0
-    out = capsys.readouterr().out
-    assert "pi_pressure" in out
-    assert "pi-recovery-health" in out
-    assert "n8n" not in out
-    assert "longhorn-backup-health" not in out
-
-
-def test_alerts_dry_run_prints_a_command_per_stream(monkeypatch, capsys):
-    monkeypatch.setattr(core, "domain", lambda: "example.test")
-    monkeypatch.setattr(core, "metallb_vip", lambda: "10.0.0.240")
-    ns = cli_parser._build_parser().parse_args(["--dry-run", "alerts", "--days", "3"])
-    assert alerts.run_alerts(ns) == 0
-    out = capsys.readouterr().out
-    assert out.count("query_range") == len(alerts.ALERT_SOURCES)
-
-
-# Which fetched lines reach the view, and which end a hit `--limit` cuts. monitor-bridge's log
-# lines carry no bracketed stamp, so a `_DOWN_RE` that required it would print "no DOWN alerts"
-# over a window whose `--raw` view holds DOWN lines. The same run exposed two more: `--check` and
-# `--pi` did not filter `--raw` at all, and a hit `--limit` threw away the NEWEST lines, so a
-# wider window listed fewer recent episodes than a narrower one. The parse half is pinned against
-# the real emitter in ansible/tests/services/test_monitor_bridge_down_line_shape.py.
-
-
-def test_keep_alert_row_admits_an_unparsed_line_only_when_unfiltered():
-    # The reject half of the None branch: an unreadable line is how `--raw` shows a shape the
-    # parsers stopped matching, but it cannot be attributed to a check or a host.
-    assert alerts.keep_alert_row(None, False, alerts.ALERT_LOGQL, "gibberish", None)
-    assert not alerts.keep_alert_row(
-        "traefik", False, alerts.ALERT_LOGQL, "gibberish", None
-    )
-    assert not alerts.keep_alert_row(None, True, alerts.ALERT_LOGQL, "gibberish", None)
-
-
-def test_alerts_check_filters_the_raw_view_as_well_as_the_episode_view(
-    monkeypatch, capsys
-):
-    minute = int(60 * 1e9)
-    _route_alert_fetch(
-        monkeypatch,
-        {
-            alerts.ALERT_LOGQL: [
-                (minute, "DOWN traefik_latency - headlamp 16% of 0.24 rps"),
-                (2 * minute, "DOWN arr_queue - 3 stalled grabs"),
-            ],
-            alerts.SYSLOG_ALERT_LOGQL: [(minute, SYSLOG_DOWN)],
-        },
-    )
-    ns = cli_parser._build_parser().parse_args(
-        ["alerts", "--days", "2", "--check", "traefik_latency", "--raw"]
-    )
-    assert alerts.run_alerts(ns) == 0
-    out = capsys.readouterr().out
-    assert "traefik_latency" in out
-    assert "arr_queue" not in out
-    assert "longhorn-backup-health" not in out
-
-
-def test_alerts_pi_filters_the_raw_view_as_well_as_the_episode_view(
-    monkeypatch, capsys
-):
-    minute = int(60 * 1e9)
-    _route_alert_fetch(
-        monkeypatch,
-        {
-            alerts.ALERT_LOGQL: [(minute, "DOWN arr_queue - 3 stalled grabs")],
-            alerts.SYSLOG_ALERT_LOGQL: [
-                (minute, PI_SYSLOG_LINE),
-                (2 * minute, NON_PI_SYSLOG_LINE),
-            ],
-        },
-    )
-    ns = cli_parser._build_parser().parse_args(
-        ["alerts", "--days", "2", "--pi", "--raw"]
-    )
-    assert alerts.run_alerts(ns) == 0
-    out = capsys.readouterr().out
-    assert "pi-recovery-health" in out
-    assert "arr_queue" not in out
-    assert "longhorn-backup-health" not in out
-
-
-def test_alerts_raw_without_a_filter_still_prints_a_line_no_parser_reads(
-    monkeypatch, capsys
-):
-    _route_alert_fetch(
-        monkeypatch,
-        {alerts.ALERT_LOGQL: [(int(60 * 1e9), "DOWN-ish line in some future shape")]},
-    )
-    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "2", "--raw"])
-    assert alerts.run_alerts(ns) == 0
-    assert "some future shape" in capsys.readouterr().out
-
-
-def test_a_wider_window_lists_every_episode_the_narrower_one_shows(monkeypatch, capsys):
-    # The issue's verify-by. With direction=forward the 2-day window spent its whole limit on the
-    # oldest lines, so `new_check` — which the 1-day window listed — vanished from the wider one.
-    lines = {alerts.ALERT_LOGQL: _two_day_log()}
-    seen = []
-    for days in ("1", "2"):
-        _route_alert_fetch(monkeypatch, lines, respect_limit=True)
-        ns = cli_parser._build_parser().parse_args(
-            ["alerts", "--days", days, "--limit", "10"]
-        )
-        assert alerts.run_alerts(ns, now=NOW) == 0
-        seen.append(capsys.readouterr().out)
-    narrow, wide = seen
-    assert "new_check" in narrow
-    assert "new_check" in wide
-
-
-def test_a_truncated_window_says_so_before_it_reports_an_all_clear(monkeypatch, capsys):
-    # Every fetched line is filtered out, so the episode view is empty while the fetch was
-    # capped — a run that would read as a clean bill of health.
-    _route_alert_fetch(
-        monkeypatch, {alerts.ALERT_LOGQL: _two_day_log()}, respect_limit=True
-    )
-    ns = cli_parser._build_parser().parse_args(
-        ["alerts", "--days", "2", "--limit", "10", "--check", "nothing_matches"]
-    )
+def test_alerts_prints_the_episodes_it_read(monkeypatch, capsys):
+    body = {
+        "status": "success",
+        "data": {"result": [_series("PiHostDown", "daniel-pi", [NOW])]},
+    }
+    _fetch_returns(monkeypatch, body)
+    ns = cli_parser._build_parser().parse_args(["alerts", "--days", "1"])
     assert alerts.run_alerts(ns, now=NOW) == 0
-    out = capsys.readouterr().out
-    assert "hit --limit 10 log lines" in out
-    assert "OLDEST end" in out
-    assert out.index("hit --limit") < out.index("no DOWN alerts")
+    assert "daniel-pi/PiHostDown" in capsys.readouterr().out
 
 
-def test_a_truncation_notice_stays_off_stdout_under_json(monkeypatch, capsys):
-    # `--json` exists to be piped, so the notice goes to stderr there rather than ahead of the
-    # document. It still has to be SAID: a silent cap under --json is the same all-clear.
-    _route_alert_fetch(
-        monkeypatch, {alerts.ALERT_LOGQL: _two_day_log()}, respect_limit=True
-    )
-    ns = cli_parser._build_parser().parse_args(
-        ["alerts", "--days", "2", "--limit", "10", "--json"]
-    )
-    assert alerts.run_alerts(ns, now=NOW) == 0
-    captured = capsys.readouterr()
-    assert json.loads(captured.out)
-    assert "hit --limit 10" in captured.err
-
-
-def test_a_zero_limit_reports_no_episodes_rather_than_crashing(monkeypatch, capsys):
-    # argparse accepts `--limit 0`, and an empty stream satisfies `0 >= 0`.
-    _route_alert_fetch(monkeypatch, {}, respect_limit=True)
-    ns = cli_parser._build_parser().parse_args(
-        ["alerts", "--days", "2", "--limit", "0"]
-    )
-    assert alerts.run_alerts(ns) == 0
-    assert "no DOWN alerts" in capsys.readouterr().out
+def test_alerts_that_cannot_read_prometheus_is_unreadable_not_an_all_clear(
+    monkeypatch, capsys
+):
+    _fetch_returns(monkeypatch, core.Unreadable("curl: (7) Failed to connect"))
+    ns = cli_parser._build_parser().parse_args(["alerts"])
+    assert alerts.run_alerts(ns, now=NOW) == PROBE_UNREADABLE
+    assert "no firing alerts" not in capsys.readouterr().out

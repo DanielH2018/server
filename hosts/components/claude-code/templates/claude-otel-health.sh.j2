@@ -1,0 +1,80 @@
+#!/usr/bin/env bash
+# Claude Code telemetry OTLP-door heartbeat, shipped by homelab-daniel-box (hosts/components/claude-code)
+# as /usr/lib/homelab/claude-otel-health.
+#
+# ONE check: is the ingest door open? This is the property no k8s object reports and no
+# in-cluster pod can test. The OTLP receiver is a `hostPort` DNAT installed by the CNI portmap
+# plugin — not a socket, so it is invisible to `ss` — and a broken rule leaves every pod Running
+# and Ready while Claude Code, a HOST process rather than a container, silently fails to export.
+#
+# DECIDED: this heartbeat survives the 2026-10-01 fold into monitor-bridge (#3094) because the door
+# is pinned to the node's LOOPBACK — `observability_otlp_host_ip` is 127.0.0.1, which the
+# observability role's "Fail if the OTLP receiver is not pinned to loopback" task asserts
+# against the live collector, because content logging ships prompts verbatim. A pod's
+# 127.0.0.1 is its own loopback, so monitor-bridge cannot reach this address from inside the
+# cluster; the only route that would is `hostNetwork: true` on monitor-bridge, which
+# re-addresses every NetworkPolicy that admits it by pod selector, on the one workload that
+# cannot page about its own breakage.
+# The substitute that needs no host — querying the receiver's `otelcol_receiver_accepted_*`
+# throughput instead — is refused by observability's CLAUDE.md "The trap: an idle stack is
+# indistinguishable from a broken one": the stack has run 47h with nothing wrong and nothing
+# flowing, so a throughput query reads the same for a quiet host as for a dead door.
+#
+# What is deliberately not here any more: the four Deployments plus the DaemonSet readiness arm,
+# which the `k8s-workloads` rules in observability now page (`K8sDeploymentZeroAvailable` and
+# its siblings), and the `otelcol_exporter_send_failed_*` arm, which folded into monitor-bridge
+# as `checks/logs.py:with_export_failures` on the Log Shipper Dropped Entries tile. Nothing here reads Prometheus or the cluster any more, which is
+# why the kubeconfig and the ClusterIP resolution are gone with them.
+#
+# Push, not poll: this is a host timer that reports its own verdict, as a journal line and a
+# textfile.
+#
+# Usage: claude-otel-health (no arguments)
+# Runs from homelab-claude-otel-health.service on daniel-box, every 10 minutes by default
+# (claude_code_telemetry_health_minute). It probes the OTLP receiver on the node's loopback,
+# logs a `status=<up|down>` line under the `claude-otel-health` tag and writes
+# `claude-otel-health.prom` for node_exporter's textfile collector. Prometheus's OtlpDoorClosed and
+# OtlpDoorNotReporting rules page from that file. Until M6 batch B6a's Cutover-2 the verdict also
+# went to a Kuma push monitor. claude_code_otlp_host_ip and claude_code_otlp_port are held equal
+# to observability's pair by hosts/lib/tests/test_claude_artifacts_node_timers.py.
+set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+# The textfile library: a host that misses it fails the run loudly instead of reporting green
+# (M6 batch B6).
+# shellcheck source=/dev/null
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t claude-otel-health "homelab-check-lib.sh missing — install homelab-daniel-box on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: two timer periods plus 300s, for the
+# reasons sync-artifacts.sh gives. Rendered from the timer's minute, read as `*/N`; any other
+# shape fails the render. ansible/tests/services/test_b6a_rule_literals.py pins the
+# NotReporting rule to it.
+{% set _every_n = claude_code_telemetry_health_minute | string | regex_replace('^[*]/([0-9]+)$', '\\1') %}
+{% if _every_n.isdigit() and '*/' ~ _every_n == claude_code_telemetry_health_minute | string %}
+DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
+{% else %}
+{{ telemetry_health_cron_minute_not_every_n | mandatory('claude_code_telemetry_health_minute must be */N for claude-otel-health to derive DEADLINE_S, got ' ~ claude_code_telemetry_health_minute) }}
+{% endif %}
+
+if timeout 5 bash -c "exec 3<>/dev/tcp/{{ claude_code_otlp_host_ip }}/{{ claude_code_otlp_port }}" 2>/dev/null; then
+  STATUS=up
+  MSG="OTLP receiver reachable on {{ claude_code_otlp_host_ip }}:{{ claude_code_otlp_port }}"
+else
+  STATUS=down
+  MSG="OTLP receiver unreachable on {{ claude_code_otlp_host_ip }}:{{ claude_code_otlp_port }}"
+fi
+
+SUCCESS=0
+[ "$STATUS" = up ] && SUCCESS=1
+# The journal line first, so `journalctl -t claude-otel-health` reads the outcome.
+logger -t claude-otel-health "status=${STATUS} ${MSG}"
+write_check_textfile claude-otel-health "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t claude-otel-health "textfile write failed (status=${STATUS})"

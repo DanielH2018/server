@@ -30,6 +30,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 # DECIDED: imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py.
 from lib.exit_codes import FINDINGS_BAD_ARGS
 from dev.findings_lib.claim import (
+    PEER_UNREADABLE,
     another_claim_blocks,
     claim_is_live,
     claim_states,
@@ -121,6 +122,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # issue, a resumed orchestrator re-claiming its old batches would open one ssh connection
     # each, and `ufw limit ssh` rejects the sixth inside 30 seconds.
     batch_holds = functools.cache(lambda: tools.batch_holds(args.numbers))
+    peer_trees = functools.cache(tools.peer_trees)
     refused = False
     for number in args.numbers:
         issue = _load_issue(number, tools)
@@ -129,7 +131,9 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             # as "every worktree is gone". The claim blocks, as it did before this path
             # existed, and `plan_claim` refuses it below. The warning was said once, above.
             stale = (
-                stale_holder(issue, trees, dirty, merged, lambda _n: batch_holds())
+                stale_holder(
+                    issue, trees, dirty, merged, lambda _n: batch_holds(), peer_trees
+                )
                 if ok
                 else None
             )
@@ -270,6 +274,7 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
         dirty,
         merged,
         batch_holds=tools.batch_holds,
+        peer_trees=tools.peer_trees,
     )
     others = 0
     if args.worktree:
@@ -320,7 +325,15 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}
     reaped = 0
-    for s in claim_states(issues, trees, dirty, merged, batch_holds=tools.batch_holds):
+    states = claim_states(
+        issues,
+        trees,
+        dirty,
+        merged,
+        batch_holds=tools.batch_holds,
+        peer_trees=tools.peer_trees,
+    )
+    for s in states:
         if s.live:
             continue
         plans = plan_release(
@@ -333,6 +346,15 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
         verb = "would be released" if args.dry_run else "released"
         print(f"#{s.number} {verb} — {s.reason}")
         reaped += 1
+    # On stdout, not stderr: `prune_worktrees.reap_claims` relays only stdout from a reap
+    # that exits 0, and the weekly sweep is where a lasting ssh failure has to show.
+    unread = [s.number for s in states if s.reason == PEER_UNREADABLE]
+    if unread:
+        print(
+            f"reap: warning: the other host's worktrees could not be read; held "
+            f"{len(unread)} claim(s) with no worktree here: "
+            + " ".join(f"#{n}" for n in unread)
+        )
     verb = "would be released" if args.dry_run else "released"
     print(f"reap: {reaped} stale claim(s) {verb}")
     return 0

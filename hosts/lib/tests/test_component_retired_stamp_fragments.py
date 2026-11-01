@@ -41,9 +41,15 @@ RECORDED = {
     # a2bed5696^:ansible/roles/setup/nut_host/tasks/main.yml
     "nut-secondary": {("render", "nut-host")},
     # 85d2bf9f7:ansible/roles/setup/claude_code/tasks/main.yml, before the role's render stamp
-    # took the name claude-code-ansible. Its triage stamp is left out: the component ships no triage.
+    # took the name claude-code-ansible. H7.40's third slice moved triage, whose templates were
+    # all claude-code-ansible still listed, so it retires that render stamp and the triage one.
+    # H7.40's fourth slice moved the artifacts node's crons, whose task stamped
+    # claude-code-node-crons (the role task file node_crons.yml, since deleted).
     "claude-code": {
         ("render", "claude-code"),
+        ("render", "claude-code-ansible"),
+        ("render", "claude-code-node-crons"),
+        ("deployed", "claude-code-triage"),
         ("deployed", "claude-code-bg-resume"),
         ("deployed", "claude-code-cgroup-metrics"),
         ("deployed", "claude-code-clone-sync"),

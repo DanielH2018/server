@@ -7,7 +7,8 @@ with the host's own vars laid over the role's defaults as `overrides`.
 Run: uv run pytest ansible/tests/setup/test_claude_code_on_daniel_server.py
 """
 
-from _helpers import ANSIBLE, HOST_VARS, load_tasks, load_yaml, task_named
+from _agent_package import agent_setup_script
+from _helpers import ANSIBLE, HOST_VARS, load_yaml
 from _setup_render import render_setup_text
 from test_claude_fleet_slice_cap import SUB_BOUNDS, to_bytes
 
@@ -61,10 +62,9 @@ def test_daniel_box_render_is_unchanged_by_the_server_block():
     assert "MemoryHigh=%s" % DEFAULTS["claude_code_fleet_memory_high"] in rendered
 
 
-def test_the_role_enables_linger_idempotently():
-    task = task_named(load_tasks(ROLE / "tasks" / "main.yml"), "enable-linger")
-    assert task["args"]["creates"] == "/var/lib/systemd/linger/{{ sys_user }}"
-    assert task.get("become") is True
+def test_the_package_enables_linger_for_the_session_user(tmp_path):
+    setup = agent_setup_script(tmp_path)
+    assert 'loginctl enable-linger "$agent" "$operator"' in setup
 
 
 def test_daniel_server_planes_stay_under_its_fleet_cap():

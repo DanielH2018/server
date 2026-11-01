@@ -293,15 +293,14 @@ def test_a_shipped_file_applies_and_holds_every_role_that_ships_it(
 def test_a_role_needing_no_tag_is_left_out_of_the_apply_and_the_hold(
     gitops_deploy, tick, state
 ):
-    """An initial_setup default claude_code never reads plans no claude_code tag (#4361).
+    """An initial_setup default renovate_agent never reads plans no renovate_agent tag (#4361).
 
-    The row names claude_code for every edit to the file. Before this answer the tick applied
-    the whole `claude_code` tag, and a failure there held the deployer over a change
-    claude_code never read.
+    The row names renovate_agent for every edit to the file. Before this answer the tick applied
+    the whole `renovate_agent` tag, and a failure there held the deployer over a change
+    renovate_agent never read.
     """
     tick.paths = [INITIAL_SETUP_DEFAULTS]
     tick.narrow_setup = {
-        "claude_code": NOTHING,
         "renovate_agent": NOTHING,
         "initial_setup": (0, "prune"),
     }
@@ -317,12 +316,11 @@ def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
     """The rejecting half: the exit code alone is not the answer, so it stays doubt."""
     tick.paths = [INITIAL_SETUP_DEFAULTS]
     tick.narrow_setup = {
-        "claude_code": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
-        "renovate_agent": NOTHING,
+        "renovate_agent": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
         "initial_setup": (0, "prune"),
     }
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert _playbook_argv(tick)[-1] == "claude_code,prune"
+    assert _playbook_argv(tick)[-1] == "prune,renovate_agent"
 
 
 def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(

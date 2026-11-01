@@ -70,8 +70,8 @@ def _suite_files():
     a sibling of the `files/` roots `_consumer_roots()` returns, not inside `files/` itself.
 
     The glob is every `*.py`, not `test_*.py` + `conftest.py`. A shared helper module —
-    monitor-bridge's `_check_gate_helpers.py`, which wires `run_once` for four suites — can
-    patch a runtime module exactly as a test does (it patched `bridge.net.push` until #3938),
+    monitor-bridge's `_fake_sources.py`, which every `run_once` suite shares — can
+    patch a runtime module exactly as a test does (a predecessor patched `bridge.net.push` until #3938),
     and under the narrower glob those patches would be invisible to this rule, so a from-import
     of one of those names would pass.
     """
@@ -188,7 +188,9 @@ def test_the_census_reads_the_real_suites():
     # `importlib.util.module_from_spec` and patches through that binding.
     patched = _patched_names_by_module()
     assert {"autofix"} <= patched.keys(), sorted(patched)
-    assert {"_request", "push"} <= patched["autofix"], sorted(patched["autofix"])
+    assert {"_request", "post_discord"} <= patched["autofix"], sorted(
+        patched["autofix"]
+    )
 
 
 def test_the_census_binds_a_module_loaded_by_path(tmp_path):
@@ -207,11 +209,11 @@ def test_the_census_binds_a_module_loaded_by_path(tmp_path):
 
 def test_the_suite_census_sees_shared_helper_modules():
     # Non-vacuity for the `*.py` glob above, naming members rather than counting.
-    # `_check_gate_helpers.py` is not named `test_*`, and once held seven of monitor-bridge's
-    # transport patches; the narrower glob that missed it read exactly as green as one that sees
+    # `_fake_sources.py` is not named `test_*`, as `_check_gate_helpers.py` was not, and that
+    # helper once held seven of monitor-bridge's transport patches; the narrower glob that missed it read exactly as green as one that sees
     # it. `test_helper_patch_extraction_can_go_red` proves a helper's patches are read out of it.
     names = {p.name for p in _suite_files()}
-    assert {"_check_gate_helpers.py", "conftest.py"} <= names, sorted(names)
+    assert {"_fake_sources.py", "conftest.py"} <= names, sorted(names)
 
 
 def test_there_are_consumer_modules():

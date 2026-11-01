@@ -41,6 +41,11 @@ a 2xx on an `authelia`-gated router, kept 7 days, capped at
 `ansible/roles/k8s/crowdsec/files/remote_allowlist.py:CAP` entries, which is what covers a VPN
 exit or a phone (#2123). Its module docstring is the design.
 
+**`remote-ips` never holds an address `home-ips` covers.** The job reads `home-ips` on every
+run, skips a sighting inside it, and prunes a live entry inside it. Before #6709, rotating home
+IPv6 privacy addresses filled the cap, and the job refused the operator's VPN exit, which
+CrowdSec then banned.
+
 To see what is exempt: `… exec deploy/crowdsec -c crowdsec -- cscli allowlists inspect
 remote-ips` (or `home-ips`); to withdraw one, `… cscli allowlists remove remote-ips <ip>`. A
 `home-ips` entry the job did not write is removed on its next run, because the job owns that
@@ -54,6 +59,25 @@ period. To lift a ban by hand (a Claude session cannot; the read-only ServiceAcc
 ```bash
 sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli decisions delete --ip <ip>
 ```
+
+## The authenticated-app whitelist keeps normal use from scoring
+
+`files/crowdsec-authenticated-app-whitelist.yaml` is a parse-time whitelist that both agent
+sidecars load into `s02-enrich`. It drops a Traefik access-log event when one named router's
+backend answered behind its own authentication. Each rule keys on `OriginStatus`, which is 0
+when Traefik answered without reaching the backend, so the bouncer's 403s, Authelia redirects
+and the LiveSync gate's no-router 404s still score. Its header has the argument for each rule.
+It covers what banned the operator from a fresh address before `remote-ips` could learn it
+(#6708):
+
+- a stale Homepage tab's widget burst, which Homepage answers with 403s and 404s;
+- LiveSync's existence checks, which CouchDB answers with 404s;
+- a Jellyfin episode's stream segments, which trip `http-crawl-non_statics` on their own.
+
+The Traefik agent also installs the hub's `crowdsecurity/jellyfin-whitelist`, from
+`ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_agent_parsers`.
+`tests/test_authenticated_app_whitelist.py` derives the router names from the render, so a
+renamed route fails there rather than exempting nothing.
 
 ## The `crowdsec-jobs` sidecar runs four jobs beside the LAPI
 
@@ -210,19 +234,19 @@ precheck sends `HEAD /v1/decisions` for that reason: LAPI answers a HEAD from th
 alone, adding no row and stamping no `last_pull`. The `DECIDED:` note in
 `ansible/roles/k8s/traefik/files/traefik_bouncer_key_precheck.py` cites the upstream code.
 
-### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
-The tailer read a Traefik access-log line before Traefik finished writing it. Each occurrence is
-one request the WAF never sees, about 0.05% of traffic. Nothing here fixes it, and the syslog
-sources (`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lose lines silently.
+### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read the engine image fixes
+The tailer read a Traefik access-log line before Traefik finished writing it. Each occurrence
+was one request the WAF never saw, about 0.05% of traffic, and the syslog sources
+(`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lost lines silently.
 
-**Re-check #2124 on the next `crowdsec_k8s_image` bump**
-(set in `ansible/inventory/group_vars/all.yml`): a release carrying
-crowdsecurity/crowdsec#4678 closes it, and v1.8.2 is the first such release. Upstream had not
-published its image on 2026-10-28, and `docs/crowdsec-waf-record.md` has the dates. The pin
-sits in the `k8s_autodeploy: false` Renovate group, so the bump arrives as a `manual —` PR.
-Verify with
-`probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h` returning
-nothing.
+Only the engine binary fixes it. crowdsecurity/crowdsec#4678 sets `CompleteLines: true` on the
+file datasource's tailer, and every release from v1.8.2 carries it. `CompleteLines` is not an
+`acquis.yaml` key, so nothing in this repo can set it. `crowdsec_k8s_image` (set in
+`ansible/inventory/group_vars/all.yml`) has pinned a release carrying the fix since #2124.
+A recurrence therefore means the pinned image lost the fix, not that a config changed.
+`docs/crowdsec-waf-record.md` has the measurements and the dates. To check, run
+`probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h`, which
+returns nothing while the fix holds.
 
 ## Which Prometheus job covers which agent
 

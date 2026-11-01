@@ -1,16 +1,14 @@
 """`probe.py targets --pi` and `probe.py pi containers` — first-command triage for daniel-pi.
 
-`targets`, `kuma-drift`, `alerts` and `health --docker` already give the cluster a first-read
-of what's wrong. daniel-pi runs no kubelet, so none of them see it: `targets` streams raw
-Prometheus JSON with no Pi filter, `kuma-drift`'s declared set is the whole static-monitors
-template, and `alerts` has no notion of "on the Pi" at all. This module is what `--pi` and
-the `pi containers` subview dispatch to.
+`targets`, `alerts` and `health --docker` already give the cluster a first-read of what's
+wrong. daniel-pi runs no kubelet, so none of them see it unscoped: `targets` streams raw
+Prometheus JSON with no Pi filter, and `alerts` lists every firing alert. This module is what
+`--pi` and the `pi containers` subview dispatch to.
 
-`kuma-drift`'s and `alerts`' `--pi` handling stay in probe_lib/monitors.py and
-probe_lib/alerts.py respectively — they filter the SAME declared/live sets those subcommands
-already build, so the filter belongs beside the data it filters. This module carries the two
-things that have no existing home: Prometheus target scoping (no formatted view exists for
-`targets` at all today) and the Pi's own Docker container inspect.
+`alerts --pi` filters in probe_lib/alerts.py, beside the series it reads, and takes its job
+set from `declared_pi_job_names` here. This module carries the two things that have no other
+home: Prometheus target scoping (no formatted view exists for `targets` at all today) and the
+Pi's own Docker container inspect.
 """
 
 import json
@@ -76,9 +74,8 @@ def format_pi_targets(declared, active_targets):
 
     `declared` is the job-name set from declared_pi_job_names(); `active_targets` is
     Prometheus's own `data.activeTargets` list. A declared job absent from the live set is
-    reported MISSING and fails the gate — dividing the Pi's own live set by itself (the
-    `monitors` mistake `kuma-drift` exists to not repeat) would read a scrape config with a
-    silently dropped job as 100% healthy.
+    reported MISSING and fails the gate — dividing the Pi's own live set by itself would read
+    a scrape config with a silently dropped job as 100% healthy.
     """
     live = {
         t.get("scrapePool"): t

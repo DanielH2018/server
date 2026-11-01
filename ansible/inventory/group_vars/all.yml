@@ -242,7 +242,7 @@ terraria_k8s_replicas: 0
 # Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
-crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1@sha256:0f2523fa61ef507f15d953045cface490cc880670c62f2755ced17524107f71a
+crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.2@sha256:65b74942f7e7ed5c60fde4ac15fc4ba715904c398c8b16dd451f4907d90347d4
 # Every app pod that carries a CrowdSec agent sidecar (ansible/templates/crowdsec-agent.yml.j2),
 # keyed by the app, to the LAPI machine name that agent logs in as. Four readers derive from
 # this map: the sidecar's AGENT_USERNAME, the k8s/crowdsec role's machine registration loop,
@@ -806,6 +806,10 @@ has_gitops: false
 # runs Docker. A host nobody thought about gets the teardown arm rather than a second container
 # runtime. daniel-pi overrides this true.
 has_docker: false
+# Whether this host has fwupd, so the host-maintenance component ships the weekly firmware update
+# (homelab-firmware-update.timer). False by default; daniel-box overrides it true. The Pi's
+# pi-tuning component purges fwupd, and daniel-server has never had it.
+has_fwupd: false
 # The Docker engine packages, listed once because three readers must agree on the set:
 # homelab-daniel-pi's engine pins (hosts/components/pi-docker) install them, initial_setup's
 # host-basics HOLDS them before its dist-upgrade, and docker_install's teardown unholds them

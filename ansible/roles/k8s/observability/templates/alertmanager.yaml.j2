@@ -47,6 +47,10 @@ spec:
             # Empty turns gossip off. One replica has no peer, and a listening cluster port
             # would only add a surface.
             - --cluster.listen-address=
+            # The UI's links and a notification's links name the route rather than the pod's
+            # hostname. No path: a path would also move --web.route-prefix, and with it
+            # /-/ready and the /api/v2 Prometheus sends to.
+            - --web.external-url=https://alertmanager.local.{{ domain }}
           ports:
             - name: http
               containerPort: 9093
@@ -79,8 +83,9 @@ spec:
           persistentVolumeClaim:
             claimName: alertmanager-data
 ---
-# Prometheus sends alerts here and scrapes `alertmanager_*` from the same port. Its one route
-# is the GET-only read door for `probe.py` (alertmanager-read-ingressroute.yaml.j2).
+# Prometheus sends alerts here and scrapes `alertmanager_*` from the same port. Two routes
+# share alertmanager.local: the UI behind Authelia (alertmanager-ingressroute.yaml.j2) and the
+# GET-only read door for `probe.py` (alertmanager-read-ingressroute.yaml.j2).
 apiVersion: v1
 kind: Service
 metadata:

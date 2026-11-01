@@ -39,6 +39,11 @@ _KEYS = (
     "homelab_builder_github_token: x\n"
     "gitops_deploy_discord_webhook: x\n"
     "claude_code_agent_gh_token: x\n"
+    "claude_code_triage_claude_oauth_token: x\n"
+    "authelia_agent_password: x\n"
+    "rkhunter_daniel_box_push_token: x\n"
+    "aide_daniel_box_push_token: x\n"
+    "healthchecks_ping_key: x\n"
 )
 
 DEFAULT_ACCURACY_S = 60  # systemd's AccuracySec when a timer sets none
@@ -55,10 +60,11 @@ EXEMPT = {
     "homelab-claude-dotfiles-sync.timer": "syncs the dotfiles clone; never touches k3s",
     "homelab-claude-memory-sync.timer": "copies the memory store to daniel-server; never touches k3s",
     "homelab-claude-fanout-server-lander.timer": "lands a merged PR over ssh; reads no cluster state",
-    "claude-triage-poll.timer": "polls monitors and starts a session only on an alert episode",
+    "homelab-claude-triage-poll.timer": "polls monitors and starts a session only on an alert episode",
+    "homelab-claude-agent-browser.timer": "installs the agent's browser pins; never touches k3s",
     "homelab-claude-pipeline-timeline.timer": "joins GitHub, journals and review records; no cluster",
     "homelab-builder.timer": "builds and signs packages; a build during a restart only waits",
-    "Sync peer Claude artifacts": "an ssh pull from daniel-server; reads no cluster state",
+    "homelab-sync-artifacts.timer": "an ssh pull from daniel-server; reads no cluster state",
     # A */5 schedule fires inside any window longer than 5 minutes, so the span cannot avoid it.
     "CronJob crowdsec */5 * * * *": "home-IP lookup; a missed run is not made up (backoffLimit 0)",
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",
@@ -363,11 +369,13 @@ def test_a_role_timer_drops_out_only_once_the_box_package_ships_its_twin():
 def test_the_real_box_package_drops_only_the_role_timers_it_ships(box_package):
     monotonic: list[str] = []
     role_schedules(monotonic, box_timers(box_package))
-    assert {"claude-cgroup-metrics.timer", "claude-memory-sync.timer"}.isdisjoint(
-        monotonic
-    )
-    # Slice 3 moves triage; until then the role's timer must still be checked.
-    assert {"claude-triage-poll.timer", "gitops-deploy.timer"} <= set(monotonic)
+    assert {
+        "claude-cgroup-metrics.timer",
+        "claude-memory-sync.timer",
+        "claude-triage-poll.timer",
+    }.isdisjoint(monotonic)
+    # A role timer the package does not ship is still checked.
+    assert "gitops-deploy.timer" in set(monotonic)
 
 
 def test_an_unlisted_monotonic_timer_is_reported():
@@ -382,3 +390,10 @@ def test_the_monthly_first_is_outside_the_window():
     first = date(2026, 11, 1)
     assert cron_fires("20 11 1 * *", first) == [11 * 3600 + 20 * 60]
     assert calendar_fires("Mon..Fri *-*-02..31 11:32:00", first) == []
+
+
+def test_a_calendar_with_a_utc_suffix_fires_at_its_clock():
+    # The weekly reboot's timer renders `weekly_reboot_timezone`, which is UTC.
+    assert calendar_fires("Sun *-*-* 07:30:00 UTC", date(2026, 11, 1)) == [
+        7 * 3600 + 30 * 60
+    ]

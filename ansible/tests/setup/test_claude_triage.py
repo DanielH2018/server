@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """The agent's unattended triage unit runs capped, as the agent, and only the agent may start it.
 
-`roles/setup/claude_code/tasks/triage.yml` installs claude-triage@.service, its polkit rule and
-its two pages. Each test pins one leg of the design in docs/claude-agent-user.md,
+The claude-code host component ships claude-triage@.service, its polkit rule and its two pages
+from `roles/setup/claude_code/templates/`. Each test pins one leg of the design in docs/claude-agent-user.md,
 "Alert-triggered triage". The runner's own behaviour is tested beside it, in
 roles/setup/claude_code/tests/test_claude_triage_run.py.
 
@@ -15,16 +15,28 @@ import re
 import pytest
 from _helpers import ANSIBLE
 from _k8s_render import render_role_template
-from _setup_render import render_setup_text
+from _setup_render import render_setup_text, role_context
 from deploy_tools.land_lib import policy
-from lib.ansible_jinja_env import make_ansible_env
+from lib.ansible_jinja_env import template_env
 from lib import yaml_fast
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 UNIT = "claude-triage@.service.j2"
 RULE = "50-claude-triage.rules.j2"
-INSTALLED = "claude_code_agent_user_enabled and claude_code_triage_enabled"
 RUNNER = ROLE / "files" / "claude_triage_run.py"
+CONFIG = "claude-triage-config.env.j2"
+# Each pin claude-triage-pins.j2 exports, and the role variable that carried it before.
+PINNED = {
+    "agent_user": "claude_code_triage_agent_user",
+    "agent_home": "claude_code_triage_agent_home",
+    "state_dir": "claude_code_triage_state_dir",
+    "model": "claude_code_triage_model",
+    "budget_usd": "claude_code_triage_budget_usd",
+    "max_turns": "claude_code_triage_max_turns",
+    "run_timeout_s": "claude_code_triage_run_timeout_s",
+    "daily_cap": "claude_code_triage_daily_cap",
+    "poll_mode": "claude_code_triage_poll_mode",
+}
 
 
 def runner_constants() -> dict:
@@ -48,11 +60,6 @@ def defaults() -> dict:
     return yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
 
-def triage_block() -> dict:
-    (block,) = yaml_fast.safe_load((ROLE / "tasks" / "triage.yml").read_text())
-    return block
-
-
 def unit(overrides: dict | None = None) -> str:
     # systemd folds a backslash-newline into one line, so ExecStart reads as one directive.
     return re.sub(r"\\\n\s*", " ", render_setup_text("claude_code", UNIT, overrides))
@@ -66,39 +73,64 @@ def directive(text: str, key: str) -> list[str]:
     ]
 
 
-def test_the_caps_and_identity_are_pinned_above_the_inventory_at_their_defaults() -> (
-    None
-):
-    """Block vars outrank host_vars, so an inventory-only PR cannot raise the caps."""
-    pinned = triage_block()["vars"]
-    assert set(pinned) == {
-        "claude_code_triage_agent_user",
-        "claude_code_triage_agent_home",
-        "claude_code_triage_state_dir",
-        "claude_code_triage_model",
-        "claude_code_triage_budget_usd",
-        "claude_code_triage_max_turns",
-        "claude_code_triage_run_timeout_s",
-        "claude_code_triage_daily_cap",
-        "claude_code_triage_poll_mode",
-    }
-    for name, value in pinned.items():
-        assert value == defaults()[name], name
-        assert "{{" not in str(value), (
-            f"{name} templates a variable, so it pins nothing"
-        )
-    assert (
-        pinned["claude_code_triage_agent_user"] == defaults()["claude_code_agent_user"]
+def pins() -> dict:
+    """What claude-triage-pins.j2 exports to the templates that import it, by name."""
+    env = template_env(ROLE / "templates")
+    module = env.get_template("claude-triage-pins.j2").make_module(role_context(ROLE))
+    return {name: getattr(module, name) for name in PINNED}
+
+
+def test_the_template_pins_equal_the_defaults() -> None:
+    """The host package reads the pins, so a changed default has to change them too."""
+    for name, var in PINNED.items():
+        assert pins()[name] == defaults()[var], name
+
+
+# Inventory values under the role's names, none of them the pinned ones. The package renderer
+# puts the inventory above a component's defaults, so only a template's own pin holds here.
+RAISED = {
+    "claude_code_triage_agent_user": "triage-sentinel-user",
+    "claude_code_triage_state_dir": "/srv/triage-sentinel",
+    "claude_code_triage_budget_usd": 999,
+    "claude_code_triage_max_turns": 999,
+    "claude_code_triage_run_timeout_s": 99999,
+    "claude_code_triage_daily_cap": 99,
+    "claude_code_triage_poll_mode": "armed",
+}
+
+
+@pytest.mark.parametrize(
+    "template", [UNIT, RULE, CONFIG, "claude-triage-poll.service.j2"]
+)
+def test_an_inventory_value_under_the_role_names_moves_nothing(template) -> None:
+    assert render_setup_text("claude_code", template, RAISED) == render_setup_text(
+        "claude_code", template
     )
+
+
+def test_the_config_carries_the_pins() -> None:
+    """The red half of the test above: the config does read the pins file."""
+    pinned = pins()
+    config = dict(
+        line.split("=", 1)
+        for line in render_setup_text("claude_code", CONFIG).splitlines()
+        if "=" in line and not line.startswith("#")
+    )
+    assert config["BUDGET_USD"] == str(pinned["budget_usd"])
+    assert config["DAILY_CAP"] == str(pinned["daily_cap"])
+    assert config["POLL_MODE"] == pinned["poll_mode"]
+    assert config["STATE_DIR"] == pinned["state_dir"]
 
 
 def test_the_unit_runs_as_the_agent_with_its_own_credential_and_a_clean_stop() -> None:
     text = unit()
     agent = defaults()["claude_code_agent_user"]
     assert directive(text, "User") == [agent]
-    assert directive(text, "EnvironmentFile") == ["/etc/claude-triage/session.env"]
+    assert directive(text, "LoadCredential") == [
+        "claude_oauth_token:/etc/claude-triage/oauth-token"
+    ]
     assert directive(text, "KillSignal") == ["SIGINT"]
-    assert directive(text, "OnFailure") == ["claude-triage-alert.service"]
+    assert directive(text, "OnFailure") == ["homelab-alert@%n.service"]
     # A busy lock is a wait, not a failure.
     assert directive(text, "SuccessExitStatus") == ["75"]
     (start,) = directive(text, "ExecStart")
@@ -152,87 +184,16 @@ def test_the_rule_and_the_runner_agree_on_the_episode_id_and_states() -> None:
     assert rendered.count("polkit.Result.YES") == 1
 
 
-def test_switching_either_flag_off_removes_everything_the_install_writes() -> None:
-    tasks = triage_block()["block"]
-    installs = [t for t in tasks if t.get("when") == INSTALLED]
-    dests = set()
-    for task in installs:
-        if "ansible.builtin.import_tasks" in task:
-            v = task["vars"]
-            if "host_lib_dir" in v:
-                # install_host_lib.yml copies these two beside the scripts.
-                dests |= {
-                    f"{v['host_lib_dir']}/{n}" for n in ("host_lib.py", "kuma_push.py")
-                }
-                continue
-            at = "@" if v.get("alert_unit_instanced") else ""
-            dests.add(f"/etc/systemd/system/{v['alert_unit_name']}-alert{at}.service")
-            continue
-        module = (
-            task.get("ansible.builtin.template")
-            or task.get("ansible.builtin.file")
-            or task.get("ansible.builtin.copy")
-        )
-        if module is None:
-            continue  # the credential assert
-        if "loop" in task:
-            for i in task["loop"]:
-                if isinstance(i, str):
-                    dests.add(module["dest"].replace("{{ item }}", i))
-                else:
-                    dests.add(i.get("dest") or i.get("path"))
-        else:
-            dests.add(module.get("dest") or module["path"])
-    assert "/etc/systemd/system/claude-triage-report-alert@.service" in dests
-    assert "/etc/systemd/system/claude-triage-poll.timer" in dests
-    assert "/opt/claude-triage/claude_triage_poll.py" in dests
-    assert "/opt/claude-triage/host_lib.py" in dests
-    (removal,) = [
-        t
-        for t in tasks
-        if t.get("when") == f"not ({INSTALLED})" and "ansible.builtin.file" in t
-    ]
-    removed = removal["loop"]
-    state_dir = defaults()["claude_code_triage_state_dir"]
-    for dest in dests:
-        if dest.startswith((state_dir, "{{ claude_code_triage_state_dir }}")):
-            continue  # the records of past runs stay
-        assert any(dest == r or dest.startswith(f"{r}/") for r in removed), dest
-    assert removed[0].endswith(".rules"), (
-        "the rule goes first, so the agent loses the start"
-    )
-
-
-def test_switching_off_stops_the_poller_before_it_removes_anything() -> None:
-    """A poll that ran mid-removal could start a run the rule no longer admits."""
-    off = [t for t in triage_block()["block"] if t.get("when") == f"not ({INSTALLED})"]
-    stop, removal = off
-    assert stop["ansible.builtin.systemd_service"] == {
-        "name": "claude-triage-poll.timer",
-        "enabled": False,
-        "state": "stopped",
-    }
-    assert "ansible.builtin.file" in removal
-
-
-def test_the_poller_runs_as_the_agent_and_its_timer_is_started() -> None:
+def test_the_poller_runs_as_the_agent() -> None:
     text = re.sub(
         r"\\\n\s*",
         " ",
         render_setup_text("claude_code", "claude-triage-poll.service.j2"),
     )
     assert directive(text, "User") == [defaults()["claude_code_agent_user"]]
-    assert directive(text, "OnFailure") == ["claude-triage-poll-alert.service"]
+    assert directive(text, "OnFailure") == ["homelab-claude-triage-poll-alert.service"]
     (start,) = directive(text, "ExecStart")
     assert start.endswith("/opt/claude-triage/claude_triage_poll.py")
-    (enable,) = [
-        t
-        for t in triage_block()["block"]
-        if t.get("when") == INSTALLED and "ansible.builtin.systemd_service" in t
-    ]
-    module = enable["ansible.builtin.systemd_service"]
-    assert module["name"] == "claude-triage-poll.timer"
-    assert (module["enabled"], module["state"]) == (True, "started")
 
 
 def test_the_alert_names_and_labels_the_poller_matches_on_exist() -> None:
@@ -275,13 +236,7 @@ def test_the_poller_mutes_for_the_whole_weekly_reboot_window() -> None:
     assert "REBOOT_GRACE_MIN=45\n" in config()
 
 
-def test_main_imports_the_triage_file() -> None:
-    main = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    assert any(t.get("ansible.builtin.import_tasks") == "triage.yml" for t in main)
-
-
 TRIAGE_FILES = [
-    "ansible/roles/setup/claude_code/tasks/triage.yml",
     f"ansible/roles/setup/claude_code/templates/{UNIT}",
     f"ansible/roles/setup/claude_code/templates/{RULE}",
     "ansible/roles/setup/claude_code/templates/claude-triage-config.env.j2",
@@ -303,14 +258,28 @@ def test_a_pr_changing_triage_needs_the_operator(path, tmp_path) -> None:
     assert policy.approval_hits([{"filename": path}], floor) == [path]
 
 
-def test_a_token_pasted_across_a_wrapped_line_reaches_systemd_whole() -> None:
-    """The 2026-10-17 paste carried two spaces from setup-token's line wrap, and Claude 401'd."""
-    rendered = render_setup_text(
+@pytest.mark.parametrize("template", [UNIT, "claude-triage-poll.service.j2"])
+def test_what_the_triage_units_write_is_kept_from_the_operators_group(template) -> None:
+    """The operator traverses the state dir, so a file there is reachable by its fixed name."""
+    text = render_setup_text("claude_code", template)
+    assert directive(text, "UMask") == ["0027"]
+
+
+def tmpfiles(operator_read: bool) -> dict[str, tuple[str, str, str]]:
+    """Each directory the tmpfiles file declares: path -> (mode, owner, group)."""
+    text = render_setup_text(
         "claude_code",
-        "claude-triage-session.env.j2",
-        {"claude_code_triage_claude_oauth_token": "sk-ant-oat01-abc  def\n"},
+        "claude-triage-tmpfiles.conf.j2",
+        {
+            "sys_user": "ubuntu",
+            "claude_code_agent_operator_read": operator_read,
+        },
     )
-    assert "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-abcdef\n" in rendered
+    return {
+        fields[1]: (fields[2], fields[3], fields[4])
+        for fields in (line.split() for line in text.splitlines())
+        if fields and fields[0] == "d"
+    }
 
 
 @pytest.mark.parametrize(
@@ -321,37 +290,13 @@ def test_the_operator_traverses_the_triage_state_dir_only_under_operator_read(
     operator_read, group, mode
 ) -> None:
     """0710 lets `probe.py applied` stat the inbox without listing the records (#6452)."""
-    (task,) = [
-        t
-        for t in triage_block()["block"]
-        if t.get("name") == "Create triage's code, config and state directories"
-    ]
-    (item,) = [
-        i for i in task["loop"] if i["path"] == "{{ claude_code_triage_state_dir }}"
-    ]
-    ctx = {
-        "sys_user": "ubuntu",
-        "claude_code_agent_operator_read": operator_read,
-        "claude_code_triage_agent_user": "claude",
-    }
-    env = make_ansible_env()
-    assert env.from_string(item["group"]).render(**ctx).strip() == group
-    assert env.from_string(item["mode"]).render(**ctx) == mode
-
-
-@pytest.mark.parametrize("template", [UNIT, "claude-triage-poll.service.j2"])
-def test_what_the_triage_units_write_is_kept_from_the_operators_group(template) -> None:
-    """The operator traverses the state dir, so a file there is reachable by its fixed name."""
-    text = render_setup_text("claude_code", template)
-    assert directive(text, "UMask") == ["0027"]
+    state_dir = pins()["state_dir"]
+    assert tmpfiles(operator_read)[state_dir] == (mode, "claude", group)
 
 
 def test_the_runners_own_directories_are_declared_without_a_listing() -> None:
-    """`runs/` and `done/` made under the old 0022 umask were 0755; the role resets them."""
-    (task,) = [
-        t
-        for t in triage_block()["block"]
-        if t.get("name") == "Create triage's code, config and state directories"
-    ]
-    modes = {i["path"].rsplit("/", 1)[-1]: i["mode"] for i in task["loop"]}
-    assert modes["runs"] == modes["done"] == "0750"
+    """`runs/` and `done/` made under the old 0022 umask were 0755; tmpfiles resets them."""
+    declared = tmpfiles(True)
+    state_dir = pins()["state_dir"]
+    assert declared[f"{state_dir}/runs"][0] == "0750"
+    assert declared[f"{state_dir}/done"][0] == "0750"
