@@ -281,11 +281,7 @@ def test_the_drill_and_its_fence_leg_write_separate_verdicts(tmp_path):
 
 UNITS = {
     "renovate-notify": ("renovate_notify", "renovate-notify.service.j2", {}),
-    "renovate-agent": (
-        "renovate_agent",
-        "renovate-agent.service.j2",
-        {"renovate_agent_kuma_push_token": "tok"},
-    ),
+    "renovate-agent": ("renovate_agent", "renovate-agent.service.j2", {}),
 }
 
 
@@ -351,11 +347,16 @@ def test_a_missing_library_logs_and_exits_zero_so_the_unit_never_fails_over_tele
     assert not list(textfile_dir.iterdir())
 
 
-def test_the_agent_writes_its_textfile_before_the_kuma_beat_can_fail_the_unit():
-    unit = render_setup_text(
-        "renovate_agent", "renovate-agent.service.j2", UNITS["renovate-agent"][2]
-    )
+@pytest.mark.parametrize("check", sorted(UNITS))
+def test_a_renovate_units_only_post_step_is_its_textfile_write(check):
+    """M6 batch B4's Cutover-1a dropped the Kuma beat, so the textfile write stands alone.
+
+    A second `ExecStartPost` that curls a deleted tile's token would fail the unit with a 404
+    on every run and page through `OnFailure`.
+    """
+    role, template, overrides = UNITS[check]
+    unit = render_setup_text(role, template, overrides)
     posts = [line for line in unit.splitlines() if line.startswith("ExecStartPost=")]
 
-    assert len(posts) == 2
-    assert "write_check_textfile" in posts[0] and "curl" in posts[1]
+    assert len(posts) == 1
+    assert "write_check_textfile" in posts[0] and "curl" not in posts[0]

@@ -14,7 +14,6 @@ from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, REPO
-from _k8s_render import render_role_template
 from _shell_render import rendered_shell_text
 from lib.proc_testing import run
 
@@ -373,21 +372,6 @@ def test_the_library_is_stamped_as_deployed_code():
     assert "stamp_deployed_name: setup-drift-lib" in text, (
         "the shared arms are copy:-deployed, so a stale copy of them silently changes what both "
         "readers check — the exact class arm 2 exists to report"
-    )
-
-
-def test_the_tile_is_gated_on_the_token():
-    """An ungated tile sits red from creation until /add-secret runs, because the cron skips its
-    push while the token is empty. The gate is `is defined`, so the tile is absent while the key is undeclared."""
-
-    def tile(overrides: dict) -> str:
-        return render_role_template("uptime-kuma", "static-monitors.yaml.j2", overrides)
-
-    assert "setup-drift-check.json" in tile(
-        {"setup_drift_push_token": "drift-token"}
-    ), "the pusher has no Kuma monitor to push to"
-    assert "setup-drift-check.json" not in tile({}), (
-        "the tile must sit inside the token gate, like its siblings"
     )
 
 

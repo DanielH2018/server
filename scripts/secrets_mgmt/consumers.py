@@ -172,6 +172,20 @@ PREFIX_EXCEPTION_CONSUMERS = {
 # the split from the template rather than trusting this comment.
 UPTIME_KUMA_TAG = "uptime-kuma"
 
+# M6 batch B6b's Cutover-1a deleted these five tiles ahead of their producers' push, which
+# Cutover-2 removes. Until then the pod still renders the token and uptime-kuma no longer does, so
+# `consumer_tags` names the pusher alone. Cutover-2 deletes this set and adds the five names to
+# `PENDING_RETIREMENT`.
+B6B_TILE_DELETED_PUSH_TOKENS = frozenset(
+    {
+        "crowdsec_remote_allowlist_push_token",
+        "monitor_bridge_appsec_push_token",
+        "monitor_bridge_home_allowlist_push_token",
+        "monitor_bridge_configarr_push_token",
+        "monitor_bridge_janitorr_push_token",
+    }
+)
+
 
 def consumer_tags(name: str) -> tuple[str, ...]:
     """Deploy tags whose redeploy makes a rotated push token take effect.
@@ -216,7 +230,7 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     else:
         # anything else unrecognised -> manual
         return ()
-    if name.endswith("_push_token"):
+    if name.endswith("_push_token") and name not in B6B_TILE_DELETED_PUSH_TOKENS:
         return (pusher, UPTIME_KUMA_TAG)
     return (pusher,)
 

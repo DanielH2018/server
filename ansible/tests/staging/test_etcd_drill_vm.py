@@ -16,7 +16,6 @@ these checks are also what holds the network template to a shape a guest can act
 uv run pytest ansible/tests/staging/test_etcd_drill_vm.py
 """
 
-import json
 import re
 import xml.etree.ElementTree as ET
 
@@ -24,7 +23,6 @@ from lib import yaml_fast
 from jinja2 import Undefined
 from lib.ansible_jinja_env import make_ansible_env, template_env
 from _helpers import ALL_VARS, ANSIBLE, load_yaml
-from _k8s_render import render_role_template
 from _setup_render import rendered_setup_text
 from _shell_render import rendered_shell_text
 
@@ -32,39 +30,6 @@ from _shell_render import rendered_shell_text
 ROLE = ANSIBLE / "roles" / "setup" / "hypervisor"
 CRON_TASK = "Schedule the full etcd restore drill"
 STUB_SSH_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI0000000000000000000000000000 stub"
-# The two tiles this drill pushes, by their AutoKuma entity id (the Secret key minus `.json`).
-FULL_TILE = "etcd-restore-drill-full"
-FENCE_TILE = "etcd-restore-drill-fence"
-# Both tiles are `| default('')`-gated on their push token, so a render that does not seed the
-# token renders them AWAY — and every assertion over them would then pass on nothing. The
-# seeds are a render INPUT, never an assertion: a token value never reaches a check here.
-TILE_TOKEN_SEEDS = {
-    "etcd_drill_full_push_token": "seed-full",
-    "etcd_drill_fence_push_token": "seed-fence",
-}
-
-
-def _kuma_tiles() -> dict[str, dict]:
-    """uptime-kuma's static entity set as the pod receives it: entity id -> parsed entity.
-
-    Rendered rather than read as text: the deadline each tile carries is the claim, and a
-    guard matching `"interval": {{ etcd_drill_full_kuma_interval_s }}` in the source stops
-    matching the day the value moves into a role default while still reading green (#3178).
-    """
-    secret = yaml_fast.safe_load(
-        render_role_template("uptime-kuma", "static-monitors.yaml.j2", TILE_TOKEN_SEEDS)
-    )
-    entities = {
-        name.removesuffix(".json"): json.loads(body)
-        for name, body in secret["stringData"].items()
-    }
-    missing = {FULL_TILE, FENCE_TILE} - set(entities)
-    assert not missing, (
-        f"uptime-kuma renders no {sorted(missing)} tile. A `| default('')`-gated tile renders "
-        f"away when its push token is unseeded, so check TILE_TOKEN_SEEDS still names the "
-        f"gate variable before concluding the tile was deleted."
-    )
-    return entities
 
 
 def _group_vars() -> dict:
@@ -263,7 +228,7 @@ def test_the_cadence_is_monthly_and_clear_of_every_backup_window():
     )
 
 
-def test_the_kuma_deadline_is_derived_from_the_cadence():
+def test_the_drill_deadline_is_derived_from_the_cadence():
     """Longer than the longest possible gap between runs, shorter than two of them."""
     gv = _group_vars()
     _, _, dom, month, dow = gv["etcd_drill_full_cron"].split()
@@ -274,13 +239,6 @@ def test_the_kuma_deadline_is_derived_from_the_cadence():
         f"etcd_drill_full_kuma_interval_s={deadline}: below {longest_gap_s} it pages on every "
         f"31-day month; above {2 * longest_gap_s} a dead drill sits green for a whole extra cycle"
     )
-    tile = _kuma_tiles()[FULL_TILE]
-    assert tile["interval"] == deadline, (
-        f"the drill's Kuma tile renders interval {tile['interval']}, not the "
-        f"etcd_drill_full_kuma_interval_s this test just bounded ({deadline}). The tile and "
-        f"the cadence must come from the same group_vars value."
-    )
-    assert tile["type"] == "push"
 
 
 def test_the_orchestrator_is_registered_as_a_cross_host_token_consumer():
@@ -290,25 +248,13 @@ def test_the_orchestrator_is_registered_as_a_cross_host_token_consumer():
     assert '"etcd_drill_full_push_token"' in consumers
 
 
-def test_the_fence_verdict_has_a_kuma_tile_and_a_token_of_its_own():
-    """The fence's non-fatal verdict has to reach the alert chain on its own tile.
+def test_the_fence_verdict_has_a_token_of_its_own():
+    """The fence's non-fatal verdict is pushed on its own token, a second cross-host consumer.
 
-    An unmeasured range leaves the restore drill passing, so the drill's tile is `up` and the
-    label is only message text. This tile shares the drill's deadline because the same monthly
-    cron pushes both, and its token is a second cross-host consumer for the same reason as the
-    first: the cron is on daniel-server and the tile is deployed from daniel-box.
+    An unmeasured range leaves the restore drill passing, so the drill's verdict is `up` and the
+    label is only message text. M6 batch B4's Cutover-1a deleted both Kuma tiles; the key stays
+    registered until the push stops.
     """
-    tiles = _kuma_tiles()
-    fence = tiles[FENCE_TILE]
-    assert fence["type"] == "push"
-    assert fence["name"] == "etcd Restore Drill (egress fence)"
-    assert fence["interval"] == tiles[FULL_TILE]["interval"], (
-        "the fence tile is pushed by the same monthly cron, so it takes the same deadline"
-    )
-    assert fence["max_retries"] == 0, (
-        "a down push on a tile with max_retries above 0 parks PENDING and never alarms"
-    )
-
     consumers = (
         ANSIBLE.parent / "scripts" / "secrets_mgmt" / "consumers.py"
     ).read_text()

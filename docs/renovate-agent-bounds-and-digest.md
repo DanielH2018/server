@@ -4,8 +4,7 @@ Working-out moved off `ansible/roles/setup/renovate_agent/CLAUDE.md` (#2995), wh
 reads on every touch of the unattended agent. The role doc keeps the arming procedure and the
 autonomous-role contract; this page keeps the modules `files/` ships, the lander, the session's
 own identity and the arming checklist, the four bounds and why each is the var it is, the
-worktree rules, what the Discord digest measures, and the alive tile's exit-code and token
-plumbing. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
+worktree rules, what the Discord digest measures, and the exit codes behind the alive verdict. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
 
 ## The modules `files/` ships
 
@@ -243,7 +242,7 @@ whether the agent is worth its cost is a count over one file rather than a read 
   `left_open`, `touched` and `opened` from the measured delta, plus `cost_usd`, `turns` and the
   denial count, and `session_id` when the result JSON carried one (#4603). Lines written
   before #3421 also carry `handed_off`, which no reader uses.
-- `crashed` — the wrapper threw. `report_crash` writes this line before its Kuma push.
+- `crashed` — the wrapper threw. `report_crash` writes this line before its Discord post.
 
 The PR fields come from the census, not from the session's summary. `left_open` is the PRs
 still open after the run, whether the session skipped them for the `k8s_autodeploy: false`
@@ -269,31 +268,43 @@ jq -s --argjson since "$(date -d '-30 days' +%s)" '[.[] | select(.ts >= $since)]
 
 The file gains one line a day and is never rotated.
 
-## The alive monitor
+## The alive verdict
 
-`renovate_agent_kuma_push_token` (SOPS, tier auto) is the one token behind two halves: the unit's
-`ExecStartPost` beat, and the `Renovate Agent — Alive` push tile in
-`roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. The beat fires only when the wrapper
-exited 0, so the tile reports silence and the `OnFailure` alert reports failure.
+The unit's `ExecStartPost` writes the `renovate-agent` textfile verdict that
+`RenovateAgentNotReporting` reads (`other-setup-checks.yaml`). It runs only when the wrapper
+exited 0, so the rule reports silence and the `OnFailure` alert reports failure. M6 batch B4's
+Cutover-1a deleted the `Renovate Agent — Alive` Kuma tile and the unit's beat to it. The
+`renovate_agent_kuma_push_token` key stays in `PENDING_RETIREMENT` until B4's token PR retires it.
 
-**A worktree-blocked skip exits non-zero, so it does not beat.** The beat is `ExecStartPost`,
-which runs after ANY exit 0 — a `down` pushed from inside the wrapper on a `return 0` path is
-overwritten by the `up` that follows it. So that skip returns `EXIT_WORKTREE_BLOCKED` instead: no
-beat, `OnFailure` pages, and the tile expires by deadman if nobody clears the tree. Until
-2026-09-18 that path returned 0, and the tile stayed green through five daily skips (#2014). A
-deployer state the agent cannot read exits `EXIT_STATE_UNREADABLE` for the same reason (#3703).
-The two other skips still exit 0: the quiet no-open-PRs skip is the healthy steady state, and the
-GitOps-hold skip is alarmed by the deployer's own `GitOps Status` tile, which this one need not
-duplicate. `test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
+**A worktree-blocked skip exits non-zero, so it writes no verdict.** The verdict is
+`ExecStartPost`, which runs after ANY exit 0, so a `down` written from inside the wrapper on a
+`return 0` path would be overwritten by the `up` that follows it. That skip returns
+`EXIT_WORKTREE_BLOCKED` instead: no verdict, `OnFailure` pages, and `RenovateAgentNotReporting`
+fires by deadman if nobody clears the tree. Until 2026-09-18 that path returned 0, and the
+monitor stayed green through five daily skips (#2014). A deployer state the agent cannot read
+exits `EXIT_STATE_UNREADABLE` for the same reason (#3703). The two other skips still exit 0: the
+quiet no-open-PRs skip is the healthy steady state, and the GitOps-hold skip is alarmed by the
+deployer's own `GitOps Status` check, which this one need not duplicate.
+`test_agent_logic.py::TestSkipExitCodes` pins the blocked and the quiet case.
 
-**A crash also pushes its own `down`, carrying the exception text** (`report_crash`, called from
-the `__main__` guard). Silence plus an `OnFailure` page was not enough: the tile went down 28 hours
-later by deadman expiry with no reason attached, which is what a host that is simply off looks
-like. For two days from 2026-09-08 that hid a one-line `prepare_worktree` failure — a directory at
-the run worktree's path that `git worktree list` had no record of (#1477). The deadman stays as the
-backstop for a host that is genuinely off; it must not be the only signal for a run that started
-and threw. The report is best effort and never re-raises, so a failed report cannot replace the
-traceback that says what broke.
+**A crash records its own reason** (`report_crash`, called from the `__main__` guard). Silence
+plus an `OnFailure` page was not enough: the rule fired 28 hours later by deadman expiry with no
+reason attached, which is what a host that is simply off looks like. For two days from 2026-09-08
+that hid a one-line `prepare_worktree` failure, a directory at the run worktree's path that
+`git worktree list` had no record of (#1477). The report writes a `crashed` line to the runs file
+and posts the exception text to Discord. The deadman stays as the backstop for a host that is
+genuinely off. The report is best effort and never re-raises, so a failed report cannot replace the
+traceback that says what broke. ENFORCED:
+`ansible/roles/setup/renovate_agent/tests/test_crash_report.py::test_a_crash_posts_the_exception_text_to_discord_and_the_runs_file`.
+
+**The unit and `config.env` carry no Kuma push.** ENFORCED:
+`ansible/tests/setup/test_renovate_agent_unit.py::test_the_unit_and_its_config_make_no_kuma_push`.
+
+The verdict's deadline is 28h, not the 25h the other daily checks use, because the verdict lands
+at the end of the run: a fast run followed by one that draws the full jitter and runs to the
+100-minute unit timeout spaces two verdicts 25h50m apart. `test_renovate_agent_unit.py` pins the
+deadline between that gap and two periods, and `test_b4_rule_literals.py` pins the rule's literal
+to it.
 
 **An unregistered directory at the run worktree's path is reclaimed, not a crash.** That is what a
 killed session leaves behind. It matters twice over, because **git searches UPWARD for a
@@ -303,22 +314,6 @@ this run tree holding uncommitted changes. `is_registered_worktree` decides whic
 fails CLOSED — an unreadable `worktree list` reads as a directory git owns — so nothing removes a
 tree that might be registered. Every case that holds real work is still refused by `worktree_is_reusable` before
 this runs.
-
-**The push URL lives in the role's root-only env file, not in the unit.** `ExecStartPost`
-sources that file and passes `$KUMA_PUSH_URL` to `curl` on stdin (`-K -`), the form
-`renovate-notify.service.j2` uses and `renovate-notify-internals.md` (*The unit is sandboxed*)
-explains. ENFORCED: `ansible/tests/setup/test_renovate_agent_unit.py`. `report_crash` sends its
-`down` the same way. ENFORCED:
-`ansible/roles/setup/renovate_agent/tests/test_crash_report.py::test_a_crash_pushes_a_down_carrying_the_exception_text`.
-
-The tile's deadline is 28h, not the 25h the other daily tiles use, because the beat lands at the
-end of the run: a fast run followed by one that draws the full jitter and runs to the 100-minute
-unit timeout spaces two beats 25h50m apart. `test_renovate_agent_unit.py` pins the deadline
-between that gap and two periods.
-
-Rotating the token moves both halves, on two deploy paths: `deploy.sh --tags uptime-kuma` for the
-tile and `initial_setup.yml --tags renovate_agent` for the unit. That is why it is in
-`CROSS_HOST_PUSH_TOKENS` in `secret_rotation.py` and the unattended rotation skips it.
 
 ## The denylist marker's own history
 

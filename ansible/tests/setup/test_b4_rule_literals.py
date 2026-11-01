@@ -8,8 +8,8 @@ producer moved to a slower cadence without its rule would page on every healthy 
 moved faster would leave the rule slower than the check (M1 convention 1).
 
 Four producers render DEADLINE_S into a shell script. The two renovate units carry it in their
-textfile ExecStartPost line. The drill and the two renovate tiles share their deadline with the
-Kuma tile they shadow, so those three are also pinned to the tile's interval.
+textfile ExecStartPost line. The Kuma tiles the deadlines once matched left in Cutover-1a, so
+nothing but the producer pins a rule's literal now.
 
 Run: uv run pytest ansible/tests/setup/test_b4_rule_literals.py
 """
@@ -18,7 +18,7 @@ import re
 
 import pytest
 from _helpers import K8S_ROLES
-from _kuma_monitors import SENTINEL, entity, monitors_text
+from _kuma_monitors import SENTINEL, monitors_text
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script
 from lib import yaml_fast
@@ -41,11 +41,7 @@ SHELL = {
 }
 UNITS = {
     "renovate-notify": ("renovate_notify", "renovate-notify.service.j2", {}),
-    "renovate-agent": (
-        "renovate_agent",
-        "renovate-agent.service.j2",
-        {"renovate_agent_kuma_push_token": "tok"},
-    ),
+    "renovate-agent": ("renovate_agent", "renovate-agent.service.j2", {}),
 }
 # (alert, origin) -> (the check label its expression reads, the producer that writes it).
 PRODUCERS = {
@@ -143,15 +139,7 @@ def test_a_threshold_that_drifted_is_flagged():
     ) == ["the `>` threshold reads 100000s, and DEADLINE_S is 129600"]
 
 
-def test_the_drill_deadline_is_the_tiles_interval_and_the_ups_deadline_follows_its_cron():
-    # The drill shares etcd_drill_full_kuma_interval_s with both of its Kuma tiles.
-    full = entity("etcd-restore-drill-full.json", "etcd_drill_full_push_token")
-    fence = entity("etcd-restore-drill-fence.json", "etcd_drill_fence_push_token")
-    assert (
-        full["interval"]
-        == fence["interval"]
-        == rendered_deadline("drill", "etcd-restore-drill-vm")
-    )
+def test_the_ups_deadline_follows_its_cron():
     # The UPS watchdog and the heartbeats render 2 x period + 300 from their cron variables.
     moved = render_shell_script(
         "setup",
@@ -160,31 +148,6 @@ def test_the_drill_deadline_is_the_tiles_interval_and_the_ups_deadline_follows_i
         {**OVERRIDES, "nut_host_watchdog_interval_minutes": 30},
     )
     assert re.findall(r"^DEADLINE_S=(\d+)$", moved, re.M) == ["3900"]
-
-
-@pytest.mark.parametrize(
-    ("producer", "token_var", "tile", "overrides"),
-    [
-        (
-            "renovate-notify",
-            "monitor_bridge_renovate_alive_push_token",
-            "renovate-notify-alive.json",
-            {},
-        ),
-        (
-            "renovate-agent",
-            "renovate_agent_kuma_push_token",
-            "renovate-agent-alive.json",
-            {"renovate_agent_enabled": True},
-        ),
-    ],
-)
-def test_a_renovate_deadline_is_the_interval_of_the_tile_it_shadows(
-    producer, token_var, tile, overrides
-):
-    assert entity(tile, token_var, overrides)["interval"] == rendered_deadline(
-        producer, producer
-    )
 
 
 CUTOVER = K8S_ROLES / "observability" / "files" / "rules" / "kuma-cutover.yaml"
@@ -247,11 +210,17 @@ def drill_window_problems(
     ]
 
 
+# Every B4 tile by name, for the cases that say what deleting some of them would mean.
+B4_TILES = set(DRILL_TILES) | set(DRILL_WINDOW_SIBLINGS)
+
+
 @pytest.fixture(scope="module")
 def b4_tiles() -> set[str]:
+    """The B4 tiles the static monitors render with every gate armed: none since Cutover-1a."""
     tiles = rendered_tile_names(monitors_text(dict.fromkeys(B4_TILE_TOKENS, SENTINEL)))
-    assert tiles >= set(DRILL_TILES) | set(DRILL_WINDOW_SIBLINGS)
-    return tiles
+    # Non-vacuity: the render found tiles at all, so an empty answer means B4's were deleted.
+    assert "Swallowed Push Verdicts" in tiles
+    return tiles & B4_TILES
 
 
 def test_the_shadow_drill_rules_have_a_sibling_term_bounding_their_window_is_clean(
@@ -262,27 +231,23 @@ def test_the_shadow_drill_rules_have_a_sibling_term_bounding_their_window_is_cle
     assert drill_window_problems(RULES.read_text(), CUTOVER.read_text(), b4_tiles) == []
 
 
-def test_a_cutover_that_drops_the_siblings_but_leaves_the_drills_shadow_is_flagged(
-    b4_tiles,
-):
+def test_a_cutover_that_drops_the_siblings_but_leaves_the_drills_shadow_is_flagged():
     cutover = CUTOVER.read_text()
     for tile in DRILL_WINDOW_SIBLINGS:
         assert f'monitor_name="{tile}"}}[2h]' in cutover, f"{tile} has no [2h] term"
         cutover = cutover.replace(f'monitor_name="{tile}"}}[2h]', "")
-    assert drill_window_problems(RULES.read_text(), cutover, b4_tiles) == [
+    assert drill_window_problems(RULES.read_text(), cutover, B4_TILES) == [
         f"{', '.join(DRILL_RULES)} shadow with no B4 sibling term in kuma-cutover"
     ]
 
 
-def test_deleting_the_drill_tiles_alone_while_their_rules_are_shadow_is_flagged(
-    b4_tiles,
-):
-    alone = b4_tiles - set(DRILL_TILES)
+def test_deleting_the_drill_tiles_alone_while_their_rules_are_shadow_is_flagged():
+    alone = B4_TILES - set(DRILL_TILES)
     assert drill_window_problems(RULES.read_text(), CUTOVER.read_text(), alone) == [
         f"{', '.join(DRILL_RULES)} shadow, a drill tile deleted, and every sibling tile live"
     ]
 
 
-def test_deleting_the_drill_tiles_with_their_siblings_is_clean(b4_tiles):
-    together = b4_tiles - set(DRILL_TILES) - set(DRILL_WINDOW_SIBLINGS)
+def test_deleting_the_drill_tiles_with_their_siblings_is_clean():
+    together = B4_TILES - set(DRILL_TILES) - set(DRILL_WINDOW_SIBLINGS)
     assert drill_window_problems(RULES.read_text(), CUTOVER.read_text(), together) == []

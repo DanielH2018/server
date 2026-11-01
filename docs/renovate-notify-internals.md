@@ -18,11 +18,12 @@ are load-bearing rather than incidental:
   and `OnFailure` pages for it. It points at `PrivateTmp` rather than `ReadWritePaths` because
   this unit parses attacker-influenceable API JSON, so a cache surviving between runs is state
   one compromised run could poison for the next.
-- **The Kuma push URL reaches curl on stdin (`-K -`), never in argv.** `systemctl show -p
-  ExecStartPost` publishes the unit line over the system bus and `/proc` here has no `hidepid`,
-  so an argv-expanded token is readable by any local user. The 0600 `config.env` was never the
-  leak; the shell expansion was. The same reasoning retired the embedded webhook from the alert
-  unit (2026-08-23b review M5), which is why that unit is honestly 0644 now.
+- **No unit line holds a credential.** `systemctl show -p ExecStartPost` publishes the unit
+  line over the system bus and `/proc` here has no `hidepid`, so a credential in a unit line or
+  an argv is readable by any local user. That reasoning retired the embedded webhook from the
+  alert unit (2026-08-23b review M5), which is why that unit is honestly 0644 now. The Kuma push
+  this bullet once covered left with the "Renovate Notifier — Alive" tile in M6 batch B4's
+  Cutover-1a.
 
 ## The dashboard-problems arm parses two independently rendered blocks
 
@@ -137,9 +138,10 @@ role.** Check mode writes no unit file, so systemd is asked about a `renovate-no
 that does not exist and reports `Could not find the requested service`. Every task before it
 reports correctly. The sibling `renovate_agent` role behaves the same way.
 
-## What the liveness monitor does not cover
+## What the liveness verdict does not cover
 
-The role doc's *Liveness, and the sandbox* section states the limit: the "Renovate Notifier —
-Alive" monitor watches the notifier, not Renovate, and it greens whatever Discord did. The
+The role doc's *Liveness, and the sandbox* section states the limit: the `renovate-notify`
+textfile verdict, which `RenovateNotifyNotReporting` reads, watches the notifier, not Renovate,
+and it greens whatever Discord did. The
 staleness arm covers Renovate going quiet. monitor-bridge verifies delivery of the
 GitOps/Renovate webhook separately (`checks/notify.py`).

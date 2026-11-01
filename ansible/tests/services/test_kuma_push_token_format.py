@@ -23,9 +23,10 @@ from secrets_mgmt import cluster_vars
 # The `that:` of the assert the flip deleted from uptime-kuma's tasks/main.yml.
 _ASSERT = "kuma_declarations | kuma_malformed_push_tokens | length == 0"
 
-# The tile whose hand-minted token was refused on 2026-10-09. It is gated on its token, so it
-# drops out of the render if the seed stops opening that gate.
-_INCIDENT_TILE = "homelab-eval-sweep"
+# A hand-written tile that is gated on its token, so it drops out of the render if the seed stops
+# opening that gate. The tile whose hand-minted token was refused on 2026-10-09, Homelab Evals,
+# left with M6 batch B2's Cutover-1a, and the registry's weekly GC tile stands in for its shape.
+_INCIDENT_TILE = "registry-gc"
 
 
 def _declarations(token_for) -> dict[str, dict]:
@@ -101,7 +102,7 @@ def test_the_check_covers_every_rendered_push_tile():
     }
     push_ids = sorted(i for i, e in declarations.items() if e["type"] == "push")
     assert _INCIDENT_TILE in push_ids
-    assert len(push_ids) >= 40, f"the push-tile census went thin: {len(push_ids)}"
+    assert len(push_ids) >= 20, f"the push-tile census went thin: {len(push_ids)}"
     assert kuma_malformed_push_tokens(declarations) == push_ids
 
 
@@ -120,7 +121,7 @@ def test_cluster_vars_refuses_a_malformed_value_in_every_rendered_push_token():
     }
     # Named members: a hand-written tile's token and one from monitor-bridge's lookup loop.
     assert {
-        "homelab_eval_push_token",
+        "registry_gc_push_token",
         "monitor_bridge_swallowed_verdicts_push_token",
     } <= variables
     base64_token = "QUJD" * 10 + "QQ+="
