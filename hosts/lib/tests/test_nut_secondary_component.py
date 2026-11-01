@@ -172,7 +172,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     assert "nut-monitor.service" in manifest["units"]
     assert "homelab-ups-watchdog.timer" in manifest["enable_links"]
     # These components retire their own entries; the rest are the package's and nut's.
-    others = ("claude-code", "host-maintenance", "integrity-scans")
+    others = ("claude-code", "host-maintenance", "integrity-scans", "worktree-sweep")
     # claude-code's one templated entry names daniel-server's sys_user, and a `when:` never
     # reaches the manifest.
     theirs = [

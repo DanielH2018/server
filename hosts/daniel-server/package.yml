@@ -30,6 +30,11 @@
 # `rkhunter_daniel_server_push_token`, `aide_daniel_server_push_token` and
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-server`, operator-only).
 #
+# #6815 adds `worktree-sweep`, the weekly removal of merged worktrees and unreachable objects
+# that daniel-box already runs. Fan-out batches run in this host's primary checkout too, and
+# nothing else cleared its 42 worktrees, 1173 loose objects or stale gc.log. The sweep pings
+# `daniel-server-worktree-sweep` with the `healthchecks_ping_key` credential listed below.
+#
 # The package declares no ufw rule of its own. The k3s agent's join rules stay `setup/k3s`
 # rules until H7.34 declares them `keep`; they carry no `homelab:` label, so the arm leaves them.
 description: daniel-server's homelab host package
@@ -39,7 +44,7 @@ component: claude-code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
+components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep]
 # No unit loads ups_secondary_daniel_server_push_token, because M6 batch B4's Cutover-2 dropped
 # the UPS watchdog's Kuma push. It stays listed because `host_secrets.py check` pins this list to
 # daniel-server's SOPS file, and changing that file takes the operator's `host_secrets.py sync

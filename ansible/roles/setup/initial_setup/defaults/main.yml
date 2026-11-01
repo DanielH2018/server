@@ -33,7 +33,8 @@ initial_setup_uv_installer_sha256: 1c6e7f025499664633ac2dce43a210800510e9ef0625c
 initial_setup_docker_prune_cron_minute: 30
 initial_setup_docker_prune_cron_hour: 6
 
-# When the weekly worktree sweep runs on `ops_cron_host`, in UTC, for the same reason: it pings
+# When the weekly worktree sweep runs on each host whose package lists the `worktree-sweep`
+# component, in UTC, for the same reason: it pings
 # the `<host>-worktree-sweep` Healthchecks.io check, whose console schedule monitor-bridge holds
 # to these values (#4482).
 initial_setup_worktree_sweep_cron_minute: 20

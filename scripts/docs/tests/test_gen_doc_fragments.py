@@ -303,6 +303,7 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         initial_setup,
         {"box": False, "pi": True},
         {"observability_alertmanager_watchdog_repeat_seconds": 60},
+        ["box", "server"],
     )
     assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
     assert "| `etcd-snapshot-offbox` | `45 2 * * *` |" in out
@@ -312,6 +313,8 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
     assert "| `weekly-reboot-pi` | `30 7 * * 0` |" in out
     assert "| `pi-docker-prune` | `30 6 * * *` |" in out
     assert "| `box-worktree-sweep` | `20 4 * * 0` |" in out
+    assert "| `server-worktree-sweep` | `20 4 * * 0` |" in out
+    assert "pi-worktree-sweep" not in out
     assert "| `alertmanager-watchdog` | `every 60s` |" in out
 
 
@@ -346,6 +349,7 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
         },
         {"box": False},
         {"observability_alertmanager_watchdog_repeat_seconds": 60},
+        ["box"],
     )
     assert "weekly-reboot-box" in out
     assert "box-docker-prune" not in out
@@ -354,7 +358,7 @@ def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
 def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
     with pytest.raises(KeyError):
         renderers.render_deadman_cadences(
-            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, {}, {}
+            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, {}, {}, []
         )
 
 
@@ -375,6 +379,14 @@ def test_host_has_docker_lets_host_vars_override_group_vars(tmp_path):
         "box": False,
         "pi": True,
     }
+
+
+def test_hosts_listing_component_names_each_package_that_lists_it(tmp_path):
+    for host, components in {"b": "[a, sweep]", "a": "[sweep]", "c": "[a]"}.items():
+        (tmp_path / host).mkdir()
+        (tmp_path / host / "package.yml").write_text(f"components: {components}\n")
+    (tmp_path / "components").mkdir()
+    assert readers.hosts_listing_component("sweep", tmp_path) == ["a", "b"]
 
 
 def test_lan_addresses_names_each_value_and_its_variable():

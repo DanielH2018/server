@@ -273,6 +273,11 @@ def reap_claims(repo: str) -> list[str]:
     return lines
 
 
+def skip_reap(repo: str) -> list[str]:
+    """The reaper `--no-reap` hands `prune_all`: it releases nothing and says why."""
+    return ["claims not reaped: --no-reap"]
+
+
 def prune_all(
     repo: str,
     trees: list[Worktree],
@@ -313,10 +318,11 @@ def prune_all(
     return failed
 
 
-def brief(prune: bool = False) -> int:
+def brief(prune: bool = False, reap: bool = True) -> int:
     """One line per removable worktree; silent when there is nothing to remove.
 
-    Returns 0, or with `prune` 1 when any removal or branch deletion failed.
+    Returns 0, or with `prune` 1 when any removal or branch deletion failed. `reap` False
+    removes without running `findings.py reap` afterwards.
 
     This exists for the SessionStart banner, which prints nothing on a healthy day and has to
     stay cheap to read. Claude Code's own worktree keeper already lists every branch whose
@@ -358,7 +364,11 @@ def brief(prune: bool = False) -> int:
         # Unconditional, unlike the report above: the weekly cron runs this path for the
         # object-store repair at prune_all's tail, which must still happen on a week with
         # nothing to remove.
-        failed = prune_all(repo, [tree for tree, _ in removable])
+        failed = prune_all(
+            repo,
+            [tree for tree, _ in removable],
+            reaper=reap_claims if reap else skip_reap,
+        )
         # Only this path hashes orphans: the banner's 5s budget cannot pay for it.
         orphans = orphan_verdicts(repo)
         for path, unstored in orphans:
@@ -430,6 +440,15 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--no-reap",
+        action="store_true",
+        help=(
+            "with --prune, skip the `findings.py reap` that follows a removal. A claim is "
+            "judged against this checkout's worktrees alone, so a host that does not run the "
+            "fan-out orchestrator reads every claim the orchestrator holds as stale"
+        ),
+    )
+    parser.add_argument(
         "--gc",
         action="store_true",
         help=(
@@ -461,7 +480,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.brief:
-        return brief(prune=args.prune)
+        return brief(prune=args.prune, reap=not args.no_reap)
 
     repo = primary_checkout()
     if repo is None:
@@ -507,7 +526,9 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     failed = prune_orphans(orphans)
-    failed += prune_all(repo, removable)
+    failed += prune_all(
+        repo, removable, reaper=skip_reap if args.no_reap else reap_claims
+    )
     # Re-read for brief()'s reason: the removals above just freed a branch each.
     failed += sweep_branches(repo, landed_orphan_branches(repo, deep=True))
     return FAILED if failed else OK
