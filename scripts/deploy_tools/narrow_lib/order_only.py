@@ -79,13 +79,14 @@ from deploy_tools.narrow_lib.order_only_runner import RUNNER
 # walk sees what the module code wrote to such an object before it, so the report also compares
 # each one's `signature` between the ends (#5107): its `bool`, `int`, `str` and container-length
 # attributes, a tuple's items, a reference to a walked object as that object's walk path, a
-# function or method by its qualified name, and the same of every object below it that no walk
-# copied (#5209). A logger first created while the chain runs sits
+# function or method by its qualified name and a bound method's `__self__` (#6433), and the
+# same of every object below it that no walk copied (#5209). A walk path through a set item
+# follows hash order, so a reference to an object under one reads as that object's own
+# contents instead (#6425). A logger first created while the chain runs sits
 # in neither walk, so the report compares the `signature` of each such logger (#5085), which
 # reaches its handlers and filters (#5209).
-# The gaps taken: a branch HEAD's data does not exercise; a reference `signature` records to an
-# object whose walk path passes through a set item, which reads the same whatever it names; a
-# function replaced by another of the same qualified name, such as one lambda for another;
+# The gaps taken: a branch HEAD's data does not exercise; a reference re-pointed between two
+# objects under set items whose contents read alike; a function replaced by another of the same qualified name, such as one lambda for another;
 # state inside a C object outside
 # the `readers` table, or in a static C type's members, when its module is one the runner loads
 # before its hook or lists in `c_modules`; process state the runner neither reads nor counts; a
