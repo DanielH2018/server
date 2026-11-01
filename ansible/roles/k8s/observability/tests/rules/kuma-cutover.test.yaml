@@ -90,14 +90,6 @@ tests:
             exp_annotations:
               summary: Kuma's Renovate Agent — Alive tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the Renovate Agent — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Daniel Pi SD Health, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Daniel Pi SD Health tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Daniel Pi SD Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Daniel Pi Recovery, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Daniel Pi Recovery tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Daniel Pi Recovery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: CrowdSec Remote Allowlist, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's CrowdSec Remote Allowlist tile is gone and no alert rule pages in its place.
@@ -237,10 +229,6 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x140'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
@@ -336,10 +324,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x140'
@@ -446,10 +430,6 @@ tests:
         values: '1x160'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x160'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x160'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x160'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x160'
       - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
@@ -548,10 +528,6 @@ tests:
         values: '1x5 _x1700'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
         values: '1x5 _x1700'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x1700'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
-        values: '1x1700'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x1700'
       - series: 'monitor_status{monitor_name="CrowdSec AppSec", monitor_type="push"}'
@@ -658,10 +634,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x3100'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x3100'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x3100'
@@ -770,10 +742,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x140'
@@ -890,10 +858,6 @@ tests:
       - series: 'monitor_status{monitor_name="Renovate Notifier — Alive", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="Renovate Agent — Alive", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Daniel Pi SD Health", monitor_type="push"}'
-        values: '1x300'
-      - series: 'monitor_status{monitor_name="Daniel Pi Recovery", monitor_type="push"}'
         values: '1x300'
       - series: 'monitor_status{monitor_name="CrowdSec Remote Allowlist", monitor_type="push"}'
         values: '1x300'
