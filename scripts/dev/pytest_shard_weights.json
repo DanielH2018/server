@@ -40,7 +40,7 @@
  ".claude/hooks/tests/test_session_health_no_wall_clock_bound.py": 0.19,
  ".claude/hooks/tests/test_session_health_other_sessions.py": 0.0,
  ".claude/hooks/tests/test_session_health_parked_deployer.py": 0.0,
- ".claude/hooks/tests/test_setup_wiring.py": 5.42,
+ ".claude/hooks/tests/test_setup_wiring.py": 0.02,
  ".claude/hooks/tests/test_strip_cd_cwd.py": 0.0,
  ".claude/hooks/tests/test_uv_python.py": 0.06,
  ".claude/hooks/tests/test_uv_python_in_batch.py": 0.79,
