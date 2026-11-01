@@ -1,5 +1,5 @@
 {
-  "checksum": "b2d860c1e4b6a52569696ffce8b4bd8743f6bd33c21736441353d27b7e08dea6",
+  "checksum": "ebae8d91dd8c8af969334a7020899c495adfd09ebf63bdf023d13aba289d414f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#Claude Tooling in This Repo (`.claude/`)",
   "row": {
@@ -8,6 +8,6 @@
       "scripts/diagnostics/probe.py": "6a5c7e83e3af5c45f83dd13a9d5819a3f9b4473f56e53ac4dd338e5a241db2f6"
     },
     "python": "3.14",
-    "verified_sha": "55862020d"
+    "verified_sha": "6a118bd80"
   }
 }
