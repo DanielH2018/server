@@ -20,7 +20,10 @@
 #
 # - Scope / exclusions: merged worktrees under `.claude/worktrees/`, orphan `worktree-*` branches
 #   whose content is on origin/master, unregistered worktree directories whose every file a ref
-#   already reaches, and unreachable objects older than a day. Nothing else.
+#   already reaches, and unreachable objects older than a day. On `ops_cron_host` alone it also
+#   releases the issue claims `findings.py reap` judges stale. Every other host passes
+#   `--no-reap`, because its checkout cannot see the orchestrator's worktree and would read the
+#   orchestrator's live claims as stale. Nothing else.
 # - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
 #   link from a package version, or reverting this component, stops the timer on the install that
 #   drops it. `systemctl stop homelab-worktree-sweep.timer` stops it until the next install.

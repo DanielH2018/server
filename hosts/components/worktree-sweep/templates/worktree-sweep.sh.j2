@@ -32,7 +32,10 @@ done
 cd /home/{{ sys_user }}/server || exit 1
 # PATH explicitly: the unit's environment inherits neither /usr/local/bin nor the user's
 # ~/.local/bin, so a bare `uv` is not found.
-PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief
+# Only ops_cron_host reaps claims. `findings.py reap` judges a claim against this checkout's
+# worktrees and this host's fan-out manifests alone. The fan-out orchestrator runs on
+# ops_cron_host, so a reap on any other host reads its claims as stale and releases them.
+PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief{{ '' if inventory_hostname == ops_cron_host else ' --no-reap' }}
 rc=$?
 key=""
 if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then

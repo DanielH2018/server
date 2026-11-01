@@ -18,11 +18,17 @@ from lib.proc_testing import fake_bin, run, write_exec
 SYS_USER = "sweepuser"
 
 
-def _run(tmp_path: Path, sweep_rc: int, key: str = "k3y"):
-    """Run the script with the sweep exiting `sweep_rc`; return its result and the ping URL."""
+def _run(tmp_path: Path, sweep_rc: int, key: str = "k3y", host: str = "daniel-box"):
+    """Run `host`'s script with the sweep exiting `sweep_rc`; return its result and the ping URL.
+
+    The `uv` stub writes the arguments it was given to `uv-args` under `tmp_path`.
+    """
     home = tmp_path / "home"
     (home / "server").mkdir(parents=True)
-    write_exec(home / ".local/bin/uv", f"exit {sweep_rc}\n")
+    write_exec(
+        home / ".local/bin/uv",
+        f'printf "%s\\n" "$@" > {tmp_path / "uv-args"}\nexit {sweep_rc}\n',
+    )
     pinged = tmp_path / "pinged"
     stubs = fake_bin(
         tmp_path / "bin",
@@ -36,7 +42,7 @@ def _run(tmp_path: Path, sweep_rc: int, key: str = "k3y"):
         "components",
         "worktree-sweep",
         "worktree-sweep.sh.j2",
-        overrides={"sys_user": SYS_USER},
+        overrides={"sys_user": SYS_USER, "inventory_hostname": host},
     )
     body = body.replace(f"/home/{SYS_USER}", str(home))
     assert "{{" not in body, body
@@ -61,3 +67,24 @@ def test_a_clean_sweep_pings_exit_0(tmp_path):
 
 def test_no_key_sends_no_ping(tmp_path):
     assert _run(tmp_path, 0, key="")[1] == ""
+
+
+def _sweep_args(tmp_path: Path, host: str) -> list[str]:
+    _run(tmp_path, 0, host=host)
+    return (tmp_path / "uv-args").read_text().split()
+
+
+def test_the_ops_cron_host_sweep_reaps_claims(tmp_path):
+    args = _sweep_args(tmp_path, "daniel-box")
+    assert args[-3:] == ["scripts/dev/prune_worktrees.py", "--prune", "--brief"]
+
+
+def test_a_sweep_on_another_host_does_not_reap_claims(tmp_path):
+    # Its reap would read every claim the daniel-box orchestrator holds as stale.
+    args = _sweep_args(tmp_path, "daniel-server")
+    assert args[-4:] == [
+        "scripts/dev/prune_worktrees.py",
+        "--prune",
+        "--brief",
+        "--no-reap",
+    ]

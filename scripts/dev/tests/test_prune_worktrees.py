@@ -200,6 +200,15 @@ def test_prune_all_does_not_reap_when_nothing_was_removed(tmp_path):
     assert _reaps_after(tmp_path, removed_ok=False) == []
 
 
+def test_no_reap_removes_without_reaping_claims(monkeypatch, capsys, tmp_path):
+    # A sweep on a host the orchestrator does not run on would release its live claims.
+    for argv in (["--prune", "--brief", "--no-reap"], ["--prune", "--no-reap"]):
+        rc, removed, trees = _main_recording_removals(monkeypatch, tmp_path, argv)
+        assert rc == 0, argv
+        assert removed == [t.path for t in trees], argv
+        assert "claims not reaped: --no-reap" in capsys.readouterr().out, argv
+
+
 def test_the_default_reaper_skips_a_checkout_with_no_findings_script(tmp_path):
     # The main-path tests run in scratch checkouts, so this is also what keeps them off gh.
     [line] = reap_claims(str(tmp_path))
