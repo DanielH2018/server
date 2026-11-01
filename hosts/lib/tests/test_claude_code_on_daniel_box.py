@@ -240,6 +240,15 @@ def test_daniel_box_declares_the_agent_with_its_own_uid(box):
     )
 
 
+def test_the_rc_host_binds_the_runtime_dir_of_the_uid_the_package_declares(box):
+    # claude_code_user_uid sits in host_vars and the uid in package.yml; the bind follows one.
+    users = json.loads(box.files["/usr/lib/homelab/manifest.json"][0])["users"]["users"]
+    uid = {u["name"]: u["uid"] for u in users}["claude"]
+    unit = box.files[f"{UNITS}/homelab-claude-rc.service"][0].decode()
+    assert re.findall(r"^BindPaths=(\S+)$", unit, re.M) == [f"/run/user/{uid}"]
+    assert f"Environment=XDG_RUNTIME_DIR=/run/user/{uid}\n" in unit
+
+
 def test_each_host_caps_its_own_agents_slice_and_the_operator_only_where_listed(
     box, server
 ):
