@@ -39,8 +39,8 @@
 # reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
-# agent's login-slice cap sit here; `role: claude_code` reaches only these files (H7.40).
-role: claude_code
+# agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).
+component: claude-code
 users:
   # uid 996 is the live uid (`getent passwd claude` on daniel-box, 2026-10-31).
   - {name: claude, uid: 996, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
@@ -87,7 +87,7 @@ credentials:
 outputs:
   # Triage's own Claude credential, read by systemd as root. It stays out of the agent's files, so
   # a session cannot copy it into the clone or a report.
-  - src: "role:claude-triage-oauth-token.j2"
+  - src: "component:templates/claude-triage-oauth-token.j2"
     path: /etc/claude-triage/oauth-token
     owner: root
     group: root
@@ -100,7 +100,7 @@ outputs:
   # JSON-escape the password and refuse a file that does not parse. The file renders under /run, outside the agent's home. `path` is where the agent looks:
   # claude-agent-setup links it there (its `ui_login` names the destination), because the
   # package must not install into a directory the agent owns.
-  - src: "role:agent-homelab-ui-credentials.json.j2"
+  - src: "component:templates/agent-homelab-ui-credentials.json.j2"
     path: /var/lib/claude/.config/homelab-ui/credentials.json
     destination: claude-agent/homelab-ui-credentials.json
     owner: claude
@@ -123,7 +123,7 @@ files:
   # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
   - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
-  - src: "role:login-slice-caps.conf.j2"
+  - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-996.slice.d/homelab-claude-caps.conf
     when: claude_code_login_caps_enabled and claude_code_agent_user_enabled
 legacy:

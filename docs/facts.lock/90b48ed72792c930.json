@@ -1,15 +1,13 @@
 {
-  "checksum": "7272714c248df17eceb7a19874ca5491a1ee28596d55f858cbc40c7b40f2afe2",
+  "checksum": "31398cadf4452626be9184dc8874dfee2f8e5fca63f8fdd8fe2ee246c78dc68f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/claude_code/CLAUDE.md#`setup/claude_code` — emptied; the host packages own Claude Code's host half",
   "row": {
     "atoms": {
       "ansible/initial_setup.yml": "dad2997555424b8d42206e5b7189899762140856058c0dd59f2ae7c26906f439",
-      "ansible/roles/setup/claude_code/tasks/main.yml": "a65d3431db1d87e790e31043b8b60b592866f38c5796f9154292087b6812b81c",
-      "docs/claude-code-rc-caps.md": "2d515326fa8d32d682265f2a3e8361c3bd241b199b3810fcec388c2b120e8245",
-      "hosts/components/claude-code/": "0c7d7c48948f71952dce53fd0751b7c0c4df73b56724f2b6883863c36ef7bfcd"
+      "ansible/roles/setup/claude_code/tasks/main.yml": "a65d3431db1d87e790e31043b8b60b592866f38c5796f9154292087b6812b81c"
     },
     "python": "3.14",
-    "verified_sha": "dd4bc2a78"
+    "verified_sha": "7069ccbd4"
   }
 }

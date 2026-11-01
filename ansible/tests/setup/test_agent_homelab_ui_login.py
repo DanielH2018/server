@@ -11,10 +11,9 @@ Run: uv run pytest ansible/tests/setup/test_agent_homelab_ui_login.py
 
 from _agent_package import agent_setup_script
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 
-CLAUDE_CODE = ANSIBLE / "roles" / "setup" / "claude_code"
 BOX_PACKAGE = ANSIBLE.parent / "hosts" / "daniel-box" / "package.yml"
 PASSWORD = "sentinel-agent-ui-password"
 DOMAIN = "sentinel.example"
@@ -86,8 +85,8 @@ def test_switching_the_browser_off_removes_the_login_link_and_on_points_it(
 
 
 def test_the_file_carries_the_username_password_and_domain() -> None:
-    rendered = render_setup_text(
-        "claude_code",
+    rendered = render_component_text(
+        "claude-code",
         "agent-homelab-ui-credentials.json.j2",
         {"authelia_agent_password": PASSWORD, "domain": DOMAIN},
     )
@@ -102,6 +101,8 @@ def test_the_login_names_the_account_the_authelia_role_creates() -> None:
     """The two roles cannot read each other's defaults, so each carries the name."""
     authelia = role_defaults("k8s", "authelia")["authelia_k8s_agent_user"]
     assert (
-        role_defaults("setup", "claude_code")["claude_code_homelab_ui_username"]
+        yaml_fast.safe_load((CLAUDE_CODE / "defaults" / "main.yml").read_text())[
+            "claude_code_homelab_ui_username"
+        ]
         == authelia
     )

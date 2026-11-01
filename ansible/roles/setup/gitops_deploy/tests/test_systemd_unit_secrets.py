@@ -13,6 +13,8 @@ import pathlib
 import re
 
 _ROLES = pathlib.Path(__file__).parents[3]
+# The host components' unit templates, the claude-code component's moved role units among them.
+_COMPONENTS = _ROLES.parents[1] / "hosts" / "components"
 
 # A Jinja interpolation naming a secret. Matched on the VARIABLE NAME, not on "does this
 # ExecStart interpolate anything" — the broad form flags six legitimate units that interpolate
@@ -29,7 +31,7 @@ def _unit_templates() -> list[pathlib.Path]:
     A TREE WALK, not an enumeration. A guard that names its paths can only prove the units its
     own fix touched, so it derives its own corpus.
     """
-    return sorted(_ROLES.rglob("*.service.j2"))
+    return sorted([*_ROLES.rglob("*.service.j2"), *_COMPONENTS.rglob("*.service.j2")])
 
 
 def test_no_unit_template_embeds_a_secret_in_execstart():
@@ -44,6 +46,7 @@ def test_no_unit_template_embeds_a_secret_in_execstart():
     assert units, (
         f"No *.service.j2 found under {_ROLES} — the walk is broken, not the tree."
     )
+    assert _COMPONENTS / "claude-code" / "templates" / "claude-rc.service.j2" in units
     for unit_path in units:
         unit = unit_path.read_text()
         exec_start = re.search(
@@ -53,7 +56,7 @@ def test_no_unit_template_embeds_a_secret_in_execstart():
             continue  # a .timer-adjacent or Type=oneshot-less unit; nothing to leak
         leaked = _SECRET_VAR.search(exec_start.group(0))
         assert not leaked, (
-            f"{unit_path.relative_to(_ROLES)} interpolates {leaked.group(0)} into ExecStart. "
+            f"{unit_path.relative_to(_ROLES.parents[1])} interpolates {leaked.group(0)} into ExecStart. "
             f"`systemctl show` will print it to any local user regardless of the unit file's "
             f'mode. Reference it as "${{ALERT_WEBHOOK}}" and supply it with EnvironmentFile= '
             f"instead."
@@ -73,7 +76,7 @@ def test_alert_units_read_a_dedicated_webhook_file():
             unit,
             re.MULTILINE,
         ), (
-            f"{unit_path.relative_to(_ROLES)} does not read a dedicated alert-webhook.env. It "
+            f"{unit_path.relative_to(_ROLES.parents[1])} does not read a dedicated alert-webhook.env. It "
             f"must NOT fall back to the role's config.env — that file is exactly what can be "
             f"unreadable when the thing this unit alerts for has failed."
         )
@@ -121,7 +124,7 @@ def test_alert_units_retry_a_failed_delivery():
             re.MULTILINE | re.DOTALL,
         )
         assert exec_start and _retries_every_failure(exec_start.group(0)), (
-            f"{unit_path.relative_to(_ROLES)} sends its page once. Give its curl "
+            f"{unit_path.relative_to(_ROLES.parents[1])} sends its page once. Give its curl "
             f"`--retry 5 --retry-delay 10 --retry-all-errors`, or, if it no longer uses curl, "
             f"an equivalent retry that covers a refused connection and a failed DNS lookup."
         )

@@ -11,12 +11,12 @@ Run: uv run pytest ansible/tests/setup/test_agent_user_dev_tools.py
 
 from _agent_package import agent_setup_script
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 
 SETUP = ANSIBLE / "roles" / "setup"
 SHARED = SETUP / "common" / "tasks" / "agent_user.yml"
-CLONE_SYNC = SETUP / "claude_code" / "files" / "claude-clone-sync.sh"
+CLONE_SYNC = CLAUDE_CODE / "files" / "claude-clone-sync.sh"
 PREK_COPY = "Give the agent user the operator's pinned prek"
 
 
@@ -71,8 +71,8 @@ def collections_path_problems(profile: str, clone: str) -> list[str]:
 
 def test_the_profile_falls_back_to_the_agents_own_collections() -> None:
     clone = "/srv/clone"
-    profile = render_setup_text(
-        "claude_code",
+    profile = render_component_text(
+        "claude-code",
         "agent-user-profile.j2",
         {
             "claude_code_agent_user_home": "/srv/agent",

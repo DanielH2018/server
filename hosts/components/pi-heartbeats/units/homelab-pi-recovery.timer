@@ -1,7 +1,7 @@
 # Shipped by homelab-daniel-pi. Its enable link ships only while
 # optimize_pi_recovery_restart_enabled is true; reconcile stops the timer on the install that
-# drops the link, and leaves it stopped when this file changes later. Every 5 minutes, half the
-# Kuma monitor's 600s heartbeat window.
+# drops the link, and leaves it stopped when this file changes later. Every 5 minutes, a third of
+# the 900s deadline that PiRecoveryNotReporting allows.
 [Unit]
 Description=Check the Pi's containers every 5 minutes
 

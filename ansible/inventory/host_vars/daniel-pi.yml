@@ -84,10 +84,10 @@ containers_list: []
   # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
   # it covers the two k3s nodes and structurally cannot reach a host that runs no kubelet.
   #
-  # NOTE for whoever adds the next node-exporter host: check_disk and check_mem scan every
-  # origin reporting node_*, and this host is excluded from both (HOST_METRIC_ORIGIN_EXCLUDE
-  # in monitor-bridge's check.py) because check_pi_pressure already owns Pi disk and memory
-  # against thresholds sized for a 456 MB box.
+  # NOTE for whoever adds the next node-exporter host: observability's disk and memory rules
+  # (roles/k8s/observability/files/rules/hosts.yaml) name daniel-box and daniel-server
+  # literally, one rule per host, so a new host needs its own copies there. This host has its
+  # own Pi* rules in the same file, with thresholds sized for a 456 MB box.
 # The Pi's services that the `homelab-daniel-pi` package deploys as one Compose project (H5).
 # The package deploys this key. containers_list stays empty: H5.12 deleted the Ansible Compose
 # path that deployed it. Entries keep containers_list's

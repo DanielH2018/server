@@ -91,9 +91,6 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
         {"renovate_agent"}
     ),
-    # initial_setup's worktree-holder crons read the agent list, the agent user, its primary
-    # profile and the operator checkout from claude_code's defaults (#4357).
-    "ansible/roles/setup/claude_code/defaults/main.yml": frozenset({"initial_setup"}),
     # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
     # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
     "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),
@@ -146,7 +143,6 @@ K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {
 # `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
 # `ansible/tests/setup/test_setup_cross_role_reads.py` holds it to the tree.
 SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
-    "ansible/filter_plugins/claude_agents.py": frozenset({"initial_setup"}),
     "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
 }
 

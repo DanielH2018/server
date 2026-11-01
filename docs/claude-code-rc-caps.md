@@ -1,6 +1,6 @@
 # claude-rc caps — the derivations behind the memory bounds
 
-The role doc `ansible/roles/setup/claude_code/CLAUDE.md` keeps the rules. This page keeps the
+The role doc `hosts/components/claude-code/CLAUDE.md` keeps the rules. This page keeps the
 live phone check, the arguments that settled which slice carries the fleet bound, and the
 reasoning behind a few unit-shape rules.
 
