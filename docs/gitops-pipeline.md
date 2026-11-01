@@ -649,9 +649,9 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `GH_TOKEN`/`GITHUB_TOKEN` in the environment win) and degrades to anonymous when gh is logged
   out. The anonymous limit is 60 requests an hour per source IP, shared with every landing's
   `await_ci.py` poll on the host, and an exhausted quota reads as "CI not finished." The
-  authenticated limit is 5000 an hour per token. An anonymous `await_ci.py` polls every 90s
-  rather than every 20s and never walks descendants, so land.sh's 1200s CI budget costs at
-  most 30 of the 60 requests (`await_ci.ANONYMOUS_INTERVAL_S`, #6148). A poll costs 2
+  authenticated limit is 5000 an hour per token. An anonymous `await_ci.py` spreads its budget over at
+  most 15 polls, at least 90s apart, and never walks descendants, so land.sh's CI budget
+  costs at most 30 of the 60 requests (`await_ci.ANONYMOUS_MAX_POLLS`, #6148, #6857). A poll costs 2
   requests until a required run registers. On an anonymous host, a merge commit GitHub never
   ran CI for ends the wait on exit 75 and asks for `gh auth login`.
   - **A tip that is not green sends the gate walking, and the tick deploys the newest GREEN

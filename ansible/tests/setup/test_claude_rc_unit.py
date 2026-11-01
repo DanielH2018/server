@@ -40,6 +40,7 @@ import pytest
 from _agent_package import render_daniel_server_with
 from _helpers import load_yaml
 from _setup_render import CLAUDE_CODE, render_component_text, role_context
+from renderer.renderer_lib.environment import RenderError
 
 COMPONENT = "claude-code"
 ROLE_DIR = CLAUDE_CODE
@@ -291,14 +292,15 @@ def test_enable_flag_also_turns_the_host_off(tmp_path) -> None:
         )
 
 
-HARDENING = ("ProtectHome", "NoNewPrivileges", "PrivateTmp")
+HARDENING = ("ProtectHome", "BindPaths", "NoNewPrivileges", "PrivateTmp")
+AGENT_UID = 996
 
 
 def test_default_user_is_the_operator_and_the_unit_is_not_hardened(unit: str) -> None:
     """As the operator the hardening lines would hide the unit's own home and break sudo.
 
-    `ProtectHome=yes` hides /home, where the operator's home is, and `NoNewPrivileges=yes`
-    blocks the sudo a phone session uses. The three lines belong to a non-operator user only,
+    `ProtectHome=` hides /home, where the operator's home is, and `NoNewPrivileges=yes`
+    blocks the sudo a phone session uses. The lines belong to a non-operator user only,
     so the default render carries none of them.
     """
     sys_user = role_context(ROLE_DIR, {})["sys_user"]
@@ -318,7 +320,11 @@ def test_agent_user_runs_from_its_own_home_with_hardening() -> None:
     """The rejecting half of the pair above: setting the var must move the unit and harden it."""
     ctx = role_context(ROLE_DIR, {"claude_code_user": "claude"})
     home = ctx["claude_code_agent_user_home"]
-    moved = render(UNIT, claude_code_user=ctx["claude_code_agent_user"])
+    moved = render(
+        UNIT,
+        claude_code_user=ctx["claude_code_agent_user"],
+        claude_code_user_uid=AGENT_UID,
+    )
     assert directive(moved, "User") == ["claude"]
     assert directive(moved, "Group") == ["claude"]
     assert directive(moved, "WorkingDirectory") == [f"{home}/server"]
@@ -329,7 +335,7 @@ def test_agent_user_runs_from_its_own_home_with_hardening() -> None:
         f"PATH={home}/.local/bin:"
     )
     assert directive(moved, "ExecStart")[0].startswith(f"{home}/.local/bin/claude rc")
-    for key in HARDENING:
+    for key in ("NoNewPrivileges", "PrivateTmp"):
         assert directive(moved, key) == ["yes"], (
             f"{key}=yes must render for the agent user"
         )
@@ -337,3 +343,34 @@ def test_agent_user_runs_from_its_own_home_with_hardening() -> None:
         "the agent's unit must pin UMask=0027: group read on what a session creates, "
         "none for other"
     )
+
+
+@pytest.mark.parametrize("uid", [AGENT_UID, 4242])
+def test_agent_sessions_reach_their_own_user_bus_and_no_human_home(uid: int) -> None:
+    """`systemd-run --user` from a phone session needs /run/user/<uid>/bus, which yes hides.
+
+    `ProtectHome=yes` hides /run/user along with /home, so the agent's sessions failed with
+    "Failed to connect to bus: Permission denied" (#6764). `tmpfs` hides the same directories,
+    and BindPaths= re-exposes only the agent's own runtime directory. Every line follows the
+    uid variable, so the second uid catches one hardcoded for daniel-box.
+    """
+    moved = render(UNIT, claude_code_user="claude", claude_code_user_uid=uid)
+    assert directive(moved, "ProtectHome") == ["tmpfs"], (
+        "ProtectHome must be tmpfs: yes hides the agent's user bus, read-only shows /home"
+    )
+    assert directive(moved, "BindPaths") == [f"/run/user/{uid}"]
+    env = directive(moved, "Environment")
+    assert f"XDG_RUNTIME_DIR=/run/user/{uid}" in env
+    assert f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus" in env
+    # The bind fails the unit's start if its source is missing, so the manager comes first.
+    assert f"user@{uid}.service" in directive(moved, "After")
+    assert f"user@{uid}.service" in directive(moved, "Wants")
+
+
+def test_agent_unit_without_a_uid_fails_the_package_render(tmp_path) -> None:
+    """No default uid: a guessed one would bind another account's runtime directory.
+
+    Rendered through the host package, whose undefined is strict, rather than `render`.
+    """
+    with pytest.raises(RenderError, match="'claude_code_user_uid' is undefined"):
+        render_daniel_server_with(tmp_path, claude_code_user="claude")
