@@ -731,50 +731,47 @@ not against a hostile session, as the copied skills already did.
 
 ## More than one agent
 
-The `claude_code` role builds every agent user in `claude_code_agents`, one run of
-`tasks/agent.yml` per entry (#4196). `claude` stays the primary agent: the
-`claude_code_agent_*` scalars configure it, and its entry carries only its name. A further
-agent is a full entry in the host's `host_vars`:
+The host packages build one agent, `claude`. The `claude-code` host component's
+`claude-agent-setup`, its GitHub token output and its clone and dotfiles sync units all read
+the `claude_code_agent_*` scalars, so they serve that one user. The `claude_code_agents` list
+and its checking filter served the emptied `claude_code` role and went with it.
 
-```yaml
-claude_code_agents:
-  - name: "{{ claude_code_agent_user }}"
-  - name: claude-ops
-    github_login: SomeOtherBot
-    github_id: 123456
-    github_token_var: claude_ops_gh_token
-```
+A further agent's account is two entries:
 
-`filter_plugins/claude_agents.py` refuses a further agent without its own GitHub login, id
-and token variable, so it never pushes as `DanielClaudeBot` by omission. It also refuses two
-agents that share a name, home or worktree prefix. A further agent gets a home under
-`/var/lib/<name>`, its own clone, the shared tools, a GitHub identity, the operator's config
-and the login caps. It gets no journal access unless its entry sets `journal_access: true`.
+1. A `users:` entry in the host's `package.yml`, with the uid the host gives it. The users
+   arm creates the account.
+1. The same name and its clone directory in
+   `initial_setup_worktree_holders_agents_by_host` in
+   `ansible/roles/setup/initial_setup/tasks/crons.yml`, so the worktree holder scan answers
+   it. `ansible/tests/setup/test_worktree_holders_install.py` fails while a host's
+   `users:` names an agent that list does not.
+
+Everything that gives the account an identity is still the primary's alone: the setup script,
+the token, the signing key, the clone and the syncs. A second agent that opens PRs therefore
+needs the component to render those per user first. That is its own change. It has to keep
+the rule the old filter enforced: a further agent never inherits the primary's GitHub login,
+id or token, so it cannot push as `DanielClaudeBot` by omission. No two agents may share a
+name, home or worktree prefix either.
 
 Only the primary agent gets the lander, the peer ssh login, the homelab-ui browser and login,
 the artifacts mount and the memory seed. Each of those is a host-wide object named after
 `claude` or a single Authelia account, and the lander is on the approval floor, so widening any
-of them is its own change. The browser also stays outside the loop so that a Node or playwright
-pin bump narrows to its own tag (#4189).
+of them is its own change.
 
-To add a further agent:
+Outside the repo, each further agent needs:
 
-1. Create its GitHub machine account and make it a write collaborator.
-1. Store its classic `public_repo` token in SOPS under the name its entry gives
-   `github_token_var`.
-1. Add `refs/heads/worktree-<prefix>+**` to the "agent branch fence" ruleset's excludes, and
-   the same pattern to `github-ruleset-drift.sh`'s declaration. A ruleset cannot tell two bot
+1. Its own GitHub machine account, made a write collaborator.
+1. Its classic `public_repo` token in the host's SOPS file.
+1. `refs/heads/worktree-<prefix>+**` in the "agent branch fence" ruleset's excludes, and
+   the same pattern in `github-ruleset-drift.sh`'s declaration. A ruleset cannot tell two bot
    accounts apart, so each can push to the other's prefix. The primary agent's lander lands
    only `worktree-claude+` branches, so it never lands another agent's work.
-1. Add the entry and its `users:` line in the host's `package.yml`, let the next package
-   version install it, then log in as the agent once
-   with `sudo machinectl shell <name>@ /bin/bash -l` and run `/login`.
-1. Add its signing key's `.pub` to its account as a Signing Key.
+1. One login as the agent, with `sudo machinectl shell <name>@ /bin/bash -l`, to run
+   `/login`.
+1. Its signing key's `.pub` added to its account as a Signing Key.
 
-To retire one, set `state: absent` rather than deleting the entry. Ansible removes nothing it
-no longer declares. Absent expires the account, keeps the home, and removes the GitHub token
-and the clone sync units. It also takes the agent out of the `worktree-holders` and
-`homelab-rootq` socket groups.
+To retire one, delete its `users:` entry and its worktree holder entry in the same change. The
+users arm expires the account, and the holder scan refuses its uid at the next apply.
 
 ## Checking and rolling back
 

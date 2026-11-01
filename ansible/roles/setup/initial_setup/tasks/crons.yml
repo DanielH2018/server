@@ -370,9 +370,10 @@
   tags: [crons, worktree-sweep]
   # DECIDED: the map entry is the per-user grant (#4295), and the socket's group is only the
   # gate on who may connect. The service refuses any uid this map does not name, so dropping
-  # an agent from claude_code_agents revokes its scan at the next apply, though it keeps the
-  # group. A group alone could not be the grant: a membership reaches a process only at its
-  # next login, and claude_code's agent_access.yml owns each agent's exact group list.
+  # an agent from initial_setup_worktree_holders_agents_by_host revokes its scan at the next
+  # apply, though it keeps the group. A group alone could not be the grant: a membership
+  # reaches a process only at its next login, and the claude-code host component's
+  # claude-agent-setup owns each agent's exact group list.
   #
   # Root-owned: the service runs as root and trusts this file for the directory it reports on.
   # World-readable, because lib.worktrees.holder_root reads it as the caller, to ask only about

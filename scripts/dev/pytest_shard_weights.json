@@ -739,7 +739,6 @@
  "ansible/tests/setup/test_artifacts_sync_alerts_once_per_outage.py": 1.04,
  "ansible/tests/setup/test_b4_rule_literals.py": 0.21,
  "ansible/tests/setup/test_chezmoi_setup_seed.py": 0.03,
- "ansible/tests/setup/test_claude_agent_profiles.py": 0.01,
  "ansible/tests/setup/test_claude_agent_ssh_login.py": 0.02,
  "ansible/tests/setup/test_claude_bg_resume_unit.py": 0.03,
  "ansible/tests/setup/test_claude_cgroup_metrics.py": 0.07,
