@@ -29,7 +29,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 unset KUBECTL_EXTERNAL_DIFF KUBECONFIG KUBECACHEDIR KUBE_EDITOR EDITOR VISUAL PAGER
 
 KUBECTL=(/usr/local/bin/k3s kubectl)
-FLUX=/usr/local/lib/homelab-takeover-check/flux
+FLUX=/usr/lib/homelab/bin/flux
 STATE=/var/lib/homelab-takeover-check
 KUBECONFIG_FILE=/etc/rancher/k3s/k3s.yaml
 UV=uv

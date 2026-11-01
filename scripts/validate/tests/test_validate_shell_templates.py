@@ -93,7 +93,6 @@ def test_discover_templates_finds_the_known_set():
         "github-ruleset-drift.sh.j2",
         "github-interaction-limit.sh.j2",
         "claude-otel-health.sh.j2",
-        "takeover-check-flux.sh.j2",
         "fake-remux-health.sh.j2",
         "registry-gc.sh.j2",
         "claude-agent-setup.sh.j2",

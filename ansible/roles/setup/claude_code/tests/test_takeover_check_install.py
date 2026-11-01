@@ -11,10 +11,10 @@ from _setup_render import render_setup_text
 from lib import yaml_fast
 from lib.proc_testing import run as run_proc
 from lib.repo_paths import HOST_VARS
-from renderer.renderer_lib import host as host_mode
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
 WRAPPER = "/usr/local/sbin/homelab-takeover-check"
+TOOLS = ANSIBLE.parent / "hosts" / "packages" / "homelab-tools" / "package.yml"
 
 
 def test_the_sudoers_template_grants_one_command_per_user() -> None:
@@ -45,13 +45,9 @@ def test_the_rendered_sudoers_file_passes_visudo(tmp_path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_the_defaults_leave_the_check_off_and_name_its_wrapper_and_paths() -> None:
+def test_the_defaults_leave_the_check_off_and_name_its_wrapper_and_state() -> None:
     defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
     assert defaults["claude_code_takeover_check_wrapper"] == WRAPPER
-    assert (
-        defaults["claude_code_takeover_check_lib_dir"]
-        == "/usr/local/lib/homelab-takeover-check"
-    )
     assert (
         defaults["claude_code_takeover_check_state_dir"]
         == "/var/lib/homelab-takeover-check"
@@ -59,21 +55,15 @@ def test_the_defaults_leave_the_check_off_and_name_its_wrapper_and_paths() -> No
     assert defaults["claude_code_takeover_check_enabled"] is False
 
 
-def test_the_flux_copy_is_pinned_to_the_flux_the_cluster_runs() -> None:
-    defaults = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
+def test_homelab_tools_pins_the_flux_the_cluster_runs() -> None:
     flux = yaml_fast.safe_load(
         (ANSIBLE / "roles" / "k8s" / "flux" / "defaults" / "main.yml").read_text()
-    )
-    assert defaults["claude_code_takeover_check_flux_version"] == flux["flux_version"]
-    url = defaults["claude_code_takeover_check_flux_url"]
-    assert "/download/{{ claude_code_takeover_check_flux_version }}/" in url
-    assert len(defaults["claude_code_takeover_check_flux_sha256"]) == 64
-    script = (
-        host_mode.render_host("daniel-box")
-        .files["/usr/lib/homelab/takeover-check-flux"][0]
-        .decode()
-    )
-    assert f'sha256="{defaults["claude_code_takeover_check_flux_sha256"]}"' in script
+    )["flux_version"]
+    tools = yaml_fast.safe_load(TOOLS.read_text())["tools"]
+    assert {arch: pin["version"] for arch, pin in tools["flux"].items()} == {
+        "amd64": flux,
+        "arm64": flux,
+    }
 
 
 def test_only_daniel_box_enables_the_check() -> None:

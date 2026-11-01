@@ -71,13 +71,6 @@ SLICE_FOUR = (
     f"{UNITS}/homelab-claude-otel-health.service",
     f"{UNITS}/homelab-claude-otel-health.timer",
     "/usr/lib/tmpfiles.d/homelab-artifacts.conf",
-    "/usr/lib/homelab/takeover-check-flux",
-    f"{UNITS}/homelab-takeover-check-flux.service",
-)
-# The takeover check's pinned flux copy ships wherever the component does.
-SLICE_FOUR_BOTH_HOSTS = (
-    "/usr/lib/homelab/takeover-check-flux",
-    f"{UNITS}/homelab-takeover-check-flux.service",
 )
 AGENT_UID = {"daniel-box": 996, "daniel-server": 995}
 
@@ -151,10 +144,17 @@ def test_daniel_box_ships_each_slice_four_subject(box):
     assert [path for path in SLICE_FOUR if path not in box.files] == []
 
 
-def test_daniel_server_ships_the_flux_copy_but_not_the_artifacts_node_crons(server):
-    assert [path for path in SLICE_FOUR_BOTH_HOSTS if path not in server.files] == []
-    node_only = [path for path in SLICE_FOUR if path not in SLICE_FOUR_BOTH_HOSTS]
-    assert [path for path in node_only if path in server.files] == []
+def test_daniel_server_ships_none_of_the_artifacts_node_timers(server):
+    assert [path for path in SLICE_FOUR if path in server.files] == []
+
+
+def test_the_takeover_check_runs_homelab_tools_flux_and_retires_its_own_copy(box):
+    wrapper = box.files["/usr/local/sbin/homelab-takeover-check"][0].decode()
+    assert "FLUX=/usr/lib/homelab/bin/flux\n" in wrapper
+    assert "homelab-tools" in box.depends
+    assert "/usr/local/lib/homelab-takeover-check" in {
+        e.get("path") for e in box.legacy
+    }
 
 
 def test_daniel_server_ships_the_browser_only_to_take_it_back(server):

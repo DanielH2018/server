@@ -19,7 +19,7 @@
 #     check's wrapper and sudoers grant. Each is armed only in daniel-box's host_vars, so
 #     daniel-server's package ships none of them.
 #   - H7.40's fourth slice: the artifacts node's peer sync and OTLP-door heartbeat timers with
-#     the directories the artifacts pod mounts, and the takeover check's pinned flux copy;
+#     the directories the artifacts pod mounts;
 #   - H7.40's third slice: alert-triggered triage, armed only in daniel-box's host_vars; the
 #     agent's peer key and ssh config on claude_agent_ssh_key_host and its one-time memory seed,
 #     both in claude-agent-setup; its homelab-ui login; and its homelab-ui browser oneshot,
@@ -176,14 +176,10 @@ files:
   - {src: "role:claude-memory-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-memory-sync.service, when: "claude_code_memory_sync_enabled"}
   - {src: "role:claude-memory-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-memory-sync.timer, when: "claude_code_memory_sync_enabled"}
   # The D5 takeover check: the wrapper and the grant land in one package version, so the grant
-  # never names a missing command. The role keeps the pinned flux copy the wrapper runs, and the
-  # wrapper creates its own state directory.
+  # never names a missing command. The flux CLI it runs is homelab-tools', which daniel-box's
+  # package depends on, and the wrapper creates its own state directory.
   - {src: "role-file:homelab-takeover-check.sh", dst: /usr/local/sbin/homelab-takeover-check, mode: "0755", when: "claude_code_takeover_check_enabled"}
   - {src: "role:claude-takeover-check.sudoers.j2", dst: /etc/sudoers.d/homelab-takeover-check, mode: "0440", when: "claude_code_takeover_check_enabled"}
-  # The pinned flux copy the wrapper runs (H7.40's fourth slice). It ships wherever the component
-  # is, so switching the check off removes the copy and the state directory.
-  - {src: templates/takeover-check-flux.sh.j2, dst: /usr/lib/homelab/takeover-check-flux, mode: "0755", activate: "try-restart:homelab-takeover-check-flux.service"}
-  - {src: units/homelab-takeover-check-flux.service, dst: /usr/lib/systemd/system/homelab-takeover-check-flux.service}
   # The artifacts node's peer sync and OTLP-door heartbeat (H7.40's fourth slice), and the
   # directories the artifacts pod mounts. They push to nothing: each logs a `status=` line and
   # writes a textfile (M6 batch B6a's Cutover-2). The tags and textfiles keep the names
@@ -239,7 +235,6 @@ enable:
   homelab-claude-triage-poll.timer:
     target: timers.target
     when: claude_code_agent_user_enabled and claude_code_triage_enabled
-  homelab-takeover-check-flux.service: multi-user.target
   homelab-sync-artifacts.timer:
     target: timers.target
     when: inventory_hostname == claude_code_artifacts_node
@@ -331,3 +326,8 @@ legacy:
   - {path: /usr/local/bin/sync-artifacts.sh}
   - {path: /usr/local/bin/claude-otel-health.sh}
   - {path: /var/lib/homelab/setup-render-manifest.d/claude-code-node-crons}
+  # #6699: the takeover check's flux copy, before homelab-tools shipped flux, and the wrapper's
+  # outputs once the check is switched off.
+  - {path: /usr/local/lib/homelab-takeover-check}
+  - path: "{{ claude_code_takeover_check_state_dir }}"
+    when: not claude_code_takeover_check_enabled

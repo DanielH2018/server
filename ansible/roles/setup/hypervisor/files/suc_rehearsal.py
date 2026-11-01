@@ -9,7 +9,8 @@ Usage:
 `pins` prints the five pins the guest installs from, as `key=value` lines. REPO is a checkout:
 each key is found by globbing `ansible/roles/*/*/defaults/main.yml`, so a pin that moves between
 roles (H6.1b moves the k3s pins) needs no edit here, and a key held by none or by two files is an
-error. The registry image is read from the `k8s/registry` role alone, because a second role copies it. `overlay` copies the system-upgrade bundle rendered at RENDERED into OUT and rewrites it
+error. The registry image is read from the `k8s/registry` role alone, because a second role copies it.
+The flux CLI's tarball digest is homelab-tools' amd64 pin. `overlay` copies the system-upgrade bundle rendered at RENDERED into OUT and rewrites it
 for a one-node guest (*Rehearsal in a drill guest*, docs/target-architecture/host/h6-k3s-suc.md),
 then prints `target_version=<the Plan's version>`. `judge` reads one snapshot of the guest and
 prints `PASS ...` (exit 0) or `WAIT ...` (exit 1) with the reason.
@@ -31,6 +32,7 @@ FLUX_RELEASE = (
     "https://github.com/fluxcd/flux2/releases/download/{v}/flux_{n}_linux_amd64.tar.gz"
 )
 INSTALLER_VAR = "{{ k3s_version }}"
+TOOLS = "hosts/packages/homelab-tools/package.yml"
 
 
 class Refusal(Exception):
@@ -68,7 +70,9 @@ def pins(repo):
             f"the installer URL still holds a template after substituting k3s_version: {url}"
         )
     flux = _defaults(repo, "flux_version")
-    if _defaults(repo, "claude_code_takeover_check_flux_version") != flux:
+    with open(os.path.join(repo, TOOLS)) as handle:
+        tool = yaml.safe_load(handle)["tools"]["flux"]["amd64"]
+    if tool["version"] != flux:
         raise Refusal(
             "the flux CLI sha256 pin belongs to a release other than flux_version"
         )
@@ -78,7 +82,7 @@ def pins(repo):
         "installer_sha256": _defaults(repo, "k3s_install_script_sha256"),
         "registry_image": _defaults(repo, "registry_k8s_image", "k8s/registry"),
         "flux_url": FLUX_RELEASE.format(v=flux, n=flux.removeprefix("v")),
-        "flux_sha256": _defaults(repo, "claude_code_takeover_check_flux_sha256"),
+        "flux_sha256": tool["sha256"],
     }
 
 
