@@ -1,0 +1,33 @@
+[Unit]
+Description=Copy the Claude memory store from {{ inventory_hostname }} to {{ claude_code_memory_sync_target }}
+{% if claude_code_sync_alert_unit is defined %}
+OnFailure={{ claude_code_sync_alert_unit }}
+{% else %}
+OnFailure=claude-memory-sync-alert.service
+{% endif %}
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+# As the user that owns the store: the copy authenticates with that user's ssh key, and the
+# files on the far side must stay owned by the same account.
+User={{ sys_user }}
+# DECIDED: one-way and overwriting (operator, issue #3123). This host is the only writer that
+# counts; a file a session on {{ claude_code_memory_sync_target }} wrote is replaced or deleted
+# on the next run. --delete is what makes the far store MATCH rather than keep entries this
+# host archived. An empty or missing source must never reach --delete, which would wipe the
+# far store, so the condition skips the run unless the index exists and is non-empty.
+ExecCondition=/usr/bin/test -s {{ claude_code_memory_sync_dir }}/MEMORY.md
+# --itemize-changes puts every overwritten or deleted file in the journal, the only record of
+# what a far-side write lost. BatchMode makes a missing key fail instead of prompting.
+ExecStart=/usr/bin/rsync -a --delete --mkpath --itemize-changes \
+  -e "ssh -o BatchMode=yes -o ConnectTimeout=20" \
+  {{ claude_code_memory_sync_dir }}/ \
+  {{ claude_code_memory_sync_target }}:{{ claude_code_memory_sync_target_dir }}/
+# The textfile that tells a timer which stopped firing from one that runs clean (#6165).
+# timer-textfile.j2 has the shape and the deadline rule.
+# A run the ExecCondition skips writes nothing either, so an empty store reads as a timer that
+# stopped: the source is daniel-box's own store, and an empty one is not a healthy state.
+{% from 'templates/timer-textfile.j2' import timer_textfile with context %}
+{{ timer_textfile('claude-memory-sync', claude_code_memory_sync_interval) }}

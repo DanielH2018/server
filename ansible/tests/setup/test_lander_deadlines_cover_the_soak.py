@@ -38,7 +38,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from _setup_render import render_setup_text
+from _setup_render import render_component_text, render_setup_text
 from deploy_tools.bundle_census import published_tags
 from deploy_tools.land_lib import handoff, options, promotion
 from deploy_tools.chained_timeout import VERIFY_CAP_S
@@ -51,8 +51,12 @@ from renderer import homelab_render
 from renderer.renderer_lib import images
 
 LANDERS = {
-    "claude-land": ("claude_code", "claude-land@.service.j2"),
-    "renovate-agent-land": ("renovate_agent", "renovate-agent-land@.service.j2"),
+    "claude-land": (render_component_text, "claude-code", "claude-land@.service.j2"),
+    "renovate-agent-land": (
+        render_setup_text,
+        "renovate_agent",
+        "renovate-agent-land@.service.j2",
+    ),
 }
 # What each unit set before D5.14 counted `images` (#5466), for the red half against the same
 # render. #5427 had raised them from 5400 and 3300.
@@ -119,8 +123,8 @@ def uncounted(pipeline: tuple[str, ...]) -> set[str]:
 
 def unit_env(lander: str, name: str) -> int:
     """The unit's `Environment=<name>=<seconds>`, or 0 when it sets none."""
-    role, template = LANDERS[lander]
-    text = render_setup_text(role, template)
+    render, source, template = LANDERS[lander]
+    text = render(source, template)
     found = re.findall(rf"^Environment={name}=(\d+)$", text, re.MULTILINE)
     assert len(found) <= 1, found
     return int(found[0]) if found else 0
@@ -187,9 +191,9 @@ def test_the_deadlines_before_karakeep_fall_short_of_the_same_render(lander, soa
 
 def test_the_handoff_outwaits_the_claude_lander():
     """land.sh stops waiting on `systemctl start` only after systemd has stopped the unit."""
-    role, template = LANDERS["claude-land"]
+    render, source, template = LANDERS["claude-land"]
     (timeout,) = re.findall(
-        r"^TimeoutStartSec=(\d+)h$", render_setup_text(role, template), re.MULTILINE
+        r"^TimeoutStartSec=(\d+)h$", render(source, template), re.MULTILINE
     )
     assert handoff.START_TIMEOUT_S > int(timeout) * 3600
 

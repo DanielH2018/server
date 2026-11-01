@@ -48,7 +48,7 @@ def _fakes(branch=None, head_again=HEAD, arm=None, **fields) -> Fakes:
 
 
 def _approval_paths(
-    tmp_path, text="ansible/roles/setup/claude_code/\nansible/vars/secrets.yml\n"
+    tmp_path, text="hosts/components/claude-code/\nansible/vars/secrets.yml\n"
 ):
     path = tmp_path / "approval-paths"
     path.write_text(text)
@@ -97,11 +97,11 @@ REFUSALS = {
             "pr_files": [
                 {
                     "status": "modified",
-                    "filename": "ansible/roles/setup/claude_code/defaults/main.yml",
+                    "filename": "hosts/components/claude-code/defaults/main.yml",
                 }
             ]
         },
-        "need the operator's approval: ansible/roles/setup/claude_code/defaults/main.yml",
+        "need the operator's approval: hosts/components/claude-code/defaults/main.yml",
     ),
     "a rename out of an approval path": (
         {
@@ -257,7 +257,7 @@ APPROVER = "operator-login"
 _CHANGES_AN_APPROVAL_PATH = [
     {
         "status": "modified",
-        "filename": "ansible/roles/setup/claude_code/defaults/main.yml",
+        "filename": "hosts/components/claude-code/defaults/main.yml",
     }
 ]
 

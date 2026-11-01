@@ -48,7 +48,7 @@ def test_the_census_finds_the_named_setup_templates():
     """Non-vacuity: the glob must return these by name, not merely return something."""
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
-    assert len(found) >= 70
+    assert len(found) >= 67
 
 
 def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
@@ -176,9 +176,9 @@ def test_a_component_supplies_its_defaults_and_secret_values_to_its_roles_templa
     assert v.component_supplied("other_role", tmp_path) == frozenset()
 
 
-def test_the_claude_code_templates_get_the_names_its_component_supplies():
-    supplied = v.component_supplied("claude_code")
+def test_the_nut_host_templates_get_the_names_its_component_supplies():
+    supplied = v.component_supplied("nut_host")
     assert {
-        "claude_code_agents_present",
-        "claude_code_agent_gh_token_value",
+        "nut_host_watchdog_packaged",
+        "nut_monitor_password_value",
     } <= supplied

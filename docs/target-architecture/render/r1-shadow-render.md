@@ -193,7 +193,7 @@ a shadow, and Ansible stays the only writer to the cluster.
   do*, lists `--dry-run` before a merge as decrypting SOPS, with no age key for the agent. Its
   *Rules the design follows* rule out a brokered `--dry-run` over the agent's clone. Its slice
   7, a pre-merge dry run without secrets, is optional and planned.
-  `ansible/roles/setup/claude_code/templates/claude-rc.service.j2` sets `PrivateTmp=yes` and
+  `hosts/components/claude-code/templates/claude-rc.service.j2` sets `PrivateTmp=yes` and
   `ProtectHome=yes` for a non-operator user. An agent session therefore sees neither the
   operator's `/tmp` and `/var/tmp` nor `/home`. `ansible/inventory/group_vars/all.yml` sets
   `sys_user` to `ubuntu`.

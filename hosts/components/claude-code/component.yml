@@ -27,10 +27,11 @@
 #     operator config subset is not shipped: the role runs it only where
 #     claude_code_agent_dotfiles is false, which no host sets.
 #
-# The component renders the role's own templates and copies its scripts in place (`role:
-# claude_code`), H4's pattern, so daniel-box's Ansible render and this package read one source.
-# Each role template that names a sibling unit takes that name from a variable whose default is
-# the Ansible-era name; the defaults below give the packaged names. H7.20a moves the sources here.
+# The templates, scripts and defaults the claude_code role used to install sit beside this file
+# (#6773): `templates/`, `files/` and `defaults/main.yml`, which the renderer loads beneath the
+# `defaults:` below. Each template that names a sibling unit takes that name from a variable whose
+# default in defaults/main.yml is the Ansible-era name; the defaults below give the packaged names.
+# Each host's package.yml reaches them with `component: claude-code`.
 #
 # DECIDED: the scripts keep their /usr/local paths (/usr/local/bin/rootq, the clone and dotfiles
 # syncs, homelab-rootq and its socket helper). The scripts, the sudoers grant and the dotfiles'
@@ -49,9 +50,8 @@
 # from ssh-users. While the key is blank, the file Ansible wrote stays untouched.
 #
 # Not shipped: the operator's own Claude Code install, which the dotfiles repo owns since H7.38.
-role: claude_code
 defaults:
-  # The packaged unit names the role templates read (see the header).
+  # The packaged unit names the templates read (see the header).
   claude_code_rc_unit: homelab-claude-rc.service
   claude_code_rc_alert_unit: homelab-claude-rc-alert.service
   claude_code_cgroup_metrics_unit: homelab-claude-cgroup-metrics.service
@@ -105,14 +105,14 @@ files:
   # The agent user.
   - {src: templates/claude-agent-setup.sh.j2, dst: /usr/lib/homelab/claude-agent-setup, mode: "0755", activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: templates/claude-agent-home.sh.j2, dst: /usr/lib/homelab/claude-agent-home, mode: "0755", activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
-  - {src: "role:agent-user-profile.j2", dst: /usr/lib/homelab/claude-agent/profile, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
-  - {src: "role:agent-gitconfig.j2", dst: /usr/lib/homelab/claude-agent/gitconfig, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
-  - {src: "role:agent-user-claude-md.j2", dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
-  - {src: "role:agent-chezmoi-seed.toml.j2", dst: /usr/lib/homelab/claude-agent/chezmoi-seed.toml, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: templates/agent-user-profile.j2, dst: /usr/lib/homelab/claude-agent/profile, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: templates/agent-gitconfig.j2, dst: /usr/lib/homelab/claude-agent/gitconfig, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: templates/agent-user-claude-md.j2, dst: /usr/lib/homelab/claude-agent/CLAUDE.md, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
+  - {src: templates/agent-chezmoi-seed.toml.j2, dst: /usr/lib/homelab/claude-agent/chezmoi-seed.toml, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled"}
   - {src: templates/agent-authorized-keys.j2, dst: /usr/lib/homelab/claude-agent/authorized_keys, activate: "try-restart:homelab-claude-agent.service", when: "claude_agent_ssh_login_enabled and (claude_agent_peer_public_key | trim) != ''"}
   # The key host's half of the agent's peer login (H7.40's third slice): the ssh config naming each
   # peer. claude-agent-setup generates the key beside it.
-  - {src: "role:agent-ssh-config.j2", dst: /usr/lib/homelab/claude-agent/ssh-config, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled and inventory_hostname == claude_agent_ssh_key_host"}
+  - {src: templates/agent-ssh-config.j2, dst: /usr/lib/homelab/claude-agent/ssh-config, activate: "try-restart:homelab-claude-agent.service", when: "claude_code_agent_user_enabled and inventory_hostname == claude_agent_ssh_key_host"}
   - {src: units/homelab-claude-agent.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent.service, when: "claude_code_agent_user_enabled"}
   # The agent's homelab-ui browser. It ships while the agent exists, whatever
   # claude_code_agent_homelab_ui_enabled says: switched off, the same script takes it back.
@@ -120,66 +120,66 @@ files:
   - {src: units/homelab-claude-agent-browser.service.j2, dst: /usr/lib/systemd/system/homelab-claude-agent-browser.service, when: "claude_code_agent_user_enabled"}
   - {src: units/homelab-claude-agent-browser.timer, dst: /usr/lib/systemd/system/homelab-claude-agent-browser.timer, when: "claude_code_agent_user_enabled"}
   # The Remote Control host.
-  - {src: "role:claude-rc.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc.service}
+  - {src: templates/claude-rc.service.j2, dst: /usr/lib/systemd/system/homelab-claude-rc.service}
   - {src: units/homelab-claude-rc-alert.service, dst: /usr/lib/systemd/system/homelab-claude-rc-alert.service}
-  - {src: "role:claude-rc-restart.service.j2", dst: /usr/lib/systemd/system/homelab-claude-rc-restart.service}
-  - {src: "role:claude-rc-restart.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-rc-restart.timer}
+  - {src: templates/claude-rc-restart.service.j2, dst: /usr/lib/systemd/system/homelab-claude-rc-restart.service}
+  - {src: templates/claude-rc-restart.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-rc-restart.timer}
   # Background sessions come back at boot.
-  - {src: "role-file:bg_session_resume.py", dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py, when: "claude_code_bg_resume_enabled"}
-  - {src: "role:claude-bg-resume.service.j2", dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service, when: "claude_code_bg_resume_enabled"}
+  - {src: files/bg_session_resume.py, dst: /usr/local/lib/claude-bg-resume/bg_session_resume.py, when: "claude_code_bg_resume_enabled"}
+  - {src: templates/claude-bg-resume.service.j2, dst: /usr/lib/systemd/system/homelab-claude-bg-resume.service, when: "claude_code_bg_resume_enabled"}
   # The cgroup metrics.
-  - {src: "role-file:claude-cgroup-metrics.sh", dst: /usr/local/bin/claude-cgroup-metrics.sh, mode: "0755"}
-  - {src: "role:claude-cgroup-metrics.service.j2", dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.service}
-  - {src: "role:claude-cgroup-metrics.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.timer}
+  - {src: files/claude-cgroup-metrics.sh, dst: /usr/local/bin/claude-cgroup-metrics.sh, mode: "0755"}
+  - {src: templates/claude-cgroup-metrics.service.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.service}
+  - {src: templates/claude-cgroup-metrics.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-cgroup-metrics.timer}
   # The agent's clone and dotfiles syncs. Their textfiles keep the names `claude-clone-sync` and
   # `claude-dotfiles-sync`, which observability's host-checks rules read.
-  - {src: "role-file:claude-clone-sync.sh", dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled"}
-  - {src: "role:claude-clone-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.service, when: "claude_code_agent_user_enabled"}
-  - {src: "role:claude-clone-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-clone-sync.timer, when: "claude_code_agent_user_enabled"}
-  - {src: "role-file:claude-dotfiles-sync.sh", dst: /usr/local/bin/claude-dotfiles-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
-  - {src: "role:claude-dotfiles-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.service, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
-  - {src: "role:claude-dotfiles-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.timer, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
+  - {src: files/claude-clone-sync.sh, dst: /usr/local/bin/claude-clone-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled"}
+  - {src: templates/claude-clone-sync.service.j2, dst: /usr/lib/systemd/system/homelab-claude-clone-sync.service, when: "claude_code_agent_user_enabled"}
+  - {src: templates/claude-clone-sync.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-clone-sync.timer, when: "claude_code_agent_user_enabled"}
+  - {src: files/claude-dotfiles-sync.sh, dst: /usr/local/bin/claude-dotfiles-sync.sh, mode: "0755", when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
+  - {src: templates/claude-dotfiles-sync.service.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.service, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
+  - {src: templates/claude-dotfiles-sync.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-dotfiles-sync.timer, when: "claude_code_agent_user_enabled and claude_code_agent_dotfiles"}
   # The caps. systemd merges drop-ins by file name across /etc and /usr/lib, so these sort after
   # the Ansible-era claude-*.conf copies and their values govern while those remain. The login
   # caps cover the operator while claude_code_login_uids names uid 1000; each host's package.yml
   # caps its agent's uid.
-  - {src: "role:fleet-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf, when: "claude_code_fleet_caps_enabled"}
-  - {src: "role:login-slice-caps.conf.j2", dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled and 1000 in claude_code_login_uids"}
+  - {src: templates/fleet-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user.slice.d/homelab-claude-fleet-caps.conf, when: "claude_code_fleet_caps_enabled"}
+  - {src: templates/login-slice-caps.conf.j2, dst: /usr/lib/systemd/system/user-1000.slice.d/homelab-claude-caps.conf, when: "claude_code_login_caps_enabled and 1000 in claude_code_login_uids"}
   # Every user manager on the host reads it, where the role wrote one copy per capped home.
-  - {src: "role:pytest-fanout-cap.conf.j2", dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf, when: "claude_code_login_caps_enabled"}
+  - {src: templates/pytest-fanout-cap.conf.j2, dst: /usr/lib/environment.d/90-homelab-claude-pytest-cap.conf, when: "claude_code_login_caps_enabled"}
   # The stop and fan-out alerts.
   - {src: units/claude-stop-alert@.service, dst: /usr/lib/systemd/system/claude-stop-alert@.service, when: "claude_code_stop_alert_enabled"}
-  - {src: "role:50-claude-stop-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules, when: "claude_code_stop_alert_enabled"}
+  - {src: templates/50-claude-stop-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-stop-alert.rules, when: "claude_code_stop_alert_enabled"}
   - {src: units/fanout-alert@.service, dst: /usr/lib/systemd/system/fanout-alert@.service, when: "claude_code_fanout_alert_enabled"}
-  - {src: "role:50-claude-fanout-alert.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules, when: "claude_code_fanout_alert_enabled"}
+  - {src: templates/50-claude-fanout-alert.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-fanout-alert.rules, when: "claude_code_fanout_alert_enabled"}
   # The root inspector.
-  - {src: "role-file:homelab_rootq.py", dst: /usr/local/sbin/homelab-rootq, mode: "0755", when: "claude_code_rootq_enabled"}
-  - {src: "role-file:rootq.sh", dst: /usr/local/bin/rootq, mode: "0755", when: "claude_code_rootq_enabled"}
-  - {src: "role:claude-rootq.sudoers.j2", dst: /etc/sudoers.d/homelab-rootq, mode: "0440", when: "claude_code_rootq_enabled"}
-  - {src: "role-file:homelab_rootq_socket.py", dst: /usr/local/libexec/homelab-rootq-socket, mode: "0700", when: "claude_code_rootq_socket_armed"}
-  - {src: "role-file:rootq_socket.py", dst: /usr/local/bin/rootq-socket, mode: "0755", when: "claude_code_rootq_socket_armed"}
-  - {src: "role:homelab-rootq.socket.j2", dst: /usr/lib/systemd/system/homelab-rootq.socket, when: "claude_code_rootq_socket_armed"}
-  - {src: "role:homelab-rootq@.service.j2", dst: /usr/lib/systemd/system/homelab-rootq@.service, when: "claude_code_rootq_socket_armed"}
-  # The agent's lander. Its name and settings are pinned in the role's claude-land-pins.j2, so
+  - {src: files/homelab_rootq.py, dst: /usr/local/sbin/homelab-rootq, mode: "0755", when: "claude_code_rootq_enabled"}
+  - {src: files/rootq.sh, dst: /usr/local/bin/rootq, mode: "0755", when: "claude_code_rootq_enabled"}
+  - {src: templates/claude-rootq.sudoers.j2, dst: /etc/sudoers.d/homelab-rootq, mode: "0440", when: "claude_code_rootq_enabled"}
+  - {src: files/homelab_rootq_socket.py, dst: /usr/local/libexec/homelab-rootq-socket, mode: "0700", when: "claude_code_rootq_socket_armed"}
+  - {src: files/rootq_socket.py, dst: /usr/local/bin/rootq-socket, mode: "0755", when: "claude_code_rootq_socket_armed"}
+  - {src: templates/homelab-rootq.socket.j2, dst: /usr/lib/systemd/system/homelab-rootq.socket, when: "claude_code_rootq_socket_armed"}
+  - {src: templates/homelab-rootq@.service.j2, dst: /usr/lib/systemd/system/homelab-rootq@.service, when: "claude_code_rootq_socket_armed"}
+  # The agent's lander. Its name and settings are pinned in templates/claude-land-pins.j2, so
   # no inventory value reaches them. The rule ships under /usr/share, where the Ansible-era copy
   # in /etc shadows it until reconcile retires that copy.
-  - {src: "role:claude-land-approval-paths.j2", dst: /etc/claude-land/approval-paths, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
-  - {src: "role:claude-land@.service.j2", dst: /usr/lib/systemd/system/homelab-claude-land@.service, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
-  - {src: "role:50-claude-land.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-land.rules, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
+  - {src: templates/claude-land-approval-paths.j2, dst: /etc/claude-land/approval-paths, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
+  - {src: templates/claude-land@.service.j2, dst: /usr/lib/systemd/system/homelab-claude-land@.service, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
+  - {src: templates/50-claude-land.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-land.rules, when: "claude_code_agent_user_enabled and claude_code_lander_enabled"}
   # The server-batch lander, the pipeline timeline and the memory store copy. Their textfiles keep
   # the names `claude-fanout-server-lander`, `claude-pipeline-timeline` and `claude-memory-sync`,
   # which observability's host-checks rules read.
-  - {src: "role:claude-fanout-server-lander.service.j2", dst: /usr/lib/systemd/system/homelab-claude-fanout-server-lander.service, when: "claude_code_fanout_server_lander_enabled"}
-  - {src: "role:claude-fanout-server-lander.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-fanout-server-lander.timer, when: "claude_code_fanout_server_lander_enabled"}
-  - {src: "role:claude-pipeline-timeline.service.j2", dst: /usr/lib/systemd/system/homelab-claude-pipeline-timeline.service, when: "claude_code_pipeline_timeline_enabled"}
-  - {src: "role:claude-pipeline-timeline.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-pipeline-timeline.timer, when: "claude_code_pipeline_timeline_enabled"}
-  - {src: "role:claude-memory-sync.service.j2", dst: /usr/lib/systemd/system/homelab-claude-memory-sync.service, when: "claude_code_memory_sync_enabled"}
-  - {src: "role:claude-memory-sync.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-memory-sync.timer, when: "claude_code_memory_sync_enabled"}
+  - {src: templates/claude-fanout-server-lander.service.j2, dst: /usr/lib/systemd/system/homelab-claude-fanout-server-lander.service, when: "claude_code_fanout_server_lander_enabled"}
+  - {src: templates/claude-fanout-server-lander.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-fanout-server-lander.timer, when: "claude_code_fanout_server_lander_enabled"}
+  - {src: templates/claude-pipeline-timeline.service.j2, dst: /usr/lib/systemd/system/homelab-claude-pipeline-timeline.service, when: "claude_code_pipeline_timeline_enabled"}
+  - {src: templates/claude-pipeline-timeline.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-pipeline-timeline.timer, when: "claude_code_pipeline_timeline_enabled"}
+  - {src: templates/claude-memory-sync.service.j2, dst: /usr/lib/systemd/system/homelab-claude-memory-sync.service, when: "claude_code_memory_sync_enabled"}
+  - {src: templates/claude-memory-sync.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-memory-sync.timer, when: "claude_code_memory_sync_enabled"}
   # The D5 takeover check: the wrapper and the grant land in one package version, so the grant
   # never names a missing command. The flux CLI it runs is homelab-tools', which daniel-box's
   # package depends on, and the wrapper creates its own state directory.
-  - {src: "role-file:homelab-takeover-check.sh", dst: /usr/local/sbin/homelab-takeover-check, mode: "0755", when: "claude_code_takeover_check_enabled"}
-  - {src: "role:claude-takeover-check.sudoers.j2", dst: /etc/sudoers.d/homelab-takeover-check, mode: "0440", when: "claude_code_takeover_check_enabled"}
+  - {src: files/homelab-takeover-check.sh, dst: /usr/local/sbin/homelab-takeover-check, mode: "0755", when: "claude_code_takeover_check_enabled"}
+  - {src: templates/claude-takeover-check.sudoers.j2, dst: /etc/sudoers.d/homelab-takeover-check, mode: "0440", when: "claude_code_takeover_check_enabled"}
   # The artifacts node's peer sync and OTLP-door heartbeat (H7.40's fourth slice), and the
   # directories the artifacts pod mounts. They push to nothing: each logs a `status=` line and
   # writes a textfile (M6 batch B6a's Cutover-2). The tags and textfiles keep the names
@@ -192,22 +192,22 @@ files:
   - {src: templates/claude-otel-health.sh.j2, dst: /usr/lib/homelab/claude-otel-health, mode: "0755", when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-claude-otel-health.service.j2, dst: /usr/lib/systemd/system/homelab-claude-otel-health.service, when: "inventory_hostname == claude_code_artifacts_node"}
   - {src: units/homelab-claude-otel-health.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-otel-health.timer, when: "inventory_hostname == claude_code_artifacts_node"}
-  # Alert-triggered triage (H7.40's third slice). Its caps and identity are pinned in the role's
-  # claude-triage-pins.j2, which every triage template imports, so no inventory value reaches them.
+  # Alert-triggered triage (H7.40's third slice). Its caps and identity are pinned in
+  # templates/claude-triage-pins.j2, which every triage template imports, so no inventory value reaches them.
   # The code and its config are root-owned, so a session cannot change what the next run executes.
-  - {src: "role-file:claude_triage_run.py", dst: /opt/claude-triage/claude_triage_run.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role-file:claude_triage_poll.py", dst: /opt/claude-triage/claude_triage_poll.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: files/claude_triage_run.py, dst: /opt/claude-triage/claude_triage_run.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: files/claude_triage_poll.py, dst: /opt/claude-triage/claude_triage_poll.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-triage/host_lib.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: kuma_push.py, dst: /opt/claude-triage/kuma_push.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:claude-triage-prompt.txt.j2", dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:claude-triage-config.env.j2", dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:claude-triage-tmpfiles.conf.j2", dst: /usr/lib/tmpfiles.d/homelab-claude-triage.conf, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:claude-triage@.service.j2", dst: /usr/lib/systemd/system/claude-triage@.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:claude-triage-report-alert@.service.j2", dst: /usr/lib/systemd/system/claude-triage-report-alert@.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:claude-triage-poll.service.j2", dst: /usr/lib/systemd/system/homelab-claude-triage-poll.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:claude-triage-poll.timer.j2", dst: /usr/lib/systemd/system/homelab-claude-triage-poll.timer, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage-prompt.txt.j2, dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage-config.env.j2, dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage-tmpfiles.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-claude-triage.conf, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage@.service.j2, dst: /usr/lib/systemd/system/claude-triage@.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage-report-alert@.service.j2, dst: /usr/lib/systemd/system/claude-triage-report-alert@.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage-poll.service.j2, dst: /usr/lib/systemd/system/homelab-claude-triage-poll.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/claude-triage-poll.timer.j2, dst: /usr/lib/systemd/system/homelab-claude-triage-poll.timer, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: units/homelab-claude-triage-poll-alert.service, dst: /usr/lib/systemd/system/homelab-claude-triage-poll-alert.service, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {src: "role:50-claude-triage.rules.j2", dst: /usr/share/polkit-1/rules.d/50-claude-triage.rules, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
+  - {src: templates/50-claude-triage.rules.j2, dst: /usr/share/polkit-1/rules.d/50-claude-triage.rules, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
 units:
   # A restart drops every session the host runs, so a changed unit waits for the operator.
   homelab-claude-rc.service: {policy: manual}

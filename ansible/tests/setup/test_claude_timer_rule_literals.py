@@ -3,7 +3,7 @@
 `files/rules/host-checks.yaml` is plain YAML, so each `Claude<Check>NotReporting` rule names
 its deadline twice: the `>` threshold of the stale-file arm and the `[Ns]` window of the
 absent_over_time arm. Each unit renders the deadline from its own timer period through
-`roles/setup/claude_code/templates/timer-textfile.j2` (#6165). A timer moved to a slower period
+`hosts/components/claude-code/templates/timer-textfile.j2` (#6165). A timer moved to a slower period
 without its rule would page on every healthy gap (M1 convention 1).
 
 The rules also name exactly the hosts whose inventory arms each timer. A host that arms one
@@ -20,11 +20,10 @@ from _helpers import (
     ALL_VARS,
     HOST_VARS,
     K8S_ROLES,
-    SETUP_ROLES,
     load_defaults,
     load_yaml,
 )
-from _setup_render import render_setup_text
+from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
@@ -73,7 +72,7 @@ def rendered_deadline(alert: str, period: str | None = None) -> int:
     template, check, var = PRODUCERS[alert]
     overrides = {} if period is None else {var: period}
     found = dict(
-        UNIT_DEADLINE.findall(render_setup_text("claude_code", template, overrides))
+        UNIT_DEADLINE.findall(render_component_text("claude-code", template, overrides))
     )
     assert check in found, f"{template} no longer writes the {check} textfile"
     return int(found[check])
@@ -138,7 +137,7 @@ ARMED_BY = {
 
 def armed_hosts(alert: str) -> set[str]:
     """The hosts whose inventory arms the alert's timer: role default < group_vars < host_vars."""
-    base = {**load_defaults(SETUP_ROLES / "claude_code"), **load_yaml(ALL_VARS)}
+    base = {**load_defaults(CLAUDE_CODE), **load_yaml(ALL_VARS)}
     armed = set()
     for path in sorted(HOST_VARS.glob("*.yml")):
         if path.name.startswith("_"):
@@ -205,7 +204,7 @@ def test_literal_problems_is_flagged_when_the_period_moves_without_the_rule(aler
 
 def _default_period_s(alert: str) -> int:
     _, _, var = PRODUCERS[alert]
-    return 60 * int(load_defaults(SETUP_ROLES / "claude_code")[var].removesuffix("min"))
+    return 60 * int(load_defaults(CLAUDE_CODE)[var].removesuffix("min"))
 
 
 def test_a_period_that_is_not_minutes_is_refused_not_rendered_with_a_guess():

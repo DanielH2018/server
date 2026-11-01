@@ -116,6 +116,7 @@ HOST_SOPS = ANSIBLE / "vars" / "hosts"
 HOST_DEPENDS = ("python3 (>= 3.12)",)
 PACKAGE_KEYS = frozenset(
     {
+        "component",
         "components",
         "credentials",
         "defaults",

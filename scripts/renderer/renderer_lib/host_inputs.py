@@ -32,11 +32,6 @@ HOST_INPUTS = (
     "ansible/roles/setup/nut_host/defaults/main.yml",
     "ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2",
     "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
-    # daniel-server's claude-code component renders this role's defaults, templates and scripts
-    # in place until H7.40 moves daniel-box (H7.39).
-    "ansible/roles/setup/claude_code/defaults/",
-    "ansible/roles/setup/claude_code/templates/",
-    "ansible/roles/setup/claude_code/files/",
     # What the H7.30 components render on every host through `role: initial_setup`: the role's
     # defaults, its templates and the maintenance wrapper.
     "ansible/roles/setup/initial_setup/defaults/main.yml",

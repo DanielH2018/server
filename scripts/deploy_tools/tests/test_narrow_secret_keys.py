@@ -199,39 +199,39 @@ def test_deploy_tags_refuses_most_of_the_fleet_naming_it(tree: Tree, capsys):
     assert _deploy_tags(tree, capsys) == (DEPLOY_BROAD, "bazarr,lidarr,radarr,sonarr")
 
 
-CLAUDE_DEFAULTS = "ansible/roles/setup/claude_code/defaults/main.yml"
+SHIPPED_DEFAULTS = "ansible/roles/setup/initial_setup/defaults/main.yml"
 
 
-def _ship_claude_defaults(tree: Tree, initial_setup_reads: str) -> None:
-    """claude_code's defaults build one key from a secret, and initial_setup ships the file.
+def _ship_defaults(tree: Tree, renovate_agent_reads: str) -> None:
+    """initial_setup's defaults build one key from a secret, and renovate_agent reads the file.
 
-    The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#4303), which
+    The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#5945), which
     this reads unpatched: a change to that row changes what these tests exercise.
     """
     tree.write(
-        CLAUDE_DEFAULTS,
-        'claude_built_token: "{{ setup_only_token }}"\nclaude_plain: 1\n',
+        SHIPPED_DEFAULTS,
+        'shipped_built_token: "{{ setup_only_token }}"\nshipped_plain: 1\n',
     )
     tree.write(
-        "ansible/roles/setup/initial_setup/tasks/main.yml",
-        f"- name: Read\n  debug: {{msg: '{{{{ {initial_setup_reads} }}}}'}}\n",
+        "ansible/roles/setup/renovate_agent/tasks/main.yml",
+        f"- name: Read\n  debug: {{msg: '{{{{ {renovate_agent_reads} }}}}'}}\n",
     )
     tree.commit("a shipped defaults file")
     tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
 
 
 def test_a_shipper_reading_none_of_the_secrets_keys_is_unread(tree: Tree, capsys):
-    """initial_setup ships claude_code's defaults for one plain key, so a secret skips it."""
-    _ship_claude_defaults(tree, "claude_plain")
+    """renovate_agent reads initial_setup's defaults for one plain key, so a secret skips it."""
+    _ship_defaults(tree, "shipped_plain")
     rc, out = _setup_readers(tree, capsys)
-    assert rc == 0 and out["unread"] == {CLAUDE_DEFAULTS: ["initial_setup"]}
+    assert rc == 0 and out["unread"] == {SHIPPED_DEFAULTS: ["renovate_agent"]}
 
 
 def test_a_shipper_reading_a_key_built_from_the_secret_is_a_reader(tree: Tree, capsys):
-    """The rejecting half: the key built from the secret reaches initial_setup's task."""
-    _ship_claude_defaults(tree, "claude_built_token")
+    """The rejecting half: the key built from the secret reaches renovate_agent's task."""
+    _ship_defaults(tree, "shipped_built_token")
     rc, out = _setup_readers(tree, capsys)
-    assert rc == 0 and CLAUDE_DEFAULTS in out["paths"] and out["unread"] == {}
+    assert rc == 0 and SHIPPED_DEFAULTS in out["paths"] and out["unread"] == {}
 
 
 def _role_tags(tree: Tree, old: str, new: str) -> frozenset[str]:
@@ -281,17 +281,17 @@ def test_a_secret_the_role_does_not_read_leaves_its_answer(setup_tree: Tree):
 def test_a_shipper_reading_none_of_the_secrets_keys_keeps_its_narrow_answer(
     tree: Tree,
 ):
-    """`role_tags` takes the routing's rule: initial_setup's prose edit still needs nothing."""
-    _ship_claude_defaults(tree, "claude_plain")
+    """`role_tags` takes the routing's rule: renovate_agent's prose edit still needs nothing."""
+    _ship_defaults(tree, "shipped_plain")
     tree.write(
-        "ansible/initial_setup.yml", SETUP_PLAY.replace("claude_code", "initial_setup")
+        "ansible/initial_setup.yml", SETUP_PLAY.replace("claude_code", "renovate_agent")
     )
-    tree.write("ansible/roles/setup/initial_setup/CLAUDE.md", "# initial_setup\n")
+    tree.write("ansible/roles/setup/renovate_agent/CLAUDE.md", "# renovate_agent\n")
     old, new = _refs(tree)
     with pytest.raises(narrow_setup.NothingToApply):
         narrow_setup.role_tags(
-            "initial_setup",
-            "initial_setup",
+            "renovate_agent",
+            "renovate_agent",
             old,
             new,
             str(tree.root),

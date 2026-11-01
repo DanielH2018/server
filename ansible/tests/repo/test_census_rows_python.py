@@ -55,7 +55,7 @@ FUTURE_ANNOTATIONS = re.compile(r"^from __future__ import annotations\b", re.MUL
 # annotation is lazy either way. So the exemption is what keeps a green suite from
 # authorising a cron-time NameError on a host.
 HOST_SHIPPED = re.compile(
-    r"^(ansible/roles/[^/]+/[^/]+/files/|hosts/lib/[^/]+\.py$|scripts/lib/longhorn_lib/)"
+    r"^(ansible/roles/[^/]+/[^/]+/files/|hosts/components/[^/]+/files/|hosts/lib/[^/]+\.py$|scripts/lib/longhorn_lib/)"
 )
 
 

@@ -1,0 +1,13 @@
+{
+  "checksum": "fb4670d22c00a990d708f1ecf9aaed788111d177ff3f49267e98a4bbd3ba388d",
+  "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
+  "key": "ansible/roles/setup/claude_code/CLAUDE.md#Where the work went",
+  "row": {
+    "atoms": {
+      "hosts/components/claude-code/": "0c7d7c48948f71952dce53fd0751b7c0c4df73b56724f2b6883863c36ef7bfcd",
+      "hosts/components/claude-code/CLAUDE.md": "1c8d1f6d30ae4b35f4d402ed005c1b72c89e14270aa6fd38fc273662ce7761f9"
+    },
+    "python": "3.14",
+    "verified_sha": "7069ccbd4"
+  }
+}

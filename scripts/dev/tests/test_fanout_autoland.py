@@ -164,7 +164,7 @@ def test_a_head_that_moved_since_the_review_never_lands(tmp_path):
         {"baseRefName": "other"},
         {"author": {"login": "someone"}},
         {"files": [{"path": "scripts/deploy_tools/land_lib/policy.py"}]},
-        {"files": [{"path": "ansible/roles/setup/claude_code/tasks/main.yml"}]},
+        {"files": [{"path": "hosts/components/claude-code/component.yml"}]},
     ],
 )
 def test_a_pr_that_is_not_the_batchs_own_clean_pr_never_lands(tmp_path, over):
@@ -181,7 +181,7 @@ def test_a_pr_that_is_not_the_batchs_own_clean_pr_never_lands(tmp_path, over):
         "scripts/dev/fanout_lib/autoland.py",
         ".github/workflows/ci.yml",
         ".claude/settings.json",
-        "ansible/roles/setup/claude_code/tasks/main.yml",
+        "hosts/components/claude-code/component.yml",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_git.py",
         "ansible/vars/secrets.yml",
         "uv.lock",

@@ -96,13 +96,13 @@ SHIMMED_PATHS = Census(
     must_find=frozenset(
         {
             "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
-            "ansible/roles/setup/claude_code/files/homelab_rootq.py",
+            "hosts/components/claude-code/files/homelab_rootq.py",
             "hosts/lib/homelab-secrets",
             "hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh",
         }
     ),
     allow={
-        "ansible/roles/setup/claude_code/files/homelab_rootq.py": (
+        "hosts/components/claude-code/files/homelab_rootq.py": (
             "it runs under sudo, so a binary path read from the environment would let the "
             "caller choose what root runs; its tests import it, so leakguard's `Popen` "
             "wrapper still sees each launch as the test's direct child"

@@ -43,13 +43,13 @@ from diagnostics.probe_lib.host_reader import (
 from lib import yaml_fast
 from lib.deployer_park import _age_phrase
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import ANSIBLE, REPO
 from lib.systemd_timer import span_s
 
 NAME = "claude-fanout-server-lander"
-# The claude-code host component ships the role's template under the packaged name.
+# The claude-code host component ships its template under the packaged name.
 UNIT = f"homelab-{NAME}.service"
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = REPO / "hosts" / "components" / "claude-code"
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 SHOW = ["LoadState", "ActiveState", "Result", "ExecMainExitTimestamp"]
 # `fanout_lib/autoland.py:run` ends both of its unread lines with this, after

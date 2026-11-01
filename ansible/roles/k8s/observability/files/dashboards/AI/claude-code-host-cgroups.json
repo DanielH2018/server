@@ -138,7 +138,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Resident memory and swap held by each cgroup. On 2026-09-05 claude-rc held all 8 GiB of this box's swap plus 6.96 GB anon while k3s got 2.9 GB. The caps that bound this live in roles/setup/claude_code/defaults/main.yml (claude_code_rc_memory_high, claude_code_rc_memory_swap_max) and are not exposed as metrics, so read them there rather than off this panel.",
+      "description": "Resident memory and swap held by each cgroup. On 2026-09-05 claude-rc held all 8 GiB of this box's swap plus 6.96 GB anon while k3s got 2.9 GB. The caps that bound this live in hosts/components/claude-code/defaults/main.yml (claude_code_rc_memory_high, claude_code_rc_memory_swap_max) and are not exposed as metrics, so read them there rather than off this panel.",
       "fieldConfig": {
         "defaults": {
           "custom": {
