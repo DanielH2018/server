@@ -182,3 +182,19 @@ def test_a_filter_re_bound_between_two_handlers_the_logger_also_holds_keeps_the_
         base_call=handlers,
     )
     assert reason and "every deploy runs" in reason
+
+
+def test_a_set_item_created_by_the_module_code_that_changes_with_its_hash_order_keeps_the_line(
+    tree,  # noqa: F811
+):
+    """One of two module-created set items changes while their hash order swaps (#6807).
+
+    Dropping the index must leave each item's signature compared, not the set path's rows.
+    `_HASH` gains `c`, or hashing `_B` raises and the run reads as doubt, which keeps the line too.
+    """
+    reason = _reason_for_head_module_code(
+        tree,
+        _TWO_IN_A_SET,
+        "_HASH.update(a=2, b=1, c=3)\n_B.name = 'c'\njson.order_only_6807 = {_A, _B}",
+    )
+    assert reason and "every deploy runs" in reason
