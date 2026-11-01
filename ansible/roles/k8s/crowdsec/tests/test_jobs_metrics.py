@@ -1,9 +1,9 @@
-"""The crowdsec-jobs sidecar exports each Kuma-pushed job's verdict, and the rules read it.
+"""The crowdsec-jobs sidecar exports each job's verdict, and the rules read it.
 
-`files/jobs_metrics.py` serves `homelab_check_*` gauges for the three jobs that push to Kuma
+`files/jobs_metrics.py` serves `homelab_check_*` gauges for the three jobs that export a verdict
 (M6 batch B6b). The first tests drive the exposition and `run_job`'s export. The rest hold the
 three places that must agree on the port and on the job tags: the scrape job, the pod and the
-NetworkPolicy, and the shadow rules' `check` literals.
+NetworkPolicy, and the rules' `check` literals.
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_jobs_metrics.py
 """
@@ -21,7 +21,7 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "pod-producers.yaml"
-PUSHING = {job.tag: job for job in cj.JOBS if job.push_env}
+PUSHING = {job.tag: job for job in cj.JOBS if job.exports}
 
 
 def _samples(body: bytes) -> dict[str, float]:
@@ -81,8 +81,6 @@ def _run(job_tag: str, returncode: int) -> list[tuple]:
     cj.run_job(
         cj.JOBS[[j.tag for j in cj.JOBS].index(job_tag)],
         runner=lambda argv, **kw: subprocess.CompletedProcess(argv, returncode, "x\n"),
-        push=lambda *a, **kw: True,
-        env={},
         out=lambda line: None,
         export=lambda tag, ok, now: recorded.append((tag, ok)),
     )
@@ -94,7 +92,7 @@ def test_a_failed_run_exports_zero_and_a_clean_run_exports_one():
     assert _run("crowdsec-remote-allowlist", 0) == [("crowdsec-remote-allowlist", True)]
 
 
-def test_a_job_with_no_kuma_monitor_exports_nothing():
+def test_a_job_that_does_not_export_exports_nothing():
     assert _run("crowdsec-bouncer-prune", 1) == []
 
 

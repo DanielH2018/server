@@ -101,9 +101,10 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
   /var/lib/crowdsec/data/trace: file exists`. The other links name data files no job opens.
 - **The scheduler is the jobs' wrapper.** It runs each job as a child process, kills one past its
   timeout, skips a slot whose previous run is still going, and prints `<UTC time> <pod>
-  <tag>: status=<up|down> <summary>` to the container log, flushed per line. It pushes the
-  remote allowlist, AppSec verify and home allowlist verdicts to their Kuma tiles with URLs
-  from the `crowdsec-jobs` Secret. Read the jobs with `probe.py loki-query '{container="crowdsec-jobs"}'`. The prefix is
+  <tag>: status=<up|down> <summary>` to the container log, flushed per line. It exports the
+  remote allowlist, AppSec verify and home allowlist verdicts as gauges on `/metrics` for the
+  `pod-producers` rules, and pushes nothing to Kuma since M6 batch B6b's Cutover-2.
+  Read the jobs with `probe.py loki-query '{container="crowdsec-jobs"}'`. The prefix is
   the host crons' syslog shape, so monitor-bridge's Swallowed Push Verdicts and `probe.py
   alerts` read this container as they read the host crons.
 - **Only the sidecar holds a Kubernetes token.** The pod does not automount one; a projected
@@ -116,17 +117,17 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 - **A sidecar crash takes the LAPI out of its Service** until the container restarts, because
   pod Ready needs every container. The scheduler never exits on a job's failure, and its memory
   limit is twice the measured peak (`ansible/roles/k8s/crowdsec/defaults/main.yml:crowdsec_k8s_jobs_mem_limit`).
-- **The sidecar also exports the three Kuma-pushed verdicts on `/metrics`** (M6 B6b, ruled on
+- **The sidecar exports three verdicts on `/metrics`** (M6 B6b, ruled on
   2026-10-23). `jobs_metrics.py` serves `homelab_check_success`,
   `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per job tag,
-  on the port of the `crowdsec-jobs` item in this role's `metrics` list. The export runs
-  beside the Kuma push until M6's Cutover-2. observability's `crowdsec-jobs` scrape job and
-  the `pod-producers` shadow rules read it, and netpol-baseline's Prometheus grant admits the
+  on the port of the `crowdsec-jobs` item in this role's `metrics` list. The export replaced
+  the Kuma push at M6's Cutover-2. observability's `crowdsec-jobs` scrape job and
+  the `pod-producers` rules read it, and netpol-baseline's Prometheus grant admits the
   port. autofix-bridge ships the same file in its own ConfigMap (M6 B7), so an edit to
   `jobs_metrics.py` changes two pods.
 - **Run a job by hand** (operator-only, the read-only ServiceAccount is refused `pods/exec`):
   `sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec-jobs -- python3
-  /jobs/crowdsec_jobs.py --run crowdsec-appsec-verify`. It pushes as a scheduled run does.
+  /jobs/crowdsec_jobs.py --run crowdsec-appsec-verify`. It prints and exports as a scheduled run does.
 
 ## The home allowlist is a host-network lookup and a sidecar sync
 

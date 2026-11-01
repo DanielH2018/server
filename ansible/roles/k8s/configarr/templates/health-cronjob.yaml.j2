@@ -2,7 +2,8 @@
 {% from 'security-context.yml.j2' import job_hardened_security_context with context %}
 {#
   The configarr sync health reader, every 10 minutes: read the newest finished configarr Job
-  and its log, then push the verdict to the "Configarr Sync" Kuma push monitor. It replaced the
+  and its log, then record the verdict as a log line and on the verdict ConfigMap's
+  annotations (health-verdict-configmap.yaml.j2). It replaced the
   daniel-box host cron `configarr sync health` at H2.5b
   (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 13).
 
@@ -13,16 +14,12 @@
 
   The labels are `app: configarr-health`, never `app: configarr`. The reader selects the Jobs
   it judges by `app=configarr`, so that label here would make it judge its own runs as syncs.
-  uptime-kuma's `netpol_from` admits `configarr-health`, which is how the push reaches Kuma's
-  Service.
 
   Flux runs this CronJob once per role revision, as the gate Job
   `configarr-health-deploy-gate-<spec digest8>` in `configarr-verify`. An extra run re-reads
-  the same Job and re-pushes the same verdict, so it is idempotent. It starts together with
-  configarr's own gate, so it can push the previous sync's verdict; defaults/main.yml's
-  DECIDED marker at `flux_cronjob_gates` says why that is accepted. The landing's gate run is
-  the one run whose push meets uptime-kuma's fence before netpol-baseline admits this label;
-  the reader always exits 0, so that lost push does not change the revision's verdict.
+  the same Job and records the same verdict, so it is idempotent. It starts together with
+  configarr's own gate, so it can record the previous sync's verdict; defaults/main.yml's
+  DECIDED marker at `flux_cronjob_gates` says why that is accepted.
 #}
 ---
 apiVersion: batch/v1
@@ -95,11 +92,6 @@ spec:
                 # The ConfigMap mount is read-only, so Python cannot write __pycache__ there.
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
-                - name: KUMA_PUSH_URL
-                  valueFrom:
-                    secretKeyRef:
-                      name: configarr-health
-                      key: push_url
 {{ job_hardened_security_context(read_only=true) }}
               volumeMounts:
                 - name: configarr-health-code

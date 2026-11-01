@@ -177,3 +177,22 @@ removes the five `CheckWithoutPager` terms of B6b (the three CrowdSec tiles, Con
 The no-pager bound is 2 hours from Cutover-1a's `uptime-kuma` apply. Cutover-1b is `observability`,
 which Flux applies through `promote`, so it waits out Sunday 02:05 to 08:15 UTC like the rest of
 the window.
+
+**Cutover-2, the Flux-plane producers.** The combined window's last B6b PR stops the pushes.
+The crowdsec-jobs sidecar no longer imports `kuma_push` or reads a push URL: `Job.exports`
+replaces `Job.push_env`, and `run_job` prints the verdict and records it for `/metrics`. The
+`crowdsec-jobs` Secret (`jobs-secret.yaml.j2`) is gone. The `configarr-health` and
+`janitorr-health` readers log `status=<up|down>` and patch the verdict ConfigMap, and their
+`health-secret.yaml.j2` files and `KUMA_PUSH_URL` variables are gone. The three producers
+leave uptime-kuma's `netpol_from` list in `daniel-box.yml`, since none dials Kuma now.
+
+`kuma_push.py` stays in the two health ConfigMaps, because `host_lib.py` imports it at module
+level; no reader calls it. The five keys (`crowdsec_remote_allowlist_push_token`,
+`monitor_bridge_appsec_push_token`, `monitor_bridge_home_allowlist_push_token`,
+`monitor_bridge_configarr_push_token`, `monitor_bridge_janitorr_push_token`) enter
+`PENDING_RETIREMENT`, and `B6B_TILE_DELETED_PUSH_TOKENS` is deleted. B6b's token PR retires the
+keys a week after Cutover-1b.
+
+The five tags stay in `KUMA_RETIRING_TAGS` until C-7, because pods that ran before the apply may
+still hold a log line from a refused push. The readers' `status=` lines still count as landed
+siblings in `swallowed_verdicts`; that is harmless, since the check pages only on a failed push.

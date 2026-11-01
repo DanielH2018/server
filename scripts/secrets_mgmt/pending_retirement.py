@@ -118,5 +118,14 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         "etcd_drill_fence_push_token",
         "monitor_bridge_renovate_alive_push_token",
         "renovate_agent_kuma_push_token",
+        # M6 batch B6b's Cutover-2 stopped the push in the crowdsec sidecar and the configarr and
+        # janitorr health CronJobs, whose five tiles Cutover-1a deleted. No render references
+        # these keys now. B6b's token PR retires them a week after Cutover-1b and deletes these
+        # five entries with them.
+        "crowdsec_remote_allowlist_push_token",
+        "monitor_bridge_appsec_push_token",
+        "monitor_bridge_home_allowlist_push_token",
+        "monitor_bridge_configarr_push_token",
+        "monitor_bridge_janitorr_push_token",
     }
 )

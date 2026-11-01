@@ -50,8 +50,8 @@ janitorr_k8s_startup_grace_seconds: 600
 # The janitorr-health CronJob's schedule. Until H2.5c
 # (docs/target-architecture/host/h2-shrink-host-plane.md, Steps item 14) it was a daniel-box
 # host cron; tasks/main.yml keeps the absent arms that remove it. */10 like the other
-# cluster-side health readers, and the Kuma monitor's interval must stay above it so a dead
-# CronJob trips the push watchdog. The host cron's UTC minute field, unchanged.
+# cluster-side health readers. The `JanitorrHealthNotReporting` rule reads the CronJob's last
+# successful time. The host cron's UTC minute field, unchanged.
 janitorr_k8s_health_schedule: "*/10 * * * *"
 
 # The ConfigMap the health reader writes its verdict to as annotations, which kube-state-metrics
@@ -66,8 +66,8 @@ janitorr_k8s_health_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d3
 janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
 
 # Above the reader's worst case: two 30 s kubectl calls (JANITORR_KUBECTL_TIMEOUT_S) plus
-# kuma_push's three 10 s attempts and its two 30 s waits, 150 s, plus the cold pull of both
-# images. No flux_cronjob_gates entry copies this CronJob into a gate Job, so no gate timeout
+# the cold pull of both images. The figure kept the margin the Kuma push needed until
+# M6 batch B6b's Cutover-2. No flux_cronjob_gates entry copies this CronJob into a gate Job, so no gate timeout
 # bounds it from above.
 janitorr_k8s_health_deadline_seconds: 420
 # How long a finished janitorr-health Job, and so its pod, stays visible. A run the weekly reboot

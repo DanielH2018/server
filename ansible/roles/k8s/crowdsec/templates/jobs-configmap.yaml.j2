@@ -1,14 +1,13 @@
 {#
-  The crowdsec-jobs sidecar's code: the scheduler, its four jobs, kuma_push.py from
-  setup/common, which the scheduler imports, and kubectl's kubeconfig. Python puts the scheduler's own directory on
-  sys.path, so the files sit flat at the mount.
+  The crowdsec-jobs sidecar's code: the scheduler, its four jobs and kubectl's kubeconfig.
+  Python puts the scheduler's own directory on sys.path, so the files sit flat at the mount.
 
   The crowdsec-home-ips CronJob mounts two keys of it too (home-ips-cronjob.yaml.j2): its
   module, home_ips_discover.py, and flux_job_connect.py from k8s/manifests, which that module
   imports for every connection it opens.
 
-  No secret goes in here. The push URLs reach the sidecar from the crowdsec-jobs Secret through
-  `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
+  No secret goes in here, and the sidecar takes none from a Secret: M6 batch B6b's Cutover-2
+  removed its Kuma push URLs and the crowdsec-jobs Secret that held them.
   ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
   secrets.yml key bound to a sentinel and fails on any sentinel it finds.
 
@@ -59,5 +58,3 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/crowdsec/files/home_ips_discover.py') | indent(4, true) }}
   flux_job_connect.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/manifests/files/flux_job_connect.py') | indent(4, true) }}
-  kuma_push.py: |
-{{ lookup('file', playbook_dir + '/../hosts/lib/kuma_push.py') | indent(4, true) }}

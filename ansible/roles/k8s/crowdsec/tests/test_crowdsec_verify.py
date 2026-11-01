@@ -401,7 +401,6 @@ def test_every_input_the_pod_names_is_one_the_roll_digest_reads(flipped_tag):
     assert named == {
         "config-secret.yaml.j2",
         "jobs-configmap.yaml.j2",
-        "jobs-secret.yaml.j2",
     }
     text = (K8S_ROLES / TAG / "templates" / "verify" / "job.yaml.j2").read_text()
     assert {name for name in named if f"{name}'" not in text} == set()

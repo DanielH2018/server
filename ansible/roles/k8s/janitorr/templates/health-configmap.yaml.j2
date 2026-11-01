@@ -3,8 +3,10 @@
   modules it imports, host_lib.py and kuma_push.py. The reader puts its own directory on
   sys.path, so the four files sit flat at the mount, as they did in /opt/janitorr-health.
 
-  No secret goes in here. The push token reaches the pod from the janitorr-health Secret
-  through `secretKeyRef` (the H2 plan's *No secret in a ConfigMap*), and
+  kuma_push.py stays because host_lib.py imports it at module level, although the reader
+  never calls it. M6 batch B6b's Cutover-2 removed the push and the janitorr-health Secret.
+
+  No secret goes in here, and the pod takes none from a Secret.
   ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
   secrets.yml key bound to a sentinel and fails on any sentinel it finds.
 #}
