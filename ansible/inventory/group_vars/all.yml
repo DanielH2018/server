@@ -242,7 +242,7 @@ terraria_k8s_replicas: 0
 # Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
-crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.1@sha256:0f2523fa61ef507f15d953045cface490cc880670c62f2755ced17524107f71a
+crowdsec_k8s_image: crowdsecurity/crowdsec:v1.8.2@sha256:65b74942f7e7ed5c60fde4ac15fc4ba715904c398c8b16dd451f4907d90347d4
 # Every app pod that carries a CrowdSec agent sidecar (ansible/templates/crowdsec-agent.yml.j2),
 # keyed by the app, to the LAPI machine name that agent logs in as. Four readers derive from
 # this map: the sidecar's AGENT_USERNAME, the k8s/crowdsec role's machine registration loop,
