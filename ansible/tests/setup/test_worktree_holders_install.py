@@ -4,19 +4,25 @@
 `WORKTREE_HOLDERS_SOCKET`; the socket unit listens there, and its per-connection service runs
 the helper the role installs. If those drift apart, every caller falls back to the
 unprivileged scan, or every removal is refused. The root map both the helper and the caller
-read names each user's worktree root, and it must name every present agent (#4295). The
-sudo grant the socket replaced must be gone from every host (#4297).
+read names each user's worktree root, and it must name every agent user a host package
+declares (#4295, #6831). The sudo grant the socket replaced must be gone from every host (#4297).
 
 Run: uv run pytest ansible/tests/setup/test_worktree_holders_install.py
 """
 
 import json
 from pathlib import PurePosixPath
-from typing import cast
 
-from _helpers import SETUP_ROLES, jinja_env, load_tasks, render_expr, task_named
+from _helpers import (
+    HOST_VARS,
+    REPO,
+    SETUP_ROLES,
+    load_tasks,
+    render_expr,
+    task_named,
+)
 from _setup_render import render_setup_text, rendered_setup_text
-from claude_agents import claude_agent_profiles
+from lib import yaml_fast
 from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
 
 CRONS = SETUP_ROLES / "initial_setup" / "tasks" / "crons.yml"
@@ -27,28 +33,8 @@ USERS = "List the worktree holder scan's users"
 ROOT_MAP = "Map each user of the worktree holder scan"
 SUDOERS = "Remove the worktree holder scan's old sudoers rule"
 GROUP = "initial_setup_worktree_holders_group"
-
-PRIMARY = {
-    "state": "present",
-    "home": "/var/lib/claude",
-    "clone_dir": "/var/lib/claude/server",
-    "repo": "DanielH2018/server",
-    "github_login": "DanielClaudeBot",
-    "github_id": 1,
-    "github_token_var": "claude_code_agent_gh_token",
-    "worktree_prefix": "claude",
-    "journal_access": True,
-    "operator_read": True,
-    "operator_config": True,
-    "memory_seed": True,
-    "dotfiles": True,
-}
-SECOND = {
-    "name": "claude2",
-    "github_login": "SecondBot",
-    "github_id": 2,
-    "github_token_var": "claude2_gh_token",
-}
+# A has_claude_code host the agent-list copy must cover, so an empty host census fails.
+KNOWN_CLAUDE_HOSTS = {"daniel-box", "daniel-server"}
 
 
 def _directives(text: str) -> dict[str, str]:
@@ -158,13 +144,15 @@ def test_an_install_with_no_directory_task_before_it_is_flagged():
     assert not _parent_created_before_install([install, late_dir], HELPER)
 
 
-def _rendered_roots(tasks: list[dict], agents: list[dict]) -> dict[str, str]:
-    """The root map the role writes for `agents`, the profiles the filter returned."""
+def _rendered_roots(tasks: list[dict]) -> dict[str, str]:
+    """The root map the role writes, from its own copy of the agent users."""
+    agents = task_named(tasks, AGENTS)["ansible.builtin.set_fact"]
     users = task_named(tasks, USERS)["ansible.builtin.set_fact"]
     context = {
         "sys_user": "ubuntu",
-        "claude_code_operator_checkout": "/home/ubuntu/server",
-        "initial_setup_worktree_holders_agents": agents,
+        "initial_setup_worktree_holders_agents": agents[
+            "initial_setup_worktree_holders_agents"
+        ],
     }
     context["initial_setup_worktree_holders_users"] = render_expr(
         users["initial_setup_worktree_holders_users"], **context
@@ -178,49 +166,54 @@ def _rendered_roots(tasks: list[dict], agents: list[dict]) -> dict[str, str]:
     return json.loads(text) if isinstance(text, str) else text
 
 
-def _granted_agents(expression: str, agents: list[dict]) -> list[dict]:
-    """What the role's agent expression makes of `agents`, through the real filter."""
-    env = jinja_env()
-    env.filters["claude_agent_profiles"] = claude_agent_profiles
-    # NativeEnvironment returns the list itself; the stubs type every render as `str`.
-    return cast(
-        list[dict],
-        env.from_string(expression).render(
-            claude_code_agents=agents,
-            claude_code_agent_user="claude",
-            claude_code_agent_primary_profile=PRIMARY,
-        ),
-    )
+def _package_agent_roots() -> dict[str, dict[str, str]]:
+    """Each has_claude_code host mapped to {agent user: its worktree root}, from its package."""
+    out = {}
+    for host_vars in sorted(HOST_VARS.glob("*.yml")):
+        if not (yaml_fast.safe_load(host_vars.read_text()) or {}).get(
+            "has_claude_code"
+        ):
+            continue
+        package = REPO / "hosts" / host_vars.stem / "package.yml"
+        users = (yaml_fast.safe_load(package.read_text()) or {}).get("users", [])
+        out[host_vars.stem] = {
+            u["name"]: f"{u['home']}/server/.claude/worktrees" for u in users
+        }
+    return out
 
 
-def test_the_root_map_names_every_present_agent_is_clean():
-    # #4295: a second present entry in claude_code_agents gets its own clone as its root, and
-    # an absent one gets nothing. The map is where the service looks a caller up, so an agent
-    # missing from it is refused every scan.
+def _covers_every_package_agent(
+    roots: dict[str, str], packages: dict[str, dict[str, str]]
+) -> bool:
+    """Whether the root map names exactly each host package's agent users, at their clones."""
+    agent_roots = {user: root for user, root in roots.items() if user != "ubuntu"}
+    return all(agent_roots == declared for declared in packages.values())
+
+
+def test_the_root_map_names_the_operator_and_every_package_agent_is_clean():
+    # #6831: the role's copy of the agent users matches every has_claude_code host's package
+    # `users:` entry. The map is where the service looks a caller up, so an agent missing from
+    # it is refused every scan.
     tasks = load_tasks(CRONS)
     copy = task_named(tasks, ROOT_MAP)["ansible.builtin.copy"]
-    expression = task_named(tasks, AGENTS)["ansible.builtin.set_fact"][
-        "initial_setup_worktree_holders_agents"
-    ]
-    agents = _granted_agents(
-        expression,
-        [{"name": "claude"}, SECOND, {**SECOND, "name": "gone", "state": "absent"}],
-    )
+    roots = _rendered_roots(tasks)
+    packages = _package_agent_roots()
 
     assert (copy["dest"], copy["owner"]) == (WORKTREE_HOLDER_ROOTS, "root")
-    assert _rendered_roots(tasks, agents) == {
-        "ubuntu": "/home/ubuntu/server/.claude/worktrees",
-        "claude": "/var/lib/claude/server/.claude/worktrees",
+    assert set(packages) >= KNOWN_CLAUDE_HOSTS
+    assert roots["ubuntu"] == "/home/ubuntu/server/.claude/worktrees"
+    assert _covers_every_package_agent(roots, packages)
+
+
+def test_a_package_agent_missing_from_the_copy_is_flagged():
+    roots = _rendered_roots(load_tasks(CRONS))
+    packages = _package_agent_roots()
+    packages["daniel-box"] = {
+        **packages["daniel-box"],
         "claude2": "/var/lib/claude2/server/.claude/worktrees",
     }
 
-
-def test_an_agent_list_read_from_the_primary_scalars_alone_is_flagged():
-    # The #4021 shape: the primary agent from claude_code's scalars, which never sees claude2.
-    scalars_only = "{{ [{'name': claude_code_agent_user, 'clone_dir': '/var/lib/claude/server'}] }}"
-    agents = _granted_agents(scalars_only, [{"name": "claude"}, SECOND])
-
-    assert "claude2" not in _rendered_roots(load_tasks(CRONS), agents)
+    assert not _covers_every_package_agent(roots, packages)
 
 
 def _sudoers_removed_everywhere(tasks: list[dict]) -> bool:

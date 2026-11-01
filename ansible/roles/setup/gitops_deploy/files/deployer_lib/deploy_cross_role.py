@@ -145,7 +145,6 @@ K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {
 # `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
 # `ansible/tests/setup/test_setup_cross_role_reads.py` holds it to the tree.
 SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
-    "ansible/filter_plugins/claude_agents.py": frozenset({"initial_setup"}),
     "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
 }
 
