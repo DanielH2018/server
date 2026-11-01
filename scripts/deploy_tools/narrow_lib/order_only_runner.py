@@ -10,8 +10,9 @@ program opens with `order_only_tables.py`'s tables and process-state reader.
 # as Ansible does, so a re-pointed registration is the code that runs.
 #
 # An audit hook, installed before the import so the plugin's module-level code runs under it
-# too, ends the process on any event outside the allowlist below, and on an `open` whose flags
-# or mode string write or create (#4846, #5081). The allowlist is every event the real chain
+# too, ends the process on any event outside the allowlist, `order_only_tables.py`'s
+# `allowed`, and on an `open` whose flags or mode string write or create (#4846, #5081). The
+# allowlist is every event the real chain
 # raises; an event it misses, after an interpreter or Ansible upgrade, reads as doubt and keeps the line rather than
 # discharging it. An allowlist, because each denylist review found another mutating event.
 # `mkfifo` and `mknod` create a file and raise no event, so `_install` replaces them on `os`
