@@ -300,3 +300,51 @@ def test_a_lost_database_on_a_host_that_had_one_is_refused_until_rebaseline(
     assert f"/{database} is missing, but /{log} shows" in refused.stderr
     assert forced.returncode == 0, forced.stderr
     assert host.commands().count(init) == 1
+
+
+PENDING = "var/lib/homelab/bootstrap/{}-baseline.pending"
+
+
+@pytest.mark.parametrize(
+    ("name", "log", "database", "init"),
+    [
+        ("rkhunter", "var/log/rkhunter.log", RKHUNTER_DB, SCANS[0]),
+        ("aide", "var/log/aide/aideinit.log", AIDE_DB, SCANS[1]),
+    ],
+    ids=["rkhunter", "aide"],
+)
+def test_a_log_left_by_our_own_unfinished_first_init_resumes_it(
+    tmp_path, name, log, database, init
+):
+    host = _scans_host(tmp_path)
+    marker = PENDING.format(name)
+    _touch(host, log, marker, *({RKHUNTER_DB, AIDE_DB} - {database}))
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    assert host.commands().count(init) == 1
+    assert not (host.root / marker).exists()
+
+
+def test_a_failed_first_aideinit_keeps_its_marker_so_the_rerun_resumes(tmp_path):
+    host = _scans_host(tmp_path)
+    _touch(host, RKHUNTER_DB)
+    # aideinit writes its log while it runs, so a failure leaves the log and no database.
+    aide_log = host.root / "var/log/aide/aideinit.log"
+    host._stub(
+        "aideinit",
+        f'echo "aideinit $*" >> {host.log}; '
+        f"mkdir -p {aide_log.parent}; touch {aide_log}; exit 1",
+    )
+
+    failed = host.run("daniel-pi")
+    marker_after_failure = (host.root / PENDING.format("aide")).exists()
+    host._stub("aideinit", f'echo "aideinit $*" >> {host.log}')
+    resumed = host.run("daniel-pi")
+
+    assert failed.returncode == 1
+    assert "aideinit failed" in failed.stderr
+    assert marker_after_failure
+    assert resumed.returncode == 0, resumed.stderr
+    assert host.commands().count(SCANS[1]) == 2

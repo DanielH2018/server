@@ -17,7 +17,8 @@
 #   creates. DECIDED: bootstrap, never a `ConditionPathExists=!` oneshot in this package (#6674).
 #   A oneshot would rebaseline any host whose database went missing, so a deleted aide.db would
 #   turn into a fresh, trusted one instead of a DOWN push. Bootstrap refuses the same case: a
-#   missing database on a host whose rkhunter or aideinit log survives needs `--rebaseline`.
+#   missing database on a host whose rkhunter or aideinit log survives needs `--rebaseline`,
+#   unless bootstrap's own `.pending` marker shows the log is its unfinished first init.
 # - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full
 #   scan. A mask is a symlink in /etc/systemd/system, outside what a package owns.
 #

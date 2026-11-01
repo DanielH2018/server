@@ -20,7 +20,8 @@
 #   6  the Pi only: start homelab-docker-engine.service once
 #   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
 #      the mask on the aide package's dailyaidecheck.timer. A missing database on a host whose
-#      logs show it had one is refused; --rebaseline writes a new one after the operator looks
+#      logs show it had one is refused; --rebaseline writes a new one after the operator looks.
+#      A first init this script started and did not finish leaves a marker, and a rerun resumes it
 #
 # --local-build <clone> is daniel-box's way in, because it serves the repository it would
 # install from. The script reads the clone with `git archive`, so it writes nothing under the
@@ -473,23 +474,39 @@ stop_after 6
 # rerunning one would bless whatever changed since, and a live host whose database goes missing
 # must stay red until the operator looks.
 UNIT_DIR=/usr/lib/systemd/system
+# A <name>.pending file here records a first baseline this script started and has not finished.
+PENDING_DIR=/var/lib/homelab/bootstrap
 
-# first_baseline <database> <log>...: refuse to write <database> when one of the logs exists,
-# because a host that logged an init or a scan had a baseline, and its loss is a finding.
+# first_baseline <name> <database> <log>...: refuse to write <database> when one of the logs
+# exists, because a host that logged an init or a scan had a baseline, and its loss is a finding.
+# The init writes its log while it runs, so an interrupted or failed first init also leaves one.
+# The <name>.pending marker tells that case apart: this script writes it before the init and
+# removes it after the init succeeds, so a marker means the log is our own unfinished first init,
+# and the rerun resumes it. On a pass, the function writes the marker.
 first_baseline() {
-    database=$1
-    shift
-    [ "$rebaseline" = no ] || return 0
-    for log in "$@"; do
-        [ -e "$ROOT$log" ] || continue
-        die "$database is missing, but $log shows this host had one; inspect the host before trusting it, then rerun with --rebaseline"
-    done
+    marker=$ROOT$PENDING_DIR/$1.pending
+    database=$2
+    shift 2
+    if [ "$rebaseline" = no ] && [ ! -e "$marker" ]; then
+        for log in "$@"; do
+            [ -e "$ROOT$log" ] || continue
+            die "$database is missing, but $log shows this host had one; inspect the host before trusting it, then rerun with --rebaseline"
+        done
+    fi
+    mkdir -p "$ROOT$PENDING_DIR"
+    : > "$marker" || die "cannot write $marker"
+}
+
+# baseline_written <name>: the init succeeded, so its marker goes.
+baseline_written() {
+    rm -f "$ROOT$PENDING_DIR/$1.pending"
 }
 
 if [ -e "$ROOT$UNIT_DIR/homelab-rkhunter-check.timer" ] &&
     [ ! -e "$ROOT/var/lib/rkhunter/db/rkhunter.dat" ]; then
-    first_baseline /var/lib/rkhunter/db/rkhunter.dat /var/log/rkhunter.log /var/log/rkhunter.log.1
+    first_baseline rkhunter-baseline /var/lib/rkhunter/db/rkhunter.dat /var/log/rkhunter.log /var/log/rkhunter.log.1
     rkhunter --propupd --nocolors || die "rkhunter --propupd failed"
+    baseline_written rkhunter-baseline
     echo "bootstrap-host: wrote the first rkhunter baseline"
 fi
 if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
@@ -505,9 +522,10 @@ if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
         systemctl reset-failed dailyaidecheck.timer
     fi
     if [ ! -e "$ROOT/var/lib/aide/aide.db" ]; then
-        first_baseline /var/lib/aide/aide.db /var/log/aide/aideinit.log
+        first_baseline aide-baseline /var/lib/aide/aide.db /var/log/aide/aideinit.log
         echo "bootstrap-host: writing the first AIDE database, which takes over an hour on the Pi"
         # -y overwrites an aide.db.new that an interrupted run left behind.
         aideinit -y || die "aideinit failed"
+        baseline_written aide-baseline
     fi
 fi

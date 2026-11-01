@@ -1353,6 +1353,13 @@ steps are:
    it found. After the operator has inspected the host, `--rebaseline` writes the new
    baseline.
 
+   Each init writes its log while it runs, so a first init that is interrupted or fails
+   leaves a log and no database. The script therefore writes a marker,
+   `/var/lib/homelab/bootstrap/rkhunter-baseline.pending` or `aide-baseline.pending`, before
+   it starts each init, and removes it after the init succeeds. When the marker exists, the
+   log is the script's own unfinished first init, so a rerun resumes the init rather than
+   refusing it.
+
 `--until <step>` stops after a step, so a runbook can restore data before step 5 starts any
 service. The operator then adds the printed public key as a recipient (**operator-only**)
 and merges. The next package carries ciphertext the host can read, and `homelab-secrets`
