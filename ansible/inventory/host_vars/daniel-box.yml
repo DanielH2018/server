@@ -583,8 +583,8 @@ containers_list:
   # Headless DDNS client: no web UI, no Traefik route.
   - name: cloudflare-ddns
     platform: k8s
-    # Flux applies cloudflare-ddns through `promote` and substitutes its API-token and Kuma
-    # push-token Secret from homelab-cluster-vars (D5.19). The handback is two PRs,
+    # Flux applies cloudflare-ddns through `promote` and substitutes its API-token Secret from
+    # homelab-cluster-vars (D5.19). The handback is two PRs,
     # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
   - name: freshrss
@@ -980,13 +980,10 @@ containers_list:
     # browsers arrive through traefik. The `autokuma` sidecar needs no entry: it reaches Kuma
     # over pod-local loopback, which no NetworkPolicy evaluates.
     netpol_from:
+      # autofix-bridge, both cloudflare-ddns Deployments and pi-peer-backup left this list when
+      # M6 batch B7's Cutover-2 stopped their pushes. A census of their templates and scripts
+      # found no other path to Kuma.
       - monitor-bridge           # KUMA_URL (monitor-bridge/templates/config/env.yaml.j2)
-      - autofix-bridge           # KUMA_URL (autofix-bridge/templates/deployment.yaml.j2)
-      - cloudflare-ddns-direct   # push URL (cloudflare-ddns/templates/deployment-direct.yaml.j2)
-      - cloudflare-ddns-proxied  # push URL (cloudflare-ddns/templates/deployment-proxied.yaml.j2)
-      # push_url (pi-peer-backup/templates/secret.yaml.j2), a CronJob. The first census read
-      # Deployments only and missed it: its 2026-08-21 run succeeded and lost its heartbeat.
-      - pi-peer-backup
       - kuma-status-page-sync    # KUMA__URL + deadman push (uptime-kuma's status-page-sync CronJob)
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
 
@@ -1104,8 +1101,7 @@ containers_list:
     # `owner`: docs/flux-deploy-plane.md.
     owner: flux
     # The check exporter's listener (autofix.py, through jobs_metrics.py), which serves the
-    # *arr remediation loop's verdict as homelab_check_* gauges beside the Kuma push (M6 batch
-    # B7). The entry has no `port` of its own, so the item names it. The `metrics` item renders
+    # *arr remediation loop's verdict as homelab_check_* gauges (M6 batch B7). The entry has no `port` of its own, so the item names it. The `metrics` item renders
     # the `autofix-bridge` scrape job and the Service port, and deployment.yaml.j2 hands the
     # same number to the process, so the two cannot drift apart. The process binds whatever
     # CHECK_EXPORTER_PORT holds, so this port moves the listener too.
@@ -1151,7 +1147,7 @@ containers_list:
           ups: ["{{ nut_ups_name | default('apc-ups') }}"]
   # Nightly CronJob: the Pi's WireGuard peer keys land on a Longhorn PVC the WEEKLY tier
   # carries to B2 on its Saturday shard (`k3s_longhorn_weekly_volumes`, `# Sat`), and the job
-  # pushes the "WG Pi Peer Backup" monitor directly. The job is nightly; the OFF-SITE copy is
+  # exports its verdict to the `pi-peer-backup-verdict` ConfigMap. The job is nightly; the OFF-SITE copy is
   # weekly, so there is no same-day off-site restore point.
   - name: pi-peer-backup
     platform: k8s
