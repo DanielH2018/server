@@ -2465,8 +2465,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `docs/pi-host-tuning-record.md` records the updater's measured memory peaks.
 - **H3.8b:**
     - `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`,
-      `ansible/tests/setup/test_pi_gz_integrity_sweep.py`,
-      `ansible/tests/setup/test_pi_health_log_line_shape.py` and `ansible/tests/setup/_pi_health.py`
+      `ansible/tests/setup/test_pi_gz_integrity_sweep.py`, the Pi log-line shape test (deleted
+      by M6's PR B-2 with the Loki parser it fed) and `ansible/tests/setup/_pi_health.py`
       retarget the rendered component and its `defaults:` map instead of the role;
     - `ansible/tests/setup/test_cron_scripts_publish_via_pr.py:push_corpus` names the two
       scripts at their component path;
@@ -2484,8 +2484,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       sections of that `CLAUDE.md`. Run `uv run python scripts/dev/fact_status.py forget`
       for the removed *Autonomous-role contract* section's key, and `fact_status.py verify`
       for *Where it runs*, *What it does* and any other section whose citations the PR
-      changes. *What it does* cites a test node in
-      `ansible/tests/setup/test_pi_health_log_line_shape.py`, which this PR retargets;
+      changes. *What it does* cites a test node in the Pi log-line shape test, which this PR
+      retargets;
     - the `# fact:` marker in
       `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py:test_a_dead_container_is_restarted`
       names the removed section, so it goes in the same edit;
