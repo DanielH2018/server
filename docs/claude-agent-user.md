@@ -629,8 +629,8 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   firing `ALERTS`, without `Watchdog`, shadow and drill alerts. Prometheus publishes its port
   on loopback only on the node it runs on, so the poller tries loopback, then the pinned
   ClusterIP `observability_prometheus_cluster_ip`. A refused connection on loopback is the
-  expected answer on the other node, so it logs nothing. Any other loopback failure, and any
-  failure on the ClusterIP, logs a warning with its URL.
+  expected answer on the other node, so it logs a line at no priority. Any other loopback
+  failure, and any failure on the ClusterIP, logs a warning with its URL.
 - **An episode is a fall, not a red tile.** The first poll records what is already down and
   starts nothing, so arming never fires on every known red tile at once. A key opens an episode
   once it reads down on two consecutive polls, and keeps that episode until it recovers.

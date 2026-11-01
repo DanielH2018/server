@@ -67,15 +67,16 @@ def prom_vector(
     timeout: float = 10,
     urlopen: Callable = urllib.request.urlopen,
     *,
-    quiet_refusal: bool = False,
+    refusal_expected: bool = False,
 ) -> list[dict] | None:
     """The `result` list of an instant query, or None when the read failed.
 
     A failure is logged at warning priority with the URL and the cause. `read_all` falls back
     to the next URL, so without the line a dead loopback Prometheus left no trace while the
-    ClusterIP answered. With `quiet_refusal`, a refused connection logs nothing: it is how
-    loopback answers on the node Prometheus does not run on, and `read_all` sets it only for
-    a URL with a fallback behind it. `urlopen` is the seam a test replaces.
+    ClusterIP answered. With `refusal_expected`, a refused connection logs at no priority
+    instead, so `journalctl -p warning` stays clear of it: it is how loopback answers on the
+    node Prometheus does not run on, and `read_all` sets it only for a URL with a fallback
+    behind it. `urlopen` is the seam a test replaces.
     """
     url = f"{base_url.rstrip('/')}/api/v1/query?" + urllib.parse.urlencode(
         {"query": query}
@@ -85,9 +86,15 @@ def prom_vector(
             body = json.load(resp)
     except (OSError, ValueError) as exc:
         # urllib wraps the socket's ConnectionRefusedError in a URLError's `reason`.
-        if quiet_refusal and isinstance(
+        if refusal_expected and isinstance(
             getattr(exc, "reason", exc), ConnectionRefusedError
         ):
+            log(
+                "Prometheus refused the connection; trying the next URL",
+                tag=TAG,
+                url=base_url,
+                query=query,
+            )
             return None
         log(
             f"Prometheus read failed: {exc}",
@@ -116,8 +123,8 @@ def read_all(
     """Every query from the first URL that answers them all, or None when none does.
 
     Prometheus publishes loopback only on the node it runs on, so the pinned ClusterIP after
-    it reaches Prometheus from either node. `read` takes `quiet_refusal`, true for every URL
-    but the last, so the expected refusal on the other node logs nothing.
+    it reaches Prometheus from either node. `read` takes `refusal_expected`, true for every
+    URL but the last, so the expected refusal on the other node is not logged as a warning.
     """
     queries = {
         "kuma": KUMA_QUERY,
@@ -128,7 +135,7 @@ def read_all(
     for i, base in enumerate(urls):
         found = {}
         for name, query in queries.items():
-            result = read(base, query, quiet_refusal=i < len(urls) - 1)
+            result = read(base, query, refusal_expected=i < len(urls) - 1)
             if result is None:
                 break
             found[name] = result
