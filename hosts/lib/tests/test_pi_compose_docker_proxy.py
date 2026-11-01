@@ -72,3 +72,21 @@ def test_the_proxies_join_the_networks_the_ansible_era_containers_use(package):
         "proxy": {"external": True},
         "lifecycle": {"external": True},
     }
+
+
+def test_the_proxy_alloys_log_source_reads_through_allows_container_logs(package):
+    """The socket-proxy denies `/containers/<id>/logs` unless ALLOW_LOGS is set, whatever CONTAINERS is.
+
+    Without the flag, discovery (`/containers/json`) still answers 200 while every log stream gets
+    a 403, so `{job="pi"}` falls silent and `LokiPiLogsSilent` fires. The service is derived from
+    the host Alloy's `loki.source.docker` dials, so a re-pointed source is checked too.
+    """
+    config = text(package, f"{COMPOSE}/alloy/config.alloy")
+    source = re.search(r'loki\.source\.docker "pi" \{(.*?)\n\}', config, re.S)
+    assert source, 'alloy\'s config carries no loki.source.docker "pi" block'
+    host = re.search(r'host\s*=\s*"tcp://([\w-]+):2375"', source.group(1))
+    assert host, 'loki.source.docker "pi" names no tcp://<service>:2375 host'
+    reader_proxy = host.group(1)
+    assert reader_proxy in SUB_PROXIES
+    env = project_of(package)["services"][reader_proxy]["environment"]
+    assert "ALLOW_LOGS=1" in env
