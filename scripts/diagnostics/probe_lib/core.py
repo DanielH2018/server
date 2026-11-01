@@ -475,6 +475,11 @@ _LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
 # filters the raw body, where a JSON encoder may write the `&` as `\u0026`.
 _APIKEY_RE = re.compile(r"(apikey=)[^&#;\s\"'\\]+", re.IGNORECASE)
 
+# An Uptime Kuma push URL carries its token as a path segment, `/api/push/<token>`, which no
+# query-parameter rule reaches (#6749). cloudflare-ddns logs the URL on a failed ping and
+# Traefik's access log records the path. The Alloy stage strips it from new records.
+_KUMA_PUSH_RE = re.compile(r"(/api/push/)[0-9A-Za-z_-]+")
+
 REDACTED = "<redacted>"
 
 # Matched as lowercase substrings against a credential-bearing name: an *arr field or key name,
@@ -543,6 +548,7 @@ def redact_log_secrets(text):
     """
     text = _LOG_SECRET_RE.sub(rf"\g<1>{REDACTED}", text)
     text = _APIKEY_RE.sub(rf"\g<1>{REDACTED}", text)
+    text = _KUMA_PUSH_RE.sub(rf"\g<1>{REDACTED}", text)
     return redact_query_params(text)
 
 
