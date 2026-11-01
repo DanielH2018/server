@@ -377,7 +377,7 @@ def entry_change_tags(
     An entry's own role is visited under the entry's tag. The list's READERS — a role whose
     template renders `containers_list` bare or through `hostvars[...]` — are the other half
     of the edge and are `narrow_broad._list_reader_tags`: removing glances from daniel-pi's
-    list changes monitor-bridge's `PI_PUBLISHED_PORTS`, though no tag names that role.
+    list changes observability's `blackbox-pi-ports` targets, though no tag names that role.
 
     A REMOVED entry contributes nothing of its own and refuses nothing. No `--tags` value
     applies a removal: the play iterates the list, so the removed entry's role is simply not

@@ -74,7 +74,7 @@ def _reader(tree: Tree, role: str, line: str) -> None:
 
 
 def test_a_role_reading_another_hosts_list_through_hostvars_is_reached(tree: Tree):
-    """monitor-bridge derives PI_PUBLISHED_PORTS from daniel-pi's list."""
+    """observability derives its `blackbox-pi-ports` targets from daniel-pi's list."""
     _reader(tree, "prowlarr", "ports: {{ hostvars['daniel-pi'].containers_list }}")
     tree.write(
         "ansible/inventory/host_vars/daniel-pi.yml",
