@@ -283,7 +283,8 @@ def _install(
             except Exception:
                 now = None
             if now is None or changed(old, now):
-                writes.append(path)
+                # A set item's index follows hash order, which differs between the ends (#6825).
+                writes.append(unindexed(path))
         for path, (value, old) in contents.items():
             if path.endswith("/manager/loggerDict") and type(value) is dict:
                 # A logger created while the chain runs sits in no copy, so `loggerDict` gains
