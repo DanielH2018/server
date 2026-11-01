@@ -765,8 +765,11 @@ Four things sit in that position:
   `land_tags.py`).
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
-the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger. Run the
-printed apply and clear commands as printed, including any `--applied <tags>`. A bring-up
+the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
+`scripts/deploy_tools/owed_run.py <role>` runs the printed apply commands and the clear in one
+step, and `--dry-run` shows them first. It refuses a line whose apply arms more than the change, a role
+applied by hand, and a checkout behind `origin/master`, so run those as printed, including any
+`--applied <tags>` on the clear. A bring-up
 playbook gets no such line, because the tick parks on those and writes no marker. A landing
 behind a recorded role reads `settled`, because the tree converged. A role the tick DID apply
 on daniel-box gets a line too when its change reaches another host (#6510): the line's `hosts`

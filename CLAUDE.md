@@ -170,10 +170,11 @@ Say which of these applies, then stop:
   construction. Clearing it means applying their change; name it and stop.
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
   cannot apply, and another session's PR created it. That line is theirs to clear. When your
-  own merged PR created the line, do not stop: run the playbook with exactly the tags the
-  line owes, from a tree whose `HEAD` is `origin/master`, then `gitops_state.py clear-owed
-  manual_plane <role>`. The operator granted that standing clearance on 2026-10-24. The
-  `land-after-merge` skill has the `--applied` form for a narrowed apply.
+  own merged PR created the line, do not stop: run `uv run python
+  scripts/deploy_tools/owed_run.py <role>` from a tree whose `HEAD` is
+  `origin/master`. It runs exactly the commands the line owes, on the hosts the line names,
+  then clears it, and it refuses a line that needs you, such as a maximal apply. The operator
+  granted that standing clearance on 2026-10-24.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
