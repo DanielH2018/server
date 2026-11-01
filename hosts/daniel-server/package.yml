@@ -72,3 +72,6 @@ legacy:
   # (`docker exec crowdsec cscli hub update && … upgrade`, 07:15 daily). This host has had no
   # Docker since 2026-08-14, so it fails every day, and no other tree path retires it.
   - {cron: Update Crowdsec Hub, user: root}
+  # #6735: not Ansible-era. A 2026-10-25 test run leaked this textfile; the eval sweep runs on
+  # daniel-box alone, so nothing here overwrites it and HostCheckOverdue holds on it.
+  - {path: /var/lib/node-exporter-textfile/eval-run.prom}

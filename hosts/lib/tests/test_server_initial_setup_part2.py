@@ -4,7 +4,8 @@ The components are host-neutral and `test_pi_initial_setup_part2.py` holds their
 tests hold what is specific to this host: the role skips the three subjects here, the crons it
 stops writing are retired and replaced at their slot without the Pi's Docker prune, the scans
 read this host's own tokens, and reconcile adopts the two SSH rules while it leaves the k3s
-agent's rules and the hand-added rule alone.
+agent's rules and the hand-added rule alone. Reconcile also removes the `eval-run` textfile a test
+run leaked here, which no daniel-server component writes (#6735).
 
 Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part2.py
 """
@@ -80,6 +81,25 @@ def test_each_cron_this_host_stops_writing_is_retired_and_a_timer_runs_at_its_sl
 def test_reconcile_retires_the_compose_era_crowdsec_hub_cron(manifest):
     retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
     assert retired.get("Update Crowdsec Hub") == "root"
+
+
+def _eval_run_writers(package: host_mode.Package) -> list[str]:
+    return [
+        dst
+        for dst, (body, *_) in package.files.items()
+        if b"write_check_textfile eval-run " in body
+    ]
+
+
+def test_reconcile_retires_the_leaked_eval_run_textfile(package, manifest):
+    leaked = "/var/lib/node-exporter-textfile/eval-run.prom"
+    assert {"path": leaked} in manifest["legacy"]
+    # The entry deletes a live producer's file once anything on this host writes the check.
+    # daniel-box ships the producer, so the pattern must still find it there.
+    assert _eval_run_writers(host_mode.render_host("daniel-box")) == [
+        "/usr/lib/homelab/eval-run"
+    ]
+    assert _eval_run_writers(package) == []
 
 
 def test_the_scans_read_this_hosts_own_tokens(package):
