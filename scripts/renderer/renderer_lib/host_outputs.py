@@ -74,8 +74,8 @@ SOPS_SUFFIX = ".sops.yaml"
 REQUIRED = frozenset({"src", "path", "owner", "group", "mode", "keys"})
 OPTIONAL = frozenset({"destination", "persist", "dependents", "link", "format"})
 # The formats an output may declare. A dotenv file is read by Compose, whose parser the script
-# guards (H5, *Secrets*).
-FORMATS = frozenset({"dotenv"})
+# guards (H5, *Secrets*). The script escapes each value of a json output for a JSON string.
+FORMATS = frozenset({"dotenv", "json"})
 # The script's `NAME` and `KEY`: a placeholder name, and a credential's file name.
 PLACEHOLDER_NAME = re.compile(r"[A-Za-z0-9_]+")
 CREDENTIAL_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*")
