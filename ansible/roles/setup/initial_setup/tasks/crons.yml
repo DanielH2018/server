@@ -331,21 +331,23 @@
   tags: [crons, worktree-sweep]
   # The operator ruled on 2026-10-10 that each agent user gets the same grant as sys_user
   # (#4021): its root is its own clone, so a removal it runs in that clone sees a sys_user
-  # process inside the tree. Every present entry of claude_code_agents, through the filter
-  # claude_code builds the users with (#4295), so names and clones follow that role.
-  # deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS lists initial_setup as its caller.
+  # process inside the tree. Every agent user is listed, each with its clone (#4295).
   #
-  # Whether the user exists yet is not read. initial_setup runs before claude_code creates an
-  # agent, and an entry for a user with no uid matches no caller. Filtering it out would leave
-  # a new agent in the socket's group but refused by the service, so every removal it ran
-  # would be refused until the next apply.
+  # DECIDED: a copy of the agent users the host packages declare, not a read of claude_code's
+  # defaults (#6831). Role defaults are play-wide, so reading them made that file an input of
+  # this role, and the file is leaving the role (#6773). Each has_claude_code host's
+  # package.yml `users:` entry is the source; its clone is `<home>/server`. Adding or dropping
+  # an agent edits both, and ansible/tests/setup/test_worktree_holders_install.py fails while
+  # they differ. Dropping an entry revokes that agent's scan at the next apply.
+  #
+  # Whether the user exists yet is not read. initial_setup runs before the host package creates
+  # an agent, and an entry for a user with no uid matches no caller. Filtering it out would
+  # leave a new agent in the socket's group but refused by the service, so every removal it
+  # ran would be refused until the next apply.
   when: has_claude_code
   ansible.builtin.set_fact:
-    initial_setup_worktree_holders_agents: >-
-      {{ claude_code_agents
-         | claude_agent_profiles(claude_code_agent_user, claude_code_agent_primary_profile)
-         | selectattr('state', 'eq', 'present')
-         | list }}
+    initial_setup_worktree_holders_agents:
+      - {name: claude, clone_dir: /var/lib/claude/server}
 
 - name: List the worktree holder scan's users and the checkout each one works in
   tags: [crons, worktree-sweep]
@@ -354,7 +356,7 @@
     initial_setup_worktree_holders_users: >-
       {{ [sys_user] + initial_setup_worktree_holders_agents | map(attribute='name') | list }}
     initial_setup_worktree_holders_checkouts: >-
-      {{ [claude_code_operator_checkout]
+      {{ ['/home/' + sys_user + '/server']
          + initial_setup_worktree_holders_agents | map(attribute='clone_dir') | list }}
 
 - name: Map each user of the worktree holder scan to the worktree root it reports under
