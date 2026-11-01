@@ -614,8 +614,9 @@ a short window with none, which is the safe direction of convention 5.
       every 15 minutes and skips 23:00 to 00:59 and 04:00 to 05:59 UTC. No network fault is
       needed. The page duplicates the batch's live `PiRecoveryFailed` or `PiSdHealthFailed`
       rule for the same DOWN verdict, so it is a second page for a real fault, not a false one.
-      B5 accepts the window: land its Cutover-2 while both Pi checks read `status=up`, outside
-      the updater's skip hours. Exempting a DOWN line without `by=kuma` would close the window,
+      B5 accepts the window: its Cutover-2 lands while both Pi checks read `status=up`, outside
+      the updater's skip hours. B5's Cutover-2 landed in
+      [#6794](https://github.com/DanielH2018/server/pull/6794) on 2026-11-01. Exempting a DOWN line without `by=kuma` would close the window,
       but it contradicts the exclusion's rule that a lost DOWN still counts.
 
   Land Cutover-2 the same day anyway. No step depends on a tile's interval, so a slow tick or a
