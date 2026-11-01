@@ -432,7 +432,10 @@ PR follows a read that the tile is gone.
       `k3s/tasks/health-crons.yml` ("Record the deployed Longhorn backup health reader",
       tagged `backup-health`, and "Record the deployed live-drift check", tagged
       `live-drift`). configarr and janitorr import `install_host_lib.yml`
-      (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`).
+      (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`). Both facts moved after this
+      baseline. H7.2e moved the file to `hosts/lib/kuma_push.py`, and `ca9ea9da0` gave
+      `deploy_ui/tasks/code.yml` a ninth pair. *Files under `hosts/`* below and C-3a use
+      the paths at HEAD.
     - `ansible/roles/setup/common/tasks/kuma_check_timer.yml` (118 lines) and its two unit
       templates, with 8 callers (`KNOWN_CHECKS`). Every unit path derives from
       `kuma-check-{{ kuma_check_name }}`, and the `absent` arm removes only those names.
@@ -583,6 +586,10 @@ a short window with none, which is the safe direction of convention 5.
       Cutover-1a deletes their tiles. Placing them in Cutover-1a instead would deploy
       `monitor-bridge` after `uptime-kuma` (the toposort), and a refused push read in that gap
       could hold two down cycles and page.
+    - **B9's tags.** B9's shadow PR (`ab283899e`) merged before B9 joined this recipe, and
+      it added no tag. A separate PR therefore adds `aide-check` and `rkhunter-check`, the
+      `logger -t` tags of the two scans, with their cases, and deploys `monitor-bridge`. B9's
+      Cutover-1a waits a week after that deploy, for the reason above.
     - **What the shadow week gives up.** While a batch's tile is live, a `rejected` push from
       its producer means its token matches no tile. That tile then receives no push and goes
       DOWN at its own interval, so the exclusion loses only the faster, named page.
@@ -868,8 +875,8 @@ files that the rows above name only by their Ansible path. Each goes with the PR
     - `/usr/local/lib/pi-kuma-push-lib.sh` in `hosts/daniel-pi/package.yml`. The read is a
       read-only `ls` of that path over `ssh daniel-pi`.
 - **The triage poller and rootq.** The poller,
-  `hosts/components/claude-code/files/claude_triage_poll.py`, reads `monitor_status` and
-  is #6862's. `hosts/components/claude-code/files/homelab_rootq.py` matches `/api/push/` in
+  `hosts/components/claude-code/files/claude_triage_poll.py`, reads `monitor_status`. B-10,
+  which the fix for #6862 adds to *Phase B*, drops that read. `hosts/components/claude-code/files/homelab_rootq.py` matches `/api/push/` in
   a redaction rule, not a Kuma read, so it belongs on the allowlist (#6862).
 - **`hosts/components/claude-code/CLAUDE.md`** quotes `kuma_push` in the ENFORCED line of
   `test_neither_producer_pushes_to_kuma`. C-6 rewords that line to name the test without
@@ -1743,7 +1750,7 @@ here. C-1 waits for the operator's acceptance.
           once a read-only `ls /usr/local/lib/kuma-push-lib.sh` finds no file on daniel-box,
           and over `ssh` on daniel-server and the Pi.
         - **Deploys.** The tick applies `initial_setup`, `gitops_deploy`, `renovate_agent`,
-          `renovate_notify` and `fake_remux` on daniel-box. `land.sh` deploys `configarr` and
+          `renovate_notify`, `fake_remux` and `deploy_ui` on daniel-box. `land.sh` deploys `configarr` and
           `janitorr` while each still imports `install_host_lib.yml`, which
           `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` defers and alerts on. Once H2
           has removed a role's import, C-3a does not edit it, and its `/opt` copy is H2's
@@ -1883,7 +1890,7 @@ here. C-1 waits for the operator's acceptance.
    checks/notify.py, service.py, host_edge.py, cloudflare_ips.py, healthchecks.py   unchanged: they read State, down_streak and the caches in bridge/streaks.py
 ~  checks/cluster.py                                   check_prometheus out (A6-7a)
 ~  check_table.py                                      22 rows out (A1 to A5, A7, B8); prometheus out (A6-7a); tile fields out (A6-8); swallowed_verdicts out (C-7)
-~  verdicts/logs.py                                    KUMA_RETIRING_TAGS (B1 to B7 shadow PRs); out with swallowed_verdicts (C-7)
+~  verdicts/logs.py                                    KUMA_RETIRING_TAGS (B1 to B7 shadow PRs, B9's tag PR); out with swallowed_verdicts (C-7)
 ~  checks/*.py, verdicts/*.py                          the Prometheus-reading bodies out (A1 to A5, B8); the log arm out (A7)
  ansible/roles/k8s/uptime-kuma/templates/
 ~  static-monitors.yaml.j2                             CHECKS loop out (A6-7a); B tiles out (each Cutover-1a)
@@ -1919,7 +1926,7 @@ here. C-1 waits for the operator's acceptance.
 -  kuma-push/                                          C-3a, with its entry in all three package.yml lists
 ~  builder/component.yml, claude-code/component.yml    the lib: kuma_push.py rows out (C-3a); builder's /opt legacy entry out (C-6)
 ~  loki-route-witness/, secret-rotation/component.yml  the kuma-check-* legacy entries out (C-6)
-~  claude-code/files/claude_triage_poll.py             the Kuma source out (B-10)
+~  claude-code/files/claude_triage_poll.py             the Kuma source out (B-10, from #6876)
  hosts/daniel-pi/package.yml                           the pi-kuma-push-lib.sh legacy entry out (C-6)
  scripts/renderer/renderer_lib/
 ~  host_sources.py, host_inputs.py                     the kuma-push-lib.sh rows out (C-3a)
@@ -1947,7 +1954,7 @@ here. C-1 waits for the operator's acceptance.
 ## Steps, as PRs
 
 **Phase A** follows the batch table. Per batch: one shadow PR; Cutover-a and Cutover-b (A
-batches, B8); or Cutover-1a, Cutover-1b and Cutover-2 (B1 to B7); then the token PR a week
+batches, B8); or Cutover-1a, Cutover-1b and Cutover-2 (B1 to B7, and B9 after its tag PR); then the token PR a week
 after the last cutover. A6 runs as A6-1 to A6-9, with the refactor A6-7r before A6-7a.
 *The cutover order* above names each deploy.
 Phase A is about 75 PRs, and A0 lands before any Kuma-side PR. Each shadow PR adds its
@@ -2043,7 +2050,7 @@ this applies to, with what the rules predict:
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
-| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
+| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
 | C-3b | the timer rename with the legacy-unit removal; the variable rename; `glance_facts.py:timer_units` and its named-member case | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand |
 | C-4a | the key rename, `ingress_probes.py` and its `ansible_jinja_env.py` registration | ~160 | per the narrowing |
 | C-4b | delete `kuma_monitors.py`, its `ansible_jinja_env.py` import and registration, and its `FILTER_FIELDS` row, after D6 | ~70 removed | none once D6 has landed |
@@ -2159,7 +2166,7 @@ M4's rules.
   dependent skipped by a down gate exports 0 and its body is not called. A raising body
   exports 0 and the next row still runs. Until A6-7a, the test also asserts that the push
   keeps today's skip and grace values.
-- `KUMA_RETIRING_TAGS` (each B1 to B7 shadow PR): a `rejected` line from a listed tag returns
+- `KUMA_RETIRING_TAGS` (each B1 to B7 shadow PR, and B9's tag PR): a `rejected` line from a listed tag returns
   up and from an unlisted tag returns down; a lost `status=down` line from a listed tag still
   pages; a listed tag that names no rendered script fails.
 - The probe-row case (C-1): a portless row naming a portless entry fails, and so does a
@@ -2482,7 +2489,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
 - **B5.** Nothing beyond the shadow PR. The unit-flag-and-directory test and the `optimize_pi` `CLAUDE.md`
   line the first draft named are obsolete: H3.6 wrote the test, and H3.8b moved the heartbeats and their
   contract into `hosts/components/pi-heartbeats/component.yml`.
-- **B1 to B7, each shadow PR.** The batch's `KUMA_RETIRING_TAGS` entries and their cases in
+- **B1 to B7, each shadow PR, and B9's tag PR.** The batch's `KUMA_RETIRING_TAGS` entries and their cases in
   `ansible/roles/k8s/monitor-bridge/tests/test_check_swallowed_verdicts.py`.
 - **A6-1 and A6-2.** The exporter test for `homelab_check_rows`, the run-loop export test,
   and the promtool cases for the two exporter rules, restart cases included.
@@ -2565,7 +2572,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - About 75 rules with their tests, including `KumaDown` (deleted again in C-1a).
     - The bridge exporter loop, about 120 lines, with the `homelab_check_rows` gauge, and the
       autofix-bridge exporter.
-    - `KUMA_RETIRING_TAGS`, one set that grows over B1 to B7 and goes in C-7.
+    - `KUMA_RETIRING_TAGS`, one set that grows over B1 to B7 and B9 and goes in C-7.
     - `homelab-check-lib.sh`, about 60 lines.
     - Four blackbox modules and one `tcp_connect` target per Pi publisher.
     - `health_alerts.py`, about 150 lines.
