@@ -11,8 +11,11 @@ from git import (
     git_dirty,
     git_env,
     git_stdout,
+    merge_tree,
     repair_object_store,
 )
+from lib.git_testing import commit, init_repo
+from lib.git_testing import git as scrubbed_git
 from lib.proc_testing import run
 
 
@@ -208,3 +211,23 @@ def test_a_missing_gc_log_is_not_reported_as_a_repair(tmp_path):
     lines = repair_object_store(tmp_path)
 
     assert not any("gc.log" in line for line in lines), lines
+
+
+def test_a_conflicting_merge_from_a_linked_worktree_keeps_exit_1_and_writes_nothing(
+    tmp_path,
+):
+    """The scratch store reads through the SHARED objects directory, which a worktree lacks."""
+    repo, wt = tmp_path / "repo", tmp_path / "wt"
+    init_repo(repo)
+    commit(repo, "init", **{"a.txt": "base\n"})
+    scrubbed_git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
+    commit(wt, "feature side", **{"a.txt": "feature\n"})
+    commit(repo, "master side", **{"a.txt": "master\n"})
+    objects = repo / ".git" / "objects"
+    before = set(objects.glob("??/*"))
+
+    result = merge_tree("master", "feature", cwd=wt)
+
+    assert result.returncode == 1, result.stderr
+    assert "a.txt" in result.stdout
+    assert set(objects.glob("??/*")) == before
