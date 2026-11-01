@@ -25,7 +25,7 @@ ORIGIN = "2" * 40
 SECRETS = "ansible/vars/secrets.yml"
 HOST_VARS = "ansible/inventory/host_vars/test-host.yml"
 GROUP_VARS = "ansible/inventory/group_vars/all.yml"
-CLAUDE_TRIAGE_TASKS = "ansible/roles/setup/claude_code/tasks/triage.yml"
+CLAUDE_CODE_TASKS = "ansible/roles/setup/claude_code/tasks/main.yml"
 DECLARES = (
     "containers_list:\n  - name: homepage\n    platform: k8s\n"
     "  - name: peanut\n    platform: k8s\n"
@@ -139,7 +139,7 @@ def test_a_key_both_planes_read_applies_the_setup_role_first(
 ):
     tick.declare(DECLARES)
     tick.paths = [SECRETS]
-    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers = [CLAUDE_CODE_TASKS]
     tick.secret_k8s = (0, "homepage")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert [argv[-3:] for argv in tick.playbooks] == [

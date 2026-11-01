@@ -344,7 +344,7 @@ def test_a_range_no_setup_role_needs_a_tag_for_runs_no_playbook(
 
 # ── a secrets.yml key a setup role reads (#5436) ──────────────────────────────────────────────
 SECRETS = "ansible/vars/secrets.yml"
-CLAUDE_TRIAGE_TASKS = "ansible/roles/setup/claude_code/tasks/triage.yml"
+CLAUDE_CODE_TASKS = "ansible/roles/setup/claude_code/tasks/main.yml"
 
 
 def test_a_secrets_only_range_applies_the_setup_role_reading_its_key(
@@ -356,7 +356,7 @@ def test_a_secrets_only_range_applies_the_setup_role_reading_its_key(
     nothing. The page still goes out, because no derivation sees a consumer it refused.
     """
     tick.paths = [SECRETS]
-    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers = [CLAUDE_CODE_TASKS]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-3:] == [
         "ansible/initial_setup.yml",
@@ -384,7 +384,7 @@ def test_a_refused_reader_derivation_merges_and_applies_no_setup_role(
 ):
     """A refusal routes nothing, so the range behaves as before #5436: merged and paged."""
     tick.paths = [SECRETS]
-    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers = [CLAUDE_CODE_TASKS]
     tick.secret_readers_error = SecretReadersRefused("cannot say (a play-level reader)")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
@@ -398,7 +398,7 @@ def test_a_reader_derivation_that_times_out_parks_the_range(
 ):
     """A timeout is not an answer: merged, no later range would carry the key again."""
     tick.paths = [SECRETS]
-    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers = [CLAUDE_CODE_TASKS]
     tick.secret_readers_error = subprocess.TimeoutExpired(["uv"], 30)
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.playbooks == []
@@ -421,7 +421,7 @@ def test_a_shipper_that_reads_none_of_the_secrets_keys_is_not_applied(
 def _park_on_a_failed_reader_lookup(gitops_deploy, tick, state, error):
     """One tick over a `secrets.yml` range whose reader lookup raises `error`."""
     tick.paths = [SECRETS]
-    tick.secret_readers = [CLAUDE_TRIAGE_TASKS]
+    tick.secret_readers = [CLAUDE_CODE_TASKS]
     tick.secret_readers_error = error
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == []
