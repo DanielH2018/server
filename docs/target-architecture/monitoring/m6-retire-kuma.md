@@ -149,6 +149,8 @@ push-token secret remains.
           `kuma_ingress_monitors` registration in `scripts/lib/ansible_jinja_env.py`, and
           the `kuma_ingress_monitors` row in
           `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS`.
+        - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
+          an output redaction rule, not a Kuma read.
         - Any file the B-7 and C-6 PRs could not reword, with its reason.
     - Test directories are outside the selector. Many tests use `uptime-kuma` as a sample deploy
       tag, and a test that reads Kuma is deleted with its subject (`.claude/rules/python-layout.md`,
@@ -1766,6 +1768,11 @@ here. C-1 waits for the operator's acceptance.
    them to `RETIRED`, and carries the regenerated fragment. That is the token-PR rule in
    *Steps*.
 6. **C-6, the census row.** It holds `kuma` to its allowlist from then on (exit criterion 3).
+   C-6 also waits for #6875. Under `hosts/`, the grep below also matches the Kuma push
+   producers and the push plumbing that moved into host packages after this plan was written,
+   such as `hosts/lib/kuma_push.py` and `hosts/components/kuma-push/component.yml`. No PR here
+   names them by their `hosts/` path yet. #6875 assigns each one to its Phase A batch or to
+   C-3a.
    Its precondition, quoted in the PR, is the read for exit criterion 3's first bullet. It
    must list allowlist entries only:
    `git grep -l -E "/api/push/|kuma_push|KUMA_URL|KUMA_PUSH_|monitor_status|entry_port\('uptime-kuma'\)|kuma-push-lib|kuma_ingress_monitors|kuma-check-" -- ansible hosts scripts .claude ':!*/tests/*' ':!*/test_*'`.
