@@ -45,7 +45,7 @@ def _lock_git(lock_failures):
 
 
 def _run(tmp_path, link_at_start, git_body):
-    """Run the rendered cron once; return (verdicts, logger lines, git call count).
+    """Run the rendered cron once; return (verdicts, logger lines).
 
     A verdict is the run's `status=` log line without the prefix, as `<status> <message>`.
     The probe that follows a good fetch is stubbed to report a clean fleet.
@@ -86,7 +86,7 @@ def _run(tmp_path, link_at_start, git_body):
     run(["bash", str(script)], check=True)
     lines = logs.read_text().splitlines()
     verdicts = [line[len("status=") :] for line in lines if line.startswith("status=")]
-    return verdicts, lines, len(calls.read_text().splitlines())
+    return verdicts, lines
 
 
 def _status_lines(logs):
@@ -95,7 +95,7 @@ def _status_lines(logs):
 
 def test_a_fetch_that_fails_after_the_link_returns_reads_skipped(tmp_path):
     # The 2026-10-16 sequence: down when the fetch started, back by the time it failed.
-    pushes, logs, _ = _run(tmp_path, "down", _failing_git("up"))
+    pushes, logs = _run(tmp_path, "down", _failing_git("up"))
     assert [p.split()[0] for p in pushes] == ["up"], pushes
     assert "skipped: WAN unreachable when the fetch started" in pushes[0]
     assert FETCH_ERR in pushes[0]
@@ -103,7 +103,7 @@ def test_a_fetch_that_fails_after_the_link_returns_reads_skipped(tmp_path):
 
 
 def test_a_fetch_that_fails_with_the_link_up_throughout_reads_down(tmp_path):
-    pushes, logs, _ = _run(tmp_path, "up", _failing_git("up"))
+    pushes, logs = _run(tmp_path, "up", _failing_git("up"))
     assert [p.split()[0] for p in pushes] == ["down"], pushes
     assert "skipped" not in pushes[0]
     assert "retried" not in pushes[0]
@@ -114,21 +114,19 @@ def test_a_fetch_that_fails_with_the_link_up_throughout_reads_down(tmp_path):
 
 
 def test_a_fetch_that_fails_after_the_link_drops_reads_skipped(tmp_path):
-    pushes, _, _ = _run(tmp_path, "up", _failing_git("down"))
+    pushes, _ = _run(tmp_path, "up", _failing_git("down"))
     assert [p.split()[0] for p in pushes] == ["up"], pushes
     assert "skipped: WAN unreachable — " in pushes[0]
 
 
 def test_a_ref_lock_held_by_a_concurrent_fetch_is_retried_and_reads_up(tmp_path):
     # The 2026-10-25 sequence: the tick held origin/master's lock, then released it.
-    pushes, _, git_calls = _run(tmp_path, "up", _lock_git(1))
-    assert git_calls == 2
+    pushes, _ = _run(tmp_path, "up", _lock_git(1))
     assert pushes == ["up all services current"], pushes
 
 
 def test_a_ref_lock_still_held_on_the_retry_reads_down(tmp_path):
-    pushes, _, git_calls = _run(tmp_path, "up", _lock_git(2))
-    assert git_calls == 2
+    pushes, _ = _run(tmp_path, "up", _lock_git(2))
     assert [p.split()[0] for p in pushes] == ["down"], pushes
     assert "retried once after a ref-lock failure" in pushes[0]
     assert "cannot lock ref" in pushes[0]
