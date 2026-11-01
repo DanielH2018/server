@@ -522,10 +522,10 @@ data:
           - source_labels: [__meta_kubernetes_pod_label_app]
             target_label: arr
           # DECIDED: no `origin` label here. `ScrapeTargetsMissing` (files/rules/scrape-targets.yaml)
-          # counts `up{origin="daniel-server"}` against a floor of 1, and that floor assumes
-          # exactly one series: the node job. Labelling the exportarr pods too would put three
-          # more series behind the same floor, so node-exporter could die and the count would
-          # still read >= 1.
+          # counts `up{origin="daniel-server"}` against a floor of 1. The node and gpu jobs both
+          # carry that origin, so the floor fires only once both are gone; a single dead
+          # exporter pages through ScrapeTargetDown instead. Labelling the exportarr pods would
+          # put three more series behind the same floor and weaken it further.
       # daniel-pi, the one host outside the cluster. STATIC targets, not discovery: the two
       # jobs above use `role: pod`, which by construction only ever finds pods — so the Pi,
       # which runs no kubelet, could never appear in them however many exporters it grew.
