@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-01 14:44 UTC
-generated_sha: 6a91a78dd3
+generated_at: 2026-11-01 14:46 UTC
+generated_sha: d39c33c6fe
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 6a91a78dd3
 
 # Decisions
 
-944 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+942 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -990,9 +990,7 @@ generated_sha: 6a91a78dd3
 | ` marker with the byte | `docs/pi-host-tuning-record.md:67` | 2026-10-10 |
 | ` marker carries the | `docs/pi-host-tuning-record.md:286` | 2026-09-30 |
 | ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:278` | 2026-10-24 |
-| ` marker in the tree. | `docs/reference/scripts.md:43` | 2026-10-03 |
-| ` marker in the tree. | `docs/reference/scripts.md:43` | 2026-10-03 |
-| ` marker in the tree. | `docs/reference/scripts.md:43` | 2026-10-03 |
+| ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` comment beside it accepts a grouped VERSION bump paging four days early as the cost. | `docs/renovate-notify-internals.md:81` | 2026-10-02 |
 | ` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. | `docs/security-tools.md:25` | 2026-10-12 |
 | ` marker in `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` holds the evidence. | `docs/security-tools.md:89` | 2026-10-12 |
