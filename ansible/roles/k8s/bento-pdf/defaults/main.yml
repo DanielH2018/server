@@ -1,7 +1,7 @@
 ---
 # Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
-bento_pdf_k8s_image: ghcr.io/alam00000/bentopdf:latest@sha256:039239902a01e58a5a0f52e29039fafa18ffc2a481bb8acd807599f1c6dde7ef
+bento_pdf_k8s_image: ghcr.io/alam00000/bentopdf:latest@sha256:b107c37d9f1f27b7edae28d262e526d8e225541a7cc26005b84dbab42c904105
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateless: RollingUpdate Deployment, no PVC, readinessProbe on the only Deployment, and the
