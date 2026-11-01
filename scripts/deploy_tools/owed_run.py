@@ -35,7 +35,11 @@ from lib.ansible_inventory import host_names
 from lib.cli_help import ArgumentParser
 from lib.deployer_park import ManualPlaneRemedy, manual_plane_remedies
 from lib.git import git
-from lib.repo_paths import REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, REPO
+
+# The deployer's own modules, which `deploy_state` reaches `host_lib` from for its writes.
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
+_sys.path.insert(0, str(HOST_LIB_FILES))
 
 from deployer_lib.deploy_state import STATE_DIR, DeployerState
 from gitops_markers import on_host
