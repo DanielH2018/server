@@ -12,31 +12,28 @@
 # already true under the wider list. docs/claude-agent-user.md, "The approval floor", has the
 # reasoning. The list is literal here, not a variable, so the inventory cannot override it.
 #
-# The lander: this list, the unit that reads it, the rule that lets the agent start it, the task
-# file that installs them where no host package does, the template that pins the lander's name
-# and settings, and the host component that ships them and decides when (H7.40's second slice).
-ansible/roles/setup/claude_code/tasks/lander.yml
+# The lander: this list, the unit that reads it, the rule that lets the agent start it, the
+# template that pins the lander's name and settings, and the host component that ships them and
+# decides when (H7.40's second slice).
 hosts/components/claude-code/templates/claude-land-approval-paths.j2
 hosts/components/claude-code/templates/claude-land@.service.j2
 hosts/components/claude-code/templates/50-claude-land.rules.j2
 hosts/components/claude-code/templates/claude-land-pins.j2
 hosts/components/claude-code/component.yml
-# Alert-triggered triage (operator decision, 2026-10-15): the task file that pins the run's
-# caps and identity, every claude-triage template (a prefix: the unit, its config, its prompt
+# Alert-triggered triage (operator decision, 2026-10-15): every claude-triage template (a
+# prefix: the pins file that sets the run's caps and identity, the unit, its config, its prompt
 # and its credential file, the poller's unit and timer), the polkit rule that lets the agent
 # start a run, the runner and the poller. A run will land its own fixes with nobody watching,
 # so it must not raise its own caps or arm its own trigger.
-ansible/roles/setup/claude_code/tasks/triage.yml
 hosts/components/claude-code/templates/claude-triage
 hosts/components/claude-code/templates/50-claude-triage.rules.j2
 hosts/components/claude-code/files/claude_triage_run.py
 hosts/components/claude-code/files/claude_triage_poll.py
 # The read-only root inspector (issue #6323): the root script that decides what root reads and
-# prints, the shim, the task file and the sudoers grant. The agent holds the grant, so it must
-# not widen what the grant reaches.
+# prints, the shim and the sudoers grant. The agent holds the grant, so it must not widen what
+# the grant reaches.
 hosts/components/claude-code/files/homelab_rootq.py
 hosts/components/claude-code/files/rootq.sh
-ansible/roles/setup/claude_code/tasks/rootq.yml
 hosts/components/claude-code/templates/claude-rootq.sudoers.j2
 # The same inspector through the agent's socket (#6350). The issue expected the entries above
 # to cover it, and they cover only the script: the socket helper that gates a request, the

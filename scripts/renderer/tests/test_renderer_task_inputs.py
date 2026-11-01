@@ -107,7 +107,7 @@ def test_a_set_fact_equals_the_value_templar_computes(role, fact, stubs):
 def test_uptime_kuma_indexes_every_declaration(stubs):
     """`kuma_declarations` is read through `default({})`, so an empty one would still render.
 
-    The census holds more than 45 declarations, and so does this.
+    The census holds more than 25 declarations, and so does this.
     """
     rendered = cluster.render_tag("uptime-kuma", stubs)
     (configmap,) = [
@@ -117,4 +117,4 @@ def test_uptime_kuma_indexes_every_declaration(stubs):
         )
         if doc
     ]
-    assert len(json.loads(configmap["data"]["index.json"])) > 45
+    assert len(json.loads(configmap["data"]["index.json"])) > 25

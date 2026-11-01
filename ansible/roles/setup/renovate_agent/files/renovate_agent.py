@@ -314,18 +314,16 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
 def report_crash(
     exc: BaseException, tools: AgentTools = TOOLS, config_path: str = CONFIG
 ) -> None:
-    """Push a `down` carrying the exception text, and post the same to Discord.
+    """Record the crash in the runs file and post the exception text to Discord.
 
-    The alive beat is the unit's `ExecStartPost`, which systemd runs only when the process
-    exited 0 — so a crash pushed NOTHING and the monitor went down 28 hours later by deadman
-    expiry, carrying no reason. An operator then reads "no heartbeat", which is what a host that
-    is simply off looks like: for two days from 2026-09-08 that hid a one-line
-    `prepare_worktree` failure (#1477). The deadman stays as the backstop for a host that is
-    genuinely off; it must not be the only signal for a run that started and threw.
+    The unit's textfile write is its `ExecStartPost`, which systemd runs only when the process
+    exited 0, so a crash writes no verdict and `RenovateAgentNotReporting` fires 28 hours later
+    with no reason attached. An operator reading that sees what a host that is simply off looks
+    like: for two days from 2026-09-08 that hid a one-line `prepare_worktree` failure (#1477).
+    The runs file and the Discord post carry the reason.
 
     Best effort throughout, and it never re-raises: a failed report must not replace the
-    traceback that says what actually broke. The push URL carries a rotation-tracked token, so
-    it is read from config.env (0600) and never logged.
+    traceback that says what actually broke.
     """
     text = f"{type(exc).__name__}: {exc}"
     try:
@@ -334,29 +332,6 @@ def report_crash(
         cfg = {}
     state_dir = cfg.get("STATE_DIR", "/var/lib/renovate-agent")
     record_run(state_dir, run_record(int(time.time()), "crashed", text[:200]))
-    push_url = cfg.get("KUMA_PUSH_URL", "")
-    if push_url:
-        sep = "&" if "?" in push_url else "?"
-        # The URL reaches curl as a config file on stdin (`-K -`), the form the unit's
-        # ExecStartPost uses, because a curl argv is readable by any local user while it runs.
-        url = f"{push_url}{sep}status=down".replace("\\", "\\\\").replace('"', '\\"')
-        tools.run(
-            [
-                "curl",
-                "-fsS",
-                "-m",
-                "15",
-                "-o",
-                "/dev/null",
-                "-K",
-                "-",
-                "--get",
-                "--data-urlencode",
-                f"msg=crashed: {text[:200]}",
-            ],
-            timeout=30,
-            stdin_text=f'url = "{url}"\n',
-        )
     tools.discord_post(
         cfg.get("DISCORD_WEBHOOK", ""),
         f"🚨 renovate-agent: CRASHED on {os.uname().nodename} — {text[:400]}",

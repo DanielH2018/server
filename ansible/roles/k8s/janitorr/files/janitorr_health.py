@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """janitorr health reader — the cluster-side replacement for monitor-bridge's check_janitorr.
 
-Reads the running janitorr pod and its log, then pushes a verdict to the "Janitorr Errors" Kuma
-push monitor. It never exits nonzero on a bad verdict: a DOWN is data to report, not a crash.
+Reads the running janitorr pod and its log, then records a verdict: one log line, and the
+verdict ConfigMap's annotations when `JANITORR_VERDICT_CONFIGMAP` is set. It never exits nonzero
+on a bad verdict: a DOWN is data to report, not a crash. M6 batch B6b's Cutover-2 removed its
+push to the Kuma "Janitorr Errors" monitor.
 
 Runs as the janitorr-health CronJob (templates/health-cronjob.yaml.j2), in the repo's pinned
 python image, with kubectl copied in by an init container and the pod's own ServiceAccount
-(templates/health-rbac.yaml.j2) as its credential. host_lib.py and kuma_push.py sit beside it
-in the same ConfigMap. The push URL, which carries the token, reaches it as KUMA_PUSH_URL from
-the janitorr-health Secret through `secretKeyRef`, so the token is never in the ConfigMap or in
-this file.
+(templates/health-rbac.yaml.j2) as its credential. host_lib.py sits beside it in the same
+ConfigMap, with kuma_push.py, which host_lib imports and this reader never calls.
 
 Usage:
 
     python3 /config/janitorr_health.py
 
-Takes no arguments. `-h` and `--help` print this text and exit 0. With KUMA_PUSH_URL empty,
-or naming no `/api/push/<token>` path, it pushes nothing and prints one tab-separated line,
-`up<TAB>msg` or `down<TAB>msg`, which is how a hand run reads the verdict.
+Takes no arguments. `-h` and `--help` print this text and exit 0. It prints one line,
+`<UTC time> <pod> janitorr-health: status=<up|down> <message>`, which is how a hand run reads
+the verdict.
 
 Environment (all optional):
 
@@ -28,7 +28,6 @@ Environment (all optional):
     JANITORR_KUBECTL_TIMEOUT_S   seconds allowed per kubectl call (default 30)
     JANITORR_VERDICT_CONFIGMAP   ConfigMap the verdict is also written to, as annotations that
                                  kube-state-metrics exports (default empty: no export)
-    KUMA_PUSH_URL                the Janitorr Errors push monitor's URL, `<base>/api/push/<token>`
 """
 
 from __future__ import annotations
@@ -51,7 +50,7 @@ GRACE_S = float(os.environ.get("JANITORR_STARTUP_GRACE_S", "600"))
 KUBECTL = os.environ.get("JANITORR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("JANITORR_KUBECTL_TIMEOUT_S", "30"))
 # M6 B6b: the verdict leaves the pod a second way, as annotations on this ConfigMap, which
-# kube-state-metrics exports to Prometheus beside the Kuma push. Empty exports nothing.
+# kube-state-metrics exports to Prometheus. Empty exports nothing.
 VERDICT_CONFIGMAP = os.environ.get("JANITORR_VERDICT_CONFIGMAP", "")
 # The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape rsyslog gave the host
 # script's `logger -t` lines (the H2 plan's *Evidence goes to stdout*). monitor-bridge's
@@ -171,24 +170,21 @@ def verdict(kubectl: Callable[..., tuple[int, str]], now: float) -> tuple[bool, 
 
 def main(
     kubectl: Callable[..., tuple[int, str]] = KUBECTL_RUNNER,
-    push: Callable[..., bool] = host_lib.kuma_push,
     now: Callable[[], float] = time.time,
     verdict_configmap: str = VERDICT_CONFIGMAP,
 ) -> int:
-    """Pushes the verdict to Kuma, or prints it as `up\\tmsg` / `down\\tmsg` with no token.
+    """Logs the verdict and writes it to the verdict ConfigMap.
 
-    Exits 0 whatever the verdict. A reader that raises pushes a DOWN naming the exception,
-    which is what the host script's wrapper did for a reader that crashed: an absent push would
-    leave the tile to time out with no explanation.
+    Exits 0 whatever the verdict. A reader that raises records a DOWN naming the exception,
+    so a crash reads as a verdict rather than as silence.
 
-    The one exit 1 is a failed export to the verdict ConfigMap, after the push has run. A
-    reader that cannot write its verdict leaves the shadow rules reading the previous one, and
+    The one exit 1 is a failed export to the verdict ConfigMap, after the log line is written. A
+    reader that cannot write its verdict leaves the rules reading the previous one, and
     the failed Job stops the CronJob's last successful time, which `JanitorrHealthNotReporting`
     reads.
 
     Args:
         kubectl: the kubectl transport; a test passes a recorder.
-        push: `kuma_push`'s signature; a test passes a stub.
         verdict_configmap: the ConfigMap the verdict is also written to, or empty for no
             export.
         now: the clock the container's uptime is measured on.
@@ -198,23 +194,13 @@ def main(
     except Exception as e:  # any crash is reported as the verdict
         ok, msg = False, "janitorr health reader failed: %s: %s" % (type(e).__name__, e)
     status = "up" if ok else "down"
-    # The export runs beside the push until M6's Cutover-2 drops the push.
     exported = (
         export_verdict(kubectl, verdict_configmap, status, msg, now())
         if verdict_configmap
         else True
     )
     exit_code = 0 if exported else 1
-    # One URL rather than a base and a token, so the Secret's value is not a whole-scalar
-    # placeholder: one would join k8s/manifests' standalone guard map, and a change to that
-    # map fans a landing's narrowed apply out to every role that includes k8s/manifests.
-    base, _, token = os.environ.get("KUMA_PUSH_URL", "").partition("/api/push/")
-    if not base or not token:
-        print("%s\t%s" % (status, msg))
-        return exit_code
     emit("status=%s %s" % (status, msg))
-    if push(status, msg, base, token, log=emit):
-        emit("pushed")
     return exit_code
 
 

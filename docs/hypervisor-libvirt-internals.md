@@ -61,9 +61,10 @@ token or the R2 credentials — so a leak aborts the run with nothing staged. Th
 (`fence=hold`, or `fence=hold,unproven=<labels>` when a target answered from neither the guest
 nor daniel-server, which means the target moved rather than that the fence held).
 
-**The verdict also pushes a Kuma tile of its own**, `etcd Restore Drill (egress fence)`, added
-in #3021. Riding the drill's own tile gave the leg's two non-fatal outcomes no alarm at all. A
-leak did alarm, but named "etcd Restore Drill (full)" — an operator reading that tile sees a
+**The verdict also reports on a check of its own**, `etcd-restore-drill-egress-fence`, added
+in #3021 as a Kuma tile and carried since M6 batch B4 by `EtcdRestoreDrillEgressFenceFailed`.
+Riding the drill's own check gave the leg's two non-fatal outcomes no alarm at all. A
+leak did alarm, but named the full drill — an operator reading that alert sees a
 failed restore drill rather than a guest that reached production. An unproven target alarmed
 nowhere: it leaves the drill PASSING, so its label sat in the message text of an `up` push and
 one fenced range went unmeasured every month until someone read a green run. The leg exists so

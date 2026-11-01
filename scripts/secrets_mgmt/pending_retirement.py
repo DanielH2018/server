@@ -97,5 +97,35 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # them.
         "artifacts_sync_push_token",
         "claude_otel_push_token",
+        # M6 batches B2 and B4's combined Cutover-1a deleted 15 tiles whose tokens no other
+        # cluster render references. The setup-plane producers push into them until Cutover-2
+        # drops the push, and daniel-server's copies until the operator's hand apply. The B2 and B4
+        # token PRs retire the keys a week after Cutover-1b and delete these 15 entries with
+        # them. B6b's three crowdsec tokens and the configarr and janitorr tokens are not here,
+        # because the pods' own Secrets still render them.
+        "docs_refresh_push_token",
+        "homelab_eval_push_token",
+        "secret_rotation_push_token",
+        "setup_drift_push_token",
+        "loki_route_witness_push_token",
+        "loki_route_witness_daniel_server_push_token",
+        "ups_secondary_push_token",
+        "ups_secondary_daniel_server_push_token",
+        "monitor_bridge_fake_remux_push_token",
+        "monitor_bridge_fake_remux_replace_push_token",
+        "mkv_attachment_repair_push_token",
+        "etcd_drill_full_push_token",
+        "etcd_drill_fence_push_token",
+        "monitor_bridge_renovate_alive_push_token",
+        "renovate_agent_kuma_push_token",
+        # M6 batch B6b's Cutover-2 stopped the push in the crowdsec sidecar and the configarr and
+        # janitorr health CronJobs, whose five tiles Cutover-1a deleted. No render references
+        # these keys now. B6b's token PR retires them a week after Cutover-1b and deletes these
+        # five entries with them.
+        "crowdsec_remote_allowlist_push_token",
+        "monitor_bridge_appsec_push_token",
+        "monitor_bridge_home_allowlist_push_token",
+        "monitor_bridge_configarr_push_token",
+        "monitor_bridge_janitorr_push_token",
     }
 )

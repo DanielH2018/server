@@ -173,8 +173,12 @@ def test_notification_configs_declare_apply_existing():
 # M6 batch B5's Daniel Pi SD Health left the tier when Cutover-1a deleted it. `PiSdHealthFailed`
 # and `PiSdHealthNotReporting` are critical, so Alertmanager mails them once Cutover-1b drops
 # `shadow`.
+#
+# M6 batch B4's three tiles on the tier, etcd Restore Drill (full) and the two UPS Secondary tiles,
+# left it when Cutover-1a deleted them. `EtcdRestoreDrillFailed`, `EtcdRestoreDrillNotReporting` and
+# the four `UpsSecondary*` rules are critical, so Alertmanager mails them once Cutover-1b drops
+# `shadow`.
 EMAIL_TIER = {
-    "etcd Restore Drill (full)",
     "B2 Reachable",
     "B2 Free Tier Headroom",
     "R2 Free Tier Headroom",
@@ -182,17 +186,45 @@ EMAIL_TIER = {
     "Discord Delivery",
     # On the tier for the transport, not the urgency: no Discord webhook can deliver at all.
     "WAN Reachable",
-    # One tile per host, and both mail for the reason the template's own comment gives: a
-    # secondary upsmon that is not running is only discovered at a power cut, which is exactly
-    # when Discord is unreachable. They were declared on the tier before this list could see
-    # them — their token gate rendered them away under the old stubbed render.
-    "UPS Secondary (daniel-box)",
-    "UPS Secondary (daniel-server)",
 }
 
 
 # A heartbeat window no tile holds, for the render that reveals which tiles the variable moves.
 _WINDOW_PROBE_S = 7777
+
+
+def test_the_deleted_b2_b4_and_b6b_tiles_are_not_declared():
+    # M6 batches B2, B4 and B6b's combined Cutover-1a deleted these 20 hand-written tiles. RED if
+    # one is declared again: AutoKuma would re-create it, and its producer (still pushing until
+    # Cutover-2) would feed a tile whose rule already pages from Alertmanager.
+    declared = {e["name"] for e in _entities().values()}
+    assert not declared & {
+        # B2
+        "Docs Refresh",
+        "Homelab Evals",
+        "Secret Rotation",
+        "Setup Plane Drift (agent hosts)",
+        "Loki Read Route (daniel-box)",
+        "Loki Read Route (daniel-server)",
+        # B4
+        "UPS Secondary (daniel-box)",
+        "UPS Secondary (daniel-server)",
+        "Fake Remux Scan",
+        "Fake Remux Replace",
+        "MKV Attachment Repair",
+        "etcd Restore Drill (full)",
+        "etcd Restore Drill (egress fence)",
+        "Renovate Notifier \u2014 Alive",
+        "Renovate Agent \u2014 Alive",
+        # B6b
+        "CrowdSec Remote Allowlist",
+        "CrowdSec AppSec",
+        "CrowdSec Home Allowlist",
+        "Configarr Sync",
+        "Janitorr Errors",
+    }
+    # Non-vacuity by name: a render that declared nothing would pass the line above.
+    assert "Swallowed Push Verdicts" in declared
 
 
 def test_the_deleted_b1_tiles_are_not_declared():

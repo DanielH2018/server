@@ -21,7 +21,6 @@ What's specific to this unit, and what this file guards:
 import re
 
 from _helpers import ANSIBLE
-from _kuma_monitors import entity, tile_is_gated_on
 from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run
@@ -37,7 +36,6 @@ TIMER = (COMPONENT / "units/homelab-eval-sweep.timer").read_text()
 SPEC = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
 SCRIPT = rendered_shell_text("components", "eval-sweep", "eval-run.sh.j2")
 
-TILE = "homelab-eval-sweep.json"
 TOKEN_VAR = "homelab_eval_push_token"
 KEY_VAR = "anthropic_api_key"
 # A value no secret holds, so a render that carries it carries THIS variable's value.
@@ -160,13 +158,6 @@ def test_the_api_key_gate_scan_rejects_an_ungated_script():
     assert not _is_gated_on_the_api_key('echo "no gate here"')
 
 
-def test_the_monitor_is_gated_on_its_token():
-    assert tile_is_gated_on(TILE, TOKEN_VAR), (
-        "an ungated monitor sits red from creation until the secret exists — gate it like "
-        f"docs-refresh.json does. The tile renders with {TOKEN_VAR} empty."
-    )
-
-
 def _unchanged_arm_is_safe(script: str) -> bool:
     """Whether the git-diff-empty branch after trend.py fails closed rather than reporting up.
 
@@ -205,9 +196,3 @@ def test_the_unchanged_arm_scan_rejects_a_laundered_version():
         "fi\n"
     )
     assert not _unchanged_arm_is_safe(laundered)
-
-
-def test_push_monitor_does_not_retry():
-    assert entity(TILE, TOKEN_VAR)["max_retries"] == 0, (
-        "a push monitor's deadline IS its retry; max_retries re-arms it and delays the alert"
-    )

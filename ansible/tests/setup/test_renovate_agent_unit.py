@@ -13,20 +13,17 @@ the template as applied either way:
 4. The prompt's caps must be the unit's caps. A prompt naming a different PR cap or timeout
    from `defaults/main.yml` is how a session starts a landing it has no budget to finish.
 
-Every template here is asserted on its RENDER, at a SENTINEL value no secret holds: a substring
-match on the Jinja holds only while the expression is spelled that way, and a render at inventory
-values cannot tell an unset secret from a misspelled name (#3202).
+Every template here is asserted on its RENDER: a substring match on the Jinja holds only while the
+expression is spelled that way (#3202).
 
 Run: uv run pytest ansible/tests/setup/test_renovate_agent_unit.py
 """
 
-import json
 import re
 
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from _kuma_monitors import entity, monitors_text
 from _role_census import role_task_files
 from _setup_render import render_setup_text
 
@@ -38,9 +35,6 @@ TIMER = "renovate-agent.timer.j2"
 PROMPT = "prompt.txt.j2"
 TASKS = ROLE / "tasks" / "service.yml"
 DEFAULTS = ROLE / "defaults" / "main.yml"
-
-# A value no secret holds, so a render carrying it carries THIS variable's value.
-SENTINEL = "renovate-agent-render-sentinel"
 
 
 def render(template: str, overrides: dict | None = None) -> str:
@@ -60,8 +54,8 @@ def directive(unit_text: str, key: str) -> list[str]:
 
 @pytest.fixture(scope="module")
 def unit() -> str:
-    """The unit rendered with the push token armed, so the gated beat line is present."""
-    return render(UNIT, {TOKEN: SENTINEL})
+    """The unit rendered at inventory values."""
+    return render(UNIT)
 
 
 @pytest.fixture(scope="module")
@@ -216,112 +210,47 @@ def test_the_timer_is_persistent() -> None:
     assert "Persistent=true" in render(TIMER)
 
 
-# ── the alive beat: the tile, the unit's push, and the deadline that ties them ───────────
+# ── the verdict: the unit makes no Kuma push, and its deadline straddles the daily period ──
 
-ROTATION = ANSIBLE / "secret_rotation.yml"
-TOKEN = "renovate_agent_kuma_push_token"
-TILE = "renovate-agent-alive.json"
 DAY = 86400
-
-
-def _alive_tile() -> dict:
-    """The Renovate Agent tile as it renders with its push token armed.
-
-    The source read this replaces substituted `{{ ... }}` to `0` first, so an interval moved
-    into a role default read as 0 and the band below compared nothing.
-    """
-    return entity(TILE, TOKEN, {"renovate_agent_enabled": True})
-
-
-def test_a_disarmed_agent_renders_no_alive_tile() -> None:
-    disarmed = monitors_text({"renovate_agent_enabled": False, TOKEN: SENTINEL})
-    assert f"  {TILE}: |" not in disarmed, "a disarmed agent must render no tile"
-
-
 CONFIG_ENV = "config.env.j2"
+UNIT_DEADLINE = re.compile(
+    r'write_check_textfile renovate-agent 1 "\$\(date \+%%s\)" (\d+)'
+)
 
 
-def test_the_unit_beats_kuma_only_after_a_clean_run(unit: str) -> None:
-    posts = directive(unit, "ExecStartPost")
-    assert posts and any("$KUMA_PUSH_URL" in p for p in posts), (
-        "ExecStartPost must push the Kuma beat: without it a timer that stops firing is "
-        "invisible until someone notices the backlog"
-    )
-    assert any("/etc/renovate-agent/config.env" in p for p in posts), (
-        "the beat must read its URL from the 0600 config.env at run time"
-    )
-    # The gate, off two renders rather than the `{% if %}` line.
-    disarmed = directive(render(UNIT, {TOKEN: ""}), "ExecStartPost")
-    assert not any("$KUMA_PUSH_URL" in p for p in disarmed), (
-        "the beat must be gated on the token, or a checkout without the secret renders a "
-        "URL with an empty token and curl -f fails every otherwise-clean run"
-    )
+def test_the_unit_and_its_config_make_no_kuma_push(unit: str) -> None:
+    """M6 batch B4's Cutover-1a deleted the Renovate Agent tile and dropped the beat with it.
 
-
-def test_the_unit_holds_no_push_token(unit: str) -> None:
-    """A unit line is public. `systemctl show <unit> -p ExecStartPost` serves it over the
-    system bus to any local user, so a token interpolated into an Exec line is readable
-    without sudo — the same reasoning that keeps the alert webhook out of the unit above.
+    A beat into a deleted tile gets a 404, `curl -f` fails, and `OnFailure` pages every day.
     """
-    # The `unit` fixture renders the token as SENTINEL, so an interpolation anywhere in the unit
-    # puts that value into a line systemd publishes.
-    assert SENTINEL not in unit, (
-        f"{TOKEN} is interpolated into the unit — move it to config.env and reference "
-        "$KUMA_PUSH_URL, as renovate-notify.service.j2 does"
+    posts = directive(unit, "ExecStartPost")
+    assert any("write_check_textfile renovate-agent" in p for p in posts), (
+        "the unit's textfile write is the verdict RenovateAgentNotReporting reads"
     )
-    assert "/api/push/" not in unit, "the push URL must not appear in a unit line"
+    assert not any("curl" in p or "KUMA_PUSH_URL" in p for p in posts), posts
+    assert "/api/push/" not in unit
+    assert "KUMA_PUSH_URL" not in render(CONFIG_ENV)
 
 
-def test_config_env_carries_the_gated_push_url() -> None:
-    """The other half of the move: the URL has to land somewhere 0600, still gated on the
-    token so a checkout without the secret renders an empty value rather than a broken URL."""
-    armed = render(CONFIG_ENV, {TOKEN: SENTINEL})
-    assert "KUMA_PUSH_URL=https://" in armed and f"/api/push/{SENTINEL}" in armed, (
-        f"config.env must carry the push URL the unit reads, built from {TOKEN}; it renders "
-        f"{[ln for ln in armed.splitlines() if 'KUMA_PUSH_URL' in ln]}"
-    )
-    # The line is unconditional and the gate decides its VALUE, so the disarmed render carries
-    # an EMPTY assignment: a URL ending in an empty token would 404 every run.
-    text = render(CONFIG_ENV, {TOKEN: ""})
-    disarmed = [ln for ln in text.splitlines() if "KUMA_PUSH_URL" in ln]
-    assert disarmed == ["KUMA_PUSH_URL="], (
-        "KUMA_PUSH_URL must be gated on the token, or an unset secret renders a URL ending "
-        f"in an empty token and every push 404s. Rendered: {disarmed}"
-    )
+def test_config_env_stays_root_owned_and_group_read_only() -> None:
     tasks = TASKS.read_text()
     assert re.search(
         r"dest: /etc/renovate-agent/config\.env\n\s+owner: root\n\s+group:.*\n\s+mode: \"0640\"",
         tasks,
     ), (
-        "config.env must stay root-owned and group-read only — it is the only place the push "
-        "token lands on disk, and the session must not be able to rewrite it"
+        "config.env must stay root-owned and group-read only: it holds the Discord webhook, "
+        "and the session must not be able to rewrite it"
     )
 
 
-def test_the_tile_and_the_unit_share_one_token() -> None:
-    # The tile must carry the sentinel this variable alone holds.
-    body = re.search(
-        rf"^  {re.escape(TILE)}: \|\n\s+(\{{.*\}})$",
-        monitors_text({TOKEN: SENTINEL, "renovate_agent_enabled": True}),
-        re.M,
-    )
-    assert body, f"no {TILE} tile in the rendered monitors"
-    assert json.loads(body.group(1))["push_token"] == SENTINEL, (
-        "the tile must embed the same SOPS var the unit pushes with, or the beat lands on a "
-        "monitor that does not exist and the tile sits red"
-    )
-    assert f"\n  {TOKEN}:\n" in ROTATION.read_text(), (
-        f"{TOKEN} is not registered in secret_rotation.yml — run secret_rotation.py sync"
-    )
-
-
-def test_the_deadline_straddles_the_daily_period() -> None:
-    """Below one period the tile fires DOWN on a run that merely started late; at two periods
+def test_the_deadline_straddles_the_daily_period(unit: str) -> None:
+    """Below one period the rule fires on a run that merely started late; at two periods
     a whole missed run goes unreported. The timer is daily with a 10-min jitter and up to a
-    100-min run, so the beat-to-beat gap can exceed a day by under two hours."""
-    interval = _alive_tile()["interval"]
-    assert DAY + 2 * 3600 < interval < 2 * DAY, (
-        f"interval {interval}s must sit between one jittered daily period and two days"
+    100-min run, so the gap between two verdicts can exceed a day by under two hours."""
+    [deadline] = UNIT_DEADLINE.findall(unit)
+    assert DAY + 2 * 3600 < int(deadline) < 2 * DAY, (
+        f"deadline {deadline}s must sit between one jittered daily period and two days"
     )
     defaults = yaml_fast.safe_load(DEFAULTS.read_text())
     assert re.fullmatch(

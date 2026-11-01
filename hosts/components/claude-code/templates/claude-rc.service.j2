@@ -16,6 +16,18 @@ OnFailure=claude-rc-alert.service
 # the manager if linger is ever off.
 Wants=user@{{ claude_code_user_uid }}.service
 After=user@{{ claude_code_user_uid }}.service
+{% else %}
+# DECIDED: no Wants= and no After= on the operator's user@{{ claude_code_login_uid }}.service.
+# The agent branch orders on its manager because its BindPaths= fails the unit's start while
+# the runtime directory is missing. This branch binds nothing. The two Environment= lines
+# below are paths that sd-bus reads at each `systemctl --user` call, and sessions spawn long
+# after boot, so a manager that comes up after this unit costs nothing. Wants= would start the
+# operator's manager at boot on a host where the operator does not linger. That manager
+# would then run until logind stops it at the operator's first logout, which is a linger
+# the operator never set. Where the operator does linger (claude-agent-setup lingers both
+# accounts), logind starts the manager at boot and Wants= adds nothing. After= alone guards
+# nothing either, and it would hold this unit's start until the operator's manager finishes
+# starting its own units.
 {% endif %}
 
 [Service]
@@ -47,11 +59,6 @@ BindPaths=/run/user/{{ claude_code_user_uid }}
 NoNewPrivileges=yes
 PrivateTmp=yes
 
-# A system unit gets neither variable, and sd-bus finds the user bus through one of them. With
-# both unset, `systemd-run --user` and `systemctl --user` fail with "No medium found".
-Environment=XDG_RUNTIME_DIR=/run/user/{{ claude_code_user_uid }}
-Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ claude_code_user_uid }}/bus
-
 # DECIDED: UMask=0027, for a non-operator user only. The unit set no UMask=, so a session
 # inherited systemd's default 0022 (`systemctl show -p UMask` on daniel-box). That
 # already leaves the group read bit on a file created 0666, so the value is not what lets the
@@ -65,6 +72,17 @@ Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ claude_code_user_uid
 UMask=0027
 
 {% endif %}
+{#- The agent's uid is claude_code_user_uid, which has no default. The operator's is
+    claude_code_login_uid, never claude_code_user_uid: daniel-box keeps that var at the agent's
+    uid when its rollback sets claude_code_user back to the operator. The inline if evaluates
+    one side only, so an agent render without claude_code_user_uid still fails. #}
+{% set runtime_uid = claude_code_user_uid if claude_code_user != sys_user else claude_code_login_uid %}
+# A system unit gets neither variable, and sd-bus finds the user bus through one of them. With
+# both unset, `systemd-run --user` and `systemctl --user` fail with "No medium found". The
+# operator's unit needs them as much as the agent's (#6868).
+Environment=XDG_RUNTIME_DIR=/run/user/{{ runtime_uid }}
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{{ runtime_uid }}/bus
+
 {% if claude_code_fleet_caps_enabled %}
 # DECIDED: this unit lives in {{ claude_code_fleet_slice }}, not the default system.slice, so
 # that it shares ONE parent cgroup with the other half of the Claude fleet — the login-session

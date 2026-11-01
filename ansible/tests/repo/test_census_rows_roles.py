@@ -321,9 +321,11 @@ ROWS = (
                 "{{ containers_list | entry_port('uptime-kuma') }}\n",
             ),
         ),
-        # Five dials across five files when the row landed (2026-10-09). netpol-baseline's
+        # Five dials across five files when the row landed (2026-10-09). M6 batch B6b's Cutover-2
+        # deleted the configarr, janitorr and crowdsec push Secrets, and other M6 cutovers
+        # removed the rest, which left monitor-bridge's env as the one dial. netpol-baseline's
         # probe row names the port in a table, not a dial; the entry-port render test covers it.
-        min_matches=5,
+        min_matches=1,
         must_find=frozenset(
             {
                 "ansible/roles/k8s/monitor-bridge/templates/config/env.yaml.j2",

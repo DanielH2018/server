@@ -207,6 +207,10 @@ because the two alerts share no `instance`, and the estate has one Pi.
 dead Kuma pages once, as a critical (`ansible/tests/services/test_alertmanager_kuma_inhibit.py`).
 `KumaDown` and the five k3s-cron rule pairs in `files/rules/host-checks.yaml` page since M6's
 batch B1 Cutover-1b.
+`files/rules/initial-setup-checks.yaml`, `other-setup-checks.yaml` and `pod-producers.yaml` hold
+the rules that replaced the Kuma tiles of M6 batches B2, B4 and B6b, and they page since the
+combined Cutover-1b. `EtcdRestoreDrillFailed` is critical, so a failed monthly drill pages Discord
+and email until a drill run passes.
 `files/rules/extra-probes.yaml` holds the rules that replaced Kuma's 14 hand-written probe tiles
 and the Pi's port arm. Its per-target alerts take `service` from the `blackbox-extra` and
 `blackbox-pi-ports` scrape jobs, so their rule labels carry none, and they page since M6's batch B8

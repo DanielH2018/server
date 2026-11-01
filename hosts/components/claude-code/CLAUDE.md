@@ -233,6 +233,11 @@ The sandbox hides `/home`, `/root` and `/run/user`, then binds back `/run/user/<
 `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` at it, so `systemd-run --user` works from a
 phone session (#6764). The uid is `claude_code_user_uid`, which has no default: a host that
 sets `claude_code_user` to the agent sets it in host_vars to the uid its `package.yml` declares.
+The operator's unit carries no sandbox but sets the same two variables, at `/run/user/<uid>` for
+`claude_code_login_uid` (#6868). It reads that var rather than `claude_code_user_uid`, which
+daniel-box keeps at the agent's uid through a rollback to `ubuntu`. Only the agent's unit orders
+on `user@<uid>.service`: the operator's binds nothing, so a late manager fails nothing, and a
+`Wants=` would start the operator's manager on a host where the operator does not linger.
 
 ## The artifacts node's two timers
 

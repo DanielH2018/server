@@ -259,8 +259,8 @@ operator.
 `hosts/components/claude-code/templates/claude-land-approval-paths.j2` is the source of
 truth, with a reason beside each entry. It holds:
 
-- the lander itself: `tasks/lander.yml`, the list template, the unit template, the polkit
-  rule template and the pins template, all under `ansible/roles/setup/claude_code/`, and
+- the lander itself: the list template, the unit template, the polkit rule template and the
+  pins template, all under `hosts/components/claude-code/templates/`, and
   `hosts/components/claude-code/component.yml`, which ships them
 - `scripts/deploy_tools/land`, a prefix that covers `land.sh`, `land.py`, `land_*.py` and
   `land_lib/`
@@ -270,9 +270,10 @@ truth, with a reason beside each entry. It holds:
 - `ansible/roles/setup/initial_setup/tasks/access.yml`, which holds sudo, ssh and the
   operator's login
 - `ansible/.sops.yaml` and `ansible/vars/secrets.yml`
-- alert-triggered triage: `tasks/triage.yml`, every `templates/claude-triage*` template, the
-  rule `templates/50-claude-triage.rules.j2` and `files/claude_triage_run.py`, all under
-  `ansible/roles/setup/claude_code/`. The operator added them on 2026-10-15. Later slices let
+- alert-triggered triage: every `templates/claude-triage*` template, which includes the pins
+  template that sets the run's caps, the rule `templates/50-claude-triage.rules.j2`,
+  `files/claude_triage_run.py` and `files/claude_triage_poll.py`, all under
+  `hosts/components/claude-code/`. The operator added them on 2026-10-15. Later slices let
   a triage run land its own fixes with nobody watching, so it must not be able to raise its own
   caps.
 - `ansible/roles/k8s/cluster-base/`, the agent's read-only cluster RBAC. The operator added it
@@ -283,10 +284,11 @@ truth, with a reason beside each entry. It holds:
 Two choices keep the floor from being bypassed through the inventory:
 
 - The list is literal in the template, not a variable.
-- `tasks/lander.yml` pins the unit's checkout, branch prefix, required author and approver,
-  and the Unix user the polkit rule admits, as block vars. Block vars outrank `host_vars` and
-  `group_vars`. Each pin is a literal. A pin that templated the agent profile's variables
-  resolved from the inventory and pinned nothing.
+- `hosts/components/claude-code/templates/claude-land-pins.j2` pins the unit's checkout,
+  branch prefix, required author and approver, and the Unix user the polkit rule admits. The
+  unit, the polkit rule and the agent's profile import it, so no inventory value repoints the
+  lander. Each pin is a literal. A pin that templated the agent profile's variables resolved
+  from the inventory and pinned nothing.
 
 **The floor is not a barrier to root.** The deployer applies any setup-role change as root, so
 a task added to an unlisted role reaches root without approval. A true root barrier would put
@@ -573,7 +575,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 
 ### Slice 1: one run, started by hand
 
-`tasks/triage.yml` in `setup/claude_code` installs the run. `claude_code_triage_enabled`
+The `claude-code` host component installs the run. `claude_code_triage_enabled`
 switches it on, and it installs only while `claude_code_agent_user_enabled` is also true.
 
 - **The unit** `claude-triage@<episode>.service` runs as `claude`, with the hardening the

@@ -82,5 +82,5 @@ def test_an_index_missing_a_required_member_is_refused(static_monitors, missing)
     """Dropping any one named entity is refused, however many others remain."""
     index = declaration_index(static_monitors)
     del index[missing]
-    assert len(index) > 50
+    assert len(index) > 30
     assert not index_passes(index)

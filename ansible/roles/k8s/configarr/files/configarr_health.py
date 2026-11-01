@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
 """configarr health reader — the cluster-side replacement for monitor-bridge's check_configarr.
 
-Reads the last completed configarr Job and pushes a verdict to the "Configarr Sync" Kuma push
-monitor. It never exits nonzero on a bad verdict: a DOWN is data to report, not a crash.
+Reads the last completed configarr Job and records a verdict: one log line, and the verdict
+ConfigMap's annotations when `CONFIGARR_VERDICT_CONFIGMAP` is set. It never exits nonzero on a
+bad verdict: a DOWN is data to report, not a crash. M6 batch B6b's Cutover-2 removed its push
+to the Kuma "Configarr Sync" monitor.
 
 Runs as the configarr-health CronJob (templates/health-cronjob.yaml.j2), in the repo's pinned
 python image, with kubectl copied in by an init container and the pod's own ServiceAccount
-(templates/health-rbac.yaml.j2) as its credential. host_lib.py and kuma_push.py sit beside it
-in the same ConfigMap. The push URL, which carries the token, reaches it as KUMA_PUSH_URL from
-the configarr-health Secret through `secretKeyRef`, so the token is never in the ConfigMap or in
-this file.
+(templates/health-rbac.yaml.j2) as its credential. host_lib.py sits beside it in the same
+ConfigMap, with kuma_push.py, which host_lib imports and this reader never calls.
 
 Usage:
 
     python3 /config/configarr_health.py
 
-Takes no arguments. `-h` and `--help` print this text and exit 0. With KUMA_PUSH_URL empty,
-or naming no `/api/push/<token>` path, it pushes nothing and prints one tab-separated line, `up<TAB>msg` or
-`down<TAB>msg`, which is how a hand run reads the verdict.
+Takes no arguments. `-h` and `--help` print this text and exit 0. It prints one line,
+`<UTC time> <pod> configarr-health: status=<up|down> <message>`, which is how a hand run reads
+the verdict.
 
 Environment (all optional):
 
@@ -28,7 +28,6 @@ Environment (all optional):
     CONFIGARR_KUBECTL_TIMEOUT_S  seconds allowed per kubectl call (default 30)
     CONFIGARR_VERDICT_CONFIGMAP  ConfigMap the verdict is also written to, as annotations that
                                  kube-state-metrics exports (default empty: no export)
-    KUMA_PUSH_URL                the Configarr Sync push monitor's URL, `<base>/api/push/<token>`
 """
 
 from __future__ import annotations
@@ -51,12 +50,13 @@ MAX_AGE_S = float(os.environ.get("CONFIGARR_MAX_AGE_H", "26")) * 3600
 KUBECTL = os.environ.get("CONFIGARR_KUBECTL", "k3s kubectl")
 TIMEOUT = int(os.environ.get("CONFIGARR_KUBECTL_TIMEOUT_S", "30"))
 # M6 B6b: the verdict leaves the pod a second way, as annotations on this ConfigMap, which
-# kube-state-metrics exports to Prometheus beside the Kuma push. Empty exports nothing.
+# kube-state-metrics exports to Prometheus. Empty exports nothing.
 VERDICT_CONFIGMAP = os.environ.get("CONFIGARR_VERDICT_CONFIGMAP", "")
 # The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape rsyslog gave the host
 # script's `logger -t` lines (the H2 plan's *Evidence goes to stdout*). monitor-bridge's
 # Swallowed Push Verdicts check parses exactly two tokens before the tag, so a bare
-# `<tag>: <message>` line would match its LogQL and never count (#5569).
+# `<tag>: <message>` line would match its LogQL and never count (#5569). The check reads
+# this line as a landed sibling, which is harmless: it pages only on a failed push.
 TAG = "configarr-health"
 
 
@@ -87,7 +87,7 @@ def export_verdict(
     """Writes the verdict and the run time to the verdict ConfigMap's annotations.
 
     kube-state-metrics exports `homelab/check-verdict` as a label of
-    `kube_configmap_annotations`, which the shadow rule `ConfigarrSyncFailed` reads. The time
+    `kube_configmap_annotations`, which the rule `ConfigarrSyncFailed` reads. The time
     and the message are for a human reading the object. The rule measures freshness from the
     CronJob's last successful run instead, because an annotation is a label and cannot be
     compared with the clock.
@@ -164,26 +164,23 @@ def verdict(kubectl: Callable[..., tuple[int, str]], now: float) -> tuple[bool, 
 
 def main(
     kubectl: Callable[..., tuple[int, str]] = KUBECTL_RUNNER,
-    push: Callable[..., bool] = host_lib.kuma_push,
     now: Callable[[], float] = time.time,
     verdict_configmap: str = VERDICT_CONFIGMAP,
 ) -> int:
-    """Pushes the verdict to Kuma, or prints it as `up\tmsg` / `down\tmsg` with no token.
+    """Logs the verdict and writes it to the verdict ConfigMap.
 
-    Exits 0 whatever the verdict. A reader that raises pushes a DOWN naming the exception,
-    which is what the host script's wrapper did for a reader that crashed: an absent push would
-    leave the tile to time out with no explanation. Its gate Job in `configarr-verify`
+    Exits 0 whatever the verdict. A reader that raises records a DOWN naming the exception,
+    so a crash reads as a verdict rather than as silence. Its gate Job in `configarr-verify`
     therefore proves that the reader starts and runs, and never what it judged.
 
-    The one exit 1 is a failed export to the verdict ConfigMap, after the push has run. A
-    reader that cannot write its verdict leaves the shadow rules reading the previous one, and
+    The one exit 1 is a failed export to the verdict ConfigMap, after the log line is written. A
+    reader that cannot write its verdict leaves the rules reading the previous one, and
     the failed Job stops the CronJob's last successful time, which `ConfigarrHealthNotReporting`
     reads. The same exit fails the gate Job when the Role or the ConfigMap is missing, which
     proves the export path on every revision.
 
     Args:
         kubectl: the kubectl transport; a test passes a recorder.
-        push: `kuma_push`'s signature; a test passes a stub.
         verdict_configmap: the ConfigMap the verdict is also written to, or empty for no
             export.
         now: the clock the Job's age is measured on.
@@ -200,23 +197,13 @@ def main(
             ),
         )
     status = "up" if ok else "down"
-    # The export runs beside the push until M6's Cutover-2 drops the push.
     exported = (
         export_verdict(kubectl, verdict_configmap, status, msg, now())
         if verdict_configmap
         else True
     )
     exit_code = 0 if exported else 1
-    # One URL rather than a base and a token, so the Secret's value is not a whole-scalar
-    # placeholder: one would join k8s/manifests' standalone guard map, and a change to that
-    # map fans a landing's narrowed apply out to every role that includes k8s/manifests.
-    base, _, token = os.environ.get("KUMA_PUSH_URL", "").partition("/api/push/")
-    if not base or not token:
-        print("%s\t%s" % (status, msg))
-        return exit_code
     emit("status=%s %s" % (status, msg))
-    if push(status, msg, base, token, log=emit):
-        emit("pushed")
     return exit_code
 
 

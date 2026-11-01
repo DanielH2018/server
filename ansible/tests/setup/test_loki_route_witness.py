@@ -23,7 +23,6 @@ import os
 
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 from _helpers import ALL_VARS, ANSIBLE
-from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script, rendered_shell_text
 from lib import yaml_fast
@@ -36,7 +35,7 @@ CRON_TASKS = yaml_fast.safe_load(CRONS)
 WITNESS = ("setup", "initial_setup", "loki-read-route-health.sh.j2")
 PUSH_ENV = "loki-route-kuma-push.env.j2"
 
-# The two tiles and the variable each is gated on, one per witnessing host.
+# Each witnessing host's tile id (deleted by M6 batch B2's Cutover-1a) and its token variable.
 TILES = {
     "daniel-box": ("loki-read-route-daniel-box.json", "loki_route_witness_push_token"),
     "daniel-server": (
@@ -51,7 +50,7 @@ SENTINELS = {
 }
 
 CRON_NAME = "Loki read-route witness"
-# The monitor interval declared for both tiles, and the timer period it has to cover.
+# The deadline the verdict's textfile carries, and the timer period it has to cover.
 MONITOR_INTERVAL_S = 7200
 HOURLY_S = 3600
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
@@ -119,22 +118,6 @@ def test_each_host_pushes_its_own_token():
     )
 
 
-def test_both_tiles_are_declared_and_gated_on_their_own_token():
-    """An ungated tile sits red from creation until its secret exists.
-
-    Read off the render: `entity` fails when the tile is absent with its gate armed, and
-    `tile_is_gated_on` fails when the tile is there with the gate open. Together they pin each
-    tile to THAT variable, which a substring match on the `{% if %}` line cannot do.
-    """
-    for host, (tile, gate_var) in TILES.items():
-        assert entity(tile, gate_var)["name"] == f"Loki Read Route ({host})", (
-            f"{tile} must be the tile named for {host}"
-        )
-        assert tile_is_gated_on(tile, gate_var), (
-            f"{tile} renders with {gate_var} empty, so it sits red from creation"
-        )
-
-
 def test_the_push_deadline_exceeds_the_timer_period():
     """A deadline shorter than the producer's period fires DOWN with nothing wrong."""
     on_calendar = _timer_import()["vars"]["kuma_check_on_calendar"]
@@ -142,11 +125,6 @@ def test_the_push_deadline_exceeds_the_timer_period():
         "this test reads the timer as hourly; give it a period if that changes"
     )
     assert MONITOR_INTERVAL_S >= 2 * HOURLY_S
-    for tile, gate_var in TILES.values():
-        assert entity(tile, gate_var)["interval"] == MONITOR_INTERVAL_S, (
-            f"{tile}'s rendered interval is not {MONITOR_INTERVAL_S}s, so the deadline this "
-            "test compares against the timer period is not the one Kuma gets"
-        )
 
 
 def test_a_host_dropped_from_the_list_loses_the_timer_and_the_cron():
