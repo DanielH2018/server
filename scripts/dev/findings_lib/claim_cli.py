@@ -121,6 +121,7 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
     # issue, a resumed orchestrator re-claiming its old batches would open one ssh connection
     # each, and `ufw limit ssh` rejects the sixth inside 30 seconds.
     batch_holds = functools.cache(lambda: tools.batch_holds(args.numbers))
+    peer_trees = functools.cache(tools.peer_trees)
     refused = False
     for number in args.numbers:
         issue = _load_issue(number, tools)
@@ -129,7 +130,9 @@ def cmd_claim(args: argparse.Namespace, tools: FindingsTools) -> int:
             # as "every worktree is gone". The claim blocks, as it did before this path
             # existed, and `plan_claim` refuses it below. The warning was said once, above.
             stale = (
-                stale_holder(issue, trees, dirty, merged, lambda _n: batch_holds())
+                stale_holder(
+                    issue, trees, dirty, merged, lambda _n: batch_holds(), peer_trees
+                )
                 if ok
                 else None
             )
@@ -270,6 +273,7 @@ def cmd_claims(args: argparse.Namespace, tools: FindingsTools) -> int:
         dirty,
         merged,
         batch_holds=tools.batch_holds,
+        peer_trees=tools.peer_trees,
     )
     others = 0
     if args.worktree:
@@ -320,7 +324,15 @@ def cmd_reap(args: argparse.Namespace, tools: FindingsTools) -> int:
     issues = load_issues("open", tools)
     by_number = {i["number"]: i for i in issues}
     reaped = 0
-    for s in claim_states(issues, trees, dirty, merged, batch_holds=tools.batch_holds):
+    states = claim_states(
+        issues,
+        trees,
+        dirty,
+        merged,
+        batch_holds=tools.batch_holds,
+        peer_trees=tools.peer_trees,
+    )
+    for s in states:
         if s.live:
             continue
         plans = plan_release(
