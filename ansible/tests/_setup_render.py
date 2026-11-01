@@ -22,11 +22,12 @@ from pathlib import Path
 from lib.ansible_jinja_env import template_env
 from lib.render_context import render_context
 from lib.render_guard import render_or_error
-from lib.repo_paths import REPO
 from validate.setup_templates import (
     ANSIBLE_RUNTIME_CONTEXT,
     SETUP,
+    COMPONENTS,
     discover_templates,
+    template_loader,
 )
 
 
@@ -43,24 +44,26 @@ def role_context(role_dir: Path, overrides: dict | None = None) -> dict:
 
 
 def render_setup_texts(
-    overrides: dict | None = None, setup: Path = SETUP
+    overrides: dict | None = None, setup: Path = SETUP, components: Path | None = None
 ) -> tuple[tuple[str, str, str], ...]:
     """(role, template name, rendered TEXT) for every template under `setup`, uncached.
 
     The template set is `validate/setup_templates.py:discover_templates`, so what a guard here
-    covers cannot drift from what that gate renders. Raises on a render failure rather than
-    skipping it: a template that stopped rendering would otherwise drop out of every census
-    built on this. `setup` is a parameter so a test can point it at a `tmp_path` tree.
+    covers cannot drift from what that gate renders, the role-shaped host components included.
+    Raises on a render failure rather than skipping it: a template that stopped rendering would
+    otherwise drop out of every census built on this. `setup` is a parameter so a test can point
+    it at a `tmp_path` tree, and `components` defaults to the repo's only when `setup` does.
     """
+    if components is None:
+        components = COMPONENTS if setup == SETUP else setup / "components"
     contexts: dict[Path, dict] = {}
     texts = []
-    for tpl in discover_templates(setup):
+    for tpl in discover_templates(setup, components):
         role_dir = tpl.parents[1]
         if role_dir not in contexts:
             contexts[role_dir] = role_context(role_dir, overrides)
-        rendered, err = render_or_error(
-            template_env(tpl.parent), tpl.name, contexts[role_dir]
-        )
+        root, name = template_loader(tpl)
+        rendered, err = render_or_error(template_env(root), name, contexts[role_dir])
         if rendered is None:
             raise AssertionError(f"setup/{role_dir.name}/{tpl.name}: {err}")
         texts.append((role_dir.name, tpl.name, rendered))
@@ -120,9 +123,6 @@ def render_setup_text(role: str, template: str, overrides: dict | None = None) -
     return rendered
 
 
-# The host components that keep role-shaped sources: `templates/`, `files/` and
-# `defaults/main.yml` beside their component.yml.
-COMPONENTS = REPO / "hosts" / "components"
 # The component that took over the claude_code setup role's sources (#6773).
 CLAUDE_CODE = COMPONENTS / "claude-code"
 
