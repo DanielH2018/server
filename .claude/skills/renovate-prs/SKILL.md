@@ -117,10 +117,14 @@ its content. The `hooks` job's scoping step now exits non-zero when the merge-re
 master is empty, which fails the `prek` gate; `test_ci_empty_pr_merge_fails.py` proves it.
 That shape defeats the `baseRefOid` tell above — GitHub reports where master stood when the
 PR opened, a few commits back, while the branch's real merge base is a day old. When a PR's
-title names a version its diff does not write, read the merge base directly:
+title names a version its diff does not write, read the merge base directly. Fetch the PR
+branch on its own line. `FETCH_HEAD` names the first ref a fetch wrote, so fetching master and
+the branch together makes it master, and the merge base comes back as master's tip:
 
 ```bash
-git fetch -q origin master "<headRefName>" && git merge-base origin/master FETCH_HEAD
+git fetch -q origin master
+git fetch -q origin "<headRefName>"
+git merge-base origin/master FETCH_HEAD
 ```
 
 A PR the check fails is closed, not rebased: its content is already on master. Ticking the
