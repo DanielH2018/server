@@ -24,7 +24,7 @@ tests:
       - eval_time: 200h
         alertname: DocsRefreshNotReporting
         exp_alerts:
-          - exp_labels: {check: docs-refresh, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: docs-refresh, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's generated-docs refresh has stopped reporting.
               description: >-
@@ -38,7 +38,7 @@ tests:
       - eval_time: 200h
         alertname: EvalSweepNotReporting
         exp_alerts:
-          - exp_labels: {check: eval-run, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: eval-run, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's weekly eval sweep has stopped reporting.
               description: >-
@@ -52,7 +52,7 @@ tests:
       - eval_time: 200h
         alertname: SecretRotationAuditNotReporting
         exp_alerts:
-          - exp_labels: {check: secret-rotation-audit, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: secret-rotation-audit, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
@@ -66,7 +66,7 @@ tests:
       - eval_time: 200h
         alertname: SetupDriftNotReporting
         exp_alerts:
-          - exp_labels: {check: setup-drift-check, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: setup-drift-check, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's setup-drift check has stopped reporting.
               description: >-
@@ -81,7 +81,7 @@ tests:
       - eval_time: 200h
         alertname: LokiReadRouteNotReporting
         exp_alerts:
-          - exp_labels: {check: loki-read-route-health, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
@@ -90,7 +90,7 @@ tests:
                 being witnessed. Read `systemctl status kuma-check-loki-read-route` on
                 daniel-box, then /var/lib/node-exporter-textfile/loki-read-route-health.prom on
                 the host.
-          - exp_labels: {check: loki-read-route-health, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
@@ -116,7 +116,7 @@ tests:
       - eval_time: 4h
         alertname: DocsRefreshFailed
         exp_alerts:
-          - exp_labels: {check: docs-refresh, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: docs-refresh, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's generated-docs refresh reported a failure.
               description: >-
@@ -135,7 +135,7 @@ tests:
       - eval_time: 4h
         alertname: EvalSweepFailed
         exp_alerts:
-          - exp_labels: {check: eval-run, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: eval-run, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's weekly eval sweep reported a failure.
               description: >-
@@ -154,7 +154,7 @@ tests:
       - eval_time: 4h
         alertname: SecretRotationAuditFailed
         exp_alerts:
-          - exp_labels: {check: secret-rotation-audit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: secret-rotation-audit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's secret-rotation audit reported a failure.
               description: >-
@@ -173,7 +173,7 @@ tests:
       - eval_time: 4h
         alertname: SetupDriftFailed
         exp_alerts:
-          - exp_labels: {check: setup-drift-check, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: setup-drift-check, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's setup plane has drifted from the repo.
               description: >-
@@ -198,7 +198,7 @@ tests:
       - eval_time: 4h
         alertname: LokiReadRouteFailed
         exp_alerts:
-          - exp_labels: {check: loki-read-route-health, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box cannot read Loki through the loki-homelab route.
               description: >-
@@ -224,7 +224,7 @@ tests:
       - eval_time: 4h
         alertname: LokiReadRouteFailed
         exp_alerts:
-          - exp_labels: {check: loki-read-route-health, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server cannot read Loki through the loki-homelab route.
               description: >-
@@ -249,7 +249,7 @@ tests:
       - eval_time: 14h
         alertname: DocsRefreshNotReporting
         exp_alerts:
-          - exp_labels: {check: docs-refresh, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: docs-refresh, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's generated-docs refresh has stopped reporting.
               description: >-
@@ -270,7 +270,7 @@ tests:
       - eval_time: 175h
         alertname: EvalSweepNotReporting
         exp_alerts:
-          - exp_labels: {check: eval-run, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: eval-run, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's weekly eval sweep has stopped reporting.
               description: >-
@@ -291,7 +291,7 @@ tests:
       - eval_time: 26h
         alertname: SecretRotationAuditNotReporting
         exp_alerts:
-          - exp_labels: {check: secret-rotation-audit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: secret-rotation-audit, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
@@ -312,7 +312,7 @@ tests:
       - eval_time: 26h
         alertname: SetupDriftNotReporting
         exp_alerts:
-          - exp_labels: {check: setup-drift-check, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: setup-drift-check, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's setup-drift check has stopped reporting.
               description: >-
@@ -340,7 +340,7 @@ tests:
       - eval_time: 3h
         alertname: LokiReadRouteNotReporting
         exp_alerts:
-          - exp_labels: {check: loki-read-route-health, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, instance: daniel-box, job: node, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
@@ -368,7 +368,7 @@ tests:
       - eval_time: 3h
         alertname: LokiReadRouteNotReporting
         exp_alerts:
-          - exp_labels: {check: loki-read-route-health, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, instance: daniel-server, job: node, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-
@@ -394,7 +394,7 @@ tests:
       - eval_time: 17h
         alertname: DocsRefreshNotReporting
         exp_alerts:
-          - exp_labels: {check: docs-refresh, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: docs-refresh, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's generated-docs refresh has stopped reporting.
               description: >-
@@ -415,7 +415,7 @@ tests:
       - eval_time: 178h
         alertname: EvalSweepNotReporting
         exp_alerts:
-          - exp_labels: {check: eval-run, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: eval-run, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's weekly eval sweep has stopped reporting.
               description: >-
@@ -436,7 +436,7 @@ tests:
       - eval_time: 29h
         alertname: SecretRotationAuditNotReporting
         exp_alerts:
-          - exp_labels: {check: secret-rotation-audit, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: secret-rotation-audit, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's secret-rotation audit has stopped reporting.
               description: >-
@@ -457,7 +457,7 @@ tests:
       - eval_time: 29h
         alertname: SetupDriftNotReporting
         exp_alerts:
-          - exp_labels: {check: setup-drift-check, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: setup-drift-check, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's setup-drift check has stopped reporting.
               description: >-
@@ -485,7 +485,7 @@ tests:
       - eval_time: 6h
         alertname: LokiReadRouteNotReporting
         exp_alerts:
-          - exp_labels: {check: loki-read-route-health, origin: daniel-box, severity: warning, service: daniel-box, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, origin: daniel-box, severity: warning, service: daniel-box}
             exp_annotations:
               summary: daniel-box's Loki read-route witness has stopped reporting.
               description: >-
@@ -513,7 +513,7 @@ tests:
       - eval_time: 6h
         alertname: LokiReadRouteNotReporting
         exp_alerts:
-          - exp_labels: {check: loki-read-route-health, origin: daniel-server, severity: warning, service: daniel-server, shadow: "true"}
+          - exp_labels: {check: loki-read-route-health, origin: daniel-server, severity: warning, service: daniel-server}
             exp_annotations:
               summary: daniel-server's Loki read-route witness has stopped reporting.
               description: >-

@@ -5,8 +5,9 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# SHADOW UNTIL M6's BATCH B4 CUTOVER-1B. Each rule runs beside the Kuma tile of the same check, so
-# each carries `shadow: "true"` and pages nobody. Severity is the tile's: `critical` for both UPS
+# THESE RULES PAGE SINCE M6's BATCH B4 CUTOVER-1B. Each one ports the Kuma tile of the same
+# check, and Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule
+# back. Severity is the tile's: `critical` for both UPS
 # secondaries and the full drill, which email as well as notify Discord, and `warning` for the
 # rest. `service` is the host as a literal, because a node is not a workload (M3's open
 # question 3). Each pair is `<Check>Failed` and `<Check>NotReporting`, the shape M3 fixed:
@@ -36,9 +37,10 @@
 # plus slack that their Kuma tiles carry, 3024000 (35 days). The renovate units render their
 # tiles' own intervals, 129600 and 100800.
 #
-# The drills' NotReporting rules fire from the deploy until the first run after it writes its
-# file (1 November 11:20 UTC), because a monthly producer cannot write earlier. That is harmless
-# while the rules are shadow. The weekly reboot (about 07:35 to 07:50) leaves every writer's gap
+# The drills' NotReporting rules fired from the deploy until the first run after it wrote its
+# file (1 November 11:20 UTC), because a monthly producer cannot write earlier. That run failed,
+# so EtcdRestoreDrillFailed (critical) pages from Cutover-1b until a drill run passes. The weekly
+# reboot (about 07:35 to 07:50) leaves every writer's gap
 # inside its deadline.
 groups:
   - name: other-setup-checks
@@ -49,7 +51,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's UPS secondary watchdog reported a failure.
           description: >-
@@ -69,7 +70,6 @@ groups:
         labels:
           severity: critical
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's UPS secondary watchdog has stopped reporting.
           description: >-
@@ -83,7 +83,6 @@ groups:
         labels:
           severity: critical
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's UPS secondary watchdog reported a failure.
           description: >-
@@ -103,7 +102,6 @@ groups:
         labels:
           severity: critical
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's UPS secondary watchdog has stopped reporting.
           description: >-
@@ -118,7 +116,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The fake-remux scan on daniel-box reported a failure.
           description: >-
@@ -136,7 +133,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The fake-remux heartbeat on daniel-box has stopped reporting the scan.
           description: >-
@@ -150,7 +146,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The fake-remux reconciler on daniel-box reported a failure.
           description: >-
@@ -168,7 +163,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The fake-remux heartbeat on daniel-box has stopped reporting the reconciler.
           description: >-
@@ -182,7 +176,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The mkv attachment repair on daniel-box reported a failure.
           description: >-
@@ -201,7 +194,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The fake-remux heartbeat on daniel-box has stopped reporting the mkv repair.
           description: >-
@@ -215,7 +207,6 @@ groups:
         labels:
           severity: critical
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: The monthly etcd restore drill on daniel-server failed.
           description: >-
@@ -234,7 +225,6 @@ groups:
         labels:
           severity: critical
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: The monthly etcd restore drill on daniel-server has stopped reporting.
           description: >-
@@ -249,7 +239,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: The etcd drill's egress fence leg on daniel-server reported a failure.
           description: >-
@@ -268,7 +257,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: The etcd drill's egress fence leg on daniel-server has stopped reporting.
           description: >-
@@ -289,7 +277,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The renovate notifier on daniel-box has not completed a run in 36 hours.
           description: >-
@@ -310,7 +297,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: The renovate agent on daniel-box has not completed a clean run in 28 hours.
           description: >-

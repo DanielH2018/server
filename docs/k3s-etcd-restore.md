@@ -9,7 +9,7 @@ seconds end to end.
 A weekly `--list-only` drill on daniel-box (`k3s_etcd_restore_drill_cron`, armed by
 `k3s_etcd_restore_drill_armed`) proves the listing leg. `check_etcd_restore_drill()` in
 monitor-bridge reads its stamp fail-closed onto the `etcd Restore Drill` Kuma tile. The monthly
-drill has its own tile, `etcd Restore Drill (full)`.
+drill reports through `EtcdRestoreDrillFailed` and `EtcdRestoreDrillNotReporting`.
 
 No drill exercises the steps after the object graph comes back: the agent rejoin, the Longhorn
 reattach, and the restore onto a replacement host rather than into a scratch data-dir. Those
@@ -43,9 +43,10 @@ a root cron on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first
    `/var/log/etcd-restore-drill/<run-id>/` on daniel-server (pruned after 400 days), then
    destroys the guest and deletes its disk — pass or fail, so no restored etcd database, token
    copy or credential outlives a run;
-5. stamps `/var/lib/etcd-restore-drill/last-success-full` on daniel-server and pushes the verdict
-   to the **etcd Restore Drill (full)** Kuma tile, whose deadline (`etcd_drill_full_kuma_interval_s`,
-   35 days) is derived from the cron's period.
+5. stamps `/var/lib/etcd-restore-drill/last-success-full` on daniel-server and writes the verdict
+   to the `etcd-restore-drill-vm` textfile. `EtcdRestoreDrillFailed` (critical) reads the verdict,
+   and `EtcdRestoreDrillNotReporting` reads the file against a deadline
+   (`etcd_drill_full_kuma_interval_s`, 35 days) that derives from the cron's period.
 
 To run it by hand on daniel-server: `sudo /usr/local/bin/etcd-restore-drill-vm`. It takes a lock,
 so a run that overlaps the cron refuses rather than building a second guest.

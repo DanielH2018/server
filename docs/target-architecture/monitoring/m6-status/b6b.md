@@ -167,3 +167,13 @@ B6b cuts over in the combined window of B2, B4 and B6b. The window has four stac
 
 Flux does not promote on Sunday between 02:05 and 08:15 UTC, so a Flux-owned half that merges in
 that span waits for 08:15Z, and a revert waits with it.
+
+**Cutover-1b, the rules page.** The combined window's second PR drops `shadow` from the nine rules in `pod-producers.yaml` and
+removes the five `CheckWithoutPager` terms of B6b (the three CrowdSec tiles, Configarr Sync and Janitorr Errors). Every rule file is `files/rules/pod-producers.yaml`.
+`CrowdSecAppSecVerifyFailed`, `CrowdSecJobStale` and `CrowdSecJobsExporterAbsent` are `critical`; the other six are `warning`.
+
+**Inhibits.** None is added. `CrowdSecJobsExporterAbsent` fires on `absent(up{job="crowdsec-jobs"})` and `ScrapeTargetDown` on `up == 0`, so one dead exporter never fires both arms. The two CronJob rules end in `unless on () (up{job="kube-state-metrics"} == 0)`, which leaves a dead kube-state-metrics to `ScrapeTargetDown`.
+
+The no-pager bound is 2 hours from Cutover-1a's `uptime-kuma` apply. Cutover-1b is `observability`,
+which Flux applies through `promote`, so it waits out Sunday 02:05 to 08:15 UTC like the rest of
+the window.
