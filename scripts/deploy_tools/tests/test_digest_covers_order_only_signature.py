@@ -3,7 +3,8 @@
 Each row is a write `signature` compares between the ends: a tuple, which no walk copies, and
 a function swapped into a logger's filters, which leaves the list's length alone. The
 #6425 and #6433 rows re-point a reference between two set items, and re-bind a method to
-another handler.
+another handler. The #6807 row keeps two unchanged set items order-only when their hash order
+swaps, and the #6809 row re-binds a method between two handlers reached earlier elsewhere.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_digest_covers_order_only_signature.py
 """
@@ -127,5 +128,73 @@ def test_a_bound_method_re_bound_to_another_chain_created_handler_keeps_the_line
     """
     reason = _reason_for_head_call(
         tree, "import logging", call, base_call=f"{_TWO_HANDLERS}\n{base_call}"
+    )
+    assert reason and "every deploy runs" in reason
+
+
+# `_HASH` sits in the plugin's own module, which no walk reaches, so the head re-hashing and
+# rebuilding the set changes only its iteration order, as a second process does.
+_TWO_IN_A_SET = (
+    "import json\n\n\n"
+    "_HASH = {'a': 1, 'b': 2}\n\n\n"
+    "class _Box:\n    def __hash__(self):\n        return _HASH[self.name]\n\n\n"
+    "_A = _Box()\n_A.name = 'a'\n_B = _Box()\n_B.name = 'b'\n"
+    "json.order_only_6807 = {_A, _B}"
+)
+
+
+def test_two_objects_created_in_a_set_unchanged_between_the_ends_is_order_only(
+    tree,  # noqa: F811
+):
+    """Two module-created objects in a set whose hash order swaps between the ends (#6807).
+
+    Neither object changes, so the `created` rows under the set must not name each by its
+    hash-order index.
+    """
+    reason = _reason_for_head_module_code(
+        tree,
+        _TWO_IN_A_SET,
+        "_HASH.update(a=2, b=1)\njson.order_only_6807 = {_A, _B}",
+    )
+    assert reason is None
+
+
+def test_a_filter_re_bound_between_two_handlers_the_logger_also_holds_keeps_the_line(
+    tree,  # noqa: F811
+):
+    """`filters[0]` swapped from h1.filter to h2.filter, both in the logger's handlers (#6809).
+
+    Re-creating `filters` moves it after `handlers` in the logger's `__dict__`, so the
+    breadth-first walk reaches both handlers before the method's `__self__` at both ends. The
+    `__self__` must then name which handler it points at rather than write nothing.
+    """
+    handlers = (
+        "_h1 = logging.Handler(logging.INFO)\n_h2 = logging.Handler(logging.CRITICAL)\n"
+        "logging.getLogger('order-only-6809').addHandler(_h1)\n"
+        "logging.getLogger('order-only-6809').addHandler(_h2)\n"
+        "del logging.getLogger('order-only-6809').filters\n"
+        "logging.getLogger('order-only-6809').filters = [_h1.filter]"
+    )
+    reason = _reason_for_head_call(
+        tree,
+        "import logging",
+        "logging.getLogger('order-only-6809').filters[0] = _h2.filter",
+        base_call=handlers,
+    )
+    assert reason and "every deploy runs" in reason
+
+
+def test_a_set_item_created_by_the_module_code_that_changes_with_its_hash_order_keeps_the_line(
+    tree,  # noqa: F811
+):
+    """One of two module-created set items changes while their hash order swaps (#6807).
+
+    Dropping the index must leave each item's signature compared, not the set path's rows.
+    `_HASH` gains `c`, or hashing `_B` raises and the run reads as doubt, which keeps the line too.
+    """
+    reason = _reason_for_head_module_code(
+        tree,
+        _TWO_IN_A_SET,
+        "_HASH.update(a=2, b=1, c=3)\n_B.name = 'c'\njson.order_only_6807 = {_A, _B}",
     )
     assert reason and "every deploy runs" in reason
