@@ -598,8 +598,9 @@ a short window with none, which is the safe direction of convention 5.
       `test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok` derives from the
       renders. Their Cutover-2 drops the push, so the same commit drops their tags from
       `HC_ROUTED_TAGS`, or that test goes red, and deploys `monitor-bridge`. B1's and B5's
-      shadow PRs add those tags to `KUMA_RETIRING_TAGS` as well, so the refused pushes still
-      inside the 3h window do not page once `HC_ROUTED_TAGS` loses them.
+      shadow PRs add those tags to `KUMA_RETIRING_TAGS` as well. For B1, that keeps the
+      refused pushes still inside the 3h window from paging once `HC_ROUTED_TAGS` loses them.
+      For B5 the entry exempts nothing, as the next bullet explains.
     - **B1 is order-free; B5 is not.** `KUMA_RETIRING_TAGS` exempts a `rejected` line only,
       and only a line carrying `by=kuma` parses as `rejected`. B1's host cron logs to the
       daniel-box journal, which Loki reads, so a push that Kuma refuses carries `by=kuma` and
