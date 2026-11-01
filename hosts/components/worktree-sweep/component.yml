@@ -1,11 +1,14 @@
-# The weekly worktree sweep and git object-store repair on daniel-box (H7.10b,
-# docs/target-architecture/host/h7-delete-ansible.md). Until H7.36 initial_setup installed it as the
-# "Weekly git object-store repair" cron (`/etc/cron.d/git-object-store-repair`). Now
-# homelab-worktree-sweep.timer starts homelab-worktree-sweep.service on Sunday at 04:20, as
-# sys_user, in the primary checkout.
+# The weekly worktree sweep and git object-store repair (H7.10b,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.36 initial_setup installed it on
+# daniel-box as the "Weekly git object-store repair" cron (`/etc/cron.d/git-object-store-repair`).
+# Now homelab-worktree-sweep.timer starts homelab-worktree-sweep.service on Sunday at 04:20, as
+# sys_user, in the primary checkout. daniel-box and daniel-server both list the component, because
+# fan-out batches run in both hosts' checkouts (#6815). Each host pings its own
+# `<host>-worktree-sweep` check, which monitor_bridge_healthchecks_expected lists.
 #
-# The sweep needs no credential in daniel-box's SOPS file. The script sources the Healthchecks.io
-# ping key from /etc/healthchecks/ping.env, which initial_setup still writes on every host.
+# The service loads the Healthchecks.io ping key as the credential `healthchecks_ping_key`, so
+# every package listing this component lists that credential. daniel-server's package retires
+# /etc/healthchecks, the file the script read until #6815.
 # The worktree holder scan's socket (`worktree-holders.socket`) is not part of this component:
 # it moves with `claude_code` (H7.12).
 #

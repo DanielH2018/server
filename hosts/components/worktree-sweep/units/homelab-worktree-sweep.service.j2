@@ -1,6 +1,8 @@
-# Shipped by homelab-daniel-box. Started by homelab-worktree-sweep.timer.
+# Shipped by the host package's worktree-sweep component. Started by homelab-worktree-sweep.timer.
 [Unit]
 Description=Remove merged worktrees, repair the git object store and ping Healthchecks.io with the exit code
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
 
 [Service]
 SyslogLevel=notice
@@ -10,3 +12,5 @@ ExecStart=/usr/lib/homelab/worktree-sweep
 # The journal replaces the cron's `2>&1 | logger -t worktree-sweep`: Promtail ships it to Loki
 # and `journalctl -t worktree-sweep` reads it.
 SyslogIdentifier=worktree-sweep
+# The Healthchecks.io key. systemd hands the copy to User=, so the script reads it unprivileged.
+LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key

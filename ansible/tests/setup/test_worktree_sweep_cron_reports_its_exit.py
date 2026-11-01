@@ -3,11 +3,13 @@
 `prune_worktrees.py` exits 1 when a removal or a branch deletion failed, and the exit code
 reaches anyone only through the ping URL (#4482). These tests run the rendered
 `worktree-sweep` script of the `worktree-sweep` component with `uv`, `curl` and `hostname`
-stubbed, so they read what the timer runs rather than a pattern over its text.
+stubbed, so they read what the timer runs rather than a pattern over its text. The key arrives
+as systemd hands it over: a `healthchecks_ping_key` file under `$CREDENTIALS_DIRECTORY`.
 
 Run: uv run pytest ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py
 """
 
+import os
 from pathlib import Path
 
 from _shell_render import render_shell_script
@@ -27,21 +29,21 @@ def _run(tmp_path: Path, sweep_rc: int, key: str = "k3y"):
         curl=f'for a; do last="$a"; done; echo "$last" > {pinged}\n',
         hostname="echo daniel-box\n",
     )
-    ping_env = tmp_path / "ping.env"
-    ping_env.write_text(f"HC_PING_KEY='{key}'\n")
+    credentials = tmp_path / "credentials"
+    credentials.mkdir()
+    (credentials / "healthchecks_ping_key").write_text(key)
     body = render_shell_script(
         "components",
         "worktree-sweep",
         "worktree-sweep.sh.j2",
         overrides={"sys_user": SYS_USER},
     )
-    body = body.replace(f"/home/{SYS_USER}", str(home)).replace(
-        "/etc/healthchecks/ping.env", str(ping_env)
-    )
+    body = body.replace(f"/home/{SYS_USER}", str(home))
     assert "{{" not in body, body
     script = tmp_path / "worktree-sweep"
     script.write_text(body)
-    result = run(["bash", str(script)], stub_bin=stubs)
+    env = {**os.environ, "CREDENTIALS_DIRECTORY": str(credentials)}
+    result = run(["bash", str(script)], env=env, stub_bin=stubs)
     return result, pinged.read_text().strip() if pinged.exists() else ""
 
 

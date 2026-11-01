@@ -1,10 +1,10 @@
-"""The rendered `worktree-sweep` component: the weekly git object-store repair in daniel-box's package (H7.10b).
+"""The rendered `worktree-sweep` component: the weekly git object-store repair (H7.10b).
 
 Until H7.36 `initial_setup` installed the sweep as the `Weekly git object-store repair` cron in
 `/etc/cron.d/git-object-store-repair`. These tests hold what the move carries: the unit that runs
 the script as `sys_user`, the timer's slot, which equals the `initial_setup_worktree_sweep_cron_*`
-defaults the deadman fragment and monitor-bridge still read, the absence of any credential, and
-the legacy entry. The script's exit-code ping is run in
+defaults the deadman fragment and monitor-bridge still read, the Healthchecks.io key credential
+every package shipping the sweep lists (#6815), and the legacy entry. The script's exit-code ping is run in
 `ansible/tests/setup/test_worktree_sweep_cron_reports_its_exit.py`.
 
 Run: uv run pytest hosts/lib/tests/test_worktree_sweep_component.py
@@ -21,7 +21,7 @@ from lib.render_context import render_context
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = REPO / "hosts" / "components" / "worktree-sweep" / "component.yml"
+PING_KEY = "healthchecks_ping_key"
 INITIAL_SETUP_DEFAULTS = REPO / "ansible/roles/setup/initial_setup/defaults/main.yml"
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/worktree-sweep"
@@ -74,10 +74,46 @@ def test_the_service_runs_the_script_as_sys_user_and_logs_under_its_old_tag(pack
     assert "ProtectHome" not in unit
 
 
-def test_the_component_needs_no_credential(package):
-    spec = yaml_fast.safe_load(COMPONENT.read_text())
-    assert "credentials" not in spec
-    assert "CREDENTIALS_DIRECTORY" not in _text(package, SCRIPT)
+def test_the_service_loads_the_ping_key_the_script_reads(package):
+    unit = _text(package, f"{UNITS}/homelab-worktree-sweep.service")
+    assert f"LoadCredential={PING_KEY}:/run/credstore/{PING_KEY}\n" in unit
+    assert "homelab-secrets.service" in unit
+    assert f"$CREDENTIALS_DIRECTORY/{PING_KEY}" in _text(package, SCRIPT)
+
+
+def credential_problems(packages: dict[str, dict]) -> list[str]:
+    """Each package listing worktree-sweep without the Healthchecks.io key credential."""
+    return [
+        f"{host} lists worktree-sweep without the {PING_KEY} credential"
+        for host, spec in sorted(packages.items())
+        if "worktree-sweep" in spec.get("components", [])
+        and PING_KEY not in spec.get("credentials", [])
+    ]
+
+
+def _packages() -> dict[str, dict]:
+    return {
+        path.parent.name: yaml_fast.safe_load(path.read_text())
+        for path in (REPO / "hosts").glob("*/package.yml")
+    }
+
+
+def test_both_checkout_hosts_ship_the_sweep():
+    shipping = {
+        h for h, s in _packages().items() if "worktree-sweep" in s["components"]
+    }
+    assert {"daniel-box", "daniel-server"} <= shipping
+
+
+def test_every_package_shipping_the_sweep_lists_its_ping_key_is_clean():
+    assert credential_problems(_packages()) == []
+
+
+def test_a_package_shipping_the_sweep_without_its_ping_key_is_flagged():
+    packages = {"h": {"components": ["worktree-sweep"], "credentials": ["other"]}}
+    assert credential_problems(packages) == [
+        f"h lists worktree-sweep without the {PING_KEY} credential"
+    ]
 
 
 def test_the_timer_slot_equals_the_defaults_the_deadman_fragment_reads(package):
