@@ -169,8 +169,11 @@ def test_notification_configs_declare_apply_existing():
 # Pi-hole k8s DNS, left it with the other 12 probe tiles in Cutover-a1. The edge probe's rule
 # `ExtraProbeFailedCritical` is critical, and so are the Mosquitto and Pi-hole probes while their
 # entries are home-critical, so Alertmanager mails them once B8's Cutover-b drops `shadow`.
+#
+# M6 batch B5's Daniel Pi SD Health left the tier when Cutover-1a deleted it. `PiSdHealthFailed`
+# and `PiSdHealthNotReporting` are critical, so Alertmanager mails them once Cutover-1b drops
+# `shadow`.
 EMAIL_TIER = {
-    "Daniel Pi SD Health",
     "etcd Restore Drill (full)",
     "B2 Reachable",
     "B2 Free Tier Headroom",
