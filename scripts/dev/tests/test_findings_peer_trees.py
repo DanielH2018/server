@@ -82,7 +82,19 @@ def test_reap_holds_a_claim_with_no_local_worktree_when_the_peer_cannot_be_read(
     tools = dataclasses.replace(tools, peer_worktrees=_peer(None)[0])
     assert main(["reap"], tools) == 0
     assert not any("--remove-label" in c for c in calls.gh)
-    assert "reap: 0 stale claim(s) released" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "reap: 0 stale claim(s) released" in out
+    # Stdout, because the weekly sweep relays only reap's stdout on exit 0.
+    assert "could not be read; held 1 claim(s) with no worktree here: #1132" in out
+
+
+def test_reap_prints_no_peer_warning_when_the_peer_was_read(capsys):
+    peer_tree = Worktree(f"/w/{OTHER}", "abc1234", OTHER, False, "")
+    issue = make_issue(1132, comments=[claim_comment(OTHER, None, "t")])
+    tools, _ = build_tools(Fakes(issues=[issue], worktree_facts=facts()))
+    tools = dataclasses.replace(tools, peer_worktrees=_peer([peer_tree])[0])
+    assert main(["reap"], tools) == 0
+    assert "warning" not in capsys.readouterr().out
 
 
 def test_reap_reads_no_peer_when_every_stale_claim_has_a_local_worktree():

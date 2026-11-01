@@ -61,6 +61,13 @@ def _no_peer_trees() -> list[Worktree] | None:
     return []
 
 
+# The reason a claim reads held because the peer read failed. `cmd_reap` counts it, so a
+# lasting ssh or path failure reaches the sweep's output instead of reading as "0 released".
+PEER_UNREADABLE = (
+    "no worktree here, and the other host's worktrees could not be read; held"
+)
+
+
 def _peer_reason(peer: list[Worktree] | None, branch: str) -> str | None:
     """Why the peer host holds a claim this host has no worktree for, or None if it does not.
 
@@ -68,9 +75,7 @@ def _peer_reason(peer: list[Worktree] | None, branch: str) -> str | None:
     either does not exist or is a different tree. Only the peer's own sweep can judge it.
     """
     if peer is None:
-        return (
-            "no worktree here, and the other host's worktrees could not be read; held"
-        )
+        return PEER_UNREADABLE
     if any(t.branch == branch for t in peer):
         return "worktree registered by the other host's checkout — only that host can judge it"
     return None
