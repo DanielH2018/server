@@ -374,3 +374,27 @@ def test_agent_unit_without_a_uid_fails_the_package_render(tmp_path) -> None:
     """
     with pytest.raises(RenderError, match="'claude_code_user_uid' is undefined"):
         render_daniel_server_with(tmp_path, claude_code_user="claude")
+
+
+@pytest.mark.parametrize("uid", [1000, 1500])
+def test_operator_sessions_reach_the_operators_user_bus(uid: int) -> None:
+    """A system unit gets no user-bus variables, so `systemctl --user` reads "No medium found".
+
+    The operator's unit carries no sandbox, but it needs the same two variables as the agent's
+    (#6868). They follow claude_code_login_uid, so the second uid catches a hardcoded 1000.
+    """
+    env = directive(render(UNIT, claude_code_login_uid=uid), "Environment")
+    assert f"XDG_RUNTIME_DIR=/run/user/{uid}" in env
+    assert f"DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/{uid}/bus" in env
+
+
+def test_operator_unit_neither_starts_nor_waits_for_the_operators_user_manager(
+    unit: str,
+) -> None:
+    """The operator's unit binds nothing, so a late manager fails nothing.
+
+    Wants= would start the operator's manager at boot on a host where the operator does not
+    linger. The DECIDED comment at the template's [Unit] section has the reasoning.
+    """
+    ordering = directive(unit, "Wants") + directive(unit, "After")
+    assert [v for v in ordering if v.startswith("user@")] == []
