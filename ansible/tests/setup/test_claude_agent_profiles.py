@@ -8,12 +8,11 @@ Run: uv run pytest ansible/tests/setup/test_claude_agent_profiles.py
 """
 
 import pytest
-from _helpers import ANSIBLE
-from _setup_render import role_context
+from _setup_render import CLAUDE_CODE, role_context
 from ansible.errors import AnsibleFilterError
 from claude_agents import PROFILE_FIELDS, claude_agent_profiles
 
-ROLE_DIR = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE_DIR = CLAUDE_CODE
 
 PRIMARY = {
     "state": "present",

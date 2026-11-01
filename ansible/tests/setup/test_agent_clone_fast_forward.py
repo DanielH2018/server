@@ -14,12 +14,11 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import CLAUDE_CODE, render_component_text
 from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
 from lib.proc_testing import run, write_exec
 
-ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
+ROLE = CLAUDE_CODE
 SCRIPT = ROLE / "files" / "claude-clone-sync.sh"
 LIVE_SCRIPT = "/usr/local/bin/claude-clone-sync.sh"
 
@@ -153,6 +152,6 @@ def test_a_moved_lock_resyncs_the_venv_and_collections(repos: Repos) -> None:
 
 def test_the_timer_runs_the_script_as_the_agent() -> None:
     """The timer runs the script as the clone's owner, which git requires."""
-    unit = render_setup_text("claude_code", "claude-clone-sync.service.j2", {})
+    unit = render_component_text("claude-code", "claude-clone-sync.service.j2", {})
     assert "User=claude\n" in unit
     assert f"ExecStart={LIVE_SCRIPT} /var/lib/claude/server\n" in unit

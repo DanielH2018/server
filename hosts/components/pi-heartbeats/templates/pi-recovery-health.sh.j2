@@ -4,24 +4,23 @@
 #
 # Usage: pi-recovery-health [-h|--help]
 # Takes no arguments. homelab-pi-recovery.timer runs it every 5 minutes on daniel-pi, through
-# homelab-pi-recovery.service, which hands it the push token. It checks every container the
-# host deploys, runs docker start on any that is not running, and pushes to the Daniel Pi
-# Recovery Kuma monitor. Starting the service by hand does the same.
+# homelab-pi-recovery.service. It checks every container the host deploys, runs docker start on
+# any that is not running, then writes pi-recovery-health.prom to node_exporter's textfile
+# directory and one line to /var/log/pi-health/health.log. Starting the service by hand does the
+# same.
 #
-# AutoKuma only reads the SERVER's docker socket, so the Pi's containers have no liveness
-# monitor of their own. autoheal (restarts unhealthy containers) and docker-proxy (read-only
-# socket serving Alloy's container-log discovery) die silently: if autoheal dies,
-# unhealthy Pi containers stop self-recovering; if docker-proxy dies, Alloy's docker_sd finds
-# no targets and this host's container logs stop reaching Loki, while Alloy keeps running
-# with zero targets. Kuma sees wg-easy from outside; docker-proxy-lifecycle it does not.
+# Nothing else watches the Pi's containers for liveness. autoheal (restarts unhealthy
+# containers) and docker-proxy (read-only socket serving Alloy's container-log discovery) die
+# silently: if autoheal dies, unhealthy Pi containers stop self-recovering; if docker-proxy
+# dies, Alloy's docker_sd finds no targets and this host's container logs stop reaching Loki,
+# while Alloy keeps running with zero targets. docker-proxy-lifecycle has no probe from outside
+# the host.
 # This heartbeat watches EVERY container the host deploys (containers_list and compose_services,
 # plus docker-proxy's sub-proxies, which are services inside its compose file rather than list entries)
-# and pushes `up` only while all of them run, to the static "Daniel Pi Recovery" Kuma push
-# monitor (uptime-kuma role), every 5 min.
-# Dead-man's-switch: an explicit `down` names the dead container fast, while a dead timer/host
-# stops pushing and trips the monitor's 600s heartbeat watchdog. Route + auth are the
-# SD-health heartbeat's: Traefik's .local router resolved straight to the server LAN IP,
-# Authelia bypasses ^/api/push/ on this host LAN-only — the URL token is the credential.
+# and writes a passing verdict only while all of them run, every 5 min.
+# Prometheus reads the textfile (pi-checks.yaml, M6 batch B5). PiRecoveryFailed names the dead
+# container fast, and PiRecoveryNotReporting fires when the verdict goes stale, which is how a
+# dead timer or host shows.
 set -uo pipefail
 
 for arg in "$@"; do
@@ -31,28 +30,10 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/lib/homelab/kuma-push-lib.sh || {
-  logger -t pi-recovery-health "kuma-push-lib.sh missing — reinstall homelab-daniel-pi"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/lib/homelab/homelab-check-lib.sh || {
   logger -t pi-recovery-health "homelab-check-lib.sh missing — reinstall homelab-daniel-pi"
   exit 1
 }
-
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP: Kuma serves from the k8s edge, and the Docker
-# edge's bridge route for this name was removed in the slice-7 bridge teardown.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-# The push token arrives through the unit's LoadCredential=, from a root-only file, and never
-# sits in this script. A missing token stops the push, so the monitor's watchdog trips.
-TOKEN_FILE="${CREDENTIALS_DIRECTORY:-}/pi_recovery_push_token"
-if ! PUSH_TOKEN=$(cat "$TOKEN_FILE" 2>/dev/null) || [ -z "$PUSH_TOKEN" ]; then
-  logger -t pi-recovery-health "no push token at $TOKEN_FILE — start homelab-pi-recovery.service rather than this script"
-  exit 1
-fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
 {# The watch set is DERIVED, not listed: every entry this host deploys in either of the Pi's two
     lists (containers_list, which Ansible's Docker play deploys, and compose_services, which the
@@ -177,11 +158,11 @@ fi
 if [ -z "$DOWN" ] && [ -z "$COMPOSE_MSG" ]; then
   STATUS=up;   MSG="all {{ _names | length }} containers running"
 else
-  # DECIDED: STATUS stays `down` even when the restart worked. Pushing `up` after a
+  # DECIDED: STATUS stays `down` even when the restart worked. Reporting `up` after a
   # successful recovery would make an auto-restart loop invisible: a container crashing every
   # 5 minutes would read green forever, which is the failure mode that makes self-healing
-  # worse than no healing. One DOWN beat per cycle that needed intervention keeps the episode
-  # in Kuma and in the alert history, and the next clean cycle clears it.
+  # worse than no healing. One failing verdict per cycle that needed intervention keeps the
+  # episode in Prometheus and in the alert history, and the next clean cycle clears it.
   # Re-proposed by #1784 as "an UP with a warning would read more honestly", after two
   # single-cycle `not running: autoheal; restarted: autoheal` episodes on 2026-09-02/03, and
   # declined 2026-09-11: those two episodes ARE the loop this rule exists to keep visible, and
@@ -197,8 +178,7 @@ else
   [ -n "$DAEMON" ] && MSG="${MSG}; dockerd: ${DAEMON% }"
 fi
 
-# The textfile verdict for Prometheus, before the push: kuma_push retries for over 60s on a failed
-# push, and the verdict should not wait behind it (M6 B5, docs/target-architecture/monitoring/
+# The textfile verdict for Prometheus (M6 B5, docs/target-architecture/monitoring/
 # m6-retire-kuma.md). DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a
 # test pins the rule's literals to it. The directory is root:sys_user 2775, so this unit's user
 # can write it.
@@ -206,16 +186,14 @@ DEADLINE_S=900
 write_check_textfile pi-recovery-health "$([ "$STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
   || logger -t pi-recovery-health "textfile write failed (status=${STATUS})"
 
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recovery-health
-
 # Durable record of this cycle, so `probe.py alerts` can reconstruct the episode.
 #
-# Kuma keeps only CURRENT state, so a DOWN that clears is gone. The server's health crons
-# survive that by logging their own verdict unconditionally (longhorn-backup-health,
-# manifest-prune-check), and `probe_lib/alerts.py` reconstructs episodes from those lines.
-# `kuma_push` calls `logger` ONLY when the push itself fails, so this cron recorded nothing
-# for a successful DOWN push — which is why the real 2026-08-29 autoheal outage read as "no
-# DOWN alerts in the last 7d" while the monitor was live-DOWN.
+# The textfile keeps only the CURRENT verdict, so a DOWN that clears is gone. The server's health
+# crons survive that by logging their own verdict unconditionally (longhorn-backup-health,
+# manifest-prune-check), and `probe_lib/alerts.py` reconstructs episodes from those lines. This
+# cron recorded nothing for a successful DOWN until it wrote this file, which is why the real
+# 2026-08-29 autoheal outage read as "no DOWN alerts in the last 7d" while the monitor was
+# live-DOWN.
 #
 # It goes to a FILE rather than to `logger`, because daniel-pi ships no journal: rsyslog is
 # masked here on purpose (see the debloat section of optimize_pi's tasks — journald is the log
@@ -231,9 +209,5 @@ kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-recove
 # they are the heartbeat that distinguishes "nothing wrong" from "nothing shipping".
 HEALTH_LOG="/var/log/pi-health/health.log"
 mkdir -p "${HEALTH_LOG%/*}" 2>/dev/null || true
-if [ "${KUMA_PUSH_OK:-1}" = "1" ]; then
-  DETAIL="status=${STATUS} ${MSG}"
-else
-  DETAIL="push failed (status=${STATUS}: ${MSG})"
-fi
+DETAIL="status=${STATUS} ${MSG}"
 printf '%s %s %s: %s\n' "$(date -Is)" "$(hostname)" pi-recovery-health "$DETAIL" >>"$HEALTH_LOG"

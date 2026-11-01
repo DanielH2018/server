@@ -205,9 +205,31 @@ def is_allowed_undefined(name: str, known: frozenset[str]) -> bool:
     return root in known
 
 
-def discover_templates(setup: Path = SETUP) -> list[Path]:
-    """Every setup-plane template, one level under a role's `templates/`."""
-    return sorted(setup.glob("*/templates/*.j2"))
+def discover_templates(
+    setup: Path = SETUP, components: Path = COMPONENTS
+) -> list[Path]:
+    """Every setup-plane template, one level under a role's `templates/`.
+
+    A host component that keeps a role's shape, `templates/` beside a `defaults/main.yml`, is
+    counted with them: claude-code holds the claude_code role's templates (#6773).
+    """
+    shaped = [
+        tpl
+        for tpl in components.glob("*/templates/*.j2")
+        if (tpl.parents[1] / "defaults" / "main.yml").is_file()
+    ]
+    return sorted(setup.glob("*/templates/*.j2")) + sorted(shaped)
+
+
+def template_loader(tpl: Path) -> tuple[Path, str]:
+    """The directory `tpl`'s environment is rooted at, and the name it loads by.
+
+    A component template loads from the component, as the host renderer loads it, so its
+    `templates/<name>` imports resolve.
+    """
+    if (tpl.parents[1] / "component.yml").is_file():
+        return tpl.parents[1], f"templates/{tpl.name}"
+    return tpl.parent, tpl.name
 
 
 def repo_relative(tpl: Path) -> str:
@@ -216,10 +238,10 @@ def repo_relative(tpl: Path) -> str:
     The tests hand `check_template` a template written under `tmp_path`, which is outside the
     repo — `Path.relative_to` raises there rather than returning something printable.
     """
-    try:
-        return str(tpl.relative_to(ANSIBLE))
-    except ValueError:
-        return str(tpl)
+    for root in (ANSIBLE, REPO):
+        if tpl.is_relative_to(root):
+            return str(tpl.relative_to(root))
+    return str(tpl)
 
 
 def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
@@ -230,8 +252,9 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
     """
     rel = repo_relative(tpl)
     seen: dict[str, set[str]] = defaultdict(set)
-    env = template_env(tpl.parent, undefined_cls=_tracking_undefined(seen, rel))
-    rendered, err = render_or_error(env, tpl.name, ctx)
+    root, name = template_loader(tpl)
+    env = template_env(root, undefined_cls=_tracking_undefined(seen, rel))
+    rendered, err = render_or_error(env, name, ctx)
     if rendered is None:
         return [err or "render error"]
 
@@ -258,11 +281,12 @@ def component_supplied(role: str, components: Path = COMPONENTS) -> frozenset[st
     A component that names the role in `role:` renders the role's templates with its own
     `defaults:` and, for each secret key an output declares, `<key>_value`. The role's tasks no
     longer supply these, so they are read from the component rather than from `runtime_vars`.
+    `role` may also name a component, whose own templates get the same names from its spec.
     """
     out: set[str] = set()
     for path in sorted(components.glob("*/component.yml")):
         spec = yaml_fast.safe_load(path.read_text()) or {}
-        if spec.get("role") != role:
+        if role not in (spec.get("role"), path.parent.name):
             continue
         out.update(spec.get("defaults") or {})
         for output in spec.get("outputs") or []:
@@ -270,17 +294,20 @@ def component_supplied(role: str, components: Path = COMPONENTS) -> frozenset[st
     return frozenset(out)
 
 
-def check_role_template(tpl: Path, known: frozenset[str]) -> list[str]:
+def check_role_template(
+    tpl: Path, known: frozenset[str], components: Path = COMPONENTS
+) -> list[str]:
     """`check_template` under the context a deploy renders `tpl` with.
 
-    The owning role's defaults under the inventory, as Ansible layers them, minus the secrets
-    and runtime facts `known` covers. The role's default names join `known`, because a default
-    whose value will not expand is left out of the context and still counts as defined.
+    The owning role's or component's defaults under the inventory, as Ansible layers them,
+    minus the secrets and runtime facts `known` covers. The default names join `known`, because
+    a default whose value will not expand is left out of the context and still counts as
+    defined. `components` is where `component_supplied` looks, a parameter for the tests.
     """
     ctx = render_context(tpl, overrides=ANSIBLE_RUNTIME_CONTEXT)
     defaults = frozenset(load_yaml(tpl.parents[1] / "defaults" / "main.yml"))
     return check_template(
-        tpl, ctx, known | defaults | component_supplied(tpl.parents[1].name)
+        tpl, ctx, known | defaults | component_supplied(tpl.parents[1].name, components)
     )
 
 
@@ -300,7 +327,7 @@ def main(argv: Sequence[str] = ()) -> int:
     templates = discover_templates()
     failures = 0
     for tpl in templates:
-        rel = str(tpl.relative_to(ANSIBLE))
+        rel = repo_relative(tpl)
         problems = check_role_template(tpl, known)
         if problems:
             failures += 1

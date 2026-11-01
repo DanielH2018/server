@@ -9,8 +9,8 @@
 # optimize_pi_gz_integrity_state_file. Running it by hand is safe: it only reads the rotated logs.
 #
 # Runs `gzip -t` over every rotated log on this host, once a day, and writes a verdict file.
-# It pushes nothing itself: pi-sd-health reads the verdict every 5 minutes and folds it into
-# the "Daniel Pi SD Health" Kuma push, so this sweep needs no monitor and no push token.
+# It alerts nothing itself: pi-sd-health reads the verdict every 5 minutes and folds it into its
+# own verdict, which PiSdHealthFailed pages, so this sweep needs no check of its own.
 #
 # A rotated .gz that stops decompressing has two causes here, and the point is to tell either
 # from silence rather than to tell them apart:
@@ -114,5 +114,5 @@ if ! { printf '%s\n%s\n' "$verdict" "$detail" >"$work/state" && mv -f "$work/sta
 fi
 
 # The service logs both streams under the tag pi-gz-integrity, so this line is the journal
-# record of the sweep. The ALERT is the heartbeat's Kuma push, not this line.
+# record of the sweep. The ALERT is the heartbeat's PiSdHealthFailed, not this line.
 printf 'status=%s %s\n' "$verdict" "$detail"

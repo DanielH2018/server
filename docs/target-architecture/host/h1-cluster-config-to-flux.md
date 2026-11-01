@@ -377,7 +377,7 @@ The exit criterion has two parts:
 - **The agent's kubeconfig names this role.** The task `Give the agent user the operator's
   read-only kubeconfig` in `ansible/roles/setup/claude_code/tasks/agent.yml` describes "The
   homelab-readonly ServiceAccount the k3s role writes".
-  `ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2` carries
+  `hosts/components/claude-code/templates/claude-land-approval-paths.j2` carries
   `DECIDED a floor, not every path that widens the agent's authority`.
 - **`containers_list` is everywhere.**
     - It is in `ansible/inventory/host_vars/daniel-box.yml` (56 entries),

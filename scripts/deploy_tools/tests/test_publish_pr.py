@@ -258,6 +258,12 @@ def _stub_body(name: str, log: Path, fail_on: str = "") -> str:
     )
 
 
+# Runs the command after `--`, as the real one does inside its transient service.
+_SYSTEMD_RUN_PASSTHROUGH = (
+    '#!/usr/bin/env bash\nwhile [ "$1" != "--" ]; do shift; done\nshift\nexec "$@"\n'
+)
+
+
 def _land_stub(path: Path, log: Path) -> Path:
     """A stand-in for land.py, run with the interpreter publish_pr runs `land.py` with."""
     path.write_text(
@@ -276,6 +282,8 @@ def _run_cli(
         tmp_path / "bin",
         git=_stub_body("git", log, fail_on),
         gh=_stub_body("gh", log, fail_on),
+        # CI's runner is a system unit, so the landing goes through systemd-run there (#6864).
+        **{"systemd-run": _SYSTEMD_RUN_PASSTHROUGH},
     )
     # The stubs above answer instead of git, but an inherited GIT_DIR from a hook or a parent
     # worktree points at a REAL repository and one of these arguments is `reset --hard`.
@@ -309,6 +317,30 @@ def test_cli_publish_drives_real_processes_in_order(tmp_path):
     assert len(calls) == len(expected), calls
     for call, prefix in zip(calls, expected, strict=True):
         assert call.startswith(prefix), (call, prefix)
+
+
+@pytest.mark.parametrize(
+    ("cgroup", "starts_with"),
+    [
+        ("0::/system.slice/homelab-docs-refresh.service\n", "systemd-run"),
+        ("0::/user.slice/user-1000.slice/session-4.scope\n", sys.executable),
+    ],
+)
+def test_a_cron_units_landing_starts_in_the_user_manager(tmp_path, cgroup, starts_with):
+    """Issue #6864: in a system unit, the detached landing died when the cron exited."""
+    seen: list[list[str]] = []
+
+    def fake_run(argv, **_kw):
+        seen.append(argv)
+        return cp(0)
+
+    tools = publish_pr.real_tools(
+        tmp_path, tmp_path / "land.py", read_cgroup=lambda: cgroup, run_process=fake_run
+    )
+    tools.land("--pr", "7", "--detach")
+    [argv] = seen
+    assert argv[0] == starts_with
+    assert argv[-3:] == ["--pr", "7", "--detach"]
 
 
 def test_cli_publish_exit_code_reaches_the_shell(tmp_path):

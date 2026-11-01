@@ -98,8 +98,10 @@ agent gets a lander of the same shape.
   from `SO_PEERCRED` and reports only under that user's root in `/etc/worktree-holders.json`.
   For the agent, that root is its own clone, so a worktree removal in `/var/lib/claude/server`
   sees an `ubuntu` process inside the tree. initial_setup's `worktree-sweep` tag renders the
-  map from every present entry of `claude_code_agents` (#4295), and the helper refuses a uid
-  the map does not name. The `claude_code` role's `agent_access.yml` puts each present agent in
+  map from its own per-host copy of the agent users that host's package declares under
+  `users:` (#4295, #6831), and the helper refuses a uid the map does not name. Adding or
+  removing a host's agent edits that host's list in `tasks/crons.yml` too, and
+  `ansible/tests/setup/test_worktree_holders_install.py` fails while the two differ. The `claude_code` role's `agent_access.yml` puts each present agent in
   the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
 
@@ -112,7 +114,7 @@ agent gets a lander of the same shape.
   and runs `/usr/local/sbin/homelab-rootq`, so the allowlist and the redaction are the sudo
   path's own. The agent runs `rootq-socket`, which takes `rootq`'s verbs. The group is the
   whole grant, so unlike the holder scan there is no per-user map. A session sees the group
-  after `claude-rc.service` restarts. `ansible/roles/setup/claude_code/CLAUDE.md` (*The
+  after `claude-rc.service` restarts. `hosts/components/claude-code/CLAUDE.md` (*The
   agent's socket*) has the protocol, and the approval list names the helper, the client and
   both units.
 - **The agent has its own GitHub identity and signing key.** A PR author cannot approve their
@@ -132,7 +134,7 @@ authorized key.
   apply, before its `uv sync`, and moves only a clean `master`. The deployer routes no change to
   `ui_mcp.sh`, `ui_login.py` or `.claude/hooks/` to `claude_code`, so `claude-clone-sync.timer`
   runs the same fast-forward every `claude_code_agent_clone_sync_interval` (15 minutes). The
-  script is `ansible/roles/setup/claude_code/files/claude-clone-sync.sh`, and it re-syncs the
+  script is `hosts/components/claude-code/files/claude-clone-sync.sh`, and it re-syncs the
   `.venv` and the collections when a pull moves their lock files. The hook shim and the
   homelab-ui launcher run from that clone, so a stale clone breaks both.
 - **The agent has commit hooks.** The shared `agent_user.yml` copies the operator's pinned `prek`
@@ -254,7 +256,7 @@ own roles (`claude_code`, `renovate_agent`), the deployer (`gitops_deploy`), `ag
 `host_lib.py` and `ansible/inventory/` are not on it, so a PR changing them lands without the
 operator.
 
-`ansible/roles/setup/claude_code/templates/claude-land-approval-paths.j2` is the source of
+`hosts/components/claude-code/templates/claude-land-approval-paths.j2` is the source of
 truth, with a reason beside each entry. It holds:
 
 - the lander itself: `tasks/lander.yml`, the list template, the unit template, the polkit
@@ -385,9 +387,9 @@ of the pod would drop the capability.
 
 | Coupling | Where |
 |---|---|
-| `HOME`, `PATH`, `KUBECONFIG`, `ExecStart`, `WorkingDirectory` through `sys_user` | `ansible/roles/setup/claude_code/templates/claude-rc.service.j2` |
-| `claude_code_login_uid` and `claude_code_login_uids`, which drive the login-slice caps | `ansible/roles/setup/claude_code/defaults/main.yml` |
-| `claude_code_memory_sync_dir` and the path-derived project key | `ansible/roles/setup/claude_code/defaults/main.yml` |
+| `HOME`, `PATH`, `KUBECONFIG`, `ExecStart`, `WorkingDirectory` through `sys_user` | `hosts/components/claude-code/templates/claude-rc.service.j2` |
+| `claude_code_login_uid` and `claude_code_login_uids`, which drive the login-slice caps | `hosts/components/claude-code/defaults/main.yml` |
+| `claude_code_memory_sync_dir` and the path-derived project key | `hosts/components/claude-code/defaults/main.yml` |
 | `artifacts_host_dir` and its bind mount | `ansible/roles/k8s/artifacts/defaults/main.yml` |
 | Hooks that hard-code `/home/ubuntu`, and `SUDO_ASKPASS` | the dotfiles repo's `~/.claude` sources |
 | `/home/ubuntu` literals in repo tooling | the non-test files `git grep -l /home/ubuntu -- '*.py' '*.sh' '*.j2'` lists outside `tests/` (8 on 2026-10-10) |

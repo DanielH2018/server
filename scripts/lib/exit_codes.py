@@ -503,7 +503,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "`publish`: pushed but no PR was opened. `unlanded`: a PR is open.",
         ),
         _c(UNLANDED_NO_PR, "UNLANDED_NO_PR", "`unlanded`: a branch with no PR."),
-        _c(UNLANDED_PR_RED, "UNLANDED_PR_RED", "`unlanded`: its PR failed a check."),
+        _c(UNLANDED_PR_RED, "UNLANDED_PR_RED", "`unlanded`: a red or conflicting PR."),
     ),
     "scripts/deploy_tools/narrow_setup.py": (
         _c(

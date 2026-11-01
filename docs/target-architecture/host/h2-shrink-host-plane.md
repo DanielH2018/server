@@ -1276,7 +1276,7 @@ leaves `setup/`, to `longhorn-backup-health.sh`, which stays until H7.
   ansible/roles/k8s/monitor-bridge/files/checks/logs.py       (SWALLOWED_VERDICTS_POD_LOGQL names the moved pushers)
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py  (_K8S_HOST_LIB shrinks to empty)
   ansible/roles/setup/claude_code/tasks/               (+ artifacts sync, telemetry health crons, daniel-box only)
-  ansible/roles/setup/claude_code/defaults/main.yml    (+ claude_code_artifacts_node, the sync and telemetry variables)
+  hosts/components/claude-code/defaults/main.yml    (+ claude_code_artifacts_node, the sync and telemetry variables)
   ansible/roles/setup/k3s/tasks/health-crons.yml       (trim, drill, off-box cron: absent arms; + etcd token drift cron)
   ansible/roles/setup/k3s/files/                       (backup-health trim and drill arms, check 11 narrowing, check 12)
   ansible/roles/setup/k3s/defaults/main.yml            (- eight drill keys, two etcd keys, two stamp-group entries)

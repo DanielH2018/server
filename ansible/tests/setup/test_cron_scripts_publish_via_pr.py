@@ -433,17 +433,15 @@ _EXPECTED_IN_CORPUS = {
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
     "hosts/components/secret-rotation/templates/secret-rotate.sh.j2",
     "hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2",
-    "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2",
 }
 
 # The corpus also holds templates that carry a push URL but invoke no curl of their own, such as
 # the authelia bypass regex. They are counted rather than named, so the floor is what watches
-# them. 17 against a measured 23 (2026-11-01, after M6 batch B4's Cutover-1a dropped the push from
-# the two renovate units and their environment files) keeps the slack M3 chose: 23 against 37
-# after its PR 5 dropped disk-health.sh.j2. A slacker floor would let a third of that unnamed
-# tail vanish before anything went red.
-_MIN_CORPUS = 17
+# them. 15 against a measured 21 (2026-11-01, after M6 batch B4's Cutover-1a dropped the push
+# from the two renovate units and their environment files, on top of B5's Pi heartbeats) keeps
+# the slack M3 chose: 23 against 37 after its PR 5 dropped disk-health.sh.j2. A slacker floor
+# would let a third of that unnamed tail vanish before anything went red.
+_MIN_CORPUS = 15
 
 
 def push_corpus() -> dict[Path, str]:
