@@ -17,7 +17,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 - **A separate `ingressroute-push` router** is daniel-pi's push-only door.
 - **Persists:** `loki-homelab-data` (`longhorn-nobackup`, 5Gi) — logs, `744h` retention; treated
   as bulky and reconstructible in spirit, so the retention window is the real bound, not backup.
-- **The monitors that read from here:** the Alert History reconstruction, the ruler's own
+- **The monitors that read from here:** `probe.py alerts`'s DOWN history, the ruler's own
   rules and monitor-bridge's remaining LogQL checks. A broken apply blinds the first and the
   last without paging.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
@@ -66,8 +66,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
   `HostOutOfMemoryKill` pages on the first host-wide OOM kill. The stage runs
-  only `stage.regex` and `stage.labels`, because probe.py and the alert-history dashboard parse
-  the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
+  only `stage.regex` and `stage.labels`, because probe.py parses the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
   label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.
 - **k3s's own log ships warnings and worse only, as `{job="k3s"}` on each node** (#6177).
   `/var/log/k3s.log` is kept out of the journal and syslog on purpose, and Alloy tails the file

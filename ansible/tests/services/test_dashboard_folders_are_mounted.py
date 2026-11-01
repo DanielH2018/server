@@ -34,7 +34,7 @@ KNOWN_BOARDS = frozenset(
     {
         "Apps/exportarr-arr-stack.json",
         "Apps/speedtest-tracker.json",
-        "Apps/uptime-kuma-monitors.json",
+        "Apps/valheim-player-stats.json",
         "Infrastructure/longhorn-storage.json",
         "Security/crowdsec-overview.json",
     }
