@@ -1210,6 +1210,7 @@
  "scripts/dev/tests/test_findings_next.py": 0.0,
  "scripts/dev/tests/test_findings_open.py": 0.0,
  "scripts/dev/tests/test_findings_open_dedup_search.py": 0.0,
+ "scripts/dev/tests/test_findings_peer_trees.py": 0.0,
  "scripts/dev/tests/test_findings_precomputed.py": 0.23,
  "scripts/dev/tests/test_findings_red_green.py": 0.0,
  "scripts/dev/tests/test_findings_register_fetch_timeout.py": 0.0,
