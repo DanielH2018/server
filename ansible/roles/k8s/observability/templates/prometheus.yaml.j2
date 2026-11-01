@@ -535,10 +535,10 @@ data:
       # "the only host there is" assumption in monitor-bridge.
       #
       # Reached at the LAN IP, not a bridge address: Docker's published-port NAT bypasses the
-      # Pi's UFW INPUT chain (documented in initial_setup/tasks/network.yml, where the stale
-      # WireGuard allow was removed on exactly this evidence), so no firewall rule is needed
-      # and the exporters are LAN-reachable — the same posture glances already has on that
-      # host.
+      # Pi's UFW INPUT chain (documented at the `ufw:` section of hosts/daniel-pi/package.yml,
+      # where the stale WireGuard allow is retired on exactly this evidence), so no firewall
+      # rule is needed and the exporters are LAN-reachable — the same posture glances already
+      # has on that host.
       #
       # `scrape_timeout: 30s` on both Pi jobs, against the 10s global default no other job
       # overrides. The Pi is a 4-core Zero 2 W whose load5 reaches 2.4-6.6 and whose CPU PSI
