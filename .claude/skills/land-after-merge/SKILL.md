@@ -77,11 +77,12 @@ resolved from `origin/master` before the merge is armed, so you do not pass it.
 ./scripts/deploy_tools/land.sh --pr <n> --subject "..." ...        # override the squash subject
 ```
 
-**Without `--detach` you own the redirect.** `> <job-dir>/tmp/land<n>.log 2>&1`, with the
-literal path `envq CLAUDE_JOB_DIR` prints, is not optional: Ansible refuses to start on the non-blocking pipe a backgrounded Bash call hands the
-script, and the error names Ansible rather than the harness. Then wait with
-`cc-wait file <log> --match '^VERDICT:' --fail '^Traceback'` and **do not end your turn** on the
-landing.
+**Without `--detach`, run it under `runlog`.** Ansible refuses to start on the non-blocking
+pipe a backgrounded Bash call hands the script, and the error names Ansible rather than the
+harness. `runlog land<n> -- ./scripts/deploy_tools/land.sh --pr <n> …` gives it blocking
+stdio and writes the output to a log in the session's own directory, whose path it prints
+first. Then wait with `cc-wait file <log> --match '^VERDICT:' --fail '^Traceback'` and **do
+not end your turn** on the landing.
 
 ## Two command shapes the classifier refuses, and what to write instead
 
