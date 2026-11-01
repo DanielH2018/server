@@ -74,7 +74,7 @@ else
 fi
 
 # Unconditional, for the same reason as setup-drift-check.sh: this line is the durable record of
-# the verdict's message, and `probe.py alerts` reconstructs DOWN episodes from it. NOTICE rather
+# the verdict's message, and Loki keeps it. NOTICE rather
 # than INFO — journald caps MaxLevelStore=notice here.
 logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
 

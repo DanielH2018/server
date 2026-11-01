@@ -26,8 +26,7 @@ does what each job's bash wrapper did on the host: it takes the child's exit cod
 output line as the verdict, prints `<tag>: status=<up|down> <summary>` to stdout, and records
 the verdict for `/metrics`. Each stdout line carries the host crons' syslog prefix,
 `<UTC time> <pod name> <tag>: <message>`, and is flushed as it is written. monitor-bridge's
-Swallowed Push Verdicts check and `probe.py alerts` both parse that shape from
-`{container="crowdsec-jobs"}`.
+Swallowed Push Verdicts check parses that shape from `{container="crowdsec-jobs"}`.
 
 No job runs in the first `STARTUP_GRACE_S` seconds. The engine container writes
 `/etc/crowdsec` on start, and a job that ran before it finished would page a fault that does

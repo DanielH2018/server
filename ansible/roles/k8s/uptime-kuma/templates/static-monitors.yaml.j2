@@ -128,9 +128,7 @@ stringData:
    lands when the scan ends. The deadline counts from the previous push, so the slack has to
    cover one run taking longer than the last; 6 h is unmeasured, since no run had completed when
    these tiles were added (every earlier run exited on the missing --config, #4591). Move this
-   and the cron together. No `email`: a broken integrity check costs coverage, not a service.
-   Three literal blocks rather than a loop: `probe.py kuma-drift` reads tile names out of this
-   template's raw text. #}
+   and the cron together. No `email`: a broken integrity check costs coverage, not a service. #}
 {% if aide_daniel_box_push_token is defined %}
   aide-daniel-box.json: |
     {"type": "push", "name": "AIDE Integrity (daniel-box)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-box runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-box.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_box_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
@@ -192,8 +190,7 @@ stringData:
   # row's id, display name and description are what keep a monitor and its history. Every
   # tile shares the bridge's cadence: the deadline is the bridge's push interval, never
   # retried, and a `critical` row carries the severity tag and pages email too.
-  # `probe.py kuma-drift` reads this loop from the same table, so its census still lists every
-  # bridge tile. The tokens are bare lookups, so a row whose secret is missing fails the
+  # The tokens are bare lookups, so a row whose secret is missing fails the
   # render rather than dropping its tile (#1632). `ensure_ascii=False` keeps an em dash a literal
   # character, the bytes the hand-written tiles carried, so AutoKuma sees no change.
 {% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}

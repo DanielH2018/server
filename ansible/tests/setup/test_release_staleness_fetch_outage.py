@@ -9,8 +9,8 @@ once on that error.
 
 The real template and the real `homelab-check-lib.sh` run under bash. `curl` answers from a
 link-state file, and each case's stubbed `git` says what the fetch does. The assertion is on the
-`status=` `logger` line, because `probe.py alerts` rebuilds DOWN episodes from it and the
-textfile carries the same verdict.
+`status=` `logger` line, because it is the local record of the verdict and the textfile
+carries the same verdict.
 """
 
 from _helpers import ANSIBLE

@@ -189,7 +189,7 @@ def test_an_error_exit_pushes_down_with_aides_error_line(tmp_path):
     assert "aide exited 17" in pushed[1]
     assert "ERROR: missing configuration" in pushed[1], pushed[1]
     assert code == 1
-    # The durable record `probe.py alerts` reconstructs the episode from.
+    # The durable record of the verdict, which Loki keeps.
     assert any(line.startswith("aide-check: status=down ") for line in logged), logged
 
 

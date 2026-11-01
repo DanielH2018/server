@@ -152,7 +152,7 @@ def kuma_push(
             sleep(KUMA_PUSH_RETRY_DELAY_S)
     if log:
         # Its own line, never carrying `status=`: the swallowed-verdicts parser reads only
-        # `k=v` words inside the http/rc parens, and `probe.py alerts` counts `status=down`.
+        # `k=v` words inside the http/rc parens, and `status=down` marks a verdict.
         if kuma_msg:
             log("push rejected by kuma (%s): %s" % (reason.split()[0], kuma_msg))
         log("push failed (%s) (status=%s: %s)" % (reason, status, msg))

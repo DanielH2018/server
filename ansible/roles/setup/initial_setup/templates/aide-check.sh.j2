@@ -71,8 +71,8 @@ else
 fi
 
 # Logs the verdict, then pushes it. The `|| logger` inside kuma_push only fires when the curl
-# fails, so a successfully-pushed DOWN would otherwise leave no durable record and
-# `probe.py alerts` could never reconstruct this monitor. NOTICE rather than INFO — journald here
+# fails, so a successfully-pushed DOWN would otherwise leave no durable record of the
+# verdict in syslog or Loki. NOTICE rather than INFO — journald here
 # caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
 report() {
   logger -p daemon.notice -t aide-check "status=${STATUS} ${MSG}"

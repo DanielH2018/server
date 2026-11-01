@@ -248,7 +248,7 @@ health` until H7.40's fourth slice, whose `legacy:` entries in
 `hosts/components/claude-code/component.yml` retire the cron files and the scripts that
 embedded the push tokens. Each timer fires every N minutes of its `*/N` minute default, and its
 unit's `SyslogIdentifier=` keeps the tag the cron's `logger -t` wrote, `sync-artifacts` or
-`claude-otel-health`. Loki and `probe.py alerts` read that tag.
+`claude-otel-health`. Loki keeps each run's `status=` line under that tag.
 `ansible/roles/k8s/artifacts/CLAUDE.md` documents how the sync behaves, and the heartbeat's
 template carries why it is a host timer at all.
 

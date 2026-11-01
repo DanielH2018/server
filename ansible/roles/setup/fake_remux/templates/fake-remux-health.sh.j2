@@ -69,8 +69,7 @@ for i in "${!LABELS[@]}"; do
     STATUS="${LINE%%$'\t'*}"
     MSG="${LINE#*$'\t'}"
   fi
-  # The status line is the durable record of the message, and `probe.py alerts` reconstructs
-  # DOWN episodes from it.
+  # The status line is the durable record of the message: the local record of the verdict, readable in Loki with `probe.py loki-query`.
   logger -t fake-remux-health "status=${STATUS} ${LABELS[$i]}: ${MSG}"
   # The textfile carries the verdict. A failed write logs and the loop goes on.
   SUCCESS=0

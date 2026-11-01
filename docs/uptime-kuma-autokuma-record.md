@@ -380,9 +380,9 @@ payload writes every key including the unused ones: kuma-client has no serde def
 **No deadman tile, unlike the status-page sync.** That job fails silently; this one's failure
 announces itself as the Sunday Discord burst it exists to stop.
 
-**Verify it in Discord, not with `probe.py alerts`.** That subcommand rebuilds DOWN episodes from
-Loki, and a window suppresses notifications without stopping monitor-bridge logging `DOWN <name>`.
-The episodes still appear; the absent Discord message is the evidence.
+**Verify it in Discord, not from the alert history.** A window suppresses notifications without
+stopping monitor-bridge logging `DOWN <name>`, so the episodes still appear. The absent Discord
+message is the evidence.
 
 ## The ingress tiles moved to blackbox-exporter
 
