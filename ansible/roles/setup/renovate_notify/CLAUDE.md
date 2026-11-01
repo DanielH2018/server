@@ -77,19 +77,18 @@ failed Discord post retries next run.
 
 ## Liveness, and the sandbox
 
-`ExecStartPost` beats a Kuma push monitor ("Renovate Notifier — Alive", token
-`monitor_bridge_renovate_alive_push_token`) and runs only when `ExecStart` succeeded, so a
-crash pages twice — `OnFailure=renovate-notify-alert.service` and the missed 36h beat.
-**That monitor watches the notifier, not Renovate**, and greens whatever Discord did.
-A second `ExecStartPost` runs first and writes `renovate-notify.prom` to node_exporter's textfile
-directory (M6 batch B4). The `+` prefix runs that one line outside the sandbox, because
-`ProtectSystem=strict` leaves the directory read-only.
+`ExecStartPost` writes `renovate-notify.prom` to node_exporter's textfile directory (M6 batch
+B4) and runs only when `ExecStart` succeeded, so a crash pages twice:
+`OnFailure=renovate-notify-alert.service`, and `RenovateNotifyNotReporting` once the file is
+older than its 36h deadline. **That verdict watches the notifier, not Renovate**, and greens
+whatever Discord did. The `+` prefix runs that one line outside the sandbox, because
+`ProtectSystem=strict` leaves the directory read-only. The Kuma beat that used to follow it went
+with the "Renovate Notifier — Alive" tile in B4's Cutover-1a.
 
-The unit is sandboxed (`ProtectSystem=strict` + `ProtectHome=read-only`), and two overrides
-are load-bearing: `UV_CACHE_DIR=/tmp/uv-cache`, without which the unit dies with exit 2 before
-Python starts on every tick, and the Kuma push URL reaching curl on stdin (`-K -`) rather than
-in argv, where any local user could read the token. `docs/renovate-notify-internals.md` has
-both, and the gaps the alive monitor leaves.
+The unit is sandboxed (`ProtectSystem=strict` + `ProtectHome=read-only`), and one override is
+load-bearing: `UV_CACHE_DIR=/tmp/uv-cache`, without which the unit dies with exit 2 before
+Python starts on every tick. `docs/renovate-notify-internals.md` has it, and the gaps the alive
+verdict leaves.
 
 ## Working on it
 

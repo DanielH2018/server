@@ -625,6 +625,11 @@ depends on someone remembering to revert. Three rules bound the windows without 
 
 - **One window at a time.** A batch's Kuma-side PR merges only when no other batch's window
   is open.
+    - **One window may carry several batches whose soaks are clean** (operator ruling of
+      2026-10-31). One Cutover-1a PR deletes all their tiles, and one Cutover-1b PR drops
+      `shadow` from all their rules under the same two-hour bound. Each producer plane then
+      gets one Cutover-2 PR. A batch whose soak has a blocking read stays out of the window and
+      waits for its own. The first combined window carries B2, B4 and B6b.
 - **`CheckWithoutPager`, a temporary rule.** It lives in its own group, `kuma-cutover`, in
   `files/rules/kuma-cutover.yaml`.
     - A rule that does not fire has no series, so PromQL cannot read its `shadow` label. The

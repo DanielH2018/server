@@ -103,10 +103,6 @@ stringData:
   # docker-fleet + autofix-disk-prune keys removed at the Docker uninstall (2026-08-14):
   # their producers (the fleet-health cron, the disk-prune cron) retired with the
   # daemon. AutoKuma ON_DELETE=delete removes the live monitors on apply.
-  crowdsec-home-allowlist.json: |
-    {"type": "push", "name": "CrowdSec Home Allowlist", "description": "Every 5 min the crowdsec-home-ips CronJob on daniel-box looks up the home public IPv4 address via ipify and the IPv6 /64 from the host, and writes them into the crowdsec-home-ips ConfigMap; a minute later the crowdsec-jobs sidecar in the crowdsec pod syncs the cluster LAPI home-ips allowlist from it via cscli. DOWN means a lookup or a cscli call failed, or the ConfigMap has not been written for three periods because the CronJob is not running; the message says which. Read the crowdsec-jobs container log for crowdsec-home-allowlist lines, the crowdsec-home-ips Job logs, and cscli allowlists inspect home-ips.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_home_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  crowdsec-remote-allowlist.json: |
-    {"type": "push", "name": "CrowdSec Remote Allowlist", "description": "The crowdsec-jobs sidecar in the crowdsec pod runs every 5 min: it reads Traefik's access log for 2xx responses on Authelia-protected routers and keeps each public client address in the cluster LAPI remote-ips allowlist for 7 days via cscli. DOWN means kubectl or cscli failed, no router carries the authelia middleware, or the list is at its cap; the message says which. Read the crowdsec-jobs container log for crowdsec-remote-allowlist lines, and cscli allowlists inspect remote-ips.", "interval": 600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ crowdsec_remote_allowlist_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). INTERVAL IS DERIVED FROM THE
    CRONTAB: `20 4 * * 0` (registry_k8s_gc_cron_* in the registry defaults), a 604800s period,
    plus two hours. The run pushes at its end, and its worst case is about 6000s: two mirror
@@ -121,47 +117,8 @@ stringData:
   registry-gc.json: |
     {"type": "push", "name": "Registry GC", "description": "A weekly daniel-box cron (Sunday 04:20) scales the ghcr-mirror, then the dockerhub-mirror, to zero, runs a prune and garbage-collect Job on each store and scales each back. DOWN means a keep set was skipped, a pod did not stop, a Job timed out, a mirror did not come back, or another run held the lock; the message says which. Check journalctl -t registry-gc, the registry-gc-ghcr-mirror and registry-gc-dockerhub-mirror Job logs and the two mirror Deployments.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ registry_gc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-{# The host half of the shutdown chain. Its producer is nut_host's root cron, whose cadence and
-   this deadline both derive from nut_host_watchdog_interval_minutes, so a schedule change cannot
-   leave the tile graced against the old one. Gated on the token like its siblings: an ungated
-   tile sits red from creation until the secret exists. Carries `email` because a dead secondary
-   is only discovered at a power cut, which is exactly when Discord is unreachable.
-
-   ONE TILE PER HOST, never shared: nut_host's watchdog runs on both daniel-box and
-   daniel-server (ups_host), each pushing its OWN token (kuma-push.env.j2 selects by
-   inventory_hostname). Two hosts on one push token would let either host's `up` satisfy the
-   deadline, masking the other's `down`. #}
-{% if ups_secondary_push_token is defined %}
-  ups-secondary.json: |
-    {"type": "push", "name": "UPS Secondary (daniel-box)", "description": "The ups-secondary-health.sh cron on daniel-box runs every 10 min and reads upsmon.conf, systemctl is-active nut-monitor and upsc ups.status. DOWN means the secondary upsmon there is not configured, not running, or cannot reach upsd, so daniel-box would not power off on FSD. Run those two commands on daniel-box.", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ ups_secondary_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-{% endif %}
-{% if ups_secondary_daniel_server_push_token is defined %}
-  ups-secondary-daniel-server.json: |
-    {"type": "push", "name": "UPS Secondary (daniel-server)", "description": "The ups-secondary-health.sh cron on daniel-server runs every 10 min and reads upsmon.conf, systemctl is-active nut-monitor and upsc ups.status. DOWN means its secondary upsmon is not configured, not running, or cannot reach upsd, so daniel-server would not power off on FSD. Run those two commands on daniel-server.", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ ups_secondary_daniel_server_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-{% endif %}
-{# The Loki read route's only witness. Its caller is a host process, and the route's
-   guard is a ClientIP set of node-owned addresses, so no pod can probe it — see
-   roles/setup/initial_setup/templates/loki-read-route-health.sh.j2.
-
-   ONE TILE PER NODE, for the same reason as the UPS pair above: each host arrives at the route as
-   a different source address, so the route can break on one node and not the other, and
-   a shared token would let daniel-box's `up` cover a dead route from daniel-server.
-
-   7200s: the deadline must exceed the PRODUCER'S period, and the producer is an hourly cron.
-   3600 plus the run leaves 7200 with an hour of margin — move this and the cron minute together
-   or neither. No `email`: a dead read route costs an operator a confusing 404 during triage, not
-   a service outage, so Discord is proportionate. #}
-{% if loki_route_witness_push_token is defined %}
-  loki-read-route-daniel-box.json: |
-    {"type": "push", "name": "Loki Read Route (daniel-box)", "description": "The hourly kuma-check-loki-read-route timer on daniel-box runs probe.py loki-labels through the loki-homelab IngressRoute and judges the body, not the exit code; it reruns every 15 min while red. DOWN means the route answered 404 or an error from this host, usually the ClientIP guard rejecting its source address. Run systemctl status kuma-check-loki-read-route on daniel-box; check traefik pod placement.", "interval": 7200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ loki_route_witness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
-{% if loki_route_witness_daniel_server_push_token is defined %}
-  loki-read-route-daniel-server.json: |
-    {"type": "push", "name": "Loki Read Route (daniel-server)", "description": "The hourly kuma-check-loki-read-route timer on daniel-server runs probe.py loki-labels through the loki-homelab IngressRoute and judges the body, not the exit code; it reruns every 15 min while red. DOWN means the route answered 404 or an error from this host, usually the ClientIP guard rejecting its source address. Run systemctl status kuma-check-loki-read-route on daniel-server; check traefik pod placement.", "interval": 7200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ loki_route_witness_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
-{# The weekly AIDE check (#4594), ONE TILE PER HOST for the same reason as the witness pair
-   above: each host checks its own baseline, and a shared token would let one host's `up` cover
-   a host whose check stopped running.
+{# The weekly AIDE check (#4594), ONE TILE PER HOST: each host checks its own baseline, and a
+   shared token would let one host's `up` cover a host whose check stopped running.
 
    UP means AIDE completed a check, NOT that nothing changed. Differences push UP with their
    counts, because package upgrades change files every week; the `DECIDED:` marker at the
@@ -210,18 +167,6 @@ stringData:
   rkhunter-daniel-pi.json: |
     {"type": "push", "name": "rkhunter Scan (daniel-pi)", "description": "The weekly Wednesday 02:00 rkhunter-check.sh cron on daniel-pi runs rkhunter --check and pushes when the scan ends, two to three minutes later. DOWN means rkhunter raised a warning, a suspect file or a possible rootkit (the message carries the counts and the first warning), or the scan did not complete (the message carries rkhunter's exit code and first error line), or no run has reported for a week and 2 h. An account change clears when rkhunter-check.sh is run again by hand. UP means the scan completed with nothing to report. Read /var/log/rkhunter.log and journalctl -t rkhunter-check on daniel-pi.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ rkhunter_daniel_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-  configarr.json: |
-    {"type": "push", "name": "Configarr Sync", "description": "The configarr-health CronJob runs every 10 min and reads the newest finished configarr Job and its logs; the sync itself runs nightly. DOWN means the last sync is older than 26 h, exited non-zero, logged an error-level line, or its pod logs are gone. No push at all means the configarr-health CronJob itself failed: read kubectl -n homelab logs job/<newest configarr-health Job>. Run kubectl -n homelab get jobs and read the newest configarr Job logs.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_configarr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  monitor-bridge-janitorr.json: |
-    {"type": "push", "name": "Janitorr Errors", "description": "The janitorr-health CronJob runs every 10 min and counts Unexpected error occurred in scheduled task lines in the janitorr pod logs over the last 12 h, ignoring the first 10 min after startup. DOWN means at least one such error in that window. Run kubectl -n homelab logs deploy/janitorr.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_janitorr_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  autofix-fake-remux.json: |
-    {"type": "push", "name": "Fake Remux Scan", "description": "fake-remux-health.sh on daniel-box reads the state file of the daily 04:45 ffprobe scan every 10 min. DOWN means the last scan reported a failure or is older than 26 h. Check the fake-remux scan cron journal on daniel-box and state.json in the autofix-fake-remux state dir.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_fake_remux_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  autofix-fake-remux-replace.json: |
-    {"type": "push", "name": "Fake Remux Replace", "description": "fake-remux-health.sh on daniel-box reads the reconciler state file every 10 min; fake_remux_replace.py runs every 20 min to search, grab, verify and swap in genuine replacements. DOWN means the last reconcile run failed or is older than 1.2 h. Check the reconcile cron journal and replace_state.json on daniel-box.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_fake_remux_replace_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  mkv-attachment-repair.json: |
-    {"type": "push", "name": "MKV Attachment Repair", "description": "fake-remux-health.sh on daniel-box reads the mkv_attachment_repair.py state file every 10 min; the sweep itself runs every 15 min renaming attachments ffmpeg 7.1 rejects. DOWN means the last sweep failed or is older than 1.2 h. Check the mkv attachment repair cron journal and mkv_attachment_state.json on daniel-box.", "interval": 1200, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ mkv_attachment_repair_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  secret-rotation.json: |
-    {"type": "push", "name": "Secret Rotation", "description": "The daily 08:30 kuma-check-secret-rotation-audit timer on daniel-box runs secret_rotation.py audit against ansible/secret_rotation.yml; it reruns every 30 min while red. DOWN means a secret is past its rotation window, a secret in secrets.yml is missing from the registry, or a prior weekly secret-rotate left the tree dirty or unpushed. Run secret_rotation.py audit by hand; systemctl status kuma-check-secret-rotation-audit on daniel-box.", "interval": 90000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ secret_rotation_push_token }}", "tag_names": [{"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/secret-rotation/"}], "notification_name_list": ["{{ kuma_notification_id }}"]}
 {# DECIDED: the one-period-plus-an-hour margin on the drift tiles below (Docs Refresh, Manifest
    Prune, Release Staleness, Setup Plane, Live Object, GitHub Ruleset) stays. #1781 ranked them
    by 30-day down-time and read the margin as the cause. Measured 2026-09-17 from each producer's
@@ -241,58 +186,6 @@ stringData:
    `Restart=on-failure` reruns it every 15-30 min until it exits 0, and Cloudflare IP Drift
    moved into monitor-bridge, which re-probes a failure every cycle. A red tile clears when
    the fault does; the deadline still bounds silence exactly as before. #}
-{# Gated on the token like its siblings, so this lands before the secret does and neither half
-   sits red waiting for the other.
-   INTERVAL IS DERIVED FROM THE CRONTAB, not chosen: docs-refresh runs at minute 17 of hours 6
-   and 18 (crons.yml), a 12h gap, so 43200 + 3600s of grace = 46800. Move this and those hours
-   together or neither — at 90000 a whole missed run would go unreported, and at 43200 a run
-   that merely takes a minute fires DOWN with nothing wrong. #}
-{% if docs_refresh_push_token is defined %}
-  docs-refresh.json: |
-    {"type": "push", "name": "Docs Refresh", "description": "A daniel-box cron at 06:17 and 18:17 regenerates docs/reference, records a weight for every unweighted test module, rebuilds the MkDocs site and opens a PR for any change under the tree lock. DOWN means a generator, the shard-weight measurement or the site build failed, a previous run is unlanded or left the tree dirty, or the PR could not be published. Run journalctl -t docs-refresh first.", "interval": 46800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ docs_refresh_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
-{# The same two drift arms, on the hosts the monitor above cannot see: manifest-prune-check is
-   installed only on k3s server nodes, so daniel-server rendered the whole UPS shutdown chain
-   with nothing able to report it stale. Gated on the token like its siblings —
-   the cron skips its push until the secret exists, so an ungated monitor would sit red from
-   creation. Daily cron, hence the same 90000s interval. #}
-{% if setup_drift_push_token is defined %}
-  setup-drift-check.json: |
-    {"type": "push", "name": "Setup Plane Drift (agent hosts)", "description": "The daily 08:20 kuma-check-setup-drift timer on hosts without manifest-prune-check sources setup-drift-lib.sh and compares copy-deployed code to the repo and rendered scripts to their stamped source digests; it reruns every 30 min while red. DOWN names files whose deployed copy differs or whose render is stale. Re-run the initial_setup playbook for the named role on that host; systemctl status kuma-check-setup-drift there.", "interval": 90000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ setup_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
-{# Gated on the token like its siblings: the token and anthropic_api_key are added together,
-   so without the token the cron is disarmed too (initial_setup's eval-run.sh.j2 header) and
-   this monitor renders away rather than sitting red.
-   INTERVAL IS DERIVED FROM THE CRONTAB: Sunday 02:00 weekly (crons.yml), a 604800s period,
-   plus generous slack for an 8-agent hermetic LLM sweep whose runtime is not fixed like a
-   script's — 626400s (+6h) so a sweep that merely runs long doesn't fire DOWN. #}
-{% if homelab_eval_push_token is defined %}
-  homelab-eval-sweep.json: |
-    {"type": "push", "name": "Homelab Evals", "description": "A weekly Sunday 02:00 daniel-box cron runs every case under evals/cases, trends the result and opens a PR. DOWN means an eval case regressed, or an earlier PR is unlanded for a reason that needs a human; a missing anthropic_api_key skips the sweep and stays UP. Run journalctl -t eval-run and read the eval PR body.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ homelab_eval_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
-{# The FULL restore drill, run monthly in a throwaway guest on daniel-server (roles/setup/hypervisor).
-   Distinct from monitor-bridge's `etcd Restore Drill` tile, which reads daniel-box's
-   weekly list-only stamp and by design never accepts a `full` one. DEADLINE IS DERIVED FROM THE
-   CRONTAB: etcd_drill_full_kuma_interval_s in group_vars is the cron's longest period plus slack;
-   the pin is in ansible/tests/staging/test_etcd_drill_vm.py. Email tier: a restore drill that has
-   stopped passing is the class of silence the off-box snapshot tile above already escalates. #}
-{% if etcd_drill_full_push_token is defined %}
-  etcd-restore-drill-full.json: |
-    {"type": "push", "name": "etcd Restore Drill (full)", "description": "A monthly cron on daniel-server (1st, 11:20) boots a throwaway libvirt guest, restores the newest off-box etcd snapshot there with a real k3s and reads the object graph back. DOWN means a preflight failed or the restore did not pass; the message says which. Read the run evidence under the drill log root.", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ etcd_drill_full_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-{% endif %}
-{# The egress-fence leg of that same run, pushed from the same cron and so on the same deadline.
-   It is a SECOND tile rather than a line in the message above because the drill
-   tile cannot express the leg's non-fatal outcome: an unmeasured fenced range leaves the restore
-   passing, so the drill tile is `up` and the only record is the message text of a green push,
-   which alerts nobody. NEITHER `tag-severity: critical` NOR email, unlike the drill tile above,
-   and those are one decision: critical IS the email tier here, per
-   test_severity_critical_is_exactly_the_email_tier. The fatal half — a guest that reached
-   production — aborts the drill and so already escalates through that tile, which leaves this
-   one's unique contribution a probe whose target moved: a maintenance fault, not a page. #}
-{% if etcd_drill_fence_push_token is defined %}
-  etcd-restore-drill-fence.json: |
-    {"type": "push", "name": "etcd Restore Drill (egress fence)", "description": "The same monthly daniel-server cron dials every range the staging nwfilter drops, plus an internet control target, from inside the throwaway guest before that guest is handed the cluster token and the R2 write credentials. DOWN means the fence LEAKED, or that a range could not be measured at all and so is unproven — the message says which, and names the targets. Read egress-fence.log in the newest run directory under the drill log root.", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ etcd_drill_fence_push_token }}", "tag_names": [{"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
   # ── monitor-bridge's push tiles: one per row of monitor-bridge's files/check_table.py ───────
   # Derived since #3781, so a new bridge check needs no edit here. The row's `kuma_id` is the
   # AutoKuma id, and AutoKuma deletes a monitor whose id disappears (ON_DELETE=delete), so a
@@ -309,36 +202,6 @@ stringData:
   {{ check.kuma_id }}.json: |
     {"type": "push", "name": {{ check.display | to_json(ensure_ascii=False) }}, "description": {{ check.description | to_json(ensure_ascii=False) }}, "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ lookup('vars', check.token) }}"{% if tags %}, "tag_names": {{ tags | to_json }}{% endif %}, "notification_name_list": {{ ([kuma_notification_id] + (['email'] if check.critical | default(false) else [])) | to_json }}}
 {% endfor %}
-  # E7 (2026-08-13): DOCKER-USER Origin Lock retired with the public 80/443 it guarded.
-  # CrowdSec AppSec stays — its feeder moved to daniel-box (k8s/crowdsec's
-  # crowdsec-appsec-verify.sh cron), then at H2.4b into the crowdsec pod's crowdsec-jobs
-  # sidecar (files/appsec_verify.py). Same token.
-  # 1800s, NOT the bridge fleet's 600s: this monitor's feeder is k8s/crowdsec's `*/15`
-  # cron, not the 300s monitor-bridge loop. A 600s interval expired mid-cycle, so the tile
-  # alternated up/down every ~7.5 min (measured 2026-08-21: 24 transitions in 3h, up 2/3
-  # of the time = 600/900) with `max_retries: 0` turning each expiry straight into DOWN.
-  # 1800 = two cron periods, the same one-missed-run slack 600 gives the 300s bridge loop.
-  crowdsec-appsec.json: |
-    {"type": "push", "name": "CrowdSec AppSec", "description": "The crowdsec-jobs sidecar in the crowdsec pod runs every 15 min and asserts the crowdsec engine has at least one enabled appsec-config and one enabled appsec-rule. DOWN means the inline WAF is not loaded and the edge is ban-list-only, since the bouncer fails open; an unreachable LAPI stays UP. Run cscli appsec-configs list in the crowdsec pod.", "interval": 1800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_appsec_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Host flip 2 (2026-08-14): pushed once daily by renovate-notify's ExecStartPost on
-  # daniel-box (13:00 timer), not every bridge cycle — 36h window = one missed run +
-  # slack, the same tolerance the retired renovate_alive check applied. Same token.
-  renovate-notify-alive.json: |
-    {"type": "push", "name": "Renovate Notifier — Alive", "description": "renovate-notify.service on daniel-box beats this tile from ExecStartPost after each successful daily 13:00 run. DOWN means silence for 36 h: the timer did not fire or the run failed, and OnFailure will also have posted to Discord. It says nothing about Renovate itself. Run systemctl status renovate-notify.timer.", "interval": 129600, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_renovate_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Pushed once daily by renovate-agent's ExecStartPost on daniel-box (15:00 timer), and only
-  # when the session wrapper exited 0 — a failed run is the OnFailure alert's job, this tile
-  # reports silence. DECIDED: 100800s (28h), not the 90000 the other daily tiles use — the
-  # beat lands at the END of the run, and a fast run today followed by one that draws the
-  # full 10-min jitter and runs to the 100-min unit timeout tomorrow spaces two beats 25h50m
-  # apart; 25h fires DOWN on that. 28h leaves 2h of margin and stays under two periods, so a
-  # missed run still reports. test_renovate_agent_unit.py pins both bounds. Gated on the
-  # token so a checkout without the secret renders no tile rather than one that sits red, and
-  # on renovate_agent_enabled so a disarmed agent's tile is withdrawn rather than paging every
-  # six hours about a timer that is off on purpose.
-{% if renovate_agent_kuma_push_token is defined and renovate_agent_enabled | default(false) %}
-  renovate-agent-alive.json: |
-    {"type": "push", "name": "Renovate Agent — Alive", "description": "renovate-agent.service on daniel-box beats this tile from ExecStartPost after each daily 06:00 run exits 0; a crash pushes down with the exception text. DOWN means no clean run in 28 h, including a worktree-blocked skip, or a crash. Run systemctl status renovate-agent.timer and journalctl -u renovate-agent.", "interval": 100800, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ renovate_agent_kuma_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
 {# Deadman for the status-page-sync CronJob in this role — the job that owns the /status/
    containers group list. Nothing else watches a k8s Job: monitor-bridge's cluster checks
    cover Deployments and DaemonSets only, so without this tile a sync that started failing

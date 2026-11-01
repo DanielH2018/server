@@ -421,12 +421,9 @@ _ASSIGNMENT = re.compile(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")
 _CURL_CONFIG_FLAG = re.compile(r"(?<![\w-])-K(?![\w-])")
 
 # Sources kuma-push-lib.sh (any install path), with the reason each exemption is honest.
-_LIBRARY_EXEMPT = {
-    "renovate-notify.service.j2": (
-        "a systemd ExecStartPost running /bin/sh, which is dash on Ubuntu. kuma-push-lib.sh is "
-        "bash-shaped, so sourcing it would trade an argv leak for a shell-dialect dependency "
-        "inside a unit file. It uses the -K stdin form inline instead."
-    ),
+_LIBRARY_EXEMPT: dict[str, str] = {
+    # Empty since M6 batch B4's Cutover-1a dropped renovate-notify.service.j2's inline push, the
+    # last exemption. A new one is a named template with the reason it cannot source the library.
 }
 
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
@@ -438,17 +435,15 @@ _EXPECTED_IN_CORPUS = {
     "hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2",
     "hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2",
     "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2",
-    "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
 }
 
-# The corpus also holds six templates that carry a push URL but invoke no curl of their own: the
-# authelia bypass regex, both cloudflare-ddns Deployments, both pi-peer-backup manifests, and
-# renovate-notify's config.env. They are counted rather than named, so the floor is what watches
-# them. 20 against a measured 34 (2026-10-31, after M6's B1 Cutover-2 dropped the push from the
-# four k3s cron scripts) keeps the slack M3 chose: 23 against 37 after its PR 5 dropped
-# disk-health.sh.j2. A slacker floor would let a third of that unnamed tail vanish before
-# anything went red.
-_MIN_CORPUS = 20
+# The corpus also holds templates that carry a push URL but invoke no curl of their own, such as
+# the authelia bypass regex. They are counted rather than named, so the floor is what watches
+# them. 17 against a measured 23 (2026-11-01, after M6 batch B4's Cutover-1a dropped the push from
+# the two renovate units and their environment files) keeps the slack M3 chose: 23 against 37
+# after its PR 5 dropped disk-health.sh.j2. A slacker floor would let a third of that unnamed
+# tail vanish before anything went red.
+_MIN_CORPUS = 17
 
 
 def push_corpus() -> dict[Path, str]:
@@ -523,7 +518,7 @@ def test_no_push_token_reaches_curls_argv():
 def test_every_shell_push_script_sources_the_shared_library():
     """crons.yml:15-19 asserts this in prose.
 
-    Two files are honestly exempt; both are named with their reason, and both remain bound by the
+    A file that cannot source it is named with its reason in _LIBRARY_EXEMPT (none is today) and stays bound by the
     argv assertion above.
     """
     offenders = []

@@ -6,7 +6,7 @@ rejected. The `NO DEADMAN` block is right that a *stopped* cron shows up on the 
 deadman detects silence, and neither of these failures is silence. What these guard is the
 failure report and the couplings it depends on:
 
-- **The Kuma deadline must straddle the cron period.** Below it the monitor fires DOWN on a run
+- **The deadline must straddle the cron period.** Below it the NotReporting rule fires on a run
   that merely took a minute; at more than twice it, a whole missed run goes unreported. 46800
   sits between a 12h period and 24h.
 - **Exactly one `trap ... EXIT`.** A second trap on the same signal REPLACES the first, so the
@@ -18,12 +18,10 @@ import re
 from itertools import pairwise
 
 from _helpers import ANSIBLE
-from _kuma_monitors import entity, tile_is_gated_on
 from _shell_render import render_shell_script, rendered_shell_text
 from lib.repo_paths import REPO
 
 SENTINEL = "docs-refresh-render-sentinel"
-TILE = "docs-refresh.json"
 TOKEN_VAR = "docs_refresh_push_token"
 CREDENTIAL_DIR = "${CREDENTIALS_DIRECTORY:-/nonexistent}"
 SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
@@ -33,14 +31,14 @@ TIMER = (
 ROTATION = (ANSIBLE / "secret_rotation.yml").read_text()
 
 
-def _monitor_entity() -> dict:
-    """The rendered Docs Refresh entity, read out of the render by filename key.
+def _deadline_seconds() -> int:
+    """The `DEADLINE_S` the script renders, which `DocsRefreshNotReporting` carries as a literal.
 
-    Parsed from a render with the push token armed rather than from the template's source. The
-    source read had to substitute every `{{ ... }}` to `0` before the parse, so an interval
-    moved into a role default read as 0 and the comparisons below compared nothing (#3202).
+    M6 batch B2's Cutover-1a deleted the Docs Refresh Kuma tile this deadline once shared its
+    value with, so the script is the one place the number lives.
     """
-    return entity(TILE, TOKEN_VAR)
+    [deadline] = re.findall(r"^DEADLINE_S=(\d+)$", SCRIPT, re.M)
+    return int(deadline)
 
 
 def _cron_period_seconds() -> int:
@@ -58,41 +56,28 @@ def _cron_period_seconds() -> int:
     return min(gaps) * 3600
 
 
-def test_kuma_deadline_exceeds_the_cron_period():
-    interval = _monitor_entity()["interval"]
+def test_the_deadline_exceeds_the_cron_period():
+    deadline = _deadline_seconds()
     period = _cron_period_seconds()
-    assert interval > period, (
-        f"Kuma interval {interval}s does not exceed the {period}s cron period — the monitor "
-        f"fires DOWN on a run that merely takes a minute. Move the interval and the cron "
+    assert deadline > period, (
+        f"DEADLINE_S {deadline}s does not exceed the {period}s cron period — the rule "
+        f"fires on a run that merely takes a minute. Move the deadline and the cron "
         f"hour: field together."
     )
 
 
 def test_a_whole_missed_run_still_reports_down():
-    """The other half of the pair: an interval nobody can breach reports nothing.
+    """The other half of the pair: a deadline nobody can breach reports nothing.
 
-    Without this, `interval > period` is satisfied by any absurdly large number — 90000, the
+    Without this, `deadline > period` is satisfied by any absurdly large number — 90000, the
     value every daily sibling uses and the obvious thing to copy, would let a complete missed
     run pass unnoticed.
     """
-    interval = _monitor_entity()["interval"]
+    deadline = _deadline_seconds()
     period = _cron_period_seconds()
-    assert interval < 2 * period, (
-        f"Kuma interval {interval}s is at least two cron periods ({period}s) — a whole missed "
-        f"run would go unreported, which is the failure this monitor exists to catch."
-    )
-
-
-def test_push_monitor_does_not_retry():
-    assert _monitor_entity()["max_retries"] == 0, (
-        "a push monitor's deadline IS its retry; max_retries re-arms it and delays the alert"
-    )
-
-
-def test_the_monitor_is_gated_on_its_token():
-    assert tile_is_gated_on(TILE, TOKEN_VAR), (
-        "an ungated monitor sits red from creation until the secret exists — gate it like "
-        f"manifest-prune-check.json does. The tile renders with {TOKEN_VAR} empty."
+    assert deadline < 2 * period, (
+        f"DEADLINE_S {deadline}s is at least two cron periods ({period}s) — a whole missed "
+        f"run would go unreported, which is the failure this check exists to catch."
     )
 
 

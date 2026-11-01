@@ -25,10 +25,7 @@ Run: uv run pytest ansible/tests/setup/test_nut_host_secondary.py
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
-import json
-import re
 
-from _kuma_monitors import entity, monitors_text, tile_is_gated_on
 from _shell_render import rendered_shell_text
 from deploy_tools.setup_lib import setup_gates
 from lib.proc_testing import run
@@ -299,55 +296,12 @@ def test_the_watchdog_logs_above_the_journald_store_cap():
     assert "daemon.info" not in WATCHDOG
 
 
-def test_the_tile_is_gated_on_its_token():
-    """An ungated tile sits red from creation until the secret exists.
-
-    `entity` fails when the tile is absent with its gate armed, `tile_is_gated_on` when it is
-    present with the gate open. Together they pin each tile to THAT variable, which a substring
-    match on the `{% if %}` line cannot do.
-    """
-    for host, (tile, gate_var) in TILES.items():
-        assert entity(tile, gate_var)["name"] == f"UPS Secondary ({host})", (
-            f"{tile} must be the tile named for {host}"
-        )
-        assert tile_is_gated_on(tile, gate_var), (
-            f"{tile} renders with {gate_var} empty, so it sits red from creation"
-        )
-
-
-def test_the_tile_deadline_is_derived_from_the_cron_cadence():
-    """A hardcoded interval survives a schedule change and grants the wrong grace.
-
-    A 24h grace against a 23h gap clears the DOWN it was added to make sticky.
-    """
-    # Two renders at a cadence the inventory does not hold: the deadline must follow the
-    # cadence variable, which a substring match on the variable's name cannot show.
-    minutes = 7
-    for tile, gate_var in TILES.values():
-        armed = entity(tile, gate_var)
-        assert (
-            armed["interval"]
-            == NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] * 120
-        )
-        rerendered = re.search(
-            rf"^  {re.escape(tile)}: \|\n\s+(\{{.*\}})$",
-            monitors_text(
-                {gate_var: "x", "nut_host_watchdog_interval_minutes": minutes}
-            ),
-            re.M,
-        )
-        assert rerendered, f"{tile} is not rendered at a {minutes}-minute cadence"
-        moved = json.loads(rerendered.group(1))
-        assert moved["interval"] == minutes * 120, (
-            f"{tile}'s deadline does not follow nut_host_watchdog_interval_minutes — a hardcoded "
-            "interval survives a schedule change and grants the wrong grace"
-        )
-    assert "*:0/{{ nut_host_watchdog_interval_minutes }}" in NUT_TIMER.read_text()
-
-
 def test_the_watchdog_is_armable_and_armed():
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_armed"] is True
     assert NUT_HOST_DEFAULTS["nut_host_watchdog_interval_minutes"] == 10
+    # The timer follows the cadence variable, which `DEADLINE_S` in the watchdog also derives from
+    # (ansible/tests/setup/test_b4_rule_literals.py pins that deadline).
+    assert "*:0/{{ nut_host_watchdog_interval_minutes }}" in NUT_TIMER.read_text()
     enable = yaml_fast.safe_load(NUT_COMPONENT.read_text())["enable"]
     assert enable["homelab-ups-watchdog.timer"]["when"] == "nut_host_watchdog_armed"
 
