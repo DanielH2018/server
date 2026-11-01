@@ -5,7 +5,7 @@
 # wrote it. The step numbers are H7's.
 #
 # Usage, as root, with homelab-archive-keyring.gpg beside this script:
-#   ./bootstrap-host.sh <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>]
+#   ./bootstrap-host.sh <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--rebaseline]
 #   ./bootstrap-host.sh --help        print this header and exit
 #
 # Steps, in order. Each is idempotent, and --until <step> stops after one so a runbook can
@@ -19,7 +19,8 @@
 #      --create (--local-build builds the three .deb files from the clone, then installs them)
 #   6  the Pi only: start homelab-docker-engine.service once
 #   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
-#      the mask on the aide package's dailyaidecheck.timer
+#      the mask on the aide package's dailyaidecheck.timer. A missing database on a host whose
+#      logs show it had one is refused; --rebaseline writes a new one after the operator looks
 #
 # --local-build <clone> is daniel-box's way in, because it serves the repository it would
 # install from. The script reads the clone with `git archive`, so it writes nothing under the
@@ -126,7 +127,7 @@ die() {
 }
 
 usage() {
-    echo "usage: $0 <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>]" >&2
+    echo "usage: $0 <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--rebaseline]" >&2
     exit 64
 }
 
@@ -135,6 +136,7 @@ host=""
 until_step=7
 clone=""
 kit=""
+rebaseline=no
 while [ $# -gt 0 ]; do
     case "$1" in
         --until)
@@ -151,6 +153,10 @@ while [ $# -gt 0 ]; do
             [ $# -ge 2 ] || usage
             kit=$2
             shift 2
+            ;;
+        --rebaseline)
+            rebaseline=yes
+            shift
             ;;
         -*) usage ;;
         *)
@@ -467,8 +473,22 @@ stop_after 6
 # rerunning one would bless whatever changed since, and a live host whose database goes missing
 # must stay red until the operator looks.
 UNIT_DIR=/usr/lib/systemd/system
+
+# first_baseline <database> <log>...: refuse to write <database> when one of the logs exists,
+# because a host that logged an init or a scan had a baseline, and its loss is a finding.
+first_baseline() {
+    database=$1
+    shift
+    [ "$rebaseline" = no ] || return 0
+    for log in "$@"; do
+        [ -e "$ROOT$log" ] || continue
+        die "$database is missing, but $log shows this host had one; inspect the host before trusting it, then rerun with --rebaseline"
+    done
+}
+
 if [ -e "$ROOT$UNIT_DIR/homelab-rkhunter-check.timer" ] &&
     [ ! -e "$ROOT/var/lib/rkhunter/db/rkhunter.dat" ]; then
+    first_baseline /var/lib/rkhunter/db/rkhunter.dat /var/log/rkhunter.log /var/log/rkhunter.log.1
     rkhunter --propupd --nocolors || die "rkhunter --propupd failed"
     echo "bootstrap-host: wrote the first rkhunter baseline"
 fi
@@ -485,6 +505,7 @@ if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
         systemctl reset-failed dailyaidecheck.timer
     fi
     if [ ! -e "$ROOT/var/lib/aide/aide.db" ]; then
+        first_baseline /var/lib/aide/aide.db /var/log/aide/aideinit.log
         echo "bootstrap-host: writing the first AIDE database, which takes over an hour on the Pi"
         # -y overwrites an aide.db.new that an interrupted run left behind.
         aideinit -y || die "aideinit failed"

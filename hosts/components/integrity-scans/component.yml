@@ -16,7 +16,8 @@
 # - The first baselines: `rkhunter --propupd` and `aideinit`, each guarded by the file it
 #   creates. DECIDED: bootstrap, never a `ConditionPathExists=!` oneshot in this package (#6674).
 #   A oneshot would rebaseline any host whose database went missing, so a deleted aide.db would
-#   turn into a fresh, trusted one instead of a DOWN push.
+#   turn into a fresh, trusted one instead of a DOWN push. Bootstrap refuses the same case: a
+#   missing database on a host whose rkhunter or aideinit log survives needs `--rebaseline`.
 # - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full
 #   scan. A mask is a symlink in /etc/systemd/system, outside what a package owns.
 #

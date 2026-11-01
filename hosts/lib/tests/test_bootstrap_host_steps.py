@@ -208,16 +208,23 @@ def test_a_kit_whose_nfpm_differs_from_its_pin_is_refused_naming_the_file(tmp_pa
 
 SCANS = "rkhunter --propupd --nocolors", "aideinit -y"
 MASK = "systemctl mask --now dailyaidecheck.timer"
+RKHUNTER_DB, AIDE_DB = "var/lib/rkhunter/db/rkhunter.dat", "var/lib/aide/aide.db"
 
 
-def _scans_host(tmp_path) -> FakeHost:
-    """A Pi whose package ships both integrity-scans timers."""
+def _scans_host(tmp_path, *timers: str) -> FakeHost:
+    """A Pi whose package ships the named integrity-scans timers, both by default."""
     host = FakeHost(tmp_path)
     units = host.root / "usr/lib/systemd/system"
     units.mkdir(parents=True)
-    for timer in ("homelab-rkhunter-check.timer", "homelab-aide-check.timer"):
-        (units / timer).touch()
+    for timer in timers or ("rkhunter", "aide"):
+        (units / f"homelab-{timer}-check.timer").touch()
     return host
+
+
+def _touch(host: FakeHost, *paths: str) -> None:
+    for path in paths:
+        (host.root / path).parent.mkdir(parents=True, exist_ok=True)
+        (host.root / path).touch()
 
 
 def test_a_fresh_host_gets_both_baselines_and_the_masked_daily_aide_timer(tmp_path):
@@ -231,11 +238,20 @@ def test_a_fresh_host_gets_both_baselines_and_the_masked_daily_aide_timer(tmp_pa
     assert MASK in commands
 
 
-def test_a_rerun_rewrites_no_baseline_and_leaves_the_mask_alone(tmp_path):
+def test_a_failed_aideinit_still_leaves_the_daily_timer_masked(tmp_path):
     host = _scans_host(tmp_path)
-    for db in ("var/lib/rkhunter/db/rkhunter.dat", "var/lib/aide/aide.db"):
-        (host.root / db).parent.mkdir(parents=True)
-        (host.root / db).touch()
+    host._stub("aideinit", f'echo "aideinit $*" >> {host.log}; exit 1')
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 1
+    assert "aideinit failed" in result.stderr
+    assert MASK in host.commands()
+
+
+def test_a_rerun_reads_the_mask_and_rewrites_neither_baseline(tmp_path):
+    host = _scans_host(tmp_path)
+    _touch(host, RKHUNTER_DB, AIDE_DB)
     host._stub(
         "systemctl",
         f'echo "systemctl $*" >> {host.log}\n'
@@ -246,16 +262,41 @@ def test_a_rerun_rewrites_no_baseline_and_leaves_the_mask_alone(tmp_path):
 
     assert result.returncode == 0, result.stderr
     commands = host.commands()
+    assert "systemctl is-enabled dailyaidecheck.timer" in commands
     assert not [c for c in commands if c in SCANS]
     assert MASK not in commands
 
 
-def test_a_package_without_the_scans_gets_no_baseline_and_no_mask(tmp_path):
-    host = FakeHost(tmp_path)
+def test_a_package_with_only_the_rkhunter_timer_gets_only_its_baseline(tmp_path):
+    host = _scans_host(tmp_path, "rkhunter")
 
     result = host.run("daniel-pi")
 
     assert result.returncode == 0, result.stderr
     commands = host.commands()
-    assert not [c for c in commands if c.startswith(("rkhunter", "aideinit"))]
-    assert MASK not in commands
+    assert [c for c in commands if c.startswith(("rkhunter", "aideinit"))] == [SCANS[0]]
+    assert not [c for c in commands if "dailyaidecheck" in c]
+
+
+@pytest.mark.parametrize(
+    ("log", "database", "init"),
+    [
+        ("var/log/rkhunter.log.1", RKHUNTER_DB, SCANS[0]),
+        ("var/log/aide/aideinit.log", AIDE_DB, SCANS[1]),
+    ],
+    ids=["rkhunter", "aide"],
+)
+def test_a_lost_database_on_a_host_that_had_one_is_refused_until_rebaseline(
+    tmp_path, log, database, init
+):
+    host = _scans_host(tmp_path)
+    # Only the database under test is missing.
+    _touch(host, log, *({RKHUNTER_DB, AIDE_DB} - {database}))
+
+    refused = host.run("daniel-pi")
+    forced = host.run("daniel-pi", "--rebaseline")
+
+    assert refused.returncode == 1
+    assert f"/{database} is missing, but /{log} shows" in refused.stderr
+    assert forced.returncode == 0, forced.stderr
+    assert host.commands().count(init) == 1

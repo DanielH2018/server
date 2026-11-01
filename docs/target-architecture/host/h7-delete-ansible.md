@@ -1345,6 +1345,14 @@ steps are:
    rebaseline any host whose database went missing, so a deleted `aide.db` would become a
    fresh, trusted one instead of a DOWN push from the weekly check.
 
+   A rerun of the script on a live host meets the same case, for example when the operator
+   reruns it to recreate an age key. The script cannot tell a first install from a lost
+   database by the database alone, so it also reads the logs a baseline leaves behind. It
+   refuses `rkhunter --propupd` when `/var/log/rkhunter.log` or `rkhunter.log.1` exists, and
+   it refuses `aideinit` when `/var/log/aide/aideinit.log` exists. The refusal names the log
+   it found. After the operator has inspected the host, `--rebaseline` writes the new
+   baseline.
+
 `--until <step>` stops after a step, so a runbook can restore data before step 5 starts any
 service. The operator then adds the printed public key as a recipient (**operator-only**)
 and merges. The next package carries ciphertext the host can read, and `homelab-secrets`
