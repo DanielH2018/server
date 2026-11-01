@@ -72,6 +72,17 @@ class FakeFollower:
         return 0
 
 
+def _tools(**seams) -> Tools:
+    """`Tools` for a test that runs `land.main`, its journal follower always stubbed.
+
+    The default follower is a real `journalctl -f`, and whether the leak guard's shim records
+    it depends on whether the follower is stopped before it execs, so a test that forgot the
+    stub failed only on a slow runner.
+    """
+    seams.setdefault("follow_journal", FakeFollower())
+    return Tools(**seams)
+
+
 def _hand_off(tmp_path, follow=None, **fake):
     systemctl = FakeSystemctl(tmp_path / UNIT / f"{PR}.verdict", **fake)
     rc, _line = handoff.land_through_unit(
@@ -182,7 +193,7 @@ def test_a_flag_the_unit_cannot_honour_is_refused_before_anything_starts(
     monkeypatch.setenv(HANDOFF_ENV, UNIT)
     systemctl = FakeSystemctl(tmp_path / "unused")
     rc = land.main(
-        ["--pr", PR, "--arm-merge", *flags], tools=Tools(systemctl=systemctl)
+        ["--pr", PR, "--arm-merge", *flags], tools=_tools(systemctl=systemctl)
     )
     assert rc == LAND_BAD_ARGS
     assert flags[0] in capsys.readouterr().err
@@ -192,7 +203,7 @@ def test_a_flag_the_unit_cannot_honour_is_refused_before_anything_starts(
 def test_a_pr_that_is_not_a_number_is_refused(monkeypatch, tmp_path):
     monkeypatch.setenv(HANDOFF_ENV, UNIT)
     systemctl = FakeSystemctl(tmp_path / "unused")
-    assert land.main(["--pr", "0"], tools=Tools(systemctl=systemctl)) == LAND_BAD_ARGS
+    assert land.main(["--pr", "0"], tools=_tools(systemctl=systemctl)) == LAND_BAD_ARGS
     assert not systemctl.calls
 
 
@@ -206,7 +217,7 @@ def test_land_sh_hands_off_rather_than_landing(monkeypatch, tmp_path, capsys):
         raise AssertionError(f"the handoff called gh: {args}")
 
     follow = FakeFollower(["== 1/6  resolving PR #3633"])
-    tools = Tools(systemctl=systemctl, gh_json=no_gh, gh=no_gh, follow_journal=follow)
+    tools = _tools(systemctl=systemctl, gh_json=no_gh, gh=no_gh, follow_journal=follow)
     assert land.main(["--pr", PR, "--arm-merge", "--await-merge"], tools=tools) == 1
     assert systemctl.calls[0] == ("start", INSTANCE)
     assert "== 1/6  resolving PR #3633" in capsys.readouterr().out
@@ -265,7 +276,7 @@ def test_a_handed_off_landing_is_recorded_in_this_users_verdict_log(
 
     monkeypatch.setenv(HANDOFF_ENV, UNIT)
     systemctl = FakeSystemctl(tmp_path / "unused", stderr="Access denied")
-    assert land.main(["--pr", PR], tools=Tools(systemctl=systemctl)) == 1
+    assert land.main(["--pr", PR], tools=_tools(systemctl=systemctl)) == 1
     printed = capsys.readouterr().out.splitlines()[-1]
     assert printed.startswith("VERDICT: refused (PR #3633")
     assert [(e["pr"], e["rc"], e["line"]) for e in verdict_log.latest()] == [
