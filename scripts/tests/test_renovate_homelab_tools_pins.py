@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Guard the Renovate manager for `homelab-tools`' pins (target slice H3, PR H3.11).
 
-`hosts/packages/homelab-tools/package.yml` pins sops and chezmoi by version and by the sha256 of
-the file each URL serves, once per architecture. The manager must read a version and its digest
-in one match, as the nfpm manager does: one that captured only the version would bump it beside
-the old digest, and the builder would then refuse the download (reason `tools`).
+`hosts/packages/homelab-tools/package.yml` pins sops, chezmoi, node-exporter, flux, nfpm and uv
+by version and by the sha256 of the file each URL serves, once per architecture. The manager
+must read a version and its digest in one match, as the nfpm manager does: one that captured
+only the version would bump it beside the old digest, and the builder would then refuse the
+download (reason `tools`).
 
 Run: uv run pytest scripts/tests/test_renovate_homelab_tools_pins.py
 """
@@ -27,6 +28,7 @@ DEPS = {
     "nfpm": "goreleaser/nfpm",
     "node-exporter": "prometheus/node_exporter",
     "uv": "astral-sh/uv",
+    "flux": "fluxcd/flux2",
 }
 
 
@@ -63,8 +65,8 @@ def _spec_pins() -> list[tuple[str, str, str]]:
 def test_the_manager_reads_every_version_and_digest_pair_of_the_spec() -> None:
     found = tools_pins(_CONFIG_MANAGERS, (_REPO / SPEC).read_text())
     assert found == _spec_pins()
-    # Non-vacuity: five tools, two architectures.
-    assert len(found) == 10
+    # Non-vacuity: six tools, two architectures.
+    assert len(found) == 12
 
 
 def test_a_missing_or_version_only_manager_is_flagged() -> None:

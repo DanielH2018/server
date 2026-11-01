@@ -11,6 +11,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_secrets.py
 """
 
 import ast
+import json
 import os
 import re
 import sys
@@ -333,3 +334,28 @@ def test_an_unknown_format_makes_the_manifest_invalid(host):
 
     assert host.run() == 1
     assert host.decrypts() == 0
+
+
+JSON_TEMPLATE = '{"username": "agent", "password": "${a}"}\n'
+
+
+def test_a_json_output_escapes_a_quote_a_backslash_and_a_control_character(host):
+    value = 'p"w\\d\n\t'
+    host.decrypts_to(a=value)
+    host.output("login.json", JSON_TEMPLATE, keys=["a"], format="json")
+
+    assert host.run() == 0
+    rendered = json.loads(host.read("/run/homelab-secrets/login.json"))
+    assert rendered == {"username": "agent", "password": value}
+
+
+def test_a_json_output_that_does_not_parse_is_refused_by_name(host, capsys):
+    # A placeholder outside a string: no escape makes that value valid JSON.
+    host.decrypts_to(a="not a number")
+    host.output("login.json", '{"port": ${a}}\n', keys=["a"], format="json")
+
+    assert host.run() == 1
+    assert not host.path("/run/homelab-secrets/login.json").exists()
+    err = capsys.readouterr().err
+    assert "login.json" in err and "is not JSON" in err
+    assert "not a number" not in err

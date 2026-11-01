@@ -53,6 +53,15 @@ def test_the_login_file_is_the_agents_alone_and_never_persisted() -> None:
     assert output["persist"] is False and output["link"] is False
 
 
+def test_the_login_file_is_rendered_as_json_so_its_password_is_escaped() -> None:
+    (output,) = [
+        o
+        for o in yaml_fast.safe_load(BOX_PACKAGE.read_text())["outputs"]
+        if o["path"].endswith("homelab-ui/credentials.json")
+    ]
+    assert output["format"] == "json"
+
+
 def test_the_login_file_sits_in_a_directory_only_the_agent_lists(tmp_path) -> None:
     """The operator's group traverses to stat the 0600 login for `probe.py applied` (#6484)."""
     for flag, mode in ((True, "0710"), (False, "0700")):

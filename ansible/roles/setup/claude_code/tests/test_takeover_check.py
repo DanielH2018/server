@@ -471,7 +471,7 @@ def test_root_ignores_every_override(rig, tmp_path) -> None:
 
 def test_the_script_names_only_root_owned_binaries_and_never_the_users_flux() -> None:
     text = SCRIPT.read_text()
-    assert "/usr/local/lib/homelab-takeover-check/flux" in text
+    assert "FLUX=/usr/lib/homelab/bin/flux\n" in text
     assert ".local/bin" not in text.replace('PATH="$home/.local/bin', "")
     assert not [x for x in text.splitlines() if x.lstrip().startswith("sudo ")]
 
