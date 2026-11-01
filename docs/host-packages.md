@@ -106,6 +106,12 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   file removed, but never stopped, because `systemctl` refuses a template's own name. While any
   instance is active, activating or reloading, the entry stays and counts as drift, as a running
   legacy service does. A run therefore never ends an instance mid-run.
+- **A toggle-gated legacy entry.** A `legacy:` entry may carry `when:`, and ships only while it
+  holds. The claude-code component uses it to remove the textfile metrics a disarmed timer
+  wrote: the toggle that drops the timer adds the entry. Step 1 stops the dropped timer and service before step 4
+  removes the file, so a run in flight cannot write it back. Reconcile rebuilds its retired set
+  from each manifest, so an entry that drops out when the timer is re-armed retires its path
+  again on the next disarm.
 
 ## Activation, pending state and drift
 

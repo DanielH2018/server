@@ -9,10 +9,12 @@ Run: uv run pytest hosts/lib/tests/test_claude_code_on_daniel_box.py
 
 import json
 import re
+import shutil
 
 import pytest
 import yaml
 
+from lib.estate import Inventory
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
@@ -246,3 +248,34 @@ def test_each_hosts_users_entry_names_its_live_uid_and_follows_the_agent_toggle(
     assert host_vars["claude_code_agent_user_enabled"] == ("claude" in declared)
     assert declared.get("claude") == AGENT_UID[host]
     assert "users" not in yaml.safe_load(COMPONENT.read_text())
+
+
+TEXTFILES = "/var/lib/node-exporter-textfile"
+# Each timer toggle, and the textfiles its timer writes that disarming it must remove.
+TIMER_TEXTFILES = {
+    "claude_code_fanout_server_lander_enabled": {
+        f"{TEXTFILES}/fanout_operator_waits.prom",
+        f"{TEXTFILES}/claude-fanout-server-lander.prom",
+    },
+    "claude_code_pipeline_timeline_enabled": {
+        f"{TEXTFILES}/claude-pipeline-timeline.prom",
+    },
+}
+
+
+def retired_textfiles(package) -> set[str]:
+    return {
+        e["path"] for e in package.legacy if e.get("path", "").startswith(TEXTFILES)
+    }
+
+
+@pytest.mark.parametrize("toggle", sorted(TIMER_TEXTFILES))
+def test_disarming_a_timer_retires_its_textfiles(tmp_path, toggle):
+    host_vars = tmp_path / "host_vars"
+    shutil.copytree(REPO / "ansible" / "inventory" / "host_vars", host_vars)
+    path = host_vars / "daniel-box.yml"
+    path.write_text(yaml.safe_dump({**yaml.safe_load(path.read_text()), toggle: False}))
+
+    off = host_mode.render_host("daniel-box", inventory=Inventory(host_vars=host_vars))
+
+    assert retired_textfiles(off) == TIMER_TEXTFILES[toggle]
