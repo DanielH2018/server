@@ -11,24 +11,22 @@
 # --delete: a removed peer lingering in the backup is harmless, and --delete would wipe
 # the copy if the source were ever momentarily empty.
 #
-# Reporting: pushes the "WG Pi Peer Backup" Kuma monitor DIRECTLY (up on success, down
-# with the error otherwise) — the monitor-bridge `pi_peers` state-file check this
-# replaces retired with the flip. It also pings an off-premises Healthchecks.io check when
-# HC_PING_URL is set, which is what still alerts when the whole cluster (Kuma included) is
-# down. `set -uo` (not -euo) so the rsync exit code is captured and reported, not swallowed.
-#
-# The verdict also leaves the pod as annotations on one ConfigMap (VERDICT_CONFIGMAP), which
-# kube-state-metrics exports to Prometheus (M6 batch B7, docs/target-architecture/monitoring/
-# m6-retire-kuma.md). The image carries no kubectl, so export_verdict sends one merge PATCH with
-# curl and the pod's ServiceAccount token. A failed export makes the run exit 1, so the CronJob's
-# last successful time stops moving and the NotReporting rule fires.
+# Reporting: the verdict leaves the pod as annotations on one ConfigMap (VERDICT_CONFIGMAP),
+# which kube-state-metrics exports to Prometheus (M6 batch B7, docs/target-architecture/
+# monitoring/m6-retire-kuma.md). The image carries no kubectl, so export_verdict sends one
+# merge PATCH with curl and the pod's ServiceAccount token. A failed export makes the run exit
+# 1, so the CronJob's last successful time stops moving and the NotReporting rule fires. The
+# run also pings an off-premises Healthchecks.io check when HC_PING_URL is set, which is what
+# still alerts when the whole cluster is down. The "WG Pi Peer Backup" Kuma push stopped at
+# B7's Cutover-2. `set -uo` (not -euo) so the rsync exit code is captured and reported, not
+# swallowed.
 #
 # Usage: pull-pi-peers.sh (no arguments)
 # Runs as the pi-peer-backup CronJob at 23:00 America/Chicago, and once per deploy as the
 # pi-peer-backup-deploy-gate Job. Environment: PI_SRC (required, the Pi's source
-# directory), KUMA_PUSH_URL (required), HC_PING_URL (optional Healthchecks.io ping),
-# VERDICT_CONFIGMAP (optional; the ConfigMap the verdict is also written to, empty for none),
-# and HOSTNAME (a pod name starting pi-peer-backup-deploy-gate- skips both pushes and the
+# directory), HC_PING_URL (optional Healthchecks.io ping),
+# VERDICT_CONFIGMAP (optional; the ConfigMap the verdict is written to, empty for none),
+# and HOSTNAME (a pod name starting pi-peer-backup-deploy-gate- skips the ping and the
 # export). Reads the SSH identity at /ssh/id and writes to /data/peers.
 set -uo pipefail
 
@@ -38,7 +36,7 @@ for arg in "$@"; do
   esac
 done
 
-: "${PI_SRC:?}" "${KUMA_PUSH_URL:?}"
+: "${PI_SRC:?}"
 # A subdir, not the PVC mountpoint: /data itself is root-owned (fsGroup grants group
 # write, not ownership), so rsync -a's final set-times on the dest dir EPERMs (exit 23).
 # A subdir we create is ours and takes attrs cleanly.
@@ -52,26 +50,21 @@ install -m 0400 /ssh/id "$HOME/.ssh/id"
 # Flux runs a one-off gate Job named pi-peer-backup-deploy-gate-<spec digest8> in
 # pi-peer-backup-verify once per role revision, to prove a bumped image still runs. The renderer
 # copies it from this CronJob (scripts/renderer/renderer_lib/cronjob_gate.py).
-# That run is not the scheduled backup, and it must not report as one: pushing here would make
-# the Kuma monitor mean "something ran" instead of "the nightly backup ran", masking a missed
-# 23:00 firing for the rest of its 2.5-day window, and a failing gate run would page the
-# operator from a deploy-time probe rather than from the backup itself. The pod's hostname is
-# `<job-name>-<random>` (the gate Job carries the CronJob's pod template verbatim, so there is
-# no other way for the script to tell the two runs apart).
+# That run is not the scheduled backup, and it must not report as one: a ping or an export here
+# would make the check mean "something ran" instead of "the nightly backup ran", masking a
+# missed 23:00 firing, and a failing gate run would page the operator from a deploy-time probe
+# rather than from the backup itself. The pod's hostname is `<job-name>-<random>` (the gate Job
+# carries the CronJob's pod template verbatim, so there is no other way for the script to tell
+# the two runs apart).
 GATE_RUN=0
 [[ "${HOSTNAME:-}" == pi-peer-backup-deploy-gate-* ]] && GATE_RUN=1
 
-# The verdict and a failed push are written in the host crons' syslog shape — `<ts> <host>
-# pi-peer-backup: status=<up|down> <msg>` and kuma-push-lib.sh's `push failed (http=<code>
-# rc=<rc>[ by=kuma]) (status=<up|down>: <msg>)` — because there is no `logger` in this pod and
-# the only reader of push outcomes, monitor-bridge's swallowed-verdicts check, parses that
-# prefix (`verdicts/logs.py`). Alloy labels this container's stdout `{container="pi-peer-backup"}`, not
-# `{job="syslog"}`, and the check reads that stream too (#1943); until 2026-09-18 it logged
-# `kuma push failed (...)` here, so a push Kuma rejected — a token no live tile holds — was
-# invisible. `by=kuma` is a fixed word derived from the content type. Kuma answers 404 for ANY
-# exception in its push handler (#4481), so a `by=kuma` failure is preceded by the library's
-# `push rejected by kuma (http=<code>): <msg>` line carrying Kuma's own `msg`, token redacted —
-# in this pod's log, since there is no journal.
+# The verdict is written in the host crons' syslog shape — `<ts> <host> pi-peer-backup:
+# status=<up|down> <msg>` — because there is no `logger` in this pod and monitor-bridge's
+# swallowed-verdicts check parses that prefix (`verdicts/logs.py`) until C-7 deletes it. Alloy
+# labels this container's stdout `{container="pi-peer-backup"}`, not `{job="syslog"}`, and the
+# check reads that stream too (#1943). Until B7's Cutover-2 a failed Kuma push logged `push
+# failed (...)` here in the same shape; the tag stays in KUMA_RETIRING_TAGS until C-7.
 # busybox `date` has no `-Is`, hence the explicit format.
 report() { # line
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${HOSTNAME:-pi-peer-backup} pi-peer-backup: $1"
@@ -109,56 +102,31 @@ export_verdict() { # status msg
   fi
 }
 
+# Reports one run: the verdict line, the ConfigMap export and the Healthchecks.io ping. The Kuma
+# push stopped at M6 batch B7's Cutover-2, so a Kuma outage no longer touches this function.
 push() { # status msg
   if [[ "$GATE_RUN" -eq 1 ]]; then
-    echo "deploy-gate run — not pushing Kuma/Healthchecks ($1: $2)"
+    echo "deploy-gate run — not reporting ($1: $2)"
     return
   fi
 
   report "status=$1 $2"
-  # Before the Kuma push, so a Kuma outage cannot keep the verdict from Prometheus.
   export_verdict "$1" "$2"
-  local reply meta body http_code curl_rc ctype by re kuma_msg token
-  # The body comes first and the `-w` line last, as in kuma-push-lib.sh.
-  reply=$(curl -sS -m 10 --get "$KUMA_PUSH_URL" \
-    --data-urlencode "status=$1" --data-urlencode "msg=$2" \
-    -w '\n%{http_code} %{content_type}') && curl_rc=0 || curl_rc=$?
-  meta=${reply##*$'\n'}
-  body=""
-  case "$reply" in *$'\n'*) body=${reply%$'\n'*} ;; esac
-  http_code=${meta%% *}
-  ctype=""
-  case "$meta" in *" "*) ctype=${meta#* } ;; esac
-  by=""
-  case "$ctype" in application/json*) by=" by=kuma" ;; esac
-  case "$curl_rc/$http_code" in
-    0/2??) ;;
-    *)
-      # kuma-push-lib.sh's `_kuma_reply_msg`, inline because the image carries only this script.
-      re='"msg"[[:space:]]*:[[:space:]]*"(([^"\\]|\\.)*)"'
-      if [[ -n "$by" && $body =~ $re ]]; then
-        kuma_msg=${BASH_REMATCH[1]}
-        token=${KUMA_PUSH_URL##*/}
-        [[ -z "$token" ]] || kuma_msg=${kuma_msg//"$token"/<token>}
-        report "push rejected by kuma (http=${http_code}): ${kuma_msg:0:300}" >&2
-      fi
-      report "push failed (http=${http_code} rc=${curl_rc}${by}) (status=$1: $2)" >&2
-      ;;
-  esac
 
-  # Kuma resolves to a Service in this cluster, so a cluster outage silences the push above and
-  # the monitor waiting for it — nothing alerts. hc-ping.com is off-site and alerts on the
-  # silence instead. Empty when no ping key is configured, in which case this is a no-op.
+  # The cluster is what can fail silently: an outage stops this CronJob, the verdict export and
+  # every Prometheus rule that reads them, so nothing in the cluster alerts. hc-ping.com is
+  # off-site and alerts on the silence instead. Empty when no ping key is configured, in which
+  # case this is a no-op.
   if [[ -n "${HC_PING_URL:-}" ]]; then
     local url="$HC_PING_URL"
     [[ "$1" == "up" ]] || url="$url/fail"
     # Deliberately not "$2": an rsync failure echoes PI_SRC, which carries the Pi's LAN IP and
     # ssh user, and Healthchecks.io stores ping bodies. The status is what has to escape the
-    # house; the detail stays in Kuma, which is on the LAN.
+    # house; the detail stays in the pod log and the verdict ConfigMap.
     # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511). This one runs as a
     # pod rather than a cron, so the chatter lands in the pod log rather than in mail; the rule
     # is uniform across every hc-ping site so that none of them has to be exempted.
-    curl -fs -m 10 --retry 3 --data-raw "peer pull reported $1; detail in Kuma" "$url" >/dev/null 2>&1 \
+    curl -fs -m 10 --retry 3 --data-raw "peer pull reported $1; detail in the pod log" "$url" >/dev/null 2>&1 \
       || echo "healthchecks ping failed ($1: $2)" >&2
   fi
 }

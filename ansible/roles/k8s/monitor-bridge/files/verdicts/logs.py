@@ -77,7 +77,11 @@ def parse_push_line(line: str) -> tuple[str, str, str, str, str] | None:
 # alerts at once. Their lost DOWN already pages, so counting it here is one root cause twice;
 # their `status=` lines still count as landed siblings. Pinned against the tree by
 # tests/test_check_swallowed_verdicts.py: a new reader has to be added here too.
-HC_ROUTED_TAGS = frozenset({"longhorn-backup-health"})
+# longhorn-backup-health left in M6 batch B1's Cutover-2, when its push and its
+# uptime-kuma-alive ping went; it stays in KUMA_RETIRING_TAGS below. The Pi's pi-sd-health and
+# pi-recovery-health left in B5's Cutover-2, which stopped their pushes. The set is empty, and
+# `swallowed_verdicts` counts every swallowed DOWN that KUMA_RETIRING_TAGS does not exempt.
+HC_ROUTED_TAGS: frozenset[str] = frozenset()
 
 # The producers whose Kuma tile M6 is deleting (docs/target-architecture/monitoring/m6-retire-kuma.md,
 # "The cutover order"). From a batch's Cutover-1a until its Cutover-2, the producer still pushes

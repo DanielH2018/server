@@ -3,9 +3,10 @@
 #
 # Usage: release-staleness-check.sh [-h|--help]
 # Takes no arguments. Cron job "Release staleness drift check" runs it as the deploy user every
-# k3s_release_staleness_cron_minute minutes (cron file release-staleness-check). It reads the Kuma
-# push token from /etc/rancher/k3s/kuma-push.env, fetches origin, and pushes the verdict. Running
-# it by hand is safe, but it pushes to the Kuma monitor.
+# k3s_release_staleness_cron_minute minutes (cron file release-staleness-check). It fetches origin
+# and writes the verdict to $TEXTFILE_DIR/release-staleness-check.prom for node_exporter's
+# textfile collector. Prometheus rules in host-checks.yaml page it through Alertmanager. Running
+# it by hand is safe.
 #
 # THE GAP THIS CLOSES (issue #947). When gitops_deploy.py defers a non-auto-deployable k8s role
 # change (`alert_deferred`'s `cs.k8s` branch), it fast-forwards the tree and pages Discord ONCE
@@ -43,11 +44,6 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t release-staleness-check "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t release-staleness-check "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
@@ -67,29 +63,7 @@ DEADLINE_S={{ 2 * 60 * (_every_n | int) + 300 }}
 {% endif %}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP, same reasoning as manifest-prune-check.sh beside this one:
-# Kuma serves from the k8s edge and the Docker edge's bridge route for this name is gone.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
-# local account. 0640 root:{{ sys_user }} env file, shared with the other k3s health crons.
-RELEASE_STALENESS_PUSH_TOKEN=""
-# shellcheck source=/dev/null
-[[ -r /etc/rancher/k3s/kuma-push.env ]] && . /etc/rancher/k3s/kuma-push.env
-PUSH_TOKEN="$RELEASE_STALENESS_PUSH_TOKEN"
-
-# The role must deploy cleanly before the operator has registered this secret (/add-secret) —
-# skip the push rather than fail the cron until the token exists. Names the env var, not the
-# registry secret, for the same reason as manifest-prune-check.sh beside this one: the secrets
-# guard matches whole-word registry names against raw template text and would flag a log line
-# that only names the variable.
-if [[ -z "$PUSH_TOKEN" ]]; then
-  logger -t release-staleness-check "RELEASE_STALENESS_PUSH_TOKEN not set — skipping push (see /add-secret)"
-  exit 0
-fi
-PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
-
-# The stale set the last DOWN pushed, for the re-alert below (#2378).
+# The stale set the last DOWN recorded, for the changed-set log line below (#2378).
 STATE_DIR=/var/lib/homelab/release-staleness
 PREV_SET="${STATE_DIR}/stale-set"
 NEW_SET="${STATE_DIR}/stale-set.new"
@@ -98,7 +72,7 @@ TRACK_SET=""
 
 # A DOWN that is not a staleness verdict (the fetch or the probe itself failing) records an
 # empty set when none is recorded yet. Without it, the first real verdict after one finds no
-# previous set, pushes a plain DOWN onto a tile that is already DOWN, and Kuma sends nothing.
+# previous set, so its log line cannot say that the set changed.
 seed_empty_set() {
   [[ -n "$TRACK_SET" && ! -f "$PREV_SET" ]] && : > "$PREV_SET"
   return 0
@@ -135,7 +109,7 @@ if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   # The fetch reaches github.com, so one WAN outage would otherwise light this tile beside the WAN
   # tile — it did on 2026-09-18, for 3h ("git fetch origin master failed"). reachout_verdict probes
   # the link and reports a skip only when neither provider answers; a fetch GitHub itself refused
-  # still pushes down. See kuma-push-lib.sh for why the probe classifies and not the error text.
+  # still reads down. See homelab-check-lib.sh for why the probe classifies and not the error text.
   STATUS=down
   REACHOUT_NOTE=""
   if [[ -n "$LINK_DOWN_AT_START" ]]; then
@@ -145,7 +119,7 @@ if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   # The library is deployed by initial_setup, while this cron is rendered by its own role, so a
   # narrowed apply can put the new script on a host whose /usr/local/lib copy predates
   # reachout_verdict. Without this the read below aborts on an unbound variable under `set -u` and
-  # NO push happens at all — the tile reads stale-green to its heartbeat deadline, which is worse
+  # NO verdict is written at all — the check reads stale-green until its deadline, which is worse
   # than the page this change exists to stop. Same guard docs-refresh.sh.j2 carries.
   if [[ -z "$LINK_DOWN_AT_START" ]] && command -v reachout_verdict >/dev/null 2>&1; then
     reachout_verdict release-staleness-check {{ wan_probe_urls | join(' ') }}
@@ -154,12 +128,11 @@ if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   MSG="${REACHOUT_NOTE}git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
   logger -t release-staleness-check "status=${STATUS} ${MSG}"
   write_verdict "$STATUS" "$MSG"
-  # The textfile, before the push, as at the end of the script. This run's verdict is the fetch's.
+  # The textfile, as at the end of the script. This run's verdict is the fetch's.
   SUCCESS=0
   [[ "$STATUS" == "up" ]] && SUCCESS=1
   write_check_textfile release-staleness-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
     || logger -t release-staleness-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
-  kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
   seed_empty_set
   exit 0
 fi
@@ -171,8 +144,8 @@ UV=/home/{{ sys_user }}/.local/bin/uv
 # --kuma: the verdict as ONE line grouped by reason (bridge.msgfmt). The per-service list ran
 # to ~7,500 chars when a refused narrowing marked the whole fleet stale, and Discord rejects an
 # embed field past 1024 chars, so the DOWN reached nobody (#2013). Names-only was the first fix;
-# grouping keeps the reason. kuma_push caps the msg as a backstop. Not the journal either:
-# `logger` cuts a line at 1 KiB, so the full list is one `--stale-only` run away.
+# grouping keeps the reason. Not the journal either: `logger` cuts a line at 1 KiB, so the full
+# list is one `--stale-only` run away.
 # --grace-minutes: a merge younger than this is named but not counted, so a landing still
 # deploying its own merge does not page (k3s_release_staleness_grace_minutes in defaults).
 # --names-out: the counted set, one name per line, for the re-alert below. Passed only when the
@@ -198,16 +171,14 @@ else
 fi
 MSG="$OUTPUT"
 
-# RE-ALERT ON A CHANGED SET (#2378). Kuma notifies on a status TRANSITION only, plus the
-# resendInterval count, and its push route accepts only `up` or `down`. So while the tile sat
-# DOWN, a stale set that grew or shrank (one service redeployed, another merge landing) changed
-# the tile's message and never reached Discord. When this run's counted set differs from the
-# one the last DOWN pushed, the script pushes an `up` that says it is not a recovery, then the
-# `down`: Kuma sends both notifications, and the second carries the current list.
-# Considered and rejected: posting to Discord directly. That needs a webhook secret on this
-# host and bypasses the Discord template every Kuma monitor shares (uptime-kuma CLAUDE.md).
-# Grace-window services are not in the set: they do not move the verdict, so they do not
-# re-alert either. The first DOWN has no previous set, and its own transition is the alert.
+# CHANGED SET (#2378). While the check stays DOWN, a stale set that grew or shrank (one service
+# redeployed, another merge landing) changes the verdict's text and does not notify again:
+# Alertmanager repeats a firing alert on its own interval and the alert carries no list. When this
+# run's counted set differs from the one the last DOWN recorded, the script logs the change, and
+# `probe.py releases --stale-only` prints the current list. Kuma's re-notify on a changed set
+# went with its tile (M6 batch B1), an accepted loss: D6.17 disarms this check.
+# Grace-window services are not in the set: they do not move the verdict, so they do not count
+# as a change either. The first DOWN has no previous set, and its own alert is the notice.
 # No bash length or array-count expansions below: their brace-hash reads to Jinja as the start
 # of a comment, so counts come from `wc` instead.
 REALERT=""
@@ -229,29 +200,21 @@ if [[ $RC -eq 1 && -f "$PREV_SET" && -f "$NEW_SET" ]] && ! cmp -s "$PREV_SET" "$
 fi
 
 if [[ -n "$REALERT" ]]; then
-  UP_MSG="Not a recovery. ${REALERT}. The DOWN that follows carries the current list."
-  logger -t release-staleness-check "status=up ${UP_MSG}"
-  kuma_push up "$UP_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
   MSG="${REALERT}. ${OUTPUT}"
 fi
 
 logger -t release-staleness-check "status=${STATUS} ${MSG}"
 write_verdict "$STATUS" "$OUTPUT"
-# The textfile, before the push: the verdict must not wait on Kuma. This is the run's one verdict.
-# The "Not a recovery" UP above is a notification marker, so it writes nothing. The producer metric
-# contract is docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh
-# writes the file atomically. A failed write logs and the run goes on to its push.
+# The textfile: this is the run's one verdict. The producer metric contract is
+# docs/target-architecture/monitoring/m3-textfile-timer.md, and homelab-check-lib.sh writes the
+# file atomically. A failed write logs and the run goes on.
 SUCCESS=0
 [[ "$STATUS" == "up" ]] && SUCCESS=1
 write_check_textfile release-staleness-check "$SUCCESS" "$(date +%s)" "$DEADLINE_S" \
   || logger -t release-staleness-check "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
-kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
 
-# The set is recorded whatever the push outcome. A lost DOWN push is paged by monitor-bridge's
-# swallowed-verdicts check, which reads kuma_push's failure line out of Loki. Reading the push
-# result here would move this script into that check's HC_ROUTED_TAGS (verdicts/logs.py), the
-# scripts it skips because they page their own lost push. A broken check (rc > 1) keeps the
-# last good set, or seeds an empty one.
+# The set is recorded whatever the textfile outcome. A broken check (rc > 1) keeps the last good
+# set, or seeds an empty one.
 if [[ -n "$TRACK_SET" ]]; then
   if [[ $RC -eq 0 ]]; then
     rm -f "$PREV_SET"

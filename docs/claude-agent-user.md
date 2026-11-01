@@ -597,8 +597,8 @@ To switch it on, the operator:
 1. Runs `claude setup-token` as `claude`, from `sudo machinectl shell claude@ /bin/bash -l`.
 1. Adds the token as `claude_code_triage_claude_oauth_token` with the `add-secret` skill, then
    runs `secret_rotation.py sync`.
-1. Sets `claude_code_triage_enabled: true` in daniel-box's `host_vars` and applies
-   `initial_setup.yml --tags claude_code`.
+1. Sets `claude_code_triage_enabled: true` in daniel-box's `host_vars`, runs `host_secrets.py
+   sync daniel-box`, and lets the next daniel-box package version install it.
 
 To run a drill, as `claude`:
 
@@ -745,7 +745,8 @@ To add a further agent:
    the same pattern to `github-ruleset-drift.sh`'s declaration. A ruleset cannot tell two bot
    accounts apart, so each can push to the other's prefix. The primary agent's lander lands
    only `worktree-claude+` branches, so it never lands another agent's work.
-1. Add the entry, apply `initial_setup.yml --tags claude_code`, then log in as the agent once
+1. Add the entry and its `users:` line in the host's `package.yml`, let the next package
+   version install it, then log in as the agent once
    with `sudo machinectl shell <name>@ /bin/bash -l` and run `/login`.
 1. Add its signing key's `.pub` to its account as a Signing Key.
 

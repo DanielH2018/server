@@ -1,14 +1,15 @@
 {
-  "checksum": "a2b151903274b64a142ddafbefc35df20ce304bd0d19e3dc52f96e89aa74cc9b",
+  "checksum": "169b40c25f7af3c36399c432ed17e28dac9df0e247ec462dbdf2cffe54f4f67f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/gitops_deploy/CLAUDE.md#Autonomous-role contract (it deploys to production with no human in the loop)",
   "row": {
     "atoms": {
       "ansible/roles/k8s/observability/files/rules/gitops-checks.yaml": "c9663d59506221d900cf54d04efd5b2ca1ee85e81a69433d409356e41e6e2e5e",
       "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh": "662474ecceda5707c63bc86091ada2b07576b94ef9e4473da20180bfa2381c22",
-      "ansible/tests/services/test_gitops_check_rule_literals.py": "03f594d6a3c7e1afdf8a5d5174be39769608f0ed81ed9a929cbc028efd62a11d"
+      "ansible/tests/services/test_gitops_check_rule_literals.py": "03f594d6a3c7e1afdf8a5d5174be39769608f0ed81ed9a929cbc028efd62a11d",
+      "ansible/tests/services/test_gitops_check_rule_literals.py::test_neither_producer_pushes_to_kuma": "0c9606c13ba8e5702e6daba0805e07c8d5792e3f8978da1e8b462421ed273145"
     },
     "python": "3.14",
-    "verified_sha": "d3de3ecf5"
+    "verified_sha": "f2d78eb04"
   }
 }

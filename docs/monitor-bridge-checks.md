@@ -387,8 +387,8 @@ checks each gate suppresses.
   for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
   `swallowed_verdicts` is not a member either: it reads in-cluster Loki, and what failed for it
   was Kuma's own outbound send, a real fault the tile should report.
-  **The HOST crons are covered by a separate half** (#2793). `github-ruleset-drift`,
-  `release-staleness-check` and `docs-refresh` run on the host and push their own tiles, so this
+  **The HOST crons are covered by a separate half** (#2793). `release-staleness-check`,
+  `docs-refresh` and, until M6 batch B3's Cutover-2, `github-ruleset-drift` run on the host and push their own tiles, so this
   gate structurally cannot suppress them. `crowdsec-home-allowlist` was a fourth until H2.4c moved
   it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
   the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.

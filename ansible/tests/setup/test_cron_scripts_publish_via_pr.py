@@ -432,24 +432,21 @@ _LIBRARY_EXEMPT = {
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
 # changed. Every one is a template that can invoke curl against a push URL.
 _EXPECTED_IN_CORPUS = {
-    "ansible/roles/setup/claude_code/templates/telemetry-health.sh.j2",
     "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
     "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
     "hosts/components/secret-rotation/templates/secret-rotate.sh.j2",
     "hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2",
-    "ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2",
-    "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
-    "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
     "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
 }
 
 # The corpus also holds six templates that carry a push URL but invoke no curl of their own: the
 # authelia bypass regex, both cloudflare-ddns Deployments, both pi-peer-backup manifests, and
 # renovate-notify's config.env. They are counted rather than named, so the floor is what watches
-# them. 23 against a measured 37 (2026-10-23, after M3's PR 5 dropped disk-health.sh.j2) is the
-# floor M3 chose to keep — a slacker floor would let a third of that unnamed tail vanish before
+# them. 20 against a measured 34 (2026-10-31, after M6's B1 Cutover-2 dropped the push from the
+# four k3s cron scripts) keeps the slack M3 chose: 23 against 37 after its PR 5 dropped
+# disk-health.sh.j2. A slacker floor would let a third of that unnamed tail vanish before
 # anything went red.
-_MIN_CORPUS = 23
+_MIN_CORPUS = 18
 
 
 def push_corpus() -> dict[Path, str]:

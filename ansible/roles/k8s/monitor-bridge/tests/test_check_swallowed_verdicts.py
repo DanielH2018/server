@@ -264,20 +264,6 @@ def test_the_check_is_registered_and_startup_graced():
     assert gates["swallowed_verdicts"] == "startup_grace"
 
 
-def test_a_tag_that_pages_its_own_lost_push_through_healthchecks_is_not_counted():
-    # longhorn-backup-health reads KUMA_PUSH_OK and sends hc-ping `/fail`, which alerts at
-    # once; a second page here is one root cause twice. Its run line still lands a sibling.
-    ok, msg = swallowed_verdicts(
-        [
-            (1, _SIBLING_SWALLOWED),
-            (2, _RUN_DOWN.replace("release-staleness-check", "disk-health")),
-        ],
-        "3h",
-        truncated=False,
-    )
-    assert ok, msg
-
-
 def test_hc_routed_tags_are_exactly_the_scripts_that_read_kuma_push_ok():
     # Derived from the tree, not trusted from the constant: a fourth script that starts
     # reading KUMA_PUSH_OK to route `/fail` has to be listed here, and one that stops has to
@@ -297,7 +283,7 @@ def test_the_pi_heartbeats_left_hc_routing_so_only_the_old_package_still_pages()
     # `push failed (status=down: ...)` line carries no `by=kuma`, so it is a swallowed DOWN, and
     # nothing exempts it once the tags leave HC_ROUTED_TAGS: it pages until the Pi installs the
     # new package. The new package's line is a plain verdict and never pages.
-    assert not {"pi-sd-health", "pi-recovery-health"} & HC_ROUTED_TAGS
+    assert not HC_ROUTED_TAGS
     ok, msg = swallowed_verdicts(
         [(1, _PI_SWALLOWED), (2, _SIBLING_RUN)], "3h", truncated=False
     )

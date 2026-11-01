@@ -24,8 +24,10 @@ from lib import yaml_fast
 FRAGMENT_DIR = "/var/lib/homelab/setup-deployed-manifest.d/"
 _HOST_FILES = "ansible/roles/setup/k8s_host_files/tasks/"
 
-# Cron task name -> the roles that may hold its task, as `<plane>/<role>`. H2.7 re-homes the
-# two Claude crons into `setup/claude_code` under the same names, rather than retiring them.
+# Cron task name -> the roles that may hold its task, as `<plane>/<role>`. H2.7 re-homed the
+# two Claude crons into `setup/claude_code`, and H7.40 moved them into package timers, whose
+# `legacy:` entries in hosts/components/claude-code/component.yml remove the cron files. They
+# are not here: no Ansible task is left to hold an arm.
 # Registry's GC cron is D5's to retire, so it is not here.
 H2_CRONS = {
     "Cloudflare IP drift": ("k8s/traefik",),
@@ -36,8 +38,6 @@ H2_CRONS = {
     "configarr sync health": ("k8s/configarr",),
     "janitorr error health": ("k8s/janitorr",),
     "qbittorrent prefs drift check": ("k8s/qbittorrent",),
-    "Sync peer Claude artifacts": ("k8s/artifacts", "setup/claude_code"),
-    "Claude Code telemetry health": ("k8s/observability", "setup/claude_code"),
     "Longhorn filesystem trim": ("setup/k3s",),
     "Longhorn restore drill": ("setup/k3s",),
     "Off-box etcd snapshot": ("setup/k3s",),

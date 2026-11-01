@@ -188,7 +188,9 @@ def test_the_census_reads_the_real_suites():
     # `importlib.util.module_from_spec` and patches through that binding.
     patched = _patched_names_by_module()
     assert {"autofix"} <= patched.keys(), sorted(patched)
-    assert {"_request", "push"} <= patched["autofix"], sorted(patched["autofix"])
+    assert {"_request", "post_discord"} <= patched["autofix"], sorted(
+        patched["autofix"]
+    )
 
 
 def test_the_census_binds_a_module_loaded_by_path(tmp_path):
