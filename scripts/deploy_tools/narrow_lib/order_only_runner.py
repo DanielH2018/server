@@ -68,7 +68,10 @@ def _install(
     created = []
     state = {}
     calls = {}
-    skip, deque, getset, member, class_dict, type_flags, wrapper, wrapper_self, named = kinds
+    (
+        skip, deque, getset, member, class_dict, type_flags, wrapper, wrapper_self, named,
+        selves,
+    ) = kinds
     scalars = (bool, int, float, str, bytes, type(None))
     unset = object()
     builtin_names, builtin_importer, extension_loader, module_type, imp = loaders
@@ -191,9 +194,11 @@ def _install(
         # name, and descends into every object no walk copied, such as a tuple or the handlers
         # of a logger the chain created (#5209).
         # A reference to an object a walk copied reads as that object's walk path, so a
-        # re-pointed `parent` shows (#5209), except under a set item, whose path follows hash
-        # order. `_cache` follows which levels were asked about, not what the logger is set
-        # to. A reader's `()` result is left out, because a random generator's state differs
+        # re-pointed `parent` shows (#5209). A path through a set item follows hash order, so
+        # its target is descended into instead, like an object no walk copied (#6425). A bound
+        # method's `__self__` reads as one more item, so a method re-bound to another object
+        # shows (#6433). `_cache` follows which levels were asked about, not what the logger
+        # is set to. A reader's `()` result is left out, because a random generator's state differs
         # between two processes that never touch it.
         parts = []
         seen = {id(root)}
@@ -222,20 +227,24 @@ def _install(
                 if issubclass(type(value), set):
                     continue
                 items = copied.items() if type(copied) is dict else enumerate(copied)
-                for key, item in items:
-                    if type(copied) is dict and (type(key) is not str or key in ("_cache", "()")):
-                        continue
-                    name = path + "/" + str(key)
+                pending = [
+                    (path + "/" + str(key), item)
+                    for key, item in items
+                    if type(copied) is not dict
+                    or (type(key) is str and key not in ("_cache", "()"))
+                ]
+                for name, item in pending:
                     kind = type(item)
                     if kind in (bool, int, str, type(None)):
                         parts.append(name + "=" + repr(item))
-                    elif id(item) in where:
-                        target = where[id(item)]
-                        parts.append(name + "=@" + ("~" if "/~" in target else target))
+                    elif id(item) in where and "/~" not in where[id(item)]:
+                        parts.append(name + "=@" + where[id(item)])
                     elif kind in named:
                         # No walk copies a callable, so name it: a filter or handler method
                         # replaced by another function shows as a different name (#5209).
                         parts.append(name + "=&" + named[kind](item))
+                        if kind in selves:
+                            pending.append((name + "/__self__", selves[kind].__get__(item)))
                     elif id(item) not in seen:
                         seen.add(id(item))
                         following.append((name, item))
@@ -450,6 +459,7 @@ _install(
         types.MethodWrapperType,
         types.MethodWrapperType.__dict__["__self__"],
         callable_names,
+        callable_selves,
     ),
     c_modules,
     (
@@ -461,7 +471,7 @@ _install(
     ),
 )
 del _install, _process_state, unaudited, counted, readers, decimal_context, c_modules, name
-del partial, callable_names
+del partial, callable_names, callable_selves
 
 
 def _chain(plugins, roles, preload):

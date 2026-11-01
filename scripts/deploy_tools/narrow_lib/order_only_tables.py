@@ -142,6 +142,12 @@ callable_names = _callable_names(
     types.MethodType.__dict__["__func__"],
 )
 del _callable_names
+# The object a bound method or a bound built-in carries, which `signature` records beside the
+# callable's name (#6433).
+callable_selves = {
+    types.MethodType: types.MethodType.__dict__["__self__"],
+    types.BuiltinFunctionType: types.BuiltinFunctionType.__dict__["__self__"],
+}
 
 
 def _process_state(umask, getsignal, signals, getrecursionlimit, getpriority, prio,
