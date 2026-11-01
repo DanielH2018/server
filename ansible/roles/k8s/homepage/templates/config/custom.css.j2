@@ -186,10 +186,10 @@ li.service:not(#my-calendar) .service-container > div > div {
  * lookup against public/locales/<lang>/common.json, which is baked into the image. No config key
  * overrides it: `fields:` selects WHICH blocks render, never what they are called. The two
  * alternatives were both worse. Mounting a replacement common.json means shipping the whole
- * upstream file and re-reconciling it on every image bump, for four words. Rewriting these tiles
- * as `customapi` widgets, which do take a `label:`, means re-deriving each service's numbers from
- * its raw API — and for uptimekuma that is a count the widget computes and the API does not
- * expose.
+ * upstream file and re-reconciling it on every image bump, for a handful of words. Rewriting
+ * these tiles as `customapi` widgets, which do take a `label:`, means re-deriving each service's
+ * numbers from its raw API. A tile whose widget takes a `label:` per block, such as the
+ * Alertmanager tile's `prometheusmetric`, needs no rename here.
  *
  * `font-size: 0` rather than `display: none` or `visibility: hidden`: the box must keep its
  * place in the flex column, and it must be sized by the REPLACEMENT text. "Battery Charge" wraps
@@ -203,8 +203,6 @@ li.service:not(#my-calendar) .service-container > div > div {
  * component declares them; that order is the `fields:` list in services.yaml.j2, and the two are
  * ENFORCED to agree by ansible/tests/services/test_homepage_block_label_overrides.py.
  */
-li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(1) > .font-bold,
-li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold,
 li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold,
 li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold,
 li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold,
@@ -213,8 +211,6 @@ li.service:has(a[href*="qbittorrent."]) .service-block:nth-child(2) > .font-bold
   font-size: 0;
 }
 
-li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(1) > .font-bold::after,
-li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold::after,
 li.service:has(a[href*="speedtest."]) .service-block:nth-child(1) > .font-bold::after,
 li.service:has(a[href*="karakeep."]) .service-block:nth-child(1) > .font-bold::after,
 li.service:has(a[href*="peanut."]) .service-block:nth-child(1) > .font-bold::after,
@@ -223,14 +219,6 @@ li.service:has(a[href*="qbittorrent."]) .service-block:nth-child(2) > .font-bold
   /* text-xs, the class the label carries — the parent's 0 would otherwise be inherited. */
   font-size: 0.75rem;
   line-height: 1rem;
-}
-
-/* Sites Up -> Up, Sites Down -> Down */
-li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(1) > .font-bold::after {
-  content: "Up";
-}
-li.service:has(a[href*="uptime-kuma."]) .service-block:nth-child(2) > .font-bold::after {
-  content: "Down";
 }
 
 /* Download -> Down. Ping keeps its own label. */

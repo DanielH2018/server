@@ -82,24 +82,43 @@
                     - field: data.result.1.value.1
                       label: Down
                       format: number
-        - Uptime-Kuma:
-            icon: uptime-kuma.png
-            href: {{ containers_list | homepage_href('uptime-kuma', domain) }}
-            description: Monitoring
-            # No server/container pair since the Phase D cutover (2026-08-10): Kuma runs in
-            # k3s now. Widget re-targets the -k8s name (bridged names hairpin from here);
-            # /api/status-page bypasses Authelia LAN-only on the k8s side.
+        - Alertmanager:
+            icon: prometheus.png
+            # DECIDED: hand-written, not homepage_href. The observability entry's one
+            # `hostname` is grafana, and the Alertmanager UI is a second, hand-written route
+            # (observability/templates/alertmanager-ingressroute.yaml.j2, M6 B-6b) behind
+            # Authelia two_factor, because it can silence every alert.
+            href: https://alertmanager.local.{{ domain }}
+            description: Alerts
+            # The alert plane at a glance, read from Prometheus's ALERTS series (M6 B-4,
+            # docs/target-architecture/monitoring/m6-retire-kuma.md). Critical and Warning
+            # count what pages: they drop shadow="true" and drill="true", the two matchers the
+            # Alertmanager routing tree sends to its blackhole receiver. Watchdog always fires,
+            # so it reads 1 while Prometheus evaluates rules and 0 when the plane is broken.
+            # `or vector(0)`: the widget reads the first sample, and a count over no alerts
+            # is an empty vector that would render a blank block instead of 0.
+            #
+            # Same Prometheus ClusterIP and fence as the Headlamp tile above: homepage is a
+            # named caller in netpol-baseline's networkpolicy-prometheus.yaml.j2.
+            # prometheusmetric names each block with its own `label:`, so this tile needs no
+            # heading rename in custom.css.j2.
             widget:
-                type: uptimekuma
-                url: https://uptime-kuma.local.{{ domain }}
-                slug: containers
-                # `fields:` picks which blocks render, and every name in it must be one the
-                # widget's own component declares — homepage drops an unknown name silently,
-                # leaving a shorter tile and no error anywhere. The valid set for a widget is
-                # the `label="<type>.<name>"` list in
-                # src/widgets/<type>/component.jsx upstream; read it before editing one of
-                # these. uptimekuma also offers `uptime`, `incident` and `incidents`.
-                fields: [up, down]
+                type: prometheusmetric
+                url: "http://prometheus.{{ k8s_observability_namespace }}.svc.cluster.local:9090"
+                refreshInterval: 60000
+                metrics:
+                    - label: Critical
+                      query: 'count(ALERTS{alertstate="firing",severity="critical",shadow!="true",drill!="true"}) or vector(0)'
+                      format:
+                          type: number
+                    - label: Warning
+                      query: 'count(ALERTS{alertstate="firing",severity="warning",shadow!="true",drill!="true"}) or vector(0)'
+                      format:
+                          type: number
+                    - label: Watchdog
+                      query: 'count(ALERTS{alertname="Watchdog",alertstate="firing"}) or vector(0)'
+                      format:
+                          type: number
         - Pihole:
             icon: pi-hole.png
             href: {{ containers_list | homepage_href('pihole', domain, '/admin') }}

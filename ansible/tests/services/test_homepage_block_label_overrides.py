@@ -2,7 +2,7 @@
 """A renamed block label in custom.css must still point at the field it renames.
 
 homepage takes a block's heading from an i18n lookup baked into the image, and no config key
-overrides it, so four tiles rename their headings in CSS: the label text is collapsed with
+overrides it, so several tiles rename their headings in CSS: the label text is collapsed with
 `font-size: 0` and the replacement arrives as a `::after` `content`. The tile is matched by
 href, which survives a reorder, but the BLOCK is matched by `:nth-child`, and a widget renders
 its blocks in the order its component declares them — which is the order of `fields:` in
@@ -33,8 +33,6 @@ from _homepage_config import custom_css, tiles
 # (href fragment, 1-based block index) -> the upstream field that block renders.
 # The rename itself is in the CSS; this table is what the rename is renaming.
 EXPECTED_LABELS = {
-    ("uptime-kuma.", 1): "up",
-    ("uptime-kuma.", 2): "down",
     ("speedtest.", 1): "download",
     ("karakeep.", 1): "bookmarks",
     ("peanut.", 1): "battery_charge",
@@ -158,3 +156,57 @@ def test_an_override_landing_past_the_end_of_a_fields_list_is_rejected():
     truncated = _tile_fields_with("peanut.", ["battery_charge"])
     flagged = [m for m in misdirected_overrides(truncated) if "lands on nothing" in m]
     assert len(flagged) == 1, flagged
+
+
+def alertmanager_tile() -> dict:
+    """The body of the one tile linking to the Alertmanager UI."""
+    found = [
+        body for _name, body in tiles() if "alertmanager." in (body.get("href") or "")
+    ]
+    assert len(found) == 1, (
+        f"expected one tile linking to alertmanager., got {len(found)}"
+    )
+    return found[0]
+
+
+def test_the_alertmanager_tile_names_its_blocks_in_config():
+    """prometheusmetric takes a `label:` per block, so the tile needs no CSS rename.
+
+    The blocks render in `metrics:` order: what pages at critical, what pages at warning,
+    and the Watchdog that proves the alert plane evaluates at all.
+    """
+    widget = alertmanager_tile()["widget"]
+    assert widget["type"] == "prometheusmetric"
+    assert [m["label"] for m in widget["metrics"]] == [
+        "Critical",
+        "Warning",
+        "Watchdog",
+    ]
+    assert not [key for key in css_overrides(custom_css()) if "alertmanager." in key[0]]
+
+
+def test_the_alertmanager_tile_counts_only_alerts_that_page():
+    """The two severity counts drop the matchers the routing tree sends to its blackhole.
+
+    A shadow rule runs beside a check another pager still owns, and a drill fails a gate on
+    purpose; counting either would show a page nobody received.
+    """
+    metrics = {m["label"]: m["query"] for m in alertmanager_tile()["widget"]["metrics"]}
+    for label in ("Critical", "Warning"):
+        assert 'shadow!="true"' in metrics[label], metrics[label]
+        assert 'drill!="true"' in metrics[label], metrics[label]
+        assert f'severity="{label.lower()}"' in metrics[label], metrics[label]
+    assert 'alertname="Watchdog"' in metrics["Watchdog"]
+    # A count over no alerts is an empty vector, which the widget renders as a blank block.
+    assert all(q.endswith(" or vector(0)") for q in metrics.values()), metrics
+
+
+def test_no_tile_reads_uptime_kuma():
+    """M6 retires Kuma; C-1 removes the entry's hostname, which homepage_href would raise on."""
+    kuma = [
+        name
+        for name, body in tiles()
+        if (body.get("widget") or {}).get("type") == "uptimekuma"
+        or "uptime-kuma." in (body.get("href") or "")
+    ]
+    assert kuma == []

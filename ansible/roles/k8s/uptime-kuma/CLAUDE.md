@@ -84,8 +84,9 @@ same convention in plain text. Both read `heartbeatJSON.msg`, `monitorJSON.descr
 
 ## The status page's groups are synced by a CronJob, not by AutoKuma
 
-`kuma-status-page-sync` (every 15 min) owns the `publicGroupList` of the page Homepage's
-`uptimekuma` widget reads. The page OBJECT is hand-created, and stays that way.
+`kuma-status-page-sync` (every 15 min) owns the `publicGroupList` of the status page. Homepage's
+tile read it until M6 B-4 moved the tile to Alertmanager. The page OBJECT is hand-created, and
+stays that way.
 
 - **Do not declare it as an AutoKuma `status_page` entity**, though the type exists: AutoKuma
   has no update arm for one, so a drifted page writes nothing — and under
