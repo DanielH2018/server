@@ -204,3 +204,28 @@ def test_an_enable_when_that_is_no_boolean_is_flagged(hosts, when, error, messag
     (root / "daniel-pi" / "u").write_text("")
     with pytest.raises(error, match=message):
         host_mode.render_host("daniel-pi", root)
+
+
+@pytest.mark.parametrize("on", [True, False])
+def test_a_legacy_entry_ships_without_its_when_only_while_it_holds(hosts, on):
+    root = hosts(
+        {
+            "defaults": {"beat_on": on},
+            "legacy": [{"path": "/x.prom", "when": "not beat_on"}],
+        }
+    )
+
+    package = host_mode.render_host("daniel-pi", root)
+
+    expected = [] if on else [{"path": "/x.prom"}]
+    assert package.legacy == expected
+    assert (
+        _reconcile().parse_manifest(json.dumps(_manifest(package)))["legacy"]
+        == expected
+    )
+
+
+def test_a_legacy_when_that_is_no_boolean_is_flagged(hosts):
+    root = hosts({"legacy": [{"path": "/x.prom", "when": "'false'"}]})
+    with pytest.raises(RenderRefused, match="not a boolean"):
+        host_mode.render_host("daniel-pi", root)

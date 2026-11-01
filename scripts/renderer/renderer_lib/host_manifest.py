@@ -28,8 +28,11 @@ entries reconcile retires (H3, *The host handoff rule*)::
       - {cron: "X heartbeat", user: "{{ sys_user }}"}
       - {cron_file: x}
       - {unit: x.service}
+      - {path: /var/lib/node-exporter-textfile/y.prom, when: "not y_enabled"}
 
-Each legacy value renders with the host's context. An enable entry's `when:` is a Jinja
+Each legacy value renders with the host's context. A legacy entry's `when:` is evaluated as a
+file entry's is, and the entry ships only while it is true. Reconcile rebuilds its retired set
+from each manifest, so an entry that drops out and comes back retires its path again. An enable entry's `when:` is a Jinja
 expression evaluated in that context, and the link ships only when it is true. Each enable link
 ships as an nfpm `type: symlink` entry. A host package installs
 `/usr/lib/homelab/manifest.json`, which `host_manifest` builds from these keys and the units and

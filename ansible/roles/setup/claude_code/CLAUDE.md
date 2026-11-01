@@ -373,8 +373,10 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   `homelab_awaiting_operator{reason}` and its `_oldest_seconds` twin to
   `/var/lib/node-exporter-textfile/fanout_operator_waits.prom`: the PRs and batches that wait
   on a person, and the owed manual-plane applies (`scripts/dev/fanout_lib/operator_waits.py`).
-  Disarming leaves the file in place, so it is removed by hand. Each clean run also writes
-  `claude-fanout-server-lander.prom`, which pages a timer that stopped.
+  Each clean run also writes `claude-fanout-server-lander.prom`, which pages a timer that
+  stopped. Disarming adds both files to the component's toggle-gated `legacy:` entries, so the
+  reconcile that drops the timer also removes them. The NotReporting rule still fires on the
+  absent series until it is deleted.
 - **Next-run review:** before raising the pace cap or widening the rule, read a week of
   `ineligible` reasons and the verdicts of the landings it started.
 
@@ -402,7 +404,8 @@ nobody ran the joiner was lost. This timer runs it daily as `ubuntu`.
   no repository, cluster or GitHub state.
 - **Mode:** `claude_code_pipeline_timeline_enabled`, true only in daniel-box's host_vars. False
   drops the timer and its units from the next package version, and keeps the snapshots. The
-  heartbeat file then stays until it is removed by hand.
+  same version's toggle-gated `legacy:` entry removes the heartbeat file, and
+  `ClaudePipelineTimelineNotReporting` fires on the absent series until it is deleted.
   `--days` is `claude_code_pipeline_timeline_days`; a window of N days survives N-1 missed runs,
   because a later snapshot's rows supersede an earlier one's for the same PR.
 - **Abort valves:** the unit's `TimeoutStartSec=30min`. A pull that fails warns and joins the
