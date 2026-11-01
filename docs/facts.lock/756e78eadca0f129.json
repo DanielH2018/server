@@ -1,7 +1,7 @@
 {
-  "checksum": "7aa13ce2ac04ac07e5c97d85782f1df8916761323e7f5a9164acf1e25f7c0328",
+  "checksum": "a0f6bb8f79cecb6c4e59a0b3f850faaea59505900f2d670cfd6fd55e06211902",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
-  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#`UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream",
+  "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#`UnmarshalJSON : unexpected end of JSON input` is a partial-line read the engine image fixes",
   "row": {
     "atoms": {
       "ansible/inventory/group_vars/all.yml": "a9e26f83a4a9763bd4261ca4b7d94354ff85fb63301d701c683420cdfded7c0b",
@@ -9,6 +9,6 @@
       "docs/crowdsec-waf-record.md": "0fed3631bfac065efe701fd07f11045f36675afdf7959517fcaa567e5f5cb4cb"
     },
     "python": "3.14",
-    "verified_sha": "f4bca1638"
+    "verified_sha": "5c05ee7b2"
   }
 }
