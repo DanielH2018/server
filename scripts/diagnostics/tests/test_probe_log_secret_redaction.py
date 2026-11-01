@@ -18,9 +18,13 @@ an entry in `ansible/tests/repo/monkeypatch_allowlist.txt`, which its header per
 `origin/master` does not track. Shrink `ha.py`, then take the seam and drop the entry.
 """
 
+import json
+import re
+
 import pytest
 
 from diagnostics.probe_lib import core
+from diagnostics.probe_lib import curl_pipeline
 from diagnostics.probe_lib import ha
 from diagnostics.probe_lib import metrics
 
@@ -149,3 +153,65 @@ def test_json_escaped_ampersand_apikey_is_flagged():
     out = core.redact_log_secrets(body)
     assert "abc123" not in out
     assert "\\u0026limit=1" in out
+
+
+# An Uptime Kuma push URL carries its token as a path segment, `/api/push/<token>`, which no
+# query-parameter rule can reach (#6749). favonia's cloudflare-ddns logs the whole URL when a
+# ping fails, and Traefik's access log, which access-log-rotate copies to stdout, records the path.
+PUSH_TOKEN = "f" * 32
+
+DDNS_RECORD = (
+    "2026-10-25T07:40:03Z Failed to send HTTP(S) request to Uptime Kuma: "
+    f"GET http://uptime-kuma:3001/api/push/{PUSH_TOKEN}?msg=OK&status=up&ping="
+)
+
+ACCESS_LOG_RECORD = (
+    '{"ClientHost":"10.42.0.17","DownstreamStatus":404,"Duration":1200000000,'
+    f'"RequestMethod":"GET","RequestPath":"/api/push/{PUSH_TOKEN}?status=up&msg=OK&ping=",'
+    '"RouterName":"uptime-kuma@kubernetescrd"}'
+)
+
+
+@pytest.mark.parametrize(
+    "record", [DDNS_RECORD, ACCESS_LOG_RECORD], ids=["ddns", "access-log"]
+)
+def test_kuma_push_token_is_redacted(record):
+    out = core.redact_log_secrets(record)
+    assert PUSH_TOKEN not in out
+    assert re.search(r"api/push/[0-9a-f]{20,}", out) is None
+
+
+def test_the_rest_of_the_push_record_is_printed():
+    """Only the path segment goes: the target, the route and the ping's message stay."""
+    out = core.redact_log_secrets(DDNS_RECORD)
+    assert PUSH_TOKEN not in out
+    assert "Failed to send HTTP(S) request to Uptime Kuma" in out
+    assert "http://uptime-kuma:3001/api/push/" in out
+    assert "?msg=OK&status=up&ping=" in out
+
+
+def test_format_loki_redacts_the_kuma_push_token():
+    """The Verify-by: `loki-query --since 7d '{job="k8s"} |~ "api/push/…"'` prints no token."""
+    data = {
+        "data": {
+            "result": [
+                {"values": [["1761377403000000000", DDNS_RECORD]]},
+                {"values": [["1761377404000000000", ACCESS_LOG_RECORD]]},
+            ]
+        }
+    }
+    out = metrics.format_loki(data)
+    assert PUSH_TOKEN not in out
+    assert "Uptime Kuma" in out
+
+
+def test_loki_query_json_redacts_the_kuma_push_token():
+    """`loki-query --json` filters the raw body, where the encoder writes `&` as `\\u0026`."""
+    line = DDNS_RECORD.replace("&", "\\u0026")
+    body = json.dumps({"data": {"result": [{"values": [["1", "LINE"]]}]}}).replace(
+        "LINE", line
+    )
+    redact = curl_pipeline.output_redaction("loki-query")
+    out = redact(body)
+    assert PUSH_TOKEN not in out
+    assert "uptime-kuma:3001/api/push/" in out
