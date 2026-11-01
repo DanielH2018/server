@@ -335,19 +335,26 @@
   #
   # DECIDED: a copy of the agent users the host packages declare, not a read of claude_code's
   # defaults (#6831). Role defaults are play-wide, so reading them made that file an input of
-  # this role, and the file is leaving the role (#6773). Each has_claude_code host's
-  # package.yml `users:` entry is the source; its clone is `<home>/server`. Adding or dropping
-  # an agent edits both, and ansible/tests/setup/test_worktree_holders_install.py fails while
-  # they differ. Dropping an entry revokes that agent's scan at the next apply.
+  # this role, and the file is leaving the role (#6773). Each host's list copies the `users:`
+  # entry of that host's package.yml; a clone is `<home>/server`. Switching an agent off on a
+  # host deletes its `users:` entry there, and
+  # ansible/tests/setup/test_worktree_holders_install.py fails until this host's list drops
+  # it too, which revokes the agent's scan at the next apply. A host missing here gets none.
   #
   # Whether the user exists yet is not read. initial_setup runs before the host package creates
   # an agent, and an entry for a user with no uid matches no caller. Filtering it out would
   # leave a new agent in the socket's group but refused by the service, so every removal it
   # ran would be refused until the next apply.
   when: has_claude_code
+  vars:
+    initial_setup_worktree_holders_agents_by_host:
+      daniel-box:
+        - {name: claude, clone_dir: /var/lib/claude/server}
+      daniel-server:
+        - {name: claude, clone_dir: /var/lib/claude/server}
   ansible.builtin.set_fact:
-    initial_setup_worktree_holders_agents:
-      - {name: claude, clone_dir: /var/lib/claude/server}
+    initial_setup_worktree_holders_agents: >-
+      {{ initial_setup_worktree_holders_agents_by_host.get(inventory_hostname, []) }}
 
 - name: List the worktree holder scan's users and the checkout each one works in
   tags: [crons, worktree-sweep]
