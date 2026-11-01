@@ -10,7 +10,7 @@ this filter PARSES the source instead of running it:
     | py_table('CHECKS')
 
 returns one dict per call, holding each keyword argument whose value is a literal. A
-non-literal value (`fn=host.check_disk`) is left out, because it names code rather than
+non-literal value (`fn=service.check_n8n`) is left out, because it names code rather than
 data. A positional argument raises, as does a missing table or an element that is not a call:
 either would otherwise drop a row, and a dropped row is a check pushing nowhere or a Kuma tile
 AutoKuma deletes.

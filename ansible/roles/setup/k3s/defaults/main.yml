@@ -692,8 +692,9 @@ k3s_join_server_ports:  # allowed FROM each agent, ON the server
   # scheduler puts it after a reboot; whichever node it is NOT on has to admit the scrape. The
   # agent-side rule alone would assume "prometheus runs on the server", but a reboot can move it
   # to daniel-server — daniel-box's node target then sits down,
-  # dropping its host memory and /boot coverage entirely (check_disk/check_mem read green off the
-  # surviving node; see monitor-bridge check.py). Fix the firewall, not the placement: pinning
+  # dropping its host disk and memory coverage entirely (HostDiskFull and HostMemoryHigh have no
+  # daniel-box series to read; ScrapeTargetDown and HostCoverageShortfall in observability's
+  # hosts.yaml are what page). Fix the firewall, not the placement: pinning
   # prometheus back to daniel-box would re-break this the first time the pin is lifted.
   - { port: "9100", proto: tcp }
   # MetalLB memberlist gossip. Without this rule both nodes block it and the speakers never

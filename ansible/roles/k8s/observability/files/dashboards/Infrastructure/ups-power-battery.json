@@ -20,7 +20,7 @@
       }
     ]
   },
-  "description": "The APC UPS. Every panel reads nut-exporter's direct scrape of upsd first and falls back to Home Assistant's re-export of the same UPS, matching what monitor-bridge's check_ups alerts on (issue #1548). The fallback is what keeps history readable across 2026-09-10, when the NUT series begin.",
+  "description": "The APC UPS. Every panel reads nut-exporter's direct scrape of upsd first and falls back to Home Assistant's re-export of the same UPS (issue #1548). Observability's UPS* alert rules read the nut-exporter series alone. The fallback is what keeps history readable across 2026-09-10, when the NUT series begin.",
   "id": null,
   "panels": [
     {
@@ -40,7 +40,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "monitor-bridge check_ups pages below 50% (a deep discharge on battery).",
+      "description": "UPSBatteryLow pages below 50% while mains power is on (a battery that is not recharging). During a discharge UPSOnBattery pages instead.",
       "fieldConfig": {
         "defaults": {
           "max": 100,
@@ -92,7 +92,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Runway at the current load. monitor-bridge check_ups pages below 5 min (aged battery or a discharge nearing shutdown).",
+      "description": "Runway at the current load. UPSRuntimeLow pages below 5 min while mains power is on (an aged battery). During a discharge UPSOnBattery pages instead.",
       "fieldConfig": {
         "defaults": {
           "thresholds": {
@@ -142,7 +142,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "NUT's RB (Replace Battery) verdict — the earliest UPS signal, it can trip while charge/runtime still read fine. monitor-bridge check_ups pages on the nut-exporter series alone since #3105; the HA binary_sensor is kept in this panel's query as a second view during an exporter outage.",
+      "description": "NUT's RB (Replace Battery) verdict — the earliest UPS signal, it can trip while charge/runtime still read fine. UPSReplaceBattery pages on the nut-exporter series alone since #3105; the HA binary_sensor is kept in this panel's query as a second view during an exporter outage.",
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -207,7 +207,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Full-charge runway decaying over weeks/months is the aging-battery signal check_ups' floor eventually trips — widen the range to spot slow decay.",
+      "description": "Full-charge runway decaying over weeks/months is the aging-battery signal UPSRuntimeLow's floor eventually trips — widen the range to spot slow decay.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -345,7 +345,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "NUT's OB flag: mains power is gone and the UPS is carrying the load. ups.status is one-hot over `flag`, so the exporter forces a 0 whenever the UPS is not asserting it — which is what makes this a 0/1 alert input rather than a series whose absence is ambiguous. monitor-bridge check_ups pages on it after UPS_CONSECUTIVE cycles, so a brownout shorter than the grace window does not.",
+      "description": "NUT's OB flag: mains power is gone and the UPS is carrying the load. ups.status is one-hot over `flag`, so the exporter forces a 0 whenever the UPS is not asserting it — which is what makes this a 0/1 alert input rather than a series whose absence is ambiguous. UPSOnBattery pages on it after 10 minutes, so a brownout shorter than that does not.",
       "fieldConfig": {
         "defaults": {
           "mappings": [

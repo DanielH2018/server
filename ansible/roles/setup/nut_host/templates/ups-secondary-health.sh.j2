@@ -20,8 +20,9 @@
 #
 # WHY THE NEIGHBOURING CHECKS DO NOT COVER THIS, all three for the same reason — they observe a
 # different path from the one that carries the shutdown:
-#   * monitor-bridge's check_ups reads Home Assistant's Prometheus-scraped NUT sensors, i.e. the
-#     UPS as seen THROUGH the pod. It says the UPS is fine, not that this host can hear it.
+#   * observability's UPS* rules (UPSOnBattery, UPSBatteryLow and the rest, in hosts.yaml) read
+#     nut-exporter's scrape of upsd, i.e. the UPS as seen THROUGH the cluster. They say the UPS is
+#     fine, not that this host can hear it.
 #   * the "k3s nut (upsd)" Kuma tile is a TCP probe from the Kuma POD over Service DNS,
 #     re-resolved every cycle. A ClusterIP change that strands this host's frozen literal leaves
 #     that tile green — it is the wrong side of the exact thing in dispute.
@@ -105,7 +106,7 @@ elif [[ -z "$UPS_STATUS" ]]; then
   STATUS=down
   MSG="upsd at ${ENDPOINT} returned an empty ups.status"
 else
-  # Deliberately does NOT page on OB/LB. Battery state is check_ups's job; alerting on it here
+  # Deliberately does NOT page on OB/LB. Battery state is the UPS* rules' job; alerting on it here
   # would double-page the same event from two mechanisms. This check is about the LINK.
   STATUS=up
   MSG="nut-monitor active, upsd reachable at ${ENDPOINT} (ups.status=${UPS_STATUS})"
