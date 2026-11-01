@@ -58,8 +58,8 @@ which only the operator can write. Step 6 tells you which case you are in.
    - **A Kuma push token is 32 hex characters, not base64.** AutoKuma validates the format and
      refuses the monitor outright — `Invalid push_token, push token should be 32 characters and
      contain only letters and numbers` in the autokuma sidecar's log — so the tile is never
-     created, every push to it is lost, and the only visible symptom is `kuma-drift` reporting
-     it "declared, not live" plus a failing `kuma-status-page-sync` job. A base64 value has
+     created, every push to it is lost, and the only visible symptom is a failing
+     `kuma-status-page-sync` job. A base64 value has
      `+`, `/` and `=` in it and is 44 characters. `secret_rotation.py rotate` already mints
      `token_hex(16)` for exactly this reason. The uptime-kuma deploy asserts the format and
      names the refused tile, but only once someone deploys it. Match it on the first write:

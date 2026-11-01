@@ -206,8 +206,8 @@ One directive per tool. `docs/claude-tooling.md` is the full reference, and a ho
 denies prints its own reason.
 
 - **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt);
-  `--list` prints every subcommand. `monitors` answers "what is down"; **`kuma-drift` answers
-  "what is missing"**. **`health <svc>` is the k8s post-deploy gate**: its argument is a deploy
+  `--list` prints every subcommand. `monitors` answers "what is down", from Prometheus'
+  `ALERTS` and Alertmanager. **`health <svc>` is the k8s post-deploy gate**: its argument is a deploy
   TAG, and it gates the PRODUCTION cluster unless you pass `--cluster stage`. `ha automation
   <id-or-alias>` resolves the alias-slug≠id trap.
 - **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a

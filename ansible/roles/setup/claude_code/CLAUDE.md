@@ -428,9 +428,9 @@ the server-side `kubectl diff`, then the RBAC takeover census (issue #5494). The
 granted it on 2026-10-17 ("Let's add those 3 to your allowed commands"). It exists on daniel-box
 only, where `claude_code_takeover_check_enabled` is true.
 
-- **What root runs:** `/usr/local/bin/k3s kubectl` and a root-owned `flux` copy at
-  `/usr/local/lib/homelab-takeover-check/flux`, pinned to the operator's chezmoi release and
-  checksum. Every flag is written in the script. The only caller input that reaches either binary
+- **What root runs:** `/usr/local/bin/k3s kubectl` and `/usr/lib/homelab/bin/flux`, the
+  root-owned flux CLI that `homelab-tools` pins at the cluster's `flux_version`
+  (`hosts/packages/homelab-tools/package.yml`). Every flag is written in the script. The only caller input that reaches either binary
   is a validated tag, and a path to a root-owned copy of the user's render.
 - **What root never runs:** anything the invoking user can write, and kustomize over the user's
   files. `kubectl kustomize` builds each tag as `SUDO_USER`, and root diffs only the built file.
@@ -442,13 +442,13 @@ only, where `claude_code_takeover_check_enabled` is true.
 - **What it prints:** object names, field paths and exit codes. Full outputs stay in
   `/var/lib/homelab-takeover-check/<label>/`, mode 0700.
 - **Who installs what:** daniel-box's host package ships the wrapper and the grant in one
-  version, so the grant never names a missing command. `homelab-takeover-check-flux.service`
-  downloads the flux copy at boot and whenever its script changes, refuses a tarball off the
-  `claude_code_takeover_check_flux_sha256` pin, and records the pin beside the binary, so a
-  bump replaces it. The wrapper creates the state directory.
+  version, so the grant never names a missing command. The package depends on `homelab-tools`,
+  whose builder refuses a flux tarball off its pin, and the updater installs both in one run.
+  The wrapper creates the state directory.
 - **To take it back:** set `claude_code_takeover_check_enabled: false`. The next package
-  version drops the grant and the wrapper, and the same oneshot, which ships on every host the
-  component reaches, removes the flux copy and the state directory.
+  version drops the grant and the wrapper. The state directory stays, because its per-label
+  contents are not a list reconcile can name; remove it by hand. flux stays, because
+  `homelab-tools` ships it.
 - **To widen who holds it,** add to `claude_code_takeover_check_users`; one line per user.
 
 ## The root inspector

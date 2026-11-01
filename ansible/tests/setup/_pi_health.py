@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render a daniel-pi heartbeat script and run it under bash against stubs.
 
-Shared by test_pi_recovery_restarts_and_reports.py and test_pi_health_log_line_shape.py.
+Used by test_pi_recovery_restarts_and_reports.py.
 Not a test module itself.
 
 These scripts are exercised for real rather than pattern-matched, because what breaks is

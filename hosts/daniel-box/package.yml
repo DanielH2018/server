@@ -96,9 +96,8 @@ outputs:
     persist: false
     link: true
     when: claude_code_agent_user_enabled and claude_code_triage_enabled
-  # The agent's login for the homelab-ui MCP server. homelab-secrets substitutes the password
-  # without JSON escaping, so the SOPS value must hold no `"`, `\` or control character.
-  # The file renders under /run, outside the agent's home. `path` is where the agent looks:
+  # The agent's login for the homelab-ui MCP server. `format: json` makes homelab-secrets
+  # JSON-escape the password and refuse a file that does not parse. The file renders under /run, outside the agent's home. `path` is where the agent looks:
   # claude-agent-setup links it there (its `ui_login` names the destination), because the
   # package must not install into a directory the agent owns.
   - src: "role:agent-homelab-ui-credentials.json.j2"
@@ -110,6 +109,7 @@ outputs:
     keys: [authelia_agent_password]
     persist: false
     link: false
+    format: json
     when: claude_code_agent_user_enabled and claude_code_agent_homelab_ui_enabled
 maintainer_scripts: [preinst, postinst, prerm]
 # #6218: arms the shared updater schedule here, as daniel-server and the Pi do. daniel-box ships

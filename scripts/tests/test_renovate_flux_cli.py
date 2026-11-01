@@ -46,6 +46,12 @@ FLUX_STEPS = {WORKFLOW: 4, ".github/workflows/ci.yml": 2}
 DEPS = {
     "flux_version": (FLUX_DEFAULTS, "github-releases", "custom.regex", "annotated-pin"),
     "the action pin": (WORKFLOW, "github-tags", "github-actions", "action"),
+    "the homelab-tools pin": (
+        "hosts/packages/homelab-tools/package.yml",
+        "github-release-attachments",
+        "custom.regex",
+        None,
+    ),
 }
 
 UPDATE_TYPES = ("major", "minor", "patch", "digest", "pinDigest")

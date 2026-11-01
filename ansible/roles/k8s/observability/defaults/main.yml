@@ -220,7 +220,6 @@ observability_dashboard_folders:
     - home-assistant-overview.json
     - speedtest-tracker.json
     - terraria-player-stats.json
-    - uptime-kuma-monitors.json
     - valheim-player-stats.json
   Infrastructure:
     - alert-history.json

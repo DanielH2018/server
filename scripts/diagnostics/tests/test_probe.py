@@ -14,10 +14,8 @@ import pytest
 from diagnostics.probe_lib import arr
 from diagnostics.probe_lib import health_docker
 from diagnostics.probe_lib import metrics
-from diagnostics.probe_lib import monitors
 from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import core
-from lib.exit_codes import PROBE_UNREADABLE
 
 
 def test_prom_query_url_encodes_promql():
@@ -149,53 +147,6 @@ def test_format_metric_empty_is_no_data():
         metrics.format_metric({"data": {"resultType": "vector", "result": []}})
         == "no data"
     )
-
-
-def _monitor_series(name, status):
-    return {"metric": {"monitor_name": name}, "value": [1720000000, status]}
-
-
-def test_format_monitor_status_all_up():
-    data = {
-        "data": {
-            "result": [_monitor_series("sonarr", "1"), _monitor_series("radarr", "1")]
-        }
-    }
-    text, code = monitors.format_monitor_status(data)
-    assert text == "2/2 monitors up"
-    assert code == 0
-
-
-def test_format_monitor_status_lists_down_monitors_and_fails():
-    data = {
-        "data": {
-            "result": [
-                _monitor_series("sonarr", "1"),
-                _monitor_series("terraria (game port)", "0"),
-            ]
-        }
-    }
-    text, code = monitors.format_monitor_status(data)
-    assert text == "1/2 monitors up\n  terraria (game port): DOWN"
-    assert code == 1
-
-
-def test_format_monitor_status_labels_pending_and_maintenance_as_not_up():
-    data = {
-        "data": {
-            "result": [_monitor_series("a", "2"), _monitor_series("b", "3")],
-        }
-    }
-    text, code = monitors.format_monitor_status(data)
-    assert "a: PENDING" in text
-    assert "b: MAINTENANCE" in text
-    assert code == 1
-
-
-def test_format_monitor_status_empty_result_is_unreadable():
-    text, code = monitors.format_monitor_status({"data": {"result": []}})
-    assert code == PROBE_UNREADABLE
-    assert "no monitor_status series" in text
 
 
 def test_monitors_subcommand_parses():

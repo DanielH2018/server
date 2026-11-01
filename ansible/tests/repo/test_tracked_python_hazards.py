@@ -141,7 +141,7 @@ SUBPROCESS_DRIVEN: frozenset[str] = frozenset(
 # stamps `time.time() - age` reproduces the defect behind every test that imports it.
 KNOWN_TEST_FILES = frozenset(
     {
-        "scripts/diagnostics/tests/_alert_fixtures.py",
+        "scripts/diagnostics/tests/_release_fixtures.py",
         "scripts/dev/tests/test_findings_claim_staleness.py",
         "ansible/roles/k8s/monitor-bridge/tests/test_check_r2.py",
         "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py",

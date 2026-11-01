@@ -95,26 +95,20 @@ is the source, and its docstring lists which readings keep the wait open.
 
 ### `alerts [--days N --check X]`
 
-Reconstructs DOWN alert history from Loki, because Kuma keeps only current state — one row per
-firing episode. The same view is the "Alert History" Grafana board (Infrastructure folder).
-
-It reads **two** streams: monitor-bridge's container log, and the `{job="syslog"}` `status=down`
-lines the host crons emit, which push Kuma directly and so have no other durable record.
+Reads firing-alert history from Prometheus' `ALERTS` over `--days`, one row per firing
+episode. One `query_range` returns a sample for every step an alert fired. A series' samples
+within two steps of each other are one episode, and `--gap-min` pins that gap by hand. The step
+is 60 seconds and widens past about a week to stay under Prometheus' per-series point cap.
+Prometheus keeps 30 days, so a wider window returns nothing older.
 
 **Every episode row carries both ends, in UTC**, so a row compares directly against
-`journalctl --utc` output. Each check's splitting gap derives from its own sample cadence,
-because a fixed 30 minutes matched the `*/30` health crons exactly and a second of cron jitter
-started a new episode. `--gap-min` pins the gap by hand for every check (#1104).
+`journalctl --utc` output. Shadow alerts are listed and marked `shadow`, because their batch
+still pages through Kuma until it cuts over. Watchdog fires always and is left out.
 
-**The reader and the emitter stay paired** (#1782).
-`ansible/tests/services/test_monitor_bridge_down_line_shape.py` enforces the pairing. `--check`
-and `--pi` filter `--raw` as well. A truncated fetch prints its covered window *above* the
-episode list rather than a warning under an all-clear. The reader drops the retry-era
-`push failed (http=… rc=…)` scaffolding and the `push failed transiently` line that precedes
-every final failure (#1787).
-
-**Episode counts are a lower bound against Prometheus `monitor_status`** by construction: a push monitor also goes DOWN when its heartbeat expires, which writes no log
-line anywhere. Cross-check a flap count against `monitor_status` rather than against this view.
+**The `loki-homelab` ruler's alerts have no history here.** The ruler sends them to Alertmanager
+directly, so they never reach `ALERTS`, and Alertmanager keeps none. `monitors` shows the ones
+firing now; for an older episode, query the rule's LogQL with `probe.py loki-query`. A read that
+fails exits 75 rather than printing an all-clear.
 
 ### `arr <app> <api-path>` redacts the credentials it reads
 
@@ -133,51 +127,39 @@ list backs the label up, and a field is redacted as soon as it is *named* like a
 Pass `--show-secrets` for the rare case where the value itself is what you need; it prints the
 raw response, and what it prints lands in the transcript.
 
-### `monitors` vs `kuma-drift`
+### `monitors` answers "what is down"
 
-`monitors` answers "what is down." **`kuma-drift` answers "what is missing,"** which `monitors`
-structurally cannot — it counts the exporter's own set, so a monitor that is gone rather than
-down leaves the ratio at N/N up.
+`monitors` reads four sources, in order:
 
-`kuma-drift` diffs that set against `static-monitors.yaml.j2` and treats a push monitor inside
-its own interval after a Kuma restart as pending, since Kuma exports a monitor only once it has
-beaten. It reads a templated interval (`{{ uptime_kuma_k8s_bridge_push_interval }}`, the etcd drill's
-inventory variable, the UPS tiles' arithmetic) against the role's real render context, so those tiles
-are classified by their interval like a literal one (#2019).
+1. `ALERTS{alertstate="firing"}`, grouped by severity and `service`. A non-shadow `critical`
+   or `warning` alert exits 1. `info` alerts print as notes, and shadow alerts print under their
+   own heading, and neither changes the exit code.
+2. The active alerts Alertmanager holds that `ALERTS` lacks, marked `(Alertmanager only)` and
+   counted the same way. The `loki-homelab` ruler sends its alerts, such as
+   `HostOutOfMemoryKill`, to Alertmanager directly, so `ALERTS` never carries them.
+3. The Kuma tiles that are not up (`monitor_status{job="uptime-kuma"} != 1`). Kuma still pages
+   for the batches that have not cut over, so this arm stays until M6's C-1 deletes the scrape.
+   An empty result is clean because `KumaDown` fires on a dead or absent scrape.
+4. Alertmanager's active silences.
 
-Pending applies only to a monitor Kuma holds. `kuma-drift` reads which monitors exist from Kuma's
-public status page, which `kuma-status-page-sync` keeps listing every declared monitor. A
-declared name absent from that page is missing once Kuma has been up for one sync period plus
-the sync job's deadline, 1700s, whatever the tile's interval (#4005). A deploy that adds a tile
-restarts Kuma, so before that bound a new tile is absent from the page legitimately. The page
-check exists because a weekly tile AutoKuma refused would otherwise stay pending forever: the
-weekly host restart restarts Kuma before the tile's interval elapses. The sync runs every 15 minutes, and it fails while any declared tile is
-missing from Kuma, so one refused tile also leaves every tile added after it off the page. An
-unreadable page keeps the tiles pending and prints a line saying their existence went
-unverified.
+**A result without the Watchdog alert exits 75.** Rule evaluation always fires the Watchdog, so
+an empty `ALERTS` without it is a dead evaluator, not a healthy estate.
 
 ### The Pi's own first-command triage
 
-daniel-pi runs no kubelet, so `targets`, `kuma-drift`, `alerts` and `health --docker` each need
-a `--pi`-shaped answer of their own rather than the cluster's — this is the Docker-plane
-equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
+daniel-pi runs no kubelet, so `targets`, `alerts` and `health --docker` each need a
+`--pi`-shaped answer of their own rather than the cluster's — this is the Docker-plane
+equivalent of the cluster checks above, backed by `probe_lib/pi_plane.py`.
 
 - **`targets --pi`** — Prometheus scrape-target health, scoped to daniel-pi. The declared job
   set (`node-pi`, `alloy-pi`) is parsed from `k8s_pi_client_ip` static targets in observability's
   `prometheus.yaml.j2` rather than hand-listed, so a renamed or added job needs no change here.
   A declared job absent from the live set is reported MISSING and fails the gate — dividing the
   Pi's own live set by itself would repeat `monitors`' N/N-up mistake.
-- **`kuma-drift --pi`** — the same declared-vs-live reconciliation, scoped to daniel-pi's own
-  monitors. The scope comes from each monitor's YAML `stringData` key in
-  `static-monitors.yaml.j2` (`aide-daniel-pi.json`, `rkhunter-daniel-pi.json`, …) carrying `pi`
-  as its own hyphen-delimited token — `pihole-k8s-dns.json` is excluded because `pi` there is a
-  substring of `pihole`, not a token, and Pi-hole runs on k3s.
-- **`alerts --pi`** — scopes the DOWN-episode reconstruction to daniel-pi. The syslog stream
-  (the Pi's own heartbeats) carries the rsyslog host token, verified live against
-  `/var/log/pi-health/health.log` (`hostname` there prints `daniel-pi`); the monitor-bridge
-  stream carries no host field at all, since it runs in-cluster, so its one check that watches
-  the Pi remotely — `pi_pressure` (`check_pi_pressure` in monitor-bridge's `CHECKS`) — is
-  matched by name instead.
+- **`alerts --pi`** — scopes the firing-alert history to daniel-pi. An alert is the Pi's when
+  its `job` is one of the Pi's scrape jobs in `prometheus.yaml.j2`, or its `service` is
+  `daniel-pi`. The jobs are the `k8s_pi_client_ip` targets above plus `blackbox-pi-ports`,
+  whose targets are the Pi's published container ports (`PiPortDead`).
 - **`pi containers`** — one ssh call to daniel-pi (`docker ps -aq` piped into `docker inspect`
   in the same remote shell, so this is a single ssh invocation regardless of container count)
   rendering name/image/status/health/networks for every container on the host. Flags a running

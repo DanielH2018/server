@@ -189,11 +189,12 @@ def test_the_patch_maintained_exemption_names_its_mechanism():
     assert reason and "patch" in reason
 
 
-def test_the_registry_gc_keep_set_is_exempt_and_names_its_writer():
-    # The weekly registry GC writes this ConfigMap with `kubectl create`, so it never has a
-    # baseline. Exempt, it no longer holds the tile down after every Sunday run (#6280).
-    reason = ldc.is_foreign("configmap", "homelab", "registry-gc-ghcr-mirror-keep")
-    assert reason and "registry-gc.sh" in reason and "create" in reason
+def test_the_registry_gc_keep_sets_are_exempt_and_name_their_writer():
+    # The weekly registry GC writes one keep-set ConfigMap per mirror phase with `kubectl
+    # create`, so neither ever has a baseline. The dockerhub one paged from 2026-11-01 (#6843).
+    for name in ("registry-gc-ghcr-mirror-keep", "registry-gc-dockerhub-mirror-keep"):
+        reason = ldc.is_foreign("configmap", "homelab", name)
+        assert reason and "registry-gc.sh" in reason and "create" in reason, name
 
 
 def test_only_the_unexempted_baseline_less_configmap_is_flagged():
@@ -217,13 +218,15 @@ def test_only_the_unexempted_baseline_less_configmap_is_flagged():
 
 
 def test_the_host_script_exemption_matches_what_the_script_writes():
-    # The entry holds only while the script still creates this name with `kubectl create` in
-    # the namespace it lists. A rename or a switch to `apply` fails here, not on the live tile.
+    # Every MIRROR_KEEP_CM the script assigns is a ConfigMap it creates, so the table must hold
+    # exactly that set. A new mirror phase, a rename or a switch to `apply` fails here, not on
+    # the live tile.
     script = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
+    keep_sets = set(re.findall(r"^\s*MIRROR_KEEP_CM=(\S+)$", script, re.MULTILINE))
+    assert "registry-gc-ghcr-mirror-keep" in keep_sets
     assert set(ldc.HOST_SCRIPT_WRITTEN) == {
-        ("configmap", "homelab", "registry-gc-ghcr-mirror-keep")
+        ("configmap", "homelab", name) for name in keep_sets
     }
-    assert "MIRROR_KEEP_CM=registry-gc-ghcr-mirror-keep" in script
     assert '$KUBECTL create configmap "$MIRROR_KEEP_CM"' in script
     assert 'NS="homelab"' in script and 'KUBECTL="k3s kubectl -n ${NS}"' in script
 
