@@ -34,6 +34,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 import re
 
 from deploy_tools.narrow_lib import secret_keys
+from deploy_tools.narrow_lib import templates as narrow_templates
 from lib.git import git
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 
@@ -88,7 +89,9 @@ def carried(key: str, ref: str, cwd) -> set[str]:
             continue
         found.add(name)
         word = re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
-        for hit in secret_keys.readers(name, ref, cwd, [INVENTORY, SHARED_TEMPLATES]):
+        hits = secret_keys.readers(name, ref, cwd, [INVENTORY, SHARED_TEMPLATES])
+        # A Jinja comment naming a key or a macro renders nothing.
+        for hit in narrow_templates.real_mentions(hits, name, ref, cwd):
             text = show_at(ref, hit, cwd) or ""
             if hit.startswith(SHARED_TEMPLATES):
                 pending.append(hit.rsplit("/", 1)[-1])
