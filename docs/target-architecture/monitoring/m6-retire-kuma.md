@@ -136,6 +136,12 @@ push-token secret remains.
       mention of `kuma` in those trees to a frozen allowlist. Each allowlist entry names its
       file and its reason. The list only shrinks, and a file outside it that mentions `kuma`
       fails CI.
+    - Before it matches `kuma`, the census row strips every citation of this plan: the
+      filename `m6-retire-kuma`, and any path that starts
+      `docs/target-architecture/monitoring/m6-`. A citation of the plan stays true after Kuma
+      is gone, and #6903 counted 34 non-test files outside `hosts/` that carry one. A file
+      whose only `kuma` is such a citation therefore needs no allowlist entry. The row's red
+      fixture also holds a bare `kuma` beside a citation, and the row fails that fixture.
     - Both bullets share one allowlist. At C-6 it holds the entries below, and each entry
       names the identifiers it may still hold:
         - `scripts/secrets_mgmt/git_dates.py`: `RETIRED` names retired keys by design, so it
@@ -148,9 +154,6 @@ push-token secret remains.
           `org.homelab.kuma-docker-monitor` labels (see *Open questions*, item 7).
         - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
           an output redaction rule, not a Kuma read.
-        - `hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2` and
-          `pi-sd-health.sh.j2`, which cite this plan by its filename. *Every `hosts/` file
-          the grep finds, by PR* in *Phase A* assigns every other `hosts/` hit to a PR.
         - Until C-4b lands: `ansible/filter_plugins/kuma_monitors.py`, its import and its
           `kuma_ingress_monitors` registration in `scripts/lib/ansible_jinja_env.py`, and
           the `kuma_ingress_monitors` row in
@@ -1016,9 +1019,6 @@ not name.
       `hosts/components/nut-secondary/component.yml` and `hosts/daniel-pi/package.yml`.
 - **The census allowlist**, each with its reason:
     - `hosts/components/claude-code/files/homelab_rootq.py`: an output redaction rule, as above.
-    - `hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2` and
-      `hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2`: each cites this plan by
-      its filename, `m6-retire-kuma.md`. That citation stays true after Kuma is gone.
     - `hosts/components/pi-compose/services/alloy/compose.yaml.j2`,
       `hosts/components/pi-compose/services/autoheal/compose.yaml.j2`,
       `hosts/components/pi-compose/services/docker-proxy/compose.yaml.j2` and
