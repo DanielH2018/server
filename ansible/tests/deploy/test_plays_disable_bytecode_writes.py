@@ -22,6 +22,17 @@ variable sits inside the shell command sudo runs rather than in sudo's own envir
 which `env_reset` would have discarded. A task-level `environment:` merges with the play's
 rather than replacing it, so `prune_backups.yml`'s B2 keys still reach their task.
 
+The guard stops new writes, but it does not remove a directory written before it landed
+(2026-09-25). Such a directory stays in the venv until uv next recreates the venv, which uv
+does only when the interpreter changes. The next sync then fails with
+`failed to remove directory … .venv/lib: Permission denied`. On 2026-11-02 the Python 3.15 flip
+hit this in daniel-server's primary checkout (#6961). The cause was a 3.14 venv built on
+2026-06-10, which still held a `cryptography/x509/__pycache__` (root:root 750) from before the
+guard. daniel-server's sudo journal records the history. Every escalated venv command up to
+2026-09-25 03:27 lacks the variable, every one after that carries it, and no root unit, cron or
+package script runs the venv. So no live writer remains, and the fix is a one-time
+`chown -R` of the venv by the operator.
+
 The alternative — pointing `ansible_python_interpreter` outside the tree —
 is not available here. The repo's venv is load-bearing for module execution: `community.docker`
 needs `requests` and `docker`, and the k8s modules need the Kubernetes client, none of which
@@ -49,6 +60,7 @@ _KNOWN = frozenset(
         "preflight.yml",
         "prune_backups.yml",
         "seed_volume_backup.yml",
+        "volume-revert.yml",
     }
 )
 
