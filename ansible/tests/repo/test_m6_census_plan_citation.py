@@ -87,9 +87,6 @@ def test_no_file_that_only_cites_the_plan_fails_the_census_row():
     )
 
 
-_TICKED = re.compile(r"`([^`]+)`")
-
-
 def _strip_bullet() -> str:
     """Exit criterion 3's bullet that says what the census row strips before it matches."""
     bullets = re.split(r"^    - ", _exit_criterion_3(), flags=re.M)
@@ -103,7 +100,7 @@ def _strip_bullet() -> str:
 def _stated_strip(bullet: str) -> re.Pattern[str]:
     # The bullet backticks other paths too; only an `m6-` token names a citation.
     # One ending in `/` or `-` is a path prefix, any other is literal.
-    tokens = [t for t in _TICKED.findall(bullet) if "m6-" in t]
+    tokens = [t for t in re.findall(r"`([^`]+)`", bullet) if "m6-" in t]
     alts = [re.escape(t) + (r"[\w./-]*" if t[-1] in "/-" else "") for t in tokens]
     return re.compile("|".join(alts), re.I)
 
