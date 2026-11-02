@@ -901,9 +901,17 @@ files that the rows above name only by their Ansible path. Each goes with the PR
   `hosts/components/claude-code/files/claude_triage_poll.py`, reads `monitor_status`. B-10,
   which the fix for #6862 adds to *Phase B*, drops that read. `hosts/components/claude-code/files/homelab_rootq.py` matches `/api/push/` in
   a redaction rule, not a Kuma read, so it belongs on the allowlist (#6862).
-- **`hosts/components/claude-code/CLAUDE.md`** quotes `kuma_push` in the ENFORCED line of
-  `test_neither_producer_pushes_to_kuma`. C-6 rewords that line to name the test without
-  quoting its markers.
+- **`hosts/components/claude-code/CLAUDE.md`**, in *The artifacts node's two timers*, says
+  "Neither timer pushes to Kuma", and its ENFORCED line cites
+  `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`,
+  which holds both scripts to "no Kuma library". Rewording only the quoted markers would
+  leave `kuma` in the test name. C-6 deletes the test, the `KUMA_PUSH_MARKERS` tuple, the
+  `kuma_push_markers` helper and the red case `test_a_script_that_pushes_to_kuma_is_flagged`. Their subject goes with C-3a,
+  which deletes the library and `kuma_push.py`, so no shipped script can push any more
+  (`.claude/rules/python-layout.md`, *A check retires when its subject does*). C-6 rewrites
+  the bullet's lead to say that each run writes a check file and neither unit loads a
+  credential. The rewritten bullet names Kuma nowhere and drops the ENFORCED line. It runs
+  `fact_status.py verify` on the section, because the cited test is gone.
 
 **Every `hosts/` file the grep finds, by PR.** `git grep -il kuma -- hosts ':!*/tests/*'
 ':!*/test_*'` lists 45 files at `d67fb3b9b`. The identifier grep that C-6 quotes finds about a
