@@ -100,7 +100,7 @@ def _prune_with_a_wider_permission(wf):
 
 
 def _prune_with_a_drifted_cosign_release(wf):
-    _cosign_steps(wf)[0]["with"]["cosign-release"] = "v3.1.4"
+    _cosign_steps(wf)[0]["with"]["cosign-release"] = "v3.1.3"
 
 
 def _prune_with_a_drifted_cosign_installer(wf):
