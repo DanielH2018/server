@@ -27,14 +27,14 @@ HOST_REL = "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
 
 # (tool, twin file, twin pattern). The host pattern is the loop item `- <tool>==<version>`.
 TWINS = (
-    ("ansible-core", "pyproject.toml", r'"ansible-core==([\d.]+)"'),
+    ("ansible-core", "pyproject.toml", r'"ansible-core==([\w.]+)"'),
     ("ansible-lint", "prek.toml", r'ansible/ansible-lint"\s+rev\s*=\s*"v([\d.]+)"'),
     ("prek", ".github/actions/setup/action.yml", r"pip install prek==([\d.]+)"),
 )
 
 
 def host_pattern(tool: str) -> str:
-    return rf"^\s*- {re.escape(tool)}==([\d.]+)\s*$"
+    return rf"^\s*- {re.escape(tool)}==([\w.]+)\s*$"
 
 
 def versions_in(text: str, pattern: str) -> set[str]:
