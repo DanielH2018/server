@@ -68,3 +68,28 @@ two-hour no-pager bound counts from the `uptime-kuma` apply of this PR. It ends 
 rules are still `shadow`, so the revert restores Kuma as the only pager, and the tile goes green
 on the next push because the token stays in `secrets.yml` until the token PR. A Cutover-2 that
 has merged is reverted first, so the cron pushes again.
+
+**Cutover-1b, the rules page** (branch `m6-b6c-cutover-1b-rules-page`, stacked on Cutover-1a).
+`RegistryGcFailed` and `RegistryGcNotReporting` drop `shadow`, and the `kuma-cutover` group
+loses B6c's `Registry GC` term. The group stays, because B9's six terms and Phase A's terms
+remain. Both rules are `warning`, which posts to Discord alone, the channel mix the tile had.
+
+**Routing.** `test_alertmanager_routing_b6c_registry_gc.py` is a sibling of the routing module,
+which is at its line cap. It walks both rules through the rendered routing tree: each reaches
+Discord alone, muted for the weekly reboot. A rule that regains `shadow` walks to the blackhole
+and fails it. The main module's censuses read no `registry.yaml` rule, so none needs a row.
+
+**Inhibits: none added.** `RegistryGcNotReporting` ends in `unless on (origin) (up{job="node"}
+== 0)`, and a dead node exporter leaves `RegistryGcFailed` no series, so `ScrapeTargetDown`
+stays the one page. The generic `HostCheckOverdue` deadman is already muted beside the
+`NotReporting` pair by the inhibit on `equal: [check, origin]`.
+
+**Soak effect: none.** Both rules are `warning` and carry no `verify` label, so neither the
+health gate nor the soak reads them, and `renderer_lib/soak.py:longest_for` counts critical
+rules only. A firing `RegistryGcFailed` therefore does not block `registry`'s `promote`.
+
+**Precondition.** `RegistryGcNotReporting` pages when the textfile is older than 612000s, which
+is 7 days 2 hours. The file was last written 2026-11-02T18:25:55Z, so it ages out at
+2026-11-09T20:25Z unless a run refreshes it. The scheduled run of 2026-11-08 04:20 comes first.
+A merge before a file exists at all pages at once, because the rule's absent arm fires on no
+series.
