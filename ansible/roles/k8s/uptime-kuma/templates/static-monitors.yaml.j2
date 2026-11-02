@@ -103,20 +103,6 @@ stringData:
   # docker-fleet + autofix-disk-prune keys removed at the Docker uninstall (2026-08-14):
   # their producers (the fleet-health cron, the disk-prune cron) retired with the
   # daemon. AutoKuma ON_DELETE=delete removes the live monitors on apply.
-{# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). INTERVAL IS DERIVED FROM THE
-   CRONTAB: `20 4 * * 0` (registry_k8s_gc_cron_* in the registry defaults), a 604800s period,
-   plus two hours. The run pushes at its end, and its worst case is about 6000s: two mirror
-   phases, each the pod-exit, Job-delete and rollout waits, registry_k8s_gc_deadline_s (1200s)
-   and its warm budget (1800s, then 900s), plus 60s for the lock. A fast week followed by a
-   worst-case one moves the push by that much. The healthchecks.io grace is the same two hours, and
-   ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py derives both from the
-   budgets (#6569). Only the two mirror
-   stores are collected since the push store's GC was retired. Gated on the
-   token like the tiles below: an ungated tile sits red from creation until the secret exists. #}
-{% if registry_gc_push_token is defined %}
-  registry-gc.json: |
-    {"type": "push", "name": "Registry GC", "description": "A weekly daniel-box cron (Sunday 04:20) scales the ghcr-mirror, then the dockerhub-mirror, to zero, runs a prune and garbage-collect Job on each store and scales each back. DOWN means a keep set was skipped, a pod did not stop, a Job timed out, a mirror did not come back, or another run held the lock; the message says which. Check journalctl -t registry-gc, the registry-gc-ghcr-mirror and registry-gc-dockerhub-mirror Job logs and the two mirror Deployments.", "interval": 612000, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ registry_gc_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{% endif %}
 {# The weekly AIDE check (#4594), ONE TILE PER HOST: each host checks its own baseline, and a
    shared token would let one host's `up` cover a host whose check stopped running.
 

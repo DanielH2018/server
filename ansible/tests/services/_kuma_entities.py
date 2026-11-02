@@ -59,14 +59,14 @@ _HOST = "daniel-box"
 
 # Tiles that exist only because `_token_seed()` seeds their gate. Named rather than counted: a
 # count that fell from 115 to 104 would read as a template edit, where a named member names the
-# gate that stopped opening. These four are the shapes the gate hides: the sync CronJob, the
-# registry's weekly GC, and a per-host integrity scan. One of them going missing is the whole class
-# going missing.
+# gate that stopped opening. These four are the shapes the gate hides: the sync CronJob and a
+# per-host integrity scan on each host kind. One of them going missing is the whole class going
+# missing. M6 batch B6c's Cutover-1a deleted the registry's weekly GC tile, which stood here.
 GATED_MEMBERS = frozenset(
     {
         "status-page-sync.json",
-        "registry-gc.json",
         "aide-daniel-box.json",
+        "aide-daniel-pi.json",
         "rkhunter-daniel-pi.json",
     }
 )
@@ -112,7 +112,7 @@ def _token_seed() -> dict[str, str]:
     names = set(re.findall(r"\b([a-z0-9_]+_push_token)\b", TEMPLATE.read_text()))
     for row in BRIDGE_CHECKS:
         names.add(row["token"])
-    assert len(names) >= 20, f"the push-token scan went thin: {sorted(names)}"
+    assert len(names) >= 19, f"the push-token scan went thin: {sorted(names)}"
     return {name: _STUB_PREFIX + name for name in names}
 
 

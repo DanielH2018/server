@@ -17,5 +17,10 @@ PENDING_RETIREMENT: frozenset[str] = frozenset(
         # M3's PR 5 deleted the `daniel-box Disk` tile and the script's push. Its PR 6 retires
         # the key a week later and deletes this entry in the same commit.
         "daniel_box_disk_push_token",
+        # M6 batch B6c's Cutover-1a deleted the `Registry GC` tile. registry-gc.sh pushes into the
+        # deleted token until Cutover-2 drops the push, and no cluster render references the
+        # token. B6c's token PR retires the key a week after Cutover-1b and deletes this entry
+        # with it.
+        "registry_gc_push_token",
     }
 )

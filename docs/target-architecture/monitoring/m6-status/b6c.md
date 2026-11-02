@@ -32,3 +32,39 @@ writes the file.
    protected paths, so the same PR updates it. With no token in the render, the script is no
    longer a STUB, and `probe.py applied` compares it (#6917).
 5. The token PR, a week after Cutover-1b, retires `registry_gc_push_token`. C-1a waits for it.
+
+**Cutover-1a, the tile goes** (branch `m6-b6c-cutover-1a-tiles-go`). It deletes the `registry-gc`
+declaration from `static-monitors.yaml.j2` and the `^registry-gc$` status-page pattern.
+"Backups & Storage" keeps `match: []`, because four monitor-bridge rows pin themselves into it.
+`registry_gc_push_token` enters `PENDING_RETIREMENT`, because no cluster render references it
+once the tile goes. `registry-gc.sh.j2` keeps pushing into the deleted token until Cutover-2.
+`KUMA_RETIRING_TAGS` lists `registry-gc`, so `swallowed_verdicts` does not page the refused push.
+Both rules stay `shadow`, so this PR adds no pager and removes one.
+
+**What the tile's removal moved in the tests.** The floors that counted the tile fell by one:
+the monitor census (`>= 28` to `>= 27`), the declaration index (`> 30` to `> 29`), the renderer's
+index (`> 25` to `> 24`), and the three push-tile or token-name floors (`>= 20` to `>= 19`). The
+tile was a named member of two censuses, so `GATED_MEMBERS` swaps it for `aide-daniel-pi.json`,
+`_INCIDENT_TILE` becomes `aide-daniel-pi`, and `KNOWN_IDS` drops it. The worst-run guard read the
+tile's interval twice. It now reads the script's `DEADLINE_S`, which the same guard already
+equated to the rule literals. `test_the_deleted_b6c_tile_is_not_declared` fails if the tile is
+declared again.
+
+**The gates are not read, and cannot pass yet.** Read on 2026-11-02 at 18:29Z:
+
+- `homelab_check_last_run_timestamp_seconds{check="registry-gc",origin="daniel-box"}` reads
+  1793643955 (2026-11-02T18:25:55Z) and `homelab_check_success` reads 1. The textfile exists, but
+  it came from a run outside the Sunday 04:20 schedule. The first scheduled run that writes it is
+  2026-11-08, so the soak read is due on or after 2026-11-15.
+- The live `monitor-bridge-script-verdicts-logs` ConfigMap lists `registry-gc` in
+  `KUMA_RETIRING_TAGS`. #6931 landed on 2026-11-02, so the tag has been deployed for a week on
+  2026-11-09 at the earliest, and Cutover-1a waits for that.
+- `monitor_status{monitor_name="Registry GC"}` reads 1, and `ALERTS{alertname=~"RegistryGc.*"}` is
+  empty. The tile is live and both rules are quiet.
+
+The operator reads the soak, with M2's 8-minute margin over `[168h:1m]`, before merging. The
+two-hour no-pager bound counts from the `uptime-kuma` apply of this PR. It ends at the
+`observability` apply of Cutover-1b. If Cutover-1b has not applied by then, revert this PR. Its
+rules are still `shadow`, so the revert restores Kuma as the only pager, and the tile goes green
+on the next push because the token stays in `secrets.yml` until the token PR. A Cutover-2 that
+has merged is reverted first, so the cron pushes again.
