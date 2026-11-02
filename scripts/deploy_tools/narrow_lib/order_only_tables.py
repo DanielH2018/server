@@ -49,8 +49,9 @@ counted = {
 # upgrade that adds a C module to the chain reads as doubt and turns
 # `test_4836s_real_toposort_change_is_order_only` red; extend the list then.
 c_modules = frozenset({
-    "_ast", "_bisect", "_bz2", "_contextvars", "_datetime", "_heapq", "_lzma", "_opcode",
-    "_socket", "_string", "_tokenize", "_typing", "_zstd", "fcntl", "grp", "math", "pwd",
+    "_ast", "_bisect", "_bz2", "_contextvars", "_datetime", "_heapq", "_lzma",
+    "_math_integer", "_opcode", "_socket", "_string", "_tokenize", "_typing", "_zstd", "fcntl",
+    "grp", "math", "math.integer", "pwd",
     "unicodedata", "zlib",
 })
 
