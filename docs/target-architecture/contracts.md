@@ -39,7 +39,7 @@ merged.
 | M5 | loki-homelab ruler | M1. The cutover also M2's PR 3 |
 | M6a | Retire Kuma, Phase A: drain the producers | M2, M3, M4, M5's functional PRs; their token-retirement PRs may trail (the note under the table). A7's shadow PR also M5's ruler, live; A7's Cutover-a also M2's PR 4a, live |
 | M6b | Retire Kuma, Phase B: switch the readers | M6a's A6. B-1, B-1d and B-1e need only M1 and C7's health-gate selector |
-| M6c | Retire Kuma, Phase C: delete Kuma | M6a, M6b. C-1a also D5's registry PR; C-4b also D6 |
+| M6c | Retire Kuma, Phase C: delete Kuma | M6a, M6b. C-1a also B6c's token PR; C-4b also D6 |
 | H1 | Hand the cluster content to Flux | D2, D4. H1.7b also D3; H1.9 also R4 |
 | H2 | Shrink the host plane (crons → CronJobs) | —. H2.2a also H1.5a and H1.6; H2.3b also H1.5a; H2.3c also H2.3b, live; H2.8a also H1.7b and H6.4b |
 | H3 | Pi pilot: builder, updater, versioning | R1. H3.5d, the host-rules PR, also M1, and H3.9b waits on it |
@@ -70,7 +70,8 @@ which needs a drill exclusion in C7 that no slice has requested, the edge goes.
 D5's other edge to M6 keeps monitor-bridge Ansible-owned until A6-7a, an M6 step that needs
 `land.sh`'s order, has deployed (M6 *When D5 flips a role M6 edits*). It adds no cycle either.
 A6-7a waits on Phase A batches and on M2 to M5, and none of those waits on D5. M6's C-1a
-waits on D5's registry PR, which waits on no M6 step.
+waits on B6c's token PR, which waits only on B6c's own steps and on no D5 step (M6 Open
+question 13).
 
 M6a starts once the functional PRs of M2, M3, M4 and M5 have landed. The operator ruled this on
 2026-10-23. A push-token-retirement PR, such as M3's PR 6 and M5's PR 5 (#5856), may trail
@@ -1255,6 +1256,10 @@ Applied to this page:
   the uptime-kuma exclusion. D6's row gains M6's C-2b, live, which the uptime-kuma edge used
   to imply. M6c's registry edge moves to C-1a, the half of C-1 that holds the
   `monitor_status` gate. The paragraph below the table restates the no-cycle argument.
+  **Amended on 2026-11-02 (#6926).** D5's registry PRs landed without removing registry-gc's
+  Kuma push, so M6's batch B6c drains it (M6 Open question 13). M6c's C-1a edge moves from
+  D5's registry PR to B6c's token PR, and the paragraph below the table says that edge waits
+  on no D5 step.
 - **H2's per-PR edges** (H2 Open question 1). H2's row reads H2.2a on H1.5a and H1.6, H2.3b
   on H1.5a, H2.3c on H2.3b live, and H2.8a on H1.7b and H6.4b. Every other H2 PR waits on
   nothing outside H2. The row drops H1.8 and the H2.3b → D3 edge, and the paragraph below
