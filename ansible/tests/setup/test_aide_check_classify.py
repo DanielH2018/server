@@ -29,6 +29,13 @@ EXPLAINED = {
     ),
     "a conffile as the package shipped it": f"{CHANGED_CONTENT}: /etc/tool.conf",
     "an alternatives link to a package file": f"{LINK_ADDED}: /etc/alternatives/tool",
+    "a file a diversion renamed": f"{ADDED}: /usr/share/doc/tool/README.distrib",
+    "a unit a maintainer script masked": (
+        f"{LINK_ADDED}: /usr/lib/systemd/system/tool-cleanup.service"
+    ),
+    "a mode change on an unpackaged /etc file": (
+        f"{CHANGED_MODE}: /etc/homelab/deployed.env"
+    ),
     "a file an upgrade dropped": f"{REMOVED}: /usr/bin/old-tool",
     "an initrd the kernel trigger built": f"{ADDED}: /boot/initrd.img-7.0.0-42-generic",
     "an unpackaged /etc file Ansible wrote": f"{ADDED}: /etc/homelab/deployed.env",
@@ -69,6 +76,11 @@ FLAGGED = {
     ),
     "a package binary whose mode changed": (
         f"{CHANGED_MODE}: /usr/bin/tool",
+        {},
+        "owner, group or permissions changed",
+    ),
+    "a package conffile whose mode changed": (
+        f"{CHANGED_MODE}: /etc/tool.conf",
         {},
         "owner, group or permissions changed",
     ),

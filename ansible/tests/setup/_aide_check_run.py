@@ -79,8 +79,9 @@ def _dpkg_name(path: str) -> str:
 def _fake_host(root):
     """Writes PACKAGE as installed, with dpkg's records of it, under `root`.
 
-    Returns (dpkg dir, filesystem root). The filesystem also holds an alternatives link to the
-    package's binary and one file in each tree nothing packages.
+    Returns (dpkg dir, filesystem root). dpkg also records one diversion, and the filesystem also
+    holds an alternatives link to the package's binary, a unit masked by a maintainer script and
+    one file in each tree nothing packages.
     """
     dpkg, fs = root / "dpkg", root / "fs"
     (dpkg / "info").mkdir(parents=True)
@@ -103,8 +104,15 @@ def _fake_host(root):
         + "\n".join(conffiles)
         + "\nDescription: a tool\n"
     )
+    # dpkg's diversions file: diverted path, its new name, the diverting package.
+    (dpkg / "diversions").write_text(
+        "/usr/share/doc/tool/README\n/usr/share/doc/tool/README.distrib\ntool-extra\n"
+    )
     (fs / "etc" / "alternatives").mkdir(parents=True)
     (fs / "etc" / "alternatives" / "tool").symlink_to(fs / "usr" / "bin" / "tool")
+    units = fs / "usr" / "lib" / "systemd" / "system"
+    units.mkdir(parents=True)
+    (units / "tool-cleanup.service").symlink_to("/dev/null")
     for path in (
         "/usr/sbin/implant",
         "/etc/homelab/deployed.env",

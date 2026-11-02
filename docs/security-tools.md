@@ -92,9 +92,9 @@ A difference pages when it falls in one of these and no package explains it:
 - The system trees: `/usr` except `/usr/local`, `/bin`, `/sbin`, `/lib*` and `/boot`. A file pages unless a package owns it and its MD5 matches the package's. A removed path pages while a package still owns it.
 - A package-owned file under `/etc` whose content differs from the package's copy. Ansible writes `/etc` files no package owns on every merge, so those are logged and do not page.
 - The login and privilege files, packaged or not: sudoers, `/etc/ssh`, PAM, cron, `passwd`, `shadow`, `group`, `gshadow`, `ld.so.preload` and every `authorized_keys`.
-- Any entry whose owner, group or permissions changed.
+- An entry in any of those, or a package-owned `/etc` file, whose owner, group or permissions changed. A package digest cannot see a mode change.
 
-Files that package triggers regenerate, such as the initial RAM disk and the kernel module index, never page. Homes, `/var`, `/opt` and `/usr/local` are logged and never page. The script's header has the full lists, and its `DECIDED:` marker has the measurement behind them.
+Files that package triggers regenerate, such as the initial RAM disk and the kernel module index, never page. A path at either end of a package diversion (`dpkg-divert`) is checked by ownership alone, because two packages record a digest for it. Homes, `/var`, `/opt` and `/usr/local` are logged and never page. The script's header has the full lists, and its `DECIDED:` marker has the measurement behind them.
 
 Advancing the baseline after every UP run makes each report cover one week. A DOWN keeps the old baseline, so the change stays in every report until someone reviews it.
 

@@ -38,9 +38,10 @@
 #   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged.
 # - The login and privilege files in PERSIST, owned or not: sudoers, sshd, PAM, cron, the user
 #   and group databases, ld.so.preload and every authorized_keys.
-# - Any entry whose owner, group or permissions changed, since a package digest cannot see that.
+# - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
+#   since a package digest cannot see that.
 # A symlink is explained when it resolves to a package-owned path (alternatives, systemd enable
-# links, /boot/vmlinuz). Homes, /var, /opt and /usr/local are logged and never page: the
+# links, /boot/vmlinuz) or to /dev/null (a mask). Homes, /var, /opt and /usr/local are logged and never page: the
 # 2026-10-20 daniel-box report held 184 differences in six hours, and every one was in them.
 set -uo pipefail
 
@@ -82,8 +83,8 @@ REPORT_MAX_LINES=2000
 
 # database_in and database_out in Debian's /etc/aide/aide.conf.
 AIDE_DIR=/var/lib/aide
-# Read for the package file lists (info/*.list), their digests (info/*.md5sums) and the conffile
-# digests (status), which *.md5sums leaves out.
+# Read for the package file lists (info/*.list), their digests (info/*.md5sums), the conffile
+# digests (status), which *.md5sums leaves out, and the diversions.
 DPKG_DIR=/var/lib/dpkg
 # Prefixed to a report path before the file is read; empty everywhere but the tests.
 FS_ROOT=""
@@ -92,8 +93,11 @@ FS_ROOT=""
 # awk through ENVIRON, because -v would read each backslash as an escape.
 PERSIST='^/(etc/(sudoers$|sudoers\.d/|ssh/|pam\.d/|pam\.conf$|ld\.so\.preload$|crontab$|cron\.[a-z]+/|passwd$|shadow$|group$|gshadow$)|var/spool/cron/|root/\.ssh/authorized_keys|home/[^/]+/\.ssh/authorized_keys|var/lib/[^/]+/\.ssh/authorized_keys)'
 SYSTEM='^/(usr|bin|sbin|lib|lib32|lib64|libx32|boot)(/|$)'
-# Written by package triggers and maintainer scripts, so no package lists them.
-DERIVED='(/__pycache__/|^/boot/(grub|firmware)/|^/boot/(initrd\.img|vmlinuz)(\.old)?$|^/boot/initrd\.img-|^/(usr/)?lib/modules/[^/]+/modules\.|^/(usr/)?lib/[^/]+/gio/modules/giomodule\.cache$|^/(usr/)?lib/[^/]+/gdk-pixbuf-2\.0/[^/]+/loaders\.cache$|^/usr/share/glib-2\.0/schemas/gschemas\.compiled$|^/usr/share/mime/|^/usr/share/icons/[^/]+/icon-theme\.cache$|^/usr/share/info/dir$)'
+# Written by package triggers and maintainer scripts, so no package lists them. Taken from every
+# unpackaged file in the system trees on all three hosts on 2026-11-02, so a trigger that ran
+# outside the measured fortnight is listed too. The top-level usrmerge links, flash-kernel's
+# device trees on the Pi and the firmware partition are maintainer-script output as well.
+DERIVED='(/__pycache__/|/dropin\.cache$|^/(bin|sbin|lib|lib32|lib64|libx32)$|^/boot/(grub|firmware)/|^/boot/dtbs?(/|-|$)|^/boot/(initrd\.img|vmlinuz)(\.old)?$|^/boot/initrd\.img-|^/(usr/)?lib/modules/[^/]+/modules\.|^/(usr/)?lib/udev/hwdb\.bin$|^/(usr/)?lib/locale/locale-archive$|^/(usr/)?lib/[^/]+/gio/modules/giomodule\.cache$|^/(usr/)?lib/[^/]+/gdk-pixbuf-2\.0/[^/]+/loaders\.cache$|^/(usr/)?lib/[^/]+/gtk-[23]\.0/[^/]+/immodules\.cache$|^/usr/share/glib-2\.0/schemas/gschemas\.compiled$|^/usr/share/mime/|^/usr/share/icons/[^/]+/icon-theme\.cache$|^/usr/share/info/dir(\.old)?$|^/usr/share/plymouth/themes/(text\.plymouth|ubuntu-text/ubuntu-text\.plymouth)$)'
 # How many unexplained paths the tile's message names; the journal lists them all.
 MSG_PATHS=3
 UNEXPLAINED_MAX_LINES=500
@@ -164,13 +168,17 @@ if [[ "$MODE" == accept ]]; then
   exit 0
 fi
 
-# Prints "path<TAB>digest" for every path dpkg records, "-" where it records no digest.
+# Prints "path<TAB>digest" for every path dpkg records, "-" where it records no digest. Both ends
+# of a diversion print DIVERTED instead: two packages' md5sums name the same path, and either
+# digest may describe the other file.
 dpkg_index() {
   cat "$DPKG_DIR"/info/*.list 2>/dev/null | awk '{ print $0 "\t-" }'
   cat "$DPKG_DIR"/info/*.md5sums 2>/dev/null \
     | awk '{ d = $1; p = $0; sub(/^[0-9a-f]+ +/, "/", p); print p "\t" d }'
   awk '/^Conffiles:/ { c = 1; next } /^[^ ]/ { c = 0 } c && NF >= 2 { print $1 "\t" $2 }' \
     "$DPKG_DIR/status" 2>/dev/null
+  # Three lines per diversion: the diverted path, where it went, the package that diverted it.
+  awk 'NR % 3 != 0 { print $0 "\tDIVERTED" }' "$DPKG_DIR/diversions" 2>/dev/null
 }
 
 # Prints "kind<TAB>type<TAB>pug<TAB>scope<TAB>path" for each report entry in a paged tree.
@@ -209,15 +217,21 @@ unexplained_entries() {
   done | awk -F '\t' '
     # dpkg records merged-/usr paths under either name, so compare both without the /usr.
     function norm(p) { return p ~ /^\/usr\/(bin|sbin|lib|lib32|lib64|libx32)\// ? substr(p, 5) : p }
-    FILENAME == ARGV[1] { p = norm($1); owned[p] = 1; if ($2 != "-") dig[p] = $2; next }
+    FILENAME == ARGV[1] {
+      p = norm($1); owned[p] = 1
+      if ($2 == "DIVERTED") diverted[p] = 1; else if ($2 != "-") dig[p] = $2
+      next
+    }
     {
       kind = $1; type = $2; scope = $4; path = $5; p = norm(path); why = ""
-      if ($3 == "pug") why = "owner, group or permissions changed"
+      if (p in diverted) delete dig[p]
+      # An unpackaged /etc file pages on nothing, its mode included.
+      if ($3 == "pug" && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
       else if (type == "d") next
       else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
       else if (p in dig) { if ($6 != dig[p]) why = "differs from its package copy" }
       else if (p in owned) next
-      else if (type == "l" && $7 != "-" && (norm($7) in owned)) next
+      else if (type == "l" && $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned))) next
       else if (scope == "persist") why = "no package owns this login or privilege file"
       else if (scope == "system") why = "no package owns it"
       if (why != "") print path " (" why ")"
