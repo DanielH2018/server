@@ -63,10 +63,12 @@ which only the operator can write. Step 6 tells you which case you are in.
      `+`, `/` and `=` in it and is 44 characters. `secret_rotation.py rotate` already mints
      `token_hex(16)` for exactly this reason. The uptime-kuma deploy asserts the format and
      names the refused tile, but only once someone deploys it. Match it on the first write:
-     `openssl rand -hex 16 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
+     `openssl rand -hex 16 | jq -Rc . | sops set --value-stdin ansible/vars/secrets.yml '["<name>"]'`
    - **Any other generated value (auto tier):** generate and set without echoing the value:
-     `openssl rand -base64 32 | { read v; sops set ansible/vars/secrets.yml "[\"<name>\"]" "\"$v\""; }`
-     (the value is never printed). Neither settings file allow-lists these commands, so expect
+     `openssl rand -base64 32 | jq -Rc . | sops set --value-stdin ansible/vars/secrets.yml '["<name>"]'`
+     (the value is never printed, and never reaches `sops`'s argv). `--value-stdin` parses
+     stdin as JSON and refuses a bare string with `Value for --set is not valid JSON`, so
+     `jq -Rc .` quotes it first. Neither settings file allow-lists these commands, so expect
      a permission prompt.
    - **User-provided value via sops set:** only if the user explicitly accepts that the value
      will appear in the command — warn them first.
