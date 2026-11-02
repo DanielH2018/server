@@ -63,7 +63,11 @@ _TRIM_FAILURE_RE = re.compile(
     r"Failed to run volume job|Failed to run recurring job for volume"
     r"|Failed to initialize job for volume|failed to complete filesystem-trim"
 )
-_TRIM_VOLUME_RE = re.compile(r"\bvolume=(\S+)|filesystem-trim for ([\w.-]+)")
+# Where each failure line names its volume: the volume job's logger field `volumeName=`, the
+# `volume=` field `startJob` adds, or the message text `... for volume <vol>` and `... for <vol>`.
+_TRIM_VOLUME_RE = re.compile(
+    r"\bvolume(?:Name)?=\"?([\w.-]+)|for volume ([\w.-]+)|filesystem-trim for ([\w.-]+)"
+)
 # `[pod/<pod>/<container>] ...`, the prefix `kubectl logs --prefix` writes.
 _LOG_PREFIX_RE = re.compile(r"^\[pod/(?P<pod>[^/\]]+)/(?P<container>[^\]]+)\] ")
 
@@ -130,7 +134,7 @@ def trim_failures(pod_log: str, job_name: str | None) -> list[str]:
         if not _TRIM_FAILURE_RE.search(line):
             continue
         volume = _TRIM_VOLUME_RE.search(line)
-        key = (volume.group(1) or volume.group(2)) if volume else line[:120]
+        key = next(filter(None, volume.groups())) if volume else line[:120]
         failures[key.strip('"')] = None
     return list(failures)
 

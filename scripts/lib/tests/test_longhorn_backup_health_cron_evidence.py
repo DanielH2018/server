@@ -61,10 +61,15 @@ _POD_CLEAN = (
     '[pod/trim-29893330-f2mm2/trim] time="2026-11-02T06:10:06Z" level=info '
     'msg="Finished recurring filesystem trim" job=trim\n'
 )
+# One volume's failure as longhorn-manager v1.13.0 writes it: the volume job's error, which
+# carries `volumeName=`, then `startJob`'s warning, which carries `volume=`.
 _POD_FAILED = _POD_CLEAN + (
     '[pod/trim-29893330-f2mm2/trim] time="2026-11-02T06:11:00Z" level=error '
     'msg="Failed to run volume job" error="failed to complete filesystem-trim for '
-    'pvc-0123: timeout" job=trim volume=pvc-0123\n'
+    'pvc-0123: timeout" job=trim task=filesystem-trim volumeName=pvc-0123\n'
+    '[pod/trim-29893330-f2mm2/trim] time="2026-11-02T06:11:00Z" level=warning '
+    'msg="Failed to run recurring job for volume" error="failed to complete '
+    'filesystem-trim for pvc-0123: timeout" job=trim volume=pvc-0123\n'
 )
 
 
@@ -83,6 +88,23 @@ def test_cron_evidence_is_flagged_on_a_failed_trim():
             "being backed up: pvc-0123",
         )
     ]
+
+
+def test_trim_evidence_names_the_volume_from_each_failure_shape():
+    """Each of Longhorn's failure lines names its volume a different way; each one counts once."""
+    prefix = '[pod/trim-29893330-f2mm2/trim] time="2026-11-02T06:12:00Z" level=error '
+    log = _POD_FAILED + (
+        prefix
+        + 'msg="Failed to initialize job for volume pvc-0456" error="not found" job=trim\n'
+        + prefix
+        + 'msg="Failed to run volume job" error="timeout" job=trim volumeName=pvc-0789\n'
+    )
+    problems = logic.check_trim(_cronjob(), _JOBS, log, _NOW)
+    assert len(problems) == 1
+    assert problems[0][1].endswith(
+        "failed on 3 volume(s) on its last run — freed blocks are "
+        "still being backed up: pvc-0123, pvc-0456, pvc-0789"
+    )
 
 
 def test_trim_evidence_reads_only_the_newest_jobs_pod():
