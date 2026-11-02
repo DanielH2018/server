@@ -409,6 +409,13 @@ else
         uv_run="$uv_run --no-python-downloads --offline"
         echo "bootstrap-host: --offline: the clone at $sha is unchecked; the operator who chose it is its trust root"
     else
+        # The first `uv run` builds the repo venv, and PyYAML ships no wheel for every
+        # interpreter host_python_version can name. pyproject.toml forces its libyaml
+        # extension, so that build needs a compiler and libyaml's headers; the host package
+        # that depends on libyaml-dev is not installed yet. A kit's uv-cache holds the build.
+        apt-get update || die "apt-get update failed"
+        apt-get install -y --no-install-recommends gcc libc6-dev libyaml-dev ||
+            die "apt-get install of PyYAML's build dependencies failed"
         # shellcheck disable=SC2086
         (cd "$work/tree" && $uv_run python hosts/lib/bootstrap_anchor.py "$clone" "$sha" \
             --repo "$GITHUB_REPO") || die "the clone's HEAD $sha is not a green first-parent commit of master"
