@@ -709,7 +709,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `ansible/tests/`, any role-local `tests/` directory, and a `test_*.py`/`conftest.py` beside the
   module it covers. Every prefix and regex matches on path alone, so a test file would otherwise
   read as whatever plane it sat under (PR #707: three test files set `broad_manual`). A test-only
-  push produces an empty `ChangeSet` and takes the `if not cs.services` ff-merge branch, like a
+  push produces an empty `ChangeSet` and takes the no-services ff-merge branch, like a
   docs-only push. The `no-role-ships-a-test-file` row of
   `ansible/tests/repo/test_census_rows_roles.py` enforces that no role ships a test file to a host.
 - **A new module in `files/` goes in two lists in `tasks/code.yml`**: the copy task's `loop:` that
@@ -877,7 +877,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   role reads reaches no deploy tag, so it no longer defers the whole k8s plane to
   `k8s_unapplied`.
 - **A setup role reading a changed secret is applied as a setup-plane change** (#5436), on any
-  tick, with or without a deploy-plane path. `deploy_defer.route_secret_readers` runs
+  tick, with or without a deploy-plane path. `deploy_defer.route_key_readers` runs
   `scripts/deploy_tools/secret_setup_readers.py`, which greps `roles/setup/` at origin for each
   key whose ciphertext changed. Each hit goes through `setup_roles_for`, so the role joins
   `cs.setup_roles` as its own edit would. A role shipping another role's `defaults/` or
@@ -893,6 +893,32 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   again: once merged, no later range carries the key. The page fires on every tick that
   merges the range: it names `secret_rotation.py consumers`, which prints the
   apply command of every consumer that no derivation reached.
+- **A setup role templating a changed inventory key is applied the same way** (#6962). PR
+  #6952 moved `host_python_version`, and the tick sent the key to the deploy plane alone.
+  It hit the fleet-coverage ceiling, so the tick deferred the plane and applied nothing.
+  Eight setup roles render the key into their units, and none was applied or recorded in
+  `manual_plane`. `route_key_readers` therefore also runs on a range touching
+  `ansible/inventory/`, and `secret_setup_readers.py` adds the setup-role files naming a
+  top-level inventory key whose parsed value moved
+  (`scripts/deploy_tools/narrow_lib/inventory_keys.py`). Three rules differ from the secrets
+  half:
+  - A file under a role's `files/` is copied verbatim, so naming a key there reads nothing.
+    The same holds for a file a role ships from outside its tree, such as
+    `hosts/lib/host_lib.py`: `narrow_setup.inventory_tags` reads a shipped file only when it
+    is a `defaults/`, `vars/`, `templates/` or `tasks/` YAML file (#6970).
+  - An inventory value built from the key is followed to its own readers instead of
+    refusing.
+  - Nothing refuses. A play or a k8s-only shared template reading the key renders no setup
+    role. A shared template carries the key to the setup-role files that include it, and a
+    `hosts.ini` inline variable carries it to that variable's readers. A refusal here would
+    route nothing and record nothing, which is the silence #6962 reports. So the half fails
+    only on an unparsable inventory file or a failed `git`, and the tick then parks and
+    retries. A refusal from the secrets half keeps the inventory half's readers, and the
+    journal names it.
+
+  `narrow_setup.role_tags` narrows each routed role to the tags of its readers of the key,
+  where a secret takes the whole-role tag. That keeps `k3s` on its cron tags rather than on
+  `--tags k3s`, which arms the control-plane restart.
 - **A k8s role reading a changed secret is applied on a range with no deploy-plane path**
   (#5577). The narrowing above runs only when a deploy-plane path sends the range to it, so
   until #5577 a rotation alone merged, paged, and left every k8s reader on the old value.
@@ -1077,9 +1103,6 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     `readinessProbe`.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`.** Without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
-  - **A Pi Docker change riding along does not defer the bump.** No `has_gitops` host applies a
-    Pi role, so there is no Docker deploy for the k8s branch to skip. `deploy_handlers.log_pi_changes`
-    names whichever Pi shape rode along, from each handler's own ff-merge.
 
   **A k8s change that is not an eligible bump defers.** A path under `roles/k8s/**` that is not an
   eligible image-pin bump lands in `ChangeSet.k8s` (`deploy_logic.role_of` matches the whole role
@@ -1126,13 +1149,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   A merely unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
 - Each `has_gitops` host runs its own independent instance of this deployer, with its own git
   clone, state dir and lock. Only daniel-box has one.
-  - **By design, Pi-only services are NOT auto-deployed by GitOps.** The Pi has
-    `has_gitops: false`, and no GitOps or CI deploy path reaches daniel-pi. A change under
-    `roles/containers/` ff-merges and the tick logs the role it did not deploy. The Pi is a
-    memory-constrained Zero 2 W driven manually over SSH, and a Renovate image bump to a Pi
-    service is rare. Deploy to the Pi by hand: `./scripts/deploy.sh --tags <svc> -e
-    target=daniel-pi`. A Pi-side deployer or a CI cross-host gate is worth revisiting only if
-    Pi-service churn makes the manual step a real miss.
+  - **By design, the Pi's services are NOT deployed by this tick.** The Pi has
+    `has_gitops: false`, and its Compose services ship in its `homelab-daniel-pi` package,
+    which the Pi installs itself. `docs/target-architecture/host/h5-pi-compose.md` is the
+    plan that moved them there, and `land.sh` waits for the Pi to apply a merge that changes
+    its package.
 
 ### The `k8s_deferred` and `k8s_unapplied` markers, in full
 

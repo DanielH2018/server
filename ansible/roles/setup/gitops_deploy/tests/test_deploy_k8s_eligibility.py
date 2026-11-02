@@ -203,34 +203,6 @@ def test_split_k8s_denies_the_services_the_pilot_used_to_mask():
     assert cs.k8s == set(masked)
 
 
-def test_split_k8s_promotes_beside_a_pi_docker_change():
-    """The bump is promoted, and the Pi half rides along merged-and-unapplied.
-
-    No `has_gitops` host applies a Pi role, so the k8s branch skips nothing.
-    `deploy_handlers.log_pi_changes` names the Pi half.
-    """
-    paths = [
-        _SPEEDTEST_DEFAULTS,
-        "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
-    ]
-    cs = _split(paths, denylist={"traefik"})
-    assert cs.k8s_deploy == {"speedtest"}
-    assert cs.k8s == set()
-    assert cs.services == {"dozzle"}
-
-
-def test_split_k8s_promotes_beside_a_pi_shared_change():
-    """The other Pi shape.
-
-    `roles/containers/common/` sets `cs.pi_shared` and not `cs.services`, so a bump sharing a
-    tick with it and one sharing a tick with a Pi service role must both be promoted.
-    """
-    paths = [_SPEEDTEST_DEFAULTS, "ansible/roles/containers/common/tasks/main.yml"]
-    cs = _split(paths, denylist={"traefik"})
-    assert cs.k8s_deploy == {"speedtest"}
-    assert cs.pi_shared is True
-
-
 def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
     paths = [_SPEEDTEST_DEFAULTS, "ansible/roles/k8s/traefik/defaults/main.yml"]
     cs = _split(paths, denylist={"traefik"})

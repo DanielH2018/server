@@ -30,7 +30,7 @@ _sys.path.insert(0, str(HOST_LIB_FILES))
 def is_prose(path: str) -> bool:
     """Whether a changed path is documentation no playbook applies.
 
-    `narrow_broad.PLAY_PREFIXES` matches by DIRECTORY, so `roles/containers/common/CLAUDE.md`
+    `narrow_broad.PLAY_PREFIXES` matches by DIRECTORY, so a role's `CLAUDE.md`
     refused under "is read by every deploy" and widened the tick to a full `ansible/deploy.yml`
     — 14 minutes for prose (#2448). `land_tags.role_for` drops a `.md` for the same reason,
     and so does `narrow_broad._sort_hits` for a grep hit.

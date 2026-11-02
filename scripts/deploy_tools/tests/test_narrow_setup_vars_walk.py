@@ -490,12 +490,14 @@ def test_the_real_h1_4_range_narrows_below_the_k3s_role_tag(capsys):
     """The range whose `manual_plane` line recorded `"tags": []` (#5930), from history.
 
     The range deleted only the `coredns` instance from `stale-checkout-guard.yml`. Before the
-    per-task diff (#6234) the surviving Longhorn instances' tags stood in for it.
+    per-task diff (#6234) the surviving Longhorn instances' tags stood in for it. The range
+    also added a `containers_list` entry, which the role's Longhorn volume lists derive from,
+    so those tags join it (#6962).
     """
     got = narrow_setup.role_tags(
         "k3s", "k3s", "225de93f5^", "225de93f5", str(REPO), "ansible/k3s-bringup.yml"
     )
-    assert got == frozenset({"coredns"})
+    assert got == frozenset({"coredns", "longhorn", "longhorn_backup", "longhorn_r2"})
     err = capsys.readouterr().err
     assert "narrow-setup: tasks/stale-checkout-guard.yml -> coredns\n" in err
     assert "narrow-setup: defaults/main.yml -> coredns\n" in err
