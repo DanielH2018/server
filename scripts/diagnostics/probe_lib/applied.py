@@ -13,6 +13,11 @@ are separate plays, as k3s's are, is walked half by half (#6475). The rows:
   `secrets.yml` renders as `STUB` here. rootq refuses to hash a credential file, whose row
   says `content not compared: credential file`. rootq's `stat` still answers mode and owner
   for a credential file on its allowlist (#6369), so those are compared;
+- a STUB render is compared with the hash the apply recorded instead, when it recorded one:
+  one `<hex>  <path>` line per file in `RECORD_DIR/<role>`, as `sha256sum` prints it. That
+  catches a hand edit after the apply, not a change between HEAD and the last apply (#6913).
+  A host with such a file costs one more read, of the record, made before its stat read so
+  `rootq matches` gets the recorded hash;
 - `DRIFT`: missing, present where an absent arm removes it, or a declared field or the
   content differs;
 - `UNCHECKED`: a credential file rootq refused even to stat, so nothing about it was
@@ -45,18 +50,20 @@ The render is the working tree's, so commit or stash first to check `HEAD`.
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
 # pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE the imports below.
+import re
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
+from dataclasses import replace
 from functools import cache
 from pathlib import Path
 
 from deploy_tools.setup_lib.setup_gates import HOSTS
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib.applied_hosts import task_files
-from diagnostics.probe_lib.applied_facts import STUB
+from diagnostics.probe_lib.applied_facts import STUB, STUB_RENDER
 from diagnostics.probe_lib.applied_tasks import Skip, Want, expected, reads
 from diagnostics.probe_lib.host_reader import dry_run_text, read_host
 from lib import yaml_fast
@@ -73,6 +80,9 @@ SECRETS = ANSIBLE / "vars" / "secrets.yml"
 # rootq's refusals of a credential file, whose hash would be a guessing oracle for it. A
 # refused hash reads ok-meta, `credential file`; a refused stat reads UNCHECKED.
 CREDENTIAL_REFUSALS = ("is on the deny list", "matches a credential pattern")
+# Where the apply records each STUB render's SHA-256, one file per role.
+RECORD_DIR = "/var/lib/homelab/setup-applied-sha256.d"
+_HEX = re.compile(r"^[0-9a-f]{64}$")
 
 APPLIED_HELP = (
     "whether a setup role's files on each host its playbook admits match the working "
@@ -140,6 +150,25 @@ def credential_refusal(live: dict) -> str | None:
     return reason if any(r in reason for r in CREDENTIAL_REFUSALS) else None
 
 
+def with_record(wants: list[Want], text: str | None) -> list[Want]:
+    """`wants` with each STUB render's hash taken from the apply record `text`."""
+    hashes = {}
+    for line in (text or "").splitlines():
+        hex_, _, path = line.partition("  ")
+        if _HEX.match(hex_) and path.strip():
+            hashes[path.strip()] = hex_
+    out = []
+    for want in wants:
+        if want.why_no_content != STUB_RENDER:
+            out.append(want)
+        elif want.path in hashes:
+            out.append(replace(want, sha256=hashes[want.path], why_no_content="", recorded=True))  # fmt: skip
+        else:
+            why = f"{STUB_RENDER}, and no apply record holds its hash"
+            out.append(replace(want, why_no_content=why))
+    return out
+
+
 def compare(want: Want, live: dict, user: str) -> tuple[str, str]:
     """(status, detail) for one path; `live` is `host_reader`'s stat row for it."""
     status = live.get("status")
@@ -174,11 +203,13 @@ def compare(want: Want, live: dict, user: str) -> tuple[str, str]:
     same = live.get("match")
     if want.sha256 is not None and live.get("sha256") is not None:
         same = live["sha256"] == want.sha256
+    source = "the apply record" if want.recorded else "the render"
     if want.sha256 is not None and same is not None:
         if not same:
-            diffs.append("content differs from the render")
+            diffs.append(f"content differs from {source}")
         elif not diffs:
-            return "ok", f"{meta}, content matches"
+            tail = " the apply record" if want.recorded else ""
+            return "ok", f"{meta}, content matches{tail}"
     if diffs:
         return "DRIFT", "; ".join(diffs)
     if want.unchecked:
@@ -273,6 +304,16 @@ def run_applied(
     compared = False
     for host in sorted(hosts, key=lambda h: h not in carried):
         wants, skips = expected(role_dir, host, ctxs[host], tuple(hosts[host]), texts)
+        if any(w.why_no_content == STUB_RENDER for w in wants):
+            record = f"{RECORD_DIR}/{ns.role}"
+            if ns.dry_run:
+                print(dry_run_text({"files": [record]}, host))
+            elif (host, record) not in texts:
+                try:
+                    take_texts(host, read({"files": [record]}, host), texts)
+                except core.Unreadable as exc:
+                    print(f"applied: {exc.message}, so no STUB render is compared with its apply record")  # fmt: skip
+            wants = with_record(wants, texts.get((host, record)))
         # A path two tasks write takes the hash of the one that has one.
         asks = {w.path: w.sha256 for w in sorted(wants, key=lambda w: bool(w.sha256))}
         request = {"stat": sorted(asks), "rootq": asks}

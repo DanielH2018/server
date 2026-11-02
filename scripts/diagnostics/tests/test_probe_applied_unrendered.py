@@ -203,3 +203,34 @@ def test_k8s_host_files_compares_the_registry_gc_rows_rather_than_reading_ok_met
     applied.run_applied(ns, read=_reader(wants, live, record))
     status, line = _rows(capsys.readouterr().out)[path]
     assert status == "ok", line
+
+
+def test_a_root_only_stub_render_is_compared_through_rootq_with_the_recorded_hash(
+    tmp_path, capsys
+):
+    """The live file is unreadable as this user, so the record's hash must reach `rootq`."""
+    live = {"/etc/x/token": APPLIED_TOKEN}
+    record = _record("x", {"/etc/x/token": APPLIED_TOKEN})
+    role = tmp_path / "x"
+    for sub, name, text in (
+        ("tasks", "main.yml", STUB_TASK),
+        ("templates", "token.j2", "token={{ x_api_token }}\n"),
+    ):
+        (role / sub).mkdir(parents=True, exist_ok=True)
+        (role / sub / name).write_text(text)
+    wants, _ = applied_tasks.expected(role, "daniel-box", STUB_CTX)
+    inner = _reader(wants, live, record)
+
+    def read(plan, host):
+        doc = inner(plan, host)
+        for row in doc["stat"].values():
+            row.pop("sha256", None)
+        return doc
+
+    ns = SimpleNamespace(role="x", host="daniel-box", dry_run=False)
+    code = applied.run_applied(
+        ns, read=read, setup=tmp_path, render_ctx=lambda role_dir, host: STUB_CTX
+    )
+    status, line = _rows(capsys.readouterr().out)["/etc/x/token"]
+    assert (status, code) == ("ok", PROBE_OK), line
+    assert line.endswith("content matches the apply record"), line

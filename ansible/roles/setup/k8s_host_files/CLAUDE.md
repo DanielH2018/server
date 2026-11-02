@@ -54,7 +54,10 @@ retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` mani
 reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
 manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. #6536 added the
 dockerhub-mirror's Job manifest, `templates/dockerhub-mirror-gc-job.yaml.j2`, which the same
-script applies in a second phase. crowdsec's first conversion
+script applies in a second phase. #6913 added the record of `registry-gc.sh`'s SHA-256 in
+`/var/lib/homelab/setup-applied-sha256.d/k8s_host_files`. `probe.py applied` compares the
+live script with that record, because the script's render holds the Kuma push token as a
+STUB. crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installed the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. H5.14 moved those into the Pi package
 (`hosts/components/crowdsec-probe/`) and deleted the tasks, so no timer is left here.
