@@ -427,21 +427,24 @@ _LIBRARY_EXEMPT: dict[str, str] = {
 }
 
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
-# changed. Every one is a template that can invoke curl against a push URL.
+# changed. Both are shell scripts that source kuma-push-lib.sh, so they also anchor
+# test_every_shell_push_script_sources_the_shared_library: it skips every file that is not a
+# `.sh.j2`, and would pass on an empty corpus. M6 batch B6c's Cutover-2 took registry-gc.sh.j2,
+# the member that stood here, out of the corpus. B9's Cutover-2 takes these two out, and the
+# same commit then has to re-decide this set and the anchor.
 _EXPECTED_IN_CORPUS = {
-    "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
+    "ansible/roles/setup/initial_setup/templates/aide-check.sh.j2",
+    "ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2",
 }
 
 # The corpus also holds templates that carry a push URL but invoke no curl of their own, such as
 # the authelia bypass regex. They are counted rather than named, so the floor is what watches
-# them. 3 against a measured 5 (2026-11-01, after M6's B6b cutover stopped the crowdsec
-# sidecar and the configarr and janitorr health CronJobs pushing, and B2's and B4's setup-plane
-# Cutover-2 dropped ten scripts and four environment files) keeps the slack M3 chose: about
-# two-thirds of the real count, as 23 against 37 after its PR 5 dropped disk-health.sh.j2. The
-# five left are authelia's config-secret, loki-homelab's config.alloy, the aide and rkhunter
-# checks and registry-gc.sh.j2. A slacker floor would let three of them vanish before anything
-# went red. When a later M6 batch shrinks the corpus again, re-measure rather than estimate,
-# because a floor above the real count fails master CI.
+# them. 3 against a measured 4 (2026-11-02, after M6 batch B6c's Cutover-2 dropped the push from
+# registry-gc.sh.j2) keeps the slack M3 chose: about two-thirds of the real count, as 23 against
+# 37 after its PR 5 dropped disk-health.sh.j2. The four left are authelia's config-secret,
+# loki-homelab's config.alloy and the aide and rkhunter checks. A slacker floor would let two of
+# them vanish before anything went red. When a later M6 batch shrinks the corpus again,
+# re-measure rather than estimate, because a floor above the real count fails master CI.
 _MIN_CORPUS = 3
 
 

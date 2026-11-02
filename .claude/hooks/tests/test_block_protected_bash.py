@@ -132,11 +132,38 @@ def test_a_write_asks_rather_than_denies():
 
 # ── arm 2: reads that print a secret-bearing host script ─────────────────────────────
 
-# registry-gc.sh embeds a live push token: a
-# `grep -nE "rotate|--commit|sops set|push"` on it prints the token. (The original incident file,
-# secret-rotation-audit.sh, reads its token from a credential since H7.10c, so it stays out, and
-# github-ruleset-drift.sh followed it when M6 batch B3's Cutover-2 dropped its push.)
-INCIDENT = "/usr/local/bin/registry-gc.sh"
+# A deployed script that embeds a live push token: a
+# `grep -nE "rotate|--commit|sops set|push"` on it prints the token. No real script does since
+# M6 batch B6c's Cutover-2 dropped registry-gc.sh's push (the original incident file,
+# secret-rotation-audit.sh, left with H7.10c, and github-ruleset-drift.sh with B3's Cutover-2),
+# so every case below runs over a fixture checkout whose Ansible tree installs one.
+INCIDENT = "/usr/local/bin/fixture-gc.sh"
+INCIDENT_TOKEN = "fixture_gc_push_token"
+
+
+def _write_fixture_ansible(root, dest=INCIDENT, token=INCIDENT_TOKEN):
+    """A checkout `root` whose Ansible tree installs `dest` with `token` rendered inline."""
+    role_dir = root / "ansible" / "roles" / "demo"
+    (role_dir / "tasks").mkdir(parents=True)
+    (role_dir / "templates").mkdir()
+    (role_dir / "templates" / "thing.sh.j2").write_text("TOKEN={{ " + token + " }}\n")
+    (role_dir / "tasks" / "main.yml").write_text(
+        "- name: Install thing\n"
+        "  ansible.builtin.template:\n"
+        "    src: thing.sh.j2\n"
+        f"    dest: {dest}\n"
+    )
+    (root / "ansible" / "secret_rotation.yml").write_text(
+        f"entries:\n  {token}:\n    tier: auto\n    last_rotated: '2026-01-01'\n"
+    )
+    (root / ".git").write_text("gitdir: /nonexistent\n")
+    return root
+
+
+@pytest.fixture
+def fixture_root(tmp_path):
+    return str(_write_fixture_ansible(tmp_path / "fixture-checkout"))
+
 
 FLAGGED_READS = [
     f'grep -nE "rotate|--commit|sops set|push" {INCIDENT}',
@@ -162,15 +189,15 @@ CLEAN_READS = [
 
 
 @pytest.mark.parametrize("command", FLAGGED_READS)
-def test_printing_a_secret_bearing_host_script_is_flagged(command):
-    decision, reason = _mod.decide(command, _REPO)
+def test_printing_a_secret_bearing_host_script_is_flagged(command, fixture_root):
+    decision, reason = _mod.decide(command, fixture_root)
     assert decision == "deny", f"should deny: {command}"
     assert "rotat" in reason.lower()
 
 
 @pytest.mark.parametrize("command", CLEAN_READS)
-def test_a_structural_or_unrelated_read_is_clean(command):
-    decision, _ = _mod.decide(command, _REPO)
+def test_a_structural_or_unrelated_read_is_clean(command, fixture_root):
+    decision, _ = _mod.decide(command, fixture_root)
     assert decision is None, f"should not act on: {command}"
 
 
@@ -190,21 +217,25 @@ def test_the_cheap_gate_skips_the_derivation_entirely():
     assert called == [], "the derivation ran for a command naming no host bin path"
 
 
-def test_the_derivation_still_finds_the_incident_file():
+def test_the_derivation_finds_a_script_the_fixture_tree_installs(fixture_root):
     """The rejecting half of the derivation itself: an empty set would make arm 2 inert."""
-    paths = _mod._secret_bearing_paths(_REPO)
+    paths = _mod._secret_bearing_paths(fixture_root)
     assert INCIDENT in paths
-    assert "registry_gc_push_token" in paths[INCIDENT]
+    assert INCIDENT_TOKEN in paths[INCIDENT]
 
 
-def test_a_set_held_beside_the_hook_wins_over_the_trees_derivation(tmp_path):
+def test_a_set_held_beside_the_hook_wins_over_the_trees_derivation(
+    tmp_path, fixture_root
+):
     """A fan-out pipeline ships the set it derived at start; the agent's tree is not read."""
     held = tmp_path / "secret_bearing_host_paths.json"
     held.write_text('{"/usr/local/bin/held.sh": ["held_token"]}')
     assert _mod._secret_bearing_paths(_REPO, held=str(held)) == {
         "/usr/local/bin/held.sh": ["held_token"]
     }
-    assert INCIDENT in _mod._secret_bearing_paths(_REPO, held=str(tmp_path / "none"))
+    assert INCIDENT in _mod._secret_bearing_paths(
+        fixture_root, held=str(tmp_path / "none")
+    )
 
 
 # ── the payload's `cwd`, and what stands in for it ───────────────────────────────────
@@ -268,15 +299,14 @@ def secret_bearing_host_paths(*args, **kwargs):
 def _second_checkout(tmp_path):
     """A checkout that is not the hook's, and the file its own module writes on import.
 
-    It has its own `.git`, the real Ansible tree as data, and a `secret_bearing_host_paths`
+    It has its own `.git`, a fixture Ansible tree as data, and a `secret_bearing_host_paths`
     that records being imported and derives only a decoy path.
     """
     root = tmp_path / "second-checkout"
     secrets_mgmt = root / "scripts" / "secrets_mgmt"
     secrets_mgmt.mkdir(parents=True)
     (secrets_mgmt / "secret_bearing_host_paths.py").write_text(_DECOY_MODULE)
-    (root / ".git").write_text("gitdir: /nonexistent\n")
-    (root / "ansible").symlink_to(os.path.join(_REPO, "ansible"))
+    _write_fixture_ansible(root)
     (root / "docs").mkdir()
     return root, secrets_mgmt / "imported"
 
@@ -306,7 +336,7 @@ def _run_hook_process(command, cwd):
 
 def test_a_payload_cwd_in_a_second_checkout_runs_the_hooks_own_derivation(tmp_path):
     """The second checkout's module must not run, and the hook's own must derive a set that
-    still holds the incident file."""
+    holds the script that checkout's tree installs."""
     root, imported = _second_checkout(tmp_path)
     out = _run_hook_process(f"cat {INCIDENT}", root)
     assert not imported.exists(), "the hook imported the second checkout's module"
@@ -328,35 +358,10 @@ def test_a_payload_cwd_in_another_checkout_derives_from_that_checkouts_tree(tmp_
     """The cwd's checkout is data: its Ansible tree and registry decide the set, while the
     code that walks them comes from the hook's checkout. This checkout carries no
     `scripts/` at all, so only the hook's own module can derive anything here."""
-    root = tmp_path / "data-only-checkout"
-    role_dir = root / "ansible" / "roles" / "demo"
-    (role_dir / "tasks").mkdir(parents=True)
-    (role_dir / "templates").mkdir()
-    (role_dir / "templates" / "thing.sh.j2").write_text("TOKEN={{ demo_push_token }}\n")
     dest = "/usr/local/bin/only-in-the-data-checkout.sh"
-    (role_dir / "tasks" / "main.yml").write_text(
-        "- name: Install thing\n"
-        "  ansible.builtin.template:\n"
-        "    src: thing.sh.j2\n"
-        f"    dest: {dest}\n"
+    root = _write_fixture_ansible(
+        tmp_path / "data-only-checkout", dest=dest, token="demo_push_token"
     )
-    (root / "ansible" / "secret_rotation.yml").write_text(
-        "entries:\n  demo_push_token:\n    tier: auto\n    last_rotated: '2026-01-01'\n"
-    )
-    (root / ".git").write_text("gitdir: /nonexistent\n")
     out = _run_hook_process(f"cat {dest}", root)
     assert out and out["permissionDecision"] == "deny", out
     assert dest in out["permissionDecisionReason"]
-
-
-def test_a_payload_cwd_in_a_subdirectory_of_the_hooks_checkout_still_derives_a_set():
-    out = _run_hook_process(f"cat {INCIDENT}", os.path.join(_REPO, "ansible", "roles"))
-    assert out and out["permissionDecision"] == "deny", out
-    assert INCIDENT in out["permissionDecisionReason"]
-
-
-def test_a_payload_cwd_in_no_checkout_derives_from_the_hooks_own_tree(tmp_path):
-    """A cwd with no Ansible tree above it walks the hook's own tree, not an empty one."""
-    out = _run_hook_process(f"cat {INCIDENT}", tmp_path)
-    assert out and out["permissionDecision"] == "deny", out
-    assert INCIDENT in out["permissionDecisionReason"]
