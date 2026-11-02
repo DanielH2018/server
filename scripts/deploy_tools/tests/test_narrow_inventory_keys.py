@@ -170,6 +170,34 @@ def test_a_key_a_shipped_verbatim_file_names_adds_no_tag(tree, monkeypatch):
     assert narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"')) == frozenset({"alpha"})
 
 
+def _secret_moves_beside_the_key(tree: Tree) -> tuple[str, str]:
+    """The range moves `s_key` in `secrets.yml` and `host_python_version` in the inventory."""
+    secrets = "s_key: ENC[AES256_GCM,data:aaa]\nsops:\n    mac: m1\n"
+    tree.write(SECRETS, secrets)
+    tree.commit("a secret")
+    tree.write(SECRETS, secrets.replace("aaa", "bbb").replace("m1", "m2"))
+    return _moved(tree, '"3.14.6"', '"3.15.2"')
+
+
+def test_a_secret_a_shipped_verbatim_file_names_keeps_the_narrow_answer(
+    tree, monkeypatch
+):
+    """`hosts/lib/host_lib.py` is copied as is, so its docstring reads no secret (#6992)."""
+    _beta_ships(tree, monkeypatch, "hosts/lib/host_lib.py", '"""Reads s_key."""\n')
+    assert narrow(tree, *_secret_moves_beside_the_key(tree)) == frozenset({"alpha"})
+
+
+def test_a_secret_a_shipped_template_names_widens_to_the_whole_role(tree, monkeypatch):
+    _beta_ships(
+        tree,
+        monkeypatch,
+        "ansible/roles/setup/common/templates/s.env.j2",
+        "S={{ s_key }}\n",
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match="s_key"):
+        narrow(tree, *_secret_moves_beside_the_key(tree))
+
+
 def test_a_key_a_shipped_template_names_adds_the_shipping_tag(tree, monkeypatch):
     _beta_ships(
         tree,

@@ -393,14 +393,19 @@ def secrets_read(
 ) -> list[str]:
     """The `secrets.yml` keys `old..new` moved that the role reads, sorted (#5436).
 
-    A key named under the role's own tree, or in a file it ships other than a vars file,
-    counts. A shipped `defaults/` or `vars/` file counts only through
-    `secret_keys.reads_through`, as the tick's routing does.
+    A key named under the role's own tree, or in a shipped task file or template, counts. A
+    shipped `defaults/` or `vars/` file counts only through `secret_keys.reads_through`, as
+    the tick's routing does. A shipped file Ansible copies verbatim, such as
+    `hosts/lib/host_lib.py`, does not count (#6992): a secret reaches one only through an env
+    file a template renders, and that template names the key itself.
 
     Raises:
         CannotNarrow: `secrets.yml` does not parse at either ref, or `git grep` failed.
     """
-    own = [index.prefix, *(p for p in shipped if not secret_keys.is_vars_file(p))]
+    own = [
+        index.prefix,
+        *(p for p in shipped if _renders(p) and not secret_keys.is_vars_file(p)),
+    ]
     moved = set(secret_keys.keys_named_in(own, old, new, repo))
     for path in (p for p in shipped if secret_keys.is_vars_file(p)):
         for key in secret_keys.keys_named_in([path], old, new, repo):
