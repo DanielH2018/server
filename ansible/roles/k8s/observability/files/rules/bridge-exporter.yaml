@@ -269,7 +269,7 @@ groups:
           summary: The host-package builder has stopped fetching master or has left a commit unbuilt.
           description: >-
             The builder's last good fetch of master is older than 30 minutes or its series is
-            absent, or a commit of master has waited more than 11760 seconds to be built. The
+            absent, or a commit of master has waited more than 90060 seconds to be built. The
             monitor-bridge log names the builder's reason and sha, and the builder's pages in
             docs/host-packages.md have the fix for each reason.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/

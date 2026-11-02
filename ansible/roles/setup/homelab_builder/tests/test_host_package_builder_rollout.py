@@ -10,7 +10,6 @@ Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_host_package_b
 
 import json
 import re
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -29,8 +28,6 @@ from test_host_package_builder import (
 )
 
 URLS = "http://127.0.0.1:9090 http://10.43.0.9:9090"
-# Inside the Pi's 23:00 to 00:59 gap, where #6524's publish landed.
-QUIET = datetime(2026, 10, 28, 23, 8, 33, tzinfo=UTC).timestamp()
 
 
 class HostsBuilder(FixtureBuilder):
@@ -127,7 +124,7 @@ def lab(tmp_path):
 
 @pytest.fixture
 def opened(lab):
-    """A lab whose first run changed the Pi's and the server's packages: the gate is open."""
+    """A lab whose first run changed the Pi's and the server's packages: the server's gate is open."""
     origin, state, etc, _ = lab
     edit(origin, "daniel-pi", "pi 1")
     v = edit(origin, "daniel-server", "server 1")
@@ -141,11 +138,11 @@ def test_two_changed_host_packages_stage_the_canary_and_the_shared_one(opened):
     _, _, v, state, _ = opened
     # The first run also built the shared updater, which the gate never holds back.
     assert json.loads((state / "state.json").read_text())["staged"] == [
-        "hosts/daniel-pi",
+        "hosts/daniel-server",
         "packages/homelab-updater",
     ]
     assert json.loads((state / "state.json").read_text())["deferred"] == [
-        "hosts/daniel-server"
+        "hosts/daniel-pi"
     ]
     reason, sha, since = metric(state)
     assert (reason, sha) == ("canary", v[:12])
@@ -163,9 +160,9 @@ def test_a_single_changed_host_package_opens_no_gate(lab):
 
 def test_the_canary_reporting_at_the_gate_s_version_builds_the_deferred_package(opened):
     lab, prom, v, state, _ = opened
-    prom.applied["daniel-pi"], prom.reconcile["daniel-pi"] = v[:12], 1
+    prom.applied["daniel-server"], prom.reconcile["daniel-server"] = v[:12], 1
     run(lab, prom)
-    assert debs(state) == ["homelab-daniel-server"]
+    assert debs(state) == ["homelab-daniel-pi"]
     # The deferred package names the commit that staged/chosen names, as the signer requires.
     assert (state / "staged" / "chosen").read_text() == v[:12] + "\n"
     assert metric(state)[0] == "ok"
@@ -175,8 +172,8 @@ def test_the_canary_reporting_at_the_gate_s_version_builds_the_deferred_package(
 def test_a_canary_not_yet_settled_leaves_the_gate_open(opened, case):
     lab, prom, v, state, _ = opened
     older = git(lab[0].path, "rev-parse", f"{v}~1")[:12]
-    prom.applied["daniel-pi"] = older if case == "older-sha" else v[:12]
-    prom.reconcile["daniel-pi"] = 0 if case == "reconcile-0" else 1
+    prom.applied["daniel-server"] = older if case == "older-sha" else v[:12]
+    prom.reconcile["daniel-server"] = 0 if case == "reconcile-0" else 1
     if case == "no-series":
         prom.applied.clear()
     run(lab, prom)
@@ -187,10 +184,10 @@ def test_a_canary_not_yet_settled_leaves_the_gate_open(opened, case):
 def test_a_canary_at_a_descendant_closes_the_gate(opened):
     lab, prom, _v, state, _ = opened
     newer = edit(lab[0], "daniel-box", "box 1")
-    prom.applied["daniel-pi"], prom.reconcile["daniel-pi"] = newer[:12], 1
+    prom.applied["daniel-server"], prom.reconcile["daniel-server"] = newer[:12], 1
     # The tip moved, so this run builds the new commit and every package still owed.
     run(lab, prom)
-    assert "homelab-daniel-server" in debs(state)
+    assert "homelab-daniel-pi" in debs(state)
 
 
 def test_a_gate_closing_behind_a_pending_commit_builds_the_deferred_package_at_the_last_build(
@@ -198,16 +195,16 @@ def test_a_gate_closing_behind_a_pending_commit_builds_the_deferred_package_at_t
 ):
     lab, prom, v, state, _ = opened
     newer = edit(lab[0], "daniel-box", "box 1")
-    prom.applied["daniel-pi"], prom.reconcile["daniel-pi"] = v[:12], 1
+    prom.applied["daniel-server"], prom.reconcile["daniel-server"] = v[:12], 1
     run(lab, prom, pending=newer)
-    assert debs(state) == ["homelab-daniel-server"]
+    assert debs(state) == ["homelab-daniel-pi"]
     assert (state / "staged" / "chosen").read_text() == v[:12] + "\n"
     assert json.loads((state / "state.json").read_text())["deferred"] == []
 
 
 def test_no_answer_on_either_address_keeps_the_gate_open(opened):
     lab, prom, v, state, _ = opened
-    prom.applied["daniel-pi"], prom.reconcile["daniel-pi"] = v[:12], 1
+    prom.applied["daniel-server"], prom.reconcile["daniel-server"] = v[:12], 1
     prom.refuse = set(URLS.split())
     run(lab, prom)
     assert debs(state) == []
@@ -217,17 +214,17 @@ def test_no_answer_on_either_address_keeps_the_gate_open(opened):
 
 def test_a_refused_loopback_falls_back_to_the_cluster_ip(opened):
     lab, prom, v, state, _ = opened
-    prom.applied["daniel-pi"], prom.reconcile["daniel-pi"] = v[:12], 1
+    prom.applied["daniel-server"], prom.reconcile["daniel-server"] = v[:12], 1
     prom.refuse = {"http://127.0.0.1:9090"}
     run(lab, prom)
-    assert debs(state) == ["homelab-daniel-server"]
+    assert debs(state) == ["homelab-daniel-pi"]
 
 
 def test_a_release_file_naming_the_gate_s_commit_closes_it(opened):
     lab, prom, v, state, etc = opened
     (etc / "release").write_text(v + "\n")
     run(lab, prom)
-    assert debs(state) == ["homelab-daniel-server"]
+    assert debs(state) == ["homelab-daniel-pi"]
     assert prom.asked == [], "the override closes the gate before Prometheus is asked"
 
 
@@ -243,7 +240,7 @@ def test_a_release_file_naming_a_descendant_closes_it(opened):
     lab, prom, _v, state, etc = opened
     (etc / "release").write_text(edit(lab[0], "daniel-box", "box 1") + "\n")
     run(lab, prom)
-    assert "homelab-daniel-server" in debs(state)
+    assert "homelab-daniel-pi" in debs(state)
 
 
 @pytest.mark.parametrize("text", ["", "not-a-sha\n", "--all\n"])
@@ -256,27 +253,21 @@ def test_a_release_file_that_is_not_a_sha_leaves_it_open(opened, text):
 
 def test_a_newer_canary_version_moves_the_gate(opened):
     lab, prom, _v, state, _ = opened
-    newer = edit(lab[0], "daniel-pi", "pi 2")
+    newer = edit(lab[0], "daniel-server", "server 2")
     run(lab, prom)
-    assert debs(state) == ["homelab-daniel-pi"]
+    assert debs(state) == ["homelab-daniel-server"]
     assert metric(state)[:2] == ("canary", newer[:12])
     assert json.loads((state / "state.json").read_text())["gate"]["sha"] == newer
-
-
-def test_without_the_pi_s_package_daniel_server_is_the_canary(lab):
-    origin, state, _, _ = lab
-    edit(origin, "daniel-box", "box 1")
-    edit(origin, "daniel-server", "server 1")
-    run(lab, Prom())
-    assert debs(state) == ["homelab-daniel-server", "homelab-updater"]
-    assert json.loads((state / "state.json").read_text())["gate"]["host"] == (
-        "daniel-server"
-    )
 
 
 @pytest.mark.parametrize(
     ("changed", "staged_now", "deferred"),
     [
+        (
+            ["hosts/daniel-pi", "hosts/daniel-server"],
+            ["hosts/daniel-server"],
+            ["hosts/daniel-pi"],
+        ),
         (
             ["hosts/daniel-box", "hosts/daniel-pi"],
             ["hosts/daniel-pi"],
@@ -300,16 +291,14 @@ def test_the_canary_order_and_the_shared_packages(changed, staged_now, deferred)
     assert (got[0], got[1]) == (staged_now, deferred)
 
 
-def test_the_pi_leads_and_holds_the_gate_through_its_quiet_hours(lab):
-    """#6530: the Pi is the canary at all hours, so a 23:08 publish waits for its 01:05 fire."""
+def test_daniel_server_leads_the_pi_on_its_daily_schedule(lab):
+    """H3.13: the Pi fires once a day, so daniel-server is the canary when both packages change."""
     origin, state, _, _ = lab
     edit(origin, "daniel-pi", "pi 1")
     edit(origin, "daniel-server", "server 1")
     published = edit(origin, "daniel-box", "box 1")
-    run(lab, Prom(), at=QUIET)
-    sign(state)
-    run(lab, Prom(), at=QUIET + 11 * 60)
+    run(lab, Prom())
     saved = json.loads((state / "state.json").read_text())
-    assert saved["gate"] == {"host": "daniel-pi", "sha": published}
-    assert saved["deferred"] == ["hosts/daniel-box", "hosts/daniel-server"]
-    assert debs(state) == []
+    assert saved["gate"] == {"host": "daniel-server", "sha": published}
+    assert saved["deferred"] == ["hosts/daniel-box", "hosts/daniel-pi"]
+    assert debs(state) == ["homelab-daniel-server", "homelab-updater"]

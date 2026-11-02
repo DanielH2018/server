@@ -134,21 +134,21 @@ def test_the_leftover_of_a_followed_copy_stages_the_package_again(lab):
 
 def test_a_deferred_package_leaves_published_so_it_builds_when_the_gate_closes(lab):
     origin, state, etc, _ = lab
-    edit(origin, "daniel-server", "server 1")
-    assert go(lab) == 0, "one changed host package opens no gate"
-    assert "homelab-daniel-server" in debs(state)
-    # No sign(): the signer has not taken the server's deb when the next commit lands.
     edit(origin, "daniel-pi", "pi 1")
+    assert go(lab) == 0, "one changed host package opens no gate"
+    assert "homelab-daniel-pi" in debs(state)
+    # No sign(): the signer has not taken the Pi's deb when the next commit lands.
+    edit(origin, "daniel-server", "server 1")
     gate_sha = edit(origin, "daniel-box", "box 1")
     assert go(lab) == 0
-    assert debs(state) == ["homelab-daniel-pi", "homelab-updater"], "canary alone"
-    assert not (state / "published" / "hosts" / "daniel-server").exists()
+    assert debs(state) == ["homelab-daniel-server", "homelab-updater"], "canary alone"
+    assert not (state / "published" / "hosts" / "daniel-pi").exists()
     sign(state)
 
     (etc / "release").write_text(gate_sha + "\n")
     assert go(lab) == 0
-    # The server is the canary of the gate this run opens, and the box waits behind it.
-    assert debs(state) == ["homelab-daniel-server"]
+    # The Pi is the canary of the gate this run opens, and the box waits behind it.
+    assert debs(state) == ["homelab-daniel-pi"]
 
 
 class FailsAtStage(LinkedBuilder):

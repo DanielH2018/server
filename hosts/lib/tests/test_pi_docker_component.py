@@ -45,7 +45,7 @@ ENGINE_UNIT = "/usr/lib/systemd/system/homelab-docker-engine.service"
 ENGINE_TIMER = "/usr/lib/systemd/system/homelab-docker-engine.timer"
 UPDATER_DROPIN = "/usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf"
 # The Pi's quiet window, in UTC (the Pi's clock). It opens after the midnight cluster (23:55 to
-# 00:10) and closes before the updater resumes at 01:05 and man-db starts at 01:00. The 04:00 to
+# 00:10) and closes before man-db starts at 01:00; the updater's daily fire is 03:05. The 04:00 to
 # 05:59 gap is out: pi-peer-backup pulls at 04:00 or 05:00 UTC and the apt timers run at 04:20
 # and 05:20. The DECIDED comment in units/homelab-docker-engine.timer has the full reasoning.
 QUIET_WINDOW = (15 * 60, 59 * 60 + 59)

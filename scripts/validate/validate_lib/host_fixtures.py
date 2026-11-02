@@ -52,9 +52,9 @@ DROPIN = f"{UNIT_DIR}/{UPDATER}.timer.d/50-homelab.conf"
 # The inventory flag whose false value drops the recovery timer's enable link (H3.8b).
 RECOVERY_FLAG = "optimize_pi_recovery_restart_enabled"
 RECOVERY_TIMER = "homelab-pi-recovery.timer"
-# The real Pi drop-in's minute, and the one its changed copy fires at instead.
-DROPIN_MINUTE = ":05/15:00"
-DROPIN_CHANGED = ":10/15:00"
+# The real Pi drop-in's daily time, and the one its changed copy fires at instead.
+DROPIN_MINUTE = "03:05:00"
+DROPIN_CHANGED = "03:10:00"
 # The public keyring that verifies InRelease, at the top of the published repository. The test
 # image's source names it as /srv/repo/<this>, where the container mounts the repository.
 TEST_KEYRING = "homelab-test-keyring.gpg"

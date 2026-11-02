@@ -30,6 +30,11 @@ from lib.systemd_timer import timer_settings
 MERGE = "a" * 40
 PARENT = "b" * 40
 LINK = "root/usr/lib/systemd/system/timers.target.wants/homelab-updater.timer"
+# The 15-minute schedule with two gaps that the Pi ran before H3.13, kept by the container
+# fixture. The gap and deadline cases below read it; the Pi's own daily drop-in has one case.
+QUARTER_HOUR_DROPIN = (
+    REPO / "hosts/lib/tests/container/fixture/units/updater-timer.conf"
+).read_text()
 PI_DROPIN = (REPO / "hosts/daniel-pi/units/homelab-updater.timer.conf").read_text()
 SHARED_TIMER = (REPO / host_wait.SHARED_TIMER).read_text()
 
@@ -38,8 +43,8 @@ def _at(hour: int, minute: int) -> float:
     return datetime(2026, 10, 17, hour, minute, tzinfo=UTC).timestamp()
 
 
-def _pi(armed: bool = True) -> HostTarget:
-    triggers, delay = timer_settings(SHARED_TIMER, [PI_DROPIN])
+def _pi(armed: bool = True, dropin: str = QUARTER_HOUR_DROPIN) -> HostTarget:
+    triggers, delay = timer_settings(SHARED_TIMER, [dropin])
     return HostTarget("daniel-pi", armed=armed, triggers=triggers, delay=delay)
 
 
@@ -100,7 +105,7 @@ def _nfpm(*depends: str) -> dict:
     return {"nfpm.yaml": ("file", 0o644, f"name: x\ndepends:\n{lines}".encode())}
 
 
-def _dropin(text: str = PI_DROPIN) -> dict:
+def _dropin(text: str = QUARTER_HOUR_DROPIN) -> dict:
     return {str(host_wait.DROPIN): ("file", 0o644, text.encode())}
 
 
@@ -247,7 +252,7 @@ def test_the_real_pi_render_reads_its_drop_in_schedule():
     tree = host_wait.render_host_tree(REPO, "daniel-pi")
     assert tree is not None
     target = host_wait._target("daniel-pi", tree, REPO)
-    assert target.triggers == {"OnCalendar": ["*-*-* 01..03,06..22:05/15:00"]}
+    assert target.triggers == {"OnCalendar": ["*-*-* 03:05:00"]}
     assert target.armed is True
 
 
@@ -433,6 +438,17 @@ def test_a_merge_in_the_pi_quiet_hours_ends_deferred_naming_the_next_fire():
     outcome, sleeps = _wait(_pi(), fetch, [_at(22, 55)])
     assert (outcome.verdict, outcome.rc) == ("deferred", 75)
     assert "next updater fire is at 2026-10-18 01:05 UTC" in outcome.detail
+    assert sleeps == []
+
+
+def test_a_mid_day_merge_on_the_pi_daily_schedule_ends_deferred_naming_the_next_fire():
+    # H3.13's daily drop-in: the next fire after a 12:00 merge is 03:05 the next day, past the
+    # 45-minute rule, so the first query settles it and the operator starts the updater by hand.
+    fetch, _ = _prom(_series(sha="c" * 12))
+    outcome, sleeps = _wait(_pi(dropin=PI_DROPIN), fetch, [_at(12, 0)])
+    assert (outcome.verdict, outcome.rc) == ("deferred", 75)
+    assert "next updater fire is at 2026-10-18 03:05 UTC" in outcome.detail
+    assert "sudo systemctl start homelab-updater.service" in outcome.detail
     assert sleeps == []
 
 

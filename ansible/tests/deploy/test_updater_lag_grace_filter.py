@@ -18,6 +18,10 @@ UNITS = REPO / "hosts/packages/homelab-updater/units"
 TIMER = (UNITS / "homelab-updater.timer").read_text()
 SERVICE = (UNITS / "homelab-updater.service").read_text()
 PI_DROPIN = (REPO / "hosts/daniel-pi/units/homelab-updater.timer.conf").read_text()
+# The 15-minute schedule with two 2h15m gaps the Pi ran before H3.13, kept by the container fixture.
+QUARTER_HOUR_DROPIN = (
+    REPO / "hosts/lib/tests/container/fixture/units/updater-timer.conf"
+).read_text()
 FLOOR_S = 7200
 
 
@@ -27,10 +31,15 @@ def grace(dropin: str, floor=FLOOR_S) -> int:
     )
 
 
-def test_the_pi_schedule_raises_the_grace_past_the_floor():
+def test_a_gapped_schedule_raises_the_grace_past_the_floor():
     # 22:50 to 01:05 is 8100 s, plus 60 s of randomized delay, the 3000 s run timeout and the
     # 600 s slack. A fixed 7200 s grace paged on that wait.
-    assert grace(PI_DROPIN) == 8100 + 60 + 3000 + ulg.SLACK_S == 11760
+    assert grace(QUARTER_HOUR_DROPIN) == 8100 + 60 + 3000 + ulg.SLACK_S == 11760
+
+
+def test_the_pi_daily_schedule_raises_the_grace_past_a_day():
+    # H3.13: one fire a day, so a Pi canary can hold the gate for 86400 s before its run.
+    assert grace(PI_DROPIN) == 86400 + 60 + 3000 + ulg.SLACK_S == 90060
 
 
 def test_the_shared_five_minute_schedule_keeps_the_floor():
@@ -39,7 +48,7 @@ def test_the_shared_five_minute_schedule_keeps_the_floor():
 
 
 def test_a_floor_above_the_schedule_s_need_wins():
-    assert grace(PI_DROPIN, floor="20000") == 20000
+    assert grace(PI_DROPIN, floor="100000") == 100000
 
 
 @pytest.mark.parametrize(

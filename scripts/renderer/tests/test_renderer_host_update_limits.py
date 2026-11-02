@@ -294,9 +294,10 @@ def test_the_engine_pending_window_outlasts_the_pi_schedule_is_clean():
         [PI_UPDATER_DROPIN.read_text()],
         (UPDATER_UNITS / "homelab-updater.service").read_text(),
     )
-    # Named member: 01:05 to the next 00:30 is 84300s, plus the 5400s engine run, the 300s to
-    # the 02:05 updater fire, its 60s delay and its 3000s run.
-    assert needed == 93060
+    # Named member: the 03:05 fire writes 1, the next 00:30 window starts the run, and the
+    # 5400s run ends by 02:00, so the 03:05 fire after it rewrites the 1: 86400s, plus its 60s
+    # delay and its 3000s run.
+    assert needed == 89460
     windows = rule_windows_s(RULES.read_text())
     # The `[26h]` range and the `offset 26h` presence guard.
     assert len(windows) == 2

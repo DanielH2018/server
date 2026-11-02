@@ -121,7 +121,7 @@ def test_a_pi_render_whose_dropin_moved_is_refused(tmp_path):
     head = tmp_path / "head"
     host_mode.write_packages([host_mode.render_host(fx.HOST)], head)
     dropin = head / "hosts" / fx.HOST / f"root{fx.DROPIN}"
-    dropin.write_text(dropin.read_text().replace(fx.DROPIN_MINUTE, ":07/15:00"))
+    dropin.write_text(dropin.read_text().replace(fx.DROPIN_MINUTE, "03:07:00"))
 
     with pytest.raises(ValueError, match="does not fire at"):
         fx.pi_dropin_variant(head, tmp_path / "variant")

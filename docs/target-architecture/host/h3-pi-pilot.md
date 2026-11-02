@@ -96,9 +96,12 @@ printed nothing, and `/usr/lib/homelab/bin/` holds `chezmoi` and `sops`.
 PR H3.12, staged rollout: the PR that carries this line. It adds the gate, the `canary` reason and
 the root-owned `release` override to the builder, and `PROMETHEUS_URLS` to its settings file. It
 changes nothing while the Pi is the only host with a package.
-PR H3.13, the daily fallback: owed. The common path's memory peak crossed the *Risks*
-threshold on 2026-11-02 ([#5206](https://github.com/DanielH2018/server/issues/5206)), and
-[#6911](https://github.com/DanielH2018/server/issues/6911) owes the PR (step H3.13).
+PR H3.13, the daily fallback: the PR that carries this line. The common path's memory peak
+crossed the *Risks* threshold on 2026-11-02
+([#5206](https://github.com/DanielH2018/server/issues/5206)), and
+[#6911](https://github.com/DanielH2018/server/issues/6911) took the fallback. The Pi's updater
+fires once a day at 03:05, not the 00:30 this plan first named, because the engine timer holds
+00:30 (step H3.13).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -638,9 +641,9 @@ The shared timer fires 5 minutes after boot and then every 5 minutes, with
 
 The Pi package overrides it with its drop-in. The drop-in's first line, an empty
 `OnCalendar=`, resets every inherited trigger. Its second line is
-`OnCalendar=*-*-* 01..03,06..22:05/15:00`. So the Pi checks every 15 minutes and skips 23:00
-to 00:59, which holds the midnight cluster, and 04:00 to 05:59, which holds its two apt
-timers. Until PR H3.9b, the Pi package ships no enable link for `homelab-updater.timer`, so
+`OnCalendar=*-*-* 03:05:00`, H3.13's daily fallback. Until H3.13 it was
+`OnCalendar=*-*-* 01..03,06..22:05/15:00`, which checked every 15 minutes and skipped 23:00 to
+00:59, which holds the midnight cluster, and 04:00 to 05:59, which holds its two apt timers. Until PR H3.9b, the Pi package ships no enable link for `homelab-updater.timer`, so
 the updater runs only when the operator starts it. Reconcile's step 3 never starts that timer
 while it is neither enabled nor active, whatever its file or drop-in hash does. H3.9b's link
 reaches the Pi only through an updater run, so the operator starts the first one by hand
@@ -954,7 +957,7 @@ The others publish once the canary reports `homelab_host_reconcile_ok 1` at that
 or when the operator overrides. PR H3.12 adds the gate, which changes nothing until H4
 publishes a second host package.
 
-- **The canary is daniel-pi.** Each host costs something different when a package breaks
+- **The canary is daniel-server.** Each host costs something different when a package breaks
   it:
     - daniel-box runs the builder, the signer and the repository, so a package that breaks
       it can stop the publish of its own fix. It always comes last.
@@ -963,9 +966,9 @@ publishes a second host package.
       it costs off-LAN access until a LAN session repairs it (*Risks*). It is also the
       pilot, and the hostname every container case runs under.
 
-  The order is daniel-pi, daniel-server, daniel-box. When the Pi's package is not in a
+  The order is daniel-server, daniel-pi, daniel-box. When the server's package is not in a
   run's changed set, the first host in that order whose package changed is that run's
-  canary.
+  canary. The Pi led this order until H3.13 put it on the daily fallback schedule.
 - **The gate.** A run that stages the canary's package at version V records V's SHA as an
   open gate in the builder's state. While a gate is open, the builder builds the canary's
   package as usual, and moves the gate to each newer canary version. It builds no other
@@ -981,27 +984,23 @@ publishes a second host package.
 - **An open gate pages.** While a gate is open, the unbuilt-since series carries
   `reason="canary"`, its `sha` names V's commit, and its value is that commit's committer
   time. H3.5c's lag arm fires once the gate stays open past its grace, which is derived from
-  the Pi's schedule and is 11760 seconds (*The Pi canary holds the gate
-  through its quiet hours*, below). A held canary fires `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
+  the Pi's schedule and is 90060 seconds (*The Pi canary holds the gate
+  until its daily fire*, below). A held canary fires `HostReconcileFailed` first. An unreachable Prometheus keeps the gate open, which fails
   closed.
 - **Shared packages are outside the gate.** `homelab-updater` and `homelab-tools` publish
   in the run that builds them, and every host installs them at its next fire (*Open
   questions* 10).
-- **The Pi canary holds the gate through its quiet hours.** The Pi's schedule leaves two 2h15m
-  gaps, 22:50 to 01:05 and 03:50 to 06:05. A Pi package published at 23:08 on 2026-10-28
-  held daniel-server's and daniel-box's packages until 01:12, past the 2-hour lag arm
-  (#6524). PR 6531 passed the Pi over as canary while its updater was in a gap. The operator
-  ruled on 2026-10-29 to keep the Pi as canary at all hours and accept the delay (#6530), so
-  the builder carries no schedule table. The lag arm's grace follows the schedule instead:
+- **The Pi canary holds the gate until its daily fire.** Under the 15-minute schedule the Pi
+  led the order at all hours, and its two 2h15m gaps held the other hosts' packages past the
+  2-hour lag arm (#6524). The operator ruled on 2026-10-29 to keep the Pi as canary and accept
+  that delay (#6530). H3.13 put the Pi on a daily schedule, under which a Pi canary would hold
+  every other host for up to a day, so `CANARY_ORDER` puts daniel-server first (#6911). A run
+  that changes only the Pi's and daniel-box's packages still makes the Pi the canary. The lag
+  arm's grace therefore still follows the Pi's schedule:
   `ansible/filter_plugins/updater_lag_grace.py` renders the larger of
-  `monitor_bridge_builder_max_lag_s` and the Pi's longest gap between fires (8100 s), plus the
+  `monitor_bridge_builder_max_lag_s` and the Pi's longest gap between fires (86400 s), plus the
   timer's `RandomizedDelaySec` (60 s), the updater's `TimeoutStartSec` (3000 s) and 600 s of
-  slack. That is 11760 s. Moving the Pi's drop-in moves the grace with it.
-- **The Pi leads the order only while it fires more than once a day.** Under the daily
-  fallback schedule (*Risks*, apt memory), a Pi canary would hold every other host for up
-  to a day and trip the lag arm. The Pi runs the 15-minute schedule, so `CANARY_ORDER`
-  puts the Pi first. Step H3.13 owns moving daniel-server ahead of it if the fallback is
-  taken.
+  slack. That is 90060 s. Moving the Pi's drop-in moves the grace with it.
 
 ### CI (builds, never signs)
 
@@ -1828,22 +1827,23 @@ says otherwise.
     [#5206](https://github.com/DanielH2018/server/issues/5206) measured the common path at a
     114 MB cgroup peak, above the 95 MB `apt-get -d dist-upgrade` baseline and far above a
     quarter of it. `docs/pi-host-tuning-record.md` *Updater memory peaks (H3.6)* has the
-    figures, and [#6911](https://github.com/DanielH2018/server/issues/6911) owes the
-    follow-up PR. Until it lands, the Pi runs the 15-minute drop-in that H3.9b armed,
-    `hosts/daniel-pi/units/homelab-updater.timer.conf`. The PR that records the peaks
-    decides this step. It applies the threshold and records the verdict in this step. If a
-    peak crosses the threshold, it opens the follow-up that takes the fallback. That
-    follow-up makes every change below in one PR, because each half alone leaves the
-    rollout or the paging wrong:
-    - Move the Pi's drop-in to once a day at 00:30.
-    - Raise daniel-pi's `limit_seconds` in `observability_expected_hosts` past a day, with
-      the matching `HostUpdateStale` rule in `host-checks.yaml`.
-      `scripts/renderer/tests/test_renderer_host_update_limits.py` fails until the limit
-      outlasts the new schedule.
+    figures. [#6911](https://github.com/DanielH2018/server/issues/6911) took the fallback,
+    and every change below lands in one PR, because each half alone leaves the rollout or
+    the paging wrong:
+    - Move the Pi's drop-in, `hosts/daniel-pi/units/homelab-updater.timer.conf`, to once a
+      day at 03:05. The plan first named 00:30, but `homelab-docker-engine.timer` took 00:30
+      on 2026-10-30. On a night a pin moved, the engine unit masks the updater timer with
+      `--now`, which drops a fire due in the same minute, and runs for up to 90 minutes.
+      03:05 is the first slot after that worst case that also clears man-db and the 01:40
+      sweep, and its 50-minute timeout ends before the 04:00 gap.
+    - Raise daniel-pi's `limit_seconds` in `observability_expected_hosts` to 90000, past a
+      day, with the matching `HostUpdateStale` rule in `host-checks.yaml`.
+      `scripts/renderer/tests/test_renderer_host_update_limits.py` fails a limit the new
+      schedule outlasts. `DockerEnginePinUnapplied`'s 26-hour window still covers the
+      24h51m the daily schedule needs.
     - Put daniel-server ahead of daniel-pi in `hosts/lib/builder_rollout_gate.py:CANARY_ORDER`,
       and update *Staged rollout*, `hosts/components/builder/CLAUDE.md`'s *The rollout gate
-      (H3.12)* and the rollout test in the same PR. A daily canary holds every other host
-      for up to a day, and the lag arm pages after 2 hours.
+      (H3.12)* and the rollout test in the same PR.
     - Keep exit observation 4's by-hand route: the operator starts the updater once the
       builder publishes, then re-runs the same `land.sh` command.
 
@@ -2257,8 +2257,8 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - The fallback applies when the install or full-update path peaks above the re-measured
       `apt-get -d dist-upgrade`, or when the common path peaks above a quarter of it. The
       common path runs up to 80 times a day, where the baseline runs once.
-    - The fallback moves the Pi's drop-in to once a day at 00:30. That slot follows the
-      midnight cluster and precedes man-db, the 01:40 sweep and the apt timers. The land host
+    - The fallback moves the Pi's drop-in to once a day at 03:05. That slot follows the
+      00:30 engine run's worst case, man-db and the 01:40 sweep, and precedes the apt timers. The land host
       wait then ends `deferred` for the Pi unless its first query finds the Pi settled. The
       operator meets exit observation 4 by starting the updater by hand after the builder
       publishes, then re-running the same `land.sh` command. The limit test then requires
@@ -2763,7 +2763,7 @@ reviewer's suggested remedy, the reason is given.
   04:00 and 05:59. Both paths are measured in H3.6.
 - **H3-R1-22 (medium) The Pi schedule conflicts with the quiet window and the land wait.**
   Fixed. The schedule is a host-package drop-in that skips 23:00 to 00:59 and 04:00 to 05:59.
-  The daily fallback is 00:30. Land derives its deadline from the schedule, and ends
+  The daily fallback is 03:05. Land derives its deadline from the schedule, and ends
   `deferred` when the next fire is too far.
 - **H3-R1-23 (medium) The trust anchor comes from the candidate, and the key holder runs
   master's code.** Fixed. The keyring ships in the role's `files/`. Signing moves to

@@ -34,8 +34,8 @@ def _run(cfg, fetch_age_s, unbuilt):
 UNITS = REPO / "hosts/packages/homelab-updater/units"
 PI_DROPIN = (REPO / "hosts/daniel-pi/units/homelab-updater.timer.conf").read_text()
 # The longest the Pi's updater can leave a published canary package unapplied: its longest gap
-# between fires (22:50 to 01:05, 8100 s), the timer's randomized delay (60 s) and a run that
-# takes all of TimeoutStartSec (3000 s).
+# between fires (a day, on H3.13's daily drop-in), the timer's randomized delay (60 s) and a run
+# that takes all of TimeoutStartSec (3000 s).
 PI_WAIT_S = longest_gap_s(
     (UNITS / "homelab-updater.timer").read_text(), [PI_DROPIN]
 ) + timeout_start_s((UNITS / "homelab-updater.service").read_text())
@@ -48,7 +48,7 @@ def test_the_bounds_are_the_plans_defaults(cfg):
 
 
 def test_a_wait_through_the_pi_s_longest_gap_is_clean(cfg):
-    # 8100 s of gap alone outlasts the 7200 s floor, and the Pi canary holds the gate that long.
+    # The Pi's gap alone outlasts the 7200 s floor, and a Pi canary holds the gate that long.
     assert PI_WAIT_S > 7200
     ok, msg = _run(cfg, 60, [_unbuilt(NOW - PI_WAIT_S, reason="canary")])
     assert ok, msg

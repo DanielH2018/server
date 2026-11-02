@@ -1,11 +1,11 @@
 """Ansible filter plugin sizing monitor-bridge's builder lag grace from the canary's updater schedule.
 
 The builder holds every host package behind the rollout canary until the canary reports the
-gate's commit (`hosts/lib/builder_rollout_gate.py`), and the canary is daniel-pi at all hours
-(`CANARY_ORDER`, #6530). The Pi's updater timer skips 23:00 to 00:59 and 04:00 to 05:59, so a Pi
-package published just after a fire before a gap waits 2h15m for the next one. The builder's
-unbuilt-since series counts that wait, and monitor-bridge's `host_packages` row pages once it
-passes `BUILDER_MAX_LAG_S`. A fixed 2 hours would page on every such publish.
+gate's commit (`hosts/lib/builder_rollout_gate.py`). daniel-server leads `CANARY_ORDER`, but a
+run that changes only the Pi's and daniel-box's packages makes the Pi the canary (#6911). The Pi's
+updater fires once a day, so a Pi package published just after a fire waits a day for the next
+one. The builder's unbuilt-since series counts that wait, and monitor-bridge's `host_packages`
+row pages once it passes `BUILDER_MAX_LAG_S`. A fixed 2 hours would page on every such publish.
 
 `updater_lag_grace_s` derives the grace from the timer text, never from a number written beside
 it: the longest gap between two fires of the shared `homelab-updater.timer` with the canary's
