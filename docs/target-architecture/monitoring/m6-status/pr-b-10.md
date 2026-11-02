@@ -15,9 +15,8 @@ therefore drops every `kuma:` key in `poll-state.json` and opens no episode for 
 `claude_code_triage_enabled`, which `ansible/inventory/host_vars/daniel-box.yml` sets true and
 `hosts/components/claude-code/defaults/main.yml` leaves false. A render of both host packages
 before the change put the file in `homelab-daniel-box` and not in `homelab-daniel-server`. Item 9's
-**Order** and C-1a's precondition say "both hosts"; the condition that holds is that daniel-box
-runs the package version that carries B-10, because daniel-server has no poller to read the scrape
-job that C-1a deletes.
+**Order** and C-1a's precondition once said "both hosts". They now say daniel-box, because
+daniel-server has no poller to read the scrape job that C-1a deletes.
 
 C-1a's precondition stays open until `land.sh` reports daniel-box applied and the journal of
 `homelab-claude-triage-poll` on daniel-box shows a poll with no `uptime-kuma` query.
