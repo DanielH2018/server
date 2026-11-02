@@ -95,7 +95,7 @@ def linked_worktree(tmp_path: Path) -> tuple[str, str]:
     return str(primary), str(worktree)
 
 
-def test_the_commands_run_in_the_primary_checkout_whichever_tree_invokes_it(
+def test_a_linked_worktree_runs_the_commands_in_its_primary_checkout(
     owe, linked_worktree
 ):
     """A worktree run would install collections where the deployer never loads them."""
