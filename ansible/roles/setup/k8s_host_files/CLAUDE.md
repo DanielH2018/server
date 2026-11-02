@@ -140,11 +140,12 @@ crowdsec's retired crons.
 - **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
   changes this role.
 - **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes the
-  `registry-gc` textfile under `/var/lib/node-exporter-textfile/`, a `Registry GC` Kuma push
-  and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
-  (`journalctl -t registry-gc`) shows both mirror phases. A conversion apply leaves the cron
-  file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
-  blobs through the mirror's loopback hostPort and writes nothing to the cluster. The push
-  message ends with the warm counts, such as `warmed 354 blob(s), 6207 MB in 133s`.
+  `registry-gc` textfile under `/var/lib/node-exporter-textfile/`, pushes into the deleted
+  `Registry GC` Kuma tile until B6c's Cutover-2, and pings healthchecks.io as `registry-gc`.
+  The `registry-gc` journal (`journalctl -t registry-gc`) shows both mirror phases. A
+  conversion apply leaves the cron file and the script's hash unchanged. After the restore the
+  run warms the mirror: it GETs blobs through the mirror's loopback hostPort and writes
+  nothing to the cluster. The push message ends with the warm counts, such as `warmed 354
+  blob(s), 6207 MB in 133s`.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.

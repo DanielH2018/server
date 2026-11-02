@@ -193,14 +193,14 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   went stale. Both rules are in `files/rules/registry.yaml` there. The check proves the path
   and the mirror's answer, not the cache: with the WAN up, the proxy fetches a missing tag
   from GHCR and still answers 200.
-- The GC run reports three ways: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
-  static in `k8s/uptime-kuma`, deadline two hours past the weekly period), the off-site
-  healthchecks.io `registry-gc` dead-man, and the `registry-gc` textfile that observability's
-  `RegistryGcFailed` and `RegistryGcNotReporting` read. The token existed nowhere but the
+- The GC run reports three ways: the off-site healthchecks.io `registry-gc` dead-man, the
+  `registry-gc` textfile that observability's `RegistryGcFailed` and `RegistryGcNotReporting`
+  read, and a push to Kuma. M6 batch B6c's Cutover-1a deleted the `Registry GC` tile, so the
+  push (`registry_gc_push_token`) lands in a deleted token until Cutover-2 drops it
+  (`docs/target-architecture/monitoring/m6-retire-kuma.md`). The token existed nowhere but the
   script until 2026-09-18 (#1937), so before that only the dead-man saw a run.
-  - The two rules run in shadow beside the tile until M6 batch B6c retires the tile, the push
-    and the token (`docs/target-architecture/monitoring/m6-retire-kuma.md`). Their deadline
-    is the script's `DEADLINE_S`, which equals the tile's interval.
+  - The two rules stay in shadow until Cutover-1b drops `shadow`. Their deadline is the script's
+    `DEADLINE_S`, which equals the deleted tile's interval.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
   role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
   `manifests/registry/` outside the role's file list, which deleted them on every deploy.

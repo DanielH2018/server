@@ -25,8 +25,9 @@ _ASSERT = "kuma_declarations | kuma_malformed_push_tokens | length == 0"
 
 # A hand-written tile that is gated on its token, so it drops out of the render if the seed stops
 # opening that gate. The tile whose hand-minted token was refused on 2026-10-09, Homelab Evals,
-# left with M6 batch B2's Cutover-1a, and the registry's weekly GC tile stands in for its shape.
-_INCIDENT_TILE = "registry-gc"
+# left with M6 batch B2's Cutover-1a, and the registry's weekly GC tile that stood in for its
+# shape left with B6c's. The Pi's weekly AIDE check stands in for it.
+_INCIDENT_TILE = "aide-daniel-pi"
 
 
 def _declarations(token_for) -> dict[str, dict]:
@@ -102,7 +103,7 @@ def test_the_check_covers_every_rendered_push_tile():
     }
     push_ids = sorted(i for i, e in declarations.items() if e["type"] == "push")
     assert _INCIDENT_TILE in push_ids
-    assert len(push_ids) >= 20, f"the push-tile census went thin: {len(push_ids)}"
+    assert len(push_ids) >= 19, f"the push-tile census went thin: {len(push_ids)}"
     assert kuma_malformed_push_tokens(declarations) == push_ids
 
 
@@ -121,7 +122,7 @@ def test_cluster_vars_refuses_a_malformed_value_in_every_rendered_push_token():
     }
     # Named members: a hand-written tile's token and one from monitor-bridge's lookup loop.
     assert {
-        "registry_gc_push_token",
+        "aide_daniel_pi_push_token",
         "monitor_bridge_swallowed_verdicts_push_token",
     } <= variables
     base64_token = "QUJD" * 10 + "QQ+="

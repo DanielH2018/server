@@ -227,6 +227,15 @@ def test_the_deleted_b2_b4_and_b6b_tiles_are_not_declared():
     assert "Swallowed Push Verdicts" in declared
 
 
+def test_the_deleted_b6c_tile_is_not_declared():
+    # RED if the tile is declared again: AutoKuma would re-create it beside the RegistryGc* rules
+    # that replace it (M6 batch B6c), and registry-gc.sh pushes into its token until Cutover-2.
+    declared = {e["name"] for e in _entities().values()}
+    assert "Registry GC" not in declared
+    # Non-vacuity by name: a render that declared nothing would pass the line above.
+    assert "Swallowed Push Verdicts" in declared
+
+
 def test_the_deleted_b1_tiles_are_not_declared():
     # M6 batch B1's Cutover-1a deleted these five hand-written tiles. RED if one is declared
     # again: AutoKuma would re-create it, and its producer (still pushing until Cutover-2)

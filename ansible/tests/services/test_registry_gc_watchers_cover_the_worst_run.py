@@ -1,7 +1,7 @@
 """Both registry-gc watchers allow the run's derived worst case past its schedule.
 
 registry-gc.sh collects the ghcr-mirror's store and then the dockerhub-mirror's, and pings
-healthchecks.io and pushes the Kuma `Registry GC` tile only when it ends. Each phase is bounded
+healthchecks.io and writes its textfile only when it ends. Each phase is bounded
 by the pod-exit wait, the unfinished Job's delete wait, the Job deadline, the rollout wait and
 that mirror's warm budget, and the run waits up to `flock -w` for the lock first. The two
 allowances are literals, because neither monitor-bridge's nor uptime-kuma's render can read a
@@ -9,8 +9,10 @@ setup role's defaults. This guard derives the worst case from the rendered scrip
 each literal to the whole hour that covers it (#6569).
 
 The script also writes its verdict to the `registry-gc` textfile with a DEADLINE_S, and
-observability's RegistryGcNotReporting carries that deadline as two literals. All three equal the
-Kuma tile's interval, so a cron moved without its tile or its rule fails here (M6 batch B6c).
+observability's RegistryGcNotReporting carries that deadline as two literals. The deadline covers
+the week and the worst run, and both literals equal it, so a cron moved without its deadline or
+its rule fails here (M6 batch B6c). The Kuma tile that once held the same interval left with
+Cutover-1a.
 
 Run: uv run pytest ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py
 """
@@ -19,7 +21,6 @@ import math
 import re
 
 from _helpers import K8S_ROLES, REPO
-from _kuma_entities import _entities
 from _shell_render import rendered_shell_text
 from lib import yaml_fast
 from lib.estate import role_defaults
@@ -94,9 +95,9 @@ def test_the_healthchecks_grace_covering_the_worst_run_is_clean():
     assert allowance_problems("healthchecks.io grace", grace, _worst()) == []
 
 
-def test_the_kuma_interval_covering_the_week_and_the_worst_run_is_clean():
-    interval = _entities()["registry-gc.json"]["interval"]
-    assert allowance_problems("Kuma interval", interval - WEEK_S, _worst()) == []
+def test_the_textfile_deadline_covering_the_week_and_the_worst_run_is_clean():
+    deadline = rendered_deadline(_script())
+    assert allowance_problems("textfile deadline", deadline - WEEK_S, _worst()) == []
 
 
 def test_a_warm_budget_raised_past_the_grace_is_flagged():
@@ -133,11 +134,10 @@ def deadline_problems(deadline: int, expr: str) -> list[str]:
     return problems
 
 
-def test_the_textfile_deadline_equals_the_tile_interval_and_the_rule_literals_is_clean():
+def test_the_rule_literals_equal_the_textfile_deadline_is_clean():
     script = _script()
     assert "write_check_textfile registry-gc " in script
     deadline = rendered_deadline(script)
-    assert deadline == _entities()["registry-gc.json"]["interval"]
     assert deadline_problems(deadline, not_reporting_expr(RULES.read_text())) == []
 
 

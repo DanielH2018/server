@@ -220,9 +220,7 @@ uptime_kuma_k8s_status_page_groups:
   - name: Observability
     match: []
   - name: Backups & Storage
-    match:
-      # The registry PVC's only space reclaim: a storage tile, not an automation one.
-      - "^registry-gc$"
+    match: []
   - name: Hosts & Power
     match:
       - "^daniel-box-disk$"
