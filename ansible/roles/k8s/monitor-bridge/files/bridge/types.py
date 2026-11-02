@@ -80,13 +80,6 @@ class PushCheck:
     Attributes:
       name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
       fn: The check body, or the gate's probe for a row with `is_gate`.
-      token: The SOPS secret that held the push token. Nothing renders it since Cutover-2, and
-        A6-8 deletes the field with `kuma_id`, `display`, `description` and `status_group`.
-      kuma_id: The AutoKuma id of the deleted tile.
-      display: The deleted tile's display name.
-      description: What the deleted tile read, what a DOWN meant and where to look. A6-8 moves
-        it into the rule's `description` annotation.
-      status_group: The status page group the deleted tile was listed under.
       gate: The gate whose outage suppresses this check (`b2_reachable`, `wan_reachable`),
         `prometheus` for a row that reads Prometheus and sits under `EXPORTER_DEPENDENT`, or
         `startup_grace` for a reach-out check whose rule carries `for: 10m`. One value per row.
@@ -98,11 +91,6 @@ class PushCheck:
 
     name: str
     fn: CheckFn
-    token: str
-    kuma_id: str
-    display: str
-    description: str
-    status_group: str
     gate: str | None = None
     is_gate: bool = False
     critical: bool = False

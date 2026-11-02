@@ -47,7 +47,7 @@ def test_the_entry_needs_both_its_path_and_its_line_for_one_rule():
     [
         "          - key: b2_probe_application_key",  # gitleaks:allow
         "          - key: ha_token",
-        "              key: monitor_bridge_discord_push_token",
+        "              key: kuma_status_page_sync_push_token",
     ],
 )
 def test_a_secret_key_name_is_admitted(line):

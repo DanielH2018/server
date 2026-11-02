@@ -7,6 +7,7 @@ left to check is that each derivation reads what the table says.
 
 The Kuma side, that no tile carries a bridge token, is
 `ansible/tests/services/test_kuma_static_monitors.py::test_the_deleted_a6_tiles_are_not_declared`.
+The rows carry no secret since M6 batch A6-8, so nothing here reads `secrets.yml`.
 """
 
 import dataclasses
@@ -17,8 +18,6 @@ import check
 import registry
 from bridge.types import PushCheck
 from check_table import CHECKS
-from lib import yaml_fast
-from lib.repo_paths import ANSIBLE
 from py_table import py_table
 
 from _bridge_env import bridge_env
@@ -34,11 +33,9 @@ def _unknown_gates(rows) -> list[str]:
     )
 
 
-def test_each_name_and_kuma_id_appears_once():
+def test_each_name_appears_once():
     names = [row.name for row in CHECKS]
-    ids = [row.kuma_id for row in CHECKS]
     assert len(names) == len(set(names)), sorted(n for n in names if names.count(n) > 1)
-    assert len(ids) == len(set(ids)), sorted(i for i in ids if ids.count(i) > 1)
 
 
 def test_the_registry_runs_every_row_gate_rows_first_in_table_order():
@@ -117,11 +114,11 @@ def test_a_misspelt_gate_value_is_flagged():
 
 
 def test_the_deploy_reads_every_field_but_fn_off_each_row():
-    """`py_table` keeps only literal arguments, so a computed value would vanish from the deploy.
+    """`py_table` keeps only literal arguments, so a computed value would vanish from the docs.
 
-    A description built from a constant would render a tile with no description, and AutoKuma
-    would rewrite the live monitor to match. Comparing the parsed table to the imported one
-    catches that before a render does.
+    A `gate` or `runbook` built from a constant would read as absent in the generated fragments
+    while the registry used it. Comparing the parsed table to the imported one catches that
+    before a fragment is written.
     """
     parsed = py_table(_TABLE.read_text(), "CHECKS")
     defaults = {
@@ -144,11 +141,3 @@ def test_the_env_secret_renders_no_push_token_and_the_config_no_kuma_setting():
     assert {"INTERVAL", "N8N_API_KEY", "DEPLOY_PIPELINE_GITHUB_TOKEN"} <= set(env)
     assert [key for key in env if key.startswith("KUMA_")] == []
     assert "GRACE_CYCLES" not in env
-
-
-def test_every_row_names_a_secret_sops_declares():
-    # SOPS encrypts values, not keys, so the key list is readable without the age key. A row
-    # whose secret is missing fails the deploy's render at lookup('vars').
-    declared = set(yaml_fast.safe_load((ANSIBLE / "vars/secrets.yml").read_text()))
-    missing = sorted(row.token for row in CHECKS if row.token not in declared)
-    assert not missing, missing

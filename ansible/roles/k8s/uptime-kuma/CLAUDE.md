@@ -33,7 +33,7 @@ reading behind each rule below.
   `ansible/tests/services/test_kuma_static_monitors.py::test_autokuma_pin_carries_resend_interval_on_push_monitors`.
 - **`resendInterval` counts DOWN beats, not minutes** — `uptime_kuma_k8s_push_resend_down_beats`, 90, six
   hours for a tile on the 1200 s window and something else at any other cadence. No tile is
-  bridge-fed since A6's Cutover-2; `uptime_kuma_k8s_bridge_push_interval` waits for A6-8.
+  bridge-fed since A6's Cutover-2; `uptime_kuma_k8s_bridge_push_interval` waits for C-1.
 - **Every notification declaration carries `applyExisting`**, the key Kuma forces into the stored
   config: one key short of what AutoKuma compares means a rewrite on every sync pass. Never chase
   such a loop with AutoKuma's debug diff, which writes the webhook and SMTP password into Loki.
