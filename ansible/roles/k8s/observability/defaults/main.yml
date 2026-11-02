@@ -22,7 +22,7 @@ observability_k8s_alertmanager_image: prom/alertmanager:v0.34.1@sha256:e9733bafb
 # dashboards and datasources are provisioned from git.
 # Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
 # only preferences, version history and annotations. Recovery is deleting the PVC.
-observability_k8s_grafana_image: grafana/grafana:13.2.3@sha256:b28bae15e219c998fb0e0424ed724930cc61b1f61fb404d47c862f9a23f9e572
+observability_k8s_grafana_image: grafana/grafana:13.2.4@sha256:dbbc38ea21103cefb50396340cd88afec779c7e070b0a7bf5a75b4ce46651d3f
 
 # The budget of the observability-prepull Kustomization, whose Job pulls Grafana's image onto
 # its node before the observability Kustomization applies
