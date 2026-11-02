@@ -28,7 +28,6 @@ MARKERS = ("write_check_textfile", "homelab_check_last_run_timestamp_seconds")
 KUMA_TIMER = "kuma_check_timer.yml"
 _INSTALL_MODULES = ("ansible.builtin.copy", "ansible.builtin.template")
 
-_KUMA = "pushes a Kuma heartbeat that pages a missed run; M6 moves it to a textfile"
 _HC = "pings a Healthchecks.io check that pages a missed run"
 
 EXEMPT: dict[str, str] = {
@@ -65,7 +64,6 @@ EXEMPT: dict[str, str] = {
         "runs the drill with --list-only, a read-only listing of the snapshots; the full "
         "drill is the hypervisor role's cron"
     ),
-    "k8s_host_files: cron `Registry garbage collection`": _KUMA,
     "render_records: timer `kuma-check-render-records`": (
         "render_records_state is pinned absent until R4 deletes the role, so the timer is "
         "never installed"

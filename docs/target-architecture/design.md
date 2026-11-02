@@ -127,8 +127,7 @@ and the check bodies that read Prometheus and Loki; 82 of the 83 push-token secr
 `ansible/secret_rotation.yml`, with their rotation entries;
 `ansible/roles/setup/common/tasks/kuma_check_timer.yml`; and `probe.py kuma-drift`. Of the 83,
 52 carry the `monitor_bridge_` prefix and 44 belong to the bridge's own check rows. M3 retires
-1, M5 retires 3 and M6 retires 78. The 83rd, `registry_gc_push_token`, goes with registry GC
-in D5's wave D.
+1, M5 retires 3 and M6 retires 79, `registry_gc_push_token` among them (M6 batch B6c).
 
 **Remains:** D4, with better tooling (promtool zero-series tests, pint's `promql/series`
 check, `absent()`), and D5, a release-record bug fixed separately from this migration.
@@ -150,9 +149,9 @@ token (H6 Open question 4).
 Registry garbage collection does not move. D5 retires it in wave D, because after D5.4 no
 build pushes to the in-cluster registry. An in-cluster job that scales the registry's
 Deployment would also be a second writer on a flux-owned object, which C4 forbids. Wave D
-removes the GC's cron, script, Kuma tile, Healthchecks.io entry and push token together, so
-M6 does not cut registry-gc's check over and leaves its tile and token to D5. If M6 deletes
-Kuma before wave D, the tile goes with Kuma, and wave D drops that part of its PR.
+retired the push store's GC phase (#5746). The ghcr-mirror and dockerhub-mirror phases still
+run from the host cron, so their Kuma tile, push and token stay until M6 drains them as batch
+B6c, under M3's recipe (#6926). D5 still owns the GC itself.
 
 **Decision.** What remains on each host ships as one `.deb` per host (C5, C6). nfpm builds it
 from homelab-render's host output. A LAN builder builds a commit on `origin/master` with a

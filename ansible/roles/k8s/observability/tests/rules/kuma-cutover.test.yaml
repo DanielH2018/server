@@ -38,6 +38,10 @@ tests:
             exp_annotations:
               summary: Kuma's rkhunter Scan (daniel-pi) tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the rkhunter Scan (daniel-pi) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+          - exp_labels: {monitor_name: Registry GC, service: uptime-kuma, severity: critical}
+            exp_annotations:
+              summary: Kuma's Registry GC tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the Registry GC tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
           - exp_labels: {monitor_name: n8n Prod Workflows, service: uptime-kuma, severity: critical}
             exp_annotations:
               summary: Kuma's n8n Prod Workflows tile is gone and no alert rule pages in its place.
@@ -131,6 +135,8 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
         values: '1x140'
+      - series: 'monitor_status{monitor_name="Registry GC", monitor_type="push"}'
+        values: '1x140'
       - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
@@ -190,6 +196,8 @@ tests:
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Registry GC", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
         values: '1x140'
@@ -258,6 +266,8 @@ tests:
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
+        values: '1x140'
+      - series: 'monitor_status{monitor_name="Registry GC", monitor_type="push"}'
         values: '1x140'
       - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
         values: '1x140'

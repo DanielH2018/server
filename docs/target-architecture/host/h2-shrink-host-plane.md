@@ -1071,7 +1071,11 @@ D5's Wave D registry bullet retires the GC in a conversion PR while registry is 
 Ansible-owned. It sets `registry_k8s_manage_gc: false`, extends that lever's off arm to the
 cron file, `/usr/local/bin/registry-gc.sh` and `/var/lib/registry-gc`, and removes the
 `Registry GC` tile, the `registry-gc` Healthchecks.io entry and `registry_gc_push_token`'s
-rotation entry. H2 does not move the GC, for two reasons:
+rotation entry. H2 does not move the GC, for two reasons.
+
+**Amended, 2026-11-02 (#6926).** D5 retired only the push store's GC phase (#5746). The
+mirror phases still run from the host cron, and M6 batch B6c retires their `Registry GC` tile,
+push and `registry_gc_push_token`. The two reasons below still hold for the GC itself:
 
 - **An in-cluster orchestrator is still a second writer.** Its scale to zero writes the
   `spec.replicas` that registry's Deployment renders as `replicas: 1`. Once Flux owns

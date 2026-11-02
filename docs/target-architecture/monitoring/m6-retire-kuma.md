@@ -22,7 +22,7 @@ while anything still pushes to it. At the baseline, M2 to M5 leave behind:
 
 - 38 bridge checks and 3 gates, among them M2's `workload_log_errors` row and the
   `swallowed_verdicts` row M5 hands over (M5 Open question 4);
-- 37 other push producers, after D5 retires a 38th, registry-gc (*Baseline*);
+- 38 other push producers, registry-gc among them (*Baseline*);
 - 14 hand-written probes.
 
 No other slice owns them. M2's Open question 6 names M6 as the fallback owner of the
@@ -67,6 +67,8 @@ section transcludes the files in batch order. *Recording a batch's results*, und
 --8<-- "target-architecture/monitoring/m6-status/b6a.md"
 
 --8<-- "target-architecture/monitoring/m6-status/b6b.md"
+
+--8<-- "target-architecture/monitoring/m6-status/b6c.md"
 
 --8<-- "target-architecture/monitoring/m6-status/b7.md"
 
@@ -237,8 +239,7 @@ push-token secret remains.
   `bridge.streaks.apply_startup_grace` on every down cycle of a `startup_grace` row, with no
   test of when its target started. `GRACE_CYCLES` is `"2"` in `templates/env-secret.yaml.j2`,
   so a page waits one extra 300s cycle whatever the target's age.
-- **Other producers.** M3 removes 1, leaving 38. D5 retires one more, registry-gc, so M6
-  moves 37. Most are host scripts; four run in pods. Where each lives:
+- **Other producers.** M3 removes 1, leaving 38, and M6 moves all 38. Most are host scripts; four run in pods. Where each lives:
     - **daniel-box host crons in the k3s role:** longhorn backup health, the etcd snapshot,
       manifest-prune, release staleness and live-drift. M6 owns the last three only until
       their Kuma side is gone. After C-2b, D6.17 disarms the checks and D6.18 deletes them
@@ -256,12 +257,12 @@ push-token secret remains.
       `configarr-health` and `janitorr-health` CronJobs. H2 moved all five into pods before M6
       started, so no textfile reaches them. The operator ruled on 2026-10-23 that a pod exports
       through a metrics endpoint, not a hostPath textfile and not a Pushgateway.
-    - **Not M6's: registry-gc.** D5's Wave D registry PR (`d5-bulk-move.md`, *registry*)
-      retires the GC rather than moving it, and removes the `Registry GC` tile and
-      `registry_gc_push_token`. D5 calls itself "the only owner of registry GC" (its Open
-      question 15), and H2 records the same decision. Moving the cron here first would build
-      a textfile rule that D5 then deletes. Its tile is the one push tile M6 waits for
-      instead of draining (*Order*).
+    - **B6c, registry-gc.** The weekly mirror GC cron that `setup/k8s_host_files` installs on
+      daniel-box. The plan first left it to D5's Wave D registry PR, which was to retire the
+      GC with its tile and token. D5's registry PRs landed (#5689, #5729, #5746, and the flip
+      in #5830), and #5746 retired only the push store's GC phase. The mirror phases still
+      run and still push, so M6 drains the push like any other host cron (#6926, Open
+      question 13).
     - **Pods:** autofix-bridge (a Deployment), the two cloudflare-ddns Deployments, the
       pi-peer-backup CronJob, and Kuma's own status-page sync.
 - **Push-tile intervals** (`static-monitors.yaml.j2`, `interval`). Bridge tiles use
@@ -285,8 +286,8 @@ push-token secret remains.
 whose `when:` admits the tick's host.
 
 - **The GitOps tick, on daniel-box, at fast-forward:** `initial_setup`, `gitops_deploy`,
-  `hypervisor`, `fake_remux`, `nut_host`, `render_records`, `renovate_agent` and
-  `renovate_notify`. The tick applies them before `land.sh` deploys any k8s role.
+  `hypervisor`, `fake_remux`, `nut_host`, `render_records`, `renovate_agent`,
+  `renovate_notify` and `k8s_host_files`. The tick applies them before `land.sh` deploys any k8s role.
 - **A hand, never the tick:**
     - `k3s` routes to `k3s-bringup.yml`, which `deploy_changes.py:_BROAD_MANUAL_PREFIXES`
       keeps out of the tick. The tick records it in `manual_plane`.
@@ -298,7 +299,8 @@ whose `when:` admits the tick's host.
 - **`land.sh`, as k8s role deploys, or Flux:** every k8s role, including B6b's three
   (`crowdsec`, `configarr`, `janitorr`, each `owner: flux` by the end of Wave D, so the merge is
   the apply) and the pods (B7). B6a's two crons are a setup role, `claude_code`, so the tick
-  applies them. The sixth cron-installing role, registry, is D5's (*What M2 to M5 leave*).
+  applies them. registry-gc's cron is in `k8s_host_files`, a setup role the tick applies
+  too (B6c).
 
 ### When D5 flips a role M6 edits
 
@@ -306,8 +308,8 @@ The planes above name the apply while a role is Ansible-owned. D5's Wave D flips
 M6 edits, in the order of its wave table, and from each flip on, C4 has `land.sh`, the tick
 and `deploy.sh` skip the role. For an `owner: flux` role the merge is the apply. Flux
 reconciles the commit, and a PR's live read waits until the role's Kustomization reports that
-commit (C6), not for a `land.sh` `VERDICT:` line. C-1a waits for D5's registry PR, a Wave D
-conversion PR. Every k8s role that C-1 and C-2 edit was flux-owned by the end of Wave D
+commit (C6), not for a `land.sh` `VERDICT:` line. C-1a waits for B6c's token PR, which
+flips no role. Every k8s role that C-1 and C-2 edit was flux-owned by the end of Wave D
 (2026-10-22).
 
 Most M6 PRs change one pager side, so the owner decides only who applies them. Three steps
@@ -721,16 +723,17 @@ dependency between them. The cutover windows run one after another (*No-pager wi
 | B3 gitops_deploy | ruleset drift, interaction limit | M3 | the tick | The shadow PR adds two `CheckWithoutPager` terms, each `[50h10m]`: both tiles have a 90000s interval, and 2 x 90000s + 10m is 50h10m. Both rules carry `service: github`, the thing checked. | 2 |
 | B4 other setup roles | two etcd drills, three fake_remux, two UPS secondaries, render_records, renovate_agent, renovate_notify | M3 | the tick on daniel-box; a hand on daniel-server for its UPS secondary and for both etcd drills, which run only there: `initial_setup.yml --tags "nut_host,hypervisor-etcd-drill"` (**operator-only**) | The shadow PR leaves render_records out: D5 pinned its role absent (`render_records_state: absent`) and removed its tile, so there is nothing to shadow. fake_remux and the drills push several tiles under one syslog tag, so each verdict has its own check name. The renovate pair writes its textfile from a root-run `ExecStartPost` and has a NotReporting rule only, because a crash writes nothing. It adds seven `CheckWithoutPager` terms: `[2h]` for the five 1200s tiles, `[72h10m]` for the notifier and `[56h10m]` for the agent. The two drill tiles get none, since a monthly tile's range of 70d10m exceeds Prometheus's 30d retention. Their window is the batch's own: Cutover-1a deletes all of B4's tiles and Cutover-1b drops every B4 rule's `shadow`, so the five `[2h]` terms page an open B4 window by the second hour. `test_b4_rule_literals.py` fails while a drill rule is shadow and none of those five terms remains, and when a drill tile is deleted while all five tiles still render. `RenovateAgentNotReporting` follows `renovate_agent_enabled`: a disarmed agent's role writes `homelab_check_disarmed{check="renovate-agent"} 1`, and both that rule and `HostCheckOverdue` are quiet on the marker. The renovate pair's Cutover-2 lands in the same PR as B4's Cutover-1a (*Order*). | 10 |
 | B5 Pi | SD-card health, container recovery | M3 | the `homelab-daniel-pi` package: the builder publishes it and the Pi's `homelab-updater.timer` installs it (H3.8b moved both heartbeats there). No `-e target=daniel-pi` apply. | H3.6 already enabled the textfile collector on the Pi (see below). The shadow PR ships `homelab-check-lib.sh` in the package and adds two `CheckWithoutPager` terms, both `[2h]` (the tiles push every 5 minutes, so max(2h, 2 x 10m + 10m) is 2h). | 2 |
-| B6a host crons | artifacts sync, telemetry health (the two `setup/claude_code` crons) | M3 | the tick (`claude_code`) | They run on daniel-box's host, so M3's recipe applies as is. registry-gc is D5's (*Baseline*). | 2 |
+| B6a host crons | artifacts sync, telemetry health (the two `setup/claude_code` crons) | M3 | the tick (`claude_code`) | They run on daniel-box's host, so M3's recipe applies as is. registry-gc is B6c's. | 2 |
 | B6b pod producers | crowdsec remote allowlist, AppSec verify and home allowlist (the `crowdsec-jobs` sidecar); `configarr-health` and `janitorr-health` (CronJobs) | Exporter for the sidecar, CronJob for the two (*B6b*) | Flux, through `promote` (`crowdsec`, `configarr`, `janitorr`, `observability`, `netpol-baseline`) | The operator ruled on 2026-10-23 that a pod exports through a metrics endpoint. The sidecar serves `homelab_check_*` on a new `crowdsec-jobs` scrape job. Each CronJob patches its verdict onto a ConfigMap it owns, which kube-state-metrics exports. | 5 |
+| B6c registry GC | registry-gc, the weekly mirror GC cron (#6926) | M3 | the tick (`k8s_host_files`, per `setup_routing.py --host daniel-box`) | The script calls `write_check_textfile registry-gc` in `finish`, on every run and before the push, with a `DEADLINE_S` of 612000, the tile's interval. `registry.yaml` carries `RegistryGcFailed` and `RegistryGcNotReporting` in shadow, with `service: registry`. Both are `warning`, because the tile notifies Discord only. `test_registry_gc_watchers_cover_the_worst_run.py` pins the deadline to the tile's interval and to both NotReporting literals. The shadow PR adds `registry-gc` to `KUMA_RETIRING_TAGS` and one `[340h10m]` `CheckWithoutPager` term. Cutover-1a deletes the `Registry GC` tile and its status-page pattern, and moves `registry_gc_push_token` to `PENDING_RETIREMENT`. Cutover-1b drops `shadow` and the term. Cutover-2 drops the push and the `kuma-push-lib.sh` source from `registry-gc.sh.j2`, and keeps the healthchecks.io dead-man. The token PR retires the key a week after Cutover-1b. | 1 |
 | B7 pods | autofix-bridge; cloudflare-ddns direct and proxied; pi-peer-backup | Exporter, CronJob, a Prometheus rule plus a LogQL rule | `land.sh` | See *B7*. | 4 |
 | B8 probes | the 14 hand-written monitors, plus one `tcp_connect` probe per Pi published port | M4 | `land.sh` | See *B8*. Cuts over the `pi_pressure` row. | 1 |
 | B9 integrity scans | the weekly AIDE check and rkhunter scan, one tile each per host (#6168) | M3 | each host's own package, through its `integrity-scans` component (`hosts/<host>/package.yml`): the builder publishes it and the host's `homelab-updater.timer` installs it. `initial_setup_packaged_hosts['fail2ban']` lists all three hosts, so `initial_setup.yml --tags "aide,rkhunter"` writes neither scan anywhere, and no `-e target=daniel-pi` apply reaches the Pi. | Both scripts call `write_check_textfile` as `aide-check` and `rkhunter-check`, with a `DEADLINE_S` equal to the tile's interval (626400s and 612000s). `host-checks.yaml` carries `AideCheckFailed`, `AideCheckNotReporting`, `RkhunterScanFailed` and `RkhunterScanNotReporting` for each host, in shadow, and `test_integrity_scan_rule_literals.py` pins the deadline literals. The shadow PR adds six `CheckWithoutPager` terms: `[348h10m]` for the AIDE tiles and `[340h10m]` for rkhunter. Cutover-1b drops `shadow`, and Cutover-1a deletes the six tiles and their tokens. Cutover-2 drops the push and the `kuma-push-lib.sh` source from `aide-check.sh.j2` and `rkhunter-check.sh.j2`, and reaches each host in a new version of its package. C-3a waits for it on all three hosts. | 6 |
 
-Phase A retires 77 push tokens: 41 from bridge rows and 36 from other producers. Phase C
-retires the 78th, `kuma_status_page_sync_push_token`, together with Kuma's three other
-secrets. The arithmetic: 83 at the baseline, less M5's 3, M3's 1 and D5's
-`registry_gc_push_token`, leaves 78.
+Phase A retires 78 push tokens: 41 from bridge rows and 37 from other producers. Phase C
+retires the 79th, `kuma_status_page_sync_push_token`, together with Kuma's three other
+secrets. The arithmetic: 83 at the baseline, less M5's 3 and M3's 1, leaves 79. B6c's
+`registry_gc_push_token` is among Phase A's 78.
 
 **Order.**
 
@@ -794,10 +797,12 @@ secrets. The arithmetic: 83 at the baseline, less M5's 3, M3's 1 and D5's
       still holds back, and quotes its entry carrying no `owner: flux`.
     - The stall: D5's last stateless-leaf flip, and with it D5's Wave A, waits for most of
       Phase A. *Risks* names the operator's choice that follows.
-- C-1a waits for D5's registry PR, which deletes the `Registry GC` tile and its push. Until
-  then, C-1a's gate of one `monitor_status` series cannot pass (Open question 13). The index
-  does not carry this edge yet. C-1a's quoted `registry_gc_push_token` grep and its gate
-  enforce it inside this slice, so the missing edge causes no stall.
+- C-1a waits for B6c's token PR, which retires `registry_gc_push_token` after B6c's
+  cutovers have deleted the `Registry GC` tile and its push. Until B6c's Cutover-1a, C-1a's
+  gate of one `monitor_status` series cannot pass (Open question 13). The index's M6c row
+  names D5's registry PR for this edge, and that PR landed without removing the push. C-1a's
+  quoted `registry_gc_push_token` grep and its gate enforce the B6c edge inside this slice,
+  so the stale index edge causes no stall.
 
 **A0, the declaration floor (~40 lines, deploys nothing).** The uptime-kuma task
 "Check the declaration index is populated" asserts `kuma_declarations | length > 50`, and it
@@ -2211,7 +2216,7 @@ this applies to, with what the rules predict:
 | B-6b | Alertmanager IngressRoute | ~40 | `observability` |
 | B-7 | docs, skills, agents, evals, the ADR draft (C-0) | ~200 | none |
 | B-10 | triage's poller reads `ALERTS` alone and drops its `kuma:` keys; its docs; after Phase A | ~60 removed | a new version of the daniel-box and daniel-server host packages |
-| C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and D5's registry PR (a quoted `git grep -n registry_gc_push_token` over `ansible/roles/k8s/uptime-kuma/` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
+| C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and B6c's token PR (a quoted `git grep -n registry_gc_push_token -- ansible/roles ':!*/tests/*'` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
@@ -2571,9 +2576,9 @@ M4's rules.
   shadow drop, a deletion, a routing outcome or an inhibit. Mitigation: *A3 and the handoffs
   it closes* lists all five, and each has a red case in *Verification*. The routing pytest
   fails on an unshadowed `BlackboxExporterDown` whose outcome is not edited.
-- **Registry GC still pushes to Kuma until D5's registry PR.** C-1a's gate of one
+- **Registry GC pushes to Kuma until B6c's Cutover-2.** C-1a's gate of one
   `monitor_status` series refuses a C-1 that would delete that live tile. Mitigation: C-1a
-  waits for D5's PR and quotes the `registry_gc_push_token` grep. If D5's PR stalls, Kuma
+  waits for B6c's token PR and quotes the `registry_gc_push_token` grep. If B6c stalls, Kuma
   stays up with one push tile and the status-page sync.
 - **D5 flips an M6 target role mid-slice** (class 5). A flip moves the role's apply from
   `land.sh` to Flux, and three M6 steps relied on the toposort inside one `land.sh` run.
@@ -2727,8 +2732,8 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - Their tests, a large share of the bridge's 12.8k test lines.
     - `kuma-push-lib.sh`'s push half, `kuma_push.py`, `monitors.py`'s drift half,
       `kuma_live.py` and `kuma_table_loop.py`.
-    - 78 push tokens and 3 Kuma secrets, with their rotation-registry rows.
-      `registry_gc_push_token` is not among them, because D5's registry PR retires it.
+    - 79 push tokens and 3 Kuma secrets, with their rotation-registry rows.
+      `registry_gc_push_token` is among them, retired by B6c's token PR.
     - M5's `LokiHomelabDown`, which A3's scrape-target rule covers.
     - `uptime-kuma-alive` in Healthchecks.io, and one hand-written Authelia bypass.
     - The `swallowed_verdicts` row, its bodies and `KUMA_RETIRING_TAGS` (C-7), and M5's
@@ -2765,7 +2770,8 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    index too:
     - A7's shadow PR after M5's ruler is live, and A7's Cutover-a after M2's PR 4a;
     - D5's littlelink flux PR after B-1e (Open question 12);
-    - C-1a after D5's registry PR (Open question 13);
+    - C-1a after D5's registry PR (Open question 13), which that question's amendment of
+      2026-11-02 asks to repoint at B6c's token PR;
     - D5's monitor-bridge flip after A6-7a, live (*When D5 flips a role M6 edits*);
     - D6 after C-2b, live. Before #5821 this edge followed from uptime-kuma never flipping.
       The operator's 2026-10-21 ruling flipped it, and with it observability and
@@ -2777,8 +2783,8 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    handoff leaves none.
 
    The new D5 edges add no cycle, which the index states the way it does for B-1e. A6-7a
-   waits on Phase A batches and on M2 to M5, and none of those waits on D5. C-1a waits on D5's
-   registry conversion PR, which precedes the held flip and waits on none of them.
+   waits on Phase A batches and on M2 to M5, and none of those waits on D5. C-1a waits on B6c's
+   token PR, which waits only on B6c's own steps, and none of those waits on D5.
    C-4b waits on D6, and D6 waits on D5's tail and on C-2b, but nothing from C-1 to C-7 waits
    on C-4b.
 
@@ -2898,14 +2904,20 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - **Applied on 2026-10-16.** All three corrections are in the index: D5's row names
       littlelink's flux PR, M6b carries the B-1 to B-1e exception, and M6c carries C-1's
       edge to D5's registry PR.
-13. **Registry GC belongs to D5.** D5's Wave D registry PR retires the GC, its tile and its
-    token, and D5's Open question 15 names D5 the only owner. Resolution: B6 drops
-    registry-gc, and M6 counts 78 tokens. C-1 waits for D5's registry PR, which the index
-    should carry as a sub-edge. If the operator wants Kuma gone before D5's Wave D, the
-    fallback is a B6 PR that moves registry-gc under M3's recipe. D5's registry PR then
-    deletes that textfile rule instead of the tile. Whichever lands second quotes
-    `git grep -n -i 'registry.gc'` over `ansible/roles/k8s/uptime-kuma/` and
-    `ansible/roles/k8s/observability/` to show it removed the other's copy.
+13. **Registry GC is M6's batch B6c.** The plan first gave registry-gc to D5. D5's Wave D
+    registry PR was to retire the GC, its tile and its token, and D5's Open question 15 named
+    D5 the only owner. D5's registry PRs landed (#5689, #5729, #5746, and the flip in #5830),
+    and #5746 retired only the push store's GC phase. The mirror phases still run and still
+    push, and no D5 PR removes the push, so a C-1a gated on D5's PR could never start
+    (#6926). Resolution, 2026-11-02: B6c drains registry-gc under M3's recipe, M6 counts 79
+    tokens, and C-1a waits for B6c's token PR.
+    - **The index edge is stale, not wrong in effect.** contracts.md's M6c row still names
+      D5's registry PR, which has landed, so that edge is satisfied. C-1a's quoted
+      `registry_gc_push_token` grep and its one-series gate enforce the B6c wait. The
+      orchestrator owns contracts.md, and the request is to repoint the row at B6c's token
+      PR.
+    - The fallback this question once named, a B6 PR that moves registry-gc under M3's
+      recipe, is what B6c does. Nothing is left for D5 to delete.
 14. **D2.6d and A6-1 both need the bridge's serving thread.** D2.6d adds the deploy-pipeline
     family to the bridge's exporter, and A6-1 adds the serving thread, the `port` and the
     `metrics` item. The index gives D2.6d no edge to A6-1. Recommendation: whichever of the
