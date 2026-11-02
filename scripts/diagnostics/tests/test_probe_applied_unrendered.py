@@ -25,6 +25,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import pytest
 from diagnostics.probe_lib import applied, applied_tasks
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
+from lib.proc_testing import run
 
 RECORD_DIR = "/var/lib/homelab/setup-applied-sha256.d"
 
@@ -161,6 +162,27 @@ def test_a_stub_render_edited_after_the_apply_is_drift(tmp_path, capsys):
     code, rows = _run_tmp(tmp_path, capsys, STUB_TASK, STUB_CTX, live, record)
     assert rows["/etc/x/token"][0] == "DRIFT", rows
     assert code == PROBE_FAILED
+
+
+def test_the_k8s_host_files_apply_writes_the_sha256_record():
+    """Census: a task file the role runs or imports writes into `RECORD_DIR`."""
+    tracked = run(
+        [
+            "git",
+            "ls-files",
+            "ansible/roles/setup/k8s_host_files/tasks/",
+            "ansible/roles/setup/common/tasks/",
+        ],
+        check=True,
+        cwd=applied.ANSIBLE.parent,
+    ).stdout.split()
+    assert "ansible/roles/setup/k8s_host_files/tasks/registry.yml" in tracked
+    writers = [
+        path
+        for path in tracked
+        if RECORD_DIR in (applied.ANSIBLE.parent / path).read_text()
+    ]
+    assert writers, f"no task file under {tracked} writes {RECORD_DIR}"
 
 
 @pytest.mark.parametrize(
