@@ -375,9 +375,12 @@ def read_file(path: str) -> bytes:
         os.close(fd)
 
 
-def describe(path: str) -> str:
-    """Tier 1's stat: metadata only, from lstat. A DENY path's size is its secret's length."""
-    info = os.lstat(path)
+def describe(path: str, info: os.stat_result | None = None) -> str:
+    """Tier 1's stat: metadata only, from lstat. A DENY path's size is its secret's length.
+
+    INFO stands in for PATH's lstat, so a test can describe a path no test host holds.
+    """
+    info = info or os.lstat(path)
     try:
         owner = pwd.getpwuid(info.st_uid).pw_name
     except KeyError:

@@ -10,6 +10,8 @@ check, which every test host fails, while a neighbour stays refused as denied.
 Run: uv run pytest hosts/components/claude-code/tests/test_rootq_k3s_manifests.py
 """
 
+import os
+
 import homelab_rootq as rootq
 import pytest
 
@@ -66,7 +68,7 @@ EXEMPT = [
 ]
 
 
-@pytest.mark.parametrize("argv", [["stat"], ["sha256"], ["matches", HEX]])
+@pytest.mark.parametrize("argv", [["sha256"], ["matches", HEX]])
 @pytest.mark.parametrize("live", EXEMPT)
 def test_an_exempt_gc_job_gets_past_the_deny_list_for_every_tier1_verb(
     capsys, live, argv
@@ -84,3 +86,20 @@ def test_the_exemption_covers_the_two_exact_paths_and_not_their_tree() -> None:
     ]:
         assert rootq.denied(path), path
     assert rootq.denied(EXEMPT[0] + ".bak")
+
+
+# `deny=yes` is what host_reader reads as a credential file, which stops `probe.py applied`
+# asking `matches`; an exempt path's stat line must carry size and mtime instead.
+@pytest.mark.parametrize("live", EXEMPT)
+def test_stat_of_an_exempt_gc_job_prints_size_and_no_deny_marker(tmp_path, live):
+    (tmp_path / "job.yaml").write_text("kind: Job\n")
+    out = rootq.describe(live, os.lstat(tmp_path / "job.yaml"))
+    assert "size=10 mtime=" in out and "deny=" not in out, out
+
+
+def test_stat_of_a_denied_neighbour_still_prints_the_deny_marker(tmp_path):
+    (tmp_path / "job.yaml").write_text("kind: Job\n")
+    out = rootq.describe(
+        f"{MANIFESTS}/registry-jobs/gc-job.yaml", os.lstat(tmp_path / "job.yaml")
+    )
+    assert out.endswith(" deny=yes\n") and "size=" not in out, out
