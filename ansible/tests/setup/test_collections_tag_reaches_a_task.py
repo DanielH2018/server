@@ -9,6 +9,7 @@ no-op behind a green apply.
 from pathlib import Path
 
 from _role_census import role_task_files
+from _helpers import command_of, load_tasks, render_expr, task_named
 from deployer_lib.deploy_changes import setup_tags_for
 
 from lib import yaml_fast
@@ -61,3 +62,26 @@ def test_a_play_whose_tasks_lost_the_tag_is_flagged(tmp_path):
     found = playbook_tags(playbook, tmp_path / "roles")
     assert found == {"demo", "galaxy"}
     assert not setup_tags_for(["ansible/requirements.yml"]) <= found
+
+
+def _install_dir(connection: str) -> str:
+    """Where the collections install runs on a host with `connection`, from a worktree run."""
+    tasks = load_tasks(ROLES / "initial_setup" / "tasks" / "host-basics.yml")
+    task = task_named(tasks, "Install pinned Ansible collections")
+    assert "playbook_dir" not in command_of(task), (
+        "the argv must not carry a controller path"
+    )
+    return render_expr(
+        task["args"]["chdir"],
+        playbook_dir="/home/ubuntu/server/.claude/worktrees/x/ansible",
+        ansible_connection=connection,
+        sys_user="ubuntu",
+    ).strip()
+
+
+def test_an_ssh_host_installs_into_its_own_checkout():
+    assert _install_dir("ssh") == "/home/ubuntu/server/ansible"
+
+
+def test_a_local_host_installs_into_the_tree_it_runs_from():
+    assert _install_dir("local") == "/home/ubuntu/server/.claude/worktrees/x/ansible"

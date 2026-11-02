@@ -171,9 +171,9 @@ Say which of these applies, then stop:
 - A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
   cannot apply, and another session's PR created it. That line is theirs to clear. When your
   own merged PR created the line, do not stop: run `uv run python
-  scripts/deploy_tools/owed_run.py <role>` from a tree whose `HEAD` is
-  `origin/master`. It runs exactly the commands the line owes, on the hosts the line names,
-  then clears it, and it refuses a line that needs you, such as a maximal apply. The operator
+  scripts/deploy_tools/owed_run.py <role>` from any checkout. It runs exactly the commands
+  the line owes in the primary checkout, which must be at `origin/master`, on the hosts the
+  line names, then clears it, and it refuses a line that needs you, such as a maximal apply. The operator
   granted that standing clearance on 2026-10-24.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.

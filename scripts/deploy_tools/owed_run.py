@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Apply a `manual_plane` line of the deployer's `owed` ledger, then clear it, in one step.
 
-It runs exactly the commands every surface prints for the line (`manual_plane_remedies`), from
-a checkout at origin/master, and refuses a line it cannot trust or that needs the operator: a
+It runs exactly the commands every surface prints for the line (`manual_plane_remedies`) in the
+primary checkout, which must be at origin/master, whichever checkout invokes it. A playbook run
+from a session worktree installs collections into that worktree, where the deployer never loads
+them. It refuses a line it cannot trust or that needs the operator: a
 field no role, tag or host spells, a playbook or host outside the routing and the inventory, a
 role applied by hand, and an apply that arms more than the change (#6881). The clear is
 `gitops_state.clear_manual_plane`, so the journal line and the tree lock are the same ones a
@@ -35,7 +37,7 @@ from lib.ansible_inventory import host_names
 from lib.cli_help import ArgumentParser
 from lib.deployer_park import ManualPlaneRemedy, manual_plane_remedies
 from lib.git import git
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, PRIMARY_CHECKOUT, REPO
 
 # The deployer's own modules, which `deploy_state` reaches `host_lib` from for its writes.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -101,7 +103,8 @@ def run_owed(
     dry_run: bool = False,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     checkout_check: Callable[[str], str | None] = _checkout_is_origin_master,
-    repo: str = str(REPO),
+    repo: str = str(PRIMARY_CHECKOUT),
+    invoking_repo: str = str(REPO),
     now: float | None = None,
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
@@ -121,6 +124,8 @@ def run_owed(
       run: what executes each command; `subprocess.run` outside a test.
       checkout_check: returns why `repo` is not at origin/master, or None.
       repo: the checkout the commands run from, so its relative playbook paths resolve.
+      invoking_repo: the tree this script's code runs from. Its `manual_plane_remedies`,
+        `PLAYBOOKS` and inventory decide which commands run, so it must be at origin/master too.
       now: the clock the remedies read, for a test.
       lock_path, lock_wait_s, journal: passed to `clear_manual_plane`.
 
@@ -158,9 +163,24 @@ def run_owed(
             print(cmd)
         print(f"then: clear {key} for {','.join(sorted(remedy.tags))}")
         return 0
-    if stale := checkout_check(repo):
-        print(f"refused {key}: {stale}. Nothing was run.", file=sys.stderr)
-        return 1
+    # The primary checkout runs the commands; the invoking tree's code chose them (#6957).
+    trees = [(repo, "the primary checkout", f"run git -C {repo} pull --ff-only")]
+    if _Path(invoking_repo).resolve() != _Path(repo).resolve():
+        trees.append(
+            (
+                invoking_repo,
+                "the invoking tree",
+                f"rebase it onto origin/master, or run this script from {repo}",
+            )
+        )
+    for tree, name, fix in trees:
+        if stale := checkout_check(tree):
+            print(
+                f"refused {key}: {name} {tree} is stale: {stale}. To fix it, {fix}. "
+                "Nothing was run.",
+                file=sys.stderr,
+            )
+            return 1
     for cmd in commands:
         print(f"+ {cmd}", flush=True)
         if (done := run(["bash", "-c", cmd], cwd=repo)).returncode:
