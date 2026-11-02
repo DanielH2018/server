@@ -143,14 +143,18 @@ push-token secret remains.
         - `scripts/dev/pytest_shard_weights.json`: a generated record keyed by test node
           ids, which can name deleted tests.
         - The census row itself and its red fixture.
-        - `ansible/templates/autokuma.yml.j2` and the `kuma(...)` labels in the Pi's compose
-          templates. H5 drops them (see *Open questions*).
+        - `ansible/templates/autokuma.yml.j2`, and the four Pi compose templates under
+          `hosts/components/pi-compose/services/` with their inert
+          `org.homelab.kuma-docker-monitor` labels (see *Open questions*, item 7).
+        - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
+          an output redaction rule, not a Kuma read.
+        - `hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2` and
+          `pi-sd-health.sh.j2`, which cite this plan by its filename. *Every `hosts/` file
+          the grep finds, by PR* in *Phase A* assigns every other `hosts/` hit to a PR.
         - Until C-4b lands: `ansible/filter_plugins/kuma_monitors.py`, its import and its
           `kuma_ingress_monitors` registration in `scripts/lib/ansible_jinja_env.py`, and
           the `kuma_ingress_monitors` row in
           `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS`.
-        - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
-          an output redaction rule, not a Kuma read.
         - Any file the B-7 and C-6 PRs could not reword, with its reason.
     - Test directories are outside the selector. Many tests use `uptime-kuma` as a sample deploy
       tag, and a test that reads Kuma is deleted with its subject (`.claude/rules/python-layout.md`,
@@ -883,13 +887,146 @@ files that the rows above name only by their Ansible path. Each goes with the PR
       read is C-3a's `ls /opt/*/kuma_push.py` on daniel-box.
     - `/usr/local/lib/pi-kuma-push-lib.sh` in `hosts/daniel-pi/package.yml`. The read is a
       read-only `ls` of that path over `ssh daniel-pi`.
+    - The Ansible-era push env files and down marker: `/etc/homelab/loki-route-kuma-push.env`
+      and `/var/lib/kuma-check/loki-read-route.down` in
+      `hosts/components/loki-route-witness/component.yml`,
+      `/etc/homelab/rkhunter-kuma-push.env` and `/etc/homelab/aide-kuma-push.env` in
+      `hosts/components/integrity-scans/component.yml`, and `/etc/nut/kuma-push.env` in
+      `hosts/components/nut-secondary/component.yml`. The read is a read-only `ls <path>` on
+      each host whose package ships the component, over `ssh` for daniel-server and
+      daniel-pi. `rootq stat` cannot take these paths, because none is on its allowlist.
+      Only `No such file or directory` passes: a `Permission denied` says nothing about the
+      file.
 - **The triage poller and rootq.** The poller,
   `hosts/components/claude-code/files/claude_triage_poll.py`, reads `monitor_status`. B-10,
   which the fix for #6862 adds to *Phase B*, drops that read. `hosts/components/claude-code/files/homelab_rootq.py` matches `/api/push/` in
   a redaction rule, not a Kuma read, so it belongs on the allowlist (#6862).
-- **`hosts/components/claude-code/CLAUDE.md`** quotes `kuma_push` in the ENFORCED line of
-  `test_neither_producer_pushes_to_kuma`. C-6 rewords that line to name the test without
-  quoting its markers.
+- **`hosts/components/claude-code/CLAUDE.md`**, in *The artifacts node's two timers*, says
+  "Neither timer pushes to Kuma", and its ENFORCED line cites
+  `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`,
+  which holds both scripts to "no Kuma library". Rewording only the quoted markers would
+  leave `kuma` in the test name. C-6 deletes the test, the `KUMA_PUSH_MARKERS` tuple, the
+  `kuma_push_markers` helper and the red case `test_a_script_that_pushes_to_kuma_is_flagged`. Their subject goes with C-3a,
+  which deletes the library and `kuma_push.py`, so no shipped script can push any more
+  (`.claude/rules/python-layout.md`, *A check retires when its subject does*). C-6 rewrites
+  the bullet's lead to say that each run writes a check file and neither unit loads a
+  credential. The rewritten bullet names Kuma nowhere and drops the ENFORCED line. It runs
+  `fact_status.py verify` on the section, because the cited test is gone.
+
+**Every `hosts/` file the grep finds, by PR.** `git grep -il kuma -- hosts ':!*/tests/*'
+':!*/test_*'` lists 45 files at `d67fb3b9b`. The identifier grep that C-6 quotes finds about a
+dozen of them. The rest mention Kuma only in a comment, a unit's `Description=`, a label or a
+path, and the census row fails on each one all the same (#6891). Each file below goes with the
+PR named for it, or onto the census allowlist with its reason. A file that two PRs touch is
+listed under both. C-6 runs the same grep before it lands and rewords any hit this list does
+not name.
+
+- **C-3a**, with the push plumbing above:
+    - `hosts/lib/kuma_push.py`, deleted.
+    - `hosts/lib/host_lib.py`: the module docstring's "Uptime Kuma push" and "kuma_push.py"
+      mentions, the comment above the re-export, and the re-export.
+    - `hosts/components/kuma-push/component.yml`, deleted with its directory.
+    - `hosts/components/builder/component.yml` and `hosts/components/claude-code/component.yml`:
+      the `lib: kuma_push.py` rows.
+    - `hosts/components/builder/CLAUDE.md`: the file list that names `kuma_push.py`, and the
+      3.12-grammar sentence. That sentence cites
+      `test_host_lib_and_kuma_push_parse_with_the_3_12_grammar`, which C-3a renames once
+      `kuma_push.py` is gone.
+    - `hosts/daniel-box/package.yml`, `hosts/daniel-server/package.yml` and
+      `hosts/daniel-pi/package.yml`: the `kuma-push` entry in `components:`.
+    - `hosts/components/pi-heartbeats/component.yml`: the comment that points at the
+      `kuma-push` component.
+- **B-10**, with the poller's Kuma source:
+    - `hosts/components/claude-code/files/claude_triage_poll.py`.
+    - `hosts/components/claude-code/templates/claude-triage-poll.service.j2`: its
+      `Description=` names Kuma as an input.
+    - `hosts/components/claude-code/defaults/main.yml`: the severity-floor comment says Kuma
+      reads a tile's `tag-severity`, which stops being true when the poller drops Kuma.
+- **B9's Cutover-2**, with the scans' push:
+    - `hosts/components/integrity-scans/units/homelab-aide-check.service.j2` and
+      `hosts/components/integrity-scans/units/homelab-rkhunter-check.service.j2`: each
+      `Description=` says the scan pushes to Kuma.
+    - `hosts/components/integrity-scans/component.yml`: the contract's scope and evidence
+      lines that name the Kuma push.
+- **Each batch's token PR**, which removes the key from a `credentials:` list and from the
+  host's SOPS file in one step. The comment above each list says why the key stays until
+  then, and goes with it:
+    - B2's: `hosts/components/docs-refresh/component.yml`,
+      `hosts/components/eval-sweep/component.yml`,
+      `hosts/components/loki-route-witness/component.yml` and
+      `hosts/components/secret-rotation/component.yml`.
+    - B4's: `hosts/daniel-server/package.yml`, both its header line that calls the UPS
+      watchdog's token the one credential and the comment above `credentials:`.
+    - B5's: `hosts/daniel-pi/package.yml`.
+- **C-3b**, with the timer rename:
+    - The comments that cite `roles/setup/common/tasks/kuma_check_timer.yml` or call the
+      contract "the kuma-check form M6 left":
+      `hosts/components/loki-route-witness/templates/loki-read-route-health.sh.j2`,
+      `hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2`,
+      `hosts/components/loki-route-witness/units/homelab-loki-route-witness.service.j2`,
+      `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.service.j2`,
+      `hosts/components/loki-route-witness/component.yml` and
+      `hosts/components/secret-rotation/component.yml`. They cite `check_timer.yml` after it.
+    - The down marker `/var/lib/kuma-check/<name>.down` moves to
+      `/var/lib/homelab-check/<name>.down` in the four witness and audit units: the
+      `ExecStopPost=` of `homelab-loki-route-witness.service.j2` and
+      `homelab-secret-rotation-audit.service.j2`, and the `ConditionPathExists=` of
+      `hosts/components/loki-route-witness/units/homelab-loki-route-witness-boot.service` and
+      `hosts/components/secret-rotation/units/homelab-secret-rotation-audit-boot.service`. A
+      check that is red when its host
+      installs the new version loses one boot rerun, because the boot unit reads the new
+      path. Its timer reruns it at the next slot, so the cost is one missed rerun. Two tests
+      pin the old path and change with it: `hosts/lib/tests/test_loki_route_witness_component.py`
+      and `hosts/lib/tests/test_secret_rotation_component.py`.
+      Allowlisting the old path instead would keep `kuma-check` in two host packages for
+      good. Each old marker joins its component's `legacy:` list, and C-6 deletes the entry
+      once a read-only `ls` finds no file. This adds the daniel-box and daniel-server packages to
+      C-3b's deploys.
+- **C-6**, which rewords each comment that names Kuma only as history:
+    - The producers whose push a Cutover-2 removed:
+      `hosts/components/docs-refresh/templates/docs-refresh.sh.j2`,
+      `hosts/components/eval-sweep/templates/eval-run.sh.j2`,
+      `hosts/components/loki-route-witness/templates/loki-read-route-health.sh.j2`,
+      `hosts/components/secret-rotation/templates/secret-rotate.sh.j2`,
+      `hosts/components/secret-rotation/templates/secret-rotation-audit.sh.j2`,
+      `hosts/components/claude-code/templates/sync-artifacts.sh.j2` and
+      `hosts/components/claude-code/templates/claude-otel-health.sh.j2`.
+    - The component and package headers that tell the same history:
+      `hosts/components/loki-route-witness/component.yml`,
+      `hosts/components/secret-rotation/component.yml`,
+      `hosts/components/nut-secondary/component.yml`,
+      `hosts/components/pi-heartbeats/component.yml` and `hosts/daniel-box/package.yml`.
+    - The comments that describe Kuma as a reader that C-1 deletes: the maintenance window
+      in `hosts/components/host-maintenance/component.yml`,
+      `hosts/components/host-maintenance/units/homelab-reboot.timer.j2`,
+      `hosts/components/claude-code/templates/claude-triage-config.env.j2` and
+      `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer`. The timer's
+      `ENFORCED:` line cites
+      `ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py`, which C-1 deletes, so
+      the citation points at nothing from C-1 until C-6. No check resolves it: the facts lock
+      reads Markdown sections, not unit files.
+      C-6 keeps the timer's schedule and rewrites only the reason the comment gives for it.
+    - `hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh`: "a Kuma DOWN"
+      becomes the alert that pages for the nightly peer backup.
+    - `hosts/components/claude-code/CLAUDE.md`, as above.
+    - The `legacy:` entries above, in `hosts/components/builder/component.yml`,
+      `hosts/components/loki-route-witness/component.yml`,
+      `hosts/components/secret-rotation/component.yml`,
+      `hosts/components/integrity-scans/component.yml`,
+      `hosts/components/nut-secondary/component.yml` and `hosts/daniel-pi/package.yml`.
+- **The census allowlist**, each with its reason:
+    - `hosts/components/claude-code/files/homelab_rootq.py`: an output redaction rule, as above.
+    - `hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2` and
+      `hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2`: each cites this plan by
+      its filename, `m6-retire-kuma.md`. That citation stays true after Kuma is gone.
+    - `hosts/components/pi-compose/services/alloy/compose.yaml.j2`,
+      `hosts/components/pi-compose/services/autoheal/compose.yaml.j2`,
+      `hosts/components/pi-compose/services/docker-proxy/compose.yaml.j2` and
+      `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2`: the inert
+      `org.homelab.kuma-docker-monitor` label, the comments beside it, and the header and
+      healthcheck comments that name AutoKuma or Uptime Kuma. A label change recreates the
+      container, so these files leave the allowlist in the next Pi compose change that
+      recreates their containers anyway (*Open questions*, item 7).
 
 **Which package version carries a `hosts/` change.** The builder versions each host package
 `0.<first-parent count>+g<sha12>` (`hosts/lib/host_package_builder.py:version`). The version
@@ -2079,11 +2216,11 @@ this applies to, with what the rules predict:
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
 | C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
-| C-3b | the timer rename with the legacy-unit removal; the variable rename; `glance_facts.py:timer_units` and its named-member case | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand |
+| C-3b | the timer rename with the legacy-unit removal; the variable rename; `glance_facts.py:timer_units` and its named-member case; the `hosts/` comments that cite the task file and the witness and audit units' down marker (*Every `hosts/` file the grep finds, by PR*) | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand; a new version of the daniel-box and daniel-server host packages |
 | C-4a | the key rename, `ingress_probes.py` and its `ansible_jinja_env.py` registration | ~160 | per the narrowing |
 | C-4b | delete `kuma_monitors.py`, its `ansible_jinja_env.py` import and registration, and its `FILTER_FIELDS` row, after D6 | ~70 removed | none once D6 has landed |
 | C-5 | secrets (**operator-only** half first) | ~100 | none |
-| C-6 | the census row, after the quoted identifier `git grep`; C-3a's two absent tasks out; the host packages' Kuma `legacy:` entries out; after C-7 | ~60 | a new version of each host package whose `legacy:` list changes; the tick (initial_setup and the `install_host_lib.yml` importers); `land.sh` for `configarr` and `janitorr` only while they import `install_host_lib.yml`; `k3s --tags "backup-health,live-drift"` by hand |
+| C-6 | the census row, after the quoted identifier `git grep`; C-3a's two absent tasks out; the host packages' Kuma `legacy:` entries out; the `hosts/` history comments (*Every `hosts/` file the grep finds, by PR*); after C-7 | ~100 | a new version of all three host packages; the tick (initial_setup and the `install_host_lib.yml` importers); `land.sh` for `configarr` and `janitorr` only while they import `install_host_lib.yml`; `k3s --tags "backup-health,live-drift"` by hand |
 | C-7 | M5's `KumaNotificationDropped`; the `swallowed_verdicts` row with its bodies, rule, tests and `KUMA_RETIRING_TAGS` | ~350 removed | `observability`, `monitor-bridge`, `loki-homelab` |
 
 B-2 and the old B-3 (postflight) are one PR, because `postflight.py` imports the modules B-2
@@ -2688,11 +2825,14 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    gain, and C-3b needs a legacy-unit removal to be safe. Resolution: C-3b renames them. If the
    operator prefers, the names stay, C-3b shrinks to the task-file rename, and `kuma-check-`
    joins the census allowlist.
-7. **The Pi's AutoKuma labels.** `ansible/templates/autokuma.yml.j2` and the `kuma(...)` labels
-   in the compose templates of `alloy`, `autoheal`, `docker-proxy` and `wg-easy` are inert once
-   Kuma is gone. Changing them recreates every Pi container, which is a Pi deploy this slice
-   does not schedule. Resolution: H5 drops them when it rewrites the Pi compose files. Until
-   then they stay on the census allowlist.
+7. **The Pi's AutoKuma labels.** `ansible/templates/autokuma.yml.j2` and the
+   `org.homelab.kuma-docker-monitor` label in
+   `hosts/components/pi-compose/services/{alloy,autoheal,docker-proxy,wg-easy}/compose.yaml.j2`
+   are inert once Kuma is gone. H5 rewrote the Pi compose files into the `pi-compose` service
+   trees and kept the label. Changing it recreates every Pi container, which is a Pi deploy
+   this slice does not schedule. Resolution: the four files stay on the census allowlist,
+   with the comments beside the label and the header comments that name AutoKuma or Uptime
+   Kuma. They leave it in the next Pi compose change that recreates their containers anyway.
 8. **C-4b waits for D6.** `narrow_lib/filters.py` refuses any deleted plugin, and a refusal
    records every declared service as `k8s_unapplied`. Resolution: C-4b lands after D6 deletes
    the narrowing. If the operator wants it sooner, `filters.py` could learn that a deleted
