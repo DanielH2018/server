@@ -32,12 +32,6 @@
 #
 # ENFORCED: hosts/lib/tests/test_docs_refresh_component.py, and the failure-path tests in
 # ansible/tests/setup/test_docs_refresh_*.py, which read the rendered script.
-# No unit loads this key, because M6 batch B2's Cutover-2 dropped the Kuma push. It stays listed
-# because `host_secrets.py check` pins the names a host's tree declares to that host's SOPS file,
-# and changing the file takes the operator's `host_secrets.py sync daniel-box`. B2's token PR
-# removes the key here and in the file in one step.
-credentials:
-  - docs_refresh_push_token
 files:
   - {src: templates/docs-refresh.sh.j2, dst: /usr/lib/homelab/docs-refresh, mode: "0755"}
   - {src: tmpfiles.d/homelab-docs-site.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-docs-site.conf}

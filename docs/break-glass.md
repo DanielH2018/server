@@ -223,8 +223,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
       one item 11 derives: every value in every SOPS file whose creation rule lists the Pi's
       public key. Take the public key from the rule, or from `age-keygen -y` on a surviving
       copy, and run item 11's command. For the Pi the only rule is
-      `vars/hosts/daniel-pi.sops.yaml`, so the list is every value in that file, which holds
-      `pi_sd_health_push_token` and `pi_recovery_push_token`. Rotate each through
+      `vars/hosts/daniel-pi.sops.yaml`, so the list is every value in that file: the Pi
+      package's `credentials:` and the outputs it renders. Rotate each through
       `docs/secret-rotation.md`, then `host_secrets.py sync daniel-pi` (**operator-only**)
       to refresh the host file's copies.
    Source: `docs/target-architecture/host/h4-secrets-unit.md` (H4.4, H4.5) and

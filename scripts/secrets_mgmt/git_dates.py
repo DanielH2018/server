@@ -138,6 +138,78 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_kuma_notify_failures_push_token",
         "monitor_bridge_loki_push_token",
         "monitor_bridge_loki_reachable_push_token",
+        # M6's Phase A and B push tokens, whose Kuma tiles and pushes the batches' cutovers
+        # deleted between 2026-10-30 and 2026-11-01. Each batch's token PR retired them a week
+        # later. A3:
+        "monitor_bridge_targets_push_token",
+        "monitor_bridge_cluster_targets_push_token",
+        "monitor_bridge_promtail_dropped_push_token",
+        # A4:
+        "monitor_bridge_cert_push_token",
+        "monitor_bridge_traefik_push_token",
+        "monitor_bridge_traefik_latency_push_token",
+        "monitor_bridge_traefik_404_push_token",
+        "monitor_bridge_traefik_421_push_token",
+        # A2:
+        "monitor_bridge_restarts_push_token",
+        "monitor_bridge_oom_push_token",
+        "monitor_bridge_cpu_push_token",
+        # A5:
+        "monitor_bridge_longhorn_volumes_push_token",
+        "monitor_bridge_pvc_push_token",
+        "monitor_bridge_snapshot_headroom_push_token",
+        "monitor_bridge_kubelet_readonly_push_token",
+        "monitor_bridge_etcd_db_size_push_token",
+        # A1:
+        "monitor_bridge_disk_push_token",
+        "monitor_bridge_mem_push_token",
+        "monitor_bridge_host_temp_push_token",
+        "monitor_bridge_ups_push_token",
+        # A7 and B8:
+        "monitor_bridge_k8s_workloads_push_token",
+        "monitor_bridge_pi_push_token",
+        # B1:
+        "longhorn_backup_push_token",
+        "etcd_snapshot_push_token",
+        "manifest_prune_push_token",
+        "release_staleness_push_token",
+        "live_drift_push_token",
+        # B3:
+        "ruleset_drift_push_token",
+        "interaction_limit_push_token",
+        # B5:
+        "pi_sd_health_push_token",
+        "pi_recovery_push_token",
+        # B6a:
+        "artifacts_sync_push_token",
+        "claude_otel_push_token",
+        # B7:
+        "arr_autoblock_push_token",
+        "cloudflare_ddns_direct_push_token",
+        "cloudflare_ddns_proxied_push_token",
+        "monitor_bridge_pi_peers_push_token",
+        # B2 and B4:
+        "docs_refresh_push_token",
+        "homelab_eval_push_token",
+        "secret_rotation_push_token",
+        "setup_drift_push_token",
+        "loki_route_witness_push_token",
+        "loki_route_witness_daniel_server_push_token",
+        "ups_secondary_push_token",
+        "ups_secondary_daniel_server_push_token",
+        "monitor_bridge_fake_remux_push_token",
+        "monitor_bridge_fake_remux_replace_push_token",
+        "mkv_attachment_repair_push_token",
+        "etcd_drill_full_push_token",
+        "etcd_drill_fence_push_token",
+        "monitor_bridge_renovate_alive_push_token",
+        "renovate_agent_kuma_push_token",
+        # B6b:
+        "crowdsec_remote_allowlist_push_token",
+        "monitor_bridge_appsec_push_token",
+        "monitor_bridge_home_allowlist_push_token",
+        "monitor_bridge_configarr_push_token",
+        "monitor_bridge_janitorr_push_token",
     }
 )
 

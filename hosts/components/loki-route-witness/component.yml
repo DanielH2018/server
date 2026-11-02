@@ -37,13 +37,6 @@
 # ENFORCED: ansible/tests/setup/test_loki_route_witness.py (the script's behaviour against
 # stubs), hosts/lib/tests/test_loki_route_witness_component.py (the units and legacy entries)
 # and hosts/lib/tests/test_component_retired_stamp_fragments.py (the manifest fragment names).
-#
-# No unit loads the key below, because M6 batch B2's Cutover-2 dropped the Kuma push. It stays
-# listed because `host_secrets.py check` pins the names a host's tree declares to that host's SOPS
-# file, and changing the file takes the operator's `host_secrets.py sync daniel-box`. B2's token
-# PR removes the key here and in the file in one step.
-credentials:
-  - loki_route_witness_push_token
 files:
   - {src: templates/loki-read-route-health.sh.j2, dst: /usr/lib/homelab/loki-read-route-health, mode: "0755"}
   - {src: loki_route_health.py, dst: /usr/lib/homelab/loki_route_health.py, mode: "0755"}

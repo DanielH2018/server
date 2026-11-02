@@ -75,14 +75,8 @@ components:
   - sops
 units:
   k3s.service: {policy: windowed}
-# No unit loads ups_secondary_push_token since M6 batch B4's Cutover-2, nor the B2 tokens the
-# docs-refresh, eval-sweep, secret-rotation and loki-route-witness components name. They stay
-# listed because `host_secrets.py check` pins this tree's names to daniel-box's SOPS file, and
-# changing that file takes the operator's `host_secrets.py sync daniel-box`. Each batch's token PR
-# removes its keys here and in the file in one step.
 credentials:
   - k3s_readonly_token
-  - ups_secondary_push_token
   - rkhunter_daniel_box_push_token
   - aide_daniel_box_push_token
   - healthchecks_ping_key

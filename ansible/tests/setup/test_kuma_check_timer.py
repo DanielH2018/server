@@ -307,7 +307,7 @@ EXPLICIT_EXIT_PRODUCERS = {
     "github-ruleset-drift": "test_github_ruleset_drift.py",
     "github-interaction-limit": "test_github_interaction_limit.py",
 }
-# The audit script runs the Python CLI, whose `--push` exit is tested in
+# The audit script runs the Python CLI, whose `--verdict` exit is tested in
 # scripts/secrets_mgmt/tests; its own arms must never exit 0 after a down push. Since H7.36 it
 # is a component's script (COMPONENT_CHECKS), not a wired import, so none is left here.
 EXEC_PRODUCERS: frozenset[str] = frozenset()
@@ -348,7 +348,7 @@ def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
             assert not re.search(r"^\s*exit 0\b", text, re.M), (
                 f"{name}: an `exit 0` after a down push would end the reruns"
             )
-            assert "audit --push" in text
+            assert "audit --verdict" in text
         else:
             assert text.rstrip().endswith(EXIT_CONTRACT), (
                 f"{name}: {template.name} must end on the exit contract, after the final push"

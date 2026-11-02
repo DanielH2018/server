@@ -120,8 +120,8 @@ def test_daniel_boxs_watchdog_unit_loads_no_credential(tmp_path):
     package = daniel_box_package(tmp_path)
     unit = package.files["/usr/lib/systemd/system/homelab-ups-watchdog.service"][0]
     assert b"LoadCredential=" not in unit
-    # B4's token PR removes it from the package and daniel-box's SOPS file together.
-    assert "ups_secondary_push_token" in package.credentials
+    # B4's token PR retired the token.
+    assert "ups_secondary_push_token" not in package.credentials
 
 
 # ── The ONBATT timer, once any host beyond ups_host is armed ────────────────────────────────

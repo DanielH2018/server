@@ -15,7 +15,6 @@ import datetime as dt
 import subprocess
 from dataclasses import replace
 from types import SimpleNamespace
-from unittest import mock
 
 from secrets_mgmt import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, named_calls, process_calls
@@ -86,20 +85,6 @@ def test_audit_verdict_exits_zero_on_an_up_audit(capsys):
         "audit: verdict=up all secrets within rotation window"
         in capsys.readouterr().out
     )
-
-
-def test_the_wrappers_old_push_flag_still_asks_for_the_verdict():
-    """The packaged wrapper and this file land on different planes (the alias's comment)."""
-    parser_args = ["audit", "--push", "--no-derive"]
-    seen = {}
-
-    def record(args, _tools):
-        seen["verdict"] = args.verdict
-        return 0
-
-    with mock.patch.object(sr, "cmd_audit", record):
-        assert sr.main(parser_args) == 0
-    assert seen == {"verdict": True}
 
 
 def test_audit_summary_caps_the_overdue_name_list():

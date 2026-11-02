@@ -273,8 +273,8 @@ The file gains one line a day and is never rotated.
 The unit's `ExecStartPost` writes the `renovate-agent` textfile verdict that
 `RenovateAgentNotReporting` reads (`other-setup-checks.yaml`). It runs only when the wrapper
 exited 0, so the rule reports silence and the `OnFailure` alert reports failure. M6 batch B4's
-Cutover-1a deleted the `Renovate Agent — Alive` Kuma tile and the unit's beat to it. The
-`renovate_agent_kuma_push_token` key stays in `PENDING_RETIREMENT` until B4's token PR retires it.
+Cutover-1a deleted the `Renovate Agent — Alive` Kuma tile and the unit's beat to it, and B4's
+token PR retired its push token a week later.
 
 **A worktree-blocked skip exits non-zero, so it writes no verdict.** The verdict is
 `ExecStartPost`, which runs after ANY exit 0, so a `down` written from inside the wrapper on a

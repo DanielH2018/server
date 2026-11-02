@@ -96,7 +96,7 @@ def test_a_role_template_with_no_role_is_refused(tmp_path):
 UNITS = "/usr/lib/systemd/system"
 DROPIN = f"{UNITS}/nut-monitor.service.d/50-homelab.conf"
 WATCHDOG_UNIT = f"{UNITS}/homelab-ups-watchdog.service"
-# The retired push token, which the package still names for `host_secrets.py check`.
+# The Kuma push token B4's token PR retired.
 TOKEN = "ups_secondary_daniel_server_push_token"
 # The role's udev rule, pinned here because H4.3c deleted the Ansible tasks that held its text.
 RULE = (
@@ -142,13 +142,12 @@ def test_a_drop_in_with_requires_or_no_confpath_is_flagged():
     ]
 
 
-def test_the_watchdog_loads_no_credential_and_the_package_still_names_the_token(
+def test_the_watchdog_loads_no_credential_and_the_package_names_no_push_token(
     package,
 ):
     unit = text(package, WATCHDOG_UNIT)
     assert "LoadCredential=" not in unit
-    # B4's token PR removes it from the package and daniel-server's SOPS file together.
-    assert TOKEN in package.credentials
+    assert TOKEN not in package.credentials
 
 
 def test_the_watchdog_ships_as_a_plain_package_script_on_a_timer(package):

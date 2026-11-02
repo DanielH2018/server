@@ -197,10 +197,9 @@ def test_the_retired_crons_and_scripts_are_legacy_entries(package):
     assert all(entry in package.legacy for entry in expected), package.legacy
 
 
-def test_the_package_keeps_both_push_credentials_until_the_token_pr(package):
-    # No unit loads them since Cutover-2, but `host_secrets.py check` pins this list to the Pi's
-    # SOPS file, so B5's token PR removes both keys from the list and the file in one step.
+def test_the_package_names_neither_retired_push_token(package):
+    # B5's token PR retired both heartbeat push tokens.
     assert "homelab-secrets.service" in package.units()
-    assert {"pi_sd_health_push_token", "pi_recovery_push_token"} <= set(
+    assert not {"pi_sd_health_push_token", "pi_recovery_push_token"} & set(
         package.credentials
     )

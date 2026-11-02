@@ -44,13 +44,6 @@
 # ENFORCED: ansible/tests/setup/test_initial_setup_check_textfiles.py (the audit's behaviour
 # against stubs), ansible/tests/setup/test_cron_scripts_publish_via_pr.py and
 # hosts/lib/tests/test_secret_rotation_component.py (the units and the legacy entries).
-#
-# No unit loads the key below, because M6 batch B2's Cutover-2 dropped the Kuma push. It stays
-# listed because `host_secrets.py check` pins the names a host's tree declares to that host's SOPS
-# file, and changing the file takes the operator's `host_secrets.py sync daniel-box`. B2's token
-# PR removes the key here and in the file in one step.
-credentials:
-  - secret_rotation_push_token
 files:
   - {src: templates/secret-rotate.sh.j2, dst: /usr/lib/homelab/secret-rotate, mode: "0755"}
   - {src: templates/secret-rotation-audit.sh.j2, dst: /usr/lib/homelab/secret-rotation-audit, mode: "0755"}

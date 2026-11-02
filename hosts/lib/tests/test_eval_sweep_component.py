@@ -25,9 +25,9 @@ COMPONENT = REPO / "hosts" / "components" / "eval-sweep" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/eval-run"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-eval-sweep.conf"
-# The unit loads the first; the second is the retired Kuma push token the component still names.
 LOADED = ("anthropic_api_key",)
-UNLOADED = ("homelab_eval_push_token",)
+# The Kuma push token B2's token PR retired.
+RETIRED = "homelab_eval_push_token"
 CONTRACT_PARTS = (
     "Autonomous-role contract",
     "Scope:",
@@ -87,17 +87,13 @@ def test_the_service_keeps_the_crons_path_and_home(package):
     assert f"Environment=HOME=/home/{_user()}\n" in unit
 
 
-def test_the_api_key_is_a_credential_and_the_push_token_is_not_loaded(package):
-    """M6 batch B2's Cutover-2 dropped the Kuma push, the only reader of the push token.
-
-    The component still names the token, because `host_secrets.py check` pins daniel-box's SOPS
-    file to the tree's names until B2's token PR removes both.
-    """
+def test_the_api_key_is_the_only_credential(package):
+    """M6 batch B2's token PR retired the push token, so the component names the API key alone."""
     spec = yaml_fast.safe_load(COMPONENT.read_text())
-    assert tuple(spec["credentials"]) == (*LOADED, *UNLOADED)
+    assert tuple(spec["credentials"]) == LOADED
     unit = _text(package, f"{UNITS}/homelab-eval-sweep.service")
     assert credential_problems(unit, LOADED) == []
-    assert [key for key in UNLOADED if key in unit] == []
+    assert RETIRED not in unit
     assert "CREDENTIALS_DIRECTORY" in _text(package, SCRIPT)
 
 
