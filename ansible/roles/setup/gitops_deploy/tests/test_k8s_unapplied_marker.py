@@ -52,7 +52,6 @@ def test_a_deferred_k8s_role_is_recorded_with_the_sha_and_the_stamp(
         state,
         settings,
         ORIGIN,
-        set(),
         ChangeSet(k8s={"authelia"}),
         declared_k8s={"authelia"},
     )
@@ -72,7 +71,6 @@ def test_each_line_names_the_commit_that_changed_its_service(
         state,
         settings,
         ORIGIN,
-        set(),
         ChangeSet(k8s={"sonarr", "authelia"}, k8s_origins={"sonarr": APPLIED}),
         declared_k8s={"sonarr", "authelia"},
     )
@@ -84,14 +82,13 @@ def test_each_line_names_the_commit_that_changed_its_service(
 def test_a_range_with_no_k8s_role_records_nothing(
     gitops_deploy, state_dir, settings, state
 ):
-    """CLEAN half: a tasks-only push must not leave a line nobody can discharge."""
+    """CLEAN half: a secrets-only push must not leave a line nobody can discharge."""
     deploy_k8s_owed.alert_and_record_deferred(
         _tools(),
         state,
         settings,
         ORIGIN,
-        set(),
-        ChangeSet(tasks={"svca"}),
+        ChangeSet(secrets=True),
     )
     assert state.owed_pending(OWED_K8S_UNAPPLIED) == []
     assert not (state_dir / "owed.jsonl").exists()
@@ -111,7 +108,6 @@ def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp
         state,
         settings,
         LATER,
-        set(),
         ChangeSet(k8s={"authelia"}),
         declared_k8s={"authelia"},
     )
@@ -472,7 +468,6 @@ def test_a_service_already_paging_from_k8s_deferred_is_not_recorded_twice(
         state,
         settings,
         ORIGIN,
-        set(),
         ChangeSet(k8s={"sonarr", "authelia"}),
         declared_k8s={"sonarr", "authelia"},
     )

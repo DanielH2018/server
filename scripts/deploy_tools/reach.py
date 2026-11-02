@@ -10,7 +10,7 @@ test-path rule, the quiet-path filter and the path-to-role mapper.
 THREE READINGS, NOT ONE. The callers ask three different questions of the same paths:
 
 - `Reach.changes` is the deployer's `ChangeSet`. `deploy.sh --changed` deploys
-  `changes.k8s | changes.services`, which includes every k8s role that
+  `changes.k8s`, which includes every k8s role that
   `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` lists for a changed setup-role file.
 - `Reach.tags` is the landing's tag list: each path's own declared role, every role
   that `lookup()`s a changed file, and every k8s role that
@@ -186,15 +186,13 @@ class Reach(NamedTuple):
 
         The union of the `ChangeSet`'s per-role fields with the two cross-role reads: a role
         importing a changed `files/*.py` another role owns, and a role `lookup()`ing a
-        changed file. Wider than `tags` by design: `tasks` and the import consumers are in
-        it, because being behind on either still renders an old file.
+        changed file. Wider than `tags` by design: the import consumers are in it, because
+        being behind on one still renders an old file.
         """
         cs = self.changes
         return (
-            cs.services
-            | cs.k8s
+            cs.k8s
             | cs.k8s_deploy
-            | cs.tasks
             | shared_module_consumers(self.loud, repo)
             | deploy_cross_role.k8s_lookup_readers(self.loud, repo)
         )

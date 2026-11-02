@@ -709,7 +709,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `ansible/tests/`, any role-local `tests/` directory, and a `test_*.py`/`conftest.py` beside the
   module it covers. Every prefix and regex matches on path alone, so a test file would otherwise
   read as whatever plane it sat under (PR #707: three test files set `broad_manual`). A test-only
-  push produces an empty `ChangeSet` and takes the no-services ff-merge branch, like a
+  push produces an empty `ChangeSet` and takes the `handle_merge_only` ff-merge, like a
   docs-only push. The `no-role-ships-a-test-file` row of
   `ansible/tests/repo/test_census_rows_roles.py` enforces that no role ships a test file to a host.
 - **A new module in `files/` goes in two lists in `tasks/code.yml`**: the copy task's `loop:` that
@@ -1126,16 +1126,13 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `deploy.yml --tags radarr,sonarr` and then post "fast-forwarded but **not applied**" for the
   same roles.
 
-- **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`, `meta/`)**
-  are ff-merged but NOT auto-deployed, so the deployer defers-and-alerts (once per SHA,
-  the `tasks` alert slot) to redeploy the affected services by hand. `tasks/` and
-  the role-root catch-all share that channel; `*.md` (CLAUDE.md/README) stays a silent
-  ff-merge. This fires whether or not the tick deployed something else: a
-  *combined* push (`svcA`'s template + `svcB`'s `tasks/`) deploys `svcA` but still flags `svcB`'s
-  unapplied structural change (`deploy_logic.deferred_service_alerts`, keyed on the not-deployed
-  remainder `cs.tasks - deployed`, run on both branches). A service whose own template changed
-  rode its scoped `--tags` redeploy, so it's not re-flagged. Only fires on a clean deploy — a
-  health-gate rollback git-resets the whole commit, reverting the structural change too.
+- **A k8s role's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`, `meta/`)**
+  join `cs.k8s` with the rest of the role, so they take the k8s defer-and-alert (the `k8s`
+  alert slot) unless the change is an eligible image-pin bump. `*.md` (CLAUDE.md/README)
+  stays a silent ff-merge. The separate `tasks` channel served the Pi's Compose roles under
+  `roles/containers/`, and went with them (#6980). A state directory that still holds a
+  `tasks <sha>` line in its `alerted` marker keeps it inert: `parse_alerted` reads any slot,
+  `record_alerted` writes it back unchanged, and nothing looks it up.
 - Acts **only when origin is strictly ahead of local** (`is_ancestor(local, origin)` →
   `next_action(..., origin_ahead=…)`). Un-pushed local commits make origin an *ancestor* of
   local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the
