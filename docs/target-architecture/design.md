@@ -4,7 +4,7 @@ This page is the durable overview of the homelab target-architecture migration. 
 the migration exists, where each area ends up, and the order the slices run in. It records the
 substance of the churn survey of 2026-10-11, whose rendering is pruned after 30 days.
 [contracts.md](contracts.md) holds the interfaces every slice builds against, and this page
-does not restate them. Nothing here is built at `70591c307`, and every slice is PLANNED.
+does not restate them. The plans measure the tree at `70591c307`. Each slice's `Status:` line records what has merged since, with PR numbers, and this page does not repeat it.
 
 ## Why the migration exists
 
