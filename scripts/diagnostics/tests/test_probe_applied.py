@@ -110,7 +110,9 @@ def test_the_walk_reads_each_file_task_and_follows_imports_and_blocks(tmp_path):
     assert (script.mode, script.owner, script.group) == ("0755", "root", "root")
     assert by_path["/usr/local/lib/x/lib.py"].sha256 == _sha("print('x')\n")
     assert by_path["/usr/local/bin/old.sh"].present is False
-    assert by_path["/etc/cron.d/x"].sha256 is None
+    assert by_path["/etc/cron.d/x"].sha256 == _sha(
+        "#Ansible: x\n5 * * * * root /usr/local/bin/x.sh\n"
+    )
     assert by_path["/etc/x/box"].sha256 == _sha("box 8080\n")
     assert {"/var/lib/x/a", "/var/lib/x/b"} <= set(by_path)
     assert by_path["/var/lib/x/a"].mode == "0750"
@@ -207,7 +209,7 @@ def _run(tmp_path, rows, tasks=TASKS, ctx=CTX):
         return {
             "host": host,
             "user": "ubuntu",
-            "stat": {p: live[p] for p in plan["stat"]},
+            "stat": {p: live[p] for p in plan.get("stat", [])},
         }
 
     ns = SimpleNamespace(role="x", host="daniel-box", dry_run=False)

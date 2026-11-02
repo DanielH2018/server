@@ -51,6 +51,20 @@ SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
 COMMANDS = ("command", "ansible.builtin.command", "ansible.legacy.command")
 # The reason `content_hash` gives for content it cannot predict, an unchecked `Want` (#6378).
 LATE = "it reads run-time name(s)"
+# Its reason for a template render holding a secret; `applied` then compares the apply record.
+STUB_RENDER = "the render left a STUB (a secret, or a value only a play resolves)"
+CRON_REASON = "cron writes the line"
+# The schedule fields in the order `ansible.builtin.cron` writes them, whatever the task's order.
+_CRON_FIELDS = ("minute", "hour", "day", "month", "weekday")
+# Arguments that make the module write something other than one `#Ansible:` line and its job.
+_CRON_OTHER = (
+    "special_time",
+    "disabled",
+    "env",
+    "insertafter",
+    "insertbefore",
+    "backup",
+)
 _SINGLE = re.compile(r"^\s*\{\{((?:(?!\{\{|\}\}).)*)\}\}\s*$", re.S)
 
 
@@ -233,8 +247,35 @@ def content_hash(walk, module: str, args: dict, item) -> tuple[str | None, str]:
     if rendered is None:
         return None, f"the template does not render here ({err})"
     if STUB in rendered:
-        return (
-            None,
-            "the render left a STUB (a secret, or a value only a play resolves)",
-        )
+        return None, STUB_RENDER
     return hashlib.sha256(rendered.encode()).hexdigest(), ""
+
+
+def cron_hash(walk, args: dict, item) -> tuple[str | None, str]:
+    """The sha256 of the `/etc/cron.d` file `ansible.builtin.cron` writes for one job.
+
+    The module writes `#Ansible: <name>`, then `<minute> <hour> <day> <month> <weekday> <user>
+    <job>` with `*` for an omitted field, and a trailing newline. A task using any of
+    `_CRON_OTHER`, or a field that does not render to a literal, gets no hash.
+
+    Returns:
+        The hash and "", or None and the reason the content is not compared.
+    """
+    if any(args.get(k) for k in _CRON_OTHER):
+        return None, CRON_REASON
+    fields = [
+        "*" if args.get(k) is None else str(args[k])
+        for k in ("name", *_CRON_FIELDS, "user", "job")
+    ]
+    if args.get("name") is None or args.get("user") is None or args.get("job") is None:
+        return None, CRON_REASON
+    ns = {**walk.ctx, "inventory_hostname": walk.host}
+    late = template_late(walk.text_env, "\n".join(fields), ns, walk.run_time)
+    late -= {"item"} if item is not None else set()
+    if late:
+        return None, f"{CRON_REASON}, and its fields read run-time name(s) {', '.join(sorted(late))}"  # fmt: skip
+    name, *line = [walk.render(f, item) for f in fields]
+    if name is None or None in line:
+        return None, f"{CRON_REASON}, and a field does not render to a literal"
+    text = f"#Ansible: {name}\n{' '.join(line)}\n"
+    return hashlib.sha256(text.encode()).hexdigest(), ""

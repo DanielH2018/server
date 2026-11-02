@@ -56,6 +56,36 @@
         group: root
       no_log: true  # renders the Kuma push token
 
+    # `probe.py applied` cannot hash the render, which holds the token as a STUB, so it compares
+    # the live file with this record instead (#6913). `lineinfile`, because the probe reads no
+    # such task: a `copy` of a registered value would read UNCHECKED itself.
+    # DECIDED: the record is 0644 so the probe reads it as the operator. It holds a hash of a
+    # 0700 file, which guesses nothing: the token in it is random and the hash covers the script.
+    - name: Create the apply-time SHA-256 record directory
+      ansible.builtin.file:
+        path: /var/lib/homelab/setup-applied-sha256.d
+        state: directory
+        mode: "0755"
+        owner: root
+        group: root
+
+    - name: Read the installed garbage-collection script's SHA-256
+      ansible.builtin.stat:
+        path: /usr/local/bin/registry-gc.sh
+        checksum_algorithm: sha256
+      register: k8s_host_files_registry_gc_script_stat
+
+    - name: Record the garbage-collection script's SHA-256 for probe.py applied
+      ansible.builtin.lineinfile:
+        path: /var/lib/homelab/setup-applied-sha256.d/k8s_host_files
+        regexp: '^[0-9a-f]{64}  /usr/local/bin/registry-gc\.sh$'
+        line: "{{ k8s_host_files_registry_gc_script_stat.stat.checksum }}  /usr/local/bin/registry-gc.sh"
+        create: true
+        mode: "0644"
+        owner: root
+        group: root
+      when: k8s_host_files_registry_gc_script_stat.stat.exists
+
     - name: Create the registry garbage-collection state directory
       ansible.builtin.file:
         path: /var/lib/registry-gc

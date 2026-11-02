@@ -11,8 +11,10 @@ so the shared `{{ role_path }}/../common/tasks/` files are walked too, with the 
 - `copy`: the bytes of `files/<src>`, or the render of `content`, with the same fields;
 - `file` with `state: absent`: a path that must not exist. `state: directory` checks the mode
   and owner only. Any other `file` state is skipped;
-- `cron` with a `cron_file`: `/etc/cron.d/<cron_file>`, present or absent. Ansible writes the
-  line itself, so the content is not compared;
+- `cron` with a `cron_file`: `/etc/cron.d/<cron_file>`, present or absent. The content is the
+  `#Ansible: <name>` line and the job line the module writes, built from the task's arguments
+  by `applied_facts.cron_hash`. A file two present cron tasks write is compared by metadata
+  only, because the module merges their lines;
 - the same five spelled `ansible.builtin.*`.
 
 A `when:` (its own, or a block's) is Jinja over the walk's context: the host's merged vars,
@@ -48,16 +50,18 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from collections import Counter
 
 from diagnostics.probe_lib.applied_facts import (
+    CRON_REASON,
     LATE,
     SET_FACTS,
     STUB,
     content_hash,
+    cron_hash,
     expr_names,
     late_names,
     native,
@@ -91,6 +95,7 @@ class Want:
         sha256: the expected content's hash, or None when it is not compared.
         why_no_content: why `sha256` is None, for the report; "" when it is set or moot.
         unchecked: the content reads a run-time name, so it is UNCHECKED, not ok-meta.
+        recorded: `sha256` is the hash the apply recorded, not the render's.
         mode: the declared mode as four octal digits, or None when undeclared.
         owner: the declared owner, or None.
         group: the declared group, or None.
@@ -102,6 +107,7 @@ class Want:
     sha256: str | None = None
     why_no_content: str = ""
     unchecked: bool = False
+    recorded: bool = False
     mode: str | None = None
     owner: str | None = None
     group: str | None = None
@@ -417,7 +423,8 @@ class _Walk:
             self.wants.append(Want(dest, name, present=False))
             return
         if module == "cron":
-            self.wants.append(Want(dest, name, why_no_content="cron writes the line"))
+            sha, why = cron_hash(self, args, item)
+            self.wants.append(Want(dest, name, sha256=sha, why_no_content=why))
             return
         if module == "file":
             if state == "directory":
@@ -480,7 +487,15 @@ def expected(
     file's text.
     """
     walk = _walked(role_dir, host, ctx, files, texts)
-    return walk.wants, walk.skips
+    crons = Counter(
+        w.path for w in walk.wants if w.present and w.path.startswith("/etc/cron.d/")
+    )
+    shared = f"{CRON_REASON}, and several cron tasks write it"
+    wants = [
+        replace(w, sha256=None, why_no_content=shared) if crons[w.path] > 1 else w
+        for w in walk.wants
+    ]
+    return wants, walk.skips
 
 
 def reads(
