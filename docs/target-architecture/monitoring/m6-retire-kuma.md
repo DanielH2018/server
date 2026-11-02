@@ -800,9 +800,8 @@ secrets. The arithmetic: 83 at the baseline, less M5's 3 and M3's 1, leaves 79. 
 - C-1a waits for B6c's token PR, which retires `registry_gc_push_token` after B6c's
   cutovers have deleted the `Registry GC` tile and its push. Until B6c's Cutover-1a, C-1a's
   gate of one `monitor_status` series cannot pass (Open question 13). The index's M6c row
-  names D5's registry PR for this edge, and that PR landed without removing the push. C-1a's
-  quoted `registry_gc_push_token` grep and its gate enforce the B6c edge inside this slice,
-  so the stale index edge causes no stall.
+  names B6c's token PR for this edge. C-1a's quoted `registry_gc_push_token` grep and its
+  gate also enforce the edge inside this slice.
 
 **A0, the declaration floor (~40 lines, deploys nothing).** The uptime-kuma task
 "Check the declaration index is populated" asserts `kuma_declarations | length > 50`, and it
@@ -2770,8 +2769,8 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    index too:
     - A7's shadow PR after M5's ruler is live, and A7's Cutover-a after M2's PR 4a;
     - D5's littlelink flux PR after B-1e (Open question 12);
-    - C-1a after D5's registry PR (Open question 13), which that question's amendment of
-      2026-11-02 asks to repoint at B6c's token PR;
+    - C-1a after B6c's token PR (Open question 13), repointed from D5's registry PR on
+      2026-11-02;
     - D5's monitor-bridge flip after A6-7a, live (*When D5 flips a role M6 edits*);
     - D6 after C-2b, live. Before #5821 this edge followed from uptime-kuma never flipping.
       The operator's 2026-10-21 ruling flipped it, and with it observability and
@@ -2916,6 +2915,8 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
       `registry_gc_push_token` grep and its one-series gate enforce the B6c wait. The
       orchestrator owns contracts.md, and the request is to repoint the row at B6c's token
       PR.
+    - **Applied on 2026-11-02 (#6930).** contracts.md's M6c row and the paragraph after it
+      name B6c's token PR, which waits on no D5 step.
     - The fallback this question once named, a B6 PR that moves registry-gc under M3's
       recipe, is what B6c does. Nothing is left for D5 to delete.
 14. **D2.6d and A6-1 both need the bridge's serving thread.** D2.6d adds the deploy-pipeline
