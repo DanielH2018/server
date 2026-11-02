@@ -141,8 +141,8 @@ class Fakes:
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
     # `land_tags.shared_caller_tags`: each shared role the PR changes, to the tags that run it.
     shared_callers: dict[str, set[str]] = field(default_factory=dict)
-    # `land_platform.k8s_only_tags`: the derived tags whose every changed path sits under the
-    # k8s role tree, so the landing may route them to a `platform: k8s` entry alone.
+    # `land_platform.k8s_only_tags`: the tags the changed paths derive, which the landing may
+    # route to a `platform: k8s` entry alone.
     path_k8s_only: list[str] = field(default_factory=list)
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.

@@ -244,9 +244,9 @@ def classify(ln: Landing) -> None:
     )
     ln.resolved_tags = list(tags)
     if source == DeriveSource.PR:
-        # Which of these tags a changed PATH proves is a k3s change. Read over `paths`
-        # rather than `tags`, so that a tag `derive` reached some other way than by path stays
-        # unproven rather than being credited to a tree. The FALLBACK path
+        # The tags a changed PATH names, each a k3s change because no tag is declared on two
+        # platforms (`land_platform`). Read over `paths` rather than `tags`, so that a tag
+        # `derive` reached some other way than by path stays unrestricted. The FALLBACK path
         # answers the same question in step 5 instead, over the diff's paths rather than this
         # file list, which `gh` truncated -- `deploy.record_k8s_only`.
         ln.k8s_only = _classified(

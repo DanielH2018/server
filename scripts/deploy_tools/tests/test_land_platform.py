@@ -1,10 +1,7 @@
-"""`land_platform.k8s_only_tags`: which derived tags a PR's paths prove are k3s.
+"""`land_platform.k8s_only_tags`: every tag a PR's changed paths derive.
 
-The tags the k8s caller graph names are restricted to a `platform: k8s` entry. A tag a
-changed PATH named kept routing to both hosts, so a PR touching only
-`ansible/roles/k8s/wg-easy/templates/` still ran `deploy.sh -e target=daniel-pi --tags
-wg-easy`. The rejecting halves here are the more important ones: narrowing host routing is
-how a landing reads `settled` while the Pi runs old code.
+No tag is declared on two platforms, so a derived tag needs no proof of which platform it
+belongs to. The last test before `diff_range`'s holds that premise against the live tree.
 
 `test_land_tags_landing_hosts_at.py` owns the routing rule this feeds, and
 `test_land_deploy_platform_routing.py` owns whether the landing hands it over.
@@ -15,44 +12,21 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 from deploy_tools.deploy_lib import tags as deploy_tags
 from deploy_tools.land_lib import land_platform
 from lib.git_testing import commit, git_out, init_repo
-from deploy_tools.land_lib import land_tags
 from deploy_tools.deploy_lib.tags import service_records
 from lib.render_guard import HOST_VARS
 from lib.repo_paths import REPO
 
-# Both trees really declare `wg-easy` -- a `platform: k8s` entry on daniel-box and the Pi's
-# Compose service -- which is what makes it the one tag this filter exists for.
 _K8S_TEMPLATE = "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2"
+# The Pi's Compose wg-easy before H5.12 deleted `roles/containers/`.
 _DOCKER_TEMPLATE = "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"
 
 _DECLARED = {"wg-easy", "sonarr", "alloy"}
 
 
-def test_a_k8s_only_path_set_proves_the_tag_is_k3s():
-    """CLEAN half: every path naming `wg-easy` sits under the k8s tree, so the landing may
-    route it to the `platform: k8s` entry alone."""
-    assert land_platform.k8s_only_tags([_K8S_TEMPLATE], _DECLARED) == ["wg-easy"]
-
-
-def test_a_tag_named_in_both_trees_is_not_restricted():
-    """REJECTING half, and the one that matters: a PR changing both wg-easy services changes
-    the Pi's too, so restricting the tag would leave the Pi running the old container."""
-    assert (
-        land_platform.k8s_only_tags([_K8S_TEMPLATE, _DOCKER_TEMPLATE], _DECLARED) == []
-    )
-
-
-def test_a_docker_only_path_set_is_not_restricted_either():
-    """The restriction is `platform: k8s`, so a Compose path must never land in it."""
-    assert land_platform.k8s_only_tags([_DOCKER_TEMPLATE], _DECLARED) == []
-
-
-def test_each_tag_is_answered_on_its_own_paths():
-    """Per tag, not per PR: a PR touching one tree for one service and the other for another
-    restricts the k8s one and leaves the Pi's alone."""
-    docker = "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
+def test_each_derived_tag_is_returned_once_and_sorted():
     assert land_platform.k8s_only_tags(
-        [_K8S_TEMPLATE, "ansible/roles/k8s/sonarr/tasks/main.yml", docker], _DECLARED
+        [_K8S_TEMPLATE, "ansible/roles/k8s/sonarr/tasks/main.yml", _K8S_TEMPLATE],
+        _DECLARED,
     ) == ["sonarr", "wg-easy"]
 
 
@@ -80,41 +54,26 @@ def test_an_undeclared_tag_never_reaches_the_restriction():
     assert land_platform.k8s_only_tags([_K8S_TEMPLATE], set()) == []
 
 
-def test_the_tree_prefix_is_the_one_land_tags_matches_on():
-    """Non-vacuity: this module tests a path against a literal prefix while `tag_for` maps the
-    same path through `deploy_changes.role_of`. A tree renamed under one and not the other
-    would leave this returning tags that prove nothing, with every test above still green."""
-    assert land_tags.role_of(f"{land_platform.K8S_TREE}wg-easy/x.j2") == (
-        "k8s",
-        "wg-easy",
-        "",
-    )
-    assert land_tags.role_for(_K8S_TEMPLATE) == "wg-easy"
-    assert land_tags.role_for(_DOCKER_TEMPLATE) == "wg-easy"
+def test_the_live_tree_declares_no_tag_on_two_platforms():
+    """The premise `k8s_only_tags` returns every derived tag on.
 
-
-def test_the_live_tree_has_no_two_platform_tag_since_h5_9():
-    """H5.9 moved the Pi's wg-easy out of containers_list, so no live tag is on two platforms.
-
-    The cases above run against a synthetic Docker template path, which the tree no longer
-    holds. They stay until H5.13 deletes the `roles/containers` arm of `land_platform.py` and
-    these tests with it. This one fails if a tag returns to two platforms, so the fixture is
-    repointed at it rather than left synthetic.
+    A tag declared on two platforms again would need its platform proved from the paths, so
+    this fails rather than let the landing route that tag to its k8s entry alone.
     """
-    platforms = {
-        platform
-        for _host, platform, tag in service_records(HOST_VARS)
-        if tag == "wg-easy"
-    }
-    assert platforms == {"k8s"}
+    platforms: dict[str, set[str]] = {}
+    for _host, platform, tag in service_records(HOST_VARS):
+        platforms.setdefault(tag, set()).add(platform)
+    assert platforms, "containers_list declares nothing, so this proves nothing"
+    assert {t: p for t, p in platforms.items() if len(p) > 1} == {}
+    assert platforms["wg-easy"] == {"k8s"}
     assert (REPO / _K8S_TEMPLATE).exists(), _K8S_TEMPLATE
     assert not (REPO / _DOCKER_TEMPLATE).exists(), _DOCKER_TEMPLATE
 
 
 def test_diff_range_is_the_range_deploy_tags_changed_reads(tmp_path):
     """Non-vacuity for the fallback derivation: the landing reads this range's paths to
-    prove a platform, while `deploy_tags.changed` derives the tags from its own spelling. A
-    two-dot range would prove the platform of a different file set with every case above still
+    name its k8s-only tags, while `deploy_tags.changed` derives the tags from its own spelling.
+    A two-dot range would name the tags of a different file set with every case above still
     green, so this holds the two against each other on a history where they disagree -- the
     `other` branch carries a commit HEAD does not, and only three dots exclude it."""
 

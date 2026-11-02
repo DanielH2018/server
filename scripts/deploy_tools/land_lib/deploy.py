@@ -104,7 +104,7 @@ def derive_from_diff(ln: Landing) -> None:
 
 
 def record_k8s_only(ln: Landing) -> None:
-    """Which of the FALLBACK derivation's tags the diff's own paths prove are k3s.
+    """Which of the FALLBACK derivation's tags the diff's own paths name, each a k3s tag.
 
     `classify` fills `k8s_only` from the PR's file list, and a PR over `gh`'s 100-file page has
     no such list: `derive_from_diff` rebuilds the tags from `deploy_tags.py changed`, which
