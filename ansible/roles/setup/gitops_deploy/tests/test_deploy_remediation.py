@@ -19,6 +19,7 @@ from lib.repo_paths import K3S_ROLE, REPO
 
 from deployer_lib import deploy_defer
 from deployer_lib.deploy_changes import (
+    ChangeSet,
     services_from_changed_paths,
     setup_tags_for,
     shared_module_consumers,
@@ -140,37 +141,22 @@ def test_broad_remediation_names_the_branch_it_is_given():
     assert "origin/master" in broad_remediation(False, True)
 
 
-# The tasks defer-and-alert runs on BOTH branches of main(), so a COMBINED push (svcA's
-# template + svcB's tasks) cannot swallow svcB's unapplied structural change.
+# The tasks defer-and-alert runs on BOTH branches of main(), so a COMBINED push (svcA
+# redeployed + svcB's tasks) cannot swallow svcB's unapplied structural change.
 # deferred_service_alerts(cs, deployed) returns the tasks remainder that was NOT redeployed.
-# deployed == cs.services on the deploy path, set() on the docs-only branch.
 def test_deferred_alerts_combined_push_flags_other_services_tasks():
-    # svcA template deploys svcA, svcB's tasks change is left unapplied.
-    cs = services_from_changed_paths(
-        [
-            "ansible/roles/containers/prometheus/templates/prometheus.yml.j2",
-            "ansible/roles/containers/sonarr/tasks/main.yml",
-        ]
-    )
+    cs = ChangeSet(services={"prometheus"}, tasks={"sonarr"})
     assert deferred_service_alerts(cs, cs.services) == {"sonarr"}
 
 
 def test_deferred_alerts_same_service_tasks_rode_the_redeploy():
-    # svcA template + svcA tasks: svcA IS redeployed (scoped --tags reran its role), so its
-    # bundled tasks change needs no alert — the remainder is empty.
-    cs = services_from_changed_paths(
-        [
-            "ansible/roles/containers/sonarr/templates/docker-compose.yml.j2",
-            "ansible/roles/containers/sonarr/tasks/main.yml",
-        ]
-    )
+    cs = ChangeSet(services={"sonarr"}, tasks={"sonarr"})
     assert deferred_service_alerts(cs, cs.services) == set()
 
 
 def test_deferred_alerts_docs_only_branch_flags_full_sets():
-    # The no-services branch passes deployed=set(): a tasks-only push flags the whole set,
-    # preserving the original defer-and-alert behavior.
-    cs = services_from_changed_paths(["ansible/roles/containers/sonarr/tasks/main.yml"])
+    # The no-services branch passes deployed=set(): a tasks-only push flags the whole set.
+    cs = ChangeSet(tasks={"sonarr"})
     assert deferred_service_alerts(cs, set()) == {"sonarr"}
 
 

@@ -37,8 +37,8 @@ Every 10 minutes this role may fast-forward the primary checkout, run `deploy.ym
 cluster, and roll the tree and service back on a failed health gate.
 
 - **Scope / exclusions:** everything the Safety rules above allow, plus every setup-plane
-  change it can apply itself. **Never** a Pi Docker role, the bring-up playbooks, a `tasks/`- or
-  docs-only change, a red or unfinished CI verdict, or a held SHA.
+  change it can apply itself. **Never** the bring-up playbooks, a `tasks/`- or docs-only change, a red
+  or unfinished CI verdict, or a held SHA.
 - **Mode (explicit + reversible):** `has_gitops` in `host_vars` arms it on one host and tears it
   down elsewhere, so hand-deploy is that flip plus `initial_setup.yml --tags gitops_deploy`.
 - **Authoritative sources:** `origin/master` as fetched this tick, GitHub's check-runs API, and
@@ -86,7 +86,7 @@ Each arm is a rule and the function that holds it; the record page has its incid
   ancestor-walk fallback and the rulesets that guard the merge itself.
 - **Broad changes split three ways** (`deploy_changes._BROAD_*_PREFIXES`): a setup-plane change
   (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml`; a deploy-plane
-  change (`ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) applies as `deploy.yml`;
+  change (`ansible/templates/*`, `inventory/`, `deploy.yml`) applies as `deploy.yml`;
   both together apply both, setup first.
   `docs/gitops-pipeline.md`'s *Broad changes* has the narrowing and denylist each keeps.
 - **The ff-merge runs BEFORE the apply**, since applying first renders the pre-merge tree, and
@@ -104,9 +104,8 @@ Each arm is a rule and the function that holds it; the record page has its incid
   `config.env`. A flux-owned role takes nothing from this tick, so `flux_suspend: true` in its
   defaults is how you stop it: it suspends every Kustomization of the tag
   (`docs/flux-deploy-plane.md`, *Stopping one service*).
-- **Pi Docker changes are never auto-deployed**, and an encrypted-vars-only push merges and
-  alerts once per SHA. It applies only the setup roles reading a key it changed, which
-  `deploy_defer.route_key_readers` routes (#5436), and the k8s roles reading one, which
+- **An encrypted-vars-only push merges and alerts once per SHA.** It applies only the setup
+  roles reading a key it changed, which `deploy_defer.route_key_readers` routes (#5436), and the k8s roles reading one, which
   `deploy_broad_k8s.route_secret_k8s_readers` routes (#5577). The same router sends a moved
   inventory key to the setup roles that template it (#6962).
 - **A k8s tag whose `containers_list` entry sets `owner` goes to `cs.flux`**, beside `cs.k8s`.

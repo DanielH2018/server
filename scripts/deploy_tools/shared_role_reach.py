@@ -75,10 +75,7 @@ _YAML_SUFFIXES = (".yml", ".yaml")
 
 
 def _role_prefixes(role: str) -> tuple[str, ...]:
-    return (
-        f"ansible/roles/k8s/{role}/",
-        f"ansible/roles/containers/{role}/",
-    )
+    return (f"ansible/roles/k8s/{role}/",)
 
 
 def _subdir(path: str, role: str) -> str:
