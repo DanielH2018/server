@@ -81,7 +81,7 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
         'runtime: "{{ hypervisor_staging_net_uuid }}"\n'  # set_fact in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
-        'required: "{{ ups_secondary_push_token | mandatory }}"\n'  # the Ansible filter
+        'required: "{{ nut_monitor_password | mandatory }}"\n'  # the Ansible filter
     )
     assert v.check_template(tpl, ctx, known) == []
 
