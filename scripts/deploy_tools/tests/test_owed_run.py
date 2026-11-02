@@ -17,10 +17,6 @@ from deploy_tools import gitops_state, owed_run
 from lib.repo_paths import PRIMARY_CHECKOUT
 
 
-# A tree that is not the primary checkout, standing in for the worktree a session invokes from.
-WORKTREE = "/nonexistent/worktree"
-
-
 def _owed(subject: str, playbook: str, *tags: str, **keys) -> str:
     """One `manual_plane` ledger line owing `tags`, with any `host`/`agent_hosts` keys."""
     line = {"class": "manual_plane", "subject": subject, "origin": "abc123def4567890"}
@@ -136,17 +132,20 @@ def test_a_primary_checkout_behind_origin_master_runs_nothing(
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
 
 
-def test_an_invoking_tree_behind_origin_master_runs_nothing(owe, capsys):
+def test_an_invoking_tree_behind_origin_master_runs_nothing(
+    owe, linked_worktree, capsys
+):
     """The invoking tree's code chose the commands, so a stale one must not run or clear."""
+    _primary, worktree = linked_worktree
     state, run = owe(COREDNS)
     runner = Runner()
-    behind = {WORKTREE: "HEAD abc is not origin/master def"}
+    behind = {worktree: "HEAD abc is not origin/master def"}
     assert (
         run(
             "k3s",
             runner,
             checkout_check=lambda repo: behind.get(repo),
-            invoking_repo=WORKTREE,
+            invoking_repo=worktree,
         )
         == 1
     )
