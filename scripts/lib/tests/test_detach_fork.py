@@ -18,6 +18,11 @@ from lib import detach_fork
 _FANOUT = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/fanout-3159-3160.service\n"
 
 
+# The threads are the xdist worker's, which Python 3.15's check counts; the CLIs that fork run
+# single-threaded.
+@pytest.mark.filterwarnings(
+    "ignore:This process .* is multi-threaded:DeprecationWarning"
+)
 def test_the_detached_run_is_not_a_child_of_its_caller(tmp_path):
     """Issue #3159: a single fork leaves the run a child, so a kill of the caller's tree reaches it."""
     marker = tmp_path / "ran"

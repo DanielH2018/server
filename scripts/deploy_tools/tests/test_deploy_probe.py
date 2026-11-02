@@ -151,6 +151,11 @@ def test_the_log_dir_is_the_running_user_s_own():
 
 
 @pytest.mark.parametrize("verdict", [0, 1])
+# The threads are the xdist worker's, which Python 3.15's check counts; the CLIs that fork run
+# single-threaded.
+@pytest.mark.filterwarnings(
+    "ignore:This process .* is multi-threaded:DeprecationWarning"
+)
 def test_the_child_records_the_notifier_s_code(tmp_path, verdict):
     """`child` itself writes the gate's code as `.rc`, not a constant 0 (#3934).
 

@@ -82,7 +82,7 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
 def test_a_depends_entry_added_to_daniel_box_s_spec_is_clean():
     spec = (case.REPO / case.BOX_SPEC).read_text()
     changed = case.add_depends(spec, "homelab-only")
-    assert "depends:\n  - homelab-tools\n  - homelab-only\n" in changed
+    assert "depends:\n  - homelab-tools\n  - libyaml-dev\n  - homelab-only\n" in changed
     assert changed.replace("  - homelab-only\n", "", 1) == spec
 
 

@@ -329,7 +329,7 @@ jobs:
 
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          cosign-release: v3.1.3
+          cosign-release: v3.1.4
 
       # `--reproducible` fixes the created timestamp, so pushing one commit twice yields one
       # digest. The revision is the form promote.py's REVISION_ANNOTATION parser reads.
@@ -545,7 +545,7 @@ jobs:
 
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
         with:
-          cosign-release: v3.1.3
+          cosign-release: v3.1.4
 
       # `cosign verify` inside `decide` passes no credentials of its own and reads the docker
       # config, and the package is private until the operator makes it public.

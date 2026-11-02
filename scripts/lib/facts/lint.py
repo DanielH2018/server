@@ -9,7 +9,6 @@ drop but a machine cannot judge (a number that may or may not be a count, a test
 backref). ``fact_status.py lint`` exits non-zero on errors only.
 """
 
-import os
 import re
 from collections import Counter
 from dataclasses import dataclass
@@ -73,7 +72,14 @@ def host_pattern(hosts: frozenset[str]) -> re.Pattern | None:
     word character, ``-`` or ``.<word>`` is a longer name or a domain (``daniel-hunter.com``).
     A sentence-final period still ends a host mention. None when the hosts share no prefix.
     """
-    common = os.path.commonprefix(sorted(hosts))
+    if not hosts:
+        return None
+    # The sorted extremes share exactly the prefix every host shares.
+    first, last = min(hosts), max(hosts)
+    length = 0
+    while length < len(first) and first[length] == last[length]:
+        length += 1
+    common = first[:length]
     prefix = common[: common.rfind("-") + 1]
     if not prefix:
         return None

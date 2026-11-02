@@ -50,6 +50,10 @@ credentials:
 maintainer_scripts: [preinst, postinst, prerm]
 enable:
   homelab-updater.timer: timers.target
+# pyproject.toml forces PyYAML's C extension, so a repo venv on an interpreter PyYAML ships no
+# wheel for builds it from source against these headers.
+depends:
+  - libyaml-dev
 files:
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"

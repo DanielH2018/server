@@ -61,6 +61,13 @@ runs:
         # the action itself, so a lock change invalidates it exactly.
         enable-cache: true
 
+    # pyproject.toml forces PyYAML's libyaml extension, so a source build (an interpreter
+    # PyYAML ships no wheel for) needs these headers or fails.
+    - name: Install libyaml headers
+      if: inputs.uv == 'true'
+      shell: bash
+      run: dpkg -s libyaml-dev >/dev/null 2>&1 || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libyaml-dev; }
+
     # Several ansible/tests read the Galaxy collections, and the ansible-lint hook's own entry
     # runs `ansible-galaxy collection install` before linting — warm that is a 0.4s no-op, cold
     # a ~40 MB download. One key for every job that asks, so they share one entry.
