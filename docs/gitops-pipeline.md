@@ -900,12 +900,14 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `manual_plane`. `route_key_readers` therefore also runs on a range touching
   `ansible/inventory/`, and `secret_setup_readers.py` adds the setup-role files naming a
   top-level inventory key whose parsed value moved
-  (`scripts/deploy_tools/narrow_lib/inventory_keys.py`). Three rules differ from the secrets
-  half:
-  - A file under a role's `files/` is copied verbatim, so naming a key there reads nothing.
-    The same holds for a file a role ships from outside its tree, such as
-    `hosts/lib/host_lib.py`: `narrow_setup.inventory_tags` reads a shipped file only when it
-    is a `defaults/`, `vars/`, `templates/` or `tasks/` YAML file (#6970).
+  (`scripts/deploy_tools/narrow_lib/inventory_keys.py`). A file a role ships from outside
+  its tree, such as `hosts/lib/host_lib.py`, counts only when it is a `defaults/`, `vars/`,
+  `templates/` or `tasks/` YAML file, in both halves (`narrow_setup._renders`, #6970,
+  #6992). Ansible copies any other shipped file verbatim, so a key its docstring names reads
+  nothing. A secret reaches such a file only through an env file a template renders, and
+  that template names the key itself. Three rules differ from the secrets half:
+  - A file under a role's own `files/` is copied verbatim, so naming a key there reads
+    nothing.
   - An inventory value built from the key is followed to its own readers instead of
     refusing.
   - Nothing refuses. A play or a k8s-only shared template reading the key renders no setup
