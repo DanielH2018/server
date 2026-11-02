@@ -123,6 +123,10 @@ ERROR_REPORT = (
 
 # Records each call as `tag: message`: the message argument when one is given, else every line
 # on stdin, which is how the script hands over the report.
+# systemd's IgnoreSIGPIPE=yes default. An ignored signal stays ignored across exec, and only then
+# does a write to a closed pipe print bash's `write error: Broken pipe` instead of dying silently.
+IGNORING_SIGPIPE = ("sh", "-c", 'trap "" PIPE; exec "$0" "$@"')
+
 LOGGER_STUB = """\
 #!/bin/sh
 tag=""
@@ -153,6 +157,7 @@ def _run_check(
     rewrite: dict[str, str] | None = None,
     pending: bool = False,
     stubs: dict[str, str] | None = None,
+    ignore_sigpipe: bool = False,
 ):
     """Render aide-check.sh and run it with aide stubbed to print `report` and exit `rc`.
 
@@ -163,6 +168,7 @@ def _run_check(
     writes aide.db.new as `--update` does; `baseline` says whether aide.db exists beforehand.
     `rewrite` replaces a file's content on the fake host before the run, and `pending` leaves
     an aide.db.new from an earlier run. `stubs` adds fake binaries in front of PATH.
+    `ignore_sigpipe` starts the script with SIGPIPE ignored, as systemd starts a service.
     The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, pushed lines or
     None, logged lines, whether aide ran).
     """
@@ -227,7 +233,9 @@ def _run_check(
         if lock_held:
             fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
         result = run(
-            [str(script), *args],
+            [*IGNORING_SIGPIPE, str(script), *args]
+            if ignore_sigpipe
+            else [str(script), *args],
             env={
                 **os.environ,
                 "KUMA_PUSH_OUT": str(pushed),

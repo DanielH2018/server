@@ -217,7 +217,7 @@ def test_a_long_report_is_capped_with_a_line_saying_so(tmp_path):
 def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
     """Every host logged `printf: write error: Broken pipe` on 2026-11-02 at the report cap."""
     long_report = DIFF_REPORT + f"{CHANGED_CONTENT}: /home/ubuntu/x\n" * 20000
-    _run_check(tmp_path, long_report, rc=4, cap=3)
+    _run_check(tmp_path, long_report, rc=4, cap=3, ignore_sigpipe=True)
     assert "Broken pipe" not in (tmp_path / "stderr").read_text()
 
 
