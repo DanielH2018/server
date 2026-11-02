@@ -40,7 +40,7 @@ spec:
               mountPath: /etc/nginx/tmp
           readinessProbe:
             httpGet:
-              path: /
+              path: /flux-drill-not-found
               port: {{ container_item.port }}
             initialDelaySeconds: 5
             periodSeconds: 10
