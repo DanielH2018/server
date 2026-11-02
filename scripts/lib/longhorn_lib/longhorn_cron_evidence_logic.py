@@ -1,13 +1,23 @@
-"""Checks 9 and 10 of the Longhorn backup-plane heartbeat — the two crons' evidence plane.
+"""Checks 9 and 10 of the Longhorn backup-plane heartbeat: the trim's and the B2 cron's evidence.
 
-Split out of longhorn_backup_health_logic.py when that module reached its length cap, and the
-split is also the shape of the thing: checks 1-8 read the CLUSTER, these two read a journal and
-a cron file. Same contract as the module they came from — stdlib only, every clock reading and
-file read injected, no cluster needed to test it.
+Split out of longhorn_backup_health_logic.py when that module reached its length cap. Same
+contract as the module it came from: stdlib only, every clock reading and every read injected,
+no cluster needed to test it.
 
-Check 9 reads what the `longhorn-trim` and `b2-deletions` crons SAID (#2418). Check 10 reads
-whether they said anything at all (#2443). They are separate arms on one journal read because
-silence and a bad verdict are different faults with different fixes.
+Check 9 reads what each job SAID (#2418). Check 10 reads whether it ran at all (#2443). They are
+separate arms because silence and a bad verdict are different faults with different fixes.
+
+- The **filesystem trim** is Longhorn's `trim` RecurringJob (H2.2c of
+  docs/target-architecture/host/h2-shrink-host-plane.md). Its arm reads the CronJob Longhorn
+  creates for it, that CronJob's newest Job, and the Job's pod log. The pod log is the evidence,
+  because longhorn-manager logs a per-volume failure and can still finish the Job as succeeded.
+- The **B2 deletion accounting** is a host cron. Its arm reads the `b2-deletions` journal tag,
+  the cron file and the cron's fire stamp.
+
+Rank 4 throughout, where `_fetch_text` uses rank 1 for a failed kubectl read. That asymmetry is
+deliberate: a failed backup-plane read means the backups are unreadable, while everything here
+is the evidence plane. A trim that reclaimed nothing and a deletion nobody could price are both
+real and neither is urgent, so they must not displace a stale backup from the push slot.
 """
 
 from __future__ import annotations
@@ -26,114 +36,244 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
 
 import host_lib
+from host_lib import rfc3339_to_epoch
 
-# ── check 9: do the trim and B2-accounting crons have a reader? ─────────────────────────────
+# ── the trim: Longhorn's `trim` RecurringJob ────────────────────────────────────────────────
 
-# `trimmed 41 volume(s), 3 skipped, 0 failed` — longhorn-trim-volumes.sh's unconditional summary
-# line, matched as written rather than by field position. The abort arm logs no summary at all,
-# which is why both shapes are searched and the newest of either decides.
-_TRIM_SUMMARY_RE = re.compile(r"trimmed \d+ volume\(s\), \d+ skipped, (\d+) failed")
-_TRIM_ABORT_RE = re.compile(r"^ABORT: (.*)")
+# The RecurringJob's name. Longhorn names the CronJob after it and labels the CronJob, its Jobs
+# and their pods `recurring-job.longhorn.io=<name>`, and names the pod's container after it.
+TRIM_JOB = "trim"
+TRIM_JOB_LABEL = "recurring-job.longhorn.io"
+# Read in the Longhorn namespace. `--ignore-not-found` makes an absent CronJob rc 0 with empty
+# output, so every non-zero exit is a read that failed.
+TRIM_CRONJOB_GET_ARGS = (
+    "get",
+    "cronjobs.batch",
+    TRIM_JOB,
+    "--ignore-not-found",
+    "-o",
+    "json",
+)
+
+# The per-volume failure lines in longhorn-manager v1.13.0's `app/recurringjob/volume.go`:
+# `startJob`'s warning, `startVolumeJob`'s two errors, and the error `doRecurringFilesystemTrim`
+# wraps. Matched as written. A healthy run's first line is `Failed to create Longhorn manager API
+# client, retrying`, so a looser match on "Failed" would read every run as a failure.
+_TRIM_FAILURE_RE = re.compile(
+    r"Failed to run volume job|Failed to run recurring job for volume"
+    r"|Failed to initialize job for volume|failed to complete filesystem-trim"
+)
+# Where each failure line names its volume: the volume job's logger field `volumeName=`, the
+# `volume=` field `startJob` adds, or the message text `... for volume <vol>` and `... for <vol>`.
+_TRIM_VOLUME_RE = re.compile(
+    r"\bvolume(?:Name)?=\"?([\w.-]+)|for volume ([\w.-]+)|filesystem-trim for ([\w.-]+)"
+)
+# `[pod/<pod>/<container>] ...`, the prefix `kubectl logs --prefix` writes.
+_LOG_PREFIX_RE = re.compile(r"^\[pod/(?P<pod>[^/\]]+)/(?P<container>[^\]]+)\] ")
+
+# The slack a run gets past one period of the CronJob's schedule before check 10 calls it
+# stopped. The same 2h the B2 arm's 26h window gives its daily cron.
+_TRIM_SLACK_S = 2 * 3600
 
 
-def _newest_trim_verdict(lines: list[str]) -> tuple[int, str] | None:
-    """The trim's last run, read backwards from the newest journal line.
+def schedule_period_s(schedule: str) -> int | None:
+    """Seconds between two runs of a `MINUTE HOUR * * *` or `MINUTE HOUR * * DOW` schedule.
 
-    Returns None when no line in the window carries either shape. That is "no reading", not
-    "healthy": whether the trim cron is still running at all is check 10's alarm, which reads
-    the same lines through `trim_has_spoken` and does claim it (#2443).
+    Returns None for any other shape, such as a list or a step in a field: check 10 then says it
+    cannot judge the cadence rather than guess one.
     """
-    for line in reversed(lines):
-        text = line.strip()
-        abort = _TRIM_ABORT_RE.match(text)
-        if abort:
-            return (4, f"longhorn-trim aborted its last run: {abort.group(1)[:160]}")
-        summary = _TRIM_SUMMARY_RE.search(text)
-        if summary:
-            failed = int(summary.group(1))
-            if failed:
-                return (
-                    4,
-                    f"longhorn-trim failed on {failed} volume(s) on its last run — "
-                    "freed blocks are still being backed up",
-                )
-            return None
+    fields = schedule.split()
+    if len(fields) != 5 or not all(f.isdigit() for f in fields[:2]):
+        return None
+    if fields[2:] == ["*", "*", "*"]:
+        return 86400
+    if fields[2:4] == ["*", "*"] and fields[4].isdigit():
+        return 7 * 86400
     return None
 
 
-def check_cron_evidence(
-    trim_lines: list[str] | None,
-    deletion_lines: list[str] | None,
-    window_hours: int,
-) -> list[tuple[int, str]]:
-    """Whether the trim and B2-deletion-accounting crons reported anything worth a page.
+def _created(item: dict) -> float | None:
+    return rfc3339_to_epoch(
+        str((item.get("metadata") or {}).get("creationTimestamp") or "")
+    )
 
-    Both crons write their verdict through `logger` and nothing read it (#2418). The trim's own
-    comment claimed "a cron mail or a Kuma push notices" a failure; no Kuma push existed, and the
-    cron mail lands in /var/mail/ubuntu among thousands of unread success lines. This check is
-    that reader.
 
-    `trim_lines` / `deletion_lines` are the journal lines for each tag over the last
-    `window_hours`, or None when the read itself failed.
+def newest_trim_job(job_items: list[dict]) -> dict | None:
+    """The newest Job the trim CronJob created, by creationTimestamp, or None when there is none."""
+    jobs = [
+        item
+        for item in job_items
+        if ((item.get("metadata") or {}).get("labels") or {}).get(TRIM_JOB_LABEL)
+        == TRIM_JOB
+    ]
+    if not jobs:
+        return None
+    return max(jobs, key=lambda item: _created(item) or 0.0)
 
-    Rank 4 throughout, where `_fetch_text` uses rank 1 for a failed kubectl read. That asymmetry
-    is deliberate: a kubectl failure means the backup plane is unreadable, while everything here
-    is the evidence plane. A trim that reclaimed nothing and a deletion nobody could price are
-    both real and neither is urgent, so they must not displace a stale backup from the push slot.
+
+def _job_failed(item: dict) -> bool:
+    return any(
+        c.get("type") == "Failed" and c.get("status") == "True"
+        for c in ((item.get("status") or {}).get("conditions") or [])
+    )
+
+
+def trim_failures(pod_log: str, job_name: str | None) -> list[str]:
+    """The volumes, or failure lines where no volume is named, the trim's last run failed on.
+
+    Reads only the `trim` container, and only the pods of `job_name` when one is given: a failed
+    Job's pod can outlive it beside a newer, clean run.
     """
-    problems: list[tuple[int, str]] = []
+    failures: dict[str, None] = {}
+    for line in pod_log.splitlines():
+        prefix = _LOG_PREFIX_RE.match(line)
+        if not prefix or prefix["container"] != TRIM_JOB:
+            continue
+        if job_name and not prefix["pod"].startswith(job_name + "-"):
+            continue
+        if not _TRIM_FAILURE_RE.search(line):
+            continue
+        volume = _TRIM_VOLUME_RE.search(line)
+        key = next(filter(None, volume.groups())) if volume else line[:120]
+        failures[key.strip('"')] = None
+    return list(failures)
 
-    if trim_lines is None:
+
+def _trim_liveness(
+    cronjob: dict, newest: dict | None, now_s: float
+) -> tuple[int, str] | None:
+    """Check 10's trim arm: whether the CronJob still starts a Job as often as its schedule says."""
+    spec = cronjob.get("spec") or {}
+    schedule = str(spec.get("schedule") or "")
+    if spec.get("suspend"):
+        return (4, f"the {TRIM_JOB} CronJob is suspended, so no filesystem trim runs")
+    period_s = schedule_period_s(schedule)
+    if period_s is None:
+        return (
+            4,
+            f"the {TRIM_JOB} CronJob's schedule {schedule!r} is not a daily or weekly cron, "
+            "so whether it still runs cannot be judged",
+        )
+    allowed_s = period_s + _TRIM_SLACK_S
+    status = cronjob.get("status") or {}
+    last_s = rfc3339_to_epoch(str(status.get("lastScheduleTime") or ""))
+    if last_s is None and newest is not None:
+        last_s = _created(newest)
+    if last_s is None:
+        created_s = _created(cronjob)
+        if created_s is not None and now_s - created_s < allowed_s:
+            return None
+        return (4, f"the {TRIM_JOB} CronJob ({schedule}) has never started a Job")
+    if now_s - last_s > allowed_s:
+        return (
+            4,
+            f"the {TRIM_JOB} CronJob ({schedule}) last started a Job "
+            f"{int((now_s - last_s) / 3600)}h ago — it has stopped running",
+        )
+    return None
+
+
+def check_trim(
+    cronjob: dict | None,
+    job_items: list[dict] | None,
+    pod_log: str | None,
+    now_s: float,
+) -> list[tuple[int, str]]:
+    """Checks 9 and 10 for Longhorn's `trim` RecurringJob.
+
+    Args:
+        cronjob: the CronJob `TRIM_CRONJOB_GET_ARGS` returned, or None when it does not exist.
+        job_items: `.items` of every Job in the Longhorn namespace, or None when that read failed.
+        pod_log: `kubectl logs -l recurring-job.longhorn.io --prefix` output, or None when that
+            read failed.
+        now_s: the epoch every age is measured from.
+
+    A failed read of the Jobs or the pod log skips the arm that needs it, because the caller has
+    already reported that read as a problem of its own.
+    """
+    if cronjob is None:
+        return [
+            (
+                4,
+                f"the {TRIM_JOB} RecurringJob has no CronJob, so Longhorn schedules no "
+                "filesystem trim",
+            )
+        ]
+    if job_items is None:
+        return []
+    problems: list[tuple[int, str]] = []
+    newest = newest_trim_job(job_items)
+    liveness = _trim_liveness(cronjob, newest, now_s)
+    if liveness:
+        problems.append(liveness)
+    name = ((newest or {}).get("metadata") or {}).get("name")
+    if newest is not None and _job_failed(newest):
         problems.append(
             (
                 4,
-                "could not read the longhorn-trim journal — a trim failure has no reader",
+                f"the {TRIM_JOB} Job {name} failed — see its pod log in longhorn-system",
             )
         )
-    else:
-        trim_problem = _newest_trim_verdict(trim_lines)
-        if trim_problem:
-            problems.append(trim_problem)
+    if pod_log is not None:
+        failed = trim_failures(pod_log, name)
+        if failed:
+            problems.append(
+                (
+                    4,
+                    f"the {TRIM_JOB} job failed on {len(failed)} volume(s) on its last run — "
+                    "freed blocks are still being backed up: " + ", ".join(failed[:5]),
+                )
+            )
+    return problems
 
+
+# ── the B2 deletion accounting: a host cron ─────────────────────────────────────────────────
+
+
+def check_deletion_evidence(
+    deletion_lines: list[str] | None, window_hours: int
+) -> list[tuple[int, str]]:
+    """Check 9's B2 arm: whether the deletion accounting reported an UNPRICED deletion.
+
+    The cron writes its verdict through `logger`, and nothing read it until this check (#2418).
+    `deletion_lines` are the `b2-deletions` journal lines over the last `window_hours`, or None
+    when the read itself failed.
+    """
     if deletion_lines is None:
-        problems.append(
+        return [
             (
                 4,
                 "could not read the b2-deletions journal — an UNPRICED deletion has no reader",
             )
-        )
-    else:
-        # The whole window is searched, not just the newest run, for two reasons. `logger` writes
-        # one journal entry per line and probe.py's UNPRICED report is a multi-line block, so
-        # "the newest run" cannot be reconstructed from the lines alone. And an unpriced deletion
-        # is a permanent EVENT rather than a current state — the transactions it spent cannot be
-        # recovered by any later run — so the right behaviour is to report it once and let it age
-        # out of the window, which it does on its own.
-        unpriced = [line for line in deletion_lines if "UNPRICED" in line]
-        if unpriced:
-            problems.append(
-                (
-                    4,
-                    f"b2-deletions reported UNPRICED in the last {window_hours}h "
-                    f"(Class C spent that no later run can price): {unpriced[0].strip()[:160]}",
-                )
+        ]
+    # The whole window is searched, not just the newest run, for two reasons. `logger` writes
+    # one journal entry per line and probe.py's UNPRICED report is a multi-line block, so
+    # "the newest run" cannot be reconstructed from the lines alone. And an unpriced deletion
+    # is a permanent EVENT rather than a current state — the transactions it spent cannot be
+    # recovered by any later run — so the right behaviour is to report it once and let it age
+    # out of the window, which it does on its own.
+    unpriced = [line for line in deletion_lines if "UNPRICED" in line]
+    if unpriced:
+        return [
+            (
+                4,
+                f"b2-deletions reported UNPRICED in the last {window_hours}h "
+                f"(Class C spent that no later run can price): {unpriced[0].strip()[:160]}",
             )
+        ]
+    return []
 
-    return problems
 
-
-# ── check 10: are those two crons still firing at all? ──────────────────────────────────────
-
-# One period of either cron. `health-crons.yml` schedules both with an hour and a minute and NO
-# `weekday`, so each fires once a day. If either gains a weekday, this constant and the window
-# guard in `check_cron_liveness` change together — a weekly cron is legitimately silent for six
-# days and the guard below would have to compare against its own period instead.
+# One period of the cron. `health-crons.yml` schedules it with an hour and a minute and NO
+# `weekday`, so it fires once a day. If it gains a weekday, this constant and the window guard
+# in `check_deletion_liveness` change together — a weekly cron is legitimately silent for six
+# days and the guard would have to compare against its own period instead.
 _CRON_PERIOD_S = 86400
 
 # `b2-deletions: charged 3, skipped 0, unpriced 0` and `b2-deletions: declined: ...` —
 # `deletions_summary_line` and `deletions_declined_line` in
-# `scripts/diagnostics/probe_lib/b2_ledger.py`, matched as written the way the trim's summary
-# is. A completed run prints exactly one of them.
+# `scripts/diagnostics/probe_lib/b2_ledger.py`, matched as written. A completed run prints
+# exactly one of them.
 _DELETIONS_SUMMARY_RE = re.compile(
     r"b2-deletions: charged \d+, skipped \d+, unpriced \d+"
 )
@@ -141,7 +281,7 @@ _DELETIONS_DECLINED_RE = re.compile(r"b2-deletions: declined: ")
 
 
 class CronState(NamedTuple):
-    """What the host knows about one of check 9's crons, apart from what it logged.
+    """What the host knows about a host cron, apart from what it logged.
 
     Attributes:
         tag: the syslog tag the cron's verdict lines carry. Named in the message because it is
@@ -149,12 +289,10 @@ class CronState(NamedTuple):
         path: the `/etc/cron.d` file Ansible installs the cron as.
         installed_at: that file's mtime, or None when the file does not exist.
         unreadable: the file exists but could not be stat'd — a permissions change, most
-            likely. Distinct from a missing file for the reason `check_restore_drill`'s
-            `stamp_unreadable` flag is distinct: "the cron is gone" and "I could not look" have
-            different fixes, and folding them sends whoever is paged to the wrong one.
+            likely. Distinct from a missing file because "the cron is gone" and "I could not
+            look" have different fixes, and folding them sends whoever is paged to the wrong one.
         expected: whether this host installs the cron at all. The B2-accounting cron is gated
-            on `has_repo_checkout` and a host without a checkout never gets one; the trim cron
-            carries no such gate.
+            on `has_repo_checkout` and a host without a checkout never gets one.
         fired_stamp: the file the cron line itself touches before it runs its job.
             `/etc/cron.d` is 0700 root on these hosts (initial_setup's CIS hardening), so the
             sys_user this check runs as can never stat `path`. The stamp is the reader that
@@ -188,28 +326,31 @@ def deletions_have_spoken(lines: list[str]) -> bool:
     )
 
 
-def trim_has_spoken(lines: list[str]) -> bool:
-    """Whether the window holds a line `_newest_trim_verdict` recognises.
-
-    Check 9 reads the trim's CONTENT and returns None both for a clean run and for a window
-    that held no run at all. This separates the two, so check 10 can alarm on the second
-    without check 9 having to claim anything about liveness.
-    """
-    return any(
-        _TRIM_ABORT_RE.match(line.strip()) or _TRIM_SUMMARY_RE.search(line.strip())
-        for line in lines
-    )
-
-
-def _liveness_problem(
-    cron: CronState,
+def check_deletion_liveness(
     lines: list[str] | None,
-    spoke: bool,
+    cron: CronState,
     window_hours: int,
     now_s: float,
 ) -> tuple[int, str] | None:
-    """Whether `cron` has gone silent, given what its tag logged inside the window."""
-    if not cron.expected or spoke:
+    """Check 10's B2 arm: whether the cron still fires, as distinct from what it said.
+
+    Check 9 reads the cron's CONTENT and stays green on an empty window, so a cron whose entry
+    is removed or whose crontab is lost would leave check 9 green forever (#2443). Silence alone
+    is not the alarm. Three things legitimately produce it, and each is answered without a new
+    tunable:
+
+    - A window shorter than one cron period. Then silence is the normal reading on most ticks,
+      so the arm does not run at all.
+    - A cron this host does not install (`CronState.expected`).
+    - A cron installed less than one window ago: a freshly provisioned host, or one Ansible has
+      just rewritten. The window is already one period plus slack, so it is the grace too.
+
+    The arm judges silence on a RECOGNISED line, so it proves the cron COMPLETED rather than
+    merely fired (#2545).
+    """
+    if window_hours * 3600 < _CRON_PERIOD_S:
+        return None
+    if not cron.expected or (lines and deletions_have_spoken(lines)):
         return None
     if lines is None:
         # Check 9 already reports the failed journal read, and it is the same fault. A second
@@ -254,57 +395,6 @@ def _liveness_problem(
     )
 
 
-def check_cron_liveness(
-    trim_lines: list[str] | None,
-    deletion_lines: list[str] | None,
-    trim: CronState,
-    deletion: CronState,
-    window_hours: int,
-    now_s: float,
-) -> list[tuple[int, str]]:
-    """Whether the trim and B2-accounting crons still fire, as distinct from what they said.
-
-    Check 9 reads both crons' CONTENT and stays green on an empty window, which is the same
-    shape the restore drill's "a drill that silently stops looks identical to one never
-    scheduled" had before check 7 closed it (#2443). A trim cron whose entry is removed, whose
-    script goes un-rendered, or whose crontab is lost leaves the window empty forever and check
-    9 green forever. This arm is the reader for that.
-
-    Silence alone is not the alarm — three things legitimately produce it, and each is answered
-    without a new tunable:
-
-    - A window shorter than one cron period. Then silence is the normal reading on most ticks,
-      so the arm does not run at all.
-    - A cron this host does not install (`CronState.expected`).
-    - A cron installed less than one window ago: a freshly provisioned host, or one Ansible has
-      just rewritten. The window is already one period plus slack, so it is the grace too.
-
-    Both arms judge silence on a RECOGNISED line, so each proves its cron COMPLETED rather
-    than merely fired. The b2 half judged on any line at all until #2545 gave
-    `probe.py b2-deletions` a summary line of its own: the cron pipes both streams through
-    `logger`, so a traceback was evidence of life, and check 9 stayed quiet alongside it
-    because a traceback carries no `UNPRICED`.
-
-    Rank 4 throughout, matching check 9: a cron that stopped is real and not urgent, and it
-    must not displace a stale backup from the push slot.
-    """
-    if window_hours * 3600 < _CRON_PERIOD_S:
-        return []
-    problems = []
-    for cron, lines, spoke in (
-        (trim, trim_lines, bool(trim_lines) and trim_has_spoken(trim_lines)),
-        (
-            deletion,
-            deletion_lines,
-            bool(deletion_lines) and deletions_have_spoken(deletion_lines),
-        ),
-    ):
-        problem = _liveness_problem(cron, lines, spoke, window_hours, now_s)
-        if problem:
-            problems.append(problem)
-    return problems
-
-
 def cron_state(tag: str, path: str, expected: bool, fired_stamp: str) -> CronState:
     """`CronState` for the cron installed at `path`, reading its install and fire times.
 
@@ -318,23 +408,21 @@ def cron_state(tag: str, path: str, expected: bool, fired_stamp: str) -> CronSta
     )
 
 
-def check(
+def check_deletions(
     journal,
     window_hours: int,
-    trim: CronState,
     deletion: CronState,
     now_s: float,
 ) -> list[tuple[int, str]]:
-    """Checks 9 and 10 over ONE journal read each, in the order they are reported.
+    """Checks 9 and 10 for the B2 deletion accounting, over ONE journal read.
 
     `journal(tag)` is `host_lib.journal_reader`'s bound reader: the lines that tag logged in
     the window, or None when the read itself failed. The two arms share the read because they
     are two questions about the same lines — what the cron said, and whether it said anything.
     """
-    trim_lines = journal(trim.tag)
-    deletion_lines = journal(deletion.tag)
-    return check_cron_evidence(
-        trim_lines, deletion_lines, window_hours
-    ) + check_cron_liveness(
-        trim_lines, deletion_lines, trim, deletion, window_hours, now_s
-    )
+    lines = journal(deletion.tag)
+    problems = check_deletion_evidence(lines, window_hours)
+    liveness = check_deletion_liveness(lines, deletion, window_hours, now_s)
+    if liveness:
+        problems.append(liveness)
+    return problems

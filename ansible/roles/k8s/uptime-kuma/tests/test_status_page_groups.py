@@ -12,14 +12,9 @@ from pathlib import Path as _Path
 import yaml
 
 from _k8s_render import render_role_template
-from py_table import py_table
 from render_status_page import bucket
 
 ROLE = _Path(__file__).resolve().parents[1]
-
-# monitor-bridge's push tiles render from one loop over this table (#3781), so their ids are
-# the rows' `kuma_id`s rather than literal keys in the template.
-CHECK_TABLE = ROLE.parent / "monitor-bridge" / "files" / "check_table.py"
 
 DECLARATION = re.compile(r"^  (?P<id>[A-Za-z0-9._-]+)\.json: \|$")
 NAME = re.compile(r'"name": "(?P<name>[^"]*)"')
@@ -27,14 +22,13 @@ TYPE = re.compile(r'"type": "(?P<type>[a-z_]+)"')
 
 # The census this file walks is a regex over a template, so it returns an empty set the moment
 # the template's shape changes — and every assertion below would then pass over nothing. These
-# are monitors from four different groups; a rename that drops one is a real change to review,
+# are monitors from two different groups; a rename that drops one is a real change to review,
 # not an accident of parsing.
 KNOWN_IDS = frozenset(
     {
-        "monitor-bridge-b2-storage",
-        "gitops-deploy-alive",
         "aide-daniel-box",
-        "monitor-bridge-scrutiny",
+        "aide-daniel-pi",
+        "rkhunter-daniel-server",
         "status-page-sync",
     }
 )
@@ -43,8 +37,7 @@ KNOWN_IDS = frozenset(
 def declarations():
     """AutoKuma id -> (display name, entity type) for every monitor in the template.
 
-    A literal declaration is read off the template's lines, and the bridge tile loop off the
-    table it iterates.
+    Every declaration is a literal in the template, so a line regex reads it.
     """
     text = (ROLE / "templates" / "static-monitors.yaml.j2").read_text()
     lines = text.splitlines()
@@ -59,9 +52,6 @@ def declarations():
         if name is None or entity_type is None:
             continue
         found[match.group("id")] = (name.group("name"), entity_type.group("type"))
-    if "py_table('CHECKS')" in text:
-        for row in py_table(CHECK_TABLE.read_text(), "CHECKS"):
-            found[row["kuma_id"]] = (row["display"], "push")
     return found
 
 
@@ -74,7 +64,7 @@ def monitor_index():
 
 
 def rules():
-    """The rules as the sync ConfigMap ships them, with the bridge tiles pinned in (#3781)."""
+    """The rules as the sync ConfigMap ships them."""
     configmap = yaml.safe_load(
         render_role_template("uptime-kuma", "status-page-sync-configmap.yaml.j2")
     )
@@ -84,7 +74,7 @@ def rules():
 def test_the_declaration_census_finds_every_known_monitor():
     index = monitor_index()
     assert KNOWN_IDS <= set(index), f"census lost: {sorted(KNOWN_IDS - set(index))}"
-    assert len(index) >= 27, f"census found only {len(index)} monitors"
+    assert len(index) >= 6, f"census found only {len(index)} monitors"
 
 
 def test_every_declared_monitor_lands_in_a_named_group():
@@ -96,17 +86,6 @@ def test_every_declared_monitor_lands_in_a_named_group():
         if name != "Other"
     }
     assert placed == set(index), f"unplaced: {sorted(set(index) - placed)}"
-
-
-def test_every_bridge_tile_lands_in_the_group_its_row_names():
-    """A broader pattern in an earlier group would take a pinned tile first; this says so."""
-    placed = {i: name for name, ids in bucket(monitor_index(), rules()) for i in ids}
-    wanted = {
-        row["kuma_id"]: row["status_group"]
-        for row in py_table(CHECK_TABLE.read_text(), "CHECKS")
-    }
-    assert wanted["monitor-bridge-scrutiny"] == "Hosts & Power"
-    assert {i: placed.get(i) for i in wanted} == wanted
 
 
 def test_the_catch_all_group_is_empty_for_committed_declarations():

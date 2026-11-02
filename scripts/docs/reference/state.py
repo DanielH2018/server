@@ -224,7 +224,6 @@ def secret_rotate_run(repo: Path = REPO) -> LoopRun:
 
 
 def longhorn_restore_drill_run(
-    state_dir: Path = Path("/var/lib/longhorn-restore-drill"),
     tools: Tools = DEFAULT_TOOLS,
     namespace: str | None = None,
 ) -> LoopRun:
@@ -234,9 +233,8 @@ def longhorn_restore_drill_run(
     resolved directly -- see the module docstring).
 
     Reads `last-success` from the drill's stamp ConfigMap through `lib.kubectl` on `prod`, under
-    the docs-refresh cron's KUBECONFIG, and from `state_dir` while the ConfigMap is absent or
-    holds no `last-success`. A failed read is `unreadable`, never a fallback: the directory may
-    be the stale half once the drill writes the ConfigMap.
+    the docs-refresh cron's KUBECONFIG. An absent ConfigMap, or one with no `last-success`, is no
+    run recorded. A failed read is `unreadable`.
     """
     if namespace is None:
         namespace = _k3s_default_var("k3s_longhorn_restore_drill_namespace") or ""
@@ -260,10 +258,10 @@ def longhorn_restore_drill_run(
     except ValueError:
         return LoopRun(None, "stamp ConfigMap content did not parse", unreadable=True)
     stamps = drill_stamps.from_configmap(doc, namespace)
-    if stamps is None:
-        return _epoch_marker(state_dir, "last-success", "PVC restore proven")
+    if stamps.last_success is None:
+        return LoopRun(None, "no run recorded yet")
     try:
-        epoch = float(stamps.last_success or "")
+        epoch = float(stamps.last_success)
     except ValueError:
         return LoopRun(None, "stamp ConfigMap content did not parse", unreadable=True)
     return LoopRun(

@@ -86,8 +86,15 @@ PATHS = (
     # The polkit rules this role installs, fanout-alert, land and triage, which `probe.py
     # applied claude_code` read as `unread` on 2026-10-25 (#6357): rules.d is 0750 root.
     ("/etc/polkit-1/rules.d", "50-claude-*.rules"),
-    # A DENY path, so only `stat` answers it, and without size or mtime (#6369).
+    # DENY paths, so only `stat` answers them, and without size or mtime (#6369).
     ("/etc/claude-rc", "alert-webhook.env"),
+    # k8s_host_files' rows under the k3s manifests tree (#6988). The tree stays denied, because
+    # it holds every staged role's secret.yaml, so each name here is exact.
+    ("/etc/rancher/k3s/manifests", "registry-jobs"),
+    ("/etc/rancher/k3s/manifests", "autokuma-claims"),
+    ("/etc/rancher/k3s/manifests/registry-jobs", "gc-job.yaml"),
+    ("/etc/rancher/k3s/manifests/registry-jobs", "ghcr-mirror-gc-job.yaml"),
+    ("/etc/rancher/k3s/manifests/registry-jobs", "dockerhub-mirror-gc-job.yaml"),
 )
 # The only files tier 2 prints. A new printing source needs a structural argument for why the
 # filter redacts it cleanly: netplan is YAML, whose every line is a key, a list item or a

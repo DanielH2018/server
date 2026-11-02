@@ -209,29 +209,19 @@ uptime_kuma_k8s_status_page_sync_job_ttl_seconds: 2700
 # EMPTY for the committed declarations, so adding a monitor without placing it fails CI rather
 # than quietly appending it to a junk drawer.
 #
-# monitor-bridge's tiles need no pattern here: templates/status-page-sync-configmap.yaml.j2
-# pins each one into the group its row's `status_group` names in that role's check_table.py.
+# A group no declaration matches is left off the page, so M6 batch A6 deleted `Services`,
+# `Observability`, `Backups & Storage` and `Media Automation`. Only monitor-bridge's tiles filled
+# them, and Cutover-1a deleted those tiles.
 uptime_kuma_k8s_status_page_groups:
-  - name: Services
-    match:
-      - "-k8s$"
-  # A group with no declared tile of its own keeps `match: []`: monitor-bridge's rows pin
-  # themselves into the group their `status_group` names, so the group still fills.
-  - name: Observability
-    match: []
-  - name: Backups & Storage
-    match: []
   - name: Hosts & Power
     match:
       - "^daniel-box-disk$"
-      - "^cloudflare-(ddns|ip-drift)"
+      - "^cloudflare-ddns"
       # The weekly AIDE check, one tile per host, daniel-pi's included: a host-integrity
       # signal, so the Pi's tile groups with its siblings rather than under Raspberry Pi.
       - "^aide-"
       # The weekly rkhunter scan, one tile per host, grouped with AIDE for the same reason.
       - "^rkhunter-"
-  - name: Media Automation
-    match: []
   - name: Automation & Drift
     match:
       - "^status-page-sync$"

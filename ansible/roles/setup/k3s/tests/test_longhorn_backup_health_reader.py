@@ -24,6 +24,7 @@ from _longhorn_reader_stubs import (
     _reader_env,
     _rfc3339,
     _run_reader_against,
+    fresh_drill_cm,
     reader_argv,
 )
 
@@ -59,7 +60,7 @@ def test_reader_pins_the_transport(tmp_path):
 
 
 def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
-    """Check 9 shells out to journalctl correctly, which no pure-function test can see.
+    """Check 9's B2 arm shells out to journalctl correctly, which no pure-function test can see.
 
     The stub asserts the argv the reader builds — the `-t <tag>` selector, the `--since -Nh`
     window from LONGHORN_CRON_EVIDENCE_WINDOW_HOURS, and `--output=cat`, which is what makes each
@@ -72,8 +73,7 @@ def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
         'printf "%s\\n" "$*" | grep -q -- "--since -26h" || exit 64\n'
         'printf "%s\\n" "$*" | grep -q -- "--output=cat" || exit 64\n'
         'case "$*" in\n'
-        '  *"-t longhorn-trim"*) echo "trimmed 38 volume(s), 3 skipped, 3 failed" ;;\n'
-        '  *"-t b2-deletions"*) : ;;\n'
+        '  *"-t b2-deletions"*) echo "UNPRICED — backup-abc123" ;;\n'
         "  *) exit 64 ;;\n"
         "esac\n",
     )
@@ -88,11 +88,10 @@ def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
         reader_argv(), capture_output=True, text=True, env=env, timeout=30
     )
     assert proc.returncode == 0, proc.stderr
-    assert proc.returncode == 0, proc.stderr
-    # The rank-1 kubectl failures win the push slot, so the trim verdict is in the FULL message
+    # The rank-1 kubectl failures win the push slot, so the B2 verdict is in the FULL message
     # the reader logs rather than on stdout. That is where to read it, and its presence there is
     # what proves the journal read reached a verdict rather than being dropped.
-    assert "longhorn-trim failed on 3 volume(s)" in logger_calls.read_text()
+    assert "b2-deletions reported UNPRICED" in logger_calls.read_text()
 
 
 def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):
@@ -146,7 +145,7 @@ def test_reader_treats_a_clean_bool_env_normally(tmp_path):
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL="/bin/false",
-        LONGHORN_TRIM_CRON_EXPECTED="False",
+        LONGHORN_B2_DELETIONS_CRON_EXPECTED="False",
     )
     proc = subprocess.run(
         reader_argv(),
@@ -161,14 +160,14 @@ def test_reader_treats_a_clean_bool_env_normally(tmp_path):
 def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
     """An expected-cron flag must REFUSE an unrecognized value, not fold it into False.
 
-    `_require_bool_env` backs the two LONGHORN_*_CRON_EXPECTED flags, and False there means a
+    `_require_bool_env` backs LONGHORN_B2_DELETIONS_CRON_EXPECTED, and False there means a
     missing cron goes unreported. A typo'd or truncated export must fail loudly the way a
     missing var does, not fold silently into "not expected".
     """
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL="/bin/false",
-        LONGHORN_TRIM_CRON_EXPECTED="maybe",
+        LONGHORN_B2_DELETIONS_CRON_EXPECTED="maybe",
     )
     proc = subprocess.run(
         reader_argv(),
@@ -178,7 +177,7 @@ def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
         timeout=30,
     )
     assert proc.returncode != 0
-    assert "LONGHORN_TRIM_CRON_EXPECTED" in proc.stderr
+    assert "LONGHORN_B2_DELETIONS_CRON_EXPECTED" in proc.stderr
     assert "maybe" in proc.stderr
 
 
@@ -192,15 +191,11 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     """
     now = NOW
     snapshot_ts = _rfc3339(now - 60)
-    drill_dir = tmp_path / "drill"
-    drill_dir.mkdir()
-    (drill_dir / "last-success").write_text(str(int(now - 3600)))
 
     stub = _green_path_stub_kubectl(tmp_path, snapshot_ts)
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
     )
 
     proc = subprocess.run(
@@ -217,36 +212,33 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     assert "2 B2 backup(s)/24h (budget 16)" in proc.stdout
 
 
-def test_reader_pages_when_the_trim_cron_file_is_gone(tmp_path):
-    """Check 10 through the real wiring: the shim's cron paths reach the verdict.
+def test_reader_pages_when_the_trim_cronjob_is_gone(tmp_path):
+    """Check 10 through the real wiring: the CronJob read reaches the verdict.
 
-    The green path above proves the logic stays quiet; this proves the reader actually stats
-    what the shim exports, rather than the arm being unreachable in production.
+    The green path above proves the logic stays quiet; this proves the reader actually reads
+    the trim CronJob, rather than the arm being unreachable in production.
     """
-    now = NOW
-    snapshot_ts = _rfc3339(now - 60)
-    drill_dir = tmp_path / "drill"
-    drill_dir.mkdir()
-    (drill_dir / "last-success").write_text(str(int(now - 3600)))
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_TRIM_CRONJOB="")
 
-    stub = _green_path_stub_kubectl(tmp_path, snapshot_ts)
-    env = _reader_env(
-        tmp_path,
-        LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
-        LONGHORN_TRIM_CRON_FILE=str(tmp_path / "cron.d" / "no-such-cron"),
-    )
-
-    proc = subprocess.run(
-        reader_argv(now=NOW),
-        capture_output=True,
-        text=True,
-        env=env,
-        timeout=30,
-    )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("down\t"), proc.stdout
-    assert "the longhorn-trim cron is not installed" in proc.stdout
+    assert "the trim RecurringJob has no CronJob" in proc.stdout, proc.stdout
+
+
+def test_reader_pages_naming_a_volume_the_trim_failed_on(tmp_path):
+    """Check 9 through the real pod-log read, which the trim arm shares with check 11."""
+    failed = (
+        f'[pod/trim-1-abcde/trim] time="{_rfc3339(NOW - 30)}" level=error '
+        'msg="Failed to run volume job" job=trim volume=pvc-web-data\n'
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=failed)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "the trim job failed on 1 volume(s)" in proc.stdout, proc.stdout
+    assert "pvc-web-data" in proc.stdout, proc.stdout
 
 
 def test_reader_argv_hands_now_to_main(tmp_path):
@@ -258,13 +250,9 @@ def test_reader_argv_hands_now_to_main(tmp_path):
     argument reached main().
     """
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
-    drill_dir = tmp_path / "drill"
-    drill_dir.mkdir()
-    (drill_dir / "last-success").write_text(str(int(NOW - 3600)))
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
     )
 
     proc = subprocess.run(
@@ -301,6 +289,7 @@ def test_reader_argv_hands_now_to_main(tmp_path):
         ("failed-jobs", "failed-jobs fetch failed (rc=124)"),
         ("pod-logs", "recurring-job pod logs fetch failed (rc=124)"),
         ("drill-stamps", "restore-drill stamp ConfigMap fetch failed (rc=124)"),
+        ("trim-cronjob", "could not read the trim CronJob"),
     ],
 )
 def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
@@ -331,6 +320,7 @@ def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, na
             "drill-stamps",
             "restore-drill stamp ConfigMap fetch returned an unparseable body",
         ),
+        ("trim-cronjob", "could not read the trim CronJob"),
     ],
 )
 def test_an_unparseable_json_body_is_flagged_by_name(
@@ -372,26 +362,28 @@ def test_a_failed_backup_list_fetch_does_not_cascade_into_the_tier_loop(
 
 
 def test_reader_is_up_with_an_empty_excluded_oversize_file(tmp_path):
-    """Control for the pair below: the drill writes an empty file when the cap excludes nothing."""
-    (tmp_path / "drill").mkdir()
-    (tmp_path / "drill" / "excluded_oversize").write_text("")
+    """Control for the pair below: the drill writes an empty key when the cap excludes nothing."""
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
 
-    proc = _run_reader_against(stub, tmp_path)
+    proc = _run_reader_against(
+        stub, tmp_path, STUB_DRILL_CM=fresh_drill_cm(excluded_oversize="")
+    )
 
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("up\t"), proc.stdout
 
 
 def test_reader_pages_naming_a_volume_the_drill_excluded_as_oversize(tmp_path):
-    """The reader reads the drill's `excluded_oversize` file, which no logic test can see."""
-    (tmp_path / "drill").mkdir()
-    (tmp_path / "drill" / "excluded_oversize").write_text(
-        f"jellyfin-config\t{5 * 2**30}\n"
-    )
+    """The reader reads the drill's `excluded_oversize` key, which no logic test can see."""
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
 
-    proc = _run_reader_against(stub, tmp_path)
+    proc = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_DRILL_CM=fresh_drill_cm(
+            excluded_oversize=f"jellyfin-config\t{5 * 2**30}\n"
+        ),
+    )
 
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("down\t"), proc.stdout
@@ -399,24 +391,24 @@ def test_reader_pages_naming_a_volume_the_drill_excluded_as_oversize(tmp_path):
 
 
 def test_reader_is_up_with_an_empty_excluded_nopvc_file(tmp_path):
-    """Control for the pair below: the drill writes an empty file when every volume has a PVC."""
-    (tmp_path / "drill").mkdir()
-    (tmp_path / "drill" / "excluded_nopvc").write_text("")
+    """Control for the pair below: the drill writes an empty key when every volume has a PVC."""
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
 
-    proc = _run_reader_against(stub, tmp_path)
+    proc = _run_reader_against(
+        stub, tmp_path, STUB_DRILL_CM=fresh_drill_cm(excluded_nopvc="")
+    )
 
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("up\t"), proc.stdout
 
 
 def test_reader_pages_naming_a_volume_the_drill_excluded_for_no_pvc(tmp_path):
-    """The reader reads the drill's `excluded_nopvc` file, which no logic test can see."""
-    (tmp_path / "drill").mkdir()
-    (tmp_path / "drill" / "excluded_nopvc").write_text("pvc-released\n")
+    """The reader reads the drill's `excluded_nopvc` key, which no logic test can see."""
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
 
-    proc = _run_reader_against(stub, tmp_path)
+    proc = _run_reader_against(
+        stub, tmp_path, STUB_DRILL_CM=fresh_drill_cm(excluded_nopvc="pvc-released\n")
+    )
 
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("down\t"), proc.stdout

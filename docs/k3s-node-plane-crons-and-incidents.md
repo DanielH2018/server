@@ -73,42 +73,51 @@ Eligibility is the `recurring-job-group.longhorn.io/*` label, with the `no-backu
 by name. The volume is chosen least recently attempted, not least recently succeeded, so one
 permanently broken volume cannot starve the rest.
 
-## A `logger` line is evidence only because two checks read it
+## The trim and the B2 accounting are evidence only because two checks read them
 
-The trim and the two B2 accounting crons log every run through `logger`, readable in Loki. The
-drill's lines are the pod log of its CronJob since H2.3d, and check 7 reads its stamp instead. That is evidence only because check 9 of `longhorn-backup-health.sh` reads it (#2418). It
-pushes DOWN on the trim's `ABORT:` line, on a non-zero `N failed` in its newest summary line, or
-on an `UNPRICED` line from `b2-deletions` anywhere in
-`ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Before that
-the trim's own comment claimed "a cron mail or a Kuma push notices" a failure: no such push
-existed, and the cron mail lands in `/var/mail/ubuntu`, which held 5,678 unread messages on
-2026-09-24.
+Checks 9 and 10 of `longhorn-backup-health.sh` read what the filesystem trim and the B2
+deletion accounting reported, and whether each still runs (#2418, #2443). The drill's lines are
+the pod log of its CronJob since H2.3d, and check 7 reads its stamp instead. Before check 9 the
+trim's own comment claimed "a cron mail or a Kuma push notices" a failure: no such push existed,
+and the cron mail lands in `/var/mail/ubuntu`, which held 5,678 unread messages on 2026-09-24.
 
-**Check 10 is the second reader, for the crons' liveness** (#2443). Check 9 reads what they said,
-and an empty window reads as green to it. Check 10 pushes DOWN when the window holds no line a
-completed run of that cron writes — its `/etc/cron.d` entry removed, its script un-rendered, the
-crontab lost, or the run itself dying part-way — which is the shape check 7 closes for the restore
-drill. Each arm judges on a recognised line, the trim on its summary or `ABORT:` and
-`b2-deletions` on the summary line `probe.py b2-deletions` ends every completed run with (#2545);
-before that the b2 arm took any line at all, so a run that logged a traceback and exited non-zero
-read as alive. It stays quiet in the three cases that produce silence legitimately: a window
-shorter than the 24h cron period, a cron this host does not install (`b2-deletion-accounting` is
-gated on `has_repo_checkout`), and a cron installed less than one window ago.
+**The trim is Longhorn's `trim` RecurringJob since H2.2c, so its evidence is the cluster's.**
+The `longhorn-backup` role declares the job, and Longhorn runs it from a CronJob of the same name
+in `longhorn-system`. Check 9 reads the newest Job's pod log, from the one
+`kubectl logs -l recurring-job.longhorn.io` read check 11 also uses. It pushes DOWN on a per-volume
+failure line, because longhorn-manager can log a failed volume and still finish the Job as
+succeeded. It also pushes DOWN on a Job whose `Failed` condition is set. Check 10 reads the
+CronJob: an absent or suspended CronJob, or one whose last scheduled run is older than one
+period of its own `spec.schedule` plus 2 hours, pushes DOWN. The period comes from the live
+schedule, so no host key restates it. The native job runs inside longhorn-manager, so a manager
+that is not ready runs no trim at all, and check 10 then sees the missed run.
+
+**The B2 accounting is a host cron, so its evidence is the journal.** Check 9 pushes DOWN on an
+`UNPRICED` line from `b2-deletions` anywhere in
+`ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Check 10
+pushes DOWN when the window holds no line a completed run writes: its `/etc/cron.d` entry
+removed, the crontab lost, or the run itself dying part-way. It judges on the summary line
+`probe.py b2-deletions` ends every completed run with (#2545); before that it took any line at
+all, so a run that logged a traceback and exited non-zero read as alive. It stays quiet in the
+three cases that produce silence legitimately: a window shorter than the 24h cron period, a host
+without the cron (`b2-deletion-accounting` is gated on `has_repo_checkout`), and a cron
+installed less than one window ago.
 
 **Check 10 tells "fired and failed" from "stopped firing" with a fire stamp** (#3677).
 `initial_setup` hardens `/etc/cron.d` to 0700 root, so the `sys_user` this check runs as can
-never stat a cron's entry there. The trim script and the `b2-deletions` cron line each touch a stamp under
-`k3s_cron_fired_stamp_dir` before its job runs, and the shim exports the stamp paths. A stamp
+never stat a cron's entry there. The `b2-deletions` cron line touches a stamp under
+`k3s_cron_fired_stamp_dir` before its job runs, and the shim exports the stamp path. A stamp
 inside the window means the cron fired and its run did not complete, and the message points at
 the cron's journal tag. A stale or missing stamp means the cron has not fired. The message
 then says that whether the entry is still installed needs root to check. The 2026-10-08 outage
 was the first kind: `b2-deletions` fired every day and logged only its refusal.
 
-Every matched line is matched as written, so rewording one means changing `_TRIM_SUMMARY_RE` /
-`_TRIM_ABORT_RE` / `_DELETIONS_SUMMARY_RE` / `_DELETIONS_DECLINED_RE` in
-`scripts/lib/longhorn_lib/longhorn_cron_evidence_logic.py` in the same edit. The b2 shapes
-come from `deletions_summary_line` / `deletions_declined_line` in
-`scripts/diagnostics/probe_lib/b2_ledger.py`, which
+Every matched line is matched as written, so a reworded line means changing `_TRIM_FAILURE_RE`
+/ `_DELETIONS_SUMMARY_RE` / `_DELETIONS_DECLINED_RE` in
+`scripts/lib/longhorn_lib/longhorn_cron_evidence_logic.py` in the same edit. The trim's shapes
+come from longhorn-manager's `app/recurringjob/volume.go`, so a Longhorn upgrade that rewords
+them blinds check 9 until the regex follows. The b2 shapes come from `deletions_summary_line` /
+`deletions_declined_line` in `scripts/diagnostics/probe_lib/b2_ledger.py`, which
 `test_cron_liveness_accepts_the_summary_line_the_probe_writes` holds to the regexes.
 
 The drill stamps `ATTEMPT_DIR` on every run and `SUCCESS_DIR` only after the assertions pass;

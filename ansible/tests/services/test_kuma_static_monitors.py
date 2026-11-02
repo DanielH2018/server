@@ -18,7 +18,6 @@ from _kuma_entities import (
     _entities,
     bridge_env,
     bridge_push_tokens,
-    entities_with,
     push_tokens_by_monitor,
 )
 
@@ -178,19 +177,14 @@ def test_notification_configs_declare_apply_existing():
 # left it when Cutover-1a deleted them. `EtcdRestoreDrillFailed`, `EtcdRestoreDrillNotReporting` and
 # the four `UpsSecondary*` rules are critical, so Alertmanager mails them once Cutover-1b drops
 # `shadow`.
-EMAIL_TIER = {
-    "B2 Reachable",
-    "B2 Free Tier Headroom",
-    "R2 Free Tier Headroom",
-    "SMART Data / Health",
-    "Discord Delivery",
-    # On the tier for the transport, not the urgency: no Discord webhook can deliver at all.
-    "WAN Reachable",
-}
-
-
-# A heartbeat window no tile holds, for the render that reveals which tiles the variable moves.
-_WINDOW_PROBE_S = 7777
+#
+# M6 batch A6's six tiles on the tier (B2 Reachable, B2 Free Tier Headroom, R2 Free Tier
+# Headroom, SMART Data / Health, Discord Delivery and WAN Reachable) left it when Cutover-1a
+# deleted every monitor-bridge tile. `B2Unreachable`, `B2FreeTierHeadroomLow`,
+# `R2FreeTierHeadroomLow`, `SmartHealthFailing`, `DiscordDeliveryFailing` and `WANUnreachable` are
+# critical, so Alertmanager mails them once Cutover-1b drops `shadow`. The set is empty because
+# no Kuma tile mails any more.
+EMAIL_TIER: set[str] = set()
 
 
 def test_the_deleted_b2_b4_and_b6b_tiles_are_not_declared():
@@ -224,7 +218,7 @@ def test_the_deleted_b2_b4_and_b6b_tiles_are_not_declared():
         "Janitorr Errors",
     }
     # Non-vacuity by name: a render that declared nothing would pass the line above.
-    assert "Swallowed Push Verdicts" in declared
+    assert "Status Page Sync" in declared
 
 
 def test_the_deleted_b6c_tile_is_not_declared():
@@ -233,7 +227,7 @@ def test_the_deleted_b6c_tile_is_not_declared():
     declared = {e["name"] for e in _entities().values()}
     assert "Registry GC" not in declared
     # Non-vacuity by name: a render that declared nothing would pass the line above.
-    assert "Swallowed Push Verdicts" in declared
+    assert "Status Page Sync" in declared
 
 
 def test_the_deleted_b1_tiles_are_not_declared():
@@ -248,7 +242,7 @@ def test_the_deleted_b1_tiles_are_not_declared():
         "Release Staleness Drift",
         "Live Object Drift",
     }
-    assert "Swallowed Push Verdicts" in declared
+    assert "Status Page Sync" in declared
 
 
 def test_the_deleted_b3_tiles_are_not_declared():
@@ -257,76 +251,56 @@ def test_the_deleted_b3_tiles_are_not_declared():
     declared = {e["name"] for e in _entities().values()}
     assert not declared & {"GitHub Ruleset Drift", "GitHub Interaction Limit"}
     # Non-vacuity by name: a render that declared nothing would pass the line above.
-    assert "Swallowed Push Verdicts" in declared
+    assert "Status Page Sync" in declared
 
 
-def test_every_bridge_push_token_reaches_a_push_tile():
-    # A row in monitor-bridge's `files/check_table.py` with no tile pushes into nothing:
-    # Kuma answers an unknown token with 404 and no monitor ever goes red. Joined on rendered
-    # values, the same way as the interval guard below, so the token the bridge pushes and the
-    # one the tile accepts are compared rather than two variable names.
+# The 20 tiles M6 batch A6's Cutover-1a deleted: every tile monitor-bridge fed. Cutover-2 stops
+# the push and deletes `test_the_bridge_pushes_into_no_tile` with it.
+A6_TILES_DELETED = {
+    "WAN Reachable",
+    "Discord Delivery",
+    "R2 Free Tier Headroom",
+    "Cloudflare IP Drift",
+    "Healthchecks.io Console Drift",
+    "B2 Reachable",
+    "B2 Free Tier Headroom",
+    "Arr Queue Warnings",
+    "GitOps Deploy — Alive",
+    "GitOps Deploy — Status",
+    "Host Packages — Status",
+    "etcd Restore Drill",
+    "Home Assistant Automations",
+    "n8n Prod Workflows",
+    "Bazarr Health",
+    "Prowlarr Indexers",
+    "SMART Data / Health",
+    "k3s Speedtest",
+    "Swallowed Push Verdicts",
+    "Prometheus Reachable",
+}
+
+
+def test_the_deleted_a6_tiles_are_not_declared():
+    # RED if the template declares a bridge tile again: AutoKuma would re-create it beside the
+    # bridge-exporter.yaml rule that replaces it (M6 batch A6), and the bridge pushes into its
+    # token until Cutover-2.
+    declared = {e["name"] for e in _entities().values()}
+    assert not declared & A6_TILES_DELETED
+    # Non-vacuity by name: a render that declared nothing would pass the line above.
+    assert "Status Page Sync" in declared
+    assert len(A6_TILES_DELETED) == len(bridge_push_tokens())
+
+
+def test_the_bridge_pushes_into_no_tile():
+    # M6 batch A6's Cutover-1a deleted every tile the bridge feeds, and the bridge keeps pushing
+    # into the deleted tokens until Cutover-2: Kuma answers an unknown token with 404, which the
+    # bridge logs as `push failed`. Joined on rendered values, so the token the bridge pushes
+    # and the one a tile accepts are compared rather than two variable names. A tile that gains
+    # a bridge token back fails here, and so does a bridge row whose token went missing.
     bridge_tokens = bridge_push_tokens()
     tile_tokens = set(push_tokens_by_monitor().values())
     assert "stub-monitor_bridge_swallowed_verdicts_push_token" in bridge_tokens
-    assert not sorted(bridge_tokens - tile_tokens), sorted(bridge_tokens - tile_tokens)
-
-
-def test_bridge_push_monitors_share_one_interval():
-    # Every tile the bridge feeds must take its heartbeat window from uptime_kuma_k8s_bridge_push_interval,
-    # so widening the window is one edit rather than one per tile. A new bridge
-    # check that hardcodes an interval reads as covered while sitting on the old, tighter window —
-    # which is the flap this variable exists to stop.
-    #
-    # Both sides are rendered values: the tile's own `push_token` against the token the bridge's
-    # env-secret pushes to. Under `NamedStub` a secret renders as its own variable name, so the
-    # join is on what the two pods would agree on rather than on a name scanned out of both
-    # templates.
-    bridge_tokens = bridge_push_tokens()
-    tokens = push_tokens_by_monitor()
-    want = ROLE_DEFAULTS["uptime_kuma_k8s_bridge_push_interval"]
-    off = {
-        name: e["interval"]
-        for name, e in _entities().items()
-        if e["type"] == "push"
-        and tokens.get(e["name"]) in bridge_tokens
-        and e["interval"] != want
-    }
-    assert not off, (
-        "bridge-fed monitors not on uptime_kuma_k8s_bridge_push_interval: %s" % off
-    )
-
-
-def test_non_bridge_push_monitors_keep_their_own_interval():
-    # The REJECT half. A guard that only asserted "every bridge tile uses the variable" would pass
-    # just as happily with the non-bridge tiles swept onto it too, which is the mistake it is here
-    # to prevent — their feeders are crons on other cadences, not the bridge loop.
-    #
-    # Which tiles are WIRED to the variable is answered by MOVING it: the set whose interval
-    # DIFFERS between the inventory render and the probe render is exactly the set a future
-    # widening would move. Comparing rendered numbers at one value could not answer it — eight
-    # non-bridge monitors already sit at 1200 for their own reasons, and a coincidence would read
-    # as a violation. Asking for a difference rather than for `== _WINDOW_PROBE_S` also catches a
-    # tile that derives its window (`uptime_kuma_k8s_bridge_push_interval * 2`) rather than taking it whole.
-    bridge_tokens = bridge_push_tokens()
-    at_inventory = {e["name"]: e.get("interval") for e in _entities().values()}
-    moved = {
-        e["name"]
-        for e in entities_with(
-            {"uptime_kuma_k8s_bridge_push_interval": _WINDOW_PROBE_S}
-        ).values()
-        if e["type"] == "push" and e.get("interval") != at_inventory.get(e["name"])
-    }
-    # Non-vacuity: a template that stopped reading the variable moves nothing, and an empty set
-    # satisfies every subset claim below.
-    assert len(moved) >= 20, (
-        f"only {len(moved)} tiles move with uptime_kuma_k8s_bridge_push_interval — the variable has stopped "
-        "reaching the heartbeat windows it is meant to set"
-    )
-    tokens = push_tokens_by_monitor()
-    swept = {name for name in moved if tokens.get(name) not in bridge_tokens}
-    assert not swept, (
-        "non-bridge monitors wired to the bridge's heartbeat window: %s" % sorted(swept)
-    )
+    assert not bridge_tokens & tile_tokens, sorted(bridge_tokens & tile_tokens)
 
 
 def test_bridge_push_interval_is_a_multiple_of_the_loop():

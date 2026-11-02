@@ -182,15 +182,6 @@ def _entities_at_inventory_values() -> dict[str, dict]:
     return _parse_entities(_render("uptime-kuma", "static-monitors.yaml.j2"))
 
 
-def entities_with(overrides: dict) -> dict[str, dict]:
-    """The same entity set rendered with `overrides` laid over the inventory.
-
-    For a guard asking which tiles a variable MOVES — the rendered equivalent of asking which
-    tiles name it. Not cached: each caller passes its own overrides.
-    """
-    return _parse_entities(_render("uptime-kuma", "static-monitors.yaml.j2", overrides))
-
-
 @lru_cache(maxsize=1)
 def bridge_env() -> dict[str, str]:
     """monitor-bridge's environment as the bridge pod receives it: env var -> value.
