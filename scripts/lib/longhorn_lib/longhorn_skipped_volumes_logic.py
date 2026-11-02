@@ -24,6 +24,7 @@ from pathlib import Path as _Path
 # host both sit beside the reader, whose directory is already on sys.path, so these inserts
 # name directories that do not exist there and change nothing.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from host_lib import rfc3339_to_epoch
 from longhorn_lib import longhorn_backups as backups
