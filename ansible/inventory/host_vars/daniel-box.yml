@@ -980,10 +980,7 @@ containers_list:
     # browsers arrive through traefik. The `autokuma` sidecar needs no entry: it reaches Kuma
     # over pod-local loopback, which no NetworkPolicy evaluates.
     netpol_from:
-      # autofix-bridge, both cloudflare-ddns Deployments and pi-peer-backup left this list when
-      # M6 batch B7's Cutover-2 stopped their pushes. A census of their templates and scripts
-      # found no other path to Kuma.
-      - monitor-bridge           # KUMA_URL (monitor-bridge/templates/config/env.yaml.j2)
+      - monitor-bridge          # KUMA_URL (monitor-bridge/templates/config/env.yaml.j2)
       - kuma-status-page-sync    # KUMA__URL + deadman push (uptime-kuma's status-page-sync CronJob)
       - kuma-maintenance-sync    # KUMA__URL (uptime-kuma's maintenance-sync CronJob)
 
