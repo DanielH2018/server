@@ -43,15 +43,12 @@ would teach the operator to ignore the page. A failed GitHub read exits 1, becau
 means this host's own credentials broke.
 """
 
-import copy
-import functools
 import json
 import re
 import shutil
 import subprocess
 import sys as _sys
 import time
-import tomllib
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -61,7 +58,7 @@ from pathlib import Path
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib import operator_waits
+from fanout_lib import operator_waits, own_surface
 from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
 from fanout_lib.review.api import LAND_SH, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
@@ -85,33 +82,6 @@ GH_TIMEOUT_S = 60.0
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-server-lander"
 # gh returns at most this many changed files, so a PR at the cap may hide a path past it.
 FILE_CAP = 100
-# Paths whose change widens what this command or the lander may do, or that the landing path
-# imports. A PR touching one is left for a person, the way `homelab-claude-land@`'s approval
-# list leaves it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
-# of it, not only land*. The deployer's `files/` decide the CI gate, `ansible/vars/` holds the
-# secrets and the generated cluster file, and `.claude/` holds the repo's hooks and settings.
-OWN_PATHS = (
-    "scripts/deploy_tools/",
-    "scripts/lib/",
-    "scripts/dev/fanout",
-    ".github/",
-    ".claude/",
-    "hosts/components/claude-code/",
-    "ansible/roles/setup/gitops_deploy/",
-    "ansible/vars/",
-    "pyproject.toml",
-    "uv.lock",
-    "uv.toml",
-    ".python-version",
-)
-# Two narrowings of OWN_PATHS (#5659), and no others: skills, hooks and workflows steer what
-# agents do or run as CI, so a self-landed change to one could loosen a guardrail with no
-# person in the loop. `pyproject.toml` stays held unless its only change is to
-# `[tool.pytest.ini_options].testpaths` (`testpaths_only`). A role's `CLAUDE.md` is prose the
-# deployer never executes, so it passes under these roles and every other file there holds.
-PYPROJECT = "pyproject.toml"
-DOC_ONLY_ROLES = ("ansible/roles/setup/gitops_deploy/",)
-DOC_FILE = "CLAUDE.md"
 # A heading that names a step only a person can do, and the text that holds a PR back.
 OPERATOR_HEADING = re.compile(r"(?i)before[- ]merge|operator")
 HOLD_TEXT = re.compile(r"(?i)needs input|do not merge")
@@ -168,6 +138,8 @@ class Boundaries:
         owed: the deployer's `owed.jsonl`, for the waiting gauge.
         clock: the epoch second now.
         testpaths_only: whether the PR at this head changes `pyproject.toml` only in `testpaths`.
+        role_docs_only: whether the PR's files under `DOC_ONLY_ROLES` are all `CLAUDE.md` files
+            it adds or modifies, with no rename or removal.
     """
 
     tools: Tools = field(default_factory=Tools)
@@ -188,7 +160,16 @@ class Boundaries:
     owed: Callable[[], str] = lambda: operator_waits.read_owed()
     open_issues: Callable[[], list[dict]] = lambda: read_open_issues()
     clock: Callable[[], float] = time.time
-    testpaths_only: Callable[[str], bool] = lambda head: live_testpaths_only(head)
+    testpaths_only: Callable[[str], bool] = lambda head: (
+        own_surface.live_testpaths_only(head)
+    )
+    role_docs_only: Callable[[int], bool] = lambda pr: own_surface.live_role_docs_only(
+        pr
+    )
+
+    def judge(self, rec: dict, pr: dict) -> str:
+        """`problems` with this boundary's two diff reads."""
+        return problems(rec, pr, self.testpaths_only, self.role_docs_only)
 
 
 class CheckoutFailed(Exception):
@@ -217,77 +198,6 @@ def read_open_issues() -> list[dict]:
     if not isinstance(data, list):
         raise ValueError("gh issue list did not print a list")
     return [i for i in data if isinstance(i, dict)]
-
-
-def gh_raw_file(path: str, ref: str) -> str:
-    """The text of `path` at commit `ref`; raises on a failed read."""
-    out = gh(
-        "api", "-H", "Accept: application/vnd.github.raw",
-        f"repos/{SERVER}/contents/{path}?ref={ref}", timeout=GH_TIMEOUT_S,
-    )  # fmt: skip
-    return out.stdout
-
-
-def merge_base(head: str) -> str:
-    """The commit the PR branched from, which is what its diff is against."""
-    out = gh(
-        "api", f"repos/{SERVER}/compare/{BASE}...{head}",
-        "--jq", ".merge_base_commit.sha", timeout=GH_TIMEOUT_S,
-    )  # fmt: skip
-    sha = out.stdout.strip()
-    if not re.fullmatch(r"[0-9a-f]{40}", sha):
-        raise ValueError(f"no merge base for {head}")
-    return sha
-
-
-def without_testpaths(config: dict) -> dict:
-    """`config` with `[tool.pytest.ini_options].testpaths` removed, where it exists."""
-    rest = copy.deepcopy(config)
-    table = rest.get("tool", {}).get("pytest", {}).get("ini_options")
-    if isinstance(table, dict):
-        table.pop("testpaths", None)
-    return rest
-
-
-def pyproject_pair(head: str) -> tuple[str, str]:
-    """`pyproject.toml` at the PR's merge base and at its head; raises on a failed read."""
-    return gh_raw_file(PYPROJECT, merge_base(head)), gh_raw_file(PYPROJECT, head)
-
-
-def testpaths_only(head: str, read: Callable[[str], tuple[str, str]]) -> bool:
-    """Whether the PR at `head` changes `pyproject.toml` only inside `testpaths`.
-
-    `read` returns the file at the merge base and at `head`. This compares the two parsed, so
-    a dependency, a `[tool.uv]` key or any other table that differs holds the PR. Any read or
-    parse failure also holds it: this is the fail-closed half of the narrowing.
-    """
-    try:
-        old, new = (tomllib.loads(text) for text in read(head))
-        paths = (
-            new.get("tool", {})
-            .get("pytest", {})
-            .get("ini_options", {})
-            .get("testpaths", [])
-        )
-    except OSError, ValueError, subprocess.SubprocessError:
-        return False
-    listed = isinstance(paths, list) and all(isinstance(p, str) for p in paths)
-    return listed and without_testpaths(old) == without_testpaths(new)
-
-
-@functools.cache
-def live_testpaths_only(head: str) -> bool:
-    """`testpaths_only` against GitHub, read once per head for the passes of one run."""
-    return testpaths_only(head, pyproject_pair)
-
-
-def holds_own_surface(path: str, pyproject_ok: Callable[[], bool]) -> bool:
-    """Whether this changed path is one the lander leaves for a person."""
-    if path == PYPROJECT:
-        return not pyproject_ok()
-    if path.startswith(DOC_ONLY_ROLES) and path.rsplit("/", 1)[-1] == DOC_FILE:
-        return False
-    return path.startswith(OWN_PATHS)
 
 
 def newest_per_pr(records: Sequence[dict]) -> dict[int, dict]:
@@ -323,17 +233,21 @@ def operator_step_in(body: str) -> str:
     return f"the body says '{hold.group(0)}'" if hold else ""
 
 
-def never_testpaths_only(head: str) -> bool:
+def never(_key: str | int) -> bool:
     return False
 
 
 def problems(
-    rec: dict, pr: dict, pyproject_ok: Callable[[str], bool] = never_testpaths_only
+    rec: dict,
+    pr: dict,
+    pyproject_ok: Callable[[str], bool] = never,
+    docs_ok: Callable[[int], bool] = never,
 ) -> str:
     """Why this PR may not land unattended, or "" when it may. First reason wins.
 
     `rec` is the batch's review record, `pr` the PR as GitHub reads it now. `pyproject_ok`
-    answers `Boundaries.testpaths_only`; the default holds every PR that touches `pyproject.toml`.
+    answers `Boundaries.testpaths_only` and `docs_ok` answers `Boundaries.role_docs_only`. The
+    defaults hold every PR that touches `pyproject.toml` or a role's `CLAUDE.md`.
     """
     if rec.get("outcome") != "pr":
         return f"the batch ended '{rec.get('outcome')}', not 'pr'"
@@ -360,7 +274,13 @@ def problems(
     files = [str(f.get("path") or "") for f in pr.get("files") or []]
     if len(files) >= FILE_CAP:
         return f"it changes {len(files)} files, at the listing cap"
-    own = [f for f in files if holds_own_surface(f, lambda: pyproject_ok(head))]
+    own = [
+        f
+        for f in files
+        if own_surface.holds(
+            f, lambda: pyproject_ok(head), lambda: docs_ok(int(pr.get("number") or 0))
+        )
+    ]
     if own:
         return f"it changes the lander's own surface: {', '.join(own[:3])}"
     return operator_step_in(str(pr.get("body") or ""))
@@ -507,7 +427,7 @@ def run(
             candidates[number],
             f"#{number} batch {candidates[number].get('batch')}",
         )
-        why = problems(rec, prs[number], b.testpaths_only)
+        why = b.judge(rec, prs[number])
         if why:
             out(f"{label}: ineligible, {why}")
         elif log := handed_off(log_dir, number):
@@ -546,19 +466,15 @@ def write_waits(
             n: reason
             for host, recs in (("box", box), ("server", server))
             for n, r in recs.items()
-            if (
-                reason := operator_waits.counted_reason(
-                    host, problems(r, prs[n], b.testpaths_only)
-                )
-            )
+            if (reason := operator_waits.counted_reason(host, b.judge(r, prs[n])))
         }
         try:
             operator_waits.record_stamps(stamps, held, b.clock())
         except OSError as exc:
             out(f"operator wait stamps not written: {tail(str(exc))}")
     starts = operator_waits.waits(
-        [(problems(r, prs[n], b.testpaths_only), r) for n, r in server.items()],
-        [(problems(r, prs[n], b.testpaths_only), r) for n, r in box.items()],
+        [(b.judge(r, prs[n]), r) for n, r in server.items()],
+        [(b.judge(r, prs[n]), r) for n, r in box.items()],
         operator_waits.owed_manual_planes(b.owed()),
     )
     body = operator_waits.render(starts, b.clock())

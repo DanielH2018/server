@@ -1,16 +1,16 @@
 {
-  "checksum": "5b9e65dc5d24d1c0302c92dd7ac29a58d081a79b2795e95d83d4d9e2a032bcdd",
+  "checksum": "a5e563d014d37180373d7a8e34536eb34997c6a7efc2fefcf67766b772f4d3ac",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)",
   "row": {
     "atoms": {
       "ansible/vars/": "d2aae192a8ace1c1a2522320891784581f33bbdca74ac269f2a609c30556a300",
       "scripts/deploy_tools/": "4ff8cc62e9fbc6c422904d7eba14fe7bc09a07d734f41b956da9284e9bb200b7",
-      "scripts/dev/fanout_lib/autoland.py:problems": "64ec33522c730242e2a496b35f399af3dcf774a31543fef1ce5780ae01765d45",
+      "scripts/dev/fanout_lib/autoland.py:problems": "5ef3735e18b11fc37c002621a0756e95861d0fd47aa577e06d5c4609241ad65e",
       "scripts/dev/fanout_lib/operator_waits.py": "9b2269ed193430a4939c5cd3ead5a32a38e5d62dfaa744a364a7d535d69a7735",
       "scripts/lib/": "59c0359aa79f274a0e5bfdc220c39ce5894c4b0a6423c48fd9b10bcca9102b29"
     },
     "python": "3.14",
-    "verified_sha": "d5591610f"
+    "verified_sha": "0d0316e19"
   }
 }

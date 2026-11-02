@@ -358,7 +358,8 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   narrowings apply (#5659). A PR passes when its only `pyproject.toml` change is to
   `[tool.pytest.ini_options].testpaths`, judged by parsing the file at the merge base and at the
   head, and a read or parse failure holds it. A PR also passes when its only change under the
-  deployer's role is a `CLAUDE.md`. Each landing runs from its own `origin/master` worktree under
+  deployer's role is a `CLAUDE.md` it adds or edits, read from the REST pulls-files statuses:
+  a rename, a removal or an unreadable status holds it. Each landing runs from its own `origin/master` worktree under
   `~/.local/state/fanout-server-lander/checkouts/`, never from the primary checkout.
 - **Primary:** the unit's working directory and `--primary` are `claude_code_operator_checkout`,
   which `ubuntu` owns. They are never `claude_code_rc_workdir`, the agent's clone on daniel-box:

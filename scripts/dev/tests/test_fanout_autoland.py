@@ -14,7 +14,7 @@ import pytest
 from _fanout_fakes import fake_tools
 from _review_fakes import PR, _finding, _pipeline, _report
 
-from fanout_lib import autoland
+from fanout_lib import autoland, own_surface
 from fanout_lib.autoland import Boundaries
 
 HEAD = "a" * 40
@@ -230,16 +230,16 @@ def _served(old, new):
     ],
 )
 def test_pyproject_is_judged_by_what_changed_in_it(new, lands):
-    assert autoland.testpaths_only(HEAD, _served(PYPROJECT, new)) is lands
+    assert own_surface.testpaths_only(HEAD, _served(PYPROJECT, new)) is lands
 
 
 def test_a_pyproject_that_cannot_be_read_or_parsed_holds():
-    assert autoland.testpaths_only(HEAD, _served(PYPROJECT, "not [ toml")) is False
+    assert own_surface.testpaths_only(HEAD, _served(PYPROJECT, "not [ toml")) is False
 
     def unreachable(head):
         raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 502")
 
-    assert autoland.testpaths_only(HEAD, unreachable) is False
+    assert own_surface.testpaths_only(HEAD, unreachable) is False
 
 
 @pytest.mark.parametrize(
@@ -257,8 +257,53 @@ def test_a_pyproject_that_cannot_be_read_or_parsed_holds():
 def test_the_two_narrowed_holds_pass_only_their_own_diff(tmp_path, files, lands):
     run = _Landings([_record()], [_pr(files=[{"path": f} for f in files])])
     run.boundaries.testpaths_only = lambda head: True
+    run.boundaries.role_docs_only = lambda pr: True
     run.run(tmp_path)
     assert bool(run.started) is lands
+
+
+def _entry(filename, status="modified", previous=None):
+    return {"filename": filename, "status": status, "previous_filename": previous}
+
+
+@pytest.mark.parametrize(
+    ("entries", "lands"),
+    [
+        ([_entry(f"{GITOPS}/CLAUDE.md"), _entry("README.md")], True),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "added")], True),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "renamed", f"{GITOPS}/tasks/x.yml")], False),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "renamed", f"{GITOPS}/CLAUDE.old.md")], False),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "removed")], False),
+        ([_entry("docs/CLAUDE.md", "renamed", f"{GITOPS}/files/x.py")], False),
+    ],
+    ids=[
+        "edit",
+        "add",
+        "task-renamed-onto-doc",
+        "doc-renamed",
+        "doc-removed",
+        "moved-out",
+    ],
+)
+def test_a_role_doc_passes_only_as_a_plain_add_or_edit(entries, lands):
+    assert own_surface.role_docs_only(5001, lambda pr: entries) is lands
+
+
+def test_a_role_doc_pass_is_refused_when_the_file_status_cannot_be_read():
+    def unreachable(pr):
+        raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 502")
+
+    assert own_surface.role_docs_only(5001, unreachable) is False
+
+
+def test_a_role_doc_the_diff_read_refuses_holds_with_that_reason(tmp_path):
+    run = _Landings([_record()], [_pr(files=[{"path": f"{GITOPS}/CLAUDE.md"}])])
+    run.boundaries.role_docs_only = lambda pr: False
+    _, text = run.run(tmp_path)
+    assert run.started == []
+    assert (
+        f"ineligible, it changes the lander's own surface: {GITOPS}/CLAUDE.md" in text
+    )
 
 
 def test_a_pyproject_change_that_is_not_testpaths_only_holds_with_that_reason(tmp_path):
