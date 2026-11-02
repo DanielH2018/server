@@ -58,10 +58,20 @@ def test_a_moved_key_a_setup_template_reads_names_that_template(tree, capsys):
     )
 
 
-def test_a_key_only_the_play_and_files_name_names_no_setup_file(tree, capsys):
-    """`deploy.yml` reading it refuses the deploy plane, and says nothing about a setup role."""
-    refs = _moved(tree, "read-by-the-play", "moved")
-    assert _setup_readers(tree, capsys, refs) == (0, {"paths": [], "unread": {}})
+def test_a_key_only_the_play_and_files_name_adds_no_setup_file(tree, capsys):
+    """`deploy.yml` reading it refuses the deploy plane, and says nothing about a setup role.
+
+    It moves beside a key a template reads, so the answer is that template alone rather than
+    a refusal or the verbatim `files/notes.py`.
+    """
+    tree.write(
+        GROUP_VARS,
+        BASE_VARS.replace('"3.14.6"', '"3.15.2"').replace("read-by-the-play", "moved"),
+    )
+    assert _setup_readers(tree, capsys, _refs(tree)) == (
+        0,
+        {"paths": [f"{ROLE}/templates/alpha.conf.j2"], "unread": {}},
+    )
 
 
 def test_a_value_built_from_the_moved_key_reaches_its_readers(tree, capsys):

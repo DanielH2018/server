@@ -41,8 +41,9 @@ ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
 # Three playbooks and the vars files, parsed once: 0.8s measured under a loaded suite run.
 # Thirty seconds is the wedged case, as for the setup narrowing (`NARROW_SETUP_TIMEOUT_S`).
 ROUTING_TIMEOUT_S = 30.0
-# A grep per changed key: 0.4s measured over PR #5405's commit, and 0.25s for the `--deploy-tags`
-# half over the last three commits to the file, so the routing bound serves both.
+# A grep per changed key: 0.4s measured over PR #5405's commit, 0.25s for the `--deploy-tags`
+# half over the last three commits to the file, and 0.29s over 382df818e, an inventory commit
+# moving `containers_list` and `compose_services` (#6962), so the routing bound serves all three.
 SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
 # 0.84s measured over ee529af466, a six-file hypervisor commit, so the routing bound serves it.
 SETUP_REACH_SCRIPT = "scripts/deploy_tools/setup_reach_hosts.py"
