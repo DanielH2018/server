@@ -292,3 +292,83 @@ tests:
       - alertname: DockerhubMirrorScaledToZero
         eval_time: 180m
         exp_alerts: []
+
+  # A GC run ends down: RegistryGcFailed fires at once, while the up verdict before it was quiet.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="registry-gc", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x5 0x5'
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: RegistryGcFailed
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: RegistryGcFailed
+        exp_alerts:
+          - exp_labels:
+              check: registry-gc
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: registry
+              severity: warning
+              shadow: "true"
+            exp_annotations:
+              summary: The weekly registry garbage collection did not complete.
+              description: "registry-gc.sh on daniel-box ended with status=down: a keep set was skipped, a mirror pod did not stop, a GC Job timed out, a mirror did not come back, or another run held the lock. Run `journalctl -t registry-gc` on daniel-box, then read the registry-gc-ghcr-mirror and registry-gc-dockerhub-mirror Job logs and the two mirror Deployments."
+
+  # The GC wrote at 0 and never again while the exporter stays up. The stale-file arm fires once
+  # the timestamp is more than 612000s (170h) old, so it is quiet at 170h and fires at 171h.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="registry-gc", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x180'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x180'
+    alert_rule_test:
+      - eval_time: 170h
+        alertname: RegistryGcNotReporting
+        exp_alerts: []
+      - eval_time: 171h
+        alertname: RegistryGcNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: registry-gc
+              instance: daniel-box
+              job: node
+              origin: daniel-box
+              service: registry
+              severity: warning
+              shadow: "true"
+            exp_annotations: &registry_gc_not_reporting
+              summary: The weekly registry garbage collection has stopped reporting.
+              description: "No registry-gc verdict newer than 612000s reached Prometheus from daniel-box's textfile collector, so nothing confirms the mirrors' weekly GC still runs. Read /etc/cron.d/registry-gc and `journalctl -t registry-gc` on daniel-box, then /var/lib/node-exporter-textfile/registry-gc.prom on the host."
+
+  # The same stale file behind a dead node exporter is ScrapeTargetDown's page, not this one.
+  - interval: 1h
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="registry-gc", instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x180'
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '0x180'
+    alert_rule_test:
+      - eval_time: 171h
+        alertname: RegistryGcNotReporting
+        exp_alerts: []
+
+  # No registry-gc file at all: the absent arm fires with no series in the 612000s window.
+  - interval: 1h
+    input_series:
+      - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
+        values: '1x180'
+    alert_rule_test:
+      - eval_time: 171h
+        alertname: RegistryGcNotReporting
+        exp_alerts:
+          - exp_labels:
+              check: registry-gc
+              origin: daniel-box
+              service: registry
+              severity: warning
+              shadow: "true"
+            exp_annotations: *registry_gc_not_reporting

@@ -26,7 +26,7 @@
 # uptime_kuma_k8s_bridge_push_interval (1200s), so its range is [2h].
 # A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
 # B9's three AIDE tiles (626400s) use [348h10m] and its three rkhunter tiles (612000s) use
-# [340h10m], both inside the 30d retention.
+# [340h10m], both inside the 30d retention. B6c's Registry GC tile (612000s) uses [340h10m] too.
 # B4's two etcd drill tiles had no term: a monthly push tile's range would be 70d10m, which
 # exceeds Prometheus's 30d retention. B4's five [2h] terms bounded their window, and all of B4's
 # terms left with its Cutover-1b.
@@ -47,6 +47,8 @@ groups:
               absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-server)"}[340h10m])
             or
               absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-pi)"}[340h10m])
+            or
+              absent_over_time(monitor_status{monitor_name="Registry GC"}[340h10m])
             or
               absent_over_time(monitor_status{monitor_name="n8n Prod Workflows"}[2h])
             or

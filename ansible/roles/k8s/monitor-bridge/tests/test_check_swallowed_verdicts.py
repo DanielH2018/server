@@ -297,6 +297,18 @@ def test_the_pi_heartbeats_left_hc_routing_so_only_the_old_package_still_pages()
     assert ok, msg
 
 
+def test_the_registry_gc_cron_is_quiet_when_refused_and_paging_when_lost():
+    # B6c: from Cutover-1a until Cutover-2, registry-gc.sh pushes into the deleted tile's token.
+    # The tag is one the rendered script logs under, so the exclusion matches its lines.
+    assert "registry-gc" in _producer_tags()
+    refused = _REJECTED_UP.replace("release-staleness-check", "registry-gc")
+    ok, msg = swallowed_verdicts([(1, refused)], "3h", truncated=False)
+    assert ok, msg
+    lost = _SWALLOWED_DOWN.replace("release-staleness-check", "registry-gc")
+    ok, msg = swallowed_verdicts([(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False)
+    assert not ok and "registry-gc" in msg
+
+
 # B7's pod producer, the pi-peer-backup script. The other B7 pods log to no stream these
 # selectors read. The tag is derived from `report()`: `${HOSTNAME:-<pod>} <tag>: $1`.
 _B7_TAGS = {"pi-peer-backup"}

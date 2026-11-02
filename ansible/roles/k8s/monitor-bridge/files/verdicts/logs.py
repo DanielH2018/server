@@ -126,6 +126,8 @@ KUMA_RETIRING_TAGS = frozenset(
         # the Pi installs the package, a DOWN cycle pages. The set goes with C-7.
         "pi-recovery-health",
         "pi-sd-health",
+        # B6c: registry-gc.sh, the weekly mirror GC cron of setup/k8s_host_files.
+        "registry-gc",
         "release-staleness-check",
         "secret-rotation-audit",
         "setup-drift-check",

@@ -64,8 +64,9 @@
 # Runs from the registry-gc root cron on daniel-box, weekly at the time set by
 # registry_k8s_gc_cron_weekday, _hour and _minute. For each mirror in turn it scales the
 # Deployment to 0, runs its Job from /etc/rancher/k3s/manifests/registry-jobs/ (the prune and
-# garbage-collect), scales the mirror back and warms it. It pushes the result to Kuma when
-# registry_gc_push_token is set. It reads /etc/rancher/k3s/k3s.yaml and
+# garbage-collect), scales the mirror back and warms it. It writes the result to the
+# registry-gc textfile on every run, and pushes it to Kuma when registry_gc_push_token is set.
+# It reads /etc/rancher/k3s/k3s.yaml, /usr/local/lib/homelab-check-lib.sh and
 # /usr/local/lib/kuma-push-lib.sh, and keeps its state in /var/lib/registry-gc.
 
 set -uo pipefail
@@ -81,6 +82,17 @@ source /usr/local/lib/kuma-push-lib.sh || {
   logger -t registry-gc "kuma-push-lib.sh missing — run initial_setup on this host"
   exit 1
 }
+# shellcheck source=/dev/null
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t registry-gc "homelab-check-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+# The longest legitimate gap between two textfile writes: the weekly cron plus two hours for the
+# worst run, the interval of the Kuma `Registry GC` tile. RegistryGcNotReporting in
+# observability's rules/registry.yaml reads it, and
+# ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins all three.
+DEADLINE_S=612000
 
 # Cron's default PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s installer puts the
 # binary. Without this every kubectl call below silently resolves to nothing.
@@ -152,6 +164,10 @@ finish() {
   # Explicit, because root's umask here renders this 0640 and the operator reading it after a
   # run is not root. Nothing secret is in it — a status, a timestamp and a count.
   chmod 0644 "$STATE_FILE"
+
+  # Before the push and ungated, so a run with no token or a refused push still records it.
+  write_check_textfile registry-gc "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" \
+    "$DEADLINE_S" || logger -t registry-gc "textfile write failed (status=${STATUS})"
 
   if [[ -n "$PUSH_TOKEN" ]]; then
     kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \

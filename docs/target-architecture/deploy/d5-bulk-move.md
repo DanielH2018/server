@@ -2910,6 +2910,12 @@ sizes its batch of roles against that projection.
       cron runs as today until this PR retires its push half. registry's flip therefore waits
       on no H2 PR. Open question 2 rules on the registry's own fate before nut's Wave C PR.
 
+      **Amended, 2026-11-02 (#6926).** This PR retired the push store's GC phase only. The
+      mirror phases of `registry-gc.sh` still run and still push to the `Registry GC` tile,
+      so M6 retires the push, the tile and `registry_gc_push_token` as its batch B6c
+      (`docs/target-architecture/monitoring/m6-retire-kuma.md`, Open question 13). D5 stays
+      the only owner of the GC itself.
+
       **Status, 2026-10-18.** Every self-test and the netpol probe have their inert Jobs in
       `ansible/roles/k8s/registry/templates/verify-inert/` (#5651). The pull Jobs run the
       fleet's python Job image from `localhost:5000`, so the pod's own pull proves the

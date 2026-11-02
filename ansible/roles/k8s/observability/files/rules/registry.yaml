@@ -180,3 +180,43 @@ groups:
             daniel-server's textfile collector, so nothing is watching whether the node's docker.io
             mirror endpoint serves pulls. Read the log of the node-exporter pod's
             `dockerhub-mirror-pull` container on daniel-server.
+      # M6 BATCH B6c, SHADOW UNTIL ITS CUTOVER-1B (#6926). registry-gc.sh writes the registry-gc
+      # textfile beside its Kuma push, and the "Registry GC" tile pages the same verdict. The
+      # NotReporting literals equal the DEADLINE_S the script renders, which equals the tile's
+      # interval: ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins all
+      # three. The tile notifies Discord only, so both rules are `warning`. NotReporting fires
+      # from its deploy until the first Sunday run writes the file, which pages nobody while it
+      # is shadow.
+      - alert: RegistryGcFailed
+        expr: homelab_check_success{check="registry-gc",origin="daniel-box"} == 0
+        labels:
+          severity: warning
+          service: registry
+          shadow: "true"
+        annotations:
+          summary: The weekly registry garbage collection did not complete.
+          description: >-
+            registry-gc.sh on daniel-box ended with status=down: a keep set was skipped, a
+            mirror pod did not stop, a GC Job timed out, a mirror did not come back, or another
+            run held the lock. Run `journalctl -t registry-gc` on daniel-box, then read the
+            registry-gc-ghcr-mirror and registry-gc-dockerhub-mirror Job logs and the two mirror
+            Deployments.
+      - alert: RegistryGcNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="registry-gc",origin="daniel-box"} > 612000
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="registry-gc",origin="daniel-box"}[612000s])
+          )
+          unless on (origin) (up{job="node"} == 0)
+        labels:
+          severity: warning
+          service: registry
+          shadow: "true"
+        annotations:
+          summary: The weekly registry garbage collection has stopped reporting.
+          description: >-
+            No registry-gc verdict newer than 612000s reached Prometheus from daniel-box's
+            textfile collector, so nothing confirms the mirrors' weekly GC still runs. Read
+            /etc/cron.d/registry-gc and `journalctl -t registry-gc` on daniel-box, then
+            /var/lib/node-exporter-textfile/registry-gc.prom on the host.

@@ -8,19 +8,28 @@ allowances are literals, because neither monitor-bridge's nor uptime-kuma's rend
 setup role's defaults. This guard derives the worst case from the rendered script, and holds
 each literal to the whole hour that covers it (#6569).
 
+The script also writes its verdict to the `registry-gc` textfile with a DEADLINE_S, and
+observability's RegistryGcNotReporting carries that deadline as two literals. All three equal the
+Kuma tile's interval, so a cron moved without its tile or its rule fails here (M6 batch B6c).
+
 Run: uv run pytest ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py
 """
 
 import math
 import re
 
-from _helpers import REPO
+from _helpers import K8S_ROLES, REPO
 from _kuma_entities import _entities
 from _shell_render import rendered_shell_text
+from lib import yaml_fast
 from lib.estate import role_defaults
 
 BRIDGE_ROLE = REPO / "ansible/roles/k8s/monitor-bridge"
 WEEK_S = 7 * 24 * 3600
+RULES = K8S_ROLES / "observability" / "files" / "rules" / "registry.yaml"
+# A bare `>` comparison: `>=` and `==` are not the stale-file arm.
+STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
+WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 
 # Each bounded wait one phase runs once, by the script line that carries it.
 _PHASE_WAITS = {
@@ -96,4 +105,47 @@ def test_a_warm_budget_raised_past_the_grace_is_flagged():
     worst = worst_case_s(script)
     assert allowance_problems("grace", 7200, worst) == [
         "grace: allows 7200s past the schedule, the worst run needs 10800s"
+    ]
+
+
+def rendered_deadline(script: str) -> int:
+    (deadline,) = re.findall(r"^DEADLINE_S=(\d+)$", script, re.M)
+    return int(deadline)
+
+
+def not_reporting_expr(text: str) -> str:
+    [group] = yaml_fast.safe_load(text)["groups"]
+    (expr,) = [
+        r["expr"] for r in group["rules"] if r["alert"] == "RegistryGcNotReporting"
+    ]
+    return expr
+
+
+def deadline_problems(deadline: int, expr: str) -> list[str]:
+    """Why RegistryGcNotReporting's two literals differ from `deadline`, or nothing."""
+    problems = []
+    for name, found in (
+        ("the `>` threshold", STALE_ARM.findall(expr)),
+        ("the absent_over_time window", WINDOW.findall(expr)),
+    ):
+        if found != [str(deadline)]:
+            problems.append(f"{name} reads {found}, and DEADLINE_S renders {deadline}")
+    return problems
+
+
+def test_the_textfile_deadline_equals_the_tile_interval_and_the_rule_literals_is_clean():
+    script = _script()
+    assert "write_check_textfile registry-gc " in script
+    deadline = rendered_deadline(script)
+    assert deadline == _entities()["registry-gc.json"]["interval"]
+    assert deadline_problems(deadline, not_reporting_expr(RULES.read_text())) == []
+
+
+def test_a_not_reporting_window_that_drifted_from_the_deadline_is_flagged():
+    text = RULES.read_text().replace(
+        'check="registry-gc",origin="daniel-box"}[612000s]',
+        'check="registry-gc",origin="daniel-box"}[604800s]',
+    )
+    assert deadline_problems(612000, not_reporting_expr(text)) == [
+        "the absent_over_time window reads ['604800'], and DEADLINE_S renders 612000"
     ]

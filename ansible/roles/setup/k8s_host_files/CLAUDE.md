@@ -139,8 +139,9 @@ crowdsec's retired crons.
   hold clears.
 - **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
   changes this role.
-- **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes a `Registry GC`
-  Kuma push and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
+- **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes the
+  `registry-gc` textfile under `/var/lib/node-exporter-textfile/`, a `Registry GC` Kuma push
+  and a `registry-gc` healthchecks.io ping, and the `registry-gc` journal
   (`journalctl -t registry-gc`) shows both mirror phases. A conversion apply leaves the cron
   file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
   blobs through the mirror's loopback hostPort and writes nothing to the cluster. The push
