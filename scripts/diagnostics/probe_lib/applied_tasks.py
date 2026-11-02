@@ -286,10 +286,9 @@ class _Walk:
             self.skips.append(Skip(name, "it loops over a list that is not literal"))
             return
         outer = self.ctx
+        self.ctx = {**outer, **self.task_vars(task, outer)}
         try:
             for item in items:
-                ns = dict(outer, item=item) if item is not None else outer
-                self.ctx = {**outer, **self.task_vars(task, ns)}
                 self.one(name, *found, item=item)
         finally:
             self.ctx = outer

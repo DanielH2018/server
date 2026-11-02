@@ -85,6 +85,38 @@ def test_an_include_var_keeps_its_native_bool(tmp_path, state, paths):
     assert [w.path for w in wants] == paths and not any(s.unchecked for s in skips)
 
 
+def test_a_template_tasks_own_vars_render_its_content_and_path(tmp_path):
+    main = (
+        "- name: Write each resolver file\n"
+        "  ansible.builtin.template: {src: r.j2, dest: '/etc/{{ x_dir }}/r.conf'}\n"
+        "  vars: {x_dir: a, x_servers: '{{ x_upstreams }}'}\n"
+    )
+    files = {"templates/r.j2": "{% for s in x_servers %}nameserver {{ s }}\n{% endfor %}"}  # fmt: skip
+    wants, skips = _walk(tmp_path, main, {"x_upstreams": ["127.0.0.1"]}, files)
+    sha = hashlib.sha256(b"nameserver 127.0.0.1\n").hexdigest()
+    assert [(w.path, w.sha256) for w in wants] == [("/etc/a/r.conf", sha)]
+    assert skips == []
+
+
+def test_a_task_var_reading_a_register_leaves_a_stub_not_an_unchecked_row(tmp_path):
+    main = REGISTER + (
+        "- name: Write the kubeconfig\n"
+        "  ansible.builtin.template: {src: k.j2, dest: /etc/x/k}\n"
+        "  vars: {x_token: '{{ x_out.stdout }}'}\n"
+    )
+    wants, _ = _walk(tmp_path, main, {}, {"templates/k.j2": "token: {{ x_token }}\n"})
+    assert [(w.path, w.sha256, w.unchecked) for w in wants] == [("/etc/x/k", None, False)]  # fmt: skip
+    assert "STUB" in wants[0].why_no_content
+
+
+def test_the_real_k3s_role_hashes_the_node_resolv_conf():
+    """`tasks/node.yml` passes the shared template its nameservers through the task's `vars:`."""
+    role = applied.SETUP / "k3s"
+    wants, _ = applied_tasks.expected(role, "daniel-box", applied.context(role, "daniel-box"))  # fmt: skip
+    resolv = next(w for w in wants if w.path == "/etc/resolv.conf")
+    assert resolv.sha256 is not None, resolv.why_no_content
+
+
 def test_a_vars_lookup_reads_the_vars_or_a_stub_for_a_secret(tmp_path):
     main = (
         "- name: Write the token\n"
