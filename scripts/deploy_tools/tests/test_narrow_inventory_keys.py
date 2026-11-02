@@ -11,6 +11,7 @@ import json
 import pytest
 
 import secret_setup_readers
+from deploy_tools.land_lib.key_readers import KeyReader, key_readers
 from deploy_tools.narrow_lib import broad, inventory_keys
 
 from _narrow_fixtures import Tree, _refs
@@ -162,3 +163,32 @@ def test_a_host_vars_key_is_scoped_to_its_host(tree):
         "": [f"{ROLE}/templates/alpha.conf.j2"],
         "daniel-server": [f"{ROLE}/templates/alpha.conf.j2"],
     }
+
+
+_SECRET = "s_key: ENC[AES256_GCM,data:aaa]\nsops:\n    mac: m1\n"
+
+
+def _secret_and_pin_moved(tree: Tree) -> str:
+    """A range moving `s_key`, which `beta` reads, and the pin, which `alpha` reads."""
+    tree.write(SECRETS, _SECRET)
+    tree.write(f"{ROLE}/templates/beta.conf.j2", "token = {{ s_key }}\n")
+    tree.commit("beta reads a secret")
+    tree.write(SECRETS, _SECRET.replace("aaa", "bbb").replace("m1", "m2"))
+    return "..".join(_moved(tree, '"3.14.6"', '"3.15.2"'))
+
+
+def test_key_readers_merges_the_secrets_half_beside_the_inventory_half(tree):
+    """#6968: both halves land under every host, neither replacing the other."""
+    assert key_readers(_secret_and_pin_moved(tree), tree.root) == [
+        KeyReader(f"{ROLE}/templates/alpha.conf.j2", frozenset()),
+        KeyReader(f"{ROLE}/templates/beta.conf.j2", frozenset()),
+    ]
+
+
+def test_key_readers_drops_a_refusing_secrets_half_and_keeps_the_inventory_half(tree):
+    """A play reading the secret refuses that half, which the tick routes nothing for."""
+    tree.write("ansible/deploy.yml", "- hosts: all\n  vars:\n    p: '{{ s_key }}'\n")
+    tree.commit("a play reads the secret")
+    assert key_readers(_secret_and_pin_moved(tree), tree.root) == [
+        KeyReader(f"{ROLE}/templates/alpha.conf.j2", frozenset())
+    ]

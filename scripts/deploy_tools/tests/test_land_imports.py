@@ -61,6 +61,8 @@ ALLOWED = {
         "land_shared",
         "land_tags",
         "land_tested_base",
+        # The moved-key readers `Classifier.key_readers` derives (#6968).
+        "key_readers",
         # The per-user verdict record `Tools.record_verdict` writes by default.
         "verdict_log",
     },

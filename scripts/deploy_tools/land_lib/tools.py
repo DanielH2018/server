@@ -27,7 +27,7 @@ import subprocess
 import sys
 import tempfile
 import time
-from collections.abc import Callable, Iterable, Generator
+from collections.abc import Callable, Iterable, Generator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
@@ -51,6 +51,7 @@ from deploy_tools import await_ci, shared_role_reach
 from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
 from deploy_tools.land_lib import land_flux, land_shared, land_tags, land_tested_base
 from deploy_tools.land_lib import verdict_log
+from deploy_tools.land_lib.key_readers import KeyReader, readable_key_readers
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
@@ -530,6 +531,7 @@ class RemainingSetupHosts(Protocol):
         pr_range: str = "",
         ref: str = "",
         repo: Path = ...,
+        key_readers: Sequence[KeyReader] = (),
     ) -> str: ...
 
 
@@ -622,6 +624,9 @@ class Classifier:
     self_applied: SelfApplied = land_tags.self_applied
     self_applied_command: SelfAppliedCommand = land_tags.self_applied_command
     remaining_setup_hosts: RemainingSetupHosts = land_reach.remaining_setup_hosts_note
+    # The setup files reading a key the PR range moved, which `remaining_setup_hosts` adds to
+    # the paths' reach as the tick does (#6968). It reads git, unlike the rest of this class.
+    key_readers: Callable[[str, Path], list[KeyReader]] = readable_key_readers
     derive: Derive = land_tags.derive
     # Reads the role-caller graph from this checkout's tree, as `plane_note` always has.
     shared_caller_tags: Callable[[list[str], set[str] | None], dict[str, set[str]]] = (

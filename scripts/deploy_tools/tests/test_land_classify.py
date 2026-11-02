@@ -15,6 +15,7 @@ from deployer_lib.deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify
+from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.land_lib.land_shared import GUARD_MAP
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
@@ -242,7 +243,19 @@ def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
     # the host the tick ran on, read from the boundary rather than hardcoded
     assert call[1] == ("daniel-box",)
     # the merge commit's tree in the primary checkout, not this checkout's own (#4080)
-    assert call[2] == {"ref": MERGE_SHA, "repo": PRIMARY}
+    assert call[2] == {"ref": MERGE_SHA, "repo": PRIMARY, "key_readers": []}
+
+
+def test_classify_hands_the_key_readers_to_the_note(landing):
+    """#6968: the note adds a moved key's readers, as the tick's `setup_reach_hosts.py` does."""
+    reader = KeyReader(
+        "ansible/roles/setup/initial_setup/tasks/host-basics.yml", frozenset()
+    )
+    ln, calls = landing(Fakes(self_applied=True, key_readers=(reader,)))
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    call = next(c for c in calls if c[0] == "remaining_setup_hosts")
+    assert call[2]["key_readers"] == [reader]
 
 
 def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):
