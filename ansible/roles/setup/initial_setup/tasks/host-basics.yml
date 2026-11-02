@@ -392,10 +392,15 @@
   # repo owner, so community.sops lands for the user who runs deploys. `command` runs on the
   # TARGET, but these are the CONTROLLER's collections: a host Ansible drives over ssh never
   # loads them.
+  #
+  # `playbook_dir` is a controller path, so it names the target's tree only on a
+  # connection=local host. An ssh host gets its own checkout: a run from a session worktree
+  # otherwise hands daniel-pi a path that exists only on the controller.
   become: false
-  ansible.builtin.command: >-
-    ansible-galaxy collection install
-    -r {{ playbook_dir }}/requirements.yml
-    -p {{ playbook_dir }}/collections
+  ansible.builtin.command: ansible-galaxy collection install -r requirements.yml -p collections
+  args:
+    chdir: >-
+      {{ playbook_dir if ansible_connection == 'local'
+         else '/home/' ~ sys_user ~ '/server/ansible' }}
   changed_when: false
   when: has_repo_checkout
