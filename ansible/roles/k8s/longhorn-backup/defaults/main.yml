@@ -108,7 +108,7 @@ k3s_longhorn_backup_retain: 14
 
 # Longhorn's native filesystem trim (the `trim` RecurringJob, H2.2a). 06:10 UTC follows both backup
 # windows, because a trim before the day's snapshot hands back blocks that the snapshot then pins
-# again. The host cron in `setup/k3s` runs at the same minute until H2.2c.
+# again. It replaced the host trim cron in `setup/k3s` (H2.2c).
 k3s_longhorn_trim_cron: "10 6 * * *"
 
 # Weekly tier: B2 transaction spend scales with volume COUNT per run — each backup pays fixed

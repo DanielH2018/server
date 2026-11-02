@@ -316,14 +316,11 @@ def test_cron_targets_resolve_a_job_line_carrying_jinja_with_spaces(tmp_path):
 
 
 def test_the_widened_resolver_covers_the_scripts_it_was_written_for(cron_map):
-    # Pin the two the parser fixes brought in (docs-refresh.sh left for a systemd unit, H7.10a), so a later narrowing of either fix shows up
-    # here rather than as a guard quietly covering less than it claims.
+    # Pin the one script the `| logger` suffix fix still brings in (docs-refresh.sh left for a
+    # systemd unit, H7.10a, and the trim for a Longhorn RecurringJob, H2.2c), so a later narrowing
+    # shows up here rather than as a guard quietly covering less than it claims.
     names = {t.name for t in cron_map}
-    for expected in (
-        "longhorn-backup-health.sh.j2",
-        "longhorn-trim-volumes.sh.j2",
-    ):
-        assert expected in names, expected
+    assert "longhorn-backup-health.sh.j2" in names
 
 
 def test_the_real_tree_has_no_kubeconfig_violation():

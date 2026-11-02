@@ -220,7 +220,6 @@
  "ansible/roles/setup/k3s/tests/test_longhorn_host_readers_follow_the_cluster.py": 6.96,
  "ansible/roles/setup/k3s/tests/test_longhorn_lib_install.py": 0.27,
  "ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_stamps.py": 2.52,
- "ansible/roles/setup/k3s/tests/test_longhorn_trim_volume_list_failure.py": 0.37,
  "ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py": 0.67,
  "ansible/roles/setup/k8s_host_files/tests/test_ghcr_mirror_prune.py": 1.23,
  "ansible/roles/setup/renovate_agent/tests/test_prepare_worktree.py": 0.18,

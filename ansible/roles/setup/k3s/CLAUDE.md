@@ -44,9 +44,8 @@ come from `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_pin_c
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`;
   `k3s-bringup.yml --tags "node-address"`
-- **Crons (8):**
+- **Crons (7):**
   - `Longhorn backup health` — `*/10 * * * *`
-  - `Longhorn filesystem trim` — `10 6 * * *`
   - `B2 deletion accounting` — `10 7 * * *`
   - `B2 backup budget listing` — `20 7 * * *`
   - `daniel-box disk health` — `*/10 * * * *`
@@ -81,16 +80,15 @@ docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recove
 ## Autonomous-role contract (the crons that change state with no human in the loop)
 
 `tasks/health-crons.yml` installs a dozen crons; most read the cluster and push a Kuma tile.
-Two change state. The authority of those two actuators is written here so a later edit
-cannot quietly widen it. Three state-changing actuators left this role. The volume-label
-reconcile left at H1.6, and its contract is the `longhorn-reconcile` role's `CLAUDE.md`. The
-Longhorn RecurringJobs left at H1.7b, and their contract is the `longhorn-backup` role's
-`CLAUDE.md`. The restore drill left at H2.3d, and its contract is the `longhorn-restore-drill`
-role's `CLAUDE.md`.
+One changes state. Its authority is written here so a later edit cannot quietly widen it.
+Four state-changing actuators left this role. The volume-label reconcile left at H1.6, and its
+contract is the `longhorn-reconcile` role's `CLAUDE.md`. The Longhorn RecurringJobs left at
+H1.7b, and the filesystem trim became one of them at H2.2c; their contract is the
+`longhorn-backup` role's `CLAUDE.md`. The restore drill left at H2.3d, and its contract is the
+`longhorn-restore-drill` role's `CLAUDE.md`.
 
-- **Scope, per actuator.** The **trim** (`longhorn-trim-volumes.sh`, daily) discards blocks ext4
-  already freed and reaches no live data. The **off-box etcd snapshot**
-  (`etcd-snapshot-offbox.sh`, daily) uploads the snapshot and never the cluster token.
+- **Scope.** The **off-box etcd snapshot** (`etcd-snapshot-offbox.sh`, daily) uploads the
+  snapshot and never the cluster token.
 - **Never a cron:** the two reapers delete stranded objects, operator-invoked and dry-run by
   default; scheduling either is out of contract. They are the `backups` and `snapshots`
   subcommands of `scripts/backup/longhorn_reap.py` and run from the repo checkout, so this role
@@ -99,15 +97,12 @@ role's `CLAUDE.md`.
 - **Mode / arming:** `k3s_manage_health_crons` withholds the whole set, and
   `k3s_etcd_restore_drill_armed` the weekly etcd drill, which runs `--list-only` here. The
   `k3s_manage_health_crons` flag defaults to `true`, and no host overrides it.
-- **Abort valves:** the trim aborts when the node's
-  longhorn-manager pod is not ready or the volume list fails, and the weekly B2 tier is sharded across weekdays so no
-  day's deletions reach the B2 transaction cap.
-- **Required evidence:** the trim and the two B2 accounting crons log every run
-  through `logger`, which is evidence only because checks 9 and 10 of `longhorn-backup-health.sh`
-  read it, matching each line AS WRITTEN. `docs/k3s-node-plane-crons-and-incidents.md` names the
-  regex and the file to edit together. ENFORCED:
+- **Required evidence:** checks 9 and 10 of `longhorn-backup-health.sh` read the trim's pod
+  log for a per-volume failure and its CronJob for a stopped schedule. They read the B2 deletion
+  accounting cron's `logger` lines the same way, matching each line AS WRITTEN. `docs/k3s-node-plane-crons-and-incidents.md`
+  names the regex and the file to edit together. ENFORCED:
   `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`,
-  `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone`.
+  `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_trim_is_flagged_when_its_cronjob_is_gone`.
 - **Next-run review:** read the B2 ledger before widening scope.
 
 ## Notable
