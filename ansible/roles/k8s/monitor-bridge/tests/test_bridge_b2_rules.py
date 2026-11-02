@@ -6,7 +6,8 @@ things must hold, and the table is the only source for each:
 - a rule selects each row by its `check` label, and the dependent's rule carries the `requires`
   label that names its gate, so Alertmanager's inhibit rule reaches it;
 - the dependent's rule and the gate's rule sit in one rule group;
-- neither has a `for:`, because a `startup_grace` row is the only A6 row that does;
+- both have `for: 10m` and the same one (operator ruling 2026-11-02), so the dependent never pages
+  before its inhibit source exists;
 - the rendered inhibit rule's source names a defined rule, and its target matcher selects
   exactly the dependent, with the same `shadow` state as the source. Alertmanager inhibits
   before it routes, so a shadow source would otherwise silence a live target.
@@ -116,16 +117,46 @@ def test_the_b2_family_is_the_one_row_behind_the_gate():
     assert dependents() == ["b2_storage"]
 
 
-def test_the_dependent_rule_requires_the_gate_and_shares_its_group_with_no_for():
+def for_problems(gate_rule: dict, dependent_rules: list[dict]) -> list[str]:
+    """Why the gate's `for:` and its dependents' would let a dependent page first, or [].
+
+    Args:
+        gate_rule: The gate's rule.
+        dependent_rules: The rules of the rows behind the gate.
+    """
+    found = []
+    if gate_rule.get("for") != "10m":
+        found.append(f"{GATE_ALERT} has for={gate_rule.get('for')!r}, want '10m'")
+    for rule in dependent_rules:
+        if rule.get("for") != gate_rule.get("for"):
+            found.append(
+                f"{rule['alert']} has for={rule.get('for')!r}, not {GATE_ALERT}'s "
+                f"{gate_rule.get('for')!r}"
+            )
+    return found
+
+
+def test_the_dependent_rule_requires_the_gate_and_shares_its_group_and_its_for():
     gate_group, gate_rule = rule_for(GATE)
     assert gate_rule["alert"] == GATE_ALERT
     assert "requires" not in gate_rule["labels"]
-    assert "for" not in gate_rule
+    dependent_rules = []
     for row in dependents():
         group, rule = rule_for(row)
         assert rule["labels"].get("requires") == REQUIRES, row
         assert group == gate_group, row
-        assert "for" not in rule, row
+        dependent_rules.append(rule)
+    assert for_problems(gate_rule, dependent_rules) == []
+
+
+def test_a_dependent_whose_for_differs_from_the_gates_is_flagged():
+    """The rejecting half: a dependent with a shorter `for:` would page before the inhibit
+    source exists, and a gate that loses its `for:` pages on a 2-minute reboot dip."""
+    _, gate_rule = rule_for(GATE)
+    _, dependent = rule_for("b2_storage")
+    assert for_problems(gate_rule, [{**dependent, "for": "5m"}])
+    assert for_problems(gate_rule, [{k: v for k, v in dependent.items() if k != "for"}])
+    assert for_problems({k: v for k, v in gate_rule.items() if k != "for"}, [dependent])
 
 
 def test_severity_follows_the_rows_critical_flag():
