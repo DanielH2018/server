@@ -502,8 +502,11 @@ a need appears.
   length. A missing one is refused as "does not exist". `cat`, `sha256` and `matches` still
   refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
   before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
-  it exists or not. The one DENY entry in `PATHS` is the exact path
-  `/etc/claude-rc/alert-webhook.env`. rootq cannot stat a file in the agent user's home,
+  it exists or not. The DENY entries in `PATHS` are exact names:
+  `/etc/claude-rc/alert-webhook.env`, and the five paths `k8s_host_files` writes or removes
+  under `/etc/rancher/k3s/manifests/` (#6988). That tree stays denied as a whole, because it
+  holds every staged role's `secret.yaml`, so `probe.py applied` compares those rows by mode
+  and owner only. rootq cannot stat a file in the agent user's home,
   which root does not own. The role therefore makes `~/.config/gh` and `~/.config/homelab-ui`
   0710 under `claude_code_agent_operator_read`, so `probe.py applied` stats the 0600 token
   and login files as the operator, without listing either directory or reading either file.
