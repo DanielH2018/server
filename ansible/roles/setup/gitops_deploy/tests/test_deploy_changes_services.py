@@ -21,7 +21,7 @@ from deployer_lib.deploy_changes import (
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)
-    assert cs.services == set()
+    assert cs.k8s == set()
     assert cs.broad is False
 
 
@@ -35,7 +35,7 @@ def test_unrelated_path_ignored():
 def test_secrets_only_change_flags_secrets_not_broad():
     cs = services_from_changed_paths(["ansible/vars/secrets.yml"])
     assert cs.secrets is True
-    assert cs.services == set()
+    assert cs.k8s == set()
     assert cs.broad is False
 
 
@@ -44,23 +44,20 @@ def test_secret_rotation_registry_only_is_not_secrets():
     # ff is correct, so it must NOT trip the secrets flag.
     cs = services_from_changed_paths(["ansible/secret_rotation.yml"])
     assert cs.secrets is False
-    assert cs.services == set()
+    assert cs.k8s == set()
     assert cs.broad is False
 
 
 # k8s roles (ansible/roles/k8s/<role>/...) once matched NONE of the role regexes (all
-# containers/-scoped), so services_from_changed_paths returned an EMPTY ChangeSet and main()'s `if not
-# cs.services:` branch took it as a plain docs-only ff-merge — silent, on every has_gitops host
-# (daniel-box, all 41 services platform: k8s). Maps to cs.k8s (defer-and-alert), never cs.services
-# — this deployer has no mechanism that ever auto-deploys a k8s-platform role.
-def test_k8s_role_change_flags_k8s_not_services():
+# containers/-scoped), so services_from_changed_paths returned an EMPTY ChangeSet and main()
+# took it as a plain docs-only ff-merge — silent, on every has_gitops host. Maps to cs.k8s
+# (defer-and-alert): this deployer never auto-deploys a k8s role's manifest change.
+def test_k8s_role_change_flags_k8s():
     cs = services_from_changed_paths(
         ["ansible/roles/k8s/authelia/templates/deployment.yaml.j2"]
     )
     assert cs.k8s == {"authelia"}
-    assert cs.services == set()
     assert cs.broad is False
-    assert cs.tasks == set()
 
 
 def test_k8s_role_matches_any_subdir_not_just_templates():
@@ -69,13 +66,11 @@ def test_k8s_role_matches_any_subdir_not_just_templates():
     # channel.
     cs = services_from_changed_paths(["ansible/roles/k8s/authelia/tasks/main.yml"])
     assert cs.k8s == {"authelia"}
-    assert cs.services == set()
 
 
 def test_k8s_role_docs_stay_silent():
     cs = services_from_changed_paths(["ansible/roles/k8s/authelia/CLAUDE.md"])
     assert cs.k8s == set()
-    assert cs.services == set()
     assert cs.broad is False
 
 

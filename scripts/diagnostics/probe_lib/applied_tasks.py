@@ -96,7 +96,6 @@ class Want:
         sha256: the expected content's hash, or None when it is not compared.
         why_no_content: why `sha256` is None, for the report; "" when it is set or moot.
         unchecked: the content reads a run-time name, so it is UNCHECKED, not ok-meta.
-        recorded: `sha256` is the hash the apply recorded, not the render's.
         mode: the declared mode as four octal digits, or None when undeclared.
         owner: the declared owner, or None.
         group: the declared group, or None.
@@ -108,7 +107,6 @@ class Want:
     sha256: str | None = None
     why_no_content: str = ""
     unchecked: bool = False
-    recorded: bool = False
     mode: str | None = None
     owner: str | None = None
     group: str | None = None

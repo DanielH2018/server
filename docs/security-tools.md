@@ -72,47 +72,71 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 
 **What it does:** Takes a cryptographic snapshot of the filesystem (hashes, permissions, ownership, timestamps) and detects any additions, modifications, or deletions since that snapshot was taken.
 
-**Schedule:** Weekly, Monday at 3:00 AM, on every host. The cron runs `/usr/local/bin/aide-check.sh`, which writes the report to syslog tagged `aide` and pushes a verdict to that host's **AIDE Integrity (&lt;host&gt;)** Kuma tile.
+**Schedule:** Weekly, Monday at 3:00 AM, on every host. `homelab-aide-check.timer` runs `/usr/lib/homelab/aide-check`, which writes the report to syslog tagged `aide` and pushes a verdict to that host's **AIDE Integrity (&lt;host&gt;)** Kuma tile.
 
 Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing.
 
-**What the tile means.** The script reads AIDE's exit code (#4594):
+**What the tile means.** The script runs `aide --update`, reads its exit code (#4594), and classifies each difference against the package database (#4599):
 
-| Exit | Tile | Message |
-|------|------|---------|
-| 0 | UP | no differences from the baseline |
-| 1-7 | UP | the added, removed and changed counts from the report's Summary |
-| anything else | DOWN | AIDE's first error line: the check did not complete |
+| Exit | Differences | Tile | Baseline |
+|------|-------------|------|----------|
+| 0 | none | UP | advanced |
+| 1-7 | every one explained, or outside the paged trees | UP, with the counts | advanced |
+| 1-7 | at least one no package explains | DOWN, naming the first three | kept |
+| anything else | not read | DOWN, with AIDE's first error line | kept |
 
-No push for a week and 6 hours also reads DOWN, which means the cron stopped running or the scan never finished.
+No push for a week and 6 hours also reads DOWN, which means the timer stopped running or the scan never finished.
 
-Differences read UP on purpose. Unattended-upgrades installs packages on every host every week, and AIDE reports every file a package touched, so a DOWN on differences would be red every Monday. An UP tile therefore means that AIDE completed a check, not that nothing changed. Read the counts in the tile's message, and read the list in the journal. No alert fires on a changed file, however sensitive. Paging on a change that no package upgrade explains is tracked in #4599. The counts are cumulative: they grow every week until someone updates the baseline (below). The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2` holds the evidence.
+A difference pages when it falls in one of these and no package explains it:
+
+- The system trees: `/usr` except `/usr/local`, `/bin`, `/sbin`, `/lib*` and `/boot`. A file pages unless a package owns it and its MD5 matches the package's. A package-owned symlink pages unless it still resolves to a package file. A removed path pages while a package still owns it.
+- A package-owned file under `/etc` whose content differs from the package's copy. Ansible writes `/etc` files no package owns on every merge, so those are logged and do not page.
+- The login, privilege and code-loading files, packaged or not: sudoers, `/etc/ssh`, PAM and `/etc/security`, cron, `passwd`, `shadow`, `group`, `gshadow`, the loader config (`ld.so.preload`, `ld.so.conf.d`), `/etc/environment` and the shell startup files (`/etc/profile.d`, `bash.bashrc`, root's), apt hooks in `apt.conf.d`, device rules in `/etc/udev/rules.d`, module config, and every `authorized_keys`.
+- An entry in any of those, or a package-owned `/etc` file, whose owner, group or permissions changed. A package digest cannot see a mode change.
+
+Files that package triggers regenerate, such as the initial RAM disk, GRUB's config and the kernel module index, page only in a week in which no package ran. A path at either end of a package diversion (`dpkg-divert`) must match the digest one of the two packages records. Homes, `/var`, `/opt`, `/usr/local` and `/etc/systemd/system` are logged and never page: Ansible rewrites the last three on every merge, and the first two change with ordinary use. The script's header has the full lists, and its `DECIDED:` marker has the measurement behind them.
+
+Advancing the baseline after every UP run makes each report cover one week. A DOWN keeps the old baseline, so the change stays in every report until someone reviews it.
+
+**Reviewing a DOWN:** the journal lists every unexplained path with its reason, under `aide-check`:
+
+```bash
+sudo journalctl -t aide-check --since -7d | grep unexplained
+```
+
+Once every path is accounted for, accept the run's database as the baseline. This takes the scan lock and moves `aide.db.new` over `aide.db`. It scans nothing and pushes nothing, and the tile clears on the next weekly run:
+
+```bash
+sudo /usr/lib/homelab/aide-check --accept
+```
+
+It refuses when `aide.db` is missing, because a deleted baseline must stay an error rather than become a fresh, trusted one. `hosts/bootstrap-host.sh` creates the first baseline.
 
 The script logs at most 2000 report lines. A longer report ends with a `report truncated` line. To see the rest, run the check by hand. Its verdict goes to syslog tagged `aide-check` as `status=<up|down> <message>`.
 
-To prove the tile pages, force an error exit on one host and run the script by hand. Rename the database, run `sudo /usr/local/bin/aide-check.sh`, then put the database back. AIDE exits 18 at once, and the tile goes DOWN with `open (read-only) failed for file '/var/lib/aide/aide.db'` in its message:
+To prove the tile pages, force an error exit on one host and run the script by hand. Rename the database, run `sudo /usr/lib/homelab/aide-check`, then put the database back. AIDE exits 18 at once, and the tile goes DOWN with `open (read-only) failed for file '/var/lib/aide/aide.db'` in its message:
 
 ```bash
 sudo mv /var/lib/aide/aide.db /var/lib/aide/aide.db.held
-sudo /usr/local/bin/aide-check.sh
+sudo /usr/lib/homelab/aide-check
 sudo mv /var/lib/aide/aide.db.held /var/lib/aide/aide.db
 ```
 
-The tile stays DOWN until the next run. To clear it, run `sudo /usr/local/bin/aide-check.sh` again. That run scans the whole filesystem, so on the Pi it takes over an hour.
+The tile stays DOWN until the next run. To clear it, run `sudo /usr/lib/homelab/aide-check` again. That run scans the whole filesystem, so on the Pi it takes over an hour.
 
 **Check for findings:**
 
 ```bash
-# From the weekly cron
+# From the weekly timer
 sudo journalctl -t aide -t aide-check --since -7d
 
-# Run a manual check
+# Run a manual check, which leaves the baseline alone
 sudo aide --config=/etc/aide/aide.conf --check
 ```
 
 Output shows exactly what changed:
 
-```
+```text
 AIDE found differences between database and filesystem!!
 
 Summary:
@@ -121,18 +145,11 @@ Summary:
   Changed entries: 5
 
 Changed entries:
-  f ... : /etc/ssh/sshd_config
-  f ... : /etc/passwd
+f =.... mc..H.. . : /etc/ssh/sshd_config
+f =...p mc..H.. . : /etc/passwd
 ```
 
-The letters on the left indicate what changed: `p` = permissions, `u` = user/owner, `s` = size, `sha256` = content hash, etc.
-
-**Updating the baseline:** After any intentional system change (package update, config edit, re-running `initial_setup.yml`), update the baseline or AIDE keeps reporting those changes:
-
-```bash
-sudo aide --config=/etc/aide/aide.conf --update
-sudo mv /var/lib/aide/aide.db.new /var/lib/aide/aide.db
-```
+The 18-character column on the left says what changed, in the order `YlZbpugamcinHAXSEC`: `p` = permissions, `u` = user/owner, `g` = group, `H` = content hash, and so on. An added entry shows `+` in every column and a removed one `-`.
 
 The initial database lives at `/var/lib/aide/aide.db`. The first run (`aideinit`) takes 10–20 minutes on this server due to file count.
 

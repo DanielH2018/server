@@ -1374,12 +1374,12 @@ tests:
               service: daniel-pi
               shadow: "true"
             exp_annotations:
-              summary: daniel-pi's weekly AIDE check did not complete.
+              summary: daniel-pi's weekly AIDE check failed or found an unexplained change.
               description: >-
-                aide-check.sh on daniel-pi ended with status=down: AIDE exited with an error and
-                checked nothing, or the previous week's run still held the lock. Differences
-                from the baseline read up. Run `journalctl -t aide-check` and `journalctl -t
-                aide` on daniel-pi.
+                aide-check on daniel-pi ended with status=down: a file changed that no package
+                explains, AIDE exited with an error and checked nothing, or the previous week's
+                run still held the lock. Run `journalctl -t aide-check` on daniel-pi; once every
+                unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
 
   # No AIDE file on any host, and daniel-pi's exporter is down. The absent_over_time arm fires
   # for the two k3s nodes, and daniel-pi's rule leaves its dead exporter to the `targets` check

@@ -312,12 +312,12 @@ groups:
           service: daniel-box
           shadow: "true"
         annotations:
-          summary: daniel-box's weekly AIDE check did not complete.
+          summary: daniel-box's weekly AIDE check failed or found an unexplained change.
           description: >-
-            aide-check.sh on daniel-box ended with status=down: AIDE exited with an error and
-            checked nothing, or the previous week's run still held the lock. Differences from
-            the baseline read up. Run `journalctl -t aide-check` and `journalctl -t aide` on
-            daniel-box.
+            aide-check on daniel-box ended with status=down: a file changed that no package
+            explains, AIDE exited with an error and checked nothing, or the previous week's
+            run still held the lock. Run `journalctl -t aide-check` on daniel-box; once every
+            unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
       - alert: AideCheckNotReporting
         expr: |
           (
@@ -344,12 +344,12 @@ groups:
           service: daniel-server
           shadow: "true"
         annotations:
-          summary: daniel-server's weekly AIDE check did not complete.
+          summary: daniel-server's weekly AIDE check failed or found an unexplained change.
           description: >-
-            aide-check.sh on daniel-server ended with status=down: AIDE exited with an error and
-            checked nothing, or the previous week's run still held the lock. Differences from
-            the baseline read up. Run `journalctl -t aide-check` and `journalctl -t aide` on
-            daniel-server.
+            aide-check on daniel-server ended with status=down: a file changed that no package
+            explains, AIDE exited with an error and checked nothing, or the previous week's
+            run still held the lock. Run `journalctl -t aide-check` on daniel-server; once every
+            unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
       - alert: AideCheckNotReporting
         expr: |
           (
@@ -376,12 +376,12 @@ groups:
           service: daniel-pi
           shadow: "true"
         annotations:
-          summary: daniel-pi's weekly AIDE check did not complete.
+          summary: daniel-pi's weekly AIDE check failed or found an unexplained change.
           description: >-
-            aide-check.sh on daniel-pi ended with status=down: AIDE exited with an error and
-            checked nothing, or the previous week's run still held the lock. Differences from
-            the baseline read up. Run `journalctl -t aide-check` and `journalctl -t aide` on
-            daniel-pi.
+            aide-check on daniel-pi ended with status=down: a file changed that no package
+            explains, AIDE exited with an error and checked nothing, or the previous week's
+            run still held the lock. Run `journalctl -t aide-check` on daniel-pi; once every
+            unexplained path is reviewed, `sudo /usr/lib/homelab/aide-check --accept`.
       - alert: AideCheckNotReporting
         expr: |
           (

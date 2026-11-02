@@ -444,20 +444,14 @@ def _changed_half(cs, ctx: Context) -> set[str]:
     side. Refusing here would only turn the dropped deploy half of a mixed range into a full
     run nobody ran. A bring-up playbook still refuses: the tick parks on those before any
     plan exists, and a hand `deploy_tags.py narrow` over such a range must not read as
-    applyable. `cs.tasks` refuses for the opposite reason: `changed` reports it as work a
-    human deploys by hand, and the full run this replaces DOES apply it. `cs.secrets` is
-    left to `narrow`, which maps each key the range moved to its readers (`secret_keys`).
+    applyable. `cs.secrets` is left to `narrow`, which maps each key the range moved to its readers (`secret_keys`).
 
     `cs` is the range's whole `ChangeSet`. A deploy-plane path sets only the plane flags and
     `setup_roles`, which this does not read, so the deploy half needs no carving out first.
     """
     if cs.broad_manual:
         raise CannotNarrow("the range also changes a bring-up playbook")
-    if cs.tasks:
-        raise CannotNarrow(
-            f"structural change in {sorted(cs.tasks)}, which no tag captures"
-        )
-    roles = cs.k8s | cs.services
+    roles = set(cs.k8s)
     # A range that RETIRES a role still lists every path it owned as changed, and a retired
     # role has no entry and no caller — the shape `_role_tags` refuses.
     for role in sorted(roles):

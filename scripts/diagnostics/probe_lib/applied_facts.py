@@ -51,7 +51,7 @@ SET_FACTS = ("set_fact", "ansible.builtin.set_fact", "ansible.legacy.set_fact")
 COMMANDS = ("command", "ansible.builtin.command", "ansible.legacy.command")
 # The reason `content_hash` gives for content it cannot predict, an unchecked `Want` (#6378).
 LATE = "it reads run-time name(s)"
-# Its reason for a template render holding a secret; `applied` then compares the apply record.
+# Its reason for a template render holding a secret, whose content `applied` never compares.
 STUB_RENDER = "the render left a STUB (a secret, or a value only a play resolves)"
 CRON_REASON = "cron writes the line"
 # The schedule fields in the order `ansible.builtin.cron` writes them, whatever the task's order.
