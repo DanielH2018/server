@@ -1,6 +1,6 @@
 # H5 — Pi Compose
 
-Status: DONE. H5.1 to H5.14 landed (H5.11 as #6501, H5.12 as #6441, H5.13 as #6974's PR);
+Status: DONE. H5.1 to H5.14 landed (H5.11 as #6501, H5.12 as #6441, H5.13 as #6982);
 H5.10 removed `pi-canary`, H5.11 put the Pi's images under Renovate, H5.12 deleted
 `ansible/roles/containers/` and amended ADR-0013, and H5.13 deleted the GitOps deployer's
 Pi Docker arms.
