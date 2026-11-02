@@ -37,7 +37,7 @@ from lib.ansible_inventory import host_names
 from lib.cli_help import ArgumentParser
 from lib.deployer_park import ManualPlaneRemedy, manual_plane_remedies
 from lib.git import git
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, PRIMARY_CHECKOUT
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, PRIMARY_CHECKOUT, REPO
 
 # The deployer's own modules, which `deploy_state` reaches `host_lib` from for its writes.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -104,6 +104,7 @@ def run_owed(
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     checkout_check: Callable[[str], str | None] = _checkout_is_origin_master,
     repo: str = str(PRIMARY_CHECKOUT),
+    invoking_repo: str = str(REPO),
     now: float | None = None,
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
@@ -123,6 +124,8 @@ def run_owed(
       run: what executes each command; `subprocess.run` outside a test.
       checkout_check: returns why `repo` is not at origin/master, or None.
       repo: the checkout the commands run from, so its relative playbook paths resolve.
+      invoking_repo: the tree this script's code runs from. Its `manual_plane_remedies`,
+        `PLAYBOOKS` and inventory decide which commands run, so it must be at origin/master too.
       now: the clock the remedies read, for a test.
       lock_path, lock_wait_s, journal: passed to `clear_manual_plane`.
 
@@ -160,9 +163,24 @@ def run_owed(
             print(cmd)
         print(f"then: clear {key} for {','.join(sorted(remedy.tags))}")
         return 0
-    if stale := checkout_check(repo):
-        print(f"refused {key}: {stale}. Nothing was run.", file=sys.stderr)
-        return 1
+    # The primary checkout runs the commands; the invoking tree's code chose them (#6957).
+    trees = [(repo, "the primary checkout", f"run git -C {repo} pull --ff-only")]
+    if _Path(invoking_repo).resolve() != _Path(repo).resolve():
+        trees.append(
+            (
+                invoking_repo,
+                "the invoking tree",
+                f"rebase it onto origin/master, or run this script from {repo}",
+            )
+        )
+    for tree, name, fix in trees:
+        if stale := checkout_check(tree):
+            print(
+                f"refused {key}: {name} {tree} is stale: {stale}. To fix it, {fix}. "
+                "Nothing was run.",
+                file=sys.stderr,
+            )
+            return 1
     for cmd in commands:
         print(f"+ {cmd}", flush=True)
         if (done := run(["bash", "-c", cmd], cwd=repo)).returncode:

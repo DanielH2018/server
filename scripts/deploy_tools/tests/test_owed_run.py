@@ -17,6 +17,10 @@ from deploy_tools import gitops_state, owed_run
 from lib.repo_paths import PRIMARY_CHECKOUT
 
 
+# A tree that is not the primary checkout, standing in for the worktree a session invokes from.
+WORKTREE = "/nonexistent/worktree"
+
+
 def _owed(subject: str, playbook: str, *tags: str, **keys) -> str:
     """One `manual_plane` ledger line owing `tags`, with any `host`/`agent_hosts` keys."""
     line = {"class": "manual_plane", "subject": subject, "origin": "abc123def4567890"}
@@ -84,8 +88,53 @@ def test_the_commands_run_in_the_primary_checkout_whichever_tree_invokes_it(owe)
     """A worktree run would install collections where the deployer never loads them."""
     _state, run = owe(COREDNS)
     runner, checked = Runner(), []
-    assert run("k3s", runner, checkout_check=lambda repo: checked.append(repo)) == 0
-    assert checked == runner.cwds == [str(PRIMARY_CHECKOUT)]
+    assert (
+        run(
+            "k3s",
+            runner,
+            checkout_check=lambda repo: checked.append(repo),
+            invoking_repo=WORKTREE,
+        )
+        == 0
+    )
+    assert checked == [str(PRIMARY_CHECKOUT), WORKTREE]
+    assert runner.cwds == [str(PRIMARY_CHECKOUT)]
+
+
+def test_an_invoking_tree_behind_origin_master_runs_nothing(owe, capsys):
+    """The invoking tree's code chose the commands, so a stale one must not run or clear."""
+    state, run = owe(COREDNS)
+    runner = Runner()
+    behind = {WORKTREE: "HEAD abc is not origin/master def"}
+    assert (
+        run(
+            "k3s",
+            runner,
+            checkout_check=lambda repo: behind.get(repo),
+            invoking_repo=WORKTREE,
+        )
+        == 1
+    )
+    assert runner.ran == []
+    err = capsys.readouterr().err
+    assert "the invoking tree" in err and "is not origin/master" in err
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+def test_the_primary_checkout_as_invoking_tree_is_checked_once(owe):
+    _state, run = owe(COREDNS)
+    runner, checked = Runner(), []
+    primary = str(PRIMARY_CHECKOUT)
+    assert (
+        run(
+            "k3s",
+            runner,
+            checkout_check=lambda repo: checked.append(repo),
+            invoking_repo=primary,
+        )
+        == 0
+    )
+    assert checked == [primary]
 
 
 def test_a_line_for_another_host_runs_there_after_a_pull(owe):
