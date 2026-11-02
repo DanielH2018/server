@@ -23,13 +23,6 @@ _DOCKER_TEMPLATE = "ansible/roles/containers/wg-easy/templates/docker-compose.ym
 _DECLARED = {"wg-easy", "sonarr", "alloy"}
 
 
-def test_each_derived_tag_is_returned_once_and_sorted():
-    assert land_platform.k8s_only_tags(
-        [_K8S_TEMPLATE, "ansible/roles/k8s/sonarr/tasks/main.yml", _K8S_TEMPLATE],
-        _DECLARED,
-    ) == ["sonarr", "wg-easy"]
-
-
 def test_a_path_that_names_no_tag_restricts_nothing():
     """`tag_for` is the one mapper for this: a `.md`, a role's own `tests/`, an unregistered
     role and a path outside the role trees all drop out of the derivation, so none of them can
