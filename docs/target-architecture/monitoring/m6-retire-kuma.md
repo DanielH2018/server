@@ -800,9 +800,8 @@ secrets. The arithmetic: 83 at the baseline, less M5's 3 and M3's 1, leaves 79. 
 - C-1a waits for B6c's token PR, which retires `registry_gc_push_token` after B6c's
   cutovers have deleted the `Registry GC` tile and its push. Until B6c's Cutover-1a, C-1a's
   gate of one `monitor_status` series cannot pass (Open question 13). The index's M6c row
-  names D5's registry PR for this edge, and that PR landed without removing the push. C-1a's
-  quoted `registry_gc_push_token` grep and its gate enforce the B6c edge inside this slice,
-  so the stale index edge causes no stall.
+  names B6c's token PR for this edge. C-1a's quoted `registry_gc_push_token` grep and its
+  gate also enforce the edge inside this slice.
 
 **A0, the declaration floor (~40 lines, deploys nothing).** The uptime-kuma task
 "Check the declaration index is populated" asserts `kuma_declarations | length > 50`, and it
