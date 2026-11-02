@@ -34,7 +34,6 @@ def _record(
         state,
         settings,
         ORIGIN,
-        set(),
         ChangeSet(k8s=set(k8s)),
         declared_k8s={"sonarr", "authelia"},
     )

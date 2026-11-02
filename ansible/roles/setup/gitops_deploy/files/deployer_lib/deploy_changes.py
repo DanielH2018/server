@@ -87,7 +87,7 @@ _BROAD_DEPLOY_PREFIXES = (
     # sibling task dirs matched nothing: `role_of` is anchored to ansible/roles/, so a
     # change to `pre_tasks/load_secrets.yml`, `tasks/k8s_batch.yml` (the k8s rollout-batch path) or
     # `post_tasks/k8s_stabilise_gate.yml` (the post-deploy stabilisation gate) returned a fully
-    # EMPTY ChangeSet. main() has no catch-all branch — `if not cs.services:` ff-merges
+    # EMPTY ChangeSet. main()'s fall-through, `handle_merge_only`, ff-merges
     # unconditionally and both alert_deferred/alert_secrets_deferred no-op on empty fields — so
     # empty-because-unclassified was bit-for-bit indistinguishable from empty-because-docs: a
     # silent ff-merge, no alert, no deploy, on files that change what EVERY deploy does.
@@ -304,12 +304,11 @@ def _is_test_only_path(path: str) -> bool:
 
 @dataclass
 class ChangeSet:
-    """What one push's changed paths add up to: which services to deploy, which planes are broad.
+    """What one push's changed paths add up to: which k8s roles changed, which planes are broad.
 
     Each field's own comment documents its meaning and how it interacts with the others.
     """
 
-    services: set[str] = field(default_factory=set)
     broad: bool = False
     # Which manual playbook a broad change needs — deploy.yml's plane (shared templates/inventory)
     # vs initial_setup.yml's (roles/setup/, requirements.yml, bring-up playbooks). `broad`
@@ -335,9 +334,6 @@ class ChangeSet:
     # inventory key, and a lookup that failed.
     key_reader_roles: set[str] = field(default_factory=set)
     key_readers_failed: bool = False
-    # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
-    # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …), named for history.
-    tasks: set[str] = field(default_factory=set)
     # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...) and are not promoted to
     # `k8s_deploy` below. Each defer-and-alerts; nothing this tick applies can cover one.
     k8s: set[str] = field(default_factory=set)
@@ -478,8 +474,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # and one under roles/k8s/<svc>/files/ read as a k8s change and defer-alerted. PR #707
         # was three test files and did both, costing two hand-run commands to clear (2026-09-01).
         #
-        # An empty ChangeSet is the right outcome, not a hole: gitops_deploy.py takes the
-        # `if not cs.services` branch and fast-forwards, exactly as it does for a docs-only push.
+        # An empty ChangeSet is the right outcome, not a hole: gitops_deploy.py falls through
+        # to `handle_merge_only` and fast-forwards, exactly as it does for a docs-only push.
         if _is_test_only_path(p):
             continue
         # Documentation reaches no host either, and it is tested here — ONCE, ahead of every

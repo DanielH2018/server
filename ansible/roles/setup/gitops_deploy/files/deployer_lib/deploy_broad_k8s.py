@@ -324,7 +324,7 @@ def apply_broad_k8s(
             # The secrets page rides this exit for the reason the `DECIDED:` in
             # `deploy_handlers.handle_broad`'s own failure arm gives (#2459).
             deploy_k8s_owed.alert_and_record_deferred(
-                tools, state, config, origin, applied, cs, plan.k8s_services
+                tools, state, config, origin, cs, plan.k8s_services
             )
             record_deferred_receipt(state, target, plans, plan.k8s_services)
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
@@ -347,7 +347,7 @@ def apply_broad_k8s(
     if bumps:
         tools.emit_deploy_annotation(bumps, origin)
     deploy_k8s_owed.alert_and_record_deferred(
-        tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
+        tools, state, config, origin, cs, plan.k8s_services
     )
     record_deferred_receipt(state, target, plans, plan.k8s_services)
     # The tick's last exit, and the only one a range with nothing deferred reaches, so the

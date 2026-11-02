@@ -40,7 +40,7 @@ def test_tags_adds_a_lookup_reader_and_changes_does_not():
     r = reach([_LOOKED_UP])
     declared = {"monitor-bridge", "uptime-kuma"}
     assert r.tags(declared) == {"monitor-bridge", "uptime-kuma"}
-    assert "uptime-kuma" not in r.changes.k8s | r.changes.services
+    assert "uptime-kuma" not in r.changes.k8s
     assert "uptime-kuma" in r.touched()
 
 

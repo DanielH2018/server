@@ -269,7 +269,6 @@ def handle_broad(
                 state,
                 config,
                 origin,
-                set(),
                 deploy_broad_k8s.fold_deferred(cs, plans, plan.k8s_services),
                 plan.k8s_services,
             )
@@ -346,7 +345,7 @@ def handle_k8s(
     # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     deploy_k8s_owed.alert_and_record_deferred(
-        tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
+        tools, state, config, origin, cs, plan.k8s_services
     )
     return 0
 
@@ -433,14 +432,14 @@ def _rollback_k8s(
     return 0 if posted else 1
 
 
-def handle_no_services(
+def handle_merge_only(
     tools: DeployTools,
     state: DeployerState,
     config: Config,
     target: TickTarget,
     plan: TickPlan,
 ) -> int:
-    """Nothing maps to a deploy here: ff-merge, then flag what rode along unapplied."""
+    """Nothing in the range deploys: ff-merge, then flag what rode along unapplied."""
     cs, origin = plan.cs, target.origin
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)  # docs-only etc.
     # A secrets-only push (rotated value, no service template changed) maps to nothing, so the
@@ -448,10 +447,8 @@ def handle_no_services(
     # on its next deploy. Defer-and-alert (once per SHA) so the operator redeploys the
     # consumer(s); without this the rotated secret sits stale.
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
-    # tasks/ changes aren't auto-deployed but DO change what a deploy does, so they must not
-    # sit silently ff-merged. Nothing was deployed this tick (deployed=set()), so
-    # the full sets are flagged. Same helper runs on the deploy path for a combined push.
+    # A changed k8s role is merged but not applied, so it must not sit silently ff-merged.
     deploy_k8s_owed.alert_and_record_deferred(
-        tools, state, config, origin, set(), cs, plan.k8s_services
+        tools, state, config, origin, cs, plan.k8s_services
     )
     return 0

@@ -175,16 +175,6 @@ def secrets_deferred_alert(origin: str) -> str:
     )
 
 
-def tasks_deferred_alert(origin: str, services: set[str]) -> str:
-    """The post for a structural-dir change to services this tick did not redeploy."""
-    return (
-        f"⚠️ gitops-deploy: a structural dir (`tasks/`/`defaults/`/`vars/`/`handlers/`) changed "
-        f"for `{', '.join(sorted(services))}` in `{origin[:8]}` with no redeploy of those "
-        f"service(s) — fast-forwarded but **not applied** (those dirs aren't auto-deployed). "
-        f"Redeploy by hand: `{PLAYBOOK_CMD} ansible/deploy.yml --tags <svc>`."
-    )
-
-
 def k8s_deferred_alert(
     origin: str, k8s: set[str], declared_k8s: set[str], consumers: set[str] | None
 ) -> str:

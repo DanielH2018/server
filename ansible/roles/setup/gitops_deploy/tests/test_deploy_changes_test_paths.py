@@ -38,13 +38,11 @@ TEST_ONLY_PATHS = [
 
 
 def test_a_test_only_push_is_clean():
-    """It must reach gitops_deploy.py's `if not cs.services` branch, which ff-merges."""
+    """It must reach gitops_deploy.py's fall-through, `handle_merge_only`, which ff-merges."""
     cs = services_from_changed_paths(TEST_ONLY_PATHS)
     assert cs.broad is False
     assert cs.broad_manual is False
-    assert cs.services == set()
     assert cs.k8s == set()
-    assert cs.tasks == set()
     assert cs.secrets is False
 
 
@@ -98,4 +96,4 @@ def test_a_path_merely_containing_test_is_not_exempt():
         "ansible/roles/setup/gitops_deploy/files/pytest_helper.py",
     ):
         cs = services_from_changed_paths([path])
-        assert cs.broad or cs.services or cs.k8s or cs.tasks, path
+        assert cs.broad or cs.k8s, path
