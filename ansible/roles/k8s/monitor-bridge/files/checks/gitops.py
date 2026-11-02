@@ -340,5 +340,6 @@ def check_host_packages(
         now if now is not None else time.time(),
         cfg.BUILDER_MAX_FETCH_AGE_S,
         cfg.BUILDER_MAX_LAG_S,
+        cfg.BUILDER_PI_CANARY_MAX_LAG_S,
         drift,
     )

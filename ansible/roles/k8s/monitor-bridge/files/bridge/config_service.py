@@ -42,6 +42,7 @@ class ServiceConfig:
     GITOPS_BEHIND_MAX_S: float
     GITOPS_CONTENTION_MAX_S: float
     BUILDER_MAX_LAG_S: float
+    BUILDER_PI_CANARY_MAX_LAG_S: float
     BUILDER_MAX_FETCH_AGE_S: float
     HA_URL: str
     HA_TOKEN: str = field(repr=False)
@@ -178,10 +179,12 @@ def service_config(
         # The host-package builder's two page bounds, in seconds, rendered from the role defaults
         # `monitor_bridge_builder_max_lag_s` and `monitor_bridge_builder_max_fetch_age_s`. The
         # lag bound is how long master may sit unbuilt: it exceeds the ~103 s master CI run many
-        # times over, so a normal landing never trips it. The template raises the default to
-        # the rollout canary's longest gap between updater fires (`updater_lag_grace_s`, #6530). The fetch bound is 15 builder runs
-        # (the timer fires every 2 minutes), so one slow `git fetch` never trips it either.
+        # times over, so a normal landing never trips it. A gate whose canary is daniel-pi gets
+        # the Pi's longest gap between updater fires instead (`updater_lag_grace_s`, #6530, #6919).
+        # The fetch bound is 15 builder runs (the timer fires every 2 minutes), so one slow
+        # `git fetch` never trips it either.
         BUILDER_MAX_LAG_S=_num("BUILDER_MAX_LAG_S"),
+        BUILDER_PI_CANARY_MAX_LAG_S=_num("BUILDER_PI_CANARY_MAX_LAG_S"),
         BUILDER_MAX_FETCH_AGE_S=_num("BUILDER_MAX_FETCH_AGE_S"),
         # HA automation-engine heartbeat: an HA time_pattern automation stamps
         # input_datetime.ha_heartbeat with now() every minute, so its last_changed is fresh ONLY

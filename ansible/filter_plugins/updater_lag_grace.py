@@ -5,7 +5,8 @@ gate's commit (`hosts/lib/builder_rollout_gate.py`). daniel-server leads `CANARY
 run that changes only the Pi's and daniel-box's packages makes the Pi the canary (#6911). The Pi's
 updater fires once a day, so a Pi package published just after a fire waits a day for the next
 one. The builder's unbuilt-since series counts that wait, and monitor-bridge's `host_packages`
-row pages once it passes `BUILDER_MAX_LAG_S`. A fixed 2 hours would page on every such publish.
+row pages once a gate whose `host` label is daniel-pi passes `BUILDER_PI_CANARY_MAX_LAG_S`
+(#6919). A fixed 2 hours would page on every such publish.
 
 `updater_lag_grace_s` derives the grace from the timer text, never from a number written beside
 it: the longest gap between two fires of the shared `homelab-updater.timer` with the canary's

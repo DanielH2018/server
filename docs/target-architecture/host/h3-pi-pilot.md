@@ -420,7 +420,7 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
     - The builder writes `homelab_builder.prom` with two series:
         - `homelab_builder_fetch_timestamp_seconds`, the end of the last run whose
           `git fetch` succeeded;
-        - `homelab_builder_unbuilt_since_timestamp_seconds{reason,sha}`, the committer time
+        - `homelab_builder_unbuilt_since_timestamp_seconds{reason,sha[,host]}`, the committer time
           of the oldest first-parent commit after the last built commit. It is the tip's
           committer time when the tip does not descend from the last built commit, and 0
           when the tip is the last built commit. `sha` names that oldest unbuilt commit, or
@@ -429,7 +429,8 @@ H4 to H7 use these names unchanged. A slice that needs a different value says so
           or had nothing to build. `token` is a builder token that `config.env` lacks or that
           the check-runs read refused with 401 or 403, so a revoked token never reads as
           `no-green`. `tools` is a pinned binary whose digest differs
-          (*`homelab-tools`*), and `canary` is an open rollout gate (*Staged rollout*).
+          (*`homelab-tools`*), and `canary` is an open rollout gate (*Staged rollout*), whose series alone carries
+          `host`, the gate's canary host.
     - Neither `homelab-builder` nor `homelab-signer` can write the textfile directory. Each
       writes its file under its own state directory. Its unit then runs the role's
       `publish-textfile` script through an `ExecStopPost=-+` line. The `+` runs it as root,
@@ -781,8 +782,8 @@ Two alert paths report the host plane, so a hold or a stall is never silent:
       `monitor_bridge_builder_max_fetch_age_s`, 1800 seconds by default, or absent. That
       covers a dead builder timer, a missing token and a fetch that keeps failing;
     - `homelab_builder_unbuilt_since_timestamp_seconds` is non-zero and older than
-      `monitor_bridge_builder_max_lag_s`, 2 hours by default, raised to the canary's
-      schedule need (*Staged rollout*, the Pi canary bullet). That covers a trust refusal,
+      `monitor_bridge_builder_max_lag_s`, 2 hours by default, raised to the Pi's schedule
+      need for a gate whose canary is daniel-pi (*Staged rollout*, the Pi canary bullet). That covers a trust refusal,
       a keyring refusal, a tools refusal, a rewritten master, an empty CI context list, a
       CI context that no longer matches, a builder hold, a rollout gate the canary never
       closes, and a master that stays red for 2 hours. In each of these the builder runs
@@ -996,8 +997,9 @@ publishes a second host package.
   that delay (#6530). H3.13 put the Pi on a daily schedule, under which a Pi canary would hold
   every other host for up to a day, so `CANARY_ORDER` puts daniel-server first (#6911). A run
   that changes only the Pi's and daniel-box's packages still makes the Pi the canary. The lag
-  arm's grace therefore still follows the Pi's schedule:
-  `ansible/filter_plugins/updater_lag_grace.py` renders the larger of
+  arm's grace for that gate therefore still follows the Pi's schedule, and every other reason
+  keeps the 7200 s floor (#6919). The builder names the gate's host in the series' `host` label,
+  and `ansible/filter_plugins/updater_lag_grace.py` renders the larger of
   `monitor_bridge_builder_max_lag_s` and the Pi's longest gap between fires (86400 s), plus the
   timer's `RandomizedDelaySec` (60 s), the updater's `TimeoutStartSec` (3000 s) and 600 s of
   slack. That is 90060 s. Moving the Pi's drop-in moves the grace with it.

@@ -571,10 +571,12 @@ class Builder(RolloutGate):
             log(f"could not write {PROM}: {type(exc).__name__}: {exc}")
 
     def _write_prom_lines(self, reason: str, tip: str, last: str | None) -> None:
-        sha, since = tip, 0.0
+        sha, since, host = tip, 0.0, ""
         if reason == "canary":
             sha = self.state["gate"]["sha"]
             since = float(self.git("show", "-s", "--format=%ct", sha))
+            # monitor-bridge sizes the lag arm's grace by the gate's host (#6919).
+            host = f',host="{self.state["gate"]["host"]}"'
         elif last != tip:
             chain = self.git("rev-list", "--first-parent", tip).split()
             if last in chain:
@@ -586,7 +588,7 @@ class Builder(RolloutGate):
             f"homelab_builder_fetch_timestamp_seconds {self.state.get('last_fetch', 0)}",
             "# HELP homelab_builder_unbuilt_since_timestamp_seconds Committer time of the oldest unbuilt first-parent commit, 0 when caught up.",
             "# TYPE homelab_builder_unbuilt_since_timestamp_seconds gauge",
-            f'homelab_builder_unbuilt_since_timestamp_seconds{{reason="{reason}",sha="{sha[:12]}"}} {since}',
+            f'homelab_builder_unbuilt_since_timestamp_seconds{{reason="{reason}",sha="{sha[:12]}"{host}}} {since}',
         ]
         atomic_write(str(self.state_dir / PROM), "\n".join(lines) + "\n")
 

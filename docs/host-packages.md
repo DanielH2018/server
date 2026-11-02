@@ -472,9 +472,10 @@ The gate closes by itself once Prometheus reports the canary at that commit or a
 `homelab_host_reconcile_ok` at 1. daniel-server leads because the Pi's updater fires once a day,
 at 03:05 (H3.13, #6911). A run that changes only the Pi's and daniel-box's packages still makes
 the Pi the canary, and daniel-box's package then waits up to a day for the Pi's next fire. The
-"Host Packages — Status" tile pages once the gate has stayed open for 90060 seconds, a grace
-derived from that gap, which `ansible/filter_plugins/updater_lag_grace.py` reads from the Pi's
-timer drop-in. To release daniel-box's package sooner, start the Pi's updater by hand or write
+series then carries `host="daniel-pi"`, and the "Host Packages — Status" tile pages once that
+gate has stayed open for 90060 seconds, a grace derived from that gap, which
+`ansible/filter_plugins/updater_lag_grace.py` reads from the Pi's timer drop-in. A gate whose
+canary is any other host pages after 7200 seconds, like every other reason (#6919). To release daniel-box's package sooner, start the Pi's updater by hand or write
 the release file below.
 
 To close the gate before the canary reports, name the gate's commit on daniel-box. The gate's
@@ -647,8 +648,9 @@ Drift") pages on a condition that persists, in two cases:
 
 - the builder's last good fetch of master is older than 30 minutes, or its series is absent.
   That covers a dead `homelab-builder.timer`, a missing token and a fetch that keeps failing;
-- a commit of master has waited more than 90060 seconds to be built (2 hours, raised to cover the
-  Pi canary's longest gap between updater fires, which is a day on its daily schedule). The builder runs and exits 0 in each of these cases,
+- a commit of master has waited more than 7200 seconds to be built, or 90060 seconds behind a gate
+  whose canary is daniel-pi, which covers the Pi's longest gap between updater fires, a day on its
+  daily schedule (#6919). The builder runs and exits 0 in each of these cases,
   so only the tile reports them.
 
 The tile's message names the `reason` and `sha` labels of

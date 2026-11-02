@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import builder_rollout_gate as gate
+import host_package_builder as hb
 from test_host_package_builder import (
     FPR,
     GREEN,
@@ -147,6 +148,15 @@ def test_two_changed_host_packages_stage_the_canary_and_the_shared_one(opened):
     reason, sha, since = metric(state)
     assert (reason, sha) == ("canary", v[:12])
     assert since == float(git(state / "src", "show", "-s", "--format=%ct", v))
+
+
+def test_the_canary_series_names_the_gate_s_host(opened):
+    # monitor-bridge gives a Pi canary the Pi's day-long grace and every other host the floor.
+    state = opened[3]
+    assert (
+        f'homelab_builder_unbuilt_since_timestamp_seconds{{reason="canary",sha="{opened[2][:12]}",host="daniel-server"}}'
+        in (state / hb.PROM).read_text()
+    )
 
 
 def test_a_single_changed_host_package_opens_no_gate(lab):

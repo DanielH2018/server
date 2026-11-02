@@ -27,8 +27,9 @@ RELEASE = "/etc/homelab-builder/release"
 # schedule (#6911). A Pi canary would hold every other host for up to a day; the operator's
 # 2026-10-29 ruling that the Pi lead at all hours (#6530) assumed its 15-minute schedule. A run
 # that changes the Pi's and daniel-box's packages alone still makes the Pi the canary, so
-# monitor-bridge keeps deriving its builder lag grace from the Pi's drop-in
-# (ansible/filter_plugins/updater_lag_grace.py, rendered in monitor-bridge's env.yaml.j2).
+# monitor-bridge derives the lag grace for a gate whose `host` label is daniel-pi from the Pi's
+# drop-in (ansible/filter_plugins/updater_lag_grace.py, rendered in monitor-bridge's
+# env.yaml.j2), and every other reason keeps the 7200 s floor (#6919).
 CANARY_ORDER = ("daniel-server", "daniel-pi", "daniel-box")
 APPLIED = "homelab_host_applied_info"
 RECONCILE_OK = "homelab_host_reconcile_ok"
