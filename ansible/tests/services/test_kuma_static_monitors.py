@@ -290,8 +290,8 @@ def test_the_deleted_a6_tiles_are_not_declared():
 
 def test_no_tile_carries_a_monitor_bridge_push_token():
     # RED if a tile accepts a `monitor_bridge_*_push_token` again. M6 batch A6 retired all 20:
-    # nothing pushes into them, and the keys wait in PENDING_RETIREMENT for A6-9. Under the test
-    # render a token is `stub-<variable name>`, so the variable is readable off the tile.
+    # nothing pushes into them, and A6-9 removed the keys. Under the test render a token is
+    # `stub-<variable name>`, so the variable is readable off the tile.
     tokens = {e.get("push_token", "") for e in _entities().values()}
     assert not [t for t in tokens if t.startswith("stub-monitor_bridge_")]
     # Non-vacuity by name: a render with no push tiles would pass the line above.

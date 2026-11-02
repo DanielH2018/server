@@ -7,8 +7,7 @@ Kuma since M6 batch A6's Cutover-2. The *At a glance* block below has why it car
 readiness probe nor auto-deploy.
 
 **`files/check_table.py`'s `CHECKS` declares every check once**: body and gate, from which the
-registry and the gate sets derive. The rows still spell their retired `token`, `kuma_id`,
-`display`, `description` and `status_group` fields until A6-8 deletes them. Each check's
+registry and the gate sets derive. Each check's
 `verdicts/` function says what it evaluates. This file states what holds across every check.
 `docs/monitor-bridge-checks.md` has the measurement behind each number, and
 `docs/monitor-bridge-internals.md` the module table, prerequisites, gate-set membership and

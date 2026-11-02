@@ -18,27 +18,19 @@ INTERNALS_PAGE = REPO / "docs" / "monitor-bridge-internals.md"
 ROWS = [
     {
         "name": "disk",
-        "display": "Root Disk",
-        "status_group": "Hosts & Power",
         "gate": "prometheus",
         "critical": True,
     },
     {
         "name": "n8n",
-        "display": "n8n Prod Workflows",
-        "status_group": "Services",
         "gate": "startup_grace",
     },
     {
         "name": "etcd_restore_drill",
-        "display": "etcd Restore Drill",
-        "status_group": "Backups & Storage",
         "runbook": "k3s-etcd-restore",
     },
     {
         "name": "prometheus",
-        "display": "Prometheus Reachable",
-        "status_group": "Observability",
         "is_gate": True,
     },
 ]
@@ -46,13 +38,12 @@ ROWS = [
 
 def test_bridge_checks_renders_one_row_per_check_in_order():
     assert fb.render_bridge_checks(ROWS).splitlines() == [
-        "| Tile | Check | Gate | Critical | Status page group | Runbook |",
-        "|---|---|---|---|---|---|",
-        "| Root Disk | `disk` | `prometheus` | yes | Hosts & Power |  |",
-        "| n8n Prod Workflows | `n8n` | `startup_grace` |  | Services |  |",
-        "| etcd Restore Drill | `etcd_restore_drill` | none |  | Backups & Storage "
-        "| `k3s-etcd-restore` |",
-        "| Prometheus Reachable | `prometheus` | is a gate |  | Observability |  |",
+        "| Check | Gate | Critical | Runbook |",
+        "|---|---|---|---|",
+        "| `disk` | `prometheus` | yes |  |",
+        "| `n8n` | `startup_grace` |  |  |",
+        "| `etcd_restore_drill` | none |  | `k3s-etcd-restore` |",
+        "| `prometheus` | is a gate |  |  |",
     ]
 
 
@@ -60,7 +51,7 @@ def test_gate_sets_group_members_by_the_gate_column():
     assert fb.render_gate_sets(ROWS).splitlines() == [
         "| Gate value | Held by | Members | Checks |",
         "|---|---|---|---|",
-        "| `prometheus` | Prometheus Reachable gate, which suppresses them | 1 | `disk` |",
+        "| `prometheus` | `prometheus` gate, which suppresses them | 1 | `disk` |",
         "| `startup_grace` | their rule's `for: 10m`, which rides out the weekly reboot "
         "| 1 | `n8n` |",
         "| ungated | nothing | 1 | `etcd_restore_drill` |",
@@ -163,7 +154,7 @@ def live_check_titles(page: str) -> list[str]:
     for line in section.splitlines():
         match = _TITLE.match(line)
         if match and _ARM not in match.group(2):
-            titles.append(match.group(1))
+            titles.append(match.group(1).strip("`"))
     return titles
 
 
@@ -209,12 +200,12 @@ def test_the_live_checks_section_stops_at_the_next_heading():
 
 def test_every_live_check_has_a_bullet_and_every_bullet_a_live_check():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
-    displays = {row["display"] for row in rows}
+    names = {row["name"] for row in rows}
     page = CHECKS_PAGE.read_text()
     titles = live_check_titles(page)
     assert len(titles) >= 19
-    assert {"etcd Restore Drill", "B2 Free Tier Headroom"} <= set(titles)
-    assert title_drift(page, displays) == (set(), set())
+    assert {"etcd_restore_drill", "b2_storage"} <= set(titles)
+    assert title_drift(page, names) == (set(), set())
 
 
 # --- the internals module table against files/ ----------------------------------------------

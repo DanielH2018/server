@@ -16,8 +16,8 @@ records where each number came from and which incident added each arm.
 live check has a bullet, and every bullet names a live check. The prose inside a bullet is not
 tested. If a bullet disagrees with the registry, the registry is right.
 
-The bullets group the checks by domain, not in registry order. Each is named by its Kuma tile,
-and the row's `name` in `files/check_table.py` is the key the code uses.
+The bullets group the checks by domain, not in registry order. Each is titled by the
+row's `name` in `files/check_table.py`, which is the key the code uses.
 
 **HISTORY —** The Docker-era plumbing (compose, bind mounts, networks) is in git:
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/monitor-bridge/`.
@@ -26,16 +26,16 @@ The kopia backup checks retired with kopia on 2026-08-10, and the backup plane i
 
 ## Live checks
 
-Each row below is one check, and was one Kuma push monitor until A6's Cutover-1a. The table is generated from `CHECKS` and lists every
+Each row below is one check. The table is generated from `CHECKS` and lists every
 check and gate in registry order. The bullets after it carry the measurements and incidents
-behind each tile, under the tile's display name.
+behind each check, under the check's name.
 
 --8<-- "assets/generated/fragments/bridge-checks.md"
 
 The bridge evaluates the two reachability gates first. The internals page lists which
 checks each gate suppresses.
 
-- **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure streak**.
+- **`n8n`** (n8n public API: per-*active*-workflow **consecutive-failure streak**.
   n8n does not save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to bound
   `database.sqlite` and its B2 backup churn), so "consecutive" cannot be read from one snapshot.
   `check_n8n` accumulates the streak ACROSS cycles, deduped by execution id so a lingering failure
@@ -49,7 +49,7 @@ checks each gate suppresses.
   via the `X-N8N-API-KEY` header. The streaks live in `bridge.streaks.State` (`n8n_streaks`), so
   they reset on a bridge restart, which the `startup_grace` hysteresis rides out. Pure
   `n8n_update_streaks()`/`n8n_verdict()` are unit-tested.)
-- **Arr Queue Warnings** (sonarr's + radarr's own `/api/v3/queue`: `down` on any item with
+- **`arr_queue`** (sonarr's + radarr's own `/api/v3/queue`: `down` on any item with
   `trackedDownloadStatus == "warning"`, `trackedDownloadState == "importBlocked"`, or
   `importPending` carrying `statusMessages`, naming the release title + app. The check exists
   because an indexer once served a poisoned fake-episode `.exe` (2026-07-01): sonarr blocked the
@@ -78,7 +78,7 @@ checks each gate suppresses.
   `trackedDownloadStatus == "error"`, and an item with no readable `added` timestamp is flagged
   rather than held. The other four episodes in that window were "Not a Custom Format upgrade for
   existing episode files" and still page on sight.)
-- **Bazarr Health** (bazarr's `/api/system/status` + `/api/system/health` over `media`: `down`
+- **`bazarr`** (bazarr's `/api/system/status` + `/api/system/health` over `media`: `down`
   when a peer version field is present-but-empty, or when bazarr self-reports a health issue.
   **Bazarr is the *arr with no exporter, and that is the whole point.** It holds its OWN copies of
   Sonarr's and Radarr's API keys, in its config on the `bazarr-config` PVC and entered through its
@@ -99,7 +99,7 @@ checks each gate suppresses.
   seconds," spent *inside* bazarr), and v2.3.0 predates the overlapping-collection skip upstream
   added for that drainage (their #380). These two endpoints measured 2-7 ms and 477+13 bytes on
   2026-08-29.)
-- **Prowlarr Indexers** (Prowlarr's `/api/v1/indexerstatus` + `/api/v1/indexer` over `media`,
+- **`prowlarr_indexers`** (Prowlarr's `/api/v1/indexerstatus` + `/api/v1/indexer` over `media`,
   `X-Api-Key`. `down` only when an indexer has been failing ≥ `PROWLARR_INDEXER_MIN_DOWN_MIN` (1
   week = 10080 min: only a genuinely long outage pages, and short flaps are noise), measured from
   Prowlarr's own `initialFailure`. That is the age-based, per-indexer SUSTAINED signal Prowlarr's
@@ -114,11 +114,11 @@ checks each gate suppresses.
   public trackers from the offender list. It is set to `The Pirate Bay,1337x`, because their
   backends flap for hours and the remaining indexers cover the same searches. Pure
   `indexers_down()` is unit-tested.)
-- **GitOps Deploy — Alive** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
+- **`gitops_alive`** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
   `gitops_deploy` deployer rewrites each non-crashing tick. `down` once it is older than
   `GITOPS_MAX_AGE_MIN`, which means the deployer stalled or the host is down. The deployer does
   not push to Kuma itself; see `ansible/roles/setup/gitops_deploy/CLAUDE.md`)
-- **GitOps Deploy — Status** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`,
+- **`gitops_status`** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`,
   `/gitops-state/contention_since`, `/gitops-state/manual_plane` **and
   `/gitops-state/behind_since`**. `down` while a rolled-back commit is held pending the operator
   reverting the offending PR (self-heals when the hold clears), OR while local and origin have
@@ -150,7 +150,7 @@ checks each gate suppresses.
   clears the line itself. The arm reads the `owed` ledger's `k8s_deferred` class (#3392). Pure
   `gitops_status()` and its parsers are unit-tested, and an unparseable marker reads as not-behind
   rather than paging forever on garbage.)
-- **Host Packages — Status** (`host_packages`, reads the host-package builder's two textfile series
+- **`host_packages`** (`host_packages`, reads the host-package builder's two textfile series
   through daniel-box's node exporter, the `node` job. It is a row of its own, because
   `gitops_status` reads the deployer's state directory outside the Prometheus gate, and a
   Prometheus-sourced arm there would page on every Prometheus outage. The row is `gate="prometheus"`
@@ -174,7 +174,7 @@ checks each gate suppresses.
   series' `reason` and `sha` labels, and `docs/host-packages.md`, *The builder's pages*, has the
   fix for each reason. The query carries no `origin` matcher: `origin_sel()` pins daniel-server,
   and only daniel-box runs the builder. Pure `host_packages()` and the arm pairs are unit-tested.)
-- **B2 Reachable** (authenticates against B2's native API (`b2_authorize_account`, Basic auth with
+- **`b2_reachable`** (authenticates against B2's native API (`b2_authorize_account`, Basic auth with
   `B2_PROBE_KEY_ID` + the file-mounted `B2_PROBE_APPLICATION_KEY_FILE`), because Longhorn's own
   B2-backed backups need it. The gate comes from the 2026-08-02 transaction-cap incident
   (`docs/archive/b2-transaction-cap-monitoring-gaps.md`): B2 caps **transactions** separately from
@@ -206,7 +206,7 @@ checks each gate suppresses.
   `b2_authorize_account` is itself subject to the cap (Backblaze's endpoint docs list
   403/`transaction_cap_exceeded` among its errors). If a future breach leaves this monitor green,
   point `B2_PROBE_URL` at a Class C call instead; it is a URL swap by design.)
-- **B2 Free Tier Headroom** (`files/checks/b2.py:b2_storage_usage`. Lists every file version
+- **`b2_storage`** (`files/checks/b2.py:b2_storage_usage`. Lists every file version
   in the bucket the `B2_PROBE_*` key is scoped to, sums `contentLength` including hidden
   versions and unfinished large-file parts, and compares the total with `B2_STORAGE_CAP_BYTES`
   (10 GB). `down` past `B2_STORAGE_MAX_PCT` (80). Those hidden bytes bill as stored data, so a
@@ -219,7 +219,7 @@ checks each gate suppresses.
   failure is more often a 5xx. Empty credentials disable the check. **Behind `b2_reachable`**: a
   transaction cap fails this check and B2 Reachable together, and one root cause must not light
   two tiles. Runbook: `longhorn-backup-tiering`.)
-- **R2 Free Tier Headroom** (Cloudflare's GraphQL Analytics API, `r2StorageAdaptiveGroups` +
+- **`r2_usage`** (Cloudflare's GraphQL Analytics API, `r2StorageAdaptiveGroups` +
   `r2OperationsAdaptiveGroups` in ONE POST: month-to-date storage bytes, Class A and Class B
   operation counts as a percentage of the free tier (10 GB / 1M / 10M), `down` past
   `R2_USAGE_MAX_PCT` (80) on any arm. **Cloudflare offers no spending cap or usage limit on R2, on
@@ -251,20 +251,20 @@ checks each gate suppresses.
   which point drop the `bucketName` filter rather than raising the thresholds.
   Empty `CF_ACCOUNT_ID`/`CF_ANALYTICS_TOKEN`/`R2_BUCKET` disables the check (stays up). Pure
   `r2_month_start()`/`r2_classify_operations()`/`r2_usage_verdict()` are unit-tested.)
-- **Cloudflare IP Drift** (`checks/cloudflare_ips.py`: the two published range pages against
+- **`cloudflare_ips_drift`** (`checks/cloudflare_ips.py`: the two published range pages against
   `CLOUDFLARE_IPS_EXPECTED`, the `cloudflare_ips` allowlist traefik trusts and whose IPv4
   half netpol-baseline admits. A success is cached for `CLOUDFLARE_IPS_PROBE_INTERVAL_S` (a day). Drift, a page with
   under 10 ranges, or a fetch that did not answer is DOWN and re-probed every cycle, so the tile
   clears one cycle after `cloudflare_ips` is fixed. That is why the check lives here and not in
   k8s/traefik's daily root cron, which left a red tile until the next 05:25. Empty expected list
   disables the check (stays up). Pure `cloudflare_ips_verdict()` is unit-tested.)
-- **Healthchecks.io Console Drift** (`checks/healthchecks.py`, #2566: compares the console's
+- **`healthchecks_drift`** (`checks/healthchecks.py`, #2566: compares the console's
   schedule type, period or cron expression, timezone and grace for each slug with
   `monitor_bridge_healthchecks_expected`. `docs/healthchecks-io-deadman.md` owns the expectation
   table, the cache and the history of the drift it caught. An undocumented console check is named
   and does not page (the `DECIDED:` in `healthchecks_verdict`). Gate: `wan_reachable`. An empty key
   or expected list disables it, and it stays up.)
-- **SMART Data / Health** (Scrutiny's web API `/api/summary` over `monitoring`: every
+- **`scrutiny`** (Scrutiny's web API `/api/summary` over `monitoring`: every
   non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
   (0 = SMART self-assessment and Scrutiny's attribute thresholds both OK; non-zero decodes to
   "SMART self-assessment FAILED" / "attribute threshold breached"). Freshness catches a silently
@@ -287,7 +287,7 @@ checks each gate suppresses.
   legitimately has none. Pure `scrutiny_freshness()`, `scrutiny_health()`,
   `scrutiny_device_wear()` and `scrutiny_wear_verdict()` are unit-tested; those tests mock the
   payload, so they prove the verdict logic and nothing about the endpoint path.)
-- **Home Assistant Automations** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
+- **`ha_heartbeat`** (HA's REST API `/api/states/input_datetime.ha_heartbeat` over
   `apps`, Bearer `HA_TOKEN`. An HA `time_pattern:/1min` automation stamps that helper with
   `now()`, so its `last_changed` is fresh ONLY while HA's automation *scheduler* is executing.
   `down` once it is older than `HA_HEARTBEAT_MAX_AGE` (300 s): a wedged-but-running HA (HTTP
@@ -322,7 +322,7 @@ checks each gate suppresses.
   **`ha_heartbeat` is deliberately not gated on Loki**: a Loki gate would suppress the WHOLE check
   during a Loki outage, which would blind the real heartbeat. The ban arm fails open on a Loki
   error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is unit-tested.)
-- **k3s Speedtest** (speedtest-tracker's `/api/v1/results`, newest row only, Bearer
+- **`speedtest`** (speedtest-tracker's `/api/v1/results`, newest row only, Bearer
   `speedtest_api_token` from the mounted credentials Secret. Three arms in this order: status, then
   age, then the download floor. The order is load-bearing, because `download_bits` is null on a
   failed row and a floor comparison ahead of the status arm compares None.
@@ -363,7 +363,7 @@ checks each gate suppresses.
   manual UI toggle that `roles/k8s/speedtest/CLAUDE.md` records as impossible to set from config
   at the pinned build, on a `longhorn-nobackup` PVC, a human step this alert path should not
   acquire. The scrape stays what #996 added it for: history in Grafana.)
-- **WAN Reachable** (two provider URLs fetched by hostname, tried in order: the root-cause GATE for
+- **`wan_reachable`** (two provider URLs fetched by hostname, tried in order: the root-cause GATE for
   the internet-reaching checks, and the peer of Prometheus and B2 Reachable. An internet outage
   had no gate until a single WAN outage on 2026-09-18 turned 11 tiles red inside 90 minutes,
   including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
@@ -402,7 +402,7 @@ checks each gate suppresses.
   when it gained the Prometheus gate (#2004): the two sets must stay disjoint so a graced check
   reaches the evaluation path every cycle, and the gate covers the post-boot transient the grace
   covered plus the outage it never could. Empty `WAN_PROBE_URLS` disables the gate.)
-- **etcd Restore Drill** (`files/checks/service.py:check_etcd_restore_drill`. Reads the
+- **`etcd_restore_drill`** (`files/checks/service.py:check_etcd_restore_drill`. Reads the
   `last-success-list-only` stamp that the weekly etcd restore drill cron on daniel-box writes
   under `ETCD_DRILL_STATE_DIR` (`/etcd-drill-state`, a hostPath), and checks its `epoch=` line
   against `ETCD_DRILL_MAX_AGE_DAYS` (8 days). It never reads `last-success-full`, because only the
@@ -415,7 +415,7 @@ checks each gate suppresses.
   the Longhorn `Backup` CRs that locate the volume backups, so a restore nobody can prove puts the
   rest of the recovery chain at risk. No gate and no streak: a file read has no upstream to wait
   on, and a stale stamp does not heal by itself. Runbook: `k3s-etcd-restore`.)
-- **Swallowed Push Verdicts** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged and then
+- **`swallowed_verdicts`** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged and then
   lost, #1869. The library returns 0 after a failed push by design, so the cron does not fail, and
   the verdict reaches nobody until the tile's heartbeat deadline (a day and an hour later for the
   daily drift producers). `check_swallowed_verdicts` reads the crons' push-outcome lines out of
@@ -458,7 +458,7 @@ checks each gate suppresses.
   (`{container=~"pi-peer-backup|crowdsec-jobs|configarr-health|janitorr-health"}`) reads
   them, and the two fetches are merged before the verdict. The selector is not
   `job=~"syslog|k8s"`, because the cap was sized against the syslog stream alone.)
-- **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
+- **`discord`** (GET-verifies **all five** Discord notification webhooks: Kuma's own
   `monitor_discord_webhook_url`; CrowdSec's `crowdsec_discord_webhook_url`, which CrowdSec posts
   ban alerts to *directly*, not via Kuma; `gitops_deploy_discord_webhook`, which delivers the
   `gitops-deploy` rollback alert AND every `renovate_notify` digest (the Renovate Notifier — Alive

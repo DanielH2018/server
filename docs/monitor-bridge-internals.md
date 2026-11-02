@@ -47,15 +47,17 @@ The rules below shaped those memberships.
 
 - **The bridge pushes nothing to Uptime Kuma.** M6 batch A6's Cutover-2 deleted the push path,
   and the `KUMA_PUSH_*` env keys. `uptime_kuma_k8s_bridge_push_interval` has no template
-  reader left, and A6-8 deletes it. The 20 `monitor_bridge_*_push_token` keys wait in `PENDING_RETIREMENT`
-  (`scripts/secrets_mgmt/pending_retirement.py`) for A6-9.
+  reader left, and C-1 deletes it with the uptime-kuma role. A6-9 retired the 20
+  `monitor_bridge_*_push_token` keys and deleted the pending-retirement allowance.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
 - **The table:** `files/check_table.py` holds one `PushCheck` row per check and gate (#3659,
   #3788). `registry.build_checks` reads it in Python. `ansible/filter_plugins/py_table.py`
   parses it without importing it for the docs fragments. `tests/test_check_table.py` pins the
-  table to the registry, the gates, the env, SOPS and that parse. The rows still spell their
-  `token`, `kuma_id`, `display`, `description` and `status_group` fields, which A6-8 deletes.
+  table to the registry, the gates, the env and that parse. A row carries `name`, `fn`, `gate`,
+  `is_gate`, `critical` and `runbook`: A6-8 deleted `token`, `kuma_id`, `display`, `description`
+  and `status_group` with the tiles they fed. `tests/test_bridge_size_cap.py` holds the bridge's
+  `files/` under 8,000 lines.
 - **A table change deploys monitor-bridge alone.** `deploy_cross_role.k8s_lookup_readers` finds
   every k8s role that `lookup()`s another role's file, and uptime-kuma stopped being one for the
   table when its bridge tiles went.
@@ -102,7 +104,7 @@ The rules below shaped those memberships.
 |---|---|
 | `cli.py` | the `argparse` front end and `main(argv, env, checks, sources) -> int`, which builds the `Config`, the registry and the `Sources`, refuses an unknown check name in the filter and loops `run_once` |
 | `check.py` | `run_once(cfg, src, checks, only, export)` — the run loop, with `GATE_SKIP` (the two gate rows and the message a skipped dependent logs), `EXPORTER_DEPENDENT`, `check_enabled`, `down_exporters` and `_evaluate` |
-| `check_table.py` | `CHECKS`, one `PushCheck` per check and gate: its body and gate, plus the retired push fields A6-8 deletes |
+| `check_table.py` | `CHECKS`, one `PushCheck` per check and gate: its body, gate, `critical` flag and runbook slug |
 | `registry.py` | `build_checks()`, a `Check` for every row of `CHECKS`, the two gate rows first, each with its row's `gate` |
 | `gitops_markers.py`, `gitops_ledger.py`, `gitops_hold.py` | generated verbatim copies of the deployer's marker parsers, written by `scripts/dev/gen_gitops_markers.py` (edit the source under `roles/setup/gitops_deploy/files/`, never the copy). `gitops_markers.py` holds the line-format markers, `gitops_ledger.py` the `owed` ledger and tick receipt, and `gitops_hold.py` the `DeployerSnapshot` that `check_gitops_status` reads every marker through |
 | `deploy_pipeline.py` | the deploy-pipeline exporter: `collect(cfg, src, now)` reads `promote`'s state with three `api.github.com` GETs and two `ghcr.io` GETs into four `homelab_deploy_*` gauges, adds `homelab_deploy_reboot_window_active` from the `WEEKLY_REBOOT_*` schedule, and `Exposition` serves them on `DEPLOY_PIPELINE_PORT` from a daemon thread. `cli.main()` starts the listener and calls `refresh` after each cycle |

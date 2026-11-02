@@ -215,6 +215,27 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_janitorr_push_token",
         # B6c:
         "registry_gc_push_token",
+        # A6-9: the 20 monitor-bridge push tokens, retired after Cutover-2 stopped the push.
+        "monitor_bridge_arr_queue_push_token",
+        "monitor_bridge_b2_reachable_push_token",
+        "monitor_bridge_b2_storage_push_token",
+        "monitor_bridge_bazarr_push_token",
+        "monitor_bridge_cloudflare_drift_push_token",
+        "monitor_bridge_discord_push_token",
+        "monitor_bridge_etcd_drill_push_token",
+        "monitor_bridge_gitops_alive_push_token",
+        "monitor_bridge_gitops_status_push_token",
+        "monitor_bridge_ha_push_token",
+        "monitor_bridge_healthchecks_drift_push_token",
+        "monitor_bridge_host_packages_push_token",
+        "monitor_bridge_n8n_push_token",
+        "monitor_bridge_prometheus_push_token",
+        "monitor_bridge_prowlarr_indexers_push_token",
+        "monitor_bridge_r2_usage_push_token",
+        "monitor_bridge_scrutiny_push_token",
+        "monitor_bridge_speedtest_push_token",
+        "monitor_bridge_swallowed_verdicts_push_token",
+        "monitor_bridge_wan_reachable_push_token",
     }
 )
 

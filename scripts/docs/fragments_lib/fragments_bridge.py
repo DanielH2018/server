@@ -90,8 +90,8 @@ def render_bridge_checks(rows: list[dict]) -> str:
         rows: the keyword-literal dicts `read_check_rows` returns.
     """
     lines = [
-        "| Tile | Check | Gate | Critical | Status page group | Runbook |",
-        "|---|---|---|---|---|---|",
+        "| Check | Gate | Critical | Runbook |",
+        "|---|---|---|---|",
     ]
     for row in rows:
         if row.get("is_gate"):
@@ -100,8 +100,7 @@ def render_bridge_checks(rows: list[dict]) -> str:
             gate = f"`{row['gate']}`" if row.get("gate") else "none"
         runbook = f"`{row['runbook']}`" if row.get("runbook") else ""
         lines.append(
-            f"| {row['display']} | `{row['name']}` | {gate} "
-            f"| {'yes' if row.get('critical') else ''} | {row['status_group']} | {runbook} |"
+            f"| `{row['name']}` | {gate} | {'yes' if row.get('critical') else ''} | {runbook} |"
         )
     return "\n".join(lines) + "\n"
 
@@ -112,7 +111,7 @@ def render_gate_sets(rows: list[dict]) -> str:
     Args:
         rows: the keyword-literal dicts `read_check_rows` returns.
     """
-    displays = {row["name"]: row["display"] for row in rows if row.get("is_gate")}
+    gate_rows = [row["name"] for row in rows if row.get("is_gate")]
     members: dict[str | None, list[str]] = {}
     for row in rows:
         if not row.get("is_gate"):
@@ -125,18 +124,18 @@ def render_gate_sets(rows: list[dict]) -> str:
         "| Gate value | Held by | Members | Checks |",
         "|---|---|---|---|",
     ]
-    for gate, display in displays.items():
+    for gate in gate_rows:
         lines.append(
             line(
                 f"`{gate}`",
-                f"{display} gate, which suppresses them",
+                f"`{gate}` gate, which suppresses them",
                 members.get(gate, []),
             )
         )
     # A gate value with members and no gate row of its own is the exporter suppression:
     # `check.EXPORTER_DEPENDENT` holds those rows while a node exporter is down.
     for gate in members:
-        if gate not in displays and gate not in (STARTUP_GRACE_GATE, None):
+        if gate not in gate_rows and gate not in (STARTUP_GRACE_GATE, None):
             lines.append(
                 line(
                     f"`{gate}`",

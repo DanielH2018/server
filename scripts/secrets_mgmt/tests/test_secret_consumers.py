@@ -11,7 +11,6 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_consumers.py
 
 from pathlib import Path
 
-from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
     FLUX_PATH,
@@ -24,11 +23,7 @@ from secrets_mgmt.rotation_tools import REPO, load_registry
 
 
 # ── consumer mapping (which redeploys apply a rotated token) ─────────────────
-def test_consumer_tags_monitor_bridge_tokens():
-    # M6 batch A6's Cutover-2 stopped the push and Cutover-1a deleted the tiles, so the 20
-    # `monitor_bridge_*_push_token` keys are in PENDING_RETIREMENT and name no consumer: a rotation
-    # deploying either role would apply a render that no longer references them.
-    assert consumer_tags("monitor_bridge_swallowed_verdicts_push_token") == ()
+def test_consumer_tags_status_page_sync_token_names_its_tile_role():
     # Non-vacuity: a tile that still renders its token keeps the tile's role as its consumer.
     assert UPTIME_KUMA_TAG in consumer_tags("kuma_status_page_sync_push_token")
     # `kopia_restore_drill_push_token` is absent from both secrets.yml and secret_rotation.yml,
@@ -67,8 +62,9 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     reg = load_registry()
     auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens
-    known_manual = CROSS_HOST_PUSH_TOKENS | PENDING_RETIREMENT
-    unrotatable = [n for n in auto if not consumer_tags(n) and n not in known_manual]
+    unrotatable = [
+        n for n in auto if not consumer_tags(n) and n not in CROSS_HOST_PUSH_TOKENS
+    ]
     assert not unrotatable, (
         "auto-tier tokens with no consumer_tags and not known-manual — they silently drop "
         "out of unattended rotation: %s" % unrotatable

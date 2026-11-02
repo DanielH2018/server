@@ -20,7 +20,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
-from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.rotation_tools import REPO
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST, host_vars_file
@@ -58,19 +57,6 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
 )
 
 
-# Push tokens whose name carries the `monitor_bridge_` prefix but whose PUSHER lives in another
-# role entirely. The prefix is a Kuma-history artefact: renaming the monitor would break its
-# history, so the token keeps its name although the owning service's own health script pushes
-# it. Routing these by prefix names a role that renders them NOWHERE — `rotate --deploy` would
-# write a new value, deploy monitor-bridge, leave the real pusher on the old token and stamp
-# `last_rotated` green.
-#
-# Derived by measurement, not by reading the names: `grep -rl <token> ansible/roles/`.
-PREFIX_EXCEPTION_CONSUMERS = {
-    "monitor_bridge_cloudflare_drift_push_token": "monitor-bridge",
-}
-
-
 # Every push token has TWO consumers in the cluster, and this function names both. The pusher
 # reads it from its own role's env Secret; the Kuma monitor that receives the push is a static
 # AutoKuma entity rendered by k8s/uptime-kuma (`static-monitors.yaml.j2`, a
@@ -98,19 +84,14 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     different HOSTS and no redeploy can cover them. Those still return empty; a multi-tag
     return there would assert a repair that cannot happen.
     """
-    # Both of these precede the prefix rule below: every token they name also carries the
-    # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
-    if name in CROSS_HOST_PUSH_TOKENS or name in PENDING_RETIREMENT:
-        # PENDING_RETIREMENT: the check is deleted and nothing renders the token, so a rotation
-        # has no role to redeploy .
+    # This precedes the prefix rule below, so a token named in the set is never claimed by it.
+    if name in CROSS_HOST_PUSH_TOKENS:
         return ()
     elif name == "kuma_status_page_sync_push_token":
         # The one token whose pusher and tile are the SAME role: the status-page-sync CronJob
         # reads it from autokuma-credentials, and its tile is a static-file entity beside it.
         # Returning the tag twice would be the honest reading of the rule below, and useless.
         return (UPTIME_KUMA_TAG,)
-    elif name in PREFIX_EXCEPTION_CONSUMERS:
-        pusher: str | None = PREFIX_EXCEPTION_CONSUMERS[name]
     elif name.startswith("monitor_bridge_"):
         pusher = "monitor-bridge"
     elif name == "docker_fleet_push_token":
