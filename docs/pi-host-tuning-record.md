@@ -434,6 +434,27 @@ The swap-in rate sits beside the 136-181/s daily rate that alloy's compose templ
 
 Query each figure on its own. PromQL `or` drops a series whose labels match one already returned, and the timestamp and duration series carry identical labels, so a combined query returns only one of them.
 
+## Updater memory peaks (H3.6)
+
+The operator measured these on 2026-11-02, between 01:00 and 01:08 UTC (#5206). Each run went through `systemd-run --wait --pty -p MemoryAccounting=yes sh -c '<command>; cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak'`. The shell reads the unit's own cgroup peak after the command exits, while the cgroup is still alive.
+
+| Run | `memory.peak` | systemd's summary line |
+|---|---|---|
+| `apt-get -d -y dist-upgrade` (the baseline) | 95223808 B (91 MiB) | `Memory peak: 1.0M` |
+| `/usr/lib/homelab/homelab-updater`, the common path | 114147328 B (109 MiB) | `Memory peak: 332.0K` |
+
+**Don't take the peak from systemd 255's summary line on this host.** The summary under-reports by two orders of magnitude, which is why H3's plain `systemd-run --wait` command is not enough. The memory controller itself works: `cgroup.controllers` lists `memory`, and `system.slice/memory.peak` read 347 MB the same night. The common-path run fetched only the homelab `InRelease` and its 28.6 kB `Packages` list. It took 2 min 30 s and 41 s of CPU.
+
+**Verdict: the fallback applies.** H3's rule triggers when the common path peaks above a quarter of the baseline, which here is 23.8 MB. The common path peaked at 114 MB, above the baseline itself. On a board with 167 MB available, that path runs up to 80 times a day. The install path and the full-update path stay unmeasured, because the rule has already fired and neither can be triggered on demand. Both figures are cgroup peaks, so both count the page cache the run charged.
+
+Prometheus on the `node-pi` job shows the pressure over the 01:00-01:08 window, which spans both runs:
+
+| Figure | Value | Query |
+|---|---|---|
+| Highest 5-minute memory PSI `full` | 0.2101 (21.0%) | `max_over_time(rate(node_pressure_memory_stalled_seconds_total{job="node-pi"}[5m])[8m:1m] @ 1793581680)` |
+| Lowest `MemAvailable` | 137916416 B | `min_over_time(node_memory_MemAvailable_bytes{job="node-pi"}[8m] @ 1793581680)` |
+| Lowest `MemAvailable` over the 24 h before | 107053056 B | `min_over_time(node_memory_MemAvailable_bytes{job="node-pi"}[24h] @ 1793581200)` |
+
 ## See also
 
 - `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.
