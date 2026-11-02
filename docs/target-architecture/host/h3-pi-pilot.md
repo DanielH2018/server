@@ -96,9 +96,9 @@ printed nothing, and `/usr/lib/homelab/bin/` holds `chezmoi` and `sops`.
 PR H3.12, staged rollout: the PR that carries this line. It adds the gate, the `canary` reason and
 the root-owned `release` override to the builder, and `PROMETHEUS_URLS` to its settings file. It
 changes nothing while the Pi is the only host with a package.
-PR H3.13, the daily fallback: undecided. It is owed only if the Pi's memory peaks cross the
-*Risks* threshold, and [#5206](https://github.com/DanielH2018/server/issues/5206) still owes those
-peaks (step H3.13).
+PR H3.13, the daily fallback: owed. The common path's memory peak crossed the *Risks*
+threshold on 2026-11-02 ([#5206](https://github.com/DanielH2018/server/issues/5206)), and
+[#6911](https://github.com/DanielH2018/server/issues/6911) owes the PR (step H3.13).
 
 Depends on: R1
 Unblocks: H4, H5
@@ -1824,10 +1824,12 @@ says otherwise.
       `ansible/tests/setup/test_setup_cross_role_files.py` requires for that read.
     - Add the root-owned `release` override and its runbook step.
 15. **H3.13 The daily fallback, only if the Pi's memory peaks call for it.** The trigger
-    is the threshold in *Risks*, apt memory. Nobody has evaluated it yet, because the
-    four peaks are unmeasured: H3.6 did not record them, and
-    [#5206](https://github.com/DanielH2018/server/issues/5206) owes them. Until then the
-    Pi runs the 15-minute drop-in that H3.9b armed,
+    is the threshold in *Risks*, apt memory. **Verdict, 2026-11-02: the fallback applies.**
+    [#5206](https://github.com/DanielH2018/server/issues/5206) measured the common path at a
+    114 MB cgroup peak, above the 95 MB `apt-get -d dist-upgrade` baseline and far above a
+    quarter of it. `docs/pi-host-tuning-record.md` *Updater memory peaks (H3.6)* has the
+    figures, and [#6911](https://github.com/DanielH2018/server/issues/6911) owes the
+    follow-up PR. Until it lands, the Pi runs the 15-minute drop-in that H3.9b armed,
     `hosts/daniel-pi/units/homelab-updater.timer.conf`. The PR that records the peaks
     decides this step. It applies the threshold and records the verdict in this step. If a
     peak crosses the threshold, it opens the follow-up that takes the fallback. That
@@ -2247,6 +2249,9 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       whose summary prints the cgroup's memory peak: `apt-get -d dist-upgrade`, which
       `apt-daily` already runs once a day; the updater's common path; its install path; and
       its full `apt-get update` path.
+    - On the Pi, systemd 255's summary under-reports the peak by two orders of magnitude.
+      The measured figures come from the unit's own `memory.peak`, read inside the unit,
+      and `docs/pi-host-tuning-record.md` gives the command.
     - The baseline is re-measured this way because the recorded 57 MB is a process RSS. A
       cgroup peak can also count page cache, so the two figures are not comparable.
     - The fallback applies when the install or full-update path peaks above the re-measured
