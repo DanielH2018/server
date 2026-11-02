@@ -75,24 +75,18 @@ from deployer_lib.deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREF
 from deployer_lib.deploy_changes import _is_test_only_path, role_of
 
 # Paths whose content every play reads, so no `--tags` value scopes a change to them: the play
-# itself, the task directories it imports, the toposort, and ansible.cfg. The Pi's shared
-# Docker deploy path is in neither half — Pi work, never a broad path.
+# itself, the task directories it imports, the toposort, and ansible.cfg.
 PLAY_PREFIXES = _BROAD_PLAY_PREFIXES
 # The trees a variable or a macro can be consumed from and still map to a deploy tag.
 # `ansible/roles/setup/` is absent on purpose: the setup plane has its own arm in
 # `handle_broad`, and `ansible/deploy.yml` renders nothing for it.
-ROLE_TREES = ("ansible/roles/k8s", "ansible/roles/containers")
+ROLE_TREES = ("ansible/roles/k8s",)
 SHARED_TEMPLATES = "ansible/templates/"
 INVENTORY = "ansible/inventory/"
 # The two broad-deploy trees a census reads. `broad_path_tags` refuses a `PLAY_PREFIXES` path
 # other than a filter plugin, and a census counting one would mark every service stale for a
 # change to how a deploy RUNS.
 CENSUS_PREFIXES = _BROAD_CENSUS_PREFIXES
-# The one directory under the role trees that is not a service: `common`, the shared Docker
-# deploy path. Every grep here reads the TREE at `ctx.ref`, so no `archive` entry is needed.
-# `land_tags._NOT_SERVICES` still carries one because it reads DIFF paths, and a range
-# spanning the deleting merge carries 270 of them.
-_NOT_SERVICES = frozenset({"common"})
 
 
 class Importers(NamedTuple):
@@ -223,8 +217,7 @@ def _sort_hits(
             templates.add(path[len(SHARED_TEMPLATES) :])
             continue
         at = role_of(path)
-        named = at and at.plane != "setup" and at.role not in _NOT_SERVICES
-        if named:
+        if at and at.plane == "k8s":
             roles.add(at.role)
     return Importers(roles, templates)
 

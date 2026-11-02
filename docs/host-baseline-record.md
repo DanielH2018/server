@@ -144,9 +144,11 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   for over an hour each on the Pi. The AIDE database init is the slow part of a first run on any
   host — about 8 minutes, with progress monitoring, so expect a long pause rather than a hang.
 - **The AIDE and rkhunter crons report to Kuma.** `aide-check.sh` keeps AIDE's exit code
-  and pushes one "AIDE Integrity" tile per host. An error exit pushes DOWN, and differences
-  push UP with their counts, because package upgrades change files every week (#4594).
-  `docs/security-tools.md` has the exit-code table. The script runs from the cron rather than
+  and pushes one "AIDE Integrity" tile per host. An error exit pushes DOWN (#4594). A difference
+  pushes DOWN only when it is in a paged tree and no package's digest explains it, because
+  package upgrades change files every week (#4599). The script advances the baseline after
+  every UP run and keeps it on a DOWN until `aide-check --accept`. `docs/security-tools.md`
+  has the table and the review steps. The script runs from the cron rather than
   from a `kuma-check-*` timer, because a timer reruns a red check, and each rerun here is
   another full-filesystem scan.
 - **Both scans also write a node_exporter textfile, so their liveness survives Kuma's

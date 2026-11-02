@@ -56,8 +56,9 @@ manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. #
 dockerhub-mirror's Job manifest, `templates/dockerhub-mirror-gc-job.yaml.j2`, which the same
 script applies in a second phase. #6913 added a host-side record of `registry-gc.sh`'s
 SHA-256, because the script's render held the Kuma push token as a STUB. M6 batch B6c's Cutover-2 dropped the push and the record task, so
-`probe.py applied` hashes the real render. The old record file stays on daniel-box and nothing
-reads it. crowdsec's first conversion
+`probe.py applied` hashes the real render. #6987 deleted the probe's reader of the record and
+added an absent arm in `tasks/registry.yml` that removes the record directory from daniel-box.
+crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installed the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. H5.14 moved those into the Pi package
 (`hosts/components/crowdsec-probe/`) and deleted the tasks, so no timer is left here.

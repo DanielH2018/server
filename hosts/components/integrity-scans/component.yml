@@ -25,18 +25,20 @@
 # `rkhunter --update` ran on every Ansible apply. It runs before every scan instead, from
 # `ExecStartPre=-`, which ignores its exit code as the task's `failed_when: false` did.
 #
-# Autonomous-role contract (each scan runs weekly with no human in the loop). Both only read the
-# filesystem and report.
+# Autonomous-role contract (each scan runs weekly with no human in the loop). Both read the
+# filesystem and report; the AIDE check also advances its own baseline.
 #
-# - Scope / exclusions: `rkhunter --check` and `aide --check` at idle CPU and IO priority, one Kuma
-#   push each to this host's own monitor, and the `rkhunter-check` and `aide-check` textfiles in
-#   node_exporter's textfile directory. Neither rewrites a baseline, and nothing reaches another
-#   host.
+# - Scope / exclusions: `rkhunter --check` and `aide --update` at idle CPU and IO priority, one
+#   Kuma push each to this host's own monitor, and the `rkhunter-check` and `aide-check` textfiles
+#   in node_exporter's textfile directory. The AIDE check moves `aide.db.new` over `aide.db` after
+#   a run whose every difference a package explains (#4599). It never advances on a DOWN, and
+#   never creates an `aide.db` that is missing. Nothing reaches another host.
 # - Mode (explicit and reversible): each timer's enable link arms it. Dropping the component from a
 #   host package stops both timers on the install that drops it. An unset credential skips the push
-#   and nothing else.
-# - Authoritative sources: AIDE's own exit code and rkhunter's log summary; each script's header has
-#   why the exit code alone cannot say.
+#   and nothing else. A DOWN on an unexplained change stays DOWN until an operator reviews it and
+#   runs `/usr/lib/homelab/aide-check --accept`.
+# - Authoritative sources: AIDE's own exit code and report, dpkg's file lists and digests, and
+#   rkhunter's log summary; each script's header has why the exit code alone cannot say.
 # - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal, the Kuma
 #   push, and the textfile the `host-checks` rule group reads (#6168).
 role: initial_setup

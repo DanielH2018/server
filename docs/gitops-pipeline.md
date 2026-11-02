@@ -709,7 +709,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   `ansible/tests/`, any role-local `tests/` directory, and a `test_*.py`/`conftest.py` beside the
   module it covers. Every prefix and regex matches on path alone, so a test file would otherwise
   read as whatever plane it sat under (PR #707: three test files set `broad_manual`). A test-only
-  push produces an empty `ChangeSet` and takes the `if not cs.services` ff-merge branch, like a
+  push produces an empty `ChangeSet` and takes the no-services ff-merge branch, like a
   docs-only push. The `no-role-ships-a-test-file` row of
   `ansible/tests/repo/test_census_rows_roles.py` enforces that no role ships a test file to a host.
 - **A new module in `files/` goes in two lists in `tasks/code.yml`**: the copy task's `loop:` that
@@ -903,6 +903,9 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   (`scripts/deploy_tools/narrow_lib/inventory_keys.py`). Three rules differ from the secrets
   half:
   - A file under a role's `files/` is copied verbatim, so naming a key there reads nothing.
+    The same holds for a file a role ships from outside its tree, such as
+    `hosts/lib/host_lib.py`: `narrow_setup.inventory_tags` reads a shipped file only when it
+    is a `defaults/`, `vars/`, `templates/` or `tasks/` YAML file (#6970).
   - An inventory value built from the key is followed to its own readers instead of
     refusing.
   - Nothing refuses. A play or a k8s-only shared template reading the key renders no setup
@@ -1100,9 +1103,6 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     `readinessProbe`.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`.** Without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
-  - **A Pi Docker change riding along does not defer the bump.** No `has_gitops` host applies a
-    Pi role, so there is no Docker deploy for the k8s branch to skip. `deploy_handlers.log_pi_changes`
-    names whichever Pi shape rode along, from each handler's own ff-merge.
 
   **A k8s change that is not an eligible bump defers.** A path under `roles/k8s/**` that is not an
   eligible image-pin bump lands in `ChangeSet.k8s` (`deploy_logic.role_of` matches the whole role
@@ -1149,13 +1149,11 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   A merely unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
 - Each `has_gitops` host runs its own independent instance of this deployer, with its own git
   clone, state dir and lock. Only daniel-box has one.
-  - **By design, Pi-only services are NOT auto-deployed by GitOps.** The Pi has
-    `has_gitops: false`, and no GitOps or CI deploy path reaches daniel-pi. A change under
-    `roles/containers/` ff-merges and the tick logs the role it did not deploy. The Pi is a
-    memory-constrained Zero 2 W driven manually over SSH, and a Renovate image bump to a Pi
-    service is rare. Deploy to the Pi by hand: `./scripts/deploy.sh --tags <svc> -e
-    target=daniel-pi`. A Pi-side deployer or a CI cross-host gate is worth revisiting only if
-    Pi-service churn makes the manual step a real miss.
+  - **By design, the Pi's services are NOT deployed by this tick.** The Pi has
+    `has_gitops: false`, and its Compose services ship in its `homelab-daniel-pi` package,
+    which the Pi installs itself. `docs/target-architecture/host/h5-pi-compose.md` is the
+    plan that moved them there, and `land.sh` waits for the Pi to apply a merge that changes
+    its package.
 
 ### The `k8s_deferred` and `k8s_unapplied` markers, in full
 

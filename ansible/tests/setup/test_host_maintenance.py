@@ -26,7 +26,8 @@ from _helpers import K8S_ROLES, ROLES, load_defaults, load_tasks, walk_tasks
 from _role_census import role_task_files
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run, write_exec
-from test_aide_check import LOGGER_STUB, _textfile
+from _aide_check_run import LOGGER_STUB
+from test_aide_check import _textfile
 
 ROLE = ROLES / "setup" / "initial_setup"
 SCRIPT = ROLE / "files" / "host-maintenance.sh"

@@ -9,10 +9,6 @@ probe asks about with `match`, the way `rootq matches PATH HEX` does.
 The cron module's output was read off the real module (ansible-core, 2026-11-02): a
 `#Ansible: <name>` line, then `<minute> <hour> <day> <month> <weekday> <user> <job>`, with `*`
 for an omitted field and a trailing newline.
-
-The contract the fix meets for a STUB render: the apply records each such file's SHA-256 in
-`RECORD_DIR/<role>`, one `<hex>  <path>` line per file, as `sha256sum` prints it. The probe reads
-that record through the host read's `files` and compares the live hash with it.
 """
 
 import hashlib
@@ -22,10 +18,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from diagnostics.probe_lib import applied, applied_tasks
+from diagnostics.probe_lib import applied, applied_facts, applied_tasks
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
-
-RECORD_DIR = "/var/lib/homelab/setup-applied-sha256.d"
 
 REGISTRY_GC_CRON = (
     "#Ansible: Registry garbage collection\n"
@@ -36,22 +30,10 @@ CRON_TASK = """\
   ansible.builtin.cron: {name: Nightly x, minute: "5", hour: "3", user: root, job: /usr/local/bin/x.sh, cron_file: x}
 """
 CRON_TEXT = "#Ansible: Nightly x\n5 3 * * * root /usr/local/bin/x.sh\n"
-STUB_TASK = """\
-- name: Install the token file
-  ansible.builtin.template: {src: token.j2, dest: /etc/x/token, mode: "0600", owner: root, group: root}
-"""
-STUB_CTX = {"x_api_token": "STUB"}
-APPLIED_TOKEN = "token=s3cr3t\n"
 
 
 def _sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
-
-
-def _record(role: str, texts: dict[str, str]) -> dict[str, str]:
-    """The apply-time record of `texts`, keyed by the record's path."""
-    lines = "".join(f"{_sha(text)}  {path}\n" for path, text in texts.items())
-    return {f"{RECORD_DIR}/{role}": lines}
 
 
 def _reader(wants, live: dict[str, str], files: dict[str, str]):
@@ -144,24 +126,6 @@ def test_a_cron_file_edited_by_hand_is_drift(tmp_path, capsys):
     assert code == PROBE_FAILED
 
 
-def test_a_stub_render_whose_live_hash_matches_the_apply_record_reads_ok(
-    tmp_path, capsys
-):
-    live = {"/etc/x/token": APPLIED_TOKEN}
-    record = _record("x", {"/etc/x/token": APPLIED_TOKEN})
-    code, rows = _run_tmp(tmp_path, capsys, STUB_TASK, STUB_CTX, live, record)
-    assert rows["/etc/x/token"][0] == "ok", rows
-    assert code == PROBE_OK
-
-
-def test_a_stub_render_edited_after_the_apply_is_drift(tmp_path, capsys):
-    live = {"/etc/x/token": "token=edited\n"}
-    record = _record("x", {"/etc/x/token": APPLIED_TOKEN})
-    code, rows = _run_tmp(tmp_path, capsys, STUB_TASK, STUB_CTX, live, record)
-    assert rows["/etc/x/token"][0] == "DRIFT", rows
-    assert code == PROBE_FAILED
-
-
 def _registry_gc_rows(live):
     role = applied.SETUP / "k8s_host_files"
     wants, _ = applied_tasks.expected(
@@ -172,16 +136,15 @@ def _registry_gc_rows(live):
 
 def test_the_registry_gc_script_render_holds_no_stub():
     """The script embedded a push token until M6 batch B6c's Cutover-2, so its render was a STUB
-    and the apply recorded its hash. It embeds none now, so the probe hashes the real render and
-    no apply record is involved."""
+    and its content was not compared. It embeds none now, so the probe hashes the real render."""
     wants = _registry_gc_rows({})
     script = next(w for w in wants if w.path == "/usr/local/bin/registry-gc.sh")
     assert script.sha256, script
-    assert script.why_no_content != applied.STUB_RENDER, script
+    assert script.why_no_content != applied_facts.STUB_RENDER, script
 
 
 def test_k8s_host_files_compares_the_registry_gc_rows_with_the_real_render(capsys):
-    """Both rows read ok when the host holds what the apply wrote, with no apply record on it."""
+    """Both rows read ok when the host holds what the apply wrote."""
     live = {"/etc/cron.d/registry-gc": REGISTRY_GC_CRON}
     wants = _registry_gc_rows(live)
     ns = SimpleNamespace(role="k8s_host_files", host="daniel-box", dry_run=False)
@@ -202,34 +165,3 @@ def test_a_registry_gc_script_edited_after_the_apply_is_drift(capsys):
     applied.run_applied(ns, read=_reader(wants, live, {}))
     status, line = _rows(capsys.readouterr().out)["/usr/local/bin/registry-gc.sh"]
     assert status == "DRIFT", line
-
-
-def test_a_root_only_stub_render_is_compared_through_rootq_with_the_recorded_hash(
-    tmp_path, capsys
-):
-    """The live file is unreadable as this user, so the record's hash must reach `rootq`."""
-    live = {"/etc/x/token": APPLIED_TOKEN}
-    record = _record("x", {"/etc/x/token": APPLIED_TOKEN})
-    role = tmp_path / "x"
-    for sub, name, text in (
-        ("tasks", "main.yml", STUB_TASK),
-        ("templates", "token.j2", "token={{ x_api_token }}\n"),
-    ):
-        (role / sub).mkdir(parents=True, exist_ok=True)
-        (role / sub / name).write_text(text)
-    wants, _ = applied_tasks.expected(role, "daniel-box", STUB_CTX)
-    inner = _reader(wants, live, record)
-
-    def read(plan, host):
-        doc = inner(plan, host)
-        for row in doc["stat"].values():
-            row.pop("sha256", None)
-        return doc
-
-    ns = SimpleNamespace(role="x", host="daniel-box", dry_run=False)
-    code = applied.run_applied(
-        ns, read=read, setup=tmp_path, render_ctx=lambda role_dir, host: STUB_CTX
-    )
-    status, line = _rows(capsys.readouterr().out)["/etc/x/token"]
-    assert (status, code) == ("ok", PROBE_OK), line
-    assert line.endswith("content matches the apply record"), line

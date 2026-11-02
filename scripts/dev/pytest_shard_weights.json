@@ -736,6 +736,7 @@
  "ansible/tests/setup/test_agent_user.py": 0.0,
  "ansible/tests/setup/test_agent_user_dev_tools.py": 0.01,
  "ansible/tests/setup/test_aide_check.py": 0.52,
+ "ansible/tests/setup/test_aide_check_classify.py": 1.32,
  "ansible/tests/setup/test_aide_check_names_its_config.py": 0.0,
  "ansible/tests/setup/test_alert_unit.py": 0.1,
  "ansible/tests/setup/test_apt_keyring_permissions.py": 0.03,
