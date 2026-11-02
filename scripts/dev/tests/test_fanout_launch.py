@@ -25,12 +25,15 @@ from fanout_lib.launch import (
     systemd_run_command,
     unit_name,
     unit_path,
+    venv_sync_command,
     worktree_path,
     write_brief_command,
 )
 from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
 from fanout_lib.transport import REPO
 from _fanout_fakes import as_operator, fake_tools, ok
+
+from lib.proc_testing import fake_bin
 
 from lib.repo_paths import REPO as REPO_ROOT
 
@@ -219,15 +222,56 @@ def test_the_appended_system_prompt_file_exists_where_the_unit_resolves_it():
 
 def test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run():
     cmd = launch_command("b")
-    assert cmd == create_worktree_command("b") + " && " + write_brief_command(
-        "b"
-    ) + " && " + systemd_run_command("b")
+    assert cmd == " && ".join(
+        [
+            create_worktree_command("b"),
+            venv_sync_command("b"),
+            write_brief_command("b"),
+            systemd_run_command("b"),
+        ]
+    )
     assert (
         cmd.index("worktree add")
         < cmd.index("worktree lock")
+        < cmd.index(" sync --frozen")
         < cmd.index("cat > ")
         < cmd.index("systemd-run")
     )
+
+
+def _fake_uv(home, exit_code: int):
+    """A `uv` under `home/.local/bin` that drains stdin, records its argv, and exits `exit_code`."""
+    fake_bin(
+        home / ".local/bin",
+        uv=f'cat >/dev/null\necho "$@" > {home}/argv\nexit {exit_code}\n',
+    )
+
+
+def _run_sync_then_cat(home):
+    """Run the sync step, then `cat`, as the launch chain does, with the brief on stdin."""
+    cmd = venv_sync_command("b", home=str(home)) + " && cat"
+    return subprocess.run(
+        ["bash", "-c", cmd], input="BRIEF", capture_output=True, text=True, timeout=30
+    )
+
+
+def test_the_venv_sync_builds_the_batch_worktrees_venv_from_the_lock(tmp_path):
+    """#6978: a fresh batch tree had no venv for run-hook.sh to fall back to."""
+    _fake_uv(tmp_path, 0)
+    proc = _run_sync_then_cat(tmp_path)
+    assert proc.returncode == 0 and proc.stdout == "BRIEF"
+    argv = (tmp_path / "argv").read_text().split()
+    assert argv == ["--directory", worktree_path("b"), "sync", "--frozen", "--quiet"]
+
+
+def test_a_failed_venv_sync_warns_and_the_launch_goes_on_with_the_brief_intact(
+    tmp_path,
+):
+    _fake_uv(tmp_path, 1)
+    proc = _run_sync_then_cat(tmp_path)
+    assert proc.returncode == 0 and proc.stdout == "BRIEF"
+    assert "uv sync in " in proc.stderr and "failed" in proc.stderr
+    assert "fanout-step:" not in proc.stderr
 
 
 def test_launch_writes_the_brief_over_stdin_then_starts_the_unit():
