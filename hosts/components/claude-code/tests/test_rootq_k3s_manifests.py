@@ -10,6 +10,8 @@ check, which every test host fails, while a neighbour stays refused as denied.
 Run: uv run pytest hosts/components/claude-code/tests/test_rootq_k3s_manifests.py
 """
 
+import os
+
 import homelab_rootq as rootq
 import pytest
 
@@ -52,7 +54,52 @@ def test_stat_of_an_unlisted_k3s_manifest_path_is_refused_as_denied(capsys, live
 
 @pytest.mark.parametrize("argv", [["cat"], ["sha256"], ["matches", HEX]])
 def test_a_listed_k3s_manifest_refuses_every_verb_but_stat(capsys, argv):
-    live = f"{MANIFESTS}/registry-jobs/ghcr-mirror-gc-job.yaml"
+    live = f"{MANIFESTS}/registry-jobs/gc-job.yaml"
     rc, out, err = run_live(capsys, argv[0], live, *argv[1:])
     assert (rc, out) == (2, "")
     assert "deny list" in err
+
+
+# The operator's #7007 ruling: the two mirror GC Jobs hold no secret, so they leave DENY by
+# exact name and `probe.py applied` can ask `matches` of them.
+EXEMPT = [
+    f"{MANIFESTS}/registry-jobs/ghcr-mirror-gc-job.yaml",
+    f"{MANIFESTS}/registry-jobs/dockerhub-mirror-gc-job.yaml",
+]
+
+
+@pytest.mark.parametrize("argv", [["sha256"], ["matches", HEX]])
+@pytest.mark.parametrize("live", EXEMPT)
+def test_an_exempt_gc_job_gets_past_the_deny_list_for_every_tier1_verb(
+    capsys, live, argv
+):
+    rc, out, err = run_live(capsys, argv[0], live, *argv[1:])
+    assert (rc, out) == (2, "")
+    assert err == f"refused: {live} does not exist\n"
+
+
+def test_the_exemption_covers_the_two_exact_paths_and_not_their_tree() -> None:
+    assert [p for p in EXEMPT if rootq.denied(p)] == []
+    for path in [
+        f"{MANIFESTS}/registry-jobs",
+        f"{MANIFESTS}/registry-jobs/gc-job.yaml",
+    ]:
+        assert rootq.denied(path), path
+    assert rootq.denied(EXEMPT[0] + ".bak")
+
+
+# `deny=yes` is what host_reader reads as a credential file, which stops `probe.py applied`
+# asking `matches`; an exempt path's stat line must carry size and mtime instead.
+@pytest.mark.parametrize("live", EXEMPT)
+def test_stat_of_an_exempt_gc_job_prints_size_and_no_deny_marker(tmp_path, live):
+    (tmp_path / "job.yaml").write_text("kind: Job\n")
+    out = rootq.describe(live, os.lstat(tmp_path / "job.yaml"))
+    assert "size=10 mtime=" in out and "deny=" not in out, out
+
+
+def test_stat_of_a_denied_neighbour_still_prints_the_deny_marker(tmp_path):
+    (tmp_path / "job.yaml").write_text("kind: Job\n")
+    out = rootq.describe(
+        f"{MANIFESTS}/registry-jobs/gc-job.yaml", os.lstat(tmp_path / "job.yaml")
+    )
+    assert out.endswith(" deny=yes\n") and "size=" not in out, out
