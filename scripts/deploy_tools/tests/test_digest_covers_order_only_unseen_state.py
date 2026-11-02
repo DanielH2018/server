@@ -491,7 +491,16 @@ def test_an_open_event_with_a_writing_mode_string_keeps_the_line(tree, tmp_path)
     "imports, call",
     [
         ("import logging", "logging._lock.acquire()"),
-        ("import decimal", "decimal.getcontext().prec = 5"),
+        pytest.param(
+            "import decimal",
+            "decimal.getcontext().prec = 5",
+            # CPython 3.15 dropped its bundled libmpdec, and actions/setup-python's build has no
+            # `_decimal`; the hosts' uv builds do, and the case is about that C context.
+            marks=pytest.mark.skipif(
+                importlib.util.find_spec("_decimal") is None,
+                reason="decimal is the pure-Python _pydecimal here, not a C context",
+            ),
+        ),
         ("import threading", "threading._counter()"),
         ("import _socket", "_socket.setdefaulttimeout(5)"),
     ],

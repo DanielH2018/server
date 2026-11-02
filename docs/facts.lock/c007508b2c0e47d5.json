@@ -1,5 +1,5 @@
 {
-  "checksum": "3888219e21f6303029804979f9e6c95a15f05b00dc25770219871a1e001ddde3",
+  "checksum": "bd8bd616c299055e5a251fe0278b94acfdbf03e2ea6e9314f56c0ebc2cb5d493",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/bento-pdf/CLAUDE.md#Editing",
   "row": {
@@ -7,7 +7,7 @@
       "ansible/templates/ingressroute-default.yaml.j2": "837539b8a48082ed0f5b9f6ca11b8029d66c7cc03562c6103b27371ce536d68c",
       "ansible/templates/service-default.yaml.j2": "34004e457e70b79fb81002555e9e6c811fb14e3e2d3383d1beed85bce06764f0"
     },
-    "python": "3.14",
-    "verified_sha": "fd34ae8eb"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

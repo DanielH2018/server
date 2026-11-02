@@ -1,5 +1,5 @@
 {
-  "checksum": "95dd4a47906764836beb250b2b64b085032b9b481c091dc737236bb490191e7c",
+  "checksum": "96a921b2dfb473ec38b44f58de77aaf32e7f012348a5731f408b304ab7fc736d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#Secrets Management",
   "row": {
@@ -12,7 +12,7 @@
       "docs/claude-shell-permissions.md": "444005815ecd96d4f19a9c3a25f009aa778550679ae347cbb1d2e9f796e4a2be",
       "docs/secret-rotation.md": "93a2e8492581420545568d5dd82c559f37746c8c974d1211a4a676a3fca0c2f8"
     },
-    "python": "3.14",
-    "verified_sha": "9ca696963"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

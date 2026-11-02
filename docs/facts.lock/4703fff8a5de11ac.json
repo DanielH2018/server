@@ -1,12 +1,12 @@
 {
-  "checksum": "6f68acb43d5a71370ddd0e911d512be1c80d477d03af40e5c3b97a4b776c3a7a",
+  "checksum": "902f0997720b59d192db9596b49ef771ae7d91bb3e3c2059320f24bcfc047e6f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/hypervisor/CLAUDE.md#The staging network",
   "row": {
     "atoms": {
       "ansible/tests/staging/test_staging_network.py": "945b7f1ea673fb2588486fa13e313776f5106d907d4e132314fd66eb4be0788b"
     },
-    "python": "3.14",
-    "verified_sha": "fea456d31"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

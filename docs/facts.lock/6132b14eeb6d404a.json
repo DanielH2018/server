@@ -1,5 +1,5 @@
 {
-  "checksum": "4613a7c8b35b3488de7691b1b3a98af7ff3ad37512ab9cc2ad89e7f982c0038e",
+  "checksum": "0a3c01dd811f957b591e6703d142e7d7835e9f1f5d26126091d8c4d2bd1b6c3c",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Notable",
   "row": {
@@ -10,7 +10,7 @@
       "ansible/tests/setup/test_host_maintenance.py": "fea592be7faabdac6cad076ecf7ef1ea860f83910d526a2dfd96875d5d06888e",
       "ansible/tests/setup/test_integrity_scan_rule_literals.py": "a2410f3a5eef922beda27ef679bddb31e514ab283ea263e476ce28dfe095f74a"
     },
-    "python": "3.14",
-    "verified_sha": "a7dccd77d"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

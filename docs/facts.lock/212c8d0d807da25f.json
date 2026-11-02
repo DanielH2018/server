@@ -1,5 +1,5 @@
 {
-  "checksum": "ccdb7cd168a367a22dec1079bdac1549561c56d5ff7bf3d50ccce301bc053758",
+  "checksum": "67c71239ec0a15b5ed0eea97ef604973a5250816a7609da17cd0d4742618a50b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/builder/CLAUDE.md#The signer and the publish (H3.5b)",
   "row": {
@@ -9,7 +9,7 @@
       "hosts/lib/homelab_repo_sign.py": "32eb767e01a8c17aab7aa85d83a6c314cb688277d67fa20805353f2460ad406a",
       "hosts/lib/tests/test_host_lib.py::test_host_lib_and_kuma_push_parse_with_the_3_12_grammar": "6c1ab048acc7a26041fdaef5f58ee03e4a341749b09cda5e02931558ad3bd7cf"
     },
-    "python": "3.14",
-    "verified_sha": "a6b477514"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

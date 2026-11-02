@@ -1,5 +1,5 @@
 {
-  "checksum": "48e8d08e0cca7377e4e5804fcb6283baf71a2152b89eac65bce2b1ee1f2b8715",
+  "checksum": "59d5be405225b2d8eba3d12a424906593fa22195082770c0a94b198074a9d913",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/uptime-kuma/CLAUDE.md#Traps",
   "row": {
@@ -10,7 +10,7 @@
       "ansible/tests/setup/test_kuma_check_timer.py": "681c1867a51d5de668b53f4b608b6bc0ce05391b87c4d6157a9661452454d13b",
       "scripts/secrets_mgmt/cluster_vars.py": "f4a39b84c34b6a63e328f364d726d5dfaed51f82cf8512a5c4e7cb739be07a4b"
     },
-    "python": "3.14",
-    "verified_sha": "ff5cc95cb"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

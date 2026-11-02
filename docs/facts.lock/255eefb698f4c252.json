@@ -1,5 +1,5 @@
 {
-  "checksum": "d3f9383e2dcdab2602c9bc8a8188dcb2ce9db7d7808015eb3a17423c07ab5494",
+  "checksum": "8e85eba5a19dbbc552eaff42d70112a77b61a5c91dfb6655f1278c9eb4d9f09b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#Project Overview",
   "row": {
@@ -7,7 +7,7 @@
       "docs/archive/k3s-migration/": "0291e44fe530d24794290f5b260f7387ec3e832fa0d98098441fe4d422577ffc",
       "docs/reference/services.md": "eef3a764fbf5867386e316051fc583ae6c079dfd7b67d6ed7d1ffbc5c9e74ebb"
     },
-    "python": "3.14",
-    "verified_sha": "55862020d"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

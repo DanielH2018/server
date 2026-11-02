@@ -1,5 +1,5 @@
 {
-  "checksum": "c657d143fc058ce07ae2964befe7a6d76b20cbb64e70270a8436e2b70103d729",
+  "checksum": "ab1823c67bd7341361fd12a984dce3b176d653cad9a03ec9b58ff2c95587cd7c",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/image-builder/CLAUDE.md#Flux-owned roles (target slice D5.4)",
   "row": {
@@ -10,7 +10,7 @@
       "scripts/renderer/renderer_lib/images.py": "a7e9f7dee8a83bcaed3f34d29f5dd50928c57221b0b56cfa5e351ee9d5f46e53",
       "scripts/renderer/renderer_lib/task_inputs.py:image_contexts": "3a4f9b7fa444c612fbc6adbf5f53e98a47274be17f2385b0216619ecaaa6fb81"
     },
-    "python": "3.14",
-    "verified_sha": "b0bccc7e3"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "checksum": "03a6d2f7f13405295d887972862cbb59c91565a1c6469490b85279af04698824",
+  "checksum": "b6f814eabc68b492469ea0eb610b8d7f582bf5a93a7b720f6b0ec428a945a737",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/claude-code/CLAUDE.md#Traps already paid for",
   "row": {
@@ -8,7 +8,7 @@
       "ansible/tests/setup/test_claude_login_slice_caps.py": "848caff738220947e072b08c9c760429cd875563ec4a996513648886f89d8940",
       "ansible/tests/setup/test_claude_rc_unit.py": "cc567ed1d95532357f0b097c2a20aa453cda18c1f58565bb72403854c652d234"
     },
-    "python": "3.14",
-    "verified_sha": "7069ccbd4"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

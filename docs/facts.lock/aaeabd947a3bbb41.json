@@ -1,12 +1,12 @@
 {
-  "checksum": "37e78378713a739460241fc2efa0c998600cbecece9c11da9ad66e609a16a3a8",
+  "checksum": "3109acdcde79c8268e21f5ab471a74cf7fc2e46631b03a249ec95d42f0865420",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The two operator allowlists, and how to unban yourself",
   "row": {
     "atoms": {
       "ansible/roles/k8s/crowdsec/files/remote_allowlist.py:CAP": "76634f82a8ae71874e7d67056c8ad1e19722820b3aadc698f55c8fceda9372eb"
     },
-    "python": "3.14",
-    "verified_sha": "abf8d0d4a"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

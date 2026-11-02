@@ -1,5 +1,5 @@
 {
-  "checksum": "c67b3310bad5000e3cfdeb2fa477098bf687ed544d4b6b79b3deb119dabe1a42",
+  "checksum": "a4ec2e3cab0ee0dc4fc276c1a314beadef5278f186c819f3d5d0e7df4b683d86",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/blackbox-exporter/CLAUDE.md#Notable",
   "row": {
@@ -8,7 +8,7 @@
       "ansible/tests/services/test_blackbox_exporter_modules.py": "bdfa5022f814be428ca026044c78435062f02849681b465e0020500c0bb16df3",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
-    "python": "3.14",
-    "verified_sha": "ff5cc95cb"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

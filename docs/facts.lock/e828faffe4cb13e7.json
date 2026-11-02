@@ -1,12 +1,12 @@
 {
-  "checksum": "4c4a2b1fa85282ab49ece3e87a170d9dfb3680a6a76732728d1203960d0cf79d",
+  "checksum": "04ffe4122d45153e11f671b36bf4c1fb951aa6a5b881c212a5e5f3ddc1ec87d5",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/headlamp/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/tests/k8s/test_aggregated_clusterroles.py": "0e42ce03add78918f9c355bc6cafdabfefd25ab3a0f4e3f1c38d06aad8c8d387"
     },
-    "python": "3.14",
-    "verified_sha": "df6a1f4a7"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

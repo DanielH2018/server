@@ -1,5 +1,5 @@
 {
-  "checksum": "c27f6558b79811e1d5097035c7fe4bbabadf8cd23496ce44d5756dc4f4cd220e",
+  "checksum": "b38425994bfc1bc4fee352a451a84daf560530b204dec86f3855217b7ff8bda5",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/artifacts/CLAUDE.md#At a glance",
   "row": {
@@ -8,7 +8,7 @@
       "hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2": "5010ebf950dbe6e1253e8c0fcf85e2bfc031222fba2746355c612f4ec1cd1333",
       "hosts/lib/tests/test_claude_artifacts_node_timers.py": "e8dc749ce8b978aeb467c6a7e0fde526c83bb85c46a5631ee4db5f21fae82998"
     },
-    "python": "3.14",
-    "verified_sha": "dd4bc2a78"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

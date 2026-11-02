@@ -1,5 +1,5 @@
 {
-  "checksum": "85acdb98ec750890de501f127bf446dd4158b8ac736e9c02a42ea08bcfa106a0",
+  "checksum": "9ca6e3cbdbd7b917248b4efc529c92883bc3c09e0c161e03692f9fb76e549824",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/radarr/CLAUDE.md#At a glance",
   "row": {
@@ -9,7 +9,7 @@
       "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193",
       "scripts/lib/k8s_role_callers.py:role_callers": "6487aaabe2d2d952b888af3ac4bbf0eb23e56f47e8e88141a160036f6b8575b4"
     },
-    "python": "3.14",
-    "verified_sha": "53a8a1634"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

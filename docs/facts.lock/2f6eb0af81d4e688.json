@@ -1,5 +1,5 @@
 {
-  "checksum": "5c1fb46bc6fc561dccce4dbd9c4657c93d411251b8de1624f2c3b49f023dff23",
+  "checksum": "ed37fe48952c7f653a8226bef0d6e5f35864f5fb07d76cf55644257315bad63e",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/home-assistant/CLAUDE.md#At a glance",
   "row": {
@@ -9,7 +9,7 @@
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193"
     },
-    "python": "3.14",
-    "verified_sha": "946a74a7c"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

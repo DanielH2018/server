@@ -1,5 +1,5 @@
 {
-  "checksum": "12d616a60dfe2e1dc27daf61d254746a894b03ffb0c413ad7a6a6502f2c502e9",
+  "checksum": "f400b3e518e0e8fb9cc058f145493480798528a1ac5ff08d56412f0c5694abe4",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/cluster-base/CLAUDE.md#At a glance",
   "row": {
@@ -11,7 +11,7 @@
       "docs/break-glass.md": "2823d12d9954147d9b7ad124362e31f2b81927d3aa6c036577400846c35a627c",
       "docs/longhorn-disaster-recovery.md": "4c9a4a63c6856b47fb7c612953def99d6b299477412a04fc9369539f36398ef3"
     },
-    "python": "3.14",
-    "verified_sha": "14cf76620"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }
