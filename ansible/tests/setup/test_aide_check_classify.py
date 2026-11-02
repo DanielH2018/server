@@ -208,6 +208,25 @@ FLAGGED = {
         {"packages_ran": ("other",)},
         NOT_EXPLAINED,
     ),
+    "a compiled module when only a Python library package ran": (
+        f"{CHANGED_CONTENT}: /usr/lib/python3/dist-packages/toolpkg/__pycache__/mod.cpython-312.pyc",
+        {"packages_ran": ("python3-other",)},
+        NOT_EXPLAINED,
+    ),
+    "a profile script link to a unit the roles write": (
+        f"{LINK_ADDED}: /etc/profile.d/extra.sh",
+        {
+            "relink": {
+                "/etc/profile.d/extra.sh": "/etc/systemd/system/gitops-deploy.service"
+            }
+        },
+        UNPACKAGED_STARTUP,
+    ),
+    "a package symlink pointed at a unit the roles write": (
+        f"{LINK_CHANGED}: /usr/bin/tool-link",
+        {"relink": {"/usr/bin/tool-link": "/etc/systemd/system/gitops-deploy.service"}},
+        "a package owns it, but it is not the link the package installed",
+    ),
     "a boot link pointed outside /boot in a kernel week": (
         f"{LINK_CHANGED}: /boot/initrd.img",
         {

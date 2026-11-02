@@ -116,8 +116,13 @@ SYSTEM='^/(usr|bin|sbin|lib|lib32|lib64|libx32|boot)(/|$)'
 # tasks and fails when one is missing here, so a role that installs a new unit under
 # /etc/systemd/system must add it to this list.
 ROLE_WRITTEN='^/etc/systemd/system/(coredns-host\.service|deploy-ui\.service|gitops-deploy(-alert)?\.service|gitops-deploy\.timer|renovate-(agent|notify)(-alert)?\.service|renovate-(agent|notify)\.timer|renovate-agent-land@\.service|worktree-holders\.socket|worktree-holders@\.service|kuma-check-(github-interaction-limit|github-ruleset-drift|live-drift|loki-read-route|manifest-prune|render-records|setup-drift)(-boot\.service|\.service|\.timer)|k3s(-agent)?\.service(\.env)?|k3s(-agent)?\.service\.d/10-log-to-file\.conf|snap-[a-z0-9-]+-[0-9]+\.mount)$'
-# Prefixed with /usr/local/bin: commands root's PATH reaches before /usr/bin, so an entry named
-# like a packaged command replaces it for root.
+# DECIDED: /usr/local/bin pages on a name a package also installs, not on every unpackaged entry
+# the way /usr/local/sbin does. Root's PATH reaches /usr/local/bin before /usr/bin, so a twin of a
+# packaged command replaces it for root. A list of the legitimate names would have to cover
+# pip installs, k3s's links, hand-installed tools and the roles' scripts: daniel-server held 30
+# unpackaged entries on 2026-11-02, of which one (jsonschema, from pip) had a packaged twin. That
+# one pages whenever it changes. A new entry with a unique name does not page; a unit, cron entry
+# or profile script that would run it does.
 LOCAL_BIN='^/usr/local/bin/'
 # Written by package triggers and maintainer scripts, so no package lists them. Taken from every
 # unpackaged file in the system trees on all three hosts on 2026-11-02, so a trigger that ran
@@ -143,7 +148,8 @@ DERIVED_FIRMWARE='^/boot/(firmware/|dtbs?(/|-|$))'
 PKGS_FIRMWARE='^(flash-kernel|linux-(image|modules|raspi|firmware|base)|u-boot|raspi|rpi)'
 # Compiled Python: the package that owns the source, or an interpreter upgrade, recompiles it.
 DERIVED_PYCACHE='/__pycache__/'
-PKGS_PYTHON='^(python3|libpython3)'
+# The interpreter packages only: a library such as python3-jwt compiles its own files.
+PKGS_PYTHON='^(python3(\.[0-9]+)?(-minimal)?|libpython3(\.[0-9]+)?(-minimal|-stdlib)?)$'
 # Caches that any package's trigger rewrites: explained by any package run since the baseline.
 DERIVED_CACHES='/dropin\.cache$|^/(usr/)?lib/udev/hwdb\.bin$|^/(usr/)?lib/locale/locale-archive$|^/(usr/)?lib/[^/]+/gio/modules/giomodule\.cache$|^/(usr/)?lib/[^/]+/gdk-pixbuf-2\.0/[^/]+/loaders\.cache$|^/(usr/)?lib/[^/]+/gtk-[23]\.0/[^/]+/immodules\.cache$|^/usr/share/glib-2\.0/schemas/gschemas\.compiled$|^/usr/share/mime/|^/usr/share/icons/[^/]+/icon-theme\.cache$|^/usr/share/info/dir(\.old)?$|^/usr/share/plymouth/themes/(text\.plymouth|ubuntu-text/ubuntu-text\.plymouth)$'
 DERIVED="(${USRMERGE}|${DERIVED_KERNEL}|${DERIVED_GRUB}|${DERIVED_FIRMWARE}|${DERIVED_PYCACHE}|${DERIVED_CACHES})"
@@ -329,7 +335,9 @@ unexplained_entries() {
       d = (p in digs) ? digs[p] : ""
       if ((p in divto) && (divto[p] in digs)) d = d digs[divto[p]]
       # $7 is set only while the path is a symlink, and $6 only while it is a regular file.
-      link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned) || $7 ~ ENVIRON["ROLE_WRITTEN"])
+      # A unit the roles write is a fair target only for a link under /etc/systemd/system, where
+      # `systemctl enable` makes it.
+      link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned) || (path ~ /^\/etc\/systemd\/system\// && $7 ~ ENVIRON["ROLE_WRITTEN"]))
       base = path; sub(/^.*\//, "", base)
       # /usr/local/bin pages only for a name a package also installs; its other entries are logged.
       if (scope == "shadow") {
