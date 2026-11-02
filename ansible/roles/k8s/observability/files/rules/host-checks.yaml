@@ -1349,11 +1349,10 @@ groups:
       # rule pages a pin that no run applied: the engine timer paused, the Pi off at 00:30, or a
       # run that failed without masking the updater.
       #
-      # 26h is the longest a pin legitimately waits, from the Pi's schedule. The updater first
-      # writes 1 as late as 01:05, the slot after the window, so the pin waits 23h25m for the
-      # next 00:30. The unit's TimeoutStartSec is 90 minutes, and the updater's next slot (5
-      # minutes), its 60s delay and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 25h51m
-      # in all. scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the
+      # 26h is the longest a pin legitimately waits, from the Pi's daily schedule (H3.13). The
+      # updater first writes 1 at its 03:05 fire, so the pin waits 21h25m for the next 00:30. The
+      # unit's TimeoutStartSec is 90 minutes, and the updater's 03:05 fire after it, its 60s delay
+      # and its own 50-minute TimeoutStartSec rewrite the 1 to 0: 24h51m in all. scripts/renderer/tests/test_renderer_host_update_limits.py derives it from the
       # unit files and fails a window shorter than it.
       #
       # It reads the range, never a `for:`. A failed scrape or the Pi's weekly reboot marks the
@@ -1412,7 +1411,7 @@ groups:
       - alert: HostUpdateStale
         expr: |
           (
-              time() - homelab_host_update_success_timestamp_seconds{job="node-pi",origin="daniel-pi"} > 15000
+              time() - homelab_host_update_success_timestamp_seconds{job="node-pi",origin="daniel-pi"} > 90000
             or
               (
                   absent(homelab_host_update_success_timestamp_seconds{job="node-pi",origin="daniel-pi"})
@@ -1424,9 +1423,9 @@ groups:
           severity: critical
           service: daniel-pi
         annotations:
-          summary: daniel-pi has had no successful homelab update for 4 hours 10 minutes.
+          summary: daniel-pi has had no successful homelab update for 25 hours.
           description: >-
-            No homelab-updater run on daniel-pi has succeeded in 4 hours 10 minutes, or its exporter is up
+            No homelab-updater run on daniel-pi has succeeded in 25 hours, or its exporter is up
             and serves no success timestamp. A failed fetch, a stopped homelab-apt-repo.service,
             a firewall rule, a keyring mismatch and a stopped timer each leave it stale. Read
             `systemctl status homelab-updater.timer` and `journalctl -u homelab-updater` on

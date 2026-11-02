@@ -139,12 +139,12 @@ holds the refusal.
 ## The rollout gate (H3.12)
 
 A run whose changed set holds more than one host package (`hosts/<host>/`) stages only the
-canary's and defers the rest. The canary is the first of daniel-pi, daniel-server and daniel-box
-whose package changed, at every hour. daniel-pi's drop-in skips 23:00 to 00:59 and 04:00 to
-05:59, so a Pi package published at the start of a gap holds the other hosts' packages for up to
-2h15m plus one updater run. The operator accepted that delay on 2026-10-29 and kept the Pi as
-canary (`# DECIDED:` at `CANARY_ORDER`, #6530). monitor-bridge derives its builder lag grace from
-that gap, so the wait does not page. The shared packages under `packages/` never wait. The run records the gate
+canary's and defers the rest. The canary is the first of daniel-server, daniel-pi and daniel-box
+whose package changed. daniel-server leads because daniel-pi's drop-in fires the updater once a
+day (H3.13, #6911), so a Pi canary holds the other hosts' packages for up to a day plus one
+updater run. A run that changes only the Pi's and daniel-box's packages still makes the Pi the
+canary (`# DECIDED:` at `CANARY_ORDER`). monitor-bridge derives its builder lag grace from the
+Pi's gap, so that wait does not page. The shared packages under `packages/` never wait. The run records the gate
 `{host, sha}` and the deferred directories in `state.json`, and moves the gate to each newer
 canary version it stages. While the gate is open the builder builds no other host package, and
 the unbuilt-since series reads `reason="canary"` with the gate's commit as `sha`. A hold or a

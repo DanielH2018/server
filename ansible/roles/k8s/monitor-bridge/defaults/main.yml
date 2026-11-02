@@ -15,7 +15,7 @@ monitor_bridge_deploy_pipeline_port: 9180
 # a hold, an open rollout gate, a master that stays red) before the tile pages. The value here is
 # the FLOOR, 2 hours against a ~103 s master CI run. config/env.yaml.j2 renders the larger of
 # this and the rollout canary's schedule need: daniel-pi's longest gap between updater fires
-# (2h15m), its randomized delay, the updater's run timeout and a slack, through
+# (a day, on H3.13's daily drop-in), its randomized delay, the updater's run timeout and a slack, through
 # `filter_plugins/updater_lag_grace.py` (#6530). Raising this floor never lowers the derived
 # value, and a denser Pi schedule falls back to it. Fetch age: how old the builder's last successful `git fetch` may be,
 # 30 minutes, which is 15 of its 2-minute runs and covers a dead timer or a missing token.
