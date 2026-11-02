@@ -11,6 +11,7 @@ import json
 import pytest
 
 import secret_setup_readers
+from deploy_tools.narrow_lib import broad, inventory_keys
 
 from _narrow_fixtures import Tree, _refs
 from _setup_role_fixtures import ROLE, build, narrow
@@ -143,3 +144,21 @@ def test_a_secrets_refusal_keeps_the_inventory_readers_of_the_same_range(tree, c
 def test_role_tags_narrows_a_moved_key_to_its_readers_tag(tree):
     """No path under the role moved, and the role still needs the tag that renders the key."""
     assert narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"')) == frozenset({"alpha"})
+
+
+def test_a_host_vars_key_is_scoped_to_its_host(tree):
+    """#6968: a `host_vars/<h>.yml` key reaches `<h>`, and a carried value keeps that host."""
+    tree.write("ansible/inventory/host_vars/daniel-server.yml", 'server_pin: "1"\n')
+    tree.commit("host vars")
+    tree.write("ansible/inventory/host_vars/daniel-server.yml", 'server_pin: "2"\n')
+    tree.write(
+        GROUP_VARS,
+        BASE_VARS.replace('"3.14.6"', '"{{ server_pin }}"'),
+    )
+    old, new = _refs(tree)
+    ctx = broad.Context(tree.root, new, set(), {}, lambda _m: None)
+    found = inventory_keys.setup_reader_paths_by_host(old, ctx)
+    assert {h: sorted(r.paths) for h, r in found.items()} == {
+        "": [f"{ROLE}/templates/alpha.conf.j2"],
+        "daniel-server": [f"{ROLE}/templates/alpha.conf.j2"],
+    }

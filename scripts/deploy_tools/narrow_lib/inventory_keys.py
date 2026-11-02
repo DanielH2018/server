@@ -56,18 +56,39 @@ def changed_keys(old_ref: str, new_ref: str, cwd) -> set[str]:
     Raises:
         CannotNarrow: `git diff` failed, or a touched inventory YAML file does not parse.
     """
+    return set().union(*changed_keys_by_host(old_ref, new_ref, cwd).values())
+
+
+def changed_keys_by_host(old_ref: str, new_ref: str, cwd) -> dict[str, set[str]]:
+    """`changed_keys`, split by the one host a key's file reaches (#6968).
+
+    A key moved in `host_vars/<h>.yml` is under `<h>`. Every other file's keys, the group
+    files included, are under "", which stands for every host a reader's gate admits.
+
+    Raises:
+        CannotNarrow: `git diff` failed, or a touched inventory YAML file does not parse.
+    """
     r = git(
         "diff", "--name-only", f"{old_ref}..{new_ref}", "--", INVENTORY,
         cwd=cwd, check=False,
     )  # fmt: skip
     if r.returncode != 0:
         raise CannotNarrow(f"`git diff -- {INVENTORY}` failed: {r.stderr.strip()}")
-    keys: set[str] = set()
+    keys: dict[str, set[str]] = {}
     for path in filter(_loaded, r.stdout.splitlines()):
         old = mapping_at(show_at(old_ref, path, cwd) or "", path)
         new = mapping_at(show_at(new_ref, path, cwd) or "", path)
-        keys |= changed_mapping_keys(old, new, path)
+        if moved := changed_mapping_keys(old, new, path):
+            keys.setdefault(_host_of(path), set()).update(moved)
     return keys
+
+
+def _host_of(path: str) -> str:
+    """The host a `host_vars/<h>.yml` file is loaded by, "" for any other inventory file."""
+    parent, _, name = path.rpartition("/")
+    if parent == f"{INVENTORY}host_vars":
+        return name.rsplit(".", 1)[0]
+    return ""
 
 
 def carried(key: str, ref: str, cwd) -> set[str]:
@@ -127,10 +148,41 @@ def setup_reader_paths(old_ref: str, ctx) -> secret_keys.SetupReaders:
         CannotNarrow: an inventory YAML file does not parse, or `git` failed. Neither is an
             answer about a reader, so the tick parks and retries rather than route nothing.
     """
-    keys: set[str] = set()
-    for key in sorted(changed_keys(old_ref, ctx.ref, ctx.cwd)):
-        keys |= carried(key, ctx.ref, ctx.cwd)
-    return secret_keys.setup_readers_of(keys, ctx, READER_PATHSPECS)
+    return secret_keys.setup_readers_of(
+        _carried_all(changed_keys(old_ref, ctx.ref, ctx.cwd), ctx),
+        ctx,
+        READER_PATHSPECS,
+    )
+
+
+def setup_reader_paths_by_host(
+    old_ref: str, ctx
+) -> dict[str, secret_keys.SetupReaders]:
+    """`setup_reader_paths`, split by the host each moved key's file reaches (#6968).
+
+    The keys are split by `changed_keys_by_host`, and a key carried onward keeps its origin
+    file's host: a `group_vars` value built from a `host_vars/<h>.yml` key still differs on
+    `<h>` alone.
+
+    Raises:
+        CannotNarrow: as `setup_reader_paths`.
+    """
+    return {
+        host: secret_keys.setup_readers_of(
+            _carried_all(keys, ctx), ctx, READER_PATHSPECS
+        )
+        for host, keys in sorted(
+            changed_keys_by_host(old_ref, ctx.ref, ctx.cwd).items()
+        )
+    }
+
+
+def _carried_all(keys: set[str], ctx) -> set[str]:
+    """`carried` over each of `keys`, as one set."""
+    found: set[str] = set()
+    for key in sorted(keys):
+        found |= carried(key, ctx.ref, ctx.cwd)
+    return found
 
 
 def keys_named_in(pathspecs: list[str], old_ref: str, new_ref: str, cwd) -> list[str]:
