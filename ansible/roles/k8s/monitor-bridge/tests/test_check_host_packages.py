@@ -69,7 +69,7 @@ def test_a_wait_through_the_pi_s_longest_gap_is_clean(cfg, series):
 
 
 def test_a_daniel_server_canary_pages_past_the_floor(cfg):
-    stuck = _canary(NOW - cfg.BUILDER_MAX_LAG_S - 60, host="daniel-server")
+    stuck = _canary(NOW - 7200 - 60, host="daniel-server")
     ok, msg = _run(cfg, 60, [stuck])
     assert not ok and "master unbuilt" in msg, msg
 
