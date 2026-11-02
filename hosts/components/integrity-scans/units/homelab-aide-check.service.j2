@@ -1,7 +1,8 @@
 # Shipped by the host package's integrity-scans component. Started by homelab-aide-check.timer.
 #
-# No Restart=: a red check is a broken config or a missing database, which a rerun does not
-# clear, and every rerun is another full-filesystem scan of an hour or more.
+# No Restart=: a red check is a broken config, a missing database or a change awaiting
+# `aide-check --accept`, which a rerun does not clear, and every rerun is another
+# full-filesystem scan of an hour or more.
 [Unit]
 Description=Run the weekly AIDE check and push its verdict to this host's Kuma monitor
 After=network-online.target homelab-secrets.service

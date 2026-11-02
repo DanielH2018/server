@@ -2,14 +2,18 @@
 # Weekly AIDE file-integrity check — rendered by the initial_setup role, or by the integrity-scans
 # host component on a host whose package owns it; edits overwritten.
 #
-# Usage: aide-check.sh [-h|--help]
-# Takes no arguments. Cron job "Weekly AIDE file integrity check", or homelab-aide-check.timer on
-# a packaged host, runs it as root, Monday 03:00. It runs `aide --check` against
+# Usage: aide-check.sh [-h|--help] [--accept]
+# With no arguments: cron job "Weekly AIDE file integrity check", or homelab-aide-check.timer on
+# a packaged host, runs it as root, Monday 03:00. It runs `aide --update` against
 # /var/lib/aide/aide.db at idle CPU and IO priority, writes the report to the journal under the
-# `aide` tag, writes the verdict to the node_exporter textfile as check `aide-check`, and pushes it
-# to this host's "AIDE Integrity (<host>)" Kuma monitor using the token in
-# /etc/homelab/aide-kuma-push.env or the unit's credential. Running it by hand is safe, but it
-# takes as long as the scheduled run and it pushes.
+# `aide` tag, classifies every difference (below), writes the verdict to the node_exporter
+# textfile as check `aide-check`, and pushes it to this host's "AIDE Integrity (<host>)" Kuma
+# monitor using the token in /etc/homelab/aide-kuma-push.env or the unit's credential. Running it
+# by hand is safe, but it takes as long as the scheduled run and it pushes.
+#
+# --accept: after a human has reviewed a DOWN run's unexplained changes, moves that run's
+# aide.db.new over aide.db, so the next run reports against the accepted state. It scans nothing
+# and pushes nothing; the tile clears on the next run.
 #
 # WHY A SCRIPT (#4594). The cron used to pipe `aide --check` straight into `logger -t aide`. The
 # pipeline's exit status was logger's, and nothing read the tag, so every host exited
@@ -19,14 +23,35 @@
 #
 # AIDE's exit code is a bitmask when the check completes: 0 means no differences, and 1, 2 and 4
 # mean entries were added, removed or changed, so 1-7 is a completed check that found something.
-# 14 and up are AIDE's error codes (a write error, an invalid argument, a bad config line, an IO
-# error), and 127 means the binary is gone. Anything outside 0-7 is treated as an error rather
-# than enumerated, so a code AIDE adds later still reads DOWN.
+# `--update` uses the same codes as `--check`. 14 and up are AIDE's error codes (a write error,
+# an invalid argument, a bad config line, an IO error), and 127 means the binary is gone.
+# Anything outside 0-7 is treated as an error rather than enumerated, so a code AIDE adds later
+# still reads DOWN.
+#
+# WHAT PAGES (#4599). A completed run pushes DOWN when a difference falls in a paged tree and no
+# package explains it:
+# - The system trees (/usr except /usr/local, /bin, /sbin, /lib*, /boot): any added or changed
+#   file a package does not own with this content, and any removed path a package still owns.
+#   The files package triggers regenerate, such as the initrd and the module index, are listed in
+#   DERIVED and page only in a week dpkg did not run. A package-owned symlink must still resolve
+#   to a package file.
+# - /etc: a package-owned path whose content differs from the package's copy, or that is gone.
+#   Ansible writes unpackaged /etc files on every merge, so those are logged, not paged.
+# - The login, privilege and code-loading files in PERSIST, owned or not: sudoers, sshd, PAM,
+#   cron, the user and group databases, the loader and module config, shell startup files, apt
+#   hooks, udev rules and every authorized_keys.
+# - Any of the above, or any package-owned /etc path, whose owner, group or permissions changed,
+#   since a package digest cannot see that.
+# A symlink is explained when it resolves to a package-owned path (alternatives, systemd enable
+# links, /boot/vmlinuz) or to /dev/null (a mask). Homes, /var, /opt and /usr/local are logged and never page: the
+# 2026-10-20 daniel-box report held 184 differences in six hours, and every one was in them.
 set -uo pipefail
 
+MODE=check
 for arg in "$@"; do
   case "$arg" in
     -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+    --accept) MODE=accept ;;
   esac
 done
 
@@ -57,6 +82,33 @@ KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 # the rest is dropped with a line saying so, rather than left for journald's rate limit to drop
 # without a trace.
 REPORT_MAX_LINES=2000
+
+# database_in and database_out in Debian's /etc/aide/aide.conf.
+AIDE_DIR=/var/lib/aide
+# Read for the package file lists (info/*.list), their digests (info/*.md5sums), the conffile
+# digests (status), which *.md5sums leaves out, and the diversions.
+DPKG_DIR=/var/lib/dpkg
+# Prefixed to a report path before the file is read; empty everywhere but the tests.
+FS_ROOT=""
+
+# Regexes over the absolute path, in awk's dialect. Kept to what mawk accepts: no intervals. They reach
+# awk through ENVIRON, because -v would read each backslash as an escape.
+# Login, privilege and code-loading files that nothing here writes in an ordinary week: between
+# 2026-10-19 and 2026-11-02, daniel-box and daniel-server changed none of them outside a package
+# except through the claude-user migration. /etc/systemd/system and /usr/local stay out: Ansible rewrote 18
+# units and 8 scripts there on daniel-box in the same fortnight.
+PERSIST='^/(etc/(sudoers$|sudoers\.d/|ssh/|pam\.d/|pam\.conf$|security/|ld\.so\.preload$|ld\.so\.conf$|ld\.so\.conf\.d/|crontab$|cron\.[a-z]+/|passwd$|shadow$|group$|gshadow$|environment$|profile$|profile\.d/|bash\.bashrc$|apt/apt\.conf\.d/|udev/rules\.d/|modprobe\.d/|modules-load\.d/|modules$)|var/spool/cron/|root/\.(bashrc|profile|bash_profile)$|root/\.ssh/authorized_keys|home/[^/]+/\.ssh/authorized_keys|var/lib/[^/]+/\.ssh/authorized_keys)'
+SYSTEM='^/(usr|bin|sbin|lib|lib32|lib64|libx32|boot)(/|$)'
+# Written by package triggers and maintainer scripts, so no package lists them. A change here is
+# explained only in a window in which dpkg ran, since only a package run regenerates them. Taken
+# from every unpackaged file in the system trees on all three hosts on 2026-11-02, so a trigger
+# that ran outside the measured fortnight is listed too. The top-level usrmerge links,
+# flash-kernel's device trees on the Pi and the firmware partition are maintainer-script output
+# as well.
+DERIVED='(/__pycache__/|/dropin\.cache$|^/(bin|sbin|lib|lib32|lib64|libx32)$|^/boot/(grub|firmware)/|^/boot/dtbs?(/|-|$)|^/boot/(initrd\.img|vmlinuz)(\.old)?$|^/boot/initrd\.img-|^/(usr/)?lib/modules/[^/]+/modules\.|^/(usr/)?lib/udev/hwdb\.bin$|^/(usr/)?lib/locale/locale-archive$|^/(usr/)?lib/[^/]+/gio/modules/giomodule\.cache$|^/(usr/)?lib/[^/]+/gdk-pixbuf-2\.0/[^/]+/loaders\.cache$|^/(usr/)?lib/[^/]+/gtk-[23]\.0/[^/]+/immodules\.cache$|^/usr/share/glib-2\.0/schemas/gschemas\.compiled$|^/usr/share/mime/|^/usr/share/icons/[^/]+/icon-theme\.cache$|^/usr/share/info/dir(\.old)?$|^/usr/share/plymouth/themes/(text\.plymouth|ubuntu-text/ubuntu-text\.plymouth)$)'
+# How many unexplained paths the tile's message names; the journal lists them all.
+MSG_PATHS=3
+UNEXPLAINED_MAX_LINES=500
 
 # Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
 # local account.
@@ -90,29 +142,141 @@ report() {
   fi
 }
 
+# Moves aide.db.new over aide.db. Refuses when aide.db is missing, so a deleted baseline stays an
+# error exit instead of becoming a fresh, trusted one (#6674); bootstrap-host.sh owns the first.
+advance_baseline() {
+  [[ -e "$AIDE_DIR/aide.db" && -s "$AIDE_DIR/aide.db.new" ]] || return 1
+  mv -f "$AIDE_DIR/aide.db.new" "$AIDE_DIR/aide.db"
+}
+
 # One scan at a time. A scan that outlives its week would otherwise have the next Monday's start a
 # second full scan beside it. The run that finds the lock held pushes DOWN, which also turns a scan
-# that never ends into a page a week after it started (#5785).
+# that never ends into a page a week after it started (#5785). --accept takes it too, so it cannot
+# move a database a running scan is writing.
 LOCK_FILE=/run/lock/aide-check.lock
 exec 8>"$LOCK_FILE"
 if ! flock -n 8; then
+  if [[ "$MODE" == accept ]]; then
+    echo "an aide-check run holds ${LOCK_FILE}; accept after it finishes" >&2
+    exit 1
+  fi
   STATUS=down
   MSG="the previous aide-check run still holds ${LOCK_FILE}, so this week's check did not start; ps -C aide shows how long it has run"
   report
   exit 1
 fi
 
+if [[ "$MODE" == accept ]]; then
+  if ! advance_baseline; then
+    echo "nothing to accept: needs both ${AIDE_DIR}/aide.db and a non-empty ${AIDE_DIR}/aide.db.new from the last run" >&2
+    exit 1
+  fi
+  logger -p daemon.notice -t aide-check "baseline accepted by hand; the next run reports against it"
+  echo "accepted ${AIDE_DIR}/aide.db.new as the baseline; the tile clears on the next run"
+  exit 0
+fi
+
+# Prints "path<TAB>-" for every path a package lists, "path<TAB>digest" for every digest dpkg
+# records, and "from<TAB>DIVERT<TAB>to" for each diversion. A third-party md5sums file such as
+# gh's writes each path as ./usr/...
+dpkg_index() {
+  cat "$DPKG_DIR"/info/*.list 2>/dev/null | awk '{ print $0 "\t-" }'
+  cat "$DPKG_DIR"/info/*.md5sums 2>/dev/null \
+    | awk '{ d = $1; p = $0; sub(/^[0-9a-f]+ +(\.\/)?/, "/", p); print p "\t" d }'
+  awk '/^Conffiles:/ { c = 1; next } /^[^ ]/ { c = 0 } c && NF >= 2 { print $1 "\t" $2 }' \
+    "$DPKG_DIR/status" 2>/dev/null
+  # Three lines per diversion: the diverted path, where it went, the package that diverted it.
+  awk 'NR % 3 == 1 { from = $0 } NR % 3 == 2 { print from "\tDIVERT\t" $0 }' \
+    "$DPKG_DIR/diversions" 2>/dev/null
+}
+
+# Prints "kind<TAB>type<TAB>pug<TAB>scope<TAB>path" for each report entry in a paged tree.
+# AIDE's summary column is 18 characters, YlZbpugamcinHAXSEC, so p, u and g are columns 5-7;
+# an added entry's is the file type then all `+`, a removed one's all `-`.
+paged_entries() {
+  printf '%s\n' "$REPORT" \
+    | PERSIST="$PERSIST" SYSTEM="$SYSTEM" DERIVED="$DERIVED" DPKG_RAN="$DPKG_RAN" awk '
+    substr($0, 19, 3) == ": /" && $0 !~ /^[ \t]/ {
+      s = substr($0, 1, 18); path = substr($0, 21); rest = substr(s, 2)
+      kind = (rest ~ /^\++$/) ? "added" : (rest ~ /^-+$/) ? "removed" : "changed"
+      if (path ~ ENVIRON["PERSIST"]) scope = "persist"
+      else if (path ~ /^\/usr\/local(\/|$)/) next
+      else if (path ~ ENVIRON["SYSTEM"]) scope = "system"
+      else if (path ~ /^\/etc\//) scope = "etc"
+      else next
+      if (scope != "persist" && path ~ ENVIRON["DERIVED"]) {
+        if (ENVIRON["DPKG_RAN"] == "yes") next
+        scope = "derived"
+      }
+      pug = (kind == "changed" && substr(s, 5, 3) ~ /[pug]/) ? "pug" : "-"
+      print kind "\t" substr(s, 1, 1) "\t" pug "\t" scope "\t" path
+    }'
+}
+
+# Prints "path (reason)" for each paged entry no package explains. Reads the files as they are
+# now: AIDE has just hashed them, and a change in between is next week's report.
+unexplained_entries() {
+  local kind type pug scope path digest target
+  paged_entries | while IFS=$'\t' read -r kind type pug scope path; do
+    digest=- target=-
+    if [[ "$kind" != removed ]]; then
+      if [[ -L "$FS_ROOT$path" ]]; then
+        target=$(readlink -f -- "$FS_ROOT$path") && target=${target#"$FS_ROOT"} || target=-
+      elif [[ -f "$FS_ROOT$path" ]]; then
+        digest=$(md5sum <"$FS_ROOT$path" | awk '{ print $1 }') || digest=-
+      fi
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$kind" "$type" "$pug" "$scope" "$path" "$digest" "$target"
+  done | awk -F '\t' '
+    # dpkg records merged-/usr paths under either name, so compare both without the /usr.
+    function norm(p) { return p ~ /^\/usr\/(bin|sbin|lib|lib32|lib64|libx32)\// ? substr(p, 5) : p }
+    FILENAME == ARGV[1] {
+      p = norm($1); owned[p] = 1
+      if ($2 == "DIVERT") { q = norm($3); owned[q] = 1; divto[q] = p }
+      else if ($2 != "-") digs[p] = digs[p] " " $2
+      next
+    }
+    {
+      kind = $1; type = $2; scope = $4; path = $5; p = norm(path); why = ""
+      # Every digest a package records for this path. Two packages record a diverted path, and a
+      # diversion target holds what its package installed under the diverted name.
+      d = (p in digs) ? digs[p] : ""
+      if ((p in divto) && (divto[p] in digs)) d = d digs[divto[p]]
+      # $7 is set only while the path is a symlink, and $6 only while it is a regular file.
+      link_ok = $7 != "-" && ($7 == "/dev/null" || (norm($7) in owned))
+      # An unpackaged /etc file pages on nothing, its mode included.
+      if ($3 == "pug" && (scope != "etc" || (p in owned))) why = "owner, group or permissions changed"
+      else if (type == "d") next
+      else if (scope == "derived") why = "regenerated by package triggers, but dpkg has not run since the baseline"
+      else if (kind == "removed") { if (p in owned) why = "removed, but a package still owns it" }
+      else if (d != "") { if (index(d " ", " " $6 " ") == 0) why = "differs from its package copy" }
+      # dpkg records no digest for a symlink, so an owned one must still resolve inside a package.
+      # Every installed package on daniel-server records md5sums (2026-11-02), so an owned regular
+      # file with no digest was a link or a directory in its package.
+      else if (p in owned) { if (!link_ok) why = "a package owns it, but it is not the link the package installed" }
+      else if (link_ok) next
+      else if (scope == "persist") why = "no package owns this login or privilege file"
+      else if (scope == "system") why = "no package owns it"
+      if (why != "") print path " (" why ")"
+    }' <(dpkg_index) -
+}
+
 # Captured whole rather than piped, because a pipeline's exit status is its last command's, which
 # is how the old cron lost it. nice and ionice exit with the status of the command they run.
 # --config is required: AIDE 0.18 has no default config path, and a bare `aide --check` exits
-# with "missing configuration" and checks nothing (#4591).
+# with "missing configuration" and checks nothing (#4591). --update reports exactly as --check
+# does and also writes aide.db.new, which advance_baseline moves into place. A stale aide.db.new
+# from a run nobody accepted goes first, so the database moved is always this run's.
+rm -f "$AIDE_DIR/aide.db.new"
 START=$SECONDS
-REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --check 2>&1)
+REPORT=$(/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide --config=/etc/aide/aide.conf --update 2>&1)
 RC=$?
 RUN_TIME="$(((SECONDS - START) / 60))m"
 
+# awk reads all of its input, where head would close the pipe early and printf would log a
+# broken-pipe error.
 REPORT_LINES=$(printf '%s\n' "$REPORT" | wc -l)
-printf '%s\n' "$REPORT" | head -n "$REPORT_MAX_LINES" | logger -t aide
+printf '%s\n' "$REPORT" | awk -v max="$REPORT_MAX_LINES" 'NR <= max' | logger -t aide
 if ((REPORT_LINES > REPORT_MAX_LINES)); then
   logger -t aide "report truncated: logged ${REPORT_MAX_LINES} of ${REPORT_LINES} lines; run aide --config=/etc/aide/aide.conf --check by hand for the rest"
 fi
@@ -121,38 +285,55 @@ fi
 # because the same labels head the per-entry lists further down the report.
 summary_count() {
   printf '%s\n' "$REPORT" | awk -v label="$1" '
-    $0 ~ "^[[:space:]]*" label " entries:[[:space:]]*[0-9]+" { print $NF; exit }'
+    !found && $0 ~ "^[[:space:]]*" label " entries:[[:space:]]*[0-9]+" { print $NF; found = 1 }'
 }
 
-# DECIDED: differences push UP, with their counts in the message; only an error exit pushes DOWN.
-# Unattended-upgrades installs packages on every host every week (dpkg.log on daniel-box and
-# daniel-server, July to October 2026: no week without an upgrade), and AIDE reports each file a
-# package touched. A DOWN on differences would be red every Monday on every host, and a tile that
-# is always red is a signal nobody reads, which is the fault this script exists to fix. The
-# counts still land on the tile's heartbeat and in the journal. They are cumulative: nothing
-# advances the baseline (aideinit runs only when aide.db is absent), so each week's counts include
-# every earlier week's until someone runs `aide --update` by hand. So this check pages when AIDE
-# fails, not when it finds a changed file. Paging on a change needs a way to tell an unexplained
-# change from a package upgrade, and #4599 tracks that.
+# DECIDED: page on a difference no package explains, and advance the baseline after every run
+# that has none (#4599, replacing #4594's "differences push UP"). Package upgrades land every
+# week, so the classifier rather than the exit code decides: measured on daniel-server's
+# 2026-11-02 report, all 18,556 changed package-owned files under /usr, /lib and /boot matched
+# their dpkg digests, and its complete /boot and /etc entries were packages, triggers, Longhorn's
+# /etc/iscsi and libvirt profiles. Advancing makes each report cover one week instead of
+# growing from the first baseline. A DOWN does not advance: the change stays in every report
+# until a human reads it and runs `aide-check --accept`, so one missed page does not bury it.
+# dpkg rewrites its status file on every run, triggers included. aide.db dates from the last
+# advance, so a status file newer than it means a package run could explain DERIVED output.
+DPKG_RAN=no
+[[ "$DPKG_DIR/status" -nt "$AIDE_DIR/aide.db" ]] && DPKG_RAN=yes
 if ((RC == 0)); then
   STATUS=up
   MSG="no differences from the baseline (run ${RUN_TIME})"
 elif ((RC >= 1 && RC <= 7)); then
-  STATUS=up
   ADDED=$(summary_count Added)
   REMOVED=$(summary_count Removed)
   CHANGED=$(summary_count Changed)
-  if [[ -n "${ADDED}${REMOVED}${CHANGED}" ]]; then
-    MSG="differences from the baseline: ${ADDED:-?} added, ${REMOVED:-?} removed, ${CHANGED:-?} changed (exit ${RC}, run ${RUN_TIME}); journalctl -t aide lists them"
+  COUNTS="${ADDED:-?} added, ${REMOVED:-?} removed, ${CHANGED:-?} changed"
+  # A classifier that fails has judged nothing, so it must not read as "all explained".
+  if ! UNEXPLAINED=$(unexplained_entries); then
+    STATUS=down
+    MSG="aide completed, but classifying its differences failed, so none was judged: ${COUNTS} (exit ${RC}, run ${RUN_TIME}); run aide-check by hand to see the error"
+  elif [[ -n "$UNEXPLAINED" ]]; then
+    STATUS=down
+    UNEXPLAINED_COUNT=$(printf '%s\n' "$UNEXPLAINED" | wc -l)
+    printf '%s\n' "$UNEXPLAINED" \
+      | awk -v max="$UNEXPLAINED_MAX_LINES" 'NR <= max { print "unexplained: " $0 }' \
+      | logger -p daemon.notice -t aide-check
+    NAMED=$(printf '%s\n' "$UNEXPLAINED" | awk -v max="$MSG_PATHS" 'NR <= max' | paste -sd ';' -)
+    MSG="${UNEXPLAINED_COUNT} changes no package explains: ${NAMED} (${COUNTS}, exit ${RC}, run ${RUN_TIME}); journalctl -t aide-check lists them; once reviewed, run aide-check --accept"
   else
-    MSG="differences from the baseline (exit ${RC}, run ${RUN_TIME}), but the report has no Summary counts; journalctl -t aide"
+    STATUS=up
+    MSG="differences from the baseline, every one explained or outside the paged trees: ${COUNTS} (exit ${RC}, run ${RUN_TIME}); journalctl -t aide lists them"
   fi
 else
   STATUS=down
   # The first line that names an error, else the first line of output at all.
-  DETAIL=$(printf '%s\n' "$REPORT" | awk 'tolower($0) ~ /error/ { sub(/^[[:space:]]+/, ""); print; exit }')
-  [[ -n "$DETAIL" ]] || DETAIL=$(printf '%s\n' "$REPORT" | awk 'NF { sub(/^[[:space:]]+/, ""); print; exit }')
+  DETAIL=$(printf '%s\n' "$REPORT" | awk '!found && tolower($0) ~ /error/ { sub(/^[[:space:]]+/, ""); print; found = 1 }')
+  [[ -n "$DETAIL" ]] || DETAIL=$(printf '%s\n' "$REPORT" | awk '!found && NF { sub(/^[[:space:]]+/, ""); print; found = 1 }')
   MSG="aide exited ${RC}, so the check did not complete: ${DETAIL:-no output} (run ${RUN_TIME}); journalctl -t aide"
+fi
+
+if [[ "$STATUS" == up ]] && ! advance_baseline; then
+  MSG="${MSG}; baseline not advanced, ${AIDE_DIR}/aide.db.new missing"
 fi
 
 report
