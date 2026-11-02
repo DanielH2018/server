@@ -17,7 +17,10 @@ are separate plays, as k3s's are, is walked half by half (#6475). The rows:
   one `<hex>  <path>` line per file in `RECORD_DIR/<role>`, as `sha256sum` prints it. That
   catches a hand edit after the apply, not a change between HEAD and the last apply (#6913).
   A host with such a file costs one more read, of the record, made before its stat read so
-  `rootq matches` gets the recorded hash;
+  `rootq matches` gets the recorded hash. A role opts in by writing the record, which only
+  `k8s_host_files` does. A credential file, such as an `.env` holding a token or a
+  kubeconfig, never gets one: its hash is the guessing oracle rootq refuses to answer, and a
+  0644 record would publish it. Its row stays `ok-meta`, `no apply record holds its hash`;
 - `DRIFT`: missing, present where an absent arm removes it, or a declared field or the
   content differs;
 - `UNCHECKED`: a credential file rootq refused even to stat, so nothing about it was
