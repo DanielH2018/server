@@ -14,7 +14,7 @@ import pytest
 from urllib.error import URLError
 
 T0 = datetime(2026, 10, 15, 18, 30, tzinfo=timezone.utc).timestamp()
-MEMORY = {"kuma:Memory": {"source": "kuma", "monitor": "Memory"}}
+DOWN = {"alert:TargetDown:sonarr": {"source": "alertmanager", "monitor": "TargetDown"}}
 
 
 def advance(
@@ -23,83 +23,65 @@ def advance(
     hold=False,
     muted=False,
     unknown=frozenset(),
-    kuma_up=frozenset(),
     floor=0,
 ):
-    return poll.step(state, down, hold, muted, T0, 2, 3, unknown, kuma_up, floor)
+    return poll.step(state, down, hold, muted, T0, 2, 3, unknown, floor)
 
 
 def test_the_first_poll_records_what_is_down_and_starts_nothing() -> None:
-    state, episodes = advance({}, MEMORY)
+    state, episodes = advance({}, DOWN)
     assert episodes == []
     # Still down on the next polls: it was down before the poller looked, so no episode.
-    state, episodes = advance(state, MEMORY)
-    state, episodes = advance(state, MEMORY)
+    state, episodes = advance(state, DOWN)
+    state, episodes = advance(state, DOWN)
     assert episodes == []
 
 
 def test_a_fall_opens_one_episode_once_it_has_held_for_the_streak() -> None:
     state, _ = advance({}, {})
-    state, episodes = advance(state, MEMORY)
+    state, episodes = advance(state, DOWN)
     assert episodes == []  # one poll is a flap
-    state, episodes = advance(state, MEMORY)
-    assert [e["monitor"] for e in episodes] == ["Memory"]
-    state, episodes = advance(state, MEMORY)
+    state, episodes = advance(state, DOWN)
+    assert [e["monitor"] for e in episodes] == ["TargetDown"]
+    state, episodes = advance(state, DOWN)
     assert episodes == []  # still the same episode
 
 
 def test_a_flap_that_recovers_before_the_streak_opens_nothing() -> None:
     state, _ = advance({}, {})
-    state, _ = advance(state, MEMORY)
-    state, _ = advance(state, {}, kuma_up={"kuma:Memory"})
-    state, episodes = advance(state, MEMORY)
+    state, _ = advance(state, DOWN)
+    state, _ = advance(state, {})
+    state, episodes = advance(state, DOWN)
     assert episodes == []
 
 
 def test_a_recovery_closes_the_episode_so_the_next_fall_is_new() -> None:
     state, _ = advance({}, {})
-    state, _ = advance(state, MEMORY)
-    state, _ = advance(state, MEMORY)
-    state, _ = advance(state, {}, kuma_up={"kuma:Memory"})
-    assert state["keys"] == {}
-    state, _ = advance(state, MEMORY)
-    state, episodes = advance(state, MEMORY)
-    assert len(episodes) == 1
-
-
-def test_a_kuma_series_that_vanishes_is_not_a_recovery() -> None:
-    """A long-interval monitor has no series until its first beat after a Kuma restart."""
-    state, _ = advance({}, MEMORY)  # the baseline: already red
+    state, _ = advance(state, DOWN)
+    state, _ = advance(state, DOWN)
     state, _ = advance(state, {})
-    assert "kuma:Memory" in state["keys"]
-    _, episodes = advance(state, MEMORY)
-    assert episodes == []
-
-
-def test_only_a_monitor_reading_1_counts_as_up() -> None:
-    kuma = [
-        {"metric": {"monitor_name": "up"}, "value": [T0, "1"]},
-        {"metric": {"monitor_name": "down"}, "value": [T0, "0"]},
-        {"metric": {"monitor_name": "pending"}, "value": [T0, "2"]},
-    ]
-    assert poll.kuma_up_keys(kuma) == {"kuma:up"}
-    assert set(poll.down_keys(kuma, [])) == {"kuma:down"}
+    assert state["keys"] == {}
+    state, _ = advance(state, DOWN)
+    state, episodes = advance(state, DOWN)
+    assert len(episodes) == 1
 
 
 def test_a_failed_read_keeps_the_state_rather_than_reading_as_recovered() -> None:
     state, _ = advance({}, {})
-    state, _ = advance(state, MEMORY)
-    state, _ = advance(state, MEMORY)
+    state, _ = advance(state, DOWN)
+    state, _ = advance(state, DOWN)
     held, episodes = advance(state, None)
     assert held == state
     assert episodes == []
     # The monitor never recovered, so the poll after the outage opens nothing.
-    _, episodes = advance(held, MEMORY)
+    _, episodes = advance(held, DOWN)
     assert episodes == []
 
 
 def test_more_falls_than_the_storm_size_make_one_storm_episode() -> None:
-    down = {f"kuma:m{i}": {"source": "kuma", "monitor": f"m{i}"} for i in range(4)}
+    down = {
+        f"alert:A{i}:": {"source": "alertmanager", "monitor": f"m{i}"} for i in range(4)
+    }
     state, _ = advance({}, {})
     state, _ = advance(state, down)
     _, episodes = advance(state, down)
@@ -109,7 +91,9 @@ def test_more_falls_than_the_storm_size_make_one_storm_episode() -> None:
 
 
 def test_falls_up_to_the_storm_size_each_get_their_own_episode() -> None:
-    down = {f"kuma:m{i}": {"source": "kuma", "monitor": f"m{i}"} for i in range(3)}
+    down = {
+        f"alert:A{i}:": {"source": "alertmanager", "monitor": f"m{i}"} for i in range(3)
+    }
     state, _ = advance({}, {})
     state, _ = advance(state, down)
     _, episodes = advance(state, down)
@@ -118,8 +102,7 @@ def test_falls_up_to_the_storm_size_each_get_their_own_episode() -> None:
 
 def test_a_fall_below_the_floor_is_skipped_once_and_never_makes_a_storm() -> None:
     down = {
-        f"kuma:w{i}": {"source": "kuma", "monitor": f"w{i}", "severity": "warning"}
-        for i in range(4)
+        f"alert:W{i}:": {"monitor": f"w{i}", "severity": "warning"} for i in range(4)
     }
     down["alert:TargetDown:sonarr"] = {"monitor": "TargetDown", "severity": "critical"}
     critical = poll.SEVERITY_RANK["critical"]
@@ -141,19 +124,18 @@ def test_a_fall_below_the_floor_is_skipped_once_and_never_makes_a_storm() -> Non
 @pytest.mark.parametrize("gate", ["hold", "muted"])
 def test_a_hold_or_the_reboot_mute_defers_the_episode_until_it_lifts(gate) -> None:
     state, _ = advance({}, {})
-    state, _ = advance(state, MEMORY, **{gate: True})
-    state, episodes = advance(state, MEMORY, **{gate: True})
+    state, _ = advance(state, DOWN, **{gate: True})
+    state, episodes = advance(state, DOWN, **{gate: True})
     assert episodes == []
-    _, episodes = advance(state, MEMORY)
+    _, episodes = advance(state, DOWN)
     assert len(episodes) == 1
 
 
 @pytest.mark.parametrize(
     "key",
     [
-        "kuma:rkhunter Scan (daniel-box)",
-        "kuma:Memory",
         "alert:KubePodCrashLooping:",
+        "alert:TargetDown:Registry GC (daniel-box)",
         "alert:" + "VeryLongAlertName" * 6 + ":sonarr",
         "storm",
     ],
@@ -164,26 +146,26 @@ def test_every_episode_id_is_one_the_runner_and_its_rule_accept(key) -> None:
     assert episode_id.startswith("20261015t1830-")
 
 
-def test_a_kuma_key_carries_its_tiles_severity_tag() -> None:
-    kuma = [
-        {"metric": {"monitor_name": "UPS", "severity": "critical"}, "value": [T0, "0"]},
-        {"metric": {"monitor_name": "Registry GC"}, "value": [T0, "0"]},
-    ]
-    down = poll.down_keys(kuma, [])
-    assert poll.severity_rank(down["kuma:UPS"]) == poll.SEVERITY_RANK["critical"]
-    assert poll.severity_rank(down["kuma:Registry GC"]) == 0
-
-
 def test_down_keys_skip_the_deploy_hold_and_key_alerts_by_service() -> None:
-    kuma = [{"metric": {"monitor_name": "Memory"}, "value": [T0, "0"]}]
     alerts = [
         {"metric": {"alertname": "DeployHoldActive"}},
-        {"metric": {"alertname": "TargetDown", "service": "sonarr"}},
+        {
+            "metric": {
+                "alertname": "TargetDown",
+                "service": "sonarr",
+                "severity": "critical",
+            }
+        },
+        {"metric": {"alertname": "RegistryGc"}},
     ]
-    assert set(poll.down_keys(kuma, alerts)) == {
-        "kuma:Memory",
-        "alert:TargetDown:sonarr",
-    }
+    down = poll.down_keys(alerts)
+    assert set(down) == {"alert:TargetDown:sonarr", "alert:RegistryGc:"}
+    # The floor reads the series' own `severity` label; a series with none ranks 0.
+    assert (
+        poll.severity_rank(down["alert:TargetDown:sonarr"])
+        == poll.SEVERITY_RANK["critical"]
+    )
+    assert poll.severity_rank(down["alert:RegistryGc:"]) == 0
 
 
 REBOOT = {
@@ -224,19 +206,16 @@ def _config(tmp_path, mode: str, extra: str = "") -> str:
     return str(path)
 
 
-HEALTHY = {
-    poll.KUMA_UP_QUERY: [{"value": [T0, "1"]}],
-    poll.PROM_AGE_QUERY: [{"value": [T0, "86400"]}],
-}
+HEALTHY = {poll.PROM_AGE_QUERY: [{"value": [T0, "86400"]}]}
 
 
-def _reads(*kuma_by_poll, **answers):
-    """A `read` seam answering each poll's Kuma query in turn, with healthy sources."""
-    polls = iter(kuma_by_poll)
-    fixed = {**HEALTHY, poll.ALERTS_QUERY: [], **answers}
+def _reads(*alerts_by_poll, **answers):
+    """A `read` seam answering each poll's `ALERTS` query in turn, with a healthy Prometheus."""
+    polls = iter(alerts_by_poll)
+    fixed = {**HEALTHY, **answers}
 
     def read(base, query, refusal_expected=False):
-        return next(polls) if query == poll.KUMA_QUERY else fixed[query]
+        return next(polls) if query == poll.ALERTS_QUERY else fixed[query]
 
     return read
 
@@ -249,7 +228,7 @@ def _run(config, read, started):
 
 def _fall(*names, severity="critical"):
     return [
-        {"metric": {"monitor_name": n, "severity": severity}, "value": [T0, "0"]}
+        {"metric": {"alertname": n, "severity": severity}, "value": [T0, "1"]}
         for n in names
     ]
 
@@ -262,7 +241,7 @@ def test_a_warning_fall_starts_nothing_and_shadow_records_it_skipped(
     """A mistyped floor admits only critical, so it holds the warning back too."""
     config = _config(tmp_path, mode, f"POLL_MIN_SEVERITY={floor}\n")
     started = []
-    read = _reads([], _fall("Registry GC", severity="warning"))
+    read = _reads([], _fall("RegistryGc", severity="warning"))
     assert _run(config, read, started) == 0  # the baseline
     assert _run(config, read, started) == 0
     shadow = tmp_path / "state" / "shadow.jsonl"
@@ -279,11 +258,11 @@ def test_a_warning_fall_starts_nothing_and_shadow_records_it_skipped(
 def test_a_warning_floor_opens_the_warning_fall(tmp_path, mode) -> None:
     config = _config(tmp_path, mode, "POLL_MIN_SEVERITY=warning\n")
     started = []
-    read = _reads([], _fall("Registry GC", severity="warning"))
+    read = _reads([], _fall("RegistryGc", severity="warning"))
     assert _run(config, read, started) == 0  # the baseline
     assert _run(config, read, started) == 0
     if mode == "armed":
-        assert started == ["20261015t1830-kuma-registry-gc"]
+        assert started == ["20261015t1830-alert-registrygc"]
     else:
         (line,) = (tmp_path / "state" / "shadow.jsonl").read_text().splitlines()
         assert "skipped" not in json.loads(line)
@@ -299,7 +278,7 @@ def test_armed_mode_starts_a_run_and_shadow_mode_only_logs_it(tmp_path, mode) ->
     shadow = tmp_path / "state" / "shadow.jsonl"
     inbox = tmp_path / "state" / "inbox"
     if mode == "armed":
-        assert started == ["20261015t1830-kuma-memory"]
+        assert started == ["20261015t1830-alert-memory"]
         queued = json.loads((inbox / f"{started[0]}.json").read_text())
         assert queued["monitor"] == "Memory"
         assert not shadow.exists()
@@ -343,18 +322,19 @@ def test_a_queued_episode_whose_run_crashed_is_not_started_again(tmp_path) -> No
     assert len(started) == 1
 
 
-def test_a_kuma_restart_does_not_read_as_every_tile_recovering(tmp_path) -> None:
-    """Kuma's series vanish while it restarts; its standing reds are not new falls after."""
+def test_a_kuma_key_in_the_saved_state_is_dropped_without_an_episode(tmp_path) -> None:
+    """Nothing can recover a `kuma:` key now, so it must not stay open for good (B-10)."""
     config = _config(tmp_path, "armed")
+    stale = {"since": T0, "open": True, "streak": 2}
+    (tmp_path / "state" / "poll-state.json").write_text(
+        json.dumps({"baseline": True, "keys": {"kuma:Memory": stale}})
+    )
     started = []
-    restarting = _reads([], [], **{poll.KUMA_UP_QUERY: [{"value": [T0, "0"]}]})
-    _run(config, _reads(_fall("rkhunter")), started)  # the baseline: already red
-    _run(config, restarting, started)
-    _run(config, restarting, started)
-    back = _reads(_fall("rkhunter"), _fall("rkhunter"))
-    _run(config, back, started)
-    _run(config, back, started)
+    assert _run(config, _reads([]), started) == 0
+    state = json.loads((tmp_path / "state" / "poll-state.json").read_text())
+    assert state["keys"] == {}
     assert started == []
+    assert list((tmp_path / "state" / "inbox").iterdir()) == []
 
 
 def test_alerts_after_a_prometheus_restart_are_not_new_falls() -> None:
@@ -369,29 +349,20 @@ def test_alerts_after_a_prometheus_restart_are_not_new_falls() -> None:
 
 
 def test_the_baseline_waits_for_a_poll_that_can_judge_every_source() -> None:
-    state, _ = advance({}, {}, unknown={"kuma"})
+    state, _ = advance({}, {}, unknown={"alert"})
     assert state == {}
-    state, episodes = advance(state, MEMORY)
+    state, episodes = advance(state, DOWN)
     assert episodes == []  # this poll is the baseline
 
 
 @pytest.mark.parametrize(
-    ("kuma_up", "age", "unknown"),
-    [
-        ("1", "86400", set()),
-        ("0", "86400", {"kuma"}),
-        (None, "86400", {"kuma"}),
-        ("1", "300", {"alert"}),
-        ("1", None, {"alert"}),
-    ],
+    ("age", "unknown"),
+    [("86400", set()), ("300", {"alert"}), (None, {"alert"})],
 )
-def test_a_source_is_unknown_while_its_exporter_is_down_or_just_restarted(
-    kuma_up, age, unknown
+def test_the_alerts_are_unknown_while_prometheus_is_missing_or_just_restarted(
+    age, unknown
 ) -> None:
-    found = {
-        "kuma_up": [] if kuma_up is None else [{"value": [T0, kuma_up]}],
-        "prom_age": [] if age is None else [{"value": [T0, age]}],
-    }
+    found = {"prom_age": [] if age is None else [{"value": [T0, age]}]}
     assert poll.unknown_sources(found) == unknown
 
 
@@ -419,11 +390,23 @@ def test_the_poller_falls_back_to_the_cluster_ip_when_loopback_fails(tmp_path) -
     assert state["baseline"] is True
 
 
+def test_the_poller_reads_only_the_alerts_and_prometheus_age(tmp_path) -> None:
+    asked = set()
+    healthy = _reads([])
+
+    def read(base, query, refusal_expected=False):
+        asked.add(query)
+        return healthy(base, query)
+
+    assert _run(_config(tmp_path, "armed"), read, []) == 0
+    assert asked == {poll.ALERTS_QUERY, poll.PROM_AGE_QUERY}
+
+
 def test_the_poller_answers_help(capsys) -> None:
     with pytest.raises(SystemExit) as exit_:
         poll.main(["claude_triage_poll.py", "--help"], "/nonexistent")
     assert exit_.value.code == 0
-    assert "Poll Kuma and Alertmanager" in capsys.readouterr().out
+    assert "Poll Alertmanager" in capsys.readouterr().out
 
 
 def test_a_failed_prometheus_read_is_logged_with_its_url_at_warning(

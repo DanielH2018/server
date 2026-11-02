@@ -559,8 +559,7 @@ restarting, and leaves a report to read later. The four rulings:
 - **The budget** is 6 runs a day, $10 to diagnose and $25 to fix. One run goes at a time, and a
   storm of monitors going down together gets one run.
 
-A timer running as `claude` is the trigger. It polls Kuma and Alertmanager for monitors that
-went down. A webhook into the host was rejected. Host services bind to loopback, so a webhook
+A timer running as `claude` is the trigger. It polls Prometheus for alerts that started firing. A webhook into the host was rejected. Host services bind to loopback, so a webhook
 would need a non-loopback port, a firewall rule, and a network input that starts Claude.
 
 The build runs in slices, and each slice is exercised before the next starts:
@@ -627,33 +626,35 @@ The drill writes `/var/lib/claude/triage/runs/drill-1.json` and `triage-drill-1.
 minutes.
 The code is root-owned under `/opt/claude-triage`, like the runner's.
 
-- **It reads two Prometheus vectors.** One is Kuma's `monitor_status == 0`. The other is the
-  firing `ALERTS`, without `Watchdog`, shadow and drill alerts. Prometheus publishes its port
+- **It reads the firing `ALERTS` vector**, without `Watchdog`, shadow and drill alerts, and
+  Prometheus's own start time. It has no Kuma source (M6's B-10), because every Kuma pager has
+  an `ALERTS` rule. Prometheus publishes its port
   on loopback only on the node it runs on, so the poller tries loopback, then the pinned
   ClusterIP `observability_prometheus_cluster_ip`. A refused connection on loopback is the
   expected answer on the other node, so it logs a line at no priority. Any other loopback
   failure, and any failure on the ClusterIP, logs a warning with its URL.
-- **An episode is a fall, not a red tile.** The first poll records what is already down and
-  starts nothing, so arming never fires on every known red tile at once. A key opens an episode
-  once it reads down on two consecutive polls, and keeps that episode until it recovers.
-- **A vanished series is unknown, not recovered.** A failed read keeps every key as it was. A
-  Kuma key recovers only when its monitor reads 1, because Kuma exports a monitor only after its
-  first heartbeat since it started. Kuma's keys hold while `up{job="uptime-kuma"}` is not 1, and
-  the alert keys hold for 20 minutes after Prometheus starts, until its rules can fire again.
-  Without these, every Kuma or Prometheus restart would read each standing red as a new fall.
-  M6's B-10 drops the Kuma path before Kuma's scrape job goes
-  (`docs/target-architecture/monitoring/m6-retire-kuma.md`, *Phase B* item 9).
-- **A fall below `critical` opens no run.** Kuma exports each tile's `tag-severity` as a
-  `severity` label, so one floor covers both sources, and an untagged tile ranks below `info`.
+- **An episode is a fall, not a firing alert.** The first poll records what is already firing
+  and starts nothing, so arming never fires on every known alert at once. A key opens an
+  episode once it reads down on two consecutive polls, and keeps that episode until it
+  recovers.
+- **A failed read, or a restarted Prometheus, is unknown, not recovered.** A failed read keeps
+  every key as it was, and the alert keys hold for 20 minutes after Prometheus starts, until
+  its rules can fire again. Without that hold, every Prometheus restart would read each
+  standing alert as a new fall. A `poll-state.json` written by a poller that still had the Kuma
+  source holds `kuma:` keys. The first successful poll drops them and opens no episode,
+  because nothing can recover them any more.
+- **A fall below `critical` opens no run.** The floor reads the `severity` label of the
+  `ALERTS` series, and a series with no label ranks below `info`.
   The poller logs each skipped fall, and in `shadow` mode appends it to `shadow.jsonl` with
   `"skipped": "below-floor"`. The floor is `poll_min_severity`, pinned in
   `templates/claude-triage-pins.j2` because lowering it raises the runs a day the poller asks
   for. An unknown value admits only `critical`.
   Without the floor, the journal from 2026-10-31 18:21 to 2026-11-01 11:23 UTC held 15 shadow
-  episodes, about 21 a day against the six-run cap (#6861). Replayed through the floor, 3 of
+  episodes, about 21 a day against the six-run cap (#6861). That journal predates B-10, so
+  some of those episodes were Kuma falls. Replayed through the floor, 3 of
   them open a run: Kuma's `etcd Restore Drill (full)`, `ProdMovedOutsidePromote` and
   `CheckWithoutPager`. A per-key cooldown was rejected: every repeat in that window was a
-  warning or an untagged tile, which the floor already drops.
+  warning or an untagged series, which the floor already drops.
 - **A storm is one run.** More than three keys at or above the floor falling in one poll make
   a single storm episode that lists them all. Skipped falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Find monitors that just went down and start one triage run per episode, as the agent user.
 
-`claude-triage-poll.timer` runs this every two minutes. It reads two Prometheus vectors: Uptime
-Kuma's `monitor_status == 0`, the Kuma path, and the firing `ALERTS`, the Alertmanager path.
-It keeps per-key state in `<STATE_DIR>/poll-state.json` and opens an episode only on an
-up→down transition that has held for `POLL_STREAK` polls. A key that stays down keeps one
-episode until it recovers.
+`claude-triage-poll.timer` runs this every two minutes. It reads the firing `ALERTS` vector,
+the Alertmanager path, and Prometheus's own start time. It keeps per-key state in
+`<STATE_DIR>/poll-state.json` and opens an episode only on an up→down transition that has held
+for `POLL_STREAK` polls. A key that stays down keeps one episode until it recovers.
 
 Three modes, from `POLL_MODE` in the root-owned config:
 
@@ -16,19 +15,18 @@ Three modes, from `POLL_MODE` in the root-owned config:
 
 A fall below `POLL_MIN_SEVERITY` opens no run. The poller logs it as skipped, and in shadow
 mode appends it to `shadow.jsonl` with `"skipped": "below-floor"`, so the week of records the
-operator reads before arming shows what the floor dropped. Kuma exports a tile's `severity`
-tag as a label, so one floor covers both sources. A key with no severity ranks below `info`.
+operator reads before arming shows what the floor dropped. The floor reads the `severity` label
+of the `ALERTS` series. A key with no severity ranks below `info`.
 
-The first poll after a state file is created is a baseline. It records what is already down and
-starts nothing, so arming never fires on every known red tile at once.
+The first poll after a state file is created is a baseline. It records what is already firing
+and starts nothing, so arming never fires on every known alert at once.
 
-A series that vanished is unknown, not recovered, so a key keeps its previous state when its
-source cannot be trusted. A failed read leaves every key as it was. A Kuma key recovers only
-when its `monitor_status` reads 1: Kuma exports a monitor only after its first heartbeat since
-it started, so a long-interval monitor has no series for hours after a Kuma restart. Kuma's
-keys stay as they were while `up{job="uptime-kuma"}` is not 1. The alert keys stay as they were
-for `ALERTS_SETTLE_S` after Prometheus starts, because a restarted Prometheus fires nothing
-until each rule's `for:` delay, or the grace period of a restored one, has passed again.
+A failed read leaves every key as it was. The alert keys also stay as they were for
+`ALERTS_SETTLE_S` after Prometheus starts, because a restarted Prometheus fires nothing until
+each rule's `for:` delay, or the grace period of a restored one, has passed again. Any other
+key that is not firing recovers, including a key that an earlier version of this poller stored
+for a source it has since dropped: the first successful poll drops it and opens no episode,
+because no source can recover it any more.
 """
 
 from __future__ import annotations
@@ -50,8 +48,6 @@ from datetime import datetime, timezone
 from host_lib import WARNING, atomic_write, log, parse_env_file
 
 CONFIG = "/etc/claude-triage/config.env"
-KUMA_QUERY = 'monitor_status{job="uptime-kuma"}'
-KUMA_UP_QUERY = 'up{job="uptime-kuma"}'
 # Watchdog always fires by design; shadow and drill alerts page nobody.
 ALERTS_QUERY = (
     'ALERTS{alertstate="firing", alertname!="Watchdog", shadow!="true", drill!="true"}'
@@ -134,8 +130,6 @@ def read_all(
     URL but the last, so the expected refusal on the other node is not logged as a warning.
     """
     queries = {
-        "kuma": KUMA_QUERY,
-        "kuma_up": KUMA_UP_QUERY,
         "alerts": ALERTS_QUERY,
         "prom_age": PROM_AGE_QUERY,
     }
@@ -158,8 +152,6 @@ def value(series: dict) -> float:
 def unknown_sources(found: dict[str, list[dict]]) -> set[str]:
     """The key prefixes whose emptiness this poll does not prove recovered."""
     unknown = set()
-    if not any(value(s) == 1 for s in found["kuma_up"]):
-        unknown.add("kuma")
     ages = [value(s) for s in found["prom_age"]]
     if not ages or min(ages) < ALERTS_SETTLE_S:
         unknown.add("alert")
@@ -170,27 +162,9 @@ def slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
 
 
-def kuma_up_keys(kuma: list[dict]) -> set[str]:
-    """The Kuma keys whose monitor reads up now; only these count as recovered."""
-    return {
-        f"kuma:{s['metric']['monitor_name']}"
-        for s in kuma
-        if s.get("metric", {}).get("monitor_name") and value(s) == 1
-    }
-
-
-def down_keys(kuma: list[dict], alerts: list[dict]) -> dict[str, dict]:
-    """Every source that is down now, keyed `kuma:<monitor>` or `alert:<name>:<service>`."""
+def down_keys(alerts: list[dict]) -> dict[str, dict]:
+    """Every alert firing now, keyed `alert:<name>:<service>`."""
     found: dict[str, dict] = {}
-    for series in kuma:
-        m = series.get("metric", {})
-        name = m.get("monitor_name", "")
-        if name and value(series) == 0:
-            found[f"kuma:{name}"] = {
-                "source": "kuma",
-                "monitor": name,
-                "severity": m.get("severity", ""),
-            }
     for series in alerts:
         m = series.get("metric", {})
         name = m.get("alertname", "")
@@ -243,16 +217,14 @@ def step(
     streak_needed: int,
     storm_size: int,
     unknown: set[str] | frozenset[str] = frozenset(),
-    kuma_up: set[str] | frozenset[str] = frozenset(),
     floor: int = 0,
 ) -> tuple[dict, list[dict]]:
     """Advance the per-key state by one poll; return (new state, episodes to open).
 
-    `down` is None when the read failed, and `unknown` names the sources (`kuma`, `alert`)
-    whose keys this poll cannot judge: either way those keys keep their state. The baseline
-    waits for a poll that can judge every source, so a source that comes back later cannot
-    read its standing reds as new falls. A Kuma key recovers only when it is in `kuma_up`; an
-    alert key recovers when it stops firing.
+    `down` is None when the read failed, and `unknown` names the sources (`alert`) whose keys
+    this poll cannot judge: either way those keys keep their state. The baseline waits for a
+    poll that can judge every source, so a source that comes back later cannot read its
+    standing alerts as new falls. A key recovers when it stops firing.
 
     A fall whose severity ranks below `floor` comes back as a `skipped` record rather than an
     episode, and still opens its key, so it is reported once per fall. Skipped falls never
@@ -277,11 +249,9 @@ def step(
                 ready.append(key)
         keys[key] = entry
     for key in list(keys):
-        source = key.split(":", 1)[0]
-        if key in down or source in unknown:
+        if key in down or key.split(":", 1)[0] in unknown:
             continue
-        if source == "alert" or key in kuma_up:
-            del keys[key]  # recovered: the next fall is a new episode
+        del keys[key]  # recovered: the next fall is a new episode
     episodes: list[dict] = []
     if ready and not (hold or muted):
         below = sorted(k for k in ready if severity_rank(down[k]) < floor)
@@ -368,7 +338,7 @@ def main(
     """One poll; `read`, `start` and `now` are the seams a test replaces."""
     argparse.ArgumentParser(
         prog="claude_triage_poll.py",
-        description="Poll Kuma and Alertmanager once and start triage for new episodes.",
+        description="Poll Alertmanager once and start triage for new episodes.",
     ).parse_args(argv[1:])
     cfg = parse_env_file(config_path)
     mode = cfg.get("POLL_MODE", "off")
@@ -390,10 +360,9 @@ def main(
             WARNING,
             tag=TAG,
         )
-        down, hold, unknown, up = None, False, set(), set()
+        down, hold, unknown = None, False, set()
     else:
-        down = down_keys(found["kuma"], found["alerts"])
-        up = kuma_up_keys(found["kuma"])
+        down = down_keys(found["alerts"])
         hold = any(
             a.get("metric", {}).get("alertname") == HOLD_ALERT for a in found["alerts"]
         )
@@ -407,7 +376,6 @@ def main(
         int(cfg.get("POLL_STREAK", "2")),
         int(cfg.get("POLL_STORM_SIZE", "3")),
         unknown,
-        up,
         # An unknown floor admits only `critical`: a typo must not open every warning.
         SEVERITY_RANK.get(cfg.get("POLL_MIN_SEVERITY", ""), SEVERITY_RANK["critical"]),
     )
