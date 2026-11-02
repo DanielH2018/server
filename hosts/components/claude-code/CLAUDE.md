@@ -270,9 +270,8 @@ template carries why it is a host timer at all.
   deadline from its own minute default, so that default must stay `*/N`, and
   `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it.
   ENFORCED: `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`
-  holds both shipped scripts to no Kuma library, `kuma_push` or push URL. The two push tokens,
-  `artifacts_sync_push_token` and `claude_otel_push_token`, are no longer package credentials. They stay in
-  `PENDING_RETIREMENT` (`scripts/secrets_mgmt/pending_retirement.py`) until B6a's token PR.
+  holds both shipped scripts to no Kuma library, `kuma_push` or push URL. B6a's token PR retired
+  their two push tokens.
 
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 

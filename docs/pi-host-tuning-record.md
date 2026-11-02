@@ -224,7 +224,7 @@ the root filesystem's ext4 `errors_count` verdict to `pi-sd-health.prom` in node
 textfile directory. `homelab-pi-sd-health.timer` runs it every 5 minutes. A nonzero count is a
 failing verdict, which `PiSdHealthFailed` pages, and a verdict older than 900 seconds trips
 `PiSdHealthNotReporting`. The script pushed to a Kuma monitor until M6 batch B5's Cutover-2, and
-the Pi's SOPS file keeps `pi_sd_health_push_token` until B5's token PR retires it.
+B5's token PR retired its push token a week later.
 
 **The same verdict carries the rotated-log integrity result** (#2715).
 `pi-gz-integrity.sh.j2` (`homelab-pi-gz-integrity.timer`, daily 01:40 UTC, and a minute after
@@ -271,8 +271,8 @@ role's compose file rather than list entries. It reads `docker ps` against the r
 through the docker group, so it still reports docker-proxy's own death, and writes its verdict
 to `pi-recovery-health.prom`. Any one container down is a failing verdict, which
 `PiRecoveryFailed` pages; a dead timer or host trips `PiRecoveryNotReporting` after 900
-seconds. The script pushed to a Kuma monitor until M6 batch B5's Cutover-2, and the Pi's SOPS
-file keeps `pi_recovery_push_token` until B5's token PR retires it. The set was autoheal and
+seconds. The script pushed to a Kuma monitor until M6 batch B5's Cutover-2, and B5's token PR
+retired its push token a week later. The set was autoheal and
 docker-proxy alone until #1910: the same failed start reaches wg-easy and
 docker-proxy-lifecycle.
 

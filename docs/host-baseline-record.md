@@ -227,7 +227,7 @@ daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
 - Writes `setup-drift-check.prom`, which `SetupDriftFailed` and `SetupDriftNotReporting`
   read. It pushed the "Setup Plane Drift (agent hosts)" Kuma tile until M6 batch B2's
   Cutover-2, which also retired the `/etc/homelab/kuma-push.env` token file with an `absent`
-  task. The token stays in `CROSS_HOST_PUSH_TOKENS` until B2's token PR retires the key.
+  task. B2's token PR retired the key a week later.
 
 ### Verify a cron arm as the user cron runs it
 
@@ -287,8 +287,8 @@ without `-f`, so a route Traefik refuses returns `404 page not found` with exit 
 the role's `tests/test_loki_route_health.py` holds that 404 as a DOWN case.
 `ansible/tests/setup/test_loki_route_witness.py` guards the host list, the deadline against
 the timer period, the exit-code contract (a down verdict exits 1), the removal arm, and that
-neither copy pushes to Kuma, which M6 batch B2's Cutover-2 removed. Both retired tokens stay in
-`CROSS_HOST_PUSH_TOKENS` (`scripts/secrets_mgmt/consumers.py`) until B2's token PR.
+neither copy pushes to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both
+tokens a week later.
 
 ## The generated-docs refresh cron, in detail
 

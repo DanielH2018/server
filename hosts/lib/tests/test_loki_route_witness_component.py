@@ -17,7 +17,8 @@ from lib.estate import role_defaults
 from lib.repo_paths import REPO
 
 COMPONENT = REPO / "hosts" / "components" / "loki-route-witness" / "component.yml"
-CREDENTIAL = "loki_route_witness_push_token"
+# The Kuma push token B2's token PR retired.
+RETIRED = "loki_route_witness_push_token"
 CONTRACT_PARTS = (
     "Autonomous-role contract",
     "Scope / exclusions:",
@@ -64,7 +65,7 @@ def test_the_timer_fires_hourly_at_minute_23_and_the_links_are_enabled(package):
         "homelab-loki-route-witness.timer",
         "homelab-loki-route-witness-boot.service",
     } <= set(package.enable_links())
-    assert package.credentials.count(CREDENTIAL) == 1
+    assert RETIRED not in package.credentials
 
 
 def test_the_package_retires_the_ansible_era_timer_cron_and_files(package):
@@ -87,9 +88,8 @@ def test_the_role_skips_daniel_box_and_keeps_daniel_server():
     assert defaults["initial_setup_packaged_hosts"]["loki_route_witness"] == [
         "daniel-box"
     ]
-    # The retired token stays named until B2's token PR, for `host_secrets.py check`.
     spec = yaml.safe_load(COMPONENT.read_text())
-    assert spec["credentials"] == [CREDENTIAL]
+    assert "credentials" not in spec
 
 
 def test_the_component_header_carries_the_contract():

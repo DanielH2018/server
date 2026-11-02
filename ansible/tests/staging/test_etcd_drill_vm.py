@@ -241,13 +241,6 @@ def test_the_drill_deadline_is_derived_from_the_cadence():
     )
 
 
-def test_the_orchestrator_is_registered_as_a_cross_host_token_consumer():
-    consumers = (
-        ANSIBLE.parent / "scripts" / "secrets_mgmt" / "consumers.py"
-    ).read_text()
-    assert '"etcd_drill_full_push_token"' in consumers
-
-
 def test_the_fence_verdict_has_a_check_of_its_own():
     """The fence's non-fatal verdict is written to its own textfile check.
 

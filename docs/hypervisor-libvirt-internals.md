@@ -83,8 +83,7 @@ that an unmeasured fence does not read as a held one, and at the monitor layer i
   maintenance fault, not a page.
 - Both drill push tokens, `etcd_drill_full_push_token` and `etcd_drill_fence_push_token`, stopped
   being read at M6 batch B4's Cutover-2, which retired their env file on daniel-server with an
-  `absent` task. They stay registered in `scripts/secrets_mgmt/consumers.py` until B4's token PR
-  retires the keys.
+  `absent` task. B4's token PR retired both keys a week later.
 
 Two addresses are allocated rather than pinned in the inventory — Longhorn's frontend ClusterIP
 and a pod IP discovered from `ip neigh show dev cni0` — which is why each carries the host-side

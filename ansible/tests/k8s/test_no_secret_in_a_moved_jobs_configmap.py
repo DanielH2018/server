@@ -107,16 +107,16 @@ def test_a_moved_roles_configmaps_carry_no_secret_value_is_clean() -> None:
     assert {key: hits for key, hits in found.items() if hits} == {}
 
 
-def test_a_configmap_carrying_a_push_token_is_flagged() -> None:
+def test_a_configmap_carrying_a_secret_value_is_flagged() -> None:
     values = sentinels()
-    token = "monitor_bridge_configarr_push_token"
+    token = "healthchecks_ping_key"
     rendered = _LEAKING_CONFIGMAP.format(token=values[token])
     assert leaked(rendered, values) == [("leaky-health", token)]
 
 
-def test_the_same_token_in_a_secret_is_not_flagged() -> None:
+def test_the_same_value_in_a_secret_is_not_flagged() -> None:
     values = sentinels()
-    rendered = _LEAKING_CONFIGMAP.format(
-        token=values["monitor_bridge_configarr_push_token"]
-    ).replace("kind: ConfigMap", "kind: Secret")
+    rendered = _LEAKING_CONFIGMAP.format(token=values["healthchecks_ping_key"]).replace(
+        "kind: ConfigMap", "kind: Secret"
+    )
     assert leaked(rendered, values) == []

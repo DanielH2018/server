@@ -530,14 +530,8 @@ def main(argv=None) -> int:
     # below uniform rather than making every other subcommand carry an argument for this one.
     pc.set_defaults(func=lambda args, _tools: cmd_consumers(args))
     pa = sub.add_parser("audit")
-    # `--push` is the name the wrapper used while the audit pushed to Kuma (M6 batch B2's
-    # Cutover-2 removed the push). It stays an alias because the wrapper ships in the
-    # homelab-daniel-box package while this file runs from the checkout the GitOps tick
-    # fast-forwards, so for one landing a wrapper that still passes `--push` can run this file.
-    # B2's token PR deletes the alias.
     pa.add_argument(
         "--verdict",
-        "--push",
         dest="verdict",
         action="store_true",
         help="exit 1 when the audit reads down (the daily wrapper's textfile verdict)",

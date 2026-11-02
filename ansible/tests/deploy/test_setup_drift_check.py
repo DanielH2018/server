@@ -20,7 +20,6 @@ from lib.proc_testing import run
 _REPO = REPO
 _LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 _CRONS = _REPO / "ansible/roles/setup/initial_setup/tasks/crons.yml"
-_CONSUMERS = _REPO / "scripts/secrets_mgmt/consumers.py"
 
 
 def _run_scan(tmp_path, deployed=(), rendered=(), repo_files=None):
@@ -377,16 +376,6 @@ def test_the_library_is_stamped_as_deployed_code():
     assert "stamp_deployed_name: setup-drift-lib" in text, (
         "the shared arms are copy:-deployed, so a stale copy of them silently changes what both "
         "readers check — the exact class arm 2 exists to report"
-    )
-
-
-def test_the_token_is_registered_as_cross_host():
-    """The cron runs on daniel-server and the tile deploys from daniel-box, so no single
-    `rotate --deploy` can move both halves. Left out of the set, an unattended rotation would
-    update the tile and leave the cron pushing the old value — silencing the only monitor that
-    can report a stale render on the host that owns the UPS shutdown chain."""
-    assert '"setup_drift_push_token"' in _CONSUMERS.read_text(), (
-        "setup_drift_push_token must be in CROSS_HOST_PUSH_TOKENS"
     )
 
 

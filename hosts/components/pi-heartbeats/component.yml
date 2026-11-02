@@ -2,9 +2,7 @@
 # the optimize_pi role installed them as three crons. Each script runs as a oneshot service on a
 # timer, as sys_user. The recovery unit grants that user the `docker` group itself, with
 # `SupplementaryGroups=docker`, because no task adds sys_user to it on a rebuilt Pi.
-# No unit loads a credential, because M6 batch B5 dropped the Kuma pushes. The package spec still
-# lists pi_sd_health_push_token and pi_recovery_push_token under `credentials:`, because the
-# Pi's SOPS file must match that list; B5's token PR retires both together.
+# No unit loads a credential, because M6 batch B5 dropped the Kuma pushes.
 #
 # - homelab-pi-sd-health, every 5 minutes: the root filesystem's ext4 errors_count, the
 #   rotated-log integrity verdict and the log2ram mount, written to pi-sd-health.prom in

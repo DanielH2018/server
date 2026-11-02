@@ -405,12 +405,10 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
     credentials = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])[
         "credentials"
     ]
-    # The two heartbeat tokens (H4.5), and the scan tokens and Healthchecks.io key (H7.30).
+    # The scan tokens and Healthchecks.io key (H7.30).
     assert credentials == [
         "aide_daniel_pi_push_token",
         "healthchecks_ping_key",
-        "pi_recovery_push_token",
-        "pi_sd_health_push_token",
         "rkhunter_daniel_pi_push_token",
     ]
     for key in credentials:

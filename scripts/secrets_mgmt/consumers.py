@@ -38,57 +38,16 @@ from deployer_lib.deploy_cross_role import k8s_lookup_map
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        "pi_sd_health_push_token",  # Pi timer, via optimize_pi's interim file + server label
-        "pi_recovery_push_token",  # Pi timer, via optimize_pi's interim file + server label
-        "longhorn_backup_push_token",  # daniel-box cron (k3s role) + daniel-server label
-        # daniel-box timer (claude-code component) + daniel-server label. The timer pushes to
-        # nothing since M6 batch B6a's Cutover-2, so the key has no pusher left.
-        "claude_otel_push_token",
         "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
-        "manifest_prune_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
-        "release_staleness_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
-        "live_drift_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
-        "etcd_snapshot_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
-        # daniel-box cron (setup/gitops_deploy) + k8s/uptime-kuma static tile. Declines for the
-        # same reason the setup-plane tokens below do rather than naming a role: gitops_deploy has
-        # no `containers_list` entry, so `deploy.yml --tags gitops_deploy` matches nothing and
-        # exits 0 — a rotation would stamp green having deployed neither half. It is applied by
-        # `initial_setup.yml --tags gitops_deploy`, by hand, because it is the role running the
-        # tick.
-        "ruleset_drift_push_token",
-        # Same role, same cron shape, same reason: daniel-box cron (setup/gitops_deploy) +
-        # k8s/uptime-kuma static tile, applied by `initial_setup.yml --tags gitops_deploy`.
-        "interaction_limit_push_token",
-        # daniel-box timer (claude-code component) + k8s/uptime-kuma static tile. The timer pushes
-        # to nothing since M6 batch B6a's Cutover-2, so the key has no pusher left.
-        "artifacts_sync_push_token",
         # daniel-box cron (setup/k8s_host_files, since registry's D5 conversion) + k8s/uptime-kuma
         # static tile. k8s_host_files has no `containers_list` entry, so `deploy.yml --tags
         # registry` matches nothing; the script is applied by `initial_setup.yml --tags
         # k8s_host_files`. Until that PR the k8s/registry role rendered it.
         "registry_gc_push_token",
-        # daniel-box cron (setup/initial_setup) + k8s/uptime-kuma static tile. Both halves embed
-        # the token and must move together; initial_setup has no deploy tag, so a `--deploy
-        # --tags uptime-kuma` would rotate the tile and leave the cron pushing the old value —
-        # which reads as the monitor going silent, the exact fault it was added to report.
-        "docs_refresh_push_token",
-        # Same role, same cron shape, same reason: the weekly eval sweep (eval-run.sh.j2) +
-        # its k8s/uptime-kuma static tile.
-        "homelab_eval_push_token",
-        # daniel-SERVER cron (setup/initial_setup) + a k8s/uptime-kuma tile deployed from
-        # daniel-box: two hosts, so no single redeploy can move both halves. Rotating the tile
-        # alone would leave the cron pushing the old value, silencing the only monitor that can
-        # report a stale render on the host that owns the UPS shutdown chain.
-        "setup_drift_push_token",
-        # The Loki read-route witness, one token per cluster node: a setup/initial_setup cron on
-        # daniel-box and daniel-server respectively, against tiles deployed from daniel-box. Same
-        # shape as setup_drift_push_token above — no deploy tag on the pushing role, and for the
-        # daniel-server half two hosts as well.
-        "loki_route_witness_push_token",
-        "loki_route_witness_daniel_server_push_token",
         # The weekly AIDE check, one token per host: a setup/initial_setup cron on each of the
-        # three hosts against tiles deployed from daniel-box. Same shape as the witness tokens
-        # above, and daniel-pi's half crosses hosts as well.
+        # three hosts against tiles deployed from daniel-box. initial_setup has no deploy tag, so
+        # no redeploy moves the cron's half, and daniel-server's and daniel-pi's halves cross
+        # hosts as well.
         "aide_daniel_box_push_token",
         "aide_daniel_server_push_token",
         "aide_daniel_pi_push_token",
@@ -96,37 +55,10 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "rkhunter_daniel_box_push_token",
         "rkhunter_daniel_server_push_token",
         "rkhunter_daniel_pi_push_token",
-        # daniel-SERVER cron (setup/hypervisor, applied by `initial_setup.yml --tags hypervisor`
-        # on that host) + a k8s/uptime-kuma tile deployed from daniel-box: two hosts, no single
-        # redeploy moves both halves. The tile is the only alarm on the full etcd restore drill.
-        "etcd_drill_full_push_token",
-        # The same run's egress-fence verdict, on a tile of its own. Same two-host shape
-        # as the token above, and rendered into the same env file on daniel-server — so a
-        # rotation that moves only the tile silences the alarm that says a fenced range went
-        # unmeasured, which is the one thing this tile exists to say.
-        "etcd_drill_fence_push_token",
-        "secret_rotation_push_token",  # self-referential
-        # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
-        # Named `monitor_bridge_*` only for Kuma monitor-history continuity; the check lives
-        # outside monitor-bridge.
-        "monitor_bridge_fake_remux_push_token",  # setup/fake_remux cron
-        "monitor_bridge_fake_remux_replace_push_token",  # setup/fake_remux cron
-        "monitor_bridge_renovate_alive_push_token",  # setup/renovate_notify
-        "renovate_agent_kuma_push_token",  # setup/renovate_agent, same shape
-        # Same reason as its two fake_remux siblings above: pushed by a setup role with no deploy
-        # tag, so there is nothing for --deploy to run. The tile is in k8s/uptime-kuma.
-        "mkv_attachment_repair_push_token",
-        # nut_host cron (renders /etc/nut/kuma-push.env) + k8s/uptime-kuma static tile. Same shape
-        # as docs_refresh_push_token above: nut_host runs only from initial_setup.yml and has no
-        # deploy tag, so `--deploy --tags uptime-kuma` would move the tile and leave the root cron
-        # pushing the old value — silencing the monitor that watches the shutdown chain.
-        "ups_secondary_push_token",
-        # daniel-server's (ups_host) own leg of the same watchdog, so the two hosts do not
-        # share ups_secondary_push_token above — same shape and same reason.
-        "ups_secondary_daniel_server_push_token",
         # daniel-box timer (setup/render_records, renders /etc/render-records/config.env) +
-        # k8s/uptime-kuma static tile. Same shape as mkv_attachment_repair_push_token: the
-        # pushing role runs only from initial_setup.yml and has no deploy tag.
+        # k8s/uptime-kuma static tile. The pushing role runs only from initial_setup.yml and has
+        # no deploy tag, so `--deploy --tags uptime-kuma` would move the tile and leave the timer
+        # pushing the old value.
         "render_records_push_token",
     }
 )
@@ -139,21 +71,10 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
 # write a new value, deploy monitor-bridge, leave the real pusher on the old token and stamp
 # `last_rotated` green.
 #
-# Derived by measurement, not by reading the names: `grep -rl <token> ansible/roles/`. Nine of
-# the 41 `monitor_bridge_*` tokens are mis-routed by their prefix.
+# Derived by measurement, not by reading the names: `grep -rl <token> ansible/roles/`.
 PREFIX_EXCEPTION_CONSUMERS = {
-    "monitor_bridge_appsec_push_token": "crowdsec",
-    "monitor_bridge_home_allowlist_push_token": "crowdsec",
     "monitor_bridge_cloudflare_drift_push_token": "monitor-bridge",
-    "monitor_bridge_configarr_push_token": "configarr",
-    "monitor_bridge_janitorr_push_token": "janitorr",
-    "monitor_bridge_pi_peers_push_token": "pi-peer-backup",
 }
-# The other three mis-routed tokens are pushed by SETUP roles (setup/fake_remux,
-# setup/renovate_notify), which have no entry in `containers_list` and therefore no deploy tag.
-# Naming the role here would be the same defect one step along: `ansible-playbook deploy.yml
-# --tags fake_remux` matches nothing and Ansible exits 0, so the rotation would still stamp
-# green having deployed nothing. They decline instead, above.
 
 
 # Every push token has TWO consumers in the cluster, and this function names both. The pusher
@@ -198,17 +119,10 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         pusher: str | None = PREFIX_EXCEPTION_CONSUMERS[name]
     elif name.startswith("monitor_bridge_"):
         pusher = "monitor-bridge"
-    elif name.startswith("cloudflare_ddns_"):
-        pusher = "cloudflare-ddns"
     elif name == "docker_fleet_push_token":
         # The monitor-bridge role renders the host cron script; the monitor itself is a
         # static-file entity in the cluster Kuma (slice-7 Phase D KD2).
         pusher = "monitor-bridge"
-    elif name == "arr_autoblock_push_token":
-        # autofix-bridge (daniel-server only) renders the pusher's env. (Token name kept as
-        # arr_autoblock_* for Kuma history continuity; the consumer is the autofix-bridge
-        # deploy tag.)
-        pusher = "autofix-bridge"
     else:
         # anything else unrecognised -> manual
         return ()

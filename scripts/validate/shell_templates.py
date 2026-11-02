@@ -74,14 +74,10 @@ from validate.validate_lib.shell_lint import (
 COMPONENTS = REPO / "hosts" / "components"
 
 # Shell-specific overrides: values a lint pass needs to be shell-plausible rather than the bare
-# "STUB" literal StubUndefined fills in elsewhere. The push token is a SOPS secret with no
-# plaintext fallback in group_vars/all.yml (unlike cloudflare_ips/sys_user, which ARE plaintext
-# and come through BASE_CONTEXT/all_vars unchanged). Any token-shaped string is fine, because it
-# is just interpolated into a URL path. `hostvars` needs no stub: `render_context` builds it
-# from each host's literal `server_ip`, and a stub here would replace that whole map.
-SHELL_STUB_OVERRIDES = {
-    "secret_rotation_push_token": "stub-secret-rotation-token",
-}
+# "STUB" literal StubUndefined fills in elsewhere. No linted template needs one. `hostvars` needs
+# no stub: `render_context` builds it from each host's literal `server_ip`, and a stub here would
+# replace that whole map.
+SHELL_STUB_OVERRIDES: dict[str, str] = {}
 
 
 def template_context(path: Path, overrides: dict | None = None) -> dict:

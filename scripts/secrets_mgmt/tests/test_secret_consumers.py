@@ -49,24 +49,12 @@ def test_consumer_tags_non_push_prefixed_token_gets_no_tile():
     assert consumer_tags("monitor_bridge_ha_token") == ("monitor-bridge",)
 
 
-def test_consumer_tags_cloudflare_ddns_tokens():
-    # B7's Cutover-2 removed the push, so the token is pending retirement and owes no redeploy.
-    assert consumer_tags("cloudflare_ddns_proxied_push_token") == ()
-
-
 def test_consumer_tags_cross_host_tokens_are_manual():
-    # Cross-host / self-referential — the unattended cron must NOT auto-rotate these, and they
-    # must NOT pick up the uptime-kuma tag either: their pusher half sits on another HOST, so a
-    # tag list would assert a repair one playbook run cannot perform. This is the reject half of
-    # the multi-tag change.
-    assert consumer_tags("pi_sd_health_push_token") == ()
-    assert consumer_tags("pi_recovery_push_token") == ()  # Pi cron, manual Pi deploy
-    assert consumer_tags("secret_rotation_push_token") == ()
-
-
-def test_consumer_tags_autofix_bridge_token():
-    # B7's Cutover-2 removed autofix-bridge's push, so its token is pending retirement.
-    assert consumer_tags("arr_autoblock_push_token") == ()
+    # Cross-host — the unattended cron must NOT auto-rotate these, and they must NOT pick up the
+    # uptime-kuma tag either: their pusher half sits on another HOST, so a tag list would assert
+    # a repair one playbook run cannot perform. This is the reject half of the multi-tag change.
+    assert consumer_tags("aide_daniel_pi_push_token") == ()
+    assert consumer_tags("rkhunter_daniel_server_push_token") == ()
 
 
 def test_consumer_tags_registry_gc_token_is_manual():
@@ -74,13 +62,6 @@ def test_consumer_tags_registry_gc_token_is_manual():
     # setup role has no deploy tag, so the unattended rotation must skip it rather than redeploy
     # `registry`, which no longer renders the token, and leave the cron pushing the old value.
     assert consumer_tags("registry_gc_push_token") == ()
-
-
-def test_consumer_tags_artifacts_sync_token_is_manual():
-    # setup/claude_code renders the sync cron that pushes since H2.7, and a setup role has no
-    # deploy tag, so the unattended rotation must skip it rather than redeploy `artifacts`,
-    # which no longer renders the token, and leave the cron pushing the old value.
-    assert consumer_tags("artifacts_sync_push_token") == ()
 
 
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
@@ -113,8 +94,8 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
 # ── consumer_tag correctness ────────────────────────────────────────────────
 # The guard above proves a token RESOLVES a tag. Nothing proved the tag was right, which is
 # this estate's recurring guard-scope shape: a check written alongside a fix inherits the
-# fix's scope. Routing every `monitor_bridge_*` name to monitor-bridge by prefix is wrong,
-# because nine of those tokens are pushed from another role's health script entirely —
+# fix's scope. Routing every `monitor_bridge_*` name to monitor-bridge by prefix is wrong
+# when such a token is pushed from another role's health script entirely —
 # the prefix is a Kuma monitor-history artefact, kept so renaming the monitor would not lose
 # its history. For those, `rotate --deploy` would write a new value, deploy a role that renders
 # the token nowhere, leave the real pusher on the old one, and stamp `last_rotated` green.
@@ -136,8 +117,8 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
     """The same failure one step along: every consumer tag must be a real deploy tag.
 
     `ansible-playbook deploy.yml --tags <unmatched>` runs nothing and exits 0, so the rotation still
-    reads as deployed. Three mis-routed tokens are pushed by SETUP roles with no `containers_list`
-    entry, which is why they decline in CROSS_HOST_PUSH_TOKENS instead of naming their role.
+    reads as deployed. A token pushed by a SETUP role with no `containers_list` entry declines in
+    CROSS_HOST_PUSH_TOKENS instead of naming its role for this reason.
     """
     from deploy_tools.deploy_lib import tags as deploy_tags
 
