@@ -1,9 +1,8 @@
 """`deploy_cross_role.k8s_lookup_readers`: the k8s roles that `lookup()` another role's file.
 
-A change to such a file must deploy its readers as well as its owner. uptime-kuma renders a
-push tile for every row of monitor-bridge's `files/check_table.py` (#3781), so a new check
-landed as `--tags monitor-bridge` alone would ship the check and leave its tile undeployed. The
-landing (`reach.Reach.tags`), the deployer's defer alert and the secret census all read
+A change to such a file must deploy its readers as well as its owner. authelia and traefik
+embed crowdsec's allowlists, so an allowlist landed as `--tags crowdsec` alone would ship the
+list and leave its copies stale. The landing (`reach.Reach.tags`), the deployer's defer alert and the secret census all read
 this derivation.
 
 Run: uv run pytest ansible/tests/deploy/test_k8s_lookup_readers.py
@@ -16,9 +15,9 @@ from lib.repo_paths import REPO
 CHECK_TABLE = "ansible/roles/k8s/monitor-bridge/files/check_table.py"
 
 
-def test_the_check_table_reaches_uptime_kuma_and_not_its_owner():
-    # monitor-bridge's own env-secret reads the table too; the owner is not an extra reader.
-    assert k8s_lookup_readers([CHECK_TABLE], REPO) == {"uptime-kuma"}
+def test_the_check_table_reaches_no_other_role():
+    # uptime-kuma looked the table up until M6 batch A6's Cutover-2 deleted its bridge tiles.
+    assert k8s_lookup_readers([CHECK_TABLE], REPO) == set()
 
 
 def test_crowdsec_allowlists_reach_both_roles_that_embed_them():
@@ -61,7 +60,16 @@ def test_a_lookup_with_keyword_arguments_is_a_reader(tmp_path):
     ) == {"reader"}
 
 
-def test_a_check_table_change_lands_with_the_tile_role():
+def test_a_check_table_change_lands_with_its_own_role_alone():
     tags, source = land_tags.derive([CHECK_TABLE], changed_files=1)
     assert source == "pr"
-    assert tags == ["monitor-bridge", "uptime-kuma"]
+    assert tags == ["monitor-bridge"]
+
+
+def test_a_crowdsec_allowlist_change_lands_with_both_embedding_roles():
+    # Non-vacuity for the derivation the check-table tests above now read as empty.
+    tags, source = land_tags.derive(
+        ["ansible/roles/k8s/crowdsec/files/crowdsec-whitelist.yaml"], changed_files=1
+    )
+    assert source == "pr"
+    assert {"authelia", "traefik"} <= set(tags)

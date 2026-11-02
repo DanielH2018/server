@@ -61,10 +61,18 @@ def test_gate_sets_group_members_by_the_gate_column():
         "| Gate value | Held by | Members | Checks |",
         "|---|---|---|---|",
         "| `prometheus` | Prometheus Reachable gate, which suppresses them | 1 | `disk` |",
-        "| `startup_grace` | startup grace, which holds them `up` through their first "
-        "down cycles | 1 | `n8n` |",
+        "| `startup_grace` | their rule's `for: 10m`, which rides out the weekly reboot "
+        "| 1 | `n8n` |",
         "| ungated | nothing | 1 | `etcd_restore_drill` |",
     ]
+
+
+def test_a_gate_value_with_no_gate_row_is_the_exporter_suppression():
+    rows = [row for row in ROWS if not row.get("is_gate")]
+    assert (
+        "| `prometheus` | the exporter-health probe, which suppresses them while an "
+        "exporter is down | 1 | `disk` |"
+    ) in fb.render_gate_sets(rows).splitlines()
 
 
 def test_thresholds_renders_key_and_value():
@@ -113,16 +121,19 @@ def test_tunables_never_carry_a_value_built_from_a_variable():
 def test_every_check_row_reaches_the_checks_fragment():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
     body = fb.render_bridge_checks(rows)
-    assert len(rows) >= 20
+    assert len(rows) >= 19
     assert all(f"`{row['name']}`" in body for row in rows)
 
 
 def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
     body = fb.render_gate_sets(rows)
-    assert {"prometheus", "b2_reachable", "wan_reachable"} <= {
+    assert {"b2_reachable", "wan_reachable"} == {
         row["name"] for row in rows if row.get("is_gate")
     }
+    # The `prometheus` value has no gate row since M6 batch A6's Cutover-2, but its member keeps a
+    # set line: the exporter suppression.
+    assert "| `prometheus` | " in body
     for row in rows:
         if not row.get("is_gate"):
             assert body.count(f"`{row['name']}`") == 1, row["name"]
@@ -130,9 +141,9 @@ def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
 
 def test_thresholds_fragment_finds_the_template_tunables():
     found = dict(fb.read_env_tunables(fb.ENV_SETTINGS.read_text()))
-    assert len(found) >= 35
+    assert len(found) >= 34
     assert found["INTERVAL"] == "300"
-    assert found["GRACE_CYCLES"] == "2"
+    assert "GRACE_CYCLES" not in found
 
 
 # --- *Live checks* titles against CHECKS ----------------------------------------------------
@@ -201,7 +212,7 @@ def test_every_live_check_has_a_bullet_and_every_bullet_a_live_check():
     displays = {row["display"] for row in rows}
     page = CHECKS_PAGE.read_text()
     titles = live_check_titles(page)
-    assert len(titles) >= 20
+    assert len(titles) >= 19
     assert {"etcd Restore Drill", "B2 Free Tier Headroom"} <= set(titles)
     assert title_drift(page, displays) == (set(), set())
 
@@ -275,5 +286,5 @@ def test_every_checks_module_is_named_in_the_checks_row():
         "__init__"
     }
     rows = module_table(INTERNALS_PAGE.read_text())
-    assert {"service", "wan", "cluster"} <= stems
+    assert {"service", "wan", "b2"} <= stems
     assert unlisted_check_domains(rows, stems) == set()

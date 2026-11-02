@@ -7,6 +7,7 @@ without them.
 
 import importlib
 import os
+import re
 
 from dataclasses import replace
 
@@ -19,34 +20,29 @@ import verdict_export
 import deploy_pipeline
 from _bridge_env import bridge_env
 from _fake_sources import mk
-from _fake_sources import FakeSink, FakeSources
+from _fake_sources import FakeSources
 from _deploy_pipeline_fakes import github
 from bridge.types import Check
 
 
-def _silence(pushes, ran, names=("host_packages",), **env):
+def _silence(ran, names=("host_packages",), **env):
     """STATE the registry, the I/O and the environment, so main() runs touching nothing live.
 
-    Returns the `checks=` / `sources=` / `sink=` / `env=` / `exposition=` keyword arguments to hand
+    Returns the `checks=` / `sources=` / `env=` / `exposition=` keyword arguments to hand
     `cli.main`, which is how a test says which checks exist and what they read without mutating
     a module. `env` is the rendered pod environment, the one the pod's `main()` reads, with
     `HEARTBEAT_FILE` pointed at the null device so a cycle's heartbeat writes nowhere.
 
     Args:
-      pushes: Collects every (token, ok, msg) the cycle would have pushed, through the sink.
       ran: Collects the name of every check body that ran.
       names: The registry to run — one `Check` per name, each recording into `ran`.
       **env: Overrides laid on the rendered env, as `bridge_env` takes them.
     """
-    sink = FakeSink()
-    sink.pushes = pushes
-
     return {
         "env": bridge_env(HEARTBEAT_FILE=os.devnull, **env),
-        "checks": [Check(n, "tok_%s" % n, mk(ran, n)) for n in names],
+        "checks": [Check(n, mk(ran, n)) for n in names],
         # No exporter is down, so the exporter probe suppresses nothing.
         "sources": FakeSources(prom_vector=lambda q: []),
-        "sink": sink,
         # Unserved, so a looping main() binds no port. The rendered token is blank, so the
         # family reads nothing either.
         "exposition": deploy_pipeline.Exposition(),
@@ -54,8 +50,15 @@ def _silence(pushes, ran, names=("host_packages",), **env):
     }
 
 
-def test_no_arguments_means_loop_forever_and_push(cfg):
-    """The pod's own invocation: --once is off, --dry-run is off, so it loops and pushes.
+def _gauge(wired, name):
+    """The value `wired`'s exporter holds for the row `name`, or None when it holds none."""
+    body = wired["check_exposition"].body().decode()
+    found = re.search(r'^homelab_check_success\{check="%s"\} (\S+)$' % name, body, re.M)
+    return None if found is None else float(found.group(1))
+
+
+def test_no_arguments_means_loop_forever_and_export(cfg):
+    """The pod's own invocation: --once is off, so it loops and exports.
 
     The Deployment runs `python /app/cli.py` with no arguments, so "keeps looping" is the one
     behaviour the CLI may not change. Asserting the argparse defaults alone would pass even if
@@ -64,11 +67,10 @@ def test_no_arguments_means_loop_forever_and_push(cfg):
     """
     args = cli.build_parser().parse_args([])
     assert args.once is False
-    assert args.dry_run is False
     assert args.checks == []
 
-    pushes, ran = [], []
-    wired = _silence(pushes, ran)
+    ran = []
+    wired = _silence(ran)
 
     class _Slept(Exception):
         pass
@@ -80,20 +82,27 @@ def test_no_arguments_means_loop_forever_and_push(cfg):
     with pytest.raises(_Slept):
         cli.main([], sleep=_sleep, **wired)
     assert ran == ["host_packages"]
-    assert ("tok_host_packages", True, "host_packages ok") in pushes
+    assert _gauge(wired, "host_packages") == 1.0
 
 
-def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_push():
-    """The family runs in the looping pod, after the cycle's pushes, on the one `Sources`."""
-    pushes, ran = [], []
-    wired = _silence(pushes, ran, DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
+def test_there_is_no_dry_run_flag_since_nothing_is_pushed():
+    """RED on a parser that still takes `--dry-run`: Cutover-2 deleted the push it guarded."""
+    with pytest.raises(SystemExit) as stopped:
+        cli.build_parser().parse_args(["--dry-run"])
+    assert stopped.value.code == cli.USAGE_ERROR
+
+
+def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_run():
+    """The family runs in the looping pod, after the cycle's checks, on the one `Sources`."""
+    ran = []
+    wired = _silence(ran, DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
     wired["sources"] = github(prom_vector=lambda q: [])
 
     class _Slept(Exception):
         pass
 
     def _sleep(seconds):
-        assert ("tok_host_packages", True, "host_packages ok") in pushes
+        assert _gauge(wired, "host_packages") == 1.0
         raise _Slept
 
     with pytest.raises(_Slept):
@@ -105,7 +114,7 @@ def test_the_loop_publishes_the_deploy_pipeline_gauges_after_the_checks_push():
 
 def test_once_publishes_nothing_and_reads_no_github():
     """`--once` is the hand-run beside the pod, so it neither serves nor reads the family."""
-    wired = _silence([], [], DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
+    wired = _silence([], DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
     assert cli.main(["--once"], **wired) == 0
     assert wired["exposition"].body() == b""
     assert wired["sources"].queries("get_json") == []
@@ -119,7 +128,7 @@ def test_every_cycle_reads_the_one_state_main_built():
     `--check counter` keeps the gates and the exporter probe from sending a live query. The
     second cycle stops the loop with a BaseException, which `_evaluate` does not catch.
     """
-    wired = _silence([], [], INTERVAL="0")
+    wired = _silence([], INTERVAL="0")
     del wired["sources"]
     seen = []
 
@@ -133,7 +142,7 @@ def test_every_cycle_reads_the_one_state_main_built():
             raise _Stop
         return True, "counted"
 
-    wired["checks"] = [Check("counter", "tok_counter", counter)]
+    wired["checks"] = [Check("counter", counter)]
     with pytest.raises(_Stop):
         cli.main(["--check", "counter"], **wired)
     assert seen[0] is seen[1]
@@ -141,8 +150,8 @@ def test_every_cycle_reads_the_one_state_main_built():
 
 
 def test_once_runs_exactly_one_cycle_and_returns_zero():
-    pushes, ran = [], []
-    wired = _silence(pushes, ran)
+    ran = []
+    wired = _silence(ran)
     assert (
         cli.main(
             ["--once"], sleep=lambda s: pytest.fail("--once must not sleep"), **wired
@@ -150,82 +159,56 @@ def test_once_runs_exactly_one_cycle_and_returns_zero():
         == 0
     )
     assert ran == ["host_packages"]
-    assert ("tok_host_packages", True, "host_packages ok") in pushes
 
 
-def test_dry_run_evaluates_every_check_and_pushes_nothing():
-    """The rejecting half of the test above: same cycle, zero pushes.
-
-    A --dry-run that still pushed would overwrite a real monitor's state from a hand-run
-    terminal, which is exactly what the flag exists to make safe.
-    """
-    pushes, ran = [], []
-    wired = _silence(pushes, ran)
-    assert cli.main(["--once", "--dry-run"], **wired) == 0
-    assert ran == ["host_packages"]
-    assert pushes == []
-
-
-def test_the_registry_is_built_from_the_passed_env_when_checks_is_none(monkeypatch):
+def test_the_registry_is_built_from_the_table_when_checks_is_none(capsys):
     """The pod's own path: `checks is None` builds the registry with `registry.build_checks`.
 
     Every other test here STATES `checks=`, so the branch the Deployment actually takes would
-    otherwise be untested — and it is the branch that decides which Kuma monitor a result
-    reaches. `os.environ` carries a DIFFERENT token for the same monitor, so a build_checks
-    reading the process environment instead of its argument pushes to the wrong monitor and this
-    test sees it.
+    otherwise be untested. The run is narrowed to one row of the real table, so the row's real
+    body runs and the log names it.
     """
-    pushes, ran = [], []
-    wired = _silence(pushes, ran, KUMA_PUSH_HOST_PACKAGES="from_the_argument")
-    monkeypatch.setenv("KUMA_PUSH_HOST_PACKAGES", "from_os_environ")
-    argv = ["--once", "--check", "host_packages"]
-    assert (
-        cli.main(
-            argv,
-            env=wired["env"],
-            checks=None,
-            sources=wired["sources"],
-            sink=wired["sink"],
-        )
-        == 0
-    )
-    tokens = [t for t, _ok, _msg in pushes]
-    assert "from_the_argument" in tokens, tokens
-    assert "from_os_environ" not in tokens, tokens
+    wired = _silence([])
+    argv = ["--once", "--check", "gitops_alive"]
+    assert cli.main(argv, env=wired["env"], checks=None, sources=wired["sources"]) == 0
+    out = capsys.readouterr().out
+    assert re.search(r"checks=1/\d+\)", out), out
+    assert re.search(r"^(OK  |DOWN) gitops_alive - ", out, re.M), out
 
 
 def test_check_flag_is_repeatable_and_filters_like_checks_only(cfg):
-    pushes, ran = [], []
+    ran = []
     # The unnamed third entry is what makes this test discriminating. With only the two named
     # checks registered, a --check that was parsed and then never threaded into run_once()
     # produces exactly the same `ran` list, because an empty CHECKS_ONLY enables everything.
-    wired = _silence(pushes, ran, names=("host_packages", "n8n", "scrutiny"))
+    wired = _silence(ran, names=("host_packages", "n8n", "scrutiny"))
     cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
-    argv = ["--once", "--dry-run", "--check", "host_packages", "--check", "n8n"]
+    argv = ["--once", "--check", "host_packages", "--check", "n8n"]
     assert cli.main(argv, **wired) == 0
     assert sorted(ran) == ["host_packages", "n8n"]
     assert "scrutiny" not in ran
 
 
 def test_check_flag_names_one_row_without_its_gate():
-    """`--check host_packages` alone runs that row: the gate it names is not in `only`, so it
-    reads as up and does not run, which is the filter the operator asked for."""
-    pushes, ran = [], []
-    wired = _silence(pushes, ran, names=("prometheus", "host_packages", "n8n"))
-    assert cli.main(["--once", "--dry-run", "--check", "host_packages"], **wired) == 0
-    assert ran == ["host_packages"]
+    """`--check b2_storage` alone runs that row: the gate it names is not in `only`, so it
+    reads as up and does not run, which is the filter the operator asked for.
+    """
+    ran = []
+    wired = _silence(ran, names=("b2_reachable", "b2_storage", "n8n"))
+    assert cli.main(["--once", "--check", "b2_storage"], **wired) == 0
+    assert ran == ["b2_storage"]
 
 
 def test_an_unknown_check_name_exits_two_without_running_anything():
-    pushes, ran = [], []
-    wired = _silence(pushes, ran)
+    ran = []
+    wired = _silence(ran)
     assert cli.main(["--once", "--check", "no_such_check"], **wired) == 2
     assert ran == []
 
 
 def test_an_unknown_name_in_the_env_filter_exits_two_without_running_anything():
-    pushes, ran = [], []
-    wired = _silence(pushes, ran, CHECKS_SKIP="no_such_check")
+    ran = []
+    wired = _silence(ran, CHECKS_SKIP="no_such_check")
     assert cli.main(["--once"], **wired) == 2
     assert ran == []
 
@@ -288,8 +271,8 @@ def test_a_malformed_http_timeout_reaches_the_same_report(monkeypatch):
 
 
 def test_main_reports_config_problems_and_exits_two(capsys):
-    pushes, ran = [], []
-    wired = _silence(pushes, ran, SCRUTINY_MAX_AGE_H="ninety")
+    ran = []
+    wired = _silence(ran, SCRUTINY_MAX_AGE_H="ninety")
     assert cli.main(["--once"], **wired) == 2
     assert ran == []
     assert "SCRUTINY_MAX_AGE_H" in capsys.readouterr().err

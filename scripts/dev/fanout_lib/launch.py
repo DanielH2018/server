@@ -216,6 +216,26 @@ def remove_worktree_command(batch: str, target: Target = SERVER_TARGET) -> str:
     )
 
 
+VENV_SYNC_TIMEOUT_S = 60
+
+
+def venv_sync_command(batch: str, home: str | None = None) -> str:
+    """Build the batch worktree's `.venv` before its agent's first tool call.
+
+    `run-hook.sh` falls back to the session checkout's own venv when the primary checkout's
+    cannot run, and a fresh worktree has none to fall back to, so every guard asks (#6978).
+    A failed sync only warns: the venv matters only while the primary one is broken, and a
+    launch refused for it would cost the batch every other time.
+    """
+    wt = worktree_path(batch)
+    home = home or str(_Path.home())
+    return (
+        f"{{ timeout {VENV_SYNC_TIMEOUT_S} env PATH={unit_path(home)} "
+        f"uv --directory {wt} sync --frozen --quiet </dev/null || "
+        f'echo "fanout: uv sync in {wt} failed; its hooks have no venv to fall back to" >&2; }}'
+    )
+
+
 def snapshot_root(worktree: str) -> str:
     """Where another repo's batch in `worktree` holds its snapshot of this repo."""
     return f"{worktree}/{SNAPSHOT_DIR}"
@@ -333,16 +353,18 @@ def prepare_command(batch: str, target: Target) -> str:
 
 
 def launch_command(batch: str, review: bool = False, red_green: bool = False) -> str:
-    """The one call a batch launch runs: worktree add+lock, brief write, systemd-run.
+    """The one call a batch launch runs: worktree add+lock, venv sync, brief write, systemd-run.
 
     The brief text is this command's own stdin, consumed by the `cat` in the middle of the
     chain. Each step is wrapped by `_step` to exit on its own failure, so a failure
     anywhere stops the rest — a failed worktree add never reaches `cat` or `systemd-run`,
-    and a failed brief write never reaches `systemd-run`.
+    and a failed brief write never reaches `systemd-run`. The venv sync is the exception:
+    it warns and the chain goes on.
     """
     return " && ".join(
         [
             create_worktree_command(batch),
+            venv_sync_command(batch),
             write_brief_command(batch),
             systemd_run_command(batch, review=review, red_green=red_green),
         ]

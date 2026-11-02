@@ -33,7 +33,6 @@ import re
 from functools import lru_cache
 
 from jinja2 import ChainableUndefined
-from py_table import py_table
 
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env, register_ansible_filters
@@ -79,11 +78,6 @@ ROLE_DEFAULTS = yaml_fast.safe_load(
     (ANSIBLE / "roles/k8s/uptime-kuma/defaults/main.yml").read_text()
 )
 
-# monitor-bridge's check table, read the way both templates read it: through the filter.
-BRIDGE_CHECKS = py_table(
-    (ANSIBLE / "roles/k8s/monitor-bridge/files/check_table.py").read_text(), "CHECKS"
-)
-
 _STUB_PREFIX = "stub-"
 
 
@@ -101,18 +95,14 @@ class NamedStub(ChainableUndefined):
 
 
 def _token_seed() -> dict[str, str]:
-    """Every `*_push_token` the tiles or the bridge read, mapped to its `NamedStub` rendering.
+    """Every `*_push_token` the tiles read, mapped to its `NamedStub` rendering.
 
     A seed, not an assertion: the names decide which gated tiles render at all, and a tile that
-    does not render is a guard that covers nothing. Both sides are read because the join
-    between a tile and its bridge feeder needs the same value on both. The bridge's names come
-    from its check table, which both templates render one token per row from (#3659, #3781);
-    neither template names one.
+    does not render is a guard that covers nothing. The names come from the template itself:
+    since M6 batch A6's Cutover-2 no monitor-bridge row renders a token.
     """
     names = set(re.findall(r"\b([a-z0-9_]+_push_token)\b", TEMPLATE.read_text()))
-    for row in BRIDGE_CHECKS:
-        names.add(row["token"])
-    assert len(names) >= 19, f"the push-token scan went thin: {sorted(names)}"
+    assert len(names) >= 6, f"the push-token scan went thin: {sorted(names)}"
     return {name: _STUB_PREFIX + name for name in names}
 
 
@@ -203,33 +193,6 @@ def bridge_env() -> dict[str, str]:
     }
     assert "INTERVAL" in data, "the bridge's environment declares no INTERVAL"
     return data
-
-
-def bridge_push_tokens() -> set[str]:
-    """The push-token VALUES monitor-bridge itself pushes to.
-
-    Derived from the rendered env-secret, not listed: several monitors carry a `monitor_bridge_*`
-    token name while being fed by something else entirely (CrowdSec Home Allowlist is fed by a
-    job in the crowdsec pod, and the two Pi monitors and Arr Auto-Block are not bridge checks). A
-    hand-kept list here would put those on the bridge's heartbeat window and relax a tile whose
-    feeder runs on another clock.
-    """
-    tokens = {
-        value
-        for key, value in bridge_env().items()
-        if key.startswith("KUMA_PUSH_") and value
-    }
-    assert len(tokens) >= 20, f"the bridge's push-token census went thin: {len(tokens)}"
-    return tokens
-
-
-def push_tokens_by_monitor() -> dict[str, str]:
-    """monitor display name -> the push token the tile renders, for every push tile."""
-    return {
-        entity["name"]: entity.get("push_token", "")
-        for entity in _entities().values()
-        if entity["type"] == "push"
-    }
 
 
 def domain() -> str:

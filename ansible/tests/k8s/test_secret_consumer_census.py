@@ -85,11 +85,23 @@ def test_the_census_reports_nothing_for_a_name_no_role_references():
     assert tree_consumers("sonarr_api_key_that_does_not_exist_anywhere") == {}
 
 
-def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_file():
-    """uptime-kuma renders every bridge token from monitor-bridge's check table (#3781)."""
-    assert tree_consumers("monitor_bridge_swallowed_verdicts_push_token") == {
-        "monitor-bridge": "deploy",
-        "uptime-kuma": "deploy",
+def test_the_census_credits_a_role_rendering_the_secret_out_of_another_roles_file(
+    tmp_path,
+):
+    """uptime-kuma rendered every bridge token from monitor-bridge's check table (#3781), until
+    M6 batch A6 deleted those tiles. A fixture tree keeps the mechanism pinned: the owner holds
+    the name in a file, and a reader role looks that file up."""
+    owner = tmp_path / "ansible/roles/k8s/owner"
+    reader = tmp_path / "ansible/roles/k8s/reader/templates"
+    (owner / "files").mkdir(parents=True)
+    reader.mkdir(parents=True)
+    (owner / "files/table.py").write_text('TOKEN = "fixture_a6_push_token"\n')
+    (reader / "x.yaml.j2").write_text(
+        "data: {{ lookup('file', playbook_dir + '/roles/k8s/owner/files/table.py') }}\n"
+    )
+    assert tree_consumers("fixture_a6_push_token", str(tmp_path)) == {
+        "owner": "deploy",
+        "reader": "deploy",
     }
 
 

@@ -5,8 +5,7 @@ mutates. `cli.main()` builds one `Sources` per process, and that `Sources` build
 as `src.state`, so the state lives exactly as long as the process: a bridge restart resets it,
 as it always has. A check body reads it as `src.state.<field>` beside its config and its I/O,
 and a test gets a zeroed `State` with every `FakeSources` it builds, so nothing has to clear or
-patch a module global between tests (#3866). The startup grace's counters are a field too,
-`grace_streaks`, which `run_once` reads as `src.state.grace_streaks` (#3938).
+patch a module global between tests (#3866).
 """
 
 from dataclasses import dataclass, field
@@ -61,11 +60,6 @@ class State:
       down_streaks: Consecutive-down count per check name, advanced through `down_streak()` and
         reset to 0 by each check on an `ok` result.
       n8n_streaks: Per-workflow consecutive-failure streaks (`checks.service.check_n8n`).
-      grace_streaks: The startup grace's consecutive-down count per check (rows whose `gate` is
-        `startup_grace`, `check.STARTUP_GRACE`), advanced by `apply_startup_grace` from `run_once`. Keyed by a set of names
-        disjoint from `down_streaks`', and a different mechanism: it holds `up` through the
-        first GRACE_CYCLES-1 cycles after the bridge itself starts, rather than through a
-        transient at any time.
       b2_probe: The B2 gate's cache (`checks.b2.b2_reachable`).
       b2_storage: The B2 storage-usage cache (`checks.b2.b2_storage_usage`).
       r2_probe: The R2 usage cache (`checks.r2.r2_usage`).
@@ -76,7 +70,6 @@ class State:
 
     down_streaks: dict[str, int] = field(default_factory=dict)
     n8n_streaks: dict = field(default_factory=dict)
-    grace_streaks: dict[str, int] = field(default_factory=dict)
     b2_probe: B2ProbeCache = field(
         default_factory=lambda: {
             "ts": 0.0,
@@ -105,8 +98,7 @@ def down_streak(
 ) -> tuple[int, bool, str]:
     """Pure consecutive-down hysteresis step shared by every per-check grace mechanism.
 
-    Used by check_ha_heartbeat's and check_discord's per-check grace, plus
-    apply_startup_grace. Call on a DOWN result — the caller resets its own counter to 0 on
+    Used by check_ha_heartbeat's and check_discord's per-check grace. Call on a DOWN result — the caller resets its own counter to 0 on
     `ok`. Increments `count` and returns (new_count, hold_ok, out_msg): while under
     `threshold` it holds `up` with a "<held_label> n/N (<grace_note>): msg" note; the
     `threshold`'th straight down pages with "msg (n cycles)".
@@ -119,22 +111,3 @@ def down_streak(
             "%s %d/%d (%s): %s" % (held_label, count, threshold, grace_note, msg),
         )
     return count, False, "%s (%d cycles)" % (msg, count)
-
-
-def apply_startup_grace(
-    name: str, ok: bool, msg: str, threshold: float, streaks: dict[str, int]
-) -> tuple[bool, str]:
-    """Pure: hold a reach-out check `up` through the first `threshold`-1 consecutive down cycles.
-
-    `streaks` is a name->consecutive-down-count dict, mutated in place: `src.state.grace_streaks`
-    in production. An `ok` result resets the
-    count; a down result advances the shared `down_streak` hysteresis, so a held cycle reads with the
-    same "down streak n/N" / "(n cycles)" wording as the HA/UPS/Discord per-check grace.
-    """
-    if ok:
-        streaks[name] = 0
-        return ok, msg
-    streaks[name], ok, msg = down_streak(
-        streaks.get(name, 0), threshold, msg, "startup/redeploy grace"
-    )
-    return ok, msg
