@@ -1,6 +1,6 @@
 ### PR B-10
 
-PR B-10, triage's poller drops its Kuma source: drafted, not merged. It merges only after A6's
+PR B-10, triage's poller drops its Kuma source: [#6997](https://github.com/DanielH2018/server/pull/6997), drafted, not merged. It merges only after A6's
 Cutover-1b is live, so that every Kuma pager has an `ALERTS` rule and the `ALERTS` path sees each
 fall the Kuma path saw. [#6876](https://github.com/DanielH2018/server/pull/6876) named the poller
 as a Kuma consumer.
