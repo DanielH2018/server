@@ -111,7 +111,7 @@ class ScriptedTick:
         self.secret_readers: list[str] = []
         # Its `unread` half: the shippers of a reader vars file that read none of its keys.
         self.secret_unread: dict[str, list[str]] = {}
-        # Raised instead of answering, for `route_secret_readers`'s fallback.
+        # Raised instead of answering, for `route_key_readers`'s fallback.
         self.secret_readers_error: Exception | None = None
         # What `--deploy-tags` answers (#5577): (exit code, stdout). No k8s reader by default.
         self.secret_k8s: tuple[int, str] = (0, "")

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which setup-role files read a `secrets.yml` key a range moved (#5436).
+"""Which setup-role files read a `secrets.yml` or inventory key a range moved (#5436, #6962).
 
 THE PROBLEM. PR #5405 added `claude_code_triage_claude_oauth_token`, read only by
 `setup/claude_code`. The tick derives setup tags from changed paths, and `secrets.yml` sits
@@ -11,6 +11,12 @@ deployer maps each through its own `setup_roles_for`, so a file another role shi
 role as well. `unread` maps a shipped `defaults/` or `vars/` file to the shippers that read
 none of its keys built from a moved secret, which the deployer leaves out. `narrow_lib.secret_keys`
 holds the derivation, beside the deploy-plane half that maps the same keys to deploy tags.
+
+The same answer covers the inventory (#6962). PR #6952 moved `host_python_version` in
+`group_vars/all.yml`, and the tick applied it to the deploy plane alone while eight setup
+roles render it into their units. `narrow_lib.inventory_keys` adds the setup-role files
+templating a top-level inventory key whose value the range changed. A refusal from either
+half refuses the whole answer.
 
 WHO CALLS IT. `deployer_lib.deploy_setup_roles.secret_setup_readers` runs it as a SUBPROCESS,
 because it parses YAML and the deployer's unit runs under `uv run --no-project`. Exit
@@ -38,7 +44,7 @@ import json
 import subprocess
 import sys
 
-from deploy_tools.narrow_lib import broad, secret_keys
+from deploy_tools.narrow_lib import broad, inventory_keys, secret_keys
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import DEPLOY_BROAD, OK
 from lib.narrow_git import CannotNarrow
@@ -68,13 +74,28 @@ def main(argv: list[str] | None = None) -> int:
         return _deploy_tags(args.old, args.new, _Path(args.repo), rules, explain)
     ctx = broad.Context(_Path(args.repo), args.new, set(), {}, explain)
     try:
-        found = secret_keys.setup_reader_paths(args.old, ctx, rules)
+        found = merged(
+            secret_keys.setup_reader_paths(args.old, ctx, rules),
+            inventory_keys.setup_reader_paths(args.old, ctx),
+        )
     except (CannotNarrow, subprocess.CalledProcessError) as exc:
         print(f"secret-readers: cannot say ({exc})", file=sys.stderr)
         return DEPLOY_BROAD
     unread = {path: sorted(roles) for path, roles in sorted(found.unread.items())}
     print(json.dumps({"paths": sorted(found.paths), "unread": unread}))
     return OK
+
+
+def merged(
+    a: secret_keys.SetupReaders, b: secret_keys.SetupReaders
+) -> secret_keys.SetupReaders:
+    """Both answers as one: a shipper is unread only where every half naming the path says so."""
+    unread = {}
+    for path in a.paths | b.paths:
+        halves = [h.unread.get(path, set()) for h in (a, b) if path in h.paths]
+        if left := set.intersection(*map(set, halves)):
+            unread[path] = left
+    return secret_keys.SetupReaders(a.paths | b.paths, unread)
 
 
 def _deploy_tags(old: str, new: str, repo: _Path, rules, explain) -> int:

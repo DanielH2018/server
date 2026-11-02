@@ -24,8 +24,9 @@ answers for a role name, where `deploy_changes` answers for a changed path. `dep
 re-exports every name, so its readers keep their imports.
 
 `secret_setup_readers` is the one question here about a range rather than a role: which
-setup-role files name a `secrets.yml` key the range moved (#5436). It is a YAML-parsing
-subprocess for the same reason, and `deploy_defer.route_secret_readers` maps its paths.
+setup-role files name a `secrets.yml` or inventory key the range moved (#5436, #6962). It
+is a YAML-parsing subprocess for the same reason, and `deploy_defer.route_key_readers` maps
+its paths.
 """
 
 from __future__ import annotations
@@ -161,9 +162,9 @@ def secret_setup_readers(
 
     Returns:
         (paths, unread). `paths` is every file under `ansible/roles/setup/` at `new` naming a
-        `secrets.yml` key whose ciphertext differs across the range, empty when none does.
-        `unread` maps a shipped vars file among them to the shippers that read no key of it
-        built from a moved secret.
+        `secrets.yml` key whose ciphertext differs across the range, or an inventory key whose
+        value does, empty when none does. `unread` maps a shipped vars file among them to the
+        shippers that read no key of it built from a moved one.
 
     Raises:
         subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.

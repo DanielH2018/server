@@ -436,7 +436,7 @@ def test_a_parked_reader_failure_logs_the_lookup_as_the_reason(
     )
     parked = [ln for ln in capsys.readouterr().out.splitlines() if "park:" in ln]
     assert len(parked) == 1, parked
-    assert "secret-reader lookup failed" in parked[0]
+    assert "key-reader lookup failed" in parked[0]
     assert "names no role" not in parked[0]
 
 
@@ -467,3 +467,25 @@ def test_a_transient_reader_failure_is_retried_by_the_next_tick(
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert _playbook_argv(tick)[-1] == "claude_code"
+
+
+# ── an inventory key a setup role templates (#6962) ──────────────────────────────────────────
+def test_an_inventory_range_applies_and_records_the_setup_roles_reading_its_key(
+    gitops_deploy, tick, state
+):
+    """PR #6952's shape: `host_python_version` moved, and the deploy plane hit its ceiling.
+
+    The tick deferred the plane, applied no setup role and recorded none, so every unit kept
+    the old interpreter while `probe.py gitops-state` read clean.
+    """
+    tick.paths = ["ansible/inventory/group_vars/all.yml"]
+    tick.narrow = (3, "")
+    tick.secret_readers = [
+        "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
+        "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
+    ]
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert ["ansible/initial_setup.yml", "--tags", "gitops_deploy"] == (
+        _playbook_argv(tick)[-3:]
+    )
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
