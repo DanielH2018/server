@@ -11,6 +11,8 @@ import os
 import sys
 from types import SimpleNamespace
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from diagnostics.probe_lib import applied, applied_tasks
@@ -63,8 +65,12 @@ def _record_writers() -> list[str]:
         text = path.read_text(errors="replace")
         if RECORD_DIR not in text:
             continue
-        if rel.endswith((".yml", ".yaml")) and "/tasks/" in rel:
-            if any(_writes_record(t) for t in _tasks(yaml_fast.safe_load(text))):
+        # Prose and a variable holding the path write nothing; a task or a script does.
+        if rel.endswith(".md"):
+            continue
+        if rel.endswith((".yml", ".yaml")):
+            tasks = _tasks(yaml_fast.safe_load(text)) if "/tasks/" in rel else ()
+            if any(_writes_record(t) for t in tasks):
                 writers.append(rel)
         else:
             writers.append(rel)
@@ -101,8 +107,15 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-def test_a_stale_apply_record_does_not_make_a_stub_render_drift(tmp_path, capsys):
-    """A record left from an old apply holds a hash the live file no longer has."""
+@pytest.mark.parametrize(
+    "recorded",
+    ["token=old\n", "token=current\n"],
+    ids=["false-drift", "false-ok"],
+)
+def test_a_stale_apply_record_gives_no_verdict_on_a_stub_render(
+    tmp_path, capsys, recorded
+):
+    """A record left from an old apply decides neither DRIFT nor ok for the live file."""
     role = tmp_path / "x"
     for sub, name, text in (
         ("tasks", "main.yml", STUB_TASK),
@@ -111,7 +124,7 @@ def test_a_stale_apply_record_does_not_make_a_stub_render_drift(tmp_path, capsys
         (role / sub).mkdir(parents=True, exist_ok=True)
         (role / sub / name).write_text(text)
     live = "token=current\n"
-    stale = {f"{RECORD_DIR}/x": f"{_sha('token=old')}  /etc/x/token\n"}
+    stale = {f"{RECORD_DIR}/x": f"{_sha(recorded)}  /etc/x/token\n"}
 
     def read(plan: dict, host: str) -> dict:
         row = {"status": "ok", "mode": "0600", "owner": "root", "group": "root"}
