@@ -768,7 +768,7 @@ Four things sit in that position:
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
 `scripts/deploy_tools/owed_run.py <role>` runs the printed apply commands and the clear in one
 step, and `--dry-run` shows them first. It refuses a line whose apply arms more than the change, a role
-applied by hand, and a checkout behind `origin/master`, so run those as printed, including any
+applied by hand, and a primary checkout behind `origin/master`, so run those as printed, including any
 `--applied <tags>` on the clear. A bring-up
 playbook gets no such line, because the tick parks on those and writes no marker. A landing
 behind a recorded role reads `settled`, because the tree converged. A role the tick DID apply

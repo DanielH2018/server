@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from deploy_tools import gitops_state, owed_run
+from lib.repo_paths import PRIMARY_CHECKOUT
 
 
 def _owed(subject: str, playbook: str, *tags: str, **keys) -> str:
@@ -32,10 +33,11 @@ class Runner:
     """Records each command and answers with the next exit code, 0 once they run out."""
 
     def __init__(self, *codes: int):
-        self.codes, self.ran = list(codes), []
+        self.codes, self.ran, self.cwds = list(codes), [], []
 
     def __call__(self, argv, cwd):
         self.ran.append(argv[-1])
+        self.cwds.append(cwd)
         return subprocess.CompletedProcess(argv, self.codes.pop(0) if self.codes else 0)
 
 
@@ -76,6 +78,14 @@ def test_a_clean_line_runs_its_command_then_clears_it(owe, journal):
     ]
     assert state.manual_plane_pending() == []
     assert journal[0][0] == "k3s"
+
+
+def test_the_commands_run_in_the_primary_checkout_whichever_tree_invokes_it(owe):
+    """A worktree run would install collections where the deployer never loads them."""
+    _state, run = owe(COREDNS)
+    runner, checked = Runner(), []
+    assert run("k3s", runner, checkout_check=lambda repo: checked.append(repo)) == 0
+    assert checked == runner.cwds == [str(PRIMARY_CHECKOUT)]
 
 
 def test_a_line_for_another_host_runs_there_after_a_pull(owe):

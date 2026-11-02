@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Apply a `manual_plane` line of the deployer's `owed` ledger, then clear it, in one step.
 
-It runs exactly the commands every surface prints for the line (`manual_plane_remedies`), from
-a checkout at origin/master, and refuses a line it cannot trust or that needs the operator: a
+It runs exactly the commands every surface prints for the line (`manual_plane_remedies`) in the
+primary checkout, which must be at origin/master, whichever checkout invokes it. A playbook run
+from a session worktree installs collections into that worktree, where the deployer never loads
+them. It refuses a line it cannot trust or that needs the operator: a
 field no role, tag or host spells, a playbook or host outside the routing and the inventory, a
 role applied by hand, and an apply that arms more than the change (#6881). The clear is
 `gitops_state.clear_manual_plane`, so the journal line and the tree lock are the same ones a
@@ -35,7 +37,7 @@ from lib.ansible_inventory import host_names
 from lib.cli_help import ArgumentParser
 from lib.deployer_park import ManualPlaneRemedy, manual_plane_remedies
 from lib.git import git
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, PRIMARY_CHECKOUT
 
 # The deployer's own modules, which `deploy_state` reaches `host_lib` from for its writes.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -101,7 +103,7 @@ def run_owed(
     dry_run: bool = False,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     checkout_check: Callable[[str], str | None] = _checkout_is_origin_master,
-    repo: str = str(REPO),
+    repo: str = str(PRIMARY_CHECKOUT),
     now: float | None = None,
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
