@@ -10,10 +10,11 @@ import json
 
 import pytest
 
+import narrow_setup
 import secret_setup_readers
 
 from _narrow_fixtures import Tree, _refs
-from _setup_role_fixtures import ROLE, build, narrow
+from _setup_role_fixtures import BETA, ROLE, build, narrow
 
 GROUP_VARS = "ansible/inventory/group_vars/all.yml"
 SECRETS = "ansible/vars/secrets.yml"
@@ -143,3 +144,38 @@ def test_a_secrets_refusal_keeps_the_inventory_readers_of_the_same_range(tree, c
 def test_role_tags_narrows_a_moved_key_to_its_readers_tag(tree):
     """No path under the role moved, and the role still needs the tag that renders the key."""
     assert narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"')) == frozenset({"alpha"})
+
+
+def _beta_ships(tree: Tree, monkeypatch, shipped: str, text: str) -> None:
+    """`beta`'s task ships `shipped`, another role's file, which names the moved key."""
+    monkeypatch.setitem(
+        narrow_setup.deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+        shipped,
+        frozenset({"demo"}),
+    )
+    tree.write(shipped, text)
+    task = f"- name: Ship it\n  ansible.builtin.copy:\n    src: {shipped}\n  tags: [beta]\n"
+    tree.write(f"{ROLE}/tasks/beta.yml", BETA + task)
+    tree.commit("beta ships another role's file")
+
+
+def test_a_key_a_shipped_verbatim_file_names_adds_no_tag(tree, monkeypatch):
+    """`hosts/lib/host_lib.py`'s docstring names `host_python_version`, and is copied as is."""
+    _beta_ships(
+        tree,
+        monkeypatch,
+        "hosts/lib/host_lib.py",
+        '"""Runs under host_python_version."""\n',
+    )
+    assert narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"')) == frozenset({"alpha"})
+
+
+def test_a_key_a_shipped_template_names_adds_the_shipping_tag(tree, monkeypatch):
+    _beta_ships(
+        tree,
+        monkeypatch,
+        "ansible/roles/setup/common/templates/py.conf.j2",
+        "py = {{ host_python_version }}\n",
+    )
+    got = narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"'))
+    assert got == frozenset({"alpha", "beta"})

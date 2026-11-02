@@ -34,8 +34,9 @@ CHECK_TABLE = MONITOR_BRIDGE_FILES / "check_table.py"
 # since #5574.
 ENV_SETTINGS = BRIDGE_ROLE / "templates" / "config" / "env.yaml.j2"
 
-# The gate value that names no gate row: a reach-out check held `up` through its first down
-# cycles instead of suppressed (`bridge/streaks.py:apply_startup_grace`).
+# The gate value that names no gate row: a reach-out check whose rule carries `for: 10m`, so it
+# rides out the weekly reboot instead of being suppressed. The bridge held it `up` through its
+# first down cycle until M6 batch A6's Cutover-2.
 STARTUP_GRACE_GATE = "startup_grace"
 
 # An env value that is a number or a duration (`300`, `0.02`, `2h`, `30m`).
@@ -132,10 +133,21 @@ def render_gate_sets(rows: list[dict]) -> str:
                 members.get(gate, []),
             )
         )
+    # A gate value with members and no gate row of its own is the exporter suppression:
+    # `check.EXPORTER_DEPENDENT` holds those rows while a node exporter is down.
+    for gate in members:
+        if gate not in displays and gate not in (STARTUP_GRACE_GATE, None):
+            lines.append(
+                line(
+                    f"`{gate}`",
+                    "the exporter-health probe, which suppresses them while an exporter is down",
+                    members[gate],
+                )
+            )
     lines.append(
         line(
             f"`{STARTUP_GRACE_GATE}`",
-            "startup grace, which holds them `up` through their first down cycles",
+            "their rule's `for: 10m`, which rides out the weekly reboot",
             members.get(STARTUP_GRACE_GATE, []),
         )
     )

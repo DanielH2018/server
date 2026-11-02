@@ -103,7 +103,7 @@ def test_the_check_covers_every_rendered_push_tile():
     }
     push_ids = sorted(i for i, e in declarations.items() if e["type"] == "push")
     assert _INCIDENT_TILE in push_ids
-    assert len(push_ids) >= 19, f"the push-tile census went thin: {len(push_ids)}"
+    assert len(push_ids) >= 6, f"the push-tile census went thin: {len(push_ids)}"
     assert kuma_malformed_push_tokens(declarations) == push_ids
 
 
@@ -120,10 +120,10 @@ def test_cluster_vars_refuses_a_malformed_value_in_every_rendered_push_token():
         for entity in _entities().values()
         if entity["type"] == "push"
     }
-    # Named members: a hand-written tile's token and one from monitor-bridge's lookup loop.
+    # Named members: two hand-written tiles' tokens, one a host cron's and one a CronJob's.
     assert {
         "aide_daniel_pi_push_token",
-        "monitor_bridge_swallowed_verdicts_push_token",
+        "kuma_status_page_sync_push_token",
     } <= variables
     base64_token = "QUJD" * 10 + "QQ+="
     refusals = cluster_vars.successor_refusals(

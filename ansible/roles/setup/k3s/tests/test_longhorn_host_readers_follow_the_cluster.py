@@ -50,13 +50,9 @@ def _shim_thresholds() -> dict[str, str]:
 
 def _run(tmp_path, stub, **stub_env):
     """The reader under the shim's exports, against `stub`, with `stub_env` changing the cluster."""
-    drill_dir = tmp_path / "drill"
-    drill_dir.mkdir(exist_ok=True)
-    (drill_dir / "last-success").write_text(str(int(NOW - 3600)))
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
         **_shim_thresholds(),
         **stub_env,
     )

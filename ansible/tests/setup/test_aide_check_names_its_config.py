@@ -46,7 +46,7 @@ def test_weekly_aide_check_passes_its_config():
     ]
     assert aide_lines, "aide-check.sh no longer invokes /usr/bin/aide"
     for line in aide_lines:
-        assert "--check" in line, line
+        assert "--update" in line, line
         assert _AIDE_WITH_CONFIG.search(line), (
             f"aide-check.sh runs aide without --config: {line}"
         )

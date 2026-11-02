@@ -22,8 +22,10 @@
 # (19 in 7 days) drop a push tile's monitor_status series until its next push, so a 2h range
 # on a tile that pushes less often than hourly would page while the tile is healthy. A daily
 # tile therefore uses [48h10m]. Add a term with its own interval's range, never a bare 2h.
-# Read the interval from the tile's declaration. Every monitor-bridge tile shares
-# uptime_kuma_k8s_bridge_push_interval (1200s), so its range is [2h].
+# Read the interval from the tile's declaration. Every monitor-bridge tile shared
+# uptime_kuma_k8s_bridge_push_interval (1200s), so its range was [2h]. M6 batch A6's 19 bridge
+# terms used it and left with A6's Cutover-1b. `Prometheus Reachable` had no term, because
+# it has no rule.
 # A tile whose interval is 90000s (a daily timer plus an hour) uses [50h10m], as B3's two do.
 # B9's three AIDE tiles (626400s) use [348h10m] and its three rkhunter tiles (612000s) use
 # [340h10m], both inside the 30d retention. B6c's Registry GC tile (612000s) used [340h10m], and
@@ -48,44 +50,6 @@ groups:
               absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-server)"}[340h10m])
             or
               absent_over_time(monitor_status{monitor_name="rkhunter Scan (daniel-pi)"}[340h10m])
-            or
-              absent_over_time(monitor_status{monitor_name="n8n Prod Workflows"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Bazarr Health"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Prowlarr Indexers"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="SMART Data / Health"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="k3s Speedtest"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Swallowed Push Verdicts"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="WAN Reachable"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Discord Delivery"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="R2 Free Tier Headroom"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Cloudflare IP Drift"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Healthchecks.io Console Drift"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="B2 Reachable"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="B2 Free Tier Headroom"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Arr Queue Warnings"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="GitOps Deploy — Alive"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="GitOps Deploy — Status"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="etcd Restore Drill"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Home Assistant Automations"}[2h])
-            or
-              absent_over_time(monitor_status{monitor_name="Host Packages — Status"}[2h])
           )
           unless on() (up{job="uptime-kuma"} == 0)
         labels:

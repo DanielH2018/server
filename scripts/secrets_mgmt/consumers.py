@@ -38,11 +38,6 @@ from deployer_lib.deploy_cross_role import k8s_lookup_map
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        # daniel-box cron (setup/k8s_host_files, since registry's D5 conversion) + k8s/uptime-kuma
-        # static tile. k8s_host_files has no `containers_list` entry, so `deploy.yml --tags
-        # registry` matches nothing; the script is applied by `initial_setup.yml --tags
-        # k8s_host_files`. Until that PR the k8s/registry role rendered it.
-        "registry_gc_push_token",
         # The weekly AIDE check, one token per host: a setup/initial_setup cron on each of the
         # three hosts against tiles deployed from daniel-box. initial_setup has no deploy tag, so
         # no redeploy moves the cron's half, and daniel-server's and daniel-pi's halves cross

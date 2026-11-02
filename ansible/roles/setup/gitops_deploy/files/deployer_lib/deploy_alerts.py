@@ -2,8 +2,8 @@
 """The deployer's notify subsystem: when to send, the queue's file, and the send itself.
 
 **When to say it** is this module: `alert_once` owns the per-SHA dedupe marker, `deliver` owns
-the retry queue, `drain_pending` empties it, and `alert_deferred` fires the tasks/meta/k8s
-channels. **What to say** is `deploy_alert_text.py`, one pure function per alert — the seam
+the retry queue, `drain_pending` empties it, and `alert_deferred` fires the k8s
+channel. **What to say** is `deploy_alert_text.py`, one pure function per alert — the seam
 this module's docstring named before #2600 split it. This module decides delivery and never
 composes a message, so each half reads without the other.
 
@@ -31,7 +31,6 @@ from deployer_lib.deploy_health import (
     apply_send_result,
     cap_pending,
 )
-from deployer_lib.deploy_remediation import deferred_service_alerts
 from deployer_lib.deploy_state import DeployerState
 from deployer_lib.deploy_toolbox import DeployTools
 from host_lib import atomic_write
@@ -216,18 +215,14 @@ def alert_deferred(
     state: DeployerState,
     config: Config,
     origin: str,
-    deployed: set[str],
     cs: ChangeSet,
     declared_k8s: set[str] | None = None,
 ) -> None:
-    """Fire the tasks/ and k8s-role defer-and-alert for changes not redeployed.
+    """Fire the k8s-role defer-and-alert for the roles in `cs.k8s`.
 
-    Runs on BOTH the no-services branch (deployed=set()) and after a SUCCESSFUL deploy
-    (deployed=cs.services): a combined push (svcA template + svcB tasks/) deploys svcA but
-    leaves svcB's structural change ff-merged and unapplied. The pending remainder is the pure
-    `deferred_service_alerts`; this is its I/O shell (per-SHA dedupe marker + deliver). Each channel
-    alerts at most once per origin SHA; its marker advances on DETECTION (deliver() and the pending
-    queue own delivery + retry), so a transient webhook blip is redelivered, not silently dropped.
+    Runs on every exit that leaves the range merged. The channel alerts at most once per origin
+    SHA; its marker advances on DETECTION (deliver() and the pending queue own delivery + retry),
+    so a transient webhook blip is redelivered, not silently dropped.
 
     `declared_k8s` is this host's `platform: k8s` containers_list entries, used to decide whether
     the k8s alert can name a `--tags` redeploy at all (see k8s_remediation). It defaults to None
@@ -237,19 +232,8 @@ def alert_deferred(
     `--tags` line for a role with no entry exits 0 having applied nothing.
     """
     declared_k8s = declared_k8s or set()
-    pending_tasks = deferred_service_alerts(cs, deployed)
-    if pending_tasks:
-        alert_once(
-            tools,
-            state,
-            config,
-            "tasks",
-            origin,
-            deploy_alert_text.tasks_deferred_alert(origin, pending_tasks),
-        )
     if cs.k8s:
-        # No `- deployed` subtraction (unlike tasks): a bump this tick deployed sits in
-        # `cs.k8s_deploy`. The one exception is a broad tick's narrowed deploy plane, and
+        # A bump this tick deployed sits in `cs.k8s_deploy`, not here. The one exception is a broad tick's narrowed deploy plane, and
         # `deploy_broad_k8s` subtracts what that applied from `cs` before calling this (#2453).
         #
         # DECIDED: this alert is a one-shot detection, not the durable signal. It fires once per

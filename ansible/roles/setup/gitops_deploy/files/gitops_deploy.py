@@ -325,7 +325,7 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
         return deploy_handlers.handle_broad(tools, state, config, target, plan)
     if plan.cs.k8s_deploy:
         return deploy_handlers.handle_k8s(tools, state, config, target, plan)
-    return deploy_handlers.handle_no_services(tools, state, config, target, plan)
+    return deploy_handlers.handle_merge_only(tools, state, config, target, plan)
 
 
 def entrypoint(

@@ -2,7 +2,6 @@
 | Env key | Value |
 |---|---|
 | `INTERVAL` | `300` |
-| `GRACE_CYCLES` | `2` |
 | `GITOPS_MAX_AGE_MIN` | `90` |
 | `GITOPS_BEHIND_MAX_MIN` | `360` |
 | `GITOPS_CONTENTION_MAX_MIN` | `30` |

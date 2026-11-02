@@ -1,8 +1,7 @@
 """Documentation reaches no host: which paths the deployer's mapper must classify as nothing.
 
 A `.md` is prose about a role, never role content a playbook applies. Without a suffix test on
-the setup arm and on `roles/containers/common/`, a document there would take a broad arm by
-path and route prose to an apply. The census at the bottom holds the suffix rule's own
+the setup arm, a document there would take a broad arm by path and route prose to an apply. The census at the bottom holds the suffix rule's own
 assumption — that no role ships a `.md` as content — to the three READMEs that sit under a
 `files/` directory.
 
@@ -24,8 +23,7 @@ def test_a_setup_roles_document_is_clean():
     `ansible/roles/setup/<role>/CLAUDE.md` matches `_BROAD_SETUP_PREFIXES` by path, and without a docs test on the setup arm
     a docs-only edit would route the deployer
     to an `initial_setup.yml --tags <role>` apply, or to a defer-and-alert for a role no
-    playbook includes. `ansible/roles/containers/common/CLAUDE.md` is the same defect one plane
-    over: it matches `_BROAD_DEPLOY_PREFIXES` and named a full `ansible/deploy.yml`.
+    playbook includes.
 
     Paired with `test_a_setup_roles_config_is_still_broad` below: a docs test that swallowed
     the whole setup plane would pass here and fail there.
@@ -33,7 +31,6 @@ def test_a_setup_roles_document_is_clean():
     for path in (
         "ansible/roles/setup/k3s/CLAUDE.md",
         "ansible/roles/setup/gitops_deploy/CLAUDE.md",
-        "ansible/roles/containers/common/CLAUDE.md",
     ):
         assert services_from_changed_paths([path]) == ChangeSet(), path
 

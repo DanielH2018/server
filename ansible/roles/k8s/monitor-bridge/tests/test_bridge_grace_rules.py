@@ -6,7 +6,8 @@ before that hold, so the rule's `for: 10m` needs two down cycles. Four things mu
 table is the only source for each:
 
 - every `startup_grace` row has one rule selecting its `check` label;
-- a rule has `for: 10m` exactly when its row is `startup_grace`, so a row that loses its grace,
+- a rule has `for: 10m` exactly when its row is `startup_grace` or one of the three reboot rows the
+  2026-11-02 ruling named, so a row that loses its grace,
   or a row that gains a `for:` on top of an in-body streak, fails;
 - no such rule carries `requires`, since a `startup_grace` row names no gate;
 - severity follows the row's `critical` flag, and `swallowed_verdicts` is the warning that
@@ -25,6 +26,10 @@ RULES = K8S_ROLES / "observability" / "files" / "rules" / "bridge-exporter.yaml"
 GRACE = "startup_grace"
 # Two bridge cycles (operator ruling 2026-10-31): a one-cycle blip must not fire.
 GRACE_FOR = "10m"
+# The three rows whose rules read 0 for two minutes at the weekly reboot on 2026-11-01 07:43 to
+# 07:44Z, and so carry `for: 10m` without being `startup_grace` rows (operator ruling 2026-11-02).
+# Named, not derived: a fourth row that wants a `for:` has to be added here in a reviewed PR.
+REBOOT_ROWS = frozenset({"b2_reachable", "b2_storage", "host_packages"})
 # The `service` label names the thing checked (operator ruling, 2026-10-23), except for the one
 # row whose subject is the bridge's own log read.
 BRIDGE_SERVICE_ROW = "swallowed_verdicts"
@@ -53,7 +58,8 @@ def for_problems(rules: list[dict]) -> list[str]:
     for row in CHECKS:
         found = rules_for(row.name, rules)
         for rule in found:
-            want = GRACE_FOR if row.gate == GRACE else None
+            held = row.gate == GRACE or row.name in REBOOT_ROWS
+            want = GRACE_FOR if held else None
             if rule.get("for") != want:
                 problems.append(
                     f"{row.name}: {rule['alert']} has for={rule.get('for')!r}, want {want!r}"
@@ -96,12 +102,21 @@ def test_a_gated_rule_that_gains_a_for_is_flagged():
     assert for_problems(rules)
 
 
-def test_family_rules_name_no_gate_and_stay_in_shadow():
+def test_a_reboot_row_rule_that_loses_its_for_is_flagged():
+    for row in sorted(REBOOT_ROWS):
+        rules = copy.deepcopy(all_rules())
+        [rule] = rules_for(row, rules)
+        assert rule["for"] == GRACE_FOR, row
+        del rule["for"]
+        assert for_problems(rules), row
+
+
+def test_family_rules_name_no_gate_and_carry_no_shadow():
     rules = all_rules()
     for row in family():
         [rule] = rules_for(row.name, rules)
         assert "requires" not in rule["labels"], row.name
-        assert rule["labels"]["shadow"] == "true", row.name
+        assert "shadow" not in rule["labels"], row.name
 
 
 def test_severity_follows_the_rows_critical_flag():

@@ -84,7 +84,6 @@ def test_discover_templates_finds_the_known_set():
         "sync-artifacts.sh.j2",
         "longhorn-backup-health.sh.j2",
         "longhorn-restore-drill.sh.j2",
-        "longhorn-trim-volumes.sh.j2",
         "disk-health.sh.j2",
         "manifest-prune-check.sh.j2",
         "release-staleness-check.sh.j2",

@@ -24,8 +24,10 @@ from pathlib import Path as _Path
 # host both sit beside the reader, whose directory is already on sys.path, so these inserts
 # name directories that do not exist there and change nothing.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[3] / "hosts" / "lib"))
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from host_lib import rfc3339_to_epoch
+from longhorn_lib import longhorn_backups as backups
 
 # One line of `kubectl logs --prefix`: `[pod/<pod>/<container>] time="..." level=warning
 # msg="Cannot create job for <vol> volume in state <state>" ...`. The container is named for the
@@ -52,6 +54,14 @@ def parse_skipped_volumes(log_text: str) -> list[tuple[str, str, float]]:
     return skips
 
 
+def is_backup_job(job: str) -> bool:
+    """Whether `job` is a backup RecurringJob, whose skip leaves a volume without a backup.
+
+    The `trim` job skips a detached volume too, and that skip costs no recovery point.
+    """
+    return job == backups.DAILY_JOB or job.startswith(backups.WEEKLY_SHARD_PREFIX)
+
+
 # DECIDED: only weekly-tier volumes are checked. A daily volume a job skipped gets its next
 # chance the following night, inside check 4's daily limit, so flagging it would hold the tile
 # DOWN for a day after every cold start over a gap that closes on its own. A weekly volume waits
@@ -64,7 +74,7 @@ def check_skipped_weekly_volumes(
     """Names each weekly volume a RecurringJob skipped that has no backup taken since.
 
     Args:
-      skips: parse_skipped_volumes() output.
+      skips: parse_skipped_volumes() output. A skip by a job that takes no backup is ignored.
       watched: volume name -> namespace/pvcName, for the weekly-shard volumes on an armed
         target. A skip of a volume outside it (daily tier, deleted, disarmed) is ignored.
       coverage_rows: (volumeName, snapshotCreatedAt, RecurringJob) across every Backup. A
@@ -74,7 +84,7 @@ def check_skipped_weekly_volumes(
     """
     flagged: dict[str, str] = {}
     for job, vol, skipped_s in skips:
-        if vol not in watched:
+        if vol not in watched or not is_backup_job(job):
             continue
         if any(
             v == vol and (rfc3339_to_epoch(ts) or 0) > skipped_s

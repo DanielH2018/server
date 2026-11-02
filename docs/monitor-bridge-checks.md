@@ -1,11 +1,13 @@
 # monitor-bridge checks: the per-check record
 
 The measurements, incidents and retirements behind every threshold check the
-`monitor-bridge` pod pushes to Uptime Kuma. The per-check rule (what it reads, the threshold
+`monitor-bridge` pod evaluates. Since M6 batch A6's Cutover-2 it serves each verdict as a
+`homelab_check_success` gauge and pushes nothing to Uptime Kuma, so each push, tile or
+heartbeat named below describes the monitor a check fed before then. The per-check rule (what it reads, the threshold
 and the arms) lives in the `verdicts/` function that each `files/check_table.py` row names.
 `ansible/roles/k8s/monitor-bridge/CLAUDE.md` carries what holds across all checks: the gates,
 the hysteresis and the module layout. `docs/monitor-bridge-internals.md` owns the module table,
-the operator prerequisites, the push-token plumbing and the gate-set membership. This page
+the operator prerequisites, the exporter plumbing and the gate-set membership. This page
 records where each number came from and which incident added each arm.
 
 `files/check_table.py`'s `CHECKS` is the authority on which checks exist, and the
@@ -24,25 +26,15 @@ The kopia backup checks retired with kopia on 2026-08-10, and the backup plane i
 
 ## Live checks
 
-Each row below is one Kuma push monitor. The table is generated from `CHECKS` and lists every
+Each row below is one check, and was one Kuma push monitor until A6's Cutover-1a. The table is generated from `CHECKS` and lists every
 check and gate in registry order. The bullets after it carry the measurements and incidents
 behind each tile, under the tile's display name.
 
 --8<-- "assets/generated/fragments/bridge-checks.md"
 
-The bridge evaluates the four reachability gates first. The internals page lists which
+The bridge evaluates the two reachability gates first. The internals page lists which
 checks each gate suppresses.
 
-- **Prometheus Reachable** (a trivial `vector(1)` instant query: the root-cause GATE for the
-  prom-dependent checks, evaluated FIRST each cycle. When Prometheus is unreachable, every
-  prom-dependent check (each row of `files/check_table.py` with `gate="prometheus"`) is
-  **suppressed**, pushed `up` with a "skipped — Prometheus unreachable" `msg` so its push-monitor
-  heartbeat stays alive, and only THIS monitor pages. Without the gate one Prometheus outage fires
-  all of them at once. A single scrape target down (Prometheus up, one exporter gone) still
-  surfaces separately as `ScrapeTargetDown`. The `prometheus` gate's members derive from the `gate="prometheus"`
-  rows, so neither a count nor an enumeration of it is written anywhere else. The role CLAUDE.md
-  once carried a hardcoded count of ten while the set held more (#1359), and then an enumeration a
-  test pinned, until the column made both redundant (#3788).)
 - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure streak**.
   n8n does not save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to bound
   `database.sqlite` and its B2 backup churn), so "consecutive" cannot be read from one snapshot.
@@ -498,6 +490,13 @@ checks each gate suppresses.
   streak wrapper are unit-tested.)
 
 ## Retired and moved checks
+
+Prometheus Reachable (M6 batch A6's Cutover-2) retired without a rule of its own, by design. It
+was a trivial `vector(1)` query that ordered the exporter-health probe, and `ScrapeTargetDown`
+and the scrape-job rules already report an unreachable Prometheus. `host_packages` keeps
+`gate="prometheus"` as the label of the `EXPORTER_DEPENDENT` suppression, so a dead node
+exporter holds it beside `ScrapeTargetDown`. #1359 and #3788 are the history of the gate's
+member list.
 
 Checks that left `CHECKS` push their monitors from elsewhere, with the same tokens, so each
 monitor keeps its history. The direct pushers are the `pi-peer-backup` k8s CronJob (WG Pi Peer

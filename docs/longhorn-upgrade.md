@@ -23,9 +23,9 @@ uv run python scripts/deploy_tools/runbook_gates.py longhorn-upgrade
 ```
 
 Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it
-found. Exit 69 means the cluster could not be asked. Run it on daniel-box: gate 2 reads the
-restore drill's stamp from its ConfigMap, and while that holds none, from the drill's directory on
-daniel-box.
+found. Exit 69 means the cluster could not be asked. It runs from any host with the read-only
+kubeconfig: gate 2 reads the restore drill's stamp from its ConfigMap, and a ConfigMap with no
+`last-success` fails the gate.
 
 **`land.sh` runs these gates at the merge.** Merging the pin is the upgrade (H1 Open question 6,
 ruled 2026-10-16), so `land.sh --arm-merge --await-merge` runs

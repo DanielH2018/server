@@ -133,7 +133,7 @@ k3s_agent_longhorn_scheduling: true
 # The restore drill itself is the `longhorn-restore-drill` Flux role's (H2.3d): its schedule, its
 # volume pin, its size cap, its content floor, its timeout, its probe image and its empty-volume
 # waiver are that role's defaults, and no `setup/` file reads them. What stays here is what a host
-# reader reads: the namespace, the stamp directory, and the two bounds of backup health's checks
+# reader reads: the namespace and the two bounds of backup health's checks
 # 7 and 8 further down.
 #
 # The namespace the drill's stamp ConfigMap, `longhorn-restore-drill-stamps`, lives in. Backup
@@ -141,13 +141,9 @@ k3s_agent_longhorn_scheduling: true
 # this namespace. It mirrors the role's `longhorn_drill_namespace`, which the drill itself reads,
 # and ansible/tests/k8s/test_restore_drill_stamps.py holds the pair equal.
 k3s_longhorn_restore_drill_namespace: homelab
-# The host directory the drill kept its stamps in before H2.3c. Readers fall back to it while the
-# ConfigMap holds no `last-success`; H2.3f deletes the key, the fallback and the directory.
-k3s_longhorn_restore_drill_stamp_dir: /var/lib/longhorn-restore-drill
 
-# Where the trim script and the B2-accounting cron line touch a stamp before their work runs, owned by
-# sys_user so those crons can write it and longhorn-backup-health can read it. Check 10 reads
-# the stamps to tell "the cron fired and its run failed" from "the cron stopped firing",
+# Where the B2-accounting cron line touches a stamp before its work runs, owned by sys_user so
+# that cron can write it and longhorn-backup-health can read it. Check 10 reads the stamp to tell "the cron fired and its run failed" from "the cron stopped firing",
 # which the /etc/cron.d stat cannot: initial_setup hardens that directory to 0700 root (#3677).
 k3s_cron_fired_stamp_dir: /var/lib/longhorn-cron-fired
 # How stale the drill's last success may be before the heartbeat calls it out. Nightly cadence, so
@@ -166,15 +162,14 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # state check 8 is already paging about on its own terms.
 k3s_longhorn_restore_drill_coverage_slack_days: 5
 
-# How far back checks 9 and 10 of longhorn-backup-health.sh read the `longhorn-trim` and
-# `b2-deletions` journal tags. Both crons run daily, so 26h holds the last run under either DST
-# offset with a couple of hours of jitter to spare. It is also how long a reported fault stays
-# RED: the trim arm reads only the NEWEST run, so a fixed trim goes green on its next run
-# whatever this is, while an UNPRICED deletion — a permanent event, not a state — ages out after
-# this window.
+# How far back checks 9 and 10 of longhorn-backup-health.sh read the `b2-deletions` journal tag.
+# The cron runs daily, so 26h holds the last run under either DST offset with a couple of hours of
+# jitter to spare. It is also how long a reported fault stays RED: an UNPRICED deletion — a
+# permanent event, not a state — ages out after this window. The trim's arms read Longhorn's
+# `trim` CronJob and its newest Job instead, and take their cadence from its schedule.
 #
 # Check 10 makes the window load-bearing twice over. It alarms when the window holds NO
-# line from a cron, which is only a fault because 26h exceeds one 24h cron period — below one
+# line from the cron, which is only a fault because 26h exceeds one 24h cron period — below one
 # period the check disables that arm rather than page on normal silence. The same 26h is the
 # grace for a freshly installed cron, so there is no second tunable to keep in step.
 k3s_longhorn_cron_evidence_window_hours: 26
@@ -228,13 +223,6 @@ k3s_longhorn_weekly_backup_max_age_hours: 198
 # and nothing here changes faster than the daily backup it watches. The Kuma monitor's heartbeat
 # interval must stay above this (see the uptime-kuma role) so a dead cron trips the watchdog.
 k3s_longhorn_backup_health_cron_minute: "*/10"
-
-# Filesystem trim (templates/longhorn-trim-volumes.sh.j2). 06:10 daily: after BOTH backup windows
-# (03:30 daily, 04:30 weekly) and clear of the 05:15 manifest-prune check. The ordering is the
-# constraint, not the hour — trimming BEFORE the day's snapshot hands back blocks that the
-# snapshot then pins again, so the sweep has to follow the snapshot, not precede it.
-k3s_longhorn_trim_cron_hour: "6"
-k3s_longhorn_trim_cron_minute: "10"
 
 # The B2 deletion ledger's two crons (tasks/health-crons.yml). 07:10 charges the day's completed
 # deletions, 07:20 re-lists the block tree so tomorrow's charges have a price. That ORDER is the
@@ -633,10 +621,6 @@ k3s_render_stamp_groups:
       # what makes this group eligible for a versioned release at all — see release_bin.yml's
       # header.
       - ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2
-      # Longhorn filesystem-trim sweep. Runs as the sys_user through the read-only kubeconfig:
-      # it reads volume state with kubectl and issues the trim through the longhorn-backend
-      # API, which needs no Kubernetes write.
-      - ansible/roles/setup/k3s/templates/longhorn-trim-volumes.sh.j2
   - name: k3s-disk-health           # tags: [disk-health]
     templates:
       - ansible/roles/setup/k3s/templates/disk-health.sh.j2

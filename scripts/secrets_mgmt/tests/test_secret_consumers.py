@@ -11,8 +11,6 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_consumers.py
 
 from pathlib import Path
 
-from py_table import py_table
-
 from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
@@ -27,11 +25,12 @@ from secrets_mgmt.rotation_tools import REPO, load_registry
 
 # ── consumer mapping (which redeploys apply a rotated token) ─────────────────
 def test_consumer_tags_monitor_bridge_tokens():
-    # The pusher AND the tile. Asserting only the pusher is what let the tile go stale.
-    assert consumer_tags("monitor_bridge_swallowed_verdicts_push_token") == (
-        "monitor-bridge",
-        "uptime-kuma",
-    )
+    # M6 batch A6's Cutover-2 stopped the push and Cutover-1a deleted the tiles, so the 20
+    # `monitor_bridge_*_push_token` keys are in PENDING_RETIREMENT and name no consumer: a rotation
+    # deploying either role would apply a render that no longer references them.
+    assert consumer_tags("monitor_bridge_swallowed_verdicts_push_token") == ()
+    # Non-vacuity: a tile that still renders its token keeps the tile's role as its consumer.
+    assert UPTIME_KUMA_TAG in consumer_tags("kuma_status_page_sync_push_token")
     # `kopia_restore_drill_push_token` is absent from both secrets.yml and secret_rotation.yml,
     # so no arm maps it and it resolves to no consumer.
     assert consumer_tags("kopia_restore_drill_push_token") == ()
@@ -57,13 +56,6 @@ def test_consumer_tags_cross_host_tokens_are_manual():
     assert consumer_tags("rkhunter_daniel_server_push_token") == ()
 
 
-def test_consumer_tags_registry_gc_token_is_manual():
-    # setup/k8s_host_files renders the GC cron's script since registry's D5 conversion, and a
-    # setup role has no deploy tag, so the unattended rotation must skip it rather than redeploy
-    # `registry`, which no longer renders the token, and leave the cron pushing the old value.
-    assert consumer_tags("registry_gc_push_token") == ()
-
-
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # Registry-driven guard: a new single-host `auto` push token must resolve a consumer_tag
     # (so the unattended weekly `rotate --commit --deploy` cron actually rotates it) or sit in
@@ -72,10 +64,10 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # OVERDUE page — exactly how arr_autoblock_push_token slipped in when autofix-bridge landed.
     # Derived from the module's own CROSS_HOST_PUSH_TOKENS (single source): each entry
     # documents its pusher/label host pair beside the name.
-    known_manual = CROSS_HOST_PUSH_TOKENS | PENDING_RETIREMENT
     reg = load_registry()
     auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens
+    known_manual = CROSS_HOST_PUSH_TOKENS | PENDING_RETIREMENT
     unrotatable = [n for n in auto if not consumer_tags(n) and n not in known_manual]
     assert not unrotatable, (
         "auto-tier tokens with no consumer_tags and not known-manual — they silently drop "
@@ -145,32 +137,20 @@ def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
       - a token WITHOUT a tile that claims `uptime-kuma` deploys a role rendering it nowhere,
         which is the mis-routing the 2026-08-25 M-8b finding was about, one role along.
 
-    Measured: 56 tokens have a tile, 43 resolve a consumer, 42 are in both, and the lone
-    `monitor_bridge_ha_token` sits outside. The 14 tile-bearing tokens that resolve NOTHING are
-    the cross-host ones — deliberately manual, and this test must not drag them back in.
+    The lone `monitor_bridge_ha_token` sits outside, and the tile-bearing tokens that resolve
+    NOTHING are the cross-host ones — deliberately manual, and this test must not drag them back
+    in. The bridge's own tokens have no tile since M6 batch A6, so they are not in this join.
     """
     tile = (
         Path(REPO) / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
     ).read_text()
-    # The bridge's tiles render from one loop over its check table (#3781), so their tokens
-    # are the table's rather than literals in the template.
-    bridge_tokens = {
-        row["token"]
-        for row in py_table(
-            (
-                Path(REPO) / "ansible/roles/k8s/monitor-bridge/files/check_table.py"
-            ).read_text(),
-            "CHECKS",
-        )
-    }
-    assert "monitor_bridge_swallowed_verdicts_push_token" in bridge_tokens
     reg = load_registry()
     wrong = []
     for name in reg["entries"]:
         tags = consumer_tags(name)
         if not tags:
             continue  # manual: this test says nothing about tokens with no consumer at all
-        has_tile = ("{{ %s }}" % name) in tile or name in bridge_tokens
+        has_tile = ("{{ %s }}" % name) in tile
         claims_kuma = UPTIME_KUMA_TAG in tags
         if has_tile != claims_kuma:
             wrong.append("%s: tile=%s but consumer_tags=%s" % (name, has_tile, tags))

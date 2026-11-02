@@ -1,4 +1,4 @@
-"""`FakeSources` and `FakeSink`: the `bridge.sources` doubles a test hands to a check or `run_once`.
+"""`FakeSources` and `FakeExport`: the doubles a test hands to a check or `run_once`.
 
 A test states the answer each query gets instead of patching `bridge.net`:
 
@@ -16,8 +16,8 @@ PromQL or URL a check sent. `state` is a fresh `bridge.streaks.State`, so a test
 streak or probe cache as `src.state.<field>` rather than through a module global. A test whose
 cycles need different answers builds a second fake with `FakeSources(state=first.state, ...)`.
 
-`FakeSink` records every push `run_once` would have sent to Kuma as `(token, ok, msg)` in
-`pushes`, so a test reads what was pushed without patching `bridge.net.push`.
+`FakeExport` records every verdict `run_once` would have exported, as `(name, ok)` in `records`,
+so a test reads what the gauges would hold without serving them.
 
 `mk` and `as_body` build the check bodies a registry of `Check` entries carries: one that records
 that it ran, and one that returns or raises a stated result. The second exists because an
@@ -31,7 +31,7 @@ return values, which a fixture would have to wrap in a factory, and the name is 
 
 from collections.abc import Callable
 
-from bridge.sources import Sink, Sources
+from bridge.sources import Sources
 from bridge.streaks import State
 
 _METHODS = (
@@ -108,19 +108,22 @@ class FakeSources(Sources):
         return self._answer("post_json", url, payload, headers=headers)
 
 
-class FakeSink(Sink):
-    """A `Sink` that records each push instead of sending it.
+class FakeExport:
+    """A `CheckExposition` stand-in that records each verdict `run_once` exports.
 
     Attributes:
-      pushes: `(token, ok, msg)` for every push, in the order `run_once` sent them.
+      records: `(name, ok)` for every enabled row, in the order `run_once` recorded them.
     """
 
     def __init__(self) -> None:
-        # No `cfg` or opener: nothing here reaches Kuma.
-        self.pushes: list[tuple[str, bool, str]] = []
+        self.records: list[tuple[str, bool]] = []
 
-    def push(self, token: str, ok: bool, msg: str) -> None:
-        self.pushes.append((token, ok, msg))
+    def record(self, name: str, ok: bool, now: float) -> None:
+        self.records.append((name, ok))
+
+    @property
+    def verdicts(self) -> dict[str, bool]:
+        return dict(self.records)
 
 
 def mk(ran: list[str], name: str):

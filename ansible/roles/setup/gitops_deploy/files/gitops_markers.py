@@ -108,11 +108,11 @@ MARKERS: dict[str, str] = {
     # through a function argument would escape.
     #
     # Undelivered post-merge alerts, retried at the TOP of every tick. The
-    # secrets/tasks/meta/combined channels `git merge --ff-only` BEFORE their delivery-gated
+    # secrets and k8s channels `git merge --ff-only` BEFORE their delivery-gated
     # marker write, so once merged local==origin and the next tick short-circuits at `noop`
     # (main) before ever re-reaching the alert code — a single transient discord() failure
     # (timeout/5xx/Cloudflare-1010/DNS blip) would otherwise drop that alert forever (the
-    # rotated secret sits stale in its container / the tasks|meta change sits
+    # rotated secret sits stale in its container / the k8s change sits
     # ff-merged-but-unapplied, with no other signal). This queue decouples DELIVERY from the
     # git action: an alert that fails to send is persisted here keyed by "<channel>:<sha>"
     # and `drain_pending()` resends it every tick until a confirmed 2xx clears it. The
@@ -129,7 +129,7 @@ MARKERS: dict[str, str] = {
 # `DeployerState.path` gave each slot while it was its own `MARKERS` entry.
 # `tests/test_alert_once_markers.py` checks every call site's literal against it.
 ALERT_SLOTS: frozenset[str] = frozenset(
-    {"broad", "secrets", "tasks", "k8s", "stale_denylist", "ci"}
+    {"broad", "secrets", "k8s", "stale_denylist", "ci"}
 )
 
 # The deploy-plane playbook. A k8s deploy runs it with `--tags <services>`, and a failed one

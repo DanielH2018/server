@@ -10,7 +10,7 @@ test-path rule, the quiet-path filter and the path-to-role mapper.
 THREE READINGS, NOT ONE. The callers ask three different questions of the same paths:
 
 - `Reach.changes` is the deployer's `ChangeSet`. `deploy.sh --changed` deploys
-  `changes.k8s | changes.services`, which includes every k8s role that
+  `changes.k8s`, which includes every k8s role that
   `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` lists for a changed setup-role file.
 - `Reach.tags` is the landing's tag list: each path's own declared role, every role
   that `lookup()`s a changed file, and every k8s role that
@@ -61,11 +61,6 @@ from deployer_lib.deploy_logic import (
     shared_module_consumers,
 )
 
-# The one directory under the role trees that is not a service: `common`, the shared Docker
-# deploy path. `--tags common` matches no containers_list entry, and Ansible exits 0 on a tag
-# selecting nothing.
-_NOT_SERVICES = frozenset({"common"})
-
 
 def role_for(path: str) -> str | None:
     """The role directory a changed path belongs to, or None.
@@ -79,14 +74,14 @@ def role_for(path: str) -> str | None:
     `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
 
     The path shape itself is the deployer's `deploy_changes.role_of`, reached through the
-    index, so one function answers which role a path sits in. The `.md` rule and
-    `_NOT_SERVICES` stay HERE: `role_of` is the plain mapper, and this is the caller that reads
-    DIFF paths rather than a tree at a ref.
+    index, so one function answers which role a path sits in. The `.md` rule stays HERE:
+    `role_of` is the plain mapper, and this is the caller that reads DIFF paths rather than a
+    tree at a ref.
     """
     if path.endswith(".md"):
         return None
     at = role_of(path)
-    if at is None or at.plane == "setup" or at.role in _NOT_SERVICES:
+    if at is None or at.plane != "k8s":
         return None
     return at.role
 
@@ -191,15 +186,13 @@ class Reach(NamedTuple):
 
         The union of the `ChangeSet`'s per-role fields with the two cross-role reads: a role
         importing a changed `files/*.py` another role owns, and a role `lookup()`ing a
-        changed file. Wider than `tags` by design: `tasks` and the import consumers are in
-        it, because being behind on either still renders an old file.
+        changed file. Wider than `tags` by design: the import consumers are in it, because
+        being behind on one still renders an old file.
         """
         cs = self.changes
         return (
-            cs.services
-            | cs.k8s
+            cs.k8s
             | cs.k8s_deploy
-            | cs.tasks
             | shared_module_consumers(self.loud, repo)
             | deploy_cross_role.k8s_lookup_readers(self.loud, repo)
         )
