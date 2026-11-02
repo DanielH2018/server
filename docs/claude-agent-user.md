@@ -571,7 +571,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
 | 3 | The `claude-restart@` broker and its allowlist | Planned |
 | 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs the bot account visible again (#5126). |
-| 5 | A Kuma alive push and a weekly summary | Planned |
+| 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retires Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
 
 ### Slice 1: one run, started by hand
 
@@ -630,7 +630,9 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
 - **It reads two Prometheus vectors.** One is Kuma's `monitor_status == 0`. The other is the
   firing `ALERTS`, without `Watchdog`, shadow and drill alerts. Prometheus publishes its port
   on loopback only on the node it runs on, so the poller tries loopback, then the pinned
-  ClusterIP `observability_prometheus_cluster_ip`.
+  ClusterIP `observability_prometheus_cluster_ip`. A refused connection on loopback is the
+  expected answer on the other node, so it logs a line at no priority. Any other loopback
+  failure, and any failure on the ClusterIP, logs a warning with its URL.
 - **An episode is a fall, not a red tile.** The first poll records what is already down and
   starts nothing, so arming never fires on every known red tile at once. A key opens an episode
   once it reads down on two consecutive polls, and keeps that episode until it recovers.
@@ -639,6 +641,8 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
   first heartbeat since it started. Kuma's keys hold while `up{job="uptime-kuma"}` is not 1, and
   the alert keys hold for 20 minutes after Prometheus starts, until its rules can fire again.
   Without these, every Kuma or Prometheus restart would read each standing red as a new fall.
+  M6's B-10 drops the Kuma path before Kuma's scrape job goes
+  (`docs/target-architecture/monitoring/m6-retire-kuma.md`, *Phase B* item 9).
 - **A fall below `critical` opens no run.** Kuma exports each tile's `tag-severity` as a
   `severity` label, so one floor covers both sources, and an untagged tile ranks below `info`.
   The poller logs each skipped fall, and in `shadow` mode appends it to `shadow.jsonl` with

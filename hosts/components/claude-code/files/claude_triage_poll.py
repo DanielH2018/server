@@ -73,12 +73,17 @@ def prom_vector(
     query: str,
     timeout: float = 10,
     urlopen: Callable = urllib.request.urlopen,
+    *,
+    refusal_expected: bool = False,
 ) -> list[dict] | None:
     """The `result` list of an instant query, or None when the read failed.
 
     A failure is logged at warning priority with the URL and the cause. `read_all` falls back
     to the next URL, so without the line a dead loopback Prometheus left no trace while the
-    ClusterIP answered. `urlopen` is the seam a test replaces.
+    ClusterIP answered. With `refusal_expected`, a refused connection logs at no priority
+    instead, so `journalctl -p warning` stays clear of it: it is how loopback answers on the
+    node Prometheus does not run on, and `read_all` sets it only for a URL with a fallback
+    behind it. `urlopen` is the seam a test replaces.
     """
     url = f"{base_url.rstrip('/')}/api/v1/query?" + urllib.parse.urlencode(
         {"query": query}
@@ -87,6 +92,17 @@ def prom_vector(
         with urlopen(url, timeout=timeout) as resp:
             body = json.load(resp)
     except (OSError, ValueError) as exc:
+        # urllib wraps the socket's ConnectionRefusedError in a URLError's `reason`.
+        if refusal_expected and isinstance(
+            getattr(exc, "reason", exc), ConnectionRefusedError
+        ):
+            log(
+                "Prometheus refused the connection; trying the next URL",
+                tag=TAG,
+                url=base_url,
+                query=query,
+            )
+            return None
         log(
             f"Prometheus read failed: {exc}",
             WARNING,
@@ -109,12 +125,13 @@ def prom_vector(
 
 
 def read_all(
-    urls: list[str], read: Callable[[str, str], list[dict] | None]
+    urls: list[str], read: Callable[..., list[dict] | None]
 ) -> dict[str, list[dict]] | None:
     """Every query from the first URL that answers them all, or None when none does.
 
     Prometheus publishes loopback only on the node it runs on, so the pinned ClusterIP after
-    it reaches Prometheus from either node.
+    it reaches Prometheus from either node. `read` takes `refusal_expected`, true for every
+    URL but the last, so the expected refusal on the other node is not logged as a warning.
     """
     queries = {
         "kuma": KUMA_QUERY,
@@ -122,10 +139,10 @@ def read_all(
         "alerts": ALERTS_QUERY,
         "prom_age": PROM_AGE_QUERY,
     }
-    for base in urls:
+    for i, base in enumerate(urls):
         found = {}
         for name, query in queries.items():
-            result = read(base, query)
+            result = read(base, query, refusal_expected=i < len(urls) - 1)
             if result is None:
                 break
             found[name] = result
@@ -344,7 +361,7 @@ def drain(state: dict, state_dir: str, start: Callable[[str], None]) -> dict:
 def main(
     argv: list[str],
     config_path: str = CONFIG,
-    read: Callable[[str, str], list[dict] | None] = prom_vector,
+    read: Callable[..., list[dict] | None] = prom_vector,
     start: Callable[[str], None] = start_run,
     now: Callable[[], float] = time.time,
 ) -> int:

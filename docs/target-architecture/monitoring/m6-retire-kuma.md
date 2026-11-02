@@ -86,6 +86,8 @@ section transcludes the files in batch order. *Recording a batch's results*, und
 
 --8<-- "target-architecture/monitoring/m6-status/pr-b-7.md"
 
+--8<-- "target-architecture/monitoring/m6-status/pr-b-10.md"
+
 --8<-- "target-architecture/monitoring/m6-status/pr-c-0.md"
 
 --8<-- "target-architecture/monitoring/m6-status/pr-c-1.md"
@@ -122,8 +124,8 @@ push-token secret remains.
    exits 0.
 3. Nothing reads Kuma. This is a functional criterion, not a sweep of every mention. It is
    reached only after C-4b, which waits for D6.
-    - None of these identifiers appears in a non-test file under `ansible/`, `scripts/` or
-      `.claude/`, outside the allowlist below: `/api/push/`, `kuma_push`, `KUMA_URL`,
+    - None of these identifiers appears in a non-test file under `ansible/`, `hosts/`,
+      `scripts/` or `.claude/`, outside the allowlist below: `/api/push/`, `kuma_push`, `KUMA_URL`,
       `KUMA_PUSH_`, `monitor_status`, `entry_port('uptime-kuma')`, `kuma-push-lib`,
       `kuma_ingress_monitors`, `kuma-check-`. C-6 quotes the `git grep` that shows it
       (*Phase C* item 6). A read through an indirection escapes that grep:
@@ -147,6 +149,8 @@ push-token secret remains.
           `kuma_ingress_monitors` registration in `scripts/lib/ansible_jinja_env.py`, and
           the `kuma_ingress_monitors` row in
           `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS`.
+        - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
+          an output redaction rule, not a Kuma read.
         - Any file the B-7 and C-6 PRs could not reword, with its reason.
     - Test directories are outside the selector. Many tests use `uptime-kuma` as a sample deploy
       tag, and a test that reads Kuma is deleted with its subject (`.claude/rules/python-layout.md`,
@@ -452,6 +456,11 @@ PR follows a read that the tile is gone.
     - `scripts/diagnostics/postflight.py` imports `kuma_live` and `monitors` at module level.
       `check_kuma_monitors` and `check_kuma_drift` read them, and `check_kuma_scrape` reads
       `up{job="uptime-kuma"}`.
+    - Triage's poller, `hosts/components/claude-code/files/claude_triage_poll.py`, which
+      both host packages ship. It opens episodes from `monitor_status{job="uptime-kuma"}`
+      and holds every Kuma key while `up{job="uptime-kuma"}` is not 1. Once C-1a deletes
+      the scrape job, that `up` series stops existing, so a poller still reading Kuma would
+      freeze every Kuma key in its last state (#6862).
     - homelab-mcp has no Kuma tool and imports no `kuma_live`.
       `git grep -l kuma_live` lists only `postflight.py`, `probe_lib/monitors.py`, their tests,
       `docs/reference/scripts.md` and `pytest_shard_weights.json`. One sentence in its
@@ -1524,6 +1533,18 @@ reach A6-7a, fail the bijection test and lose its only pager.
     - `.claude/hooks/hooklib/service_lines.py`;
     - the eval cases that name Kuma;
     - `ansible/roles/k8s/homelab-mcp/CLAUDE.md`.
+9. **Triage's poller** drops its Kuma source in B-10. It keeps the `ALERTS` path alone:
+    - **The code.** `KUMA_QUERY`, `KUMA_UP_QUERY`, `kuma_up_keys`, the `kuma` arm of
+      `unknown_sources` and of `down_keys`, and the `kuma_up` argument of `step` go.
+    - **The state.** The first poll on the new code drops every `kuma:` key from
+      `poll-state.json` and opens no episode for it. Without that step, a Kuma key that
+      was down stays down for good, because no source can recover it any more.
+    - **The docs.** *Slice 2: the poller* in `docs/claude-agent-user.md`, the poller's
+      module docstring, and the component's `CLAUDE.md` describe one input.
+    - **Order.** B-10 lands after Phase A, when every Kuma pager has an `ALERTS` rule, so the
+      `ALERTS` path sees each fall the Kuma path saw. It lands before C-1a, which deletes
+      the scrape job the poller reads. It ships in a new version of each host package, so
+      C-1a waits until both hosts have installed it.
 
 ### Phase C — delete Kuma
 
@@ -1549,6 +1570,8 @@ here. C-1 waits for the operator's acceptance.
     - B-2 and B-4 have landed and deployed. B-4 removes homepage's
       `homepage_href('uptime-kuma', domain)` call, which raises once the entry loses
       `hostname`, and B-2 replaces postflight's Kuma reads.
+    - B-10 has landed, and both hosts run the package version that carries it. Until then
+      the triage poller reads the scrape job that C-1a deletes (*Phase B* item 9).
 
    Scope:
     - Delete `KumaDown` with its inhibit, Prometheus's `uptime-kuma` scrape job, the
@@ -1845,9 +1868,13 @@ here. C-1 waits for the operator's acceptance.
    them to `RETIRED`, and carries the regenerated fragment. That is the token-PR rule in
    *Steps*.
 6. **C-6, the census row.** It holds `kuma` to its allowlist from then on (exit criterion 3).
+   Under `hosts/`, the grep below also matches the Kuma push producers and the push plumbing
+   that moved into host packages after this plan was written, such as `hosts/lib/kuma_push.py`
+   and `hosts/components/kuma-push/component.yml`. *Files under `hosts/`* in *Phase A* assigns
+   each hit to its PR.
    Its precondition, quoted in the PR, is the read for exit criterion 3's first bullet. It
    must list allowlist entries only:
-   `git grep -l -E "/api/push/|kuma_push|KUMA_URL|KUMA_PUSH_|monitor_status|entry_port\('uptime-kuma'\)|kuma-push-lib|kuma_ingress_monitors|kuma-check-" -- ansible scripts .claude ':!*/tests/*' ':!*/test_*'`.
+   `git grep -l -E "/api/push/|kuma_push|KUMA_URL|KUMA_PUSH_|monitor_status|entry_port\('uptime-kuma'\)|kuma-push-lib|kuma_ingress_monitors|kuma-check-" -- ansible hosts scripts .claude ':!*/tests/*' ':!*/test_*'`.
    C-6 rewords any other hit whose PR missed it. Before C-4b, the C-4b entries stay listed.
    C-6 also deletes C-3a's two absent tasks, for `kuma-push-lib.sh` and for the `/opt` copies
    of `kuma_push.py`, once the reads C-3a names find no file. C-6 lands after C-7: until C-7,
@@ -2046,6 +2073,7 @@ this applies to, with what the rules predict:
 | B-6a | Authelia `two_factor` rule for `alertmanager.local` and its render test | ~30 | `authelia` |
 | B-6b | Alertmanager IngressRoute | ~40 | `observability` |
 | B-7 | docs, skills, agents, evals, the ADR draft (C-0) | ~200 | none |
+| B-10 | triage's poller reads `ALERTS` alone and drops its `kuma:` keys; its docs; after Phase A | ~60 removed | a new version of the daniel-box and daniel-server host packages |
 | C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and D5's registry PR (a quoted `git grep -n registry_gc_push_token` over `ansible/roles/k8s/uptime-kuma/` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |

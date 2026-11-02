@@ -5,11 +5,13 @@ Each test drives `step` or `main` through its seams: no Prometheus, no systemctl
 
 import fcntl
 import json
+import os
 from datetime import datetime, timezone
 
 import claude_triage_poll as poll
 import claude_triage_run as run
 import pytest
+from urllib.error import URLError
 
 T0 = datetime(2026, 10, 15, 18, 30, tzinfo=timezone.utc).timestamp()
 MEMORY = {"kuma:Memory": {"source": "kuma", "monitor": "Memory"}}
@@ -233,7 +235,7 @@ def _reads(*kuma_by_poll, **answers):
     polls = iter(kuma_by_poll)
     fixed = {**HEALTHY, poll.ALERTS_QUERY: [], **answers}
 
-    def read(base, query):
+    def read(base, query, refusal_expected=False):
         return next(polls) if query == poll.KUMA_QUERY else fixed[query]
 
     return read
@@ -394,7 +396,7 @@ def test_a_source_is_unknown_while_its_exporter_is_down_or_just_restarted(
 
 
 def test_off_mode_reads_nothing(tmp_path) -> None:
-    def read(base, query):
+    def read(base, query, refusal_expected=False):
         raise AssertionError("off mode read Prometheus")
 
     assert _run(_config(tmp_path, "off"), read, []) == 0
@@ -405,13 +407,14 @@ def test_the_poller_falls_back_to_the_cluster_ip_when_loopback_fails(tmp_path) -
     asked = []
     healthy = _reads([])
 
-    def read(base, query):
-        asked.append(base)
+    def read(base, query, refusal_expected=False):
+        asked.append((base, refusal_expected))
         return None if base == "http://loopback" else healthy(base, query)
 
     assert _run(_config(tmp_path, "armed"), read, []) == 0
-    assert asked[0] == "http://loopback"
-    assert set(asked[1:]) == {"http://cluster-ip"}
+    # Only the URL with a fallback behind it may swallow a refusal.
+    assert asked[0] == ("http://loopback", True)
+    assert set(asked[1:]) == {("http://cluster-ip", False)}
     state = json.loads((tmp_path / "state" / "poll-state.json").read_text())
     assert state["baseline"] is True
 
@@ -436,4 +439,49 @@ def test_a_failed_prometheus_read_is_logged_with_its_url_at_warning(
     assert capsys.readouterr().out == (
         "claude-triage-poll: Prometheus read failed: connection refused "
         "url=http://127.0.0.1:9090 query=up\n"
+    )
+
+
+def _stdout_as_journal(monkeypatch) -> None:
+    """Make `log` see captured stdout as the journal, so it writes the `<n>` priority."""
+    st = os.fstat(1)
+    monkeypatch.setenv("JOURNAL_STREAM", f"{st.st_dev}:{st.st_ino}")
+
+
+@pytest.mark.parametrize(
+    "cause",
+    [
+        ConnectionRefusedError(111, "Connection refused"),
+        URLError(ConnectionRefusedError(111, "Connection refused")),
+    ],
+)
+def test_a_refusal_with_a_fallback_behind_it_logs_without_a_priority(
+    capfd, monkeypatch, cause
+) -> None:
+    # On the node Prometheus does not run on, loopback refuses every poll (#6862).
+    def refuse(url, timeout):
+        raise cause
+
+    _stdout_as_journal(monkeypatch)
+    assert (
+        poll.prom_vector(
+            "http://127.0.0.1:9090", "up", urlopen=refuse, refusal_expected=True
+        )
+        is None
+    )
+    assert capfd.readouterr().out == (
+        "claude-triage-poll: Prometheus refused the connection; trying the next URL "
+        "url=http://127.0.0.1:9090 query=up\n"
+    )
+
+
+def test_a_timeout_still_warns_with_a_fallback_behind_it(capfd, monkeypatch) -> None:
+    # Only a refusal is the expected answer; a hung loopback Prometheus still warns.
+    def hang(url, timeout):
+        raise URLError(TimeoutError("timed out"))
+
+    _stdout_as_journal(monkeypatch)
+    poll.prom_vector("http://127.0.0.1:9090", "up", urlopen=hang, refusal_expected=True)
+    assert capfd.readouterr().out.startswith(
+        "<4>claude-triage-poll: Prometheus read failed"
     )
