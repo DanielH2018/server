@@ -229,7 +229,7 @@ def test_the_deleted_b2_b4_and_b6b_tiles_are_not_declared():
 
 def test_the_deleted_b6c_tile_is_not_declared():
     # RED if the tile is declared again: AutoKuma would re-create it beside the RegistryGc* rules
-    # that replace it (M6 batch B6c), and registry-gc.sh pushes into its token until Cutover-2.
+    # that replace it (M6 batch B6c). Cutover-2 stopped registry-gc.sh pushing into its token.
     declared = {e["name"] for e in _entities().values()}
     assert "Registry GC" not in declared
     # Non-vacuity by name: a render that declared nothing would pass the line above.
