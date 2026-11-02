@@ -29,9 +29,7 @@ ORIGIN = "2" * 40
 # One commit between LOCAL and the tip, for the ticks that fast-forward past a tip that is
 # pending or red.
 GREEN_ANCESTOR = "3" * 40
-DOCKER_TEMPLATE = "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"
 K8S_DEFAULTS = "ansible/roles/k8s/sonarr/defaults/main.yml"
-DECLARES_WG_EASY = "containers_list:\n  - name: wg-easy\n    platform: docker\n"
 DECLARES_SONARR = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
 
 
@@ -89,14 +87,14 @@ def test_a_dirty_tree_skips_without_merging(gitops_deploy, tick, state):
 
 def test_a_held_sha_is_skipped(gitops_deploy, tick, state):
     state.write_hold(ORIGIN)
-    tick.paths = [DOCKER_TEMPLATE]
+    tick.paths = [K8S_DEFAULTS]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.playbooks == []
 
 
 def test_pending_ci_defers_silently(gitops_deploy, tick, state_dir, state):
     tick.ci = "pending"
-    tick.paths = [DOCKER_TEMPLATE]
+    tick.paths = [K8S_DEFAULTS]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [] and tick.posts == []
     assert _alerted(state_dir, "ci") is None
@@ -104,7 +102,7 @@ def test_pending_ci_defers_silently(gitops_deploy, tick, state_dir, state):
 
 def test_red_ci_parks_and_pages_once_per_sha(gitops_deploy, tick, state_dir, state):
     tick.ci = "fail"
-    tick.paths = [DOCKER_TEMPLATE]
+    tick.paths = [K8S_DEFAULTS]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == []
@@ -164,35 +162,6 @@ def test_a_docs_only_push_ff_merges_the_pinned_sha_and_deploys_nothing(
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [] and tick.posts == []
     assert tick.head == ORIGIN
-
-
-# ── a Docker role change ──────────────────────────────────────────────────────────────────────
-def test_a_docker_template_push_merges_deploys_nothing_and_says_so(
-    gitops_deploy, tick, state_dir, capsys, state
-):
-    """No has_gitops host runs Docker, so a Pi role change is merged and left to a hand deploy.
-
-    The hold stays: nothing was deployed, so nothing proved the held SHA fixed.
-    """
-    (state_dir / "hold_sha").write_text("f" * 40)
-    tick.declare(DECLARES_WG_EASY)
-    tick.paths = [DOCKER_TEMPLATE]
-    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert tick.merges == [ORIGIN]
-    assert tick.playbooks == [] and tick.posts == []
-    assert _marker(state_dir, "hold_sha") == "f" * 40
-    assert "does not deploy: ['wg-easy']" in capsys.readouterr().out
-
-
-def test_a_containers_common_push_merges_without_the_full_play(
-    gitops_deploy, tick, capsys, state
-):
-    """The Pi's shared deploy path is not broad, so it does not buy a full deploy.yml."""
-    tick.paths = ["ansible/roles/containers/common/tasks/docker_deploy.yml"]
-    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert tick.merges == [ORIGIN]
-    assert tick.playbooks == [] and tick.posts == []
-    assert "-e target=daniel-pi" in capsys.readouterr().out
 
 
 # ── the broad planes ──────────────────────────────────────────────────────────────────────────
@@ -308,21 +277,6 @@ DEPLOY_SONARR = [
     "--tags",
     "sonarr",
 ]
-
-
-def test_an_image_bump_beside_a_pi_change_deploys_and_names_the_pi_half(
-    gitops_deploy, tick, capsys, state
-):
-    """The bump deploys, and the Pi work it rode in with is still named.
-
-    The promotion is not refused when `cs.services` is non-empty. That moves the tick off
-    `handle_no_services`, the only path that said anything about the Pi half — so `handle_k8s`
-    says it.
-    """
-    _image_bump(tick, extra_paths=[DOCKER_TEMPLATE])
-    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert tick.playbooks == [DEPLOY_SONARR], "the bump deployed rather than deferring"
-    assert "does not deploy: ['wg-easy']" in capsys.readouterr().out
 
 
 def test_an_image_bump_merges_then_deploys(gitops_deploy, tick, state_dir, state):

@@ -113,33 +113,6 @@ def alert_red_tip(
     deploy_alerts.alert_once(tools, state, config, "ci", red, body)
 
 
-def log_pi_changes(cs) -> None:
-    """Name the Pi Docker work this tick merged and cannot apply, in the journal.
-
-    Called from each handler right after its `git merge --ff-only`, because the claim the line
-    makes is that the change is merged. The Pi has `has_gitops: false`, so no tick here ever
-    deploys one of these; the operator does, with `-e target=daniel-pi`.
-
-    Two shapes, one line each: a `roles/containers/<svc>/` change (`cs.services`) and a
-    `roles/containers/common/` change (`cs.pi_shared`). Before #2836 only the
-    `handle_no_services` path said either, so a Pi change sharing a tick with a promoted image
-    bump or a broad plane was merged in silence.
-
-    A contention arm below the call site resets the tree seconds later, which makes the line
-    retroactively wrong on that path. Accepted rather than moved: `for_contention` logs its own
-    reason, and the next tick re-crosses the range and says it again.
-    """
-    if cs.services:
-        log(
-            f"docker: merged Docker role change(s) this host does not deploy: {sorted(cs.services)}"
-        )
-    if cs.pi_shared:
-        log(
-            "docker: merged a roles/containers/common change this host does not deploy; "
-            "apply it with `./scripts/deploy.sh -e target=daniel-pi`"
-        )
-
-
 def handle_broad(
     tools: DeployTools,
     state: DeployerState,
@@ -204,7 +177,6 @@ def handle_broad(
     # setup plan, so the deploy plane still applies second.
     plans += plan.secret_plans
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
-    log_pi_changes(cs)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
     # not after the apply below. A mixed range whose apply FAILS returns from the except arm,
     # and a record placed after it never ran: the role sat fast-forwarded on disk with no
@@ -350,7 +322,6 @@ def handle_k8s(
     """The promoted k8s image bumps: ff-merge, deploy, roll back on failure."""
     cs, origin = plan.cs, target.origin
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
-    log_pi_changes(cs)
     started = time.monotonic()
     try:
         deploy_io.deploy_k8s(
@@ -469,14 +440,9 @@ def handle_no_services(
     target: TickTarget,
     plan: TickPlan,
 ) -> int:
-    """Nothing maps to a deploy here: ff-merge, then flag what rode along unapplied.
-
-    A Pi Docker role change (`cs.services`, `cs.pi_shared`) lands here too. No has_gitops host runs Docker, so
-    the deployer never applied one; it is deployed by hand with `-e target=daniel-pi`.
-    """
+    """Nothing maps to a deploy here: ff-merge, then flag what rode along unapplied."""
     cs, origin = plan.cs, target.origin
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)  # docs-only etc.
-    log_pi_changes(cs)
     # A secrets-only push (rotated value, no service template changed) maps to nothing, so the
     # ff-merge above is all we can do automatically — but the new value only reaches a container
     # on its next deploy. Defer-and-alert (once per SHA) so the operator redeploys the
