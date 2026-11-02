@@ -892,9 +892,11 @@ files that the rows above name only by their Ansible path. Each goes with the PR
       `hosts/components/loki-route-witness/component.yml`,
       `/etc/homelab/rkhunter-kuma-push.env` and `/etc/homelab/aide-kuma-push.env` in
       `hosts/components/integrity-scans/component.yml`, and `/etc/nut/kuma-push.env` in
-      `hosts/components/nut-secondary/component.yml`. The read is `rootq stat <path>` on
-      daniel-box and daniel-server for each host whose package ships the component, and a
-      read-only `ls` over `ssh daniel-pi` for the integrity-scans pair on the Pi.
+      `hosts/components/nut-secondary/component.yml`. The read is a read-only `ls <path>` on
+      each host whose package ships the component, over `ssh` for daniel-server and
+      daniel-pi. `rootq stat` cannot take these paths, because none is on its allowlist.
+      Only `No such file or directory` passes: a `Permission denied` says nothing about the
+      file.
 - **The triage poller and rootq.** The poller,
   `hosts/components/claude-code/files/claude_triage_poll.py`, reads `monitor_status`. B-10,
   which the fix for #6862 adds to *Phase B*, drops that read. `hosts/components/claude-code/files/homelab_rootq.py` matches `/api/push/` in
@@ -930,6 +932,8 @@ not name.
     - `hosts/components/claude-code/files/claude_triage_poll.py`.
     - `hosts/components/claude-code/templates/claude-triage-poll.service.j2`: its
       `Description=` names Kuma as an input.
+    - `hosts/components/claude-code/defaults/main.yml`: the severity-floor comment says Kuma
+      reads a tile's `tag-severity`, which stops being true when the poller drops Kuma.
 - **B9's Cutover-2**, with the scans' push:
     - `hosts/components/integrity-scans/units/homelab-aide-check.service.j2` and
       `hosts/components/integrity-scans/units/homelab-rkhunter-check.service.j2`: each
@@ -963,10 +967,12 @@ not name.
       `hosts/components/secret-rotation/units/homelab-secret-rotation-audit-boot.service`. A
       check that is red when its host
       installs the new version loses one boot rerun, because the boot unit reads the new
-      path. Its timer reruns it at the next slot, so the cost is one missed rerun.
+      path. Its timer reruns it at the next slot, so the cost is one missed rerun. Two tests
+      pin the old path and change with it: `hosts/lib/tests/test_loki_route_witness_component.py`
+      and `hosts/lib/tests/test_secret_rotation_component.py`.
       Allowlisting the old path instead would keep `kuma-check` in two host packages for
       good. Each old marker joins its component's `legacy:` list, and C-6 deletes the entry
-      once `rootq stat` finds no file. This adds the daniel-box and daniel-server packages to
+      once a read-only `ls` finds no file. This adds the daniel-box and daniel-server packages to
       C-3b's deploys.
 - **C-6**, which rewords each comment that names Kuma only as history:
     - The producers whose push a Cutover-2 removed:
@@ -986,11 +992,11 @@ not name.
       in `hosts/components/host-maintenance/component.yml`,
       `hosts/components/host-maintenance/units/homelab-reboot.timer.j2`,
       `hosts/components/claude-code/templates/claude-triage-config.env.j2` and
-      `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer`, and the
-      tile severity in `hosts/components/claude-code/defaults/main.yml`. The timer's
+      `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer`. The timer's
       `ENFORCED:` line cites
       `ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py`, which C-1 deletes, so
-      the citation points at nothing from C-1 until C-6. No check resolves that citation.
+      the citation points at nothing from C-1 until C-6. No check resolves it: the facts lock
+      reads Markdown sections, not unit files.
       C-6 keeps the timer's schedule and rewrites only the reason the comment gives for it.
     - `hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh`: "a Kuma DOWN"
       becomes the alert that pages for the nightly peer backup.
