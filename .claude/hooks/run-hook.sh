@@ -172,12 +172,13 @@ fi
 
 # `--no-sync` keeps a venv whose interpreter mismatches the pin, but uv deletes and recreates one
 # whose `bin/python` cannot run, `--no-sync` or not. A sandboxed session cannot write the
-# primary checkout, so that rebuild fails with EACCES and every guard call errors (#6969). When
-# the primary has a `.venv` whose interpreter cannot run, the session checkout's venv stands in. Its
-# `bin/python` runs, so uv uses it as it is. With neither, the guards ask: the project-free
-# interpreter lacks PyYAML, which block-protected-bash's secret-path arm needs.
+# primary checkout, so that rebuild fails with EACCES and every guard call errors (#6969). A
+# project with no `.venv` at all is the same write, since uv creates one. In both cases the
+# session checkout's venv stands in; its `bin/python` runs, so uv uses it as it is. With neither,
+# the guards ask: the project-free interpreter lacks PyYAML, which block-protected-bash's
+# secret-path arm needs. A cd target that is no project gets no venv from uv, so it runs as is.
 if [[ -n "$project" ]]; then
-    if [[ -x .venv/bin/python || ! -e .venv ]]; then
+    if [[ -x .venv/bin/python || ! -f pyproject.toml ]]; then
         exec "$uv" run --no-sync --quiet python "$script"
     fi
     own_venv=${HOOKS_DIR%/.claude/hooks}/.venv

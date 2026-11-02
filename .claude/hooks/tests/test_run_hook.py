@@ -391,8 +391,8 @@ def _venv(path: Path) -> None:
     run([uv, "venv", "--quiet", "--python", sys.executable, str(path)], check=True)
 
 
-def _primary(tmp_path: Path) -> Path:
-    """A primary checkout: a project pinned to this interpreter, with its `.venv` built."""
+def _primary(tmp_path: Path, pin: str | None = None, venv: bool = True) -> Path:
+    """A primary checkout: a project pinned to `pin`, by default this interpreter's minor."""
     primary = tmp_path / "primary"
     primary.mkdir()
     major, minor = sys.version_info[:2]
@@ -400,13 +400,36 @@ def _primary(tmp_path: Path) -> Path:
         f'[project]\nname = "x"\nversion = "0"\nrequires-python = ">={major}.{minor}"\n',
         encoding="utf-8",
     )
-    (primary / ".python-version").write_text(f"{major}.{minor}\n", encoding="utf-8")
-    _venv(primary / ".venv")
+    (primary / ".python-version").write_text(
+        f"{pin or f'{major}.{minor}'}\n", encoding="utf-8"
+    )
+    if venv:
+        _venv(primary / ".venv")
     return primary
 
 
 @pytest.fixture
-def read_only_primary(tmp_path):
+def lock():
+    """Makes a checkout read-only, as a sandboxed batch sees the primary, until teardown."""
+    locked: list[Path] = []
+
+    def lock_tree(root: Path) -> Path:
+        tree = [root, *[p for p in root.rglob("*") if p.is_dir()]]
+        _set_mode(tree, 0o555)
+        locked.extend(tree)
+        return root
+
+    yield lock_tree
+    _set_mode(locked, 0o755)
+
+
+def _set_mode(directories: list[Path], mode: int) -> None:
+    for directory in directories:
+        directory.chmod(mode)
+
+
+@pytest.fixture
+def read_only_primary(tmp_path, lock):
     """A primary checkout whose `.venv/bin/python` points nowhere, none of it writable.
 
     That is the state uv deletes and recreates even under `--no-sync`; a sandboxed batch cannot
@@ -415,15 +438,7 @@ def read_only_primary(tmp_path):
     primary = _primary(tmp_path)
     (primary / ".venv" / "bin" / "python").unlink()
     (primary / ".venv" / "bin" / "python").symlink_to(tmp_path / "removed-python")
-    locked = [primary, *[p for p in primary.rglob("*") if p.is_dir()]]
-    _set_mode(locked, 0o555)
-    yield primary
-    _set_mode(locked, 0o755)
-
-
-def _set_mode(directories: list[Path], mode: int) -> None:
-    for directory in directories:
-        directory.chmod(mode)
+    return lock(primary)
 
 
 def _session_runner(tmp_path: Path, primary: Path) -> Path:
@@ -460,8 +475,36 @@ def test_reject_a_broken_primary_venv_with_no_session_venv_asks(
     assert "has a Python that runs" in out["permissionDecisionReason"]
 
 
+def test_accept_a_missing_primary_venv_runs_the_hook_in_the_session_venv(
+    tmp_path, lock
+):
+    """uv creates a project's missing `.venv`, which is the same write as a rebuild, so a
+    primary caught between deleting and recreating its venv falls back too."""
+    primary = lock(_primary(tmp_path, venv=False))
+    runner = _session_runner(tmp_path, primary)
+    _venv(tmp_path / "session" / ".venv")
+    proc = _run(runner, "probe", "--project", "--ask-on-cd")
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(tmp_path / "session" / ".venv"), proc.stderr
+    assert not (primary / ".venv").exists()
+
+
+def test_accept_a_read_only_primary_venv_that_mismatches_its_pin_still_runs_the_hook(
+    tmp_path, lock
+):
+    """The issue's own scenario: the pin moved and the venv was not rebuilt. `--no-sync`
+    keeps a mismatched venv whose interpreter runs, so the primary's venv runs the hook."""
+    primary = lock(_primary(tmp_path, pin="3.99"))
+    runner = _session_runner(tmp_path, primary)
+    _venv(tmp_path / "session" / ".venv")
+    proc = _run(runner, "probe", "--project", "--ask-on-cd")
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(primary / ".venv"), proc.stderr
+
+
 def test_accept_a_working_primary_venv_still_runs_the_hook(tmp_path):
-    """The near miss: a primary venv whose interpreter runs is used, not the session's."""
+    """A guard for the path the fallback leaves alone: a primary venv whose interpreter runs
+    is preferred over the session's, so a fallback taken unconditionally fails here."""
     primary = _primary(tmp_path)
     runner = _session_runner(tmp_path, primary)
     _venv(tmp_path / "session" / ".venv")
