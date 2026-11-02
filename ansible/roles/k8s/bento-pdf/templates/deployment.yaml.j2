@@ -16,6 +16,10 @@ spec:
       app: bento-pdf
   template:
     metadata:
+      annotations:
+        # D7's green superseding pair, the T leaf: a pod-template change that rolls the pod and
+        # nothing else (docs/target-architecture/deploy/d7-superseding-promotions.md, *Verification*).
+        homelab/d7-green-pair: "2026-11-02"
       labels:
         app: bento-pdf
         netpol-baseline: enforced
