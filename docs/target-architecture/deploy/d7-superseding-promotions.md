@@ -4,7 +4,11 @@ Status: IN PROGRESS. D7.1 to D7.5 landed on 2026-10-24: D7.1 in #6140, D7.2 in #
 in #6156, the refactor D7.5 needed in #6159, D7.5 in #6193, D7.7 in #6200, D7.8 in #6205,
 and the hold attribution #6199 asked for in #6204. The operator turned `SUPERSEDE` on in
 D7.6 (#6210), which merged on 2026-10-25. The live pair ran that day, and *Verification*
-records what it proved and what it left open. The red proof for the live pair has not run.
+records what it proved and what it left open. The red proof for the live pair ran on
+2026-10-29 and passed: promote run 40882393836, for #6497 (P), #6498 (T) and the revert
+#6508. The slice stays in progress because the exit criterion's one pair, with
+P superseded and T `good`, has not run: the 2026-10-25 pair did not exercise `superseded`,
+and the red proof's T failed on purpose.
 
 Depends on: D5, through #5704's soak fix (the soak Job exits once `homelab` no longer
 holds its revision). D2.5's in-flight guard and D5.2b1's hold without a reset are the
@@ -350,6 +354,47 @@ supersedes another.
   readiness probe on its leaf, as #5605 did for speedtest. T's `verify` must print
   `failed` naming that leaf, and `settle` must hold `<T> failed=<leaf>` and reset
   `prod` to the `last-good` from before P.
+- **The red proof's result, 2026-10-29.** It ran and passed. The three PRs were:
+    - P, #6497, merge 0a064b4b1d at 13:23:12Z: an ical-proxy annotation.
+    - T, #6498, merge 0b56c1dd24 at 13:23:57Z: bento-pdf's readinessProbe set to
+      `/flux-drill-not-found`.
+    - #6508, merged at 13:55:40Z: the revert of T.
+
+  T's promote run is 40882393836. Its logs, quoted without their timestamps, read as follows.
+    - `decide` read `last-good` at commit 5abf9894bc, which is before P (committed at
+      13:17:20Z), and superseded P's verification:
+
+      ```
+      promote.py: recorded on last-good's commit 5abf9894bc9f05ff22722f6a15e96990e4f743d9: flux/bento-pdf=success, flux/ical-proxy=success, flux/netpol-baseline=success, flux/netpol-baseline-deferred=success, flux/netpol-baseline-verify=success, flux/soak=success
+      promote.py: 0b56c1dd24067c02a79eb53085aea80ffd0491fb supersedes the verification of 0a064b4b1def60ccab73a3556a538199d2291565
+      ```
+    - `verify` expected the names of both commits, including `flux/ical-proxy` from P, then
+      failed T's leaf:
+
+      ```
+      verify: expecting flux/bento-pdf, flux/homelab, flux/ical-proxy, flux/netpol-baseline, flux/netpol-baseline-deferred, flux/netpol-baseline-verify, flux/soak on 0b56c1dd within 19800s
+      target=0b56c1dd24067c02a79eb53085aea80ffd0491fb verdict=failed failed=bento-pdf
+      ```
+    - `settle` held T and reset `prod`:
+
+      ```
+      DEPLOY_HOLD set to '0b56c1dd24067c02a79eb53085aea80ffd0491fb failed=bento-pdf'
+      prod reset to sha256:1a7369c3a5b9cfe1a8cbd71d03bf01e04802bac131cdbc00dec965c1b89c605d
+      ```
+    - That reset digest is the `last-good` from before P. `tag` and `settle` both logged it as
+      `RESET_DIGEST: sha256:1a7369c3…c605d`, the value `decide` output. It differs from
+      `PRIOR_DIGEST: sha256:fb0fae7e…7956`, which is P's digest and the `prod` that `decide`
+      read. A registry read on 2026-11-02 resolved `sha-5abf9894bc…` to
+      `sha256:1a7369c3a5b9cfe1a8cbd71d03bf01e04802bac131cdbc00dec965c1b89c605d` and
+      `sha-0a064b4b1d…` to the `fb0fae7e…` digest.
+    - P's own run, 40882216959, ended superseded and wrote nothing. Its `verify` printed
+      `target=0a064b4b1def60ccab73a3556a538199d2291565 verdict=superseded failed=`, and its
+      `settle` printed `verify read prod moved past
+      sha-0a064b4b1def60ccab73a3556a538199d2291565, so this run writes nothing and dispatches
+      nothing`. This is the first `verify` that printed `superseded` on production.
+
+  A rerun of the proof, prepared on 2026-11-02 as #6999, #7001 and #7002, was closed
+  unmerged once this record was found.
 
 ## Rollback
 
