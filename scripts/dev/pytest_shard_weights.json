@@ -1107,6 +1107,7 @@
  "scripts/deploy_tools/tests/test_narrow_filter_tables.py": 0.03,
  "scripts/deploy_tools/tests/test_narrow_flux_born_entry.py": 0.53,
  "scripts/deploy_tools/tests/test_narrow_guard_map.py": 0.36,
+ "scripts/deploy_tools/tests/test_narrow_inventory_keys.py": 0.33,
  "scripts/deploy_tools/tests/test_narrow_reads_the_deployers_split.py": 0.08,
  "scripts/deploy_tools/tests/test_narrow_secret_keys.py": 1.08,
  "scripts/deploy_tools/tests/test_narrow_setup.py": 7.49,
