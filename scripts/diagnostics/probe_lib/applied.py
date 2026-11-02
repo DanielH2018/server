@@ -255,6 +255,26 @@ def take_texts(host: str, doc: dict, texts: dict) -> None:
             print(f"applied: {path} on {host} was not read ({why}), so content that reads it is not compared")  # fmt: skip
 
 
+def read_record(ns, host: str, read) -> str | None:
+    """The text of `ns.role`'s apply record on `host`, or None when there is none to read.
+
+    An absent record prints nothing: each STUB row already says no record holds its hash.
+    """
+    request = {"files": [f"{RECORD_DIR}/{ns.role}"]}
+    if ns.dry_run:
+        print(dry_run_text(request, host))
+        return None
+    try:
+        row = (read(request, host).get("files") or {}).get(request["files"][0]) or {}
+    except core.Unreadable as exc:
+        print(f"applied: {exc.message}, so no STUB render is compared with its apply record")  # fmt: skip
+        return None
+    if row.get("status") not in ("ok", "absent"):
+        why = row.get("error") or row.get("status")
+        print(f"applied: {request['files'][0]} on {host} was not read ({why}), so no STUB render is compared with it")  # fmt: skip
+    return row.get("text") if row.get("status") == "ok" else None
+
+
 def run_applied(
     ns, read=read_host, setup: Path = SETUP, render_ctx=None, files_of=task_files
 ) -> int:
@@ -305,15 +325,7 @@ def run_applied(
     for host in sorted(hosts, key=lambda h: h not in carried):
         wants, skips = expected(role_dir, host, ctxs[host], tuple(hosts[host]), texts)
         if any(w.why_no_content == STUB_RENDER for w in wants):
-            record = f"{RECORD_DIR}/{ns.role}"
-            if ns.dry_run:
-                print(dry_run_text({"files": [record]}, host))
-            elif (host, record) not in texts:
-                try:
-                    take_texts(host, read({"files": [record]}, host), texts)
-                except core.Unreadable as exc:
-                    print(f"applied: {exc.message}, so no STUB render is compared with its apply record")  # fmt: skip
-            wants = with_record(wants, texts.get((host, record)))
+            wants = with_record(wants, read_record(ns, host, read))
         # A path two tasks write takes the hash of the one that has one.
         asks = {w.path: w.sha256 for w in sorted(wants, key=lambda w: bool(w.sha256))}
         request = {"stat": sorted(asks), "rootq": asks}
