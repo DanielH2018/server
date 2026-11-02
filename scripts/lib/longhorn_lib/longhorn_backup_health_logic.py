@@ -1,8 +1,8 @@
 """Pure decision core for the Longhorn backup-plane heartbeat (longhorn_backup_health.py).
 
 Ported verbatim from longhorn-backup-health.sh.j2's eight `add()` checks. Checks 9 and 10 —
-the trim and B2-accounting crons' evidence and liveness — live in longhorn_cron_evidence_logic.py
-under the same contract; they read a journal rather than the cluster. Check 11, the weekly
+the trim's and the B2 accounting's evidence and liveness — live in longhorn_cron_evidence_logic.py
+under the same contract. Check 11, the weekly
 volumes a RecurringJob skipped, lives in longhorn_skipped_volumes_logic.py (#3968). Split from
 the I/O shell (host-side kubectl reads, stamp-file reads) the same way configarr_health_logic.py is: this
 stays stdlib-only, takes every clock reading and file read as an argument, and is unit-testable
