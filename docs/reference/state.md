@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-11-02 06:17 UTC
-generated_sha: 8157ef1478
+generated_at: 2026-11-02 18:17 UTC
+generated_sha: e4b9a0e932
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 8157ef1478
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-11-02T06:10:03+0000 | 7m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-11-01T12:03:05+0000 | 18h14m | 1d | ok | session completed |
-| renovate-notify | 2026-11-01T22:41:29+0000 | 7h36m | 1d | ok | notified |
-| docs-refresh | 2026-11-01T18:18:00+0000 | 11h59m | unknown | ok | generators: ok |
-| secret-rotate | 2026-10-30T12:34:47+0000 | 2d17h | unknown | ok | last touched by: Rotate Prowlarr's API key after probe.py arr printed it |
-| longhorn-restore-drill | 2026-11-02T04:10:39+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-10-26T10:20:03+0000 | 6d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1792982702.zip) |
+| gitops-deploy | 2026-11-02T18:06:15+0000 | 11m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-11-02T12:06:26+0000 | 6h11m | 1d | ok | session completed |
+| renovate-notify | 2026-11-02T13:01:25+0000 | 5h16m | 1d | ok | notified |
+| docs-refresh | 2026-11-02T06:18:00+0000 | 11h59m | unknown | ok | generators: ok |
+| secret-rotate | 2026-11-02T16:37:26+0000 | 1h40m | unknown | ok | last touched by: Retire M6's Phase A and B push tokens a week after their cutovers |
+| longhorn-restore-drill | 2026-11-02T04:10:39+0000 | 14h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-11-02T10:20:02+0000 | 7h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1793587502.zip) |

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-02 06:17 UTC
-generated_sha: 8157ef1478
+generated_at: 2026-11-02 18:17 UTC
+generated_sha: e4b9a0e932
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 8157ef1478
 
 # Secrets
 
-199 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+142 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -156,90 +156,33 @@ rotated unattended by the weekly secret-rotate cron.
 | `aide_daniel_box_push_token` | 2026-08-24 | 2027-02-19 | 109 |
 | `aide_daniel_pi_push_token` | 2026-07-07 | 2026-12-20 | 48 |
 | `aide_daniel_server_push_token` | 2026-07-28 | 2027-01-17 | 76 |
-| `arr_autoblock_push_token` | 2026-08-30 | 2027-02-26 | 116 |
-| `artifacts_sync_push_token` | 2026-05-24 | 2026-11-12 | 10 |
-| `claude_otel_push_token` | 2026-08-28 | 2027-02-14 | 104 |
-| `cloudflare_ddns_direct_push_token` | 2026-08-30 | 2027-02-26 | 116 |
-| `cloudflare_ddns_proxied_push_token` | 2026-08-30 | 2027-02-16 | 106 |
-| `crowdsec_remote_allowlist_push_token` | 2026-06-05 | 2026-11-18 | 16 |
 | `daniel_box_disk_push_token` | 2026-08-28 | 2027-02-16 | 106 |
-| `docs_refresh_push_token` | 2026-08-06 | 2027-01-19 | 78 |
-| `etcd_drill_fence_push_token` | 2026-07-26 | 2027-01-19 | 78 |
-| `etcd_drill_full_push_token` | 2026-07-21 | 2027-01-13 | 72 |
-| `etcd_snapshot_push_token` | 2026-08-28 | 2027-02-22 | 112 |
-| `homelab_eval_push_token` | 2026-10-09 | 2027-04-01 | 150 |
-| `interaction_limit_push_token` | 2026-05-15 | 2026-10-30 | -3 |
 | `kuma_status_page_sync_push_token` | 2026-07-08 | 2026-12-28 | 56 |
-| `live_drift_push_token` | 2026-08-15 | 2027-02-03 | 93 |
-| `loki_route_witness_daniel_server_push_token` | 2026-05-14 | 2026-11-08 | 6 |
-| `loki_route_witness_push_token` | 2026-05-03 | 2026-10-30 | -3 |
-| `longhorn_backup_push_token` | 2026-08-28 | 2027-02-14 | 104 |
-| `manifest_prune_push_token` | 2026-08-28 | 2027-02-13 | 103 |
-| `mkv_attachment_repair_push_token` | 2026-04-02 | 2026-09-26 | -37 |
-| `monitor_bridge_appsec_push_token` | 2026-08-28 | 2027-02-16 | 106 |
 | `monitor_bridge_arr_queue_push_token` | 2026-08-30 | 2027-02-19 | 109 |
 | `monitor_bridge_b2_reachable_push_token` | 2026-08-30 | 2027-02-17 | 107 |
 | `monitor_bridge_b2_storage_push_token` | 2026-08-30 | 2027-02-25 | 115 |
 | `monitor_bridge_bazarr_push_token` | 2026-08-16 | 2027-02-02 | 92 |
-| `monitor_bridge_cert_push_token` | 2026-08-30 | 2027-02-19 | 109 |
 | `monitor_bridge_cloudflare_drift_push_token` | 2026-08-28 | 2027-02-14 | 104 |
-| `monitor_bridge_cluster_targets_push_token` | 2026-08-30 | 2027-02-20 | 110 |
-| `monitor_bridge_configarr_push_token` | 2026-08-28 | 2027-02-17 | 107 |
-| `monitor_bridge_cpu_push_token` | 2026-08-30 | 2027-02-20 | 110 |
 | `monitor_bridge_discord_push_token` | 2026-08-30 | 2027-02-26 | 116 |
-| `monitor_bridge_disk_push_token` | 2026-08-30 | 2027-02-15 | 105 |
-| `monitor_bridge_etcd_db_size_push_token` | 2026-05-23 | 2026-11-09 | 7 |
 | `monitor_bridge_etcd_drill_push_token` | 2026-04-28 | 2026-10-18 | -15 |
-| `monitor_bridge_fake_remux_push_token` | 2026-08-28 | 2027-02-19 | 109 |
-| `monitor_bridge_fake_remux_replace_push_token` | 2026-08-28 | 2027-02-17 | 107 |
 | `monitor_bridge_gitops_alive_push_token` | 2026-08-30 | 2027-02-23 | 113 |
 | `monitor_bridge_gitops_status_push_token` | 2026-08-30 | 2027-02-25 | 115 |
 | `monitor_bridge_ha_push_token` | 2026-08-30 | 2027-02-14 | 104 |
 | `monitor_bridge_healthchecks_drift_push_token` | 2026-07-31 | 2027-01-16 | 75 |
-| `monitor_bridge_home_allowlist_push_token` | 2026-08-28 | 2027-02-10 | 100 |
 | `monitor_bridge_host_packages_push_token` | 2026-07-23 | 2027-01-10 | 69 |
-| `monitor_bridge_host_temp_push_token` | 2026-08-09 | 2027-02-01 | 91 |
-| `monitor_bridge_janitorr_push_token` | 2026-08-30 | 2027-02-15 | 105 |
-| `monitor_bridge_k8s_workloads_push_token` | 2026-08-30 | 2027-02-12 | 102 |
-| `monitor_bridge_kubelet_readonly_push_token` | 2026-08-03 | 2027-01-18 | 77 |
-| `monitor_bridge_longhorn_volumes_push_token` | 2026-09-13 | 2027-02-28 | 118 |
-| `monitor_bridge_mem_push_token` | 2026-08-30 | 2027-02-23 | 113 |
 | `monitor_bridge_n8n_push_token` | 2026-08-30 | 2027-02-23 | 113 |
-| `monitor_bridge_oom_push_token` | 2026-08-30 | 2027-02-18 | 108 |
-| `monitor_bridge_pi_peers_push_token` | 2026-08-30 | 2027-02-24 | 114 |
-| `monitor_bridge_pi_push_token` | 2026-08-30 | 2027-02-25 | 115 |
 | `monitor_bridge_prometheus_push_token` | 2026-08-30 | 2027-02-19 | 109 |
-| `monitor_bridge_promtail_dropped_push_token` | 2026-08-30 | 2027-02-26 | 116 |
 | `monitor_bridge_prowlarr_indexers_push_token` | 2026-08-30 | 2027-02-18 | 108 |
-| `monitor_bridge_pvc_push_token` | 2026-05-28 | 2026-11-16 | 14 |
 | `monitor_bridge_r2_usage_push_token` | 2026-08-30 | 2027-02-13 | 103 |
-| `monitor_bridge_renovate_alive_push_token` | 2026-08-28 | 2027-02-13 | 103 |
-| `monitor_bridge_restarts_push_token` | 2026-08-30 | 2027-02-21 | 111 |
 | `monitor_bridge_scrutiny_push_token` | 2026-08-30 | 2027-02-15 | 105 |
-| `monitor_bridge_snapshot_headroom_push_token` | 2026-05-31 | 2026-11-14 | 12 |
 | `monitor_bridge_speedtest_push_token` | 2026-04-20 | 2026-10-17 | -16 |
 | `monitor_bridge_swallowed_verdicts_push_token` | 2026-06-20 | 2026-12-04 | 32 |
-| `monitor_bridge_targets_push_token` | 2026-08-30 | 2027-02-14 | 104 |
-| `monitor_bridge_traefik_404_push_token` | 2026-06-05 | 2026-12-02 | 30 |
-| `monitor_bridge_traefik_421_push_token` | 2026-06-20 | 2026-12-16 | 44 |
-| `monitor_bridge_traefik_latency_push_token` | 2026-08-30 | 2027-02-24 | 114 |
-| `monitor_bridge_traefik_push_token` | 2026-08-30 | 2027-02-18 | 108 |
-| `monitor_bridge_ups_push_token` | 2026-08-30 | 2027-02-18 | 108 |
 | `monitor_bridge_wan_reachable_push_token` | 2026-06-25 | 2026-12-18 | 46 |
-| `pi_recovery_push_token` | 2026-08-30 | 2027-02-13 | 103 |
-| `pi_sd_health_push_token` | 2026-08-30 | 2027-02-22 | 112 |
 | `registry_gc_push_token` | 2026-05-10 | 2026-11-06 | 4 |
-| `release_staleness_push_token` | 2026-04-05 | 2026-09-26 | -37 |
 | `render_records_push_token` | 2026-08-17 | 2027-01-30 | 89 |
-| `renovate_agent_kuma_push_token` | 2026-09-10 | 2027-03-04 | 122 |
 | `rkhunter_daniel_box_push_token` | 2026-07-29 | 2027-01-13 | 72 |
 | `rkhunter_daniel_pi_push_token` | 2026-07-12 | 2027-01-08 | 67 |
 | `rkhunter_daniel_server_push_token` | 2026-10-12 | 2027-03-28 | 146 |
-| `ruleset_drift_push_token` | 2026-09-01 | 2027-02-26 | 116 |
-| `secret_rotation_push_token` | 2026-08-28 | 2027-02-24 | 114 |
-| `setup_drift_push_token` | 2026-10-25 | 2027-04-15 | 164 |
-| `ups_secondary_daniel_server_push_token` | 2026-06-13 | 2026-12-04 | 32 |
-| `ups_secondary_push_token` | 2026-08-22 | 2027-02-10 | 100 |
 
 ## ignore
 
