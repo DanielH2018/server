@@ -36,14 +36,10 @@ def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
     old_ts = _rfc3339(now - 3600)
     new_ts = _rfc3339(now - 30)
     stub = _grace_pair_stub_kubectl(tmp_path, created_ts=new_ts, old_backup_ts=old_ts)
-    drill_dir = tmp_path / "drill"
-    drill_dir.mkdir()
-    (drill_dir / "last-success").write_text(str(int(now - 3600)))
 
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
         STUB_R2_URL="",  # R2 disarmed in the cluster
         STUB_DAILY_CRON="30",  # malformed: one field, no hour
     )
@@ -66,14 +62,10 @@ def test_well_formed_cron_graces_the_new_volume(tmp_path):
     old_ts = _rfc3339(now - 3600)
     new_ts = _rfc3339(now - 30)
     stub = _grace_pair_stub_kubectl(tmp_path, created_ts=new_ts, old_backup_ts=old_ts)
-    drill_dir = tmp_path / "drill"
-    drill_dir.mkdir()
-    (drill_dir / "last-success").write_text(str(int(now - 3600)))
 
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
         STUB_R2_URL="",  # R2 disarmed in the cluster
         STUB_DAILY_CRON="30 3 * * *",
     )

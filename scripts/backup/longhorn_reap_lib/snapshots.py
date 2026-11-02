@@ -12,7 +12,7 @@ filesystem-trim only frees blocks below the OLDEST retained snapshot in the chai
 stranded snapshot anywhere pins every block beneath it. Reaping is what lets a subsequent trim
 reclaim anything, and only after a volume REMOUNT: ext4 skips block groups it has already
 trimmed since mount. Scale the workload to 0 until `detached`, scale back, then trim -- a
-rollout restart does not detach. See longhorn-trim-volumes.sh.j2's header.
+rollout restart does not detach. docs/longhorn-backup-tiering.md has the measurement.
 
 THE ALTERNATIVE, REJECTED. Setting Longhorn's remove-snapshots-during-filesystem-trim=true
 would reclaim more, automatically, cluster-wide -- and silently destroy recovery points on

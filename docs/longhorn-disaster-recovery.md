@@ -415,29 +415,28 @@ PVC is bound to the volume again, the volume is deleted, or it moves to `no-back
 ConfigMap `longhorn-restore-drill-stamps` in `k3s_longhorn_restore_drill_namespace` (`homelab`).
 The drill reads it once per run with `get` and writes each stamp with a merge `patch`. A missing
 key is epoch 0. A failed patch fails the run, so a run that cannot stamp restores nothing, and a
-ConfigMap that does not exist fails the run with `stamp ConfigMap absent`. The H2.3c run that found
-no `imported-at` key converted the old host directory into keys in one patch, and the CronJob
-carries no import arm. Each ConfigMap key replaced one file of that directory:
+ConfigMap that does not exist fails the run with `stamp ConfigMap absent`. The keys:
 
-| ConfigMap key | File under `/var/lib/longhorn-restore-drill/` (read by the fallback only) | Value |
-|---|---|---|
-| `last-success` | `last-success` | the file's content, an epoch |
-| `candidates` | `candidates` | the file's content, one PVC per line |
-| `excluded_oversize` | `excluded_oversize` | the file's content |
-| `excluded_nopvc` | `excluded_nopvc` | the file's content |
-| `seen.<pvc>` | `seen/<pvc>` | the epoch the marker's mtime held |
-| `success.<pvc>` | `success/<pvc>` | the epoch the file held |
-| `attempts.<pvc>`, `retries.<pvc>` | `attempts/<pvc>`, `retries/<pvc>` | the epoch the marker's mtime held; only the drill reads these |
+| ConfigMap key | Value |
+|---|---|
+| `last-success` | the epoch of the last passing drill |
+| `candidates` | one PVC per line |
+| `excluded_oversize` | one `<volume><TAB><actualSize>` per line |
+| `excluded_nopvc` | one volume per line |
+| `seen.<pvc>` | the epoch the drill first saw the candidate |
+| `success.<pvc>` | the epoch of the candidate's last passing drill |
+| `attempts.<pvc>`, `retries.<pvc>` | the epoch of the last attempt and retry; only the drill reads these |
 
-While the ConfigMap is absent or holds no `last-success`, every reader reads the directory. A
-failed ConfigMap read never falls back: the heartbeat reports it as a failed fetch, the upgrade
-gate exits 69, and the state page marks the row unreadable. Two rules apply only to the
-ConfigMap. A candidate with no `seen.<pvc>` key takes the ConfigMap's `creationTimestamp` as its
-seen time, so check 8 flags it once the coverage window passes instead of skipping it. Check 8
-also pages at once, in either store, when the candidate list is non-empty and no candidate has a
-seen entry, because that means the drill's state did not persist. The directory fallback goes
-when the readers drop their file arm (H2.3f of
-`docs/target-architecture/host/h2-shrink-host-plane.md`).
+An absent ConfigMap, or one with no `last-success`, is a drill that has never passed: check 7
+pages, the upgrade gate fails gate 2, and the state page shows the row as never run. No reader
+falls back to the host directory the drill used before H2.3c, since H2.3f of
+`docs/target-architecture/host/h2-shrink-host-plane.md` dropped that fallback. A failed
+ConfigMap read is its own fault: the heartbeat reports it as a failed fetch, the upgrade gate
+exits 69, and the state page marks the row unreadable. A candidate with no `seen.<pvc>` key
+takes the ConfigMap's `creationTimestamp` as its seen time, so check 8 flags it once the
+coverage window passes instead of skipping it. Check 8 also pages at once when the candidate
+list is non-empty and no candidate has a seen entry, because that means the drill's state did
+not persist.
 
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is

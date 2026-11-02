@@ -26,11 +26,15 @@ def test_restore_drill_is_clean_when_recent():
 def test_restore_drill_is_flagged_when_the_stamp_is_missing():
     """FAILS CLOSED: a never-run drill is the state most in need of reporting."""
     problem = logic.check_restore_drill(
-        None, "/var/lib/longhorn-restore-drill/last-success", NOW, 3 * DAY, 3
+        None,
+        "configmap homelab/longhorn-restore-drill-stamps key last-success",
+        NOW,
+        3 * DAY,
+        3,
     )
     assert problem == (
         3,
-        "no restore drill has ever succeeded (no /var/lib/longhorn-restore-drill/last-success) — "
+        "no restore drill has ever succeeded (no configmap homelab/longhorn-restore-drill-stamps key last-success) — "
         "backups are unproven",
     )
 
@@ -40,24 +44,6 @@ def test_restore_drill_is_flagged_on_an_unparseable_stamp():
         3,
         "restore-drill stamp content is not a valid timestamp — "
         "treating the restore path as unproven",
-    )
-
-
-def test_restore_drill_is_flagged_when_the_stamp_is_unreadable():
-    """Distinct from a MISSING stamp (see check_restore_drill's docstring): a stamp that
-    exists but can't be opened must not read as "the drill never ran"."""
-    problem = logic.check_restore_drill(
-        None,
-        "/var/lib/longhorn-restore-drill/last-success",
-        NOW,
-        3 * DAY,
-        3,
-        stamp_unreadable=True,
-    )
-    assert problem == (
-        3,
-        "restore-drill stamp at /var/lib/longhorn-restore-drill/last-success could not be "
-        "read (permissions?) — treating the restore path as unproven",
     )
 
 

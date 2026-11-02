@@ -459,15 +459,15 @@ def test_handle_k8s_rolls_back_to_the_failed_shas_snapshot(
     assert ("annotation", {"sonarr"}) not in tick.log
 
 
-# ── handle_no_services() ──────────────────────────────────────────────────────────────────
-def test_handle_no_services_merges_and_flags_a_rotated_secret(
+# ── handle_merge_only() ───────────────────────────────────────────────────────────────────
+def test_handle_merge_only_merges_and_flags_a_rotated_secret(
     gitops_deploy, tick, settings, state
 ):
     plan = _plan(
         gitops_deploy, ChangeSet(secrets=True), paths=["ansible/vars/secrets.yml"]
     )
     assert (
-        deploy_handlers.handle_no_services(
+        deploy_handlers.handle_merge_only(
             tick.tools, state, settings, _target(gitops_deploy), plan
         )
         == 0

@@ -106,7 +106,6 @@ from deployer_lib.deploy_remediation import (  # noqa: F401
     _setup_commands,
     broad_budget_ok,
     broad_remediation,
-    deferred_service_alerts,
     k8s_remediation,
     manual_plane_clear_for,
     manual_plane_remediation,

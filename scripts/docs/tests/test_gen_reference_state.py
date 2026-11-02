@@ -156,7 +156,7 @@ def test_etcd_drill_parses_the_key_value_stamp(tmp_path):
     assert "offbox-daniel-box-1788144302.zip" in run.outcome
 
 
-# --- longhorn_restore_drill_run(): the stamp ConfigMap, then the host directory -------------
+# --- longhorn_restore_drill_run(): the stamp ConfigMap -------------------------------------
 
 _CM_ARGS = ("-n", "homelab", *g.drill_stamps.CONFIGMAP_GET_ARGS)
 _NODES = {"items": [{"metadata": {"name": "daniel-box"}}]}
@@ -189,41 +189,28 @@ def _stamps(epoch: float) -> str:
     return json.dumps({"kind": "ConfigMap", "data": {"last-success": f"{int(epoch)}"}})
 
 
-def _drill(state_dir, tools):
-    return g.longhorn_restore_drill_run(state_dir, tools=tools, namespace="homelab")
+def _drill(tools):
+    return g.longhorn_restore_drill_run(tools=tools, namespace="homelab")
 
 
-def test_longhorn_drill_reads_the_configmap_stamp_over_the_directory(tmp_path):
-    (tmp_path / "last-success").write_text(
-        str(int((NOW - dt.timedelta(days=9)).timestamp()))
-    )
+def test_longhorn_drill_reads_the_configmap_stamp():
     fresh = (NOW - dt.timedelta(hours=1)).timestamp()
-    run = _drill(tmp_path, _kubectl(_stamps(fresh)))
+    run = _drill(_kubectl(_stamps(fresh)))
     assert run.last_run == dt.datetime.fromtimestamp(int(fresh), dt.timezone.utc)
 
 
-def test_longhorn_drill_falls_back_to_the_directory_while_the_configmap_is_absent(
-    tmp_path,
-):
-    stamp = int((NOW - dt.timedelta(hours=1)).timestamp())
-    (tmp_path / "last-success").write_text(str(stamp))
-    run = _drill(tmp_path, _kubectl(""))
-    assert run.last_run == dt.datetime.fromtimestamp(stamp, dt.timezone.utc)
+def test_longhorn_drill_with_an_absent_or_stampless_configmap_never_ran():
+    """No host directory stands in for the ConfigMap any more."""
     empty = json.dumps({"kind": "ConfigMap", "data": {}})
-    assert _drill(tmp_path, _kubectl(empty)).last_run == run.last_run
+    for stdout in ("", empty):
+        run = _drill(_kubectl(stdout))
+        assert g.status_for(run, cadence=1440.0, now=NOW) == "never", stdout
 
 
-def test_longhorn_drill_with_a_failed_read_is_unreadable_not_the_directory(tmp_path):
-    (tmp_path / "last-success").write_text(str(int(NOW.timestamp())))
-    run = _drill(tmp_path, _kubectl("", rc=1))
+def test_longhorn_drill_with_a_failed_read_is_unreadable():
+    run = _drill(_kubectl("", rc=1))
     assert run.unreadable and run.last_run is None
-    no_kubectl = kubectl.Tools(find_tool=lambda name: None)
-    assert _drill(tmp_path, no_kubectl).unreadable
-
-
-def test_longhorn_drill_with_both_stores_absent_is_never_a_pass(tmp_path):
-    run = _drill(tmp_path / "does-not-exist", _kubectl(""))
-    assert g.status_for(run, cadence=1440.0, now=NOW) == "unreadable"
+    assert _drill(kubectl.Tools(find_tool=lambda name: None)).unreadable
 
 
 # --- cadence_minutes(): reused from crons.py, not duplicated --------------------------------

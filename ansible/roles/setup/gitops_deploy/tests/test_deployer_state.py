@@ -352,7 +352,7 @@ def test_every_alert_slot_lives_in_the_one_keyed_file(state):
     state.record_alerted("ci", "deadbeef" * 5)
     assert state.alerted_sha("broad") == SHA
     assert state.alerted_sha("ci") == "deadbeef" * 5
-    assert state.alerted_sha("tasks") is None
+    assert state.alerted_sha("k8s") is None
     assert pathlib.Path(state.path("alerted")).read_text() == (
         f"broad {SHA}\nci {'deadbeef' * 5}"
     )

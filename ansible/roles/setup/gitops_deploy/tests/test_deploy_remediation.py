@@ -2,9 +2,8 @@
 
 A remediation that names the wrong playbook, a tag that matches nothing, or a consumer the
 push did not touch is a green recap over an unapplied change -- `ansible-playbook` exits 0 on
-a tag that selects no task. `deferred_service_alerts` is the combined-push remainder main()
-reads on both branches; `broad_budget_ok` is the forward-only decision written as a predicate
-so it fails instead of rotting.
+a tag that selects no task. `broad_budget_ok` is the forward-only decision written as a
+predicate so it fails instead of rotting.
 """
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation.py
@@ -19,7 +18,6 @@ from lib.repo_paths import K3S_ROLE, REPO
 
 from deployer_lib import deploy_defer
 from deployer_lib.deploy_changes import (
-    ChangeSet,
     services_from_changed_paths,
     setup_tags_for,
     shared_module_consumers,
@@ -27,7 +25,6 @@ from deployer_lib.deploy_changes import (
 from deployer_lib.deploy_remediation import (
     broad_budget_ok,
     broad_remediation,
-    deferred_service_alerts,
     k8s_remediation,
     manual_plane_remediation,
     maximal_tag_warning,
@@ -139,25 +136,6 @@ def test_broad_remediation_names_the_branch_it_is_given():
     command that does nothing on a host tracking anything else."""
     assert "origin/release" in broad_remediation(False, True, branch="release")
     assert "origin/master" in broad_remediation(False, True)
-
-
-# The tasks defer-and-alert runs on BOTH branches of main(), so a COMBINED push (svcA
-# redeployed + svcB's tasks) cannot swallow svcB's unapplied structural change.
-# deferred_service_alerts(cs, deployed) returns the tasks remainder that was NOT redeployed.
-def test_deferred_alerts_combined_push_flags_other_services_tasks():
-    cs = ChangeSet(services={"prometheus"}, tasks={"sonarr"})
-    assert deferred_service_alerts(cs, cs.services) == {"sonarr"}
-
-
-def test_deferred_alerts_same_service_tasks_rode_the_redeploy():
-    cs = ChangeSet(services={"sonarr"}, tasks={"sonarr"})
-    assert deferred_service_alerts(cs, cs.services) == set()
-
-
-def test_deferred_alerts_docs_only_branch_flags_full_sets():
-    # The no-services branch passes deployed=set(): a tasks-only push flags the whole set.
-    cs = ChangeSet(tasks={"sonarr"})
-    assert deferred_service_alerts(cs, set()) == {"sonarr"}
 
 
 def _prescribed_tags(msg: str) -> set[str]:

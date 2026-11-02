@@ -17,7 +17,7 @@ undefined. `k8s/volume-revert` is the only caller.
   last caller, `volume-snapshot`'s detached-volume path (#2740, #3997).
 - **Ready means Running with every container ready.** The rule is
   `ansible/filter_plugins/longhorn_manager.py:ready_manager_ip`, which the snapshot reaper calls
-  too; the trim cron spells it in jq. During a Longhorn upgrade the manager restarts, so a revert
+  too. During a Longhorn upgrade the manager restarts, so a revert
   then fails at the resolve, before it touches any claim.
 - **`k8s_autodeploy: false`** — deploys no workload, renders no manifest, pins no image; declared
   rather than auto-deploy-eligible for the same reason `volume-snapshot` is.

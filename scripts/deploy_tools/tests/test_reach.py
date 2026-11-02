@@ -40,7 +40,7 @@ def test_tags_adds_a_lookup_reader_and_changes_does_not():
     r = reach([_LOOKED_UP])
     declared = {"crowdsec", "authelia", "traefik"}
     assert r.tags(declared) == {"crowdsec", "authelia", "traefik"}
-    assert {"authelia", "traefik"}.isdisjoint(r.changes.k8s | r.changes.services)
+    assert {"authelia", "traefik"}.isdisjoint(r.changes.k8s)
     assert {"authelia", "traefik"} <= r.touched()
 
 

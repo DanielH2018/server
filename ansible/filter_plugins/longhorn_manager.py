@@ -2,12 +2,10 @@
 
 A process in a node's host netns reaches the Longhorn HTTP API only through that node's own
 longhorn-manager pod; the `longhorn-backend` ClusterIP load-balances across nodes and fails
-whenever it picks the other one. Three callers resolve the local pod: `k8s/longhorn-api`'s
-`resolve.yml` (attach, revert, detach), the trim cron (`setup/k3s/templates/
-longhorn-trim-volumes.sh.j2`) and the snapshot reaper (`scripts/backup/
-longhorn_reap.py snapshots`). The rule is written once here (#3736). The reaper and
-`resolve.yml` call this function; the trim cron runs on the host with no repo checkout, so it
-keeps a jq spelling of the same rule, and a parity test runs both over the same pods.
+whenever it picks the other one. Two callers resolve the local pod: `k8s/longhorn-api`'s
+`resolve.yml` (attach, revert, detach) and the snapshot reaper (`scripts/backup/
+longhorn_reap.py snapshots`). The rule is written once here (#3736), and both call this
+function.
 
 The rule: on this node, phase `Running`, and every container ready. A pod reporting no
 `containerStatuses` is NOT ready, because its containers have not started.
