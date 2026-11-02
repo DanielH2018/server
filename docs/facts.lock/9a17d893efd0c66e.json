@@ -1,5 +1,5 @@
 {
-  "checksum": "c133923178da36f24ea5d83f4a155f387d96f526e62eed19f5c67c852f23678a",
+  "checksum": "2baa8ee05e1ebc324dd9389a73544ce0fc5c922fbf9c260c2a98f5c2e8d6e4ae",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/media-volume/CLAUDE.md#At a glance",
   "row": {
@@ -8,7 +8,7 @@
       "ansible/tests/setup/test_k8s_host_files_pairs.py": "d206ec0dc4cd0a817a9aef3f3a3edef2b10c565cf997ce16cc4bfbd4db3bafec",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
-    "python": "3.14",
-    "verified_sha": "69b7772f1"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

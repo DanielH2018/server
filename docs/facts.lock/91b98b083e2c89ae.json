@@ -1,5 +1,5 @@
 {
-  "checksum": "11000fccecc37ffbf469ae55d633bbff7d3712c6a9d97c892d3c567177ed790b",
+  "checksum": "ad63bd2085d55df67e5e0f43bb6264669b7c749b27400ace7a1bdcb7d2f338e0",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/docker_install/CLAUDE.md#Where the work went",
   "row": {
@@ -10,7 +10,7 @@
       "hosts/components/pi-docker/": "5df8ebf9a4d8373825407ea70774e3b8d5dd1a83d74dd6501865e3c4a419e5fa",
       "hosts/daniel-pi/package.yml": "57b88574a107d153b76e9275432c325d21a9122d5485370e1ef36a762f4971b8"
     },
-    "python": "3.14",
-    "verified_sha": "fa150b8f6"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

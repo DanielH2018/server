@@ -1,5 +1,5 @@
 {
-  "checksum": "b8995a126930d2078212a40c4e009c5d2cf1b61aee32dee56e0a3cc57041b9ae",
+  "checksum": "b6222ce067884e3c441b16e04ccdafedae19c14d46d0b36c63695651c71d5763",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn/CLAUDE.md#At a glance",
   "row": {
@@ -20,7 +20,7 @@
       "docs/longhorn-upgrade.md": "04188a542f54902dfb346f19c33a5a9d6de82e0d3e627033ee56d1262c150b05",
       "scripts/dev/vendor_manifest.py": "f0c0c9df684a1ed3d858ec17f02c8e7c279dbb7595180eb00d70a50e42a9d7ef"
     },
-    "python": "3.14",
-    "verified_sha": "7ed18d48f"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

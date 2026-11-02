@@ -1,5 +1,5 @@
 {
-  "checksum": "915a915325e8827cd42618ba5129593757f58f4f41edaa1eaf80cc2ad81556f5",
+  "checksum": "a1553dc3b233a91cb4cef747ad83df9f4fbbc81997f82b90af40cde5832f0cd0",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Notable",
   "row": {
@@ -14,7 +14,7 @@
       "hosts/components/k3s-server/": "c2bef8911f98481c1e7bc3c77e27fbd2b8e2404700aa15b4cf9cb71f0da3b18d",
       "hosts/components/k3s-server/component.yml": "5fb01de80a34abff152ba23889fb025d1b95bf0601cd18625bac7097600850b1"
     },
-    "python": "3.14",
-    "verified_sha": "f3b006b77"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

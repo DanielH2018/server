@@ -1,5 +1,5 @@
 {
-  "checksum": "bd2639ede51d4890c0a0a668a3e36f98309918b6cc844f40208bdcd7ad223bf2",
+  "checksum": "04e3908bfcdfd245f586065db15b695fa925e24bc1a4c53414eacc23042724cf",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Grafana logs in through Authelia (OIDC), and the admin form stays on",
   "row": {
@@ -7,7 +7,7 @@
       "ansible/tests/services/test_grafana_authelia_oidc.py": "15ebd612ba6253304bf7432134b2172df791b95e58b183441db9026ac753d214",
       "docs/observability-dashboards.md": "3f7bb280621a98c03a611a8ee5ddd5c6c87cb7cbe3f3761f19172324edd44cef"
     },
-    "python": "3.14",
-    "verified_sha": "89d586f13"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

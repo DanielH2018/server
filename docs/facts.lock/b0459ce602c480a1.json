@@ -1,5 +1,5 @@
 {
-  "checksum": "003b2ec1a55843798da19e315fab78c8fe50bf491c0833145c97ee8156edfc46",
+  "checksum": "db8adf7617397cb17b6a181481938ef27f309e56d5e43f52d9597edd00051c24",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/karakeep/CLAUDE.md#Notable",
   "row": {
@@ -11,7 +11,7 @@
       "ansible/tests/services/test_karakeep_chrome_rollout.py": "58d0f546dae793d55cff257d135ff1dd00e55d6246ec93ca7f2b8933b878e41a",
       "ansible/tests/services/test_karakeep_prepulls_its_images.py": "708f5a996fc04725a82e21c0e639d1f9fcc913edadf6ad076050eee7470f029d"
     },
-    "python": "3.14",
-    "verified_sha": "50b82aa3c"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

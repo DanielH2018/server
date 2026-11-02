@@ -1,5 +1,5 @@
 {
-  "checksum": "13eeb6b15a6f96f73622fc547b20a17a0b8e5f21cb253062b1fa5406813cd42c",
+  "checksum": "d51c57e9e7bd29705cdbc507f3e548f51863e8465caad123d03858e58e758cd0",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/homepage/CLAUDE.md#Notable",
   "row": {
@@ -13,7 +13,7 @@
       "ansible/tests/services/test_homepage_widget_urls_carry_no_credentials.py": "023ecafd04fc7bed1160d040e275acd5b95f03e42e135870258c92687981ac9b",
       "docs/homepage-widgets-and-layout.md": "0da2508ad1486a3d74f0e8b68589ce984f30d53a5149273a297ff6cd8a9a3c78"
     },
-    "python": "3.14",
-    "verified_sha": "cab79a38d"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

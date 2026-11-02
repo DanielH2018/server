@@ -1,5 +1,5 @@
 {
-  "checksum": "addcbd2e30953c73d9a2c1f5ad52bbf56474a1cb2184149ff7a3f03286df1477",
+  "checksum": "3a11c06e28c5b00c5499573f33e7d3b4ba5e7abc895d555273d049ac94dd7c99",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/prowlarr/CLAUDE.md#Notable",
   "row": {
@@ -9,7 +9,7 @@
       "ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_limit": "178f0500c96b189423a09b50e945fb7f25015b84bd753d30176d8f6215dbe9f5",
       "ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_request": "ca59077d6440bd5dc90ee9c004074062d92f88e9274e9f3dcde58892a9c038f0"
     },
-    "python": "3.14",
-    "verified_sha": "e11418271"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

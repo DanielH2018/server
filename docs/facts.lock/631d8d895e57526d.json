@@ -1,5 +1,5 @@
 {
-  "checksum": "93c7659fa5af69a40790ffa8289ade8a367c91a8c726a1841d7b78da255aa2fe",
+  "checksum": "05702dd894c859e292ffd97fc280871fa7697ab1123b3095d95ddc70d993f168",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/builder/CLAUDE.md#The `homelab-tools` step (H3.11)",
   "row": {
@@ -8,7 +8,7 @@
       "hosts/lib/homelab_tool_fetch.py:install_tools": "203a3e9993a5d96fbe2879f0e557f6f9e085d8c427f0ab94bf108aa229fed207",
       "hosts/packages/homelab-tools/": "c3756b455ae17c65b6586f168471570887823e8701ae91400c1ab51bfdce4b21"
     },
-    "python": "3.14",
-    "verified_sha": "a41b8b1bd"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

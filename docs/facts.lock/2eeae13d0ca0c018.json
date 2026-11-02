@@ -1,5 +1,5 @@
 {
-  "checksum": "8cfe3b3dd2c9808eaa283a09add91433ccc7092d37a21f45ea0ec4e4e6629e44",
+  "checksum": "7586db6a3dfdc6ec5e15580f9c977f57ab06ed2d7ff5c3a8050d6a85c3277803",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#The procedure",
   "row": {
@@ -9,7 +9,7 @@
       "hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS": "c5f45b668f4c37fa1b5726ce80aad2b21bd09f64126a74615b4becf98b6a3114",
       "scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts": "1b6ee2ab6f462431f699d573e226e23a3fd3124c2a49697ee52860a15636c826"
     },
-    "python": "3.14",
-    "verified_sha": "7ed18d48f"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

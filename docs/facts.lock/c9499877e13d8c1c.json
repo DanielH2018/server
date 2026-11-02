@@ -1,12 +1,12 @@
 {
-  "checksum": "f731505eedcea26d13686edb832925d1cb6fc8311c710427d5a8c46283ed8e1a",
+  "checksum": "891c26b3e372a73e95085ba0a3c246655d2c72b77fb372a6de47f04a6a151490",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/pihole-exporter/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
-    "python": "3.14",
-    "verified_sha": "b7cf2224c"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

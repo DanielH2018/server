@@ -1,5 +1,5 @@
 {
-  "checksum": "0ac486613096485b3894caacba8d35b4cff3b11338a233853045267264e1918b",
+  "checksum": "ffe95ec2f825eb9b2f48675829ebf10b9b5fb7d0e5717a144849557ffa18af00",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/manifests/CLAUDE.md#Rules a caller can break",
   "row": {
@@ -12,7 +12,7 @@
       "scripts/renderer/renderer_lib/restart.py:RESTART_ANNOTATION": "19d4dd96a72a351630ff4f8e703796fef80d5ff32c40aed795ba88449c1ddac2",
       "scripts/renderer/renderer_lib/restart.py:restart_targets": "c9cc8cea398f6f2c9b8c923a4a3edc56fa008985d77e0ae3762ab6dbc710b7fd"
     },
-    "python": "3.14",
-    "verified_sha": "9db1c482e"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

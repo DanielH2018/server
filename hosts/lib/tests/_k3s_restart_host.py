@@ -8,8 +8,8 @@ exactly one check refuse.
 
 import hashlib
 import importlib.machinery
-import importlib.util
 import json
+import types
 from datetime import datetime, timezone
 from pathlib import Path
 from subprocess import CompletedProcess
@@ -25,9 +25,7 @@ CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 
 def load():
     loader = importlib.machinery.SourceFileLoader("homelab_k3s_restart", str(SCRIPT))
-    spec = importlib.util.spec_from_loader(loader.name, loader)
-    assert spec is not None
-    module = importlib.util.module_from_spec(spec)
+    module = types.ModuleType(loader.name)
     loader.exec_module(module)
     return module
 

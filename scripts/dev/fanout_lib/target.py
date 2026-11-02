@@ -22,7 +22,7 @@ from lib.worktree_owner import own_prefix
 
 SERVER = "DanielH2018/server"
 # The interpreter a unit runs repo Python with; `fanout_lib.place.HEALTH_CMD` pins the same one.
-HEADLESS_PYTHON = "3.14.6"
+HEADLESS_PYTHON = "3.15.2"
 # The agent user cannot read /home/ubuntu, and its login profile
 # (hosts/components/claude-code/templates/agent-user-profile.j2) points RUN_HOOK_PROJECT_DIR at its
 # own clone instead (#3627). The repo's hook shim, .claude/hooks/run-hook.sh, reads the same

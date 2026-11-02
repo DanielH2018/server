@@ -24,11 +24,11 @@ cloudflare_ips:
   - "2a06:98c0::/29"
   - "2c0f:f248::/32"
 
-# Exact patch, not `3.14`. uv resolves a bare minor to whatever it already has, so two hosts
+# Exact patch, not `3.15`. uv resolves a bare minor to whatever it already has, so two hosts
 # drift apart with nothing asking for either. Eighteen host scripts run on this and must be the
 # same interpreter on both machines. The minor must track
 # .python-version — ansible/tests/setup/test_host_python_pin.py enforces both halves.
-host_python_version: "3.14.6"
+host_python_version: "3.15.2"
 
 # The git-tree lock (ADR-0011, ADR-0017): every job that mutates or snapshots the primary
 # checkout takes it. Host templates read this var, and Python reads `deploy_locks.TREE_LOCK`

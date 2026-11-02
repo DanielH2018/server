@@ -1,5 +1,5 @@
 {
-  "checksum": "e35ac79d5c673a6263036ee1ad3edb41da8f0af695f54376dcf05d47d94ae1cf",
+  "checksum": "522eba1e4a78d3ca804d20a5a0894d3f8879d3e01ca4686be33e241dd5dfafdc",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/code-server/CLAUDE.md#At a glance",
   "row": {
@@ -9,7 +9,7 @@
       "docs/volume-snapshot-drills.md": "065c3fed1513022fe8e3b8848f85ca3b5527c7a34f0d50d3b1dad708b176b193",
       "scripts/renderer/renderer_lib/images.py:ghcr_refs": "7f71afd8cebd89ff8e89e654db90b7bc266ebb6840203bca245b7a484e16a14f"
     },
-    "python": "3.14",
-    "verified_sha": "ca9961a5a"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

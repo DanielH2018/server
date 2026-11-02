@@ -1,5 +1,5 @@
 {
-  "checksum": "eeba82512551a768a2e9387ae9f1bbc79017dd723908b37ef8a166c5965e2665",
+  "checksum": "7d347126ff04f8dee6b9ea9a8c4dc25623e1775cf911722cf43c56b77521ba3d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/claude-code/CLAUDE.md#The host packages own it",
   "row": {
@@ -11,7 +11,7 @@
       "hosts/lib/tests/test_claude_code_component.py": "63e1788f1ae83ed0a6599561f903d285d5b8fe17eacfd0bce6ab7b864e62e440",
       "hosts/lib/tests/test_claude_code_on_daniel_box.py": "b836e539bbfdc262583f0726bdc3679aa00c07aca74e8f80f0444d2340208483"
     },
-    "python": "3.14",
-    "verified_sha": "7069ccbd4"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

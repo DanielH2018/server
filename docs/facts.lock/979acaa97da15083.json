@@ -1,5 +1,5 @@
 {
-  "checksum": "7c67db438b1090fb900ffce52c644382d2b7f61939e16e626c5fc69bb71d79be",
+  "checksum": "5d6f884b1e581f8e227453c7caea08c57cd30de5bed67f5c749f06558d5c69e0",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/sops_setup/CLAUDE.md#Where the work went",
   "row": {
@@ -11,7 +11,7 @@
       "hosts/components/sops/": "1271c31d88aa73f3d7b239d87d7e08c04e32bb63f921ce661ff317b9a588a933",
       "hosts/packages/homelab-tools/package.yml": "1857a4286a0bde33262136e630b722071faca45fbf3badb2951cdabafc0b66e3"
     },
-    "python": "3.14",
-    "verified_sha": "99dc92f68"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

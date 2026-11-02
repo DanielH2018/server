@@ -1,5 +1,5 @@
 {
-  "checksum": "a324c69616ca2a0b547064183960c6efb5f5e3ccf508e166dae272cae42ccb94",
+  "checksum": "3a6e948bedbda534c2ed77aff349a2b96ff737b39cba0f5ff6a82ffe6a663db6",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/node-exporter/CLAUDE.md#The textfile collector directory",
   "row": {
@@ -16,7 +16,7 @@
       "docs/target-architecture/monitoring/m3-textfile-timer.md": "402f3a50127fa4d5c5e118f35c17cfbe9c7b73a5d58fb938703fcd801959e2ab",
       "hosts/components/claude-code/files/claude-cgroup-metrics.sh": "cf992faf00b70ceb11079e0266003978b6d9d9d79faf5cb0f728ae386e46a7b8"
     },
-    "python": "3.14",
-    "verified_sha": "7069ccbd4"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

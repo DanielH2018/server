@@ -1,5 +1,5 @@
 {
-  "checksum": "f7756a48bc937ae23b1f7348ce87575857ce016fe4dd5647067b6867f838ff75",
+  "checksum": "c2e2c0642e8ebbfaeb16b0ef3e6a347ef60182e2f20631acb0e330596b439cff",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/homelab-mcp/CLAUDE.md#Notable",
   "row": {
@@ -7,7 +7,7 @@
       "scripts/diagnostics/probe_lib/obs_api.py": "8e9d6487be4c22e78ee9a48557077b987a67bcfe1260df0b717e376df4506801",
       "scripts/diagnostics/tests/test_obs_api.py": "1056ee42d45a0cbbdd87ed5af465dbd64276cd4dc2da1e8594440608686988b1"
     },
-    "python": "3.14",
-    "verified_sha": "fd34ae8eb"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

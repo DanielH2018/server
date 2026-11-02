@@ -240,7 +240,7 @@ the line and half did not.
 under the HOST's interpreter rather than the repo's uv env — `python3` on daniel-server and
 daniel-pi is 3.12.3 — and below 3.14 there is no PEP 649, so annotations evaluate eagerly at
 `def`/`class` time and the import is real insurance against a forward reference. The repo suite
-cannot see that difference, because it runs on 3.14 where both spellings are lazy.
+cannot see that difference, because it runs on 3.15 where both spellings are lazy.
 
 **A check ships with a proof it can go red.** `.claude/rules/python-layout.md` owns this rule
 and its two companions, non-vacuity and a measured transport. They apply to every validator or

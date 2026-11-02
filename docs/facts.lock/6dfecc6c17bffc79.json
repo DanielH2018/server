@@ -1,5 +1,5 @@
 {
-  "checksum": "b3e0a8261f604edd1e92ee3841a2458cac99f449aa8c96c4214cee727594bf2e",
+  "checksum": "6ad5618c62e6b965311dbe463e4d933852a667f5d1cdf104d756c23035614666",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k8s_host_files/CLAUDE.md#What it holds",
   "row": {
@@ -15,7 +15,7 @@
       "hosts/components/docs-refresh/": "f6bdb22c998ccf4d1b8b7a0bd3d9ba109c7fe1cccbd01c47093e758b26d957e7",
       "hosts/components/pi-peer-backup-target/": "57d5c023c977ec54ca3a4d36d99fff8c73ac4c9a257b76083143f68763ff1e89"
     },
-    "python": "3.14",
-    "verified_sha": "7ed18d48f"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

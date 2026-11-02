@@ -1,5 +1,5 @@
 {
-  "checksum": "90e81afe5e7b79137eed7ba6a8300c24e4bae2ac872d090712997c994843b181",
+  "checksum": "f2e4122184a59e0337c8295ea52675c334925d4772a1c02cc94b5d5f45bcd1ac",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/pi-peer-backup/CLAUDE.md#At a glance",
   "row": {
@@ -14,7 +14,7 @@
       "hosts/lib/tests/test_pi_tuning_component.py": "2f96d002a9f17dff2613fd6a95f637f13290746665b71763b7df6ad99f33451e",
       "scripts/renderer/renderer_lib/cronjob_gate.py": "4eaddbf67a332ed20dd32ae71779223f8b69a824de4c64ddb0bd356536119847"
     },
-    "python": "3.14",
-    "verified_sha": "7ed18d48f"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

@@ -173,6 +173,6 @@ if [[ -n "$project" ]]; then
     exec "$uv" run --no-sync --quiet python "$script"
 fi
 
-"$uv" run --no-project --no-python-downloads --python 3.14.6 \
+"$uv" run --no-project --no-python-downloads --python 3.15.2 \
     "$script" 2>/dev/null
 exit 0

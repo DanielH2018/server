@@ -1,5 +1,5 @@
 {
-  "checksum": "ddc261863e264391a7c3a925675a461ea3bf326969a9bd5b93fc8576c0aa1c4d",
+  "checksum": "b41fe225913905bf49900a1d90855fbe2ac7651471eecbeecfea8f75ff521854",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/optimize_pi/CLAUDE.md#Where the work went",
   "row": {
@@ -12,7 +12,7 @@
       "hosts/components/pi-tuning/": "e039f06216b1028ca0efbe3840daeacb17ac726a3f4d665fc9ff59e87b680ad9",
       "hosts/daniel-pi/package.yml": "57b88574a107d153b76e9275432c325d21a9122d5485370e1ef36a762f4971b8"
     },
-    "python": "3.14",
-    "verified_sha": "fa150b8f6"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

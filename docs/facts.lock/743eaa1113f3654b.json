@@ -1,5 +1,5 @@
 {
-  "checksum": "a30dcded40ab4df4ac8f32728daed30db1d478cf1b0781c95383f39e0f4ce6d3",
+  "checksum": "b29efe1a7d8d6bbe2a9f3f72f6b169bfa0437b5959694e8ba14a94ae1df9ea15",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#Alert plane",
   "row": {
@@ -24,7 +24,7 @@
       "docs/target-architecture/monitoring/m4-blackbox-ingress.md": "9801543adbf865bc66804029c04e6b8ac75e1cd61d09159c979806f4f389df38",
       "scripts/validate/notification_renders.py:render_problems": "878ac2e910af92c705c09a01fde99e85b523f269ca4bc8811b024882ab5229b6"
     },
-    "python": "3.14",
-    "verified_sha": "40b4e3946"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "checksum": "f1febe63e04c36a95f67238d35ba112f31ebd7ae4c5965f15c788a4751db3406",
+  "checksum": "73f9610ee55d362100d8d9d4944f0ad2e21854706b67b15379250e20bbfeb88c",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart",
   "row": {
@@ -11,7 +11,7 @@
       "scripts/renderer/renderer_lib/restart.py:RELOADED_IN_PLACE": "03350e230052152bd7c0f6588994217c79a11aa7dc11df9bb21042b39ac57ecb",
       "scripts/renderer/tests/test_renderer_self_rollout_restart.py::test_a_board_or_rule_edit_after_the_flip_moves_no_restart_value": "2591a20ab3f7e5001134459c83e38bcbb009ff01e42dc35a3c023a8773e0f597"
     },
-    "python": "3.14",
-    "verified_sha": "4a1f8caa9"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

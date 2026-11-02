@@ -1,5 +1,5 @@
 {
-  "checksum": "bca6374b9a4dec28b1fe016f82f27377d5226b8f0f9692d6fb4f63ada12cc3cc",
+  "checksum": "c9b36d30c0255db92baac7c697eb7b7f1e8c5f1544ee1bc0137bd9c74df7e824",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/github_cli/CLAUDE.md#At a glance",
   "row": {
@@ -8,7 +8,7 @@
       "hosts/components/apt-github-cli/": "550a1676736f0666700dea7da6df16168eabe0fef9501b2fe193d489927f0cfd",
       "scripts/renderer/tests/test_apt_source_components.py": "5eb45033d1ca34dd3482743c457e6dc849df4846e1fa70846789ebb6ab1d1b3a"
     },
-    "python": "3.14",
-    "verified_sha": "7c7e6b9ed"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }
