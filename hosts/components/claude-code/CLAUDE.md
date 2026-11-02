@@ -222,7 +222,7 @@ What it does not restore:
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
 leaves a report (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
-`homelab-claude-triage-poll.timer` starts one when a monitor goes down, and ships in `shadow`
+`homelab-claude-triage-poll.timer` starts one when an alert starts firing, and ships in `shadow`
 mode, which only logs. The task file, templates, runner and poller are on the lander's approval
 list, and the caps and the poll mode are pinned in `templates/claude-triage-pins.j2`. `docs/claude-agent-user.md`,
 *Alert-triggered triage*, has the design.
