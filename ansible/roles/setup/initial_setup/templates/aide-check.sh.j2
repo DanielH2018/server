@@ -149,7 +149,7 @@ PKGS_FIRMWARE='^(flash-kernel|linux-(image|modules|raspi|firmware|base)|u-boot|r
 # Compiled Python: the package that owns the source, or an interpreter upgrade, recompiles it.
 DERIVED_PYCACHE='/__pycache__/'
 # The interpreter packages only: a library such as python3-jwt compiles its own files.
-PKGS_PYTHON='^(python3(\.[0-9]+)?(-minimal)?|libpython3(\.[0-9]+)?(-minimal|-stdlib)?)$'
+PKGS_PYTHON='^(python[3](\.[0-9]+)?(-minimal)?|libpython[3](\.[0-9]+)?(-minimal|-stdlib)?)$'
 # Caches that any package's trigger rewrites: explained by any package run since the baseline.
 DERIVED_CACHES='/dropin\.cache$|^/(usr/)?lib/udev/hwdb\.bin$|^/(usr/)?lib/locale/locale-archive$|^/(usr/)?lib/[^/]+/gio/modules/giomodule\.cache$|^/(usr/)?lib/[^/]+/gdk-pixbuf-2\.0/[^/]+/loaders\.cache$|^/(usr/)?lib/[^/]+/gtk-[23]\.0/[^/]+/immodules\.cache$|^/usr/share/glib-2\.0/schemas/gschemas\.compiled$|^/usr/share/mime/|^/usr/share/icons/[^/]+/icon-theme\.cache$|^/usr/share/info/dir(\.old)?$|^/usr/share/plymouth/themes/(text\.plymouth|ubuntu-text/ubuntu-text\.plymouth)$'
 DERIVED="(${USRMERGE}|${DERIVED_KERNEL}|${DERIVED_GRUB}|${DERIVED_FIRMWARE}|${DERIVED_PYCACHE}|${DERIVED_CACHES})"
