@@ -891,6 +891,7 @@
  "hosts/components/claude-code/tests/test_claude_triage_run.py": 0.0,
  "hosts/components/claude-code/tests/test_rootq.py": 0.15,
  "hosts/components/claude-code/tests/test_rootq_install.py": 0.15,
+ "hosts/components/claude-code/tests/test_rootq_k3s_manifests.py": 0.0,
  "hosts/components/claude-code/tests/test_rootq_redaction.py": 0.05,
  "hosts/components/claude-code/tests/test_rootq_socket.py": 3.1,
  "hosts/components/claude-code/tests/test_takeover_check.py": 0.65,
