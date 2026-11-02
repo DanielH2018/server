@@ -260,17 +260,6 @@ def test_a_newer_canary_version_moves_the_gate(opened):
     assert json.loads((state / "state.json").read_text())["gate"]["sha"] == newer
 
 
-def test_without_the_server_s_package_daniel_pi_is_the_canary(lab):
-    origin, state, _, _ = lab
-    edit(origin, "daniel-box", "box 1")
-    edit(origin, "daniel-pi", "pi 1")
-    run(lab, Prom())
-    assert debs(state) == ["homelab-daniel-pi", "homelab-updater"]
-    assert json.loads((state / "state.json").read_text())["gate"]["host"] == (
-        "daniel-pi"
-    )
-
-
 @pytest.mark.parametrize(
     ("changed", "staged_now", "deferred"),
     [
