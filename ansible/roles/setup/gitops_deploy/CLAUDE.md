@@ -105,8 +105,9 @@ Each arm is a rule and the function that holds it; the record page has its incid
   defaults is how you stop it: it suspends every Kustomization of the tag
   (`docs/flux-deploy-plane.md`, *Stopping one service*).
 - **An encrypted-vars-only push merges and alerts once per SHA.** It applies only the setup
-  roles reading a key it changed, which `deploy_defer.route_secret_readers` routes (#5436), and the k8s roles reading one, which
-  `deploy_broad_k8s.route_secret_k8s_readers` routes (#5577).
+  roles reading a key it changed, which `deploy_defer.route_key_readers` routes (#5436), and the k8s roles reading one, which
+  `deploy_broad_k8s.route_secret_k8s_readers` routes (#5577). The same router sends a moved
+  inventory key to the setup roles that template it (#6962).
 - **A k8s tag whose `containers_list` entry sets `owner` goes to `cs.flux`**, beside `cs.k8s`.
   Flux applies it, so the tick merges and logs it and never applies, defers, alerts on or owes
   it. The deploy plane drops it before its empty check. Ownership is read at the commit being

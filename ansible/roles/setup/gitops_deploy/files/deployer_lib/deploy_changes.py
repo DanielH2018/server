@@ -329,9 +329,12 @@ class ChangeSet:
     # nothing to `setup_roles`, and without this the command fell back to `<role>` (#4282).
     manual_playbooks: set[str] = field(default_factory=set)
     secrets: bool = False
-    # From `plan_tick` (#5436): the setup roles reading a moved key, and a lookup that failed.
-    secret_setup_roles: set[str] = field(default_factory=set)
-    secret_readers_failed: bool = False
+    # A path under `ansible/inventory/`, whose moved keys setup roles may read too (#6962).
+    inventory: bool = False
+    # From `plan_tick` (#5436, #6962): the setup roles reading a moved `secrets.yml` or
+    # inventory key, and a lookup that failed.
+    key_reader_roles: set[str] = field(default_factory=set)
+    key_readers_failed: bool = False
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
     # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …), named for history.
     tasks: set[str] = field(default_factory=set)
@@ -516,6 +519,7 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if any(p.startswith(prefix) for prefix in _BROAD_DEPLOY_PREFIXES):
             cs.broad = True
             cs.broad_deploy = True
+            cs.inventory |= p.startswith("ansible/inventory/")
             cs.setup_roles |= setup_roles_for(p)  # filter-plugin callers (#3874)
             cs.broad_setup |= bool(cs.setup_roles)
             continue

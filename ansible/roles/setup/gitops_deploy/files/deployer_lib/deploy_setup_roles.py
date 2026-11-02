@@ -24,8 +24,9 @@ answers for a role name, where `deploy_changes` answers for a changed path. `dep
 re-exports every name, so its readers keep their imports.
 
 `secret_setup_readers` is the one question here about a range rather than a role: which
-setup-role files name a `secrets.yml` key the range moved (#5436). It is a YAML-parsing
-subprocess for the same reason, and `deploy_defer.route_secret_readers` maps its paths.
+setup-role files name a `secrets.yml` or inventory key the range moved (#5436, #6962). It
+is a YAML-parsing subprocess for the same reason, and `deploy_defer.route_key_readers` maps
+its paths.
 """
 
 from __future__ import annotations
@@ -40,8 +41,9 @@ ROUTING_SCRIPT = "scripts/deploy_tools/setup_routing.py"
 # Three playbooks and the vars files, parsed once: 0.8s measured under a loaded suite run.
 # Thirty seconds is the wedged case, as for the setup narrowing (`NARROW_SETUP_TIMEOUT_S`).
 ROUTING_TIMEOUT_S = 30.0
-# A grep per changed key: 0.4s measured over PR #5405's commit, and 0.25s for the `--deploy-tags`
-# half over the last three commits to the file, so the routing bound serves both.
+# A grep per changed key: 0.4s measured over PR #5405's commit, 0.25s for the `--deploy-tags`
+# half over the last three commits to the file, and 0.29s over 382df818e, an inventory commit
+# moving `containers_list` and `compose_services` (#6962), so the routing bound serves all three.
 SECRET_READERS_SCRIPT = "scripts/deploy_tools/secret_setup_readers.py"
 # 0.84s measured over ee529af466, a six-file hypervisor commit, so the routing bound serves it.
 SETUP_REACH_SCRIPT = "scripts/deploy_tools/setup_reach_hosts.py"
@@ -156,14 +158,16 @@ def derive_routing(
 
 def secret_setup_readers(
     repo: str, old: str, new: str
-) -> tuple[list[str], dict[str, list[str]]]:
+) -> tuple[list[str], dict[str, list[str]], str]:
     """Run `secret_setup_readers.py` over `old..new` in `repo`.
 
     Returns:
         (paths, unread). `paths` is every file under `ansible/roles/setup/` at `new` naming a
-        `secrets.yml` key whose ciphertext differs across the range, empty when none does.
-        `unread` maps a shipped vars file among them to the shippers that read no key of it
-        built from a moved secret.
+        `secrets.yml` key whose ciphertext differs across the range, or an inventory key whose
+        value does, empty when none does. `unread` maps a shipped vars file among them to the
+        shippers that read no key of it built from a moved one. The third value is the
+        secrets half's refusal when the inventory half still answered, "" otherwise, and ""
+        from a script that predates #6962.
 
     Raises:
         subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
@@ -188,14 +192,16 @@ def secret_setup_readers(
     data = json.loads(r.stdout)
     paths = data.get("paths") if isinstance(data, dict) else None
     unread = data.get("unread") if isinstance(data, dict) else None
+    refused = data.get("refused", "") if isinstance(data, dict) else None
     if not (
         isinstance(paths, list)
         and all(isinstance(p, str) for p in paths)
         and isinstance(unread, dict)
         and all(isinstance(v, list) for v in unread.values())
+        and isinstance(refused, str)
     ):
         raise ValueError(f"not the secret-readers JSON: {r.stdout.strip()[:200]!r}")
-    return paths, unread
+    return paths, unread, refused
 
 
 def secret_k8s_readers(repo: str, old: str, new: str) -> tuple[int, str]:

@@ -257,7 +257,7 @@ def plan_tick(
     cs = deploy_defer.drop_deleted_setup_roles(
         tools, config, target.origin, services_from_changed_paths(paths), paths
     )
-    deploy_defer.route_secret_readers(tools, config, target, cs)
+    deploy_defer.route_key_readers(tools, config, target, cs)
     # Read at origin: this runs before the ff-merge, so the deleted directory is still on disk.
     deleted = k8s_roles_deleted_at(tools, config, target.origin, cs.k8s)
     if deleted:

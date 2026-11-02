@@ -1,6 +1,6 @@
 # M4 — blackbox_exporter for the ingress probes
 
-Status: IN PROGRESS
+Status: DONE. PR 1 merged as [#4834](https://github.com/DanielH2018/server/pull/4834), PR 2 as [#4798](https://github.com/DanielH2018/server/pull/4798), PR 4 as [#5635](https://github.com/DanielH2018/server/pull/5635), PR 5 as [#5632](https://github.com/DanielH2018/server/pull/5632) and PR 6 as [#6014](https://github.com/DanielH2018/server/pull/6014). PR 3 is listed below.
 
 PR 3, the probe job and its rules: [#4837](https://github.com/DanielH2018/server/pull/4837).
 

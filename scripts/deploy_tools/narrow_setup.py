@@ -100,7 +100,7 @@ from pathlib import Path
 
 from deploy_tools.narrow_lib import filters as narrow_filters
 from deploy_tools.narrow_lib import paths as narrow_paths
-from deploy_tools.narrow_lib import secret_keys
+from deploy_tools.narrow_lib import inventory_keys, secret_keys
 from lib.cli_help import ArgumentParser
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -409,6 +409,48 @@ def secrets_read(
     return sorted(moved)
 
 
+def inventory_tags(
+    index: RoleIndex, shipped: list[str], old: str, new: str, repo: str
+) -> frozenset[str]:
+    """The tags of the role's readers of the inventory keys `old..new` moved (#6962).
+
+    A moved key moves no path under the role, so the role's own diff never names it. Each
+    one the role's tree templates maps to `key_readers`, as a changed `defaults/` key does in
+    `path_tags`. One a shipped task file or template names maps to the tags of the role's
+    tasks naming that file, and one a shipped vars file carries onward maps the way
+    `foreign_key_tags` maps another role's changed key. Narrowing rather than refusing
+    matters for `k3s`: its whole-role tag arms the control-plane restart.
+
+    Raises:
+        CannotNarrow: every refusal `inventory_keys.keys_named_in`, `key_readers`,
+            `readers_of` and `keys_reaching` make, and a key the role names with no reader.
+    """
+    tags: set[str] = set()
+    for key in inventory_keys.keys_named_in([index.prefix], old, new, repo):
+        # A shared template carrying the key is named by its file name (`carried`).
+        is_template = key.endswith(".j2")
+        got = index.readers_of(key) if is_template else index.key_readers(key)
+        if not got:
+            raise CannotNarrow(
+                f"the variable {key} reaches no task file of {index.prefix}"
+            )
+        tags |= got
+    for path in shipped:
+        keys = inventory_keys.keys_named_in([path], old, new, repo)
+        if not keys:
+            continue
+        if not secret_keys.is_vars_file(path):
+            got = index.readers_of(path.rsplit("/", 1)[-1])
+            if not got:
+                raise CannotNarrow(f"{path} reaches no task file of {index.prefix}")
+            tags |= got
+            continue
+        for name in sorted(keys_reaching(path, set(keys), new, repo)):
+            if index.mentions(name):
+                tags |= index.key_readers(name)
+    return frozenset(tags)
+
+
 def role_tags(
     role: str, role_tag: str, old: str, new: str, repo: str, playbook: str
 ) -> frozenset[str]:
@@ -467,16 +509,22 @@ def role_tags(
     deleted = OldRole(index, old, new, repo, playbook)
     # A secret the role reads moves no path under it, yet reaches the host only when the role
     # renders again (#5436). Which of its tags read the key is not derived, so the role tag.
+    # An inventory key is narrowed to its readers' tags instead (#6962).
     moved = secrets_read(index, shipped, old, new, repo)
     if moved:
         raise CannotNarrow(
             f"the range changes the secret {', '.join(moved)}, which {role} reads"
         )
-    if not changed:
+    tags = set(inventory_tags(index, shipped, old, new, repo))
+    if tags:
+        shown = ",".join(sorted(tags))
+        print(
+            f"narrow-setup: inventory keys the role reads -> {shown}", file=sys.stderr
+        )
+    elif not changed:
         raise CannotNarrow(
             f"{old}..{new} changes nothing under {prefix} or in a file it ships"
         )
-    tags: set[str] = set()
     for path in changed:
         if path.startswith(prefix):
             rel = path[len(prefix) :]

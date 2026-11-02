@@ -22,10 +22,8 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest
 from diagnostics.probe_lib import applied, applied_tasks
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
-from lib.proc_testing import run
 
 RECORD_DIR = "/var/lib/homelab/setup-applied-sha256.d"
 
@@ -164,45 +162,46 @@ def test_a_stub_render_edited_after_the_apply_is_drift(tmp_path, capsys):
     assert code == PROBE_FAILED
 
 
-def test_the_k8s_host_files_apply_writes_the_sha256_record():
-    """Census: a task file the role runs or imports writes into `RECORD_DIR`."""
-    tracked = run(
-        [
-            "git",
-            "ls-files",
-            "ansible/roles/setup/k8s_host_files/tasks/",
-            "ansible/roles/setup/common/tasks/",
-        ],
-        check=True,
-        cwd=applied.ANSIBLE.parent,
-    ).stdout.split()
-    assert "ansible/roles/setup/k8s_host_files/tasks/registry.yml" in tracked
-    writers = [
-        path
-        for path in tracked
-        if RECORD_DIR in (applied.ANSIBLE.parent / path).read_text()
-    ]
-    assert writers, f"no task file under {tracked} writes {RECORD_DIR}"
-
-
-@pytest.mark.parametrize(
-    "path", ["/etc/cron.d/registry-gc", "/usr/local/bin/registry-gc.sh"]
-)
-def test_k8s_host_files_compares_the_registry_gc_rows_rather_than_reading_ok_meta(
-    capsys, path
-):
-    """The issue's Verify-by: both rows read ok when the host holds what the apply wrote."""
-    script = "#!/bin/bash\nPUSH_TOKEN=applied\n"
-    live = {"/etc/cron.d/registry-gc": REGISTRY_GC_CRON, "/usr/local/bin/registry-gc.sh": script}  # fmt: skip
-    record = _record("k8s_host_files", {"/usr/local/bin/registry-gc.sh": script})
+def _registry_gc_rows(live):
     role = applied.SETUP / "k8s_host_files"
     wants, _ = applied_tasks.expected(
         role, "daniel-box", applied.context(role, "daniel-box")
     )
+    return wants
+
+
+def test_the_registry_gc_script_render_holds_no_stub():
+    """The script embedded a push token until M6 batch B6c's Cutover-2, so its render was a STUB
+    and the apply recorded its hash. It embeds none now, so the probe hashes the real render and
+    no apply record is involved."""
+    wants = _registry_gc_rows({})
+    script = next(w for w in wants if w.path == "/usr/local/bin/registry-gc.sh")
+    assert script.sha256, script
+    assert script.why_no_content != applied.STUB_RENDER, script
+
+
+def test_k8s_host_files_compares_the_registry_gc_rows_with_the_real_render(capsys):
+    """Both rows read ok when the host holds what the apply wrote, with no apply record on it."""
+    live = {"/etc/cron.d/registry-gc": REGISTRY_GC_CRON}
+    wants = _registry_gc_rows(live)
     ns = SimpleNamespace(role="k8s_host_files", host="daniel-box", dry_run=False)
-    applied.run_applied(ns, read=_reader(wants, live, record))
-    status, line = _rows(capsys.readouterr().out)[path]
-    assert status == "ok", line
+    applied.run_applied(ns, read=_reader(wants, live, {}))
+    rows = _rows(capsys.readouterr().out)
+    for path in ("/etc/cron.d/registry-gc", "/usr/local/bin/registry-gc.sh"):
+        assert rows[path][0] == "ok", rows[path][1]
+
+
+def test_a_registry_gc_script_edited_after_the_apply_is_drift(capsys):
+    """The rejecting half: a live script that differs from the render is DRIFT."""
+    live = {
+        "/etc/cron.d/registry-gc": REGISTRY_GC_CRON,
+        "/usr/local/bin/registry-gc.sh": "#!/bin/bash\necho edited\n",
+    }
+    wants = _registry_gc_rows(live)
+    ns = SimpleNamespace(role="k8s_host_files", host="daniel-box", dry_run=False)
+    applied.run_applied(ns, read=_reader(wants, live, {}))
+    status, line = _rows(capsys.readouterr().out)["/usr/local/bin/registry-gc.sh"]
+    assert status == "DRIFT", line
 
 
 def test_a_root_only_stub_render_is_compared_through_rootq_with_the_recorded_hash(

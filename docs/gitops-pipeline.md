@@ -877,7 +877,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   role reads reaches no deploy tag, so it no longer defers the whole k8s plane to
   `k8s_unapplied`.
 - **A setup role reading a changed secret is applied as a setup-plane change** (#5436), on any
-  tick, with or without a deploy-plane path. `deploy_defer.route_secret_readers` runs
+  tick, with or without a deploy-plane path. `deploy_defer.route_key_readers` runs
   `scripts/deploy_tools/secret_setup_readers.py`, which greps `roles/setup/` at origin for each
   key whose ciphertext changed. Each hit goes through `setup_roles_for`, so the role joins
   `cs.setup_roles` as its own edit would. A role shipping another role's `defaults/` or
@@ -893,6 +893,29 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   again: once merged, no later range carries the key. The page fires on every tick that
   merges the range: it names `secret_rotation.py consumers`, which prints the
   apply command of every consumer that no derivation reached.
+- **A setup role templating a changed inventory key is applied the same way** (#6962). PR
+  #6952 moved `host_python_version`, and the tick sent the key to the deploy plane alone.
+  It hit the fleet-coverage ceiling, so the tick deferred the plane and applied nothing.
+  Eight setup roles render the key into their units, and none was applied or recorded in
+  `manual_plane`. `route_key_readers` therefore also runs on a range touching
+  `ansible/inventory/`, and `secret_setup_readers.py` adds the setup-role files naming a
+  top-level inventory key whose parsed value moved
+  (`scripts/deploy_tools/narrow_lib/inventory_keys.py`). Three rules differ from the secrets
+  half:
+  - A file under a role's `files/` is copied verbatim, so naming a key there reads nothing.
+  - An inventory value built from the key is followed to its own readers instead of
+    refusing.
+  - Nothing refuses. A play or a k8s-only shared template reading the key renders no setup
+    role. A shared template carries the key to the setup-role files that include it, and a
+    `hosts.ini` inline variable carries it to that variable's readers. A refusal here would
+    route nothing and record nothing, which is the silence #6962 reports. So the half fails
+    only on an unparsable inventory file or a failed `git`, and the tick then parks and
+    retries. A refusal from the secrets half keeps the inventory half's readers, and the
+    journal names it.
+
+  `narrow_setup.role_tags` narrows each routed role to the tags of its readers of the key,
+  where a secret takes the whole-role tag. That keeps `k3s` on its cron tags rather than on
+  `--tags k3s`, which arms the control-plane restart.
 - **A k8s role reading a changed secret is applied on a range with no deploy-plane path**
   (#5577). The narrowing above runs only when a deploy-plane path sends the range to it, so
   until #5577 a rotation alone merged, paged, and left every k8s reader on the old value.

@@ -1,6 +1,6 @@
 # M5 — loki-homelab ruler
 
-Status: IN PROGRESS
+Status: DONE. PR 4a merged as [#5852](https://github.com/DanielH2018/server/pull/5852), [#5896](https://github.com/DanielH2018/server/pull/5896) reverted it, and [#5899](https://github.com/DanielH2018/server/pull/5899) merged it again. PR 4b merged as [#5853](https://github.com/DanielH2018/server/pull/5853) and PR 5 as [#6507](https://github.com/DanielH2018/server/pull/6507). PRs 1 to 3 are listed below.
 
 PR 1, the Prometheus-side Loki rules and `loki-query --step`: [#4797](https://github.com/DanielH2018/server/pull/4797).
 
