@@ -282,13 +282,15 @@ PAGING = {
     },
     # Batch A1's host rules since its Cutover-b: `HostDiskFull` and the five `UPS*` rules are
     # critical, so both channels, and the rest are `warning`. The five Pi pressure arms joined
-    # at B8's Cutover-b, when they dropped `shadow`.
+    # at B8's Cutover-b, when they dropped `shadow`. Batch A6's 21 bridge-exporter rules joined at
+    # its Cutover-1b: eight are `critical`, so both channels, and the rest post to Discord alone.
     **{
         name: (
             labels,
             ["discord", "email"] if labels["severity"] == "critical" else ["discord"],
         )
-        for name, labels in literal_sets(HOSTS_RULES, shadow=False).items()
+        for path in (HOSTS_RULES, BRIDGE_RULES)
+        for name, labels in literal_sets(path, shadow=False).items()
     },
 }
 DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
@@ -296,7 +298,6 @@ DEPLOY_HOLD, _ = PAGING["deploy-hold-active"]
 SHADOW = {
     **host_sets(shadow=True),
     **loki_sets(shadow=True),
-    **literal_sets(BRIDGE_RULES, shadow=True),
     **literal_sets(HOSTS_RULES, shadow=True),
 }
 WATCHDOG = {"alertname": "Watchdog", "severity": "info", "service": "observability"}
