@@ -73,10 +73,8 @@ class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig):
     """
 
     INTERVAL: int
-    GRACE_CYCLES: int
     HEARTBEAT_FILE: str
     PROM_URL: str
-    KUMA_URL: str
     LOKI_URL: str
     CHECKS_ONLY: frozenset[str]
     CHECKS_SKIP: frozenset[str]
@@ -180,20 +178,11 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         **vars(cluster_config(_env, _int, _num)),
         **vars(io_config(_env, _int, _num, _env_file, INTERVAL, problems)),
         INTERVAL=INTERVAL,
-        # Startup/redeploy grace for the reach-out checks (`startup_grace` rows, applied in run_once).
-        # The bridge's first cycle after a host reboot runs before the heavy apps it polls (n8n,
-        # sonarr/radarr, prowlarr, scrutiny) finish starting, so an un-graced
-        # reach-out check flips its max_retries=0 push monitor DOWN on that one transient cycle
-        # and pages, then recovers next cycle — the weekly-reboot noise. Like HA_CONSECUTIVE,
-        # only the GRACE_CYCLES'th consecutive down pages; a genuinely-down dependency still
-        # alerts after ~one extra INTERVAL, and one ok resets the streak.
-        GRACE_CYCLES=_int("GRACE_CYCLES"),
         # Touched after every completed cycle; the container healthcheck compares its mtime
         # against ~3×INTERVAL. PID death already restarts the container, but a HANG only shows
-        # up as push silence in Kuma — the healthcheck lets autoheal restart on that too.
+        # up as stale gauges (`BridgeCheckStale`) — the healthcheck lets autoheal restart on that too.
         HEARTBEAT_FILE=_env("HEARTBEAT_FILE", "/tmp/heartbeat"),
         PROM_URL=PROM_URL,
-        KUMA_URL=_env("KUMA_URL").rstrip("/"),
         LOKI_URL=_env("LOKI_URL").rstrip("/"),
         # Which checks THIS instance runs. The Phase F twin/remnant split ended with the Docker
         # uninstall (2026-08-14): the cluster deployment is now the ONLY bridge and runs every

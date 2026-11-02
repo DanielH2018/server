@@ -1,13 +1,15 @@
-# monitor-bridge — every threshold check, pushed to Uptime Kuma (k8s)
+# monitor-bridge — every threshold check, served as a Prometheus exporter (k8s)
 
 A stdlib-only Python loop (`files/cli.py`) that runs every registered check each `INTERVAL`
-(300 s) and pushes `status=up|down&msg=…` to one Uptime Kuma **push** monitor per check, so a
-threshold breach pages. The *At a glance* block below has why it carries neither a readiness
-probe nor auto-deploy.
+(300 s) and serves each verdict as a `homelab_check_success` gauge, so a threshold breach pages
+through the `bridge-exporter.yaml` rules in observability. The bridge pushes nothing to Uptime
+Kuma since M6 batch A6's Cutover-2. The *At a glance* block below has why it carries neither a
+readiness probe nor auto-deploy.
 
-**`files/check_table.py`'s `CHECKS` declares every check once**: body, push token, gate and
-Kuma tile, from which the registry, the gate sets, the env-secret and uptime-kuma's tiles
-derive. Each check's `verdicts/` function says what it evaluates. This file states what holds across every check.
+**`files/check_table.py`'s `CHECKS` declares every check once**: body and gate, from which the
+registry and the gate sets derive. The rows still spell their retired `token`, `kuma_id`,
+`display`, `description` and `status_group` fields until A6-8 deletes them. Each check's
+`verdicts/` function says what it evaluates. This file states what holds across every check.
 `docs/monitor-bridge-checks.md` has the measurement behind each number, and
 `docs/monitor-bridge-internals.md` the module table, prerequisites, gate-set membership and
 test-patching rules.
@@ -30,29 +32,30 @@ entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer al
 merged change reaches the cluster when `promote` publishes and verifies the next bundle. To give
 it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
 the flag leaves two writers on the objects. Its Secrets substitute from `homelab-cluster-vars`,
-so a new push token reaches the pod only after `cluster_vars.py write` (operator-only).
+so a new credential reaches the pod only after `cluster_vars.py write` (operator-only).
 `tasks/main.yml` holds only the `k8s/manifests` include, which no Flux path runs; it stays for
 the handback, and the Kustomization's `wait` replaces the rollout wait.
 
 ## Gates and hysteresis
 
 Three reachability gate rows run first each cycle and skip their dependents, so one outage pages
-once; a skipped check pushes `up` with a `skipped — <source> unreachable` message, so its
-heartbeat survives. A check's row names its gate in the `gate` column, with the reason, and
+once. A skipped check exports 0 and its body is not called, and Alertmanager's inhibit rules
+hold its page behind the gate's. A check's row names its gate in the `gate` column, with the reason, and
 `registry.build_checks` hands that value to `check.run_once` on each `Check`.
 
-- **Prometheus, B2 and WAN Reachable** skip the rows naming them. One value per row, a gate or
-  `startup_grace`, keeps a row from being skipped by one and held by the other. The internals
-  page has the membership rules.
-- **A gate has no gate of its own** — a tile that cannot go red is not coverage; #2825 deleted
+- **B2 and WAN Reachable** skip the rows naming them. The `prometheus` value suppresses no
+  row in the bridge: it labels the rows `EXPORTER_DEPENDENT` holds and the rules that carry
+  the exporter inhibit. The internals page has the membership rules.
+- **A gate has no gate of its own** — a gate that cannot go red is not coverage; #2825 deleted
   the second Prometheus gate on that reasoning.
 - **`EXPORTER_DEPENDENT`** suppresses a dead node-exporter's dependents, keyed by scrape job,
   so one host's dead exporter holds them estate-wide (`DECIDED:` at the probe in
   `files/check.py`; the internals page has the membership). A new scrape job fails
   `test_every_node_exporter_job_is_mapped_in_exporter_dependent`.
-- **`startup_grace` and the `*_CONSECUTIVE` streaks** (`bridge/streaks.py`) are the per-check
-  hysteresis: a held cycle pushes `up` with a `down streak n/N` note, so a streak delays a page,
-  never suppresses one.
+- **The `*_CONSECUTIVE` streaks** (`bridge/streaks.py`) are the per-check hysteresis: a held
+  cycle exports 1 with a `down streak n/N` note, so a streak delays a page, never suppresses
+  one. The `startup_grace` rows hold nothing in the bridge since Cutover-2: their rules carry
+  `for: 10m` instead, which rides out the weekly reboot.
 
 ## Checks
 
@@ -65,18 +68,15 @@ the template rather than the constant. `templates/deployment.yaml.j2` renders ea
 `env` value, and `templates/env-secret.yaml.j2` holds only credentials: Flux's typed patch reads
 a Secret's quoted `"300"` back as a number and refuses it (#5574).
 
-Two push-side rules bind as widely. **Every push monitor has `max_retries=0`**, so widen
-`uptime_kuma_k8s_bridge_push_interval` to fix post-boot flapping and never add retries
-(`test_push_monitors_never_retry`). **A new arm folds into an existing monitor by default**;
-prove its selector against a live source first (checks page's *Traps*). **A new check is one
-`check_table.py` row, one `check_*` body and its push-token secret** (`/add-secret`); the
-Kuma tile renders from the row, and landing it deploys uptime-kuma too. The liveness probe,
-the credentials and the prerequisites are on the internals page.
+**A new arm folds into an existing check by default**; prove its selector against a live
+source first (checks page's *Traps*). **A new check is one `check_table.py` row and one
+`check_*` body, plus a rule in observability's `bridge-exporter.yaml`** for it to page. The
+liveness probe, the credentials and the prerequisites are on the internals page.
 
 ## The deploy-pipeline family
 
-One family is served rather than pushed. `files/deploy_pipeline.py` reads the `promote`
-workflow's state each cycle, after every check has pushed, and serves five `homelab_deploy_*`
+A second family is served beside the check verdicts. `files/deploy_pipeline.py` reads the
+`promote` workflow's state each cycle, after every check has run, and serves five `homelab_deploy_*`
 gauges on `monitor_bridge_deploy_pipeline_port` through `templates/service.yaml.j2`.
 observability's `deploy-pipeline` scrape job collects them, and its `deploy-pipeline` rule
 group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
@@ -97,7 +97,7 @@ group pages on them. `docs/flux-deploy-plane.md` says what each alert means.
 
 ## The check exporter
 
-`files/verdict_export.py` serves each row's verdict beside the Kuma push, as part of M6
+`files/verdict_export.py` serves each row's verdict, as part of M6
 (`docs/target-architecture/monitoring/m6-retire-kuma.md`, *The bridge as an exporter*). It runs
 on its own port, the `metrics` item on this role's `containers_list` entry, and observability's
 `monitor-bridge` scrape job collects it. The deploy-pipeline family keeps its own listener and
@@ -107,11 +107,12 @@ job, so neither job sees the other's series.
   `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` carry
   `check="<row>"`. `homelab_check_rows` counts the enabled rows of `CHECKS`, gate rows included.
   It is not `registry.build_checks`' length, which drops every gate row.
-- **The value is the verdict before suppression and before `startup_grace`.** A row whose gate
-  reads down exports 0 and its body is not called. A body that raises exports 0. The push keeps
-  today's values until the push path is deleted.
+- **The value is the verdict before suppression.** A row whose gate reads down exports 0 and
+  its body is not called. A body that raises exports 0. The exporter is the only output: the
+  push path to Uptime Kuma was deleted in M6 batch A6's Cutover-2.
 - **`--once`, `--dry-run` and `--check` serve nothing**, like the deploy-pipeline family.
-- **No rule reads these series yet.** `bridge-exporter.yaml` arrives with the shadow PRs.
+- **The `bridge-exporter.yaml` rules page on these series.** A row with no rule never pages,
+  and `BridgeCheckStale` compares the exported row count against `homelab_check_rows`.
 
 ## Module layout — and the one rule that governs it
 
@@ -149,7 +150,7 @@ Unit tests are `uv run pytest ansible/roles/k8s/monitor-bridge/tests`, one file 
 **A shared test helper goes under `tests/`, never beside `cli.py`** — every `.py` in `files/` is
 production code to `_runtime_modules()`. Smoke test one pass with
 `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once`;
-`--dry-run` pushes nothing, and `--check <name>` refuses a gated check without its gate.
+`--dry-run` serves nothing, and `--check <name>` refuses a gated check without its gate.
 
 ## Traps
 

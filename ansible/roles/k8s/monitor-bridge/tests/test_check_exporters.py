@@ -4,7 +4,7 @@ A metric read through a dead exporter returns an empty vector, which `host_packa
 from a healthy one. `check.EXPORTER_DEPENDENT` maps each scrape job to the rows it feeds, and
 `run_once` skips those rows while the job is down, so Scrape Targets is the single page. Both
 axes of the map are guarded here, its values (are they real checks) and its keys (does every
-scraped node-exporter job appear), and so is the Prometheus gate that orders the probe.
+scraped node-exporter job appear), and so is the probe that runs without a gate row.
 """
 
 import re
@@ -15,7 +15,7 @@ import pytest
 import check
 import checks.gitops
 import registry
-from _fake_sources import FakeSink, FakeSources, mk
+from _fake_sources import FakeExport, FakeSources, mk
 from bridge.types import Check
 from lib.repo_paths import REPO as _REPO
 
@@ -134,42 +134,64 @@ def test_the_exempt_jobs_are_still_scraped_and_unmapped():
 # ── run_once ─────────────────────────────────────────────────────────────────────────────────
 
 
-def _cycle(cfg, up_vector, *, prom_result=(True, "prom ok"), host_packages=None):
-    """One cycle: the Prometheus gate row, `host_packages` behind it, and `targets` behind it.
+def _cycle(cfg, up_vector, *, host_packages=None):
+    """One cycle: `host_packages`, which sits under `node`, and `targets`, which sits under no job.
 
     The production EXPORTER_DEPENDENT map is left in place: this suite is about which jobs it
-    skips, so stating a sentinel map would test the driver rather than the table.
+    skips, so stating a sentinel map would test the driver rather than the table. There is no
+    `prometheus` gate row: Cutover-2 deleted it, and the probe runs because `host_packages` is
+    enabled and under `node`, which is the wiring the first test below proves.
 
-    Returns (ran, pushed, src): the names whose body ran, {token: (ok, msg)}, and the fake.
+    Returns (ran, exported, src): the names whose body ran, {name: verdict}, and the fake.
     """
     ran = []
-    sink = FakeSink()
+    export = FakeExport()
     src = FakeSources(prom_vector=lambda q: up_vector if q == "up" else [])
     check.run_once(
         cfg,
         src,
         [
-            Check("prometheus", "tok_prom", lambda _cfg, _src: prom_result),
             Check(
-                "host_packages",
-                "tok_host_packages",
-                host_packages or mk(ran, "host_packages"),
-                "prometheus",
+                "host_packages", host_packages or mk(ran, "host_packages"), "prometheus"
             ),
-            Check("targets", "tok_targets", mk(ran, "targets"), "prometheus"),
+            Check("targets", mk(ran, "targets")),
         ],
-        sink,
+        export=export,
     )
-    return ran, {t: (ok, m) for t, ok, m in sink.pushes}, src
+    return ran, export.verdicts, src
 
 
-def test_a_dead_node_exporter_skips_its_dependents_and_scrape_targets_still_pages(cfg):
-    ran, pushed, _ = _cycle(cfg, [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 1.0)])
+def test_a_dead_node_exporter_skips_its_dependents_and_scrape_targets_still_pages(
+    cfg, capsys
+):
+    ran, exported, _ = _cycle(cfg, [({"job": "node"}, 0.0), ({"job": "cadvisor"}, 1.0)])
     assert "host_packages" not in ran
     assert "targets" in ran
-    ok, msg = pushed["tok_host_packages"]
-    assert ok is True
-    assert "exporter" in msg.lower()
+    # A skipped row exports 0 without running its body, and the cycle counts it as skipped.
+    assert exported == {"host_packages": False, "targets": True}
+    assert "CYCLE 1 up, 0 down, 1 skipped" in capsys.readouterr().out
+
+
+def test_the_exporter_probe_runs_without_a_prometheus_gate_row(cfg):
+    """RED on a run loop that only probes after a `prometheus` row: no such row exists, so the
+    dependents would run against an empty vector from a dead exporter.
+    """
+    ran, _, src = _cycle(cfg, [({"job": "node"}, 0.0)])
+    assert ran == ["targets"]
+    assert src.queries("prom_vector") == ["up"]
+
+
+def test_no_exporter_probe_when_the_dependent_is_not_enabled(cfg):
+    """A narrowed run that leaves `host_packages` out sends no `up` query."""
+    ran = []
+    src = FakeSources()
+    check.run_once(
+        replace(cfg, CHECKS_SKIP=frozenset({"host_packages"})),
+        src,
+        [Check("host_packages", mk(ran, "host_packages"), "prometheus")],
+    )
+    assert ran == []
+    assert src.queries("prom_vector") == []
 
 
 def test_no_suppression_when_the_exporters_are_up(cfg):
@@ -187,25 +209,9 @@ def test_an_up_probe_that_fails_does_not_suppress(cfg):
     check.run_once(
         cfg,
         FakeSources(prom_vector=boom),
-        [
-            Check("prometheus", "tok_prom", lambda _cfg, _src: (True, "prom ok")),
-            Check(
-                "host_packages",
-                "tok_host_packages",
-                mk(ran, "host_packages"),
-                "prometheus",
-            ),
-        ],
-        FakeSink(),
+        [Check("host_packages", mk(ran, "host_packages"), "prometheus")],
     )
     assert ran == ["host_packages"]
-
-
-def test_a_down_prometheus_gate_skips_before_the_exporter_probe_runs(cfg):
-    ran, pushed, src = _cycle(cfg, [], prom_result=(False, "prom down"))
-    assert ran == []
-    assert "Prometheus unreachable" in pushed["tok_host_packages"][1]
-    assert src.queries("prom_vector") == []
 
 
 # The probe is a bare `up`, not pinned to PROM_ORIGIN. The `cfg` fixture leaves PROM_ORIGIN
@@ -226,12 +232,12 @@ def test_a_dead_node_exporter_is_seen_under_the_deployed_origin_pin(cfg):
     Under a pinned probe the whole vector was invisible: daniel-server's only series is
     healthy, so `up{origin="daniel-server"}` carried no dead exporter to suppress on.
     """
-    ran, pushed, _ = _cycle(
+    ran, exported, _ = _cycle(
         replace(cfg, PROM_ORIGIN='origin="daniel-server"'), _THREE_ORIGIN_UP
     )
     assert "host_packages" not in ran
     assert "targets" in ran
-    assert pushed["tok_host_packages"][0] is True
+    assert exported["host_packages"] is False
 
 
 def test_an_origin_pinned_probe_would_see_no_dead_exporter():
@@ -250,32 +256,30 @@ def test_a_dead_pi_exporter_suppresses_nothing_in_the_bridge():
 
 
 @pytest.mark.parametrize(
-    ("node_up", "ok", "needle"),
-    [(0.0, True, "exporter"), (1.0, False, "fetch series absent")],
+    ("node_up", "line"),
+    [(0.0, None), (1.0, "fetch series absent")],
     ids=["suppressed_while_the_exporter_is_down", "pages_once_it_is_up"],
 )
-def test_the_real_host_packages_body_under_the_suppression(cfg, node_up, ok, needle):
-    """With the builder series absent, the row pushes up while the exporter that publishes them
-    is dead, and pages on the absent series once the exporter is up."""
+def test_the_real_host_packages_body_under_the_suppression(cfg, capsys, node_up, line):
+    """With the builder series absent, the row is skipped while the exporter that publishes them
+    is dead, and its body reports DOWN on the absent series once the exporter is up.
+    """
     sources = FakeSources(
         prom_vector=lambda q: [({"job": "node"}, node_up)] if q == "up" else [],
         prom_scalar=lambda q: None,
     )
-    sink = FakeSink()
+    export = FakeExport()
     check.run_once(
         cfg,
         sources,
-        [
-            Check("prometheus", "tok_prom", lambda _cfg, _src: (True, "prom ok")),
-            Check(
-                "host_packages",
-                "tok_hp",
-                checks.gitops.check_host_packages,
-                "prometheus",
-            ),
-        ],
-        sink,
+        [Check("host_packages", checks.gitops.check_host_packages, "prometheus")],
+        export=export,
     )
-    pushed_ok, msg = {t: (o, m) for t, o, m in sink.pushes}["tok_hp"]
-    assert pushed_ok is ok
-    assert needle in msg.lower()
+    out = capsys.readouterr().out
+    assert export.verdicts == {"host_packages": False}
+    if line is None:
+        assert "DOWN host_packages" not in out
+        assert "1 skipped" in out
+    else:
+        assert "DOWN host_packages" in out
+        assert line in out.lower()

@@ -170,33 +170,9 @@ stringData:
    `Restart=on-failure` reruns it every 15-30 min until it exits 0, and Cloudflare IP Drift
    moved into monitor-bridge, which re-probes a failure every cycle. A red tile clears when
    the fault does; the deadline still bounds silence exactly as before. #}
-  # ── monitor-bridge's push tiles: one per row of monitor-bridge's files/check_table.py ───────
-  # Derived since #3781, so a new bridge check needs no edit here. The row's `kuma_id` is the
-  # AutoKuma id, and AutoKuma deletes a monitor whose id disappears (ON_DELETE=delete), so a
-  # row's id, display name and description are what keep a monitor and its history. Every
-  # tile shares the bridge's cadence: the deadline is the bridge's push interval, never
-  # retried, and a `critical` row carries the severity tag and pages email too.
-  # The tokens are bare lookups, so a row whose secret is missing fails the
-  # render rather than dropping its tile (#1632). `ensure_ascii=False` keeps an em dash a literal
-  # character, the bytes the hand-written tiles carried, so AutoKuma sees no change.
-  #
-  # The `if` on the loop is M6 batch A6's Cutover-1a (m6-retire-kuma.md, "The cutover order"). It
-  # names every row of the table, so no bridge tile is declared: the `bridge-exporter.yaml` rules
-  # in observability replace them and page from Cutover-1b on. The rows stay in the table until
-  # Cutover-2 stops the push, so the bridge keeps pushing into the deleted tokens in between and
-  # logs `push failed`. Cutover-2 removes the loop. The tuple is a literal so that a reader of this
-  # file sees the excluded names without evaluating the table.
-{% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') if check.name not in (
-    'wan_reachable', 'discord', 'r2_usage', 'cloudflare_ips_drift', 'healthchecks_drift',
-    'b2_reachable', 'b2_storage', 'arr_queue', 'gitops_alive', 'gitops_status', 'host_packages',
-    'etcd_restore_drill', 'ha_heartbeat', 'n8n', 'bazarr', 'prowlarr_indexers', 'scrutiny',
-    'speedtest', 'swallowed_verdicts', 'prometheus',
-) %}
-{%   set tags = ([{'name': 'tag-severity', 'value': 'critical'}] if check.critical | default(false) else [])
-              + ([{'name': 'tag-runbook', 'value': 'https://docs.local.' ~ domain ~ '/' ~ check.runbook ~ '/'}] if check.runbook | default(none) else []) %}
-  {{ check.kuma_id }}.json: |
-    {"type": "push", "name": {{ check.display | to_json(ensure_ascii=False) }}, "description": {{ check.description | to_json(ensure_ascii=False) }}, "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ lookup('vars', check.token) }}"{% if tags %}, "tag_names": {{ tags | to_json }}{% endif %}, "notification_name_list": {{ ([kuma_notification_id] + (['email'] if check.critical | default(false) else [])) | to_json }}}
-{% endfor %}
+{# monitor-bridge declares no tile. M6 batch A6's Cutover-1a excluded every row of its
+   files/check_table.py from a loop here (#3781), and Cutover-2 deleted the loop with the
+   bridge's push. The `bridge-exporter.yaml` rules in observability page those checks. #}
 {# Deadman for the status-page-sync CronJob in this role — the job that owns the /status/
    containers group list. Nothing else watches a k8s Job: monitor-bridge's cluster checks
    cover Deployments and DaemonSets only, so without this tile a sync that started failing

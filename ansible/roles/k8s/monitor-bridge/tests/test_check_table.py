@@ -1,12 +1,12 @@
 """`files/check_table.py` against the registry, the gates, the env, SOPS and the deploy's reading.
 
 The table is the one place a check is declared (#3659, #3788). The registry and the gate sets
-derive from it in Python, and the env-secret and the Kuma tiles derive from it through
+derive from it in Python, and the docs fragments derive from it through
 `ansible/filter_plugins/py_table.py`, which parses the module instead of running it. What is
 left to check is that each derivation reads what the table says.
 
-The Kuma side, that each row's token reaches a push tile, is
-`ansible/tests/services/test_kuma_static_monitors.py::test_every_bridge_push_token_reaches_a_push_tile`.
+The Kuma side, that no tile carries a bridge token, is
+`ansible/tests/services/test_kuma_static_monitors.py::test_the_deleted_a6_tiles_are_not_declared`.
 """
 
 import dataclasses
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import check
 import registry
-from bridge.types import PushCheck, push_env
+from bridge.types import PushCheck
 from check_table import CHECKS
 from lib import yaml_fast
 from lib.repo_paths import ANSIBLE
@@ -24,8 +24,8 @@ from py_table import py_table
 from _bridge_env import bridge_env
 
 _TABLE = Path(__file__).resolve().parents[1] / "files" / "check_table.py"
-_GATES = frozenset({"prometheus", "b2_reachable", "wan_reachable"})
-_GATE_VALUES = _GATES | {"startup_grace", None}
+_GATES = frozenset({"b2_reachable", "wan_reachable"})
+_GATE_VALUES = _GATES | {"prometheus", "startup_grace", None}
 
 
 def _unknown_gates(rows) -> list[str]:
@@ -42,28 +42,28 @@ def test_each_name_and_kuma_id_appears_once():
 
 
 def test_the_registry_runs_every_row_gate_rows_first_in_table_order():
-    registered = [c.name for c in registry.build_checks({})]
+    registered = [c.name for c in registry.build_checks()]
     # Named members, so an empty table cannot make both sides equal and empty.
     assert {"n8n", "host_packages"} <= set(registered)
     gates = [row.name for row in CHECKS if row.is_gate]
     assert registered == gates + [row.name for row in CHECKS if not row.is_gate]
-    assert {c.fn for c in registry.build_checks({})} == {row.fn for row in CHECKS}
+    assert {c.fn for c in registry.build_checks()} == {row.fn for row in CHECKS}
 
 
-def test_the_gate_rows_are_the_three_gates_the_run_loop_skips_by():
+def test_the_gate_rows_are_the_two_gates_the_run_loop_skips_by():
     assert {row.name for row in CHECKS if row.is_gate} == _GATES == set(check.GATE_SKIP)
 
 
 def test_every_registered_check_carries_its_rows_gate():
-    assert {c.name: c.gate for c in registry.build_checks({})} == {
+    assert {c.name: c.gate for c in registry.build_checks()} == {
         row.name: row.gate for row in CHECKS
     }
     assert {"host_packages"} <= {row.name for row in CHECKS if row.gate == "prometheus"}
 
 
 def test_a_row_that_names_a_gate_comes_after_that_gate_in_the_registry():
-    names = [c.name for c in registry.build_checks({})]
-    for c in registry.build_checks({}):
+    names = [c.name for c in registry.build_checks()]
+    for c in registry.build_checks():
         if c.gate in check.GATE_SKIP:
             assert names.index(c.gate) < names.index(c.name), c.name
 
@@ -90,9 +90,9 @@ def _ungated_readers(checks) -> set[str]:
 
 
 def test_every_prometheus_reader_is_gated_on_prometheus():
-    """A reader outside the `prometheus` column pages on its own during a Prometheus outage,
-    alongside the gate that already reported it."""
-    checks = registry.build_checks({})
+    """A reader outside the `prometheus` column is outside the exporter suppression, so it pages
+    beside `ScrapeTargetDown` when a node exporter dies."""
+    checks = registry.build_checks()
     # Non-vacuity: an empty derivation would make the assertion below pass on nothing.
     assert {"host_packages"} <= _prometheus_readers(checks)
     assert _ungated_readers(checks) == set()
@@ -101,7 +101,7 @@ def test_every_prometheus_reader_is_gated_on_prometheus():
 def test_a_prometheus_reader_that_loses_its_gate_is_flagged():
     checks = [
         dataclasses.replace(c, gate=None) if c.name == "host_packages" else c
-        for c in registry.build_checks({})
+        for c in registry.build_checks()
     ]
     assert _ungated_readers(checks) == {"host_packages"}
 
@@ -129,19 +129,21 @@ def test_the_deploy_reads_every_field_but_fn_off_each_row():
         for f in dataclasses.fields(PushCheck)
         if f.default is not dataclasses.MISSING
     }
-    assert len(parsed) == len(CHECKS) >= 20
+    assert len(parsed) == len(CHECKS) >= 19
     for row, read in zip(CHECKS, parsed, strict=True):
         expected = dataclasses.asdict(row)
         del expected["fn"]
         assert {**defaults, **read} == expected, row.name
 
 
-def test_the_env_secret_renders_one_token_per_row_under_the_name_the_bridge_reads():
-    rendered = {key for key in bridge_env() if key.startswith("KUMA_PUSH_")}
-    assert (
-        "KUMA_PUSH_HA_HEARTBEAT" in rendered
-    )  # a row whose secret predates the naming rule
-    assert rendered == {push_env(row.name) for row in CHECKS}
+def test_the_env_secret_renders_no_push_token_and_the_config_no_kuma_setting():
+    """RED on a template that renders a `KUMA_PUSH_*` token, `KUMA_URL` or `GRACE_CYCLES` again:
+    Cutover-2 stopped the push, and the bridge reads none of them."""
+    env = bridge_env()
+    # Non-vacuity by name: an env that rendered nothing would pass the lines below.
+    assert {"INTERVAL", "N8N_API_KEY", "DEPLOY_PIPELINE_GITHUB_TOKEN"} <= set(env)
+    assert [key for key in env if key.startswith("KUMA_")] == []
+    assert "GRACE_CYCLES" not in env
 
 
 def test_every_row_names_a_secret_sops_declares():

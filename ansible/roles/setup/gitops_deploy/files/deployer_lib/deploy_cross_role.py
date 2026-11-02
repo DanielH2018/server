@@ -352,9 +352,9 @@ def k8s_lookup_readers(paths, repo_root) -> set[str]:
     """k8s roles whose templates or tasks `lookup()` a changed file owned by a DIFFERENT role.
 
     A k8s role's change deploys that role, which is wrong for a file another role renders
-    too. uptime-kuma renders a push tile for every row of monitor-bridge's
-    `files/check_table.py` (#3781), and authelia and traefik embed crowdsec's allowlist files,
-    so a change there must reach the readers as well as the owner. Derived by reading the
+    too. Authelia and traefik embed crowdsec's allowlist files, so a change there must reach
+    the readers as well as the owner. (uptime-kuma read monitor-bridge's `files/check_table.py`
+    until M6 batch A6's Cutover-2 removed its push tiles, #3781.) Derived by reading the
     lookups rather than listing the pairs, so a new reader is found the day it is written.
     The `import` form of the same question is `deploy_changes.shared_module_consumers`.
 
