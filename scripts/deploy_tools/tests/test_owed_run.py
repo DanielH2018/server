@@ -17,10 +17,6 @@ from deploy_tools import gitops_state, owed_run
 from lib.repo_paths import PRIMARY_CHECKOUT
 
 
-# A tree that is not the primary checkout, standing in for the worktree a session invokes from.
-WORKTREE = "/nonexistent/worktree"
-
-
 def _owed(subject: str, playbook: str, *tags: str, **keys) -> str:
     """One `manual_plane` ledger line owing `tags`, with any `host`/`agent_hosts` keys."""
     line = {"class": "manual_plane", "subject": subject, "origin": "abc123def4567890"}
@@ -84,8 +80,22 @@ def test_a_clean_line_runs_its_command_then_clears_it(owe, journal):
     assert journal[0][0] == "k3s"
 
 
-def test_the_commands_run_in_the_primary_checkout_whichever_tree_invokes_it(owe):
+@pytest.fixture
+def linked_worktree(tmp_path: Path) -> tuple[str, str]:
+    """`(primary, worktree)`: a worktree whose `.git` file points into a distinct primary."""
+    primary, worktree = tmp_path / "primary", tmp_path / "worktree"
+    gitdir = primary / ".git" / "worktrees" / "worktree"
+    gitdir.mkdir(parents=True)
+    worktree.mkdir()
+    (worktree / ".git").write_text(f"gitdir: {gitdir}\n")
+    return str(primary), str(worktree)
+
+
+def test_a_linked_worktree_runs_the_commands_in_its_primary_checkout(
+    owe, linked_worktree
+):
     """A worktree run would install collections where the deployer never loads them."""
+    primary, worktree = linked_worktree
     _state, run = owe(COREDNS)
     runner, checked = Runner(), []
     assert (
@@ -93,25 +103,49 @@ def test_the_commands_run_in_the_primary_checkout_whichever_tree_invokes_it(owe)
             "k3s",
             runner,
             checkout_check=lambda repo: checked.append(repo),
-            invoking_repo=WORKTREE,
+            invoking_repo=worktree,
         )
         == 0
     )
-    assert checked == [str(PRIMARY_CHECKOUT), WORKTREE]
-    assert runner.cwds == [str(PRIMARY_CHECKOUT)]
+    assert checked == [primary, worktree]
+    assert runner.cwds == [primary]
 
 
-def test_an_invoking_tree_behind_origin_master_runs_nothing(owe, capsys):
-    """The invoking tree's code chose the commands, so a stale one must not run or clear."""
+def test_a_primary_checkout_behind_origin_master_runs_nothing(
+    owe, linked_worktree, capsys
+):
+    primary, worktree = linked_worktree
     state, run = owe(COREDNS)
     runner = Runner()
-    behind = {WORKTREE: "HEAD abc is not origin/master def"}
+    behind = {primary: "HEAD abc is not origin/master def"}
     assert (
         run(
             "k3s",
             runner,
             checkout_check=lambda repo: behind.get(repo),
-            invoking_repo=WORKTREE,
+            invoking_repo=worktree,
+        )
+        == 1
+    )
+    assert runner.ran == []
+    assert f"the primary checkout {primary}" in capsys.readouterr().err
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+def test_an_invoking_tree_behind_origin_master_runs_nothing(
+    owe, linked_worktree, capsys
+):
+    """The invoking tree's code chose the commands, so a stale one must not run or clear."""
+    _primary, worktree = linked_worktree
+    state, run = owe(COREDNS)
+    runner = Runner()
+    behind = {worktree: "HEAD abc is not origin/master def"}
+    assert (
+        run(
+            "k3s",
+            runner,
+            checkout_check=lambda repo: behind.get(repo),
+            invoking_repo=worktree,
         )
         == 1
     )

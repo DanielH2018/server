@@ -825,6 +825,8 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
   their rows from `ansible/secret_rotation.yml` by hand, add the names to
   `scripts/secrets_mgmt/git_dates.py:RETIRED`, run `cluster_vars.py write` (**operator-only**) so the
   cluster files lose the names, and delete `PENDING_RETIREMENT` with the test that holds it.
+  M6's B6c reuses the set, so its token PR owns that deletion instead
+  (`docs/target-architecture/monitoring/m6-status/b6c.md`, step 5).
 - The recipe, as PR 4a first stated it when it carried the retirement, follows. Read "this PR"
   as PR 5 and "the agent's commit" as the commit that adds the `RETIRED` names.
 
