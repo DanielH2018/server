@@ -179,4 +179,3 @@ tick and no hand apply is involved.
 holds both shipped scripts to no Kuma library, `kuma_push` or push URL. Its red case is
 `test_a_script_that_pushes_to_kuma_is_flagged`. The two script tests read the verdict back from
 the journal line a `logger` stub records, in place of a stubbed `kuma_push`.
-||||||| df7fb9ac76

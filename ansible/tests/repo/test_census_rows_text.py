@@ -209,6 +209,34 @@ ROWS = (
         must_find=frozenset({"CLAUDE.md"}),
     ),
     Census(
+        name="markdown-carries-no-merge-conflict-marker",
+        reason=(
+            "A conflict resolved by hand can leave a marker behind, and mkdocs renders it, "
+            "and the base section after a diff3 `|||||||` line, as prose (#6928). A reader "
+            "cannot tell the stale copy from the live one. Delete the marker and the side "
+            "master's later edits did not build on. A bare `=======` is left alone, because "
+            "it is also a setext heading underline."
+        ),
+        files=lambda: tracked("*.md"),
+        offence=lines_matching(re.compile(r"^(<{7}|\|{7}|>{7})( |$)")),
+        red=(
+            Subject("a.md", "- live bullet\n||||||| parent of 10ac6bb1e (Page)\n"),
+            Subject("a.md", "<<<<<<< HEAD\n- ours\n"),
+            Subject("a.md", "- theirs\n>>>>>>> topic\n"),
+        ),
+        green=(
+            Subject("a.md", "Title\n=======\n\n| a | b |\n|---|---|\n"),
+            Subject("a.md", "`<<<<<<< HEAD` opens a conflict.\n"),
+        ),
+        min_matches=300,
+        must_find=frozenset(
+            {
+                "CLAUDE.md",
+                "docs/target-architecture/monitoring/m5-loki-ruler.md",
+            }
+        ),
+    ),
+    Census(
         name="templates-iterate-dicts-sorted",
         reason=(
             "`.items()` renders a dict in insertion order, so reordering the source changes the "
