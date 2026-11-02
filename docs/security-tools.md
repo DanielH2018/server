@@ -89,12 +89,12 @@ No push for a week and 6 hours also reads DOWN, which means the timer stopped ru
 
 A difference pages when it falls in one of these and no package explains it:
 
-- The system trees: `/usr` except `/usr/local`, `/bin`, `/sbin`, `/lib*` and `/boot`. A file pages unless a package owns it and its MD5 matches the package's. A removed path pages while a package still owns it.
+- The system trees: `/usr` except `/usr/local`, `/bin`, `/sbin`, `/lib*` and `/boot`. A file pages unless a package owns it and its MD5 matches the package's. A package-owned symlink pages unless it still resolves to a package file. A removed path pages while a package still owns it.
 - A package-owned file under `/etc` whose content differs from the package's copy. Ansible writes `/etc` files no package owns on every merge, so those are logged and do not page.
-- The login and privilege files, packaged or not: sudoers, `/etc/ssh`, PAM, cron, `passwd`, `shadow`, `group`, `gshadow`, `ld.so.preload` and every `authorized_keys`.
+- The login, privilege and code-loading files, packaged or not: sudoers, `/etc/ssh`, PAM and `/etc/security`, cron, `passwd`, `shadow`, `group`, `gshadow`, the loader config (`ld.so.preload`, `ld.so.conf.d`), `/etc/environment` and the shell startup files (`/etc/profile.d`, `bash.bashrc`, root's), apt hooks in `apt.conf.d`, device rules in `/etc/udev/rules.d`, module config, and every `authorized_keys`.
 - An entry in any of those, or a package-owned `/etc` file, whose owner, group or permissions changed. A package digest cannot see a mode change.
 
-Files that package triggers regenerate, such as the initial RAM disk and the kernel module index, never page. A path at either end of a package diversion (`dpkg-divert`) is checked by ownership alone, because two packages record a digest for it. Homes, `/var`, `/opt` and `/usr/local` are logged and never page. The script's header has the full lists, and its `DECIDED:` marker has the measurement behind them.
+Files that package triggers regenerate, such as the initial RAM disk, GRUB's config and the kernel module index, page only in a week in which no package ran. A path at either end of a package diversion (`dpkg-divert`) must match the digest one of the two packages records. Homes, `/var`, `/opt`, `/usr/local` and `/etc/systemd/system` are logged and never page: Ansible rewrites the last three on every merge, and the first two change with ordinary use. The script's header has the full lists, and its `DECIDED:` marker has the measurement behind them.
 
 Advancing the baseline after every UP run makes each report cover one week. A DOWN keeps the old baseline, so the change stays in every report until someone reviews it.
 

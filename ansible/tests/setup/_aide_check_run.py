@@ -60,15 +60,22 @@ def _report(*entries: str) -> str:
 # AIDE's 18-character summary column, as the 2026-10-20 daniel-box report printed each kind.
 ADDED, REMOVED = "f+++++++++++++++++", "f-----------------"
 CHANGED_CONTENT = "f =.... mc..H.. . "
-CHANGED_MODE = "f =...p mc..H.. . "
+# YlZbpugamcinHAXSEC: a permission change prints `p` in column 5.
+CHANGED_MODE = "f =.p.. mc..H.. . "
 LINK_ADDED = "l+++++++++++++++++"
+LINK_CHANGED = "l =.... mc.. .. . "
+# When aide.db was last advanced. The script compares it only with the dpkg status file's mtime.
+BASELINE_EPOCH = 1_792_000_000
 # One installed package: each path's content, and whether dpkg records its digest in md5sums
 # (relative, under the pre-usrmerge name) or as a conffile in status.
 PACKAGE = {
     "/usr/bin/tool": ("tool v2\n", "md5sums"),
     "/usr/lib/x86_64-linux-gnu/libtool.so": ("lib v2\n", "md5sums"),
     "/etc/tool.conf": ("conf v2\n", "conffile"),
+    "/usr/share/doc/tool/README": ("readme v1\n", "md5sums"),
 }
+# Package-owned symlinks, which dpkg lists with no digest, and where each points.
+PACKAGE_LINKS = {"/usr/bin/tool-link": "tool"}
 
 
 def _dpkg_name(path: str) -> str:
@@ -79,9 +86,9 @@ def _dpkg_name(path: str) -> str:
 def _fake_host(root):
     """Writes PACKAGE as installed, with dpkg's records of it, under `root`.
 
-    Returns (dpkg dir, filesystem root). dpkg also records one diversion, and the filesystem also
-    holds an alternatives link to the package's binary, a unit masked by a maintainer script and
-    one file in each tree nothing packages.
+    Returns (dpkg dir, filesystem root). dpkg also records one diversion of the package's README,
+    and the filesystem also holds an alternatives link to the package's binary, a unit masked by
+    a maintainer script and one file in each tree nothing packages.
     """
     dpkg, fs = root / "dpkg", root / "fs"
     (dpkg / "info").mkdir(parents=True)
@@ -95,19 +102,30 @@ def _fake_host(root):
             md5sums.append(f"{digest}  {_dpkg_name(path).lstrip('/')}")
         else:
             conffiles.append(f" {path} {digest}")
+    for link, target in PACKAGE_LINKS.items():
+        (fs / link.lstrip("/")).symlink_to(target)
     (dpkg / "info" / "tool.list").write_text(
-        "".join(f"{_dpkg_name(p)}\n" for p in PACKAGE)
+        "".join(f"{_dpkg_name(p)}\n" for p in [*PACKAGE, *PACKAGE_LINKS])
     )
     (dpkg / "info" / "tool.md5sums").write_text("\n".join(md5sums) + "\n")
+    # A third-party package, whose md5sums file names each path as ./usr/...
+    (fs / "usr/bin/vendor").write_text("vendor v1\n")
+    (dpkg / "info" / "vendor.list").write_text("/usr/bin/vendor\n")
+    vendor_digest = hashlib.md5(b"vendor v1\n").hexdigest()
+    (dpkg / "info" / "vendor.md5sums").write_text(
+        f"{vendor_digest}  ./usr/bin/vendor\n"
+    )
     (dpkg / "status").write_text(
         "Package: tool\nStatus: install ok installed\nConffiles:\n"
         + "\n".join(conffiles)
         + "\nDescription: a tool\n"
     )
-    # dpkg's diversions file: diverted path, its new name, the diverting package.
+    # dpkg's diversions file: diverted path, its new name, the diverting package. tool's README
+    # now sits at the new name.
     (dpkg / "diversions").write_text(
         "/usr/share/doc/tool/README\n/usr/share/doc/tool/README.distrib\ntool-extra\n"
     )
+    (fs / "usr/share/doc/tool/README").rename(fs / "usr/share/doc/tool/README.distrib")
     (fs / "etc" / "alternatives").mkdir(parents=True)
     (fs / "etc" / "alternatives" / "tool").symlink_to(fs / "usr" / "bin" / "tool")
     units = fs / "usr" / "lib" / "systemd" / "system"
@@ -163,6 +181,8 @@ def _run_check(
     args: tuple[str, ...] = (),
     baseline: bool = True,
     rewrite: dict[str, str] | None = None,
+    relink: dict[str, str] | None = None,
+    dpkg_ran: bool = True,
     pending: bool = False,
     stubs: dict[str, str] | None = None,
     ignore_sigpipe: bool = False,
@@ -174,8 +194,10 @@ def _run_check(
     database and filesystem root `_fake_host` writes. `lock_held` holds the lock from this
     process for the run, as a scan still running from the previous week would. The aide stub
     writes aide.db.new as `--update` does; `baseline` says whether aide.db exists beforehand.
-    `rewrite` replaces a file's content on the fake host before the run, and `pending` leaves
-    an aide.db.new from an earlier run. `stubs` adds fake binaries in front of PATH.
+    `rewrite` replaces a path on the fake host with a regular file holding the given content, and
+    `relink` with a symlink to the given target, before the run. `dpkg_ran` dates dpkg's status
+    file after the baseline, as any package run does, and `pending` leaves an aide.db.new from an
+    earlier run. `stubs` adds fake binaries in front of PATH.
     `ignore_sigpipe` starts the script with SIGPIPE ignored, as systemd starts a service.
     The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, pushed lines or
     None, logged lines, whether aide ran).
@@ -200,11 +222,21 @@ def _run_check(
         )
     dpkg, fs = _fake_host(tmp_path)
     for path, content in (rewrite or {}).items():
+        (fs / path.lstrip("/")).unlink(missing_ok=True)
         (fs / path.lstrip("/")).write_text(content)
+    for path, target in (relink or {}).items():
+        (fs / path.lstrip("/")).unlink(missing_ok=True)
+        (fs / path.lstrip("/")).symlink_to(target)
     aide_dir = tmp_path / "aide-db"
     aide_dir.mkdir()
     if baseline:
         (aide_dir / "aide.db").write_text("last week\n")
+    baseline_time = BASELINE_EPOCH
+    os.utime(
+        aide_dir / "aide.db" if baseline else aide_dir, (baseline_time, baseline_time)
+    )
+    status_time = baseline_time + (60 if dpkg_ran else -60)
+    os.utime(dpkg / "status", (status_time, status_time))
     if pending:
         (aide_dir / "aide.db.new").write_text("reviewed\n")
 
