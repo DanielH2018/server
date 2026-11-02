@@ -1382,13 +1382,17 @@ groups:
             pages". A failed run leaves homelab-updater.timer masked, so unmask and start it
             once the cause is fixed.
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
-      # SHADOW UNTIL #5658's ruling on unattended launches decides whether idle slots page
-      # anyone (#5672). No batch ran for 16.4h on the night of 2026-10-13 while 9 filed issues
-      # waited, and nothing said so. The server lander writes findings_issues from issue labels
-      # each pass (fanout_lib/operator_waits.py), and claude-cgroup-metrics.sh writes one
-      # claude_fanout_batch_pids_current series per live batch on either node, so no series
-      # at all means no batch runs anywhere. A free count with no series behind it reads
-      # absent, never 0, so a lander that stopped writing leaves this quiet rather than firing.
+      # NOTIFIES, NEVER PAGES (#5658, ruled 2026-11-02: no unattended launcher, because a batch
+      # launch spends tokens). It is a warning, so it reaches Discord alone, and
+      # alertmanager-secret.yaml.j2 gives it a 24h repeat_interval so an idle stretch notifies
+      # once. Over 14 days the shadow series held for 226 of 336 hours, which an hourly
+      # repeat would have turned into noise. No batch ran for 16.4h on the night of
+      # 2026-10-13 while 9 filed issues waited, and nothing said so (#5672). The server lander
+      # writes findings_issues from issue labels each pass (fanout_lib/operator_waits.py), and
+      # claude-cgroup-metrics.sh writes one claude_fanout_batch_pids_current series per live
+      # batch on either node, so no series at all means no batch runs anywhere. A free count
+      # with no series behind it reads absent, never 0, so a lander that stopped writing
+      # leaves this quiet rather than firing.
       - alert: FanoutSlotsIdleWithFreeWork
         expr: >-
           max(findings_issues{state="free", origin="daniel-box"}) > 0
@@ -1397,7 +1401,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: Free fan-out issues have waited an hour with no batch running.
           description: >-

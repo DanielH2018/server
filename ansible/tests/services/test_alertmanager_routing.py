@@ -421,15 +421,14 @@ def test_host_sets_names_every_host_check_rule():
         "TextfileCollectorError AideCheckFailed AideCheckNotReporting RkhunterScanFailed "
         "RkhunterScanNotReporting"
     ).split()
-    box_only = ("FanoutSlotsIdleWithFreeWork").split()
     assert set(host_sets(shadow=True)) == (
         {f"{alert}/{host}" for alert in every_host for host in hosts}
-        | {f"{alert}/daniel-box" for alert in box_only}
         | {"ComposeUpFailed/daniel-pi"}
     )
     assert set(host_sets(shadow=False)) >= {
         "DiskHealthFailed/daniel-box",
         "DiskHealthNotReporting/daniel-box",
+        "FanoutSlotsIdleWithFreeWork/daniel-box",
     } | {
         f"{alert}/{host}"
         for alert in ("HostReconcileFailed", "HostRebootOverdue", "HostCheckOverdue")

@@ -598,6 +598,7 @@
  "ansible/tests/services/test_alertmanager_routing_b6a_host_crons.py": 0.16,
  "ansible/tests/services/test_alertmanager_routing_b7_pods.py": 0.21,
  "ansible/tests/services/test_alertmanager_routing_b8_probes.py": 0.25,
+ "ansible/tests/services/test_alertmanager_routing_fanout_idle.py": 6.38,
  "ansible/tests/services/test_anisync_pin_matches_server.py": 0.0,
  "ansible/tests/services/test_artifacts_agent_mount.py": 0.08,
  "ansible/tests/services/test_artifacts_configmap.py": 0.0,
