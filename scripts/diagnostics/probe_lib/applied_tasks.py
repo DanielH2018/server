@@ -6,7 +6,7 @@ imports, through `block` and `always`, and turns each file-writing task into a `
 stating what a clean apply leaves. An import path renders with `role_path` and `playbook_dir`,
 so the shared `{{ role_path }}/../common/tasks/` files are walked too, with the import's
 `vars:` on top. A file-writing task's own `vars:` render its fields and content too; one that
-does not evaluate is left out, so a render reading it leaves a `STUB`. It reads five modules:
+does not evaluate renders as `STUB`, whatever outer value shares its name. It reads five modules:
 
 - `template`: the render of `templates/<src>`, with `dest`, `mode`, `owner` and `group`;
 - `copy`: the bytes of `files/<src>`, or the render of `content`, with the same fields;
@@ -296,15 +296,15 @@ class _Walk:
     def task_vars(self, task: dict, ns: dict, keep_unread: bool = False) -> dict:
         """A task's `vars:`, each evaluated against `ns`.
 
-        A value that does not evaluate is dropped, so the content render leaves a `STUB` and
-        the row reads ok-meta, as for a secret. `keep_unread` keeps it as written instead.
+        A value that does not evaluate becomes `STUB`, shadowing any outer value of the same
+        name as Ansible's task var does, so the row reads ok-meta, as for a secret.
+        `keep_unread` keeps it as written instead.
         """
         ns = {**ns, "inventory_hostname": self.host}
         out = {}
         for key, value in (task.get("vars") or {}).items():
             ok, evaluated = native(self.gate_env, value, ns, self.run_time)
-            if ok or keep_unread:
-                out[key] = evaluated if ok else value
+            out[key] = evaluated if ok else (value if keep_unread else STUB)
         return out
 
     def learn(self, task: dict, whens: list) -> None:

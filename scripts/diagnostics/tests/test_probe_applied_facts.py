@@ -104,7 +104,9 @@ def test_a_task_var_reading_a_register_leaves_a_stub_not_an_unchecked_row(tmp_pa
         "  ansible.builtin.template: {src: k.j2, dest: /etc/x/k}\n"
         "  vars: {x_token: '{{ x_out.stdout }}'}\n"
     )
-    wants, _ = _walk(tmp_path, main, {}, {"templates/k.j2": "token: {{ x_token }}\n"})
+    # An outer x_token must not render: the task var shadows it, as in Ansible.
+    files = {"templates/k.j2": "token: {{ x_token }}\n"}
+    wants, _ = _walk(tmp_path, main, {"x_token": "placeholder"}, files)
     assert [(w.path, w.sha256, w.unchecked) for w in wants] == [("/etc/x/k", None, False)]  # fmt: skip
     assert "STUB" in wants[0].why_no_content
 
