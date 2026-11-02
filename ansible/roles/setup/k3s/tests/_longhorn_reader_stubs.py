@@ -44,6 +44,43 @@ DRILL_CM_ARGS = [
     "json",
 ]
 
+# The trim CronJob read as the stubs match it, in the Longhorn namespace.
+TRIM_CRONJOB_ARGS = [
+    "get",
+    "cronjobs.batch",
+    "trim",
+    "--ignore-not-found",
+    "-o",
+    "json",
+]
+
+
+def fresh_drill_cm(**data: str) -> str:
+    """`STUB_DRILL_CM`: a stamp ConfigMap whose drill passed an hour before NOW, plus `data`."""
+    return json.dumps(
+        {
+            "kind": "ConfigMap",
+            "metadata": {"creationTimestamp": _rfc3339(NOW - 30 * 86400)},
+            "data": {"last-success": str(int(NOW - 3600)), **data},
+        }
+    )
+
+
+def trim_cronjob_body(schedule: str = "10 6 * * *", last_s: float = NOW - 3600) -> str:
+    """`STUB_TRIM_CRONJOB`: the trim CronJob, last scheduled at `last_s`."""
+    return json.dumps(
+        {
+            "kind": "CronJob",
+            "metadata": {
+                "name": "trim",
+                "creationTimestamp": _rfc3339(NOW - 30 * 86400),
+            },
+            "spec": {"schedule": schedule},
+            "status": {"lastScheduleTime": _rfc3339(last_s)},
+        }
+    )
+
+
 # Runs the reader with main(now=NOW) instead of `python longhorn_backup_health.py`, still as a
 # subprocess: import-time env parsing, the sys.path bootstrap, the stub-kubectl shell-out and
 # the up/down<TAB>msg contract are all the real ones. `-P` keeps the cwd off sys.path, so the
@@ -127,7 +164,7 @@ def _reader_env(tmp_path, **overrides) -> dict:
     """Every LONGHORN_* env var the reader requires, with permissive defaults a test can override.
 
     Every one of these is REQUIRED by the reader (`_require_env` et al — no hardcoded fallback),
-    so a subprocess test has to set all seventeen or the reader exits nonzero before doing
+    so a subprocess test has to set every one or the reader exits nonzero before doing
     anything else. Centralised here so each test only names the ONE
     var it cares about overriding. LONGHORN_BACKUP_KUBECTL is the exception: every subprocess
     test points it at its own stub, so it has no default here.
@@ -136,7 +173,10 @@ def _reader_env(tmp_path, **overrides) -> dict:
     env["PYTHONPATH"] = (
         f"{HOST_LIB_DIR}:{LONGHORN_LIB_ROOT}:{env.get('PYTHONPATH', '')}"
     )
-    env["LONGHORN_RESTORE_DRILL_STAMP_DIR"] = str(tmp_path / "no-such-drill-dir")
+    # A drill that passed an hour before NOW, and a trim CronJob that started a Job then. A test
+    # about either sets the knob to "" (absent) or to its own body.
+    env["STUB_DRILL_CM"] = fresh_drill_cm()
+    env["STUB_TRIM_CRONJOB"] = trim_cronjob_body()
     env.update(
         {
             "LONGHORN_BACKUP_NAMESPACE": "longhorn-system",
@@ -148,25 +188,22 @@ def _reader_env(tmp_path, **overrides) -> dict:
             "LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS": "3",
             "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS": "5",
             "LONGHORN_RESTORE_DRILL_NAMESPACE": DRILL_NAMESPACE,
-            # /bin/true — rc 0 with no output, which check 9 reads as "the window held nothing"
+            # /bin/true — rc 0 with no output, which check 9's B2 arm reads as "the window held nothing"
             # and is silent about. It must not be the real journalctl: the verdict would then
             # depend on whatever the machine running the suite happens to have logged. A test
             # about check 9 overrides this with /bin/false or a stub that prints lines.
             "LONGHORN_JOURNALCTL": "/bin/true",
             "LONGHORN_JOURNAL_TIMEOUT_S": "10",
             "LONGHORN_CRON_EVIDENCE_WINDOW_HOURS": "26",
-            # Check 10's crons, installed an hour before NOW: the reader stats these paths, sees them
+            # Check 10's B2 cron, installed an hour before NOW: the reader stats this path, sees it
             # inside the window, and grants the freshly-provisioned grace — so the empty
             # journal above stays silent and the green path stays green. A test about check 10
-            # overrides a path with one that does not exist, or backdates its mtime further.
-            "LONGHORN_TRIM_CRON_FILE": str(_touch_cron(tmp_path, "longhorn-trim")),
-            "LONGHORN_TRIM_CRON_EXPECTED": "True",
+            # overrides the path with one that does not exist, or backdates its mtime further.
             "LONGHORN_B2_DELETIONS_CRON_FILE": str(
                 _touch_cron(tmp_path, "b2-deletion-accounting")
             ),
             "LONGHORN_B2_DELETIONS_CRON_EXPECTED": "True",
-            # No fire stamps: neither cron has fired, so the install-time grace above decides.
-            "LONGHORN_TRIM_CRON_FIRED_STAMP": str(tmp_path / "fired" / "longhorn-trim"),
+            # No fire stamp: the cron has not fired, so the install-time grace above decides.
             "LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP": str(
                 tmp_path / "fired" / "b2-deletion-accounting"
             ),
@@ -230,8 +267,9 @@ def _green_path_stub_kubectl(tmp_path, snapshot_ts: str) -> Path:
     exact flags the reader passes: without `--tail=-1` kubectl returns 10 lines per pod, and a
     reader that dropped it would pass every test while reading nothing in production.
 
-    The restore drill's stamp ConfigMap answers `STUB_DRILL_CM`, empty by default, which is how
-    `--ignore-not-found` reports an absent ConfigMap. It answers only under `DRILL_NAMESPACE`.
+    The restore drill's stamp ConfigMap answers `STUB_DRILL_CM`, and only under
+    `DRILL_NAMESPACE`; empty is how `--ignore-not-found` reports an absent ConfigMap. The trim
+    CronJob answers `STUB_TRIM_CRONJOB` the same way. `_reader_env` sets both.
 
     Each dispatch arm carries a branch NAME, and two env knobs turn one named branch red without
     disturbing the others: `STUB_FAIL_BRANCH` makes it exit 124 (host_lib's timeout code)
@@ -256,8 +294,9 @@ if "-n" in args:
     args = args[:i] + args[i + 2:]
 
 if args == __DRILL_CM_ARGS__ and ns == "__DRILL_NAMESPACE__":
-    # Absent by default: `--ignore-not-found` prints nothing, the live state until H2.3c.
     branch, body = "drill-stamps", os.environ.get("STUB_DRILL_CM", "")
+elif args == __TRIM_CRONJOB_ARGS__:
+    branch, body = "trim-cronjob", os.environ.get("STUB_TRIM_CRONJOB", "")
 elif args == ["get", "backuptargets.longhorn.io", "-o", "json"]:
     branch, body = "targets", _targets_body()
 elif args == ["get", "recurringjobs.longhorn.io", "-o", "json"]:
@@ -295,6 +334,7 @@ sys.stdout.write(body)
 """.replace("__CLUSTER_OBJECTS__", _CLUSTER_OBJECTS_PY)
         .replace("__SNAPSHOT_TS__", snapshot_ts)
         .replace("__DRILL_CM_ARGS__", repr(DRILL_CM_ARGS))
+        .replace("__TRIM_CRONJOB_ARGS__", repr(TRIM_CRONJOB_ARGS))
         .replace("__DRILL_NAMESPACE__", DRILL_NAMESPACE)
         .replace(
             "__BACKUP_LIST__",
@@ -312,18 +352,10 @@ sys.stdout.write(body)
 def _run_reader_against(stub, tmp_path, **env_overrides):
     """Run the reader against `stub` on an otherwise-green fixture, returning the finished proc.
 
-    The reader runs with main(now=NOW), so the drill stamp written here and the snapshot stamp
-    the caller baked into `stub` are both judged against NOW.
+    The reader runs with main(now=NOW), so the drill stamp `_reader_env` sets and the snapshot
+    stamp the caller baked into `stub` are both judged against NOW.
     """
-    drill_dir = tmp_path / "drill"
-    drill_dir.mkdir(exist_ok=True)
-    (drill_dir / "last-success").write_text(str(int(NOW - 3600)))
-    env = _reader_env(
-        tmp_path,
-        LONGHORN_BACKUP_KUBECTL=str(stub),
-        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
-        **env_overrides,
-    )
+    env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL=str(stub), **env_overrides)
     return subprocess.run(
         reader_argv(now=NOW),
         capture_output=True,
@@ -343,6 +375,7 @@ def _grace_pair_stub_kubectl(tmp_path, created_ts: str, old_backup_ts: str) -> P
     stub = tmp_path / "stub-kubectl-grace"
     backup_list = _backup_list_body(("pvc-old", old_backup_ts, "daily-backup"))
     script = f"""#!/usr/bin/env python3
+import os
 import sys
 __CLUSTER_OBJECTS__
 
@@ -360,7 +393,9 @@ def emit(text, rc=0):
 
 
 if args == {DRILL_CM_ARGS!r} and ns == {DRILL_NAMESPACE!r}:
-    emit("")
+    emit(os.environ.get("STUB_DRILL_CM", ""))
+elif args == {TRIM_CRONJOB_ARGS!r}:
+    emit(os.environ.get("STUB_TRIM_CRONJOB", ""))
 elif args == ["get", "backuptargets.longhorn.io", "-o", "json"]:
     emit(_targets_body())
 elif args == ["get", "recurringjobs.longhorn.io", "-o", "json"]:

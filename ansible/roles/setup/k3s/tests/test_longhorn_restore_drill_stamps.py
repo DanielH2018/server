@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
-"""The restore drill's two stores: the ConfigMap arm, the host-directory arm, and which one a run reads.
+"""The restore drill's stamp ConfigMap, as checks 7 and 8, the upgrade gate and the state page read it.
 
-Checks 7 and 8, the Longhorn upgrade gate and the docs state page all pick their store through
-`select_stamps`. The ConfigMap is read while it holds `last-success`; otherwise the host directory
-is, which is the live state until the drill writes the ConfigMap (H2.3c).
+All four read through `from_configmap`. An absent ConfigMap, or one with no `last-success`, is a
+drill that has never passed (H2.3f dropped the host-directory fallback).
 
-The last four tests run the backup-health reader as a subprocess against the shared stub kubectl,
-whose ConfigMap branch answers `STUB_DRILL_CM`.
+The tests after the divider run the backup-health reader as a subprocess against the shared stub
+kubectl, whose ConfigMap branch answers `STUB_DRILL_CM`.
 
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_stamps.py
 """
@@ -36,21 +35,7 @@ def _cm(data: dict[str, str]) -> dict:
     }
 
 
-@pytest.fixture
-def stamp_dir(tmp_path):
-    """A host directory as the drill leaves it after a pass over two candidates."""
-    (tmp_path / "seen").mkdir()
-    (tmp_path / "success").mkdir()
-    (tmp_path / "last-success").write_text("1700000000\n")
-    (tmp_path / "candidates").write_text("pvc-a\npvc-b\n")
-    (tmp_path / "seen" / "pvc-a").touch()
-    (tmp_path / "success" / "pvc-a").write_text("1700000000\n")
-    (tmp_path / "excluded_oversize").write_text("big\t5368709120\n")
-    (tmp_path / "excluded_nopvc").write_text("orphan\n")
-    return tmp_path
-
-
-def test_the_configmap_arm_returns_the_directory_arms_shapes():
+def test_the_configmap_arm_reads_every_key_checks_7_and_8_use():
     doc = _cm(
         {
             "last-success": f"{int(NOW)}\n",
@@ -76,34 +61,15 @@ def test_the_configmap_arm_returns_the_directory_arms_shapes():
     )
 
 
-def test_the_directory_arm_has_no_seen_default(stamp_dir):
-    got = stamps.from_directory(str(stamp_dir))
-    assert got.last_success == "1700000000"
-    assert got.candidates == ["pvc-a", "pvc-b"]
-    assert list(got.seen) == ["pvc-a"]
-    assert got.seen_default is None
-    assert got.success == {"pvc-a": "1700000000"}
-    assert got.excluded_oversize == [("big", 5368709120)]
-    assert got.excluded_nopvc == ["orphan"]
-
-
-def test_a_configmap_holding_last_success_is_the_store(stamp_dir):
-    doc = _cm({"last-success": f"{int(NOW)}"})
-    got = stamps.select_stamps(doc, "homelab", str(stamp_dir))
-    assert got.last_success == f"{int(NOW)}" and got.candidates == []
-
-
-def test_an_absent_or_stampless_configmap_reads_the_directory(stamp_dir):
-    """An absent ConfigMap is the live state after H2.3a; an empty one, after H2.3b."""
+def test_an_absent_or_stampless_configmap_is_a_drill_that_never_passed():
+    """Neither is a pass: check 7 and the upgrade gate read `last_success` None as never run."""
     for doc in (None, _cm({}), _cm({"candidates": "pvc-z\n"})):
-        got = stamps.select_stamps(doc, "homelab", str(stamp_dir))
-        assert got.where == str(stamp_dir / "last-success")
-        assert got.candidates == ["pvc-a", "pvc-b"]
-
-
-def test_both_stores_absent_is_a_missing_stamp_not_a_pass(tmp_path):
-    got = stamps.select_stamps(None, "homelab", str(tmp_path / "nowhere"))
-    assert got.last_success is None and not got.last_success_unreadable
+        got = stamps.from_configmap(doc, "homelab")
+        assert got.last_success is None
+        assert (
+            got.where
+            == "configmap homelab/longhorn-restore-drill-stamps key last-success"
+        )
 
 
 def test_an_empty_answer_is_an_absent_configmap_and_garbage_is_a_failed_read():
@@ -129,13 +95,7 @@ def _drill_cm(data: dict[str, str]) -> str:
 
 
 def test_reader_is_up_on_a_fresh_configmap_with_every_candidate_seen(tmp_path):
-    """Control for the pairs below: the ConfigMap arm, read in place of the directory.
-
-    The directory lists a candidate with no seen marker, which the empty-seen guard pages on,
-    so only a reader that took its candidates and seen entries from the ConfigMap prints `up`.
-    """
-    (tmp_path / "drill").mkdir()
-    (tmp_path / "drill" / "candidates").write_text("pvc-a\n")
+    """Control for the pairs below: the ConfigMap arm with every candidate seen."""
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(READER_NOW - 60))
     cm = _drill_cm(
         {
@@ -150,8 +110,7 @@ def test_reader_is_up_on_a_fresh_configmap_with_every_candidate_seen(tmp_path):
     assert proc.stdout.startswith("up\t"), proc.stdout
 
 
-def test_reader_pages_on_a_stale_configmap_stamp_over_a_fresh_directory(tmp_path):
-    """The ConfigMap decides once it holds `last-success`; the directory stamp is fresh."""
+def test_reader_pages_on_a_stale_configmap_stamp(tmp_path):
     stub = _green_path_stub_kubectl(tmp_path, _rfc3339(READER_NOW - 60))
     cm = _drill_cm({"last-success": str(int(READER_NOW - 4 * 86400))})
     proc = _run_reader_against(stub, tmp_path, STUB_DRILL_CM=cm)
@@ -192,3 +151,22 @@ def test_reader_pages_on_an_unseen_candidate_past_the_configmaps_creation_time(
 
     assert proc.stdout.startswith("down\t"), proc.stdout
     assert "not restore-proven in 7d: pvc-b" in proc.stdout, proc.stdout
+
+
+def test_reader_pages_on_a_configmap_with_no_last_success_beside_a_fresh_directory(
+    tmp_path,
+):
+    """The directory the drill wrote before H2.3c is no evidence: no `last-success` is never run."""
+    drill_dir = tmp_path / "drill"
+    drill_dir.mkdir()
+    (drill_dir / "last-success").write_text(str(int(READER_NOW - 3600)))
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(READER_NOW - 60))
+    proc = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_DRILL_CM=_drill_cm({"candidates": ""}),
+        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
+    )
+
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "no restore drill has ever succeeded" in proc.stdout, proc.stdout

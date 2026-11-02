@@ -64,35 +64,27 @@ def _stamps(data: dict) -> dict:
     }
 
 
-@pytest.fixture
-def state_dir(tmp_path):
-    d = tmp_path / "longhorn-restore-drill"
-    d.mkdir()
-    (d / gates.DRILL_STAMP).write_text(f"{int(NOW - DAY)}\n")
-    return d
+FRESH = {"last-success": f"{int(NOW - DAY)}"}
 
 
 def _run(
-    state_dir,
     targets=ARMED,
     volumes=SETTLED_VOLUMES,
     engines=ONE_ENGINE,
     now=NOW,
-    stamps="",
+    stamps=None,
 ):
-    """`stamps=""` is an absent ConfigMap, the live state until the drill writes one."""
+    """`stamps` is the stamp ConfigMap's data, a drill that passed a day ago by default."""
     tools = fake_tools(
         {
-            CM_ARGS: stamps,
+            CM_ARGS: _stamps(FRESH if stamps is None else stamps),
             gates.TARGETS_ARGS: targets,
             gates.VOLUMES_ARGS: volumes,
             gates.ENGINE_IMAGES_ARGS: engines,
         }
     )
     out = io.StringIO()
-    code = gates.run_gates(
-        tools=tools, state_dir=str(state_dir), max_age_s=3 * DAY, now=now, out=out
-    )
+    code = gates.run_gates(tools=tools, max_age_s=3 * DAY, now=now, out=out)
     return code, out.getvalue()
 
 
@@ -129,42 +121,28 @@ def test_a_disarmed_target_the_runbook_does_not_need_is_clean():
 # ── gate 2: the restore drill ───────────────────────────────────────────────────────────────
 
 
-def test_a_fresh_drill_stamp_is_clean(state_dir):
-    assert gates.stale_restore_drill(state_dir, 3 * DAY, now=NOW) == []
+def test_a_fresh_drill_stamp_is_clean():
+    assert gates.stale_restore_drill(3 * DAY, NOW, _stamps(FRESH), "homelab") == []
 
 
-def test_a_stale_or_absent_drill_stamp_is_flagged(state_dir):
-    (state_dir / gates.DRILL_STAMP).write_text(f"{int(NOW - 4 * DAY)}\n")
-    found = gates.stale_restore_drill(state_dir, 3 * DAY, now=NOW)
-    assert found == ["last restore drill passed 4.0 days ago (window 3 days)"]
-    (state_dir / gates.DRILL_STAMP).unlink()
-    assert "has ever passed" in gates.stale_restore_drill(state_dir, 3 * DAY, NOW)[0]
-
-
-def test_an_absent_state_directory_is_not_a_fresh_drill(tmp_path):
-    found = gates.stale_restore_drill(tmp_path / "nowhere", 3 * DAY, now=NOW)
-    assert len(found) == 1 and "not a directory" in found[0]
-
-
-def test_a_fresh_configmap_stamp_is_clean_with_no_state_directory(tmp_path):
-    doc = _stamps({"last-success": f"{int(NOW - DAY)}"})
-    found = gates.stale_restore_drill(
-        tmp_path / "nowhere", 3 * DAY, NOW, doc, "homelab"
-    )
-    assert found == []
-
-
-def test_a_stale_configmap_stamp_is_flagged_over_a_fresh_directory(state_dir):
+def test_a_stale_drill_stamp_is_flagged():
     doc = _stamps({"last-success": f"{int(NOW - 4 * DAY)}"})
-    found = gates.stale_restore_drill(state_dir, 3 * DAY, NOW, doc, "homelab")
+    found = gates.stale_restore_drill(3 * DAY, NOW, doc, "homelab")
     assert found == ["last restore drill passed 4.0 days ago (window 3 days)"]
 
 
-def test_a_configmap_with_no_last_success_reads_the_directory(state_dir):
-    (state_dir / gates.DRILL_STAMP).write_text(f"{int(NOW - 4 * DAY)}\n")
-    doc = _stamps({"candidates": "pvc-a\n"})
-    found = gates.stale_restore_drill(state_dir, 3 * DAY, NOW, doc, "homelab")
-    assert found == ["last restore drill passed 4.0 days ago (window 3 days)"]
+def test_an_absent_or_stampless_configmap_is_a_drill_that_never_passed():
+    """No host directory stands in for the ConfigMap any more; neither reads as a pass."""
+    for doc in (None, _stamps({"candidates": "pvc-a\n"})):
+        found = gates.stale_restore_drill(3 * DAY, NOW, doc, "homelab")
+        assert len(found) == 1 and "has ever passed" in found[0], found
+
+
+def test_an_unparseable_stamp_is_flagged():
+    found = gates.stale_restore_drill(
+        3 * DAY, NOW, _stamps({"last-success": "garbage"}), "homelab"
+    )
+    assert len(found) == 1 and "cannot read an epoch" in found[0], found
 
 
 def test_the_window_is_the_k3s_roles_own_number():
@@ -223,8 +201,8 @@ def test_a_failed_read_never_passes_a_gate():
 # ── the runner: order, stop, exit code ──────────────────────────────────────────────────────
 
 
-def test_all_gates_passing_exits_zero(state_dir):
-    code, out = _run(state_dir)
+def test_all_gates_passing_exits_zero():
+    code, out = _run()
     assert code == 0, out
     assert out.count(" ok — ") == 4
 
@@ -247,41 +225,39 @@ def test_all_gates_passing_exits_zero(state_dir):
         ),
     ],
 )
-def test_the_exit_code_is_the_first_failing_gate(state_dir, number, docs):
-    code, out = _run(state_dir, **docs)
+def test_the_exit_code_is_the_first_failing_gate(number, docs):
+    code, out = _run(**docs)
     assert code == number
     assert f"gate {number} FAILED" in out
     assert f"gate {number + 1} " not in out
 
 
-def test_a_stale_drill_stops_at_gate_two_before_the_volume_read(state_dir):
-    code, out = _run(state_dir, now=NOW + 10 * DAY)
+def test_a_stale_drill_stops_at_gate_two_before_the_volume_read():
+    code, out = _run(now=NOW + 10 * DAY)
     assert code == 2
     assert "gate 3" not in out
 
 
-def test_the_runner_reads_the_configmap_in_the_drill_namespace(state_dir):
-    """A fresh directory and a stale ConfigMap stamp: the ConfigMap decides."""
-    stale = _stamps({"last-success": f"{int(NOW - 4 * DAY)}"})
-    code, out = _run(state_dir, stamps=stale)
+def test_the_runner_reads_the_configmap_in_the_drill_namespace():
+    code, out = _run(stamps={"last-success": f"{int(NOW - 4 * DAY)}"})
     assert code == 2, out
     assert gates.restore_drill_namespace() == "homelab"
 
 
-def test_a_failed_configmap_read_is_unavailable_not_a_fallback(state_dir):
+def test_a_failed_configmap_read_is_unavailable_not_a_fallback():
     tools = failing_read(fake_tools({gates.TARGETS_ARGS: ARMED}), "configmap")
     out = io.StringIO()
-    code = gates.run_gates(tools=tools, state_dir=str(state_dir), out=out)
+    code = gates.run_gates(tools=tools, out=out)
     assert code == gates.gate_runner.EX_UNAVAILABLE
     assert "gate 2" in out.getvalue() and "Forbidden" in out.getvalue()
 
 
-def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate(state_dir):
+def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate():
     tools = failing_read(
         fake_tools({gates.TARGETS_ARGS: ARMED}), "backuptargets.longhorn.io"
     )
     out = io.StringIO()
-    code = gates.run_gates(tools=tools, state_dir=str(state_dir), out=out)
+    code = gates.run_gates(tools=tools, out=out)
     assert code == gates.gate_runner.EX_UNAVAILABLE
     assert "returned no document" in out.getvalue()
 
