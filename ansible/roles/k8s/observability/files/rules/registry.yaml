@@ -180,19 +180,16 @@ groups:
             daniel-server's textfile collector, so nothing is watching whether the node's docker.io
             mirror endpoint serves pulls. Read the log of the node-exporter pod's
             `dockerhub-mirror-pull` container on daniel-server.
-      # M6 BATCH B6c, SHADOW UNTIL ITS CUTOVER-1B (#6926). registry-gc.sh writes the registry-gc
-      # textfile beside its Kuma push, and the "Registry GC" tile pages the same verdict. The
-      # NotReporting literals equal the DEADLINE_S the script renders, which equals the tile's
-      # interval: ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins all
-      # three. The tile notifies Discord only, so both rules are `warning`. NotReporting fires
-      # from its deploy until the first Sunday run writes the file, which pages nobody while it
-      # is shadow.
+      # M6 BATCH B6c (#6926). registry-gc.sh writes the registry-gc textfile, and these two rules
+      # replaced the "Registry GC" Kuma tile that Cutover-1a deleted. The NotReporting literals
+      # equal the DEADLINE_S the script renders, which equals the deleted tile's interval:
+      # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins both. The
+      # tile notified Discord only, so both rules are `warning`.
       - alert: RegistryGcFailed
         expr: homelab_check_success{check="registry-gc",origin="daniel-box"} == 0
         labels:
           severity: warning
           service: registry
-          shadow: "true"
         annotations:
           summary: The weekly registry garbage collection did not complete.
           description: >-
@@ -212,7 +209,6 @@ groups:
         labels:
           severity: warning
           service: registry
-          shadow: "true"
         annotations:
           summary: The weekly registry garbage collection has stopped reporting.
           description: >-
