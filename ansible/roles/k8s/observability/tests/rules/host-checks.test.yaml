@@ -1093,7 +1093,6 @@ tests:
           - exp_labels:
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: Free fan-out issues have waited an hour with no batch running.
               description: >-

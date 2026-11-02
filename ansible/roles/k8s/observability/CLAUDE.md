@@ -165,9 +165,11 @@ prints the rule a new entry needs. `docs/host-packages.md` is the runbook for bo
 group also carries one `WiredLinkDown` warning per node whose host_vars set
 `k3s_node_static_link`, reading that link's carrier and operstate (#5124). The same test
 module holds that set to host_vars, so a node that pins a new link needs a rule edit too.
-It also carries `FanoutSlotsIdleWithFreeWork`, in shadow until #5658 is ruled: free issues
-for an hour with no fan-out batch live on either node, read from the server lander's
-`findings_issues` gauge and the per-batch cgroup series.
+It also carries `FanoutSlotsIdleWithFreeWork`, a warning that notifies Discord and never
+pages (#5658): free issues for an hour with no fan-out batch live on either node, read from
+the server lander's `findings_issues` gauge and the per-batch cgroup series. Its own route in
+`templates/alertmanager-secret.yaml.j2` repeats every 24h, so an idle stretch sends one
+message, and no other alert shares that route.
 
 **`HostCheckOverdue` is the host checks' catch-all deadman, never a replacement for a pair.**
 One rule per host compares each check's timestamp with the
