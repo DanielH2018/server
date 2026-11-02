@@ -13,7 +13,6 @@ from pathlib import Path
 
 from py_table import py_table
 
-from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
     FLUX_PATH,
@@ -57,13 +56,6 @@ def test_consumer_tags_cross_host_tokens_are_manual():
     assert consumer_tags("rkhunter_daniel_server_push_token") == ()
 
 
-def test_consumer_tags_registry_gc_token_is_manual():
-    # setup/k8s_host_files renders the GC cron's script since registry's D5 conversion, and a
-    # setup role has no deploy tag, so the unattended rotation must skip it rather than redeploy
-    # `registry`, which no longer renders the token, and leave the cron pushing the old value.
-    assert consumer_tags("registry_gc_push_token") == ()
-
-
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # Registry-driven guard: a new single-host `auto` push token must resolve a consumer_tag
     # (so the unattended weekly `rotate --commit --deploy` cron actually rotates it) or sit in
@@ -72,11 +64,12 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # OVERDUE page — exactly how arr_autoblock_push_token slipped in when autofix-bridge landed.
     # Derived from the module's own CROSS_HOST_PUSH_TOKENS (single source): each entry
     # documents its pusher/label host pair beside the name.
-    known_manual = CROSS_HOST_PUSH_TOKENS | PENDING_RETIREMENT
     reg = load_registry()
     auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
     assert auto  # sanity: the registry has auto-tier tokens
-    unrotatable = [n for n in auto if not consumer_tags(n) and n not in known_manual]
+    unrotatable = [
+        n for n in auto if not consumer_tags(n) and n not in CROSS_HOST_PUSH_TOKENS
+    ]
     assert not unrotatable, (
         "auto-tier tokens with no consumer_tags and not known-manual — they silently drop "
         "out of unattended rotation: %s" % unrotatable

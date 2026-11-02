@@ -20,7 +20,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
-from secrets_mgmt.pending_retirement import PENDING_RETIREMENT
 from secrets_mgmt.rotation_tools import REPO
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST, host_vars_file
@@ -38,11 +37,6 @@ from deployer_lib.deploy_cross_role import k8s_lookup_map
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        # daniel-box cron (setup/k8s_host_files, since registry's D5 conversion) + k8s/uptime-kuma
-        # static tile. k8s_host_files has no `containers_list` entry, so `deploy.yml --tags
-        # registry` matches nothing; the script is applied by `initial_setup.yml --tags
-        # k8s_host_files`. Until that PR the k8s/registry role rendered it.
-        "registry_gc_push_token",
         # The weekly AIDE check, one token per host: a setup/initial_setup cron on each of the
         # three hosts against tiles deployed from daniel-box. initial_setup has no deploy tag, so
         # no redeploy moves the cron's half, and daniel-server's and daniel-pi's halves cross
@@ -103,11 +97,8 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     different HOSTS and no redeploy can cover them. Those still return empty; a multi-tag
     return there would assert a repair that cannot happen.
     """
-    # Both of these precede the prefix rule below: every token they name also carries the
-    # `monitor_bridge_` prefix, so the prefix rule would otherwise claim them first.
-    if name in CROSS_HOST_PUSH_TOKENS or name in PENDING_RETIREMENT:
-        # PENDING_RETIREMENT: the check is deleted and nothing renders the token, so a rotation
-        # has no role to redeploy .
+    # This precedes the prefix rule below, so a token named in the set is never claimed by it.
+    if name in CROSS_HOST_PUSH_TOKENS:
         return ()
     elif name == "kuma_status_page_sync_push_token":
         # The one token whose pusher and tile are the SAME role: the status-page-sync CronJob
