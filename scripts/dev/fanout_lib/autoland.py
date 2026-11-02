@@ -58,7 +58,7 @@ from pathlib import Path
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from fanout_lib import operator_waits
+from fanout_lib import operator_waits, own_surface
 from fanout_lib.launch_gates import LOCAL_HOST, live_batch_cap
 from fanout_lib.review.api import LAND_SH, login
 from fanout_lib.target import SERVER, SERVER_CHECKOUT
@@ -82,25 +82,6 @@ GH_TIMEOUT_S = 60.0
 STATE_DIR = Path.home() / ".local" / "state" / "fanout-server-lander"
 # gh returns at most this many changed files, so a PR at the cap may hide a path past it.
 FILE_CAP = 100
-# Paths whose change widens what this command or the lander may do, or that the landing path
-# imports. A PR touching one is left for a person, the way `homelab-claude-land@`'s approval
-# list leaves it. `scripts/deploy_tools/` is the whole tree because land.sh imports await_ci.py and the rest
-# of it, not only land*. The deployer's `files/` decide the CI gate, `ansible/vars/` holds the
-# secrets and the generated cluster file, and `.claude/` holds the repo's hooks and settings.
-OWN_PATHS = (
-    "scripts/deploy_tools/",
-    "scripts/lib/",
-    "scripts/dev/fanout",
-    ".github/",
-    ".claude/",
-    "hosts/components/claude-code/",
-    "ansible/roles/setup/gitops_deploy/",
-    "ansible/vars/",
-    "pyproject.toml",
-    "uv.lock",
-    "uv.toml",
-    ".python-version",
-)
 # A heading that names a step only a person can do, and the text that holds a PR back.
 OPERATOR_HEADING = re.compile(r"(?i)before[- ]merge|operator")
 HOLD_TEXT = re.compile(r"(?i)needs input|do not merge")
@@ -156,6 +137,9 @@ class Boundaries:
         local_records: daniel-box's own recent review records, for the waiting gauge.
         owed: the deployer's `owed.jsonl`, for the waiting gauge.
         clock: the epoch second now.
+        testpaths_only: whether the PR at this head changes `pyproject.toml` only in `testpaths`.
+        role_docs_only: whether the PR's files under `DOC_ONLY_ROLES` are all `CLAUDE.md` files
+            it adds or modifies, with no rename or removal.
     """
 
     tools: Tools = field(default_factory=Tools)
@@ -176,6 +160,16 @@ class Boundaries:
     owed: Callable[[], str] = lambda: operator_waits.read_owed()
     open_issues: Callable[[], list[dict]] = lambda: read_open_issues()
     clock: Callable[[], float] = time.time
+    testpaths_only: Callable[[str], bool] = lambda head: (
+        own_surface.live_testpaths_only(head)
+    )
+    role_docs_only: Callable[[int], bool] = lambda pr: own_surface.live_role_docs_only(
+        pr
+    )
+
+    def judge(self, rec: dict, pr: dict) -> str:
+        """`problems` with this boundary's two diff reads."""
+        return problems(rec, pr, self.testpaths_only, self.role_docs_only)
 
 
 class CheckoutFailed(Exception):
@@ -239,10 +233,21 @@ def operator_step_in(body: str) -> str:
     return f"the body says '{hold.group(0)}'" if hold else ""
 
 
-def problems(rec: dict, pr: dict) -> str:
+def never(_key: str | int) -> bool:
+    return False
+
+
+def problems(
+    rec: dict,
+    pr: dict,
+    pyproject_ok: Callable[[str], bool] = never,
+    docs_ok: Callable[[int], bool] = never,
+) -> str:
     """Why this PR may not land unattended, or "" when it may. First reason wins.
 
-    `rec` is the batch's review record, `pr` the PR as GitHub reads it now.
+    `rec` is the batch's review record, `pr` the PR as GitHub reads it now. `pyproject_ok`
+    answers `Boundaries.testpaths_only` and `docs_ok` answers `Boundaries.role_docs_only`. The
+    defaults hold every PR that touches `pyproject.toml` or a role's `CLAUDE.md`.
     """
     if rec.get("outcome") != "pr":
         return f"the batch ended '{rec.get('outcome')}', not 'pr'"
@@ -269,7 +274,13 @@ def problems(rec: dict, pr: dict) -> str:
     files = [str(f.get("path") or "") for f in pr.get("files") or []]
     if len(files) >= FILE_CAP:
         return f"it changes {len(files)} files, at the listing cap"
-    own = [f for f in files if f.startswith(OWN_PATHS)]
+    own = [
+        f
+        for f in files
+        if own_surface.holds(
+            f, lambda: pyproject_ok(head), lambda: docs_ok(int(pr.get("number") or 0))
+        )
+    ]
     if own:
         return f"it changes the lander's own surface: {', '.join(own[:3])}"
     return operator_step_in(str(pr.get("body") or ""))
@@ -416,7 +427,7 @@ def run(
             candidates[number],
             f"#{number} batch {candidates[number].get('batch')}",
         )
-        why = problems(rec, prs[number])
+        why = b.judge(rec, prs[number])
         if why:
             out(f"{label}: ineligible, {why}")
         elif log := handed_off(log_dir, number):
@@ -455,15 +466,15 @@ def write_waits(
             n: reason
             for host, recs in (("box", box), ("server", server))
             for n, r in recs.items()
-            if (reason := operator_waits.counted_reason(host, problems(r, prs[n])))
+            if (reason := operator_waits.counted_reason(host, b.judge(r, prs[n])))
         }
         try:
             operator_waits.record_stamps(stamps, held, b.clock())
         except OSError as exc:
             out(f"operator wait stamps not written: {tail(str(exc))}")
     starts = operator_waits.waits(
-        [(problems(r, prs[n]), r) for n, r in server.items()],
-        [(problems(r, prs[n]), r) for n, r in box.items()],
+        [(b.judge(r, prs[n]), r) for n, r in server.items()],
+        [(b.judge(r, prs[n]), r) for n, r in box.items()],
         operator_waits.owed_manual_planes(b.owed()),
     )
     body = operator_waits.render(starts, b.clock())

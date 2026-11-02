@@ -14,7 +14,7 @@ import pytest
 from _fanout_fakes import fake_tools
 from _review_fakes import PR, _finding, _pipeline, _report
 
-from fanout_lib import autoland
+from fanout_lib import autoland, own_surface
 from fanout_lib.autoland import Boundaries
 
 HEAD = "a" * 40
@@ -194,6 +194,124 @@ def test_a_pr_touching_the_landing_paths_own_surface_is_refused_with_that_reason
     _, text = run.run(tmp_path)
     assert run.started == []
     assert "ineligible, it changes the lander's own surface" in text
+
+
+GITOPS = "ansible/roles/setup/gitops_deploy"
+PYPROJECT = """\
+[project]
+dependencies = ["pyyaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["scripts"]
+addopts = "-n auto"
+"""
+
+
+def _served(old, new):
+    """The reader a run uses for the merge base's `pyproject.toml` and the head's."""
+    return lambda head: (old, new)
+
+
+@pytest.mark.parametrize(
+    ("new", "lands"),
+    [
+        (PYPROJECT.replace('["scripts"]', '["scripts", "hosts/new/tests"]'), True),
+        (PYPROJECT.replace('"pyyaml"', '"pyyaml", "requests"'), False),
+        (PYPROJECT.replace("-n auto", "-n 4"), False),
+        (PYPROJECT + "\n[tool.uv]\npackage = false\n", False),
+        (PYPROJECT.replace('["scripts"]', "[1]"), False),
+    ],
+    ids=[
+        "testpaths",
+        "dependency",
+        "other-key-in-table",
+        "other-table",
+        "bad-testpaths",
+    ],
+)
+def test_pyproject_is_judged_by_what_changed_in_it(new, lands):
+    assert own_surface.testpaths_only(HEAD, _served(PYPROJECT, new)) is lands
+
+
+def test_a_pyproject_that_cannot_be_read_or_parsed_holds():
+    assert own_surface.testpaths_only(HEAD, _served(PYPROJECT, "not [ toml")) is False
+
+    def unreachable(head):
+        raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 502")
+
+    assert own_surface.testpaths_only(HEAD, unreachable) is False
+
+
+@pytest.mark.parametrize(
+    ("files", "lands"),
+    [
+        (["pyproject.toml", "scripts/dev/tests/test_x.py"], True),
+        (["pyproject.toml", "uv.lock"], False),
+        ([f"{GITOPS}/CLAUDE.md"], True),
+        ([f"{GITOPS}/CLAUDE.md", f"{GITOPS}/tasks/main.yml"], False),
+        ([f"{GITOPS}/files/deployer_lib/deploy_git.py"], False),
+        ([".claude/skills/deploy/SKILL.md"], False),
+        ([".claude/hooks/guard.py"], False),
+    ],
+)
+def test_the_two_narrowed_holds_pass_only_their_own_diff(tmp_path, files, lands):
+    run = _Landings([_record()], [_pr(files=[{"path": f} for f in files])])
+    run.boundaries.testpaths_only = lambda head: True
+    run.boundaries.role_docs_only = lambda pr: True
+    run.run(tmp_path)
+    assert bool(run.started) is lands
+
+
+def _entry(filename, status="modified", previous=None):
+    return {"filename": filename, "status": status, "previous_filename": previous}
+
+
+@pytest.mark.parametrize(
+    ("entries", "lands"),
+    [
+        ([_entry(f"{GITOPS}/CLAUDE.md"), _entry("README.md")], True),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "added")], True),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "renamed", f"{GITOPS}/tasks/x.yml")], False),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "renamed", f"{GITOPS}/CLAUDE.old.md")], False),
+        ([_entry(f"{GITOPS}/CLAUDE.md", "removed")], False),
+        ([_entry("docs/CLAUDE.md", "renamed", f"{GITOPS}/files/x.py")], False),
+    ],
+    ids=[
+        "edit",
+        "add",
+        "task-renamed-onto-doc",
+        "doc-renamed",
+        "doc-removed",
+        "moved-out",
+    ],
+)
+def test_a_role_doc_passes_only_as_a_plain_add_or_edit(entries, lands):
+    assert own_surface.role_docs_only(5001, lambda pr: entries) is lands
+
+
+def test_a_role_doc_pass_is_refused_when_the_file_status_cannot_be_read():
+    def unreachable(pr):
+        raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 502")
+
+    assert own_surface.role_docs_only(5001, unreachable) is False
+
+
+def test_a_role_doc_the_diff_read_refuses_holds_with_that_reason(tmp_path):
+    run = _Landings([_record()], [_pr(files=[{"path": f"{GITOPS}/CLAUDE.md"}])])
+    run.boundaries.role_docs_only = lambda pr: False
+    _, text = run.run(tmp_path)
+    assert run.started == []
+    assert (
+        f"ineligible, it changes the lander's own surface: {GITOPS}/CLAUDE.md" in text
+    )
+
+
+def test_a_pyproject_change_that_is_not_testpaths_only_holds_with_that_reason(tmp_path):
+    run = _Landings([_record()], [_pr(files=[{"path": "pyproject.toml"}])])
+    run.boundaries.testpaths_only = lambda head: False
+    _, text = run.run(tmp_path)
+    assert run.started == []
+    assert "ineligible, it changes the lander's own surface: pyproject.toml" in text
 
 
 def test_a_failed_handoff_is_logged_with_its_reason_and_starts_nothing_else(tmp_path):
