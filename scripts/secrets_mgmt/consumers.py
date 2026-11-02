@@ -38,7 +38,6 @@ from deployer_lib.deploy_cross_role import k8s_lookup_map
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        "daniel_box_disk_push_token",  # daniel-box cron (k3s role) + daniel-server label
         # daniel-box cron (setup/k8s_host_files, since registry's D5 conversion) + k8s/uptime-kuma
         # static tile. k8s_host_files has no `containers_list` entry, so `deploy.yml --tags
         # registry` matches nothing; the script is applied by `initial_setup.yml --tags
