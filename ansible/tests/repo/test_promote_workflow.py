@@ -87,7 +87,7 @@ RENDER_REF = "${{ inputs.sha || github.event.workflow_run.head_sha || github.sha
 # The ancestry step must read the dispatched commit, never the workflow's own `github.sha`.
 DISPATCHED_SHA = "inputs.sha"
 PROMOTE_REF = "${{ github.sha }}"
-COSIGN_RELEASE = "v3.1.3"
+COSIGN_RELEASE = "v3.1.4"
 HEAD_SHA = "workflow_run.head_sha"
 # `tag` moves `prod` only when `decide` said so.
 VERDICT_GATE = "needs.promote.outputs.verdict == 'promote'"
