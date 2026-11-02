@@ -413,9 +413,16 @@ else
         # interpreter host_python_version can name. pyproject.toml forces its libyaml
         # extension, so that build needs a compiler and libyaml's headers; the host package
         # that depends on libyaml-dev is not installed yet. A kit's uv-cache holds the build.
-        apt-get update || die "apt-get update failed"
-        apt-get install -y --no-install-recommends gcc libc6-dev libyaml-dev ||
-            die "apt-get install of PyYAML's build dependencies failed"
+        build_deps="gcc libc6-dev libyaml-dev"
+        # shellcheck disable=SC2086
+        installed=$(dpkg-query -W -f='${Status}\n' $build_deps 2>/dev/null |
+            grep -c 'install ok installed' || true)
+        if [ "$installed" != 3 ]; then
+            # shellcheck disable=SC2086
+            apt-get install -y --no-install-recommends $build_deps ||
+                { apt-get update && apt-get install -y --no-install-recommends $build_deps; } ||
+                die "apt-get install of PyYAML's build dependencies failed"
+        fi
         # shellcheck disable=SC2086
         (cd "$work/tree" && $uv_run python hosts/lib/bootstrap_anchor.py "$clone" "$sha" \
             --repo "$GITHUB_REPO") || die "the clone's HEAD $sha is not a green first-parent commit of master"
