@@ -354,7 +354,11 @@ server batch runs as `ubuntu` on `worktree-fanout-<batch>`.
   the head the review read, with no unchecked box under an operator or before-merge heading and
   no `needs input` or `Do not merge` text. A `--no-review` batch writes no record, so it never
   lands. Neither does a PR touching the landing path's code (`scripts/deploy_tools/`, `scripts/lib/`), the
-  fan-out tooling, the deployer, `ansible/vars/`, `.github/`, `.claude/` or this role. Each landing runs from its own `origin/master` worktree under
+  fan-out tooling, the deployer, `ansible/vars/`, `.github/`, `.claude/` or this component. Two
+  narrowings apply (#5659). A PR passes when its only `pyproject.toml` change is to
+  `[tool.pytest.ini_options].testpaths`, judged by parsing the file at the merge base and at the
+  head, and a read or parse failure holds it. A PR also passes when its only change under the
+  deployer's role is a `CLAUDE.md`. Each landing runs from its own `origin/master` worktree under
   `~/.local/state/fanout-server-lander/checkouts/`, never from the primary checkout.
 - **Primary:** the unit's working directory and `--primary` are `claude_code_operator_checkout`,
   which `ubuntu` owns. They are never `claude_code_rc_workdir`, the agent's clone on daniel-box:

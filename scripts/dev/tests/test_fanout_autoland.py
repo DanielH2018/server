@@ -196,6 +196,79 @@ def test_a_pr_touching_the_landing_paths_own_surface_is_refused_with_that_reason
     assert "ineligible, it changes the lander's own surface" in text
 
 
+GITOPS = "ansible/roles/setup/gitops_deploy"
+PYPROJECT = """\
+[project]
+dependencies = ["pyyaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["scripts"]
+addopts = "-n auto"
+"""
+
+
+def _served(old, new):
+    """The reader a run uses for the merge base's `pyproject.toml` and the head's."""
+    return lambda head: (old, new)
+
+
+@pytest.mark.parametrize(
+    ("new", "lands"),
+    [
+        (PYPROJECT.replace('["scripts"]', '["scripts", "hosts/new/tests"]'), True),
+        (PYPROJECT.replace('"pyyaml"', '"pyyaml", "requests"'), False),
+        (PYPROJECT.replace("-n auto", "-n 4"), False),
+        (PYPROJECT + "\n[tool.uv]\npackage = false\n", False),
+        (PYPROJECT.replace('["scripts"]', "[1]"), False),
+    ],
+    ids=[
+        "testpaths",
+        "dependency",
+        "other-key-in-table",
+        "other-table",
+        "bad-testpaths",
+    ],
+)
+def test_pyproject_is_judged_by_what_changed_in_it(new, lands):
+    assert autoland.testpaths_only(HEAD, _served(PYPROJECT, new)) is lands
+
+
+def test_a_pyproject_that_cannot_be_read_or_parsed_holds():
+    assert autoland.testpaths_only(HEAD, _served(PYPROJECT, "not [ toml")) is False
+
+    def unreachable(head):
+        raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 502")
+
+    assert autoland.testpaths_only(HEAD, unreachable) is False
+
+
+@pytest.mark.parametrize(
+    ("files", "lands"),
+    [
+        (["pyproject.toml", "scripts/dev/tests/test_x.py"], True),
+        (["pyproject.toml", "uv.lock"], False),
+        ([f"{GITOPS}/CLAUDE.md"], True),
+        ([f"{GITOPS}/CLAUDE.md", f"{GITOPS}/tasks/main.yml"], False),
+        ([f"{GITOPS}/files/deployer_lib/deploy_git.py"], False),
+        ([".claude/skills/deploy/SKILL.md"], False),
+        ([".claude/hooks/guard.py"], False),
+    ],
+)
+def test_the_two_narrowed_holds_pass_only_their_own_diff(tmp_path, files, lands):
+    run = _Landings([_record()], [_pr(files=[{"path": f} for f in files])])
+    run.boundaries.testpaths_only = lambda head: True
+    run.run(tmp_path)
+    assert bool(run.started) is lands
+
+
+def test_a_pyproject_change_that_is_not_testpaths_only_holds_with_that_reason(tmp_path):
+    run = _Landings([_record()], [_pr(files=[{"path": "pyproject.toml"}])])
+    run.boundaries.testpaths_only = lambda head: False
+    _, text = run.run(tmp_path)
+    assert run.started == []
+    assert "ineligible, it changes the lander's own surface: pyproject.toml" in text
+
+
 def test_a_failed_handoff_is_logged_with_its_reason_and_starts_nothing_else(tmp_path):
     run = _Landings([_record()], [_pr()], start_rc=1)
     _, text = run.run(tmp_path)
