@@ -37,7 +37,12 @@ from lib.ansible_inventory import host_names
 from lib.cli_help import ArgumentParser
 from lib.deployer_park import ManualPlaneRemedy, manual_plane_remedies
 from lib.git import git
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, PRIMARY_CHECKOUT, REPO
+from lib.repo_paths import (
+    GITOPS_DEPLOY_FILES,
+    HOST_LIB_FILES,
+    REPO,
+    primary_checkout_of,
+)
 
 # The deployer's own modules, which `deploy_state` reaches `host_lib` from for its writes.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -103,7 +108,7 @@ def run_owed(
     dry_run: bool = False,
     run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     checkout_check: Callable[[str], str | None] = _checkout_is_origin_master,
-    repo: str = str(PRIMARY_CHECKOUT),
+    repo: str | None = None,
     invoking_repo: str = str(REPO),
     now: float | None = None,
     lock_path: str | None = None,
@@ -124,6 +129,7 @@ def run_owed(
       run: what executes each command; `subprocess.run` outside a test.
       checkout_check: returns why `repo` is not at origin/master, or None.
       repo: the checkout the commands run from, so its relative playbook paths resolve.
+        None means the primary checkout `invoking_repo` hangs off, or `invoking_repo` itself.
       invoking_repo: the tree this script's code runs from. Its `manual_plane_remedies`,
         `PLAYBOOKS` and inventory decide which commands run, so it must be at origin/master too.
       now: the clock the remedies read, for a test.
@@ -163,6 +169,8 @@ def run_owed(
             print(cmd)
         print(f"then: clear {key} for {','.join(sorted(remedy.tags))}")
         return 0
+    if repo is None:
+        repo = str(primary_checkout_of(_Path(invoking_repo)))
     # The primary checkout runs the commands; the invoking tree's code chose them (#6957).
     trees = [(repo, "the primary checkout", f"run git -C {repo} pull --ff-only")]
     if _Path(invoking_repo).resolve() != _Path(repo).resolve():
