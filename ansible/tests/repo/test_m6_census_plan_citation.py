@@ -85,3 +85,51 @@ def test_no_file_that_only_cites_the_plan_fails_the_census_row():
         "these files mention `kuma` only by citing the M6 plan, yet the census row as the "
         f"plan states it would fail on them: {uncovered}"
     )
+
+
+_TICKED = re.compile(r"`([^`]+)`")
+
+
+def _strip_bullet() -> str:
+    """Exit criterion 3's bullet that says what the census row strips before it matches."""
+    bullets = re.split(r"^    - ", _exit_criterion_3(), flags=re.M)
+    found = [b for b in bullets if re.search(r"\bstrips\b", b) and PLAN_NAME in b]
+    assert len(found) == 1, (
+        f"want one exit-criterion-3 bullet stating the strip, got {found}"
+    )
+    return found[0]
+
+
+def _stated_strip(bullet: str) -> re.Pattern[str]:
+    # The bullet backticks other paths too; only an `m6-` token names a citation.
+    # One ending in `/` or `-` is a path prefix, any other is literal.
+    tokens = [t for t in _TICKED.findall(bullet) if "m6-" in t]
+    alts = [re.escape(t) + (r"[\w./-]*" if t[-1] in "/-" else "") for t in tokens]
+    return re.compile("|".join(alts), re.I)
+
+
+def test_the_stated_strip_rule_keeps_a_bare_kuma_and_covers_every_citation():
+    bullet = _strip_bullet()
+    flat = " ".join(bullet.split())
+    assert not re.search(r"\b(not|never|no longer) strip", flat), flat
+    assert "bare `kuma` beside a citation" in flat and "fails" in flat, (
+        "the strip bullet must name the red fixture that keeps a bare `kuma` failing"
+    )
+    strip = _stated_strip(bullet)
+    assert "kuma" not in strip.sub("", "# see m6-retire-kuma.md, C-6").lower()
+    assert (
+        "kuma"
+        not in strip.sub(
+            "", "# docs/target-architecture/monitoring/m6-retire-kuma.md#design"
+        ).lower()
+    )
+    assert "kuma" in strip.sub("", "kuma_url = x  # m6-retire-kuma.md").lower()
+    # The plan's own tokens must clear every citation form the tree holds, not just the test's.
+    stated = {
+        rel
+        for rel in _citing_files()
+        if "kuma" not in strip.sub("", (REPO / rel).read_text(errors="replace")).lower()
+    }
+    expected = {rel for rel in _citing_files() if _citation_only(rel)}
+    assert "hosts/components/pi-heartbeats/templates/pi-sd-health.sh.j2" in stated
+    assert stated == expected, f"the stated strip leaves `kuma` in {expected - stated}"
