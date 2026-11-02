@@ -10,13 +10,12 @@ without a cycle.
 # retired key cannot come back by revert. Each name has no consumer until then:
 # `consumers.consumer_tags` returns nothing for it, `cluster_vars_check.names_problems` does not
 # demand a cluster render for it, and `cluster_vars.write` keeps it in the cluster file (#5960).
-# M5's PR 5 retired its three tokens on 2026-10-29, and M6's Phase A and B token PRs retired
-# theirs a week after each batch's cutover. The last retirement deletes this set.
+# M5's PR 5 retired its three tokens on 2026-10-29, M6's Phase A and B token PRs retired theirs
+# a week after each batch's cutover, and M3's PR 6 retired `daniel_box_disk_push_token` on
+# 2026-11-02. B6c's token PR, the last retirement the plans schedule, deletes this module with
+# its readers and tests.
 PENDING_RETIREMENT: frozenset[str] = frozenset(
     {
-        # M3's PR 5 deleted the `daniel-box Disk` tile and the script's push. Its PR 6 retires
-        # the key a week later and deletes this entry in the same commit.
-        "daniel_box_disk_push_token",
         # M6 batch B6c's Cutover-1a deleted the `Registry GC` tile, and no cluster render
         # references the token. Cutover-2 dropped registry-gc.sh's push, so no render of any kind
         # does. B6c's token PR retires the key a week after Cutover-1b and deletes this entry

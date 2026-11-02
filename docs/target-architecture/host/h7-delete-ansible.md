@@ -1,6 +1,6 @@
 # H7 — Remaining roles, then delete Ansible
 
-Status: PLANNED
+Status: IN PROGRESS. Partial landings through 2026-11-01, named by PR: [#6081](https://github.com/DanielH2018/server/pull/6081), [#6087](https://github.com/DanielH2018/server/pull/6087), [#6084](https://github.com/DanielH2018/server/pull/6084), [#6138](https://github.com/DanielH2018/server/pull/6138), [#6169](https://github.com/DanielH2018/server/pull/6169), [#6190](https://github.com/DanielH2018/server/pull/6190), [#6201](https://github.com/DanielH2018/server/pull/6201), [#6224](https://github.com/DanielH2018/server/pull/6224), [#6242](https://github.com/DanielH2018/server/pull/6242), [#6248](https://github.com/DanielH2018/server/pull/6248), [#6264](https://github.com/DanielH2018/server/pull/6264), [#6230](https://github.com/DanielH2018/server/pull/6230), [#6339](https://github.com/DanielH2018/server/pull/6339), [#6593](https://github.com/DanielH2018/server/pull/6593), [#6600](https://github.com/DanielH2018/server/pull/6600), [#6637](https://github.com/DanielH2018/server/pull/6637), [#6683](https://github.com/DanielH2018/server/pull/6683), [#6701](https://github.com/DanielH2018/server/pull/6701), [#6717](https://github.com/DanielH2018/server/pull/6717), [#6719](https://github.com/DanielH2018/server/pull/6719), [#6782](https://github.com/DanielH2018/server/pull/6782), [#6788](https://github.com/DanielH2018/server/pull/6788), [#6806](https://github.com/DanielH2018/server/pull/6806), [#6856](https://github.com/DanielH2018/server/pull/6856), [#6871](https://github.com/DanielH2018/server/pull/6871). Which numbered steps are complete is not recorded.
 Depends on: H2, H5, H6, R4, per PR (the *Waits on* column of *Steps, as PRs*)
 Unblocks: none (it closes Area 3)
 
@@ -8,7 +8,7 @@ Re-sliced on 2026-10-17 at the operator's request: 65 steps became 37 PRs. The 6
 PR the old list planned. Its 20 numbered items name 48 steps, and the canary triples of H7.6
 and H7.7, the two host PRs of H7.12c and the five PRs of H7.19a count once per PR. The
 re-sliced PRs are numbered from H7.21, so no re-sliced ID equals an old one. No step has
-landed.
+landed when the slice was re-sliced on 2026-10-17; the Status line records what has merged since.
 
 Related issues: [#4561](https://github.com/DanielH2018/server/issues/4561), daniel-server's IPv6 default route. Its netplan file moves into the
 host package.

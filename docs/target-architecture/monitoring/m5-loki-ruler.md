@@ -1,6 +1,6 @@
 # M5 — loki-homelab ruler
 
-Status: IN PROGRESS
+Status: DONE. PR 4a merged as [#5852](https://github.com/DanielH2018/server/pull/5852), [#5896](https://github.com/DanielH2018/server/pull/5896) reverted it, and [#5899](https://github.com/DanielH2018/server/pull/5899) merged it again. PR 4b merged as [#5853](https://github.com/DanielH2018/server/pull/5853) and PR 5 as [#6507](https://github.com/DanielH2018/server/pull/6507). PRs 1 to 3 are listed below.
 
 PR 1, the Prometheus-side Loki rules and `loki-query --step`: [#4797](https://github.com/DanielH2018/server/pull/4797).
 
@@ -825,6 +825,8 @@ its tokens. The sops removal and `cluster_vars.py write` are operator-only.
   their rows from `ansible/secret_rotation.yml` by hand, add the names to
   `scripts/secrets_mgmt/git_dates.py:RETIRED`, run `cluster_vars.py write` (**operator-only**) so the
   cluster files lose the names, and delete `PENDING_RETIREMENT` with the test that holds it.
+  M6's B6c reuses the set, so its token PR owns that deletion instead
+  (`docs/target-architecture/monitoring/m6-status/b6c.md`, step 5).
 - The recipe, as PR 4a first stated it when it carried the retirement, follows. Read "this PR"
   as PR 5 and "the agent's commit" as the commit that adds the `RETIRED` names.
 

@@ -1,6 +1,6 @@
 # M2 — One bridge family to rules
 
-Status: IN PROGRESS
+Status: DONE. PR 4a merged as [#5825](https://github.com/DanielH2018/server/pull/5825) and PR 4b as [#5828](https://github.com/DanielH2018/server/pull/5828) on 2026-10-22. PR 5 retires no token by design, and M6's A7 retires it.
 
 PR 1, the workload-service mapping: [#4777](https://github.com/DanielH2018/server/pull/4777).
 PR 2, the k8s-workloads rules in shadow: [#4779](https://github.com/DanielH2018/server/pull/4779). Its soak starts at its deploy, and PR 4a waits 7 days from that time.
