@@ -43,15 +43,35 @@ PI_WAIT_S = longest_gap_s(
 
 def test_the_bounds_are_the_plans_defaults(cfg):
     assert cfg.BUILDER_MAX_FETCH_AGE_S == 1800
-    # The 7200 s default is the floor; the canary's schedule raises it (#6530).
-    assert cfg.BUILDER_MAX_LAG_S == PI_WAIT_S + SLACK_S
+    # The 7200 s floor bounds every reason but a Pi canary, which the Pi's schedule raises
+    # (#6530, #6919).
+    assert cfg.BUILDER_MAX_LAG_S == 7200
+    assert cfg.BUILDER_PI_CANARY_MAX_LAG_S == PI_WAIT_S + SLACK_S
 
 
-def test_a_wait_through_the_pi_s_longest_gap_is_clean(cfg):
+def _canary(since, **host):
+    return ({"reason": "canary", "sha": SHA, **host}, float(since))
+
+
+@pytest.mark.parametrize(
+    "series",
+    [
+        pytest.param(_canary(NOW - PI_WAIT_S, host="daniel-pi"), id="pi_canary"),
+        # A builder older than the `host` label writes none, so the bridge reads it as the Pi.
+        pytest.param(_canary(NOW - PI_WAIT_S), id="canary_without_a_host_label"),
+    ],
+)
+def test_a_wait_through_the_pi_s_longest_gap_is_clean(cfg, series):
     # The Pi's gap alone outlasts the 7200 s floor, and a Pi canary holds the gate that long.
     assert PI_WAIT_S > 7200
-    ok, msg = _run(cfg, 60, [_unbuilt(NOW - PI_WAIT_S, reason="canary")])
+    ok, msg = _run(cfg, 60, [series])
     assert ok, msg
+
+
+def test_a_daniel_server_canary_pages_past_the_floor(cfg):
+    stuck = _canary(NOW - cfg.BUILDER_MAX_LAG_S - 60, host="daniel-server")
+    ok, msg = _run(cfg, 60, [stuck])
+    assert not ok and "master unbuilt" in msg, msg
 
 
 @pytest.mark.parametrize(
@@ -108,6 +128,12 @@ def test_the_oldest_unbuilt_series_is_judged_when_a_label_change_leaves_two(cfg)
 def test_an_absent_unbuilt_series_is_red(cfg):
     ok, msg = _run(cfg, 60, [])
     assert not ok and "unbuilt-since series absent" in msg
+
+
+def test_a_non_canary_reason_pages_at_the_floor(cfg):
+    # A keyring refusal, a hold or a red master no longer waits out the Pi's day (#6919).
+    ok, msg = _run(cfg, 60, [_unbuilt(NOW - 7200 - 60, reason="keyring")])
+    assert not ok and "master unbuilt for 121m (> 120m)" in msg, msg
 
 
 def test_both_arms_are_named_when_both_fire(cfg):

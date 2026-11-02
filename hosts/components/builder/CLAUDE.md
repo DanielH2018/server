@@ -143,8 +143,9 @@ canary's and defers the rest. The canary is the first of daniel-server, daniel-p
 whose package changed. daniel-server leads because daniel-pi's drop-in fires the updater once a
 day (H3.13, #6911), so a Pi canary holds the other hosts' packages for up to a day plus one
 updater run. A run that changes only the Pi's and daniel-box's packages still makes the Pi the
-canary (`# DECIDED:` at `CANARY_ORDER`). monitor-bridge derives its builder lag grace from the
-Pi's gap, so that wait does not page. The shared packages under `packages/` never wait. The run records the gate
+canary (`# DECIDED:` at `CANARY_ORDER`). While a gate is open the series also carries `host`, the
+canary's host. monitor-bridge gives a `host="daniel-pi"` gate a grace derived from the Pi's
+gap, so that wait does not page, and every other reason the 7200 s floor (#6919). The shared packages under `packages/` never wait. The run records the gate
 `{host, sha}` and the deferred directories in `state.json`, and moves the gate to each newer
 canary version it stages. While the gate is open the builder builds no other host package, and
 the unbuilt-since series reads `reason="canary"` with the gate's commit as `sha`. A hold or a
