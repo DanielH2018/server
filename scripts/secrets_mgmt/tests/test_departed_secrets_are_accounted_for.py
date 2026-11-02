@@ -69,11 +69,12 @@ def test_no_listed_departure_is_back_in_the_store(current):
     )
 
 
-def test_a_pending_retirement_is_still_in_the_store_and_not_yet_retired(current):
+def test_a_retired_key_has_left_the_pending_allowance(current):
     """The allowance ends with the keys: a name that left `secrets.yml` must leave the set too.
 
     A name in both tables would say a key is pending and gone at once. M3's disk token is the
-    named member: it moved from the allowance to RETIRED.
+    named member, because the set is empty between retirements and the two set-level asserts
+    then hold for nothing.
     """
     assert "daniel_box_disk_push_token" in RETIRED
     assert "daniel_box_disk_push_token" not in PENDING_RETIREMENT
