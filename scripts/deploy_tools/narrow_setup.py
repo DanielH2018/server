@@ -427,7 +427,9 @@ def inventory_tags(
     """
     tags: set[str] = set()
     for key in inventory_keys.keys_named_in([index.prefix], old, new, repo):
-        got = index.key_readers(key)
+        # A shared template carrying the key is named by its file name (`carried`).
+        is_template = key.endswith(".j2")
+        got = index.readers_of(key) if is_template else index.key_readers(key)
         if not got:
             raise CannotNarrow(
                 f"the variable {key} reaches no task file of {index.prefix}"

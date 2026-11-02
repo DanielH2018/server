@@ -489,3 +489,18 @@ def test_an_inventory_range_applies_and_records_the_setup_roles_reading_its_key(
         _playbook_argv(tick)[-3:]
     )
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+def test_a_secrets_refusal_beside_inventory_readers_still_applies_them(
+    gitops_deploy, tick, capsys, state
+):
+    """One half's refusal must not drop the other half's readers for the same range."""
+    tick.paths = [SECRETS, "ansible/inventory/group_vars/all.yml"]
+    tick.narrow = (3, "")
+    tick.secret_readers = [
+        "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2"
+    ]
+    tick.secret_refused = "the secrets half cannot say (a play-level reader)"
+    assert gitops_deploy.main(tick.tools, tick.config, state) == 0
+    assert _playbook_argv(tick)[-1] == "gitops_deploy"
+    assert "no secret reader routed (the secrets half" in capsys.readouterr().out

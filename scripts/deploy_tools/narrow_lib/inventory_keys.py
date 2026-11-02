@@ -18,10 +18,10 @@ with two differences:
     counting its `files/` would re-apply `gitops_deploy` for every new service.
   - The deploy-plane refusals do not apply. `deploy.yml` reading `containers_list`, or a k8s
     macro reading an image pin, says nothing about a setup role, and refusing on them would
-    have refused 17 of the last 40 inventory ranges. What still refuses is what can carry the
-    key to a setup role unseen: a `hosts.ini` line naming it, and a shared template that a
-    setup-role file names. An inventory value built from the key is followed instead, so its
-    readers count too.
+    have refused 17 of the last 40 inventory ranges. What could carry the key to a setup role
+    unseen is followed instead (`carried`): an inventory value built from it, and a shared
+    template naming it. So a moved key never refuses, and one refusal cannot leave a reader
+    unrouted with nothing recorded.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_inventory_keys.py
 """
@@ -70,11 +70,16 @@ def changed_keys(old_ref: str, new_ref: str, cwd) -> set[str]:
 
 
 def carried(key: str, ref: str, cwd) -> set[str]:
-    """`key`, and every inventory key at `ref` whose value is built from it, to a fixed point.
+    """`key`, and every name at `ref` that carries its value onward, to a fixed point.
+
+    Three kinds of name carry it: an inventory YAML key whose value names it, a `hosts.ini`
+    inline variable whose value names it, and a shared template naming it. A template's file
+    name is what a setup role names when it includes the macro, so the name walks on as a
+    word like a key does, and the setup files naming it are its readers. A comment in
+    `hosts.ini` names keys in prose (`server_ip`) and carries nothing.
 
     Raises:
-        CannotNarrow: `hosts.ini` names one of them, or a shared template a setup-role file
-            names does.
+        CannotNarrow: an inventory YAML file does not parse, or `git grep` failed.
     """
     found, pending = set(), [key]
     while pending:
@@ -84,24 +89,30 @@ def carried(key: str, ref: str, cwd) -> set[str]:
         found.add(name)
         word = re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")
         for hit in secret_keys.readers(name, ref, cwd, [INVENTORY, SHARED_TEMPLATES]):
+            text = show_at(ref, hit, cwd) or ""
             if hit.startswith(SHARED_TEMPLATES):
-                _refuse_if_setup_imports(hit, name, ref, cwd)
+                pending.append(hit.rsplit("/", 1)[-1])
             elif _loaded(hit):
-                values = mapping_at(show_at(ref, hit, cwd) or "", hit)
+                values = mapping_at(text, hit)
                 pending += [k for k, v in values.items() if word.search(str(v))]
             elif not hit.rsplit("/", 1)[-1].startswith("_"):
-                raise CannotNarrow(f"the variable {name} is named in {hit}")
+                pending += _ini_vars_naming(text, word)
     return found
 
 
-def _refuse_if_setup_imports(template: str, key: str, ref: str, cwd) -> None:
-    name = template.rsplit("/", 1)[-1]
-    users = secret_keys.readers(name, ref, cwd, READER_PATHSPECS)
-    if users:
-        raise CannotNarrow(
-            f"the variable {key} is named by the shared template {name}, which "
-            f"{', '.join(users)} names"
-        )
+def _ini_vars_naming(text: str, word: re.Pattern) -> list[str]:
+    """The inline `var=value` names on `hosts.ini`'s host lines whose value matches `word`."""
+    names = []
+    for line in text.splitlines():
+        if line.lstrip().startswith(("#", ";", "[")):
+            continue
+        # A value runs to the next `var=`, since `{{ key }}` holds spaces.
+        starts = list(re.finditer(r"(\w+)=", line))
+        ends = [m.start() for m in starts[1:]] + [len(line)] if starts else []
+        for here, end in zip(starts, ends, strict=True):
+            if word.search(line[here.end() : end]):
+                names.append(here.group(1))
+    return names
 
 
 def setup_reader_paths(old_ref: str, ctx) -> secret_keys.SetupReaders:
@@ -110,8 +121,8 @@ def setup_reader_paths(old_ref: str, ctx) -> secret_keys.SetupReaders:
     `ctx` is `broad.Context`.
 
     Raises:
-        CannotNarrow: every refusal `changed_keys`, `carried` and
-            `secret_keys.setup_readers_of` make.
+        CannotNarrow: an inventory YAML file does not parse, or `git` failed. Neither is an
+            answer about a reader, so the tick parks and retries rather than route nothing.
     """
     keys: set[str] = set()
     for key in sorted(changed_keys(old_ref, ctx.ref, ctx.cwd)):

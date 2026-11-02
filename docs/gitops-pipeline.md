@@ -905,9 +905,13 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   - A file under a role's `files/` is copied verbatim, so naming a key there reads nothing.
   - An inventory value built from the key is followed to its own readers instead of
     refusing.
-  - A play or a k8s-only shared template reading the key does not refuse, because neither
-    renders a setup role. Only a `hosts.ini` mention and a shared template a setup-role file
-    names refuse.
+  - Nothing refuses. A play or a k8s-only shared template reading the key renders no setup
+    role. A shared template carries the key to the setup-role files that include it, and a
+    `hosts.ini` inline variable carries it to that variable's readers. A refusal here would
+    route nothing and record nothing, which is the silence #6962 reports. So the half fails
+    only on an unparsable inventory file or a failed `git`, and the tick then parks and
+    retries. A refusal from the secrets half keeps the inventory half's readers, and the
+    journal names it.
 
   `narrow_setup.role_tags` narrows each routed role to the tags of its readers of the key,
   where a secret takes the whole-role tag. That keeps `k3s` on its cron tags rather than on

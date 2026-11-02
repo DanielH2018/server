@@ -15,15 +15,18 @@ holds the derivation, beside the deploy-plane half that maps the same keys to de
 The same answer covers the inventory (#6962). PR #6952 moved `host_python_version` in
 `group_vars/all.yml`, and the tick applied it to the deploy plane alone while eight setup
 roles render it into their units. `narrow_lib.inventory_keys` adds the setup-role files
-templating a top-level inventory key whose value the range changed. A refusal from either
-half refuses the whole answer.
+templating a top-level inventory key whose value the range changed. The two halves answer
+independently. The inventory half never refuses (`inventory_keys.carried` follows what the
+secrets half refuses on), so its only failure is an unparsable file or a failed `git`, and
+that exits `FAILED`. A secrets-half refusal beside inventory readers keeps those readers and
+names itself in the JSON's `refused` string, which is empty otherwise.
 
 WHO CALLS IT. `deployer_lib.deploy_setup_roles.secret_setup_readers` runs it as a SUBPROCESS,
 because it parses YAML and the deployer's unit runs under `uv run --no-project`. Exit
-`DEPLOY_BROAD` (3), the code `deploy_tags.py narrow` refuses with, is a refusal, with the
-reason on stderr, and the tick then applies no
-setup role for the range, which is the behaviour before #5436. Any other non-zero exit, such
-as a traceback's 1, is a failure the tick parks on and retries.
+`DEPLOY_BROAD` (3), the code `deploy_tags.py narrow` refuses with, is a refusal: the secrets
+half refused and the inventory half found no reader. The reason is on stderr, and the tick
+then applies no setup role for the range, which is the behaviour before #5436. Any other
+non-zero exit, such as a traceback's 1, is a failure the tick parks on and retries.
 
 WITH `--deploy-tags` it prints the deploy plane's half instead (#5577): the comma-joined
 `deploy.yml` tags whose render reads a moved key, as `deploy_tags.py narrow` does for a range
@@ -46,7 +49,7 @@ import sys
 
 from deploy_tools.narrow_lib import broad, inventory_keys, secret_keys
 from lib.cli_help import ArgumentParser
-from lib.exit_codes import DEPLOY_BROAD, OK
+from lib.exit_codes import DEPLOY_BROAD, FAILED, OK
 from lib.narrow_git import CannotNarrow
 
 
@@ -74,15 +77,23 @@ def main(argv: list[str] | None = None) -> int:
         return _deploy_tags(args.old, args.new, _Path(args.repo), rules, explain)
     ctx = broad.Context(_Path(args.repo), args.new, set(), {}, explain)
     try:
-        found = merged(
-            secret_keys.setup_reader_paths(args.old, ctx, rules),
-            inventory_keys.setup_reader_paths(args.old, ctx),
-        )
+        inventory = inventory_keys.setup_reader_paths(args.old, ctx)
     except (CannotNarrow, subprocess.CalledProcessError) as exc:
+        print(f"inventory-readers: failed ({exc})", file=sys.stderr)
+        return FAILED
+    refused = ""
+    try:
+        found = merged(secret_keys.setup_reader_paths(args.old, ctx, rules), inventory)
+    except (CannotNarrow, subprocess.CalledProcessError) as exc:
+        refused = f"the secrets half cannot say ({exc})"
         print(f"secret-readers: cannot say ({exc})", file=sys.stderr)
-        return DEPLOY_BROAD
+        if not inventory.paths:
+            return DEPLOY_BROAD
+        found = inventory
     unread = {path: sorted(roles) for path, roles in sorted(found.unread.items())}
-    print(json.dumps({"paths": sorted(found.paths), "unread": unread}))
+    print(
+        json.dumps({"paths": sorted(found.paths), "unread": unread, "refused": refused})
+    )
     return OK
 
 

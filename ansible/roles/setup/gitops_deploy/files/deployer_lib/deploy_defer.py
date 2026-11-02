@@ -185,14 +185,15 @@ def route_key_readers(
     `host_python_version` reached the deploy plane alone while eight setup roles render it.
     Each reader path goes through `setup_roles_for`, less the shippers of a vars file that read
     none of its moved keys, and `handle_broad` then applies or records each role as for its own
-    edit. A refusal routes nothing, and the journal line names why. Any other failure parks,
+    edit. The secrets half may refuse, which routes none of its readers and leaves the
+    `secrets` page to name them, while the inventory half never refuses. Any failure parks,
     as no later range carries the change again. Runs after `drop_deleted_setup_roles`, whose
     reclassification would lose the roles.
     """
     if not (cs.secrets or cs.inventory):
         return
     try:
-        paths, unread = tools.secret_setup_readers(
+        paths, unread, refused = tools.secret_setup_readers(
             config.repo, target.local, target.origin
         )
     except SecretReadersRefused as exc:
@@ -202,6 +203,8 @@ def route_key_readers(
         log(f"key-readers: {type(exc).__name__}: {exc} — parking", level=WARNING)
         cs.key_readers_failed = cs.broad = True
         return
+    if refused:
+        log(f"key-readers: no secret reader routed ({refused})", level=WARNING)
     roles = {r for p in paths for r in setup_roles_for(p) - set(unread.get(p, ()))}
     if not roles:
         return

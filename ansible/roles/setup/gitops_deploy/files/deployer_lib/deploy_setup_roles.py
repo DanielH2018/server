@@ -158,14 +158,16 @@ def derive_routing(
 
 def secret_setup_readers(
     repo: str, old: str, new: str
-) -> tuple[list[str], dict[str, list[str]]]:
+) -> tuple[list[str], dict[str, list[str]], str]:
     """Run `secret_setup_readers.py` over `old..new` in `repo`.
 
     Returns:
         (paths, unread). `paths` is every file under `ansible/roles/setup/` at `new` naming a
         `secrets.yml` key whose ciphertext differs across the range, or an inventory key whose
         value does, empty when none does. `unread` maps a shipped vars file among them to the
-        shippers that read no key of it built from a moved one.
+        shippers that read no key of it built from a moved one. The third value is the
+        secrets half's refusal when the inventory half still answered, "" otherwise, and ""
+        from a script that predates #6962.
 
     Raises:
         subprocess.TimeoutExpired: the child outlived `ROUTING_TIMEOUT_S`.
@@ -190,14 +192,16 @@ def secret_setup_readers(
     data = json.loads(r.stdout)
     paths = data.get("paths") if isinstance(data, dict) else None
     unread = data.get("unread") if isinstance(data, dict) else None
+    refused = data.get("refused", "") if isinstance(data, dict) else None
     if not (
         isinstance(paths, list)
         and all(isinstance(p, str) for p in paths)
         and isinstance(unread, dict)
         and all(isinstance(v, list) for v in unread.values())
+        and isinstance(refused, str)
     ):
         raise ValueError(f"not the secret-readers JSON: {r.stdout.strip()[:200]!r}")
-    return paths, unread
+    return paths, unread, refused
 
 
 def secret_k8s_readers(repo: str, old: str, new: str) -> tuple[int, str]:
