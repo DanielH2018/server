@@ -27,8 +27,9 @@ Tier 2 prints, and only from fixed sources, each through the redaction filter:
 
 PATH is absolute, and it must resolve to itself: a symlink anywhere along it, `..`, `.`, `//`
 or a trailing slash is refused. It must match a PATHS entry, every directory above it must be
-root-owned and writable by root alone, and it must miss every DENY pattern. The one exception
-is `stat` of a DENY path PATHS names, which answers without size or mtime (#6369).
+root-owned and writable by root alone, and it must miss every DENY pattern unless DENY_EXEMPT
+names it exactly. The one exception is `stat` of a DENY path PATHS names, which answers
+without size or mtime (#6369).
 
 Output is filtered twice. Output that matches REFUSE, or that gives a credential-named key a
 literal value, is withheld whole. The rest is redacted by default: every value is replaced by
@@ -89,7 +90,8 @@ PATHS = (
     # DENY paths, so only `stat` answers them, and without size or mtime (#6369).
     ("/etc/claude-rc", "alert-webhook.env"),
     # k8s_host_files' rows under the k3s manifests tree (#6988). The tree stays denied, because
-    # it holds every staged role's secret.yaml, so each name here is exact.
+    # it holds every staged role's secret.yaml, so each name here is exact. DENY_EXEMPT lifts
+    # the two mirror GC Jobs off DENY, so every tier-1 verb answers those.
     ("/etc/rancher/k3s/manifests", "registry-jobs"),
     ("/etc/rancher/k3s/manifests", "autokuma-claims"),
     ("/etc/rancher/k3s/manifests/registry-jobs", "gc-job.yaml"),
@@ -124,6 +126,13 @@ DENY = (
     "*/wg*.conf",
     "/etc/wireguard",
     "*.psk",
+)
+# Exact paths DENY matches that hold no secret, so every tier-1 verb answers them and
+# holds_credential still judges their content. The operator ruled these on 2026-11-02 (#7007):
+# exact names only, never a glob, because their tree holds every staged role's secret.yaml.
+DENY_EXEMPT = (
+    "/etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml",
+    "/etc/rancher/k3s/manifests/registry-jobs/dockerhub-mirror-gc-job.yaml",
 )
 # Content that withholds the whole output rather than redacting it. The last four rows are the
 # shapes the tree itself renders into the hosts: a Kuma push token in a URL path, netplan's
@@ -277,6 +286,8 @@ def config(
 
 def denied(path: str) -> bool:
     """Whether PATH or any of its ancestors matches a DENY pattern. PATH may be unchecked."""
+    if path in DENY_EXEMPT:
+        return False
     probe = path
     while True:
         if any(fnmatch.fnmatchcase(probe, pattern) for pattern in DENY):

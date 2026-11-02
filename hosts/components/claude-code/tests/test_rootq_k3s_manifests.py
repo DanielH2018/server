@@ -52,7 +52,35 @@ def test_stat_of_an_unlisted_k3s_manifest_path_is_refused_as_denied(capsys, live
 
 @pytest.mark.parametrize("argv", [["cat"], ["sha256"], ["matches", HEX]])
 def test_a_listed_k3s_manifest_refuses_every_verb_but_stat(capsys, argv):
-    live = f"{MANIFESTS}/registry-jobs/ghcr-mirror-gc-job.yaml"
+    live = f"{MANIFESTS}/registry-jobs/gc-job.yaml"
     rc, out, err = run_live(capsys, argv[0], live, *argv[1:])
     assert (rc, out) == (2, "")
     assert "deny list" in err
+
+
+# The operator's #7007 ruling: the two mirror GC Jobs hold no secret, so they leave DENY by
+# exact name and `probe.py applied` can ask `matches` of them.
+EXEMPT = [
+    f"{MANIFESTS}/registry-jobs/ghcr-mirror-gc-job.yaml",
+    f"{MANIFESTS}/registry-jobs/dockerhub-mirror-gc-job.yaml",
+]
+
+
+@pytest.mark.parametrize("argv", [["stat"], ["sha256"], ["matches", HEX]])
+@pytest.mark.parametrize("live", EXEMPT)
+def test_an_exempt_gc_job_gets_past_the_deny_list_for_every_tier1_verb(
+    capsys, live, argv
+):
+    rc, out, err = run_live(capsys, argv[0], live, *argv[1:])
+    assert (rc, out) == (2, "")
+    assert err == f"refused: {live} does not exist\n"
+
+
+def test_the_exemption_covers_the_two_exact_paths_and_not_their_tree() -> None:
+    assert [p for p in EXEMPT if rootq.denied(p)] == []
+    for path in [
+        f"{MANIFESTS}/registry-jobs",
+        f"{MANIFESTS}/registry-jobs/gc-job.yaml",
+    ]:
+        assert rootq.denied(path), path
+    assert rootq.denied(EXEMPT[0] + ".bak")
