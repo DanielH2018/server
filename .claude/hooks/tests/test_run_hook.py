@@ -380,3 +380,91 @@ def test_the_runner_runs_the_py_beside_itself_not_beside_the_cwd(tmp_path):
         cwd=decoy,
     )
     assert proc.stdout.strip() == "from the runner dir", proc.stderr
+
+
+# --- A primary venv the session cannot rebuild (#6969) ------------------------------------
+
+
+def _venv(path: Path) -> None:
+    uv = shutil.which("uv")
+    assert uv, "uv is not on PATH"
+    run([uv, "venv", "--quiet", "--python", sys.executable, str(path)], check=True)
+
+
+def _primary(tmp_path: Path) -> Path:
+    """A primary checkout: a project pinned to this interpreter, with its `.venv` built."""
+    primary = tmp_path / "primary"
+    primary.mkdir()
+    major, minor = sys.version_info[:2]
+    (primary / "pyproject.toml").write_text(
+        f'[project]\nname = "x"\nversion = "0"\nrequires-python = ">={major}.{minor}"\n',
+        encoding="utf-8",
+    )
+    (primary / ".python-version").write_text(f"{major}.{minor}\n", encoding="utf-8")
+    _venv(primary / ".venv")
+    return primary
+
+
+@pytest.fixture
+def read_only_primary(tmp_path):
+    """A primary checkout whose `.venv/bin/python` points nowhere, none of it writable.
+
+    That is the state uv deletes and recreates even under `--no-sync`; a sandboxed batch cannot
+    write the primary, so the rebuild failed with EACCES and every guard call errored.
+    """
+    primary = _primary(tmp_path)
+    (primary / ".venv" / "bin" / "python").unlink()
+    (primary / ".venv" / "bin" / "python").symlink_to(tmp_path / "removed-python")
+    locked = [primary, *[p for p in primary.rglob("*") if p.is_dir()]]
+    _set_mode(locked, 0o555)
+    yield primary
+    _set_mode(locked, 0o755)
+
+
+def _set_mode(directories: list[Path], mode: int) -> None:
+    for directory in directories:
+        directory.chmod(mode)
+
+
+def _session_runner(tmp_path: Path, primary: Path) -> Path:
+    """A runner copy inside a session checkout's `.claude/hooks`, whose hook prints its venv."""
+    hooks = tmp_path / "session" / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    (hooks / "probe.py").write_text("import sys\nprint(sys.prefix)\n", encoding="utf-8")
+    return _variant_runner(hooks, str(primary))
+
+
+def test_accept_a_broken_primary_venv_runs_the_hook_in_the_session_venv(
+    tmp_path, read_only_primary
+):
+    """The guard still decides: the session checkout's venv runs it, and the primary's
+    is left as it is."""
+    runner = _session_runner(tmp_path, read_only_primary)
+    _venv(tmp_path / "session" / ".venv")
+    proc = _run(runner, "probe", "--project", "--ask-on-cd")
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(tmp_path / "session" / ".venv"), proc.stderr
+    assert (read_only_primary / ".venv" / "bin" / "python").is_symlink()
+
+
+def test_reject_a_broken_primary_venv_with_no_session_venv_asks(
+    tmp_path, read_only_primary
+):
+    """The project-free interpreter lacks PyYAML, which a deny arm needs, so with no venv
+    that runs the guards ask rather than fall back to it."""
+    runner = _session_runner(tmp_path, read_only_primary)
+    proc = _run(runner, "probe", "--project", "--ask-on-cd")
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)["hookSpecificOutput"]
+    assert out["permissionDecision"] == "ask"
+    assert "has a Python that runs" in out["permissionDecisionReason"]
+
+
+def test_accept_a_working_primary_venv_still_runs_the_hook(tmp_path):
+    """The near miss: a primary venv whose interpreter runs is used, not the session's."""
+    primary = _primary(tmp_path)
+    runner = _session_runner(tmp_path, primary)
+    _venv(tmp_path / "session" / ".venv")
+    proc = _run(runner, "probe", "--project")
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.strip() == str(primary / ".venv"), proc.stderr
