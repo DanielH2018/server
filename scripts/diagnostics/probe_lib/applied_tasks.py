@@ -5,7 +5,8 @@ imports, through `block` and `always`, and turns each file-writing task into a `
 `rescue` is not walked: it runs only when its block fails, so it undoes the block rather than
 stating what a clean apply leaves. An import path renders with `role_path` and `playbook_dir`,
 so the shared `{{ role_path }}/../common/tasks/` files are walked too, with the import's
-`vars:` on top. It reads five modules:
+`vars:` on top. A file-writing task's own `vars:` render its fields and content too; one that
+does not evaluate renders as `STUB`, whatever outer value shares its name. It reads five modules:
 
 - `template`: the render of `templates/<src>`, with `dest`, `mode`, `owner` and `group`;
 - `copy`: the bytes of `files/<src>`, or the render of `content`, with the same fields;
@@ -284,8 +285,27 @@ class _Walk:
         if items is None:
             self.skips.append(Skip(name, "it loops over a list that is not literal"))
             return
-        for item in items:
-            self.one(name, *found, item=item)
+        outer = self.ctx
+        self.ctx = {**outer, **self.task_vars(task, outer)}
+        try:
+            for item in items:
+                self.one(name, *found, item=item)
+        finally:
+            self.ctx = outer
+
+    def task_vars(self, task: dict, ns: dict, keep_unread: bool = False) -> dict:
+        """A task's `vars:`, each evaluated against `ns`.
+
+        A value that does not evaluate becomes `STUB`, shadowing any outer value of the same
+        name as Ansible's task var does, so the row reads ok-meta, as for a secret.
+        `keep_unread` keeps it as written instead.
+        """
+        ns = {**ns, "inventory_hostname": self.host}
+        out = {}
+        for key, value in (task.get("vars") or {}).items():
+            ok, evaluated = native(self.gate_env, value, ns, self.run_time)
+            out[key] = evaluated if ok else (value if keep_unread else STUB)
+        return out
 
     def learn(self, task: dict, whens: list) -> None:
         """Make static each name an evaluable `set_fact` sets; the module docstring has when."""
@@ -391,12 +411,10 @@ class _Walk:
                 self.ctx = {**outer, **self.facts}
                 if item is not None:
                     self.ctx[loop_var] = item
-                ns = {**self.ctx, "inventory_hostname": self.host}
-                extra = {}
-                for key, value in (task.get("vars") or {}).items():
-                    ok, out = native(self.gate_env, value, ns, self.run_time)
-                    extra[key] = out if ok else value
-                self.ctx = {**self.ctx, **extra}
+                self.ctx = {
+                    **self.ctx,
+                    **self.task_vars(task, self.ctx, keep_unread=True),
+                }
                 self.tasks(path, whens)
         finally:
             self.ctx = {**outer, **self.facts}
