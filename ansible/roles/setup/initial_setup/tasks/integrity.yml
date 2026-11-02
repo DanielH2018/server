@@ -10,14 +10,6 @@
     state: present
   become: true
 
-- name: Update rkhunter data files
-  tags: [rkhunter]
-  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
-  ansible.builtin.command: rkhunter --update --nocolors
-  become: true
-  changed_when: false
-  failed_when: false
-
 - name: Initialize rkhunter file-properties baseline (first run only)
   tags: [rkhunter]
   when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']

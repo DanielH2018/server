@@ -8,7 +8,5 @@ Wants=network-online.target homelab-secrets.service
 Type=oneshot
 SyslogLevel=notice
 SyslogIdentifier=rkhunter-check
-# The data-file refresh that ran on every Ansible apply. Its exit code is not the verdict.
-ExecStartPre=-/usr/bin/rkhunter --update --nocolors
 ExecStart=/usr/lib/homelab/rkhunter-check
 LoadCredential=rkhunter_push_token:/run/credstore/rkhunter_{{ inventory_hostname | replace('-', '_') }}_push_token
