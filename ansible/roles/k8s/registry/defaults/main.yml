@@ -73,9 +73,10 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # second writer on `spec.replicas` (D5, Wave D's registry bullet).
 #
 # The weekly garbage collection: the ghcr-mirror-gc-job manifest, the script, its state directory
-# and the cron that runs it. False for a cluster Kuma does not watch — registry-gc.sh pushes its result
-# to `uptime-kuma.local.<domain>`, so leaving it on elsewhere reports a foreign registry's
-# health to a real operator, which is what k3s_manage_health_crons exists to prevent.
+# and the cron that runs it. False for a cluster whose alerting should not hear about this
+# registry — registry-gc.sh writes its result to the registry-gc textfile and pings
+# healthchecks.io, so leaving it on elsewhere reports a foreign registry's health to a real
+# operator, which is what k3s_manage_health_crons exists to prevent.
 #
 # Skip-only, matching every sibling flag in this repo: turning it off on a host that already
 # has the cron installs nothing and removes nothing. A removal arm would be the one shape the

@@ -141,13 +141,20 @@ def test_a_new_key_a_setup_role_reads_names_that_roles_file(tree: Tree, capsys):
     tree.write(SECRETS, _with(BASE_SECRETS, "new_setup_token", "eee"))
     assert _setup_readers(tree, capsys) == (
         0,
-        {"paths": ["ansible/roles/setup/claude_code/templates/env.j2"], "unread": {}},
+        {
+            "paths": ["ansible/roles/setup/claude_code/templates/env.j2"],
+            "unread": {},
+            "refused": "",
+        },
     )
 
 
 def test_a_key_only_a_k8s_role_reads_names_no_setup_file(tree: Tree, capsys):
     tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
-    assert _setup_readers(tree, capsys) == (0, {"paths": [], "unread": {}})
+    assert _setup_readers(tree, capsys) == (
+        0,
+        {"paths": [], "unread": {}, "refused": ""},
+    )
 
 
 def test_a_key_the_play_reads_refuses_the_setup_answer(tree: Tree, capsys):

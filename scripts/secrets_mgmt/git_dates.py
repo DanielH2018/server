@@ -213,6 +213,8 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_home_allowlist_push_token",
         "monitor_bridge_configarr_push_token",
         "monitor_bridge_janitorr_push_token",
+        # B6c:
+        "registry_gc_push_token",
     }
 )
 

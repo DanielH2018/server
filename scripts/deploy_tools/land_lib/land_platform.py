@@ -8,9 +8,8 @@ k8s role-caller graph names. A tag a changed PATH named was left out, so a PR to
 `ansible/roles/k8s/wg-easy/templates/` still ran `deploy.sh -e target=daniel-pi --tags wg-easy`
 — one extra ssh deploy of a Compose service the change never touched, recreating nothing.
 
-THE PROOF IS THE TREE THE PATH SITS IN, and it has to be EVERY path that names the tag. A PR
-touching both `roles/k8s/wg-easy/` and `roles/containers/wg-easy/` changes both services, so
-that tag keeps routing to both hosts. Narrowing host routing is the dangerous direction -- a
+THE PROOF IS THE TREE THE PATH SITS IN, and it has to be EVERY path that names the tag. One
+naming path outside `roles/k8s/` keeps the tag routing to every host that declares it. Narrowing host routing is the dangerous direction -- a
 tag that reaches no host leaves the landing reading `settled` while the Pi runs the old
 container -- so this answers only for a tag whose whole path set sits under one tree.
 

@@ -119,7 +119,7 @@ def route_secret_k8s_readers(
     it only when the range carries a deploy-plane path. A rotation alone set `cs.secrets` and
     nothing else, so it merged, paged, and every reader kept the old value until a hand
     redeployed it. This asks `secret_setup_readers.py --deploy-tags` for the secrets half
-    alone, as `deploy_defer.route_secret_readers` asks it for the setup roles, and routes the
+    alone, as `deploy_defer.route_key_readers` asks it for the setup roles, and routes the
     range through `handle_broad` only when a reader exists. A range with a deploy-plane path
     is skipped, because `narrow` already maps its keys, and so is a range carrying any k8s
     role change, for the reason the `DECIDED:` below gives.

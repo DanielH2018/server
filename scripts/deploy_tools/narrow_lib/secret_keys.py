@@ -150,11 +150,7 @@ class SetupReaders(NamedTuple):
 def setup_reader_paths(old_ref: str, ctx, rules: Rules) -> SetupReaders:
     """The files under `roles/setup/` at `ctx.ref` naming a key `old_ref..ctx.ref` moved (#5436).
 
-    Paths rather than roles, so the deployer maps each through its own `setup_roles_for`, the
-    edge that sends a file another role ships to that role too. A `.md`, a test file and a
-    `_CENSUS_SKIP_FILES` name drop, as they do for `key_tags`. A shipped vars file is read
-    only key by key, so its shippers are checked with `reads_through`: a defaults file may name
-    a secret while the role that ships it reads one unrelated key.
+    `setup_readers_of` over the moved secrets, once each has passed `_reaches_setup_plainly`.
 
     Raises:
         CannotNarrow: a key some reader outside the role trees names, where this grep cannot
@@ -163,26 +159,53 @@ def setup_reader_paths(old_ref: str, ctx, rules: Rules) -> SetupReaders:
             shared template, which a setup role may import. The tick then applies no setup
             role for the range and the `secrets` page stays its only signal.
     """
+    keys = changed_keys(old_ref, ctx.ref, ctx.cwd)
+    for key in sorted(keys):
+        _reaches_setup_plainly(key, ctx, rules)
+    return setup_readers_of(keys, ctx, [SETUP_TREE])
+
+
+def _reaches_setup_plainly(key: str, ctx, rules: Rules) -> None:
+    """Refuse a secret some file outside the role trees names; see `setup_reader_paths`."""
+    outside = rules.sort_hits(
+        [
+            h
+            for h in rules.grep(ctx, key, word=True, inventory=True)
+            if h.rsplit("/", 1)[-1] not in _CENSUS_SKIP_FILES
+        ],
+        f"the secret {key}",
+        ctx,
+        key,
+    )
+    if outside.templates:
+        raise CannotNarrow(
+            f"the secret {key} is named by the shared template "
+            f"{', '.join(sorted(outside.templates))}, which a setup role may import"
+        )
+
+
+def setup_readers_of(keys: set[str], ctx, pathspecs: list[str]) -> SetupReaders:
+    """The files in `pathspecs` at `ctx.ref` naming one of `keys`, a secret or a variable.
+
+    Paths rather than roles, so the deployer maps each through its own `setup_roles_for`, the
+    edge that sends a file another role ships to that role too. A `.md`, a test file and a
+    `_CENSUS_SKIP_FILES` name drop, as they do for `key_tags`. A shipped vars file is read
+    only key by key, so its shippers are checked with `reads_through`: a defaults file may name
+    a key while the role that ships it reads one unrelated key.
+
+    Args:
+        keys: the moved keys.
+        ctx: `broad.Context` at the new ref.
+        pathspecs: the `git grep` pathspecs a setup-role reader is looked for in.
+
+    Raises:
+        CannotNarrow: `git grep` failed.
+    """
     found: set[str] = set()
     read_by: dict[str, set[str]] = {}
-    for key in sorted(changed_keys(old_ref, ctx.ref, ctx.cwd)):
-        outside = rules.sort_hits(
-            [
-                h
-                for h in rules.grep(ctx, key, word=True, inventory=True)
-                if h.rsplit("/", 1)[-1] not in _CENSUS_SKIP_FILES
-            ],
-            f"the secret {key}",
-            ctx,
-            key,
-        )
-        if outside.templates:
-            raise CannotNarrow(
-                f"the secret {key} is named by the shared template "
-                f"{', '.join(sorted(outside.templates))}, which a setup role may import"
-            )
-        hits = readers(key, ctx.ref, ctx.cwd, [SETUP_TREE])
-        ctx.explain(f"secret-readers: {key} -> {', '.join(hits) or '(no setup role)'}")
+    for key in sorted(keys):
+        hits = readers(key, ctx.ref, ctx.cwd, pathspecs)
+        ctx.explain(f"setup-readers: {key} -> {', '.join(hits) or '(no setup role)'}")
         found |= set(hits)
         for hit in hits:
             if not is_vars_file(hit):
@@ -205,9 +228,9 @@ def is_vars_file(path: str) -> bool:
 
 
 def reads_through(index: RoleIndex, path: str, key: str, ref: str, cwd) -> bool:
-    """Whether the role `index` reads the secret `key` through another role's vars file.
+    """Whether the role `index` reads the moved `key` through another role's vars file.
 
-    The role reads such a file only by the keys it names, so it reads the secret when it
+    The role reads such a file only by the keys it names, so it reads the moved key when it
     names `key` or a key whose value is built from it (`keys_reaching`). A walk that cannot
     say counts as a read: a role applied too widely is slow, one left out holds a stale value.
     """

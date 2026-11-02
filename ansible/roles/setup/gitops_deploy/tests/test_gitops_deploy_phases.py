@@ -58,7 +58,7 @@ def _target(gitops_deploy, **overrides):
 def test_assess_reads_both_heads_and_classifies_an_ordinary_push(
     gitops_deploy, tick, settings, state
 ):
-    tick.paths = ["ansible/roles/containers/sonarr/templates/docker-compose.yml.j2"]
+    tick.paths = ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
     target = deploy_phases.assess(tick.tools, state, settings)
     assert (target.local, target.origin) == (LOCAL, ORIGIN)
     assert target.action == "deploy" and target.dirty is False
@@ -199,25 +199,13 @@ def test_assess_raises_retryable_on_a_git_failure(gitops_deploy, tick, settings,
 
 
 # ── plan_tick() ───────────────────────────────────────────────────────────────────────────
-def test_plan_tick_maps_a_template_push_to_its_service(
+def test_plan_tick_maps_a_template_push_to_its_k8s_role(
     gitops_deploy, tick, settings, state
 ):
-    tick.paths = ["ansible/roles/containers/sonarr/templates/docker-compose.yml.j2"]
+    tick.paths = ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
     plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
-    assert plan.cs.services == {"sonarr"}
+    assert plan.cs.k8s == {"sonarr"}
     assert plan.paths == tick.paths
-
-
-def test_plan_tick_keeps_a_containers_path_off_the_same_named_k8s_role(
-    gitops_deploy, tick, settings, state
-):
-    """wg-easy is a Pi Docker role and a k8s role at once. A containers/ template edit is Pi
-    work, so it must not page as a deferred change to the k8s role of the same name."""
-    tick.declare("containers_list:\n  - name: wg-easy\n    platform: k8s\n")
-    tick.paths = ["ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"]
-    plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
-    assert plan.cs.services == {"wg-easy"}
-    assert plan.cs.k8s == set()
 
 
 def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
