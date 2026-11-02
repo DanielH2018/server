@@ -333,13 +333,19 @@ def build_manifest(entry: ManifestEntry, values: dict) -> dict:
     return obj
 
 
-def write(tree: Tree, expected: Expected, run: Run = subprocess.run) -> int:
+def write(
+    tree: Tree,
+    expected: Expected,
+    run: Run = subprocess.run,
+    pending: frozenset[str] = PENDING_RETIREMENT,
+) -> int:
     """Bring the cluster files in line with `secrets.yml` and `expected`; return the exit code.
 
     Args:
         tree: The tree to read and write.
         expected: The render's expectations.
         run: The subprocess runner for every sops call; a test binds its own environment.
+        pending: The keys a write keeps although no render references them.
     """
     try:
         values = decrypt(tree, tree.secrets, run)
@@ -363,7 +369,7 @@ def write(tree: Tree, expected: Expected, run: Run = subprocess.run) -> int:
             if tree.cluster_file.is_file()
             else None
         )
-        desired = _desired(values, expected, current)
+        desired = _desired(values, expected, current, pending)
         written = _encrypt_all(tree, desired, manifests, run)
         changed = _update_dotenv(tree, desired, current, run)
     except SopsFailed as exc:
@@ -390,14 +396,16 @@ def write(tree: Tree, expected: Expected, run: Run = subprocess.run) -> int:
     return OK
 
 
-def _desired(values: dict, expected: Expected, current: dict | None) -> dict[str, str]:
+def _desired(
+    values: dict, expected: Expected, current: dict | None, pending: frozenset[str]
+) -> dict[str, str]:
     """The dotenv's keys and values: the render's keys, plus each held pending retirement.
 
     `check` exempts a `PENDING_RETIREMENT` key from "no cluster render references it", so a
     write keeps one the cluster file still holds rather than unsetting it (#5960). It stays
     only while `secrets.yml` holds it too, which is where its value comes from.
     """
-    held = set(current or ()) & PENDING_RETIREMENT & set(values)
+    held = set(current or ()) & pending & set(values)
     return {key: str(values[key]) for key in sorted(expected.keys | held)}
 
 

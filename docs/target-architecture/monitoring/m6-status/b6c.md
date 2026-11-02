@@ -32,3 +32,8 @@ writes the file.
    protected paths, so the same PR updates it. With no token in the render, the script is no
    longer a STUB, and `probe.py applied` compares it (#6917).
 5. The token PR, a week after Cutover-1b, retires `registry_gc_push_token`. C-1a waits for it.
+   It is the last retirement the plans schedule, so it also deletes
+   `scripts/secrets_mgmt/pending_retirement.py`, its readers in `consumers.py`,
+   `cluster_vars.py` and `cluster_vars_check.py`, its `HOST_INPUTS` entry in
+   `scripts/renderer/renderer_lib/host_inputs.py`, and the tests that hold it. M5's plan
+   scheduled that deletion for its PR 5 (#6371), and M3's PR 6 left the set empty.

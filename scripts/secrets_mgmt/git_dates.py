@@ -138,6 +138,9 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_kuma_notify_failures_push_token",
         "monitor_bridge_loki_push_token",
         "monitor_bridge_loki_reachable_push_token",
+        # The `daniel-box Disk` tile's push token, whose tile and push M3's PR 5 deleted on
+        # 2026-10-23. M3's PR 6 retired it a week later.
+        "daniel_box_disk_push_token",
         # M6's Phase A and B push tokens, whose Kuma tiles and pushes the batches' cutovers
         # deleted between 2026-10-30 and 2026-11-01. Each batch's token PR retired them a week
         # later. A3:
