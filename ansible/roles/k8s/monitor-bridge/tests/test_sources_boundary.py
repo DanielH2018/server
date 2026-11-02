@@ -13,11 +13,11 @@ from pathlib import Path
 
 import pytest
 
-from bridge.sources import Sink, Sources
+from bridge.sources import Sources
 
 FILES = Path(__file__).resolve().parents[1] / "files"
 
-# The transport functions `Sources` wraps. `push` is the sink and the selector builders read
+# The transport functions `Sources` wraps. The selector builders read
 # no network, so neither is listed.
 FETCHERS = frozenset(
     {
@@ -59,7 +59,6 @@ def test_no_check_body_calls_the_transport_directly():
     # Named members, so a move of the package reads as a failure rather than an empty pass.
     assert {
         "checks/host_edge.py",
-        "checks/cluster.py",
         "checks/logs.py",
         "check.py",
     } <= set(modules)
@@ -162,21 +161,6 @@ def test_the_live_post_json_sends_the_payload(cfg):
     assert sent[0].get_method() == "POST"
     assert json.loads(sent[0].data) == {"a": 1}
     assert sent[0].get_header("X-k") == "v"
-
-
-def test_the_live_sink_pushes_to_the_token_s_monitor(cfg):
-    """FakeSink overrides `push`, so this is the one test that runs the live delegation.
-
-    A swapped token, status or message would pass every run-loop test and push nonsense to Kuma.
-    """
-    sent, opener = _fake_opener({"ok": True})
-    Sink(cfg, opener=opener).push("tok123", False, "disk 95%")
-    url = urllib.parse.urlsplit(sent[0].full_url)
-    assert url.path.endswith("/api/push/tok123")
-    assert dict(urllib.parse.parse_qsl(url.query)) == {
-        "status": "down",
-        "msg": "disk 95%",
-    }
 
 
 def _fake_opener(body):

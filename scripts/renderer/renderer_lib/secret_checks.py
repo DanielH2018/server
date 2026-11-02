@@ -50,7 +50,6 @@ from lib.repo_paths import K8S_ROLES, REPO, SHARED_TPL
 from renderer.renderer_lib.environment import renderer_env
 from renderer.renderer_lib.jinja_aliases import scan_templates
 from renderer.renderer_lib.jinja_uses import (
-    DYNAMIC_LOOKUP,
     Policy,
     TemplateScan,
     Use,
@@ -181,12 +180,6 @@ RULE5_MEMBERS = (
         _ROLE_TEMPLATES.format("uptime-kuma", "secret.yaml.j2"),
         "kuma_status_page_sync_push_token",
         "filter default",
-        1,
-    ),
-    NamedUse(
-        _ROLE_TEMPLATES.format("monitor-bridge", "env-secret.yaml.j2"),
-        DYNAMIC_LOOKUP.format("check.token"),
-        "output",
         1,
     ),
     *(NamedUse(*member) for member in ALIAS_MEMBERS),

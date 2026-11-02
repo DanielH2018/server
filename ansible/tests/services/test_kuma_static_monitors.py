@@ -17,8 +17,6 @@ from _kuma_entities import (
     ROLE_DEFAULTS,
     _entities,
     bridge_env,
-    bridge_push_tokens,
-    push_tokens_by_monitor,
 )
 
 # Entity types the Secret declares that are not monitors: the two notifications and the two
@@ -255,7 +253,7 @@ def test_the_deleted_b3_tiles_are_not_declared():
 
 
 # The 20 tiles M6 batch A6's Cutover-1a deleted: every tile monitor-bridge fed. Cutover-2 stops
-# the push and deletes `test_the_bridge_pushes_into_no_tile` with it.
+# the push and removed the loop.
 A6_TILES_DELETED = {
     "WAN Reachable",
     "Discord Delivery",
@@ -288,19 +286,16 @@ def test_the_deleted_a6_tiles_are_not_declared():
     assert not declared & A6_TILES_DELETED
     # Non-vacuity by name: a render that declared nothing would pass the line above.
     assert "Status Page Sync" in declared
-    assert len(A6_TILES_DELETED) == len(bridge_push_tokens())
 
 
-def test_the_bridge_pushes_into_no_tile():
-    # M6 batch A6's Cutover-1a deleted every tile the bridge feeds, and the bridge keeps pushing
-    # into the deleted tokens until Cutover-2: Kuma answers an unknown token with 404, which the
-    # bridge logs as `push failed`. Joined on rendered values, so the token the bridge pushes
-    # and the one a tile accepts are compared rather than two variable names. A tile that gains
-    # a bridge token back fails here, and so does a bridge row whose token went missing.
-    bridge_tokens = bridge_push_tokens()
-    tile_tokens = set(push_tokens_by_monitor().values())
-    assert "stub-monitor_bridge_swallowed_verdicts_push_token" in bridge_tokens
-    assert not bridge_tokens & tile_tokens, sorted(bridge_tokens & tile_tokens)
+def test_no_tile_carries_a_monitor_bridge_push_token():
+    # RED if a tile accepts a `monitor_bridge_*_push_token` again. M6 batch A6 retired all 20:
+    # nothing pushes into them, and the keys wait in PENDING_RETIREMENT for A6-9. Under the test
+    # render a token is `stub-<variable name>`, so the variable is readable off the tile.
+    tokens = {e.get("push_token", "") for e in _entities().values()}
+    assert not [t for t in tokens if t.startswith("stub-monitor_bridge_")]
+    # Non-vacuity by name: a render with no push tiles would pass the line above.
+    assert "stub-kuma_status_page_sync_push_token" in tokens
 
 
 def test_bridge_push_interval_is_a_multiple_of_the_loop():

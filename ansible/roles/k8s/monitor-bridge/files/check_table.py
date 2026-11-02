@@ -1,35 +1,28 @@
-"""Every check and gate monitor-bridge runs, and the Kuma push tile each one feeds (#3659).
+"""Every check and gate monitor-bridge runs (#3659).
 
 This table is the one place a check is declared. Everything else derives from it:
 
-- `registry.build_checks` turns every row into a `Check` carrying its `gate`, the three gate
-  rows first. `check.run_once` skips a row while the gate row it names reads down, and holds a
-  `startup_grace` row `up` through its first down cycle. `EXPORTER_DEPENDENT` stays in
-  `check.py`: it is keyed by scrape job, and one check can sit under two jobs.
-- `templates/env-secret.yaml.j2` renders one `KUMA_PUSH_<NAME>` per row, the env var
-  `bridge.types.push_env(name)` reads.
-- `k8s/uptime-kuma/templates/static-monitors.yaml.j2` renders one push tile per row.
-- `k8s/uptime-kuma/templates/status-page-sync-configmap.yaml.j2` pins each tile into the status
-  page group its `status_group` names.
+- `registry.build_checks` turns every row into a `Check` carrying its `gate`, the two gate
+  rows first. `check.run_once` skips a row while the gate row it names reads down.
+  `EXPORTER_DEPENDENT` stays in `check.py`: it is keyed by scrape job, and one check can sit
+  under two jobs.
+- `cli.main` counts the table's enabled rows into `homelab_check_rows`, which `BridgeCheckStale`
+  compares with the rows that export a verdict.
+- `scripts/docs/fragments_lib/fragments_bridge.py` reads it through
+  `ansible/filter_plugins/py_table.py` for the generated bridge fragments. That filter parses
+  this file without running it, which is why every field but `fn` is a literal and why this
+  module imports only check bodies.
 
-The two templates read this file through `ansible/filter_plugins/py_table.py`, which parses it
-without running it. That is why every field but `fn` is a literal, and why this module imports
-only check bodies.
+Adding a check takes one row here, one `check_*` body, and one rule in
+`k8s/observability/files/rules/bridge-exporter.yaml`.
 
-Adding a check takes one row here, one `check_*` body, and its push-token secret
-(`/add-secret`, which also runs `secret_rotation.py sync`). The `regen-doc-fragments` prek hook
-rewrites the secret-tiers fragment that sync moves, in the same commit.
+Since M6 batch A6's Cutover-2 nothing pushes to Uptime Kuma, so `token`, `kuma_id`, `display`,
+`status_group` and `description` feed no reader but the docs fragments. A6-8 deletes them.
 
-DECIDED: `token` is spelled out on every row rather than derived from `name`.
-scripts/secrets_mgmt/consumers.py finds who to redeploy after a rotation by grepping each
-role's files for the secret's name, so a derived name would drop monitor-bridge from that census
-and leave the pod pushing a revoked token. uptime-kuma renders the same tokens from this file;
-the census credits it through the cross-role read `deploy_changes.cross_role_readers` derives.
-Four rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name, because
-renaming a secret is a rotation.
-
-`kuma_id`, `display` and `description` are what AutoKuma compares, and it runs with
-`ON_DELETE=delete` keyed by id, so changing an id deletes the live monitor and its history.
+DECIDED: `token` is spelled out on every row rather than derived from `name`, until A6-8
+deletes the field. scripts/secrets_mgmt/consumers.py greps each role's files for a secret's
+name. Four rows predate the `monitor_bridge_<name>_push_token` rule and keep their old name,
+because renaming a secret is a rotation.
 
 Stdlib only, like every module under files/.
 """
@@ -38,7 +31,6 @@ from bridge.types import PushCheck
 from checks import (
     b2,
     cloudflare_ips,
-    cluster,
     gitops,
     healthchecks,
     host_edge,
@@ -157,13 +149,9 @@ CHECKS: tuple[PushCheck, ...] = (
         kuma_id="monitor-bridge-b2-storage", display="B2 Free Tier Headroom", status_group="Backups & Storage", gate="b2_reachable", critical=True, runbook="longhorn-backup-tiering",
         description="monitor-bridge reads B2's bucket usage against the free tier, gated behind B2 Reachable so a cap incident pages once. DOWN: storage past the threshold. A drain is nearly free; a prune pays per deleted backup, so read longhorn-backup-tiering before deleting.",
     ),
-    # The three reachability gates. A gate has no gate of its own: a tile that cannot go red is
-    # not coverage (#2825).
-    PushCheck(
-        name="prometheus", fn=cluster.check_prometheus, token="monitor_bridge_prometheus_push_token",
-        kuma_id="monitor-bridge-prometheus", display="Prometheus Reachable", status_group="Observability", is_gate=True,
-        description="monitor-bridge's gate for every Prometheus-backed check: a vector(1) query every 5 min. DOWN: Prometheus itself is unreachable, and every dependent tile is held green with a `skipped` message so this one pages alone. Check the prometheus pod first.",
-    ),
+    # The two reachability gates. A gate has no gate of its own: a tile that cannot go red is
+    # not coverage (#2825). The `prometheus` gate left with Cutover-2: the Watchdog covers a dead
+    # Prometheus, and `host_packages` keeps the value as the label of its exporter suppression.
     PushCheck(
         name="b2_reachable", fn=b2.check_b2_reachable, token="monitor_bridge_b2_reachable_push_token",
         kuma_id="monitor-bridge-b2-reachable", display="B2 Reachable", status_group="Backups & Storage", is_gate=True, critical=True, runbook="longhorn-backup-tiering",

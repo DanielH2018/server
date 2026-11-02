@@ -1,4 +1,4 @@
-"""Every query a check body sends, and every verdict `run_once` pushes, as two injectable objects.
+"""Every query a check body sends, as one injectable object.
 
 `cli.main()` builds one `Sources(cfg)` per process and `check.run_once` hands it to every gate
 probe and check body beside the frozen `Config`, so a check body reaches its data as
@@ -15,10 +15,6 @@ the User-Agent, the HTTPError contract. They read `bridge.net.<name>` qualified 
 so the Loki parsing tests can still patch `bridge.net._get_json` underneath a real `Sources`.
 `cfg` and the `opener` that sends each request are bound once here, so no method takes them; a
 test of the delegations hands in a fake opener rather than patching `urllib.request`.
-
-`Sink` is the write half: where `run_once` sends each gate's and each check's verdict. The live
-one pushes to Kuma through `bridge.net.push`; a test hands in `tests/_fake_sources.py`'s
-`FakeSink`, which records the pushes, instead of patching `bridge.net.push` (#3938).
 
 Stdlib only, like every module under files/.
 """
@@ -80,23 +76,3 @@ class Sources:
     ) -> JsonValue:
         """POST `payload` as JSON to `url` and parse the JSON response."""
         return bridge.net._post_json(url, payload, headers, opener=self.opener)
-
-
-class Sink:
-    """Where `run_once` sends each verdict: the Kuma push monitors, bound to one `Config`.
-
-    `cli.main()` builds one per process beside the `Sources`. Pushing is best-effort, as
-    `bridge.net.push` documents: an unreachable Kuma is logged, never raised.
-
-    Attributes:
-      cfg: The configuration holding KUMA_URL.
-      opener: Sends each push, in `urllib.request.urlopen`'s shape. None is the real `urlopen`.
-    """
-
-    def __init__(self, cfg: Config, opener: Opener | None = None) -> None:
-        self.cfg = cfg
-        self.opener = opener
-
-    def push(self, token: str, ok: bool, msg: str) -> None:
-        """Push `ok` as status up or down, with `msg`, to the Kuma push monitor for `token`."""
-        bridge.net.push(self.cfg, token, ok, msg, opener=self.opener)

@@ -2,7 +2,7 @@
 """monitor-bridge's entry point — the command line, the config load and the check loop.
 
 The Deployment runs `python /app/cli.py` with no arguments, which loops forever at INTERVAL
-seconds. Everything below the loop is a leaf: `registry.build_checks(env)` says which checks
+seconds. Everything below the loop is a leaf: `registry.build_checks()` says which checks
 exist and which gate each one names, `bridge.sources.Sources` is what every check queries,
 and `check.run_once` runs one cycle over them. Nothing here holds env-derived state after import.
 
@@ -21,7 +21,7 @@ import verdict_export
 import deploy_pipeline
 import registry
 from bridge.config import load_config
-from bridge.sources import Sink, Sources
+from bridge.sources import Sources
 from bridge.types import Check
 from check_table import CHECKS
 
@@ -43,8 +43,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = _ArgumentParser(
         prog="cli.py",
         description=(
-            "Evaluate the homelab health checks and push each result to its Uptime Kuma "
-            "push monitor. With no arguments this loops forever at INTERVAL seconds, which "
+            "Evaluate the homelab health checks and export each verdict as a Prometheus "
+            "gauge. With no arguments this loops forever at INTERVAL seconds, which "
             "is what the Deployment runs."
         ),
     )
@@ -64,11 +64,6 @@ def build_parser() -> argparse.ArgumentParser:
             "check runs even when its gate is not named."
         ),
     )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="evaluate every check and print the results, but push nothing to Kuma",
-    )
     return parser
 
 
@@ -77,7 +72,6 @@ def main(
     env: Mapping[str, str] | None = None,
     checks: list[Check] | None = None,
     sources: Sources | None = None,
-    sink: Sink | None = None,
     sleep: Callable[[float], None] | None = None,
     exposition: deploy_pipeline.Exposition | None = None,
     check_exposition: verdict_export.CheckExposition | None = None,
@@ -92,23 +86,20 @@ def main(
 
     Args:
       argv: The argument list, without the program name. None reads sys.argv.
-      env: The environment `load_config` and `registry.build_checks` read. None reads the real
-        one. See the DECIDED note below.
-      checks: The registry to run. None builds it from `env`, which is what the pod does; a test
-        passes the two entries it means rather than patching a module table.
+      env: The environment `load_config` reads. None reads the real one.
+      checks: The registry to run. None builds it from the table, which is what the pod does; a
+        test passes the two entries it means rather than patching a module table.
       sources: The `Sources` every gate and check body queries through. None builds the live
         `Sources(cfg)` from the config loaded here; a test passes a fake.
-      sink: Where every verdict is pushed. None builds the live `Sink(cfg)`, which pushes to
-        Kuma; a test passes a `FakeSink` that records the pushes.
       sleep: Waits out the INTERVAL between cycles. None is `time.sleep`; a test passes one that
         raises, to stop the loop at its first sleep.
       exposition: What the deploy-pipeline family publishes its gauges to after each cycle.
-        None in the looping pod builds one and serves it on DEPLOY_PIPELINE_PORT. `--once`,
-        `--dry-run` and `--check` serve nothing and read nothing, so a hand-run beside the pod
-        never contends for its port. A test passes an unserved `Exposition` and reads its body.
+        None in the looping pod builds one and serves it on DEPLOY_PIPELINE_PORT. `--once`
+        and `--check` serve nothing and read nothing, so a hand-run beside the pod never
+        contends for its port. A test passes an unserved `Exposition` and reads its body.
       check_exposition: What the per-row verdict gauges are recorded to. None in the looping
-        pod builds one and serves it on CHECK_EXPORTER_PORT, under the same `--once`,
-        `--dry-run` and `--check` rule as `exposition`. A test passes an unserved one.
+        pod builds one and serves it on CHECK_EXPORTER_PORT, under the same `--once` and
+        `--check` rule as `exposition`. A test passes an unserved one.
 
     Returns:
       The process exit code: 0 after a completed --once run, 2 on a configuration fault.
@@ -117,11 +108,8 @@ def main(
     # Building the config never raises; bridge.common.CONFIG_PROBLEMS carries HTTP_TIMEOUT's own
     # parse failure, parsed there because autofix-bridge shares that module.
     #
-    # DECIDED: `env` reaches `load_config` and `registry.build_checks`, and nothing else.
-    # Slice 17b moved the registry out of `check.py` precisely so `main(env={...})` can decide
-    # which monitor a result is pushed to, which it could not while the KUMA_PUSH_* tokens were
-    # read at import into a module-level list. The three gate rows are registry entries since
-    # M6's A6-7r, so their tokens come from the same `env`.
+    # `env` reaches `load_config` and nothing else: the registry reads no environment since
+    # Cutover-2 deleted the push tokens.
     environment = os.environ if env is None else env
     cfg = load_config(environment, problems=bridge.common.CONFIG_PROBLEMS)
     if cfg.CONFIG_PROBLEMS:
@@ -133,9 +121,8 @@ def main(
                 flush=True,
             )
         return 2
-    checks = registry.build_checks(environment) if checks is None else checks
+    checks = registry.build_checks() if checks is None else checks
     sources = Sources(cfg) if sources is None else sources
-    sink = Sink(cfg) if sink is None else sink
     sleep = time.sleep if sleep is None else sleep
     only = frozenset(args.checks) if args.checks else cfg.CHECKS_ONLY
     unknown = sorted((only | cfg.CHECKS_SKIP) - {c.name for c in checks})
@@ -152,10 +139,10 @@ def main(
         c.name for c in checks if check.check_enabled(c.name, only, cfg.CHECKS_SKIP)
     ]
     bridge.common.log(
-        "monitor-bridge starting (interval=%ss, once=%s, dry_run=%s, checks=%d/%d)"
-        % (cfg.INTERVAL, args.once, args.dry_run, len(enabled), len(checks))
+        "monitor-bridge starting (interval=%ss, once=%s, checks=%d/%d)"
+        % (cfg.INTERVAL, args.once, len(enabled), len(checks))
     )
-    if args.once or args.dry_run or args.checks:
+    if args.once or args.checks:
         exposition = None
         check_exposition = None
     else:
@@ -175,17 +162,12 @@ def main(
             cfg,
             sources,
             checks,
-            sink=sink,
-            dry_run=args.dry_run,
             only=only,
             export=check_exposition,
         )
         if exposition is not None:
             deploy_pipeline.refresh(cfg, sources, exposition, now=time.time())
-        # A --dry-run hand-run must touch nothing live, including the liveness-probe file — see
-        # build_parser()'s --dry-run help.
-        if not args.dry_run:
-            bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
+        bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
         if args.once:
             return 0
         sleep(cfg.INTERVAL)

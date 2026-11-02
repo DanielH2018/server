@@ -1,16 +1,15 @@
 """The run loop: what a registry declares and selects, how a gate row skips its dependents, and the heartbeat.
 
 `CHECKS` has to agree with the deployed manifests — a check needing an env var the manifest does
-not set fails at runtime, and a monitor with no check never beats. CHECKS_ONLY/CHECKS_SKIP are
-how a deployment narrows that registry.
+not set fails at runtime, and a row with no rule never pages. CHECKS_ONLY/CHECKS_SKIP are how a
+deployment narrows that registry.
 
-A monitor that cannot reach Prometheus, B2 or the WAN must report "cannot tell", never "down" —
-otherwise one unreachable dependency fires every monitor that reads it at once. These tests drive
-`run_once()` end to end with a fake source and sink, so they fail when the wiring changes rather
-than when the logic does. Each states the registry it means as `Check` entries, a gate row first
-and the rows that name it after. Three neighbours own the rest: the gate column's membership is
-`test_check_table.py`, the exporter suppression is `test_check_exporters.py`, and the startup
-grace is `test_check_streaks.py`.
+A row that cannot reach B2 or the WAN must report "cannot tell", never "down" — otherwise one
+unreachable dependency fires every row that reads it at once. These tests drive `run_once()` end
+to end with a fake source and a fake export, so they fail when the wiring changes rather than
+when the logic does. Each states the registry it means as `Check` entries, a gate row first and
+the rows that name it after. Two neighbours own the rest: the gate column's membership is
+`test_check_table.py`, and the exporter suppression is `test_check_exporters.py`.
 """
 
 from dataclasses import replace
@@ -26,7 +25,7 @@ from bridge.config import load_config
 import check
 import registry
 import verdict_export
-from _fake_sources import FakeSink, FakeSources, as_body, mk
+from _fake_sources import FakeExport, FakeSources, as_body, mk
 from bridge.types import Check
 
 
@@ -45,7 +44,7 @@ def test_touch_heartbeat_writes_and_refreshes(tmp_path, cfg):
 
 
 def test_touch_heartbeat_never_raises(cfg):
-    # Best-effort like push(): a heartbeat failure must not kill the loop.
+    # Best-effort: a heartbeat failure must not kill the loop.
     cfg = replace(cfg, HEARTBEAT_FILE="/nonexistent-dir/heartbeat")
     bridge.common.touch_heartbeat(cfg.HEARTBEAT_FILE)
 
@@ -83,24 +82,24 @@ def test_subset_names_are_real_checks():
 
 def test_run_once_with_only_filter_touches_no_gate(cfg):
     # With a CHECKS_ONLY filter active, run_once must evaluate exactly that set — no
-    # gate probe, no metric check, no push for anything else.
+    # gate probe, no metric check, no verdict recorded for anything else.
     cfg = replace(cfg, CHECKS_ONLY=SUBSET_ONLY, CHECKS_SKIP=frozenset())
     evaluated = []
     # Every body `_evaluate` can reach is a recorder: each registry entry, gate rows included.
     # That covers the whole registry, so a body outside the filter that ran would be recorded,
     # which stating a registry of only the subset could not show.
     checks = [replace(c, fn=mk(evaluated, c.name)) for c in registry.build_checks()]
-    sink = FakeSink()
-    # No answers: the Prometheus gate is outside the filter, so the exporter probe sends nothing.
-    check.run_once(cfg, FakeSources(), checks, sink)
+    export = FakeExport()
+    # No answers: no row of the subset sits under an exporter, so the probe sends nothing.
+    check.run_once(cfg, FakeSources(), checks, export=export)
     assert set(evaluated) == SUBSET_ONLY
-    assert len(sink.pushes) == len(SUBSET_ONLY)
+    assert len(export.records) == len(SUBSET_ONLY)
 
 
 def _quiet_cycle(cfg, checks, capsys, **kwargs):
     """One run_once over `checks`; returns what it logged."""
     cfg = replace(cfg, CHECKS_ONLY=frozenset(), CHECKS_SKIP=frozenset())
-    check.run_once(cfg, FakeSources(), checks, FakeSink(), **kwargs)
+    check.run_once(cfg, FakeSources(), checks, **kwargs)
     return capsys.readouterr().out
 
 
@@ -124,10 +123,13 @@ def test_a_cycle_logs_down_verdicts_and_one_summary_not_each_up(cfg, capsys):
     assert "CYCLE 1 up, 1 down, 0 skipped" in out
 
 
-def test_a_dry_run_still_logs_each_up_verdict(cfg, capsys):
+def test_a_narrowed_run_still_logs_each_up_verdict(cfg, capsys):
     entry = next(e for e in registry.build_checks() if e.name == "gitops_alive")
     out = _quiet_cycle(
-        cfg, [replace(entry, fn=mk([], entry.name))], capsys, dry_run=True
+        cfg,
+        [replace(entry, fn=mk([], entry.name))],
+        capsys,
+        only=frozenset({entry.name}),
     )
     assert f"OK   {entry.name} - {entry.name} ok" in out
 
@@ -158,13 +160,14 @@ def test_every_dashboard_parsed_check_is_logged_when_up(cfg, capsys):
 
 
 def test_the_registry_runs_the_gate_rows_first_and_hands_each_row_its_gate():
-    checks = registry.build_checks({})
-    gates = [c.name for c in checks[:3]]
-    assert gates == ["prometheus", "b2_reachable", "wan_reachable"]
+    checks = registry.build_checks()
+    gates = [c.name for c in checks[:2]]
+    assert gates == ["b2_reachable", "wan_reachable"]
     by_name = {c.name: c for c in checks}
+    assert "prometheus" not in by_name
     assert by_name["b2_storage"].gate == "b2_reachable"
     assert by_name["discord"].gate == "wan_reachable"
-    assert by_name["n8n"].gate == check.STARTUP_GRACE
+    assert by_name["n8n"].gate == "startup_grace"
     assert by_name["gitops_alive"].gate is None
     assert all(by_name[g].gate is None for g in gates)
 
@@ -172,63 +175,63 @@ def test_the_registry_runs_the_gate_rows_first_and_hands_each_row_its_gate():
 # ── a gate row skips the rows that name it ──────────────────────────────────────────────────
 
 
-def _gated_cycle(cfg, gate, result, **kwargs):
+def _gated_cycle(cfg, gate, result, export=None):
     """One cycle: `gate` as a row reporting `result`, a row behind it, and one behind nothing.
 
-    Returns (ran, pushed): the names whose body ran, and {token: (ok, msg)} for every push.
+    Returns (ran, exported): the names whose body ran, and {name: verdict} the exporter got.
+    `export` defaults to a `FakeExport`, so the verdicts are readable.
     """
     ran = []
-    sink = FakeSink()
+    export = FakeExport() if export is None else export
     check.run_once(
         cfg,
         FakeSources(prom_vector=lambda q: []),
         [
-            Check(gate, "tok_gate", as_body(result)),
-            Check("behind", "tok_behind", mk(ran, "behind"), gate),
-            Check("free", "tok_free", mk(ran, "free")),
+            Check(gate, as_body(result)),
+            Check("behind", mk(ran, "behind"), gate),
+            Check("free", mk(ran, "free")),
         ],
-        sink,
-        **kwargs,
+        export=export,
     )
-    return ran, {tok: (ok, msg) for tok, ok, msg in sink.pushes}
+    return ran, getattr(export, "verdicts", None)
 
 
 @pytest.mark.parametrize("gate", sorted(check.GATE_SKIP))
-def test_a_down_gate_skips_its_dependents_and_pages_once(cfg, gate):
+def test_a_down_gate_skips_its_dependents_and_exports_zero_for_both(cfg, gate, capsys):
     """One page for the outage, not one per dependent — and not zero."""
-    ran, pushed = _gated_cycle(cfg, gate, (False, "gate says down"))
+    ran, exported = _gated_cycle(cfg, gate, (False, "gate says down"))
     assert ran == ["free"]
-    # The dependent's heartbeat survives with the gate's skip message; the gate's own tile pages.
-    assert pushed["tok_behind"] == (True, check.GATE_SKIP[gate])
-    assert pushed["tok_gate"] == (False, "gate says down")
+    # The gate's own gauge reads 0 and pages through its rule. The dependent's body never ran,
+    # its gauge reads 0 too, and Alertmanager's inhibit rule holds its page behind the gate's.
+    assert exported == {gate: False, "behind": False, "free": True}
+    assert "CYCLE 1 up, 1 down, 1 skipped" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("gate", sorted(check.GATE_SKIP))
 def test_a_gate_that_is_up_skips_nothing(cfg, gate):
-    ran, pushed = _gated_cycle(cfg, gate, (True, "gate says up"))
+    ran, exported = _gated_cycle(cfg, gate, (True, "gate says up"))
     assert ran == ["behind", "free"]
-    assert pushed["tok_behind"] == (True, "behind ok")
+    assert exported == {gate: True, "behind": True, "free": True}
 
 
 def test_a_raising_gate_probe_is_a_down_gate(cfg):
     """The real outage path: the probe raises rather than returning a pair."""
-    ran, pushed = _gated_cycle(
+    ran, exported = _gated_cycle(
         cfg, "wan_reachable", RuntimeError("name resolution failed")
     )
     assert ran == ["free"]
-    assert pushed["tok_gate"][0] is False
-    assert "name resolution failed" in pushed["tok_gate"][1]
+    assert exported["wan_reachable"] is False
 
 
 def test_a_gate_the_filter_disables_reads_as_up(cfg):
     """A gate that does not run suppresses nothing, which is what lets `--check` name one row."""
-    ran, pushed = _gated_cycle(
+    ran, exported = _gated_cycle(
         replace(cfg, CHECKS_SKIP=frozenset({"wan_reachable"})),
         "wan_reachable",
         (False, "would be down"),
     )
     assert ran == ["behind", "free"]
-    assert "tok_gate" not in pushed
+    assert "wan_reachable" not in exported
 
 
 def test_a_gate_row_exports_its_verdict_and_a_skipped_row_exports_zero(cfg):
@@ -243,36 +246,33 @@ def test_a_gate_row_exports_its_verdict_and_a_skipped_row_exports_zero(cfg):
         ), name
 
 
-# ── the sources and the sink are injected values, not lookups ───────────────────────────────
+# ── the sources are an injected value, not a lookup ─────────────────────────────────────────
 
 
-def test_run_once_hands_its_sources_to_every_row_and_pushes_through_its_sink(cfg):
-    """A body that looked its sources up elsewhere would answer from the live transport, and a
-    push that bypassed the sink would reach the real Kuma."""
-    src = FakeSources(prom_vector=lambda q: [])
+def test_run_once_hands_its_sources_to_every_row_and_probes_no_exporter_without_a_dependent(
+    cfg,
+):
+    """A body that looked its sources up elsewhere would answer from the live transport."""
+    src = FakeSources()
     received = []
 
     def body(_cfg, got):
         received.append(got)
         return True, "ok"
 
-    sink = FakeSink()
-    check.run_once(
-        cfg,
-        src,
-        [Check("prometheus", "tok_prom", body), Check("disk", "tok_disk", body)],
-        sink,
-    )
+    export = FakeExport()
+    check.run_once(cfg, src, [Check("a", body), Check("b", body)], export=export)
     assert len(received) == 2
     assert all(got is src for got in received)
-    assert src.queries("prom_vector") == ["up"]
-    assert sink.pushes == [("tok_prom", True, "ok"), ("tok_disk", True, "ok")]
+    # No row sits under `EXPORTER_DEPENDENT`, so the cycle sends no exporter-health query.
+    assert src.queries("prom_vector") == []
+    assert export.records == [("a", True), ("b", True)]
 
 
-def test_run_once_requires_its_sources_and_its_sink(cfg):
-    """The red-proof half: no default `Sources` or `Sink`, so a forgotten argument cannot reach
-    the network or push to the live Kuma."""
+def test_run_once_requires_its_sources(cfg):
+    """The red-proof half: no default `Sources`, so a forgotten argument cannot reach the
+    network."""
     with pytest.raises(TypeError):
-        check.run_once(cfg, checks=[], sink=FakeSink())  # ty: ignore[missing-argument]
+        check.run_once(cfg, checks=[])  # ty: ignore[missing-argument]
     with pytest.raises(TypeError):
-        check.run_once(cfg, FakeSources(), [])  # ty: ignore[missing-argument]
+        check.run_once(cfg, FakeSources())  # ty: ignore[missing-argument]

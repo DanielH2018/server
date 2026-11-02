@@ -9,8 +9,8 @@ _SERVICE = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
 _BRINGUP = "ansible/k3s-bringup.yml"
 # A setup-role file that two k8s roles ship a copy of, and that no k8s role `lookup()`s.
 _COPIED = "hosts/lib/host_lib.py"
-# A monitor-bridge file uptime-kuma `lookup()`s to render one tile per check (#3781).
-_LOOKED_UP = "ansible/roles/k8s/monitor-bridge/files/check_table.py"
+# A crowdsec file that authelia and traefik `lookup()` to embed it.
+_LOOKED_UP = "ansible/roles/k8s/crowdsec/files/crowdsec-whitelist.yaml"
 
 
 def test_a_quiet_path_is_dropped_before_the_mapper_reads_it():
@@ -38,10 +38,10 @@ def test_changes_and_tags_both_expand_a_copied_file():
 
 def test_tags_adds_a_lookup_reader_and_changes_does_not():
     r = reach([_LOOKED_UP])
-    declared = {"monitor-bridge", "uptime-kuma"}
-    assert r.tags(declared) == {"monitor-bridge", "uptime-kuma"}
-    assert "uptime-kuma" not in r.changes.k8s
-    assert "uptime-kuma" in r.touched()
+    declared = {"crowdsec", "authelia", "traefik"}
+    assert r.tags(declared) == {"crowdsec", "authelia", "traefik"}
+    assert {"authelia", "traefik"}.isdisjoint(r.changes.k8s)
+    assert {"authelia", "traefik"} <= r.touched()
 
 
 def test_a_build_context_file_outside_every_role_tags_the_role_embedding_it():

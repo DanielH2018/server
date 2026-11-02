@@ -1,9 +1,8 @@
-"""HTTP, PromQL and LogQL fetching for monitor-bridge, and the Kuma push.
+"""HTTP, PromQL and LogQL fetching for monitor-bridge.
 
 This is the transport. A check body never calls it: it queries through the `src` argument,
-`bridge.sources.Sources`, whose live methods delegate here and whose fake answers in tests, and
-`run_once` pushes through `bridge.sources.Sink`, which delegates to `push`. Every function that
-sends a request takes an `opener`, the `urllib.request.urlopen`-shaped callable that sends it, so a
+`bridge.sources.Sources`, whose live methods delegate here and whose fake answers in tests.
+Every function that sends a request takes an `opener`, the `urllib.request.urlopen`-shaped callable that sends it, so a
 transport test hands in a fake opener rather than patching `urllib.request` (#3938). None means
 the real `urlopen`, resolved at call time. What the suite still patches on this module is
 `_get_json` in the Loki parsing tests. Callers reach it as `bridge.net._get_json`, never by
@@ -29,11 +28,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, TypeVar
 
-import bridge.common
-
-# `cap_push_msg` and `PUSH_MSG_MAX` live in bridge.common so autofix-bridge's push shares them;
-# they are re-exported here for the callers and tests that reach them as `net.*`.
-from bridge.common import HTTP_TIMEOUT, PUSH_MSG_MAX, cap_push_msg  # noqa: F401
+from bridge.common import HTTP_TIMEOUT
 from bridge.config import Config
 from bridge.parsing import FETCH_BODY_MAX, describe_fetch_failure, endpoint_label
 from bridge.types import JsonObject, JsonValue, as_list, as_object, as_object_list
@@ -286,41 +281,3 @@ def loki_lines(
             lines.append((int(ts), line))
     lines.sort()
     return lines
-
-
-def push(
-    cfg: Config,
-    token: str,
-    ok: bool,
-    msg: str,
-    opener: Opener | None = None,
-) -> None:
-    """Pushes an up/down heartbeat plus message to the Kuma push monitor for `token`.
-
-    A no-op, logged, when token is unset. Best-effort: an unreachable Kuma is logged and
-    swallowed rather than raised, so it never crashes the check loop. `msg` is capped at
-    `PUSH_MSG_MAX` chars first (`cap_push_msg`), so no check can hand Discord an embed it
-    rejects.
-
-    Args:
-        cfg: The configuration holding KUMA_URL.
-        token: The Kuma push-monitor token; empty/None skips the push.
-        ok: Whether the check succeeded (pushed as status "up") or not ("down").
-        msg: The status message to attach to the push.
-        opener: Sends the GET that carries the push. None is the real `urlopen`.
-    """
-    # DECIDED: one attempt, not setup/common's `kuma_push` with its three attempts 30s apart
-    # (#3745). That retry suits a caller with one push per run, as autofix-bridge and the
-    # status-page sync are. This loop pushes one tile per check, every cycle, in sequence, so
-    # through an uptime-kuma rollout's 404 window each push would wait 60s and the cycle would
-    # stall for most of an hour. A lost push here is retried by the next cycle, 300s later, and
-    # `cap_push_msg` keeps the ` (N cycles)` suffix that `kuma_push`'s cap does not.
-    if not token:
-        bridge.common.log("WARN: no push token set; skipping push:", msg)
-        return
-    msg = cap_push_msg(msg)
-    qs = urllib.parse.urlencode({"status": "up" if ok else "down", "msg": msg})
-    try:
-        _get_json("%s/api/push/%s?%s" % (cfg.KUMA_URL, token, qs), opener=opener)
-    except Exception as e:  # best-effort heartbeat; never crash the loop
-        bridge.common.log("push failed (%s):" % msg, e)
