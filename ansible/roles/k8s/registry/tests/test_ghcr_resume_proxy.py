@@ -16,6 +16,7 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import cast
+from urllib.parse import urlsplit
 
 import pytest
 
@@ -192,11 +193,21 @@ def test_a_client_range_is_answered_from_its_offset(ghcr, proxy):
     assert body == BLOB_DATA[1000:]
 
 
-def test_a_challenge_and_a_manifest_pass_through_unchanged(proxy):
-    status, headers, _ = _get(proxy, "/v2/", Authorization="Bearer stale")
+def test_a_client_without_a_token_authenticates_through_the_proxys_own_realm(proxy):
+    # distribution's realmAllowed: a bearer realm must sit on the remote's own host:port.
+    status, headers, _ = _get(proxy, BLOB_PATH, Authorization="")
     assert status == 401
-    assert headers["WWW-Authenticate"].startswith("Bearer realm=")
+    params = dict(
+        ghcr_resume_proxy.CHALLENGE_PARAM.findall(headers["WWW-Authenticate"])
+    )
+    assert urlsplit(params["realm"]).netloc == f"127.0.0.1:{proxy.server_address[1]}"
 
+    token = ghcr_resume_proxy.fetch_token(headers["WWW-Authenticate"], timeout=5)
+    status, _, body = _get(proxy, BLOB_PATH, Authorization=f"Bearer {token}")
+    assert (status, body) == (200, BLOB_DATA)
+
+
+def test_a_manifest_passes_through_unchanged(proxy):
     status, headers, body = _get(
         proxy, "/v2/flaresolverr/flaresolverr/manifests/latest"
     )
