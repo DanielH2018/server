@@ -85,8 +85,11 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     - `REGISTRY_PROXY_REMOTEURL` names the `ghcr-resume` container on the pod's loopback,
       `registry_k8s_ghcr_resume_port`. It runs `files/ghcr_resume_proxy.py` from a ConfigMap
       named for its content, so a script edit rolls the mirror.
-    - The sidecar relays every request to ghcr.io unchanged, the 401 challenge included, so
-      distribution still fetches its tokens from ghcr.io's realm. It answers a blob GET
+    - The sidecar relays every request to ghcr.io, and rewrites a 401 challenge's
+      `https://ghcr.io/token` realm to its own `http://127.0.0.1:<port>/token`, which it
+      relays back to ghcr.io. distribution's `realmAllowed` drops a bearer realm on another
+      host than `REGISTRY_PROXY_REMOTEURL`, so with ghcr.io's realm it sent every request
+      without a token and cached nothing from 2026-10-29 until #6955. It answers a blob GET
       itself. After a cut it asks ghcr.io for a fresh signed URL, with a fresh anonymous
       token if the old one expired, and continues with `Range: bytes=<sent>-`.
     - A resumed answer that is not a 206 starting at that offset aborts the response short,

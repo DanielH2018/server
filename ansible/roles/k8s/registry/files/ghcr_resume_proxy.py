@@ -7,8 +7,11 @@ blob over about 200 MB therefore never completes through the mirror, and contain
 fall back to ghcr.io on a short body (#6401).
 
 `REGISTRY_PROXY_REMOTEURL` names this process instead of ghcr.io. Every request except a blob
-GET passes through unchanged, the 401 challenge included, so distribution still fetches its
-tokens from ghcr.io's realm. A blob GET is answered here: the proxy follows the 307 itself,
+GET passes through, with one edit: a 401 challenge whose realm is on ghcr.io names this
+process's own `/token` instead. distribution's `realmAllowed` drops a bearer realm on another
+host than the remote, and any realm on a loopback IP, so with ghcr.io's own realm it never
+fetched a token and every upstream request was a 401 (#6955). The token GET then relays here
+to ghcr.io like any other request. A blob GET is answered here: the proxy follows the 307 itself,
 streams the body, and on a short read asks ghcr.io for a fresh signed URL and continues with
 `Range: bytes=<sent>-`. A resumed answer that is not a 206 starting at that offset aborts the
 response, so distribution sees a short body and stores nothing, rather than a spliced one.
@@ -31,6 +34,7 @@ BLOB = re.compile(r"^/v2/(?P<repo>.+)/blobs/(?P<digest>sha256:[0-9a-f]{64})$")
 OPEN_RANGE = re.compile(r"^bytes=(\d+)-$")
 CONTENT_RANGE = re.compile(r"^bytes (\d+)-(\d+)/(\d+)$")
 CHALLENGE_PARAM = re.compile(r'(\w+)="([^"]*)"')
+REALM = re.compile(r'realm="([^"]*)"', re.IGNORECASE)
 FORWARDED = ("Authorization", "Accept", "User-Agent")
 HOP_BY_HOP = {
     "connection",
@@ -196,10 +200,24 @@ class Handler(BaseHTTPRequestHandler):
         with resp:
             self._copy(resp, method)
 
+    def _challenge(self, value: str) -> str:
+        """Return a `WWW-Authenticate` value with an upstream realm moved to this proxy."""
+        here = self.headers.get("Host") or "%s:%d" % self.proxy.server_address[:2]
+
+        def local(match: re.Match[str]) -> str:
+            realm = match.group(1)
+            if not realm.startswith(self.proxy.upstream + "/"):
+                return match.group(0)
+            return f'realm="http://{here}{realm[len(self.proxy.upstream) :]}"'
+
+        return REALM.sub(local, value)
+
     def _copy(self, resp: http.client.HTTPResponse, method: str = "GET") -> None:
         body = b"" if method == "HEAD" else resp.read()
         self.send_response(resp.status, resp.reason)
         for key, value in resp.getheaders():
+            if key.lower() == "www-authenticate":
+                value = self._challenge(value)
             if key.lower() not in HOP_BY_HOP and key.lower() != "content-length":
                 self.send_header(key, value)
         length = (
