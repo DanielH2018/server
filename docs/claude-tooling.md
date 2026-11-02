@@ -418,7 +418,10 @@ row whose metadata came from `rootq` says `(rootq)`, such as anything under dani
 `probe_lib/applied_tasks.py` names the modules it reads (`template`, `copy`, `file`, `cron`
 with a `cron_file`). It follows every task import, including the shared
 `{{ role_path }}/../common/tasks/` files with the import's `vars:`, and an import loop once per
-item. A `copy` with `remote_src` is compared by metadata only, because its source is on the
+item. A file-writing task's own `vars:` render its path and content, as k3s's
+`/etc/resolv.conf` task passes the shared template its nameservers (#6918). A task var that
+does not evaluate, such as one reading a `register` or `item`, is left out, so the render
+leaves a `STUB` and the row reads `ok-meta`. A `copy` with `remote_src` is compared by metadata only, because its source is on the
 host. It evaluates each `when:` as Jinja against the host's merged inventory vars, with
 Jinja-valued vars resolved and an import's `vars:` on top. A gate that reads a value only the
 run sets, such as a `set_fact`, a `register` or an `ansible_*` fact, cannot be read. The
