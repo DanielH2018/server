@@ -18,6 +18,11 @@ expression. A whole-body match would flag a script that only names a secret in a
 (`_helpers.registry_secret_names`) is shared with the release_bin guard so the two cannot
 disagree about what counts as a secret.
 
+NO NAMED MEMBER. The census had one, registry-gc.sh.j2, and M6 batch B6c's Cutover-2 retired it
+when that script's push, and its inline token, went. No other script renders a secret, so the
+tree test below runs over an empty census until one does, and the red proofs above carry the
+predicate.
+
 LIMIT: a script rendering a name the registry does not carry is invisible here. The eval sweep
 reads both its secrets from systemd credentials, so no task of the role renders them.
 
@@ -37,16 +42,6 @@ from _role_census import task_files_by_role
 
 TEMPLATE_MODULES = {"ansible.builtin.template", "template"}
 PLANES = ("k8s", "setup")
-
-# Named so the census cannot go vacuous: a rename of the tasks
-# file, of the src, or of the registry entry the body references drops the script out of the
-# set silently, and the assertion below would pass over nothing.
-KNOWN_SECRET_SCRIPTS = frozenset(
-    {
-        ("setup", "k8s_host_files", "registry-gc.sh.j2"),
-    }
-)
-
 
 # --- the rule, as a predicate ----------------------------------------------------------
 
@@ -149,18 +144,6 @@ def _secret_rendering_tasks():
         hits = renders_a_secret(template.read_text(), names)
         if hits:
             yield plane, role, src, task, hits
-
-
-def test_the_census_finds_the_known_members():
-    found = {
-        (plane, role, src) for plane, role, src, _t, _h in _secret_rendering_tasks()
-    }
-    missing = KNOWN_SECRET_SCRIPTS - found
-    assert not missing, (
-        f"the census no longer finds {sorted(missing)}; found {sorted(found)}. Either the "
-        "script moved, its src was renamed, or the registry name it embeds changed — update "
-        "KNOWN_SECRET_SCRIPTS, or the guard below is checking nothing."
-    )
 
 
 def test_every_secret_rendering_shell_template_task_has_no_log():

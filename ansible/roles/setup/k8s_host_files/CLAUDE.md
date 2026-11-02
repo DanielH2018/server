@@ -54,10 +54,10 @@ retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` mani
 reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
 manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. #6536 added the
 dockerhub-mirror's Job manifest, `templates/dockerhub-mirror-gc-job.yaml.j2`, which the same
-script applies in a second phase. #6913 added the record of `registry-gc.sh`'s SHA-256 in
-`/var/lib/homelab/setup-applied-sha256.d/k8s_host_files`. `probe.py applied` compares the
-live script with that record, because the script's render holds the Kuma push token as a
-STUB. crowdsec's first conversion
+script applies in a second phase. #6913 added a host-side record of `registry-gc.sh`'s
+SHA-256, because the script's render held the Kuma push token as a STUB. M6 batch B6c's Cutover-2 dropped the push and the record task, so
+`probe.py applied` hashes the real render. The old record file stays on daniel-box and nothing
+reads it. crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installed the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. H5.14 moved those into the Pi package
 (`hosts/components/crowdsec-probe/`) and deleted the tasks, so no timer is left here.
@@ -140,12 +140,12 @@ crowdsec's retired crons.
 - **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
   changes this role.
 - **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes the
-  `registry-gc` textfile under `/var/lib/node-exporter-textfile/`, pushes into the deleted
-  `Registry GC` Kuma tile until B6c's Cutover-2, and pings healthchecks.io as `registry-gc`.
-  The `registry-gc` journal (`journalctl -t registry-gc`) shows both mirror phases. A
-  conversion apply leaves the cron file and the script's hash unchanged. After the restore the
-  run warms the mirror: it GETs blobs through the mirror's loopback hostPort and writes
-  nothing to the cluster. The push message ends with the warm counts, such as `warmed 354
-  blob(s), 6207 MB in 133s`.
+  `registry-gc` textfile under `/var/lib/node-exporter-textfile/` and pings healthchecks.io
+  as `registry-gc`. It pushes nothing to Kuma since B6c's Cutover-2. The `registry-gc` journal
+  (`journalctl -t registry-gc`) shows both mirror phases. A conversion apply leaves the cron
+  file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
+  blobs through the mirror's loopback hostPort and writes nothing to the cluster. The run's
+  message, in `/var/lib/registry-gc/state.json` and the healthchecks.io ping, ends with the
+  warm counts, such as `warmed 354 blob(s), 6207 MB in 133s`.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.

@@ -164,7 +164,7 @@ def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):
         deploy_tags,
         "_git_diff_paths",
         lambda ref, cwd=None: [
-            "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2",
+            "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2",
             "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2",
         ],
     )
@@ -252,20 +252,6 @@ def test_changed_reports_no_files_differ(capsys, monkeypatch):
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "no files differ" in captured.err
-
-
-def test_changed_warns_but_still_exits_zero_on_a_docs_only_change(capsys, monkeypatch):
-    # tasks/-only change: not auto-deployed, not a tag, but must not be silently dropped.
-    monkeypatch.setattr(
-        deploy_tags,
-        "_git_diff_paths",
-        lambda ref, cwd=None: ["ansible/roles/containers/dozzle/tasks/main.yml"],
-    )
-    assert deploy_tags.main(["changed"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out == ""
-    assert "structural change" in captured.err
-    assert "dozzle" in captured.err
 
 
 def test_changed_default_ref_is_origin_master():

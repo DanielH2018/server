@@ -193,13 +193,12 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   went stale. Both rules are in `files/rules/registry.yaml` there. The check proves the path
   and the mirror's answer, not the cache: with the WAN up, the proxy fetches a missing tag
   from GHCR and still answers 200.
-- The GC run reports three ways: the off-site healthchecks.io `registry-gc` dead-man, the
+- The GC run reports two ways: the off-site healthchecks.io `registry-gc` dead-man and the
   `registry-gc` textfile that observability's `RegistryGcFailed` and `RegistryGcNotReporting`
-  read, and a push to Kuma. M6 batch B6c's Cutover-1a deleted the `Registry GC` tile, and its
-  Cutover-1b made the two rules page Discord. The push (`registry_gc_push_token`) lands in a
-  deleted token until Cutover-2 drops it
-  (`docs/target-architecture/monitoring/m6-retire-kuma.md`). The token existed nowhere but the
-  script until 2026-09-18 (#1937), so before that only the dead-man saw a run.
+  read. The script pushed to a `Registry GC` Kuma tile until M6 batch B6c
+  (`docs/target-architecture/monitoring/m6-retire-kuma.md`): Cutover-1a deleted the tile,
+  Cutover-1b made the two rules page Discord, and Cutover-2 dropped the push. B6c's token PR
+  then retired the push token.
   - Both rules are `warning`, the deleted tile's channel mix. Their deadline is the script's
     `DEADLINE_S`, which equals the deleted tile's interval.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this

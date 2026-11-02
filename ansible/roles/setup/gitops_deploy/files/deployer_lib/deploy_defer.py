@@ -175,52 +175,57 @@ def drop_deleted_setup_roles(
     return kept
 
 
-def route_secret_readers(
+def route_key_readers(
     tools: DeployTools, config: Config, target: TickTarget, cs: ChangeSet
 ) -> None:
-    """Route the setup roles reading a `secrets.yml` key the range moved into `cs` (#5436).
+    """Route the setup roles reading a key the range moved into `cs` (#5436, #6962).
 
-    `secrets.yml` sits under no setup role, so PR #5405's key for `claude_code` applied
-    nothing. Each reader path goes through `setup_roles_for`, less the shippers of a vars file
-    that read none of its secret-built keys, and `handle_broad` then applies or records each
-    role as for its own edit. A refusal routes nothing and the `secrets` page names the
-    consumers. Any other failure parks, as no later range carries the change again. Runs
-    after `drop_deleted_setup_roles`, whose reclassification would lose the roles.
+    The key is a `secrets.yml` key or a top-level inventory variable. Neither file sits under a
+    setup role, so PR #5405's key for `claude_code` applied nothing, and PR #6952's
+    `host_python_version` reached the deploy plane alone while eight setup roles render it.
+    Each reader path goes through `setup_roles_for`, less the shippers of a vars file that read
+    none of its moved keys, and `handle_broad` then applies or records each role as for its own
+    edit. The secrets half may refuse, which routes none of its readers and leaves the
+    `secrets` page to name them, while the inventory half never refuses. Any failure parks,
+    as no later range carries the change again. Runs after `drop_deleted_setup_roles`, whose
+    reclassification would lose the roles.
     """
-    if not cs.secrets:
+    if not (cs.secrets or cs.inventory):
         return
     try:
-        paths, unread = tools.secret_setup_readers(
+        paths, unread, refused = tools.secret_setup_readers(
             config.repo, target.local, target.origin
         )
     except SecretReadersRefused as exc:
-        log(f"secret-readers: no setup role routed ({exc})")
+        log(f"key-readers: no setup role routed ({exc})", level=WARNING)
         return
     except Exception as exc:
-        log(f"secret-readers: {type(exc).__name__}: {exc} — parking", level=WARNING)
-        cs.secret_readers_failed = cs.broad = True
+        log(f"key-readers: {type(exc).__name__}: {exc} — parking", level=WARNING)
+        cs.key_readers_failed = cs.broad = True
         return
+    if refused:
+        log(f"key-readers: no secret reader routed ({refused})", level=WARNING)
     roles = {r for p in paths for r in setup_roles_for(p) - set(unread.get(p, ()))}
     if not roles:
         return
     log(
-        f"secret-readers: secrets.yml moved a key {', '.join(sorted(roles))} reads "
+        f"key-readers: the range moved a key {', '.join(sorted(roles))} reads "
         f"({', '.join(sorted(paths))}) — routing them as setup-plane changes"
     )
-    cs.secret_setup_roles |= roles
+    cs.key_reader_roles |= roles
     cs.setup_roles |= roles
     cs.broad = cs.broad_setup = True
 
 
-def secret_reader_tags(cs: ChangeSet) -> set[str]:
-    """The `initial_setup.yml` tags of the `cs.secret_setup_roles` the tick's run applies.
+def key_reader_tags(cs: ChangeSet) -> set[str]:
+    """The `initial_setup.yml` tags of the `cs.key_reader_roles` the tick's run applies.
 
     The other half of `setup_tags_for(paths)`, with its filter: a role gated off this host or
     applied by another playbook gets no tag here and is recorded in `manual_plane` instead.
     """
     return {
         setup_role_tag(role)
-        for role in cs.secret_setup_roles
+        for role in cs.key_reader_roles
         if tick_applies_setup_role(role)
     }
 
@@ -274,7 +279,7 @@ def parks_the_tick(cs, setup_tags: set[str], pending: list[str]) -> bool:
     unroutable and nameless at once. Fast-forwarding it would apply nothing, record nothing
     and say nothing.
     """
-    if cs.broad_manual or cs.secret_readers_failed:
+    if cs.broad_manual or cs.key_readers_failed:
         return True
     if cs.setup_roles and routing_failed():
         return True
@@ -291,7 +296,7 @@ def park(
         cs.setup_roles,
         config.branch,
         playbooks=cs.manual_playbooks,
-        secret_readers_failed=cs.secret_readers_failed,
+        key_readers_failed=cs.key_readers_failed,
     )
     # Say so in the JOURNAL, every tick. `alert_once` below throttles the Discord page to one
     # per SHA, and until 2026-09-09 that throttle also decided what the journal said: from the
@@ -301,7 +306,7 @@ def park(
     # journal when `land.sh` exits 4, and a page they already received an hour ago is not there.
     log(
         f"park: origin {origin[:8]}: parked, nothing merged — {broad_park_reason(cs)}. "
-        f"{'' if cs.secret_readers_failed else 'Apply by hand: '}{remediation}"
+        f"{'' if cs.key_readers_failed else 'Apply by hand: '}{remediation}"
     )
     # A park doesn't ff-merge, so it re-evals next tick; the per-SHA marker (inside alert_once)
     # stops a re-queue. The remediation names the RIGHT playbook per plane (2026-07-16 M1).
@@ -312,7 +317,7 @@ def park(
         "broad",
         origin,
         deploy_alert_text.broad_deferred_alert(
-            origin, remediation, cs.secret_readers_failed
+            origin, remediation, cs.key_readers_failed
         ),
     )
 

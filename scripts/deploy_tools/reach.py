@@ -61,11 +61,6 @@ from deployer_lib.deploy_logic import (
     shared_module_consumers,
 )
 
-# The one directory under the role trees that is not a service: `common`, the shared Docker
-# deploy path. `--tags common` matches no containers_list entry, and Ansible exits 0 on a tag
-# selecting nothing.
-_NOT_SERVICES = frozenset({"common"})
-
 
 def role_for(path: str) -> str | None:
     """The role directory a changed path belongs to, or None.
@@ -79,14 +74,14 @@ def role_for(path: str) -> str | None:
     `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
 
     The path shape itself is the deployer's `deploy_changes.role_of`, reached through the
-    index, so one function answers which role a path sits in. The `.md` rule and
-    `_NOT_SERVICES` stay HERE: `role_of` is the plain mapper, and this is the caller that reads
-    DIFF paths rather than a tree at a ref.
+    index, so one function answers which role a path sits in. The `.md` rule stays HERE:
+    `role_of` is the plain mapper, and this is the caller that reads DIFF paths rather than a
+    tree at a ref.
     """
     if path.endswith(".md"):
         return None
     at = role_of(path)
-    if at is None or at.plane == "setup" or at.role in _NOT_SERVICES:
+    if at is None or at.plane != "k8s":
         return None
     return at.role
 

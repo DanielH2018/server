@@ -17,17 +17,14 @@ import pytest
 
 from secrets_mgmt.secret_bearing_host_paths import (
     readable_beyond_owner_and_group,
-    secret_bearing_host_paths,
     world_readable_secret_bearing_tasks,
 )
 
 
 def test_no_secret_bearing_host_script_is_world_readable():
-    # The census this filters is floored by name in test_secret_bearing_host_paths.py; the
-    # count here keeps this file from passing on an emptied one. One since M6 batch B3's
-    # Cutover-2, after H7.40's package scripts and the two gitops_deploy timers stopped
-    # embedding their push tokens: registry-gc.sh is the last script that does.
-    assert len(secret_bearing_host_paths()) >= 1
+    # The census is empty since M6 batch B6c's Cutover-2 dropped registry-gc.sh's push, the last
+    # script that embedded a token, so no real subject remains and the line that counted one went
+    # with it. The synthetic cases below keep the rule: one world-readable script is flagged.
     assert world_readable_secret_bearing_tasks() == []
 
 

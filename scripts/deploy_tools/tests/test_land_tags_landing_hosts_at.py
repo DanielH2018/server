@@ -122,22 +122,6 @@ def test_the_path_derivation_feeds_this_routing_read(tmp_path):
     ) == {"daniel-box": ["wg-easy"]}
 
 
-def test_a_change_to_both_wg_easy_services_still_routes_to_both_hosts(tmp_path):
-    """REJECTING half of the pair above: a PR changing the
-    Pi's Compose wg-easy as well must keep deploying it."""
-    shas = _repo(tmp_path)
-    k8s_only = land_platform.k8s_only_tags(
-        [
-            "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2",
-            "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2",
-        ],
-        {"wg-easy"},
-    )
-    assert land_tags.landing_hosts_at(
-        ["wg-easy"], shas[1], tmp_path, k8s_only=k8s_only
-    ) == {"daniel-box": ["wg-easy"], "daniel-pi": ["wg-easy"]}
-
-
 def test_restricting_a_tag_with_no_k8s_entry_leaves_it_routed(tmp_path):
     """The fail-safe: `newpi` is declared on daniel-pi alone, so restricting it to k8s would
     route it to NO host -- and the landing then falls through to one local deploy that matches

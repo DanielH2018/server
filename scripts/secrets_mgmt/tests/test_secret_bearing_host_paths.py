@@ -5,16 +5,14 @@ module returns. A derivation that quietly narrows therefore unblocks a read that
 credential into the terminal and the transcript, and nothing else in the tree notices — the
 module had no test at all until this file.
 
-Two shapes of test, because either alone is green while checking nothing:
+Every derivation test runs over a synthetic tree: one input the derivation must flag and one it
+must not, so a rule that stopped matching altogether fails here rather than reading green.
 
-- **Against the real tree.** `MUST_FIND` pins path -> secret-name pairs the census has to
-  return. The module finds its own subject by pattern (`roles/**/tasks/*.yml`, plus
-  `task_file.parent.parent` for the role directory), so a rename or a moved directory makes it
-  return `{}` — and every synthetic-tree test below still passes, since those build the tree to
-  match the pattern. The pin is a subset, never equality or a count: a new secret-bearing
-  script must not fail this file.
-- **Against a synthetic tree.** One input the derivation must flag and one it must not, so a
-  rule that stopped matching altogether fails here rather than reading green.
+No test pins a script of the real tree. `MUST_FIND` did, with registry-gc.sh as its one member,
+and M6 batch B6c's Cutover-2 retired it when that script's push, and its inline token, went: the
+real census is empty, and a pin on a subject that no longer exists can only fail. A script that
+embeds a credential again is covered by the synthetic cases, and the hook's own tests run over a
+fixture checkout.
 
 Nothing in this file prints the content of a secret-bearing source. The assertions are over
 dest paths and secret NAMES, which is exactly what the module returns and what the hook's deny
@@ -35,18 +33,6 @@ from secrets_mgmt.secret_bearing_host_paths import (
     secret_names,
 )
 
-# Path -> a secret name the census MUST report for it. Entries chosen to span the shapes
-# the derivation has to cover:
-#   * registry-gc.sh — a k8s_host_files script that embeds a push token. The module's docstring
-#     records the incident on secret-rotation-audit.sh, which H7.36 moved to a host package and
-#     which now reads its token from a credential, so it left the census. M6 batch B3's
-#     Cutover-2 took github-ruleset-drift.sh out the same way: its push, and its token with it.
-# The NAME is pinned alongside the path deliberately: a path survives a `GENERIC_NAMES` entry
-# or a tier flipped to `ignore` while losing the very name that made it dangerous.
-MUST_FIND = {
-    "/usr/local/bin/registry-gc.sh": "registry_gc_push_token",
-}
-
 # The hook's own copy of the prefix list. It short-circuits on this before importing anything,
 # so a prefix added here and not there makes the guard stop firing for the new tree.
 HOOK = REPO / ".claude" / "hooks" / "block-protected-bash.py"
@@ -57,18 +43,7 @@ def real_census():
     return secret_bearing_host_paths()
 
 
-# ── the real tree: the census must not be empty, and must contain these ──────────────────
-def test_the_census_reaches_the_known_secret_bearing_scripts(real_census):
-    missing = {
-        dest: name
-        for dest, name in MUST_FIND.items()
-        if name not in real_census.get(dest, ())
-    }
-    assert not missing, (
-        f"census lost {missing}; it currently reports {sorted(real_census)}"
-    )
-
-
+# ── the real tree: whatever it returns is visible to the hook ────────────────────────────
 def test_every_returned_dest_is_under_a_host_bin_prefix(real_census):
     stray = [d for d in real_census if not d.startswith(HOST_BIN_PREFIXES)]
     assert not stray, f"{stray} would be invisible to the hook's cheap prefix gate"
@@ -114,20 +89,6 @@ def test_the_generic_address_name_is_not_tracked_but_its_password_is():
     names = secret_names()
     assert "email" not in names
     assert "smtp_notify_app_password" in names
-
-
-def test_tiering_the_address_did_not_drop_its_script_from_the_census(real_census):
-    """Narrowing a name must not narrow the deny set.
-
-    `MUST_FIND` already pins the path; this says why it is there, and fails with the reason
-    rather than with a missing-key diff if a later change removes the push token too.
-    """
-    reported = real_census.get("/usr/local/bin/registry-gc.sh", ())
-    assert "email" not in reported
-    assert "registry_gc_push_token" in reported, (
-        "registry-gc.sh left the census; the hook now permits a content-printing read "
-        "of a script that renders a push token inline"
-    )
 
 
 # ── the synthetic tree: one input it must flag, one it must not ──────────────────────────

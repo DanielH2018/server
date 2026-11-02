@@ -65,9 +65,9 @@
 # registry_k8s_gc_cron_weekday, _hour and _minute. For each mirror in turn it scales the
 # Deployment to 0, runs its Job from /etc/rancher/k3s/manifests/registry-jobs/ (the prune and
 # garbage-collect), scales the mirror back and warms it. It writes the result to the
-# registry-gc textfile on every run, and pushes it to Kuma when registry_gc_push_token is set.
-# It reads /etc/rancher/k3s/k3s.yaml, /usr/local/lib/homelab-check-lib.sh and
-# /usr/local/lib/kuma-push-lib.sh, and keeps its state in /var/lib/registry-gc.
+# registry-gc textfile on every run, and pings healthchecks.io when a key is configured.
+# It reads /etc/rancher/k3s/k3s.yaml and /usr/local/lib/homelab-check-lib.sh, and keeps its
+# state in /var/lib/registry-gc.
 
 set -uo pipefail
 
@@ -78,18 +78,13 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t registry-gc "kuma-push-lib.sh missing — run initial_setup on this host"
-  exit 1
-}
-# shellcheck source=/dev/null
 source /usr/local/lib/homelab-check-lib.sh || {
   logger -t registry-gc "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
 }
 
 # The longest legitimate gap between two textfile writes: the weekly cron plus two hours for the
-# worst run, the interval of the Kuma `Registry GC` tile. RegistryGcNotReporting in
+# worst run, the interval the deleted Kuma `Registry GC` tile had. RegistryGcNotReporting in
 # observability's rules/registry.yaml reads it, and
 # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins all three.
 DEADLINE_S=612000
@@ -148,10 +143,6 @@ use_dockerhub_store() {
   MIRROR_STARTED=0 MIRROR_DONE=0 MIRROR_DOWN=0 MIRROR_NOTE="" MIRROR_MSG=""
 }
 
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
-PUSH_TOKEN="{{ registry_gc_push_token | default('') }}"
-
 STATUS=down
 MSG="did not complete"
 
@@ -165,20 +156,12 @@ finish() {
   # run is not root. Nothing secret is in it — a status, a timestamp and a count.
   chmod 0644 "$STATE_FILE"
 
-  # Before the push and ungated, so a run with no token or a refused push still records it.
   write_check_textfile registry-gc "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" \
     "$DEADLINE_S" || logger -t registry-gc "textfile write failed (status=${STATUS})"
 
-  if [[ -n "$PUSH_TOKEN" ]]; then
-    kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
-      "$KUMA_HOST" "$KUMA_RESOLVE_IP" registry-gc
-  else
-    logger -t registry-gc "registry_gc_push_token not set — skipping push (see /add-secret)"
-  fi
-
   # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
-  # Kuma runs on the cluster this mutates, so a cluster outage silences both the push above and
-  # the monitor waiting for it. Skipped when no key is configured.
+  # Prometheus runs on the cluster this mutates, so a cluster outage silences both the textfile
+  # above and the rules waiting for it. Skipped when no key is configured.
   # Names mirror longhorn-backup-health.sh.j2 exactly: test_healthchecks_pings.py selects the
   # files it audits by matching HC_PING_KEY / HC_URL, so a locally-renamed variable drops this
   # script out of the parametrization and the guards silently stop being checked.
@@ -411,7 +394,7 @@ mirror_blob_digests() {
 # read and blob GET is bounded by the budget left, so the phase ends within its budget.
 # DECIDED: a blob that fails to warm is named in the journal and the message but leaves the run
 # up. It costs a cold pull later, never a corrupt store, and the likely cause is a slow GHCR
-# episode that a Kuma page cannot fix. #5654 has the measurements.
+# episode that a page cannot fix. #5654 has the measurements.
 warm_mirror() {
   local ref repo id blobs blob got left
   local -A seen=()

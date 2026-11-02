@@ -223,7 +223,7 @@ def plane_note(
 ) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
-    A deploy tag covers roles/k8s and roles/containers. It does not cover the setup plane,
+    A deploy tag covers roles/k8s. It does not cover the setup plane,
     which `deploy.yml` cannot apply at all -- so a PR touching only roles/setup derives zero
     tags. That must not read as `nothing-to-deploy`: a setup-role change needs its own
     `initial_setup.yml --tags <role>` run.

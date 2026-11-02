@@ -87,27 +87,6 @@ def test_docs_only_pr_scopes_to_nothing_without_falling_back():
     assert source == "pr"
 
 
-def test_a_docker_role_derives_its_tag():
-    tags, source = land_tags.derive(
-        ["ansible/roles/containers/dozzle/templates/docker-compose.yml.j2"],
-        changed_files=1,
-    )
-    assert tags == ["dozzle"]
-    assert source == "pr"
-
-
-def test_the_shared_common_role_is_not_a_tag():
-    """`common` is the shared Docker deploy path, not a service.
-
-    Deploying `--tags common` matches nothing and Ansible exits 0, so a green run would prove
-    nothing happened.
-    """
-    tags, _ = land_tags.derive(
-        ["ansible/roles/containers/common/tasks/main.yml"], changed_files=1
-    )
-    assert tags == []
-
-
 def test_missing_changed_files_count_falls_back_rather_than_guessing():
     """`gh` omitting changedFiles must not be read as agreement.
 
