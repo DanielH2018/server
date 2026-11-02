@@ -1,12 +1,12 @@
 {
-  "checksum": "245de006f4bc48ca35e65305149079286cc8b6a768b7cad7041bce7ab0933d4c",
+  "checksum": "2ef1e38ce2b32267b9955f239dda42b0becbcde89d13979528cf1097644c0f1d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/nut/CLAUDE.md#Two-tier shutdown (unchanged from the Docker era)",
   "row": {
     "atoms": {
       "ansible/roles/k8s/nut/defaults/main.yml": "28e5abeb0b7dfcd3879b9441f88e25807c45c224c7aca2790af4a4c95fe54a1d"
     },
-    "python": "3.14",
-    "verified_sha": "eab40596f"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

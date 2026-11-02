@@ -178,7 +178,10 @@ def test_the_online_local_build_asks_the_anchor_and_a_refusal_installs_nothing(
     assert result.returncode == 1
     assert "not a green first-parent commit of master" in result.stderr
     assert "bootstrap_anchor.py" in (host.root / "uv.calls").read_text()
-    assert [c for c in host.apt_calls() if c.startswith("install")] == []
+    installs = [c for c in host.apt_calls() if c.startswith("install")]
+    # The anchor's own venv needs PyYAML's build dependencies, which come from Ubuntu's
+    # archive; nothing the unverified clone built is installed.
+    assert installs == ["install -y --no-install-recommends gcc libc6-dev libyaml-dev"]
 
 
 def test_a_kit_without_the_k3s_binary_is_refused_naming_the_file(tmp_path):

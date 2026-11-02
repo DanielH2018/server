@@ -120,7 +120,7 @@ from fanout_lib.transport import (
 # pins for session-health so this reading is taken by the same interpreter a real session would use.
 HEALTH_CMD = (
     f'cd {REPO} && printf \'{{"source":"startup"}}\' | '
-    "uv run --no-project --no-python-downloads --python 3.14.6 .claude/hooks/session-health.py"
+    "uv run --no-project --no-python-downloads --python 3.15.2 .claude/hooks/session-health.py"
 )
 
 

@@ -1,5 +1,5 @@
 {
-  "checksum": "daa0b24a23c36b8c55b71353049d62c48b910743d4f47a613b871afe67cdab93",
+  "checksum": "77c2d490ee4993409afad89021ddcc13108e9ab3c6af4ceb88d2be92c07c109d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/game-stats/CLAUDE.md#At a glance",
   "row": {
@@ -10,7 +10,7 @@
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "scripts/renderer/tests/test_renderer_game_stats_restart.py": "011f225a8798b9f64ece31b2a2dfd5208da73b791626e0ba85c2e1cda209736c"
     },
-    "python": "3.14",
-    "verified_sha": "f04bc82cf"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

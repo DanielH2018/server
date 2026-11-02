@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-02 06:17 UTC
-generated_sha: 8157ef1478
+generated_at: 2026-11-02 18:17 UTC
+generated_sha: e4b9a0e932
 ---
 
 !!! warning "Generated file — do not edit"
@@ -28,7 +28,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#4660](https://github.com/DanielH2018/server/issues/4660) | low | gap | - | Workflow subagent run length has no measured outcome, so their cap stays undecided | 2026-10-12 | 0 | - | ✓ |
 | [#4663](https://github.com/DanielH2018/server/issues/4663) | low | gap | - | Implementer maxTurns decision needs a sample with enough red PRs | 2026-10-12 | 1 | - | ✓ |
-| [#4715](https://github.com/DanielH2018/server/issues/4715) | low | gap | docs | The backlog page shows #2584's retired accepted reason after G4 drops the role-doc size gate | 2026-10-12 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#6370](https://github.com/DanielH2018/server/issues/6370) | low | improvement | security | Retire the disk-health push token a week after the M3 cutover | 2026-10-25 | 0 | - | ✓ |
 | [#6371](https://github.com/DanielH2018/server/issues/6371) | low | improvement | security | Retire the three Loki push tokens a week after the M5 cutover | 2026-10-25 | 0 | - | ✓ |
@@ -37,27 +36,15 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6436](https://github.com/DanielH2018/server/issues/6436) | low | gap | docs | PR template header still says the GitOps deployer applies image pins and the deploy plane | 2026-10-28 | 0 | - | - |
 | [#6572](https://github.com/DanielH2018/server/issues/6572) | low | improvement | cicd | Re-measure master-merge CI supersessions after narrowing land.sh's pre-merge branch update | 2026-10-29 | 0 | - | ✓ |
 | [#6643](https://github.com/DanielH2018/server/issues/6643) | low | improvement | security | Retire daniel-server's user-home age key once no Ansible apply runs there | 2026-10-30 | 0 | - | ✓ |
-| [#6655](https://github.com/DanielH2018/server/issues/6655) | low | improvement | backup-observability | M6 A3: retire the three scrape and log-shipper push tokens a week after the cutover | 2026-10-30 | 0 | - | ✓ |
-| [#6681](https://github.com/DanielH2018/server/issues/6681) | low | improvement | backup-observability | M6 A4: retire the five edge push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6687](https://github.com/DanielH2018/server/issues/6687) | low | improvement | backup-observability | M6 A2: retire the three container push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
 | [#6697](https://github.com/DanielH2018/server/issues/6697) | low | improvement | backup-observability | Drop longhorn_robustness.py from monitor-bridge's shipped modules | 2026-10-31 | 0 | - | - |
-| [#6702](https://github.com/DanielH2018/server/issues/6702) | low | improvement | backup-observability | M6 A5: retire the five storage push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6710](https://github.com/DanielH2018/server/issues/6710) | low | improvement | backup-observability | M6 A1: retire the four host push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6720](https://github.com/DanielH2018/server/issues/6720) | low | improvement | backup-observability | M6 B8: retire the Pi Pressure push token a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6759](https://github.com/DanielH2018/server/issues/6759) | low | improvement | backup-observability | M6 A7: retire the workload log errors push token a week after the cutover | 2026-10-31 | 0 | - | ✓ |
 | [#6762](https://github.com/DanielH2018/server/issues/6762) | low | improvement | cicd | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings | 2026-10-31 | 0 | - | ✓ |
 | [#6763](https://github.com/DanielH2018/server/issues/6763) | low | improvement | cicd | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands | 2026-10-31 | 0 | - | ✓ |
 | [#6769](https://github.com/DanielH2018/server/issues/6769) | low | improvement | cicd | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week | 2026-10-31 | 0 | - | ✓ |
-| [#6796](https://github.com/DanielH2018/server/issues/6796) | low | improvement | backup-observability | M6 B3: retire the GitHub ruleset drift and interaction limit push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6797](https://github.com/DanielH2018/server/issues/6797) | low | improvement | backup-observability | M6 B6a: retire the artifacts sync and OTLP door push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6799](https://github.com/DanielH2018/server/issues/6799) | low | improvement | backup-observability | M6 B7: retire the four pod push tokens a week after the cutover | 2026-10-31 | 0 | - | ✓ |
-| [#6811](https://github.com/DanielH2018/server/issues/6811) | low | improvement | backup-observability | M6 B1: retire the five k3s-cron push tokens a week after the cutover | 2026-11-01 | 0 | - | ✓ |
 | [#6821](https://github.com/DanielH2018/server/issues/6821) | low | gap | docs | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 | 2026-11-01 | 0 | - | ✓ |
-| [#6860](https://github.com/DanielH2018/server/issues/6860) | low | improvement | backup-observability | M6 B5: retire the two Pi heartbeat push tokens a week after the cutover | 2026-11-01 | 0 | - | ✓ |
-| [#6879](https://github.com/DanielH2018/server/issues/6879) | low | improvement | backup-observability | M6 B2, B4 and B6b: retire the 20 push tokens a week after the cutover | 2026-11-01 | 0 | - | ✓ |
 | [#6882](https://github.com/DanielH2018/server/issues/6882) | low | gap | docs | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 | 2026-11-01 | 0 | - | ✓ |
 | [#6917](https://github.com/DanielH2018/server/issues/6917) | low | gap | security | rootq refuses to hash registry-gc.sh, so probe.py applied cannot compare it with its apply record | 2026-11-02 | 0 | - | ✓ |
-| [#6930](https://github.com/DanielH2018/server/issues/6930) | low | gap | docs | contracts.md still gates M6 C-1a on D5's registry PR after registry-gc moved to M6 batch B6c | 2026-11-02 | 0 | - | ✓ |
+| [#6950](https://github.com/DanielH2018/server/issues/6950) | low | gap | docs | M6 status files still describe the Phase A and B token PRs as future steps | 2026-11-02 | 0 | - | ✓ |
+| [#6958](https://github.com/DanielH2018/server/issues/6958) | low | gap | cicd | owed_run primary-checkout test passes on the unfixed code outside a worktree | 2026-11-02 | 0 | worktree-d5-orchestrator-wave14 | - |
 
 ## Deferred, by date
 
@@ -71,26 +58,14 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | 2026-11-04 | withheld | [#4599](https://github.com/DanielH2018/server/issues/4599) | The AIDE check cannot page on an unexplained file change |
 | 2026-11-04 | withheld | [#6750](https://github.com/DanielH2018/server/issues/6750) | M6 B9: re-read the Pi's integrity-scan textfiles after their first packaged runs |
 | 2026-11-05 | withheld | [#4188](https://github.com/DanielH2018/server/issues/4188) | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands |
-| 2026-11-06 | withheld | [#6655](https://github.com/DanielH2018/server/issues/6655) | M6 A3: retire the three scrape and log-shipper push tokens a week after the cutover |
-| 2026-11-07 | withheld | [#6681](https://github.com/DanielH2018/server/issues/6681) | M6 A4: retire the five edge push tokens a week after the cutover |
-| 2026-11-07 | withheld | [#6687](https://github.com/DanielH2018/server/issues/6687) | M6 A2: retire the three container push tokens a week after the cutover |
-| 2026-11-07 | withheld | [#6702](https://github.com/DanielH2018/server/issues/6702) | M6 A5: retire the five storage push tokens a week after the cutover |
-| 2026-11-07 | withheld | [#6710](https://github.com/DanielH2018/server/issues/6710) | M6 A1: retire the four host push tokens a week after the cutover |
-| 2026-11-07 | withheld | [#6720](https://github.com/DanielH2018/server/issues/6720) | M6 B8: retire the Pi Pressure push token a week after the cutover |
-| 2026-11-07 | withheld | [#6759](https://github.com/DanielH2018/server/issues/6759) | M6 A7: retire the workload log errors push token a week after the cutover |
 | 2026-11-07 | withheld | [#6769](https://github.com/DanielH2018/server/issues/6769) | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week |
-| 2026-11-07 | withheld | [#6796](https://github.com/DanielH2018/server/issues/6796) | M6 B3: retire the GitHub ruleset drift and interaction limit push tokens a week after the cutover |
-| 2026-11-07 | withheld | [#6797](https://github.com/DanielH2018/server/issues/6797) | M6 B6a: retire the artifacts sync and OTLP door push tokens a week after the cutover |
-| 2026-11-07 | withheld | [#6799](https://github.com/DanielH2018/server/issues/6799) | M6 B7: retire the four pod push tokens a week after the cutover |
 | 2026-11-08 | withheld | [#6697](https://github.com/DanielH2018/server/issues/6697) | Drop longhorn_robustness.py from monitor-bridge's shipped modules |
 | 2026-11-08 | withheld | [#6762](https://github.com/DanielH2018/server/issues/6762) | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings |
 | 2026-11-08 | withheld | [#6763](https://github.com/DanielH2018/server/issues/6763) | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands |
-| 2026-11-08 | withheld | [#6811](https://github.com/DanielH2018/server/issues/6811) | M6 B1: retire the five k3s-cron push tokens a week after the cutover |
-| 2026-11-08 | withheld | [#6860](https://github.com/DanielH2018/server/issues/6860) | M6 B5: retire the two Pi heartbeat push tokens a week after the cutover |
-| 2026-11-08 | withheld | [#6879](https://github.com/DanielH2018/server/issues/6879) | M6 B2, B4 and B6b: retire the 20 push tokens a week after the cutover |
 | 2026-11-09 | withheld | [#6821](https://github.com/DanielH2018/server/issues/6821) | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 |
 | 2026-11-09 | withheld | [#6882](https://github.com/DanielH2018/server/issues/6882) | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 |
 | 2026-11-09 | withheld | [#6926](https://github.com/DanielH2018/server/issues/6926) | M6 plan leaves registry-gc's Kuma push to a D5 PR that landed without removing it, so C-1a's gate never clears |
+| 2026-11-09 | withheld | [#6950](https://github.com/DanielH2018/server/issues/6950) | M6 status files still describe the Phase A and B token PRs as future steps |
 | 2026-11-10 | withheld | [#3778](https://github.com/DanielH2018/server/issues/3778) | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it |
 | 2026-11-10 | withheld | [#3865](https://github.com/DanielH2018/server/issues/3865) | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap |
 | 2026-11-10 | withheld | [#6917](https://github.com/DanielH2018/server/issues/6917) | rootq refuses to hash registry-gc.sh, so probe.py applied cannot compare it with its apply record |

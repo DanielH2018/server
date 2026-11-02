@@ -1,5 +1,5 @@
 {
-  "checksum": "c7b33c7b6e7774e391a3a8496616b544bc734ce740e49b02ad3a9f617a507a9f",
+  "checksum": "b955f6ab264251753317d9ee9cea1ca23e2000fae9bc9164ddc94aefd80aff9f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/traefik-crds/CLAUDE.md#At a glance",
   "row": {
@@ -11,7 +11,7 @@
       "scripts/renderer/renderer_lib/cluster.py:attach_vendored": "c962ec861063a89c6eb36e79e6914f99a2f4dd70a2ba3fc90b2678aa0f7f9c0f",
       "scripts/renderer/tests/test_renderer_crd_census.py": "7fa9c323c1792f6a53133bd2b9c79da13b3f8314adc5516a32d64e2acd22e5e9"
     },
-    "python": "3.14",
-    "verified_sha": "d980d6e47"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

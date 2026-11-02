@@ -1,5 +1,5 @@
 {
-  "checksum": "9c5174033b963f4623eba7c1c9976f7d61065439c86159e254aa53039c7e7f55",
+  "checksum": "99cf1d263c006d1f70a15da4578f52f351842b54ffcbddf7b89080575950d285",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
   "row": {
@@ -23,7 +23,7 @@
       "docs/target-architecture/monitoring/m6-retire-kuma.md": "521cc9bee40ee23c4f9947b444898dff18c9f2a4f644eeb75419cd9721d8a32c",
       "scripts/renderer/renderer_lib/images.py:ghcr_text": "2d355f1d1aa99f59d01f5bf5c6ab179e1efa8f7d41400ae0b043aeb259ff760d"
     },
-    "python": "3.14",
-    "verified_sha": "d60baf0f6"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

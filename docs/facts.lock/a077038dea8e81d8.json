@@ -1,5 +1,5 @@
 {
-  "checksum": "5dc8d2fc1be9484bff42a03246509994884770bc0a41a250f09d5fe664388a47",
+  "checksum": "d43f8c5de9c4607ed5f9bd23332ccf62361a4f76bac3f87ccc250ee0b0500f8f",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/claude-code/CLAUDE.md#The artifacts node's two timers",
   "row": {
@@ -11,7 +11,7 @@
       "hosts/lib/tests/test_claude_artifacts_node_timers.py": "e8dc749ce8b978aeb467c6a7e0fde526c83bb85c46a5631ee4db5f21fae82998",
       "hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma": "14d70765e73964d1d851a48058acfb4b19918e8586c83319ebe594fc46f174a4"
     },
-    "python": "3.14",
-    "verified_sha": "279a5b7bb"
+    "python": "3.15",
+    "verified_sha": "7047f4620"
   }
 }

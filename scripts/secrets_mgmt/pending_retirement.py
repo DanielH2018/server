@@ -12,6 +12,14 @@ without a cycle.
 # demand a cluster render for it, and `cluster_vars.write` keeps it in the cluster file (#5960).
 # M5's PR 5 retired its three tokens on 2026-10-29, M6's Phase A and B token PRs retired theirs
 # a week after each batch's cutover, and M3's PR 6 retired `daniel_box_disk_push_token` on
-# 2026-11-02. M6's B6c Cutover-1a adds `registry_gc_push_token`, and B6c's token PR, the last
-# retirement the plans schedule, deletes this module with its readers and tests.
-PENDING_RETIREMENT: frozenset[str] = frozenset()
+# 2026-11-02. B6c's token PR, the last retirement the plans schedule, deletes this module with
+# its readers and tests.
+PENDING_RETIREMENT: frozenset[str] = frozenset(
+    {
+        # M6 batch B6c's Cutover-1a deleted the `Registry GC` tile. registry-gc.sh pushes into the
+        # deleted token until Cutover-2 drops the push, and no cluster render references the
+        # token. B6c's token PR retires the key a week after Cutover-1b and deletes this entry
+        # with it.
+        "registry_gc_push_token",
+    }
+)

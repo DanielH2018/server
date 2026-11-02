@@ -1,5 +1,5 @@
 {
-  "checksum": "02618117d1754cfcb134f23a8d6529bf6b61cec2b3ff4f7aff8d67203a8c83dc",
+  "checksum": "420330bbb67a46713d9061e11ebe0d6409ce73c3b2d4fad4514d372ec7c86378",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/autofix-bridge/CLAUDE.md#Editing & testing",
   "row": {
@@ -9,7 +9,7 @@
       "scripts/renderer/renderer_lib/restart.py": "b331d41dae536f3934ebb79237271891eab11638dba5103a0271331fd42eb8d4",
       "scripts/renderer/tests/test_renderer_autofix_bridge_script.py": "7b1a54202b459259afec507b82eddc8eadd3dfa77c7dfea8287fde84fdf8db28"
     },
-    "python": "3.14",
-    "verified_sha": "7d8a1ecea"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

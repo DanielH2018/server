@@ -1,12 +1,12 @@
 {
-  "checksum": "8032bbfb27eb915f48b5a668f27b133fbf3b4c5eafbe7e0a725f58f182bab533",
+  "checksum": "33df34cfeb60ab980157f3143806fa8f212df7c67c7f71baa050d7796586a941",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#`kubectl` — what actually decides",
   "row": {
     "atoms": {
       "docs/claude-shell-permissions.md": "444005815ecd96d4f19a9c3a25f009aa778550679ae347cbb1d2e9f796e4a2be"
     },
-    "python": "3.14",
-    "verified_sha": "55862020d"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

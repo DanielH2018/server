@@ -1,5 +1,5 @@
 {
-  "checksum": "5369aa1a8d8825c26e9542559f81b4c5a26ffbcadcf259825214cf4b597aed84",
+  "checksum": "cd25a6d2f51ce879c8681303d3e11475b143127c01c26d6bea1ca9e52e0dc8c3",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/crowdsec/CLAUDE.md#The `crowdsec-jobs` sidecar runs four jobs beside the LAPI",
   "row": {
@@ -8,7 +8,7 @@
       "ansible/roles/k8s/crowdsec/templates/deployment.yaml.j2": "19a9cd1ee321f31da60d0386b98c019cb1f8606e381e6f1fe914538e4f9fc68a",
       "ansible/roles/setup/k8s_host_files/tasks/crowdsec.yml": "6551a956b06355ad705419d9b56127da48cf62a285f157809fd12a2ba9ed065a"
     },
-    "python": "3.14",
-    "verified_sha": "ab684ae22"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

@@ -44,5 +44,5 @@ ConfigMaps (`deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`, #3320). `resolv
 
 Each task file's header carries the reasoning and the variable contract; read it before
 adding a caller. `host_lib.py` must stay importable on the host Python floor
-(`test_host_python_pin.py`), not only on the repo's 3.14 — it runs under the pinned host
+(`test_host_python_pin.py`), not only on the repo's 3.15 — it runs under the pinned host
 interpreter, never `uv run` against the repo.

@@ -253,7 +253,7 @@
 - name: Install Python CLI tooling as uv tools
   tags: [tooling]
   # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
-  # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.14 to match the
+  # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.15 to match the
   # repo's .python-version (the test/validate `uv run` hooks). Per-user, so `prek install`
   # (below) finds prek on ~/.local/bin.
   #
@@ -264,7 +264,7 @@
   #   ansible-lint  == prek.toml's ansible/ansible-lint rev (the hook's own version).
   #   prek          == the CI setup action's `pip install prek==` pin (.github/actions/setup).
   # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
-  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.14 {{ item }}"
+  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.15 {{ item }}"
   loop:
     - ansible-core==2.22.0rc2
     - ansible-lint==26.10.1

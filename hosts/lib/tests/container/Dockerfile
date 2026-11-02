@@ -36,7 +36,11 @@ ENV container=docker
 # install (`pi_host_seed`), so the container has no DNS and an apt that needs a fetch retries
 # until the case's 900 second timeout (run 41153975441). `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
-# install, and bootstrap-host.sh calls each before it installs anything (H7.15a).
+# install, and bootstrap-host.sh calls each before it installs anything (H7.15a). `gcc`,
+# `libc6-dev` and `libyaml-dev` build PyYAML's C extension for the repo venv. They are
+# installed here, not downloaded: bootstrap_case.py's apt-get shim simulates every install, so
+# bootstrap-host.sh's own install of them would leave no compiler, and it skips that install
+# when all three are present.
 RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runner-ca.crt \
     set -eu; \
     rm -f /etc/apt/apt.conf.d/docker-clean /etc/apt/sources.list; \
@@ -51,7 +55,8 @@ RUN --mount=type=bind,from=runner-ca,source=ca-certificates.crt,target=/run/runn
     echo 'Acquire::Retries "10";' > /etc/apt/apt.conf.d/80retries; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt update; \
     apt-get -o Acquire::https::CaInfo=/run/runner-ca.crt install -y --no-install-recommends \
-        systemd systemd-sysv python3 ca-certificates age git gnupg curl; \
+        systemd systemd-sysv python3 ca-certificates age git gnupg curl \
+        gcc libc6-dev libyaml-dev; \
     apt-get install -y --download-only tree zram-tools watchdog earlyoom \
         fail2ban sysstat acct rkhunter aide aide-common
 

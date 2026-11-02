@@ -1,5 +1,5 @@
 {
-  "checksum": "a5e563d014d37180373d7a8e34536eb34997c6a7efc2fefcf67766b772f4d3ac",
+  "checksum": "3647207b4a199e79224c27b66d9c15bc25354edbe611c1a784407a998aaabc10",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/claude-code/CLAUDE.md#Autonomous-role contract (`claude-fanout-server-lander`, a landing with no session behind it)",
   "row": {
@@ -10,7 +10,7 @@
       "scripts/dev/fanout_lib/operator_waits.py": "9b2269ed193430a4939c5cd3ead5a32a38e5d62dfaa744a364a7d535d69a7735",
       "scripts/lib/": "59c0359aa79f274a0e5bfdc220c39ce5894c4b0a6423c48fd9b10bcca9102b29"
     },
-    "python": "3.14",
-    "verified_sha": "0d0316e19"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

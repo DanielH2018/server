@@ -1,5 +1,5 @@
 {
-  "checksum": "05fef1d52672bf6ead3d36dd247955b0d364306868cbb5f45b73432686750e7b",
+  "checksum": "4215d0e5f321af33230834822e416ff665d93186bad511effaadac5f29530ebc",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/flux/CLAUDE.md#What Flux follows",
   "row": {
@@ -11,7 +11,7 @@
       "scripts/renderer/tests/test_renderer_bootstrap_documents.py": "f8f71e522df8edadec2cd71774e585ca6189d4e6f1ab59daf839afe290638ebd",
       "scripts/renderer/tests/test_renderer_crd_census.py": "7fa9c323c1792f6a53133bd2b9c79da13b3f8314adc5516a32d64e2acd22e5e9"
     },
-    "python": "3.14",
-    "verified_sha": "35a19551f"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

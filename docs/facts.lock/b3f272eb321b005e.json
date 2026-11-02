@@ -1,5 +1,5 @@
 {
-  "checksum": "69e299c09a3b4e86d8bb5d0a09dc867f12d404636ad38f468d06d0706c09bffc",
+  "checksum": "4d8d830b119d9673b79a7d8cd79fb1da1ae5527e5157b6f655ad4f7dbd3b5e52",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/jellyfin/CLAUDE.md#Notable",
   "row": {
@@ -7,7 +7,7 @@
       "ansible/tests/services/test_jellyfin_plugin_allowlist.py": "6f440d3ce9cec0b509bf42076e7d96ef1b05f619171c0a6773efdd60c8d05e0a",
       "ansible/tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py": "28327e4856206bf552264eabaddbe46b4a10575e8344d88beeb8a180fd473877"
     },
-    "python": "3.14",
-    "verified_sha": "5a50426ab"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

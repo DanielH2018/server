@@ -1,7 +1,7 @@
 [project]
 name = "server-homelab"
 version = "0.0.0"
-requires-python = ">=3.14"
+requires-python = ">=3.15"
 
 [tool.uv]
 package = false                      # virtual project: manage deps/lock, do not build the repo
@@ -185,6 +185,9 @@ pythonpath = [
 ]
 
 [tool.ruff]
+# One minor behind `requires-python`: ruff supports py315 only in preview and warns on every
+# run otherwise. 3.14 syntax is valid 3.15, so the rules lose nothing the code can use yet.
+target-version = "py314"
 # DECIDED: Markdown stays out of ruff's scope. ruff 0.16 began formatting Python code
 # blocks inside .md, which pulled every prose file in the repo into a gate whose stated
 # job is first-party Python — and its output mangles the plan docs, exploding readable
@@ -316,7 +319,7 @@ select = [
 "**/conftest.py" = ["D205", "D209"]
 
 [tool.ty.environment]
-python-version = "3.14"
+python-version = "3.15"
 # This repo has no `__init__.py` files and no installed package: a script reaches a sibling
 # directory through the `sys.path` bootstrap the root CLAUDE.md describes, and a test reaches its
 # role's `files/` the same way. ty resolves imports from search paths alone, so without this list

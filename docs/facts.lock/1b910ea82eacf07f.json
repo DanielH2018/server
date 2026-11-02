@@ -1,5 +1,5 @@
 {
-  "checksum": "9cf2e1452545477c264f5aaccfbdbeb2c6c962d867c8c0207932c4ef13639645",
+  "checksum": "46880847f8836f6a4c3333403b42663cbc8a33af342080f00a07f8eb9ff9d5bb",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Layout",
   "row": {
@@ -12,7 +12,7 @@
       "docs/longhorn-upgrade.md": "04188a542f54902dfb346f19c33a5a9d6de82e0d3e627033ee56d1262c150b05",
       "scripts/lib/repo_paths.py": "c5243cd7430b6f03c1ef9bd7094346e19e2fb633bf826683fb4f787f234362f3"
     },
-    "python": "3.14",
-    "verified_sha": "35a19551f"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

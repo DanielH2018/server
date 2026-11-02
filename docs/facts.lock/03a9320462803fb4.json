@@ -1,5 +1,5 @@
 {
-  "checksum": "9da7d3496ff6343bee17e922b04e5823214884a91a44b5b4d27e88fa8c72a7f9",
+  "checksum": "d2f7ea42fee8db6af288a80bff2a41c0d2c26a0c1498b00530c96b6e7581f575",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/configarr/CLAUDE.md#At a glance",
   "row": {
@@ -11,7 +11,7 @@
       "ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py": "494173af32f38dace06c496ad7031f6391f146cc6271c8facd621309eb0e267e",
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9"
     },
-    "python": "3.14",
-    "verified_sha": "2b4addeaa"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

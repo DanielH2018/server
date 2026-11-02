@@ -1,12 +1,12 @@
 {
-  "checksum": "9622879ff5e9a6f8cedf9f68cc478f4e0567fd04be0947ec122f28ebe0255558",
+  "checksum": "6b55661240ed36832f633e68016cc21380bc780b1775ca013ac1a165323a8261",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/builder/CLAUDE.md#`hosts/components/builder` — the host-package builder and its apt repository (daniel-box)",
   "row": {
     "atoms": {
       "docs/target-architecture/host/h3-pi-pilot.md": "3d87c601ba6a1281391a0449705d0b73a13264dda7bf83d1664758342eb192f2"
     },
-    "python": "3.14",
-    "verified_sha": "a41b8b1bd"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }

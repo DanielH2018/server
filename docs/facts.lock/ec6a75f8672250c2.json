@@ -1,5 +1,5 @@
 {
-  "checksum": "2dc649c53e32cc4cd73cf3af6fb602f7ac34cd2115a04d1caff1f3d2718c490f",
+  "checksum": "8471d8875dc2c3e9d488ab8274303b737bc0239522ca16e0aa3ac59ad10980a1",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/claude-code/CLAUDE.md#The agent's socket",
   "row": {
@@ -8,7 +8,7 @@
       "hosts/components/claude-code/files/homelab_rootq_socket.py": "8ec9179df3730eaf710aa79665527bacba2f1c1e5f2cf7d2cefa75273ab7db7c",
       "hosts/components/claude-code/files/homelab_rootq_socket.py:ARITY": "8fa31398da0538ec95551be501af94bbc26cb8aa6f389170c8dfef39eabeae47"
     },
-    "python": "3.14",
-    "verified_sha": "7069ccbd4"
+    "python": "3.15",
+    "verified_sha": "ac726bb45"
   }
 }
