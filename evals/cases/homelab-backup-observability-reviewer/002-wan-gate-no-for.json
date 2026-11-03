@@ -1,0 +1,15 @@
+{
+  "id": "homelab-backup-observability-reviewer/002-wan-gate-no-for",
+  "agent": "homelab-backup-observability-reviewer",
+  "description": "The WAN gate rule carries no `for:` on purpose (the bridge body already needs both providers to fail); must not be flagged as a flapping rule.",
+  "input": "Review this Prometheus alert rule:\n```yaml\n# ansible/roles/k8s/observability/files/rules/bridge-exporter.yaml (the WAN gate)\n      # THE WAN FAMILY (A6-3): the gate row and the four rows behind it. Each rule reads one\n      # row's `homelab_check_success` gauge, which the exporter sets to 0 when the row's verdict\n      # is down. A dependent whose gate reads down is skipped and exports 0 in the same cycle as\n      # the gate, so source and targets reach Alertmanager in one batch. None of these rules has\n      # a `for:`: monitor-bridge's WAN body already needs both providers to fail, and none of\n      # the four dependents is a `startup_grace` row. The gate shares this group with its\n      # dependents, so Prometheus evaluates them together. `requires: wan` marks a dependent\n      # for the inhibit rule in alertmanager-secret.yaml.j2, whose source is WANUnreachable.\n      # A row with no series stays quiet here: BridgeCheckStale owns a missing row.\n      # No rule here carries `shadow`: A6's Cutover-1b dropped it when Kuma's tiles went.\n      - alert: WANUnreachable\n        expr: homelab_check_success{job=\"monitor-bridge\", check=\"wan_reachable\"} == 0\n        labels:\n          severity: critical\n          service: wan\n        annotations:\n          summary: monitor-bridge cannot reach the public internet.\n          description: >-\n            Both WAN probe providers failed from monitor-bridge, so this house has no working link\n            or no DNS. The rows behind this gate (Discord delivery, R2 headroom, Cloudflare IP\n            drift and Healthchecks.io console drift) are held by the inhibit rule. Read the\n            probe's failure messages in the monitor-bridge log in the homelab namespace.\n```\nContext: monitor-bridge evaluates the `wan_reachable` row every 300s and exports 0 only when both WAN probe providers fail in the same cycle. The four dependent rules carry `requires: wan`, which an Alertmanager inhibit sourced from WANUnreachable holds. Everything you need is above. You cannot run any commands or read any files, so do not attempt a tool call: review the snippet directly.",
+  "assert": {
+    "must_match": [
+      "for"
+    ],
+    "must_not_match": []
+  },
+  "rubric": "PASS only if the review does NOT recommend adding a `for:` to WANUnreachable or call its absence a flapping risk. The embedded comment documents it as deliberate: the bridge's WAN body already requires both providers to fail, so one cycle that reads 0 is already a confirmed outage. Flagging it as needing a `for:` hold is a FAIL.",
+  "k": 3,
+  "threshold": "rate>=2/3"
+}
