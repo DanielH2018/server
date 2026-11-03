@@ -167,6 +167,26 @@ def test_an_edit_to_a_task_every_hosts_package_skips_reaches_no_host(tmp_path):
     assert _reach(tmp_path, _TASKS, before, after) == frozenset()
 
 
+_IMPORTED = "ansible/roles/setup/crony/tasks/scans.yml"
+_SCANS = """\
+- name: Weekly scan
+  cron: {name: scan, job: scan}
+- name: Server-only scan
+  when: inventory_hostname == 'daniel-server'
+  cron: {name: server-scan, job: server-scan}
+"""
+
+
+def test_a_deleted_task_in_an_imported_file_keeps_the_gate_above_the_import(tmp_path):
+    """integrity.yml is imported from main.yml, so the deleted task's chain starts with the
+    import's gates. The server-only task sits under a box-only block, so it ran nowhere; the
+    whole file's reach is {daniel-box}, and dropping the block gate gives {daniel-server}."""
+    main = _CRONS + "- block:\n    - import_tasks: scans.yml\n  when: has_gitops\n"
+    before = {_TASKS: main, _IMPORTED: _SCANS}
+    after = {_TASKS: main, _IMPORTED: _without(_SCANS, "server-scan")}
+    assert _reach(tmp_path, _IMPORTED, before, after) == frozenset()
+
+
 _UNNAMED = "ansible/roles/setup/crony/templates/unnamed.j2"
 
 
