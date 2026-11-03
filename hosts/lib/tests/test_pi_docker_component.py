@@ -286,7 +286,7 @@ def test_a_failed_apt_run_leaves_the_timer_masked_and_the_stop_post_holds(
 
 def test_a_dockerd_restart_recreates_the_project_under_the_interlock(engine, package):
     _at_pins(engine, package)
-    engine.state["active"] = {"homelab-reconcile.service": 1}
+    engine.state["active"] = {"homelab-reconcile.service": 2}
 
     result = engine.run("restart", "docker")
 
