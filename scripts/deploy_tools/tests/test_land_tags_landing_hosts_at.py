@@ -112,7 +112,7 @@ def test_restricting_one_tag_leaves_the_others_routed_as_before(tmp_path):
 
 def test_the_path_derivation_feeds_this_routing_read(tmp_path):
     """End to end: the tags `land_platform` derives from a PR's own paths are the
-    argument this read takes, and a k8s-tree-only change routes to daniel-box alone."""
+    argument this read takes, and a wg-easy change routes to daniel-box alone."""
     shas = _repo(tmp_path)
     k8s_only = land_platform.k8s_only_tags(
         ["ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2"], {"wg-easy"}

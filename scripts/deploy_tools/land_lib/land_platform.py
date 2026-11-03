@@ -1,27 +1,20 @@
 #!/usr/bin/env python3
-"""Which of a PR's derived tags its own changed paths PROVE are a k3s change.
+"""Which of a PR's derived tags the landing may route to a `platform: k8s` entry alone.
 
-One tag name can select two services on two platforms: `wg-easy` is a `platform: k8s` entry on
-daniel-box and a Compose entry on daniel-pi. `render_guard.hosts_for_tags` takes a `k8s_only`
-subset that routes such a tag to the k8s entry alone, and `classify` fills it with the tags the
-k8s role-caller graph names. A tag a changed PATH named was left out, so a PR touching only
-`ansible/roles/k8s/wg-easy/templates/` still ran `deploy.sh -e target=daniel-pi --tags wg-easy`
-— one extra ssh deploy of a Compose service the change never touched, recreating nothing.
+`render_guard.hosts_for_tags` takes a `k8s_only` subset that routes a tag to its k8s entry
+alone, and `classify` fills it from the PR's changed paths through this module. The subset
+existed for a tag declared on two platforms: `wg-easy` was a k8s entry on daniel-box and a
+Compose entry in `roles/containers/` on daniel-pi.
 
-THE PROOF IS THE TREE THE PATH SITS IN, and it has to be EVERY path that names the tag. One
-naming path outside `roles/k8s/` keeps the tag routing to every host that declares it. Narrowing host routing is the dangerous direction -- a
-tag that reaches no host leaves the landing reading `settled` while the Pi runs the old
-container -- so this answers only for a tag whose whole path set sits under one tree.
+NO TAG IS DECLARED ON TWO PLATFORMS. The Pi's services are `compose_services` entries, its
+`containers_list` is empty, and `reach.tag_for` names a tag only for a path under
+`roles/k8s/`. So every tag a path derives is a k3s tag, and this returns them all. A tag no
+path names is still absent, because this reads paths rather than `Reach.tags`' output.
+`test_land_platform.py` fails if a tag returns to two platforms, which is the premise.
 
-A TAG NO PATH NAMES IS NEVER IN HERE, because this reads paths rather than `Reach.tags`'
-output. Nothing proves which platform such a tag belongs to, so it keeps reaching every host
-that declares it.
-
-Its own module because it answers one question, which platform a derived tag belongs to, from
-the public functions of `land_tags` and `reach`. The import goes one way -- neither reads
-anything here -- so no cycle. `diff_range` restates the range `deploy_tags._git_diff_paths`
-reads, and a test compares the two. That copy is of `deploy_lib/tags.py`, not of `land_tags`,
-so folding this module into `land_tags` would not remove it.
+Its own module because `diff_range` restates the range `deploy_tags._git_diff_paths` reads,
+and a test compares the two. That copy is of `deploy_lib/tags.py`, not of `land_tags`, so
+folding this module into `land_tags` would not remove it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 """
@@ -37,15 +30,9 @@ sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_t
 import reach
 from deploy_tools.land_lib import land_tags
 
-# The role tree a k3s workload's files sit in. `land_tags._K8S` anchors its own match to this
-# same prefix, and `test_land_platform.py` holds the two against each other: a tree that moved
-# under one spelling and not the other would leave this proving nothing while still returning
-# tags.
-K8S_TREE = "ansible/roles/k8s/"
-
 
 def k8s_only_tags(files, declared: set[str] | None = None) -> list[str]:
-    """The tags `files` derives whose every naming path sits under `K8S_TREE`.
+    """Every tag `files` derives, sorted.
 
     `files` is the PR's own changed-path list. `declared` is the `containers_list` tags read at
     the merge commit; None reads this checkout, as every `land_tags` mapper does.
@@ -55,11 +42,7 @@ def k8s_only_tags(files, declared: set[str] | None = None) -> list[str]:
     unregistered role drop out here exactly as they drop out of the derivation.
     """
     declared = land_tags.declared_tags() if declared is None else declared
-    trees: dict[str, set[bool]] = {}
-    for path in files:
-        if tag := reach.tag_for(path, declared):
-            trees.setdefault(tag, set()).add(path.startswith(K8S_TREE))
-    return sorted(tag for tag, in_k8s in trees.items() if in_k8s == {True})
+    return sorted({tag for path in files if (tag := reach.tag_for(path, declared))})
 
 
 def diff_range(ref: str) -> str:
@@ -67,8 +50,8 @@ def diff_range(ref: str) -> str:
 
     Three dots, and HEAD on the right: `changed` reads `<ref>...HEAD` in the primary checkout
     (`deploy_tags._git_diff_paths`). The landing's fallback derivation reads the same range's
-    paths to prove a tag's platform, so the two spellings have to be one spelling --
-    a two-dot range would prove the platform of a different file set than the tags came from.
+    paths to name its tags, so the two spellings have to be one spelling -- a two-dot range
+    would name the tags of a different file set than the tags came from.
     `test_land_platform.py` holds this against that helper.
     """
     return f"{ref}...HEAD"
