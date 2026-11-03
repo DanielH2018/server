@@ -172,3 +172,9 @@ def test_a_failed_read_of_the_published_versions_stays_deferred():
     outcome = _wait(_pi(PI_DROPIN), fetch, _clock(_at(12, 0)), _at(12, 0))
     assert outcome is not None
     assert outcome.verdict == Verdict.DEFERRED
+
+
+def test_an_unbuilt_host_ends_the_landing_unbuilt_at_exit_75():
+    outcome = _ends_with([_published("homelab-daniel-pi", BEFORE)])
+    assert outcome is not None
+    assert (outcome.verdict, outcome.rc) == ("unbuilt", 75)
