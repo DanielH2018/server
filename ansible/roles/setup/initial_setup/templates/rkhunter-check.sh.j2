@@ -39,9 +39,10 @@ source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: the cron runs weekly (Wednesday 02:00,
-# integrity.yml), 604800s, and the extra 2h is the slack the "rkhunter Scan" tile keeps
-# (interval 612000) for a run that takes far longer than the last. Move it with the cron (#6168).
+# The longest legitimate gap between two textfile writes: the timer runs weekly (Wednesday
+# 02:00, hosts/components/integrity-scans/units/homelab-rkhunter-check.timer), 604800s, and the
+# extra 2h is the slack the "rkhunter Scan" tile keeps (interval 612000) for a run that takes
+# far longer than the last. Move it with the timer (#6168).
 # ansible/tests/setup/test_integrity_scan_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=612000
 

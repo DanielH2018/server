@@ -99,10 +99,6 @@ has_low_memory_board: false
 # Separate from the flag above on purpose: "is a Pi board" and "is memory-constrained" are
 # two facts, and a 4 GB Pi would carry this one alone.
 has_raspi_kernel: false
-# Whether this host has enough RAM that reclaiming page cache beats swapping service heaps,
-# so initial_setup lowers vm.swappiness to 10. False by default; daniel-server (30 GB) and
-# daniel-box (28 GiB, the control plane) override it true.
-has_ample_ram: false
 # AutoKuma id of the managed notification provider (a static entity defined in the
 # uptime-kuma role); the kuma() macro links every monitor to it via notification_name_list.
 kuma_notification_id: discord
