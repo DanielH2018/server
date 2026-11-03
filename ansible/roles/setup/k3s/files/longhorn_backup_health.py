@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Longhorn backup-plane heartbeat — the cluster-reading half of longhorn-backup-health.sh.
 
-Reads the cluster through the read-only ServiceAccount kubeconfig and the restore drill's stamps,
-from the drill's ConfigMap or, while that holds no `last-success`, from the files on disk. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
+Reads the cluster through the read-only ServiceAccount kubeconfig, the restore drill's stamp
+ConfigMap among it, and the B2 deletion accounting cron's journal. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
 wrapper to log and push to Kuma. It never exits nonzero on a bad verdict: a DOWN is data to
 report, not a crash. Same shape as configarr_health.py: this file does the I/O,
 longhorn_backup_health_logic.py holds every threshold and decides up-or-down, and the split is
@@ -18,9 +18,8 @@ Not run by hand: /usr/local/bin/longhorn-backup-health (rendered from
 templates/longhorn-backup-health.sh.j2, a cron every 10 minutes) exports every setting and
 calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
 LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, the LONGHORN_*_MAX_AGE_HOURS and
-LONGHORN_DAILY_BACKUP_BUDGET thresholds, LONGHORN_RESTORE_DRILL_* (stamp dir, namespace and
-ages), LONGHORN_TRIM_CRON_* and LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired
-stamp), LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
+LONGHORN_DAILY_BACKUP_BUDGET thresholds, LONGHORN_RESTORE_DRILL_* (namespace and ages),
+LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired stamp), LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
 
 It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
 cluster: a blank `spec.backupTargetURL` is a disarmed target (H1.7a). The daily and weekly run
@@ -110,7 +109,6 @@ MAX_AGE_HOURS = _require_int_env("LONGHORN_BACKUP_MAX_AGE_HOURS")
 WEEKLY_MAX_AGE_HOURS = _require_int_env("LONGHORN_WEEKLY_BACKUP_MAX_AGE_HOURS")
 ERROR_MAX_AGE_HOURS = _require_int_env("LONGHORN_BACKUP_ERROR_MAX_AGE_HOURS")
 DAILY_BACKUP_BUDGET = _require_int_env("LONGHORN_DAILY_BACKUP_BUDGET")
-DRILL_STAMP_DIR = _require_env("LONGHORN_RESTORE_DRILL_STAMP_DIR")
 # The drill's stamp ConfigMap lives in the drill's namespace, not Longhorn's, so it gets its own
 # runner rather than a second `-n` passed through the longhorn-system one.
 DRILL_NAMESPACE = _require_env("LONGHORN_RESTORE_DRILL_NAMESPACE")
@@ -120,16 +118,9 @@ DRILL_COVERAGE_SLACK_DAYS = _require_int_env(
     "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS"
 )
 CRON_EVIDENCE_WINDOW_HOURS = _require_int_env("LONGHORN_CRON_EVIDENCE_WINDOW_HOURS")
-# Check 10's two crons. The path, the fire stamp and the expected flag are shim-exported for the reason
-# the transport settings are: a value only the shim knows must not sit here as a default a
-# wrong export would shadow. The flag differs per cron — the B2-accounting task is gated on
-# `has_repo_checkout`, the trim task is not.
-TRIM_CRON = cron_evidence.cron_state(
-    "longhorn-trim",
-    _require_env("LONGHORN_TRIM_CRON_FILE"),
-    _require_bool_env("LONGHORN_TRIM_CRON_EXPECTED"),
-    _require_env("LONGHORN_TRIM_CRON_FIRED_STAMP"),
-)
+# Check 10's B2 cron. The path, the fire stamp and the expected flag are shim-exported for the
+# reason the transport settings are: a value only the shim knows must not sit here as a default a
+# wrong export would shadow. The B2-accounting task is gated on `has_repo_checkout`.
 B2_DELETIONS_CRON = cron_evidence.cron_state(
     "b2-deletions",
     _require_env("LONGHORN_B2_DELETIONS_CRON_FILE"),
@@ -137,9 +128,9 @@ B2_DELETIONS_CRON = cron_evidence.cron_state(
     _require_env("LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP"),
 )
 
-# Check 9's transport. Its own deadline rather than TIMEOUT: journalctl answers from a local
+# Check 9's B2 transport. Its own deadline rather than TIMEOUT: journalctl answers from a local
 # file in milliseconds, and the shim sizes the reader's worst-case run against its 600s cron
-# period, where two more 30s calls would not fit.
+# period.
 journal = host_lib.journal_reader(
     _require_env("LONGHORN_JOURNALCTL"),
     CRON_EVIDENCE_WINDOW_HOURS,
@@ -267,13 +258,11 @@ def _fetch_r2_volumes(problems: list[tuple[int, str]]) -> set[str] | None:
 def _fetch_drill_stamps(
     problems: list[tuple[int, str]],
 ) -> drill_stamps.DrillStamps | None:
-    """The store checks 7 and 8 read this run, or None having appended a problem.
+    """The drill's stamps for checks 7 and 8, or None having appended a problem.
 
-    An absent ConfigMap, or one with no `last-success`, falls back to the host directory: that is
-    the live state until the drill writes the ConfigMap (H2.3c). A failed read falls back to
-    nothing. It is a rank-1 problem like every other failed fetch here, and checks 7 and 8 are
-    skipped, because a directory the drill may have stopped writing is not evidence once the
-    ConfigMap could hold the current state.
+    An absent ConfigMap, or one with no `last-success`, reads as a drill that has never passed,
+    and check 7 reports it. A failed read is a rank-1 problem like every other failed fetch here,
+    and checks 7 and 8 are skipped.
     """
     rc, out = drill_kubectl(*drill_stamps.CONFIGMAP_GET_ARGS)
     if rc != 0:
@@ -293,7 +282,24 @@ def _fetch_drill_stamps(
             )
         )
         return None
-    return drill_stamps.select_stamps(doc, DRILL_NAMESPACE, DRILL_STAMP_DIR)
+    return drill_stamps.from_configmap(doc, DRILL_NAMESPACE)
+
+
+def _fetch_trim_cronjob() -> tuple[bool, dict | None]:
+    """(read, cronjob) for the trim RecurringJob's CronJob; cronjob is None when it is absent.
+
+    `read` is False when the read failed or returned a body that is not a JSON object.
+    """
+    rc, out = kubectl(*cron_evidence.TRIM_CRONJOB_GET_ARGS)
+    if rc != 0:
+        return False, None
+    if not out.strip():
+        return True, None
+    try:
+        body = json.loads(out)
+    except ValueError:
+        return False, None
+    return isinstance(body, dict), body if isinstance(body, dict) else None
 
 
 def _syslog(message: str) -> None:
@@ -328,7 +334,6 @@ def _check_restore_drill(
         now_s,
         DRILL_MAX_AGE_DAYS * 86400,
         DRILL_MAX_AGE_DAYS,
-        stamp_unreadable=stamps.last_success_unreadable,
     )
     coverage_problem = logic.check_restore_coverage(
         stamps.candidates,
@@ -519,40 +524,51 @@ def main(now: float | None = None) -> int:
     if stamps is not None:
         _check_restore_drill(problems, stamps, now_s)
 
-    # ── checks 9 and 10: what the trim and B2-accounting crons said, and whether they ran ──
+    # Longhorn keeps each RecurringJob's newest pod (history limit 1), so this one read holds the
+    # last run of every RecurringJob: check 11 reads the backup jobs' skips from it and check 9
+    # the trim's failures. `--tail=-1` because kubectl's default with a selector is the last 10
+    # lines, and the skips are written at the top of a run. `--ignore-errors` because a pod whose
+    # container is still starting answers with an error, and failing the whole read on it would
+    # page DOWN at random on a run's first seconds. That narrows `DECIDED: a kubectl fetch that
+    # fails is a DOWN with a reason` above for one pod's log only, whose lines go unseen for that
+    # tick; a failed call as a whole still exits nonzero and is reported.
+    pod_log = _fetch_text(
+        problems,
+        "recurring-job pod logs",
+        "logs",
+        "-l",
+        cron_evidence.TRIM_JOB_LABEL,
+        "--prefix",
+        "--tail=-1",
+        "--ignore-errors",
+    )
+
+    # ── checks 9 and 10: what the trim and the B2 accounting said, and whether they ran ──────
+    # A failed CronJob read is rank 4, the evidence plane's rank, not `_fetch_text`'s rank 1.
+    trim_read, trim_cronjob = _fetch_trim_cronjob()
+    if trim_read:
+        problems.extend(
+            cron_evidence.check_trim(trim_cronjob, job_items, pod_log, now_s)
+        )
+    else:
+        problems.append(
+            (4, "could not read the trim CronJob — a trim failure has no reader")
+        )
     problems.extend(
-        cron_evidence.check(
-            journal, CRON_EVIDENCE_WINDOW_HOURS, TRIM_CRON, B2_DELETIONS_CRON, now_s
+        cron_evidence.check_deletions(
+            journal, CRON_EVIDENCE_WINDOW_HOURS, B2_DELETIONS_CRON, now_s
         )
     )
 
-    # ── check 11: weekly volumes a RecurringJob skipped ──────────────────────────────────
-    # Longhorn keeps each RecurringJob's newest pod (history limit 1), so its log holds the last
-    # run's skips until the next run replaces it. `--tail=-1` because kubectl's default with a
-    # selector is the last 10 lines, and the skips are written at the top of a run.
-    # `--ignore-errors` because a pod whose container is still starting answers with an error,
-    # and failing the whole read on it would page DOWN at random on a run's first seconds. That
-    # narrows `DECIDED: a kubectl fetch that fails is a DOWN with a reason` above for one pod's
-    # log only, whose skips go unseen for that tick with check 4 still behind them; a failed
-    # call as a whole still exits nonzero and is reported. Skipped with the backup list, like
-    # check 4, since `weekly_watched` and the coverage rows come from it.
-    if backup_list is not None:
-        skip_log = _fetch_text(
-            problems,
-            "recurring-job pod logs",
-            "logs",
-            "-l",
-            "recurring-job.longhorn.io",
-            "--prefix",
-            "--tail=-1",
-            "--ignore-errors",
+    # ── check 11: weekly volumes a backup RecurringJob skipped ───────────────────────────
+    # Skipped with the backup list, like check 4, since `weekly_watched` and the coverage rows
+    # come from it.
+    if backup_list is not None and pod_log is not None:
+        skipped_problem = skipped.check_skipped_weekly_volumes(
+            skipped.parse_skipped_volumes(pod_log), weekly_watched, coverage_rows
         )
-        if skip_log is not None:
-            skipped_problem = skipped.check_skipped_weekly_volumes(
-                skipped.parse_skipped_volumes(skip_log), weekly_watched, coverage_rows
-            )
-            if skipped_problem:
-                problems.append(skipped_problem)
+        if skipped_problem:
+            problems.append(skipped_problem)
 
     status, msg, push_msg = logic.build_verdict(
         problems,

@@ -393,20 +393,37 @@ def secrets_read(
 ) -> list[str]:
     """The `secrets.yml` keys `old..new` moved that the role reads, sorted (#5436).
 
-    A key named under the role's own tree, or in a file it ships other than a vars file,
-    counts. A shipped `defaults/` or `vars/` file counts only through
-    `secret_keys.reads_through`, as the tick's routing does.
+    A key named under the role's own tree, or in a shipped task file or template, counts. A
+    shipped `defaults/` or `vars/` file counts only through `secret_keys.reads_through`, as
+    the tick's routing does. A shipped file Ansible copies verbatim, such as
+    `hosts/lib/host_lib.py`, does not count (#6992): a secret reaches one only through an env
+    file a template renders, and that template names the key itself.
 
     Raises:
         CannotNarrow: `secrets.yml` does not parse at either ref, or `git grep` failed.
     """
-    own = [index.prefix, *(p for p in shipped if not secret_keys.is_vars_file(p))]
+    own = [
+        index.prefix,
+        *(p for p in shipped if _renders(p) and not secret_keys.is_vars_file(p)),
+    ]
     moved = set(secret_keys.keys_named_in(own, old, new, repo))
     for path in (p for p in shipped if secret_keys.is_vars_file(p)):
         for key in secret_keys.keys_named_in([path], old, new, repo):
             if secret_keys.reads_through(index, path, key, new, repo):
                 moved.add(key)
     return sorted(moved)
+
+
+def _renders(path: str) -> bool:
+    """Whether Ansible renders the shipped `path`, so an inventory key it names is read.
+
+    A role's `defaults/` or `vars/` file, a `templates/` file or a `tasks/` YAML file is
+    rendered. Anything else, such as `hosts/lib/host_lib.py`, is copied verbatim, so a key its
+    docstring names reaches no host (#6970).
+    """
+    if secret_keys.is_vars_file(path) or "/templates/" in path:
+        return True
+    return "/tasks/" in path and path.endswith((".yml", ".yaml"))
 
 
 def inventory_tags(
@@ -417,7 +434,8 @@ def inventory_tags(
     A moved key moves no path under the role, so the role's own diff never names it. Each
     one the role's tree templates maps to `key_readers`, as a changed `defaults/` key does in
     `path_tags`. One a shipped task file or template names maps to the tags of the role's
-    tasks naming that file, and one a shipped vars file carries onward maps the way
+    tasks naming that file, a shipped file copied verbatim is not read, and one a shipped
+    vars file carries onward maps the way
     `foreign_key_tags` maps another role's changed key. Narrowing rather than refusing
     matters for `k3s`: its whole-role tag arms the control-plane restart.
 
@@ -435,7 +453,7 @@ def inventory_tags(
                 f"the variable {key} reaches no task file of {index.prefix}"
             )
         tags |= got
-    for path in shipped:
+    for path in (p for p in shipped if _renders(p)):
         keys = inventory_keys.keys_named_in([path], old, new, repo)
         if not keys:
             continue

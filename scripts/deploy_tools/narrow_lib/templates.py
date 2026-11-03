@@ -50,9 +50,7 @@ CLAIM_TEMPLATE = "claim-default.yaml.j2"
 CLAIM_KEY = "k8s_claims"
 CLAIM_RENDERER = "manifests"
 _RENDERER_TASKS = f"ansible/roles/k8s/{CLAIM_RENDERER}/tasks/"
-_DECLARATION = re.compile(
-    r"^ansible/roles/(?:k8s|containers)/([^/]+)/defaults/main\.ya?ml$"
-)
+_DECLARATION = re.compile(r"^ansible/roles/k8s/([^/]+)/defaults/main\.ya?ml$")
 
 
 def _outside_comments(text: str | None, word: str) -> bool:

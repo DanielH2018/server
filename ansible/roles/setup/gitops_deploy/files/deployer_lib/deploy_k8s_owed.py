@@ -151,7 +151,6 @@ def alert_and_record_deferred(
     state: DeployerState,
     config: Config,
     origin: str,
-    deployed: set[str],
     cs,
     declared_k8s: set[str] | None = None,
 ) -> None:
@@ -209,9 +208,7 @@ def alert_and_record_deferred(
     # A carried service is live already, so the one-shot k8s alert must not name it (#6147).
     # When every service is carried, `cs.k8s` empties and the alert skips the k8s channel.
     alert_cs = dataclasses.replace(cs, k8s=cs.k8s - set(carried)) if carried else cs
-    deploy_alerts.alert_deferred(
-        tools, state, config, origin, deployed, alert_cs, declared_k8s
-    )
+    deploy_alerts.alert_deferred(tools, state, config, origin, alert_cs, declared_k8s)
 
 
 def discharge_k8s_unapplied(

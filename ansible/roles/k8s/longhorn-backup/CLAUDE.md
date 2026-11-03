@@ -96,7 +96,10 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
   (06:10 UTC) with `groups: []`, and a volume joins it through the per-job label
   `recurring-job.longhorn.io/trim` that `longhorn-reconcile` sets. A `trim` group would read as
   a backup tier to the restore drill and the reapers, and the `DECIDED:` marker in
-  `templates/longhorn-recurringjob.yaml.j2` says why. It deletes no backup.
+  `templates/longhorn-recurringjob.yaml.j2` says why. It deletes no backup. It replaced the host
+  trim cron at H2.2c. Its abort valve is longhorn-manager itself: the job runs inside the
+  manager, so a manager that is not ready runs no trim. Checks 9 and 10 of `setup/k3s`'s
+  backup health read its pod log and its CronJob.
 - **Arming.** `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` blank one target each. The
   retired `k3s_manage_backup_targets` flag existed for a cluster with no real credentials. No
   host set it, and staging, the one such cluster, was retired on 2026-09-29.

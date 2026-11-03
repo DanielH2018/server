@@ -1,8 +1,8 @@
 """Pure decision core for the Longhorn backup-plane heartbeat (longhorn_backup_health.py).
 
 Ported verbatim from longhorn-backup-health.sh.j2's eight `add()` checks. Checks 9 and 10 —
-the trim and B2-accounting crons' evidence and liveness — live in longhorn_cron_evidence_logic.py
-under the same contract; they read a journal rather than the cluster. Check 11, the weekly
+the trim's and the B2 accounting's evidence and liveness — live in longhorn_cron_evidence_logic.py
+under the same contract. Check 11, the weekly
 volumes a RecurringJob skipped, lives in longhorn_skipped_volumes_logic.py (#3968). Split from
 the I/O shell (host-side kubectl reads, stamp-file reads) the same way configarr_health_logic.py is: this
 stays stdlib-only, takes every clock reading and file read as an argument, and is unit-testable
@@ -14,7 +14,7 @@ message text is copied character-for-character except where the fourth divergenc
 otherwise — several are matched by downstream tests/greps and by an operator's muscle memory
 reading `journalctl -t longhorn-backup-health`.
 
-Four deliberate divergences from the shell, found by the 2026-09-04 review and left as-is
+Three deliberate divergences from the shell, found by the 2026-09-04 review and left as-is
 rather than made byte-identical:
 - Every `{int(duration / N)}` below (hours/days rendered into a message) uses true division then
   `int()`, which truncates toward zero exactly like bash's `$(( duration / N ))` — NOT floor
@@ -24,18 +24,6 @@ rather than made byte-identical:
   replaces: `.status.snapshotCreatedAt` is a plain Longhorn-authored string with no format
   guarantee, and rejecting a sub-second timestamp here would be a false RED, not a caught bug.
 - Ranks and thresholds are unchanged from the shell; only parsing tolerance was widened.
-- check_restore_drill()'s "not a valid timestamp" message is NOT the shell's string. Bash's
-  `[[ ! "$DRILL_AT" =~ ^[0-9]+$ ]]` branch reused the word "unreadable" — `"restore-drill stamp
-  is unreadable — treating the restore path as unproven"` — even though bash's own `[[ -r ]]`
-  gate above it meant that branch was reached only once the file HAD been read; "unreadable"
-  there meant "the content isn't a timestamp", not "the open() call failed". This module gives
-  the open()-failed case its own real permissions check (`_read_stamp()`'s `unreadable` flag,
-  the 2026-08-19 fix — see its docstring), which needed the word "unreadable" for what it
-  actually means. Reusing the old string for content-that-isn't-a-timestamp would make the two
-  distinct failure modes share one message again, so the content-parse message was reworded
-  instead: `"restore-drill stamp content is not a valid timestamp — ..."`. A Loki query or Kuma
-  keyword pinned to the old exact string needs updating to match either the new one or the
-  `_read_stamp`-unreadable one, depending on which failure it means to catch.
 """
 
 from __future__ import annotations
@@ -365,28 +353,12 @@ def check_restore_drill(
     now_s: float,
     max_age_s: float,
     max_age_days: int,
-    *,
-    stamp_unreadable: bool = False,
 ) -> tuple[int, str] | None:
     """Whether the restore drill's last success is fresh enough.
 
-    `stamp_content` is the stamp file's content with any trailing newline already stripped
-    (matching bash `$(cat ...)` command substitution), or None if the file is missing or could
-    not be opened. `stamp_unreadable` distinguishes those two None cases — the I/O layer sets it
-    when `open()` raised something other than FileNotFoundError (a permissions problem, most
-    likely). Bash's own `[[ -r ]]` distinguished them and this must too: on 2026-08-19 the stamp
-    directory's mode made a fresh, successful drill's stamp unreadable by the checker's user, and
-    folding that into "never ran" paged "no restore drill has ever succeeded" — permanently, and
-    backwards, since a drill HAD just succeeded (see test_stamp_is_readable_by_the_user_that_
-    checks_it). "Never ran" and "ran, but I can't read the proof" are different problems with
-    different fixes, and conflating them sends whoever's paged to fix the wrong one.
+    `stamp_content` is the drill's `last-success` epoch with any trailing newline stripped, or
+    None when the drill has never recorded one. `stamp_path` names where it was read from.
     """
-    if stamp_unreadable:
-        return (
-            3,
-            f"restore-drill stamp at {stamp_path} could not be read (permissions?) — "
-            "treating the restore path as unproven",
-        )
     if stamp_content is None:
         return (
             3,

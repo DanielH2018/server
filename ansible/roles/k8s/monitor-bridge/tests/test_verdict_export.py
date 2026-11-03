@@ -1,8 +1,8 @@
 """The check exporter: what `run_once` records per row, and the row count `main()` serves.
 
-Until the push path is deleted, every row exports the end state's verdict beside the push that
-keeps today's value. The cases here pin the places the two differ: a gate-skipped row, a row held
-`up` by `startup_grace`, and a body that raises.
+Every row exports its verdict. The cases here pin the places a verdict is not the body's plain
+result: a gate-skipped row, a `startup_grace` row (no hold since the push is gone), and a body that
+raises.
 """
 
 import os
@@ -19,7 +19,7 @@ import deploy_pipeline
 import registry
 from _bridge_env import bridge_env
 from _fake_sources import mk
-from _fake_sources import FakeSink, FakeSources
+from _fake_sources import FakeSources
 from bridge.types import Check
 
 SERIES = re.compile(r'^(\w+)\{check="([^"]+)"\} (\S+)$', re.MULTILINE)
@@ -33,7 +33,7 @@ def _series(exposition, metric):
 
 def _cycle(cfg, wan_up):
     """One `run_once` with a WAN row, a graced row, a raising row and a plain row after it."""
-    ran, sink = [], FakeSink()
+    ran = []
     export = verdict_export.CheckExposition(cfg.INTERVAL)
 
     def graced(_cfg, _src):
@@ -48,48 +48,42 @@ def _cycle(cfg, wan_up):
         cfg,
         FakeSources(prom_vector=lambda q: []),
         [
-            Check("prometheus", "tok_prom", lambda _cfg, _src: (True, "prom ok")),
-            Check("b2_reachable", "tok_b2", lambda _cfg, _src: (True, "b2 ok")),
-            Check("wan_reachable", "tok_wan", lambda _cfg, _src: (wan_up, "wan")),
-            Check("wan_row", "tok_wan_row", mk(ran, "wan_row"), "wan_reachable"),
-            Check("graced", "tok_graced", graced, "startup_grace"),
-            Check("boom", "tok_boom", boom),
-            Check("after", "tok_after", mk(ran, "after")),
+            Check("b2_reachable", lambda _cfg, _src: (True, "b2 ok")),
+            Check("wan_reachable", lambda _cfg, _src: (wan_up, "wan")),
+            Check("wan_row", mk(ran, "wan_row"), "wan_reachable"),
+            Check("graced", graced, "startup_grace"),
+            Check("boom", boom),
+            Check("after", mk(ran, "after")),
         ],
-        sink,
         export=export,
     )
-    pushed = {t: (ok, msg) for t, ok, msg in sink.pushes if t.startswith("tok_")}
-    return ran, pushed, export
+    return ran, export
 
 
 def test_both_gate_rows_export_their_verdict(cfg):
-    _, _, export = _cycle(cfg, wan_up=True)
+    _, export = _cycle(cfg, wan_up=True)
     success = _series(export, "homelab_check_success")
     assert success["wan_reachable"] == 1.0
     assert success["b2_reachable"] == 1.0
 
 
-def test_a_row_skipped_by_a_down_gate_exports_zero_while_the_push_stays_up(cfg):
-    ran, pushed, export = _cycle(cfg, wan_up=False)
+def test_a_row_skipped_by_a_down_gate_exports_zero_without_running_its_body(cfg):
+    ran, export = _cycle(cfg, wan_up=False)
     assert "wan_row" not in ran
-    ok, msg = pushed["tok_wan_row"]
-    assert ok and msg.startswith("skipped")
     success = _series(export, "homelab_check_success")
     assert success["wan_reachable"] == 0.0
     assert success["wan_row"] == 0.0
     assert "wan_row" in _series(export, "homelab_check_last_run_timestamp_seconds")
 
 
-def test_a_graced_row_exports_the_raw_down_while_the_push_holds_it_up(cfg):
-    _, pushed, export = _cycle(cfg, wan_up=True)
-    ok, msg = pushed["tok_graced"]
-    assert ok and "1/2" in msg
+def test_a_startup_grace_row_exports_its_raw_down_with_no_hold(cfg):
+    """RED on a loop that still held a graced row `up`: the rule's `for: 10m` is the hold."""
+    _, export = _cycle(cfg, wan_up=True)
     assert _series(export, "homelab_check_success")["graced"] == 0.0
 
 
 def test_a_raising_body_exports_zero_and_the_next_row_still_runs(cfg):
-    ran, _, export = _cycle(cfg, wan_up=True)
+    ran, export = _cycle(cfg, wan_up=True)
     assert ran.index("boom") < ran.index("after")
     success = _series(export, "homelab_check_success")
     assert success["boom"] == 0.0
@@ -97,7 +91,7 @@ def test_a_raising_body_exports_zero_and_the_next_row_still_runs(cfg):
 
 
 def test_every_row_carries_the_three_cycle_deadline(cfg):
-    _, _, export = _cycle(cfg, wan_up=True)
+    _, export = _cycle(cfg, wan_up=True)
     deadlines = _series(export, "homelab_check_deadline_seconds")
     assert deadlines
     assert set(deadlines.values()) == {3.0 * cfg.INTERVAL}
@@ -113,15 +107,14 @@ def _served_rows():
     export = verdict_export.CheckExposition(300)
     wired = {
         "env": env,
-        # The three gate probes reach the network by their own transport, so they are stated.
+        # The two gate probes reach the network by their own transport, so they are stated.
         "checks": [
             replace(c, fn=lambda _cfg, _src: (False, "stub"))
             if c.name in check.GATE_SKIP
             else c
-            for c in registry.build_checks(env)
+            for c in registry.build_checks()
         ],
         "sources": FakeSources(prom_vector=lambda q: []),
-        "sink": FakeSink(),
         "exposition": deploy_pipeline.Exposition(),
         "check_exposition": export,
     }
@@ -139,6 +132,7 @@ def test_the_row_count_is_the_table_gate_rows_included():
     rows, built = _served_rows()
     names = {row.name for row in check_table.CHECKS}
     assert rows == len(names)
-    assert {"wan_reachable", "b2_reachable", "prometheus"} <= names
+    assert {"wan_reachable", "b2_reachable"} <= names
+    assert "prometheus" not in names
     # Red on an exporter that counts anything but the table: the registry is the table's length.
     assert len(built) == rows

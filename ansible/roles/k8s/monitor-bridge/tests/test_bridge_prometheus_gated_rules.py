@@ -7,8 +7,8 @@ keeps the bridge's exporter suppression, so a dead `node` exporter pages once th
 
 - every non-gate row whose `gate` is `prometheus` has exactly one rule selecting its `check`
   label, so a second such row, or a row that loses its rule, fails;
-- the rule carries no `for:` and no `requires` label, names the thing checked as its `service`,
-  takes its severity from the row's `critical` flag and stays `shadow` until A6-7b;
+- the rule has `for: 10m` (operator ruling 2026-11-02) and no `requires` label, names the thing checked as its `service`,
+  takes its severity from the row's `critical` flag and carries no `shadow` since A6-7b;
 - the rule excludes the row while any `node` target is down, which is the estate-wide
   suppression the bridge applies through `EXPORTER_DEPENDENT["node"]` today.
 
@@ -52,14 +52,14 @@ def problems(rules: list[dict]) -> list[str]:
             continue
         [rule] = selected
         labels = rule["labels"]
-        if "for" in rule or "requires" in labels:
-            found.append(f"{row.name}: the rule has no for: and no requires")
+        if rule.get("for") != "10m" or "requires" in labels:
+            found.append(f"{row.name}: the rule must have for: 10m and no requires")
         if labels.get("service") in {None, "", "monitor-bridge"}:
             found.append(f"{row.name}: service must name the thing checked")
         if labels.get("severity") != ("critical" if row.critical else "warning"):
             found.append(f"{row.name}: severity does not follow the critical flag")
-        if labels.get("shadow") != "true":
-            found.append(f"{row.name}: the rule is shadow until A6-7b")
+        if "shadow" in labels:
+            found.append(f"{row.name}: the rule carries shadow after A6-7b")
         if EXPORTER_EXCLUSION not in rule["expr"]:
             found.append(f"{row.name}: the rule must exclude a down node exporter")
     return found
@@ -69,16 +69,16 @@ def test_the_family_is_host_packages():
     assert [r.name for r in family()] == ["host_packages"]
 
 
-def test_a_prometheus_gated_row_has_one_quiet_shadow_rule_that_excludes_a_dead_exporter():
+def test_a_prometheus_gated_row_has_one_live_rule_that_excludes_a_dead_exporter():
     assert problems(all_rules()) == []
 
 
-def test_a_rule_that_loses_its_exporter_exclusion_or_gains_a_for_is_flagged():
+def test_a_rule_that_loses_its_exporter_exclusion_or_its_for_is_flagged():
     rules = copy.deepcopy(all_rules())
     [rule] = rules_for("host_packages", rules)
     rule["expr"] = rule["expr"].replace(EXPORTER_EXCLUSION, "")
     assert problems(rules)
     rules = copy.deepcopy(all_rules())
     [rule] = rules_for("host_packages", rules)
-    rule["for"] = "10m"
+    del rule["for"]
     assert problems(rules)

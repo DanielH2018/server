@@ -222,7 +222,7 @@ What it does not restore:
 
 `claude-triage@<episode>.service` runs one unattended, diagnose-only session as `claude` and
 leaves a report (shipped off behind `claude_code_triage_enabled`, and in daniel-box's package).
-`homelab-claude-triage-poll.timer` starts one when a monitor goes down, and ships in `shadow`
+`homelab-claude-triage-poll.timer` starts one when an alert starts firing, and ships in `shadow`
 mode, which only logs. The task file, templates, runner and poller are on the lander's approval
 list, and the caps and the poll mode are pinned in `templates/claude-triage-pins.j2`. `docs/claude-agent-user.md`,
 *Alert-triggered triage*, has the design.
@@ -502,8 +502,18 @@ a need appears.
   length. A missing one is refused as "does not exist". `cat`, `sha256` and `matches` still
   refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
   before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
-  it exists or not. The one DENY entry in `PATHS` is the exact path
-  `/etc/claude-rc/alert-webhook.env`. rootq cannot stat a file in the agent user's home,
+  it exists or not. The DENY entries in `PATHS` are exact names:
+  `/etc/claude-rc/alert-webhook.env`, and the five paths `k8s_host_files` writes or removes
+  under `/etc/rancher/k3s/manifests/` (#6988). That tree stays denied as a whole, because it
+  holds every staged role's `secret.yaml`, so `probe.py applied` compares most of those rows
+  by mode and owner only.
+- **Two DENY paths are exempt by exact name.** The operator ruled this on 2026-11-02 (#7007).
+  `hosts/components/claude-code/files/homelab_rootq.py:DENY_EXEMPT` names the two registry
+  mirror GC Jobs, `registry-jobs/ghcr-mirror-gc-job.yaml` and
+  `registry-jobs/dockerhub-mirror-gc-job.yaml`, which hold no secret. `denied()` returns
+  false for them, so every tier-1 verb answers them and `probe.py applied` compares their
+  content. Tier 1's credential check still applies to what they hold. The exemption takes
+  exact names only, never a glob. rootq cannot stat a file in the agent user's home,
   which root does not own. The role therefore makes `~/.config/gh` and `~/.config/homelab-ui`
   0710 under `claude_code_agent_operator_read`, so `probe.py applied` stats the 0600 token
   and login files as the operator, without listing either directory or reading either file.

@@ -22,9 +22,11 @@ is a target, so a failure waits rather than skips.
 | a target's first-parent package ships no enable link for the updater's timer | `deferred`, exit 75 |
 | a target's deadline is more than 45 minutes away | `deferred`, exit 75 |
 | a target is still unsettled past its deadline | `deferred`, exit 75 |
+| a target it would defer on has no package published at or after the merge, and the builder's reason is not `ok`, `canary` or `no-green` | `unbuilt`, exit 75 |
 
 A target's deadline is the second updater fire after the merge plus 10 minutes, read from the
 first parent's rendered schedule. The first fire can precede the builder's publish.
+`host_published.py` decides the `unbuilt` row, which replaces each `deferred` row it covers.
 
 Typical usage example (`pipeline.py`'s, after master CI is green on the merge commit):
 
@@ -54,6 +56,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.compose_wait import compose_settled, touches_compose
+from deploy_tools.land_lib.host_published import unbuilt_hosts
 from deploy_tools.land_lib.host_schedule import (  # noqa: F401
     BOOT_ONLY,
     DEADLINE_SLACK_S,
@@ -64,6 +67,7 @@ from deploy_tools.land_lib.host_schedule import (  # noqa: F401
 )
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
+from diagnostics.probe_lib.builder import fetch_deadline_s
 from deploy_tools.land_lib.tools import gate_snapshot
 from lib import yaml_fast
 from lib.git import git as run_git
@@ -504,6 +508,8 @@ def wait_for_hosts(
     Raises:
         Outcome: Through `ln.finish`: `deploy-failed` for a held host, and `deferred` for a
             target the landing cannot wait for, or one still unsettled past its deadline.
+            `unbuilt` replaces `deferred` when the builder has published no package at or
+            after the merge for a host it names.
     """
     pr = ln.opts.pr
     primary = ln.opts.primary
@@ -540,12 +546,13 @@ def wait_for_hosts(
         now = reads.clock()
         if first:
             first = False
-            _refuse_unwaitable(ln, head, pending, merged_at, now, deadlines)
+            green_at = now
+            unwaitable = _unwaitable(pending, merged_at, now, deadlines)
+            if unwaitable:
+                _defer(ln, head, unwaitable, merge, green_at, reads)
         late = [t for t in pending if now > deadlines[t.host]]
         if late:
-            ln.finish(
-                Verdict.DEFERRED, 75, f"{head} — {_late(late, states, deadlines)}"
-            )
+            _defer(ln, head, _late(late, states, deadlines), merge, green_at, reads)
         say(f"waiting for hosts to apply: {', '.join(t.host for t in pending)}")
         reads.sleep(POLL_S)
 
@@ -572,24 +579,53 @@ def _poll(pending: list[HostTarget], reads: HostReads) -> dict[str, HostState] |
     return None
 
 
-def _refuse_unwaitable(
+def _defer(
     ln: Landing,
     head: str,
+    reasons: dict[str, str],
+    merge: str,
+    green_at: float,
+    reads: HostReads,
+) -> None:
+    """End the landing on `reasons`, keyed by host: `unbuilt` if the builder never got there.
+
+    The builder is asked only here, never on a poll: before a deferral, a missing publish is
+    the builder still working. A failing reason from a fetch before `green_at`, the wait's
+    first query, may predate the merge's fix, so this waits for the builder's next run, up to
+    `probe.py builder`'s fetch deadline. Past it, the reason stands.
+    """
+    hosts, primary = list(reasons), ln.opts.primary
+    unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query, green_at)
+    while unbuilt is None:
+        if reads.clock() > green_at + fetch_deadline_s():
+            unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query)
+            break
+        say(
+            "the builder has not fetched master since CI went green; waiting for its run"
+        )
+        reads.sleep(POLL_S)
+        unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query, green_at)
+    if unbuilt:
+        ln.finish(Verdict.UNBUILT, 75, f"{head} — {'; '.join(unbuilt)}")
+    ln.finish(Verdict.DEFERRED, 75, f"{head} — {'; '.join(reasons.values())}")
+
+
+def _unwaitable(
     pending: list[HostTarget],
     merged_at: float,
     now: float,
     deadlines: dict[str, float],
-) -> None:
-    """End the landing `deferred` for a target no wait can see settle; else fill `deadlines`.
+) -> dict[str, str]:
+    """Why each target no wait can see settle cannot be waited for; fills `deadlines`.
 
     DECIDED: a target whose schedule is unknown, because its render failed or its timer is
     one this cannot read, waits the full 45 minutes rather than being refused, so a failure
     waits rather than skips (H3.9a item 2).
     """
-    reasons = []
+    reasons = {}
     for target in pending:
         if target.armed is False:
-            reasons.append(
+            reasons[target.host] = (
                 f"{target.host}'s package at the first parent ships no enable link for "
                 f"{UPDATER_TIMER}, so no timer is armed. Start the updater on "
                 f"{target.host}: `{START_UPDATER}`"
@@ -600,21 +636,20 @@ def _refuse_unwaitable(
         if due is not None and due - now > MAX_WAIT_S:
             fire = next_fire(target, now)
             when = utc(fire) if fire is not None else "an unknown time"
-            reasons.append(
+            reasons[target.host] = (
                 f"{target.host}'s next updater fire is at {when}, and its deadline "
                 f"{utc(due)} is more than {MAX_WAIT_S // 60} minutes away. To apply "
                 f"sooner, start the updater on {target.host}: `{START_UPDATER}`"
             )
-    if reasons:
-        ln.finish(Verdict.DEFERRED, 75, f"{head} — {'; '.join(reasons)}")
+    return reasons
 
 
 def _late(
     late: list[HostTarget],
     states: dict[str, HostState] | None,
     deadlines: dict[str, float],
-) -> str:
-    parts = []
+) -> dict[str, str]:
+    parts = {}
     for target in late:
         state = (states or {}).get(target.host) or HostState()
         success = (
@@ -622,7 +657,7 @@ def _late(
             if state.last_success is not None
             else f"it reports no {LAST_SUCCESS}"
         )
-        parts.append(
+        parts[target.host] = (
             f"{target.host} has not applied it by {utc(deadlines[target.host])}; {success}"
         )
-    return "; ".join(parts)
+    return parts

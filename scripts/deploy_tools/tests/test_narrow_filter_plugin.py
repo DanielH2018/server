@@ -160,15 +160,13 @@ def test_a_deleted_plugin_is_flagged(tree: Tree):
         tree.narrow(*_refs(tree))
 
 
-def test_the_real_py_table_plugin_reaches_its_two_callers():
+def test_the_real_py_table_plugin_reaches_its_caller():
     """Non-vacuity on the real tree, and the issue's own case: `py_table` reached the whole
-    play before this rule, and its callers are monitor-bridge and uptime-kuma."""
+    play before this rule. uptime-kuma stopped calling it when M6 batch A6's Cutover-2 deleted
+    its bridge-tile loop, so monitor-bridge is the one caller left."""
     ctx = narrow_broad.context_for("HEAD", REPO)
     path = "ansible/filter_plugins/py_table.py"
-    assert narrow_broad.broad_path_tags(path, "HEAD", ctx) >= {
-        "monitor-bridge",
-        "uptime-kuma",
-    }
+    assert narrow_broad.broad_path_tags(path, "HEAD", ctx) >= {"monitor-bridge"}
 
 
 def test_the_real_docstring_edit_of_4410_reaches_nothing():

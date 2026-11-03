@@ -251,31 +251,30 @@
     mode: "0755"
   become: true
 
-- name: Schedule the Longhorn filesystem-trim sweep
+# The filesystem trim is Longhorn's `trim` RecurringJob in the `longhorn-backup` Flux role since
+# H2.2c, and backup health's checks 9 and 10 read its CronJob, Job and pod log. Nothing removes a
+# cron file, a script link or a stamp the role stops declaring, so these three arms retire the
+# host copies. An absent arm names no schedule field, because the schedule keys left this role.
+- name: Retire the host Longhorn filesystem trim cron
   tags: [backup-health]
-  # After BOTH backup windows (03:30 daily, 04:30 weekly) and clear of the 05:15 manifest-prune
-  # check, so a trim never contends with a snapshot being taken. Order matters more than the
-  # hour: trimming before the day's snapshot would hand back blocks the snapshot then re-pins.
-  #
-  # `2>&1 | logger -t longhorn-trim-cron` for the journal reason on the secret-rotation cron in
-  # `initial_setup/tasks/crons.yml`: without it cron mails one `trim <volume>` or `skip <volume>`
-  # line per volume per day into a spool nothing opens.
-  #
-  # A DIFFERENT TAG FROM THE SCRIPT'S OWN `logger -t longhorn-trim`, deliberately. Check 9 of
-  # longhorn-backup-health reads that tag's window and matches `_TRIM_SUMMARY_RE` /
-  # `_TRIM_ABORT_RE` as written; pouring the per-volume chatter and the operator NOTE block into
-  # the same tag would put unrelated newest-first lines in front of the verdict the check reads
-  # backwards for. The verdict keeps its own tag and its own two lines.
   ansible.builtin.cron:
     name: "Longhorn filesystem trim"
-    hour: "{{ k3s_longhorn_trim_cron_hour }}"
-    minute: "{{ k3s_longhorn_trim_cron_minute }}"
-    user: "{{ sys_user }}"
-    # Check 10's fire stamp is the script's first act rather than a `touch` on this line: the
-    # cron-target resolver in scripts/validate/validate_lib/cron_targets.py accepts only the
-    # bare script path here, and a prefix would take the trim out of every cron rule it checks.
-    job: "/usr/local/bin/longhorn-trim-volumes.sh 2>&1 | logger -t longhorn-trim-cron"
     cron_file: longhorn-trim
+    user: "{{ sys_user }}"
+    state: absent
+  become: true
+
+- name: Retire the host Longhorn filesystem trim script and its fire stamp
+  tags: [backup-health]
+  # The script is a symlink through `/opt/homelab/current/k3s-backup-health`, which
+  # release_bin.yml only ever creates, so it dangles once `current` swings to a release without
+  # the trim. The stamp is the one the script touched for check 10, which no longer reads it.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/bin/longhorn-trim-volumes.sh
+    - "{{ k3s_cron_fired_stamp_dir }}/longhorn-trim"
   become: true
 
 - name: Schedule the after-the-fact B2 deletion accounting
@@ -287,7 +286,7 @@
   # block tree at ~1.28 Class C per stored block, which is what sets the daily cap, and once
   # the tree is gone nothing can price it.
   #
-  # After the trim sweep at 06:10 and well clear of both prune windows (03:30 daily, 04:30
+  # After Longhorn's 06:10 trim and well clear of both prune windows (03:30 daily, 04:30
   # weekly), so the day's deletions have all completed. Same UTC day as those windows under
   # either DST offset, which matters because the ledger is keyed on the UTC day B2's counters
   # reset on. Reads Loki and the Kubernetes API only — it spends nothing on B2 itself.

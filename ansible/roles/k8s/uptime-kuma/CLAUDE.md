@@ -32,7 +32,8 @@ reading behind each rule below.
   all 50 push tiles behind a correct template. ENFORCED:
   `ansible/tests/services/test_kuma_static_monitors.py::test_autokuma_pin_carries_resend_interval_on_push_monitors`.
 - **`resendInterval` counts DOWN beats, not minutes** — `uptime_kuma_k8s_push_resend_down_beats`, 90, six
-  hours for a bridge-fed tile and something else at any other cadence.
+  hours for a tile on the 1200 s window and something else at any other cadence. No tile is
+  bridge-fed since A6's Cutover-2; `uptime_kuma_k8s_bridge_push_interval` waits for C-1.
 - **Every notification declaration carries `applyExisting`**, the key Kuma forces into the stored
   config: one key short of what AutoKuma compares means a rewrite on every sync pass. Never chase
   such a loop with AutoKuma's debug diff, which writes the webhook and SMTP password into Loki.
@@ -94,8 +95,9 @@ stays that way.
   `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py::test_no_status_page_is_declared_as_an_autokuma_entity`.
 - **A tile aimed at a path-only route uses a hostname no IngressRoute claims**, because Traefik
   ranks routers by rule length — hence `edge-selfcheck.local.<domain>`.
-- **A new monitor needs a group rule** (`test_every_declared_monitor_lands_in_a_named_group`);
-  a bridge row has one.
+- **A new monitor needs a group rule** (`test_every_declared_monitor_lands_in_a_named_group`).
+  monitor-bridge declares no tile since M6 batch A6; observability's `bridge-exporter.yaml`
+  pages its checks.
 - **No tile probes a service's bare ingress URL.** blackbox-exporter's `blackbox-ingress` job
   probes one per routed `containers_list` entry, and the `ingress-probes` rules alert on it
   (`docs/uptime-kuma-autokuma-record.md`, *The ingress tiles moved to blackbox-exporter*). A

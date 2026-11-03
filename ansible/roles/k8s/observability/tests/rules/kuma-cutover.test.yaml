@@ -1,7 +1,8 @@
 # promtool unit tests for files/rules/kuma-cutover.yaml, the temporary CheckWithoutPager guard.
 # Run with `scripts/validate/alert_tools.sh promtool test rules <this file>`. The rule has no
-# `for:`, so its two hours are the term's [2h] window: a tile that stops reporting fires once
-# its last sample is more than two hours old.
+# `for:`, so its hold is the term's range: a tile that stops reporting fires once its last
+# sample is older than its term's range. Only B9's six terms remain. Their ranges ([348h10m] and
+# [340h10m]) are about 14 days, so the expiry case uses an hourly series.
 rule_files:
   - ../../files/rules/kuma-cutover.yaml
 evaluation_interval: 1m
@@ -38,82 +39,6 @@ tests:
             exp_annotations:
               summary: Kuma's rkhunter Scan (daniel-pi) tile is gone and no alert rule pages in its place.
               description: "M6's cutover removed the rkhunter Scan (daniel-pi) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: n8n Prod Workflows, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's n8n Prod Workflows tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the n8n Prod Workflows tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Bazarr Health, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Bazarr Health tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Bazarr Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Prowlarr Indexers, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Prowlarr Indexers tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Prowlarr Indexers tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: SMART Data / Health, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's SMART Data / Health tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the SMART Data / Health tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: k3s Speedtest, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's k3s Speedtest tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the k3s Speedtest tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Swallowed Push Verdicts, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Swallowed Push Verdicts tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Swallowed Push Verdicts tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: WAN Reachable, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's WAN Reachable tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the WAN Reachable tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Discord Delivery, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Discord Delivery tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Discord Delivery tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: R2 Free Tier Headroom, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's R2 Free Tier Headroom tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the R2 Free Tier Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Cloudflare IP Drift, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Cloudflare IP Drift tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Cloudflare IP Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Healthchecks.io Console Drift, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Healthchecks.io Console Drift tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Healthchecks.io Console Drift tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: B2 Reachable, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's B2 Reachable tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the B2 Reachable tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: B2 Free Tier Headroom, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's B2 Free Tier Headroom tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the B2 Free Tier Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Arr Queue Warnings, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Arr Queue Warnings tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Arr Queue Warnings tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: GitOps Deploy — Alive, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's GitOps Deploy — Alive tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the GitOps Deploy — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: GitOps Deploy — Status, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's GitOps Deploy — Status tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the GitOps Deploy — Status tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: etcd Restore Drill, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's etcd Restore Drill tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the etcd Restore Drill tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Home Assistant Automations, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Home Assistant Automations tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Home Assistant Automations tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: Host Packages — Status, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's Host Packages — Status tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the Host Packages — Status tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # Every tile present: no term fires.
   - interval: 1m
     input_series:
@@ -131,195 +56,40 @@ tests:
         values: '1x140'
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
         values: '1x140'
-      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x140'
     alert_rule_test:
       - alertname: CheckWithoutPager
         eval_time: 131m
         exp_alerts: []
-  # One tile stops reporting at minute 9 (the batch's Cutover-a ran) while the others stay.
-  # Nothing fires inside the two hours, and only that tile is named after them.
-  - interval: 1m
+  # One tile stops reporting at hour 10 while the others stay, with an hourly series so the
+  # [348h10m] term can expire. It fires nothing at hour 357, 347 hours after the last sample, and
+  # names only that tile at hour 360, which is past the range.
+  - interval: 1h
     input_series:
       - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
-        values: '1x140'
+        values: '1x370'
       - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
-        values: '1x140'
+        values: '1x370'
       - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
-        values: '1x140'
+        values: '1x370'
       - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
-        values: '1x140'
+        values: '1x10 _x360'
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
-        values: '1x140'
+        values: '1x370'
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
-        values: '1x140'
+        values: '1x370'
       - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
-        values: '1x10 _x130'
-      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x140'
+        values: '1x370'
     alert_rule_test:
       - alertname: CheckWithoutPager
-        eval_time: 128m
+        eval_time: 357h
         exp_alerts: []
       - alertname: CheckWithoutPager
-        eval_time: 131m
+        eval_time: 360h
         exp_alerts:
-          - exp_labels: {monitor_name: B2 Reachable, service: uptime-kuma, severity: critical}
+          - exp_labels: {monitor_name: AIDE Integrity (daniel-pi), service: uptime-kuma, severity: critical}
             exp_annotations:
-              summary: Kuma's B2 Reachable tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the B2 Reachable tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-  # Tiles of the WAN, B2 and ungated bridge rows stop reporting at minute 9 while the others stay.
-  # Nothing fires inside the two hours, and only those tiles are named after them: each new
-  # term fires once its tile is gone longer than its [2h] range.
-  - interval: 1m
-    input_series:
-      - series: 'up{job="uptime-kuma", instance="uptime-kuma:3001"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-box)", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-server)", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="AIDE Integrity (daniel-pi)", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-box)", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-server)", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="rkhunter Scan (daniel-pi)", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="n8n Prod Workflows", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Bazarr Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Prowlarr Indexers", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="SMART Data / Health", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="k3s Speedtest", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Swallowed Push Verdicts", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="WAN Reachable", monitor_type="push"}'
-        values: '1x10 _x130'
-      - series: 'monitor_status{monitor_name="Discord Delivery", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="R2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Cloudflare IP Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Healthchecks.io Console Drift", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="B2 Reachable", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="B2 Free Tier Headroom", monitor_type="push"}'
-        values: '1x10 _x130'
-      - series: 'monitor_status{monitor_name="Arr Queue Warnings", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Alive", monitor_type="push"}'
-        values: '1x10 _x130'
-      - series: 'monitor_status{monitor_name="GitOps Deploy — Status", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="etcd Restore Drill", monitor_type="push"}'
-        values: '1x10 _x130'
-      - series: 'monitor_status{monitor_name="Home Assistant Automations", monitor_type="push"}'
-        values: '1x140'
-      - series: 'monitor_status{monitor_name="Host Packages — Status", monitor_type="push"}'
-        values: '1x140'
-    alert_rule_test:
-      - alertname: CheckWithoutPager
-        eval_time: 128m
-        exp_alerts: []
-      - alertname: CheckWithoutPager
-        eval_time: 131m
-        exp_alerts:
-          - exp_labels: {monitor_name: WAN Reachable, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's WAN Reachable tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the WAN Reachable tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: B2 Free Tier Headroom, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's B2 Free Tier Headroom tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the B2 Free Tier Headroom tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: GitOps Deploy — Alive, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's GitOps Deploy — Alive tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the GitOps Deploy — Alive tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
-          - exp_labels: {monitor_name: etcd Restore Drill, service: uptime-kuma, severity: critical}
-            exp_annotations:
-              summary: Kuma's etcd Restore Drill tile is gone and no alert rule pages in its place.
-              description: "M6's cutover removed the etcd Restore Drill tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
+              summary: Kuma's AIDE Integrity (daniel-pi) tile is gone and no alert rule pages in its place.
+              description: "M6's cutover removed the AIDE Integrity (daniel-pi) tile more than two hours ago, and its replacement rule still carries shadow=\"true\". Drop `shadow` from the rule, or revert the Kuma-side PR to restore the tile."
   # A Kuma outage (up == 0) fires no term; KumaDown's own pager covers it.
   - interval: 1m
     input_series:

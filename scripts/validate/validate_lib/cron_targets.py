@@ -32,8 +32,7 @@ from lib.repo_paths import REPO, ROLES
 # INTERACTIVELY, where the shell's own PATH already has it — under cron it fails "command not
 # found", or worse: bare `kubectl` alone (without `k3s kubectl`) silently reports an EMPTY
 # cluster rather than erroring, which reads as "the cluster has nothing" instead of "PATH is
-# wrong". longhorn-trim-volumes.sh.j2 already carries the fix and the comment this trap is
-# copied from.
+# wrong". manifest-prune-check.sh.j2 carries the fix.
 #
 # Only a script that's an ACTUAL cron `job:` target is in scope — this must not flag an
 # operator-invoked script that uses the same bare `k3s kubectl` and is deliberately UNSCHEDULED
@@ -55,9 +54,9 @@ PATH_EXPORT_INCLUDES_LOCAL_BIN = re.compile(
 #    is not an invocation of anything).
 # A bare `kubectl` alone is deliberately NOT matched: registry-gc.sh.j2 echoes one in a
 # human-facing suggestion string ("see: kubectl -n ... logs ..."), which is not an invocation at
-# all — matching it there would flag prose, not code. This is what must also not fire on
-# longhorn-trim-volumes.sh.j2's own explanatory comment about this exact trap — comments are
-# stripped before this runs, so prose mentioning either name never reaches it regardless.
+# all — matching it there would flag prose, not code. Nor may it fire on a script's own
+# comment explaining this trap — comments are stripped before this runs, so prose mentioning
+# either name never reaches it regardless.
 BARE_K8S_INVOCATION = re.compile(r"(?<![\w/])k3s(?![\w/])")
 # `env: yes/true` + `name: PATH` is the ansible.builtin.cron idiom for a crontab-level `PATH=...`
 # line (distinct from the module's `job:` — see the ansible.builtin.cron docs on `env`), which
@@ -74,7 +73,7 @@ CRONTAB_PATH_ENV = re.compile(
 # guard scope drifting from the hazard, so the assignments are parsed and consulted instead. The
 # trailing `2>&1 | logger -t <tag>` is the journal routing every cron that prints on a
 # successful run carries, and it must not take the script out of scope: the `$` anchor alone
-# would silently drop longhorn-trim-volumes.sh.j2 and docs-refresh.sh.j2, which is the same
+# would silently drop longhorn-backup-health.sh.j2, which is the same
 # coverage loss the `env` group above stops. Only this one suffix is accepted — anything else
 # after the script name is a job shape nothing here has parsed, and reading it as a plain target
 # would claim coverage of a line this does not understand.
@@ -225,8 +224,8 @@ def cron_job_scripts(roles: Path = ROLES) -> dict[Path, Path]:
 def strip_comments(text: str) -> str:
     """Drop whole-line `#` comments, so a rule matches code rather than prose about it.
 
-    longhorn-trim-volumes.sh.j2 explains the bare-`k3s` trap in a comment; without this the
-    rules in `cron_checks.py` would flag the explanation as an instance of what it warns about.
+    A script that explains the bare-`k3s` trap in a comment would otherwise have the rules in
+    `cron_checks.py` flag the explanation as an instance of what it warns about.
     """
     return "\n".join(
         line for line in text.splitlines() if not line.strip().startswith("#")

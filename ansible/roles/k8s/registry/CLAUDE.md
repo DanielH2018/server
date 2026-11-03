@@ -197,8 +197,8 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   `registry-gc` textfile that observability's `RegistryGcFailed` and `RegistryGcNotReporting`
   read. The script pushed to a `Registry GC` Kuma tile until M6 batch B6c
   (`docs/target-architecture/monitoring/m6-retire-kuma.md`): Cutover-1a deleted the tile,
-  Cutover-1b made the two rules page Discord, and Cutover-2 dropped the push. The token
-  (`registry_gc_push_token`) stays in `secrets.yml` until B6c's token PR.
+  Cutover-1b made the two rules page Discord, and Cutover-2 dropped the push. B6c's token PR
+  then retired the push token.
   - Both rules are `warning`, the deleted tile's channel mix. Their deadline is the script's
     `DEADLINE_S`, which equals the deleted tile's interval.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this

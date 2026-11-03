@@ -61,7 +61,8 @@ ExecStartPre=+/usr/lib/homelab/builder-fingerprint
 # Downloads the pinned interpreter. This line does not set UV_PYTHON_DOWNLOADS=never, which would
 # refuse the install, and it does nothing once the version is present.
 ExecStartPre=/usr/lib/homelab/bin/uv python install --no-bin {{ host_python_version }}
-# `env` sets UV_PYTHON_DOWNLOADS=never for this line only, so a run never downloads Python.
+# `env` sets UV_PYTHON_DOWNLOADS=never for this line only. The render overrides it once per run
+# to install the built tree's own host_python_version, which can differ from this one.
 ExecStart=/usr/bin/env UV_PYTHON_DOWNLOADS=never /usr/lib/homelab/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/builder/host_package_builder.py
 # `+` runs the copy as root outside the sandbox, `-` keeps a failed copy from failing the unit.
 ExecStopPost=-+/bin/sh /usr/lib/homelab/publish-textfile homelab_builder_ /var/lib/homelab-builder/homelab_builder.prom

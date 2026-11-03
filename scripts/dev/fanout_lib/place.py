@@ -38,7 +38,7 @@ Exit codes (`lib.exit_codes`'s `FANOUT_PLACE_*`); `status` ranks its batches' ti
 
 A launch costs one remote ssh connection per host it reads for headroom, a second only for
 a host a batch is actually placed on (its session-health read), plus one
-per batch placed there — worktree add+lock, brief write and systemd-run folded into one
+per batch placed there — worktree add+lock, venv sync, brief write and systemd-run folded into one
 call. `--host` pins every batch to one host; leave it unset and placement reads both hosts
 and chooses per batch. Calls to the host this script itself runs on go over `bash -c`, not
 ssh, so they never count against `ufw limit ssh` — `fanout_lib.launch_gates` holds the cap

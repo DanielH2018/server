@@ -29,7 +29,8 @@ from _helpers import ROLES, load_tasks, walk_tasks
 from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script
-from test_aide_check import LOGGER_STUB, _textfile
+from _aide_check_run import LOGGER_STUB
+from test_aide_check import _textfile
 
 SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
 PUSH_ENV = "rkhunter-kuma-push.env.j2"

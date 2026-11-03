@@ -2,12 +2,16 @@
 
 The cron used to pipe `aide --check` into `logger`, so the pipeline's status was logger's and an
 AIDE that checked nothing for weeks read the same as one that passed (#4591). aide-check.sh keeps
-AIDE's exit code, pushes it to one Kuma tile per host, and holds four properties:
+AIDE's exit code, pushes it to one Kuma tile per host, and holds five properties:
 
 AN ERROR EXIT PUSHES DOWN. Anything outside 0-7 means the check did not complete.
 
-DIFFERENCES PUSH UP, WITH THEIR COUNTS. Package upgrades change files every week, so a DOWN on
-differences would be red every Monday; the script's `DECIDED:` marker has the evidence.
+A DIFFERENCE NO PACKAGE EXPLAINS PUSHES DOWN (#4599). Package upgrades change files every week,
+so a difference a package's digest accounts for, or one outside the paged trees, pushes UP with
+its counts; the script's `DECIDED:` marker has the measurement.
+
+THE BASELINE ADVANCES ONLY ON UP. A DOWN keeps aide.db until `--accept`, and a missing aide.db
+is never created.
 
 ONE TOKEN PER HOST. A shared token would let one host's `up` cover another whose check stopped.
 
@@ -17,17 +21,19 @@ with nothing wrong, and one past two weeks lets a second missed run go unreporte
 Run: uv run pytest ansible/tests/setup/test_aide_check.py
 """
 
-import fcntl
-import os
 import re
 
-from lib.proc_testing import fake_bin, run, write_exec
+from _aide_check_run import (
+    CHANGED_CONTENT,
+    CLEAN_REPORT,
+    DIFF_REPORT,
+    ERROR_REPORT,
+    _run_check,
+)
 from _helpers import ROLES, load_tasks, walk_tasks
 from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
-from _shell_render import render_shell_script
 
-SCRIPT = ("setup", "initial_setup", "aide-check.sh.j2")
 PUSH_ENV = "aide-kuma-push.env.j2"
 INTEGRITY = ROLES / "setup" / "initial_setup" / "tasks" / "integrity.yml"
 CRON_NAME = "Weekly AIDE file integrity check"
@@ -39,133 +45,6 @@ TILES = {
     "daniel-pi": ("aide-daniel-pi.json", "aide_daniel_pi_push_token"),
 }
 WEEK_S = 7 * 24 * 3600
-
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
-# The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
-# own directory, which node_exporter scrapes.
-REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
-CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
-REAL_ENV = "/etc/homelab/aide-kuma-push.env"
-REAL_AIDE = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide"
-REAL_CAP = "REPORT_MAX_LINES=2000"
-REAL_LOCK = "LOCK_FILE=/run/lock/aide-check.lock"
-
-CLEAN_REPORT = """\
-Start timestamp: 2026-10-19 03:00:01 +0000 (AIDE 0.18.6)
-AIDE found NO differences between database and filesystem. Looks okay!!
-"""
-DIFF_REPORT = """\
-Start timestamp: 2026-10-19 03:00:01 +0000 (AIDE 0.18.6)
-AIDE found differences between database and filesystem!!
-
-Summary:
-  Total number of entries:\t266585
-  Added entries:\t\t2
-  Removed entries:\t\t0
-  Changed entries:\t\t3
-
----------------------------------------------------
-Added entries:
----------------------------------------------------
-
-f++++++++++++++++: /etc/new-one
-f++++++++++++++++: /etc/new-two
-"""
-# The line every host logged each Monday until #4591, and the exit it came with.
-ERROR_REPORT = (
-    "  ERROR: missing configuration (use '--config' '--before' or '--after' "
-    "command line parameter)\n"
-)
-
-# Records each call as `tag: message`: the message argument when one is given, else every line
-# on stdin, which is how the script hands over the report.
-LOGGER_STUB = """\
-#!/bin/sh
-tag=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    -t) tag=$2; shift 2 ;;
-    -p) shift 2 ;;
-    *) break ;;
-  esac
-done
-if [ $# -gt 0 ]; then
-  printf '%s: %s\\n' "$tag" "$*" >> "$LOGGER_OUT"
-else
-  while IFS= read -r line; do printf '%s: %s\\n' "$tag" "$line" >> "$LOGGER_OUT"; done
-fi
-"""
-
-
-def _run_check(
-    tmp_path,
-    report: str,
-    rc: int,
-    token: str = "stubtoken",
-    cap: int = 2000,
-    lock_held: bool = False,
-):
-    """Render aide-check.sh and run it with aide stubbed to print `report` and exit `rc`.
-
-    Only absolute paths are repointed: the push lib (a recording stub), the token env file, the
-    lock file and the nice/ionice/aide invocation. `lock_held` holds the lock from this process
-    for the run, as a scan still running from the previous week would. Returns (exit code,
-    pushed lines or None, logged lines, whether aide ran).
-    """
-    body = render_shell_script(
-        *SCRIPT,
-        overrides={"domain": "example.test", "k3s_metallb_ingress_vip": "10.0.0.240"},
-    )
-    for needle in (REAL_LIB, REAL_ENV, REAL_AIDE, REAL_CAP, REAL_LOCK, REAL_CHECK_LIB):
-        assert needle in body, (
-            f"{needle} is no longer in aide-check.sh; this harness repoints it"
-        )
-
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(
-        'kuma_push() { printf \'%s\\n%s\\n\' "$1" "$2" > "$KUMA_PUSH_OUT"; }\n'
-    )
-    env_file = tmp_path / "push.env"
-    env_file.write_text(f"AIDE_PUSH_TOKEN={token}\n")
-    lock_file = tmp_path / "aide-check.lock"
-    report_file = tmp_path / "report"
-    report_file.write_text(report)
-    aide = write_exec(
-        tmp_path / "aide",
-        f'touch "$AIDE_RAN"\ncat {report_file}\nexit {rc}\n',
-    )
-    body = (
-        body.replace(REAL_LIB, str(lib))
-        .replace(REAL_CHECK_LIB, str(CHECK_LIB))
-        .replace(REAL_ENV, str(env_file))
-        .replace(REAL_AIDE, str(aide))
-        .replace(REAL_CAP, f"REPORT_MAX_LINES={cap}")
-        .replace(REAL_LOCK, f"LOCK_FILE={lock_file}")
-    )
-    script = write_exec(tmp_path / "aide-check.sh", body)
-    pushed, logged, ran = (tmp_path / n for n in ("pushed", "logged", "ran"))
-    textfile_dir = tmp_path / "textfile"
-    textfile_dir.mkdir(exist_ok=True)
-    with open(lock_file, "w") as holder:
-        if lock_held:
-            fcntl.flock(holder, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        result = run(
-            [str(script)],
-            env={
-                **os.environ,
-                "KUMA_PUSH_OUT": str(pushed),
-                "TEXTFILE_DIR": str(textfile_dir),
-                "LOGGER_OUT": str(logged),
-                "AIDE_RAN": str(ran),
-            },
-            stub_bin=fake_bin(tmp_path / "bin", logger=LOGGER_STUB),
-        )
-    return (
-        result.returncode,
-        pushed.read_text().splitlines() if pushed.exists() else None,
-        logged.read_text().splitlines() if logged.exists() else [],
-        ran.exists(),
-    )
 
 
 def test_a_clean_check_pushes_up(tmp_path):
@@ -189,6 +68,7 @@ def test_an_error_exit_pushes_down_with_aides_error_line(tmp_path):
     assert "aide exited 17" in pushed[1]
     assert "ERROR: missing configuration" in pushed[1], pushed[1]
     assert code == 1
+    assert (tmp_path / "aide-db" / "aide.db").read_text() == "last week\n"
     # The durable record of the verdict, which Loki keeps.
     assert any(line.startswith("aide-check: status=down ") for line in logged), logged
 
@@ -332,6 +212,13 @@ def test_a_long_report_is_capped_with_a_line_saying_so(tmp_path):
         report_lines
     )
     assert len(report_lines) == 4, report_lines
+
+
+def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
+    """Every host logged `printf: write error: Broken pipe` on 2026-11-02 at the report cap."""
+    long_report = DIFF_REPORT + f"{CHANGED_CONTENT}: /home/ubuntu/x\n" * 20000
+    _run_check(tmp_path, long_report, rc=4, cap=3, ignore_sigpipe=True)
+    assert "Broken pipe" not in (tmp_path / "stderr").read_text()
 
 
 def test_each_host_pushes_its_own_token():

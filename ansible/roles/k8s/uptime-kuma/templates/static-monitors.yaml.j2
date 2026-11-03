@@ -106,9 +106,9 @@ stringData:
 {# The weekly AIDE check (#4594), ONE TILE PER HOST: each host checks its own baseline, and a
    shared token would let one host's `up` cover a host whose check stopped running.
 
-   UP means AIDE completed a check, NOT that nothing changed. Differences push UP with their
-   counts, because package upgrades change files every week; the `DECIDED:` marker at the
-   classification in roles/setup/initial_setup/templates/aide-check.sh.j2 has the evidence.
+   DOWN on a change no package explains (#4599), as well as on an error. Package upgrades
+   change files every week and read UP; the `DECIDED:` marker at the classification in
+   roles/setup/initial_setup/templates/aide-check.sh.j2 has the measurement.
 
    626400s: the producer is a weekly cron (Monday 03:00, integrity.yml), 604800s, and the push
    lands when the scan ends. The deadline counts from the previous push, so the slack has to
@@ -117,15 +117,15 @@ stringData:
    and the cron together. No `email`: a broken integrity check costs coverage, not a service. #}
 {% if aide_daniel_box_push_token is defined %}
   aide-daniel-box.json: |
-    {"type": "push", "name": "AIDE Integrity (daniel-box)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-box runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-box.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_box_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "AIDE Integrity (daniel-box)", "description": "The weekly Monday 03:00 aide-check on daniel-box runs aide --update against the host baseline and pushes when the scan ends. DOWN means a file changed that no package explains (the message names the first three; review them, then run aide-check --accept), AIDE exited with an error and checked nothing (the message carries its first error line), or no run has reported for a week and 6 h. UP means every difference was a package upgrade or sat outside the paged trees, and the baseline advanced. Run journalctl -t aide-check and journalctl -t aide on daniel-box.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_box_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {% if aide_daniel_server_push_token is defined %}
   aide-daniel-server.json: |
-    {"type": "push", "name": "AIDE Integrity (daniel-server)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-server runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-server.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "AIDE Integrity (daniel-server)", "description": "The weekly Monday 03:00 aide-check on daniel-server runs aide --update against the host baseline and pushes when the scan ends. DOWN means a file changed that no package explains (the message names the first three; review them, then run aide-check --accept), AIDE exited with an error and checked nothing (the message carries its first error line), or no run has reported for a week and 6 h. UP means every difference was a package upgrade or sat outside the paged trees, and the baseline advanced. Run journalctl -t aide-check and journalctl -t aide on daniel-server.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {% if aide_daniel_pi_push_token is defined %}
   aide-daniel-pi.json: |
-    {"type": "push", "name": "AIDE Integrity (daniel-pi)", "description": "The weekly Monday 03:00 aide-check.sh cron on daniel-pi runs aide --check against the host baseline and pushes when the scan ends. DOWN means AIDE exited with an error and checked nothing (the message carries its first error line, usually a config or database fault), or no run has reported for a week and 6 h. UP means the check completed; its message counts the files that differ from the baseline, which is routine after package upgrades. Run journalctl -t aide-check and journalctl -t aide on daniel-pi.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "AIDE Integrity (daniel-pi)", "description": "The weekly Monday 03:00 aide-check on daniel-pi runs aide --update against the host baseline and pushes when the scan ends. DOWN means a file changed that no package explains (the message names the first three; review them, then run aide-check --accept), AIDE exited with an error and checked nothing (the message carries its first error line), or no run has reported for a week and 6 h. UP means every difference was a package upgrade or sat outside the paged trees, and the baseline advanced. Run journalctl -t aide-check and journalctl -t aide on daniel-pi.", "interval": 626400, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ aide_daniel_pi_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# The weekly rkhunter scan (#4598), one tile per host for the same reason as the AIDE tiles
    above.
@@ -170,21 +170,9 @@ stringData:
    `Restart=on-failure` reruns it every 15-30 min until it exits 0, and Cloudflare IP Drift
    moved into monitor-bridge, which re-probes a failure every cycle. A red tile clears when
    the fault does; the deadline still bounds silence exactly as before. #}
-  # ── monitor-bridge's push tiles: one per row of monitor-bridge's files/check_table.py ───────
-  # Derived since #3781, so a new bridge check needs no edit here. The row's `kuma_id` is the
-  # AutoKuma id, and AutoKuma deletes a monitor whose id disappears (ON_DELETE=delete), so a
-  # row's id, display name and description are what keep a monitor and its history. Every
-  # tile shares the bridge's cadence: the deadline is the bridge's push interval, never
-  # retried, and a `critical` row carries the severity tag and pages email too.
-  # The tokens are bare lookups, so a row whose secret is missing fails the
-  # render rather than dropping its tile (#1632). `ensure_ascii=False` keeps an em dash a literal
-  # character, the bytes the hand-written tiles carried, so AutoKuma sees no change.
-{% for check in lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py') | py_table('CHECKS') %}
-{%   set tags = ([{'name': 'tag-severity', 'value': 'critical'}] if check.critical | default(false) else [])
-              + ([{'name': 'tag-runbook', 'value': 'https://docs.local.' ~ domain ~ '/' ~ check.runbook ~ '/'}] if check.runbook | default(none) else []) %}
-  {{ check.kuma_id }}.json: |
-    {"type": "push", "name": {{ check.display | to_json(ensure_ascii=False) }}, "description": {{ check.description | to_json(ensure_ascii=False) }}, "interval": {{ uptime_kuma_k8s_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ uptime_kuma_k8s_push_resend_down_beats }}, "push_token": "{{ lookup('vars', check.token) }}"{% if tags %}, "tag_names": {{ tags | to_json }}{% endif %}, "notification_name_list": {{ ([kuma_notification_id] + (['email'] if check.critical | default(false) else [])) | to_json }}}
-{% endfor %}
+{# monitor-bridge declares no tile. M6 batch A6's Cutover-1a excluded every row of its
+   files/check_table.py from a loop here (#3781), and Cutover-2 deleted the loop with the
+   bridge's push. The `bridge-exporter.yaml` rules in observability page those checks. #}
 {# Deadman for the status-page-sync CronJob in this role — the job that owns the /status/
    containers group list. Nothing else watches a k8s Job: monitor-bridge's cluster checks
    cover Deployments and DaemonSets only, so without this tile a sync that started failing

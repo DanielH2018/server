@@ -52,6 +52,7 @@ from builder_ci_grade import (
     read_check_pages,
     token_refused,
 )
+from builder_python import render_python
 from builder_rollout_gate import RELEASE, RolloutGate, admit
 from homelab_tool_fetch import Failure
 
@@ -412,6 +413,9 @@ class Builder(RolloutGate):
             shutil.rmtree(self.work, ignore_errors=True)
 
     def render(self, tree: Path, out: Path) -> None:
+        # The tree's own pin, never the unit's: the unit carrying a new pin ships in a
+        # package only this render builds (#7023).
+        python = render_python(tree, self.python, self.uv, self.run)
         proc = self.run(
             [
                 self.uv,
@@ -419,7 +423,7 @@ class Builder(RolloutGate):
                 "--frozen",
                 "--no-python-downloads",
                 "--python",
-                self.python,
+                python,
                 "python",
                 "scripts/validate/host_packages.py",
                 "render",

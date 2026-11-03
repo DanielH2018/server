@@ -75,24 +75,18 @@ from deployer_lib.deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREF
 from deployer_lib.deploy_changes import _is_test_only_path, role_of
 
 # Paths whose content every play reads, so no `--tags` value scopes a change to them: the play
-# itself, the task directories it imports, the toposort, and ansible.cfg. The Pi's shared
-# Docker deploy path is in neither half — Pi work, never a broad path.
+# itself, the task directories it imports, the toposort, and ansible.cfg.
 PLAY_PREFIXES = _BROAD_PLAY_PREFIXES
 # The trees a variable or a macro can be consumed from and still map to a deploy tag.
 # `ansible/roles/setup/` is absent on purpose: the setup plane has its own arm in
 # `handle_broad`, and `ansible/deploy.yml` renders nothing for it.
-ROLE_TREES = ("ansible/roles/k8s", "ansible/roles/containers")
+ROLE_TREES = ("ansible/roles/k8s",)
 SHARED_TEMPLATES = "ansible/templates/"
 INVENTORY = "ansible/inventory/"
 # The two broad-deploy trees a census reads. `broad_path_tags` refuses a `PLAY_PREFIXES` path
 # other than a filter plugin, and a census counting one would mark every service stale for a
 # change to how a deploy RUNS.
 CENSUS_PREFIXES = _BROAD_CENSUS_PREFIXES
-# The one directory under the role trees that is not a service: `common`, the shared Docker
-# deploy path. Every grep here reads the TREE at `ctx.ref`, so no `archive` entry is needed.
-# `land_tags._NOT_SERVICES` still carries one because it reads DIFF paths, and a range
-# spanning the deleting merge carries 270 of them.
-_NOT_SERVICES = frozenset({"common"})
 
 
 class Importers(NamedTuple):
@@ -223,8 +217,7 @@ def _sort_hits(
             templates.add(path[len(SHARED_TEMPLATES) :])
             continue
         at = role_of(path)
-        named = at and at.plane != "setup" and at.role not in _NOT_SERVICES
-        if named:
+        if at and at.plane == "k8s":
             roles.add(at.role)
     return Importers(roles, templates)
 
@@ -451,20 +444,14 @@ def _changed_half(cs, ctx: Context) -> set[str]:
     side. Refusing here would only turn the dropped deploy half of a mixed range into a full
     run nobody ran. A bring-up playbook still refuses: the tick parks on those before any
     plan exists, and a hand `deploy_tags.py narrow` over such a range must not read as
-    applyable. `cs.tasks` refuses for the opposite reason: `changed` reports it as work a
-    human deploys by hand, and the full run this replaces DOES apply it. `cs.secrets` is
-    left to `narrow`, which maps each key the range moved to its readers (`secret_keys`).
+    applyable. `cs.secrets` is left to `narrow`, which maps each key the range moved to its readers (`secret_keys`).
 
     `cs` is the range's whole `ChangeSet`. A deploy-plane path sets only the plane flags and
     `setup_roles`, which this does not read, so the deploy half needs no carving out first.
     """
     if cs.broad_manual:
         raise CannotNarrow("the range also changes a bring-up playbook")
-    if cs.tasks:
-        raise CannotNarrow(
-            f"structural change in {sorted(cs.tasks)}, which no tag captures"
-        )
-    roles = cs.k8s | cs.services
+    roles = set(cs.k8s)
     # A range that RETIRES a role still lists every path it owned as changed, and a retired
     # role has no entry and no caller — the shape `_role_tags` refuses.
     for role in sorted(roles):

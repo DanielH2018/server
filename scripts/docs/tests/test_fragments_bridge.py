@@ -18,27 +18,19 @@ INTERNALS_PAGE = REPO / "docs" / "monitor-bridge-internals.md"
 ROWS = [
     {
         "name": "disk",
-        "display": "Root Disk",
-        "status_group": "Hosts & Power",
         "gate": "prometheus",
         "critical": True,
     },
     {
         "name": "n8n",
-        "display": "n8n Prod Workflows",
-        "status_group": "Services",
         "gate": "startup_grace",
     },
     {
         "name": "etcd_restore_drill",
-        "display": "etcd Restore Drill",
-        "status_group": "Backups & Storage",
         "runbook": "k3s-etcd-restore",
     },
     {
         "name": "prometheus",
-        "display": "Prometheus Reachable",
-        "status_group": "Observability",
         "is_gate": True,
     },
 ]
@@ -46,13 +38,12 @@ ROWS = [
 
 def test_bridge_checks_renders_one_row_per_check_in_order():
     assert fb.render_bridge_checks(ROWS).splitlines() == [
-        "| Tile | Check | Gate | Critical | Status page group | Runbook |",
-        "|---|---|---|---|---|---|",
-        "| Root Disk | `disk` | `prometheus` | yes | Hosts & Power |  |",
-        "| n8n Prod Workflows | `n8n` | `startup_grace` |  | Services |  |",
-        "| etcd Restore Drill | `etcd_restore_drill` | none |  | Backups & Storage "
-        "| `k3s-etcd-restore` |",
-        "| Prometheus Reachable | `prometheus` | is a gate |  | Observability |  |",
+        "| Check | Gate | Critical | Runbook |",
+        "|---|---|---|---|",
+        "| `disk` | `prometheus` | yes |  |",
+        "| `n8n` | `startup_grace` |  |  |",
+        "| `etcd_restore_drill` | none |  | `k3s-etcd-restore` |",
+        "| `prometheus` | is a gate |  |  |",
     ]
 
 
@@ -60,11 +51,19 @@ def test_gate_sets_group_members_by_the_gate_column():
     assert fb.render_gate_sets(ROWS).splitlines() == [
         "| Gate value | Held by | Members | Checks |",
         "|---|---|---|---|",
-        "| `prometheus` | Prometheus Reachable gate, which suppresses them | 1 | `disk` |",
-        "| `startup_grace` | startup grace, which holds them `up` through their first "
-        "down cycles | 1 | `n8n` |",
+        "| `prometheus` | `prometheus` gate, which suppresses them | 1 | `disk` |",
+        "| `startup_grace` | their rule's `for: 10m`, which rides out the weekly reboot "
+        "| 1 | `n8n` |",
         "| ungated | nothing | 1 | `etcd_restore_drill` |",
     ]
+
+
+def test_a_gate_value_with_no_gate_row_is_the_exporter_suppression():
+    rows = [row for row in ROWS if not row.get("is_gate")]
+    assert (
+        "| `prometheus` | the exporter-health probe, which suppresses them while an "
+        "exporter is down | 1 | `disk` |"
+    ) in fb.render_gate_sets(rows).splitlines()
 
 
 def test_thresholds_renders_key_and_value():
@@ -113,16 +112,19 @@ def test_tunables_never_carry_a_value_built_from_a_variable():
 def test_every_check_row_reaches_the_checks_fragment():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
     body = fb.render_bridge_checks(rows)
-    assert len(rows) >= 20
+    assert len(rows) >= 19
     assert all(f"`{row['name']}`" in body for row in rows)
 
 
 def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
     body = fb.render_gate_sets(rows)
-    assert {"prometheus", "b2_reachable", "wan_reachable"} <= {
+    assert {"b2_reachable", "wan_reachable"} == {
         row["name"] for row in rows if row.get("is_gate")
     }
+    # The `prometheus` value has no gate row since M6 batch A6's Cutover-2, but its member keeps a
+    # set line: the exporter suppression.
+    assert "| `prometheus` | " in body
     for row in rows:
         if not row.get("is_gate"):
             assert body.count(f"`{row['name']}`") == 1, row["name"]
@@ -130,9 +132,9 @@ def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
 
 def test_thresholds_fragment_finds_the_template_tunables():
     found = dict(fb.read_env_tunables(fb.ENV_SETTINGS.read_text()))
-    assert len(found) >= 35
+    assert len(found) >= 34
     assert found["INTERVAL"] == "300"
-    assert found["GRACE_CYCLES"] == "2"
+    assert "GRACE_CYCLES" not in found
 
 
 # --- *Live checks* titles against CHECKS ----------------------------------------------------
@@ -152,7 +154,7 @@ def live_check_titles(page: str) -> list[str]:
     for line in section.splitlines():
         match = _TITLE.match(line)
         if match and _ARM not in match.group(2):
-            titles.append(match.group(1))
+            titles.append(match.group(1).strip("`"))
     return titles
 
 
@@ -198,12 +200,12 @@ def test_the_live_checks_section_stops_at_the_next_heading():
 
 def test_every_live_check_has_a_bullet_and_every_bullet_a_live_check():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
-    displays = {row["display"] for row in rows}
+    names = {row["name"] for row in rows}
     page = CHECKS_PAGE.read_text()
     titles = live_check_titles(page)
-    assert len(titles) >= 20
-    assert {"etcd Restore Drill", "B2 Free Tier Headroom"} <= set(titles)
-    assert title_drift(page, displays) == (set(), set())
+    assert len(titles) >= 19
+    assert {"etcd_restore_drill", "b2_storage"} <= set(titles)
+    assert title_drift(page, names) == (set(), set())
 
 
 # --- the internals module table against files/ ----------------------------------------------
@@ -275,5 +277,5 @@ def test_every_checks_module_is_named_in_the_checks_row():
         "__init__"
     }
     rows = module_table(INTERNALS_PAGE.read_text())
-    assert {"service", "wan", "cluster"} <= stems
+    assert {"service", "wan", "b2"} <= stems
     assert unlisted_check_domains(rows, stems) == set()
