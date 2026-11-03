@@ -257,31 +257,49 @@ the appendix, and the appendix is never re-read.
   cost quality that the data shows. A cap at the guide's 20 would stop up to 18 of 57 skeptics
   before their verdict. Revisit if one review dispatches more than 20 skeptics or skeptic p90
   passes 50.
-- **`implementer` is measured but undecided: too few red outcomes** (#4652, #4665). Measured
-  on 2026-10-12 over 2026-09-16 to 10-12. Loki holds 142 implementer `subagent_completed`
-  events, and transcripts survive for 94 runs. An event is not a run: a resumed agent emits one
-  event per resumption, while its transcript holds the whole run. Each event is assigned to a
-  transcript in its session. A transcript takes at most 4 events, which must sum to its
-  tool-use count, each lie within 3 s of one of its messages, and include one at its last
-  message. The 142 events split three ways:
-  - 102 belong to 93 transcripts: 84 runs emitted one event and 9 resumed runs emitted two.
-  - 10 match no transcript in sessions that have transcripts.
-  - 30 come from 5 sessions with no transcript on either host.
+- **DECIDED: no `maxTurns` on `implementer`** (#4652, #4663). The PRs fed by the longest
+  implementer runs open red no more often than the rest, and a cap at the guide's 20 would stop
+  216 of 248 runs. Revisit if the top quartile's red rate reaches twice the other three's.
 
-  The 94th transcript emitted no event, because it was stopped and re-dispatched. 40 events
-  therefore lack a transcript, and they are at most 40 runs of unmeasured length. A
-  transcript's tool-use count is its number of distinct `tool_use` ids, because one transcript
-  repeats 226 of its 487 `tool_use` entries. Over the 94 runs, tool uses are p50 47, p90 121
-  and max 332 (nearest rank); the 142 events read p50 51 and p90 160. The join takes each
-  run's PR from the last non-`master` branch in its transcript. The PR's verdict comes from
-  the check runs on its head commit when it opened, and `cancelled` counts as no verdict. Of
-  the 94 runs, the join drops 12 that worked on `master`, 7 that started after their PR opened
-  (conflict and review fix-ups) and 9 whose PR had no verdict. That leaves 66 runs on 21 PRs,
-  and runs on one PR are not independent: 22 of them share one.
-  By tool-use quartile (14-29, 29-42, 42-69, 71-332), 0, 0, 1 and 0 runs went red, and the
-  one red PR (#3113) came from a 66-tool-use run. The top quartile is not redder, but one red
-  PR in 21 cannot show an effect in either direction. A cap waits on a sample with enough red
-  PRs to compare.
+  **The join.** It pairs each run's length with its PR's first-CI verdict:
+  1. Loki's `subagent_completed` event is not a run, because a resumed agent emits one event
+     per resumption, while its transcript holds the whole run (#4665). Each event is assigned to a
+     transcript in its session. A transcript takes at most 4 events, which must sum to its
+     tool-use count, each lie within 3 s of one of its messages, and include one at its last
+     message. An event left over is a run of unmeasured length.
+  2. A run's length is its transcript's number of distinct `tool_use` ids, because one
+     transcript repeats 226 of its 487 `tool_use` entries.
+  3. A run's PR is the earliest PR, opened after the run started, on the last non-`master`
+     branch in its transcript.
+  4. The PR's verdict is the earliest check run per check name on the head commit CI first
+     ran on after the PR opened (`check-runs?filter=all`, since the default `latest` shows
+     a rerun's result). Any failed check is red, and a `cancelled` check with no failure is
+     no verdict.
+  5. The join drops runs on `master`, runs on a branch that never opened a PR, runs that
+     started after their PR opened (conflict and review fix-ups), and PRs with no verdict.
+
+  **2026-10-12 to 11-03, measured 2026-11-03.** Loki holds 501 implementer events, and 248
+  transcripts survive: 246 on daniel-box and 2 on daniel-server. 362 events match 239
+  transcripts. 139 events lack a transcript, 69 of them from 3 sessions with none; their median
+  is 25 tool uses, so the unmeasured runs skew short. Over the 248 runs, tool uses are p50 64,
+  p90 237 and max 608 (nearest rank). The join drops 4 runs on `master`, 95 on a branch with no
+  PR and 17 fix-ups, leaving 132 runs on 82 PRs, of which 24 opened red on `prek` or `pytest`.
+  Grouped per PR by its longest run, the quartiles 14-35, 36-76, 77-167 and 168-608 opened
+  red 4/21, 5/21, 9/20 and 6/20. The top quartile against the rest is 6/20 against 18/62,
+  with a one-sided Fisher p of 0.57 for "the top is redder". Per run the p is 0.70, and per PR
+  by total tool uses 0.34. Four PRs (#6105, #6107, #6138, #6553) have a failed `prek` check
+  inside a workflow run that reads `cancelled`. Reading them as no verdict leaves 20 red PRs
+  in 78 and a top quartile of 4/19 (p 0.79), so the decision does not depend on that rule.
+
+  **What the decision rests on.** The 95 runs with no PR are a little longer than the joined
+  ones (p50 71 against 60, p90 252 against 213), and the longest are D5 orchestrator-wave
+  implementers whose work lands through the orchestrator's PR. The join cannot score them, so
+  the decision assumes they behave like the joined runs. Twenty-four red PRs rule out a large
+  effect of length on red CI, not a small one, and the comparison shows co-occurrence: a long
+  run may be long because its task was hard.
+
+  **HISTORY — the first window was too small to decide.** Over 2026-09-16 to 10-12, 142 events
+  and 94 transcripts joined to 66 runs on 21 PRs, and only #3113 opened red.
 - **Workflow subagents are measured but undecided** (#4651). They emit no `subagent_completed`
   event, and their `api_request` events carry no per-agent id. Loki labels a Workflow agent's
   requests `agent:builtin:workflow-subagent` only when the script names no agent type. An agent
