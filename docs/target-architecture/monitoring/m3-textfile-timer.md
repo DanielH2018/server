@@ -1,6 +1,6 @@
 # M3 — One host timer to the textfile collector
 
-Status: IN PROGRESS. PR 4 merged as [#5840](https://github.com/DanielH2018/server/pull/5840) and PR 5, the cutover, as [#6018](https://github.com/DanielH2018/server/pull/6018). PR 6, the token retirement, is open as [#6959](https://github.com/DanielH2018/server/pull/6959).
+Status: DONE. PR 4 merged as [#5840](https://github.com/DanielH2018/server/pull/5840), PR 5, the cutover, as [#6018](https://github.com/DanielH2018/server/pull/6018), and PR 6, the token retirement and M3's last PR, as [#6959](https://github.com/DanielH2018/server/pull/6959) on 2026-11-02.
 
 PR 1, the textfile collector's live producer named: [#4869](https://github.com/DanielH2018/server/pull/4869) (issue #4855).
 

@@ -1,6 +1,8 @@
 # G1 — Diff notice alongside the lock
 
-Status: IN PROGRESS
+Status: DONE. PRs 1 to 5 merged by 2026-10-12, and the five-day soak ended on
+2026-10-17T21:14:44Z. Step 6's soak checks, issue #4738, closed on 2026-10-17. G2 PR 1
+merged as [#5478](https://github.com/DanielH2018/server/pull/5478) the same day.
 
 PR 1, the revision reader: #4699 (issue #4691).
 
@@ -11,7 +13,8 @@ PR 3, the `notice` subcommand: #4719 (issue #4713).
 PR 4, the replay and the parity table: #4727 (issue #4724).
 
 PR 5, the CI steps: #4732 (issue #4731). `<ts>` is 2026-10-12T21:14:44Z, the merge of #4732,
-so the soak's 30 days would end on 2026-11-11. Step 6, the soak checks, is issue #4738.
+so the planned 30-day soak would have ended on 2026-11-11. The operator's ruling below
+replaced that end. Step 6, the soak checks, is issue #4738.
 
 The operator shortened the soak on 2026-10-17 to five days, ending 2026-10-17T21:14:44Z, so that
 G2 to G5 do not wait into November. Every 30-day window below reads as five days from `<ts>`.
