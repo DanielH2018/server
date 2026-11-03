@@ -300,18 +300,26 @@ def test_the_window_is_declared_on_the_reboot_crons_clock():
     America/Chicago and would put the window five hours off the reboot. Kuma's own identifier
     list has no `UTC` entry, so the window names a zone that is +00:00 all year instead."""
     assert GROUP_VARS["weekly_reboot_timezone"] == "UTC"
-    declared = ZoneInfo(window_timezone())
-    for month in (1, 7):
-        offset = datetime(2026, month, 15, tzinfo=declared).utcoffset()
-        assert offset is not None
-        assert offset.total_seconds() == 0, (month, offset)
+    assert _utc_offsets(window_timezone()) == {}
 
 
 def test_the_containers_display_timezone_would_be_caught():
     """The rejecting half: `tz` is what this was written as first, and it is five hours out."""
-    chicago = datetime(2026, 7, 15, tzinfo=ZoneInfo("America/Chicago")).utcoffset()
-    assert chicago is not None
-    assert chicago.total_seconds() != 0
+    display = window_timezone(
+        uptime_kuma_k8s_maintenance_window_timezone="America/Chicago"
+    )
+    assert _utc_offsets(display), f"{display} read as +00:00 all year"
+
+
+def _utc_offsets(zone: str) -> dict[int, timedelta]:
+    """The months, of January and July, in which `zone` is not +00:00."""
+    out = {}
+    for month in (1, 7):
+        offset = datetime(2026, month, 15, tzinfo=ZoneInfo(zone)).utcoffset()
+        assert offset is not None
+        if offset.total_seconds() != 0:
+            out[month] = offset
+    return out
 
 
 def test_the_sync_and_the_window_share_one_clock():
