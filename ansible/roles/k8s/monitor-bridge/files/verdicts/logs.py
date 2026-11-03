@@ -94,6 +94,10 @@ HC_ROUTED_TAGS: frozenset[str] = frozenset()
 # additions merge without touching another's.
 KUMA_RETIRING_TAGS = frozenset(
     {
+        # B9: the weekly AIDE check and rkhunter scan of the integrity-scans host component. Each
+        # logs its `status=` line and its refused push under its own name. The Pi ships only
+        # health.log to Loki, so this exempts the lines of daniel-box and daniel-server alone.
+        "aide-check",
         "claude-otel-health",
         "configarr-health",
         "crowdsec-appsec-verify",
@@ -129,6 +133,7 @@ KUMA_RETIRING_TAGS = frozenset(
         # B6c: registry-gc.sh, the weekly mirror GC cron of setup/k8s_host_files.
         "registry-gc",
         "release-staleness-check",
+        "rkhunter-check",
         "secret-rotation-audit",
         "setup-drift-check",
         "sync-artifacts",

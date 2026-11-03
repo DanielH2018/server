@@ -148,7 +148,7 @@ _PROBE_FAILED_PREFIX = "probe.py releases --stale-only exited "
 
 
 def stale_verdict_names(verdict):
-    """Service names recovered from a kuma stale verdict, in order, possibly empty.
+    """Service names recovered from a stale verdict, in order, possibly empty.
 
     Best-effort by construction: `bridge.msgfmt.format_down` shrinks the names shown per
     reason from five to one to fit 900 chars, and cuts the line from the right when even
@@ -184,10 +184,11 @@ def stale_release_problems(path=STALE_VERDICT_FILE, now=None):
     """One line naming the services `Release Staleness Drift` last found stale, or nothing.
 
     `release-staleness-check.sh` (roles/setup/k3s) writes its run's verdict, `status=<up|down>
-    <verdict>`, to `path` every `k3s_release_staleness_cron_minute`, then pushes the same text
-    to Kuma. Reading the release records here instead would re-run the git derivation the cron
+    <verdict>`, to `path` every `k3s_release_staleness_cron_minute`, beside the textfile metric
+    that pages. Reading the release records here instead would re-run the git derivation the cron
     just paid for, and the banner must not. A file older than `STALE_VERDICT_MAX_AGE_S` keeps a
-    dead cron's last verdict off the banner — the Kuma tile pages for the dead cron itself. A
+    dead cron's last verdict off the banner — `ReleaseStalenessCheckNotReporting` pages for the
+    dead cron itself. A
     host that never runs the cron (an agent node, a laptop) has no such file and stays silent.
 
     The file, not the journal (#6183): it is a stat and a read with no subprocess, and it holds

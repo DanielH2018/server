@@ -1,7 +1,8 @@
 # H6 — system-upgrade-controller for k3s
 
 Status: IN PROGRESS. Merged: H6.1a, H6.1b ([#6111](https://github.com/DanielH2018/server/pull/6111)), H6.1b2 ([#6113](https://github.com/DanielH2018/server/pull/6113)), H6.1c ([#6120](https://github.com/DanielH2018/server/pull/6120), run on production on 2026-10-25), H6.2 ([#6121](https://github.com/DanielH2018/server/pull/6121)), H6.3a ([#6104](https://github.com/DanielH2018/server/pull/6104)), H6.3b ([#6142](https://github.com/DanielH2018/server/pull/6142)) and H6.3c ([#6235](https://github.com/DanielH2018/server/pull/6235)).
-Also merged: H6.3e and H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)). Also merged: H6.4b ([#6502](https://github.com/DanielH2018/server/pull/6502), with the comment follow-up [#6631](https://github.com/DanielH2018/server/pull/6631)). No merged PR is recorded for H6.5a, H6.5b, H6.6 or H6.7.
+Also merged: H6.3e and H6.4a ([#6198](https://github.com/DanielH2018/server/pull/6198)). Also merged: H6.4b ([#6502](https://github.com/DanielH2018/server/pull/6502), with the comment follow-up [#6631](https://github.com/DanielH2018/server/pull/6631)). Also merged: H6.5a ([#7035](https://github.com/DanielH2018/server/pull/7035)) and H6.5b
+([#7059](https://github.com/DanielH2018/server/pull/7059)). No merged PR is recorded for H6.6 or H6.7.
 Also merged: H6.3d ([#6403](https://github.com/DanielH2018/server/pull/6403), paused by
 [#6412](https://github.com/DanielH2018/server/pull/6412) and re-selected on 2026-10-29 after
 [#6420](https://github.com/DanielH2018/server/pull/6420) shipped `k3s_gates.py` to
@@ -1307,7 +1308,10 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       `EnvironmentFile=` is left alone.
     - Remove the args clause from `agent.yml`, and delete `k3s_agent_args`.
     - The `Read the join credentials` play stays for a fresh join until H7.
-    - The next window restarts `k3s-agent` once.
+    - The flags take effect at the agent's next start, not in a window. daniel-server's
+      package lists no `k3s-restart` (`hosts/daniel-server/package.yml`), so nothing restarts
+      `k3s-agent` for a changed hash. The next start is the weekly reboot, a SUC upgrade or an
+      operator restart. Adding `k3s-restart` there is *Open questions* 7, the operator's call.
 15. **H6.6 The patch bump.**
     - The operator takes the next Renovate k3s patch PR. In the PR it finishes the installer
       sha256, `k3s_binary_sha256_amd64`, the vendored schemas, and H1's CoreDNS pin and

@@ -1,7 +1,9 @@
 # The k3s agent's same-path files (H6.5a, docs/target-architecture/host/h6-k3s-suc.md, *Steps, as
 # PRs*, item 13). Ansible's tasks/agent.yml wrote each one until H6.5a deleted its task, so dpkg
-# takes over the path on the first install. The agent's flags stay in the installer's unit until
-# H6.5b.
+# takes over the path on the first install. Since H6.5b the component also carries the agent's
+# flags: `k3s_agent_config` below, rendered into config.yaml.d, and the `ExecStart` lines of
+# 50-homelab.conf. Reverting H6.5b alone is safe: dpkg removes the config drop-in and the
+# `ExecStart` lines, and the installer's unit still carries every flag.
 #
 # The package ships the files and applies nothing. Each file k3s reads at startup carries
 # `activate: manual:k3s-agent.service`, and the host package marks k3s-agent.service `windowed`,
@@ -18,8 +20,26 @@ defaults:
   # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
   # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
   k3s_log_file: /var/log/k3s.log
+  # The k3s agent's flags (H6.5b). templates/50-homelab.yaml.j2 renders this mapping as
+  # /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and 50-homelab.conf runs a bare `k3s agent`.
+  # Each key is a flag name without `--`; a repeatable flag is a list. A change goes live at the
+  # agent's next start, because daniel-server's package lists no `k3s-restart`.
+  # ENFORCED: ansible/tests/setup/test_k3s_agent_flags_migration.py.
+  k3s_agent_config:
+    node-ip: "{{ server_ip }}"
+    # INERT: Longhorn honors this label only when the cluster-level
+    # `create-default-disk-labeled-nodes` setting is true, which this cluster never sets, so a
+    # default disk appears anyway. The label stays, because removing it changes the agent's
+    # flags for nothing. The enforced lever is agent_verify.yml patching the Longhorn node CR to
+    # allowScheduling:false, and `k3s_agent_longhorn_scheduling` flips that back deliberately.
+    node-label:
+      - node.longhorn.io/create-default-disk=false
+    kubelet-arg:
+      - allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf, activate: "manual:k3s-agent.service"}
+  # The agent's flags. The only file in config.yaml.d, and nothing ships config.yaml.
+  - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s-agent.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}

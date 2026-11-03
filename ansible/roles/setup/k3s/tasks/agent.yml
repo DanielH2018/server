@@ -127,13 +127,23 @@
       homelab-{{ inventory_hostname }} package first: it ships the k3s agent's files
       (hosts/components/k3s-agent).
 
-- name: Read the installed k3s-agent systemd unit
+- name: Read the packaged k3s agent flags
   tags: [k3s_agent]
-  ansible.builtin.slurp:
-    src: /etc/systemd/system/k3s-agent.service
-  register: k3s_agent_unit
+  ansible.builtin.stat:
+    path: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml
+  register: k3s_agent_config_file
   become: true
-  failed_when: false
+
+- name: Fail if the host package has not installed the k3s agent flags
+  tags: [k3s_agent]
+  # The installer passes a bare `agent`, so k3s-agent started without this file would come up
+  # with an autodetected node IP and without the kubelet's unsafe-sysctl allowlist.
+  ansible.builtin.assert:
+    that: k3s_agent_config_file.stat.exists
+    fail_msg: >-
+      /etc/rancher/k3s/config.yaml.d/50-homelab.yaml is missing on {{ inventory_hostname }}.
+      Install the homelab-{{ inventory_hostname }} package first: it ships the k3s agent's
+      flags (hosts/components/k3s-agent).
 
 - name: Read the installed k3s-agent binary
   tags: [k3s_agent]
@@ -149,30 +159,24 @@
   failed_when: false
   check_mode: false
 
-- name: Install or reconfigure the k3s agent
+- name: Install the k3s agent
   tags: [k3s_agent]
-  # Same guard as the server install (server.yml): the unit's arguments and the binary's
-  # absence, not the version. SUC's k3s-agent Plan is the only writer of the agent's version
-  # (H6.3d). A missing binary runs the full install. A missing argument re-runs the installer
-  # with INSTALL_K3S_SKIP_DOWNLOAD, which rewrites the unit and never the binary. The guard
-  # detects missing or changed flags, not removed ones. The installer writes K3S_URL/K3S_TOKEN
-  # into /etc/systemd/system/k3s-agent.service.env (0600 root), rewrites the unit,
-  # daemon-reloads and restarts the agent itself.
+  # Runs only when the binary is missing. SUC's k3s-agent Plan is the only writer of the agent's
+  # version (H6.3d), and the package is the only writer of its flags (H6.5b), so a joined agent
+  # has nothing left for the installer to do. `agent` alone: the package's 50-homelab.conf
+  # replaces the ExecStart the installer writes. The installer writes K3S_URL/K3S_TOKEN into
+  # /etc/systemd/system/k3s-agent.service.env (0600 root), and nothing rewrites that file on a
+  # joined agent, so a server-token rotation needs the operator to update it by hand.
   ansible.builtin.command:
     cmd: /usr/local/bin/k3s-install.sh
   environment:
-    INSTALL_K3S_EXEC: "{{ k3s_agent_args }}"
+    INSTALL_K3S_EXEC: agent
     INSTALL_K3S_VERSION: "{{ k3s_version }}"
     K3S_URL: "{{ k3s_server_join_url }}"
     K3S_TOKEN: "{{ k3s_join_token }}"
-    INSTALL_K3S_SKIP_DOWNLOAD: "{{ 'true' if (k3s_agent_installed_version.rc | default(1)) == 0 else 'false' }}"
   become: true
   no_log: true  # K3S_TOKEN is a cluster credential
-  when: >-
-    (k3s_agent_args.split() | reject('equalto', 'agent')
-     | difference(k3s_agent_unit.content | default('') | b64decode | replace("'", "") | split())
-     | length > 0)
-    or ((k3s_agent_installed_version.rc | default(1)) != 0)
+  when: (k3s_agent_installed_version.rc | default(1)) != 0
   changed_when: true
 
 # ── Reap the retired VIP kube-proxy bypass ────────────────────────────────────────────

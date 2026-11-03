@@ -119,9 +119,10 @@ The apiserver, Traefik's ingress path and Pi-hole DNS go away for the length of 
 because they all sit behind this node.
 
 Do not run `k3s-bringup.yml --tags k3s_server` to upgrade. Its install guard has no version
-clause since H6.3c. A missing binary runs the full install. A missing argument re-runs the
-installer with `INSTALL_K3S_SKIP_DOWNLOAD=true`, which rewrites the unit and never the binary.
-A flag change therefore still reaches daniel-box through that play until H6.4b.
+clause since H6.3c, and no argument clause since H6.4b, so it runs only for a missing binary. The
+server's flags are daniel-box's package's: they live in
+`hosts/components/k3s-server/component.yml`, and `homelab-k3s-restart` applies a change inside
+its window.
 
 Widening the Plan is a selector change only, so it keeps the Plan's version and hash. The
 Kustomization can read Current before any Job exists. The evidence is the node: its
@@ -204,9 +205,9 @@ Plan to finish, and then the upgrade container replaces the binary. No Ansible c
 of the upgrade.
 
 Do not run `k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent` to upgrade. Its
-install guard has no version clause since H6.3d. A missing binary runs the full install. A
-missing argument re-runs the installer with `INSTALL_K3S_SKIP_DOWNLOAD=true`, which rewrites the
-unit and never the binary. A flag change therefore still reaches daniel-server through that play.
+install guard has no version clause since H6.3d, and no argument clause since H6.5b, so it runs only
+for a missing binary. The agent's flags are daniel-server's package's since H6.5b: they live in
+`hosts/components/k3s-agent/component.yml` and take effect at the agent's next start.
 
 The evidence is the node, as for the server: its `plan.upgrade.cattle.io/k3s-agent` label equals
 the agent Plan's `status.latestHash`, the Job shows a `completionTime`, and

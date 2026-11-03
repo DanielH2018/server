@@ -1,5 +1,5 @@
 {
-  "checksum": "3ac99bd1449735eaec2d2aa68350195d44e0c45923153143b835f894ac333d3e",
+  "checksum": "af67dea88401b9123806baab4eb36b3ef0b088fdb50c26fbd5b5f19cf6d16c82",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Notable",
   "row": {
@@ -8,14 +8,16 @@
       "ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged": "abc50dd24685838384ee47b3e402e66947f00ca03befd3738c5169a58d889f82",
       "ansible/tests/repo/_k3s_write_verbs_row.py:K3S_WRITE_ALLOW": "4b6b11513b650f1bd89eafa73bfbe23cf1dd62b63d8a93dd502a3a083f4ac950",
       "ansible/tests/setup/test_k3s_agent_component.py": "18de1e66e21d7549a41b04813280172ed39169c02f9f29a9f68a3758c5785d87",
+      "ansible/tests/setup/test_k3s_agent_flags_migration.py": "a88945e919918ed25d274995c2bd3c5c0e9b92566a155c723f345dc6e5c83fda",
       "ansible/tests/setup/test_k3s_server_component.py": "73e3cea299a3de47f625a4ddab53d776b0e3287fc11aee2af760c9ca17671bbf",
       "ansible/tests/setup/test_k3s_server_flags_migration.py": "261fa8ea4c34c33803d096466308628a29d1bba21c507602ec0f97d61b28bea7",
       "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d",
       "hosts/components/k3s-agent/": "3a81777d5bbc099fc043dbfaa1c115ac9dd816b1b39664e3721493266f4195ab",
+      "hosts/components/k3s-agent/component.yml": "535d419f6873b518ee882ab3b21d60c3c382a70502a12fe602e580c7434e48f0",
       "hosts/components/k3s-server/": "c2bef8911f98481c1e7bc3c77e27fbd2b8e2404700aa15b4cf9cb71f0da3b18d",
       "hosts/components/k3s-server/component.yml": "5fb01de80a34abff152ba23889fb025d1b95bf0601cd18625bac7097600850b1"
     },
     "python": "3.15",
-    "verified_sha": "23b647439"
+    "verified_sha": "425dcdfd9"
   }
 }

@@ -68,8 +68,8 @@ some carrying a `DECIDED` marker. `files/` holds the Python the crons run, teste
 since H6.1b, so a pin change routes to the Flux-owned `system-upgrade` tag and writes no
 `manual_plane` line for this role. `tasks/server.yml` and `tasks/agent.yml` read the file with
 `include_vars`. `SYSTEM_UPGRADE_DEFAULTS` in `scripts/lib/repo_paths.py` is the Python readers' path.
-The server's install task runs only for a missing binary (since H6.4b), and the agent's for a
-missing binary or a missing argument (since H6.3d). SUC's `k3s-server` and `k3s-agent` Plans
+The server's install task runs only for a missing binary (since H6.4b), and so does the
+agent's (since H6.5b). SUC's `k3s-server` and `k3s-agent` Plans
 are the only writers of each node's version.
 
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
@@ -123,7 +123,7 @@ H1.7b, and the filesystem trim became one of them at H2.2c; their contract is th
   `registries.yaml`, the logging drop-in, its logrotate file and the log file's `tmpfiles.d`
   entry, in `hosts/components/k3s-agent/`. daniel-server's package lists no `k3s-restart`, so a
   change to them goes live at the agent's next start. `tasks/agent.yml` keeps the join, the
-  firewall, the Longhorn prerequisites and the installer, whose flags move in H6.5b.
+  firewall, the Longhorn prerequisites and the installer.
   `ansible/tests/setup/test_k3s_agent_component.py` holds the component.
 - **The server's flags are the same package's since H6.4b.** `k3s_server_config` in
   `hosts/components/k3s-server/component.yml` renders into
@@ -131,6 +131,12 @@ H1.7b, and the filesystem trim became one of them at H2.2c; their contract is th
   server`. `tasks/server.yml` therefore passes the installer only `server`, on a host with no
   binary, after it asserts the package installed the flags.
   `ansible/tests/setup/test_k3s_server_flags_migration.py` held the move to the old flags.
+- **The agent's flags are daniel-server's package's since H6.5b.** `k3s_agent_config` in
+  `hosts/components/k3s-agent/component.yml` renders into the same config.yaml.d path on
+  daniel-server, and the agent's unit drop-in runs a bare `k3s agent`. `tasks/agent.yml` passes
+  the installer only `agent`, on a host with no binary. A flag change goes live at the agent's
+  next start, because daniel-server's package lists no `k3s-restart`.
+  `ansible/tests/setup/test_k3s_agent_flags_migration.py` holds the move to the live flags.
 - **Both drift checks know an object Flux applies, and neither reads its label alone.** The
   prune check skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a
   Kustomization `<n>` exists in `flux-system`. It reads that list once per run, and a failed
