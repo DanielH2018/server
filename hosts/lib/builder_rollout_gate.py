@@ -154,12 +154,22 @@ class RolloutGate:
         reconcile = self.prom(f'{RECONCILE_OK}{{host="{host}"}}')
         if applied is None or reconcile is None:
             log(
-                "rollout gate stays open: Prometheus unreachable on loopback and ClusterIP"
+                "rollout gate stays open: Prometheus unreachable at every PROMETHEUS_URLS address"
             )
             return False
-        return any(float(s["value"][1]) == 1 for s in reconcile) and any(
+        if any(float(s["value"][1]) == 1 for s in reconcile) and any(
             self.descends(gate["sha"], s["metric"].get("sha", "")) for s in applied
+        ):
+            return True
+        # Prometheus answered, so say what it holds: without this line a gate held by a
+        # canary that reports an older SHA, or none, looks like a gate held by nothing (#7047).
+        shas = ",".join(s["metric"].get("sha", "") for s in applied) or "none"
+        oks = ",".join(str(s["value"][1]) for s in reconcile) or "none"
+        log(
+            f"rollout gate at {gate['sha'][:12]} stays open: {host} reports"
+            f" sha={shas} reconcile_ok={oks}"
         )
+        return False
 
     def prom(self, promql: str) -> list[dict] | None:
         """The instant-vector result of `promql`, asking each PROMETHEUS_URLS entry in turn.

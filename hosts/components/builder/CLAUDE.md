@@ -80,7 +80,7 @@ nothing new publishes either. The way out is `docs/break-glass.md` item 9's by-h
 The component reads two values other roles own. `ci_required_contexts` and `ci_ancestor_walk_max`
 come from `ansible/inventory/group_vars/all.yml`. The Prometheus ClusterIP in `builder_prom_urls`
 repeats `observability_prometheus_cluster_ip`, and
-`hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls`
+`hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster_ip`
 holds the two equal.
 
 ## The builder's run
@@ -163,16 +163,19 @@ failure keeps its own reason.
 The gate closes at the start of a run, after the hold check, in one of two ways. The operator's
 root-owned `/etc/homelab-builder/release` can name the gate's commit or a descendant, and then
 Prometheus is not asked. Otherwise the builder reads `homelab_host_applied_info` and
-`homelab_host_reconcile_ok` for the canary from the addresses in the settings file's
-`PROMETHEUS_URLS`, loopback first and then the pinned ClusterIP. It closes the gate when the
-applied SHA equals or descends from the gate's commit with reconcile at 1. Any other answer, an
-unreadable file or an unreachable Prometheus leaves the gate open. After the gate closes, a run
+`homelab_host_reconcile_ok` for the canary from the settings file's `PROMETHEUS_URLS`, which
+holds the pinned ClusterIP alone. Nothing serves Prometheus on daniel-box's loopback, so a
+loopback entry only logged a refused connection on every run. The gate closes when the applied
+SHA equals or descends from the gate's commit with reconcile at 1. Any other answer, an
+unreadable file or an unreachable Prometheus leaves the gate open. When Prometheus answers and
+the gate stays open, the builder logs the SHA and the `reconcile_ok` the canary reports beside
+the gate's commit. After the gate closes, a run
 that finds no green commit above the last built one rebuilds the deferred packages at the last
 built commit. A pending or red commit on master therefore does not hold them back.
 
 `PROMETHEUS_URLS` renders from `builder_prom_urls` in `component.yml`. The component cannot read
 the observability role's `observability_prometheus_cluster_ip`, so the default repeats the address,
-and `hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls`
+and `hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster_ip`
 holds the two equal.  The code is
 `hosts/lib/builder_rollout_gate.py`, and `docs/host-packages.md`
 has the override's runbook step.
