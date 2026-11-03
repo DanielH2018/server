@@ -17,6 +17,8 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
+import yaml
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib import yaml_fast
@@ -119,7 +121,11 @@ def eval_when_strict(
 
 
 def _eval_when(
-    expr: object, host: str, all_vars: Path = ALL_VARS, host_vars_dir: Path = HOST_VARS
+    expr: object,
+    host: str,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+    role_defaults: Path | None = None,
 ) -> bool:
     """Best-effort read of a `when:` value for one host: `eval_when_strict`, or True.
 
@@ -128,10 +134,14 @@ def _eval_when(
     hides a real gap, which is the failure this function exists to close. Same asymmetry
     `quiet_paths` already applies to a broad path it cannot read. The deployer's routing
     (`setup_routing`) takes the strict form, where a wide guess is the #3933 bug.
+
+    `role_defaults` is the gated task's role `defaults/main.yml`, layered under `group_vars`.
+    Without it a `<role>_packaged_hosts` guard names an unknown map and reads as every host
+    (#7032). A defaults file that does not parse reads as every host too.
     """
     try:
-        return eval_when_strict(expr, host, all_vars, host_vars_dir)
-    except GateUnreadable:
+        return eval_when_strict(expr, host, all_vars, host_vars_dir, role_defaults)
+    except GateUnreadable, yaml.YAMLError:
         return True
 
 

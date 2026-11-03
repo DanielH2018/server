@@ -531,7 +531,7 @@ receipt row after the tick or from the PR's own derivation on the fast path (#44
 `--tags` value matching nothing makes Ansible exit 0 having applied nothing. The refusals that
 fire in practice:
 
-- a task file with no `tags:` of its own (`main.yml`, `unit-logging.yml`), whose tasks inherit
+- a task file with no `tags:` of its own (`main.yml`), whose tasks inherit
   from the import site;
 - a key nothing in the role reads, a change under `handlers/` or `meta/`, or a `defaults/` file
   either ref does not carry;

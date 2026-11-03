@@ -150,13 +150,15 @@ healthchecks notifies on a status change, so a check already down is not paged a
 journald stores nothing below notice on these hosts and every line k3s writes is priority info —
 logrus and klog emit plain text to stderr with no `<N>` prefix, so INFO, WARN and FATA all take
 the unit's `SyslogLevel=info` default. On 2026-09-09 k3s crash-looped ~3000 times over 5h08m and
-the journal kept only systemd's `status=1/FAILURE` lines (#1918). `tasks/unit-logging.yml` writes
-a `StandardOutput=append:` drop-in for `k3s.service` and `k3s-agent.service`, plus a `copytruncate`
-logrotate stanza — truncate, because systemd holds the fd and a rename would leave the unit
+the journal kept only systemd's `status=1/FAILURE` lines (#1918). Each node's host package ships
+a `StandardOutput=append:` drop-in for its unit, `k3s.service` from `hosts/components/k3s-server/`
+and `k3s-agent.service` from `hosts/components/k3s-agent/`, plus a `copytruncate` logrotate
+stanza. It truncates because systemd holds the fd and a rename would leave the unit
 writing to the rotated inode. A drop-in rather than the unit because `k3s-install.sh` rewrites the
 unit file wholesale. Raising the unit's `SyslogLevel` to notice was the alternative and was
 rejected: notice passes the rsyslog info filter, so every k3s line would land in `/var/log/syslog`
-and ship to Loki. `ansible/tests/setup/test_k3s_unit_logging.py` holds both node types to it.
+and ship to Loki. `ansible/tests/setup/test_k3s_server_component.py` and
+`ansible/tests/setup/test_k3s_agent_component.py` hold the two drop-ins.
 
 The file's warn, error and fatal lines still reach Loki, filtered, as `loki-homelab`'s
 `{job="k3s"}` stream (#6177), so a crash loop's reason outlives the file's four rotations.

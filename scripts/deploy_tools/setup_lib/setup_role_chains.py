@@ -359,7 +359,11 @@ def task_file_chains(role_dir: Path, path: str, pr_range: str, repo: Path):
     """
     task_file = Path(path).name
     every = task_chains(role_dir, lambda task, f: f == task_file)
-    changed = _changed_tasks(path, pr_range, repo) if pr_range else None
+    texts = _range_texts(path, pr_range, repo) if pr_range else None
+    removed = _removed_task_chains(role_dir, task_file, *texts) if texts else None
+    if removed is not None:
+        return removed
+    changed = changed_task_texts(*texts) if texts else None
     if not changed:
         return every
     matched: set[str] = set()
@@ -393,12 +397,12 @@ def deleted_in(path: str, pr_range: str, repo: Path) -> bool:
     return exists == [True, False]
 
 
-def _changed_tasks(path: str, pr_range: str, repo: Path) -> set[str] | None:
-    """The leaf tasks of `path` that `pr_range` added or edited, or None to stay wide.
+def _range_texts(path: str, pr_range: str, repo: Path) -> tuple[str, str] | None:
+    """`path`'s text at both ends of `pr_range`, or None to stay wide.
 
-    Read from git at both ends of the range, not from the checkout, so a checkout on another
-    commit cannot shift the diff. A file absent at either end is None: an added file has no
-    narrower reach than its own, and a deleted one ships nothing.
+    Read from git, not from the checkout, so a checkout on another commit cannot shift the
+    diff. A file absent at either end is None: an added file has no narrower reach than its
+    own, and a deleted one ships nothing.
     """
     old, _, new = pr_range.partition("..")
     texts = []
@@ -407,7 +411,83 @@ def _changed_tasks(path: str, pr_range: str, repo: Path) -> set[str] | None:
         if shown.returncode != 0:
             return None
         texts.append(shown.stdout)
-    return changed_task_texts(*texts)
+    return texts[0], texts[1]
+
+
+def _removed_task_chains(
+    role_dir: Path, task_file: str, old_text: str, new_text: str
+) -> list[tuple] | None:
+    """The chains the removed leaves sat behind, when removing leaves is all the change did.
+
+    A deleted task ships nothing, but the hosts that ran it are where its absence shows, so
+    each removed leaf keeps its own chain: the import chains that pull `task_file` in, then the
+    block gates and the `when:` it carried in `old_text`. #7017 deleted a task every host's
+    `<role>_packaged_hosts` guard already skipped, from a file that also holds ungated tasks,
+    and the whole file's reach owed every host an apply (#7032).
+
+    None, so the caller reads the change as an edit, on any doubt: either side unparseable, a
+    block or import changed, a leaf added or edited, or no import of `task_file` found.
+    """
+    try:
+        old = yaml_fast.safe_load(old_text) or []
+        new = yaml_fast.safe_load(new_text) or []
+    except yaml.YAMLError:
+        return None
+    if not (isinstance(old, list) and isinstance(new, list)):
+        return None
+    old_leaves, old_frames = _split_leaves(old)
+    new_leaves, new_frames = _split_leaves(new)
+    if sorted(old_frames) != sorted(new_frames):
+        return None
+    removed = list(old_leaves)
+    for text in new_leaves:
+        if text not in removed:
+            return None
+        removed.remove(text)
+    entries = (
+        [()]
+        if task_file == "main.yml"
+        else _import_chains(role_dir, task_file, "main.yml")
+    )
+    if not removed or not entries:
+        return None
+    return [
+        chain
+        for entry in entries
+        for chain in _gates_in(
+            old, role_dir, lambda t, _: json.dumps(t) in removed, task_file, entry
+        )
+    ]
+
+
+def _import_chains(
+    role_dir: Path, target: str, task_file: str, inherited: tuple = ()
+) -> list[tuple]:
+    """The `when:` chain above each literal import of `target`, walking from `task_file`."""
+    path = role_dir / "tasks" / task_file
+    try:
+        tasks = _parse_tasks(path, path.stat().st_mtime_ns)
+    except OSError, yaml.YAMLError:
+        return []
+    return _imports_in(tasks or [], role_dir, target, inherited)
+
+
+def _imports_in(tasks, role_dir: Path, target: str, inherited: tuple) -> list[tuple]:
+    found: list[tuple] = []
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        chain = inherited + ((task["when"],) if "when" in task else ())
+        imported = next((task[k] for k in _IMPORT_KEYS if k in task), None)
+        if isinstance(imported, str) and "{{" not in imported:
+            name = Path(imported).name
+            if name == target:
+                found.append(chain)
+            else:
+                found.extend(_import_chains(role_dir, target, name, chain))
+        elif "block" in task:
+            found.extend(_imports_in(task["block"] or [], role_dir, target, chain))
+    return found
 
 
 def changed_task_texts(old_text: str, new_text: str) -> set[str] | None:

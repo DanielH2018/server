@@ -20,16 +20,15 @@ deployer prints this warning beside the command it suggests, from
 `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:maximal_tag_warning`.
 
 **`--tags k3s` never reaches an agent node.** `tasks/agent.yml` runs only from the opt-in join
-plays, so a change it reads, such as `templates/registries.yaml.j2`, also needs
+plays, so a change to it also needs
 `uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent`
 before the role's `manual_plane` line is cleared. The deployer prints that command for each
 host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
 `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`. It prints it beside
 the whole-role tag, and for any narrowed row holding `k3s_agent`. `narrow_setup.py` reads the
 join play's `include_role`, so `tasks/agent.yml` alone narrows to `k3s_agent` and prints the join
-with no server command. `templates/registries.yaml.j2` narrows to `k3s_server` plus the join.
-The deployer records the hosts on the line as `agent_hosts`, so the SessionStart banner,
-`probe.py gitops` and monitor-bridge print the same commands from the row.
+with no server command. The deployer records the hosts on the line as `agent_hosts`, so the
+SessionStart banner, `probe.py gitops` and monitor-bridge print the same commands from the row.
 
 **`--tags node-address` pins daniel-box alone.** `tasks/static-address.yml` also runs from the
 opt-in pin play, which matches no host without `-e pin_agent_address=<host>` and runs ON the
@@ -112,13 +111,20 @@ H1.7b, and the filesystem trim became one of them at H2.2c; their contract is th
   k3s's own output goes to `/var/log/k3s.log` (not the journal) where the apiserver's OIDC
   authenticator can wedge silently with every probe still green.
   `docs/k3s-node-plane-crons-and-incidents.md` has the detail and the incident evidence for each;
-  `ansible/tests/setup/test_k3s_unit_logging.py` holds the agent's log drop-in.
+  `ansible/tests/setup/test_k3s_server_component.py` and
+  `ansible/tests/setup/test_k3s_agent_component.py` hold the two nodes' log drop-ins.
 - **The server's same-path files are the `homelab-daniel-box` package's since H6.4a**, so no
   task here writes them: the audit policy, the authentication config, `registries.yaml`, the
   logging drop-in with its logrotate file, and the CoreDNS `.skip` marker. They live in
   `hosts/components/k3s-server/`, and `homelab-k3s-restart` restarts k3s once per changed hash
   of the ones k3s reads at startup. `ansible/tests/setup/test_k3s_server_component.py` holds
   the component. The package is forward-only: a revert deletes files the flags name.
+- **The agent's same-path files are the `homelab-daniel-server` package's since H6.5a**:
+  `registries.yaml`, the logging drop-in, its logrotate file and the log file's `tmpfiles.d`
+  entry, in `hosts/components/k3s-agent/`. daniel-server's package lists no `k3s-restart`, so a
+  change to them goes live at the agent's next start. `tasks/agent.yml` keeps the join, the
+  firewall, the Longhorn prerequisites and the installer, whose flags move in H6.5b.
+  `ansible/tests/setup/test_k3s_agent_component.py` holds the component.
 - **The server's flags are the same package's since H6.4b.** `k3s_server_config` in
   `hosts/components/k3s-server/component.yml` renders into
   `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml`, and the unit drop-in runs a bare `k3s

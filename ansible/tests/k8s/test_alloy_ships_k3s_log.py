@@ -21,7 +21,7 @@ import pytest
 from _helpers import ALL_VARS, load_yaml
 from _k8s_render import rendered_docs
 from lib import yaml_fast
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import REPO
 
 # Real line shapes from daniel-box's /var/log/k3s.log.1, 2026-10-28, trimmed. The Go runtime
 # lines are the shape a crash prints, written by hand because no crash fell in the sample.
@@ -116,7 +116,10 @@ def test_the_source_tails_the_file_k3s_writes_into_this_block(
         alloy_config,
     )
     assert m, 'no local.file_match "k3s" with a path and a job'
-    assert m[1] == yaml_fast.safe_load(K3S_DEFAULTS.read_text())["k3s_log_file"]
+    # Both nodes' packages write the file, and one literal tails it on each.
+    for component in ("k3s-server", "k3s-agent"):
+        spec = REPO / "hosts" / "components" / component / "component.yml"
+        assert m[1] == yaml_fast.safe_load(spec.read_text())["defaults"]["k3s_log_file"]
     assert m[2] == load_yaml(ALL_VARS)["loki_streams"]["host_k3s"]["job"]
     src = re.search(
         r'loki\.source\.file "k3s" \{[^}]*forward_to\s*=\s*\[([^\]]*)\]', alloy_config

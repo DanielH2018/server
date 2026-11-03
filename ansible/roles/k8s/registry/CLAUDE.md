@@ -34,7 +34,8 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
 ## Notable
 - **The role runs a second registry, `ghcr-mirror`, as a pull-through mirror of `ghcr.io`**
   (D5 Open question 2, ruled 2026-10-16). Every node's `registries.yaml` names it as the
-  `ghcr.io` mirror (`ansible/roles/setup/k3s/templates/registries.yaml.j2`), so a node keeps a
+  `ghcr.io` mirror (`hosts/components/k3s-server/templates/registries.yaml.j2` and
+  `hosts/components/k3s-agent/templates/registries.yaml.j2`), so a node keeps a
   LAN copy of each flux-owned GHCR image it pulled and nut can cold-start during a WAN outage.
   - It is its own Deployment, `templates/ghcr-mirror.yaml.j2`, not `REGISTRY_PROXY_*` on the
     push store and not a container in the push store's pod (operator ruling on #5680,

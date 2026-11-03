@@ -372,7 +372,7 @@ def test_a_reader_another_playbook_applies_is_recorded_not_applied(
 ):
     """A key only k3s reads: `k3s-bringup.yml` applies k3s, so the tick records it for a hand."""
     tick.paths = [SECRETS]
-    tick.secret_readers = ["ansible/roles/setup/k3s/templates/registries.yaml.j2"]
+    tick.secret_readers = ["ansible/roles/setup/k3s/templates/readonly-kubeconfig.j2"]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.playbooks == []
     assert tick.merges == [ORIGIN]

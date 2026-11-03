@@ -105,9 +105,9 @@ Host → ClusterIP callers targeting a **fenced** pod:
    It is same-node and stays that way: sonarr is pinned to daniel-box by the `media-data` PV's
    *required* `nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`).
 2. **containerd on daniel-server → `registry`, cross-node, and working.**
-   `roles/setup/k3s/templates/registries.yaml.j2` renders
-   `endpoint: http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}` on every host that is
-   not the registry node, installed by `roles/setup/k3s/tasks/agent.yml`. registry is fenced and
+   `hosts/components/k3s-agent/templates/registries.yaml.j2` renders
+   `endpoint: http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}`, installed by
+   daniel-server's host package since H6.5a. registry is fenced and
    runs on daniel-box. This is the cross-node host path succeeding in production, and it is the
    evidence above.
 

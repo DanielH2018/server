@@ -12,8 +12,13 @@
 #
 # #6413 adds `k3s-gates` alone: the k3s-agent Plan's `prepare` runs /usr/lib/homelab/k3s_gates.py
 # from the host's root (H6.3d). The windowed restart, `k3s-restart`, stays off this package until
-# H6 *Open questions* 7 and H6.5a decide it, so daniel-server's k3s config changes stay a hand
-# apply through the `k3s_agent` join play.
+# H6 *Open questions* 7 decides it.
+#
+# H6.5a adds `k3s-agent`, the agent's same-path files: registries.yaml, the logging drop-in, its
+# logrotate file and the log file's tmpfiles.d entry. It ships the first k3s-agent.service drop-in,
+# so the package marks k3s-agent.service `windowed` (H6.2's amendment) and reconcile never restarts
+# it. With no `k3s-restart` here, a change to those files goes live at the agent's next start: the
+# Sunday weekly reboot, a SUC upgrade, or a hand restart. H6.5a is forward-only.
 #
 # H7.39 adds `claude-code`, the agent user and everything the claude_code role installed here,
 # and `failure-alert`, the page its oneshots name. The role ends on this host. Both need
@@ -42,7 +47,9 @@ component: claude-code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep]
+components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep]
+units:
+  k3s-agent.service: {policy: windowed}
 credentials:
   - rkhunter_daniel_server_push_token
   - aide_daniel_server_push_token

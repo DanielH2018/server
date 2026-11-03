@@ -241,10 +241,7 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
     """
     index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
     untagged = {rel for rel, tags in index.tags.items() if tags is None}
-    assert untagged == {
-        "tasks/main.yml",
-        "tasks/unit-logging.yml",
-    }
+    assert untagged == {"tasks/main.yml"}
 
 
 # The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
