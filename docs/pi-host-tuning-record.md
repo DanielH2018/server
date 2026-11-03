@@ -477,22 +477,37 @@ moved under `/tmp` by `HOMELAB_ROOT`. Each of three runs went through `systemd-r
 `/usr/bin/time -v` on a fourth run reported a maximum resident set of 10496 kB for the largest
 single process and 1.22 s of wall time.
 
-**Verdict: provisional, pending the root measurement.** The highest peak is 75% of the 23.8 MB
-threshold, which is under it but not far under it. It is also 16% of the updater's 114 MB common
-path. Like H3.6's figures, these are cgroup peaks that count the page cache the run charged. The
-spread from 6.3 to 17.0 MiB across identical runs points at page cache, not at the script's own
-memory, which the 10 MiB resident figure bounds.
-
-The shipped unit runs as root under `system.slice`, where H3.6 measured the updater, and that
-peak is unmeasured. An agent has no root on the Pi, so the operator takes it (#7069). To take it,
-run this on the Pi as root, then replace this verdict with the figure:
+The operator then took the root peak on 2026-11-03 at about 23:00 UTC, the way H3.6 measured the
+updater, with `homelab-daniel-pi` 0.6731+ga4d5def5fa1e installed and already recorded as triggered.
+That run also took the common path:
 
 ```bash
-systemd-run --wait --pty -p MemoryAccounting=yes sh -c '/usr/lib/homelab/homelab-updater-poll; cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak'
+sudo systemd-run --wait --pty -p MemoryAccounting=yes sh -c '/usr/lib/homelab/homelab-updater-poll; cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak'
 ```
 
-If the root peak reaches the threshold, lengthen the poll's `OnUnitActiveSec=` first. The daily
-fire bounds the wait whatever the poll's interval.
+| Run | `memory.peak` | systemd's summary line |
+|---|---|---|
+| Root, under `system.slice` | 11931648 B (11.4 MiB) | `Memory peak: 392.0K` |
+
+**Verdict: the 15-minute interval stays.** The root peak is 50% of the 23.8 MB threshold and 10%
+of the updater's 114 MB common path. It is one run, and the unprivileged runs of the same path
+reached 75% of the threshold, so the margin is about a quarter to a half of the threshold rather
+than an order of magnitude. Every reading is under the threshold. Like H3.6's figures, these are
+cgroup peaks that count the page cache the run charged. The cause of the spread from 6.3 to
+17.0 MiB is unmeasured. The 10 MiB resident figure does not bound it, because that figure covers
+one process and the cgroup also holds `sh`, `curl`, `gzip`, `awk` and `dpkg`.
+
+The trigger path is unmeasured. It adds one `systemctl start --no-block` to the common path and
+runs once per published version, so it does not repeat every 15 minutes the way the common path
+does. Measuring it means running the command above between a publish and the poll's next fire.
+
+If a later root peak reaches the threshold, lengthen the poll's `OnUnitActiveSec=` first. The
+daily fire bounds the wait whatever the poll's interval.
+
+The first live publish confirmed the trigger on 2026-11-03. The poll logged
+`homelab-daniel-pi 0.6731+ga4d5def5fa1e is published over 0.6730+g35edf86f1457` at 22:51:22 UTC,
+`homelab-updater.service` ran until 22:58:22 UTC with no manual start, and
+`homelab_host_applied_info{host="daniel-pi"}` reads that version.
 
 ## See also
 
