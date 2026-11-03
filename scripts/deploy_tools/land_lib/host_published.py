@@ -9,11 +9,14 @@ It reads the two series `probe.py builder` reads from daniel-box's textfiles, th
 Prometheus query the host wait already uses:
 
 - `homelab_repo_published_info{package,sha,version}`: each version the repository serves;
-- `homelab_builder_unbuilt_since_timestamp_seconds{reason,sha}`: the builder's reason.
+- `homelab_builder_unbuilt_since_timestamp_seconds{reason,sha}`: the builder's reason;
+- `homelab_builder_fetch_timestamp_seconds`: when the builder last fetched master. A reason
+  from a run that fetched before the landing saw master CI green at the merge may describe an
+  ancestor the merge fixes, so it is not trusted until a later run replaces it.
 
 Typical usage example (`host_wait.py`'s, before it ends a landing `deferred`):
 
-    unbuilt = unbuilt_hosts(["daniel-pi"], merge, primary, reads, covers, query)
+    unbuilt = unbuilt_hosts(["daniel-pi"], merge, primary, reads, covers, query, green_at)
 """
 
 import sys as _sys
@@ -26,6 +29,7 @@ from diagnostics.probe_lib.builder import HEALTHY
 
 PUBLISHED = "homelab_repo_published_info"
 UNBUILT_SINCE = "homelab_builder_unbuilt_since_timestamp_seconds"
+FETCHED = "homelab_builder_fetch_timestamp_seconds"
 # The reasons of a builder that publishes the merge without a hand. `no-green` is one because
 # the host wait runs only once master CI is green at the merge: the builder has not run since.
 LAGGING = HEALTHY | {"no-green"}
@@ -43,7 +47,8 @@ def unbuilt_hosts(
     reads,
     covers,
     query,
-) -> list[str]:
+    fetched_after: float | None = None,
+) -> list[str] | None:
     """One sentence for each of `hosts` whose package the builder has not published at `merge`.
 
     A host counts only while the builder's reason is outside `LAGGING`.
@@ -60,15 +65,19 @@ def unbuilt_hosts(
         reads: `host_wait.HostReads`, passed through to `covers` and `query`.
         covers: `host_wait.covers`.
         query: `host_wait.query`.
+        fetched_after: When the landing saw master CI green at the merge. A failing reason
+            counts only from a builder that fetched after it; None trusts any reason.
 
     Returns:
         An empty list when every host's package is published at or after `merge`, when the
         builder is healthy, or when a series cannot be read: an unread source proves nothing.
+        None when the reason is failing but the builder last fetched before `fetched_after`.
     """
     try:
         published = [s["metric"] for s in query(PUBLISHED, reads)]
         builder = [s["metric"] for s in query(UNBUILT_SINCE, reads)]
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+        fetched = [float(s["value"][1]) for s in query(FETCHED, reads)]
+    except (OSError, ValueError, KeyError, IndexError, TypeError) as exc:
         say(f"the builder's published versions could not be read ({exc}); deferring")
         return []
     if not builder:
@@ -77,6 +86,8 @@ def unbuilt_hosts(
     reason = builder[0].get("reason", "?")
     if reason in LAGGING:
         return []
+    if fetched_after is not None and fetched and max(fetched) < fetched_after:
+        return None
     sentences = []
     for host in hosts:
         package = package_of(host)

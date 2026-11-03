@@ -829,6 +829,12 @@ not reached the merge is lagging by design, so that landing stays `deferred`: th
 only after master CI is green at the merge, so a `no-green` predates it. A series Prometheus
 does not report leaves it `deferred` too, because an unread source proves nothing.
 
+A failing reason counts only from a builder run that fetched master after the wait's first
+query, which follows master CI going green at the merge. An older run may have failed on an
+ancestor that this merge fixes. Until a later run replaces that reason, the wait polls
+`homelab_builder_fetch_timestamp_seconds` for up to `probe.py builder`'s fetch deadline, two
+timer periods plus the unit's `TimeoutStartSec`. Past that deadline the reason stands.
+
 ## `nothing-to-deploy`
 
 Decided from the PR's file list right after the merge, before any CI wait: a PR that reaches no

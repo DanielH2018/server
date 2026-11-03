@@ -67,6 +67,7 @@ from deploy_tools.land_lib.host_schedule import (  # noqa: F401
 )
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Verdict, say
+from diagnostics.probe_lib.builder import fetch_deadline_s
 from deploy_tools.land_lib.tools import gate_snapshot
 from lib import yaml_fast
 from lib.git import git as run_git
@@ -545,12 +546,13 @@ def wait_for_hosts(
         now = reads.clock()
         if first:
             first = False
+            green_at = now
             unwaitable = _unwaitable(pending, merged_at, now, deadlines)
             if unwaitable:
-                _defer(ln, head, unwaitable, merge, primary, reads)
+                _defer(ln, head, unwaitable, merge, green_at, reads)
         late = [t for t in pending if now > deadlines[t.host]]
         if late:
-            _defer(ln, head, _late(late, states, deadlines), merge, primary, reads)
+            _defer(ln, head, _late(late, states, deadlines), merge, green_at, reads)
         say(f"waiting for hosts to apply: {', '.join(t.host for t in pending)}")
         reads.sleep(POLL_S)
 
@@ -582,15 +584,27 @@ def _defer(
     head: str,
     reasons: dict[str, str],
     merge: str,
-    primary: Path,
+    green_at: float,
     reads: HostReads,
 ) -> None:
     """End the landing on `reasons`, keyed by host: `unbuilt` if the builder never got there.
 
     The builder is asked only here, never on a poll: before a deferral, a missing publish is
-    the builder still working.
+    the builder still working. A failing reason from a fetch before `green_at`, the wait's
+    first query, may predate the merge's fix, so this waits for the builder's next run, up to
+    `probe.py builder`'s fetch deadline. Past it, the reason stands.
     """
-    unbuilt = unbuilt_hosts(list(reasons), merge, primary, reads, covers, query)
+    hosts, primary = list(reasons), ln.opts.primary
+    unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query, green_at)
+    while unbuilt is None:
+        if reads.clock() > green_at + fetch_deadline_s():
+            unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query)
+            break
+        say(
+            "the builder has not fetched master since CI went green; waiting for its run"
+        )
+        reads.sleep(POLL_S)
+        unbuilt = unbuilt_hosts(hosts, merge, primary, reads, covers, query, green_at)
     if unbuilt:
         ln.finish(Verdict.UNBUILT, 75, f"{head} — {'; '.join(unbuilt)}")
     ln.finish(Verdict.DEFERRED, 75, f"{head} — {'; '.join(reasons.values())}")

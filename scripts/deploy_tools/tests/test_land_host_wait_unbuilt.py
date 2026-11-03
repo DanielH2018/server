@@ -19,6 +19,7 @@ from deploy_tools.land_lib import host_wait
 from deploy_tools.land_lib.host_wait import HostReads, HostTarget
 from deploy_tools.land_lib.outcome import Outcome, Verdict
 from lib.repo_paths import REPO
+from diagnostics.probe_lib.builder import fetch_deadline_s
 from lib.systemd_timer import timer_settings
 
 MERGE = "a" * 40
@@ -178,3 +179,53 @@ def test_an_unbuilt_host_ends_the_landing_unbuilt_at_exit_75():
     outcome = _ends_with([_published("homelab-daniel-pi", BEFORE)])
     assert outcome is not None
     assert (outcome.verdict, outcome.rc) == ("unbuilt", 75)
+
+
+def _builder_runs(fetches: list[float], publishes: list[list[dict]]):
+    """The red fake, with the builder's last fetch and its publishes read in turn per query."""
+    stale = _fetch([_published("homelab-daniel-pi", BEFORE)])
+
+    def fetch(url: str, timeout: float) -> bytes:
+        promql = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["query"][0]
+        if "homelab_builder_fetch_timestamp_seconds" in promql:
+            at = fetches.pop(0) if len(fetches) > 1 else fetches[0]
+            result = [{"metric": SCRAPE, "value": [0, str(at)]}]
+        elif "homelab_repo_published_info" in promql:
+            result = publishes.pop(0) if len(publishes) > 1 else publishes[0]
+        else:
+            return stale(url, timeout)
+        return json.dumps({"status": "success", "data": {"result": result}}).encode()
+
+    return fetch
+
+
+def _wait_counting_sleeps(fetch, clock) -> tuple[Outcome | None, int]:
+    sleeps = []
+    ln, _ = make_landing()
+    reads = HostReads(fetch=fetch, git=_git, clock=clock, sleep=sleeps.append)
+    try:
+        host_wait.wait_for_hosts(ln, [_pi(PI_DROPIN)], MERGE, _at(12, 0), reads=reads)
+    except Outcome as outcome:
+        return outcome, len(sleeps)
+    return None, len(sleeps)
+
+
+def test_a_failing_reason_fetched_before_the_merge_waits_for_the_builder_s_next_run():
+    stale = [_published("homelab-daniel-pi", BEFORE)]
+    built = [_published("homelab-daniel-pi", AFTER)]
+    fixed = _builder_runs([_at(11, 58), _at(12, 2)], [stale, built])
+    outcome, sleeps = _wait_counting_sleeps(fixed, _clock(_at(12, 0)))
+    assert sleeps >= 1
+    assert outcome is not None and outcome.verdict == Verdict.DEFERRED
+
+    still_failing = _builder_runs([_at(11, 58), _at(12, 2)], [stale])
+    outcome, sleeps = _wait_counting_sleeps(still_failing, _clock(_at(12, 0)))
+    assert sleeps >= 1
+    assert outcome is not None and outcome.verdict == Verdict.UNBUILT
+
+
+def test_a_builder_that_never_fetches_again_ends_unbuilt_past_its_fetch_deadline():
+    never = _builder_runs([_at(11, 58)], [[_published("homelab-daniel-pi", BEFORE)]])
+    past = _at(12, 0) + fetch_deadline_s() + 1
+    outcome, _ = _wait_counting_sleeps(never, _clock(_at(12, 0), past))
+    assert outcome is not None and outcome.verdict == Verdict.UNBUILT
