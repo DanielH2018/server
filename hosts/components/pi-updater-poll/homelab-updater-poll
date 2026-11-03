@@ -96,11 +96,15 @@ if [ "$(systemctl is-enabled homelab-updater.timer 2>/dev/null)" = masked ]; the
     say "$published is published, but homelab-updater.timer is masked; not starting the updater"
     exit 0
 fi
+# A running oneshot reads `activating`, for which `is-active` exits 3, so read the state itself.
 for unit in $BUSY; do
-    if systemctl is-active --quiet "$unit"; then
-        say "$published is published, but $unit is active; retrying on the next poll"
-        exit 0
-    fi
+    state=$(systemctl show -p ActiveState --value "$unit" 2>/dev/null)
+    case $state in
+        active | activating | deactivating | reloading)
+            say "$published is published, but $unit is $state; retrying on the next poll"
+            exit 0
+            ;;
+    esac
 done
 
 # Step 6.

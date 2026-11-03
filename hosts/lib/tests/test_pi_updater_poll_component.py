@@ -119,9 +119,13 @@ class Pi:
                 "dpkg-query": f"[ -s {self.installed} ] || exit 1\ncat {self.installed}\n",
                 "systemctl": (
                     f'echo "$*" >>{self.calls}\n'
+                    "for unit; do :; done\n"
                     "case $1 in\n"
                     f"  is-enabled) [ -e {self.masked} ] && echo masked || echo enabled ;;\n"
-                    f'  is-active) grep -qx "$3" {self.active} ;;\n'
+                    # A unit listed in `active` is a running oneshot, as the real
+                    # tool reports one; is-active exits 3 for it.
+                    f'  show) grep -qx "$unit" {self.active} && echo activating || echo inactive ;;\n'
+                    f'  is-active) grep -qx "$unit" {self.active} && echo activating; exit 3 ;;\n'
                     "esac\n"
                 ),
             },
@@ -222,7 +226,7 @@ def test_a_busy_unit_skips_without_recording(pi, unit):
     pi.active.write_text(f"{unit}\n")
     skipped = pi.poll()
     assert skipped.returncode == 0
-    assert unit in skipped.stderr
+    assert f"{unit} is activating" in skipped.stderr
     assert pi.starts() == 0
     pi.active.write_text("")
     pi.poll()
