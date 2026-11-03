@@ -79,6 +79,10 @@ class Verdict(StrEnum):
     # land.sh handed the landing to a lander unit (`handoff.py`) and stopped waiting on it
     # before it ended. The unit may still be running, and a re-run waits on it again.
     HANDOFF_TIMEOUT = "handoff-timeout"
+    # A host the landing would wait on has no package at or after the merge, and the builder
+    # reports a failing reason, so no updater fire can apply it. A re-run converges once the
+    # builder publishes. See `host_published.unbuilt_hosts` (#7024).
+    UNBUILT = "unbuilt"
 
 
 VERDICTS = frozenset(Verdict)

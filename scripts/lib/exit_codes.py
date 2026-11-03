@@ -419,9 +419,9 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             LAND_GAVE_UP,
             "LAND_GAVE_UP",
-            "gave up waiting — a budget elapsed, the deploy lock stayed busy, the tick was "
-            "skipped for lock contention every time, master merged faster than one "
-            "tick-and-deploy cycle, or the tick has not yet crossed origin.",
+            "gave up waiting — a budget elapsed, the deploy lock stayed busy, the tick was skipped "
+            "for lock contention every time, master outran one tick-and-deploy cycle, the tick "
+            "has not yet crossed origin, or no host package containing the merge is published.",
         ),
     ),
     "scripts/deploy_tools/gitops_tick.sh": (

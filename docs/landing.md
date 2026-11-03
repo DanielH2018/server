@@ -817,6 +817,24 @@ It ends `deferred` in three cases:
 - The host is still unsettled past its deadline. The line gives the host's last success
   timestamp.
 
+Before it ends `deferred` in any of the three, it reads the builder's two series from
+daniel-box's textfile exporter, `homelab_repo_published_info` and
+`homelab_builder_unbuilt_since_timestamp_seconds`, the series `probe.py builder` prints. When
+the builder's reason is not `ok`, `canary` or `no-green`, and no `homelab-<host>` version it publishes
+is the merge commit or a descendant, no updater fire can apply the merge. The landing then ends
+`unbuilt`, exit 75, naming the reason and the last version published for that host. Fix the
+builder, then re-run the same `land.sh` command. During the builder outage of 2026-11-02, five
+landings read `deferred` instead and hid it (#7024). An `ok`, `canary` or `no-green` builder that has
+not reached the merge is lagging by design, so that landing stays `deferred`: the host wait runs
+only after master CI is green at the merge, so a `no-green` predates it. A series Prometheus
+does not report leaves it `deferred` too, because an unread source proves nothing.
+
+A failing reason counts only from a builder run that fetched master after the wait's first
+query, which follows master CI going green at the merge. An older run may have failed on an
+ancestor that this merge fixes. Until a later run replaces that reason, the wait polls
+`homelab_builder_fetch_timestamp_seconds` for up to `probe.py builder`'s fetch deadline, two
+timer periods plus the unit's `TimeoutStartSec`. Past that deadline the reason stands.
+
 ## `nothing-to-deploy`
 
 Decided from the PR's file list right after the merge, before any CI wait: a PR that reaches no

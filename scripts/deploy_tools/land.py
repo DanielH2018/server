@@ -80,11 +80,13 @@ Exit codes:
   64  bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, the deploy lock stayed busy,
       the tick was skipped for lock contention every time, master merged faster than one
-      tick-and-deploy cycle, or the tick has not yet crossed origin
+      tick-and-deploy cycle, the tick has not yet crossed origin, or the builder has not
+      published a host package that contains the merge
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
-ci-red | ci-timeout | ci-unproven | lock-busy | tip-outran-retries | refused | handoff-timeout.
+ci-red | ci-timeout | ci-unproven | lock-busy | tip-outran-retries | refused | handoff-timeout |
+unbuilt.
 
 `blocked` is not a failure of this PR -- something else in the incoming range needs an
 operator, and nothing was deployed. `needs-manual-apply` means this PR reaches something
@@ -99,8 +101,10 @@ gates health, so re-run land.sh to grade it.
 `refused` is every other exit-1 stop: the landing policy, a PR closed unmerged or with
 changes requested, a read or a fetch that failed. The `land:` line on stderr, repeated in the
 verdict's detail, says which. `handoff-timeout` is land.sh giving up on a lander unit that is
-still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. Bad arguments (64) print
-no verdict.
+still running (`LAND_HANDOFF_UNIT` below); a re-run waits on it again. `unbuilt` replaces a
+host's `deferred` when the builder reports a failing reason and has published no package of
+that host at or after the merge, so no updater fire can apply it: fix the builder (`probe.py
+builder`), then re-run. Bad arguments (64) print no verdict.
 A PR whose tag Flux applies waits on `promote.py land-wait`, whose verdicts are settled |
 deploy-failed | gave-up | suspended. A tag suspended at the merge commit applies nothing
 until a PR resumes it, so the wait and the gate leave it out. `suspended` means every such
