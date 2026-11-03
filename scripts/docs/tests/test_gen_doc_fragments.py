@@ -183,8 +183,9 @@ def test_crowdsec_agent_liveness_with_a_different_period():
 
 
 def test_etcd_offbox_retention_counts():
-    assert "14 off-box etcd snapshots" in renderers.render_etcd_offbox_retention(14)
+    assert "28 off-box etcd snapshots" in renderers.render_etcd_offbox_retention(28)
     assert "7 off-box etcd snapshots" in renderers.render_etcd_offbox_retention(7)
+    assert "`etcd-snapshot-retention`" in renderers.render_etcd_offbox_retention(28)
 
 
 def test_traefik_ports_names_both_container_ports():

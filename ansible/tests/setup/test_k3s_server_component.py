@@ -11,9 +11,11 @@ The renders read the tracked `secrets.yml` and daniel-box SOPS file, as
 cannot refuse them.
 """
 
+import copy
 import shutil
 
 import pytest
+from _helpers import registry_secret_names
 from lib import yaml_fast
 from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
@@ -84,6 +86,59 @@ def test_the_package_ships_the_only_file_k3s_reads_its_config_from(package):
     in_dir = sorted(path for path in package.files if path.startswith(CONFIG_DIR))
     assert in_dir == [CONFIG]
     assert "/etc/rancher/k3s/config.yaml" not in package.files
+
+
+def test_the_config_drop_in_ships_world_readable_in_a_directory_nfpm_creates(package):
+    """Check 12 (H2.8b) reads `etcd-s3` from the drop-in as `sys_user`.
+
+    nfpm creates a parent directory the package does not list at 0755, so the directory stays
+    readable as long as no entry declares it with another mode.
+    """
+    assert package.files[CONFIG][1] == 0o644
+    declared = yaml_fast.safe_load(package.nfpm_spec())["contents"]
+    assert [e for e in declared if e["dst"].rstrip("/") + "/" == CONFIG_DIR] == []
+
+
+def test_the_drop_in_names_only_the_s3_keys_that_defer_to_the_secret(package):
+    """Any other `etcd-s3-*` flag makes k3s ignore `etcd-s3-config-secret` (H2.8a)."""
+    config = server_config(package)
+    assert config["etcd-s3"] is True
+    assert config["etcd-s3-config-secret"] == "k3s-etcd-snapshot-s3-config"
+    assert sorted(key for key in config if key.startswith("etcd-s3")) == [
+        "etcd-s3",
+        "etcd-s3-config-secret",
+    ]
+
+
+def placeholder_leaks(package, names: list[str]) -> list[str]:
+    """Files outside the package's declared secret outputs that carry a `${<secret>}`."""
+    outputs = {output["template"] for output in package.outputs}
+    return sorted(
+        f"{dst} names ${{{name}}}"
+        for dst, (content, _) in package.files.items()
+        if dst not in outputs
+        for name in names
+        if f"${{{name}}}" in content.decode(errors="replace")
+    )
+
+
+def test_no_file_outside_the_secret_outputs_carries_a_secret_placeholder(package):
+    """The template-variable half is the render's own refusal, tested below."""
+    names = registry_secret_names()
+    assert CONFIG in package.files
+    assert package.outputs, (
+        "daniel-box declares secret outputs; the exemption read none"
+    )
+    assert placeholder_leaks(package, names) == []
+
+
+def test_a_secret_placeholder_in_the_drop_in_is_flagged(package):
+    leaky = copy.copy(package)
+    leaky.files = dict(package.files)
+    leaky.files[CONFIG] = (b"etcd-s3-access-key: ${r2_access_key_id}\n", 0o644)
+    assert placeholder_leaks(leaky, registry_secret_names()) == [
+        f"{CONFIG} names ${{r2_access_key_id}}"
+    ]
 
 
 def test_the_unit_drop_in_replaces_the_installers_command_line(package):

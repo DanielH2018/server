@@ -4,7 +4,8 @@ The Longhorn backup plane: the credential Secrets `longhorn-b2` and `longhorn-r2
 BackupTargets `default` (B2) and `r2`, and the RecurringJobs `daily-backup` and
 `weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob (H2.2a). It replaced `tasks/longhorn-backup.yml` in
 `setup/k3s` (H1.7b). Which target a volume uses is `longhorn-reconcile`'s decision (H1.7a), and
-this role only declares the targets.
+this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-config` in
+`kube-system`, the Secret k3s reads for its native etcd snapshot uploads to R2 (H2.8a).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
@@ -23,7 +24,7 @@ this role only declares the targets.
   revision hold and leave `prod`, because a reset to a revision before a disarm would re-arm B2.
   `flux_prune: false` keeps a render that drops a target or a job from deleting it. Each has a
   `DECIDED:` marker in `defaults/main.yml`. `NEVER_SHED` names the tag, which is untiered.
-- **The credentials substitute from `homelab-cluster-vars`.** The two Secret templates are
+- **The credentials substitute from `homelab-cluster-vars`.** The three Secret templates are
   `stringData:` with bare `{{ key }}` placeholders, and each BackupTarget URL holds one
   (`${longhorn_b2_bucket}`, `${r2_bucket}`). A rotation reaches the cluster only through
   `cluster_vars.py write` (operator-only). The regions are plain variables, so no filter runs
@@ -43,6 +44,11 @@ this role only declares the targets.
   defaults hold the same value. The off-box etcd snapshot script reads the second.
   ENFORCED:
   `ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py::test_a_changed_twin_is_flagged`.
+- **The etcd Secret must stay in `kube-system`.** k3s reads `etcd-s3-config-secret` from no
+  other namespace, and it reads the Secret at each snapshot, not at start, so a missing one
+  costs an upload and never a control-plane boot. Its `etcd-s3-region` reads
+  `k3s_longhorn_r2_region`. ENFORCED:
+  `ansible/tests/longhorn/test_longhorn_backup_render.py::test_the_etcd_s3_secret_lands_in_kube_system_with_flux_substitution_only_there`.
 
 ## The incident levers (what the arm flags do)
 
@@ -111,6 +117,7 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
 ## Editing
 
 - Manifests: `templates/longhorn-b2-secret.yaml.j2`, `templates/longhorn-r2-secret.yaml.j2`,
+  `templates/k3s-etcd-snapshot-s3-secret.yaml.j2`,
   `templates/longhorn-backuptarget-default.yaml.j2`, `templates/longhorn-backuptarget-r2.yaml.j2`
   and `templates/longhorn-recurringjob.yaml.j2`.
 - Render the tag before you push:

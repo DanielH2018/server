@@ -359,6 +359,7 @@ NAMED_MEMBERS: dict[str, frozenset[tuple[str, str]]] = {
             ("BackupTarget", "default"),
             ("BackupTarget", "r2"),
             ("RecurringJob", "daily-backup"),
+            ("Secret", "k3s-etcd-snapshot-s3-config"),
         }
     ),
     "longhorn-reconcile": frozenset({("CronJob", "longhorn-reconcile")}),
