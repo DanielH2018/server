@@ -22,7 +22,7 @@ is a target, so a failure waits rather than skips.
 | a target's first-parent package ships no enable link for the updater's timer | `deferred`, exit 75 |
 | a target's deadline is more than 45 minutes away | `deferred`, exit 75 |
 | a target is still unsettled past its deadline | `deferred`, exit 75 |
-| a target it would defer on has no package published at or after the merge, and the builder's reason is not `ok` or `canary` | `unbuilt`, exit 75 |
+| a target it would defer on has no package published at or after the merge, and the builder's reason is not `ok`, `canary` or `no-green` | `unbuilt`, exit 75 |
 
 A target's deadline is the second updater fire after the merge plus 10 minutes, read from the
 first parent's rendered schedule. The first fire can precede the builder's publish.

@@ -26,6 +26,9 @@ from diagnostics.probe_lib.builder import HEALTHY
 
 PUBLISHED = "homelab_repo_published_info"
 UNBUILT_SINCE = "homelab_builder_unbuilt_since_timestamp_seconds"
+# The reasons of a builder that publishes the merge without a hand. `no-green` is one because
+# the host wait runs only once master CI is green at the merge: the builder has not run since.
+LAGGING = HEALTHY | {"no-green"}
 
 
 def package_of(host: str) -> str:
@@ -43,11 +46,12 @@ def unbuilt_hosts(
 ) -> list[str]:
     """One sentence for each of `hosts` whose package the builder has not published at `merge`.
 
-    A host counts only while the builder's reason is outside `probe_lib/builder.py:HEALTHY`.
+    A host counts only while the builder's reason is outside `LAGGING`.
 
-    DECIDED: an `ok` or `canary` builder that has not reached the merge is lagging by design:
-    its timer runs every 2 minutes, and a canary gate holds the other hosts until the canary
-    applies. Those landings stay `deferred`. Any other reason means no build is coming.
+    DECIDED: an `ok`, `canary` or `no-green` builder that has not reached the merge is lagging
+    by design: its timer runs every 2 minutes, a canary gate holds the other hosts until the
+    canary applies, and `no-green` predates the green CI the landing waited on. Those landings
+    stay `deferred`. Any other reason means no build is coming.
 
     Args:
         hosts: The hosts the landing would defer on.
@@ -71,7 +75,7 @@ def unbuilt_hosts(
         say(f"Prometheus reports no {UNBUILT_SINCE}; deferring")
         return []
     reason = builder[0].get("reason", "?")
-    if reason in HEALTHY:
+    if reason in LAGGING:
         return []
     sentences = []
     for host in hosts:

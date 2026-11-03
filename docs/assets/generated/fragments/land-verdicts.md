@@ -4,7 +4,7 @@
 | 0 | `LAND_SETTLED` | deployed and settled, or there was nothing to deploy. |
 | 1 | `LAND_FAILED` | CI red or unproven, blocked by a change needing a hand, the deploy failed, the health gate failed, or the PR was closed without merging, conflicts with master, or its own CI is red. |
 | 64 | `LAND_BAD_ARGS` | the command line is wrong. |
-| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, the deploy lock stayed busy, the tick was skipped for lock contention every time, master merged faster than one tick-and-deploy cycle, or the tick has not yet crossed origin. |
+| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, the deploy lock stayed busy, the tick was skipped for lock contention every time, master outran one tick-and-deploy cycle, the tick has not yet crossed origin, or no host package containing the merge is published. |
 
 The `VERDICT:` line ends with one of 18 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `lock-busy`, `tip-outran-retries`, `refused`, `handoff-timeout`, `unbuilt`.
 

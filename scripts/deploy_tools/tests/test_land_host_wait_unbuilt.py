@@ -149,7 +149,7 @@ def test_a_host_past_its_deadline_with_nothing_published_is_not_deferred():
 
 
 def test_a_healthy_builder_that_has_not_reached_the_merge_stays_deferred():
-    for reason in ("ok", "canary"):
+    for reason in ("ok", "canary", "no-green"):
         outcome = _ends_with([_published("homelab-daniel-pi", BEFORE)], reason=reason)
         assert outcome is not None
         assert (outcome.verdict, outcome.rc) == ("deferred", 75)
