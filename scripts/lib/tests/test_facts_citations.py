@@ -376,6 +376,35 @@ def test_in_tree_untracked_file_is_flagged(tmp_path):
     assert not in_tree(Citation("path", "a/x.txt", "a/x.txt", ""), tracked)
 
 
+def _cited_repo(tmp_path):
+    """A repo whose `CLAUDE.md` cites one tracked and one untracked file in one section."""
+    _init(tmp_path)
+    (tmp_path / "a").mkdir()
+    (tmp_path / "a" / "x.txt").write_text("x\n")
+    (tmp_path / "a" / "untracked.txt").write_text("y\n")
+    (tmp_path / "CLAUDE.md").write_text(
+        "## Gate\n`a/x.txt` and `a/untracked.txt`.\n\n## Style\nwhy.\n"
+    )
+    git(tmp_path, "add", "CLAUDE.md", "a/x.txt")
+    return tmp_path
+
+
+def test_repo_citations_keeps_a_tracked_path_citation(tmp_path):
+    # Imported here so the old tree fails this test, not the whole module's collection.
+    from lib.facts.citations import repo_citations
+
+    by_unit = repo_citations(_cited_repo(tmp_path))
+    assert [c.raw for c in by_unit["CLAUDE.md#Gate"]] == ["a/x.txt"]
+    assert by_unit["CLAUDE.md#Style"] == []
+
+
+def test_repo_citations_drops_an_untracked_path_citation(tmp_path):
+    from lib.facts.citations import repo_citations
+
+    cited = {c.raw for cs in repo_citations(_cited_repo(tmp_path)).values() for c in cs}
+    assert "a/untracked.txt" not in cited
+
+
 def test_in_tree_gitignored_file_is_flagged(tmp_path):
     _init(tmp_path)
     (tmp_path / ".gitignore").write_text("a/ignored.md\n")

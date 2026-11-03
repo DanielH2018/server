@@ -1,59 +1,35 @@
-"""`fact_status.py report`: lock precision from git history, and the backlog ranked by reads."""
+"""`fact_status.py report`: the notice replay over the window, and the backlog ranked by reads."""
 
-import re
 from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from lib.facts.lock import LOCK_REL, read_lock, verify_units, write_lock
+from lib.facts.citations import Citation
 from lib.facts.notice import Notice
-from lib.facts.replay import notice_replay, render_replay
-from lib.facts.report import doc_reads, precision, ranked_backlog, session_bytes
+from lib.facts.replay import notice_replay
+from lib.facts.report import build, doc_reads, ranked_backlog, session_bytes
 from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
 
-# A fixed epoch: the log rows are dated against it, never against the live clock.
+# A fixed epoch: the log rows and commit dates are set against it, never the live clock.
 _NOW = datetime(2026, 10, 10, 12, tzinfo=timezone.utc)
 _DOC = "## Gate\n`t/m.py:LIMIT` bounds {what}.\n"
 
 
-def _verified_commit(repo, message, units=("CLAUDE.md#Gate",), days_ago=0, **files):
-    """One commit holding ``files`` and the lock re-verified against them, as `verify` leaves it.
-
-    The commit is dated ``days_ago`` days before ``_NOW``, so a test can place it before the
-    report's window.
-    """
+def _dated_commit(repo, message, days_ago, **files):
+    """One commit holding ``files``, dated ``days_ago`` days before ``_NOW``; returns its SHA."""
     for rel, text in files.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text(text)
     git(repo, "add", "-A")
-    verify_units(repo, repo / LOCK_REL, list(units), message)
-    git(repo, "add", "-A")
     stamp = (_NOW - timedelta(days=days_ago)).isoformat()
     env = scrubbed_env(GIT_AUTHOR_DATE=stamp, GIT_COMMITTER_DATE=stamp)
     git(repo, "commit", "-q", "-m", message, "--no-gpg-sign", env=env)
+    return git_out(repo, "rev-parse", "HEAD")
 
 
-def test_a_move_with_a_prose_edit_is_actual_and_one_without_is_potential(tmp_path):
-    repo = init_repo(tmp_path)
-    commit(repo, "seed", README="x\n")
-    _verified_commit(
-        repo, "base", **{"t/m.py": "LIMIT = 1\n", "CLAUDE.md": _DOC.format(what="it")}
-    )
-    # The atom moves and the section is rewritten with it: the case the lock forces.
-    _verified_commit(
-        repo,
-        "edit",
-        **{"t/m.py": "LIMIT = 2\n", "CLAUDE.md": _DOC.format(what="it, now 2")},
-    )
-    # A refactor that moves the atom and leaves the prose alone.
-    _verified_commit(repo, "refactor", **{"t/m.py": "LIMIT = 1 + 1\n"})
-
-    counts = precision(repo, 30, now=_NOW).forms
-    assert (counts["symbol"].potential, counts["symbol"].actual) == (2, 1)
-    assert all(c.potential == 0 for f, c in counts.items() if f != "symbol")
-
-
-def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
+def test_the_backlog_is_the_sections_citing_nothing_ranked_by_their_docs_reads(
+    tmp_path,
+):
     now = _NOW
     stamp = now.strftime("%Y-%m-%dT%H:%M:%SZ")
     old = (now - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -70,11 +46,11 @@ def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
         f"{old} [cccccccc] path_glob_match  Project  b/CLAUDE.md\n"
         f"{stamp} [cccccccc] session_start    User     /home/u/.claude/CLAUDE.md\n"
     )
-    statuses = {
-        "CLAUDE.md#Root": "CONVENTION",
-        "a/CLAUDE.md#Rule": "UNVERIFIED",
-        "a/CLAUDE.md#Gate": "IN",
-        "b/CLAUDE.md#Old": "OUT",
+    by_unit = {
+        "CLAUDE.md#Root": [],
+        "a/CLAUDE.md#Rule": [],
+        "a/CLAUDE.md#Gate": [Citation("path", "a/x.py", "a/x.py", "")],
+        "b/CLAUDE.md#Old": [],
     }
     reads = doc_reads(
         log,
@@ -83,10 +59,10 @@ def test_the_backlog_is_ranked_by_its_docs_reads(tmp_path):
         ("/srv/repo",),
     )
 
-    assert ranked_backlog(statuses, reads) == [
-        ("a/CLAUDE.md#Rule", "UNVERIFIED", 3),
-        ("CLAUDE.md#Root", "CONVENTION", 2),
-        ("b/CLAUDE.md#Old", "OUT", 0),
+    assert ranked_backlog(by_unit, reads) == [
+        ("a/CLAUDE.md#Rule", 3),
+        ("CLAUDE.md#Root", 2),
+        ("b/CLAUDE.md#Old", 0),
     ]
 
 
@@ -120,82 +96,17 @@ def test_session_bytes_split_start_from_total_and_skip_unsized_and_subagent_rows
 
 
 def _replay(repo, notice=None):
-    prec = precision(repo, 30, now=_NOW)
-    return notice_replay(repo, prec, notice) if notice else notice_replay(repo, prec)
+    since = _NOW - timedelta(days=30)
+    return notice_replay(repo, since, notice) if notice else notice_replay(repo, since)
 
 
-def _gate_history(repo, **move_extra):
-    """A seed, a verified base, and one lock commit that moves ``LIMIT`` with ``move_extra``."""
+def _gate_history(repo):
+    """A seed, a base citing ``LIMIT``, and a commit that moves it; returns the move's SHA."""
     commit(repo, "seed", README="x\n")
-    _verified_commit(
+    commit(
         repo, "base", **{"t/m.py": "LIMIT = 1\n", "CLAUDE.md": _DOC.format(what="it")}
     )
-    _verified_commit(repo, "move", **{"t/m.py": "LIMIT = 2\n", **move_extra})
-
-
-def _nothing(repo, base, head):
-    return []
-
-
-def test_a_lock_move_the_notice_lists_reads_listed(tmp_path):
-    repo = init_repo(tmp_path)
-    _gate_history(repo)
-
-    replay = _replay(repo)
-
-    [move] = replay["content_lock_moves"]
-    assert (move["unit"], move["atom"], move["class"]) == (
-        "CLAUDE.md#Gate",
-        "t/m.py:LIMIT",
-        "listed",
-    )
-    assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ", move["committed_at"])
-    assert replay["content_notices"] == [
-        {"commit": move["commit"], "unit": "CLAUDE.md#Gate"}
-    ]
-
-
-def test_a_lock_move_the_notice_does_not_list_reads_a_named_miss(tmp_path):
-    repo = init_repo(tmp_path)
-    _gate_history(repo)
-
-    replay = _replay(repo, _nothing)
-
-    assert [m["class"] for m in replay["content_lock_moves"]] == ["miss"]
-    named = "\n".join(render_replay(replay))
-    assert re.search(r"miss +\w{12} .* CLAUDE\.md#Gate  t/m\.py:LIMIT", named)
-
-
-@pytest.mark.parametrize(
-    "hashing_file", ["scripts/lib/facts/atoms.py", "scripts/lib/facts/citations.py"]
-)
-def test_a_lock_move_in_a_commit_that_touches_the_hashing_code_reads_hashing(
-    tmp_path, hashing_file
-):
-    repo = init_repo(tmp_path)
-    _gate_history(repo, **{hashing_file: "# changed\n"})
-
-    assert [m["class"] for m in _replay(repo, _nothing)["content_lock_moves"]] == [
-        "hashing"
-    ]
-
-
-_UV_LOCK = '[[package]]\nname = "pyyaml"\nversion = "{}"\n\n[[package]]\nname = "requests"\nversion = "{}"\n'
-
-
-@pytest.mark.parametrize(
-    ("versions", "expected"),
-    [(("6.0.4", "2.32.0"), "hashing"), (("6.0.3", "2.33.0"), "miss")],
-    ids=["pyyaml-bump", "other-package-bump"],
-)
-def test_only_a_pyyaml_bump_in_uv_lock_reads_hashing(tmp_path, versions, expected):
-    repo = init_repo(tmp_path)
-    commit(repo, "lock", **{"uv.lock": _UV_LOCK.format("6.0.3", "2.32.0")})
-    _gate_history(repo, **{"uv.lock": _UV_LOCK.format(*versions)})
-
-    assert [m["class"] for m in _replay(repo, _nothing)["content_lock_moves"]] == [
-        expected
-    ]
+    return commit(repo, "move", **{"t/m.py": "LIMIT = 2\n"})
 
 
 def test_moved_counts_moved_rows_and_those_whose_prose_was_edited(tmp_path):
@@ -221,117 +132,21 @@ def test_moved_counts_moved_rows_and_those_whose_prose_was_edited(tmp_path):
     assert replay["commits_with_notice"] == 1
 
 
-@pytest.mark.parametrize("a_also_verifies_another_row", [False, True])
-def test_a_move_whose_lock_update_lands_a_commit_later_reads_split(
-    tmp_path, a_also_verifies_another_row
-):
-    repo = init_repo(tmp_path)
-    doc = _DOC.format(what="it") + "\n## Other\n`t/o.py:OTHER` too.\n"
-    both = ("CLAUDE.md#Gate", "CLAUDE.md#Other")
-    commit(repo, "seed", README="x\n")
-    _verified_commit(
-        repo,
-        "base",
-        units=both,
-        **{"t/m.py": "LIMIT = 1\n", "t/o.py": "OTHER = 1\n", "CLAUDE.md": doc},
-    )
-    # Commit A moves LIMIT and leaves its hash stale; commit B records the new hash.
-    if a_also_verifies_another_row:
-        _verified_commit(
-            repo,
-            "A",
-            units=("CLAUDE.md#Other",),
-            **{"t/m.py": "LIMIT = 2\n", "t/o.py": "OTHER = 2\n"},
-        )
-    else:
-        commit(repo, "A", **{"t/m.py": "LIMIT = 2\n"})
-    _verified_commit(repo, "B")
-
-    gate = [
-        m["class"]
-        for m in _replay(repo)["content_lock_moves"]
-        if m["unit"] == "CLAUDE.md#Gate"
-    ]
-    assert gate == ["split"]
-
-
-def test_a_split_whose_first_half_is_the_lock_commit_before_the_window_reads_split(
-    tmp_path,
-):
-    repo = init_repo(tmp_path)
-    doc = _DOC.format(what="it") + "\n## Other\n`t/o.py:OTHER` too.\n"
-    commit(repo, "seed", README="x\n")
-    _verified_commit(
-        repo,
-        "base",
-        units=("CLAUDE.md#Gate", "CLAUDE.md#Other"),
-        days_ago=40,
-        **{"t/m.py": "LIMIT = 1\n", "t/o.py": "OTHER = 1\n", "CLAUDE.md": doc},
-    )
-    # A moves LIMIT 35 days ago and records only Other, so it is the last lock commit before
-    # the 30-day window; B records LIMIT inside the window.
-    _verified_commit(
-        repo,
-        "A",
-        units=("CLAUDE.md#Other",),
-        days_ago=35,
-        **{"t/m.py": "LIMIT = 2\n", "t/o.py": "OTHER = 2\n"},
-    )
-    edge = git_out(repo, "rev-parse", "HEAD")
-    _verified_commit(repo, "B")
-
-    prec = precision(repo, 30, now=_NOW)
-    replay = notice_replay(repo, prec)
-
-    assert (prec.start, prec.lock_commits) == (edge, 1)
-    assert [(m["unit"], m["class"]) for m in replay["content_lock_moves"]] == [
-        ("CLAUDE.md#Gate", "split")
-    ]
-
-
-def test_a_row_whose_python_changed_is_named_and_not_counted(tmp_path):
-    repo = init_repo(tmp_path)
-    doc = _DOC.format(what="it") + "\n## Other\n`t/o.py:OTHER` too.\n"
-    both = ("CLAUDE.md#Gate", "CLAUDE.md#Other")
-    commit(repo, "seed", README="x\n")
-    _verified_commit(
-        repo,
-        "base",
-        units=both,
-        **{"t/m.py": "LIMIT = 1\n", "t/o.py": "OTHER = 1\n", "CLAUDE.md": doc},
-    )
-    (repo / "t/m.py").write_text("LIMIT = 2\n")
-    verify_units(repo, repo / LOCK_REL, list(both), "bump")
-    # Gate's hash moves under a new interpreter; Other is re-recorded unchanged.
-    units = read_lock(repo / LOCK_REL)
-    units["CLAUDE.md#Gate"]["python"] = "0.0"
-    write_lock(repo / LOCK_REL, units)
-    bump = commit(repo, "bump")
-
-    prec = precision(repo, 30, now=_NOW)
-
-    assert prec.python_changed == [(bump, "CLAUDE.md#Gate")]
-    assert prec.moves == []
-    assert notice_replay(repo, prec)["python_changed"] == [
-        {"commit": bump, "unit": "CLAUDE.md#Gate"}
-    ]
-
-
 def test_a_section_deleted_after_its_move_is_still_listed_at_the_move(tmp_path):
     repo = init_repo(tmp_path)
-    _gate_history(repo)
+    move = _gate_history(repo)
     commit(repo, "drop the section", **{"CLAUDE.md": "## Other\nno citations\n"})
 
     replay = _replay(repo)
 
-    assert [m["class"] for m in replay["content_lock_moves"]] == ["listed"]
+    assert {"commit": move, "unit": "CLAUDE.md#Gate"} in replay["content_notices"]
 
 
 def test_a_notice_that_raises_on_one_commit_is_recorded_and_the_replay_goes_on(
     tmp_path,
 ):
     repo = init_repo(tmp_path)
-    _gate_history(repo)
+    move = _gate_history(repo)
     seed = git(repo, "rev-list", "--max-parents=0", "HEAD").stdout.strip()
 
     def stub(repo, base, head):
@@ -343,5 +158,29 @@ def test_a_notice_that_raises_on_one_commit_is_recorded_and_the_replay_goes_on(
 
     [crash] = replay["crashed"]
     assert crash["error"] == "KeyError"
-    assert [m["class"] for m in replay["content_lock_moves"]] == ["listed"]
+    assert replay["content_notices"] == [{"commit": move, "unit": "CLAUDE.md#Gate"}]
     assert replay["commits"] == 3
+
+
+@pytest.mark.parametrize("with_lock_commit", [True, False], ids=["lock", "no-lock"])
+def test_the_replay_window_is_the_plain_days_boundary(tmp_path, with_lock_commit):
+    repo = init_repo(tmp_path)
+    _dated_commit(repo, "seed", 50, README="x\n")
+    # A commit writing the lock 40 days back: the last lock commit before the 30-day boundary.
+    lock = {"docs/facts.lock": '{"units": {}}\n'} if with_lock_commit else {}
+    _dated_commit(repo, "lock", 40, **{"t/m.py": "LIMIT = 1\n", **lock})
+    _dated_commit(repo, "outside", 35, **{"t/m.py": "LIMIT = 2\n"})
+    inside = [
+        _dated_commit(repo, "inside 1", 5, **{"t/m.py": "LIMIT = 3\n"}),
+        _dated_commit(repo, "inside 2", 1, **{"t/m.py": "LIMIT = 4\n"}),
+    ]
+    heads = []
+
+    def stub(repo, base, head):
+        heads.append(head)
+        return []
+
+    report = build(repo, {}, 30, tmp_path / "no.log", now=_NOW, notice=stub)
+
+    assert heads == inside
+    assert report["notice_replay"]["commits"] == 2

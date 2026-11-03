@@ -141,7 +141,7 @@ def lint_sections(
         rel = doc.relative_to(repo).as_posix()
         secs = sections(rel, doc.read_text(encoding="utf-8"))
         # Two sections with one heading text share one key, so the lock holds one row for
-        # both and every keyed reader (`lock.repo_citations`, `changed_units`) keeps the
+        # both and every keyed reader (`citations.repo_citations`, `changed_units`) keeps the
         # last one: the first section's atoms are never graded. Nothing downstream can
         # tell the two apart, so the document is what has to change.
         for key, n in Counter(s.key for s in secs).items():

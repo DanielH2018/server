@@ -1,9 +1,9 @@
 """The facts diff notice: each ``CLAUDE.md`` section citing an atom that a diff moved.
 
 The notice compares every cited atom at a diff's base with the same atom at its head, so it
-has to read both ends. The section walk in ``citations`` and ``lock`` cannot: ``repo_docs``
-and ``tracked_files`` run ``git ls-files`` on the index, and ``lock.repo_citations`` reads each
-doc from disk, so all three describe the checkout and no earlier revision. ``Tree`` reads
+has to read both ends. The section walk in ``citations`` cannot: ``repo_docs`` and
+``tracked_files`` run ``git ls-files`` on the index, and ``repo_citations`` reads each doc from
+disk, so all three describe the checkout and no earlier revision. ``Tree`` reads
 either end through one interface, with two backends.
 
 - **At a revision.** One ``git ls-tree -r -z <rev>`` gives the tracked set and the blob id of

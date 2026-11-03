@@ -115,12 +115,9 @@ carries the row is the squash commit that wrote its hash into the lock, and
 - `fact_status.py forget '<doc>#<heading>'` drops the row of a renamed or deleted heading.
   It also clears an `empty-row` finding: a row whose section cites nothing records nothing,
   and `verify` writes no row for such a section.
-- `fact_status.py report` measures whether the lock pays for itself, from git and the
-  instructions log alone, over `--days` (30 by default). A potential is a lock commit that
-  changed a recorded atom's hash, and it is actual when that commit also changed the owning
-  section's prose. The report prints both per atom form, leaving out new rows, rows whose
-  `python` changed, and the lock's first commit. It then ranks every section that is not IN
-  by how often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
+- `fact_status.py report` reads git and the instructions log, never the lock, over `--days`
+  (30 by default). It ranks every section that cites nothing, a CONVENTION section, by how
+  often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
   primary checkout and its rotated `.1`, so the span the report prints is usually days, not
   the window. Last, it prints the instruction bytes each session loaded, summed from the
   `bytes=` field `log-instructions.py` ends each row with. A user-level file such as
@@ -130,13 +127,12 @@ carries the row is the squash commit that wrote its hash into the lock, and
   compaction reloads `MEMORY.md` without the event as well, so the hook writes a `compact` row
   for it then. The output style sits in the system prompt and gets no `compact` row.
   Last, it prints the *Notice replay*. The replay runs `notice` once per first-parent commit
-  from the last lock commit before the window, with the parent as the base. It grades every
-  content-form lock move as `listed`, `hashing`, `split` or `miss`, and only `miss` counts
-  against parity. `scripts/lib/facts/replay.py:notice_replay` has the class rules.
+  in the window, with the parent as the base, and counts the rows by kind.
+  `scripts/lib/facts/replay.py:notice_replay` has the counts.
   `--json` prints the same as one object. Under `notice_replay`, `moved` counts the replay's
   `moved` rows, and `moved_prose_edited` counts the ones whose commit also edited the
-  section's prose. `content_lock_moves` lists each content-form lock move with its
-  `committed_at` and class.
+  section's prose. `content_notices` names the commit and section of each row whose atom is
+  not a path atom.
 - `fact_status.py notice --since <ref> [--head <rev>]` lists every section that cites an
   atom the diff moved. The diff runs from the merge base of `<ref>` and the head to the head,
   and the head is the working tree unless `--head` names a revision. It compares the atom
@@ -149,12 +145,12 @@ carries the row is the squash commit that wrote its hash into the lock, and
   base. It runs beside the lock, and G2 of the plan decides whether it replaces the lock.
   `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan.
 
-The lock is kept only while its content atoms pay for it. When `fact_status.py report
---days 60` shows fewer than two actual moves across the symbol, YAML, test and marker
-forms together, retire `docs/facts.lock`, `verify`, `reverify` and their CI tests, and
-keep `lint` with its prose rules. Path atoms are left out of that count because they hash
-existence, so they never record a prose fix.
-`docs/adr/0019-fact-support-stops-at-the-repo-store.md` records why.
+`docs/adr/0023-fact-support-is-a-diff-notice.md` retires `docs/facts.lock`, `verify`,
+`reverify` and their CI tests, and keeps `lint` with its prose rules. Slice G2's PR 3
+deletes them, and they keep running until it merges. `report` no longer measures the
+lock's precision, which was ADR-0019's retirement criterion. ADR-0023's *Context* records
+the last figure, and `docs/adr/0019-fact-support-stops-at-the-repo-store.md` records the
+criterion.
 
 Two prek hooks run on a commit. `facts-lint-changed` lints the sections the branch edits, and
 runs `vanished-identifier` over every section. It fires on a commit that touches a `CLAUDE.md`
