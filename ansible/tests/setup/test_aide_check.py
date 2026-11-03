@@ -2,7 +2,9 @@
 
 The cron used to pipe `aide --check` into `logger`, so the pipeline's status was logger's and an
 AIDE that checked nothing for weeks read the same as one that passed (#4591). aide-check.sh keeps
-AIDE's exit code, pushes it to one Kuma tile per host, and holds five properties:
+AIDE's exit code, logs it and writes it as a textfile verdict, and holds five properties. It
+pushed it to one Kuma tile per host until M6 batch B9's Cutover-2, so a test says "pushes DOWN"
+for a run whose logged status is `down`:
 
 AN ERROR EXIT PUSHES DOWN. Anything outside 0-7 means the check did not complete.
 
@@ -28,6 +30,7 @@ from _aide_check_run import (
     CLEAN_REPORT,
     DIFF_REPORT,
     ERROR_REPORT,
+    SCRIPT,
     _run_check,
 )
 from _host_packages import HOSTS, package, shipped_text
@@ -90,9 +93,9 @@ def _textfile(root, check):
     )
 
 
-def test_a_completed_check_writes_success_1_with_the_tiles_deadline(tmp_path):
-    """The liveness path that outlives Kuma (#6168): the file exists even when no push does."""
-    _run_check(tmp_path, DIFF_REPORT, rc=1, token="")
+def test_a_completed_check_writes_success_1_with_its_deadline(tmp_path):
+    """The textfile is the only verdict channel since the push left (#6168)."""
+    _run_check(tmp_path, DIFF_REPORT, rc=1)
     series = _textfile(tmp_path, "aide-check")
     assert series["homelab_check_success"] == "1"
     assert series["homelab_check_deadline_seconds"] == "626400"
@@ -189,12 +192,27 @@ def test_the_exclusions_deploy_under_a_name_aide_loads():
         )
 
 
-def test_the_check_still_runs_when_no_token_is_set(tmp_path):
-    """A host whose secret is missing keeps its weekly check; only the push is skipped."""
-    _, pushed, logged, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0, token="")
+PUSH_MARKERS = ("kuma_push", "kuma-push-lib", "KUMA_", "PUSH_TOKEN", "api/push")
+
+
+def push_markers(body: str) -> list[str]:
+    """The Kuma push plumbing a rendered script still carries, or nothing."""
+    return [marker for marker in PUSH_MARKERS if marker in body]
+
+
+def test_the_rendered_script_carries_no_kuma_push():
+    """M6 batch B9's Cutover-2: the push, its token read and its library are gone."""
+    assert push_markers(render_shell_script(*SCRIPT)) == []
+    # The rejecting half: a body that still sources the library or reads the token is flagged.
+    assert push_markers("source /usr/lib/homelab/kuma-push-lib.sh") == ["kuma-push-lib"]
+    assert push_markers('AIDE_PUSH_TOKEN="x"') == ["PUSH_TOKEN"]
+
+
+def test_the_check_logs_its_verdict_and_still_runs_without_a_credential(tmp_path):
+    """No unit loads a credential, so a run has no token and still reports."""
+    _, verdict, _, ran = _run_check(tmp_path, CLEAN_REPORT, rc=0)
     assert ran, "aide did not run"
-    assert pushed is None, "pushed with no token"
-    assert any("AIDE_PUSH_TOKEN not set" in line for line in logged), logged
+    assert verdict is not None and verdict[0] == "up", verdict
 
 
 def test_a_long_report_is_capped_with_a_line_saying_so(tmp_path):

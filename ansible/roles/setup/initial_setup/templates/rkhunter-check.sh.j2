@@ -6,9 +6,9 @@
 # Takes no arguments. Cron job "Weekly rkhunter malware scan", or homelab-rkhunter-check.timer
 # on a packaged host, runs it as root, Wednesday 02:00. It runs `rkhunter --check` at idle CPU and
 # IO priority, writes the warnings to the journal under the `rkhunter` tag, writes the verdict to
-# the node_exporter textfile as check `rkhunter-check`, and pushes it to this host's "rkhunter Scan
-# (<host>)" Kuma monitor using the token in /etc/homelab/rkhunter-kuma-push.env or the unit's
-# credential. Running it by hand is safe; a scan takes two to three minutes, and it pushes.
+# the node_exporter textfile as check `rkhunter-check`, where RkhunterScanFailed and
+# RkhunterScanNotReporting read it. Running it by hand is safe; a scan takes two to three minutes,
+# and it rewrites the textfile.
 #
 # WHY A SCRIPT (#4598). The cron used to pipe `rkhunter --check` straight into
 # `logger -t rkhunter`. The pipeline's exit status was logger's, and nothing read the tag, so a
@@ -29,11 +29,6 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source {{ initial_setup_host_lib_dir }}/kuma-push-lib.sh || {
-  logger -t rkhunter-check "kuma-push-lib.sh missing — run initial_setup or install the host package"
-  exit 1
-}
-# shellcheck source=/dev/null
 source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
   logger -t rkhunter-check "homelab-check-lib.sh missing — run initial_setup or install the host package"
   exit 1
@@ -41,31 +36,14 @@ source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
 
 # The longest legitimate gap between two textfile writes: the timer runs weekly (Wednesday
 # 02:00, hosts/components/integrity-scans/units/homelab-rkhunter-check.timer), 604800s, and the
-# extra 2h is the slack the "rkhunter Scan" tile keeps (interval 612000) for a run that takes
-# far longer than the last. Move it with the timer (#6168).
+# extra 2h is the slack for a run that takes far longer than the last. The deleted Uptime Kuma
+# tile kept the same 612000. Move it with the timer (#6168).
 # ansible/tests/setup/test_integrity_scan_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=612000
-
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
-# push must not depend on DNS.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 
 # rkhunter's LOGFILE default in /etc/rkhunter.conf. rkhunter truncates and rewrites it on every
 # run, so its mtime and its summary say whether THIS run finished.
 RKHUNTER_LOG=/var/log/rkhunter.log
-
-# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
-# local account.
-RKHUNTER_PUSH_TOKEN=""
-# A packaged unit passes the token as the credential `rkhunter_push_token`; an Ansible-run host
-# sources the env file instead.
-if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/rkhunter_push_token" ]]; then
-  RKHUNTER_PUSH_TOKEN="$(<"$CREDENTIALS_DIRECTORY/rkhunter_push_token")"
-else
-  # shellcheck source=/dev/null
-  [[ -r /etc/homelab/rkhunter-kuma-push.env ]] && . /etc/homelab/rkhunter-kuma-push.env
-fi
 
 # Captured whole rather than piped, because a pipeline's exit status is its last command's, which
 # is how the old cron lost it. --report-warnings-only keeps the journal to the warnings and any
@@ -97,7 +75,7 @@ summary_count() {
 # and daniel-box and daniel-pi one week each, every one a package or the operator adding an
 # account. It pages, because a new account is what this scan exists to catch. rkhunter stores its
 # copy of passwd and group on every run, so running this script again by hand acknowledges the
-# change and clears the tile. Suspect files read 0 in every log kept, because APT_AUTOGEN refreshes
+# change and clears the alert. Suspect files read 0 in every log kept, because APT_AUTOGEN refreshes
 # the baseline after package upgrades, so a suspect file is a binary that changed outside apt.
 if [[ -z "$SUMMARY" ]]; then
   STATUS=down
@@ -112,7 +90,7 @@ else
   COUNTS="${WARNINGS} warnings, ${SUSPECT:-?} suspect files, ${ROOTKITS:-?} possible rootkits (exit ${RC}, run ${RUN_TIME})"
   FIRST_WARNING=$(grep -m1 '^\[[0-9:]*\] Warning:' "$RKHUNTER_LOG" | sed 's/^\[[0-9:]*\] Warning: //')
   if [[ -z "$ROOTKITS" || -z "$SUSPECT" ]]; then
-    # A group of checks was skipped or the summary changed shape: a count this tile pages on is
+    # A group of checks was skipped or the summary changed shape: a count the alert pages on is
     # unreadable, so the scan cannot be called clean.
     STATUS=down
     MSG="the summary in ${RKHUNTER_LOG} lacks a Possible rootkits or Suspect files count: ${COUNTS}"
@@ -131,25 +109,13 @@ else
   fi
 fi
 
-# Unconditional and before the push: the `|| logger` inside kuma_push only fires when the curl
-# fails, so a successfully-pushed DOWN would otherwise leave no durable record of the
-# verdict in syslog or Loki. NOTICE rather than INFO — journald here
-# caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
+# Unconditional, so a DOWN leaves a durable record in syslog and Loki beside the textfile. NOTICE
+# rather than INFO — journald here caps MaxLevelStore=notice, so an info line is dropped from the
+# journal and from forwarding.
 logger -p daemon.notice -t rkhunter-check "status=${STATUS} ${MSG}"
 
-# The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and the
-# file must not wait on Kuma. A failed write logs and the run goes on to its push.
 write_check_textfile rkhunter-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
   || logger -t rkhunter-check "textfile write failed (status=${STATUS})"
-
-if [[ -z "$RKHUNTER_PUSH_TOKEN" ]]; then
-  # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
-  # matches registry names against raw template text and cannot tell a log line from a render.
-  logger -t rkhunter-check "RKHUNTER_PUSH_TOKEN not set — skipping push (see /add-secret)"
-else
-  kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${RKHUNTER_PUSH_TOKEN}" \
-    "$KUMA_HOST" "$KUMA_RESOLVE_IP" rkhunter-check
-fi
 
 # Cron ignores the exit code; it is non-zero after a DOWN so a run by hand reads the same way.
 [[ "$STATUS" == up ]] || exit 1

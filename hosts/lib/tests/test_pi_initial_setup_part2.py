@@ -75,16 +75,17 @@ def test_the_scan_packages_install_with_their_config_under_no_install_recommends
     assert {"rkhunter", "aide", "aide-common"} <= set(package.depends)
 
 
-def test_the_scans_read_the_pis_own_tokens_and_the_packaged_libraries(package):
+def test_the_scans_source_the_check_library_and_load_no_credential(package):
+    # M6 batch B9's Cutover-2 dropped the pushes. The package keeps the keys until B9's token PR,
+    # because the host's SOPS file must match the list.
     for scan in ("rkhunter", "aide"):
         script = _text(package, f"/usr/lib/homelab/{scan}-check")
-        assert "source /usr/lib/homelab/kuma-push-lib.sh ||" in script
         assert "source /usr/lib/homelab/homelab-check-lib.sh ||" in script
-        assert f'"$CREDENTIALS_DIRECTORY/{scan}_push_token"' in script
+        assert "kuma-push-lib.sh" not in script
+        assert "CREDENTIALS_DIRECTORY" not in script
         unit = _text(package, f"/usr/lib/systemd/system/homelab-{scan}-check.service")
-        key = f"{scan}_daniel_pi_push_token"
-        assert f"LoadCredential={scan}_push_token:/run/credstore/{key}\n" in unit
-        assert key in package.credentials
+        assert "LoadCredential" not in unit and "homelab-secrets" not in unit
+        assert f"{scan}_daniel_pi_push_token" in package.credentials
     assert "healthchecks_ping_key" in package.credentials
     # The Pi's main sshd_config sets no PermitRootLogin, so rkhunter must accept an absent line.
     assert "\nALLOW_SSH_ROOT_USER=unset\n" in _text(package, "/etc/rkhunter.conf.local")

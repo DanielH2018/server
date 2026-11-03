@@ -2,7 +2,7 @@
 
 The cron used to pipe `rkhunter --check` into `logger`, so the pipeline's status was logger's and
 a scan that failed outright read the same as one that passed. rkhunter-check.sh pushes one Kuma
-tile per host and holds four properties:
+tile per host until M6 batch B9's Cutover-2, and holds four properties:
 
 A SCAN THAT DID NOT COMPLETE PUSHES DOWN. rkhunter exits 1 on a warning and on an error alike, so
 the script reads completion from the log this run wrote, and a log left from last week reads as
@@ -29,8 +29,8 @@ from _helpers import ROLES
 from _host_packages import HOSTS, shipped_text
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script
-from _aide_check_run import LOGGER_STUB
-from test_aide_check import _textfile
+from _aide_check_run import LOGGER_STUB, verdict_of
+from test_aide_check import _textfile, push_markers
 
 SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
 PUSH_ENV = "rkhunter-kuma-push.env.j2"
@@ -46,12 +46,10 @@ WEEK_S = 7 * 24 * 3600
 # 2026-09-30 02:02:01 UTC, the run the stale log below records.
 LAST_WEEK = 1790733721
 
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 # The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
 # own directory, which node_exporter scrapes.
 REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
-REAL_ENV = "/etc/homelab/rkhunter-kuma-push.env"
 REAL_LOG = "RKHUNTER_LOG=/var/log/rkhunter.log"
 REAL_RKHUNTER = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/rkhunter"
 
@@ -88,31 +86,25 @@ def _run_check(
     stdout: str,
     rc: int,
     log: str | None,
-    token: str = "stubtoken",
     stale_log: str | None = None,
 ):
     """Render rkhunter-check.sh and run it with rkhunter stubbed.
 
     The stub prints `stdout`, writes `log` to the log path when it is not None, and exits `rc`.
     `stale_log` is a log already on disk from the previous week's run, the one a failed run leaves behind. Only
-    absolute paths are repointed. Returns (exit code, pushed lines or None, logged lines,
+    absolute paths are repointed. Returns (exit code, the verdict as a [status, message] pair
+    read from the `status=` line the script logs, or None when it logged none, logged lines,
     whether rkhunter ran).
     """
     body = render_shell_script(
         *SCRIPT,
         overrides={"domain": "example.test", "k3s_metallb_ingress_vip": "10.0.0.240"},
     )
-    for needle in (REAL_LIB, REAL_ENV, REAL_LOG, REAL_RKHUNTER, REAL_CHECK_LIB):
+    for needle in (REAL_LOG, REAL_RKHUNTER, REAL_CHECK_LIB):
         assert needle in body, (
             f"{needle} is no longer in rkhunter-check.sh; this harness repoints it"
         )
 
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(
-        'kuma_push() { printf \'%s\\n%s\\n\' "$1" "$2" > "$KUMA_PUSH_OUT"; }\n'
-    )
-    env_file = tmp_path / "push.env"
-    env_file.write_text(f"RKHUNTER_PUSH_TOKEN={token}\n")
     log_path = tmp_path / "rkhunter.log"
     if stale_log is not None:
         log_path.write_text(stale_log)
@@ -127,33 +119,26 @@ def _run_check(
         f'touch "$RKH_RAN"\n{write_log}cat {tmp_path / "stdout"}\nexit {rc}\n',
     )
     body = (
-        body.replace(REAL_LIB, str(lib))
-        .replace(REAL_CHECK_LIB, str(CHECK_LIB))
-        .replace(REAL_ENV, str(env_file))
+        body.replace(REAL_CHECK_LIB, str(CHECK_LIB))
         .replace(REAL_LOG, f"RKHUNTER_LOG={log_path}")
         .replace(REAL_RKHUNTER, str(rkhunter))
     )
     script = write_exec(tmp_path / "rkhunter-check.sh", body)
-    pushed, logged, ran = (tmp_path / n for n in ("pushed", "logged", "ran"))
+    logged, ran = (tmp_path / n for n in ("logged", "ran"))
     textfile_dir = tmp_path / "textfile"
     textfile_dir.mkdir(exist_ok=True)
     result = run(
         [str(script)],
         env={
             **os.environ,
-            "KUMA_PUSH_OUT": str(pushed),
             "TEXTFILE_DIR": str(textfile_dir),
             "LOGGER_OUT": str(logged),
             "RKH_RAN": str(ran),
         },
         stub_bin=fake_bin(tmp_path / "bin", logger=LOGGER_STUB),
     )
-    return (
-        result.returncode,
-        pushed.read_text().splitlines() if pushed.exists() else None,
-        logged.read_text().splitlines() if logged.exists() else [],
-        ran.exists(),
-    )
+    lines = logged.read_text().splitlines() if logged.exists() else []
+    return result.returncode, verdict_of(lines, "rkhunter-check"), lines, ran.exists()
 
 
 def test_a_clean_scan_pushes_up(tmp_path):
@@ -260,12 +245,16 @@ def test_the_ssh_root_setting_follows_the_main_sshd_config():
         assert f"\nALLOW_SSH_ROOT_USER={value}\n" in shipped, (host, shipped)
 
 
-def test_the_scan_still_runs_when_no_token_is_set(tmp_path):
-    """A host whose secret is missing keeps its weekly scan; only the push is skipped."""
-    _, pushed, logged, ran = _run_check(tmp_path, "", rc=0, log=_log(), token="")
+def test_the_rendered_script_carries_no_kuma_push():
+    """M6 batch B9's Cutover-2: the push, its token read and its library are gone."""
+    assert push_markers(render_shell_script(*SCRIPT)) == []
+
+
+def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path):
+    """No unit loads a credential, so a run has no token and still reports."""
+    _, verdict, _, ran = _run_check(tmp_path, "", rc=0, log=_log())
     assert ran, "rkhunter did not run"
-    assert pushed is None, "pushed with no token"
-    assert any("RKHUNTER_PUSH_TOKEN not set" in line for line in logged), logged
+    assert verdict is not None and verdict[0] == "up", verdict
 
 
 def test_each_host_pushes_its_own_token():
