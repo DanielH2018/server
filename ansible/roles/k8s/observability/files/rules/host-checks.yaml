@@ -297,20 +297,20 @@ groups:
             `up` series at all. Kuma still pages every check that has not moved to an alert rule, so
             a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get pods` and the
             pod's log.
-      # M6 BATCH B9, SHADOW UNTIL ITS CUTOVER-1B (#6168). The weekly AIDE and rkhunter scans run on
-      # every host and write the textfile beside their Kuma push, and the "AIDE Integrity" and
-      # "rkhunter Scan" tiles page the same verdicts. Each host gets the DiskHealth pair for each
-      # scan. A NotReporting rule's two literals equal the DEADLINE_S its script renders, which
-      # equals the tile's interval: ansible/tests/setup/test_integrity_scan_rule_literals.py
-      # pins all three. daniel-pi's rules read the `node-pi` job. Every tile notifies Discord
-      # only, so the rules are `warning`. Each NotReporting rule fires from its deploy until the
-      # scan's first run writes the file, up to a week, which pages nobody while it is shadow.
+      # M6 BATCH B9 (#6168). The weekly AIDE and rkhunter scans run on every host and write the
+      # textfile beside their Kuma push, and these rules replaced the "AIDE Integrity" and
+      # "rkhunter Scan" tiles that Cutover-1a deleted. Each host gets a Failed and a NotReporting
+      # rule for each scan. A NotReporting rule's two literals equal the DEADLINE_S its script
+      # renders, which equalled the deleted tile's interval:
+      # ansible/tests/setup/test_integrity_scan_rule_literals.py pins them. daniel-pi's rules read
+      # the `node-pi` job. Every tile notified Discord only, so the rules are `warning`. Each
+      # NotReporting rule fires from its deploy until the scan's first run writes the file, up to
+      # a week.
       - alert: AideCheckFailed
         expr: homelab_check_success{check="aide-check",origin="daniel-box"} == 0
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly AIDE check failed or found an unexplained change.
           description: >-
@@ -329,7 +329,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly AIDE check has stopped reporting.
           description: >-
@@ -342,7 +341,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's weekly AIDE check failed or found an unexplained change.
           description: >-
@@ -361,7 +359,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's weekly AIDE check has stopped reporting.
           description: >-
@@ -374,7 +371,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's weekly AIDE check failed or found an unexplained change.
           description: >-
@@ -393,7 +389,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's weekly AIDE check has stopped reporting.
           description: >-
@@ -406,7 +401,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly rkhunter scan warned or did not complete.
           description: >-
@@ -425,7 +419,6 @@ groups:
         labels:
           severity: warning
           service: daniel-box
-          shadow: "true"
         annotations:
           summary: daniel-box's weekly rkhunter scan has stopped reporting.
           description: >-
@@ -438,7 +431,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's weekly rkhunter scan warned or did not complete.
           description: >-
@@ -457,7 +449,6 @@ groups:
         labels:
           severity: warning
           service: daniel-server
-          shadow: "true"
         annotations:
           summary: daniel-server's weekly rkhunter scan has stopped reporting.
           description: >-
@@ -470,7 +461,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's weekly rkhunter scan warned or did not complete.
           description: >-
@@ -489,7 +479,6 @@ groups:
         labels:
           severity: warning
           service: daniel-pi
-          shadow: "true"
         annotations:
           summary: daniel-pi's weekly rkhunter scan has stopped reporting.
           description: >-

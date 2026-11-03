@@ -221,8 +221,8 @@ Cutover-b.
 cloudflare-ddns Deployments and the pi-peer-backup CronJob, and they page since M6's batch B7
 Cutover-1b. An inhibit in `alertmanager-secret.yaml.j2` lets `AutofixBridgeDown` hold the
 `ScrapeTargetDown` rule for the same job, so one dead exporter pages once.
-`files/rules/kuma-cutover.yaml` is temporary: its `CheckWithoutPager` pages a tile that is gone
-while its rule is still shadow, and the last M6 Phase A cutover deletes it.
+M6's temporary no-pager guard rule, which paged a tile that was gone while its replacement rule was
+still shadow, left with B9's Cutover-1b, the last batch to hold a term in it.
 
 **`files/rules/hosts.yaml` holds the host rules, one copy per host.** Its disk, memory,
 temperature and UPS rules replace monitor-bridge's `disk`, `memory`, `host_temp` and `ups`

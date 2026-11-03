@@ -1372,7 +1372,6 @@ tests:
               origin: daniel-pi
               severity: warning
               service: daniel-pi
-              shadow: "true"
             exp_annotations:
               summary: daniel-pi's weekly AIDE check failed or found an unexplained change.
               description: >-
@@ -1401,7 +1400,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly AIDE check has stopped reporting.
               description: >-
@@ -1414,7 +1412,6 @@ tests:
               origin: daniel-server
               severity: warning
               service: daniel-server
-              shadow: "true"
             exp_annotations:
               summary: daniel-server's weekly AIDE check has stopped reporting.
               description: >-
@@ -1457,7 +1454,6 @@ tests:
               origin: daniel-server
               severity: warning
               service: daniel-server
-              shadow: "true"
             exp_annotations:
               summary: daniel-server's weekly rkhunter scan has stopped reporting.
               description: >-
@@ -1782,7 +1778,6 @@ tests:
               origin: daniel-box
               severity: warning
               service: daniel-box
-              shadow: "true"
             exp_annotations:
               summary: daniel-box's weekly rkhunter scan warned or did not complete.
               description: >-
