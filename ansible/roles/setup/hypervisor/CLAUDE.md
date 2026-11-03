@@ -94,7 +94,8 @@ first connect.
   `group_vars/all.yml`, also sizes the textfile verdicts' deadline.
 - **Authoritative sources:** the snapshot listed in R2, daniel-server's own
   `/usr/local/bin/k3s`, and `K3S_TOKEN` from the k3s-agent unit's env file — a wrong token fails
-  the restore loudly.
+  the restore loudly. Nothing rewrites that file on a joined agent since H6.5b, so after a
+  deliberate server-token rotation the drill fails until the operator updates it.
 - **Abort valves:** teardown on every exit path; the pinned guest host key; the deadline pinned
   between one cron period and two; the egress-fence leg, which aborts before any credential is
   staged.
