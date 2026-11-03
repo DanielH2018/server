@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-03 06:17 UTC
-generated_sha: 4f1e13f113
+generated_at: 2026-11-03 18:17 UTC
+generated_sha: e68ff215c5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,13 +19,10 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | - | ✓ |
 | [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
-| [#6968](https://github.com/DanielH2018/server/issues/6968) | medium | gap | cicd | A moved secrets.yml or inventory key records no other host its setup readers reach | 2026-11-02 | 0 | - | - |
-| [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
+| [#7047](https://github.com/DanielH2018/server/issues/7047) | medium | gap | cicd | The builder's rollout gate waits with no reason logged, and its Pi canary reports once a day | 2026-11-03 | 0 | worktree-fanout-orchestrator-7044-7047 | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
 | [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
-| [#4660](https://github.com/DanielH2018/server/issues/4660) | low | gap | - | Workflow subagent run length has no measured outcome, so their cap stays undecided | 2026-10-12 | 0 | - | ✓ |
-| [#4663](https://github.com/DanielH2018/server/issues/4663) | low | gap | - | Implementer maxTurns decision needs a sample with enough red PRs | 2026-10-12 | 1 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#6434](https://github.com/DanielH2018/server/issues/6434) | low | improvement | cicd | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply | 2026-10-28 | 0 | - | - |
 | [#6435](https://github.com/DanielH2018/server/issues/6435) | low | gap | docs | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template | 2026-10-28 | 0 | - | - |
@@ -38,10 +35,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6821](https://github.com/DanielH2018/server/issues/6821) | low | gap | docs | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 | 2026-11-01 | 0 | - | ✓ |
 | [#6882](https://github.com/DanielH2018/server/issues/6882) | low | gap | docs | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 | 2026-11-01 | 0 | - | ✓ |
 | [#6950](https://github.com/DanielH2018/server/issues/6950) | low | gap | docs | M6 status files still describe the Phase A and B token PRs as future steps | 2026-11-02 | 0 | - | ✓ |
-| [#6975](https://github.com/DanielH2018/server/issues/6975) | low | improvement | container | H6.5a: move the k3s agent's files into daniel-server's package | 2026-11-02 | 0 | - | ✓ |
-| [#6977](https://github.com/DanielH2018/server/issues/6977) | low | improvement | backup-observability | H2.8a: turn on k3s native etcd-s3 snapshots | 2026-11-02 | 0 | - | ✓ |
-| [#6981](https://github.com/DanielH2018/server/issues/6981) | low | improvement | cicd | land_platform.k8s_only_tags can no longer restrict anything after H5.13 | 2026-11-02 | 0 | - | ✓ |
-| [#6983](https://github.com/DanielH2018/server/issues/6983) | low | gap | cicd | Pre-guard root-owned bytecode blocks removing the etcd-drill-vm worktree on daniel-server | 2026-11-02 | 0 | - | - |
+| [#7044](https://github.com/DanielH2018/server/issues/7044) | low | improvement | cicd | has_ample_ram and four template comments outlived the initial_setup tasks that read them | 2026-11-03 | 0 | worktree-fanout-orchestrator-7044-7047 | ✓ |
 
 ## Deferred, by date
 
@@ -57,10 +51,7 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | 2026-11-09 | withheld | [#6821](https://github.com/DanielH2018/server/issues/6821) | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 |
 | 2026-11-09 | withheld | [#6882](https://github.com/DanielH2018/server/issues/6882) | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 |
 | 2026-11-09 | withheld | [#6950](https://github.com/DanielH2018/server/issues/6950) | M6 status files still describe the Phase A and B token PRs as future steps |
-| 2026-11-10 | withheld | [#3778](https://github.com/DanielH2018/server/issues/3778) | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it |
 | 2026-11-10 | withheld | [#3865](https://github.com/DanielH2018/server/issues/3865) | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap |
-| 2026-11-12 | withheld | [#4660](https://github.com/DanielH2018/server/issues/4660) | Workflow subagent run length has no measured outcome, so their cap stays undecided |
-| 2026-11-12 | withheld | [#4663](https://github.com/DanielH2018/server/issues/4663) | Implementer maxTurns decision needs a sample with enough red PRs |
 | 2026-11-13 | withheld | [#6434](https://github.com/DanielH2018/server/issues/6434) | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply |
 | 2026-11-13 | withheld | [#6436](https://github.com/DanielH2018/server/issues/6436) | PR template header still says the GitOps deployer applies image pins and the deploy plane |
 | 2026-11-13 | withheld | [#6635](https://github.com/DanielH2018/server/issues/6635) | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live |
