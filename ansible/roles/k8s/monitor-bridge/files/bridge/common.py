@@ -189,9 +189,10 @@ def sanitize(s: object, maxlen: int = 120) -> str:
 
     Release titles, indexer names, n8n workflow names and *arr queue items are
     attacker-influenced — a poisoned indexer/release is the very thing several checks exist to
-    catch. Alertmanager delivers the msg to Discord, which renders @mentions and markdown, so collapse
-    whitespace, defuse '@' (which forms @everyone/@here/user pings) and backticks, and cap the
-    length.
+    catch. autofix-bridge posts its msg straight to a Discord webhook, which renders @mentions
+    and markdown, so collapse whitespace, defuse '@' (which forms @everyone/@here/user pings)
+    and backticks, and cap the length. monitor-bridge's msg reaches only its log: Alertmanager
+    delivers a check's alert to Discord from the gauge's `check` label, never from the msg.
     """
     s = "?" if s is None else str(s)
     s = " ".join(s.split())
