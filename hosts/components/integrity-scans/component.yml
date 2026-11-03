@@ -22,8 +22,10 @@
 # - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full
 #   scan. A mask is a symlink in /etc/systemd/system, outside what a package owns.
 #
-# `rkhunter --update` ran on every Ansible apply. It runs before every scan instead, from
-# `ExecStartPre=-`, which ignores its exit code as the task's `failed_when: false` did.
+# DECIDED: no `rkhunter --update` (#6964). The package keeps Debian's no-download posture:
+# the distribution's /etc/rkhunter.conf sets `UPDATE_MIRRORS=0`, `MIRRORS_MODE=1` and
+# `WEB_CMD="/bin/false"`, which rkhunter 1.4.6 rejects as a relative pathname, so an update can
+# only fail. Setting a working `WEB_CMD` would let rkhunter fetch as root on every host.
 #
 # Autonomous-role contract (each scan runs weekly with no human in the loop). Both read the
 # filesystem and report; the AIDE check also advances its own baseline.
