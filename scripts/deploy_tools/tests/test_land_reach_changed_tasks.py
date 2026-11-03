@@ -13,6 +13,7 @@ import pytest
 import yaml
 
 from deploy_tools.land_lib import land_reach
+from lib import yaml_fast
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 from deploy_tools.setup_lib.setup_role_chains import changed_task_texts
@@ -119,6 +120,51 @@ def test_an_edit_to_a_has_gitops_task_reaches_the_gitops_host_only(tmp_path):
 
 def test_an_edit_to_an_ungated_task_in_the_same_file_reaches_every_host(tmp_path):
     assert _reach_of_an_edit(tmp_path, "autoremove") == _ALL
+
+
+_PACKAGED = (
+    _CRONS
+    + """\
+- name: Refresh scanner data
+  when: inventory_hostname not in crony_packaged_hosts['scan']
+  cron: {name: scan, job: scan-update}
+"""
+)
+_DEFAULTS = "ansible/roles/setup/crony/defaults/main.yml"
+_EVERY_HOST_PACKAGED = (
+    "crony_packaged_hosts:\n  scan: [daniel-pi, daniel-server, daniel-box]\n"
+)
+
+
+def _without(text: str, job: str) -> str:
+    """`text` with the task whose cron runs `job` deleted."""
+    tasks = yaml_fast.safe_load(text)
+    return yaml.safe_dump(
+        [t for t in tasks if t["cron"]["job"] != job], sort_keys=False
+    )
+
+
+def _reach_of_a_deletion(tmp_path, job: str, text: str = _PACKAGED) -> frozenset[str]:
+    before = {_TASKS: text, _DEFAULTS: _EVERY_HOST_PACKAGED}
+    after = {_TASKS: _without(text, job)}
+    return _reach(tmp_path, _TASKS, before, after)
+
+
+def test_deleting_a_task_every_hosts_package_skips_reaches_no_host(tmp_path):
+    """#7017 deleted an `initial_setup` task its packaged-hosts guard skipped on every host,
+    from a file that also holds ungated tasks, and the landing owed two hosts an apply."""
+    assert _reach_of_a_deletion(tmp_path, "scan-update") == frozenset()
+
+
+def test_deleting_a_has_gitops_task_reaches_the_gitops_host_only(tmp_path):
+    assert _reach_of_a_deletion(tmp_path, "docs-refresh") == {"daniel-box"}
+
+
+def test_an_edit_to_a_task_every_hosts_package_skips_reaches_no_host(tmp_path):
+    """The guard's map lives in the role's defaults, which the gate reader must load."""
+    before = {_TASKS: _PACKAGED, _DEFAULTS: _EVERY_HOST_PACKAGED}
+    after = {_TASKS: _edit(_PACKAGED, "scan-update")}
+    assert _reach(tmp_path, _TASKS, before, after) == frozenset()
 
 
 _UNNAMED = "ansible/roles/setup/crony/templates/unnamed.j2"
