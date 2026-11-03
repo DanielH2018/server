@@ -306,6 +306,23 @@ def test_a_refused_push_from_the_registry_gc_cron_is_clean():
     assert ok, msg
 
 
+def test_a_refused_push_from_the_b9_scans_is_clean_and_a_lost_down_one_still_pages():
+    # B9: from Cutover-1a until Cutover-2, aide-check and rkhunter-check push into the deleted
+    # tiles' tokens. Both tags are ones the rendered scripts log under, so the exclusion matches
+    # their lines, and a misspelt tag is absent from what the scripts log.
+    producers = _producer_tags()
+    assert {"aide-check", "rkhunter-check"} <= producers
+    assert "aide-chek" not in producers
+    for tag in ("aide-check", "rkhunter-check"):
+        refused = _REJECTED_UP.replace("release-staleness-check", tag)
+        assert swallowed_verdicts([(1, refused)], "3h", truncated=False)[0], tag
+        lost = _SWALLOWED_DOWN.replace("release-staleness-check", tag)
+        ok, msg = swallowed_verdicts(
+            [(1, lost), (2, _SIBLING_RUN)], "3h", truncated=False
+        )
+        assert not ok and tag in msg, tag
+
+
 # B7's pod producer, the pi-peer-backup script. The other B7 pods log to no stream these
 # selectors read. The tag is derived from `report()`: `${HOSTNAME:-<pod>} <tag>: $1`.
 _B7_TAGS = {"pi-peer-backup"}
