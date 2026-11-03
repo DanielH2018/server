@@ -28,6 +28,7 @@ MODULES = frozenset(
         "detach",
         "handoff",
         "host_wait",
+        "host_published",
         "host_schedule",
         "compose_wait",
         "pr_json",
@@ -119,7 +120,14 @@ ALLOWED = {
     # which imports `land_tags`, so it sits above both (#4945).
     "land_tags_cli": {"land_tags", "land_reach"},
     # H3.9a: the wait on the hosts a merge reaches. It takes `gate_snapshot` from `tools`.
-    "host_wait": {"landing", "outcome", "tools", "compose_wait", "host_schedule"},
+    "host_wait": {
+        "landing",
+        "outcome",
+        "tools",
+        "compose_wait",
+        "host_published",
+        "host_schedule",
+    },
     "land_platform": {"land_tags"},
     "land_reach": set(),
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
@@ -132,6 +140,7 @@ ALLOWED = {
     # stdlib-only fork record and the verdict words.
     "land_probe": {"detach", "outcome"},
     "compose_wait": {"outcome"},
+    "host_published": {"outcome"},
     "host_schedule": set(),
     "pipeline": {
         "landing",
