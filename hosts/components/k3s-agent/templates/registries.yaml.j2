@@ -1,0 +1,33 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-agent), do not edit
+# on the host.
+#
+# Tells containerd how to reach the in-cluster registry. Without this entry containerd tries
+# HTTPS against localhost:5000, gets a plain-HTTP response, and every pod referencing a
+# locally-built image sits in ImagePullBackOff with a TLS handshake error that reads like a
+# certificate problem rather than a scheme mismatch.
+#
+# The mirror KEYS equal the k3s-server component's, so one image reference
+# ({{ k8s_registry_pull_host }}/<name>:<tag>) is node-portable. The ENDPOINT differs: an agent
+# reaches the registry Service's pinned ClusterIP over flannel, plain HTTP inside the vxlan (an
+# accepted trade-off, see k8s_registry_cluster_ip in group_vars/all.yml), where the registry node
+# reaches the loopback hostPort.
+mirrors:
+  "{{ k8s_registry_pull_host }}":
+    endpoint:
+      - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_port }}"
+  # The ghcr.io pull-through mirror, the registry pod's second listener (D5 Open question 2).
+  # containerd tries it first and then ghcr.io itself, because k3s keeps the default endpoint
+  # after every mirror endpoint. A mirror that is down or GC-scaled to zero therefore never
+  # blocks a pull while the WAN is up. lscr.io shares it (#6257): lscr.io serves ghcr.io's
+  # linuxserver repositories under ghcr.io's token realm, so the same proxy answers its paths
+  # with the same digests.
+{% for upstream in ["ghcr.io", "lscr.io"] %}
+  "{{ upstream }}":
+    endpoint:
+      - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
+{% endfor %}
+  # The docker.io pull-through mirror, its own Deployment behind the same Service (#6257). Same
+  # fallback as the entries above.
+  "docker.io":
+    endpoint:
+      - "http://{{ k8s_registry_cluster_ip }}:{{ k8s_registry_dockerhub_mirror_port }}"

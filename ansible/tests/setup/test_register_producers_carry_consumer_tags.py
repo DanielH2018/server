@@ -172,15 +172,15 @@ def _inherited_tags(docs: dict[str, list]) -> dict[str, frozenset[str]]:
     """Each task file's inherited tags, walked out from every file through static imports.
 
     An IMPORTED file's tasks carry the tags of the import statement, so a file with no `tags:`
-    of its own is still tag-selectable. `setup/k3s`'s `tasks/unit-logging.yml` is the live
-    case: untagged, imported once from `server.yml` under `k3s_server` and once from
-    `agent.yml` under `k3s_agent`, and it registers a drop-in both files then read. Reading it
-    in isolation reported two violations where the invariant holds.
+    of its own is still tag-selectable. `setup/k3s`'s `tasks/unit-logging.yml` was the case
+    that showed it, until H6.5a deleted it: untagged, imported from `server.yml` under
+    `k3s_server` and from `agent.yml` under `k3s_agent`, and it registered a drop-in both files
+    then read. Reading it in isolation reported two violations where the invariant held.
 
     EVERY file is a walk root, not just `tasks/main`. A role's entry point need not be its
     `main`: `k3s-bringup.yml` reaches `tasks/agent.yml` with a play-level `include_role` +
-    `tasks_from:`, so a walk rooted at `main` alone never visits agent.yml's own import of
-    `unit-logging.yml` and reports that import's register as uncovered. Seeding every file can
+    `tasks_from:`, so a walk rooted at `main` alone never visits an import agent.yml makes
+    and reports that import's register as uncovered. Seeding every file can
     only ADD tags, so it cannot invent a violation; what it can do is cover one in a file no
     playbook reaches at all, which is a file whose tasks never run.
 

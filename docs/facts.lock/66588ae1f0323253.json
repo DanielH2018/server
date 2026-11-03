@@ -1,5 +1,5 @@
 {
-  "checksum": "99cf1d263c006d1f70a15da4578f52f351842b54ffcbddf7b89080575950d285",
+  "checksum": "d43e007fa26108637409017be8b3d8bc0596b282ecbdec95e15f715fb8dab009",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/registry/CLAUDE.md#Notable",
   "row": {
@@ -10,7 +10,6 @@
       "ansible/roles/k8s/registry/templates/ghcr-mirror.yaml.j2:DECIDED: its own Deployment": "6e33927e149323bf80fe83b6fef8fff9ed2af5b888eff954b667d474e4a6622d",
       "ansible/roles/k8s/registry/templates/service.yaml.j2:DECIDED: one Service fronting two": "010c158f27f061f1d315ed70cfaa63ce233194a6bc32a611103a504eb9042efe",
       "ansible/roles/k8s/registry/tests/test_ghcr_resume_proxy.py": "837508e494651fa7f2ea1b47a51cb6adeeee0a13ce6b0c98c8e74cc338f2a82a",
-      "ansible/roles/setup/k3s/templates/registries.yaml.j2": "84acc4687f537d52798e72653d71265ac192c40d3cddc15967d19a26887f355f",
       "ansible/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh": "b4ab60ad821c5dfcca3005fde38fe2a9a82c369602d01ddc1bb9bfed2671cd5d",
       "ansible/roles/setup/k8s_host_files/tasks/registry.yml": "9072729272d46e1723d45ad5d4e2494f06f08f152d925765912d6613bc945a0e",
       "ansible/roles/setup/k8s_host_files/templates/dockerhub-mirror-gc-job.yaml.j2": "50aae9abccca429a05f9a12a8bb2e8fa4167f56cda3abd43b23b330c5987f36e",
@@ -21,9 +20,11 @@
       "docs/flux-deploy-plane.md": "807c3deb44c3178e7a6f9fc0bc398a3b748b95c468b14ce9b1b890c8684535d9",
       "docs/registry-push-store-gc.md": "a5745a85123f7a3c05941cfdcf6ba87a5957e0cee80917d0e5f0d43ab774a6ab",
       "docs/target-architecture/monitoring/m6-retire-kuma.md": "521cc9bee40ee23c4f9947b444898dff18c9f2a4f644eeb75419cd9721d8a32c",
+      "hosts/components/k3s-agent/templates/registries.yaml.j2": "9127dcbd3b1a7d0a1b615f14dd959de9a3dd5affc740411f4a55b5e6c05ca3cd",
+      "hosts/components/k3s-server/templates/registries.yaml.j2": "3a86ca7162ddda6bff4be029decc4f613ea49635c225814d0f9a661faf4fd6d9",
       "scripts/renderer/renderer_lib/images.py:ghcr_text": "2d355f1d1aa99f59d01f5bf5c6ab179e1efa8f7d41400ae0b043aeb259ff760d"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "23b647439"
   }
 }

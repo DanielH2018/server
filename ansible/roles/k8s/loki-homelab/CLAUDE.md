@@ -74,7 +74,8 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   level, and it drops kube-router's per-sync IPv6 ipBlock warning by name. That warning was
   95% of the remaining volume. An empty stream on a quiet day is the filter working, so nothing
   watches this stream for freshness. `ansible/tests/k8s/test_alloy_ships_k3s_log.py` runs the
-  filter over real line shapes and holds the path to setup/k3s's `k3s_log_file`.
+  filter over real line shapes and holds the path to the `k3s_log_file` both k3s host components
+  carry.
   **A selector is a double-quoted LogQL string, never a backtick one.** Alloy's match-stage
   parser rejects a backtick string that Loki accepts, and that crash-looped the DaemonSet on
   2026-10-29. The `validate-alert-rules` hook boots the pinned Alloy on the rendered config

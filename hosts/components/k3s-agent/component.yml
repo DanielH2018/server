@@ -1,0 +1,29 @@
+# The k3s agent's same-path files (H6.5a, docs/target-architecture/host/h6-k3s-suc.md, *Steps, as
+# PRs*, item 13). Ansible's tasks/agent.yml wrote each one until H6.5a deleted its task, so dpkg
+# takes over the path on the first install. The agent's flags stay in the installer's unit until
+# H6.5b.
+#
+# The package ships the files and applies nothing. Each file k3s reads at startup carries
+# `activate: manual:k3s-agent.service`, and the host package marks k3s-agent.service `windowed`,
+# so reconcile never restarts the agent. daniel-server's package lists no `k3s-restart`, so the
+# change goes live at the agent's next start: the weekly reboot, a SUC upgrade, or a hand restart.
+# A path k3s does not read at startup (logrotate, tmpfiles.d) carries no activation.
+#
+# FORWARD-ONLY for registries.yaml. Reverting the PR that added a file deletes it, and an agent
+# that starts without registries.yaml pulls every in-cluster image over HTTPS and fails. Return a
+# file to Ansible with the attended procedure in the H6 plan's *Rollback*.
+#
+# ENFORCED: ansible/tests/setup/test_k3s_agent_component.py.
+defaults:
+  # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
+  # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
+  k3s_log_file: /var/log/k3s.log
+files:
+  - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf, activate: "manual:k3s-agent.service"}
+  - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
+  - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
+  - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
+legacy:
+  # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until
+  # reconcile removes it.
+  - {path: /etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf}

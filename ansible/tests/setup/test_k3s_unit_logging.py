@@ -1,33 +1,17 @@
-"""k3s's own output survives the journald cap, on both node types.
+"""k3s's own output needs its log file, because the journal keeps none of it.
 
 `MaxLevelStore=notice` (initial_setup/tasks/system-tuning.yml) drops every priority-info line
 at the source, and every line k3s writes is priority info: logrus and klog emit plain text with
 no `<N>` prefix, so the unit's `SyslogLevel=info` default applies to INFO, WARN and FATA alike.
-A k3s crash loop therefore leaves only systemd's `status=1/FAILURE` lines in the journal, and
-why k3s exited is unrecoverable.
+A k3s crash loop therefore leaves only systemd's `status=1/FAILURE` lines in the journal.
 
-tasks/unit-logging.yml sends the unit's stdout and stderr to a logrotated file through a
-drop-in, for the agent. Since H6.4a the server's equivalent is the homelab-daniel-box package's
-(hosts/components/k3s-server), and ansible/tests/setup/test_k3s_server_component.py holds it. Every failure here is silent — the unit runs, the journal looks as it always did, and
-the next crash loop is the first anyone learns the file stopped being written.
+The drop-ins that send each unit's output to a logrotated file are the host packages' since
+H6.4a (server) and H6.5a (agent). `test_k3s_server_component.py` and
+`test_k3s_agent_component.py` hold them.
 """
 
-import pytest
 from lib import yaml_fast
 from _helpers import SETUP_ROLES, walk_tasks
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
-
-UNIT_LOGGING = K3S_ROLE / "tasks" / "unit-logging.yml"
-DEFAULTS = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
-LOG_FILE = DEFAULTS["k3s_log_file"]
-
-# The unit whose task file must import the drop-in. The installer rewrites
-# /etc/systemd/system/<unit>.service wholesale, so the drop-in is the only placement that
-# survives. The server's drop-in left this file for the package in H6.4a, so the agent is the
-# one unit left here: a daniel-server crash loop is as unrecoverable without it.
-UNITS = {
-    "k3s-agent": K3S_ROLE / "tasks" / "agent.yml",
-}
 
 SYSTEM_TUNING = SETUP_ROLES / "initial_setup" / "tasks" / "system-tuning.yml"
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
@@ -51,125 +35,7 @@ def unit_setting(content: str, key: str) -> str | None:
     return None
 
 
-def logrotate_directives(content: str) -> set[str]:
-    """The bare directives inside the `{ ... }` block, comments dropped."""
-    inside = content.split("{", 1)[1].split("}", 1)[0] if "{" in content else ""
-    return {
-        line.split()[0]
-        for line in inside.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    }
-
-
-def importing_unit(path) -> str | None:
-    """The `k3s_log_unit` a task file hands to unit-logging.yml, or None if it never imports it."""
-    for task in walk_tasks(yaml_fast.safe_load(path.read_text())):
-        if task.get("ansible.builtin.import_tasks") == "unit-logging.yml":
-            return (task.get("vars") or {}).get("k3s_log_unit")
-    return None
-
-
-def rendered(unit: str) -> dict[str, str]:
-    """unit-logging.yml's copy tasks with the two variables it takes substituted."""
-    raw = (
-        UNIT_LOGGING.read_text()
-        .replace("{{ k3s_log_unit }}", unit)
-        .replace("{{ k3s_log_file }}", LOG_FILE)
-    )
-    return copy_tasks(yaml_fast.safe_load(raw))
-
-
 def test_the_journal_still_drops_info_so_the_file_is_load_bearing():
     """If this ever moves to info the file becomes belt-and-braces, not the only copy."""
     tuning = copy_tasks(yaml_fast.safe_load(SYSTEM_TUNING.read_text()))
     assert unit_setting(tuning[JOURNALD_DEST], "MaxLevelStore") == "notice"
-
-
-@pytest.mark.parametrize("unit", sorted(UNITS))
-def test_each_node_type_imports_the_drop_in_for_its_own_unit(unit: str):
-    assert importing_unit(UNITS[unit]) == unit, (
-        f"{UNITS[unit].name} does not import unit-logging.yml with k3s_log_unit={unit}, so "
-        f"that node's k3s output is dropped by MaxLevelStore=notice and a crash loop leaves "
-        f"no reason behind"
-    )
-
-
-@pytest.mark.parametrize("unit", sorted(UNITS))
-def test_the_drop_in_sends_both_streams_to_the_file(unit: str):
-    dropin = rendered(unit)[f"/etc/systemd/system/{unit}.service.d/10-log-to-file.conf"]
-    assert unit_setting(dropin, "StandardOutput") == f"append:{LOG_FILE}", (
-        "StandardOutput is not `append:<k3s_log_file>` — the journald cap drops the stream"
-    )
-    assert unit_setting(dropin, "StandardError") in ("inherit", f"append:{LOG_FILE}"), (
-        "stderr is not routed to the same file; logrus and klog both write to stderr, so "
-        "this is the stream the crash reason is on"
-    )
-
-
-def directory_paths(tasks) -> set[str]:
-    """Every `path` an ansible.builtin.file task creates as a directory."""
-    return {
-        task["ansible.builtin.file"]["path"]
-        for task in walk_tasks(tasks)
-        if isinstance(task.get("ansible.builtin.file"), dict)
-        and task["ansible.builtin.file"].get("state") == "directory"
-    }
-
-
-@pytest.mark.parametrize("unit", sorted(UNITS))
-def test_the_drop_in_directory_is_created_before_the_copy(unit: str):
-    """copy: does not create parents, and no `.d/` exists for a unit without drop-ins."""
-    raw = UNIT_LOGGING.read_text().replace("{{ k3s_log_unit }}", unit)
-    tasks = yaml_fast.safe_load(raw)
-    dropin_dir = f"/etc/systemd/system/{unit}.service.d"
-    assert dropin_dir in directory_paths(tasks), (
-        f"no task creates {dropin_dir}, so the drop-in copy fails on a host that has never "
-        "had one — which was both hosts when this was written"
-    )
-    names = [t["name"] for t in walk_tasks(tasks) if "name" in t]
-    made = next(i for i, n in enumerate(names) if "drop-in directory" in n)
-    copied = next(i for i, n in enumerate(names) if n.startswith("Send stdout"))
-    assert made < copied, "the directory is created after the file that needs it"
-
-
-@pytest.mark.parametrize("unit", sorted(UNITS))
-def test_rotation_truncates_in_place_because_systemd_holds_the_fd(unit: str):
-    directives = logrotate_directives(rendered(unit)[f"/etc/logrotate.d/{unit}"])
-    assert "copytruncate" in directives, (
-        "without copytruncate a rename leaves the unit writing to the rotated inode until "
-        "its next restart, and the live file stays empty"
-    )
-    assert "create" not in directives, (
-        "`create` alongside copytruncate is a contradiction"
-    )
-    assert "maxsize" in directives and "rotate" in directives, (
-        "the crash-loop shape (~3000 restarts in 5h on 2026-09-09) needs a size bound as well "
-        "as a history bound"
-    )
-
-
-# ── The rejecting halves ──────────────────────────────────────────────────────────────────
-
-
-def test_a_drop_in_that_leaves_stdout_in_the_journal_is_detected():
-    assert unit_setting("[Service]\nStandardError=inherit\n", "StandardOutput") is None
-
-
-def test_a_task_file_that_never_imports_the_drop_in_is_detected():
-    assert importing_unit(SYSTEM_TUNING) is None
-
-
-def test_a_missing_drop_in_directory_is_detected():
-    tasks = [
-        {
-            "name": "x",
-            "ansible.builtin.file": {"path": "/var/log/k3s.log", "state": "touch"},
-        }
-    ]
-    assert "/etc/systemd/system/k3s.service.d" not in directory_paths(tasks)
-
-
-def test_a_rename_rotation_is_detected():
-    stanza = "/var/log/x.log {\n  daily\n  rotate 4\n  create 0640 root adm\n}\n"
-    directives = logrotate_directives(stanza)
-    assert "copytruncate" not in directives and "create" in directives

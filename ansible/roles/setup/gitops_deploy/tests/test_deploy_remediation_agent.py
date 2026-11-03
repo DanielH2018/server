@@ -1,9 +1,10 @@
 """The k3s remediation names the agent join beside `--tags k3s`, which never reaches an agent.
 
 `k3s-bringup.yml` applies `tasks/agent.yml` only from the join plays, which match no host
-without `-e join_agent=<host>`. #5551 changed `templates/registries.yaml.j2`, which both
-`server.yml` and `agent.yml` render, and the printed `--tags k3s` left daniel-server's
+without `-e join_agent=<host>`. #5551 changed the role's `registries.yaml.j2`, which both
+`server.yml` and `agent.yml` rendered then, and the printed `--tags k3s` left daniel-server's
 `registries.yaml` without the `ghcr.io` mirror while the `manual_plane` line cleared (#5606).
+Both nodes' host packages ship that file since H6.5a.
 
 The rows here come from the real derivation, `RoleIndex` read with `k3s-bringup.yml`, which
 resolves the join play's `include_role ... tasks_from: agent` to `k3s_agent` (#5628).
@@ -41,31 +42,6 @@ def _ordered(text: str, *parts: str) -> None:
         f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {text}"
     )
     assert at == sorted(at), f"{parts} out of order in {text}"
-
-
-def test_the_agents_registries_template_prints_the_join_then_the_clear():
-    """`registries.yaml.j2`: one join per agent host, then the clear, and no server command.
-
-    #5551 changed this template while both `server.yml` and `agent.yml` rendered it, and the
-    printed `--tags k3s` left daniel-server's `registries.yaml` without the `ghcr.io` mirror
-    (#5606). Since H6.4a daniel-box's package ships the server's copy, so only `agent.yml`
-    renders this template and the row is `k3s_agent` alone. `readers_of` is what
-    `narrow_setup.path_tags` asks of a changed template. `broad_remediation` is what
-    `deploy.sh` and `land.sh` print from the change set itself, with no row, so it keeps the
-    whole-role tag and the join.
-    """
-    cs = services_from_changed_paths([f"{K3S}/templates/registries.yaml.j2"])
-    assert cs.setup_roles == {"k3s"}
-    row = _index().readers_of("registries.yaml.j2")
-    assert row == {"k3s_agent"}
-    joins = [f"-e join_agent={host} --tags k3s_agent`" for host in _agent_hosts()]
-    ledger = manual_plane_remediation(cs.setup_roles, {"k3s": row})
-    _ordered(ledger, *joins, "clear-owed manual_plane k3s --applied k3s_agent`")
-    assert "k3s-bringup.yml --tags k3s_server`" not in ledger
-    broad = broad_remediation(
-        cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks
-    )
-    _ordered(broad, "git merge --ff-only", "k3s-bringup.yml --tags k3s`", *joins)
 
 
 def test_a_server_only_change_set_prints_no_agent_command_once_narrowed():

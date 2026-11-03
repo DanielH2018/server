@@ -55,7 +55,6 @@ MUST_FIND = (
     "/etc/systemd/system/kuma-check-live-drift.timer",
     "/etc/systemd/system/kuma-check-live-drift-boot.service",
     "/etc/systemd/system/renovate-agent-land@.service",
-    "/etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf",
 )
 
 
@@ -105,12 +104,7 @@ def role_destinations(task_lists: list[list[dict]]) -> set[str]:
     pattern cannot match it and the census fails by naming it.
     """
     found: set[str] = set()
-    k3s_units: set[str] = set()
     tasks = [t for task_list in task_lists for t in leaf_tasks(task_list)]
-    for task in tasks:
-        variables = task.get("vars") or {}
-        if "k3s_log_unit" in variables:
-            k3s_units.add(str(variables["k3s_log_unit"]))
     for name, _ in _wired(
         tasks, "common/tasks/kuma_check_timer.yml", "kuma_check_name"
     ):
@@ -135,10 +129,6 @@ def role_destinations(task_lists: list[list[dict]]) -> set[str]:
             if "{{ item }}" in raw:
                 items = _loop_values(task)
                 values = [raw.replace("{{ item }}", i) for i in items or []] or [raw]
-            if "{{ k3s_log_unit }}" in raw:
-                values = [
-                    raw.replace("{{ k3s_log_unit }}", u) for u in sorted(k3s_units)
-                ]
             found |= {v for v in values if v.startswith(PAGED_PREFIXES)}
     return found
 

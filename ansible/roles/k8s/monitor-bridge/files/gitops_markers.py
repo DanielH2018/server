@@ -365,8 +365,8 @@ def maximal_apply_warning(role: str, tags) -> str:
 #
 # DECIDED: a row's agent-join tag goes on the join command and never on the server one (#5628).
 # `narrow_setup.py` resolves the join play's `include_role ... tasks_from: agent`, so a change
-# reaching `tasks/agent.yml` narrows to `k3s_agent`, and `templates/registries.yaml.j2`, which
-# both halves render, to `k3s_agent,k3s_server`. `--tags k3s_agent` on the server play selects
+# reaching `tasks/agent.yml` narrows to `k3s_agent`, and one reaching a file both halves read
+# narrows to `k3s_agent,k3s_server`. `--tags k3s_agent` on the server play selects
 # nothing and exits 0, so every printer splits the row through `server_tags` and
 # `agent_join_cmds`: an agent-only row prints the join alone. The whole-role tag still gets
 # both commands, because a refusal says nothing about which half the change reached. Pinned by
