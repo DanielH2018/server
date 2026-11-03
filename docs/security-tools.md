@@ -8,7 +8,7 @@ This document covers the security and monitoring tools deployed by `ansible/role
 
 **What it does:** Scans the system for rootkits, backdoors, and suspicious files. Checks whether system binaries (`ls`, `ps`, `netstat`, etc.) have been replaced by trojaned versions, looks for hidden processes or ports, and checks for files/directories that rootkits commonly create.
 
-**Schedule:** Weekly, Wednesday at 2:00 AM, on every host (staggered off the Monday AIDE check). The cron runs `/usr/local/bin/rkhunter-check.sh`, which writes the warnings to syslog tagged `rkhunter` and pushes a verdict to that host's **rkhunter Scan (&lt;host&gt;)** Kuma tile.
+**Schedule:** Weekly, Wednesday at 2:00 AM, on every host (staggered off the Monday AIDE check). The cron runs `/usr/local/bin/rkhunter-check.sh`, which writes the warnings to syslog tagged `rkhunter` and writes a verdict textfile that `RkhunterScanFailed` and `RkhunterScanNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
 
 **What the tile means.** rkhunter exits 1 both when it finds a warning and when it fails, so the script reads `/var/log/rkhunter.log` instead (#4598). A scan completed only if this run rewrote the log and the log holds its `System checks summary`.
 
@@ -20,7 +20,7 @@ This document covers the security and monitoring tools deployed by `ansible/role
 | completed with a warning | DOWN | `rkhunter warned` with the counts and the first warning |
 | did not complete | DOWN | rkhunter's exit code and its first error line |
 
-No push for a week and 2 hours also reads DOWN, which means the cron stopped running or the scan never finished.
+No verdict for a week and 2 hours also pages, through `RkhunterScanNotReporting`, which means the cron stopped running or the scan never finished.
 
 Every warning pages (#4638). Before that change, every host warned every week from two benign causes. rkhunter reported `/etc/.updated` and `/etc/.resolv.conf.systemd-resolved.bak` as hidden files on all three hosts. It also reported `PermitRootLogin` unset on daniel-pi, because rkhunter reads only the main `/etc/ssh/sshd_config` and the Pi hardens a drop-in. `initial_setup` renders `/etc/rkhunter.conf.local` to allowlist both causes, so a healthy week has no warnings. The `DECIDED:` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. The script's verdict goes to syslog tagged `rkhunter-check` as `status=<up|down> <message>`.
 
@@ -72,7 +72,7 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 
 **What it does:** Takes a cryptographic snapshot of the filesystem (hashes, permissions, ownership, timestamps) and detects any additions, modifications, or deletions since that snapshot was taken.
 
-**Schedule:** Weekly, Monday at 3:00 AM, on every host. `homelab-aide-check.timer` runs `/usr/lib/homelab/aide-check`, which writes the report to syslog tagged `aide` and pushes a verdict to that host's **AIDE Integrity (&lt;host&gt;)** Kuma tile.
+**Schedule:** Weekly, Monday at 3:00 AM, on every host. `homelab-aide-check.timer` runs `/usr/lib/homelab/aide-check`, which writes the report to syslog tagged `aide` and writes a verdict textfile that `AideCheckFailed` and `AideCheckNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
 
 Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing.
 
@@ -85,7 +85,7 @@ Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no defa
 | 1-7 | at least one no package explains | DOWN, naming the first three | kept |
 | anything else | not read | DOWN, with AIDE's first error line | kept |
 
-No push for a week and 6 hours also reads DOWN, which means the timer stopped running or the scan never finished.
+No verdict for a week and 6 hours also pages, through `AideCheckNotReporting`, which means the timer stopped running or the scan never finished.
 
 A difference pages when it falls in one of these and no package explains it:
 
@@ -105,7 +105,7 @@ Advancing the baseline after every UP run makes each report cover one week. A DO
 sudo journalctl -t aide-check --since -7d | grep unexplained
 ```
 
-Once every path is accounted for, accept the run's database as the baseline. This takes the scan lock and moves `aide.db.new` over `aide.db`. It scans nothing and pushes nothing, and the tile clears on the next weekly run:
+Once every path is accounted for, accept the run's database as the baseline. This takes the scan lock and moves `aide.db.new` over `aide.db`. It scans nothing and writes no verdict, and the alert clears on the next weekly run:
 
 ```bash
 sudo /usr/lib/homelab/aide-check --accept

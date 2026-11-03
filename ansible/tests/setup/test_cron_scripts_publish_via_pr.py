@@ -427,25 +427,21 @@ _LIBRARY_EXEMPT: dict[str, str] = {
 }
 
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
-# changed. Both are shell scripts that source kuma-push-lib.sh, so they also anchor
-# test_every_shell_push_script_sources_the_shared_library: it skips every file that is not a
-# `.sh.j2`, and would pass on an empty corpus. M6 batch B6c's Cutover-2 took registry-gc.sh.j2,
-# the member that stood here, out of the corpus. B9's Cutover-2 takes these two out, and the
-# same commit then has to re-decide this set and the anchor.
+# changed. M6 batch B9's Cutover-2 took the last two shell push scripts, aide-check.sh.j2 and
+# rkhunter-check.sh.j2, out of the corpus. The two templates left carry a push URL but invoke no
+# curl of their own: authelia's config-secret (the bypass regex) and loki-homelab's config.alloy.
+# No `.sh.j2` member stands here any more, so
+# test_every_shell_push_script_sources_the_shared_library skips every file and passes on any
+# corpus. C-3a deletes the library, and that test with it.
 _EXPECTED_IN_CORPUS = {
-    "ansible/roles/setup/initial_setup/templates/aide-check.sh.j2",
-    "ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2",
+    "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
+    "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2",
 }
 
-# The corpus also holds templates that carry a push URL but invoke no curl of their own, such as
-# the authelia bypass regex. They are counted rather than named, so the floor is what watches
-# them. 3 against a measured 4 (2026-11-02, after M6 batch B6c's Cutover-2 dropped the push from
-# registry-gc.sh.j2) keeps the slack M3 chose: about two-thirds of the real count, as 23 against
-# 37 after its PR 5 dropped disk-health.sh.j2. The four left are authelia's config-secret,
-# loki-homelab's config.alloy and the aide and rkhunter checks. A slacker floor would let two of
-# them vanish before anything went red. When a later M6 batch shrinks the corpus again,
-# re-measure rather than estimate, because a floor above the real count fails master CI.
-_MIN_CORPUS = 3
+# The floor is the measured count: 2 on 2026-11-03, after B9's Cutover-2. When a later M6 batch
+# shrinks the corpus again, re-measure rather than estimate, because a floor above the real count
+# fails master CI.
+_MIN_CORPUS = 2
 
 
 def push_corpus() -> dict[Path, str]:

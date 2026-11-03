@@ -69,12 +69,13 @@ def test_the_firmware_update_runs_the_wrapper_and_ships_only_on_a_fwupd_host(pac
         assert f"/usr/lib/systemd/system/{FIRMWARE}" not in files, other
 
 
-def test_the_scans_read_this_hosts_own_tokens(package):
+def test_the_scans_load_no_credential_but_the_package_lists_this_hosts_tokens(package):
+    # M6 batch B9's Cutover-2 dropped the pushes. The package keeps the keys until B9's token PR,
+    # because the host's SOPS file must match the list.
     for scan in ("rkhunter", "aide"):
         unit = _text(package, f"/usr/lib/systemd/system/homelab-{scan}-check.service")
-        key = f"{scan}_daniel_box_push_token"
-        assert f"LoadCredential={scan}_push_token:/run/credstore/{key}\n" in unit
-        assert key in package.credentials
+        assert "LoadCredential" not in unit and "homelab-secrets" not in unit
+        assert f"{scan}_daniel_box_push_token" in package.credentials
     assert "healthchecks_ping_key" in package.credentials
 
 

@@ -15,12 +15,10 @@ from _shell_render import render_shell_script
 
 SCRIPT = ("setup", "initial_setup", "aide-check.sh.j2")
 
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 # The real library, so the scan writes its textfile under TEXTFILE_DIR rather than the host's
 # own directory, which node_exporter scrapes.
 REAL_CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
-REAL_ENV = "/etc/homelab/aide-kuma-push.env"
 REAL_AIDE = "/usr/bin/nice -n19 /usr/bin/ionice -c3 /usr/bin/aide"
 REAL_CAP = "REPORT_MAX_LINES=2000"
 REAL_LOCK = "LOCK_FILE=/run/lock/aide-check.lock"
@@ -202,6 +200,20 @@ fi
 """
 
 
+def verdict_of(logged: list[str], tag: str) -> list[str] | None:
+    """The [status, message] pair of the `status=` line a script logged under `tag`, or None.
+
+    The scans push nothing since M6 batch B9's Cutover-2, so the logged verdict is the one place
+    a run's status and message are readable.
+    """
+    prefix = f"{tag}: status="
+    for line in logged:
+        if line.startswith(prefix):
+            status, _, message = line.removeprefix(prefix).partition(" ")
+            return [status, message]
+    return None
+
+
 def _dpkg_log_lines(packages: tuple[str, ...], epoch: int) -> str:
     """dpkg.log as a package run writes it, stamped in local time as dpkg does.
 
@@ -219,7 +231,6 @@ def _run_check(
     tmp_path,
     report: str,
     rc: int,
-    token: str = "stubtoken",
     cap: int = 2000,
     lock_held: bool = False,
     args: tuple[str, ...] = (),
@@ -234,8 +245,7 @@ def _run_check(
 ):
     """Render aide-check.sh and run it with aide stubbed to print `report` and exit `rc`.
 
-    Only absolute paths are repointed: the push lib (a recording stub), the token env file, the
-    lock file, the nice/ionice/aide invocation, the AIDE database directory, and the dpkg
+    Only absolute paths are repointed: the lock file, the nice/ionice/aide invocation, the AIDE database directory, and the dpkg
     database and filesystem root `_fake_host` writes. `lock_held` holds the lock from this
     process for the run, as a scan still running from the previous week would. The aide stub
     writes aide.db.new as `--update` does; `baseline` says whether aide.db exists beforehand.
@@ -245,16 +255,15 @@ def _run_check(
     and `packages_ran_before` writes the same lines a month before it, in the rotated log.
     `pending` leaves an aide.db.new from an earlier run. `stubs` adds fake binaries in front of PATH.
     `ignore_sigpipe` starts the script with SIGPIPE ignored, as systemd starts a service.
-    The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, pushed lines or
-    None, logged lines, whether aide ran).
+    The script's stderr lands in `tmp_path / "stderr"`. Returns (exit code, the verdict as a
+    [status, message] pair read from the `status=` line the script logs, or None when it logged
+    none, logged lines, whether aide ran).
     """
     body = render_shell_script(
         *SCRIPT,
         overrides={"domain": "example.test", "k3s_metallb_ingress_vip": "10.0.0.240"},
     )
     for needle in (
-        REAL_LIB,
-        REAL_ENV,
         REAL_AIDE,
         REAL_CAP,
         REAL_LOCK,
@@ -292,12 +301,6 @@ def _run_check(
     if pending:
         (aide_dir / "aide.db.new").write_text("reviewed\n")
 
-    lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text(
-        'kuma_push() { printf \'%s\\n%s\\n\' "$1" "$2" > "$KUMA_PUSH_OUT"; }\n'
-    )
-    env_file = tmp_path / "push.env"
-    env_file.write_text(f"AIDE_PUSH_TOKEN={token}\n")
     lock_file = tmp_path / "aide-check.lock"
     report_file = tmp_path / "report"
     report_file.write_text(report)
@@ -307,9 +310,7 @@ def _run_check(
         f'[ {rc} -le 7 ] && echo "this week" > {aide_dir}/aide.db.new\nexit {rc}\n',
     )
     body = (
-        body.replace(REAL_LIB, str(lib))
-        .replace(REAL_CHECK_LIB, str(CHECK_LIB))
-        .replace(REAL_ENV, str(env_file))
+        body.replace(REAL_CHECK_LIB, str(CHECK_LIB))
         .replace(REAL_AIDE, str(aide))
         .replace(REAL_CAP, f"REPORT_MAX_LINES={cap}")
         .replace(REAL_LOCK, f"LOCK_FILE={lock_file}")
@@ -319,7 +320,7 @@ def _run_check(
         .replace(REAL_FS_ROOT, f"FS_ROOT={fs}")
     )
     script = write_exec(tmp_path / "aide-check.sh", body)
-    pushed, logged, ran = (tmp_path / n for n in ("pushed", "logged", "ran"))
+    logged, ran = (tmp_path / n for n in ("logged", "ran"))
     textfile_dir = tmp_path / "textfile"
     textfile_dir.mkdir(exist_ok=True)
     with open(lock_file, "w") as holder:
@@ -331,7 +332,6 @@ def _run_check(
             else [str(script), *args],
             env={
                 **os.environ,
-                "KUMA_PUSH_OUT": str(pushed),
                 "TEXTFILE_DIR": str(textfile_dir),
                 "LOGGER_OUT": str(logged),
                 "AIDE_RAN": str(ran),
@@ -339,9 +339,5 @@ def _run_check(
             stub_bin=fake_bin(tmp_path / "bin", logger=LOGGER_STUB, **(stubs or {})),
         )
     (tmp_path / "stderr").write_text(result.stderr)
-    return (
-        result.returncode,
-        pushed.read_text().splitlines() if pushed.exists() else None,
-        logged.read_text().splitlines() if logged.exists() else [],
-        ran.exists(),
-    )
+    lines = logged.read_text().splitlines() if logged.exists() else []
+    return result.returncode, verdict_of(lines, "aide-check"), lines, ran.exists()

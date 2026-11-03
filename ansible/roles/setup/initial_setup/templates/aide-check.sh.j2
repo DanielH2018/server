@@ -7,13 +7,12 @@
 # a packaged host, runs it as root, Monday 03:00. It runs `aide --update` against
 # /var/lib/aide/aide.db at idle CPU and IO priority, writes the report to the journal under the
 # `aide` tag, classifies every difference (below), writes the verdict to the node_exporter
-# textfile as check `aide-check`, and pushes it to this host's "AIDE Integrity (<host>)" Kuma
-# monitor using the token in /etc/homelab/aide-kuma-push.env or the unit's credential. Running it
-# by hand is safe, but it takes as long as the scheduled run and it pushes.
+# textfile as check `aide-check`, where AideCheckFailed and AideCheckNotReporting read it. Running
+# it by hand is safe, but it takes as long as the scheduled run and it rewrites the textfile.
 #
 # --accept: after a human has reviewed a DOWN run's unexplained changes, moves that run's
 # aide.db.new over aide.db, so the next run reports against the accepted state. It scans nothing
-# and pushes nothing; the tile clears on the next run.
+# and writes no verdict; the alert clears on the next run.
 #
 # WHY A SCRIPT (#4594). The cron used to pipe `aide --check` straight into `logger -t aide`. The
 # pipeline's exit status was logger's, and nothing read the tag, so every host exited
@@ -64,11 +63,6 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source {{ initial_setup_host_lib_dir }}/kuma-push-lib.sh || {
-  logger -t aide-check "kuma-push-lib.sh missing — run initial_setup or install the host package"
-  exit 1
-}
-# shellcheck source=/dev/null
 source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
   logger -t aide-check "homelab-check-lib.sh missing — run initial_setup or install the host package"
   exit 1
@@ -76,15 +70,10 @@ source {{ initial_setup_host_lib_dir }}/homelab-check-lib.sh || {
 
 # The longest legitimate gap between two textfile writes: the timer runs weekly (Monday 03:00,
 # hosts/components/integrity-scans/units/homelab-aide-check.timer), 604800s, and the extra 6h
-# is the slack the "AIDE Integrity" tile keeps (interval 626400) for a run that takes longer
-# than the last. Move it with the timer (#6168).
+# is the slack for a run that takes longer than the last. The deleted Uptime Kuma tile kept the
+# same 626400. Move it with the timer (#6168).
 # ansible/tests/setup/test_integrity_scan_rule_literals.py pins the rules' literals to it.
 DEADLINE_S=626400
-
-KUMA_HOST="uptime-kuma.local.{{ domain }}"
-# Pinned to the cluster ingress VIP like every sibling: Kuma serves from the k8s edge and the
-# push must not depend on DNS.
-KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 
 # The report goes to the journal one line per entry. A baseline that predates months of package
 # upgrades reports every file they touched, which can run to thousands of lines. Past this many
@@ -156,43 +145,21 @@ DERIVED_CACHES='/dropin\.cache$|^/(usr/)?lib/udev/hwdb\.bin$|^/(usr/)?lib/locale
 DERIVED="(${USRMERGE}|${DERIVED_KERNEL}|${DERIVED_GRUB}|${DERIVED_FIRMWARE}|${DERIVED_PYCACHE}|${DERIVED_CACHES})"
 # dpkg.log timestamps are local time. The window opens this long before aide.db was written,
 # because the previous scan wrote it at its end and a package run during that scan is in neither
-# its baseline nor the window otherwise. The tile's own slack is the same 6h.
+# its baseline nor the window otherwise. The deadline's own slack is the same 6h.
 WINDOW_SLACK_S=21600
 DPKG_LOG=/var/log/dpkg.log
-# How many unexplained paths the tile's message names; the journal lists them all.
+# How many unexplained paths the verdict's message names; the journal lists them all.
 MSG_PATHS=3
 UNEXPLAINED_MAX_LINES=500
 
-# Sourced, never inlined: this script lands 0755, so an inlined token would be readable by every
-# local account.
-AIDE_PUSH_TOKEN=""
-# A packaged unit passes the token as the credential `aide_push_token`; an Ansible-run host
-# sources the env file instead.
-if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/aide_push_token" ]]; then
-  AIDE_PUSH_TOKEN="$(<"$CREDENTIALS_DIRECTORY/aide_push_token")"
-else
-  # shellcheck source=/dev/null
-  [[ -r /etc/homelab/aide-kuma-push.env ]] && . /etc/homelab/aide-kuma-push.env
-fi
-
-# Logs the verdict, then pushes it. The `|| logger` inside kuma_push only fires when the curl
-# fails, so a successfully-pushed DOWN would otherwise leave no durable record of the
-# verdict in syslog or Loki. NOTICE rather than INFO — journald here
-# caps MaxLevelStore=notice, so an info line is dropped from the journal and from forwarding.
+# Logs the verdict, then writes the textfile the host-checks rules read. The log line is
+# unconditional, so a DOWN leaves a durable record in syslog and Loki beside the textfile. NOTICE
+# rather than INFO — journald here caps MaxLevelStore=notice, so an info line is dropped from the
+# journal and from forwarding.
 report() {
   logger -p daemon.notice -t aide-check "status=${STATUS} ${MSG}"
-  # The textfile verdict, before the push: kuma_push retries for over 60s on a failed push, and
-  # the file must not wait on Kuma. A failed write logs and the run goes on to its push.
   write_check_textfile aide-check "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
     || logger -t aide-check "textfile write failed (status=${STATUS})"
-  if [[ -z "$AIDE_PUSH_TOKEN" ]]; then
-    # Names the ENV VAR, not the registry secret: the release-group secrets guard whole-word
-    # matches registry names against raw template text and cannot tell a log line from a render.
-    logger -t aide-check "AIDE_PUSH_TOKEN not set — skipping push (see /add-secret)"
-  else
-    kuma_push "$STATUS" "$MSG" "https://${KUMA_HOST}/api/push/${AIDE_PUSH_TOKEN}" \
-      "$KUMA_HOST" "$KUMA_RESOLVE_IP" aide-check
-  fi
 }
 
 # Moves aide.db.new over aide.db. Refuses when aide.db is missing, so a deleted baseline stays an
@@ -225,7 +192,7 @@ if [[ "$MODE" == accept ]]; then
     exit 1
   fi
   logger -p daemon.notice -t aide-check "baseline accepted by hand; the next run reports against it"
-  echo "accepted ${AIDE_DIR}/aide.db.new as the baseline; the tile clears on the next run"
+  echo "accepted ${AIDE_DIR}/aide.db.new as the baseline; the alert clears on the next run"
   exit 0
 fi
 

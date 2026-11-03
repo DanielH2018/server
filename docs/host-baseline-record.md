@@ -142,9 +142,10 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   AIDE Monday 03:00 and rkhunter Wednesday 02:00, because they used to overlap at full priority
   for over an hour each on the Pi. The AIDE database init is the slow part of a first run on any
   host — about 8 minutes, with progress monitoring, so expect a long pause rather than a hang.
-- **The AIDE and rkhunter crons report to Kuma.** `aide-check.sh` keeps AIDE's exit code
-  and pushes one "AIDE Integrity" tile per host. An error exit pushes DOWN (#4594). A difference
-  pushes DOWN only when it is in a paged tree and no package's digest explains it, because
+- **The AIDE and rkhunter scans report through the `host-checks` rules.** `aide-check.sh` keeps
+  AIDE's exit code and writes one textfile verdict per host. It pushed one "AIDE Integrity" tile
+  per host until M6 batch B9's Cutover-2. An error exit reads DOWN (#4594). A difference
+  reads DOWN only when it is in a paged tree and no package's digest explains it, because
   package upgrades change files every week (#4599). The script advances the baseline after
   every UP run and keeps it on a DOWN until `aide-check --accept`. `docs/security-tools.md`
   has the table and the review steps. The script runs from the cron rather than
@@ -158,14 +159,14 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   M6's batch B9 cuts the tiles over. A cron moved without its `DEADLINE_S`, its tile and its
   rules fails `ansible/tests/setup/test_integrity_scan_rule_literals.py`.
 - **`aide-check.sh` runs one scan at a time.** It takes `/run/lock/aide-check.lock` with
-  `flock -n`, and a run that finds the lock held pushes DOWN without starting a second scan.
-  The tile's deadline counts from its last push, so a scan that never finishes stays silent
+  `flock -n`, and a run that finds the lock held reads DOWN without starting a second scan.
+  The deadline counts from the last verdict, so a scan that never finishes stays silent
   until then; the lock makes the next Monday's run report it instead. On 2026-10-19 daniel-box
   started a scan that was still running 35 hours later, killed by hand (#5785).
 - **`rkhunter-check.sh` reads completion from `/var/log/rkhunter.log`, not from the exit code**
   (#4598). rkhunter exits 1 on a warning and on an error alike, so a scan completed only if this
-  run rewrote the log and the log holds its summary. It pushes one "rkhunter Scan" tile per host:
-  DOWN on a scan that did not complete, and DOWN on any warning, suspect file or possible
+  run rewrote the log and the log holds its summary. It wrote one "rkhunter Scan" tile per host
+  until B9's Cutover-2, and now writes one textfile verdict: DOWN on a scan that did not complete, and DOWN on any warning, suspect file or possible
   rootkit (#4638). `/etc/rkhunter.conf.local` exempts the warnings every host raised every
   week, so a healthy week has none. Its `ALLOW_SSH_ROOT_USER` follows whether the main
   `sshd_config` sets `PermitRootLogin`, because rkhunter reads no drop-in.

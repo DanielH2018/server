@@ -5,10 +5,10 @@
 # in place through `role: initial_setup` until the last host PR moves them, so the hosts that still
 # apply the role cannot fork them.
 #
-# Each push token arrives through `LoadCredential=` from /run/credstore/, which homelab-secrets
-# fills from the host's SOPS file. The keys stay per host (`rkhunter_<host>_push_token`,
-# `aide_<host>_push_token`), so each host package lists its own two in `credentials:`. Two hosts on
-# one token would let one host's `up` hide another's missing check (#952).
+# No unit loads a credential, because M6 batch B9's Cutover-2 dropped the Kuma pushes. Each host
+# package still lists its own `rkhunter_<host>_push_token` and `aide_<host>_push_token` under
+# `credentials:`, because the host's SOPS file must match that list; B9's token PR retires all six
+# together.
 #
 # What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs these once on a
 # host whose package ships the two timers, and the live hosts already hold all three.
@@ -30,19 +30,17 @@
 # Autonomous-role contract (each scan runs weekly with no human in the loop). Both read the
 # filesystem and report; the AIDE check also advances its own baseline.
 #
-# - Scope / exclusions: `rkhunter --check` and `aide --update` at idle CPU and IO priority, one
-#   Kuma push each to this host's own monitor, and the `rkhunter-check` and `aide-check` textfiles
-#   in node_exporter's textfile directory. The AIDE check moves `aide.db.new` over `aide.db` after
+# - Scope / exclusions: `rkhunter --check` and `aide --update` at idle CPU and IO priority, and
+#   the `rkhunter-check` and `aide-check` textfiles in node_exporter's textfile directory. The AIDE check moves `aide.db.new` over `aide.db` after
 #   a run whose every difference a package explains (#4599). It never advances on a DOWN, and
 #   never creates an `aide.db` that is missing. Nothing reaches another host.
 # - Mode (explicit and reversible): each timer's enable link arms it. Dropping the component from a
-#   host package stops both timers on the install that drops it. An unset credential skips the push
-#   and nothing else. A DOWN on an unexplained change stays DOWN until an operator reviews it and
+#   host package stops both timers on the install that drops it. A DOWN on an unexplained change stays DOWN until an operator reviews it and
 #   runs `/usr/lib/homelab/aide-check --accept`.
 # - Authoritative sources: AIDE's own exit code and report, dpkg's file lists and digests, and
 #   rkhunter's log summary; each script's header has why the exit code alone cannot say.
-# - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal, the Kuma
-#   push, and the textfile the `host-checks` rule group reads (#6168).
+# - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal and the
+#   textfile the `host-checks` rule group reads (#6168).
 role: initial_setup
 defaults:
   initial_setup_host_lib_dir: /usr/lib/homelab
