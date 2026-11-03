@@ -118,6 +118,9 @@ def test_the_join_refuses_an_agent_whose_package_is_not_installed(package):
     """A fresh agent that joins before its package starts with no registries.yaml."""
     guarded = asserted_before_install(load_tasks(K3S_ROLE / "tasks" / "agent.yml"))
     assert guarded & STARTUP_FILES, guarded
+    assert CONFIG in guarded, (
+        "a bare `agent` started without the flags autodetects its node IP"
+    )
     assert guarded <= set(package.files)
 
 
