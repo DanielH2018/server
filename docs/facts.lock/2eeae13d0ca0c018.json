@@ -1,5 +1,5 @@
 {
-  "checksum": "7586db6a3dfdc6ec5e15580f9c977f57ab06ed2d7ff5c3a8050d6a85c3277803",
+  "checksum": "6c44413ba554e6a2286fda72ac33255ea135a88af6e002967ce6ee222d7b2f91",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "CLAUDE.md#The procedure",
   "row": {
@@ -7,9 +7,9 @@
       "ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict": "129eb63e16f709f2d8b973017bb9a9cda2feaf17df7d0903426f540d8521b8dc",
       "docs/landing.md": "7933f9f7ba643d82bfba99ad1fe7a11dafe6a34dbc23c588838c482d406e7e27",
       "hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS": "c5f45b668f4c37fa1b5726ce80aad2b21bd09f64126a74615b4becf98b6a3114",
-      "scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts": "1b6ee2ab6f462431f699d573e226e23a3fd3124c2a49697ee52860a15636c826"
+      "scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts": "83ee2d4aed0e4cc336f5021629390ac0d8ccc49639f71b8d072a6334c37564b9"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "9a300c025"
   }
 }

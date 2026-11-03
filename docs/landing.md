@@ -817,6 +817,17 @@ It ends `deferred` in three cases:
 - The host is still unsettled past its deadline. The line gives the host's last success
   timestamp.
 
+Before it ends `deferred` in any of the three, it reads the builder's two series from
+daniel-box's textfile exporter, `homelab_repo_published_info` and
+`homelab_builder_unbuilt_since_timestamp_seconds`, the series `probe.py builder` prints. When
+the builder's reason is neither `ok` nor `canary`, and no `homelab-<host>` version it publishes
+is the merge commit or a descendant, no updater fire can apply the merge. The landing then ends
+`unbuilt`, exit 75, naming the reason and the last version published for that host. Fix the
+builder, then re-run the same `land.sh` command. During the builder outage of 2026-11-02, five
+landings read `deferred` instead and hid it (#7024). An `ok` or `canary` builder that has not
+reached the merge is lagging by design, so that landing stays `deferred`. A series Prometheus
+does not report leaves it `deferred` too, because an unread source proves nothing.
+
 ## `nothing-to-deploy`
 
 Decided from the PR's file list right after the merge, before any CI wait: a PR that reaches no

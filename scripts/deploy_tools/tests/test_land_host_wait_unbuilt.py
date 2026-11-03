@@ -146,3 +146,29 @@ def test_a_host_past_its_deadline_with_nothing_published_is_not_deferred():
     assert outcome is not None
     assert outcome.verdict != Verdict.DEFERRED
     assert f"0.6283+g{BEFORE}" in outcome.detail
+
+
+def test_a_healthy_builder_that_has_not_reached_the_merge_stays_deferred():
+    for reason in ("ok", "canary"):
+        outcome = _ends_with([_published("homelab-daniel-pi", BEFORE)], reason=reason)
+        assert outcome is not None
+        assert (outcome.verdict, outcome.rc) == ("deferred", 75)
+
+
+def test_no_published_series_for_the_host_stays_deferred():
+    outcome = _ends_with([_published("homelab-daniel-box", BEFORE)])
+    assert outcome is not None
+    assert outcome.verdict == Verdict.DEFERRED
+
+
+def test_a_failed_read_of_the_published_versions_stays_deferred():
+    answer = _fetch([_published("homelab-daniel-pi", BEFORE)])
+
+    def fetch(url: str, timeout: float) -> bytes:
+        if "homelab_repo_published_info" in urllib.parse.unquote(url):
+            raise OSError("connection reset")
+        return answer(url, timeout)
+
+    outcome = _wait(_pi(PI_DROPIN), fetch, _clock(_at(12, 0)), _at(12, 0))
+    assert outcome is not None
+    assert outcome.verdict == Verdict.DEFERRED
