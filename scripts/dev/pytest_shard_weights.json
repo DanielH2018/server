@@ -965,6 +965,7 @@
  "hosts/lib/tests/test_pi_initial_setup_part1.py": 4.95,
  "hosts/lib/tests/test_pi_initial_setup_part2.py": 6.17,
  "hosts/lib/tests/test_pi_tuning_component.py": 0.54,
+ "hosts/lib/tests/test_pi_updater_poll_component.py": 1.72,
  "hosts/lib/tests/test_reconcile_activation.py": 5.0,
  "hosts/lib/tests/test_reconcile_component.py": 0.03,
  "hosts/lib/tests/test_reconcile_hold_way_out.py": 2.15,
