@@ -112,9 +112,13 @@ def render_etcd_offbox_retention(retention: int) -> str:
     """Renders the off-box etcd snapshot retain count.
 
     Args:
-        retention: `k3s_etcd_s3_retention`, how many R2 snapshots are kept.
+        retention: `etcd-snapshot-retention` in the k3s-server component's
+            `k3s_server_config`, which k3s applies to the S3 copies too.
     """
-    return f"{retention} off-box etcd snapshots are retained on R2 (`k3s_etcd_s3_retention`).\n"
+    return (
+        f"{retention} off-box etcd snapshots are retained on R2 "
+        "(`etcd-snapshot-retention` in `k3s_server_config`).\n"
+    )
 
 
 def render_traefik_ports(http_port: int, https_port: int) -> str:

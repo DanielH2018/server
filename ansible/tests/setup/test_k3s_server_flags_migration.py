@@ -40,6 +40,13 @@ MERGE_BASE_ARGS = [
     "--kube-apiserver-arg=audit-log-maxbackup=5",
     "--kube-apiserver-arg=audit-log-maxsize=100",
     "--kube-apiserver-arg=authentication-config=/var/lib/rancher/k3s/server/authentication-config.yaml",
+    # H2.8a: native etcd snapshots to S3.
+    "--etcd-s3",
+    "--etcd-s3-config-secret=k3s-etcd-snapshot-s3-config",
+    "--etcd-snapshot-name=offbox",
+    "--etcd-snapshot-compress",
+    "--etcd-snapshot-schedule-cron=0 */12 * * *",
+    "--etcd-snapshot-retention=28",
 ]
 
 

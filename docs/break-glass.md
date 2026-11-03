@@ -33,15 +33,18 @@ otherwise; none of the values below are secrets themselves, only names and locat
    no-op without it. Restoring onto daniel-box's own intact disk does not need it.
    Source: `docs/k3s-etcd-restore.md` ("Since 2026-08-20…" section).
 
-3. **The etcd snapshot.** Off-box copies land daily at 02:45 in
-   `s3://<r2_bucket>/etcd-snapshots/`, 14 retained, named
-   `offbox-<node>-<unix-timestamp>.zip`. Local copies (daniel-box's own disk, not
-   survivable in a total-loss event) sit at
-   `/var/lib/rancher/k3s/server/db/snapshots/`, taken at 00:00 and 12:00, 5 retained.
-   Credentials to reach the R2 copy are in
+3. **The etcd snapshot.** Off-box copies land in `s3://<r2_bucket>/etcd-snapshots/`, named
+   `offbox-<node>-<unix-timestamp>.zip`. k3s uploads one at 00:00 and 12:00 and keeps 28
+   (H2.8a), and the off-box cron adds one daily at 02:45 until H2.8b retires it. Local
+   copies (daniel-box's own disk, not survivable in a total-loss event) sit at
+   `/var/lib/rancher/k3s/server/db/snapshots/`, compressed, named `offbox-*`, taken at 00:00
+   and 12:00, 28 retained. Credentials to reach the R2 copy are in
    `/etc/rancher/k3s/etcd-s3.env` on daniel-box — rendered from SOPS, so item 1 or an
-   intact host key is the way back to them if that file itself is gone.
-   Source: `docs/k3s-etcd-restore.md` ("Where the snapshots are").
+   intact host key is the way back to them if that file itself is gone. A restore from a
+   local snapshot passes `--etcd-s3=false`, and an S3 restore keeps its explicit
+   `--etcd-s3-*` flags, because the server's drop-in enables S3 through a Secret a restore
+   cannot use.
+   Source: `docs/k3s-etcd-restore.md`, *Where the snapshots are* and *Restoring*.
 
 4. **Longhorn's B2 and R2 backup targets.** Every PVC's data, split across two targets by
    volume: B2 (`s3://daniel-server-kopia@us-east-005/longhorn`, credential Secret

@@ -86,9 +86,24 @@ defaults:
   #   kube-apiserver-arg the audit flags above, then the authentication config. That file
   #                      configures the JWT authenticator, which is mutually exclusive with the
   #                      --oidc-* flags: passing both makes the API server refuse to start.
+  #   etcd-s3,           k3s's native etcd snapshots upload to R2 (H2.8a). Every S3 value lives
+  #   etcd-s3-config-    in the Secret `longhorn-backup` renders into kube-system, which k3s
+  #   secret             reads at each snapshot, so this file holds no credential. Any other
+  #                      `etcd-s3-*` key here makes k3s ignore that Secret. To disarm the
+  #                      upload, set `etcd-s3: false`; until H2.8b retires the off-box cron,
+  #                      also set `k3s_etcd_s3_armed: false` in setup/k3s's defaults.
+  #   etcd-snapshot-name `offbox`, the name the off-box cron, both drills and the restore
+  #                      runbooks match (`offbox-<node>-<ts>`).
+  #   etcd-snapshot-     a local snapshot shrinks from about 85 MB to about 15 MB.
+  #   compress
+  #   etcd-snapshot-     k3s's default, written down: 00:00 and 12:00, a 12-hour recovery
+  #   schedule-cron      point both locally and off-box.
+  #   etcd-snapshot-     28 local copies, and 28 on S3 too: with no `etcd-s3-retention` set,
+  #   retention          k3s carries this value over to S3. 28 at 12 hours is 14 days off-box.
+  #                      docs/k3s-etcd-restore.md transcludes this value.
   #
   # ENFORCED: ansible/tests/setup/test_k3s_server_flags_migration.py holds the rendered flags
-  # equal to the ones `k3s_server_args` passed before this file existed.
+  # equal to the ones `k3s_server_args` passed before this file existed, plus H2.8a's.
   k3s_server_config:
     cluster-init: true
     disable:
@@ -103,6 +118,12 @@ defaults:
     secrets-encryption: true
     etcd-expose-metrics: "{{ k3s_etcd_expose_metrics }}"
     kube-apiserver-arg: "{{ (k3s_server_audit_args if k3s_audit_log_enabled else []) + ['authentication-config=' ~ k3s_authentication_config_path] }}"
+    etcd-s3: true
+    etcd-s3-config-secret: k3s-etcd-snapshot-s3-config
+    etcd-snapshot-name: offbox
+    etcd-snapshot-compress: true
+    etcd-snapshot-schedule-cron: "0 */12 * * *"
+    etcd-snapshot-retention: 28
   # The read-only ServiceAccount the audit policy exempts. cluster-base holds the twins
   # `cluster_base_readonly_sa_*`; a test holds the three members of each triple equal.
   k3s_server_readonly_sa_name: homelab-readonly
@@ -126,8 +147,9 @@ defaults:
   k3s_oidc_groups_prefix: "oidc:"
 files:
   - {src: templates/50-homelab.conf.j2, dst: /usr/lib/systemd/system/k3s.service.d/50-homelab.conf, activate: "manual:k3s.service"}
-  # The server's flags. The only file in config.yaml.d, and nothing ships config.yaml.
-  - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0600", activate: "manual:k3s.service"}
+  # The server's flags. The only file in config.yaml.d, and nothing ships config.yaml. World-
+  # readable: it holds no secret, and H2.8b's backup-health check 12 reads it as `sys_user`.
+  - {src: templates/50-homelab.yaml.j2, dst: /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, mode: "0644", activate: "manual:k3s.service"}
   - {src: templates/audit-policy.yaml.j2, dst: /var/lib/rancher/k3s/server/audit.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/authentication-config.yaml.j2, dst: /var/lib/rancher/k3s/server/authentication-config.yaml, mode: "0600", activate: "manual:k3s.service"}
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s.service"}

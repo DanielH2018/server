@@ -90,6 +90,7 @@ from fragments_lib import (
     fragments_hosts,
     fragments_storage,
 )
+from lib import yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.docs_provenance import write_if_body_changed
 from lib.ansible_inventory import (
@@ -126,6 +127,7 @@ OBSERVABILITY_ROLE = K8S_ROLES / "observability"
 INITIAL_SETUP_ROLE = ROLES / "setup" / "initial_setup"
 FAIL2BAN_CONF = INITIAL_SETUP_ROLE / "templates" / "fail2ban_homelab.conf.j2"
 TRAEFIK_ROLE = K8S_ROLES / "traefik"
+K3S_SERVER_COMPONENT = REPO / "hosts" / "components" / "k3s-server" / "component.yml"
 
 
 def header(sources: list[str]) -> str:
@@ -177,9 +179,10 @@ def _crowdsec_agent_liveness() -> tuple[str, list[str]]:
 
 
 def _etcd_offbox_retention() -> tuple[str, list[str]]:
-    retention = Estate().role_vars(K3S_ROLE)["k3s_etcd_s3_retention"]
+    spec = yaml_fast.safe_load(K3S_SERVER_COMPONENT.read_text())
+    retention = spec["defaults"]["k3s_server_config"]["etcd-snapshot-retention"]
     return render_etcd_offbox_retention(retention), [
-        "ansible/roles/setup/k3s/defaults/main.yml"
+        str(K3S_SERVER_COMPONENT.relative_to(REPO))
     ]
 
 

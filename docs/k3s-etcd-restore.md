@@ -149,15 +149,21 @@ cron exists to find), and anything created outside the repo.
 
 ## Where the snapshots are
 
-- Local, k3s's own schedule: `/var/lib/rancher/k3s/server/db/snapshots/`, 00:00 and 12:00, 5 retained.
-- Off-box, the cron this doc is about: R2, `s3://<r2_bucket>/etcd-snapshots/`, daily at 02:45.
-  Named `offbox-<node>-<unix-timestamp>.zip` — compressed, and the extension is literally
-  `.zip`. The name matters: it is what
-  `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
-- Credentials: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered by the k3s role
-  from the `r2_*` SOPS secrets.
+- Local, k3s's own schedule: `/var/lib/rancher/k3s/server/db/snapshots/`, 00:00 and 12:00.
+  Since H2.8a each one is compressed and named `offbox-*`, and 28 are kept. The flags are the
+  `etcd-snapshot-*` keys of `k3s_server_config` in `hosts/components/k3s-server/component.yml`.
+- Off-box, from two writers until H2.8b retires the cron. k3s's own schedule uploads each
+  00:00 and 12:00 snapshot. It reads every S3 value from the `k3s-etcd-snapshot-s3-config`
+  Secret in `kube-system`, which the `longhorn-backup` role renders. The cron this doc began
+  with uploads daily at 02:45. Both write to R2, `s3://<r2_bucket>/etcd-snapshots/`, so the
+  creation time tells them apart. Each is named `offbox-<node>-<unix-timestamp>.zip`. It is
+  compressed, and the extension is literally `.zip`. The name matters: it is what
+  `--cluster-reset-restore-path` takes for an S3 restore, as a NAME, never a path (see below).
+- Credentials for a restore: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered
+  by the k3s role from the `r2_*` SOPS secrets. The Secret cannot serve a restore, because a
+  restore runs when the API may be gone.
 
-<!-- Generated from k3s_etcd_s3_retention in the k3s role's defaults; edit that. -->
+<!-- Generated from etcd-snapshot-retention in the k3s-server component; edit that. -->
 --8<-- "assets/generated/fragments/etcd-offbox-retention.md"
 
 The `EtcdSnapshotOffboxFailed` and `EtcdSnapshotOffboxNotReporting` alert rules (read from the
@@ -263,7 +269,23 @@ k3s server \
   --etcd-s3-folder etcd-snapshots --etcd-s3-region auto
 ```
 
-That command restores and exits — it does not stay running. Then:
+`k3s server` also reads `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml`, which sets `etcd-s3:
+true` and `etcd-s3-config-secret` (H2.8a). The explicit `--etcd-s3-*` flags above make k3s
+ignore that Secret, which a restore could not read anyway.
+
+To restore from one of the 28 local snapshots instead, pass `--etcd-s3=false` and no other S3
+flag. While S3 is enabled, k3s fetches `--cluster-reset-restore-path` from S3. With only the
+config Secret it fails with `cannot use S3 config secret when restoring snapshot`. A local
+restore takes the snapshot's full path, so run gate 3 against its bare name first:
+
+```bash
+k3s server \
+  --cluster-reset \
+  --cluster-reset-restore-path=/var/lib/rancher/k3s/server/db/snapshots/<local-snapshot-name> \
+  --etcd-s3=false
+```
+
+Either command restores and exits — it does not stay running. Then:
 
 ```bash
 systemctl start k3s
