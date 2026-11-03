@@ -208,11 +208,11 @@ def test_an_upgrade_waits_for_the_updater_and_stops_the_project_around_apt(
     assert engine.state["timer"] == "enabled"
 
 
-@pytest.mark.parametrize("running", ["active", "deactivating", "reloading"])
-def test_an_upgrade_waits_out_every_running_state(engine, package, running):
+@pytest.mark.parametrize("state", ["active", "activating", "deactivating", "reloading"])
+def test_an_upgrade_waits_out_every_running_state(engine, package, state):
     _behind(engine, package)
     engine.state["active"] = {"homelab-updater.service": 2}
-    engine.state["running_state"] = running
+    engine.state["running_state"] = state
 
     assert engine.run("apply").returncode == 0
     assert engine.state["active"]["homelab-updater.service"] == 0
