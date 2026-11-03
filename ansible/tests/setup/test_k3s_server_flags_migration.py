@@ -51,8 +51,11 @@ MERGE_BASE_ARGS = [
 
 
 def cli_flags(argv: list[str]) -> list[tuple[str, str]]:
-    """`(flag, value)` pairs from a `k3s server` command line, a bare flag reading `true`."""
-    assert argv[0] == "server"
+    """`(flag, value)` pairs from a `k3s server` or `k3s agent` command line.
+
+    A bare flag reads `true`.
+    """
+    assert argv[0] in ("server", "agent")
     pairs, rest = [], argv[1:]
     while rest:
         token, rest = rest[0], rest[1:]

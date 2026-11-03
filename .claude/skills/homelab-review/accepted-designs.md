@@ -42,7 +42,11 @@ that makes the trade-off. When an entry moves there, delete it here.
 - The no-backup volume tier is deliberate: TSDBs, uptime-kuma-data, crowdsec-db, and
   valheim's SteamCMD install volume are re-downloadable, while valheim's *world* volume IS
   backed up. `docs/longhorn-backup-tiering.md` is the tiering doc.
-- The push-watchdog semantics are "down = no heartbeat".
-- The Pi is monitored via static Kuma labels. The Pi's node-exporter (scrape job `node-pi`)
-  feeds only Pi Pressure and Host Temp. Do NOT add the Pi to the instance-blind `node_*`
-  disk/memory checks; `HOST_METRIC_ORIGIN_EXCLUDE` keeps it out of them.
+- A producer that stops reporting pages through a deadman, not a heartbeat tile: each
+  textfile check's `<Check>NotReporting` rule, `HostCheckOverdue` as the catch-all, and
+  `BridgeCheckStale` for a monitor-bridge row. Uptime Kuma is being retired (ADR 0026); do not
+  propose a Kuma monitor.
+- The Pi is monitored through Prometheus: `PiHostDown` and `PiPortDead` in
+  `extra-probes.yaml`, and the Pi pressure rules in `hosts.yaml`, all reading the `node-pi`
+  and `blackbox-pi-ports` jobs. The disk and memory rules in `hosts.yaml` name daniel-box and
+  daniel-server as literals. Do NOT add the Pi to them; its pressure rules cover it.

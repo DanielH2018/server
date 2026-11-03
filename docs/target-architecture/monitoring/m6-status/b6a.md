@@ -131,7 +131,7 @@ shadow. It ends when the `observability` Kustomization reports Cutover-1b's merg
 `CheckWithoutPager` pages critical two hours after the last `monitor_status` sample of either
 tile. If Cutover-1b has not deployed within two hours, revert Cutover-1a. Its rules are still
 shadow, so the revert restores Kuma as the only pager, and the tiles go green on the crons' next
-push because both tokens stay in `secrets.yml` until B6a's token PR. If Cutover-2 has merged by
+push because both tokens stayed in `secrets.yml` until B6a's token PR. If Cutover-2 has merged by
 then, revert it first, so the crons push again.
 
 **Cutover-2 waits for H7.40 slice 4.** The plan's plane for Cutover-2 is the tick: `claude_code`
@@ -159,7 +159,7 @@ because `kuma_push` logged only a failed push, so the journal line is new for bo
 
 Neither unit loads a credential now, so `package.yml` drops `artifacts_sync_push_token` and
 `claude_otel_push_token` from `credentials:`, and the SOPS file needs no `host_secrets.py sync`.
-Both keys stay in `PENDING_RETIREMENT`. B6a's token PR retires them a week after Cutover-1b.
+Both keys stayed in `PENDING_RETIREMENT` until B6a's token PR retired them.
 
 **Which plane applies it.** The merge changes the `homelab-daniel-box` package, so daniel-box's
 updater installs the two rewritten units and scripts, and `land.sh` waits for that apply. No
@@ -179,3 +179,8 @@ tick and no hand apply is involved.
 holds both shipped scripts to no Kuma library, `kuma_push` or push URL. Its red case is
 `test_a_script_that_pushes_to_kuma_is_flagged`. The two script tests read the verdict back from
 the journal line a `logger` stub records, in place of a stubbed `kuma_push`.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.

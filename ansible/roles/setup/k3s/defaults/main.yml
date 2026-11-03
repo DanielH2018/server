@@ -578,16 +578,9 @@ k3s_coredns_probe_retries: 8
 #   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
 k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
 
-# Agent install flags. node.longhorn.io/create-default-disk=false is INERT: Longhorn honors
-# it only when the cluster-level `create-default-disk-labeled-nodes` setting is true, which
-# this cluster never sets — a default disk appears anyway. The label stays (removing it would
-# churn the unit and re-run the installer for nothing); the enforced lever is agent_verify.yml
-# patching the Longhorn node CR to allowScheduling:false. Storage participation
-# (k3s_agent_longhorn_scheduling) flips that back deliberately.
-k3s_agent_args: >-
-  agent --node-ip {{ server_ip }}
-  --node-label node.longhorn.io/create-default-disk=false
-  --kubelet-arg=allowed-unsafe-sysctls=net.ipv4.conf.all.src_valid_mark,net.ipv4.ip_forward
+# The agent's flags are `k3s_agent_config` in hosts/components/k3s-agent/component.yml since
+# H6.5b. The package renders them into /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and they
+# take effect at the agent's next start. tasks/agent.yml passes the installer a bare `agent`.
 
 # The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
 # into /var/lib/homelab/setup-render-manifest.d/ so manifest-prune-check.sh can tell whether this

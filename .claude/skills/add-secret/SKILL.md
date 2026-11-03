@@ -48,23 +48,19 @@ which only the operator can write. Step 6 tells you which case you are in.
    - **pinned** (`authelia_storage_encryption_key` and similar break-glass
      keys): **DO NOT** `sops set` these — rotating/altering them is a DANGER procedure with
      data-loss risk. Stop and point the user at the `pinned` runbook in `docs/secret-rotation.md`.
-   - **auto** — locally generated, no external coupling (e.g. a push token). Safe to generate.
+   - **auto** — locally generated, no external coupling. Safe to generate. The registry's
+     `auto` entries are the Kuma push tokens M6 has not yet retired; do not add another.
    - **assisted / external** — value comes from a provider console or has an app-side step.
 
 3. **Add the secret** (`.sops.yaml` auto-encrypts anything under `vars/`, so the file stays
    encrypted on disk):
    - **Preferred (value stays private):** tell the user to run it themselves —
      `! sops ansible/vars/secrets.yml` — add the `name: value` line in the editor, save, exit.
-   - **A Kuma push token is 32 hex characters, not base64.** AutoKuma validates the format and
-     refuses the monitor outright — `Invalid push_token, push token should be 32 characters and
-     contain only letters and numbers` in the autokuma sidecar's log — so the tile is never
-     created, every push to it is lost, and the only visible symptom is a failing
-     `kuma-status-page-sync` job. A base64 value has
-     `+`, `/` and `=` in it and is 44 characters. `secret_rotation.py rotate` already mints
-     `token_hex(16)` for exactly this reason. The uptime-kuma deploy asserts the format and
-     names the refused tile, but only once someone deploys it. Match it on the first write:
-     `openssl rand -hex 16 | jq -Rc . | sops set --value-stdin ansible/vars/secrets.yml '["<name>"]'`
-   - **Any other generated value (auto tier):** generate and set without echoing the value:
+   - **Never add a Kuma push token.** Uptime Kuma is being retired
+     (`docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`), and a new check pages
+     through an Alertmanager rule, which needs no per-check secret. If a task asks for a
+     `*_push_token`, stop and point the user at the ADR's producer recipes.
+   - **A generated value (auto tier):** generate and set without echoing the value:
      `openssl rand -base64 32 | jq -Rc . | sops set --value-stdin ansible/vars/secrets.yml '["<name>"]'`
      (the value is never printed, and never reaches `sops`'s argv). `--value-stdin` parses
      stdin as JSON and refuses a bare string with `Value for --set is not valid JSON`, so
