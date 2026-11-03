@@ -1703,12 +1703,27 @@ here. C-1 waits for the operator's acceptance.
 
    **C-1a, Kuma's watcher.** Preconditions, each checked and quoted in the PR:
     - the ADR is accepted;
-    - every Phase A cutover, B8's cutover and M4's cutover have landed, and Phase A has run a
-      week with no Kuma page;
-    - `probe.py metric 'count by (monitor_type, monitor_name) (monitor_status)'` returns
-      exactly one series, the `Status Page Sync` push tile. Any other series, of any type,
-      fails the gate. This read needs the scrape job that C-1a deletes, so C-1a quotes it and
-      C-1b does not repeat it.
+    - every Phase A cutover, B8's cutover and M4's cutover have landed. This precondition also
+      asked for a week of Phase A with no Kuma page, and the operator waived that week on
+      2026-11-03 ([#7061](https://github.com/DanielH2018/server/issues/7061));
+    - the one-series gate holds. It has two halves, and both must hold:
+        - `probe.py metric 'count by (monitor_type, monitor_name) (monitor_status)'`, an
+          instant read, returns exactly one series, the `Status Page Sync` push tile. Any other
+          series, of any type, fails the gate. This read needs the scrape job that C-1a
+          deletes, so C-1a quotes it and C-1b does not repeat it.
+        - `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` declares
+          `status-page-sync.json` as its only monitor at the commit `prod` holds. The
+          `homelab` OCIRepository's `org.opencontainers.image.revision` annotation names
+          that commit. To list the monitors, filter the file's entity keys at that commit
+          with `grep -E '\.json: \|$' | grep -vE '^ +(discord|email|tag-[a-z]+)\.json:'`,
+          which drops the notifications and the tags.
+
+      The instant read alone can pass falsely after a Kuma restart, because a weekly push
+      tile has no series until its next push. The declaration catches that case, because a
+      declared tile that a restart silenced is still declared. A
+      `last_over_time(monitor_status[8d])` read cannot replace the pair, because it also
+      returns every tile a cutover deleted inside the window: 99 series on 2026-11-03
+      ([#7075](https://github.com/DanielH2018/server/issues/7075)).
     - B-2 and B-4 have landed and deployed. B-4 removes homepage's
       `homepage_href('uptime-kuma', domain)` call, which raises once the entry loses
       `hostname`, and B-2 replaces postflight's Kuma reads.
@@ -1721,6 +1736,12 @@ here. C-1 waits for the operator's acceptance.
       `postflight.py:check_kuma_scrape`. The scrape job calls `entry_port('uptime-kuma')`, so
       it must go before C-1b removes `port`. The rule and the scrape job go in one commit. A
       scrape job removed without the rule fires `KumaDown`'s `absent()` arm.
+    - In `files/rules/scrape-targets.yaml`, delete the `ScrapeTargetDown` and
+      `ScrapeTargetFlapping` rows for `job="uptime-kuma"`, and take `uptime-kuma` out of both
+      catch-all `job!~` lists. Both rows read the `up` series the scrape job writes, so
+      neither can fire once the job is gone.
+    - In `scripts/diagnostics/probe_lib/monitors.py`, delete `KUMA_QUERY`, `format_kuma` and
+      the `monitors` read they serve.
     - Arm 3 of the cross-plane order gate names any object `observability`'s render drops.
       The PR carries a `Removes-Object:` line for each one.
     - **The cluster file.** If `cluster_vars.py check` reports that the cluster file holds a
@@ -2068,6 +2089,7 @@ here. C-1 waits for the operator's acceptance.
 +  files/rules/hosts.yaml, containers.yaml, scrape.yaml, edge.yaml, storage.yaml   A1 to A5
 +  files/rules/bridge-exporter.yaml                    A6-2 to A6-6
 ~  files/rules/host-checks.yaml                        B1 to B6a, two rules per producer; KumaDown (B1, out at C-1a)
+~  files/rules/scrape-targets.yaml                     the uptime-kuma rows and exclusions out (C-1a)
 +  files/rules/pod-producers.yaml                      B6b
 +  files/rules/pods.yaml, extra-probes.yaml            B7, B8
 +  tests/rules/<each new group>.test.yaml
@@ -2216,7 +2238,7 @@ this applies to, with what the rules predict:
 | B-6b | Alertmanager IngressRoute | ~40 | `observability` |
 | B-7 | docs, skills, agents, evals, the ADR draft (C-0) | ~200 | none |
 | B-10 | triage's poller reads `ALERTS` alone and drops its `kuma:` keys; its docs; after Phase A | ~60 removed | a new version of the daniel-box and daniel-server host packages |
-| C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and B6c's token PR (a quoted `git grep -n registry_gc_push_token -- ansible/roles ':!*/tests/*'` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
+| C-1a | `KumaDown` with its inhibit, the scrape job and its credential, `check_kuma_scrape`, the two `scrape-targets.yaml` rows, `monitors.py`'s Kuma read; the operator's `cluster_vars.py write` if the check asks; after B-2, B-4 and B6c's token PR (a quoted `git grep -n registry_gc_push_token -- ansible/roles ':!*/tests/*'` returns nothing); the two post-promotion reads that `KumaDown` and the scrape are gone | ~60 removed | the promotion (`observability`) |
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
@@ -2232,8 +2254,9 @@ B-2 and the old B-3 (postflight) are one PR, because `postflight.py` imports the
 deletes. Reverting B-2 restores both together.
 
 **Two-writer check.** For every Phase B and C PR, no check changes its pager: Phase A moved
-every pager already. The C-1 gate (exactly one `monitor_status` series, the status-page sync
-tile) refuses a C-1 that would remove a live pager, whatever the pager's monitor type.
+every pager already. The C-1 gate (exactly one `monitor_status` series and one declared
+monitor, both the status-page sync tile) refuses a C-1 that would remove a live pager, whatever
+the pager's monitor type.
 
 ## Verification
 
@@ -2246,8 +2269,11 @@ uv run python scripts/diagnostics/probe.py metric 'count by (job) (homelab_check
 # Once A6-1 lands, and again after A6-7r: both gate rows export, and the difference is 0
 uv run python scripts/diagnostics/probe.py metric 'homelab_check_success{job="monitor-bridge",check=~"wan_reachable|b2_reachable"}'
 uv run python scripts/diagnostics/probe.py metric 'count(homelab_check_success{job="monitor-bridge"}) - on() homelab_check_rows{job="monitor-bridge"}'
-# Before C-1: exactly one series, the status-page sync tile
+# Before C-1a, both halves of the gate: exactly one series, the status-page sync tile
 uv run python scripts/diagnostics/probe.py metric 'count by (monitor_type, monitor_name) (monitor_status)'
+# and only status-page-sync.json declared at the commit prod holds, which this names
+kubectl -n flux-system get ocirepository homelab -o 'jsonpath={.status.artifact.metadata.org\.opencontainers\.image\.revision}'
+git show <commit>:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2 | grep -E '\.json: \|$' | grep -vE '^ +(discord|email|tag-[a-z]+)\.json:'
 # Phase B: the health gate reads the alert plane
 uv run python scripts/diagnostics/probe.py health observability
 uv run python scripts/diagnostics/probe.py monitors

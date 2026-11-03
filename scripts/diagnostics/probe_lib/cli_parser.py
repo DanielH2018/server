@@ -151,10 +151,10 @@ def _build_parser():
     sub.add_parser(
         "monitors",
         **_verdict_help(
-            "firing alerts (ALERTS, Alertmanager) by severity and service, Kuma tiles "
-            "not up, and active silences",
-            "no paging alert fires and no Kuma tile is down",
-            "a critical or warning alert fires, or a Kuma tile is not up",
+            "firing alerts (ALERTS, Alertmanager) by severity and service, and active "
+            "silences",
+            "no paging alert fires",
+            "a critical or warning alert fires",
         ),
     )
     ll = sub.add_parser("loki-labels", help="Loki label names")

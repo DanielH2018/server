@@ -69,9 +69,8 @@ SUBCOMMANDS = [
     ),
     (
         "monitors",
-        "firing alerts from ALERTS and Alertmanager by severity and service, Kuma tiles not "
-        "up, and active "
-        "Alertmanager silences (exit 0 = no paging alert and no Kuma tile down)",
+        "firing alerts from ALERTS and Alertmanager by severity and service, and active "
+        "Alertmanager silences (exit 0 = no paging alert)",
         "monitors",
         run_monitors,
     ),

@@ -77,17 +77,12 @@ than a wider grace — see the boot-grace note under *Watching the spine itself*
 
 ## Watching the spine itself
 
-The job checks above all answer "did this job run and succeed." Kuma's own liveness is a
-different question: is the thing that still pages the checks that have not moved to Alertmanager still working.
-
-Prometheus's `KumaDown` rule answers it. It fires when the scrape of the `uptime-kuma` Service
-fails for 5 minutes, or the job has no `up` series, and Alertmanager pages it critical to Discord
-and email. A dead Kuma pod, a wedged SQLite or a NetworkPolicy that fences off :3001 therefore
-pages from Alertmanager. `KumaDown` replaced the `uptime-kuma-alive` check in M6 batch B1:
-`longhorn-backup-health.sh` used to carry its Kuma push's exit status to that slug, and the
-script no longer pushes or pings it. C-1a deletes `KumaDown` with Kuma. A *cluster* outage is
-caught off-site, because the pinging scripts go silent with it. `KumaDown` proves a 200 from
-`/metrics`, which is weaker than `uptime-kuma-alive` proved (that Kuma accepted a push).
+The job checks above all answer "did this job run and succeed." Nothing watches Kuma's own
+liveness, because every check pages from Alertmanager and a dead Kuma silences only its
+`Status Page Sync` tile. M6 batch B1 replaced the `uptime-kuma-alive` check with the `KumaDown`
+rule, and M6's C-1a deleted that rule. `longhorn-backup-health.sh` used to carry its Kuma push's
+exit status to that slug, and the script no longer pushes or pings it. A *cluster* outage is
+caught off-site, because the pinging scripts go silent with it.
 
 ### The first run after a boot is skipped
 

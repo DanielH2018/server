@@ -270,7 +270,7 @@ reports SKIP. Run it after `deploy.yml` and again after working through the list
    needs this wizard once.
 2. **Re-mint `prometheus_kuma_api_key`** in Kuma (Settings → API Keys) and `sops set` it. Kuma
    issues keys into that same unbacked-up DB, so the value in `secrets.yml` is stale on any
-   fresh Kuma and the `uptime-kuma` scrape target sits at 401/DOWN.
+   fresh Kuma, and the maintenance sync's status read then keeps every monitor in the window.
 3. **Seed the *arr API keys.** `sonarr_api_key`, `radarr_api_key`, `prowlarr_api_key` and
    `jellyfin_api_key` in SOPS are what configarr, janitorr, homepage, monitor-bridge and
    autofix-bridge authenticate with — but a fresh *arr generates its own random key on first

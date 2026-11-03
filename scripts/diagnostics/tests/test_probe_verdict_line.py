@@ -135,9 +135,7 @@ def test_monitors_ends_with_its_verdict(monkeypatch, capsys, firing, expected_rc
         assert argv[0] != "sops", f"monitors decrypted: {argv}"
         if "ALERTS" in argv[-1]:
             return _completed(argv, _alerts(*firing, url=argv[-1]))
-        if "/api/v2/" in argv[-1]:
-            return _completed(argv, "[]")  # no active silence, no alert held
-        return _completed(argv, _alerts())  # every Kuma tile up
+        return _completed(argv, "[]")  # no active silence, no alert held
 
     monkeypatch.setattr(subprocess, "run", run)
     rc = _exit_code(lambda: probe.main(["monitors"]))

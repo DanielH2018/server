@@ -119,22 +119,6 @@ def test_alert_plane_with_alertmanager_unscraped_is_flagged(monkeypatch):
     assert "does not reach Alertmanager" in detail
 
 
-def test_kuma_scrape_down_reports_the_scrape_error(monkeypatch):
-    # up{job="uptime-kuma"} == 0 — since the PG1 port the check reads the up series
-    # through the cluster query route (the targets API isn't admitted by it).
-    body = json.dumps({"data": {"result": [{"value": [0, "0"]}]}})
-    respond(monkeypatch, 200, body)
-    status, detail = postflight.check_kuma_scrape()
-    assert status == postflight.FAIL
-    assert "prometheus_kuma_api_key" in detail
-
-
-def test_kuma_scrape_absent_target_skips(monkeypatch):
-    """A cluster that doesn't scrape Kuma hasn't failed the step — it doesn't have it."""
-    respond(monkeypatch, 200, json.dumps({"data": {"result": []}}))
-    assert postflight.check_kuma_scrape()[0] == postflight.SKIP
-
-
 def test_arr_key_mismatch_fails(monkeypatch):
     respond(monkeypatch, 401)
     status, detail = postflight.check_arr_key("sonarr")

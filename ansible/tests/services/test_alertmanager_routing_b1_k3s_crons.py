@@ -2,9 +2,9 @@
 
 `test_alertmanager_routing.py` is at its line cap, so the `host-checks.yaml` share of its
 `PAGING` outcome that belongs to B1 lives here, on the same walk of the rendered routing tree.
-The ten k3s-cron rules and `KumaDown` page. The `critical` ones (the longhorn-backup and
-etcd-snapshot pairs, and `KumaDown`) mail as well as post, the rest post to Discord alone, and a
-rule that regains `shadow` walks to the blackhole instead.
+The ten k3s-cron rules page. The `critical` ones (the longhorn-backup and etcd-snapshot pairs)
+mail as well as post, the rest post to Discord alone, and a rule that regains `shadow` walks to
+the blackhole instead.
 
 Run: uv run pytest ansible/tests/services/test_alertmanager_routing_b1_k3s_crons.py
 """
@@ -33,11 +33,10 @@ EXPECTED = {
     "ReleaseStalenessCheckNotReporting/daniel-box": ["discord"],
     "LiveDriftCheckFailed/daniel-box": ["discord"],
     "LiveDriftCheckNotReporting/daniel-box": ["discord"],
-    "KumaDown/uptime-kuma": ["discord", "email"],
 }
 
 
-def test_the_eleven_b1_rules_are_the_ones_this_module_expects():
+def test_the_ten_b1_rules_are_the_ones_this_module_expects():
     # Non-vacuity by name: a rule dropped from the file, or an expected rule that is still
     # shadow, fails here instead of walking past the parametrized tests below.
     assert set(EXPECTED) <= set(host_sets(shadow=False))

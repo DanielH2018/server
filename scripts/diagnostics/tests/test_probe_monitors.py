@@ -1,4 +1,4 @@
-"""`probe.py monitors`: what is down, from `ALERTS` and the Kuma tiles not yet cut over."""
+"""`probe.py monitors`: what is down, from `ALERTS` and Alertmanager."""
 
 from diagnostics.probe_lib import monitors
 from lib.exit_codes import PROBE_UNREADABLE
@@ -89,21 +89,3 @@ def test_an_unread_alertmanager_is_unreadable_rather_than_clean():
     )
     assert code == PROBE_UNREADABLE
     assert lines[-1] == "  Alertmanager alerts unread: curl: (7) Failed to connect"
-
-
-def test_every_kuma_tile_up_is_clean():
-    assert monitors.format_kuma(_vector()) == ([], 0)
-
-
-def test_a_kuma_tile_not_up_is_flagged_by_name():
-    lines, code = monitors.format_kuma(
-        _vector({"monitor_name": "Pi SD Health"}, value="0")
-    )
-    assert code == 1
-    assert lines[-1] == "  Pi SD Health: DOWN"
-
-
-def test_a_problem_outranks_an_unread_source():
-    assert monitors.combine(PROBE_UNREADABLE, 1) == 1
-    assert monitors.combine(0, PROBE_UNREADABLE) == PROBE_UNREADABLE
-    assert monitors.combine(0, 0) == 0

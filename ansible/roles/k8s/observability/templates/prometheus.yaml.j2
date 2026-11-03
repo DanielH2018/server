@@ -273,16 +273,6 @@ data:
       # Credentials are file-mounted from the prometheus-scrape-credentials Secret — they
       # must NOT be inlined here (this is a world-readable ConfigMap, not a Secret).
       #
-      # Kuma's API key rides HTTP Basic with a blank username; per-monitor up/down,
-      # response times and cert-days-remaining. Sole source of monitor_status — the
-      # uptime-kuma board and scripts/diagnostics/postflight.py's gates read it.
-      - job_name: uptime-kuma
-        scrape_interval: 1m
-        basic_auth:
-          username: ""
-          password_file: /etc/prometheus-scrape-creds/kuma_api_key
-        static_configs:
-          - targets: ['uptime-kuma.{{ k8s_namespace }}.svc:{{ containers_list | entry_port('uptime-kuma') }}']
       # HA's prometheus integration; the bearer token is the gate (its route carries no
       # Authelia by design). Feeds hass_* — the home-assistant + ups boards and
       # monitor-bridge's UPS battery checks (which query hass_* unpinned, so the native
