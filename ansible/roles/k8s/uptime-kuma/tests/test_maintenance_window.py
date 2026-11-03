@@ -1,8 +1,7 @@
-"""The maintenance window is derived from the reboot cron, and the sync never runs inside it.
+"""The maintenance window is derived from the reboot timer, and the sync never runs inside it.
 
-Two schedules have to stay in step: `Weekly system restart` in
-roles/setup/initial_setup/tasks/crons.yml, and the Kuma window this role declares to keep that
-restart from paging Discord. Both read `weekly_reboot_*` from group_vars/all.yml, and these
+Two schedules have to stay in step: `homelab-reboot.timer` in the host-maintenance component,
+and the Kuma window this role declares to keep that restart from paging Discord. Both read `weekly_reboot_*` from group_vars/all.yml, and these
 hold that single source — a window that said one thing while the reboot did another would
 suppress an ordinary hour and page through the restart.
 """
@@ -14,7 +13,9 @@ from zoneinfo import ZoneInfo
 from pathlib import Path as _Path
 
 import jinja2
+import pytest
 import yaml
+from renderer.renderer_lib import host as host_mode
 from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
 from _role_census import task_files
 from lib.ansible_jinja_env import make_ansible_env
@@ -29,9 +30,6 @@ ROLE = _Path(__file__).resolve().parents[1]
 SHARED_TEMPLATES = REPO / "ansible" / "templates"
 DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
 GROUP_VARS = yaml.safe_load(ALL_VARS.read_text())
-CRONS = (
-    REPO / "ansible" / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
-).read_text()
 
 MINUTES_PER_WEEK = 7 * 24 * 60
 
@@ -112,16 +110,20 @@ def test_a_shorter_shutdown_delay_shortens_the_window():
     assert window(weekly_reboot_shutdown_delay_minutes=2)[1] == 47
 
 
-def test_the_reboot_cron_reads_the_same_variables_rather_than_repeating_them():
-    for variable in (
-        "weekly_reboot_minute",
-        "weekly_reboot_hour",
-        "weekly_reboot_weekday",
-        "weekly_reboot_shutdown_delay_minutes",
-    ):
-        assert variable in GROUP_VARS, variable
-        assert "{{ " + variable + " }}" in CRONS, variable
-    assert "shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}" in CRONS
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
+def test_the_reboot_timer_reads_the_same_variables_rather_than_repeating_them(host):
+    """The host-maintenance component's reboot fires at the time this window is derived from."""
+    files = host_mode.render_host(host).files
+    timer = files["/usr/lib/systemd/system/homelab-reboot.timer"][0].decode()
+    script = files["/usr/lib/homelab/homelab-reboot"][0].decode()
+    day = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")[
+        GROUP_VARS["weekly_reboot_weekday"]
+    ]
+    at = f"{GROUP_VARS['weekly_reboot_hour']:02d}:{GROUP_VARS['weekly_reboot_minute']:02d}"
+    tz = GROUP_VARS["weekly_reboot_timezone"]
+    assert f"OnCalendar={day} *-*-* {at}:00 {tz}" in timer
+    delay = GROUP_VARS["weekly_reboot_shutdown_delay_minutes"]
+    assert f"shutdown -r +{delay}" in script
 
 
 def test_the_sync_never_runs_inside_the_window_it_declares():

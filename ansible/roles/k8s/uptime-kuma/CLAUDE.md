@@ -109,8 +109,8 @@ stays that way.
 every monitor, so the Sunday reboot stops paging Discord for the tiles it takes down (#2802).
 The operator accepted the cost on 2026-09-28: an outage in the window is silent.
 
-- **Derived from the reboot cron, never written twice** — the four `weekly_reboot_*` values in
-  `group_vars/all.yml` drive both the cron and this window: `25 7 * * 0`, 50 minutes. The lead
+- **Derived from the reboot timer, never written twice** — the four `weekly_reboot_*` values in
+  `group_vars/all.yml` drive both host-maintenance's `homelab-reboot.timer` and this window: `25 7 * * 0`, 50 minutes. The lead
   and the recovery allowance sit beside them as
   `ansible/inventory/group_vars/all.yml:weekly_reboot_mute_lead_minutes` and
   `ansible/inventory/group_vars/all.yml:weekly_reboot_mute_recovery_minutes`, because
