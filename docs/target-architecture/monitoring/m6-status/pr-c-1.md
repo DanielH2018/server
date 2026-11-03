@@ -2,7 +2,7 @@
 
 #### PR C-1a
 
-[#7061](https://github.com/DanielH2018/server/issues/7061) records C-1a's start. The PR deletes
+[#7077](https://github.com/DanielH2018/server/pull/7077), from [#7061](https://github.com/DanielH2018/server/issues/7061), deletes
 `KumaDown` with its inhibit, Prometheus's `uptime-kuma` scrape job and its credential,
 `check_kuma_scrape`, the two `job="uptime-kuma"` rows in `files/rules/scrape-targets.yaml`, and
 the Kuma read in `probe.py monitors`.
