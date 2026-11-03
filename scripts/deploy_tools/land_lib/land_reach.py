@@ -18,6 +18,7 @@ and what a PR range changed in it, for those gates; this one evaluates the chain
 """
 
 import contextlib
+from collections.abc import Sequence
 import json
 import sys
 from pathlib import Path
@@ -40,6 +41,7 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib import deploy_cross_role
+from deployer_lib.deploy_changes import setup_roles_for
 from deployer_lib.deploy_logic import (
     _is_test_only_path,
     setup_role_tag,
@@ -48,6 +50,7 @@ from deployer_lib.deploy_logic import (
 from gitops_markers import PLAYBOOK_CMD
 
 import narrow_setup
+from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.narrow_lib.setup_index import RoleIndex
 from reach import reach
 from deploy_tools.setup_lib.setup_gates import (  # noqa: F401  (`_eval_when` and `_HOSTS` are read as land_reach's)
@@ -398,14 +401,17 @@ def remaining_setup_hosts_note(
     pr_range: str = "",
     ref: str = "",
     repo: Path = REPO,
+    key_readers: Sequence[KeyReader] = (),
 ) -> str:
     """`_remaining_note` over `ref`'s `ansible/` tree, or `repo`'s checkout without one.
 
     `ref` is the merge commit: the checkout can predate it (`setup_role_chains.tree_at`), and
     a ref git cannot archive falls back to `repo`'s checkout and says so on stderr.
+    `key_readers` are as `remaining_setup_hosts` takes them.
     """
     return _remaining_note(
-        *_remaining_at(files, local_host, quiet, pr_range, ref, repo), local_host
+        *_remaining_at(files, local_host, quiet, pr_range, ref, repo, key_readers),
+        local_host,
     )
 
 
@@ -416,18 +422,29 @@ def remaining_setup_hosts(
     pr_range: str = "",
     ref: str = "",
     repo: Path = REPO,
+    key_readers: Sequence[KeyReader] = (),
 ) -> dict[str, frozenset[str]]:
     """Role -> the hosts beyond `local_host` a role the tick applied there still reaches.
 
     The first half of `remaining_setup_hosts_note`, as data: the GitOps tick records each pair
     in its `owed` ledger (#6510). A role reached only through a changed repo file is not in it,
     because the tick crosses such a range without applying any setup role.
+
+    `key_readers` are the setup-role files reading a `secrets.yml` or inventory key the range
+    moved (`key_readers.key_readers`). Each adds the roles the tick routes it to, as
+    `deploy_defer.route_key_readers` does, at the reach of that file (#6968).
     """
-    return _remaining_at(files, local_host, quiet, pr_range, ref, repo)[0]
+    return _remaining_at(files, local_host, quiet, pr_range, ref, repo, key_readers)[0]
 
 
 def _remaining_at(
-    files, local_host: str, quiet, pr_range: str, ref: str, repo: Path
+    files,
+    local_host: str,
+    quiet,
+    pr_range: str,
+    ref: str,
+    repo: Path,
+    key_readers: Sequence[KeyReader] = (),
 ) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
     """`_remaining_hosts` over `ref`'s `ansible/` tree, or `repo`'s checkout without one."""
     paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
@@ -436,9 +453,12 @@ def _remaining_at(
         # Which roles the tick applied is a question about the same tree, and about the tick's
         # host (`has_gitops`), not the host this landing runs on.
         with setup_routing.routed_by(root or repo):
-            return _remaining_hosts(
+            remaining, unapplied = _remaining_hosts(
                 files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
             )
+            for role, hosts in _key_reader_hosts(key_readers, local_host, *at).items():
+                remaining[role] = remaining.get(role, frozenset()) | hosts
+            return remaining, unapplied
 
 
 def _remaining_hosts(
@@ -554,6 +574,36 @@ def _remaining_hosts(
         if hosts:
             unapplied[role] = hosts
     return remaining, unapplied
+
+
+def _key_reader_hosts(
+    readers: Sequence[KeyReader],
+    local_host: str,
+    playbook: Path,
+    all_vars: Path,
+    host_vars_dir: Path,
+    roles_dir: Path,
+) -> dict[str, frozenset[str]]:
+    """Role -> the hosts beyond `local_host` a moved key reaches through each of `readers`.
+
+    No `pr_range` goes to `setup_file_hosts`: the range need not have changed a reader, and a
+    reader it did change narrows to its changed tasks, which need not be the ones naming the key.
+    """
+    found: dict[str, frozenset[str]] = {}
+    args = (playbook, all_vars, host_vars_dir, roles_dir)
+    for reader in readers:
+        for role in setup_roles_for(reader.path) - reader.unread:
+            if not tick_applies_setup_role(role):
+                continue
+            if reader.path.startswith(f"ansible/roles/setup/{role}/"):
+                hosts = setup_file_hosts(role, reader.path, *args)
+            else:
+                hosts = setup_shipped_file_hosts(role, reader.path, *args)
+            if reader.host:
+                hosts &= {reader.host}
+            if hosts := hosts - {local_host}:
+                found[role] = found.get(role, frozenset()) | hosts
+    return found
 
 
 def _remaining_note(

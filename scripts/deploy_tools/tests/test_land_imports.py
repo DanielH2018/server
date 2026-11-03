@@ -37,6 +37,7 @@ MODULES = frozenset(
         "land_platform",
         "land_probe",
         "land_reach",
+        "key_readers",
         "land_rerolls",
         "land_shared",
         "land_tags",
@@ -61,6 +62,8 @@ ALLOWED = {
         "land_shared",
         "land_tags",
         "land_tested_base",
+        # The moved-key readers `Classifier.key_readers` derives (#6968).
+        "key_readers",
         # The per-user verdict record `Tools.record_verdict` writes by default.
         "verdict_log",
     },
@@ -118,7 +121,7 @@ ALLOWED = {
     "land_tags": {"land_shared"},
     # The CLI over the tag derivation. It reads `shared_role_reach` from outside land_lib,
     # which imports `land_tags`, so it sits above both (#4945).
-    "land_tags_cli": {"land_tags", "land_reach"},
+    "land_tags_cli": {"land_tags", "land_reach", "key_readers"},
     # H3.9a: the wait on the hosts a merge reaches. It takes `gate_snapshot` from `tools`.
     "host_wait": {
         "landing",
@@ -129,7 +132,9 @@ ALLOWED = {
         "host_schedule",
     },
     "land_platform": {"land_tags"},
-    "land_reach": set(),
+    # The setup files reading a moved key, which the reach adds to a range's own paths (#6968).
+    "land_reach": {"key_readers"},
+    "key_readers": set(),
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
     # It also holds the pin gate's reads, `pin_reads.PinReads`.
     "land_flux": {"pin_reads"},

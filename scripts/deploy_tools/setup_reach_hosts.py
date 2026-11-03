@@ -12,6 +12,12 @@ to the sorted hosts other than HOST that the range's change to it reaches. `{}` 
 does. `land_lib.land_reach.remaining_setup_hosts` holds the derivation that `land.sh`'s note
 reads too, so the tick and the landing name the same hosts.
 
+A role reaches here through a path the range changed under it, or through a file of it reading
+a `secrets.yml` or inventory key the range moved (#6968), which `route_key_readers` makes the
+tick apply. A key moved in `host_vars/<h>.yml` reaches `<h>` alone. When the key derivation
+fails, stderr says so and the answer keeps the changed paths' reach, because the tick parks on
+that failure before it would record anything from it.
+
 WHO CALLS IT. `deployer_lib.deploy_setup_roles.setup_reach_hosts` runs it as a SUBPROCESS,
 because it parses YAML and the deployer's unit runs under `uv run --no-project`. The deployer
 writes one `manual_plane` line per role it names. Any non-zero exit records nothing.
@@ -28,6 +34,7 @@ _sys.path.insert(1, str(_Path(__file__).resolve().parent))  # scripts/deploy_too
 import json
 
 from deploy_tools.land_lib import land_tags
+from deploy_tools.land_lib.key_readers import readable_key_readers
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import OK
@@ -50,6 +57,7 @@ def main(argv: list[str] | None = None, repo: _Path = REPO) -> int:
         pr_range=range_,
         ref=args.new,
         repo=repo,
+        key_readers=readable_key_readers(range_, repo),
     )
     print(json.dumps({role: sorted(hosts) for role, hosts in sorted(reach.items())}))
     return OK
