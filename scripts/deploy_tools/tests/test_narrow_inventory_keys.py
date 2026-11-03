@@ -10,12 +10,13 @@ import json
 
 import pytest
 
+import narrow_setup
 import secret_setup_readers
 from deploy_tools.land_lib.key_readers import KeyReader, key_readers
 from deploy_tools.narrow_lib import broad, inventory_keys
 
 from _narrow_fixtures import Tree, _refs
-from _setup_role_fixtures import ROLE, build, narrow
+from _setup_role_fixtures import BETA, ROLE, build, narrow
 
 GROUP_VARS = "ansible/inventory/group_vars/all.yml"
 SECRETS = "ansible/vars/secrets.yml"
@@ -192,3 +193,66 @@ def test_key_readers_drops_a_refusing_secrets_half_and_keeps_the_inventory_half(
     assert key_readers(_secret_and_pin_moved(tree), tree.root) == [
         KeyReader(f"{ROLE}/templates/alpha.conf.j2", frozenset())
     ]
+
+
+def _beta_ships(tree: Tree, monkeypatch, shipped: str, text: str) -> None:
+    """`beta`'s task ships `shipped`, another role's file, which names the moved key."""
+    monkeypatch.setitem(
+        narrow_setup.deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
+        shipped,
+        frozenset({"demo"}),
+    )
+    tree.write(shipped, text)
+    task = f"- name: Ship it\n  ansible.builtin.copy:\n    src: {shipped}\n  tags: [beta]\n"
+    tree.write(f"{ROLE}/tasks/beta.yml", BETA + task)
+    tree.commit("beta ships another role's file")
+
+
+def test_a_key_a_shipped_verbatim_file_names_adds_no_tag(tree, monkeypatch):
+    """`hosts/lib/host_lib.py`'s docstring names `host_python_version`, and is copied as is."""
+    _beta_ships(
+        tree,
+        monkeypatch,
+        "hosts/lib/host_lib.py",
+        '"""Runs under host_python_version."""\n',
+    )
+    assert narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"')) == frozenset({"alpha"})
+
+
+def _secret_moves_beside_the_key(tree: Tree) -> tuple[str, str]:
+    """The range moves `s_key` in `secrets.yml` and `host_python_version` in the inventory."""
+    secrets = "s_key: ENC[AES256_GCM,data:aaa]\nsops:\n    mac: m1\n"
+    tree.write(SECRETS, secrets)
+    tree.commit("a secret")
+    tree.write(SECRETS, secrets.replace("aaa", "bbb").replace("m1", "m2"))
+    return _moved(tree, '"3.14.6"', '"3.15.2"')
+
+
+def test_a_secret_a_shipped_verbatim_file_names_keeps_the_narrow_answer(
+    tree, monkeypatch
+):
+    """`hosts/lib/host_lib.py` is copied as is, so its docstring reads no secret (#6992)."""
+    _beta_ships(tree, monkeypatch, "hosts/lib/host_lib.py", '"""Reads s_key."""\n')
+    assert narrow(tree, *_secret_moves_beside_the_key(tree)) == frozenset({"alpha"})
+
+
+def test_a_secret_a_shipped_template_names_widens_to_the_whole_role(tree, monkeypatch):
+    _beta_ships(
+        tree,
+        monkeypatch,
+        "ansible/roles/setup/common/templates/s.env.j2",
+        "S={{ s_key }}\n",
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match="s_key"):
+        narrow(tree, *_secret_moves_beside_the_key(tree))
+
+
+def test_a_key_a_shipped_template_names_adds_the_shipping_tag(tree, monkeypatch):
+    _beta_ships(
+        tree,
+        monkeypatch,
+        "ansible/roles/setup/common/templates/py.conf.j2",
+        "py = {{ host_python_version }}\n",
+    )
+    got = narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"'))
+    assert got == frozenset({"alpha", "beta"})

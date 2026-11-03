@@ -22,7 +22,7 @@ repository (daniel-box)* holds the design.
   `StateDirectoryMode=0711`: the signer traverses the builder's directory to reach `staged/`, as
   `http.server` traverses the signer's to reach `repo/`.
 - `/usr/lib/homelab/builder/`, root-owned: `host_package_builder.py`, `homelab_tool_fetch.py` (the
-  `homelab-tools` step below), `builder_ci_grade.py`, `builder_rollout_gate.py`,
+  `homelab-tools` step below), `builder_ci_grade.py`, `builder_rollout_gate.py`, `builder_python.py`,
   `homelab_repo_sign.py`, `host_lib.py`, `kuma_push.py` and `builder.conf`. The sources are in
   `hosts/lib/`. The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot
   rewrite the code the next run executes. `builder.conf` holds the deployer's CI contexts, its walk
@@ -58,6 +58,15 @@ on the builder's next run, with no Ansible apply.
 holds nfpm equal to CI's pin and uv equal to `initial_setup_uv_version`. The unit's second
 `ExecStartPre=` installs the pinned `host_python_version` into the state directory. Only
 `ExecStart=` sets `UV_PYTHON_DOWNLOADS=never`, through `env`, because the install itself downloads.
+
+**The render runs on the built tree's interpreter, not the unit's.** `HOMELAB_PYTHON` runs the
+builder script only. `hosts/lib/builder_python.py:tree_python` reads `host_python_version`
+from the chosen commit's `ansible/inventory/group_vars/all.yml`, and `render_python` installs it
+with downloads allowed for that one call. `render()` passes it to `uv run --python`. A tree with no pin
+renders on `HOMELAB_PYTHON`, and a pin that is not a dotted version, or an install that fails,
+reads `reason="build"`. The unit that pins a new interpreter ships in `homelab-daniel-box`, which
+only this render builds, so a render on the unit's pin deadlocked the 3.15.2 cutover for six
+hours (#7023).
 
 **The package does not generate the signing key.** The Ansible role generated it once.
 `docs/break-glass.md` item 9 holds the restore, and the rebuild procedure that generates a fresh key.

@@ -37,8 +37,8 @@ CORPUS = (
     # The shared k3s plane. A role with no containers_list entry, so `tag_for` drops it
     # while `role_for` and the shared mapper both still name it.
     "ansible/roles/k8s/manifests/tasks/main.yml",
-    # A Docker role, which is the Pi's plane and lands in `cs.services` rather than `cs.k8s`.
-    "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2",
+    # A second service role, so the named half does not rest on one role's two paths.
+    "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2",
     # The setup plane: no deploy tag exists for it at all.
     "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
     # A shared template and shared inventory -- broad, mapping to no single service.
@@ -50,7 +50,7 @@ CORPUS = (
     # `ansible/deploy.yml` to apply prose. The corpus had no `.md` under a role,
     # which is why the agreement test passed throughout.
     "ansible/roles/k8s/manifests/CLAUDE.md",
-    "ansible/roles/containers/wg-easy/CLAUDE.md",
+    "ansible/roles/k8s/wg-easy/CLAUDE.md",
     # A `.md` a role SHIPS, under files/. The deployer treats it as a document like any other,
     # so this mapper does too: one suffix rule, no location exception to keep in step.
     "ansible/roles/k8s/configarr/files/baseline/README.md",
@@ -63,12 +63,11 @@ CORPUS = (
 def _shared_roles(path: str) -> set[str]:
     """The role(s) the deployer's shared mapper attributes one path to.
 
-    The three service-bearing fields are unioned because they are one question split by
-    platform and by auto-deploy eligibility: `services` is the Docker plane, `k8s` the
-    cluster plane, `k8s_deploy` the image-pin subset split out of `k8s`.
+    The two service-bearing fields are unioned because they are one question split by
+    auto-deploy eligibility: `k8s_deploy` is the image-pin subset split out of `k8s`.
     """
     cs = services_from_changed_paths([path])
-    return set(cs.services) | set(cs.k8s) | set(cs.k8s_deploy)
+    return set(cs.k8s) | set(cs.k8s_deploy)
 
 
 def test_the_two_mappers_name_the_same_role_for_every_corpus_path():
@@ -99,7 +98,7 @@ def test_the_corpus_still_carries_a_document_inside_a_role_directory():
     """
     required = {
         "ansible/roles/k8s/manifests/CLAUDE.md",
-        "ansible/roles/containers/wg-easy/CLAUDE.md",
+        "ansible/roles/k8s/wg-easy/CLAUDE.md",
     }
     assert required <= set(CORPUS)
     for path in required:

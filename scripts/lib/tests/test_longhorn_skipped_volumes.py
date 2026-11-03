@@ -61,3 +61,17 @@ def test_skipped_volume_outside_the_watched_set_is_ignored():
         )
         is None
     )
+
+
+def test_a_trim_pods_skip_of_a_weekly_volume_is_ignored():
+    """The `trim` job skips a detached volume too, and that skip costs no recovery point."""
+    trim_line = SKIP_LINE.replace(
+        "weekly-backup-d4-29857230-cnd4h/weekly-backup-d4", "trim-29893330-f2mm2/trim"
+    )
+    old = [("pvc-prowlarr", "2027-01-08T04:30:00Z", "weekly-backup-d4")]
+    assert (
+        logic.check_skipped_weekly_volumes(
+            logic.parse_skipped_volumes(trim_line), WATCHED, old
+        )
+        is None
+    )

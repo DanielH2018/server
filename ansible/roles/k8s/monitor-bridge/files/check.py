@@ -1,29 +1,28 @@
 """monitor-bridge's run loop — one full check cycle, gates first.
 
 Stdlib only (runs on python:3.14-alpine with no extra deps). Each check returns
-(ok: bool, msg: str) and maps to one Kuma *push* monitor. Every loop iteration pushes
-the result (status=up|down): an explicit `down` gives fast, descriptive alerts, while
-the Kuma push monitor's heartbeat interval is the backstop for "the bridge itself died"
-(all pushes stop).
+(ok: bool, msg: str), and the exporter records the verdict as the row's
+`homelab_check_success` gauge, which the rules in observability's `bridge-exporter.yaml` page
+on. Since M6 batch A6's Cutover-2 nothing is pushed to Uptime Kuma.
 
 This module holds `run_once`, the gate tables it reads and the two helpers it calls. The
-registry is `registry.py`, which orders the three gate rows first and gives every `Check` the
+registry is `registry.py`, which orders the two gate rows first and gives every `Check` the
 `gate` its table row names. The command line and `main()` are `cli.py` — which is what the
 Deployment runs (`python /app/cli.py`). Configuration is a frozen `Config` `main()` builds once
 and threads down; see this role's CLAUDE.md, *Configuration is a parameter, not a module global*.
 
 A name the suite patches is read QUALIFIED from the module that binds it — `bridge.common.log`
 — never from-imported, because a from-import copies the value in at import time and never sees
-the patch. Nothing here is a module table any more: the checks arrive as the `checks` argument,
-the queries through `src` and the pushes through `sink`, so a test states them instead of
-patching them. Enforced by ansible/tests/services/test_bridge_patch_boundary.py; the census of
-what is patched where is ansible/tests/services/test_monitor_bridge_modules.py.
+the patch. Nothing here is a module table any more: the checks arrive as the `checks` argument
+and the queries through `src`, so a test states them instead of patching them. Enforced by
+ansible/tests/services/test_bridge_patch_boundary.py; the census of what is patched where is
+ansible/tests/services/test_monitor_bridge_modules.py.
 
 Design: docs/monitor-bridge-internals.md.
 
 Usage:
 
-    python /app/cli.py [--once] [--dry-run]
+    python /app/cli.py [--once]
 
 This module is a library, not the entry point. Running `check.py` directly prints a pointer
 to `cli.py` on stderr and exits 2. `-h` and `--help` print this text and exit 0.
@@ -32,17 +31,11 @@ to `cli.py` on stderr and exits 2. `-h` and `--help` print this text and exit 0.
 import time
 from collections.abc import Mapping
 from types import MappingProxyType
-from typing import TYPE_CHECKING
 
 import bridge.common
-import bridge.streaks
 from bridge.config import Config
-from bridge.sources import Sink, Sources
-from bridge.types import Check, CheckFn, CheckResult
-
-if TYPE_CHECKING:
-    # Annotation only: the exporter module is wired in by cli.py.
-    from verdict_export import CheckExposition
+from bridge.sources import Sources
+from bridge.types import Check, CheckFn, CheckResult, VerdictRecorder
 
 # Checks whose `up` line is logged every cycle, because something reads it as data. The
 # Longhorn Storage dashboard's four B2 panels regex the used/cap/pct/versions figures out of
@@ -50,19 +43,15 @@ if TYPE_CHECKING:
 # blank. ENFORCED: tests/test_check.py::test_every_dashboard_parsed_check_is_logged_when_up.
 LOGGED_WHEN_UP = frozenset({"b2_storage"})
 
-# The `Check.gate` value that holds a row `up` through its first down cycles instead of skipping
-# it. Every other value names a gate row, which `GATE_SKIP` keys.
-STARTUP_GRACE = "startup_grace"
-
-# What a dependent row pushes while its gate row reads down, keyed by the gate's name. A key is
-# also how `run_once` tells a gate row from any other. One outage then pages once, through the
-# gate's own tile, where every dependent would otherwise page at once: a check that cannot reach
-# Prometheus, B2 or the WAN reports "cannot tell", never "down". The gate rows run first and
-# have no gate of their own — a tile that cannot go red is not coverage (#2825).
+# What a dependent row logs while its gate row reads down, keyed by the gate's name. A key is
+# also how `run_once` tells a gate row from any other. The dependent's body is not called and
+# its gauge reads 0, and Alertmanager's inhibit rules hold the dependent's page behind the
+# gate's own, so one outage pages once. The gate rows run first and have no gate of their own,
+# so a gate that cannot go red is not coverage (#2825). There is no `prometheus` key: the
+# Watchdog pages a dead Prometheus, which cannot evaluate a rule either.
 GATE_SKIP = {
-    "prometheus": "skipped — Prometheus unreachable (see Prometheus monitor)",
-    "b2_reachable": "skipped — B2 unreachable (see B2 Reachable monitor)",
-    "wan_reachable": "skipped — WAN unreachable (see WAN Reachable monitor)",
+    "b2_reachable": "skipped — B2 unreachable (see B2Unreachable)",
+    "wan_reachable": "skipped — WAN unreachable (see WANUnreachable)",
 }
 
 # Prometheus `job` -> the checks a dead exporter of that job skips. Scrape Targets names the dead
@@ -148,53 +137,53 @@ def run_once(
     cfg: Config,
     src: Sources,
     checks: list[Check],
-    sink: Sink,
-    dry_run: bool = False,
     only: frozenset[str] | None = None,
-    export: "CheckExposition | None" = None,
+    export: VerdictRecorder | None = None,
 ) -> None:
-    """Runs one full check cycle: every enabled check, the three gate rows first.
+    """Runs one full check cycle: every enabled check, the two gate rows first.
 
     `checks` arrives in the order `registry.build_checks` returns it, the gate rows first. A row
-    whose `gate` names a gate row that read down this cycle is not run: it pushes `up` with a
-    skip message, so its heartbeat survives and only the gate's own tile pages. A row under
-    `startup_grace` is held `up` through its first down cycle. Every other row is evaluated,
-    logged and pushed to its Kuma monitor.
+    whose `gate` names a gate row that read down this cycle is not run: its gauge reads 0 and
+    Alertmanager's inhibit rule holds its page behind the gate's. A row under an exporter that
+    is down is skipped the same way. Every other row is evaluated and logged.
 
     Args:
       cfg: The frozen config `main()` built — the ONLY source of configuration in a cycle.
       src: The `Sources` `main()` built — every Prometheus, Loki and HTTP query a gate or a
-        check body sends goes through it, and its `state` carries the startup grace's streaks.
-        A test hands in a fake holding canned answers.
-      checks: The registry to evaluate, as `registry.build_checks(env)` returns it. A
-        parameter rather than a module table so a test hands in the entries it means. A gate
-        row must come before the rows that name it; a gate the filter disables, or one absent
-        from the list, reads as up.
-      sink: Where every verdict is pushed. REQUIRED rather than defaulted to a live
-        `Sink(cfg)`, so a test that forgets it fails instead of pushing to the real Kuma.
-        cli.main() builds the one production `Sink` per process.
-      dry_run: Evaluate and log every check, but push nothing to Kuma. Defaults to False, so
-        the pod's own `python /app/cli.py` and every existing caller are unchanged.
+        check body sends goes through it. A test hands in a fake holding canned answers.
+      checks: The registry to evaluate, as `registry.build_checks()` returns it. A parameter
+        rather than a module table so a test hands in the entries it means. A gate row must
+        come before the rows that name it; a gate the filter disables, or one absent from the
+        list, reads as up.
       only: The enable-exactly-this-set filter `--check` builds. None reads cfg.CHECKS_ONLY,
         which is what the pod runs with, so it must reach EVERY check_enabled call below — a
         filter validated in main() and not passed here would print an enabled count it does
         not honour.
-      export: Where each enabled row's verdict is also recorded for Prometheus. A row skipped
-        by a gate or an exporter records 0 and its body is not called. Any other row records
-        `_evaluate`'s verdict, taken before `startup_grace` holds it `up`. None records
-        nothing, which is every caller but the looping pod.
+      export: Where each enabled row's verdict is recorded for Prometheus. A row skipped by a
+        gate or an exporter records 0 and its body is not called. Any other row records
+        `_evaluate`'s verdict. None records nothing, which is every caller but the looping pod.
     """
     only = cfg.CHECKS_ONLY if only is None else only
     skip = cfg.CHECKS_SKIP
-    # A routine verdict is logged only on a narrowed or dry run, where someone reads the
-    # output for it. The pod logged ~50 OK lines every 300 s cycle, burying the DOWN ones;
-    # it now logs each DOWN line, each `up` that is holding a down streak (a page on its
-    # way), the LOGGED_WHEN_UP lines, and one CYCLE count (#4448). A SKIP line repeats what
-    # its gate's DOWN line already says, so it is counted rather than logged.
-    log_all = bool(only) or dry_run
+    # A routine verdict is logged only on a narrowed run, where someone reads the output for
+    # it. The pod logged ~50 OK lines every 300 s cycle, burying the DOWN ones; it now logs each
+    # DOWN line, each `up` that is holding a down streak (a page on its way), the LOGGED_WHEN_UP
+    # lines, and one CYCLE count (#4448). A SKIP line repeats what its gate's DOWN line already
+    # says, so it is counted rather than logged.
+    log_all = bool(only)
     counts = {"up": 0, "down": 0, "skipped": 0}
     down_gates: set[str] = set()
+    # DECIDED: the exporter probe runs once per cycle, before the first row, and only when an
+    # enabled row sits under `EXPORTER_DEPENDENT`. The `prometheus` gate row used to order it
+    # (the probe ran after that row answered), and Cutover-2 deleted the row. A probe that
+    # fails leaves the set empty, so the dependents run and fail toward alerting.
+    dependents = frozenset().union(*EXPORTER_DEPENDENT.values())
     suppressed: set[str] = set()
+    if any(
+        entry.name in dependents and check_enabled(entry.name, only, skip)
+        for entry in checks
+    ):
+        suppressed = _exporter_suppressed(src)
 
     def log_skip(name: str, msg: str) -> None:
         if log_all:
@@ -208,7 +197,7 @@ def run_once(
         # body's own.
         exported = False
         # DECIDED: the gate skip stays in the bridge, ahead of the body, though Alertmanager
-        # will own the paging suppression. A skipped body is never called, and that is the
+        # owns the paging suppression. A skipped body is never called, and that is the
         # point: a B2 cap answer is billed (`checks/b2.py:check_b2_reachable`), so calling
         # `b2_storage` during a cap breach would bill one listing every 300s cycle, and the
         # four WAN bodies would each wait out their timeouts through a WAN outage. A rule
@@ -218,21 +207,13 @@ def run_once(
             ok, msg = True, GATE_SKIP[entry.gate]
             log_skip(name, msg)
         elif name in suppressed:
-            ok, msg = True, "skipped — exporter down (see Scrape Targets)"
+            ok, msg = True, "skipped — exporter down (see ScrapeTargetDown)"
             log_skip(name, msg)
         else:
             ok, msg = _evaluate(cfg, src, name, entry.fn)
             exported = ok
             if name in GATE_SKIP and not ok:
                 down_gates.add(name)
-            if name == "prometheus" and ok:
-                # Probed once Prometheus answers, so a dead exporter's dependents are skipped
-                # before they run.
-                suppressed = _exporter_suppressed(src)
-            if entry.gate == STARTUP_GRACE:
-                ok, msg = bridge.streaks.apply_startup_grace(
-                    name, ok, msg, cfg.GRACE_CYCLES, src.state.grace_streaks
-                )
             if log_all or not ok or "streak" in msg or name in LOGGED_WHEN_UP:
                 bridge.common.log("OK  " if ok else "DOWN", name, "-", msg)
         if export is not None:
@@ -241,19 +222,17 @@ def run_once(
             counts["skipped"] += 1
         else:
             counts["up" if ok else "down"] += 1
-        if not dry_run:
-            sink.push(entry.token, ok, msg)
     bridge.common.log(
         "CYCLE",
         "%(up)d up, %(down)d down, %(skipped)d skipped" % counts,
-        "- run with --dry-run or --check <name> to log every verdict",
+        "- run with --check <name> to log every verdict",
     )
 
 
 if __name__ == "__main__":
-    # check.py was the entry point until this split, so `python check.py --once --dry-run` is
-    # what a stale runbook (or muscle memory) still reaches for. Without this it exits 0 having
-    # printed nothing and pushed nothing, which reads as a clean dry run rather than a no-op.
+    # check.py was the entry point until this split, so `python check.py --once` is what a
+    # stale runbook (or muscle memory) still reaches for. Without this it exits 0 having
+    # printed nothing, which reads as a clean run rather than a no-op.
     import sys
 
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):

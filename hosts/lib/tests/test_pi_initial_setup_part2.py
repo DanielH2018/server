@@ -189,6 +189,14 @@ def test_the_scans_read_the_pis_own_tokens_and_the_packaged_libraries(package):
     assert "\nALLOW_SSH_ROOT_USER=unset\n" in _text(package, "/etc/rkhunter.conf.local")
 
 
+def test_the_rkhunter_scan_downloads_no_data_files(package):
+    # Debian's WEB_CMD="/bin/false" makes `rkhunter --update` fail on every run (#6964).
+    unit = _text(package, "/usr/lib/systemd/system/homelab-rkhunter-check.service")
+    assert "ExecStart=/usr/lib/homelab/rkhunter-check\n" in unit
+    assert "--update" not in unit
+    assert "WEB_CMD" not in _text(package, "/etc/rkhunter.conf.local")
+
+
 def test_the_jail_postfix_and_sysstat_edits_restart_their_daemon(package):
     assert package.activations["/etc/fail2ban/jail.d/homelab.conf"] == (
         "try-restart:fail2ban.service"

@@ -1,13 +1,14 @@
 {
-  "checksum": "8ee35606f8363e6e012c02faae1eda8ddabe07c2ddaa546c5e9c0c1609a8c293",
+  "checksum": "59ee150a658923a41ddfe8e2d87d3bd3c3188d7aa3aba4424b1997fd3675319d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/claude-code/CLAUDE.md#The root inspector",
   "row": {
     "atoms": {
       "hosts/components/claude-code/files/homelab_rootq.py:COMMANDS": "1fe52bd37215fbe7d113af8deb75fc73b087c5c8d2e058907fd82b65b8fbf106",
-      "hosts/components/claude-code/files/homelab_rootq.py:PATHS": "c80590f972de318f31f00c1aad5b81443befeae2fdb9454cfd5d858597a612db"
+      "hosts/components/claude-code/files/homelab_rootq.py:DENY_EXEMPT": "12fb84430acbb2d6d01d3eac69f5eb9bf141bce40d0de3173fe44410198455eb",
+      "hosts/components/claude-code/files/homelab_rootq.py:PATHS": "a9c4ea265a4cee57fdda5cbbf70d40e2879163e97cea953443b2f926e618a41d"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "4bbf51ecc"
   }
 }

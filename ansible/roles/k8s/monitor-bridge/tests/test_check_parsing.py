@@ -159,7 +159,7 @@ def test_repr_hides_every_credential_but_not_ordinary_config():
     """The rejecting half and the accepting half, so a repr that hid EVERYTHING would fail too.
 
     `@dataclass(repr=False)` on the whole class would satisfy the secrecy assertion while making
-    the object useless to debug; the KUMA_URL assertion is what rules that out.
+    the object useless to debug; the LOKI_URL assertion is what rules that out.
     """
     # The non-vacuity anchor: this test is only as good as _SECRET_ENV is complete, and an
     # empty or shrunken list would still pass every assertion below.
@@ -169,7 +169,7 @@ def test_repr_hides_every_credential_but_not_ordinary_config():
     )
 
     env = dict(_SECRET_ENV)
-    env["KUMA_URL"] = "http://uptime-kuma.sentinel:3001"
+    env["LOKI_URL"] = "http://loki.sentinel:3100"
     cfg = load_config(env)
     rendered = repr(cfg)
 
@@ -183,4 +183,4 @@ def test_repr_hides_every_credential_but_not_ordinary_config():
     assert cfg.HA_TOKEN == "sentinel-ha-token"
     assert cfg.SMTP_PASSWORD == "sentinel-smtp-password"
     # ...and ordinary configuration is still visible, which is what a repr is for.
-    assert "http://uptime-kuma.sentinel:3001" in rendered
+    assert "http://loki.sentinel:3100" in rendered

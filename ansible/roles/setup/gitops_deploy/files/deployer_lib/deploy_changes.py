@@ -40,16 +40,16 @@ from deployer_lib.deploy_setup_roles import (  # noqa: F401  (re-exported for th
 # plane and which subdirectory it accepted.
 #
 # The third group takes a TRAILING SLASH, so a file at a role's own root reports no
-# subdirectory rather than its own basename. The catch-all branch in
-# `services_from_changed_paths` reads that field.
-_ROLE_PATH = re.compile(r"^ansible/roles/(containers|k8s|setup)/([^/]+)/(?:([^/]+)/)?")
+# subdirectory rather than its own basename. `land_shared` and `digest_covers` read that
+# field.
+_ROLE_PATH = re.compile(r"^ansible/roles/(k8s|setup)/([^/]+)/(?:([^/]+)/)?")
 
 
 class RolePath(NamedTuple):
     """The role directory a changed path sits in.
 
     Attributes:
-        plane: `containers`, `k8s` or `setup` — the tree, which decides what can apply it.
+        plane: `k8s` or `setup` — the tree, which decides what can apply it.
         role: the role directory's name. NOT necessarily a deploy tag: only a role with a
             `containers_list` entry has one, which is `land_tags.tag_for`'s question.
         subdir: the directory under the role the path sits in (`templates`, `tasks`, `meta`,
@@ -66,18 +66,14 @@ def role_of(path: str) -> RolePath | None:
 
     The PLAIN mapper, deliberately: it answers the path shape and nothing else. Every policy
     about which roles and which files count stays with the caller, because the callers
-    genuinely differ — this module routes `containers/common/` to the Pi before the role
-    branches below are reached, `narrow_lib/broad.py` reads a tree at a ref where
-    `containers/archive/` no longer exists, and `land_tags.role_for` reads DIFF paths and so
-    still excludes `common` and drops a `.md`. Folding one in would change what deploys.
+    genuinely differ — this module routes a setup role to the broad setup plane before the
+    role branches below are reached, `narrow_lib/broad.py` reads a tree at a ref where a
+    deleted role no longer exists, and `land_tags.role_for` reads DIFF paths and so drops a
+    `.md`. Folding one in would change what deploys.
     """
     m = _ROLE_PATH.match(path)
     return RolePath(m.group(1), m.group(2), m.group(3) or "") if m else None
 
-
-# The Pi's shared Compose deploy path, which daniel-box's play never reads: Pi work
-# (`ChangeSet.pi_shared`), not a broad change buying a full `deploy.yml` run here (#2805).
-_PI_SHARED_PREFIX = "ansible/roles/containers/common/"
 
 # Changes whose blast radius we don't try to scope automatically. Split by which manual playbook
 # actually applies them, so the defer-and-alert can name the RIGHT one (2026-07-16 review M1):
@@ -91,7 +87,7 @@ _BROAD_DEPLOY_PREFIXES = (
     # sibling task dirs matched nothing: `role_of` is anchored to ansible/roles/, so a
     # change to `pre_tasks/load_secrets.yml`, `tasks/k8s_batch.yml` (the k8s rollout-batch path) or
     # `post_tasks/k8s_stabilise_gate.yml` (the post-deploy stabilisation gate) returned a fully
-    # EMPTY ChangeSet. main() has no catch-all branch — `if not cs.services:` ff-merges
+    # EMPTY ChangeSet. main()'s fall-through, `handle_merge_only`, ff-merges
     # unconditionally and both alert_deferred/alert_secrets_deferred no-op on empty fields — so
     # empty-because-unclassified was bit-for-bit indistinguishable from empty-because-docs: a
     # silent ff-merge, no alert, no deploy, on files that change what EVERY deploy does.
@@ -308,12 +304,11 @@ def _is_test_only_path(path: str) -> bool:
 
 @dataclass
 class ChangeSet:
-    """What one push's changed paths add up to: which services to deploy, which planes are broad.
+    """What one push's changed paths add up to: which k8s roles changed, which planes are broad.
 
     Each field's own comment documents its meaning and how it interacts with the others.
     """
 
-    services: set[str] = field(default_factory=set)
     broad: bool = False
     # Which manual playbook a broad change needs — deploy.yml's plane (shared templates/inventory)
     # vs initial_setup.yml's (roles/setup/, requirements.yml, bring-up playbooks). `broad`
@@ -339,10 +334,6 @@ class ChangeSet:
     # inventory key, and a lookup that failed.
     key_reader_roles: set[str] = field(default_factory=set)
     key_readers_failed: bool = False
-    pi_shared: bool = False  # a `_PI_SHARED_PREFIX` change: merged, never applied here
-    # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
-    # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …), named for history.
-    tasks: set[str] = field(default_factory=set)
     # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...) and are not promoted to
     # `k8s_deploy` below. Each defer-and-alerts; nothing this tick applies can cover one.
     k8s: set[str] = field(default_factory=set)
@@ -464,10 +455,10 @@ def is_doc(path: str) -> bool:
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     """Classify one push's changed paths into a ChangeSet.
 
-    Routes each path to the plane it belongs to — Docker service config, the tasks
-    defer-and-alert channel, a k8s role, or one of the broad-change prefixes — in the order
-    each branch below requires (test paths first, then documentation, then secrets, then
-    broad-manual ahead of broad-setup, then the active-role regexes).
+    Routes each path to the plane it belongs to — a k8s role or one of the broad-change
+    prefixes — in the order each branch below requires (test paths first, then
+    documentation, then secrets, then broad-manual ahead of broad-setup, then the role
+    mapper).
 
     Args:
         paths: repo-relative paths changed between local and origin.
@@ -483,8 +474,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # and one under roles/k8s/<svc>/files/ read as a k8s change and defer-alerted. PR #707
         # was three test files and did both, costing two hand-run commands to clear (2026-09-01).
         #
-        # An empty ChangeSet is the right outcome, not a hole: gitops_deploy.py takes the
-        # `if not cs.services` branch and fast-forwards, exactly as it does for a docs-only push.
+        # An empty ChangeSet is the right outcome, not a hole: gitops_deploy.py falls through
+        # to `handle_merge_only` and fast-forwards, exactly as it does for a docs-only push.
         if _is_test_only_path(p):
             continue
         # Documentation reaches no host either, and it is tested here — ONCE, ahead of every
@@ -521,9 +512,6 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad_setup = True
             cs.setup_roles |= setup_roles_for(p)
             continue
-        if p.startswith(_PI_SHARED_PREFIX):
-            cs.pi_shared = True
-            continue
         if any(p.startswith(prefix) for prefix in _BROAD_DEPLOY_PREFIXES):
             cs.broad = True
             cs.broad_deploy = True
@@ -536,30 +524,12 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.setup_roles |= shipped
             continue
         at = role_of(p)
-        if at is None:
-            continue
-        if at.plane == "k8s":
+        # A setup-plane path never gets here: `_BROAD_SETUP_PREFIXES` consumes it above.
+        if at is not None and at.plane == "k8s":
             # A k8s role change the deployer applies only as a promoted image-pin bump
             # (`split_k8s_auto_deploy`, `cs.k8s_deploy`); every other one defer-and-alerts.
             # The whole role dir, because the alert only needs to name the role.
             cs.k8s.add(at.role)
-        elif at.plane != "containers":
-            # A setup-plane path, which `_BROAD_SETUP_PREFIXES` consumes before this loop
-            # reaches here. Named so the branches below only see a CONTAINER role's path.
-            continue
-        elif at.subdir in ("templates", "files"):
-            # A bind-mounted file under a container role: the docker-compose.yml.j2 OR any
-            # config template / files/ asset. It reaches the container on its next deploy, so
-            # it maps to a scoped, health-gated redeploy rather than a silent ff-merge.
-            cs.services.add(at.role)
-        else:
-            # tasks/, and the catch-all for any other file under a container role —
-            # `defaults/`, `vars/`, `handlers/`, `meta/`, a file at the role's root, or a future dir.
-            # None is auto-deployed, and each changes what a deploy of that service does, so
-            # it defer-and-alerts on the tasks channel instead of taking the silent docs-only
-            # ff-merge — the same asymmetry the secrets / requirements.yml paths close. A
-            # *.md never reaches here: the docs test at the top of the loop keeps it silent.
-            cs.tasks.add(at.role)
     return cs
 
 

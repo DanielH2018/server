@@ -16,7 +16,6 @@ from lib.repo_paths import REPO
 from deployer_lib.deploy_alert_text import (
     manual_plane_alert,
     secrets_deferred_alert,
-    tasks_deferred_alert,
 )
 from deployer_lib.deploy_remediation import (
     broad_remediation,
@@ -113,10 +112,7 @@ def test_the_k8s_redeploy_runs_through_the_pinned_env():
 
 
 def test_the_deferred_redeploy_alerts_run_through_the_pinned_env():
-    alerts = [
-        secrets_deferred_alert("abc123def4567890"),
-        tasks_deferred_alert("abc123def4567890", {"sonarr"}),
-    ]
-    assert all(f"`{PINNED} ansible/deploy.yml --tags <svc>`" in a for a in alerts)
-    assert [_bare(a) for a in alerts] == [[], []]
-    assert f"`{PINNED} ansible/initial_setup.yml --tags <role>`" in alerts[0]
+    alert = secrets_deferred_alert("abc123def4567890")
+    assert f"`{PINNED} ansible/deploy.yml --tags <svc>`" in alert
+    assert _bare(alert) == []
+    assert f"`{PINNED} ansible/initial_setup.yml --tags <role>`" in alert

@@ -17,7 +17,7 @@ from deployer_lib.deploy_toolbox import DeployTools
 
 LOCAL = "1" * 40
 ORIGIN = "2" * 40
-DOCKER_TEMPLATE = "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"
+K8S_TEMPLATE = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
 # A contention stamp later than any tick_started the suite can see, so the marker reads as
 # written by the tick under test without reading the live clock.
 AFTER_ANY_TICK_START = 4_000_000_000.0
@@ -104,13 +104,13 @@ def test_a_converged_tick_is_nothing(gitops_deploy, tick, state):
 
 def test_a_held_origin_is_held(gitops_deploy, tick, state):
     state.write_hold(ORIGIN)
-    tick.paths = [DOCKER_TEMPLATE]
+    tick.paths = [K8S_TEMPLATE]
     assert _labelled_main(gitops_deploy, tick, state) == ["held"]
 
 
 def test_pending_ci_is_ci_wait(gitops_deploy, tick, state):
     tick.ci = "pending"
-    tick.paths = [DOCKER_TEMPLATE]
+    tick.paths = [K8S_TEMPLATE]
     assert _labelled_main(gitops_deploy, tick, state) == ["ci-wait"]
 
 

@@ -10,14 +10,6 @@
     state: present
   become: true
 
-- name: Update rkhunter data files
-  tags: [rkhunter]
-  when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
-  ansible.builtin.command: rkhunter --update --nocolors
-  become: true
-  changed_when: false
-  failed_when: false
-
 - name: Initialize rkhunter file-properties baseline (first run only)
   tags: [rkhunter]
   when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
@@ -341,7 +333,7 @@
   tags: [aide]
   when: inventory_hostname not in initial_setup_packaged_hosts['fail2ban']
   # The script runs aide, keeps its exit code and pushes the verdict to this host's Kuma tile;
-  # its header has the exit-code mapping and why differences push UP (#4594).
+  # its header has the exit-code mapping and which differences push DOWN (#4594, #4599).
   ansible.builtin.template:
     src: aide-check.sh.j2
     dest: /usr/local/bin/aide-check.sh

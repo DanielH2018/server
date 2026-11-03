@@ -3,8 +3,7 @@
 alert_once() advances its per-SHA marker on DETECTION, not delivery, and hands the post to
 deliver(): a webhook blip is redelivered by the queue, and an ff-merged path that noops on
 the next tick does not re-page. alert_deferred() and alert_secrets_deferred() choose the
-channel and the text; the tasks and meta channels subtract what this tick deployed, the k8s
-channel never does. DeployerState.record_behind() stamps the behind-origin marker
+channel and the text. DeployerState.record_behind() stamps the behind-origin marker
 once and keeps the first-seen time across later pushes, and the entrypoint() that feeds it
 never lets a git failure page. Every test runs
 against the canned config and the tmp state dir from conftest.py; main()'s own branches
@@ -69,12 +68,12 @@ def test_alert_once_delivers_and_advances_the_marker(
         tools,
         state,
         settings,
-        "tasks",
+        "secrets",
         ORIGIN,
         "changed",
     )
-    assert seen == [(f"tasks:{ORIGIN}", "changed")]
-    assert _alerted(state_dir, "tasks") == ORIGIN
+    assert seen == [(f"secrets:{ORIGIN}", "changed")]
+    assert _alerted(state_dir, "secrets") == ORIGIN
 
 
 def test_alert_once_is_silent_for_a_sha_already_alerted(
@@ -86,14 +85,14 @@ def test_alert_once_is_silent_for_a_sha_already_alerted(
             tools,
             state,
             settings,
-            "tasks",
+            "secrets",
             ORIGIN,
             "changed",
         )
     assert len(seen) == 1
-    deploy_alerts.alert_once(tools, state, settings, "tasks", LATER, "again")
-    assert seen[-1] == (f"tasks:{LATER}", "again")
-    assert _alerted(state_dir, "tasks") == LATER
+    deploy_alerts.alert_once(tools, state, settings, "secrets", LATER, "again")
+    assert seen[-1] == (f"secrets:{LATER}", "again")
+    assert _alerted(state_dir, "secrets") == LATER
 
 
 def test_alert_once_marks_detection_not_delivery(
@@ -102,10 +101,10 @@ def test_alert_once_marks_detection_not_delivery(
     # A failed post must not re-page on the next tick through this path: the marker advances
     # anyway, and redelivery is the pending queue's job. Real deliver(), refused webhook.
     tools = DeployTools(discord_post=lambda _webhook, _content: False)
-    deploy_alerts.alert_once(tools, state, settings, "tasks", ORIGIN, "changed")
-    assert _alerted(state_dir, "tasks") == ORIGIN
+    deploy_alerts.alert_once(tools, state, settings, "secrets", ORIGIN, "changed")
+    assert _alerted(state_dir, "secrets") == ORIGIN
     queued = json.loads((state_dir / "pending_alerts.json").read_text())
-    assert queued == {f"tasks:{ORIGIN}": "changed"}
+    assert queued == {f"secrets:{ORIGIN}": "changed"}
 
 
 # ── alert_secrets_deferred() ──────────────────────────────────────────────────────────────────
@@ -128,44 +127,21 @@ def test_a_secrets_change_pages_once_naming_the_sha(
 def test_no_secrets_change_pages_nothing(gitops_deploy, state_dir, settings, state):
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_secrets_deferred(
-        tools, state, settings, ORIGIN, ChangeSet(services={"sonarr"})
+        tools, state, settings, ORIGIN, ChangeSet(k8s={"sonarr"})
     )
     assert seen == []
     assert _alerted(state_dir, "secrets") is None
 
 
-# ── alert_deferred(): tasks and k8s channels ──────────────────────────────────────────────────
+# ── alert_deferred(): the k8s channel ──────────────────────────────────────────────────────────────
 def test_an_empty_changeset_pages_nothing(gitops_deploy, state_dir, settings, state):
     tools, seen = _posts(state_dir)
-    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, set(), ChangeSet())
+    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, ChangeSet())
     assert seen == []
     # The keyed marker itself, not a glob for per-channel basenames: those
     # files do not exist at all, so `not any(...endswith("_alerted_sha"))` would pass over a
     # slot this call had written.
     assert _marker(state_dir, "alerted_shas") is None
-
-
-def test_tasks_name_only_what_this_tick_did_not_deploy(
-    gitops_deploy, state_dir, settings, state
-):
-    # A combined push: svcA's template rode its scoped redeploy, svcB's tasks/ did not.
-    tools, seen = _posts(state_dir)
-    cs = ChangeSet(services={"svca"}, tasks={"svca", "svcb"})
-    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, {"svca"}, cs)
-    by_key = dict(seen)
-    assert set(by_key) == {f"tasks:{ORIGIN}"}
-    assert "`svcb`" in by_key[f"tasks:{ORIGIN}"]
-    assert "svca" not in by_key[f"tasks:{ORIGIN}"]
-    assert _alerted(state_dir, "tasks") == ORIGIN
-
-
-def test_a_structural_change_that_rode_its_own_redeploy_is_not_flagged(
-    gitops_deploy, state_dir, settings, state
-):
-    tools, seen = _posts(state_dir)
-    cs = ChangeSet(services={"svca"}, tasks={"svca"})
-    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, {"svca"}, cs)
-    assert seen == []
 
 
 def test_a_k8s_change_pages_with_the_remediation_for_this_host(
@@ -174,31 +150,13 @@ def test_a_k8s_change_pages_with_the_remediation_for_this_host(
     tools, seen = _posts(state_dir)
     cs = ChangeSet(k8s={"sonarr"})
     deploy_alerts.alert_deferred(
-        tools, state, settings, ORIGIN, set(), cs, declared_k8s={"sonarr"}
+        tools, state, settings, ORIGIN, cs, declared_k8s={"sonarr"}
     )
     ((key, content),) = seen
     assert key == f"k8s:{ORIGIN}"
     assert "`sonarr`" in content and ORIGIN[:8] in content
     assert content.endswith(k8s_remediation({"sonarr"}, {"sonarr"}, set()))
     assert _alerted(state_dir, "k8s") == ORIGIN
-
-
-def test_a_k8s_change_is_flagged_even_when_something_else_deployed(
-    gitops_deploy, state_dir, settings, state
-):
-    # Unlike tasks/meta there is no `- deployed` subtraction: this deployer never applies a k8s
-    # role through deploy(cs.services), so nothing a k8s change could have ridden.
-    tools, seen = _posts(state_dir)
-    deploy_alerts.alert_deferred(
-        tools,
-        state,
-        settings,
-        ORIGIN,
-        {"sonarr"},
-        ChangeSet(services={"sonarr"}, k8s={"sonarr"}),
-        {"sonarr"},
-    )
-    assert [key for key, _ in seen] == [f"k8s:{ORIGIN}"]
 
 
 def test_an_unread_inventory_prescribes_the_full_deploy(
@@ -209,7 +167,7 @@ def test_an_unread_inventory_prescribes_the_full_deploy(
     # but a `--tags` line for a role with no entry exits 0 having applied nothing.
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_deferred(
-        tools, state, settings, ORIGIN, set(), ChangeSet(k8s={"sonarr"})
+        tools, state, settings, ORIGIN, ChangeSet(k8s={"sonarr"})
     )
     ((_key, content),) = seen
     assert content.endswith(k8s_remediation({"sonarr"}, set(), set()))

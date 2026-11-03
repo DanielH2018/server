@@ -16,7 +16,7 @@ Stdlib only, like every module under files/.
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple, Protocol
 
 from bridge.config import Config
 
@@ -31,6 +31,12 @@ type JsonObject = dict[str, JsonValue]
 
 # Every check body and every gate probe: the frozen config, and the sources it reads.
 CheckFn = Callable[[Config, "Sources"], tuple[bool, str]]
+
+
+class VerdictRecorder(Protocol):
+    """Where `check.run_once` records each enabled row's verdict: `CheckExposition` in the pod."""
+
+    def record(self, name: str, ok: bool, now: float) -> None: ...
 
 
 class CheckResult(NamedTuple):
@@ -52,74 +58,43 @@ class Check:
 
     Attributes:
       name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
-      token: The Kuma push-monitor token this check's result is pushed to. Empty skips the push.
       fn: The check body. Takes the frozen `Config` and the `Sources`, and returns (ok, msg).
-      gate: The row's `gate` column. A reachability gate's name (`prometheus`, `b2_reachable`,
-        `wan_reachable`) skips this row while that gate row reads down, `startup_grace` holds
-        it `up` through its first down cycle, and None does neither. `check.run_once` reads
-        it, so the gate sets are never stated twice.
+      gate: The row's `gate` column. A reachability gate's name (`b2_reachable`, `wan_reachable`)
+        skips this row while that gate row reads down, and any other value skips nothing.
+        `check.run_once` reads it, so the gate sets are never stated twice.
     """
 
     name: str
-    token: str
     fn: CheckFn
     gate: str | None = None
 
 
 @dataclass(frozen=True)
 class PushCheck:
-    """One row of `check_table.CHECKS`: a check or gate, and the Kuma push tile it feeds.
+    """One row of `check_table.CHECKS`: a check or gate.
 
     Every field but `fn` must be written as a LITERAL in the table. The deploy reads the table
     with `ansible/filter_plugins/py_table.py`, which parses `check_table.py` rather than running
     it, and keeps only the keyword arguments whose value is a literal. `fn` is the one it drops.
 
     Attributes:
-      name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP, the gate sets and
-        `push_env` refer to.
+      name: The check's own name — what CHECKS_ONLY/CHECKS_SKIP and the gate sets refer to.
       fn: The check body, or the gate's probe for a row with `is_gate`.
-      token: The SOPS secret holding the push token. The env-secret renders its value as
-        `push_env(name)`, and the Kuma tile renders it as the tile's `push_token`.
-      kuma_id: The AutoKuma id, the declaration's file name minus `.json`. AutoKuma keys its
-        entity map on it, so changing it deletes the live monitor and its history.
-      display: The Kuma display name.
-      description: What the tile reads, what a DOWN means and where to look.
-      status_group: The status page group the tile is listed under, one of
-        `uptime_kuma_k8s_status_page_groups`' names. uptime-kuma's sync ConfigMap pins the
-        tile's id into that group's rule.
-      gate: The gate whose outage suppresses this check (`prometheus`, `b2_reachable`,
-        `wan_reachable`), or `startup_grace` for a reach-out check held `up`
-        through its first down cycles. One value per row, because a check in two of these
-        sets would be suppressed by one and held by the other.
-      is_gate: This row is one of the three reachability gates, which `check.run_once`
-        evaluates first; `registry.build_checks` leaves it out.
-      critical: The tile carries `tag-severity: critical` and notifies email as well as
-        Discord. Every tile that pages by email carries the severity tag, so one flag sets
-        both.
-      runbook: The docs page slug the tile's `tag-runbook` links to.
+      gate: The gate whose outage suppresses this check (`b2_reachable`, `wan_reachable`),
+        `prometheus` for a row that reads Prometheus and sits under `EXPORTER_DEPENDENT`, or
+        `startup_grace` for a reach-out check whose rule carries `for: 10m`. One value per row.
+      is_gate: This row is one of the two reachability gates, which `check.run_once`
+        evaluates first.
+      critical: The row's rule carries `severity: critical` and mails as well as posts.
+      runbook: The docs page slug the rule's `runbook_url` links to.
     """
 
     name: str
     fn: CheckFn
-    token: str
-    kuma_id: str
-    display: str
-    description: str
-    status_group: str
     gate: str | None = None
     is_gate: bool = False
     critical: bool = False
     runbook: str | None = None
-
-
-def push_env(name: str) -> str:
-    """The env var carrying the Kuma push token of the check or gate called `name`.
-
-    Derived, not declared: `templates/env-secret.yaml.j2` renders one `KUMA_PUSH_<NAME>` per row
-    of `check_table.CHECKS` by the same rule, so a check's name is the only spelling the two
-    sides share (#3659).
-    """
-    return "KUMA_PUSH_" + name.upper()
 
 
 def as_object(value: JsonValue, what: str) -> JsonObject:

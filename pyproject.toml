@@ -5,6 +5,10 @@ requires-python = ">=3.15"
 
 [tool.uv]
 package = false                      # virtual project: manage deps/lock, do not build the repo
+# DECIDED: compile at sync, as the syncing user, so a root importer finds fresh bytecode and
+# writes no root-owned __pycache__ a session cannot delete. Costs ~0.4s per cold sync on 16
+# cores and ~1.2s on 2 (measured in #6984).
+compile-bytecode = true
 
 # PyYAML ships no wheel for some interpreters, and a source build without libyaml's headers
 # silently falls back to the pure-Python parser, which rejects input the C loader accepts.
@@ -34,7 +38,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   # own OpenAPI files for core kinds, the catalog's for CRDs.
   "mkdocs-material>=9.5",           # the docs site; `uv run mkdocs build` renders docs/ into site/
   "zizmor>=1.0",
-  "ty==0.0.95",                     # first-party Python type gate (prek hook). Pinned exactly, not
+  "ty==0.0.96",                     # first-party Python type gate (prek hook). Pinned exactly, not
   # `>=`, because ty is pre-1.0: a 0.0.x bump can add a rule or
   # change an inference and turn master red on an unrelated PR.
   # Renovate raises the bump as its own PR, which is where the

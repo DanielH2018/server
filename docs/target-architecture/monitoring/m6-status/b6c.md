@@ -31,9 +31,10 @@ writes the file.
    `.claude/hooks/tests/test_block_protected_bash.py` asserts the token in the script's
    protected paths, so the same PR updates it. With no token in the render, the script is no
    longer a STUB, and `probe.py applied` compares it (#6917).
-5. The token PR, a week after Cutover-1b, retires `registry_gc_push_token`. C-1a waits for it.
-   It is the last retirement the plans schedule, so it also deletes
-   `scripts/secrets_mgmt/pending_retirement.py`, its readers in `consumers.py`,
+5. The token PR retires `registry_gc_push_token`. C-1a waits for it. The operator waived the
+   week after Cutover-1b on 2026-11-02, because Cutover-1a (#6963), Cutover-1b (#6965) and
+   Cutover-2 (#6972) had all landed. It is the last retirement the plans schedule, so it also
+   deletes `scripts/secrets_mgmt/pending_retirement.py`, its readers in `consumers.py`,
    `cluster_vars.py` and `cluster_vars_check.py`, its `HOST_INPUTS` entry in
    `scripts/renderer/renderer_lib/host_inputs.py`, and the tests that hold it. M5's plan
    scheduled that deletion for its PR 5. #6371 closed with the clause moved here.
@@ -129,4 +130,15 @@ gated to daniel-box, so no other host owes the role.
 **How to verify.** After the tick applies it and the next run: `journalctl -t registry-gc` shows
 no `push failed` line, `probe.py applied` reads `/usr/local/bin/registry-gc.sh` as `ok`, and
 `homelab_check_last_run_timestamp_seconds{check="registry-gc"}` advances. The token PR retires
-`registry_gc_push_token` a week after Cutover-1b.
+`registry_gc_push_token`.
+
+**The token PR, the last retirement.** The agent's half adds `registry_gc_push_token` to
+`scripts/secrets_mgmt/git_dates.py:RETIRED` and drops it from `CROSS_HOST_PUSH_TOKENS`. It deletes
+`PENDING_RETIREMENT` with `scripts/secrets_mgmt/pending_retirement.py`, the three readers, the
+`HOST_INPUTS` entry and the `pending` seam on `cluster_vars.write`. Three tests retire with
+their subject: `test_a_write_keeps_a_pending_retirement_key_and_drops_an_ordinary_one`,
+`test_a_retired_key_has_left_the_pending_allowance` and
+`test_consumer_tags_registry_gc_token_is_manual`. The operator's commit removes the key from
+`secrets.yml`, its row in `ansible/secret_rotation.yml` and its line in the cluster files. With
+the key gone, `git grep -n registry_gc_push_token -- ansible/roles ':!*/tests/*'` returns
+nothing, which is C-1a's quoted gate.

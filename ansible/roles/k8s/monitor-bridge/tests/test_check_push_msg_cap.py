@@ -2,14 +2,10 @@
 
 Kuma puts a push monitor's `msg` into the Discord DOWN embed as a field value capped at 1024
 chars and never truncates, so an oversized msg is a 400 and a page nobody receives. Each rule
-is an accept/reject pair, and the last test drives the real `push` to prove the cap sits on the
-wire path rather than beside it.
+is an accept/reject pair. `cap_push_msg` lives in `bridge.common` because autofix-bridge pushes
+through it too. monitor-bridge itself pushes nothing since A6's Cutover-2.
 """
 
-import io
-import urllib.parse
-
-import bridge.net
 from bridge.common import PUSH_MSG_MAX, cap_push_msg
 
 
@@ -30,17 +26,3 @@ def test_the_cycles_suffix_survives_the_cut():
     capped = cap_push_msg("b" * 2000 + " (7 cycles)")
     assert len(capped) == PUSH_MSG_MAX
     assert capped.endswith(" chars) (7 cycles)")
-
-
-def test_push_sends_the_capped_msg(cfg):
-    urls = []
-
-    def opener(req, timeout=None):
-        urls.append(req.full_url)
-        return io.BytesIO(b"{}")
-
-    bridge.net.push(cfg, "tok", False, "c" * 3000, opener=opener)
-    assert len(urls) == 1
-    sent = urllib.parse.parse_qs(urllib.parse.urlsplit(urls[0]).query)["msg"][0]
-    assert len(sent) == PUSH_MSG_MAX
-    assert sent.endswith(" chars)")

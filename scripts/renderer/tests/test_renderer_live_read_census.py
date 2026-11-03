@@ -60,11 +60,9 @@ def test_the_census_finds_its_named_members():
     readers = found.reached["k8s_built_image_tags"]
     assert "k8s_built_image_tags" in found.set_by_tasks
     assert readers and all("/defaults/" in reader for reader in readers)
-    # The two `vars` lookup sources.
-    assert {
-        "monitor_bridge_swallowed_verdicts_push_token",
-        "terraria_k8s_replicas",
-    } <= found.vars_names
+    # The `vars` lookup source. The bridge's push tokens were the other until M6 batch A6's
+    # Cutover-2; the fixture census below pins the dynamic-lookup mechanism on its own.
+    assert {"terraria_k8s_replicas"} <= found.vars_names
     assert "terraria_k8s_replicas" in found.reached
     assert (
         "pipe in roles/k8s/homepage/templates/icons-configmap.yaml.j2" in found.accepted

@@ -2,9 +2,8 @@
 """The text a deferred change's alert prescribes, and the budget check behind it.
 
 Every message that tells an operator what to run by hand is built here — the broad-change
-pair (`broad_remediation`), the k8s defer-and-alert (`k8s_remediation`) and the structural
-follow-ups (`deferred_service_alerts`) — so the four callers that quote them cannot drift
-apart in what order they name the ff-merge and the playbook.
+pair (`broad_remediation`) and the k8s defer-and-alert (`k8s_remediation`) — so the
+callers that quote them cannot drift apart in what order they name the ff-merge and the playbook.
 """
 
 from __future__ import annotations
@@ -487,23 +486,3 @@ def k8s_remediation(
             f"{','.join(deployable)}`."
         )
     return lead
-
-
-def deferred_service_alerts(cs: ChangeSet, deployed: set[str]) -> set[str]:
-    """Return the `tasks` service set that still needs a defer-and-alert.
-
-    Given a tick that redeployed `deployed` (empty on the docs-only branch — no service
-    mapped). A `tasks/` change is NOT auto-deployed, and unlike a doc edit it changes
-    what a deploy DOES — so for a service that was not itself redeployed it must be flagged, not
-    silently ff-merged. Subtracting `deployed` is the combined-push fix: a single push that
-    deploys svcA (its template changed) while also carrying svcB's `tasks/` leaves svcB's
-    structural change ff-merged but unapplied. The alert used to live only inside
-    `if not cs.services:`, so ANY push that deployed something swallowed that remainder — the exact
-    hole the tasks defer-and-alert was added to close. A service whose own template changed is
-    in `deployed`, so its bundled tasks change rode the scoped `--tags` redeploy — no alert.
-
-    Secrets are intentionally excluded here: the `/add-secret` flow ships `secrets.yml` WITH its
-    consuming template (that consumer is in `deployed`), so keying a secrets alert on 'any deploy
-    happened' would false-fire the happy path — the secrets alert stays on the no-services branch.
-    """
-    return cs.tasks - deployed

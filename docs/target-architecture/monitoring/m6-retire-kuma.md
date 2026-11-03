@@ -1684,8 +1684,9 @@ reach A6-7a, fail the bijection test and lose its only pager.
       module docstring, and the component's `CLAUDE.md` describe one input.
     - **Order.** B-10 lands after Phase A, when every Kuma pager has an `ALERTS` rule, so the
       `ALERTS` path sees each fall the Kuma path saw. It lands before C-1a, which deletes
-      the scrape job the poller reads. It ships in a new version of each host package, so
-      C-1a waits until both hosts have installed it.
+      the scrape job the poller reads. It ships in a new version of daniel-box's host package,
+      the only host that runs the poller (`claude_code_triage_enabled`), so C-1a waits until
+      daniel-box has installed it.
 
 ### Phase C — delete Kuma
 
@@ -1711,7 +1712,7 @@ here. C-1 waits for the operator's acceptance.
     - B-2 and B-4 have landed and deployed. B-4 removes homepage's
       `homepage_href('uptime-kuma', domain)` call, which raises once the entry loses
       `hostname`, and B-2 replaces postflight's Kuma reads.
-    - B-10 has landed, and both hosts run the package version that carries it. Until then
+    - B-10 has landed, and daniel-box runs the package version that carries it. Until then
       the triage poller reads the scrape job that C-1a deletes (*Phase B* item 9).
 
    Scope:

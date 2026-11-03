@@ -253,7 +253,7 @@ nightly trim had trimmed them all while the snapshots still pinned them. A `roll
 not a remount (kubelet keeps the volume staged on the same node); scaling the workload to 0
 until the Volume CR reads `detached` is. `actualSize` went 3.61 GB → 215 MB, the next backup
 was 63 MB, and the bucket went from 7.64 GB billed to 2.68 GB once the hidden versions were
-expired. The measurement is in `longhorn-trim-volumes.sh.j2`'s header.
+expired.
 
 **A deletion's saving lands seven days later.** The bucket carries one lifecycle rule,
 `daysFromHidingToDeleting: 7`. A delete writes a hide marker over the current version, and B2

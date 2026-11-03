@@ -13,6 +13,14 @@
     state: absent
   become: true
 
+# `registry-gc.sh` embedded a token until M6 B6c, so the apply recorded its hash here for
+# `probe.py applied`. Nothing writes or reads the record since (#6987).
+- name: Remove the retired apply-time SHA-256 record directory
+  ansible.builtin.file:
+    path: /var/lib/homelab/setup-applied-sha256.d
+    state: absent
+  become: true
+
 # `registry_k8s_manage_gc: false` skips the whole unit. Skip-only, as it was in the registry
 # role: turning it off on a host that already has the cron installs nothing and removes nothing.
 - name: Manage the registry garbage collection

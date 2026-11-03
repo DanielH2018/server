@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-02 18:17 UTC
-generated_sha: e4b9a0e932
+generated_at: 2026-11-03 06:17 UTC
+generated_sha: 4f1e13f113
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,10 +18,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | - | ✓ |
-| [#4599](https://github.com/DanielH2018/server/issues/4599) | medium | improvement | security | The AIDE check cannot page on an unexplained file change | 2026-10-12 | 0 | - | ✓ |
 | [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
-| [#6750](https://github.com/DanielH2018/server/issues/6750) | medium | gap | backup-observability | M6 B9: re-read the Pi's integrity-scan textfiles after their first packaged runs | 2026-10-31 | 0 | - | ✓ |
-| [#6926](https://github.com/DanielH2018/server/issues/6926) | medium | gap | backup-observability | M6 plan leaves registry-gc's Kuma push to a D5 PR that landed without removing it, so C-1a's gate never clears | 2026-11-02 | 0 | worktree-d5-orchestrator-wave14 | ✓ |
+| [#6968](https://github.com/DanielH2018/server/issues/6968) | medium | gap | cicd | A moved secrets.yml or inventory key records no other host its setup readers reach | 2026-11-02 | 0 | - | - |
 | [#3778](https://github.com/DanielH2018/server/issues/3778) | low | improvement | cicd | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it | 2026-10-09 | 0 | - | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
 | [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
@@ -29,12 +27,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4660](https://github.com/DanielH2018/server/issues/4660) | low | gap | - | Workflow subagent run length has no measured outcome, so their cap stays undecided | 2026-10-12 | 0 | - | ✓ |
 | [#4663](https://github.com/DanielH2018/server/issues/4663) | low | gap | - | Implementer maxTurns decision needs a sample with enough red PRs | 2026-10-12 | 1 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
-| [#6370](https://github.com/DanielH2018/server/issues/6370) | low | improvement | security | Retire the disk-health push token a week after the M3 cutover | 2026-10-25 | 0 | - | ✓ |
-| [#6371](https://github.com/DanielH2018/server/issues/6371) | low | improvement | security | Retire the three Loki push tokens a week after the M5 cutover | 2026-10-25 | 0 | - | ✓ |
 | [#6434](https://github.com/DanielH2018/server/issues/6434) | low | improvement | cicd | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply | 2026-10-28 | 0 | - | - |
 | [#6435](https://github.com/DanielH2018/server/issues/6435) | low | gap | docs | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template | 2026-10-28 | 0 | - | - |
 | [#6436](https://github.com/DanielH2018/server/issues/6436) | low | gap | docs | PR template header still says the GitOps deployer applies image pins and the deploy plane | 2026-10-28 | 0 | - | - |
-| [#6572](https://github.com/DanielH2018/server/issues/6572) | low | improvement | cicd | Re-measure master-merge CI supersessions after narrowing land.sh's pre-merge branch update | 2026-10-29 | 0 | - | ✓ |
 | [#6643](https://github.com/DanielH2018/server/issues/6643) | low | improvement | security | Retire daniel-server's user-home age key once no Ansible apply runs there | 2026-10-30 | 0 | - | ✓ |
 | [#6697](https://github.com/DanielH2018/server/issues/6697) | low | improvement | backup-observability | Drop longhorn_robustness.py from monitor-bridge's shipped modules | 2026-10-31 | 0 | - | - |
 | [#6762](https://github.com/DanielH2018/server/issues/6762) | low | improvement | cicd | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings | 2026-10-31 | 0 | - | ✓ |
@@ -42,9 +37,11 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6769](https://github.com/DanielH2018/server/issues/6769) | low | improvement | cicd | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week | 2026-10-31 | 0 | - | ✓ |
 | [#6821](https://github.com/DanielH2018/server/issues/6821) | low | gap | docs | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 | 2026-11-01 | 0 | - | ✓ |
 | [#6882](https://github.com/DanielH2018/server/issues/6882) | low | gap | docs | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 | 2026-11-01 | 0 | - | ✓ |
-| [#6917](https://github.com/DanielH2018/server/issues/6917) | low | gap | security | rootq refuses to hash registry-gc.sh, so probe.py applied cannot compare it with its apply record | 2026-11-02 | 0 | - | ✓ |
 | [#6950](https://github.com/DanielH2018/server/issues/6950) | low | gap | docs | M6 status files still describe the Phase A and B token PRs as future steps | 2026-11-02 | 0 | - | ✓ |
-| [#6958](https://github.com/DanielH2018/server/issues/6958) | low | gap | cicd | owed_run primary-checkout test passes on the unfixed code outside a worktree | 2026-11-02 | 0 | worktree-d5-orchestrator-wave14 | - |
+| [#6975](https://github.com/DanielH2018/server/issues/6975) | low | improvement | container | H6.5a: move the k3s agent's files into daniel-server's package | 2026-11-02 | 0 | - | ✓ |
+| [#6977](https://github.com/DanielH2018/server/issues/6977) | low | improvement | backup-observability | H2.8a: turn on k3s native etcd-s3 snapshots | 2026-11-02 | 0 | - | ✓ |
+| [#6981](https://github.com/DanielH2018/server/issues/6981) | low | improvement | cicd | land_platform.k8s_only_tags can no longer restrict anything after H5.13 | 2026-11-02 | 0 | - | ✓ |
+| [#6983](https://github.com/DanielH2018/server/issues/6983) | low | gap | cicd | Pre-guard root-owned bytecode blocks removing the etcd-drill-vm worktree on daniel-server | 2026-11-02 | 0 | - | - |
 
 ## Deferred, by date
 
@@ -52,11 +49,6 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 
 | Not before | State | # | Finding |
 |---|---|---|---|
-| 2026-10-29 | date passed | [#6371](https://github.com/DanielH2018/server/issues/6371) | Retire the three Loki push tokens a week after the M5 cutover |
-| 2026-10-30 | date passed | [#6370](https://github.com/DanielH2018/server/issues/6370) | Retire the disk-health push token a week after the M3 cutover |
-| 2026-11-03 | withheld | [#6572](https://github.com/DanielH2018/server/issues/6572) | Re-measure master-merge CI supersessions after narrowing land.sh's pre-merge branch update |
-| 2026-11-04 | withheld | [#4599](https://github.com/DanielH2018/server/issues/4599) | The AIDE check cannot page on an unexplained file change |
-| 2026-11-04 | withheld | [#6750](https://github.com/DanielH2018/server/issues/6750) | M6 B9: re-read the Pi's integrity-scan textfiles after their first packaged runs |
 | 2026-11-05 | withheld | [#4188](https://github.com/DanielH2018/server/issues/4188) | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands |
 | 2026-11-07 | withheld | [#6769](https://github.com/DanielH2018/server/issues/6769) | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week |
 | 2026-11-08 | withheld | [#6697](https://github.com/DanielH2018/server/issues/6697) | Drop longhorn_robustness.py from monitor-bridge's shipped modules |
@@ -64,11 +56,9 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | 2026-11-08 | withheld | [#6763](https://github.com/DanielH2018/server/issues/6763) | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands |
 | 2026-11-09 | withheld | [#6821](https://github.com/DanielH2018/server/issues/6821) | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 |
 | 2026-11-09 | withheld | [#6882](https://github.com/DanielH2018/server/issues/6882) | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 |
-| 2026-11-09 | withheld | [#6926](https://github.com/DanielH2018/server/issues/6926) | M6 plan leaves registry-gc's Kuma push to a D5 PR that landed without removing it, so C-1a's gate never clears |
 | 2026-11-09 | withheld | [#6950](https://github.com/DanielH2018/server/issues/6950) | M6 status files still describe the Phase A and B token PRs as future steps |
 | 2026-11-10 | withheld | [#3778](https://github.com/DanielH2018/server/issues/3778) | Switch the CI setup action's callers to the self-repository uses syntax once actionlint accepts it |
 | 2026-11-10 | withheld | [#3865](https://github.com/DanielH2018/server/issues/3865) | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap |
-| 2026-11-10 | withheld | [#6917](https://github.com/DanielH2018/server/issues/6917) | rootq refuses to hash registry-gc.sh, so probe.py applied cannot compare it with its apply record |
 | 2026-11-12 | withheld | [#4660](https://github.com/DanielH2018/server/issues/4660) | Workflow subagent run length has no measured outcome, so their cap stays undecided |
 | 2026-11-12 | withheld | [#4663](https://github.com/DanielH2018/server/issues/4663) | Implementer maxTurns decision needs a sample with enough red PRs |
 | 2026-11-13 | withheld | [#6434](https://github.com/DanielH2018/server/issues/6434) | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply |
@@ -191,6 +181,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#1954](https://github.com/DanielH2018/server/issues/1954) | accepted | karakeep /api/trpc/ still exposes apiKeys.exchange (password → key) with only the app throttle in front | Operator decision 2026-09-17: karakeep's /api/trpc/ public procedures (incl. apiKeys.exchange) stay reachable behind the app's own throttle; DISABLE_PASSWORD_AUTH would also remove the web login, which this deployment relies on. Revisit if karakeep gains an OIDC login. |
 | [#3944](https://github.com/DanielH2018/server/issues/3944) | accepted | Fan-out PRs that change the landing policy's imports merge without operator approval when run as ubuntu | Operator ruling 2026-10-10: a fan-out launched as ubuntu runs on the operator's own authority, so its PRs need no separate approval to change land.py's import set. The import-set approval applies only to PRs from the claude agent user. |
 | [#3973](https://github.com/DanielH2018/server/issues/3973) | accepted | Derive Authelia's OIDC client list from an oidc: block on each consuming service's containers_list entry | Operator decision 2026-10-10: no third OIDC client is planned for a while. With two clients, the existing agreement tests already catch drift, so a derived client list does not justify itself yet. |
+| [#6371](https://github.com/DanielH2018/server/issues/6371) | accepted | Retire the three Loki push tokens a week after the M5 cutover | The three Loki tokens were retired by dd0375fe0 on 2026-10-29. The remaining clause, deleting PENDING_RETIREMENT with the last retirement, moves to B6c's token PR (#6926, m6-status/b6c.md step 5), because B6c's Cutover-1a (#6963) put registry_gc_push_token into the set. |
 
 ### home-assistant
 

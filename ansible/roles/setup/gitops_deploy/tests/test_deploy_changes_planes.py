@@ -42,7 +42,7 @@ def test_requirements_yml_is_broad():
     # ff-merged and left unapplied on the host.
     cs = services_from_changed_paths(["ansible/requirements.yml"])
     assert cs.broad is True
-    assert cs.services == set()
+    assert cs.k8s == set()
 
 
 # Setup roles are wired into initial_setup.yml, not deploy.yml — a change maps to no container
@@ -55,7 +55,7 @@ def test_setup_role_change_is_broad():
         ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
     )
     assert cs.broad is True
-    assert cs.services == set()
+    assert cs.k8s == set()
 
 
 def test_renovate_notify_role_change_is_broad():
@@ -63,7 +63,7 @@ def test_renovate_notify_role_change_is_broad():
         ["ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2"]
     )
     assert cs.broad is True
-    assert cs.services == set()
+    assert cs.k8s == set()
 
 
 def test_bringup_playbooks_are_broad():
@@ -74,7 +74,7 @@ def test_bringup_playbooks_are_broad():
     ):
         cs = services_from_changed_paths([p])
         assert cs.broad is True, p
-        assert cs.services == set()
+        assert cs.k8s == set()
 
 
 def test_ansible_cfg_is_broad_but_lockfiles_are_not():
@@ -83,7 +83,7 @@ def test_ansible_cfg_is_broad_but_lockfiles_are_not():
     # ff-merge and mis-attribute a later deploy's failure.
     cs = services_from_changed_paths(["ansible.cfg"])
     assert cs.broad is True
-    assert cs.services == set()
+    assert cs.k8s == set()
     # pyproject.toml / uv.lock churn weekly (lockFileMaintenance) and the broad path never ff-merges,
     # so flagging them broad would park the host and block every downstream image bump behind the stuck
     # lockfile. They map to no service and aren't secrets, so they take the
@@ -91,9 +91,7 @@ def test_ansible_cfg_is_broad_but_lockfiles_are_not():
     for p in ("pyproject.toml", "uv.lock"):
         cs = services_from_changed_paths([p])
         assert cs.broad is False, p
-        assert cs.services == set(), p
         assert cs.secrets is False, p
-        assert cs.tasks == set(), p
 
 
 # A broad change is sub-classified by which manual playbook applies it, so
@@ -324,7 +322,7 @@ def test_every_task_file_deploy_yml_imports_is_visible_to_the_classifier():
     """A file deploy.yml imports must not classify as an EMPTY ChangeSet.
 
     `ansible/deploy.yml` is broad, but its sibling task dirs match nothing: `role_of` is
-    anchored to `ansible/roles/`. main() has no catch-all — `if not cs.services:`
+    anchored to `ansible/roles/`. main()'s fall-through, `handle_merge_only`,
     ff-merges unconditionally and the alert helpers no-op on empty fields — so an
     empty-because-unclassified ChangeSet is indistinguishable from an empty-because-docs one:
     silent ff-merge, no alert, no deploy, on files that change what EVERY deploy does.

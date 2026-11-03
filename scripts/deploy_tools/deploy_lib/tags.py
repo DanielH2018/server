@@ -464,13 +464,6 @@ def changed(
         )
         return DEPLOY_BROAD
 
-    if cs.tasks:
-        warn(
-            "--changed: structural change (tasks/defaults/vars/handlers) in "
-            f"{sorted(cs.tasks)} — not auto-deployed and not captured by a tag; review and "
-            "deploy by hand if it needs to go out.",
-            prog=PROG,
-        )
     if cs.secrets:
         warn(
             "--changed: ansible/vars/secrets.yml changed — a new value only reaches a "
@@ -480,7 +473,7 @@ def changed(
         )
 
     # Before the split, so a shared role beside a list the drop empties still exits 3.
-    derived = owners.drop_owned(cs.k8s | cs.services, skip or {}, "--changed")
+    derived = owners.drop_owned(set(cs.k8s), skip or {}, "--changed")
     host_vars = cwd / HOST_VARS.relative_to(REPO)
     tags, shared = split_shared_roles(derived, host_vars)
     if shared:

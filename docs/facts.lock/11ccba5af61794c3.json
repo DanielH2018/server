@@ -1,5 +1,5 @@
 {
-  "checksum": "760d35efce78468d41092962fcf9283a61b4947ffe73352fe051c1fd73c4c98c",
+  "checksum": "dd46d5aa8e0514337926640f1548c6d9cc0c781fdc41573c9eda1d81f064f4ba",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/builder/CLAUDE.md#What the component installs",
   "row": {
@@ -7,11 +7,12 @@
       "ansible/inventory/group_vars/all.yml": "a9e26f83a4a9763bd4261ca4b7d94354ff85fb63301d701c683420cdfded7c0b",
       "docs/break-glass.md": "2823d12d9954147d9b7ad124362e31f2b81927d3aa6c036577400846c35a627c",
       "hosts/lib/": "aee97ede131631156330f0120fe4b64226a77c507ef96ddc63bcd3db949e64ac",
+      "hosts/lib/builder_python.py:tree_python": "54fa51e5ac7a3a8812ea2761434f24691ce6d7f09ef129585ff863b0cd672124",
       "hosts/lib/tests/test_builder_component.py::test_the_nfpm_pin_is_ci_s_and_uv_matches_initial_setup": "f56cb7c3b3e991a9e02a539f39a6332d5f82fd7c5a4c0635e77f60872841699c",
       "hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls": "0a14176322c20ac86d13874d46c445a07de425884a644f33bbe8e91407e5fe20",
       "hosts/packages/homelab-tools/": "c3756b455ae17c65b6586f168471570887823e8701ae91400c1ab51bfdce4b21"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "be93cf87c"
   }
 }
