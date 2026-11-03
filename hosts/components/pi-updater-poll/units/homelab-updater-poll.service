@@ -1,0 +1,21 @@
+# Shipped by homelab-daniel-pi. Started by homelab-updater-poll.timer.
+[Unit]
+Description=Start homelab-updater when the builder publishes a newer host package
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+# Root, because the script starts homelab-updater.service. It writes only its state directory.
+ExecStart=/usr/lib/homelab/homelab-updater-poll
+StateDirectory=homelab-updater-poll
+# One GET with a 60 s curl bound; the updater it starts runs in its own unit, not under this one.
+TimeoutStartSec=2min
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes

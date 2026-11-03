@@ -25,7 +25,9 @@ is a target, so a failure waits rather than skips.
 | a target it would defer on has no package published at or after the merge, and the builder's reason is not `ok`, `canary` or `no-green` | `unbuilt`, exit 75 |
 
 A target's deadline is the second updater fire after the merge plus 10 minutes, read from the
-first parent's rendered schedule. The first fire can precede the builder's publish.
+first parent's rendered schedule. The first fire can precede the builder's publish. A first
+parent that arms daniel-pi's `homelab-updater-poll.timer` adds the poll's fires to the schedule,
+because the poll starts the updater once the publish lands.
 `host_published.py` decides the `unbuilt` row, which replaces each `deferred` row it covers.
 
 Typical usage example (`pipeline.py`'s, after master CI is green on the merge commit):
@@ -113,6 +115,8 @@ LAST_SUCCESS = "homelab_host_update_success_timestamp_seconds"
 UPDATER_TIMER = "homelab-updater.timer"
 UNIT_ROOT = PurePosixPath("root/usr/lib/systemd/system")
 DROPIN = UNIT_ROOT / f"{UPDATER_TIMER}.d" / "50-homelab.conf"
+# daniel-pi's poll (hosts/components/pi-updater-poll/), which starts the updater on a publish.
+POLL_TIMER = "homelab-updater-poll.timer"
 # The shared timer, copied byte for byte into homelab-updater. A host drop-in overrides it.
 SHARED_TIMER = Path("hosts/packages/homelab-updater/units") / UPDATER_TIMER
 
@@ -341,22 +345,35 @@ def _target(host: str, old: HostTree, at_parent: Path) -> HostTarget:
     best the first parent's package, so a link or a drop-in that arrives in this merge changes
     nothing until an updater run installs it.
     """
-    armed = any(
-        kind == "link"
-        and PurePosixPath(key).name == UPDATER_TIMER
-        and PurePosixPath(key).parent.name.endswith(".wants")
-        for key, (kind, _, _) in old.items()
-    )
+    armed = _links(old, UPDATER_TIMER)
     shared = at_parent / SHARED_TIMER
     if not old or not shared.is_file():
         return HostTarget(host, armed=armed)
     dropin = old.get(str(DROPIN))
     dropins = [dropin[2].decode()] if dropin else []
+    poll = old.get(str(UNIT_ROOT / POLL_TIMER))
     try:
         triggers, delay = timer_settings(shared.read_text(), dropins)
+        if poll and _links(old, POLL_TIMER):
+            # An armed poll starts the updater on its own fires, so each of its triggers
+            # bounds the deadline beside the updater timer's own (#7065).
+            polls, poll_delay = timer_settings(poll[2].decode(), [])
+            for key, values in polls.items():
+                triggers.setdefault(key, []).extend(values)
+            delay = max(delay, poll_delay)
     except ValueError:
         return HostTarget(host, armed=armed)
     return HostTarget(host, armed=armed, triggers=triggers, delay=delay)
+
+
+def _links(tree: HostTree, unit: str) -> bool:
+    """Whether `tree` ships an enable link for `unit` in some `.wants` directory."""
+    return any(
+        kind == "link"
+        and PurePosixPath(key).name == unit
+        and PurePosixPath(key).parent.name.endswith(".wants")
+        for key, (kind, _, _) in tree.items()
+    )
 
 
 # -- the schedule ------------------------------------------------------------------------

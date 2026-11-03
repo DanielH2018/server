@@ -1003,6 +1003,10 @@ publishes a second host package.
   `monitor_bridge_builder_max_lag_s` and the Pi's longest gap between fires (86400 s), plus the
   timer's `RandomizedDelaySec` (60 s), the updater's `TimeoutStartSec` (3000 s) and 600 s of
   slack. That is 90060 s. Moving the Pi's drop-in moves the grace with it.
+  On 2026-11-03 the operator kept the Pi eligible and chose a trigger over a reorder (#7047).
+  `hosts/components/pi-updater-poll/` polls the repository every 15 minutes and starts the
+  updater once per newer `homelab-daniel-pi` (#7065). The daily fire stays the fallback for a
+  poll that skips or a run that fails, so the grace keeps following the drop-in.
 
 ### CI (builds, never signs)
 

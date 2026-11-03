@@ -1,0 +1,13 @@
+# Shipped by homelab-daniel-pi with its enable link (#7065). Every 15 minutes, so a published
+# daniel-pi package installs within about 15 minutes plus one updater run. The daily
+# homelab-updater.timer stays the fallback.
+[Unit]
+Description=Check every 15 minutes whether the builder published a newer host package
+
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=15min
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

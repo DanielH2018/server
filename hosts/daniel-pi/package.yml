@@ -51,8 +51,12 @@
 # `initial_setup_packaged_hosts`. The scans and the timers read three new credentials, so the Pi's
 # SOPS file must hold `rkhunter_daniel_pi_push_token`, `aide_daniel_pi_push_token` and
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-pi`, operator-only).
+#
+# Since #7065 it ships pi-updater-poll: a 15-minute timer that starts homelab-updater.service once
+# the builder publishes a newer homelab-daniel-pi, so a Pi canary no longer holds the rollout gate
+# until the daily fire. The daily timer below stays the fallback. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
+components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
 credentials:
   - rkhunter_daniel_pi_push_token
   - aide_daniel_pi_push_token

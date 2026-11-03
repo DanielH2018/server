@@ -1,0 +1,51 @@
+# The Pi's updater trigger (#7065, the third Fix bullet of #7047). The operator decided on
+# 2026-11-03 to keep daniel-pi eligible as the builder's rollout canary
+# (hosts/lib/builder_rollout_gate.py:CANARY_ORDER) and to start its updater when the builder
+# publishes a new daniel-pi package. Without it a Pi canary held every other host's package for up
+# to a day, until the daily 03:05 fire (H3.13, #6911).
+#
+# homelab-updater-poll.timer fires every 15 minutes. The script fetches the homelab Packages index
+# from the URI in homelab.sources and starts homelab-updater.service once per published version
+# that is newer than the installed one. The daily homelab-updater.timer stays as the fallback, and
+# the by-hand route stays `sudo systemctl start homelab-updater.service` on the Pi.
+#
+# Autonomous-role contract (the timer starts the host's updater with no human in the loop).
+#
+# - Scope / exclusions: one HTTP GET of `binary-<arch>/Packages.gz` from the homelab repository,
+#   and a start of homelab-updater.service. It installs nothing itself and writes only
+#   /var/lib/homelab-updater-poll/. The install, reconcile and their holds are the updater's.
+# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
+#   link from a package version stops the timer on the install that drops it, and the daily
+#   timer alone remains. `systemctl stop homelab-updater-poll.timer` on the Pi stops it until the
+#   next package install. Masking homelab-updater.timer stops the poll from starting the updater
+#   as well, which is the interlock homelab-docker-engine.service relies on.
+# - Authoritative sources: the repository's URI, suite and component in
+#   /etc/apt/sources.list.d/homelab.sources, the file apt itself reads, and dpkg's installed
+#   version. The fetched index is untrusted: the updater verifies the signed InRelease before it
+#   installs anything.
+# - Abort valves: the poll starts the updater at most once per published version, recorded in
+#   /var/lib/homelab-updater-poll/triggered, so a failed, held or lock-refused run waits for the
+#   daily timer instead of repeating every 15 minutes (#6911's memory limit). It skips, without
+#   recording, while homelab-updater.timer is masked or while homelab-docker-engine,
+#   homelab-updater, homelab-reconcile, apt-daily or apt-daily-upgrade is running (a oneshot reads
+#   `activating` while it runs). The updater's
+#   own hold (docs/host-packages.md) still refuses an install. The poll does not avoid man-db's
+#   01:00 to 03:00 window, which the daily fire was placed after: it only fires the updater on a
+#   publish, and man-db holds no dpkg lock.
+# - Required evidence, every cycle: a notice line in the journal for every start or skip, and the
+#   unit's result in `systemctl status homelab-updater-poll.service`. A run that finds nothing
+#   to do logs nothing. A started run is visible as the updater's own
+#   `homelab_host_applied_info` advancing to the published version.
+# - Next-run review: a gate whose `host="daniel-pi"` stays open past about 20 minutes plus an
+#   updater run means the poll did not start the updater. Read
+#   `journalctl -u homelab-updater-poll.service` and /var/lib/homelab-updater-poll/triggered on
+#   the Pi before starting the updater by hand.
+#
+# ENFORCED: hosts/lib/tests/test_pi_updater_poll_component.py, which renders the package and holds
+# the paths, the enable link and the schedule, and runs the script against stubs.
+files:
+  - {src: homelab-updater-poll, dst: /usr/lib/homelab/homelab-updater-poll, mode: "0755"}
+  - {src: units/homelab-updater-poll.service, dst: /usr/lib/systemd/system/homelab-updater-poll.service}
+  - {src: units/homelab-updater-poll.timer, dst: /usr/lib/systemd/system/homelab-updater-poll.timer}
+enable:
+  homelab-updater-poll.timer: timers.target

@@ -3,8 +3,8 @@
 The builder holds every host package behind the rollout canary until the canary reports the
 gate's commit (`hosts/lib/builder_rollout_gate.py`). daniel-server leads `CANARY_ORDER`, but a
 run that changes only the Pi's and daniel-box's packages makes the Pi the canary (#6911). The Pi's
-updater fires once a day, so a Pi package published just after a fire waits a day for the next
-one. The builder's unbuilt-since series counts that wait, and monitor-bridge's `host_packages`
+poll timer starts its updater within about 15 minutes of a publish (#7065), but a poll that skips
+or a run that fails leaves the Pi on its daily fire, so the worst case is still a day's wait. The builder's unbuilt-since series counts that wait, and monitor-bridge's `host_packages`
 row pages once a gate whose `host` label is daniel-pi passes `BUILDER_PI_CANARY_MAX_LAG_S`
 (#6919). A fixed 2 hours would page on every such publish.
 
