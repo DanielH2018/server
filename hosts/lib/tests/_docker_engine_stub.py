@@ -7,7 +7,9 @@ Each stub command runs `python3 _docker_engine_stub.py <command> <args>`, record
     offered: package -> versions `apt-cache madison` lists, newest first.
     held: packages `apt-mark hold` has held.
     timer: homelab-updater.timer's `is-enabled` answer, "enabled" or "masked".
-    active: unit -> how many more `is-active` polls answer active.
+    active: unit -> how many more polls find the unit running.
+    running_state: the ActiveState a running unit reports, "activating" unless a test sets it,
+        because the units the engine waits on are oneshots.
     install_exit: what `apt-get install` exits; any other value than 0 installs nothing.
     modified_conffile: a conffile on the host differs from the packaged copy, so an install
         without `--force-confold` stops at dpkg's prompt, which fails with no terminal.
@@ -64,10 +66,16 @@ def systemctl(state: dict, args: list[str]) -> int:
         state["timer"] = "masked"
     elif args[0] == "unmask":
         state["timer"] = "enabled"
-    elif args[:2] == ["-q", "is-active"]:
-        left = state["active"].get(args[2], 0)
-        state["active"][args[2]] = max(left - 1, 0)
-        return 0 if left else 3
+    elif args[0] == "show" or args[:2] == ["-q", "is-active"]:
+        unit = args[-1]
+        left = state["active"].get(unit, 0)
+        state["active"][unit] = max(left - 1, 0)
+        running = state.get("running_state", "activating")
+        if args[0] == "show":
+            print(running if left else "inactive")
+            return 0
+        # systemctl's own codes: it exits 3 for `activating` and `deactivating`.
+        return 0 if left and running in ("active", "reloading") else 3
     return 0
 
 

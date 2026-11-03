@@ -119,13 +119,14 @@ class Engine:
                 f"{upstream}{r}{SUFFIX}" for r in revisions
             ]
 
-    def run(self, *args: str):
+    def run(self, *args: str, **extra_env: str):
         (self.stub / "state.json").write_text(json.dumps(self.state))
         (self.stub / "calls.jsonl").write_text("")
         env = {
             "PATH": f"{self.bin}:/usr/bin:/bin",
             "HOMELAB_ROOT": str(self.root),
             "STUB_STATE": str(self.stub),
+            **extra_env,
         }
         result = run(["/bin/sh", str(ENGINE), *args], env=env)
         self.state = json.loads((self.stub / "state.json").read_text())
@@ -205,6 +206,31 @@ def test_an_upgrade_waits_for_the_updater_and_stops_the_project_around_apt(
     assert "--force-recreate" in engine.calls()[recreate]
     assert engine.state["active"]["homelab-updater.service"] == 0
     assert engine.state["timer"] == "enabled"
+
+
+@pytest.mark.parametrize("running", ["active", "deactivating", "reloading"])
+def test_an_upgrade_waits_out_every_running_state(engine, package, running):
+    _behind(engine, package)
+    engine.state["active"] = {"homelab-updater.service": 2}
+    engine.state["running_state"] = running
+
+    assert engine.run("apply").returncode == 0
+    assert engine.state["active"]["homelab-updater.service"] == 0
+
+
+def test_an_updater_that_outlasts_the_wait_stops_nothing_and_leaves_the_timer_masked(
+    engine, package
+):
+    _behind(engine, package)
+    engine.state["active"] = {"homelab-updater.service": 99}
+
+    result = engine.run("apply", DOCKER_ENGINE_WAIT_LIMIT_S="20")
+
+    assert result.returncode == 1
+    assert "homelab-updater.service is still activating after 20s" in result.stderr
+    assert engine.index("docker", "compose") == -1
+    assert engine.index("apt-get", "install") == -1
+    assert engine.state["timer"] == "masked"
 
 
 def test_an_upgrade_over_the_edited_containerd_conffile_completes(engine, package):
