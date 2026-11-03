@@ -102,9 +102,15 @@ quiet_updater() {
     fi
     waited=0
     for unit in homelab-updater.service homelab-reconcile.service; do
-        while systemctl -q is-active "$unit"; do
+        while :; do
+            # A running oneshot reads `activating`, for which `is-active` exits 3.
+            state=$(systemctl show -p ActiveState --value "$unit" 2>/dev/null)
+            case $state in
+                active | activating | deactivating | reloading) ;;
+                *) break ;;
+            esac
             if [ "$waited" -ge "$wait_limit" ]; then
-                say "$unit is still active after ${wait_limit}s; nothing stopped, timer left masked"
+                say "$unit is still $state after ${wait_limit}s; nothing stopped, timer left masked"
                 return 1
             fi
             sleep "$wait_step"
