@@ -7,17 +7,15 @@
 
 - name: Prepare swap, packages and user tooling
   ansible.builtin.import_tasks: host-basics.yml
-- name: Harden unattended upgrades, fail2ban and SSH
+- name: Scope the sudo cache and harden the SSH directory
   ansible.builtin.import_tasks: access.yml
 - name: Install the host crons
   ansible.builtin.import_tasks: crons.yml
-- name: Cap journald, revert host tuning and install git hooks
+- name: Filter rsyslog, revert host tuning and install git hooks
   ansible.builtin.import_tasks: system-tuning.yml
-- name: Apply sysctls and the UFW ruleset
-  ansible.builtin.import_tasks: network.yml
 - name: Configure auditd, file permissions and kernel modules
   ansible.builtin.import_tasks: audit-and-kernel.yml
-- name: Enable process accounting, banners and apt-hygiene crons
+- name: Set the login banners
   ansible.builtin.import_tasks: accounting.yml
-- name: Install rkhunter, login policy, Postfix and AIDE
+- name: Suppress core dumps and mask networkd-dispatcher
   ansible.builtin.import_tasks: integrity.yml

@@ -74,8 +74,8 @@ def test_every_initial_setup_task_has_a_subject_tag() -> None:
     # A walk that silently matched nothing would pass. This task carries a subject tag in
     # crons.yml, so finding it with that tag proves the walk reached crons.yml and read the tags
     # this check is about.
-    assert "weekly-restart" in seen.get(
-        "Schedule sudo crontab for weekly restart", set()
+    assert "secret-rotation" in seen.get(
+        "Remove the secret-rotation crons from any non-gitops host", set()
     )
 
     assert not offenders, (

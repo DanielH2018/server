@@ -82,7 +82,6 @@ def test_every_notify_in_initial_setup_resolves_to_a_handler() -> None:
 def test_the_census_finds_the_cross_role_notifies() -> None:
     """Non-vacuity: initial_setup's notifies of its own handlers are in the census."""
     notifies = notified(play_roles())
-    assert "initial_setup" in notifies["Restart systemd-journald"]
     assert "initial_setup" in notifies["Start Watchdog after provisioning"]
 
 

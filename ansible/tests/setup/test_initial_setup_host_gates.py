@@ -2,8 +2,8 @@
 
 Sixteen tasks across three of the role's task files gate on a hardware fact. Each reads a flag
 instead of an `inventory_hostname == '<host>'` literal, so replacing a host edits one host_vars
-entry. Three flags carry those facts:
-`has_low_memory_board`, `has_raspi_kernel` and `has_ample_ram`.
+entry. Two flags carry those facts:
+`has_low_memory_board` and `has_raspi_kernel`.
 
 WHERE THE FLAGS LIVE IS PART OF THE GUARD, for the reason
 `test_ops_cron_host_gate.py` gives: `scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when` resolves a
@@ -36,8 +36,6 @@ _HOST_LITERAL = re.compile(r"inventory_hostname\s*[!=]=\s*['\"]")
 HOSTS = ("daniel-box", "daniel-pi", "daniel-server")
 
 # The effective value each flag must have on every host — the intended per-host truth.
-# `has_ample_ram` is armed on both daniel-server and daniel-box (a 28 GiB control-plane node) as a
-# deliberate tuning choice.
 EXPECTED_FLAGS = {
     "has_low_memory_board": {
         "daniel-box": False,
@@ -49,7 +47,6 @@ EXPECTED_FLAGS = {
         "daniel-pi": True,
         "daniel-server": False,
     },
-    "has_ample_ram": {"daniel-box": True, "daniel-pi": False, "daniel-server": True},
 }
 
 # Task name -> the flag its gate must name. Named rather than counted, so a rename fails with
@@ -65,7 +62,6 @@ EXPECTED_FLAG_GATES = {
     "Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)": "has_low_memory_board",
     "Install apt-show-versions (roomy hosts only)": "has_low_memory_board",
     "Install Raspberry Pi-specific packages": "has_raspi_kernel",
-    "Lower swappiness (ample-RAM hosts)": "has_ample_ram",
 }
 
 # The literals that stay, because they read host history rather than hardware. Each must sit
@@ -150,9 +146,8 @@ def test_the_reach_reader_resolves_each_flag_to_the_same_hosts_as_the_literal():
 def test_every_host_the_table_arms_opts_in_from_its_own_host_vars():
     """Non-vacuity on the host_vars side: a flag nobody sets true gates nothing.
 
-    A flag may arm more than one host — `has_ample_ram` arms both daniel-server and
-    daniel-box — so the count is "at least one", and every armed host must carry
-    the opt-in itself rather than inheriting it from `group_vars`.
+    A flag may arm more than one host, so the count is "at least one", and every armed host
+    must carry the opt-in itself rather than inheriting it from `group_vars`.
     """
     for flag, per_host in EXPECTED_FLAGS.items():
         armed = {h for h, v in per_host.items() if v}

@@ -9,9 +9,8 @@ left behind names a file reconcile removed, and the manifest-prune check reads i
 every run. loki-route-witness listed its render name for both and left
 `setup-deployed-manifest.d/loki-route-health` on daniel-box.
 
-The loki-route-witness and integrity-scans tasks still run on the cluster nodes, so their rows are
-derived from `initial_setup/tasks/crons.yml` and `integrity.yml`. Every other mover's task is
-gone, so its row is recorded from
+The loki-route-witness tasks still run on daniel-server, so that row is derived from
+`initial_setup/tasks/crons.yml`. Every other mover's task is gone, so its row is recorded from
 the task file at the commit before the move.
 
 Run: uv run pytest hosts/lib/tests/test_component_retired_stamp_fragments.py
@@ -23,7 +22,6 @@ from lib.repo_paths import REPO
 
 COMPONENTS = REPO / "hosts" / "components"
 CRONS = REPO / "ansible" / "roles" / "setup" / "initial_setup" / "tasks" / "crons.yml"
-INTEGRITY = CRONS.with_name("integrity.yml")
 KINDS = {
     "/var/lib/homelab/setup-render-manifest.d/": "render",
     "/var/lib/homelab/setup-deployed-manifest.d/": "deployed",
@@ -40,6 +38,8 @@ RECORDED = {
     "secret-rotation": {("render", "secret-rotation")},
     # a2bed5696^:ansible/roles/setup/nut_host/tasks/main.yml
     "nut-secondary": {("render", "nut-host")},
+    # 84bb0bbf0a:ansible/roles/setup/initial_setup/tasks/integrity.yml
+    "integrity-scans": {("render", "rkhunter-check"), ("render", "aide-check")},
     # 85d2bf9f7:ansible/roles/setup/claude_code/tasks/main.yml, before the role's render stamp
     # took the name claude-code-ansible. H7.40's third slice moved triage, whose templates were
     # all claude-code-ansible still listed, so it retires that render stamp and the triage one.
@@ -60,7 +60,6 @@ RECORDED = {
 # (task file, tag) pairs.
 DERIVED = {
     "loki-route-witness": ((CRONS, "loki_route_witness"),),
-    "integrity-scans": ((INTEGRITY, "rkhunter"), (INTEGRITY, "aide")),
 }
 
 

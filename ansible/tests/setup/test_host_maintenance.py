@@ -22,8 +22,8 @@ import os
 import re
 
 import pytest
-from _helpers import K8S_ROLES, ROLES, load_defaults, load_tasks, walk_tasks
-from _role_census import role_task_files
+from _helpers import K8S_ROLES, ROLES, load_defaults
+from _host_packages import package, shipped_text
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run, write_exec
 from _aide_check_run import LOGGER_STUB
@@ -39,9 +39,8 @@ HISTORY = re.compile(r"present_over_time\([^)]*\[(\d+)s\]\)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 
 EVERY_HOST = {"daniel-box", "daniel-server", "daniel-pi"}
-# Check -> (the cron that runs it, the alert prefix, the hosts whose rules read it). The firmware
-# cron is gated on a stat of /usr/bin/fwupdmgr, which no inventory var carries; daniel-box is
-# the one host with fwupd (crons.yml, "Detect whether fwupd is installed on this host").
+# Check -> (the retired cron it replaced, the alert prefix, the hosts whose rules read it).
+# daniel-box is the one host with fwupd, so it alone ships the firmware-update unit.
 JOBS = {
     "apt-autoremove": ("Weekly apt autoremove", "AptAutoremove", EVERY_HOST),
     "dpkg-purge": ("Weekly dpkg purge orphaned configs", "DpkgPurge", EVERY_HOST),
@@ -204,14 +203,16 @@ def test_literal_problems_is_flagged_on_a_host_with_no_rule():
     ]
 
 
-def test_each_cron_runs_the_wrapper_with_the_check_its_rules_read():
-    jobs = {}
-    for tasks_file in role_task_files(ROLE):
-        for task in walk_tasks(load_tasks(tasks_file)):
-            cron = task.get("ansible.builtin.cron")
-            if isinstance(cron, dict) and cron.get("state") != "absent":
-                jobs[cron.get("name")] = str(cron.get("job"))
-    for check, (cron, _, _) in JOBS.items():
-        assert jobs[cron].startswith(f"/usr/local/bin/host-maintenance.sh {check} "), (
-            f"`{cron}` does not run host-maintenance.sh {check}: {jobs[cron]}"
-        )
+def test_each_unit_runs_the_wrapper_with_the_check_its_rules_read():
+    for check, (_, _, hosts) in JOBS.items():
+        unit = f"/usr/lib/systemd/system/homelab-{check}.service"
+        for host in EVERY_HOST:
+            shipped = unit in package(host).files
+            assert shipped == (host in hosts), (
+                f"{host} {'ships' if shipped else 'lacks'} {unit}, but its rules "
+                f"{'do not read' if shipped else 'read'} {check}"
+            )
+            if shipped:
+                assert f"\nExecStart=/usr/lib/homelab/host-maintenance {check}\n" in (
+                    shipped_text(host, unit)
+                ), f"{host}'s {unit} does not run the wrapper with {check}"

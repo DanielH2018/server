@@ -28,8 +28,6 @@ MARKERS = ("write_check_textfile", "homelab_check_last_run_timestamp_seconds")
 KUMA_TIMER = "kuma_check_timer.yml"
 _INSTALL_MODULES = ("ansible.builtin.copy", "ansible.builtin.template")
 
-_HC = "pings a Healthchecks.io check that pages a missed run"
-
 EXEMPT: dict[str, str] = {
     "fake_remux: cron `fake-remux scan`": (
         "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
@@ -47,8 +45,6 @@ EXEMPT: dict[str, str] = {
         "writes /var/lib/gitops-deploy/last_run every tick, which monitor-bridge's GitOps-Alive "
         "check reads, and gitops_tick_metrics.py counts each tick by outcome"
     ),
-    "initial_setup: cron `Weekly system restart`": _HC,
-    "initial_setup: cron `Clean unused Docker images`": _HC,
     "k3s: cron `B2 deletion accounting`": (
         "touches a cron-fired stamp that longhorn-backup-health.sh reads into its own "
         "textfile verdict"
@@ -202,8 +198,8 @@ def test_census_resolves_each_route_a_writer_takes():
         "renovate_agent: timer `renovate-agent`",
     }
     assert {key for key in writers if found.get(key)} == writers
-    assert found.get("initial_setup: cron `Weekly apt autoremove`") is True
-    assert found.get("initial_setup: cron `Weekly system restart`") is False
+    assert found.get("initial_setup: timer `kuma-check-setup-drift`") is True
+    assert found.get("k3s: cron `B2 backup budget listing`") is False
 
 
 # ── Fixture pairs ─────────────────────────────────────────────────────────────────────

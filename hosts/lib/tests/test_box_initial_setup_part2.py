@@ -1,26 +1,22 @@
 """daniel-box ships the same last three `initial_setup` subjects as the Pi and daniel-server (H7.32).
 
 The components are host-neutral and `test_pi_initial_setup_part2.py` holds their content. These
-tests hold what is specific to this host, the last one to move: the role keeps no task of the
-three subjects for any host, the crons it stops writing here are retired and replaced at their
-slot, the firmware update ships only where fwupd is, the scans read this host's own tokens, and
+tests hold what is specific to this host, the last one to move: the
+crons the role once wrote here are retired and replaced by timers, the firmware update ships
+only where fwupd is, the scans read this host's own tokens, and
 reconcile adopts the two SSH rules while it leaves every rule another role writes alone.
 
 Run: uv run pytest hosts/lib/tests/test_box_initial_setup_part2.py
 """
 
 import json
-import re
 
 import pytest
 from test_pi_initial_setup_part1 import seeded_pi
 from test_pi_initial_setup_part2 import (
-    DAYS,
     LAN,
     TIMERS,
-    _crons,
     _reboot,
-    _subject_tasks,
     _text,
 )
 
@@ -51,35 +47,16 @@ def context() -> dict:
     return render_context(ROLE, HOST, inventory=REPO_INVENTORY)
 
 
-def test_the_role_skips_the_three_subjects_on_every_host(context):
-    subjects = set(_subject_tasks().values())
-    assert subjects == {"fail2ban", "maintenance"}
-    for subject in subjects | {"ufw"}:
-        assert set(context["initial_setup_packaged_hosts"][subject]) == {
-            "daniel-pi",
-            "daniel-server",
-            HOST,
-        }, subject
-
-
-def test_each_cron_this_host_stops_writing_is_retired_and_a_timer_runs_at_its_slot(
-    package, manifest, context
+def test_each_cron_the_role_once_wrote_here_is_retired_and_a_timer_replaces_it(
+    package, manifest
 ):
     retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
-    for name, cron in _crons(context).items():
+    for name, timer in BOX_TIMERS.items():
         if name == "Clean unused Docker images":
             continue
-        assert retired.get(name) == cron["user"], name
-        timer = BOX_TIMERS[name]
+        assert retired.get(name) == "root", name
         assert timer in manifest["enable_links"]
-        [calendar] = re.findall(
-            r"^OnCalendar=(.*)$",
-            _text(package, f"/usr/lib/systemd/system/{timer}"),
-            re.M,
-        )
-        day = "" if cron["weekday"] == "*" else f"{DAYS[int(cron['weekday'])]} "
-        clock = f"{int(cron['hour']):02d}:{int(cron['minute']):02d}:00"
-        assert calendar.removesuffix(" UTC") == f"{day}*-*-* {clock}", name
+        assert f"/usr/lib/systemd/system/{timer}" in package.files
     assert "homelab-docker-prune.timer" not in manifest["enable_links"]
 
 

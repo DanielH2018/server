@@ -30,13 +30,11 @@ from _aide_check_run import (
     ERROR_REPORT,
     _run_check,
 )
-from _helpers import ROLES, load_tasks, walk_tasks
-from _host_packages import HOSTS, shipped_text
+from _host_packages import HOSTS, package, shipped_text
 from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
 
 PUSH_ENV = "aide-kuma-push.env.j2"
-INTEGRITY = ROLES / "setup" / "initial_setup" / "tasks" / "integrity.yml"
 TIMER = "/usr/lib/systemd/system/homelab-aide-check.timer"
 
 # Each host's tile and the variable it is gated on.
@@ -166,15 +164,13 @@ def test_worktrees_and_caches_are_excluded_and_their_neighbours_are_not():
 DEBIAN_INCLUDE_NAME = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
-def _aide_local_dest() -> str:
-    dests = [
-        task["ansible.builtin.template"]["dest"]
-        for task in walk_tasks(load_tasks(INTEGRITY))
-        if (task.get("ansible.builtin.template") or {}).get("src")
-        == "98_aide_local.conf.j2"
-    ]
+AIDE_CONF_D = "/etc/aide/aide.conf.d/"
+
+
+def _aide_local_dest(host: str) -> str:
+    dests = [path for path in package(host).files if path.startswith(AIDE_CONF_D)]
     assert len(dests) == 1, (
-        f"expected one task deploying 98_aide_local.conf.j2, got {dests}"
+        f"{host} ships {dests} under {AIDE_CONF_D}, not one exclusions file"
     )
     return dests[0]
 
@@ -186,11 +182,11 @@ def test_the_include_pattern_skips_a_dotted_name_and_loads_a_plain_one():
 
 def test_the_exclusions_deploy_under_a_name_aide_loads():
     """From 2026-05-31 to 2026-10-20 the file was `98_aide_local.conf` and no rule in it ran."""
-    dest = _aide_local_dest()
-    assert dest.startswith("/etc/aide/aide.conf.d/"), dest
-    assert DEBIAN_INCLUDE_NAME.match(dest.rsplit("/", 1)[1]), (
-        f"{dest} fails aide.conf's include pattern, so AIDE never reads it"
-    )
+    for host in HOSTS:
+        dest = _aide_local_dest(host)
+        assert DEBIAN_INCLUDE_NAME.match(dest.rsplit("/", 1)[1]), (
+            f"{host}: {dest} fails aide.conf's include pattern, so AIDE never reads it"
+        )
 
 
 def test_the_check_still_runs_when_no_token_is_set(tmp_path):

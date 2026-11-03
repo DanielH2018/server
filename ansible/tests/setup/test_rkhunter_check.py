@@ -23,10 +23,9 @@ Run: uv run pytest ansible/tests/setup/test_rkhunter_check.py
 import os
 import re
 
-import jinja2
 
 from lib.proc_testing import fake_bin, run, write_exec
-from _helpers import ROLES, load_tasks, walk_tasks
+from _helpers import ROLES
 from _host_packages import HOSTS, shipped_text
 from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
@@ -36,8 +35,6 @@ from test_aide_check import _textfile
 
 SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
 PUSH_ENV = "rkhunter-kuma-push.env.j2"
-CONF_LOCAL = "rkhunter.conf.local.j2"
-INTEGRITY = ROLES / "setup" / "initial_setup" / "tasks" / "integrity.yml"
 TIMER = "/usr/lib/systemd/system/homelab-rkhunter-check.timer"
 
 # Each host's tile and the variable it is gated on.
@@ -257,22 +254,14 @@ def test_a_summary_missing_a_count_pushes_down(tmp_path):
 def test_the_ssh_root_setting_follows_the_main_sshd_config():
     """rkhunter reads PermitRootLogin from the main sshd_config only (#4638).
 
-    daniel-box's main file carries the line and daniel-pi's does not, though both harden a
-    drop-in, so the setting follows what the play read rather than the host's config path.
+    daniel-box's and daniel-server's main files carry the line and daniel-pi's does not, though
+    all three harden a drop-in, so the setting follows the main file rather than the config path.
     """
-    task = next(
-        task
-        for task in walk_tasks(load_tasks(INTEGRITY))
-        if (task.get("ansible.builtin.template") or {}).get("src") == CONF_LOCAL
-    )
-    (name, expression), *_ = task["vars"].items()
-    for rc, expected in ((0, "no"), (1, "unset")):
-        # grep's exit code, as the register before this task records it.
-        value = jinja2.Template(expression).render(
-            initial_setup_rkhunter_sshd_root_login={"rc": rc}
-        )
-        rendered = render_setup_text("initial_setup", CONF_LOCAL, {name: value})
-        assert f"\nALLOW_SSH_ROOT_USER={expected}\n" in rendered, (rc, rendered)
+    expected = {"daniel-box": "no", "daniel-server": "no", "daniel-pi": "unset"}
+    assert set(expected) == set(HOSTS)
+    for host, value in expected.items():
+        shipped = shipped_text(host, "/etc/rkhunter.conf.local")
+        assert f"\nALLOW_SSH_ROOT_USER={value}\n" in shipped, (host, shipped)
 
 
 def test_the_scan_still_runs_when_no_token_is_set(tmp_path):

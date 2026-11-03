@@ -1,23 +1,17 @@
 # initial_setup — host baseline + security hardening
 
-The big host-bring-up role: base packages, per-user Python tooling, SSH/firewall/kernel
-hardening, auditing, and file-integrity monitoring. **Not a container role** — a host-setup
-role under `ansible/roles/setup/`, run by `initial_setup.yml`, not `deploy.yml`. It is the
-largest and most fragile setup role, so **`--check` first** and scope with `--tags` when
-iterating. `docs/host-baseline-record.md` carries the per-block traps, the two host checks in
-full, and the journald-cap forensics.
+The host-bring-up role: base packages, per-user Python tooling, the sudo credential cache,
+auditd and kernel-module hardening, and the two host checks. The host packages own the rest of
+the baseline (sshd, fail2ban, unattended upgrades, sysctls, the journald cap, the maintenance
+jobs, the integrity scans and the firewall), and this role keeps no task for them.
+**Not a container role** — a host-setup role under `ansible/roles/setup/`, run by
+`initial_setup.yml`, not `deploy.yml`. It is a large setup role, so **`--check` first** and scope
+with `--tags` when iterating. `docs/host-baseline-record.md` carries the per-block traps, the two
+host checks in full, and the journald-cap forensics.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "initial_setup"`
-- **Crons (7):**
-  - `Weekly apt autoremove` — `0 2 * * 0`
-  - `Weekly dpkg purge orphaned configs` — `15 2 * * 0`
-  - `Weekly system restart` — `30 7 * * 0`
-  - `Weekly firmware update` — `0 7 * * 0`
-  - `Clean unused Docker images` — `30 6 * * *`
-  - `Weekly rkhunter malware scan` — `0 2 * * 3`
-  - `Weekly AIDE file integrity check` — `0 3 * * 1`
 - **Timers (2):** `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`),
   `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
 <!-- /generated_from -->
@@ -30,8 +24,7 @@ collections from `ansible/requirements.yml`, the tag the deployer applies a bump
 ## Hardware gates are capability flags, not host names
 A hardware gate names the FACT it reads, not the host that has it —
 `ansible/inventory/group_vars/all.yml:has_low_memory_board`,
-`ansible/inventory/group_vars/all.yml:has_raspi_kernel`,
-`ansible/inventory/group_vars/all.yml:has_ample_ram`. Each defaults false there and is true in
+`ansible/inventory/group_vars/all.yml:has_raspi_kernel`. Each defaults false there and is true in
 every carrying host's `host_vars` (#2981), so replacing a machine is a `host_vars` edit. They
 sit in `group_vars` because `scripts/deploy_tools/setup_routing.py` resolves a gate against
 those two files only, and an unknown name there leaves the role unplaced.
@@ -44,8 +37,8 @@ that no capability names, and they delete themselves once the host converges. EN
 refuses a new bare literal.
 
 ## Granular tags (run one block without the whole role)
-Every task carries a block tag placed right under `name:`, so `--tags fail2ban` or
-`--tags "ssh,firewall"` runs just that slice. The live list is the tree's, not a copy here:
+Every task carries a block tag placed right under `name:`, so `--tags sudo-timestamp` or
+`--tags "ssh,banners"` runs just that slice. The live list is the tree's, not a copy here:
 
 ```bash
 grep -rho 'tags: \[.*\]' ansible/roles/setup/initial_setup/tasks/ | sort -u
@@ -60,11 +53,9 @@ resolver example and the ENFORCED test.
 
 ## Rules the task files do not state
 `tasks/` is the inventory — one file per subject, and the tag list above says which file a tag
-runs. These three bite from outside the file you are editing; the rest, with every derivation,
+runs. These two bite from outside the file you are editing; the rest, with every derivation,
 are in the record page.
 
-- **A sysctl this role sets that UFW's `/etc/ufw/sysctl.conf` also names must be set there
-  too**, or the run ends with UFW's value live (#2977).
 - **The journal cap and the rsyslog info filter are one change.** The cap ships in
   `hosts/components/host-tuning/templates/50-homelab-journald.conf`; the filter is this role's,
   gated `when: has_rsyslog` (false on the Pi). ENFORCED:
@@ -73,33 +64,18 @@ are in the record page.
   two optimize_pi notifies went with that role's tasks in H7.25. ENFORCED:
   `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`.
 
-## Autonomous-role contract — the host crons that remain (`crons` tag)
-The weekly reboot, the weekly firmware update, the Docker image prune, the weekly apt autoremove
-and dpkg purge, and the rkhunter and AIDE scans run with no human in the loop. H7.36 moved the
-docs refresh, the infrastructure-map refresh, the eval sweep, the object-store repair and the
-secret-rotation timers into components under `hosts/components/` (`docs-refresh/`, `infra-map/`,
-`eval-sweep/`, `worktree-sweep/`, `secret-rotation/`). Each component's `component.yml` carries
-its own contract. The host packages moved the reboot, the firmware update, the prune, the apt
-hygiene jobs and the two scans into the `host-maintenance` and `integrity-scans` components on
-daniel-pi (H7.30), daniel-server (H7.31) and daniel-box (H7.32). Those components render this
-role's templates in place and carry their own contracts. `initial_setup_packaged_hosts` in
-`defaults/main.yml` skips the fail2ban group and the maintenance jobs on all three hosts, so
-their tasks in `tasks/` apply to no host. H7.32 deleted the ufw tasks, whose rules and enable are the
-`ssh-firewall` component and reconcile's ufw arm. This role
-keeps the Loki read-route witness for daniel-server
+## No state-changing job remains here
+The weekly reboot, the firmware update, the Docker image prune, the apt autoremove and dpkg
+purge, and the rkhunter and AIDE scans are timers of the `host-maintenance` and
+`integrity-scans` components on all three hosts (H7.30 to H7.32). H7.36 moved the docs refresh,
+the infrastructure-map refresh, the eval sweep, the object-store repair and the secret-rotation
+timers into components under `hosts/components/`. Each component's `component.yml` carries its
+own contract, and renders this role's templates and files in place. The fail2ban, sshd, sysctl,
+unattended-upgrades and ufw tasks were deleted with the last host's move, so a template here
+that no task names may still be a component's input: grep `hosts/` before you delete one.
+This role keeps the Loki read-route witness for daniel-server
 (`initial_setup_packaged_hosts` in `defaults/main.yml` excludes daniel-box) and the setup-drift
-check.
-- **Scope:** reboot the host, stage firmware, prune unused Docker images older than a week,
-  remove orphaned packages and configs, and scan. None edits the repository or the cluster.
-- **Mode:** the reboot, firmware and prune jobs follow `weekly_reboot_*` and `has_docker`; a
-  host without the capability loses the job on the next apply.
-- **Abort valves:** a failed prune leaves its Healthchecks.io ping unsent, and the reboot
-  chain reboots even when its ping fails, by design.
-- **Required evidence:** a `weekly-restart`, `fwupd-auto` or `docker-prune` line in the journal,
-  the Healthchecks.io check for the reboot and the prune, and the `apt-autoremove`,
-  `dpkg-purge` and `firmware-update` textfiles for the three maintenance jobs.
-- **Next-run review:** before adding a state-changing cron here, check whether a component
-  under `hosts/components/` should own it instead.
+check, both read-only. Before you add a state-changing cron, put it in a component.
 
 ## Notable
 **Two host checks live here rather than in monitor-bridge**, both `kuma-check-*` timers that
@@ -116,7 +92,7 @@ ENFORCED: `ansible/tests/services/test_initial_setup_check_rule_literals.py` pin
 deadline literals to the rendered `DEADLINE_S`. The weekly AIDE and rkhunter scans write a
 textfile the same way on every host (#6168), and the `host-checks` rule group reads it.
 ENFORCED: `ansible/tests/setup/test_integrity_scan_rule_literals.py`. The apt autoremove,
-dpkg purge and firmware update crons run through `files/host-maintenance.sh`, which writes
+dpkg purge and firmware update jobs run through `files/host-maintenance.sh`, which writes
 each job's exit code as a textfile verdict, and the `host-checks` group reads it with a
 `Failed` and a `NotReporting` rule per host that runs the job (#6179). ENFORCED:
 `ansible/tests/setup/test_host_maintenance.py`. The witness gets its

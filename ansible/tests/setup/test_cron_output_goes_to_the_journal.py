@@ -97,12 +97,13 @@ KNOWN_CRONS = frozenset(
     {
         "fake-remux scan",  # setup/fake_remux/tasks/main.yml
         "Longhorn backup health",  # setup/k3s/tasks/health-crons.yml
-        "Weekly AIDE file integrity check",  # setup/initial_setup/tasks/integrity.yml
+        "Off-box etcd snapshot",  # setup/k3s/tasks/health-crons.yml
     }
 )
-# 20 after H2.2c moved the Longhorn trim to a RecurringJob (21 after H7.40 moved the artifacts
-# node's two crons into package timers, 23 before that, and 29 before H7.36).
-_CENSUS_FLOOR = 20
+# 13 after the initial_setup crons no host ran were deleted (20 after H2.2c moved the Longhorn
+# trim to a RecurringJob, 21 after H7.40 moved the artifacts node's two crons into package
+# timers, 23 before that, and 29 before H7.36).
+_CENSUS_FLOOR = 13
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 
