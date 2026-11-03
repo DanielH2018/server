@@ -68,6 +68,7 @@ files:
   - {lib: homelab_tool_fetch.py, dst: /usr/lib/homelab/builder/homelab_tool_fetch.py, mode: "0755"}
   - {lib: builder_ci_grade.py, dst: /usr/lib/homelab/builder/builder_ci_grade.py, mode: "0755"}
   - {lib: builder_rollout_gate.py, dst: /usr/lib/homelab/builder/builder_rollout_gate.py, mode: "0755"}
+  - {lib: builder_python.py, dst: /usr/lib/homelab/builder/builder_python.py, mode: "0755"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/builder/host_lib.py, mode: "0755"}
   - {lib: kuma_push.py, dst: /usr/lib/homelab/builder/kuma_push.py, mode: "0755"}
   - {lib: publish-textfile, dst: /usr/lib/homelab/publish-textfile, mode: "0755"}
