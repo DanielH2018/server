@@ -1055,6 +1055,7 @@
  "scripts/deploy_tools/tests/test_land_health_unreadable_gate.py": 0.0,
  "scripts/deploy_tools/tests/test_land_health_verdict.py": 0.0,
  "scripts/deploy_tools/tests/test_land_host_wait.py": 0.59,
+ "scripts/deploy_tools/tests/test_land_host_wait_unbuilt.py": 0.0,
  "scripts/deploy_tools/tests/test_land_host_wait_wiring.py": 0.27,
  "scripts/deploy_tools/tests/test_land_imports.py": 0.01,
  "scripts/deploy_tools/tests/test_land_landing.py": 0.0,
