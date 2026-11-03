@@ -1,6 +1,7 @@
-"""The `k3s-agent` component as daniel-server's package renders it (H6.5a).
+"""The `k3s-agent` component as daniel-server's package renders it (H6.5a, H6.5b).
 
-The package ships the files Ansible's `tasks/agent.yml` wrote, so dpkg takes each path over. It
+The package ships the files Ansible's `tasks/agent.yml` wrote, so dpkg takes each path over,
+and since H6.5b the agent's flags in config.yaml.d. It
 marks each file k3s reads at startup `manual:k3s-agent.service`, and the package marks the unit
 `windowed`, so reconcile never restarts the agent and the change goes live at its next start.
 Every failure here is silent until that start: a drop-in that leaves stdout in the journal loses
@@ -16,7 +17,8 @@ from renderer.renderer_lib import host as host_mode
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
 UNIT = "k3s-agent.service"
 DROPIN = "/usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf"
-STARTUP_FILES = {DROPIN, "/etc/rancher/k3s/registries.yaml"}
+CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
+STARTUP_FILES = {DROPIN, CONFIG, "/etc/rancher/k3s/registries.yaml"}
 LOGROTATE = "/etc/logrotate.d/k3s-agent"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-agent.conf"
 INSTALLER = "/usr/local/bin/k3s-install.sh"
@@ -58,12 +60,23 @@ def test_the_package_marks_exactly_the_startup_files_for_the_agent(package):
         assert quiet in package.files and quiet not in package.activations
 
 
-def test_the_logging_drop_in_sends_both_streams_and_leaves_the_flags_alone(package):
-    """`ExecStart` stays the installer's until H6.5b moves the agent's flags."""
+def test_the_drop_in_logs_both_streams_and_runs_a_bare_agent(package):
+    """The bare `k3s agent` reads its flags from config.yaml.d; the env file keeps the token."""
     found = settings(text(package, DROPIN))
     assert found.pop("StandardOutput") == [f"append:{log_file()}"]
     assert found.pop("StandardError") == ["inherit"]
+    assert found.pop("ExecStart") == ["", "/usr/local/bin/k3s agent"]
     assert found == {}
+
+
+def test_the_config_drop_in_is_the_only_k3s_config_file(package):
+    """k3s merges config.yaml and every file in config.yaml.d, so a second file adds flags."""
+    configs = {
+        path
+        for path in package.files
+        if path.startswith("/etc/rancher/k3s/config.yaml")
+    }
+    assert configs == {CONFIG}
 
 
 def test_rotation_truncates_in_place_because_systemd_holds_the_fd(package):
