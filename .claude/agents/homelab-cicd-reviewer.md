@@ -52,7 +52,8 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   untracked. Re-pinning it to a version tag is not a required fix; many channel tags have no
   version to pin. A bare floating tag with no digest is a real finding.
 - **Secret rotation:** `scripts/secrets_mgmt/secret_rotation.py` (sync/audit/rotate) + `ansible/secret_rotation.yml`
-  (plaintext registry: names/tiers/dates, no values) + a daily Kuma push.
+  (plaintext registry: names/tiers/dates, no values) + a daily audit timer
+  (`hosts/components/secret-rotation/`) whose textfile verdict `SecretRotationAuditFailed` pages.
 
 ## Tools (read-only)
 - `Read`/`Grep` the workflow, `prek.toml`, `renovate.json`, the gitops_deploy files + CLAUDE.md.

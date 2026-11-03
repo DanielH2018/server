@@ -196,3 +196,8 @@ keys a week after Cutover-1b.
 The five tags stay in `KUMA_RETIRING_TAGS` until C-7, because pods that ran before the apply may
 still hold a log line from a refused push. The readers' `status=` lines still count as landed
 siblings in `swallowed_verdicts`; that is harmless, since the check pages only on a failed push.
+
+**Token PR.** [#6949](https://github.com/DanielH2018/server/pull/6949) retired this batch's push
+tokens, and the operator's commit removed the keys from `secrets.yml` on 2026-11-02. A revert of
+a cutover above no longer brings back a working tile, because no token is left for it to push
+with.
