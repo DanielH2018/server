@@ -158,7 +158,7 @@ cron exists to find), and anything created outside the repo.
   with uploads daily at 02:45. Both write to R2, `s3://<r2_bucket>/etcd-snapshots/`, so the
   creation time tells them apart. Each is named `offbox-<node>-<unix-timestamp>.zip`. It is
   compressed, and the extension is literally `.zip`. The name matters: it is what
-  `--cluster-reset-restore-path` takes for an S3 restore, as a NAME, never a path (see below).
+  `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
 - Credentials for a restore: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered
   by the k3s role from the `r2_*` SOPS secrets. The Secret cannot serve a restore, because a
   restore runs when the API may be gone.
@@ -275,14 +275,22 @@ ignore that Secret, which a restore could not read anyway.
 
 To restore from one of the 28 local snapshots instead, pass `--etcd-s3=false` and no other S3
 flag. While S3 is enabled, k3s fetches `--cluster-reset-restore-path` from S3. With only the
-config Secret it fails with `cannot use S3 config secret when restoring snapshot`. A local
-restore takes the snapshot's full path, so run gate 3 against its bare name first:
+config Secret it fails with `cannot use S3 config secret when restoring snapshot`.
+
+A local restore passes the bare name too, the one gate 3 checks. k3s changes directory to
+`/var/lib/rancher/k3s/server` before it stats the value, so hard-link the snapshot there first.
+k3s v1.36 also joined the value onto `db/snapshots` to decompress a `.zip`. An absolute path
+then doubled, and the bare name with the link satisfies both reads. This is the form
+`scripts/backup/etcd_restore_drill.sh` restores with:
 
 ```bash
+cd /var/lib/rancher/k3s/server
+ln db/snapshots/<local-snapshot-name> <local-snapshot-name>
 k3s server \
   --cluster-reset \
-  --cluster-reset-restore-path=/var/lib/rancher/k3s/server/db/snapshots/<local-snapshot-name> \
+  --cluster-reset-restore-path=<local-snapshot-name> \
   --etcd-s3=false
+rm <local-snapshot-name>
 ```
 
 Either command restores and exits — it does not stay running. Then:
