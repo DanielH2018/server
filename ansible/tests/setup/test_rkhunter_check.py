@@ -27,7 +27,6 @@ import re
 from lib.proc_testing import fake_bin, run, write_exec
 from _helpers import ROLES
 from _host_packages import HOSTS, shipped_text
-from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script
 from _aide_check_run import LOGGER_STUB
@@ -37,14 +36,11 @@ SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
 PUSH_ENV = "rkhunter-kuma-push.env.j2"
 TIMER = "/usr/lib/systemd/system/homelab-rkhunter-check.timer"
 
-# Each host's tile and the variable it is gated on.
-TILES = {
-    "daniel-box": ("rkhunter-daniel-box.json", "rkhunter_daniel_box_push_token"),
-    "daniel-server": (
-        "rkhunter-daniel-server.json",
-        "rkhunter_daniel_server_push_token",
-    ),
-    "daniel-pi": ("rkhunter-daniel-pi.json", "rkhunter_daniel_pi_push_token"),
+# Each host's push token variable. M6 batch B9's Cutover-1a deleted the tiles that received them.
+PUSH_TOKENS = {
+    "daniel-box": "rkhunter_daniel_box_push_token",
+    "daniel-server": "rkhunter_daniel_server_push_token",
+    "daniel-pi": "rkhunter_daniel_pi_push_token",
 }
 WEEK_S = 7 * 24 * 3600
 # 2026-09-30 02:02:01 UTC, the run the stale log below records.
@@ -274,23 +270,14 @@ def test_the_scan_still_runs_when_no_token_is_set(tmp_path):
 
 def test_each_host_pushes_its_own_token():
     """Rendered once per host with a different sentinel behind each variable (#3202)."""
-    sentinels = {var: f"{host}-sentinel" for host, (_, var) in TILES.items()}
-    for host in TILES:
+    sentinels = {var: f"{host}-sentinel" for host, var in PUSH_TOKENS.items()}
+    for host in PUSH_TOKENS:
         rendered = render_setup_text(
             "initial_setup", PUSH_ENV, {"inventory_hostname": host, **sentinels}
         )
         carried = [s for s in sentinels.values() if s in rendered]
         assert carried == [f"{host}-sentinel"], (
             f"{host} must carry its own token and no other; it carries {carried}"
-        )
-
-
-def test_each_host_has_a_tile_gated_on_its_own_token():
-    """An ungated tile sits red from creation until its secret exists."""
-    for host, (tile, gate_var) in TILES.items():
-        assert entity(tile, gate_var)["name"] == f"rkhunter Scan ({host})"
-        assert tile_is_gated_on(tile, gate_var), (
-            f"{tile} renders with {gate_var} empty, so it sits red from creation"
         )
 
 
@@ -303,9 +290,9 @@ def test_the_push_deadline_covers_one_week_and_not_two():
         ), (
             f"{host}: this test reads the timer as weekly; give it the new period if that changes"
         )
-    for tile, gate_var in TILES.values():
-        interval = entity(tile, gate_var)["interval"]
-        assert WEEK_S < interval < 2 * WEEK_S, (
-            f"{tile}'s deadline {interval}s must exceed the timer's weekly period, and stay "
-            "under two so a second missed run cannot pass unreported"
-        )
+    body = render_shell_script(*SCRIPT)
+    [deadline] = re.findall(r"^\s*DEADLINE_S=(\d+)$", body, re.M)
+    assert WEEK_S < int(deadline) < 2 * WEEK_S, (
+        f"DEADLINE_S {deadline}s must exceed the timer's weekly period, and stay "
+        "under two so a second missed run cannot pass unreported"
+    )

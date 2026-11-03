@@ -288,7 +288,6 @@ KNOWN_MEMBERS = frozenset(
         "staging/test_etcd_drill_vm.py",
         "staging/test_staging_egress_fence.py",
         "staging/test_staging_network.py",
-        "setup/_kuma_monitors.py",
         "setup/test_claude_code_on_daniel_server.py",
         "setup/test_claude_memory_sync.py",
         "setup/test_claude_rc_unit.py",

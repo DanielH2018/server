@@ -26,8 +26,9 @@ _ASSERT = "kuma_declarations | kuma_malformed_push_tokens | length == 0"
 # A hand-written tile that is gated on its token, so it drops out of the render if the seed stops
 # opening that gate. The tile whose hand-minted token was refused on 2026-10-09, Homelab Evals,
 # left with M6 batch B2's Cutover-1a, and the registry's weekly GC tile that stood in for its
-# shape left with B6c's. The Pi's weekly AIDE check stands in for it.
-_INCIDENT_TILE = "aide-daniel-pi"
+# shape left with B6c's. The six AIDE and rkhunter tiles that stood in for it left with B9's, so
+# the status-page sync CronJob's tile does.
+_INCIDENT_TILE = "status-page-sync"
 
 
 def _declarations(token_for) -> dict[str, dict]:
@@ -103,7 +104,7 @@ def test_the_check_covers_every_rendered_push_tile():
     }
     push_ids = sorted(i for i, e in declarations.items() if e["type"] == "push")
     assert _INCIDENT_TILE in push_ids
-    assert len(push_ids) >= 6, f"the push-tile census went thin: {len(push_ids)}"
+    assert len(push_ids) >= 1, f"the push-tile census went thin: {len(push_ids)}"
     assert kuma_malformed_push_tokens(declarations) == push_ids
 
 
@@ -120,11 +121,8 @@ def test_cluster_vars_refuses_a_malformed_value_in_every_rendered_push_token():
         for entity in _entities().values()
         if entity["type"] == "push"
     }
-    # Named members: two hand-written tiles' tokens, one a host cron's and one a CronJob's.
-    assert {
-        "aide_daniel_pi_push_token",
-        "kuma_status_page_sync_push_token",
-    } <= variables
+    # Named member: the one remaining tile's token, a CronJob's.
+    assert {"kuma_status_page_sync_push_token"} <= variables
     base64_token = "QUJD" * 10 + "QQ+="
     refusals = cluster_vars.successor_refusals(
         dict.fromkeys(variables, base64_token), frozenset(variables)

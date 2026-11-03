@@ -217,11 +217,6 @@ uptime_kuma_k8s_status_page_groups:
     match:
       - "^daniel-box-disk$"
       - "^cloudflare-ddns"
-      # The weekly AIDE check, one tile per host, daniel-pi's included: a host-integrity
-      # signal, so the Pi's tile groups with its siblings rather than under Raspberry Pi.
-      - "^aide-"
-      # The weekly rkhunter scan, one tile per host, grouped with AIDE for the same reason.
-      - "^rkhunter-"
   - name: Automation & Drift
     match:
       - "^status-page-sync$"

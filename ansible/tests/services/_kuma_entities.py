@@ -58,17 +58,10 @@ _HOST = "daniel-box"
 
 # Tiles that exist only because `_token_seed()` seeds their gate. Named rather than counted: a
 # count that fell from 115 to 104 would read as a template edit, where a named member names the
-# gate that stopped opening. These four are the shapes the gate hides: the sync CronJob and a
-# per-host integrity scan on each host kind. One of them going missing is the whole class going
-# missing. M6 batch B6c's Cutover-1a deleted the registry's weekly GC tile, which stood here.
-GATED_MEMBERS = frozenset(
-    {
-        "status-page-sync.json",
-        "aide-daniel-box.json",
-        "aide-daniel-pi.json",
-        "rkhunter-daniel-pi.json",
-    }
-)
+# gate that stopped opening. The sync CronJob's tile is the one shape the gate still hides, so
+# its going missing is the whole class going missing. M6 batch B6c's Cutover-1a deleted the
+# registry's weekly GC tile and B9's deleted the six integrity-scan tiles, which stood here.
+GATED_MEMBERS = frozenset({"status-page-sync.json"})
 
 # The resend intervals come from the role's real defaults, not from a stub. Stubbing them would
 # make every assertion below a statement about this file rather than about what deploys — the
@@ -102,7 +95,7 @@ def _token_seed() -> dict[str, str]:
     since M6 batch A6's Cutover-2 no monitor-bridge row renders a token.
     """
     names = set(re.findall(r"\b([a-z0-9_]+_push_token)\b", TEMPLATE.read_text()))
-    assert len(names) >= 6, f"the push-token scan went thin: {sorted(names)}"
+    assert len(names) >= 1, f"the push-token scan went thin: {sorted(names)}"
     return {name: _STUB_PREFIX + name for name in names}
 
 

@@ -228,6 +228,20 @@ def test_the_deleted_b6c_tile_is_not_declared():
     assert "Status Page Sync" in declared
 
 
+def test_the_deleted_b9_tiles_are_not_declared():
+    # RED if one is declared again: AutoKuma would re-create it beside the AideCheck* and
+    # Rkhunter* rules that replace it (M6 batch B9), and the scans push into their tokens until
+    # Cutover-2.
+    declared = {e["name"] for e in _entities().values()}
+    assert not {
+        name
+        for name in declared
+        if name.startswith(("AIDE Integrity (", "rkhunter Scan ("))
+    }
+    # Non-vacuity by name: a render that declared nothing would pass the line above.
+    assert "Status Page Sync" in declared
+
+
 def test_the_deleted_b1_tiles_are_not_declared():
     # M6 batch B1's Cutover-1a deleted these five hand-written tiles. RED if one is declared
     # again: AutoKuma would re-create it, and its producer (still pushing until Cutover-2)
