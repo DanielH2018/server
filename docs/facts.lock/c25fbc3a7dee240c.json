@@ -1,5 +1,5 @@
 {
-  "checksum": "43d16551e880fa3c9dd7ed337b4e5117af6462b386ac3bec4c9d75f4f6d45823",
+  "checksum": "084c392576fb909c6d0302038326184aa0b536c6a2e2f629c2d6098169bc0684",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Hardware gates are capability flags, not host names",
   "row": {
@@ -8,9 +8,10 @@
       "ansible/inventory/group_vars/all.yml:has_low_memory_board": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
       "ansible/inventory/group_vars/all.yml:has_raspi_kernel": "fcbcf165908dd18a9e49f7ff27810176db8e9f63b4352213741664245224f8aa",
       "ansible/tests/setup/test_initial_setup_host_gates.py::test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones": "a6d27aebec8bd0da343fde39a7447cb1be6a386d0d7aa783f05e430b18234e36",
-      "scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when": "ffb72da90349285c00d046216bcdd9690e1769a79bcc57f9b4f3a578358f2f2a"
+      "scripts/deploy_tools/setup_lib/setup_gates.py:_eval_when": "8b48c72025792a097da2c1105702e4f89a4228a1114710aa403dd71900125388",
+      "scripts/deploy_tools/setup_routing.py": "f625a92f6fb5f312f62635c7fd66580dd12257a811e81ddaf56672e1248617df"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "23b647439"
   }
 }

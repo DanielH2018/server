@@ -158,14 +158,17 @@ def setup_role_hosts(
         chains = task_chains(roles_dir / role, lambda task, task_file: True)
         if not chains:
             return hosts
-        return _hosts_passing(chains, hosts, all_vars, host_vars_dir)
+        return _hosts_passing(chains, hosts, all_vars, host_vars_dir, roles_dir / role)
     return frozenset(h for h in hosts if _eval_when(when, h, all_vars, host_vars_dir))
 
 
 def _hosts_passing(
-    chains, hosts, all_vars: Path, host_vars_dir: Path
+    chains, hosts, all_vars: Path, host_vars_dir: Path, role_dir: Path
 ) -> frozenset[str]:
     """The hosts of `hosts` on which at least one `when:` chain in `chains` passes whole.
+
+    Each gate is read with `role_dir`'s `defaults/main.yml` under `group_vars`, as Ansible
+    reads a task of that role, so a `<role>_packaged_hosts` guard resolves.
 
     An empty chain -- an ungated leaf -- passes everywhere, so its presence settles every
     host before a single gate is read. The rest are deduplicated first: every leaf under
@@ -176,11 +179,12 @@ def _hosts_passing(
     if () in chains:
         return frozenset(hosts)
     distinct = {json.dumps(chain, sort_keys=True): chain for chain in chains}.values()
+    defaults = role_dir / "defaults" / "main.yml"
     return frozenset(
         h
         for h in hosts
         if any(
-            all(_eval_when(g, h, all_vars, host_vars_dir) for g in chain)
+            all(_eval_when(g, h, all_vars, host_vars_dir, defaults) for g in chain)
             for chain in distinct
         )
     )
@@ -274,7 +278,7 @@ def setup_file_hosts(
         return role_hosts
     if not chains:
         return role_hosts
-    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
+    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir, roles_dir / role)
 
 
 def setup_shipped_file_hosts(
@@ -308,7 +312,7 @@ def setup_shipped_file_hosts(
     )
     if not chains:
         return role_hosts
-    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
+    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir, roles_dir / role)
 
 
 def _shipping_names(path: str, roles_dir: Path) -> set[str]:
@@ -357,7 +361,7 @@ def setup_repo_file_hosts(
     chains = task_gates_shipping_repo_path(roles_dir / role, path)
     if not chains:
         return frozenset()
-    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
+    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir, roles_dir / role)
 
 
 def _setup_apply_command(role: str, host: str, local_host: str = "") -> str:
