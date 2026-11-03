@@ -125,11 +125,10 @@ def test_the_nut_job_renders_its_path_interval_and_params_from_the_item():
     assert job["params"] == {"ups": ["apc-ups"]}
 
 
-@pytest.mark.parametrize("entry_name", ["uptime-kuma", "home-assistant"])
-def test_a_hand_written_job_reads_its_target_port_from_the_entry(entry_name):
-    """Kuma and HA keep hand-written jobs for their auth; the port still lives on the entry."""
+def test_a_hand_written_job_reads_its_target_port_from_the_entry():
+    """HA keeps a hand-written job for its auth; the port still lives on the entry."""
     entries = copy.deepcopy(host_context()["containers_list"])
-    entry = next(e for e in entries if e["name"] == entry_name)
+    entry = next(e for e in entries if e["name"] == "home-assistant")
     assert entry["port"] != 9999
     entry["port"] = 9999
     targets = _scrape_targets(
@@ -137,7 +136,7 @@ def test_a_hand_written_job_reads_its_target_port_from_the_entry(entry_name):
             "observability", "prometheus.yaml.j2", {"containers_list": entries}
         )
     )
-    assert targets[entry_name] == [f"{entry_name}.homelab.svc:9999"]
+    assert targets["home-assistant"] == ["home-assistant.homelab.svc:9999"]
 
 
 def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
@@ -167,7 +166,7 @@ def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
     ],
 )
 def test_kumas_listener_and_callers_follow_the_entry_port(role, template):
-    """Kuma and every caller read the port the scrape target reads, so none can disagree."""
+    """Kuma and every caller read the entry's port, so none can disagree."""
     entries = copy.deepcopy(host_context()["containers_list"])
     entry = next(e for e in entries if e["name"] == "uptime-kuma")
     entry["port"] = 9999
