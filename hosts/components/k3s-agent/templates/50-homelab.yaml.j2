@@ -1,0 +1,20 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-agent) -- edits
+# here are overwritten. The k3s agent's flags, from `k3s_agent_config` in the component's defaults.
+#
+# k3s reads every *.yaml in config.yaml.d when no config.yaml exists, and turns each key into
+# `--<key>=<value>`, one flag per list item. 50-homelab.conf runs a bare `k3s agent`, so this
+# file holds every flag. The server URL and the join token are not flags: K3S_URL and K3S_TOKEN
+# come from the installer's /etc/systemd/system/k3s-agent.service.env. A key whose value is
+# false is left out.
+{% for key, value in k3s_agent_config | dictsort if value is not false %}
+{% if value is sameas true %}
+{{ key }}: true
+{% elif value is string or value is number %}
+{{ key }}: {{ value | tojson }}
+{% else %}
+{{ key }}:
+{% for item in value %}
+  - {{ item | tojson }}
+{% endfor %}
+{% endif %}
+{% endfor %}

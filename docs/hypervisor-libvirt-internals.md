@@ -135,7 +135,10 @@ with `StrictHostKeyChecking=yes` against that one public half.
 - daniel-server's own `/usr/local/bin/k3s` — the same version as the server that wrote the
   snapshot. The drill prints the snapshot's recorded node versions beside it.
 - `K3S_TOKEN` from the k3s-agent unit's environment file. It is identical to the server's
-  `token` when no `--agent-token` is set, and a wrong one fails the restore stage loudly.
+  `token` when no `--agent-token` is set, and a wrong one fails the restore stage loudly. The
+  k3s installer writes the file at the agent's first join, and since H6.5b nothing rewrites it:
+  `tasks/agent.yml` runs the installer only for a missing binary. A deliberate server-token
+  rotation therefore makes the drill fail loudly until the operator updates the file.
 - The R2 write credentials, rendered to `/etc/homelab/etcd-drill-s3.env`. That is a residency
   the drill added: those credentials sit on this host as well as on daniel-box.
 
