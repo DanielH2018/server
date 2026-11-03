@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-import builder_python as bp
 import host_package_builder as hb
 
 UNIT_PIN = "3.14.6"
@@ -33,7 +32,7 @@ class Recorder:
 
 def tree_pinning(tmp_path: Path, line: str | None) -> Path:
     tree = tmp_path / "tree"
-    pin = tree / bp.PYTHON_PIN
+    pin = tree / "ansible/inventory/group_vars/all.yml"
     pin.parent.mkdir(parents=True)
     pin.write_text("---\nother: 1\n" + (f"{line}\n" if line else ""))
     return tree
