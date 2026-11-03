@@ -1445,7 +1445,7 @@ dropped D6.10, so 11 of them carry code.
 |---|---|---|---|
 | D6.10 | D6.1b | Dropped by [#5425](https://github.com/DanielH2018/server/issues/5425): no PR | none |
 | D6.11 | D6.7a, D6.7c | Yes | D5.1a2, merged; D5's flux PR; the operator's break-glass key pair |
-| D6.12 | D6.0, D6.1 | Yes. Rebased and re-measured at D5's end | D5, *live*; M2 Open question 1's label amendment |
+| D6.12 | D6.0, D6.1 | Yes. Rebased and re-measured at D5's end | D5, *live*; M2 Open question 1's label amendment; M6's C-2b, *live* |
 | D6.13 | D6.2a, D6.2b | Yes | D6.12, *live* |
 | D6.14 | D6.6 | Yes | D6.12, *live* |
 | D6.15 | D6.3 | Yes | D6.12 |

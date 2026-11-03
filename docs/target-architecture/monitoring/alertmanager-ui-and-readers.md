@@ -1,6 +1,6 @@
 # Alertmanager's UI and the services that read or silence it
 
-Status: DECIDED, pending open question 1 (spike [#6688](https://github.com/DanielH2018/server/issues/6688), 2026-10-31)
+Status: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), closed 2026-10-31). B-6a shipped the `admins` option ([#6743](https://github.com/DanielH2018/server/pull/6743)); the operator has not recorded the ruling on open question 1.
 
 Alertmanager became the homelab's paging path when M6 began retiring Uptime Kuma. Nothing
 outside the cluster can see it. During M6's cutovers on 2026-10-30 and 2026-10-31, every read of
@@ -216,7 +216,9 @@ the operator can see a silence they create during Phase C.
 1. **Can a Claude-driven browser silence a page?** The `claude-ui` user is in `admins` and has
    a seeded TOTP, so it passes B-6a's rule. The options are to accept it, which keeps `-m ui`
    coverage of the Alertmanager UI, or to name a narrower group that excludes `claude-ui` and
-   cover the UI by hand. **Operator-only.**
+   cover the UI by hand. **Operator-only.** B-6a shipped the `admins` option
+   ([#6743](https://github.com/DanielH2018/server/pull/6743), 2026-10-31); the operator has
+   not recorded the ruling.
 2. **Is an unauthenticated LAN read of `/api/v2/alerts` and `/api/v2/silences` acceptable?**
    It exposes silence comments and creators beyond what the Prometheus door exposes.
    **Answered 2026-10-31: yes** (the operator's ruling on
@@ -227,7 +229,8 @@ the operator can see a silence they create during Phase C.
 ## Follow-ups filed
 
 - [#6689](https://github.com/DanielH2018/server/issues/6689): M6 B-6a, the `two_factor`
-    Authelia rule for the `admins` group and the `deny` after it. Waits on open question 1.
+    Authelia rule for the `admins` group and the `deny` after it. Shipped as
+    [#6743](https://github.com/DanielH2018/server/pull/6743) with the `admins` option.
 - [#6690](https://github.com/DanielH2018/server/issues/6690): M6 B-6b, the route,
     `--web.external-url` and the netpol comment.
 - [#6691](https://github.com/DanielH2018/server/issues/6691): the GET-only door and

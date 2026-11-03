@@ -152,8 +152,9 @@ tier.
       `report --json`.
 
   All three land before G3 starts. G3 depends on G2. G2 PR 1 opens only when G1's exit
-  criterion holds, and G1 grades that criterion no earlier than 30 days after G1 PR 5,
-  its last PR, merges. G3 therefore adds no fallback for any of the three.
+  criterion holds, and G1 grades that criterion no earlier than five days after G1 PR 5,
+  its last PR, merges. The operator cut the soak from 30 days to five on 2026-10-17
+  (`g1-diff-notice.md`), and G1's text governs. G3 therefore adds no fallback for any of the three.
 
 ## Design
 
