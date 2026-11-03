@@ -21,9 +21,12 @@ to the tags of the tasks that read it:
   - `defaults/main.yml` or `vars/<f>.yml`: the top-level keys whose value changed, then the
     tags of every task file and template naming one of those keys, following another vars
     key that interpolates one.
-  - a key, task file, template or file the range DELETES along with its last reader is
-    asked of the role at `old` instead (`OldRole`), so it maps to the tags its readers had,
-    provided each of those tags still selects a task at `new` (#5930).
+  - a key, template or file the range DELETES along with its last reader is asked of the
+    role at `old` instead (`OldRole`), so it maps to the tags its readers had, provided each
+    of those tags still selects a task at `new` (#5930).
+  - a whole `tasks/` file the range deletes adds no tag: its tasks write nothing, and the
+    file that imported it changes too and is narrowed in its place. One that a task file at
+    `new` still names refuses (#7040).
   - a filter plugin `deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS` lists for the role:
     each of its filters the role mentions is walked like a changed key (#3878).
 
@@ -95,6 +98,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+import re
 import sys
 from pathlib import Path
 
@@ -198,11 +202,19 @@ class OldRole:
     """
 
     def __init__(
-        self, index: RoleIndex, old: str, new: str, repo: str, playbook: str
+        self,
+        index: RoleIndex,
+        old: str,
+        new: str,
+        repo: str,
+        playbook: str,
+        gone_tasks: frozenset[str] = frozenset(),
     ) -> None:
         self.index, self.old, self.new = index, old, new
         self.repo, self.playbook = repo, playbook
+        self.gone_tasks = gone_tasks
         self._read: tuple[RoleIndex, set[str]] | None = None
+        self._gone_text: dict[str, str] = {}
 
     def _before_and_live(self) -> tuple[RoleIndex, set[str]]:
         if self._read is None:
@@ -214,7 +226,12 @@ class OldRole:
                     live |= self.index.tags_of(rel)
                 except CannotNarrow:
                     continue
-            self._read = (RoleIndex(role, self.old, self.repo, playbook_text), live)
+            before = RoleIndex(role, self.old, self.repo, playbook_text)
+            # A task file the range deletes reads nothing that reaches a host any more, so
+            # its readings answer no question asked of `old` (#7040).
+            for rel in self.gone_tasks:
+                self._gone_text[rel] = before.task_text.pop(rel, "")
+            self._read = (before, live)
         return self._read
 
     def still_live(self, what: str, tags: frozenset[str]) -> frozenset[str]:
@@ -229,14 +246,24 @@ class OldRole:
     def key_tags(self, key: str) -> frozenset[str]:
         """The tags of the readers at `old` of a deleted vars key, or a refusal.
 
+        A key whose only readers at `old` are task files the range deletes adds no tag.
+
         Raises:
             CannotNarrow: nothing reads the key at `old` either, or one of its old readers'
                 tags selects nothing at `new`.
         """
-        return self.still_live(key, self._before_and_live()[0].key_readers(key))
+        before = self._before_and_live()[0]
+        try:
+            readers = before.key_readers(key)
+        except CannotNarrow:
+            mention = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")
+            if any(mention.search(text) for text in self._gone_text.values()):
+                return frozenset()
+            raise
+        return self.still_live(key, readers)
 
     def path_tags(self, rel: str) -> frozenset[str]:
-        """The tags a deleted `tasks/`, `templates/` or `files/` path had at `old`, or a refusal.
+        """The tags a deleted `templates/` or `files/` path had at `old`, or a refusal.
 
         Raises:
             CannotNarrow: every refusal `path_tags` makes at `old`, or one of the tags it
@@ -524,7 +551,12 @@ def role_tags(
     if not playbook_applies_role(playbook_text, role):
         raise CannotNarrow(f"no play in {playbook} lists {role} under roles:")
     index = RoleIndex(role, new, repo, playbook_text)
-    deleted = OldRole(index, old, new, repo, playbook)
+    gone_tasks = frozenset(
+        path[len(prefix) :]
+        for path in changed
+        if path.startswith(f"{prefix}tasks/") and show_at(new, path, repo) is None
+    )
+    deleted = OldRole(index, old, new, repo, playbook, gone_tasks)
     # A secret the role reads moves no path under it, yet reaches the host only when the role
     # renders again (#5436). Which of its tags read the key is not derived, so the role tag.
     # An inventory key is narrowed to its readers' tags instead (#6962).
@@ -549,7 +581,18 @@ def role_tags(
             if _reaches_no_host(rel):
                 continue
             now = show_at(new, path, repo)
-            if now is None and rel.startswith(("tasks/", "templates/", "files/")):
+            if now is None and rel.startswith("tasks/"):
+                # A deleted task file writes nothing. Whatever imported it must change to drop
+                # the import, and that edit is narrowed on its own; resolving the file at `old`
+                # refused one included without tags and widened to the role tag (#7040).
+                name = rel.rsplit("/", 1)[-1]
+                still = sorted(f for f, text in index.task_text.items() if name in text)
+                if still:
+                    raise CannotNarrow(
+                        f"{rel} is deleted, but {', '.join(still)} still names it"
+                    )
+                got = frozenset()
+            elif now is None and rel.startswith(("templates/", "files/")):
                 got = deleted.path_tags(rel)
             elif rel.startswith("tasks/") and runs_the_same(
                 show_at(old, path, repo) or "", now or ""

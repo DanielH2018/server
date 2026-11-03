@@ -27,6 +27,8 @@ import narrow_setup
 from deploy_tools.narrow_lib import setup_index as narrow_setup_index
 
 from _setup_role_fixtures import (
+    ALPHA,
+    DEFAULTS,
     MAIN,
     PLAYBOOK,
     PLAYBOOK_TEXT,
@@ -306,3 +308,52 @@ def test_a_play_include_with_no_tags_is_flagged(tree):
     """No tag on the include means no `--tags` value selects it without the whole play."""
     with pytest.raises(narrow_setup.CannotNarrow, match="carries no tags"):
         _touch_the_play_included_file(tree, include_extra="")
+
+
+# ── a whole task file the range deletes (#7040) ─────────────────────────────────────────
+
+# Untagged and included with vars but no tags, as `k3s/tasks/unit-logging.yml` was from
+# `agent.yml` until H6.5a deleted it. It is the only reader of `demo_log_dir`, which goes with
+# it, as `k3s_log_file` did.
+LOGGING = """\
+---
+- name: Send the unit's output to a file
+  ansible.builtin.copy:
+    content: "StandardOutput=append:{{ demo_log_dir }}/{{ unit }}.log\\n"
+    dest: "/etc/systemd/system/{{ unit }}.service.d/log.conf"
+"""
+
+DEFAULTS_WITH_LOG_DIR = DEFAULTS + "demo_log_dir: /var/log\n"
+
+ALPHA_INCLUDING_LOGGING = ALPHA + (
+    "- name: Log alpha to a file\n"
+    "  ansible.builtin.include_tasks: logging.yml\n"
+    "  vars:\n"
+    "    unit: alpha\n"
+)
+
+
+def _delete_the_logging_file(tree: Tree, alpha_after: str) -> frozenset[str]:
+    tree.write(f"{ROLE}/tasks/logging.yml", LOGGING)
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA_INCLUDING_LOGGING)
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS_WITH_LOG_DIR)
+    old = tree.commit("alpha logs to a file")
+    (tree.root / ROLE / "tasks/logging.yml").unlink()
+    tree.write(f"{ROLE}/tasks/alpha.yml", alpha_after)
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS)
+    return narrow(tree, old, tree.commit("delete the logging file"))
+
+
+def test_a_deleted_task_file_narrows_to_the_file_that_included_it(tree, capsys):
+    """H6.5a's diff: the deleted file refused at `old`, so the line owed `--tags k3s`."""
+    assert _delete_the_logging_file(tree, ALPHA) == frozenset({"alpha"})
+    err = capsys.readouterr().err
+    assert "narrow-setup: tasks/logging.yml -> (no tag" in err
+    assert "narrow-setup: defaults/main.yml -> (no tag" in err
+    assert "narrow-setup: tasks/alpha.yml -> alpha\n" in err
+
+
+def test_a_deleted_task_file_a_survivor_still_names_is_flagged(tree):
+    """The role would fail on the missing include, so nothing narrower is safe to print."""
+    with pytest.raises(narrow_setup.CannotNarrow, match="still names it"):
+        _delete_the_logging_file(tree, ALPHA_INCLUDING_LOGGING)
