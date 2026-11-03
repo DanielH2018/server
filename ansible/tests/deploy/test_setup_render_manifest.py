@@ -269,30 +269,6 @@ def test_the_deployed_code_arm_derives_its_pairs_from_fragments():
     )
 
 
-def test_a_deleted_source_is_drift_not_an_exemption():
-    """The `[[ -r "$src" ]] || return 0` guard changes meaning with the fragment form.
-
-    Hardcoded, it was merely misleading: the repo source exists on every host, so it never
-    gated anything. Fragment-derived, a pair exists ONLY because a role deployed it here — so
-    an unreadable source means the file was deleted from the repo while the artifact is still
-    live. That is drift, and arm 3 reports the same case as "template gone from the repo".
-    Returning 0 swallows it, and the entry still counts toward DEPLOYED_ENTRIES: armed, and
-    checking nothing.
-    """
-    script = _ARMS_LIB.read_text()
-    fn = re.search(r"^_check_deployed\(\) \{.*?^\}", script, re.MULTILINE | re.DOTALL)
-    assert fn, "_check_deployed() is gone or no longer a plain function."
-    body = fn.group(0)
-    assert "return 0" not in body.split('if [[ ! -r "$src" ]]')[0], (
-        "check_deployed still short-circuits on an unreadable source. A source missing from "
-        "the repo is drift under the fragment form, not 'a file this repo does not ship here'."
-    )
-    assert "source gone from the repo" in body, (
-        "check_deployed no longer distinguishes a deleted source from a byte mismatch, so the "
-        "operator cannot tell 'redeploy this' from 'this template was retired'."
-    )
-
-
 def test_every_role_that_deploys_code_declares_its_pairs():
     """The companion enumeration: each role that `copy:`-deploys executable code records it.
 
@@ -313,17 +289,6 @@ def test_every_role_that_deploys_code_declares_its_pairs():
             f"{rel} no longer declares the code it deploys, so a stale copy of it is invisible "
             f"to manifest-prune-check's deployed-code arm (2026-08-24 review M-5)."
         )
-
-
-def test_an_absent_manifest_is_not_reported_as_drift():
-    """A host that predates the mechanism has no manifest; that is unproven coverage, not a
-    failure, and paging for it would train the operator to ignore this monitor."""
-    script = _ARMS_LIB.read_text()
-    assert "render manifest absent" in script
-    assert "manifest_entries" in script, (
-        "the arm no longer counts stamped entries, so a directory of empty fragments reads as "
-        "'everything matches' instead of 'nothing is armed' (2026-08-23b review L2)."
-    )
 
 
 def test_an_empty_fragment_cannot_disarm_the_arm():

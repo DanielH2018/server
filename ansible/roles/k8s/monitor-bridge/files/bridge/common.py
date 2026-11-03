@@ -42,19 +42,7 @@ copy under autofix-bridge/files/.
 """
 
 import os
-import re
 import time
-
-# Kuma puts a push monitor's `msg` into the Discord DOWN embed as a field value, whose cap is
-# 1024 chars, and never truncates: an oversized msg makes Discord reject the WHOLE alert with
-# HTTP 400 (`{"embeds":["0"]}`), and Kuma does not retry, so the transition reaches nobody.
-# release-staleness-check's fleet-wide list did exactly that on 2026-09-17 and 2026-09-18
-# (#2013). 900 leaves room for what Kuma adds inside the field. The same cap lives in
-# `kuma-push-lib.sh` and setup/common's `kuma_push.cap_kuma_msg`, which the host pushers,
-# autofix-bridge and the status-page sync push through; this one is the boundary for
-# monitor-bridge's own pushes (`bridge.net.push` says why they stay separate).
-PUSH_MSG_MAX = 900
-_CYCLES_SUFFIX_RE = re.compile(r"\s*\(\d+ cycles?\)\s*$")
 
 # Discord rejects a message over 2000 characters with HTTP 400. The pod-side twin of host_lib's
 # `DISCORD_MAX` and `clamp_discord`: the two programs ship by different mechanisms and cannot
@@ -183,29 +171,6 @@ def touch_heartbeat(path: str) -> None:
             fh.write("%s\n" % time.time())
     except OSError as e:  # best-effort like push(); never crash the loop
         log("WARN: heartbeat write failed:", e)
-
-
-def cap_push_msg(msg: str, limit: int = PUSH_MSG_MAX) -> str:
-    """`msg` verbatim when it fits `limit`, else cut with a ` …(+N chars)` marker. Pure.
-
-    A trailing ` (N cycles)` — what `streaks.down_streak` appends to a paging message —
-    survives the cut at the end, so a long paging message still says how long it has been
-    down.
-    """
-    if len(msg) <= limit:
-        return msg
-    suffix = ""
-    m = _CYCLES_SUFFIX_RE.search(msg)
-    if m:
-        suffix = m.group(0).rstrip()
-        msg = msg[: m.start()]
-    # The marker's own width depends on the count it carries, so settle it in two passes.
-    dropped = len(msg)
-    for _ in range(2):
-        marker = " …(+%d chars)" % dropped
-        keep = max(0, limit - len(marker) - len(suffix))
-        dropped = len(msg) - keep
-    return msg[:keep] + " …(+%d chars)" % dropped + suffix
 
 
 def clamp_discord(content: str, limit: int = DISCORD_MAX) -> str:

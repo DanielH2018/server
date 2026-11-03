@@ -54,24 +54,3 @@ def test_changeset_declares_neither_services_nor_tasks():
     names = {f.name for f in dataclasses.fields(deploy_changes.ChangeSet)}
     assert "k8s" in names
     assert names.isdisjoint({"services", "tasks"})
-
-
-def test_the_tasks_defer_alert_helpers_are_deleted():
-    remediation = importlib.import_module("deployer_lib.deploy_remediation")
-    alert_text = importlib.import_module("deployer_lib.deploy_alert_text")
-    remediation_name = "deferred_service" + "_alerts"
-    alert_name = "tasks_deferred_alert"
-    assert not hasattr(remediation, remediation_name)
-    assert not hasattr(alert_text, alert_name)
-
-
-def test_the_alert_slots_have_no_tasks_channel():
-    gitops_markers = importlib.import_module("gitops_markers")
-    assert "k8s" in gitops_markers.ALERT_SLOTS
-    assert "tasks" not in gitops_markers.ALERT_SLOTS
-
-
-def test_no_handler_is_named_for_the_services_field():
-    deploy_handlers = importlib.import_module("deployer_lib.deploy_handlers")
-    assert "handle_k8s" in vars(deploy_handlers)
-    assert "handle_no_services" not in vars(deploy_handlers)

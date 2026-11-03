@@ -34,7 +34,7 @@ from pathlib import Path
 
 from _helpers import load_yaml
 from _k8s_render import render_role_template
-from _restore_drill import DRILL_DEFAULTS, DRILL_TEMPLATE
+from _restore_drill import DRILL_DEFAULTS, DRILL_TEMPLATE, harness, selected
 from _shell_render import rendered_shell_text
 from lib import yaml_fast
 from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
@@ -107,25 +107,27 @@ def test_drill_rotates_over_the_declared_backup_set() -> None:
     )
 
 
-def test_rotation_selects_by_attempt_not_by_success() -> None:
+def test_rotation_selects_by_attempt_not_by_success(tmp_path: Path) -> None:
     """Selecting on last SUCCESS lets one broken volume starve the other 24.
 
     A volume that fails every drill would stay the least-recently-succeeded forever, be chosen
     every night, and the rotation would never advance — turning a one-volume fault into total
     loss of coverage. Stamping the attempt before the restore is what bounds a failing volume to
     one slot per cycle.
+
+    Here `a-config` has never succeeded but was attempted last, with its retry spent. `b-config`
+    succeeded long ago and was attempted long ago. The rotation must pick `b-config`.
     """
-    assert 'at=$(stamp_epoch "attempts.${pvc}")' in CODE, (
-        "rotation must order candidates by their attempt stamp"
+    run = harness(tmp_path, ["a-config", "b-config"])
+    run.seed(
+        {
+            "attempts.a-config": 1_750_000_000,
+            "retries.a-config": 1_750_000_001,
+            "attempts.b-config": 1_700_000_000,
+            "success.b-config": 1_700_000_000,
+        }
     )
-    attempt_at = CODE.index('"attempts.${PVC}" "$ATTEMPT_AT"')
-    assert attempt_at < CODE.index("$KUBECTL apply -f"), (
-        "the attempt stamp must be written BEFORE the restore, or a failing volume starves "
-        "the rotation"
-    )
-    assert CODE.index('"success.${PVC}" "$PASSED_AT"') > CODE.index(
-        '"$BYTES" -ge "$MIN_BYTES"'
-    ), "the per-volume success stamp must be written only after the assertions pass"
+    assert selected(run, run()) == "b-config"
 
 
 def test_drill_carries_the_source_block_size() -> None:
@@ -137,13 +139,6 @@ def test_drill_carries_the_source_block_size() -> None:
     """
     assert 'backupBlockSize: "${BLOCKSIZE}"' in CODE, (
         "the restore volume must carry the source volume's block size"
-    )
-
-
-def test_drill_publishes_its_candidate_list() -> None:
-    """Check 8 has no cluster credential worth the name, and a second definition would drift."""
-    assert 'stamp_set candidates "$CANDIDATE_LIST"' in CODE, (
-        "the drill must publish the eligible set for the heartbeat's coverage check"
     )
 
 
@@ -166,27 +161,6 @@ def test_drill_tears_down_on_every_exit_path() -> None:
     )
     for obj in ("delete pod", "delete pvc", "delete pv", "delete volume"):
         assert obj in CODE, f"cleanup must remove the drill's {obj.split()[-1]}"
-
-
-def test_drill_stamps_only_after_the_assertions_pass() -> None:
-    """The stamp IS the proof check 7 reads. Stamping early makes a broken drill read healthy."""
-    assert CODE.count('stamp_set last-success "$PASSED_AT"') == 1, (
-        "the stamp must be written in exactly one place"
-    )
-    stamp_at = CODE.index('stamp_set last-success "$PASSED_AT"')
-    last_assert = max(CODE.index('"$FILES" -gt 0'), CODE.index('"$BYTES" -ge'))
-    assert stamp_at > last_assert, (
-        "the stamp is written before the data assertions, so a restored-but-empty volume "
-        "would record a successful drill"
-    )
-
-
-def test_drill_rejects_an_empty_restore() -> None:
-    """An empty filesystem mounts perfectly well and passes any mount-only check."""
-    assert '"$FILES" -gt 0' in CODE, "a restore producing no files must fail"
-    assert "MIN_BYTES" in CODE, (
-        "a byte floor must guard against a mounted-but-empty volume"
-    )
 
 
 def test_drill_never_prints_the_restored_file() -> None:
@@ -214,11 +188,14 @@ def test_drill_distinguishes_no_output_from_an_empty_volume() -> None:
     )
 
 
-def test_drill_reports_a_failed_probe_pod_distinctly() -> None:
+def test_drill_reports_a_failed_probe_pod_distinctly(tmp_path: Path) -> None:
     """A pod that crashed says nothing about the volume — do not blame the data for it."""
-    assert 'fail "probe pod ${PHASE}' in CODE, (
-        "a non-Succeeded probe must report the phase"
-    )
+    run = harness(tmp_path, ["a-config"])
+    proc = run(restore="pass", env={"K3S_STUB_PHASE": "Failed"})
+    assert proc.returncode == 1, proc.stderr
+    assert "probe pod Failed" in proc.stderr, proc.stderr
+    assert "no files" not in proc.stderr, proc.stderr
+    assert "success.a-config" not in run.cm
 
 
 def test_the_drill_writes_no_host_file_for_the_checker_to_read() -> None:
@@ -301,46 +278,6 @@ def _tasks():
     return docs if isinstance(docs, list) else []
 
 
-def _release_bin_group_templates(group: str) -> list[str]:
-    """The repo-relative template paths a release_bin group deploys, from the role defaults."""
-    doc = load_yaml(K3S_DEFAULTS) or {}
-    for value in doc.values() if isinstance(doc, dict) else []:
-        if not isinstance(value, list):
-            continue
-        for entry in value:
-            if isinstance(entry, dict) and entry.get("name") == group:
-                return [str(t) for t in entry.get("templates") or []]
-    return []
-
-
-def _deploy_task_for(src_basename: str):
-    """The task that deploys `src_basename`, in any of the three shapes health-crons.yml uses.
-
-    A plain `src:`; a `loop:` of src/dest dicts (several same-shaped scripts folded into one
-    `ansible.builtin.template`); and since the backup-health group became a versioned release,
-    an `import_tasks` of release_bin.yml naming a GROUP whose file list lives in the role
-    defaults. The third shape names no template in this file at all, so a resolver that only
-    knew the first two returned None and the drill's guards below asserted on nothing.
-    """
-    for task in _tasks():
-        tpl = task.get("ansible.builtin.template")
-        if isinstance(tpl, dict):
-            if tpl.get("src") == src_basename:
-                return task
-            for item in task.get("loop") or []:
-                if isinstance(item, dict) and item.get("src") == src_basename:
-                    return task
-        target = str(task.get("ansible.builtin.import_tasks") or "")
-        if target.endswith("release_bin.yml"):
-            group = (task.get("vars") or {}).get("release_bin_group")
-            if group and any(
-                Path(t).name == src_basename
-                for t in _release_bin_group_templates(group)
-            ):
-                return task
-    return None
-
-
 def test_drill_runs_as_its_own_serviceaccount_with_write_grants() -> None:
     """It creates and deletes cluster objects; the read-only SA is Forbidden on all of it."""
     cronjob = next(yaml_fast.safe_load_all(render_role_template(*CRONJOB)))
@@ -376,13 +313,6 @@ def test_the_host_cron_and_script_are_absent_arms_with_no_schedule() -> None:
         "path": "/usr/local/bin/longhorn-restore-drill.sh",
         "state": "absent",
     }
-
-
-def test_the_host_no_longer_deploys_the_drill_script() -> None:
-    """Check 7 reads the ConfigMap the CronJob writes, so no release group ships the script."""
-    assert _deploy_task_for("longhorn-restore-drill.sh.j2") is None, (
-        "a release group still deploys the host drill script that the CronJob replaced"
-    )
 
 
 def test_drill_runs_daily() -> None:

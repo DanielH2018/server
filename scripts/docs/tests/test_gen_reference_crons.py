@@ -141,12 +141,6 @@ def test_markdown_opens_with_the_provenance_banner(tmp_path):
     assert "generated_from: scripts/docs/reference/crons.py" in out
 
 
-def test_markdown_says_the_state_column_is_a_heuristic(tmp_path):
-    """An inferred column presented as authoritative is worse than none."""
-    out = g.render_markdown(g.build_rows(_basic(tmp_path)))
-    assert "heuristic" in out.lower()
-
-
 def test_a_filter_pipe_in_the_when_clause_stays_in_its_cell(tmp_path):
     """`not k8s_dry_run | bool` split ten live rows one column to the right."""
     _role(

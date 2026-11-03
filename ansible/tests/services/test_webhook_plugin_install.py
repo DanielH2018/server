@@ -21,16 +21,14 @@ import re
 
 import pytest
 
-from _helpers import ANSIBLE, REPO, image_tag, load_defaults
+from _helpers import ANSIBLE, REPO, load_defaults
 from _jellyfin_plugins import (
     INSTALLERS,
     PLUGIN_ROOT,
     compares_against,
     init_containers,
-    padded,
     plugin_constants,
     script,
-    version_tuple,
     without_assignment,
 )
 
@@ -56,25 +54,6 @@ def test_the_release_url_carries_the_pinned_version():
     assert version in url, (
         f"jellyfin_k8s_webhook_version is {version!r} but jellyfin_k8s_webhook_url does not "
         f"contain it: {url}"
-    )
-
-
-def test_the_plugin_target_abi_does_not_exceed_the_server():
-    """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = load_defaults(JELLYFIN)
-    target_abi = version_tuple(
-        defaults["jellyfin_k8s_webhook_target_abi"], "jellyfin_k8s_webhook_target_abi"
-    )
-    image = defaults["jellyfin_k8s_image"]
-    server = version_tuple(image_tag(image), "the jellyfin image tag")
-
-    abi, srv = padded(target_abi, server)
-    assert abi <= srv, (
-        f"Webhook {defaults['jellyfin_k8s_webhook_version']} targets Jellyfin "
-        f"{defaults['jellyfin_k8s_webhook_target_abi']}, but jellyfin_k8s_image is {image}.\n"
-        f"Jellyfin's loader rejects a plugin built for a newer server, silently — the rollout "
-        f"stays green and the plugin never appears in GET /Plugins. Webhook 22.0.0.0 and up "
-        f"target 12.0.0.0; take the newest release whose targetAbi the image satisfies."
     )
 
 

@@ -181,9 +181,7 @@ def gitops_status(
         # unapplied. `held_planes` reads them off the ledger's `hold_plane` class, where the
         # deployer records them (#3392). The Clear is named
         # rather than an rm because an rm of hold_sha leaves the ledger's planes behind.
-        # The way out comes BEFORE the plane list: `cap_push_msg` cuts from the right, so a
-        # long list would otherwise evict the command. It carries the FULL hold_sha, the only
-        # form `clear-hold` accepts (#4015).
+        # The command carries the FULL hold_sha, the only form `clear-hold` accepts (#4015).
         planes = held_planes(owed)
         if planes:
             return False, (

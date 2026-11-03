@@ -16,8 +16,6 @@ from lib.render_context import render_context
 from lib.repo_paths import REPO
 
 COMPONENT = REPO / "hosts" / "components" / "secret-rotation" / "component.yml"
-# The Kuma push token B2's token PR retired.
-RETIRED = "secret_rotation_push_token"
 CONTRACT_PARTS = (
     "Autonomous-role contract",
     "Scope / exclusions:",
@@ -91,10 +89,6 @@ def test_the_component_links_both_timers_and_the_boot_unit(package):
         "homelab-secret-rotation-audit.timer",
         "homelab-secret-rotation-audit-boot.service",
     } <= set(package.enable_links())
-
-
-def test_the_package_no_longer_names_the_retired_token(package):
-    assert RETIRED not in package.credentials
 
 
 def test_the_package_retires_the_ansible_era_cron_timer_and_scripts(package):

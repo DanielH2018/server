@@ -10,7 +10,6 @@ Run: uv run pytest ansible/roles/k8s/janitorr/tests/test_janitorr_health.py
 """
 
 import importlib.util
-import inspect
 import json
 import re
 import socket
@@ -22,8 +21,6 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 
 import janitorr_health
-
-ROLE = Path(__file__).resolve().parents[1]
 
 # 2026-10-18T05:30:26Z, so a container started at the stamp below is one hour old.
 _NOW = 1792301426.0
@@ -142,20 +139,6 @@ def test_a_failed_export_exits_one_after_the_log_line(capsys):
 
     assert _main(kubectl, verdict_configmap="janitorr-health-verdict") == 1
     assert "status=up" in capsys.readouterr().out
-
-
-def test_the_pod_carries_no_kuma_push_url():
-    """M6 batch B6b's Cutover-2: no env var, Secret or `push` parameter is left."""
-    [cronjob] = yaml_fast.safe_load_all(
-        render_role_template("janitorr", "health-cronjob.yaml.j2")
-    )
-    containers = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"][
-        "containers"
-    ]
-    names = {e["name"] for c in containers for e in c.get("env", [])}
-    assert "KUMA_PUSH_URL" not in names
-    assert "push" not in inspect.signature(janitorr_health.main).parameters
-    assert not (ROLE / "templates" / "health-secret.yaml.j2").exists()
 
 
 def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):

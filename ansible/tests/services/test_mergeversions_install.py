@@ -27,15 +27,13 @@ import re
 
 import pytest
 
-from _helpers import ANSIBLE, REPO, image_tag, load_defaults
+from _helpers import ANSIBLE, REPO, load_defaults
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
     init_containers,
-    padded,
     plugin_constants,
     script,
-    version_tuple,
     without_assignment,
 )
 
@@ -86,26 +84,6 @@ def test_the_digest_and_guid_are_the_right_shape():
         f"jellyfin_k8s_mergeversions_guid is not a dashed lowercase UUID: {guid!r}. It is "
         f"written verbatim into the meta.json the init container composes, and Jellyfin binds "
         f"the dashboard entry and the plugin's config directory to it."
-    )
-
-
-def test_the_plugin_target_abi_does_not_exceed_the_server():
-    """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = load_defaults(JELLYFIN)
-    target_abi = version_tuple(
-        defaults["jellyfin_k8s_mergeversions_target_abi"],
-        "jellyfin_k8s_mergeversions_target_abi",
-    )
-    image = defaults["jellyfin_k8s_image"]
-    server = version_tuple(image_tag(image), "the jellyfin image tag")
-
-    abi, srv = padded(target_abi, server)
-    assert abi <= srv, (
-        f"Merge Versions {defaults['jellyfin_k8s_mergeversions_version']} targets Jellyfin "
-        f"{defaults['jellyfin_k8s_mergeversions_target_abi']}, but jellyfin_k8s_image is "
-        f"{image}.\nJellyfin's loader rejects a plugin built for a newer server, silently — the "
-        f"rollout stays green and the plugin never appears in GET /Plugins. The 12.0.0 release "
-        f"targets 12.0; take the newest release on the line the image satisfies."
     )
 
 

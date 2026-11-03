@@ -10,12 +10,10 @@ readinessProbe passes `rollout status` the moment it reports Running, which prov
 exists and nothing else.
 """
 
-from lib import yaml_fast
 from pathlib import Path
 
 from _autodeploy import (
     _auto_deployable,
-    _declares_autodeploy,
     _deployment_templates,
     _rendered_roles,
     _roles,
@@ -32,19 +30,6 @@ from _autodeploy_rollout import (
     _sets_empty_rollout,
     _ungated_deployments,
 )
-
-
-def test_auto_deployable_reads_the_declaration_not_the_denylist() -> None:
-    """The guards' input is the role's own declaration.
-
-    Asserted directly so that when slice 1b deletes the denylist, this file needs no edit —
-    and so a future reader cannot mistake the denylist for the source of truth.
-    """
-    for role in _roles():
-        if not _declares_autodeploy(role):
-            continue
-        data = yaml_fast.safe_load((role / "defaults/main.yml").read_text()) or {}
-        assert _auto_deployable(role) is bool(data.get("k8s_autodeploy"))
 
 
 def test_the_render_reaches_every_auto_deployable_role() -> None:

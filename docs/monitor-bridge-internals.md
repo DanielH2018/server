@@ -117,7 +117,7 @@ The rules below shaped those memberships.
 | `bridge/sources.py` | `Sources(cfg)`, every query a gate or check body sends (`prom_scalar`, `prom_vector`, `loki_count`, `loki_lines`, `get_json`, `get_bytes`, `post_json`). `cli.main()` builds one; `run_once` hands it to every body as `src`. |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |
 | `bridge/streaks.py` | `State` (every streak counter and probe cache, carried as `src.state`), and `down_streak` (the consecutive-down step) |
-| `bridge/common.py` | `_env`, `sanitize`, `cap_push_msg` (`PUSH_MSG_MAX`) and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |
+| `bridge/common.py` | `_env`, `sanitize` and `clamp_discord` (`DISCORD_MAX`) — the helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts/<domain>.py` | pure decisions taking every threshold as an argument: `host` (`speedtest_verdict`), `host_smart` (`scrutiny_*`), `service`, `logs`, `notify`, `storage` (the B2/R2 decisions with the R2 Class A/B/free ACTION LISTS beside them — policy, not configuration) |
 

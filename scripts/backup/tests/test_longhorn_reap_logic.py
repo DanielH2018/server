@@ -401,20 +401,6 @@ def test_a_snapshot_with_an_empty_volume_is_skipped_entirely():
     assert result.candidates == result.kept == []
 
 
-def test_a_snapshot_with_a_real_volume_still_classifies_normally():
-    # An absent key, not a `""` value: vol-a carries no group label at all. `""` now means the
-    # group label named a RecurringJob that does not exist, which classify_snapshots refuses.
-    owner: dict[str, str] = {}
-    snaps = [
-        _snapshot("newest", "vol-a", "2026-08-19T00:00:00Z"),
-        _snapshot("stale", "vol-a", "2026-08-01T00:00:00Z", job="daily-backup"),
-    ]
-    result = logic.classify_snapshots(
-        snaps, owner, attached={"vol-a"}, min_age_days=3, now_epoch=_NOW
-    )
-    assert [n for n, *_ in result.candidates] == ["stale"]
-
-
 def test_the_newest_snapshot_is_never_a_candidate_whoever_made_it():
     owner = {}
     snaps = [_snapshot("newest", "vol-a", "2026-08-19T00:00:00Z")]

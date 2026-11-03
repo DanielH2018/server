@@ -5,13 +5,10 @@ livesync's X-Sync-Token gate lives in a Secret-mounted file-provider config on t
 (the readonly kubeconfig can read CRDs but is RBAC-denied Secrets, so that is the token's
 cluster-safe home). The failure modes this suite guards are:
 
-  * a `bridge_hostname` key reappearing -> renders nothing anywhere (the macro parameter
-    is `unsuffixed_hostname`), so the names it was meant to add silently 404
-  * ANY bridge machinery reappearing at the Docker edge -> two edges claim one Host rule
   * the livesync gate losing one of its routers -> tokened sync 404s, or the token gate
     silently stops gating (a bare Host router would forward past the header check)
-  * a reverse-bridge host losing one of its two name forms -> the LAN wildcard sends
-    `.local` traffic to a router that isn't there (or SNI != Host and the Docker edge 421s)
+  * the authelia entry losing the unsuffixed `auth` name -> the OIDC issuer Jellyfin's SSO
+    plugin points at stops resolving to the portal
 
 Run: uv run pytest ansible/tests/services/test_strangler_bridge.py
 """
@@ -24,7 +21,6 @@ from _helpers import ANSIBLE, HOST_VARS
 from lib.repo_paths import ALL_VARS
 
 
-TRAEFIK = ANSIBLE / "roles" / "containers" / "traefik" / "templates"
 GATE = (
     ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "livesync-gate-secret.yaml.j2"
 )
@@ -46,46 +42,6 @@ def _gate_config() -> dict:
     )
     manifest = yaml_fast.safe_load(rendered)
     return yaml_fast.safe_load(manifest["stringData"]["livesync-gate.yml"])
-
-
-def test_no_bridge_hostname_key_survives_anywhere():
-    """A `bridge_hostname` key matches NOTHING (the macro parameter is `unsuffixed_hostname`),
-    so the names it was meant to add silently 404."""
-    for host_file in HOST_VARS.glob("*.yml"):
-        for entry in (
-            yaml_fast.safe_load(host_file.read_text()).get("containers_list") or []
-        ):
-            assert "bridge_hostname" not in entry, (
-                f"{host_file.name}: {entry.get('name')} declares bridge_hostname — "
-                "the teardown renamed this to unsuffixed_hostname"
-            )
-    # Templates too, not just inventory: a selectattr('bridge_hostname', ...) in Jinja
-    # matches zero entries and renders an EMPTY block instead of failing. Comments are
-    # exempt; expressions are not.
-    ansible_root = HOST_VARS.parent.parent
-    for tmpl in ansible_root.rglob("*.j2"):
-        if "collections" in tmpl.parts:
-            continue
-        for i, line in enumerate(tmpl.read_text().splitlines(), 1):
-            if "bridge_hostname" in line and not line.lstrip().startswith("#"):
-                raise AssertionError(
-                    f"{tmpl.relative_to(ansible_root)}:{i} references bridge_hostname "
-                    "outside a comment — renamed to unsuffixed_hostname at the teardown"
-                )
-
-
-def test_docker_edge_renders_no_bridge_machinery():
-    """The Docker edge no longer exists, so it renders no bridge machinery.
-
-    traefik + authelia are gone from daniel-server, so there is no file-provider config left to
-    render bridge machinery into. This is an absence guard, not a render check — a reappearing
-    config.yml.j2 would mean a second edge came back, which test_reverse_bridge_stays_retired also
-    guards against.
-    """
-    assert not (TRAEFIK / "config.yml.j2").exists(), (
-        "roles/containers/traefik/templates/config.yml.j2 reappeared — the Docker edge "
-        "retired at E7; a file-provider config here means bridge machinery could too"
-    )
 
 
 def test_gate_serves_every_token_router():
@@ -159,17 +115,7 @@ def test_gate_stays_out_of_crd_objects():
     )
 
 
-def test_reverse_bridge_stays_retired():
-    """The reverse bridge is retired: the k8s portal owns auth.<domain> and the OIDC issuer.
-
-    A reappearing template would put two routers
-    on one Host and silently shadow the portal.
-    """
-    assert not (
-        ANSIBLE / "roles" / "k8s" / "traefik" / "templates" / "reverse-bridge.yaml.j2"
-    ).exists()
-    tasks = (ANSIBLE / "roles" / "k8s" / "traefik" / "tasks" / "main.yml").read_text()
-    assert "reverse-bridge" not in tasks
+def test_the_k8s_portal_owns_the_unsuffixed_auth_name():
     authelia = next(e for e in _containers("daniel-box") if e["name"] == "authelia")
     assert authelia.get("hostname") == "auth", (
         "the k8s portal must own the unsuffixed auth name — it is the OIDC issuer "

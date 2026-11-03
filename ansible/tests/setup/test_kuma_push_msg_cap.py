@@ -1,7 +1,6 @@
 """`kuma_push` caps `msg` before it reaches curl (kuma-push-lib.sh).
 
-The bridge's `PUSH_MSG_MAX` covers the cluster checks; this library is the boundary for every
-host cron. The stub curl records the `msg=` it was handed, so the assertion is on what would
+This library is the boundary for every host cron. The stub curl records the `msg=` it was handed, so the assertion is on what would
 have gone over the wire, not on a return code.
 """
 

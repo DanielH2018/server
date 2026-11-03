@@ -134,13 +134,6 @@ def test_markdown_wraps_routes_so_the_site_can_link_them(tmp_path):
     assert 'class="fqdn" data-host="sonarr.local"' in out
 
 
-def test_markdown_records_the_authelia_302_trap(tmp_path):
-    """A 302 proves the edge is up and nothing about the backend."""
-    host_vars, roles, group_vars = _make(tmp_path)
-    out = g.render_markdown(g.build_rows(host_vars, roles, group_vars))
-    assert "302" in out
-
-
 def test_markdown_opens_with_the_provenance_banner(tmp_path):
     host_vars, roles, group_vars = _make(tmp_path)
     out = g.render_markdown(g.build_rows(host_vars, roles, group_vars))

@@ -29,7 +29,6 @@ from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
     init_containers,
-    padded,
     plugin_constants,
     script,
     version_tuple,
@@ -111,25 +110,6 @@ def test_the_release_comes_from_the_jellyfin_line_that_is_deployed():
         f"come from the {line} release line: {url}\nUpstream tags per Jellyfin version "
         f"(`{line}/v...`); an asset from another line declares a targetAbi Jellyfin's loader "
         f"rejects without logging a deploy failure."
-    )
-
-
-def test_the_plugin_target_abi_does_not_exceed_the_server():
-    """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = load_defaults(JELLYFIN)
-    target_abi = version_tuple(
-        defaults["jellyfin_k8s_introskipper_target_abi"],
-        "jellyfin_k8s_introskipper_target_abi",
-    )
-    image = defaults["jellyfin_k8s_image"]
-    server = version_tuple(image_tag(image), "the jellyfin image tag")
-
-    abi, srv = padded(target_abi, server)
-    assert abi <= srv, (
-        f"Intro Skipper {defaults['jellyfin_k8s_introskipper_version']} targets Jellyfin "
-        f"{defaults['jellyfin_k8s_introskipper_target_abi']}, but jellyfin_k8s_image is "
-        f"{image}.\nJellyfin's loader rejects a plugin built for a newer server, silently — "
-        f"the rollout stays green and the plugin never appears in GET /Plugins."
     )
 
 

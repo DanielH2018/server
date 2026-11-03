@@ -11,11 +11,13 @@ Run: uv run pytest ansible/tests/setup/test_aide_check_names_its_config.py
 
 import re
 
-from _helpers import ROLES, load_tasks, walk_tasks
+import pytest
+from _host_packages import HOSTS, shipped_text
 from _shell_render import rendered_shell_text
 
-INTEGRITY = ROLES / "setup" / "initial_setup" / "tasks" / "integrity.yml"
-CRON_NAME = "Weekly AIDE file integrity check"
+UNIT_DIR = "/usr/lib/systemd/system"
+TIMER = f"{UNIT_DIR}/homelab-aide-check.timer"
+SERVICE = f"{UNIT_DIR}/homelab-aide-check.service"
 SCRIPT = ("setup", "initial_setup", "aide-check.sh.j2")
 
 # `aide` as a command word, followed by `--config=<path>` or `--config <path>` before the end.
@@ -24,17 +26,14 @@ _AIDE_WITH_CONFIG = re.compile(
 )
 
 
-def _aide_cron_job() -> str:
-    for task in walk_tasks(load_tasks(INTEGRITY)):
-        cron = task.get("ansible.builtin.cron")
-        if isinstance(cron, dict) and cron.get("name") == CRON_NAME:
-            return str(cron["job"])
-    raise AssertionError(f"no cron named {CRON_NAME!r} in {INTEGRITY}")
-
-
-def test_the_weekly_cron_runs_the_check_script():
-    assert _aide_cron_job().startswith("/usr/local/bin/aide-check.sh "), (
-        "the AIDE cron must run aide-check.sh, which keeps aide's exit code and pushes it"
+@pytest.mark.parametrize("host", HOSTS)
+def test_the_weekly_cron_runs_the_check_script(host: str):
+    """homelab-aide-check.timer starts the service whose ExecStart is the check script."""
+    assert not re.search(r"^Unit=", shipped_text(host, TIMER), re.M), (
+        "the timer names another unit, so homelab-aide-check.service is never started"
+    )
+    assert "ExecStart=/usr/lib/homelab/aide-check\n" in shipped_text(host, SERVICE), (
+        "the AIDE service must run aide-check, which keeps aide's exit code and pushes it"
     )
 
 

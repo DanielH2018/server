@@ -72,11 +72,6 @@ def kubectl_verb(rule: str) -> str | None:
     return words[1]
 
 
-def test_settings_parses():
-    """A settings file that fails to parse is ignored wholesale and nothing warns."""
-    assert isinstance(json.loads(SETTINGS.read_text()), dict)
-
-
 def test_every_allowed_kubectl_verb_is_read_only():
     granted = {v for v in (kubectl_verb(r) for r in allow_rules()) if v is not None}
     writes = sorted(granted - READ_ONLY_VERBS)

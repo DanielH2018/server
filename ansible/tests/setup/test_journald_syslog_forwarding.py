@@ -15,11 +15,14 @@ from pathlib import Path
 import pytest
 from lib import yaml_fast
 from _helpers import ALL_VARS, HOST_VARS, SETUP_ROLES
+from _host_packages import HOSTS, shipped_text
 
 ROLE = SETUP_ROLES / "initial_setup"
 SYSTEM_TUNING = ROLE / "tasks" / "system-tuning.yml"
 HANDLERS = ROLE / "handlers" / "main.yml"
 
+# The host-tuning component ships the journald drop-in in every host package. The rsyslog
+# filter below stays an initial_setup task, gated on has_rsyslog.
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
 FILTER_DEST = "/etc/rsyslog.d/49-homelab-info-filter.conf"
 
@@ -77,18 +80,18 @@ def handler_names(path: Path) -> list[str]:
     ]
 
 
-def test_journald_forwards_at_info():
+@pytest.mark.parametrize("host", HOSTS)
+def test_journald_forwards_at_info(host: str):
     """The regression itself. `notice` here deletes the authentication trail."""
-    assert (
-        setting(copy_content(SYSTEM_TUNING, JOURNALD_DEST), "MaxLevelSyslog") == "info"
-    ), (
+    assert setting(shipped_text(host, JOURNALD_DEST), "MaxLevelSyslog") == "info", (
         "MaxLevelSyslog is not info, so journald drops every priority-info message before "
         "rsyslog sees it -- no Accepted publickey, no pam_unix session lines, and crowdsec's "
         "auth.log source goes empty. Nothing reports this; the lines just stop."
     )
 
 
-def test_raising_the_forwarding_level_requires_the_syslog_filter():
+@pytest.mark.parametrize("host", HOSTS)
+def test_raising_the_forwarding_level_requires_the_syslog_filter(host: str):
     """The two are one change. Forwarding at info without the filter is the expensive half.
 
     Read statically, so it holds wherever the filter block RUNS; the block skips on a host
@@ -96,7 +99,7 @@ def test_raising_the_forwarding_level_requires_the_syslog_filter():
     nothing and the filter has nothing to pair with.
     """
     # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
-    if setting(copy_content(SYSTEM_TUNING, JOURNALD_DEST), "MaxLevelSyslog") != "info":
+    if setting(shipped_text(host, JOURNALD_DEST), "MaxLevelSyslog") != "info":
         pytest.skip("forwarding is not raised, so the filter is not required")
     content = copy_content(SYSTEM_TUNING, FILTER_DEST)
     assert content, (

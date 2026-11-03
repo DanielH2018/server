@@ -11,7 +11,6 @@ Run: uv run pytest ansible/roles/k8s/configarr/tests/test_configarr_health.py
 
 import json
 import importlib.util
-import inspect
 import re
 import socket
 import subprocess
@@ -22,8 +21,6 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 
 import configarr_health
-
-ROLE = Path(__file__).resolve().parents[1]
 
 _JOBS = {
     "items": [
@@ -152,20 +149,6 @@ def test_a_failed_export_exits_one_after_the_log_line(capsys):
 
     assert _main(kubectl, verdict_configmap="configarr-health-verdict") == 1
     assert "status=up" in capsys.readouterr().out
-
-
-def test_the_pod_carries_no_kuma_push_url():
-    """M6 batch B6b's Cutover-2: no env var, Secret or `push` parameter is left."""
-    [cronjob] = yaml_fast.safe_load_all(
-        render_role_template("configarr", "health-cronjob.yaml.j2")
-    )
-    containers = cronjob["spec"]["jobTemplate"]["spec"]["template"]["spec"][
-        "containers"
-    ]
-    names = {e["name"] for c in containers for e in c.get("env", [])}
-    assert "KUMA_PUSH_URL" not in names
-    assert "push" not in inspect.signature(configarr_health.main).parameters
-    assert not (ROLE / "templates" / "health-secret.yaml.j2").exists()
 
 
 def test_the_reader_imports_from_the_pods_mounted_layout(tmp_path):

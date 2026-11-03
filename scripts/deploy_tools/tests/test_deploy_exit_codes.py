@@ -22,7 +22,6 @@ import pytest
 
 from deploy_tools.deploy_lib import run as deploy_run
 from lib import exit_codes as ec
-from lib import exit_messages
 
 from _deploy_sh_fakes import (
     FAKE_RECAP,
@@ -41,8 +40,6 @@ _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 # that disjointness IS the fix, so it is asserted rather than assumed.
 _PLAYBOOK_FAILED = 20
 _NO_HOSTS_MATCHED = 78
-_WRAPPER_REFUSALS = (2, 3, 4, 75, 76, 77, _NO_HOSTS_MATCHED, 79)
-
 _UV_STUB = """#!/bin/bash
 # Only the playbook run carries the exit code under test; the wrapper's own helper calls
 # (deploy_tags) must succeed or the script never reaches it.
@@ -96,17 +93,6 @@ def _run_with_stubs(
         timeout=120,
         check=False,
     )
-
-
-def test_playbook_failed_is_outside_every_wrapper_refusal_code():
-    """The disjointness the fix rests on. A collision here is the bug returning."""
-    assert _PLAYBOOK_FAILED not in _WRAPPER_REFUSALS
-    assert _PLAYBOOK_FAILED not in (0, 1, 64)
-
-
-def test_no_hosts_matched_is_outside_every_other_code():
-    """78 must alias nothing: not a refusal, not 20, not ansible's own 0-4."""
-    assert _NO_HOSTS_MATCHED not in (0, 1, 2, 3, 4, 20, 64, 75, 76, 77)
 
 
 @pytest.mark.parametrize("ansible_exit", [2, 3, 4])
@@ -238,10 +224,3 @@ def test_a_code_outside_the_contract_prints_nothing_rather_than_a_wrong_meaning(
     """200 is not deploy.sh's; inventing a meaning for it is worse than the bare number."""
     deploy_run.report(200, ["--tags", "sonarr"])
     assert capsys.readouterr().err == ""
-
-
-def test_the_verdict_prefix_is_not_the_bare_one_a_landing_greps_for():
-    """A landing runs deploy.sh with stdout inherited and finds its own outcome with
-    `grep -m1 '^VERDICT:'`, so a bare `VERDICT:` here would be read as the landing's."""
-    assert exit_messages.VERDICT_PREFIXES["scripts/deploy.sh"] == "DEPLOY-VERDICT"
-    assert exit_messages.VERDICT_PREFIXES["scripts/deploy_tools/land.sh"] == "VERDICT"

@@ -1,13 +1,14 @@
 {
-  "checksum": "f36bb5e000da94b68d126d5b48afd708c1639a4212a23aeab5e68e6494a07dd5",
+  "checksum": "52f3710bee833bf243074bda17b9ee9a018fda3b66d91a6b4879cbbd41bd5e29",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state",
   "row": {
     "atoms": {
-      "ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter": "b47609105291b4b754b617b8dda8657337878d07d2bd73544028c66acc3a8b31",
-      "ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler": "fd8273f78c215200044a1814469080adfd7973ae080ebf763d0678ef81f0a8a8"
+      "ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter": "b32c3e1f7d30607ba2bcbea2293213088105ebd2855bde0f9be617642d85474c",
+      "ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler": "fd8273f78c215200044a1814469080adfd7973ae080ebf763d0678ef81f0a8a8",
+      "hosts/components/host-tuning/templates/50-homelab-journald.conf": "4aa9bbd906b49c2ebf791f83b66f469d9af7df35b80dc1cc9b09b1c5cfb8310f"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "60e39eb40"
   }
 }

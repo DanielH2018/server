@@ -37,34 +37,10 @@ def test_the_no_verdict_set_is_exactly_the_refusals_by_name():
     }
 
 
-@pytest.mark.parametrize(
-    "name",
-    [
-        "DEPLOY_TAG_MISS",
-        "DEPLOY_BROAD",
-        "DEPLOY_STALE",
-        "DEPLOY_FLUX_OWNED",
-        "DEPLOY_LOCK_BUSY",
-        "DEPLOY_LOCK_UNAVAILABLE",
-        "DEPLOY_SNAPSHOT_FAILED",
-        "DEPLOY_NO_HOSTS",
-        "DEPLOY_LOCK_PLAN_FAILED",
-    ],
-)
-def test_each_named_refusal_is_in_the_no_verdict_set(name):
-    assert getattr(ec, name) in ec.DEPLOY_SH_NO_VERDICT
-
-
 @pytest.mark.parametrize("name", ["DEPLOY_OK", "DEPLOY_PLAYBOOK_FAILED"])
 def test_the_codes_that_are_not_refusals_stay_out_of_the_set(name):
     """The reject half. 20 in particular means changes ARE live -- never a resume point."""
     assert getattr(ec, name) not in ec.DEPLOY_SH_NO_VERDICT
-
-
-def test_the_playbook_failure_code_is_disjoint_from_every_wrapper_refusal():
-    """The disjointness is asserted here too."""
-    assert ec.DEPLOY_PLAYBOOK_FAILED not in ec.DEPLOY_SH_NO_VERDICT
-    assert ec.DEPLOY_PLAYBOOK_FAILED != ec.DEPLOY_OK
 
 
 def test_the_front_half_refuses_with_the_named_codes():

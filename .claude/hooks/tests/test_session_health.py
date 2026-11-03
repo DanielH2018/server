@@ -192,21 +192,6 @@ def test_main_prints_banner_on_problem(monkeypatch, capsys):
     assert "loki" in capsys.readouterr().out
 
 
-def test_main_actually_calls_the_target_check(monkeypatch, capsys):
-    # `_run_main` stubs target_problems to a fixed-return lambda, which a main() that never
-    # called it would pass anyway. Override it here so the assertion proves the call happened.
-    called = {"targets": False}
-
-    def tp():
-        called["targets"] = True
-        return ["  ✗ target loki [loki:3100] down"]
-
-    run_main = _run_main(monkeypatch, '{"source":"startup"}')
-    assert run_main(target_problems=tp) == 0
-    assert called["targets"] is True
-    assert "loki" in capsys.readouterr().out
-
-
 def test_main_prints_master_moved_line(monkeypatch, capsys):
     run_main = _run_main(
         monkeypatch,

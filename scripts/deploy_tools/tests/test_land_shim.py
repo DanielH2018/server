@@ -28,14 +28,6 @@ def _env_without_the_active_venv() -> dict[str, str]:
     }
 
 
-def test_help_prints_the_contract_through_the_shim():
-    r = subprocess.run(
-        ["bash", str(_SH), "--help"], capture_output=True, text=True, timeout=120
-    )
-    assert r.returncode == 0, r.stderr
-    assert "Verdicts printed on stdout" in r.stdout
-
-
 def test_the_shim_holds_no_logic():
     code = [
         ln

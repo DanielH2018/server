@@ -65,8 +65,9 @@ are in the record page.
 
 - **A sysctl this role sets that UFW's `/etc/ufw/sysctl.conf` also names must be set there
   too**, or the run ends with UFW's value live (#2977).
-- **The `journald` tag's two files are one change** — the journal cap and the rsyslog info
-  filter, gated `when: has_rsyslog` (false on the Pi). ENFORCED:
+- **The journal cap and the rsyslog info filter are one change.** The cap ships in
+  `hosts/components/host-tuning/templates/50-homelab-journald.conf`; the filter is this role's,
+  gated `when: has_rsyslog` (false on the Pi). ENFORCED:
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`.
 - **Handlers live in `handlers/main.yml`**; its header says why the order there matters. The
   two optimize_pi notifies went with that role's tasks in H7.25. ENFORCED:

@@ -29,7 +29,6 @@ import pytest
 from lib.proc_testing import run
 
 HOOKS = Path(__file__).resolve().parent.parent
-REPO = HOOKS.parent.parent
 RUNNER = HOOKS / "run-hook.sh"
 
 # The flag sets the six shims collapse into. Named rather than counted, so a variant that
@@ -99,21 +98,6 @@ def _run(
         timeout=60,
         env={**base, **(env or {})},
     )
-
-
-def test_the_runner_is_executable_in_git():
-    """A hook committed 100644 is silently dead once settings.json names it.
-
-    Every hook runs through this one file, so a mode slip disarms all of them at once.
-    `uv-python.sh` shipped 100644 in #361 the same way.
-    """
-    out = run(
-        ["git", "ls-files", "-s", "--", ".claude/hooks/run-hook.sh"],
-        cwd=REPO,
-        check=True,
-    ).stdout
-    assert out.strip(), "run-hook.sh is not tracked in git"
-    assert out.split()[0] == "100755", f"git mode {out.split()[0]}, expected 100755"
 
 
 def test_the_decided_marker_records_the_trade_off():

@@ -70,10 +70,6 @@ def test_a_refused_token_reads_token_and_pages_once(lab, status):  # noqa: F811
     assert staged(state) == []
 
 
-def test_token_is_a_metric_reason():
-    assert "token" in hb.REASONS
-
-
 def plan_series_words(series: str) -> set[str]:
     """The backticked words of the plan's *Shared names* bullet that names `series`."""
     lines = PLAN.read_text().splitlines()

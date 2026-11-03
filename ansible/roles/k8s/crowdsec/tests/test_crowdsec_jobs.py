@@ -10,7 +10,6 @@ module from it, so a module the ConfigMap stops carrying fails here rather than 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_crowdsec_jobs.py
 """
 
-import dataclasses
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -110,12 +109,6 @@ def test_a_run_past_its_timeout_is_down():
         "remote_allowlist.py killed after its 180s timeout"
     ]
     assert exported == [("crowdsec-remote-allowlist", False)]
-
-
-def test_the_scheduler_makes_no_kuma_request():
-    """M6 batch B6b's Cutover-2 removed the push, and the module no longer imports its library."""
-    assert not hasattr(cj, "kuma_push")
-    assert "push_env" not in {f.name for f in dataclasses.fields(cj.Job)}
 
 
 def test_the_bouncer_prune_logs_and_exports_nothing():
