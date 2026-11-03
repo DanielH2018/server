@@ -1,7 +1,7 @@
 """Helpers shared verbatim between monitor-bridge's check.py and autofix-bridge's autofix.py.
 
-Both bridges are stdlib-only Python loops that read config from the environment and push a
-result to Uptime Kuma. They grew as separate files and drifted into their own copies of the
+Both bridges are stdlib-only Python loops that read config from the environment and export
+each verdict to Prometheus; Alertmanager delivers a firing alert to Discord. They grew as separate files and drifted into their own copies of the
 same few pure helpers — this module is the one place those bodies live now.
 
 WHAT MAY LIVE HERE, AND WHY SOME DUPLICATION STAYS
@@ -189,7 +189,7 @@ def sanitize(s: object, maxlen: int = 120) -> str:
 
     Release titles, indexer names, n8n workflow names and *arr queue items are
     attacker-influenced — a poisoned indexer/release is the very thing several checks exist to
-    catch. Kuma forwards the msg to Discord, which renders @mentions and markdown, so collapse
+    catch. Alertmanager delivers the msg to Discord, which renders @mentions and markdown, so collapse
     whitespace, defuse '@' (which forms @everyone/@here/user pings) and backticks, and cap the
     length.
     """
