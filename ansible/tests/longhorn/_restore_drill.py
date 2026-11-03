@@ -18,6 +18,7 @@ prints it, and `patch configmap` merges the patch's `data` into it, so state per
 the way the cluster's does. A harness built with `cm=False` has no such file, which the stub
 reports as NotFound (`--ignore-not-found`: rc 0, empty output). `K3S_STUB_GET_CM=fail` fails
 the read, and `K3S_STUB_PATCH_FAILS=<text>` fails any patch whose call contains the text.
+`K3S_STUB_PHASE` sets the probe pod's phase (default `Succeeded`).
 """
 
 import json
@@ -59,7 +60,7 @@ case "$*" in
     [[ -s "$manifest" ]] || return 1
     [[ "$K3S_STUB_RESTORE" == pass ]] || return 1 ;;
   *"get volume restore-drill-"*) printf '%s' "${K3S_STUB_VOLSTATE:-detached false}" ;;
-  *"get pod "*) printf 'Succeeded' ;;
+  *"get pod "*) printf '%s' "${K3S_STUB_PHASE:-Succeeded}" ;;
   *"logs "*) printf '%s\n' "${K3S_STUB_PROBE:-files=3 bytes=4096}" ;;
   *) : ;;
 esac

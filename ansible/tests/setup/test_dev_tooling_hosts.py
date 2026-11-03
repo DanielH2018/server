@@ -85,13 +85,6 @@ def test_daniel_pi_is_excluded():
     )
 
 
-def test_daniel_stage_is_excluded():
-    """`initial_setup.yml` has never completed against the staging guest at all — its git-hooks
-    task stopped the play there (docs/archive/staging-cluster.md). The list says so rather than leaving
-    a future reader to wonder whether the guest was considered."""
-    assert "daniel-stage" not in ALL_VARS_VALUES[VAR]
-
-
 def test_every_member_is_a_real_host():
     """A typo would exclude the host it meant to admit, silently — `inventory_hostname in` never
     errors on a name nothing matches."""

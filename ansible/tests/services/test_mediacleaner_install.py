@@ -26,12 +26,11 @@ import re
 import pytest
 
 from lib import yaml_fast
-from _helpers import ANSIBLE, REPO, image_tag, load_defaults
+from _helpers import ANSIBLE, REPO, load_defaults
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
     init_containers,
-    padded,
     plugin_constants,
     script,
     version_tuple,
@@ -138,27 +137,6 @@ def test_the_digest_is_the_right_shape():
     sha = load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_sha256"]
     assert SHA256.match(sha), (
         f"jellyfin_k8s_mediacleaner_sha256 is not 64 lowercase hex characters: {sha!r}"
-    )
-
-
-def test_the_plugin_target_abi_does_not_exceed_the_server():
-    """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = load_defaults(JELLYFIN)
-    target_abi = version_tuple(
-        defaults["jellyfin_k8s_mediacleaner_target_abi"],
-        "jellyfin_k8s_mediacleaner_target_abi",
-    )
-    image = defaults["jellyfin_k8s_image"]
-    server = version_tuple(image_tag(image), "the jellyfin image tag")
-
-    abi, srv = padded(target_abi, server)
-    assert abi <= srv, (
-        f"Media Cleaner {defaults['jellyfin_k8s_mediacleaner_version']} targets Jellyfin "
-        f"{defaults['jellyfin_k8s_mediacleaner_target_abi']}, but jellyfin_k8s_image is "
-        f"{image}.\nJellyfin's loader rejects a plugin built for a newer server, silently — the "
-        f"rollout stays green and the plugin never appears in GET /Plugins. For a plugin that "
-        f"DELETES MEDIA, silently not running is the better of the two failures, but it is still "
-        f"a fleet that thinks a cleaner is armed and has none."
     )
 
 

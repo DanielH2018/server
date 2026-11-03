@@ -26,8 +26,7 @@ TEMPLATE = ANSIBLE / "roles/k8s/uptime-kuma/files/discord-message.liquid"
 # Discord's embed limits (title, field value, whole embed) — a payload past any one is a 400.
 TITLE_MAX, FIELD_VALUE_MAX, EMBED_MAX = 256, 1024, 6000
 
-# The longest heartbeat message a producer can push: bridge.net.PUSH_MSG_MAX and the cap in
-# kuma-push-lib.sh are both 900.
+# The longest heartbeat message a producer can push: the cap in kuma-push-lib.sh is 900.
 PUSH_MSG_MAX = 900
 
 DOWN = {

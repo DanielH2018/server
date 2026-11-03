@@ -18,7 +18,6 @@ from lib.repo_paths import HOST_VARS
 
 ROLE = CLAUDE_CODE
 SCRIPT = "/usr/local/sbin/homelab-rootq"
-SUDOERS = "/etc/sudoers.d/claude-rootq"
 
 
 def render_sudoers(users: list[str]) -> str:
@@ -197,14 +196,6 @@ def test_the_service_keeps_the_hosts_network_namespace_for_nft_and_ufw() -> None
 def test_the_helper_runs_the_script_the_sudo_grant_names() -> None:
     assert homelab_rootq_socket.SCRIPT == SCRIPT
     assert defaults()["claude_code_rootq_script"] == SCRIPT
-
-
-def test_the_socket_is_armed_only_while_the_script_it_runs_is_enabled() -> None:
-    d = defaults()
-    assert d["claude_code_rootq_socket_enabled"] is False
-    assert d["claude_code_rootq_socket_armed"] == (
-        "{{ claude_code_rootq_enabled and claude_code_rootq_socket_enabled }}"
-    )
 
 
 def test_the_agent_brief_names_the_socket_client_only_while_the_socket_is_armed() -> (

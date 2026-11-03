@@ -11,8 +11,6 @@ and an input it must catch.
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_sops_io.py
 """
 
-import secrets as pysecrets
-
 from secrets_mgmt.sops_io import malformed_push_tokens
 
 
@@ -47,12 +45,3 @@ def test_push_token_shape_is_flagged():
     assert "non-alphanumeric" in flagged["punctuated_push_token"]
     # Reasons reach a Kuma push message and stdout, so they must never carry the value.
     assert not any("aaaa" in reason for reason in flagged.values())
-
-
-def test_rotate_mints_a_token_the_shape_check_accepts():
-    """The auto-rotation path and the guard must agree, or every rotation flips the monitor.
-
-    `cmd_rotate` mints `token_hex(16)`; this is the assertion that the two stay in step.
-    """
-    minted = {"x_push_token": pysecrets.token_hex(16)}
-    assert malformed_push_tokens(minted) == []

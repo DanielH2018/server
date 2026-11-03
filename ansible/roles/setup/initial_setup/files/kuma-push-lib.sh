@@ -98,8 +98,8 @@ kuma_push() {
   # Kuma puts the msg into the Discord DOWN embed as a field value, whose cap is 1024 chars,
   # and never truncates: an oversized msg makes Discord reject the whole alert with HTTP 400
   # and Kuma does not retry, so the transition reaches nobody. release-staleness-check's
-  # fleet-wide list did exactly that on 2026-09-17 and 2026-09-18 (#2013). Same cap as
-  # monitor-bridge's `PUSH_MSG_MAX`; 900 leaves room for what Kuma adds inside the field.
+  # fleet-wide list did exactly that on 2026-09-17 and 2026-09-18 (#2013). 900 leaves room
+  # for what Kuma adds inside the field.
   # `${#msg}` counts bytes under cron's C locale, which only makes the cap tighter.
   local -r msg_max=900
   if [ "${#msg}" -gt "$msg_max" ]; then

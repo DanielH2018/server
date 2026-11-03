@@ -32,8 +32,7 @@ KUMA_PUSH_TIMEOUT_S = 10
 def cap_kuma_msg(msg: str, limit: int = KUMA_PUSH_MSG_MAX) -> str:
     """``msg`` verbatim when it fits ``limit``, else cut with a `` …(+N chars)`` marker.
 
-    The same cut as kuma-push-lib.sh's ``msg_max`` arm and monitor-bridge's ``cap_push_msg``,
-    which keeps a trailing `` (N cycles)`` streak suffix this cut does not.
+    The same cut as kuma-push-lib.sh's ``msg_max`` arm.
     Kuma copies the msg into a Discord embed field and never truncates it, so an oversized msg
     gets the whole DOWN alert rejected (#2013).
     """

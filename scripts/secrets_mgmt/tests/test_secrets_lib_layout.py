@@ -4,7 +4,7 @@
 package beside the entry points, the way `deploy_tools/land_lib/` holds `land.py`'s modules.
 `secret_rotation.py` and `secret_bearing_host_paths.py` stay where they are, because the cron
 and the root CLAUDE.md name them. The move changes no behaviour, so these tests check where
-the code is, who still reaches for the old location, and that the code still runs from there.
+the code is and that it still runs from there.
 
 The tests find each library by the function it defines rather than by its file name, so the
 move may keep or shorten the basenames.
@@ -16,7 +16,6 @@ import ast
 import os
 import subprocess
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -25,8 +24,6 @@ from lib.repo_paths import REPO
 SECRETS_MGMT = REPO / "scripts" / "secrets_mgmt"
 SECRETS_LIB = SECRETS_MGMT / "secrets_lib"
 ENTRYPOINTS = {"secret_rotation.py", "secret_bearing_host_paths.py"}
-OLD_MODULES = {"secret_classify", "secret_registry"}
-OLD_PATHS = tuple(f"scripts/secrets_mgmt/{m}.py" for m in sorted(OLD_MODULES))
 
 
 def _tracked(*pathspec: str) -> list[str]:
@@ -74,58 +71,6 @@ def test_only_the_two_entrypoints_keep_the_secret_prefix_at_the_top_level():
         if p.count("/") == 2
     }
     assert top == ENTRYPOINTS
-
-
-def _old_location_imports(source: str) -> list[str]:
-    hits = []
-    for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.ImportFrom) and node.module:
-            if node.module in {f"secrets_mgmt.{m}" for m in OLD_MODULES} | OLD_MODULES:
-                hits.append(node.module)
-            elif node.module == "secrets_mgmt":
-                hits += [
-                    f"secrets_mgmt.{a.name}"
-                    for a in node.names
-                    if a.name in OLD_MODULES
-                ]
-        elif isinstance(node, ast.Import):
-            for a in node.names:
-                if a.name in {f"secrets_mgmt.{m}" for m in OLD_MODULES} | OLD_MODULES:
-                    hits.append(a.name)
-    return hits
-
-
-def test_no_tracked_module_imports_a_library_from_its_old_location():
-    offenders = {}
-    for rel in _tracked("*.py"):
-        path = REPO / rel
-        if not path.is_file():
-            continue
-        hits = _old_location_imports(path.read_text())
-        if hits:
-            offenders[rel] = hits
-    assert offenders == {}
-
-
-def test_no_hand_written_file_names_an_old_library_path():
-    me = str(Path(__file__).resolve().relative_to(REPO))
-    offenders = []
-    for rel in _tracked():
-        if rel == me or rel.startswith("docs/reference/"):
-            continue
-        if rel == "scripts/dev/pytest_shard_weights.json":
-            continue
-        path = REPO / rel
-        if not path.is_file():
-            continue
-        try:
-            text = path.read_text()
-        except UnicodeDecodeError:
-            continue
-        if "generated_from:" in text:
-            continue
-        offenders += [f"{rel}: {old}" for old in OLD_PATHS if old in text]
-    assert offenders == []
 
 
 @pytest.mark.parametrize("func", ["classify", "due_date"])

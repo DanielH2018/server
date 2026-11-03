@@ -58,14 +58,6 @@ def test_setup_role_change_is_broad():
     assert cs.k8s == set()
 
 
-def test_renovate_notify_role_change_is_broad():
-    cs = services_from_changed_paths(
-        ["ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2"]
-    )
-    assert cs.broad is True
-    assert cs.k8s == set()
-
-
 def test_bringup_playbooks_are_broad():
     for p in (
         "ansible/initial_setup.yml",

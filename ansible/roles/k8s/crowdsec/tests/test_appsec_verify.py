@@ -89,10 +89,6 @@ def _doc_text():
     return " ".join((av.__doc__ or "").split())
 
 
-def test_the_docstring_no_longer_names_the_retired_workload_health_tile():
-    assert "Workload Health" not in _doc_text()
-
-
 def test_the_docstring_names_the_k8s_workloads_rules_that_own_an_outage():
     doc = yaml.safe_load(K8S_WORKLOAD_RULES.read_text())
     alerts = {r.get("alert") for g in doc["groups"] for r in g["rules"]}

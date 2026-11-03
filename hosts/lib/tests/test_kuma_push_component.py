@@ -18,25 +18,10 @@ LIB = "/usr/lib/homelab/kuma-push-lib.sh"
 SOURCE = REPO / "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
 
 
-def _component(name: str) -> dict:
-    return yaml.safe_load(
-        (REPO / "hosts/components" / name / "component.yml").read_text()
-    )
-
-
-def _dsts(component: dict) -> list[str]:
-    return [entry["dst"] for entry in component.get("files", [])]
-
-
 @pytest.mark.parametrize("host", ["daniel-pi", "daniel-server"])
 def test_each_host_package_ships_the_push_helper_as_a_byte_copy(host):
     package = host_mode.render_host(host)
     assert package.files[LIB] == (SOURCE.read_bytes(), 0o644)
-
-
-def test_the_component_ships_the_helper_and_pi_heartbeats_no_longer_does():
-    assert _dsts(_component("kuma-push")) == [LIB]
-    assert LIB not in _dsts(_component("pi-heartbeats"))
 
 
 def _two_components(tmp_path, second_dst: str):

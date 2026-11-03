@@ -51,7 +51,6 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
         "ansible/roles/k8s/sonarr/CLAUDE.md",
         "ansible/roles/setup/gitops_deploy/tasks/main.yml",
-        "ansible/roles/containers/alloy/templates/docker-compose.yml.j2",
         "ansible/roles/setup/k3s/defaults/main.yml",
         "ansible/inventory/host_vars/daniel-box.yml",
         "ansible/inventory/host_vars/daniel-pi.yml",

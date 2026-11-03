@@ -31,12 +31,13 @@ from _aide_check_run import (
     _run_check,
 )
 from _helpers import ROLES, load_tasks, walk_tasks
+from _host_packages import HOSTS, shipped_text
 from _kuma_monitors import entity, tile_is_gated_on
 from _setup_render import render_setup_text
 
 PUSH_ENV = "aide-kuma-push.env.j2"
 INTEGRITY = ROLES / "setup" / "initial_setup" / "tasks" / "integrity.yml"
-CRON_NAME = "Weekly AIDE file integrity check"
+TIMER = "/usr/lib/systemd/system/homelab-aide-check.timer"
 
 # Each host's tile and the variable it is gated on.
 TILES = {
@@ -244,17 +245,17 @@ def test_each_host_has_a_tile_gated_on_its_own_token():
 
 
 def test_the_push_deadline_covers_one_week_and_not_two():
-    cron = next(
-        task["ansible.builtin.cron"]
-        for task in walk_tasks(load_tasks(INTEGRITY))
-        if (task.get("ansible.builtin.cron") or {}).get("name") == CRON_NAME
-    )
-    assert cron["weekday"] == "1" and cron["hour"] == "3", (
-        "this test reads the cron as weekly; give it the new period if that changes"
-    )
+    """The producer is homelab-aide-check.timer (integrity-scans component), weekly on Monday."""
+    for host in HOSTS:
+        on_calendar = re.search(r"^OnCalendar=(.+)$", shipped_text(host, TIMER), re.M)
+        assert on_calendar and re.fullmatch(
+            r"Mon \*-\*-\* \d\d:\d\d:\d\d", on_calendar[1]
+        ), (
+            f"{host}: this test reads the timer as weekly; give it the new period if that changes"
+        )
     for tile, gate_var in TILES.values():
         interval = entity(tile, gate_var)["interval"]
         assert WEEK_S < interval < 2 * WEEK_S, (
-            f"{tile}'s deadline {interval}s must exceed the cron's weekly period, and stay "
+            f"{tile}'s deadline {interval}s must exceed the timer's weekly period, and stay "
             "under two so a second missed run cannot pass unreported"
         )

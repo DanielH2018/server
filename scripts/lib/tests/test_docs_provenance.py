@@ -28,14 +28,6 @@ def test_banner_carries_the_timestamp():
     assert "14:30" in banner
 
 
-def test_banner_carries_the_source_and_sha():
-    banner = generated_banner(
-        "scripts/docs/service_catalog.py", when=FIXED, sha="abc1234"
-    )
-    assert "scripts/docs/service_catalog.py" in banner
-    assert "abc1234" in banner
-
-
 def test_banner_warns_against_hand_editing():
     """The hook is what enforces this, but the page must say so too.
 

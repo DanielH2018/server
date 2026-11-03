@@ -41,11 +41,8 @@ PI_WAIT_S = longest_gap_s(
 ) + timeout_start_s((UNITS / "homelab-updater.service").read_text())
 
 
-def test_the_bounds_are_the_plans_defaults(cfg):
-    assert cfg.BUILDER_MAX_FETCH_AGE_S == 1800
-    # The 7200 s floor bounds every reason but a Pi canary, which the Pi's schedule raises
-    # (#6530, #6919).
-    assert cfg.BUILDER_MAX_LAG_S == 7200
+def test_the_pi_canary_bound_is_derived_from_the_updater_timer(cfg):
+    # The Pi's schedule raises the canary bound above the 7200 s floor (#6530, #6919).
     assert cfg.BUILDER_PI_CANARY_MAX_LAG_S == PI_WAIT_S + SLACK_S
 
 

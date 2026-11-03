@@ -195,11 +195,3 @@ def test_the_retired_crons_and_scripts_are_legacy_entries(package):
         {"path": f"/usr/local/bin/{name}.sh"} for name in scripts
     ]
     assert all(entry in package.legacy for entry in expected), package.legacy
-
-
-def test_the_package_names_neither_retired_push_token(package):
-    # B5's token PR retired both heartbeat push tokens.
-    assert "homelab-secrets.service" in package.units()
-    assert not {"pi_sd_health_push_token", "pi_recovery_push_token"} & set(
-        package.credentials
-    )

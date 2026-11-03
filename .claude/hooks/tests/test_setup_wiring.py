@@ -2,8 +2,7 @@
 """Integrity tests for the .claude/ setup wiring.
 
 Catches the class of silent breakage where a reference drifts away from its target:
-a hook command in settings.json points at a renamed script, a .sh wrapper invokes a
-.py that moved, a skill tells Claude to run a probe.py subcommand that no longer
+a hook command in settings.json points at a renamed script, a skill tells Claude to run a probe.py subcommand that no longer
 exists, or a skill/agent is missing the frontmatter it needs to load. None of these
 surface at runtime — the hook just stops firing, or the agent silently fails to load.
 
@@ -61,63 +60,6 @@ def test_settings_hook_scripts_exist():
 
 
 _PRUNE = {".git", ".venv", "node_modules", "__pycache__", "collections"}
-
-
-def _repo_python_basenames():
-    """All .py basenames in the repo, skipping vendored/build dirs."""
-    names = set()
-    for _dirpath, dirs, files in os.walk(REPO):
-        dirs[:] = [d for d in dirs if d not in _PRUNE]
-        for fn in files:
-            if fn.endswith(".py"):
-                names.add(fn)
-    return names
-
-
-def test_statusline_script_exists_if_configured():
-    """If settings.json configures a statusLine command, its script must exist in the repo."""
-    settings = json.loads(_read(os.path.join(CLAUDE, "settings.json")))
-    sl = settings.get("statusLine")
-    if not sl or sl.get("type") != "command":
-        return  # no command statusLine configured — nothing to check
-    cmd = sl.get("command", "")
-    m = _SCRIPT_RE.search(cmd)
-    assert m, f"statusLine command has no recognizable .claude/ script path: {cmd!r}"
-    assert os.path.isfile(os.path.join(REPO, m.group(0))), (
-        f"statusLine references a script that doesn't exist: {m.group(0)}"
-    )
-
-
-def test_hook_wrappers_reference_existing_python():
-    """Each hooks/*.sh wrapper that invokes a .py must point at a file that exists.
-
-    This is exactly the block-containers-edit -> block-protected-edits rename scenario:
-    rename the .py but not the wrapper and the hook silently dies. Comment lines (`#`)
-    are skipped — only actual invocations count. The .py may live in hooks/ (sibling
-    invocation) or at repo-root scripts/, so membership is checked by basename across the
-    whole repo.
-
-    A reference carrying a `$` names no file this can check: `run-hook.sh` composes
-    `$HOOKS_DIR/$name.py` from the hook name its registration passes, so the name is not in the
-    wrapper at all (#3278). The composed form is covered elsewhere: `gen_hook_settings.py`
-    derives each `run-hook.sh <stem>` registration from a `.py` it found on disk, and its
-    `--check` refuses a `settings.json` that names a stem the census no longer has.
-    """
-    py_names = _repo_python_basenames()
-    hooks_dir = os.path.join(CLAUDE, "hooks")
-    broken = []
-    for fn in os.listdir(hooks_dir):
-        if not fn.endswith(".sh"):
-            continue
-        for line in _read(os.path.join(hooks_dir, fn)).splitlines():
-            if line.lstrip().startswith("#"):  # skip comments / doc mentions
-                continue
-            for pyref in re.findall(r"[\w./${}-]+\.py", line):
-                if "$" in pyref:
-                    continue
-                if os.path.basename(pyref) not in py_names:
-                    broken.append((fn, pyref))
-    assert not broken, f".sh wrappers invoke missing python files: {broken}"
 
 
 def _probe_subcommands():

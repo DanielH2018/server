@@ -149,12 +149,6 @@ def test_format_metric_empty_is_no_data():
     )
 
 
-def test_monitors_subcommand_parses():
-    p = cli_parser._build_parser()
-    ns = p.parse_args(["monitors"])
-    assert ns.cmd == "monitors"
-
-
 def test_pi_subcommand_accepts_only_containers():
     # `pi fs`/`pi mem` do not exist; a stale habit must fail at the parser rather
     # than reach a curl that no longer exists.

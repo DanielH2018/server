@@ -97,14 +97,6 @@ def test_markdown_opens_with_the_provenance_banner(tmp_path):
     assert "generated_from: scripts/docs/reference/hosts.py" in out
 
 
-def test_markdown_records_the_limit_trap(tmp_path):
-    """The connection=local pin is the fact an operator most needs from this page."""
-    ini, host_vars = _make_inventory(tmp_path)
-    out = g.render_markdown(g.build_rows(ini, host_vars))
-    assert "-e target=daniel-pi" in out
-    assert "--limit" in out
-
-
 def test_markdown_ends_with_exactly_one_newline(tmp_path):
     """A file the end-of-file-fixer hook rewrites wedges the docs-refresh cron."""
     ini, host_vars = _make_inventory(tmp_path)

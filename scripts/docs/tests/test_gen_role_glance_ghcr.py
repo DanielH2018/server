@@ -66,23 +66,3 @@ def test_a_flux_owned_role_swaps_only_its_built_image_for_ghcr(tmp_path):
     assert "`ghcr.io/community-valheim-tools/valheim-server`" in line, line
     assert f"`{images.GHCR}/valheim`" in line, line
     assert "<k8s_registry_pull_host>" not in line, line
-
-
-def test_every_committed_flux_owned_builder_glance_names_ghcr():
-    """The committed docs carry the regenerated line, not only a fresh render."""
-
-    entries = g.Estate().k8s_entries()
-    flux_builders = [
-        r for r in images.builder_roles() if entries.get(r, {}).get("owner") == "flux"
-    ]
-    assert {"ical-proxy", "homelab-mcp"} <= set(flux_builders), flux_builders
-    wrong = []
-    for name in flux_builders:
-        doc = (g.K8S_ROLES / name / "CLAUDE.md").read_text()
-        block = " ".join(doc.split(g.END)[0].split(g.BEGIN)[-1].split())
-        if (
-            f"`{images.GHCR}/{name}`" not in block
-            or "<k8s_registry_pull_host>" in block
-        ):
-            wrong.append(name)
-    assert wrong == [], f"glance still names the in-cluster registry in {wrong}"

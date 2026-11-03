@@ -36,13 +36,6 @@ def test_every_package_listing_k3s_restart_also_lists_k3s_gates():
     assert not missing, f"list k3s-gates beside k3s-restart in: {missing}"
 
 
-def test_the_restart_component_no_longer_ships_the_gates():
-    component = yaml.safe_load(
-        (REPO / "hosts/components/k3s-restart/component.yml").read_text()
-    )
-    assert GATES not in [entry["dst"] for entry in component["files"]]
-
-
 @pytest.fixture(scope="module")
 def server() -> host_mode.Package:
     return host_mode.render_host("daniel-server")

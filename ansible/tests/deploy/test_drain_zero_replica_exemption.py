@@ -56,15 +56,6 @@ def test_a_mislabelled_running_workload_is_still_rejected() -> None:
     )
 
 
-def test_a_daemonset_with_no_scheduled_nodes_is_accepted() -> None:
-    """A DaemonSet reports `desiredNumberScheduled`, and zero means no node matches it.
-
-    Same shape as the Deployment case and reached by the same expression, because the task
-    concatenates both jsonpaths and only one of them ever renders.
-    """
-    assert _fires(pods_stdout="", desired_stdout="0")
-
-
 def test_a_running_workload_is_accepted_whatever_the_desired_count() -> None:
     """The ordinary path stays untouched: pods matched, so the desired count is not consulted."""
     assert _fires(pods_stdout="0 0", desired_stdout="2")

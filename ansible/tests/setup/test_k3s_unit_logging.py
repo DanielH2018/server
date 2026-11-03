@@ -1,7 +1,7 @@
 """k3s's own output survives the journald cap, on both node types.
 
-`MaxLevelStore=notice` (initial_setup/tasks/system-tuning.yml) drops every priority-info line
-at the source, and every line k3s writes is priority info: logrus and klog emit plain text with
+`MaxLevelStore=notice` (the host-tuning component's journald drop-in) drops every priority-info
+line at the source, and every line k3s writes is priority info: logrus and klog emit plain text with
 no `<N>` prefix, so the unit's `SyslogLevel=info` default applies to INFO, WARN and FATA alike.
 A k3s crash loop therefore leaves only systemd's `status=1/FAILURE` lines in the journal, and
 why k3s exited is unrecoverable.
@@ -15,6 +15,7 @@ the next crash loop is the first anyone learns the file stopped being written.
 import pytest
 from lib import yaml_fast
 from _helpers import SETUP_ROLES, walk_tasks
+from _host_packages import HOSTS, shipped_text
 from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 UNIT_LOGGING = K3S_ROLE / "tasks" / "unit-logging.yml"
@@ -30,6 +31,7 @@ UNITS = {
 }
 
 SYSTEM_TUNING = SETUP_ROLES / "initial_setup" / "tasks" / "system-tuning.yml"
+# The host-tuning component ships this drop-in in every host package.
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
 
 
@@ -79,10 +81,10 @@ def rendered(unit: str) -> dict[str, str]:
     return copy_tasks(yaml_fast.safe_load(raw))
 
 
-def test_the_journal_still_drops_info_so_the_file_is_load_bearing():
+@pytest.mark.parametrize("host", HOSTS)
+def test_the_journal_still_drops_info_so_the_file_is_load_bearing(host: str):
     """If this ever moves to info the file becomes belt-and-braces, not the only copy."""
-    tuning = copy_tasks(yaml_fast.safe_load(SYSTEM_TUNING.read_text()))
-    assert unit_setting(tuning[JOURNALD_DEST], "MaxLevelStore") == "notice"
+    assert unit_setting(shipped_text(host, JOURNALD_DEST), "MaxLevelStore") == "notice"
 
 
 @pytest.mark.parametrize("unit", sorted(UNITS))

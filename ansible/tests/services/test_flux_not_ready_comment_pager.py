@@ -52,11 +52,3 @@ def test_comment_names_the_rule_that_pages_the_kube_state_metrics_scrape():
         f"the comment above FluxNotReady names none of {sorted(pagers)}, the rule that pages "
         f"up{{job={JOB!r}}} == 0: {comment!r}"
     )
-
-
-def test_comment_no_longer_names_the_retired_kuma_tile_as_the_pager():
-    comment = comment_above("FluxNotReady")
-    assert "Cluster Scrape Targets" not in comment, (
-        f"the comment above FluxNotReady still names Kuma's retired Cluster Scrape Targets "
-        f"tile: {comment!r}"
-    )

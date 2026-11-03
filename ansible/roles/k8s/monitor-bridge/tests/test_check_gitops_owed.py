@@ -16,7 +16,6 @@ import pytest
 
 import checks.gitops
 from _fake_sources import FakeSources
-from bridge.common import cap_push_msg
 from gitops_markers import HOLD_CLEAR_CMD
 
 _LATE = 1000.0 + 7 * 3600
@@ -169,22 +168,6 @@ def test_a_hold_on_several_planes_counts_each_entry_the_clear_waits_for(cfg):
     assert "Clear the hold in the deploy UI" in msg
     assert f"`{HOLD_CLEAR_CMD} deadbeefcafe`" in msg
     assert " rm " not in msg
-
-
-def test_a_long_plane_list_cannot_cut_the_clear_command(cfg):
-    """`cap_push_msg` cuts from the right, so the command must sit ahead of the plane list."""
-    sha = "2d25ced3" * 5
-    ok, msg = checks.gitops.gitops_status(
-        cfg,
-        sha,
-        owed="\n".join(
-            _held(f"ansible/initial_setup.yml role_{i}", i) for i in range(40)
-        ),
-    )
-    assert not ok
-    capped = cap_push_msg(msg)
-    assert len(msg) > len(capped), "the list must be long enough to be cut"
-    assert f"`{HOLD_CLEAR_CMD} {sha}`" in capped
 
 
 def test_the_manual_plane_apply_names_the_pinned_playbook_command(cfg):
