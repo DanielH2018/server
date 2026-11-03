@@ -23,11 +23,11 @@ from lib.git import git, git_process
 from .atoms import Ambiguous, backrefs, hash_atom
 from .citations import (
     Citation,
-    in_tree,
+    Citations,
     parse_citations,
+    repo_citations,
     repo_docs,
     sections,
-    tracked_files,
 )
 from .evidence import EvidenceCache, moved_evidence
 from .relations import Edb
@@ -210,29 +210,8 @@ def lock_tampered(path: Path) -> bool:
     return False
 
 
-Citations = dict[str, list[Citation]]
-"""Every section's in-tree citations keyed by unit — one parse of the docs, shared by the readers below."""
-
-
-def repo_citations(repo: Path) -> Citations:
-    """Every section's IN-TREE citations, keyed by unit.
-
-    The tracked set is read once per call: an out-of-tree span (``origin/master``, an
-    untracked or gitignored file) parses as a path citation but is not support, so it never
-    reaches the lock and never grades a section.
-
-    Every reader below takes the result as an optional ``by_unit`` and parses for itself
-    when it is not given: ``fact_status.py status`` calls two of them and lists the units,
-    so passing one parse through is what keeps it from reading every document three times.
-    """
-    tracked = tracked_files(repo)
-    out: dict[str, list[Citation]] = {}
-    for doc in repo_docs(repo):
-        rel = doc.relative_to(repo).as_posix()
-        for sec in sections(rel, doc.read_text(encoding="utf-8")):
-            cites, _ = parse_citations(sec.body)
-            out[sec.key] = [c for c in cites if in_tree(c, tracked)]
-    return out
+# Every reader below takes ``repo_citations``'s result as an optional ``by_unit``: passing one
+# parse through keeps ``fact_status.py status`` from reading every document three times.
 
 
 def build_repo_edb(

@@ -264,16 +264,13 @@ def test_reverify_records_a_section_given_its_first_citation(tmp_path, capsys):
     assert set(read_lock(repo / "docs" / "facts.lock")) == {"CLAUDE.md#Style"}
 
 
-def test_report_json_ranks_the_sections_not_in(tmp_path, capsys):
+def test_report_json_ranks_only_the_sections_citing_nothing(tmp_path, capsys):
     repo = _repo(tmp_path)
     log = tmp_path / "no-log-here.log"
     assert main(["report", "--repo", str(repo), "--log", str(log), "--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["log"]["rows"] == 0
-    assert [(r["section"], r["status"]) for r in report["backlog"]] == [
-        ("CLAUDE.md#Gate", "UNVERIFIED"),
-        ("CLAUDE.md#Style", "CONVENTION"),
-    ]
+    assert report["backlog"] == [{"section": "CLAUDE.md#Style", "reads": 0}]
 
 
 _HOOKS = Path(__file__).resolve().parents[3] / ".claude" / "hooks"

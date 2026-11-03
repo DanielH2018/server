@@ -1,25 +1,19 @@
-"""``fact_status.py report``: whether ``docs/facts.lock`` pays for itself, read from git and the log.
+"""``fact_status.py report``: the notice's yield and the docs' load, read from git and the log.
 
-Four measurements, none kept in a store of its own.
+Three measurements, none kept in a store of its own.
 
-- **Potential against actual, per atom form.** A *potential* is a lock commit in which a
-  recorded atom's hash changed. It is *actual* when the same commit also changed the owning
-  section's prose, which is the case the lock exists to force. The ratio is the lock's
-  precision, which every judgement of it so far (#2808, #2817, ``96365b0b5``) re-derived by
-  hand from ``git log -p``.
-- **The non-IN sections, ranked by reads.** Every section that is not IN, ranked by how often
-  its doc loaded into a session according to ``.claude/logs/instructions.log``, so the backlog
-  is worked in the order agents read it. The log has one row per loaded doc, so a section
-  inherits its doc's count.
+- **The sections citing nothing, ranked by reads.** Every section with no in-tree citation,
+  a CONVENTION section, ranked by how often its doc loaded into a session according to
+  ``.claude/logs/instructions.log``, so the backlog is worked in the order agents read it. The
+  log has one row per loaded doc, so a section inherits its doc's count.
 - **The instruction bytes each session loaded.** ``log-instructions.py`` ends each row with
   ``bytes=<n>``, the loaded file's size, and ``inject-nested-docs.py`` ends each
   ``bash_path_match`` row with the size of the block it injected (#4653). The report sums them
   per session id, user-level files outside the repo included (#4610). That is the always-loaded context's trend, which
   otherwise shows only when someone runs ``wc -c`` by hand.
-- **The notice replay.** ``notice.moved_sections`` runs once per first-parent commit, with the
-  parent as the base, and every content-form lock move is graded by whether the replay listed
-  it (``replay.notice_replay``). That parity decides whether the diff notice can replace the lock. The
-  plan is ``docs/target-architecture/docs-guard/g1-diff-notice.md``.
+- **The notice replay.** ``notice.moved_sections`` runs once per first-parent commit in the
+  ``--days`` window, with the parent as the base (``replay.notice_replay``).
+  ``docs/adr/0023-fact-support-is-a-diff-notice.md`` records why the notice replaced the lock.
 """
 
 import re
@@ -33,158 +27,13 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
-from lib.git import git
 from lib.repo_paths import primary_checkout_of
 
-from .citations import parse_citations
-from .lint import bodies_at
-from .lock import LOCK_REL, lock_at
+from .citations import Citations
 from .notice import Notice, moved_sections
-from .replay import LockMove, notice_replay, render_replay
+from .replay import notice_replay, render_replay
 
-FORMS = ("path", "symbol", "yaml", "test", "marker")
 LOG_REL = ".claude/logs/instructions.log"
-
-
-@dataclass
-class FormCount:
-    potential: int = 0
-    actual: int = 0
-
-
-@dataclass
-class Precision:
-    """Per-form counts over the lock commits in a window, and the moves behind them.
-
-    ``start`` is the last lock commit before ``since``, or None when the lock is younger than
-    the window. ``python_changed`` names each ``(commit, unit)`` the counts skip because the
-    row's ``python`` changed.
-    """
-
-    since: datetime
-    lock_commits: int = 0
-    forms: dict[str, FormCount] = field(
-        default_factory=lambda: {f: FormCount() for f in FORMS}
-    )
-    start: str | None = None
-    moves: list[LockMove] = field(default_factory=list)
-    python_changed: list[tuple[str, str]] = field(default_factory=list)
-
-
-def atom_form(atom: str) -> str | None:
-    """The citation form of a recorded atom key, or None when it no longer parses as one."""
-    cites, _ = parse_citations(f"`{atom}`")
-    return cites[0].form if cites else None
-
-
-def _prose_changed(
-    repo: Path,
-    parent: str,
-    sha: str,
-    unit: str,
-    bodies: dict[tuple[str, str], dict[str, str]],
-) -> bool:
-    """Whether ``sha`` changed the section ``unit`` against ``parent``; ``bodies`` caches each doc read."""
-    doc = unit.partition("#")[0]
-    for rev in (parent, sha):
-        if (rev, doc) not in bodies:
-            bodies[(rev, doc)] = bodies_at(repo, rev, doc)
-    return bodies[(parent, doc)].get(unit) != bodies[(sha, doc)].get(unit)
-
-
-def _utc(epoch: str) -> str:
-    return datetime.fromtimestamp(int(epoch), timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-
-
-def precision(repo: Path, days: int, now: datetime | None = None) -> Precision:
-    """Count potential and actual moves in every lock commit of the last ``days`` days.
-
-    A commit is compared with its first parent. Three kinds of hash change are not potentials:
-    a row the commit created (nothing was recorded before it), a row whose ``python`` changed
-    (an interpreter bump moves every symbol and test hash at once and says nothing about the
-    prose), and the commit that created the lock.
-
-    No row's ``verified_sha`` is read. That is often a branch commit a squash merge dropped,
-    and the walk needs none: it follows the lock's own first-parent history on HEAD, where
-    each squash commit carries the lock change and the prose change together.
-
-    The walk also reads ``start``, the last lock commit before the window, without counting
-    it, so that each move knows which lock commit recorded the hash it replaced.
-    """
-    now = now or datetime.now(timezone.utc)
-    out = Precision(since=now - timedelta(days=days))
-    bodies: dict[tuple[str, str], dict[str, str]] = {}
-    fmt = "--format=%H %ct %P"
-    log = git(
-        "log",
-        "--first-parent",
-        f"--since={out.since.isoformat()}",
-        fmt,
-        "--",
-        LOCK_REL,
-        cwd=repo,
-    ).stdout.splitlines()
-    edge = git(
-        "log",
-        "--first-parent",
-        "-1",
-        f"--until={out.since.isoformat()}",
-        fmt,
-        "--",
-        LOCK_REL,
-        cwd=repo,
-    ).stdout.split()
-    walk = [(line, True) for line in reversed(log)]
-    if edge:
-        out.start = edge[0]
-        walk.insert(0, (" ".join(edge), False))
-    recorded: dict[tuple[str, str], str] = {}
-    for line, counted in walk:
-        sha, epoch, *parents = line.split()
-        if not parents:
-            continue
-        before, after = lock_at(repo, parents[0]), lock_at(repo, sha)
-        if after is None:
-            continue
-        if counted and before is not None:
-            out.lock_commits += 1
-        for unit, rec in sorted(after.items()):
-            old = (before or {}).get(unit)
-            old_atoms = (old or {}).get("atoms", {})
-            changed = [
-                a for a, h in rec.get("atoms", {}).items() if old_atoms.get(a) != h
-            ]
-            countable = counted and before is not None and old is not None
-            if countable and changed and old.get("python") != rec.get("python"):
-                out.python_changed.append((sha, unit))
-                countable = False
-            moved = [a for a in changed if a in old_atoms] if countable else []
-            actual = bool(moved) and _prose_changed(repo, parents[0], sha, unit, bodies)
-            for atom in moved:
-                form = atom_form(atom)
-                if form not in out.forms:
-                    continue
-                out.forms[form].potential += 1
-                out.forms[form].actual += int(actual)
-                out.moves.append(
-                    LockMove(
-                        sha,
-                        parents[0],
-                        _utc(epoch),
-                        unit,
-                        atom,
-                        form,
-                        actual,
-                        recorded.get((unit, atom)),
-                    )
-                )
-            for atom in changed:
-                recorded[(unit, atom)] = sha
-    return out
-
-
 _ROW = re.compile(r"^(\S+) \[[^\]]*\]\s+\S+\s+\S+\s+(\S+)")
 _WORKTREE = re.compile(r"/\.claude/worktrees/[^/]+/")
 
@@ -303,21 +152,19 @@ def session_bytes(log: Path, since: datetime) -> list[SessionBytes]:
     return sorted(by_session.values(), key=lambda r: (r.first, r.session))
 
 
-def ranked_backlog(
-    statuses: dict[str, str], reads: Reads
-) -> list[tuple[str, str, int]]:
-    """Every section not IN as ``(section, status, reads)``, the most-read doc first."""
+def ranked_backlog(by_unit: Citations, reads: Reads) -> list[tuple[str, int]]:
+    """Every section citing nothing as ``(section, reads)``, the most-read doc first."""
     rows = [
-        (unit, status, reads.counts.get(unit.partition("#")[0], 0))
-        for unit, status in statuses.items()
-        if status != "IN"
+        (unit, reads.counts.get(unit.partition("#")[0], 0))
+        for unit, cites in by_unit.items()
+        if not cites
     ]
-    return sorted(rows, key=lambda r: (-r[2], r[0]))
+    return sorted(rows, key=lambda r: (-r[1], r[0]))
 
 
 def build(
     repo: Path,
-    statuses: dict[str, str],
+    by_unit: Citations,
     days: int,
     log: Path,
     now: datetime | None = None,
@@ -325,21 +172,16 @@ def build(
 ) -> dict:
     """Every measurement as one JSON-ready mapping; ``render`` prints the same thing as text."""
     now = now or datetime.now(timezone.utc)
-    prec = precision(repo, days, now)
-    docs = {u.partition("#")[0] for u in statuses}
+    since = now - timedelta(days=days)
+    docs = {u.partition("#")[0] for u in by_unit}
     roots = tuple(
         sorted({str(repo.resolve()), str(primary_checkout_of(repo).resolve())})
     )
-    reads = doc_reads(log, docs, prec.since, roots)
-    sessions = session_bytes(log, prec.since)
+    reads = doc_reads(log, docs, since, roots)
+    sessions = session_bytes(log, since)
     return {
         "window_days": days,
-        "since": prec.since.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "lock_commits": prec.lock_commits,
-        "forms": {
-            f: {"potential": c.potential, "actual": c.actual}
-            for f, c in prec.forms.items()
-        },
+        "since": since.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "log": {
             "path": str(log),
             "rows": reads.rows,
@@ -347,8 +189,7 @@ def build(
             "last": reads.last,
         },
         "backlog": [
-            {"section": u, "status": s, "reads": n}
-            for u, s, n in ranked_backlog(statuses, reads)
+            {"section": u, "reads": n} for u, n in ranked_backlog(by_unit, reads)
         ],
         "sessions": [
             {
@@ -360,43 +201,25 @@ def build(
             }
             for r in sessions
         ],
-        "notice_replay": notice_replay(repo, prec, notice),
+        "notice_replay": notice_replay(repo, since, notice),
     }
 
 
 def render(report: dict, top: int) -> str:
     """The text form of ``build``'s mapping, cut to ``top`` rows per list.
 
-    The per-form table comes first, then the ``top`` most-read sections that are not IN, then
-    the instruction bytes of the ``top`` most recent sessions, then the notice replay. The
-    replay names every lock move outside ``listed`` and every crash, whatever ``top`` says,
-    because each one is a parity finding.
+    The ``top`` most-read sections citing nothing come first, then the instruction bytes of
+    the ``top`` most recent sessions, then the notice replay, which names every crash whatever
+    ``top`` says.
     """
-    lines = [
-        f"Lock precision since {report['since']} "
-        f"({report['window_days']} days, {report['lock_commits']} lock commits)",
-        f"  {'form':<8}{'potential':>10}{'actual':>8}  ratio",
-    ]
-    for form, c in report["forms"].items():
-        ratio = f"{c['actual'] / c['potential']:.2f}" if c["potential"] else "-"
-        lines.append(f"  {form:<8}{c['potential']:>10}{c['actual']:>8}  {ratio}")
-    # A path atom hashed the file's bytes until 96365b0b5 (2026-09-28) and hashes its path since,
-    # so a path potential in the window is that commit's rehash or an edit from before it.
-    lines.append(
-        "  Since 96365b0b5 a path atom hashes its path, not the file: a path potential"
-        " predates it or is its one-time rehash."
-    )
     log = report["log"]
     span = f"{log['first']} to {log['last']}" if log["rows"] else "no rows"
-    lines += [
-        "",
-        f"Sections not IN, by doc reads ({log['rows']} rows, {span}, {log['path']})",
-        f"  {'reads':>5}  {'status':<10}  section",
+    lines = [
+        f"Sections citing nothing since {report['since']}, by doc reads"
+        f" ({log['rows']} rows, {span}, {log['path']})",
+        f"  {'reads':>5}  section",
     ]
-    lines += [
-        f"  {r['reads']:>5}  {r['status']:<10}  {r['section']}"
-        for r in report["backlog"][:top]
-    ]
+    lines += [f"  {r['reads']:>5}  {r['section']}" for r in report["backlog"][:top]]
     rest = len(report["backlog"]) - top
     if rest > 0:
         lines.append(f"  ... {rest} more; --top or --json lists them")

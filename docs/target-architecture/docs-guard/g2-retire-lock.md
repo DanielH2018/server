@@ -1,6 +1,6 @@
 # G2 — Retire the lock; ADR amending 0019
 
-Status: PLANNED
+Status: IN PROGRESS. PR 1 merged as [#5478](https://github.com/DanielH2018/server/pull/5478) on 2026-10-17.
 
 Depends on: [G1](g1-diff-notice.md)
 

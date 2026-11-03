@@ -9,10 +9,10 @@ whose citation set an edit changed, records a section the edit gave its first ci
 refuses one whose recorded atom moved. ``forget`` drops a lock row whose
 section no longer exists, which is the way out of a ``section-gone`` finding: a renamed
 heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
-own checksum. ``lint`` reports citations that cannot be support. ``report`` measures the
-lock from git and the instructions log: potential against actual moves per atom form, the
-sections not IN ranked by how often their doc loads, and the instruction bytes each session
-loaded (``--json`` for a cron or an agent). ``notice`` lists every section citing an atom
+own checksum. ``lint`` reports citations that cannot be support. ``report`` reads git and
+the instructions log, never the lock: the sections citing nothing ranked by how often their
+doc loads, the instruction bytes each session loaded, and the notice replayed over the window
+(``--json`` for a cron or an agent). ``notice`` lists every section citing an atom
 that the diff from the merge base of ``--since`` to ``--head``, or to the working tree, moved.
 It exits 0 with rows or without, and 2 only when git cannot resolve the merge base.
 """
@@ -30,6 +30,7 @@ from lib.cli_help import ArgumentParser
 
 from lib.exit_codes import FACT_STATUS_BAD_ARGS, FACT_STATUS_BAD_REF
 
+from lib.facts.citations import repo_citations
 from lib.facts.lint import changed_units, first_cited_units, lint_sections
 from lib.facts.lock import (
     LOCK_REL,
@@ -37,7 +38,6 @@ from lib.facts.lock import (
     check_lock,
     forget_units,
     read_lock,
-    repo_citations,
     reverify_benign,
     verify_units,
 )
@@ -207,12 +207,8 @@ def cmd_lint(args: argparse.Namespace) -> int:
 
 def cmd_report(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
-    by_unit = repo_citations(repo)
-    edb = build_repo_edb(repo, read_lock(repo / LOCK_REL), by_unit)
-    idb = derive(edb)
-    statuses = {u: status_of(idb, u) for u in by_unit}
     log = Path(args.log) if args.log else default_log(repo)
-    report = build(repo, statuses, args.days, log)
+    report = build(repo, repo_citations(repo), args.days, log)
     print(json.dumps(report, indent=2) if args.json else render(report, args.top))
     return 0
 

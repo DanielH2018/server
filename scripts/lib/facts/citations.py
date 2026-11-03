@@ -292,3 +292,24 @@ def in_tree(c: Citation, tracked: frozenset[str]) -> bool:
     if c.path.endswith("/"):
         return any(p.startswith(c.path) for p in tracked)
     return c.path in tracked or any(p.startswith(c.path + "/") for p in tracked)
+
+
+Citations = dict[str, list[Citation]]
+"""Every section's in-tree citations keyed by unit: one parse of the docs, shared by its readers."""
+
+
+def repo_citations(repo: Path) -> Citations:
+    """Every section's IN-TREE citations, keyed by unit.
+
+    The tracked set is read once per call: an out-of-tree span (``origin/master``, an
+    untracked or gitignored file) parses as a path citation but is not support, so it is
+    dropped. A section that cites nothing maps to an empty list.
+    """
+    tracked = tracked_files(repo)
+    out: dict[str, list[Citation]] = {}
+    for doc in repo_docs(repo):
+        rel = doc.relative_to(repo).as_posix()
+        for sec in sections(rel, doc.read_text(encoding="utf-8")):
+            cites, _ = parse_citations(sec.body)
+            out[sec.key] = [c for c in cites if in_tree(c, tracked)]
+    return out
