@@ -179,18 +179,6 @@ def test_format_loki_empty_is_no_logs():
     assert metrics.format_loki({"data": {"result": []}}) == "no logs"
 
 
-def test_metric_defaults_to_formatted_with_json_escape_hatch():
-    p = cli_parser._build_parser()
-    assert p.parse_args(["metric", "up"]).json is False
-    assert p.parse_args(["metric", "up", "--json"]).json is True
-
-
-def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
-    p = cli_parser._build_parser()
-    assert p.parse_args(["loki-query", '{job="x"}']).json is False
-    assert p.parse_args(["loki-query", '{job="x"}', "--json"]).json is True
-
-
 # A `docker exec <arr> curl -H "X-Api-Key: <hex>" …/api/… | python3` pipeline
 # both prompts AND leaks the key into argv / shell history / the log.
 

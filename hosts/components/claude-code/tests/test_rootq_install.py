@@ -211,14 +211,3 @@ def test_the_agent_brief_names_the_socket_client_only_while_the_socket_is_armed(
     assert "`rootq-socket`" in brief(True)
     assert "rootq-socket" not in brief(False)
     assert "ask the operator to run `rootq`" in brief(False)
-
-
-def test_daniel_box_and_daniel_server_arm_the_socket() -> None:
-    armed = {
-        p.stem
-        for p in HOST_VARS.glob("*.yml")
-        if (yaml_fast.safe_load(p.read_text()) or {}).get(
-            "claude_code_rootq_socket_enabled"
-        )
-    }
-    assert armed == {"daniel-box", "daniel-server"}

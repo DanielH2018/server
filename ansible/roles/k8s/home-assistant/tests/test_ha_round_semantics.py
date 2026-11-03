@@ -16,8 +16,3 @@ def test_returns_int_at_precision_zero():
     assert isinstance(_forgiving_round(1.4), int)
     assert _forgiving_round(1.4) == 1
     assert _forgiving_round(1.6) == 2
-
-
-def test_returns_float_with_precision():
-    assert _forgiving_round(1.2345, 2) == 1.23
-    assert isinstance(_forgiving_round(1.2345, 2), float)

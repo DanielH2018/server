@@ -155,9 +155,8 @@ marker-bearing file.
 
 **ADR state.**
 
-- ADR-0019's *Governs* section cites the `test_status_census` node in
-  `scripts/lib/tests/test_facts_relations.py`. `test_every_cited_test_exists` checks that
-  citation, so it must change when that test goes.
+- ADR-0019's *Governs* section names `STATUSES` and cites no test. The 2026-11-03 test
+  hygiene sweep deleted the `test_status_census` node it used to cite.
 - The highest ADR is 0019. ADR-0017 amends ADR-0011, and ADR-0011's *Status* section says
   so in one paragraph. That pair is the amendment precedent.
 - `VALID_STATUS` in `test_adr_links.py` (`ansible/tests/repo/`) accepts `Accepted`,

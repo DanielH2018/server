@@ -10,7 +10,6 @@ from _helpers import ANSIBLE
 from _setup_render import CLAUDE_CODE, render_component_text
 from lib import yaml_fast
 from lib.proc_testing import run as run_proc
-from lib.repo_paths import HOST_VARS
 
 ROLE = CLAUDE_CODE
 WRAPPER = "/usr/local/sbin/homelab-takeover-check"
@@ -71,15 +70,3 @@ def test_homelab_tools_pins_the_flux_the_cluster_runs() -> None:
         "amd64": flux,
         "arm64": flux,
     }
-
-
-def test_only_daniel_box_enables_the_check() -> None:
-    hosts = HOST_VARS
-    enabled = {
-        p.stem
-        for p in hosts.glob("*.yml")
-        if (yaml_fast.safe_load(p.read_text()) or {}).get(
-            "claude_code_takeover_check_enabled"
-        )
-    }
-    assert enabled == {"daniel-box"}

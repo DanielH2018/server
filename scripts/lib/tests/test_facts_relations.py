@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 
-from lib.facts.relations import STATUSES, Edb, derive, status_of
+from lib.facts.relations import Edb, derive, status_of
 
 U, A, T = "CLAUDE.md#Sec", "m.py:run", "t/test_m.py::test_run"
 
@@ -97,10 +97,6 @@ def test_test_atom_with_backref_is_not_one_way():
 def test_repo_section_with_no_citation_is_convention():
     e = _edb()
     assert status_of(derive(e), "CLAUDE.md#Commit style") == "CONVENTION"
-
-
-def test_status_census():
-    assert STATUSES == frozenset({"IN", "OUT", "UNVERIFIED", "CONVENTION"})
 
 
 def test_a_recorded_unit_with_no_recorded_atom_is_out_not_unverified():

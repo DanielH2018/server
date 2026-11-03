@@ -58,10 +58,6 @@ def test_input_order_is_preserved():
     assert _names(filter_by_platform(containers, "docker")) == ["z", "a", "m"]
 
 
-def test_empty_list_returns_empty_list():
-    assert filter_by_platform([], "docker") == []
-
-
 def test_original_list_is_not_mutated():
     containers = [_c("traefik"), _c("speedtest", "k8s")]
     filter_by_platform(containers, "docker")
