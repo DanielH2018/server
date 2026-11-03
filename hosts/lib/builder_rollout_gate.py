@@ -24,12 +24,14 @@ from host_lib import log as host_log
 RELEASE = "/etc/homelab-builder/release"
 # The canary order (*Staged rollout*): daniel-box runs the builder, so it always comes last.
 # DECIDED: daniel-server leads, ahead of daniel-pi, since H3.13 put the Pi on a daily updater
-# schedule (#6911). A Pi canary would hold every other host for up to a day; the operator's
-# 2026-10-29 ruling that the Pi lead at all hours (#6530) assumed its 15-minute schedule. A run
-# that changes the Pi's and daniel-box's packages alone still makes the Pi the canary, so
-# monitor-bridge derives the lag grace for a gate whose `host` label is daniel-pi from the Pi's
-# drop-in (ansible/filter_plugins/updater_lag_grace.py, rendered in monitor-bridge's
-# env.yaml.j2), and every other reason keeps the 7200 s floor (#6919).
+# schedule (#6911). The operator's 2026-10-29 ruling that the Pi lead at all hours (#6530) assumed
+# its 15-minute schedule. A run that changes the Pi's and daniel-box's packages alone still makes
+# the Pi the canary. The operator kept it eligible on 2026-11-03 (#7047): the Pi's
+# homelab-updater-poll.timer starts its updater within about 15 minutes of a newer publish (#7065),
+# so a Pi canary holds the other hosts for one updater run, not a day. The daily fire stays the
+# fallback, so monitor-bridge still derives the lag grace for a gate whose `host` label is
+# daniel-pi from the Pi's drop-in (ansible/filter_plugins/updater_lag_grace.py, rendered in
+# monitor-bridge's env.yaml.j2), and every other reason keeps the 7200 s floor (#6919).
 CANARY_ORDER = ("daniel-server", "daniel-pi", "daniel-box")
 APPLIED = "homelab_host_applied_info"
 RECONCILE_OK = "homelab_host_reconcile_ok"

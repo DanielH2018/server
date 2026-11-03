@@ -1,0 +1,109 @@
+#!/bin/sh
+# homelab-updater-poll: start homelab-updater.service when the builder has published a newer
+# homelab-<host> than the one installed (#7065). Shipped by homelab-daniel-pi
+# (hosts/components/pi-updater-poll); edits are overwritten.
+#
+# The Pi runs its updater once a day (H3.13, #6911), because the updater's common path peaked at
+# 114 MB on a board with about 150 MB available. A Pi canary would then hold every other host's
+# package at the builder's rollout gate for up to a day. This poll costs one HTTP GET of the
+# homelab Packages index, so it can run every 15 minutes, and the expensive run happens only once
+# per published version.
+#
+# A run:
+#   1. reads the repository's URI, suite and component from homelab.sources, the file apt reads;
+#   2. fetches binary-<arch>/Packages.gz and takes the highest homelab-<host> Version: in it;
+#   3. does nothing unless that version is greater than the installed one (dpkg never downgrades
+#      through the updater, so "differs" would retrigger forever after a lower publish);
+#   4. does nothing when it already started the updater for that version. A failed, held or
+#      lock-refused run therefore waits for the daily timer, never for this poll's next fire;
+#   5. skips, recording nothing, while anything that owns dpkg or the updater is busy:
+#      homelab-docker-engine.service, a masked homelab-updater.timer (the engine's interlock),
+#      the updater or reconcile itself, or apt's two daily services. The next poll retries;
+#   6. starts homelab-updater.service without waiting for it, then records the version.
+#
+# The index is not verified here: the poll trusts nothing it reads. The updater fetches the
+# signed InRelease itself, so a forged index can cost one updater run per forged version, and no
+# install.
+#
+# Exit codes: 0 nothing to do, skipped or started; 1 the index could not be fetched or read.
+#
+# HOMELAB_ROOT prefixes every path it reads or writes. Only the tests set it.
+
+set -u
+
+ROOT=${HOMELAB_ROOT:-}
+STATE=$ROOT/var/lib/homelab-updater-poll
+TRIGGERED=$STATE/triggered
+SOURCES=$ROOT/etc/apt/sources.list.d/homelab.sources
+HOST_PKG=homelab-$(hostname)
+# The units whose activity means dpkg or the updater is spoken for (step 5).
+BUSY="homelab-docker-engine.service homelab-updater.service homelab-reconcile.service apt-daily.service apt-daily-upgrade.service"
+
+say() { echo "homelab-updater-poll: $*" >&2; }
+
+# Step 1. Deb822 fields; the homelab source names one URI, one suite and one component.
+field() { awk -v k="$1:" '$1 == k { print $2; exit }' "$SOURCES" 2>/dev/null; }
+uri=$(field URIs)
+suite=$(field Suites)
+component=$(field Components)
+if [ -z "$uri" ] || [ -z "$suite" ] || [ -z "$component" ]; then
+    say "$SOURCES names no URIs, Suites or Components"
+    exit 1
+fi
+arch=$(dpkg --print-architecture)
+
+# Step 2. The download goes to a file so a failed curl is not mistaken for an empty index.
+mkdir -p "$STATE" || exit 1
+index=$STATE/Packages.gz
+url=$uri/dists/$suite/$component/binary-$arch/Packages.gz
+if ! curl -fsS --max-time 60 -o "$index" "$url"; then
+    say "could not fetch $url"
+    exit 1
+fi
+if ! gzip -t "$index" 2>/dev/null; then
+    say "$url is not a gzip file"
+    exit 1
+fi
+versions=$(gzip -dc "$index" | awk -v p="$HOST_PKG" '
+    /^Package: / { q = $2 }
+    /^Version: / { if (q == p) print $2 }
+    /^$/ { q = "" }')
+rm -f "$index"
+published=""
+for v in $versions; do
+    if [ -z "$published" ] || dpkg --compare-versions "$v" gt "$published"; then
+        published=$v
+    fi
+done
+if [ -z "$published" ]; then
+    say "$url lists no $HOST_PKG"
+    exit 0
+fi
+
+# Step 3. dpkg-query prints nothing for a package it does not know, which compares as older.
+installed=$(dpkg-query -W -f '${Version}' "$HOST_PKG" 2>/dev/null) || installed=""
+if [ -n "$installed" ] && ! dpkg --compare-versions "$published" gt "$installed"; then
+    exit 0
+fi
+
+# Step 4.
+if [ "$(cat "$TRIGGERED" 2>/dev/null)" = "$published" ]; then
+    exit 0
+fi
+
+# Step 5.
+if [ "$(systemctl is-enabled homelab-updater.timer 2>/dev/null)" = masked ]; then
+    say "$published is published, but homelab-updater.timer is masked; not starting the updater"
+    exit 0
+fi
+for unit in $BUSY; do
+    if systemctl is-active --quiet "$unit"; then
+        say "$published is published, but $unit is active; retrying on the next poll"
+        exit 0
+    fi
+done
+
+# Step 6.
+say "$HOST_PKG $published is published over ${installed:-nothing}; starting homelab-updater.service"
+systemctl start --no-block homelab-updater.service || exit 1
+printf '%s\n' "$published" >"$TRIGGERED.tmp" && mv "$TRIGGERED.tmp" "$TRIGGERED"

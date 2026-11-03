@@ -455,6 +455,35 @@ Prometheus on the `node-pi` job shows the pressure over the 01:00-01:08 window, 
 | Lowest `MemAvailable` | 137916416 B | `min_over_time(node_memory_MemAvailable_bytes{job="node-pi"}[8m] @ 1793581680)` |
 | Lowest `MemAvailable` over the 24 h before | 107053056 B | `min_over_time(node_memory_MemAvailable_bytes{job="node-pi"}[24h] @ 1793581200)` |
 
+## Updater poll memory peak (#7065)
+
+`homelab-updater-poll` runs every 15 minutes, so its common path has to stay far below H3's
+threshold of a quarter of the apt baseline, 23.8 MB. The agent measured it on 2026-11-03 at
+about 20:30 UTC, with `homelab-daniel-pi` 0.6721+g11375cb8d4e9 both published and installed.
+That is the common path: one fetch of the 32 kB `Packages.gz`, the version loop, then an exit
+before any `systemctl` call.
+
+The run was unprivileged, through the operator account's user manager, with the script's state
+moved under `/tmp` by `HOMELAB_ROOT`. Each of three runs went through `systemd-run --user --wait
+--pipe -p MemoryAccounting=yes` on a wrapper that ran the script and then read its own cgroup's
+`memory.peak`, the same reading H3.6 took above.
+
+| Run | `memory.peak` |
+|---|---|
+| 1 | 17829888 B (17.0 MiB) |
+| 2 | 6598656 B (6.3 MiB) |
+| 3 | 13373440 B (12.8 MiB) |
+
+`/usr/bin/time -v` on a fourth run reported a maximum resident set of 10496 kB for the largest
+single process and 1.22 s of wall time.
+
+**Verdict: the poll fits.** The highest peak is 75% of the 23.8 MB threshold and 16% of the
+updater's 114 MB common path. Like H3.6's figures, these are cgroup peaks that count the page
+cache the run charged. The system unit runs as root under `system.slice`, so its own peak is
+unmeasured, but it runs the same commands. To take it, run
+`systemd-run --wait --pty -p MemoryAccounting=yes sh -c '/usr/lib/homelab/homelab-updater-poll; cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak'`
+on the Pi as root.
+
 ## See also
 
 - `hosts/components/pi-heartbeats/component.yml` — the container-recovery contract.

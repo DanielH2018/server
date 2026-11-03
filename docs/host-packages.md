@@ -471,7 +471,10 @@ is open, the unbuilt-since series reads `reason="canary"`, and its `sha` names t
 The gate closes by itself once Prometheus reports the canary at that commit or a descendant with
 `homelab_host_reconcile_ok` at 1. daniel-server leads because the Pi's updater fires once a day,
 at 03:05 (H3.13, #6911). A run that changes only the Pi's and daniel-box's packages still makes
-the Pi the canary, and daniel-box's package then waits up to a day for the Pi's next fire. The
+the Pi the canary. The Pi's `homelab-updater-poll.timer` starts its updater within about 15
+minutes of a newer `homelab-daniel-pi` publish, once per version (#7065), so daniel-box's package
+waits for that run. When the poll skips, because the updater timer is masked or apt is busy,
+or the started run fails, the wait runs to the Pi's next daily fire. The
 series then carries `host="daniel-pi"`, and the "Host Packages — Status" tile pages once that
 gate has stayed open for 90060 seconds, a grace derived from that gap, which
 `ansible/filter_plugins/updater_lag_grace.py` reads from the Pi's timer drop-in. A gate whose
