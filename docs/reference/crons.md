@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-31 19:22 UTC
-generated_sha: dd4bc2a78
+generated_at: 2026-11-03 06:17 UTC
+generated_sha: 4f1e13f113
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: dd4bc2a78
 
 # Scheduled jobs
 
-20 cron entrie(s) installed across the roles.
+19 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -24,7 +24,6 @@ generated_sha: dd4bc2a78
 | Clean unused Docker images | `30 6 * * *` | conditional (inventory_hostname not in initial_setup_packaged_hosts['main) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Full etcd restore drill in a throwaway guest | `20 11 1 * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
 | Longhorn backup health | `*/10 * * * *` | every host in the play | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Longhorn filesystem trim | `10 6 * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Off-box etcd snapshot | `45 2 * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Release staleness drift check | `*/30 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Weekly AIDE file integrity check | `0 3 * * 1` | conditional (inventory_hostname not in initial_setup_packaged_hosts['fail) | `root` | read the script | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
