@@ -252,8 +252,38 @@ def test_the_real_pi_render_reads_its_drop_in_schedule():
     tree = host_wait.render_host_tree(REPO, "daniel-pi")
     assert tree is not None
     target = host_wait._target("daniel-pi", tree, REPO)
-    assert target.triggers == {"OnCalendar": ["*-*-* 03:05:00"]}
+    # Since #7065 the package also arms the poll, whose fires join the daily one.
+    assert target.triggers == {
+        "OnCalendar": ["*-*-* 03:05:00"],
+        "OnBootSec": ["15min"],
+        "OnUnitActiveSec": ["15min"],
+    }
     assert target.armed is True
+
+
+POLL_UNIT = f"root/usr/lib/systemd/system/{host_wait.POLL_TIMER}"
+POLL_LINK = f"root/usr/lib/systemd/system/timers.target.wants/{host_wait.POLL_TIMER}"
+POLL_TEXT = (
+    REPO / "hosts/components/pi-updater-poll/units" / host_wait.POLL_TIMER
+).read_bytes()
+
+
+def test_an_armed_poll_adds_its_fires_to_the_schedule():
+    tree = _dropin(PI_DROPIN) | {
+        POLL_UNIT: ("file", 0o644, POLL_TEXT),
+        POLL_LINK: ("link", 0, f"../{host_wait.POLL_TIMER}".encode()),
+    }
+    target = host_wait._target("daniel-pi", tree, REPO)
+    assert (target.triggers or {}).get("OnUnitActiveSec") == ["15min"]
+    # The 03:05 fire alone puts the deadline a day away; the poll's second fire wins.
+    due = host_wait.deadline(target, _at(12, 0))
+    assert due == _at(12, 30) + 60 + host_wait.DEADLINE_SLACK_S
+
+
+def test_a_poll_unit_without_its_enable_link_adds_nothing():
+    tree = _dropin(PI_DROPIN) | {POLL_UNIT: ("file", 0o644, POLL_TEXT)}
+    target = host_wait._target("daniel-pi", tree, REPO)
+    assert target.triggers == {"OnCalendar": ["*-*-* 03:05:00"]}
 
 
 def test_the_git_fallback_finds_the_pi_at_head():
@@ -450,6 +480,25 @@ def test_a_mid_day_merge_on_the_pi_daily_schedule_ends_deferred_naming_the_next_
     assert "next updater fire is at 2026-10-18 03:05 UTC" in outcome.detail
     assert "sudo systemctl start homelab-updater.service" in outcome.detail
     assert sleeps == []
+
+
+def test_a_mid_day_merge_on_the_pi_with_its_poll_armed_waits_until_the_host_applies():
+    # #7065: the poll's 15-minute fires bound the deadline, so the landing waits, not defers.
+    tree = _dropin(PI_DROPIN) | {
+        LINK: ("link", 0, b"../homelab-updater.timer"),
+        POLL_UNIT: ("file", 0o644, POLL_TEXT),
+        POLL_LINK: ("link", 0, f"../{host_wait.POLL_TIMER}".encode()),
+    }
+    target = host_wait._target("daniel-pi", tree, REPO)
+    stale, _ = _prom(_series(sha="c" * 12))
+    fresh, _ = _prom(_series())
+    answers = iter([stale] * 3 + [fresh] * 3)
+    outcome, sleeps = _wait(
+        target,
+        lambda url, timeout: next(answers)(url, timeout),
+        [_at(12, 0), _at(12, 1)],
+    )
+    assert outcome is None and sleeps == [host_wait.POLL_S]
 
 
 def test_a_host_unsettled_past_its_deadline_ends_deferred_with_its_last_success():

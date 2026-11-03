@@ -458,8 +458,8 @@ Prometheus on the `node-pi` job shows the pressure over the 01:00-01:08 window, 
 ## Updater poll memory peak (#7065)
 
 `homelab-updater-poll` runs every 15 minutes, so its common path has to stay far below H3's
-threshold of a quarter of the apt baseline, 23.8 MB. The agent measured it on 2026-11-03 at
-about 20:30 UTC, with `homelab-daniel-pi` 0.6721+g11375cb8d4e9 both published and installed.
+threshold of a quarter of the apt baseline, 23.8 MB. An agent measured it on daniel-pi on
+2026-11-03 at about 20:30 UTC, with `homelab-daniel-pi` 0.6721+g11375cb8d4e9 both published and installed.
 That is the common path: one fetch of the 32 kB `Packages.gz`, the version loop, then an exit
 before any `systemctl` call.
 
@@ -477,12 +477,22 @@ moved under `/tmp` by `HOMELAB_ROOT`. Each of three runs went through `systemd-r
 `/usr/bin/time -v` on a fourth run reported a maximum resident set of 10496 kB for the largest
 single process and 1.22 s of wall time.
 
-**Verdict: the poll fits.** The highest peak is 75% of the 23.8 MB threshold and 16% of the
-updater's 114 MB common path. Like H3.6's figures, these are cgroup peaks that count the page
-cache the run charged. The system unit runs as root under `system.slice`, so its own peak is
-unmeasured, but it runs the same commands. To take it, run
-`systemd-run --wait --pty -p MemoryAccounting=yes sh -c '/usr/lib/homelab/homelab-updater-poll; cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak'`
-on the Pi as root.
+**Verdict: provisional, pending the root measurement.** The highest peak is 75% of the 23.8 MB
+threshold, which is under it but not far under it. It is also 16% of the updater's 114 MB common
+path. Like H3.6's figures, these are cgroup peaks that count the page cache the run charged. The
+spread from 6.3 to 17.0 MiB across identical runs points at page cache, not at the script's own
+memory, which the 10 MiB resident figure bounds.
+
+The shipped unit runs as root under `system.slice`, where H3.6 measured the updater, and that
+peak is unmeasured. An agent has no root on the Pi, so the operator takes it (#7069). To take it,
+run this on the Pi as root, then replace this verdict with the figure:
+
+```bash
+systemd-run --wait --pty -p MemoryAccounting=yes sh -c '/usr/lib/homelab/homelab-updater-poll; cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.peak'
+```
+
+If the root peak reaches the threshold, lengthen the poll's `OnUnitActiveSec=` first. The daily
+fire bounds the wait whatever the poll's interval.
 
 ## See also
 
