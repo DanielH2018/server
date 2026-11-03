@@ -8,8 +8,9 @@ a crash loop's reason, and a file with no activation is never reported pending.
 """
 
 import pytest
+from _helpers import load_tasks
 from lib import yaml_fast
-from lib.repo_paths import REPO
+from lib.repo_paths import K3S_ROLE, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
@@ -18,6 +19,7 @@ DROPIN = "/usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf"
 STARTUP_FILES = {DROPIN, "/etc/rancher/k3s/registries.yaml"}
 LOGROTATE = "/etc/logrotate.d/k3s-agent"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-agent.conf"
+INSTALLER = "/usr/local/bin/k3s-install.sh"
 
 
 @pytest.fixture(scope="module")
@@ -82,3 +84,34 @@ def test_the_log_file_is_created_with_syslogs_group_at_boot(package):
 def test_the_legacy_entry_retires_ansibles_drop_in(package):
     legacy = {"path": "/etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf"}
     assert legacy in package.legacy
+
+
+def asserted_before_install(tasks: list[dict]) -> set[str]:
+    """The paths a `stat` reads and an `assert` requires before the task that runs the installer."""
+    stats: dict[str, str] = {}
+    found: set[str] = set()
+    for task in tasks:
+        if (task.get("ansible.builtin.command") or {}).get("cmd") == INSTALLER:
+            return found
+        stat = task.get("ansible.builtin.stat")
+        if stat and task.get("register"):
+            stats[task["register"]] = stat["path"]
+        that = (task.get("ansible.builtin.assert") or {}).get("that", "")
+        found |= {path for reg, path in stats.items() if that == f"{reg}.stat.exists"}
+    return set()
+
+
+def test_the_join_refuses_an_agent_whose_package_is_not_installed(package):
+    """A fresh agent that joins before its package starts with no registries.yaml."""
+    guarded = asserted_before_install(load_tasks(K3S_ROLE / "tasks" / "agent.yml"))
+    assert guarded & STARTUP_FILES, guarded
+    assert guarded <= set(package.files)
+
+
+def test_an_assert_after_the_installer_is_not_a_guard():
+    tasks = [
+        {"ansible.builtin.stat": {"path": "/x"}, "register": "x"},
+        {"ansible.builtin.command": {"cmd": INSTALLER}},
+        {"ansible.builtin.assert": {"that": "x.stat.exists"}},
+    ]
+    assert asserted_before_install(tasks) == set()

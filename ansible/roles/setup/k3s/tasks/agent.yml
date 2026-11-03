@@ -108,6 +108,25 @@
     checksum: "sha256:{{ k3s_install_script_sha256 }}"
   become: true
 
+- name: Read the packaged registries.yaml
+  tags: [k3s_agent]
+  ansible.builtin.stat:
+    path: /etc/rancher/k3s/registries.yaml
+  register: k3s_agent_registries_file
+  become: true
+
+- name: Fail if the host package has not installed the agent's files
+  tags: [k3s_agent]
+  # The installer starts k3s-agent, and an agent started without registries.yaml pulls every
+  # in-cluster image over HTTPS and fails, and skips the LAN mirrors. The package ships it
+  # with the log drop-in, so this file stands for both.
+  ansible.builtin.assert:
+    that: k3s_agent_registries_file.stat.exists
+    fail_msg: >-
+      /etc/rancher/k3s/registries.yaml is missing on {{ inventory_hostname }}. Install the
+      homelab-{{ inventory_hostname }} package first: it ships the k3s agent's files
+      (hosts/components/k3s-agent).
+
 - name: Read the installed k3s-agent systemd unit
   tags: [k3s_agent]
   ansible.builtin.slurp:
