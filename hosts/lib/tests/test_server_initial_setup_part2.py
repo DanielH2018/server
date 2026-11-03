@@ -85,13 +85,12 @@ def test_reconcile_retires_the_leaked_eval_run_textfile(package, manifest):
     assert _eval_run_writers(package) == []
 
 
-def test_the_scans_load_no_credential_but_the_package_lists_this_hosts_tokens(package):
-    # M6 batch B9's Cutover-2 dropped the pushes. The package keeps the keys until B9's token PR,
-    # because the host's SOPS file must match the list.
+def test_the_scans_load_no_credential_and_the_package_lists_no_scan_token(package):
+    # M6 batch B9's Cutover-2 dropped the pushes and its token PR retired the keys.
     for scan in ("rkhunter", "aide"):
         unit = _text(package, f"/usr/lib/systemd/system/homelab-{scan}-check.service")
         assert "LoadCredential" not in unit and "homelab-secrets" not in unit
-        assert f"{scan}_daniel_server_push_token" in package.credentials
+        assert f"{scan}_daniel_server_push_token" not in package.credentials
     assert "healthchecks_ping_key" in package.credentials
     # The main sshd_config here carries PermitRootLogin, as the live rkhunter.conf.local reads.
     assert "\nALLOW_SSH_ROOT_USER=no\n" in _text(package, "/etc/rkhunter.conf.local")

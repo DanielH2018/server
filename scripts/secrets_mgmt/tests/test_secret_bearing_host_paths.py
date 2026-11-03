@@ -74,7 +74,7 @@ def test_the_ignore_tier_is_excluded_from_the_tracked_names():
     it out. Pinned by name so a tier change to `r2_bucket` fails here.
     """
     assert "r2_bucket" not in secret_names()
-    assert "aide_daniel_box_push_token" in secret_names()
+    assert "render_records_push_token" in secret_names()
 
 
 def test_the_generic_address_name_is_not_tracked_but_its_password_is():

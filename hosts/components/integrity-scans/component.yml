@@ -5,10 +5,8 @@
 # in place through `role: initial_setup` until the last host PR moves them, so the hosts that still
 # apply the role cannot fork them.
 #
-# No unit loads a credential, because M6 batch B9's Cutover-2 dropped the Kuma pushes. Each host
-# package still lists its own `rkhunter_<host>_push_token` and `aide_<host>_push_token` under
-# `credentials:`, because the host's SOPS file must match that list; B9's token PR retires all six
-# together.
+# No unit loads a credential, because M6 batch B9's Cutover-2 dropped the Kuma pushes, and B9's
+# token PR retired the six per-host push tokens from the host packages and their SOPS files.
 #
 # What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs these once on a
 # host whose package ships the two timers, and the live hosts already hold all three.

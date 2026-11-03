@@ -405,12 +405,8 @@ def test_the_pis_real_manifest_runs_the_secrets_step_once_for_its_credentials(
     credentials = json.loads(package.files["/usr/lib/homelab/secrets.json"][0])[
         "credentials"
     ]
-    # The scan tokens and Healthchecks.io key (H7.30).
-    assert credentials == [
-        "aide_daniel_pi_push_token",
-        "healthchecks_ping_key",
-        "rkhunter_daniel_pi_push_token",
-    ]
+    # The Healthchecks.io key (H7.30). The scan tokens left with M6 batch B9's token PR.
+    assert credentials == ["healthchecks_ping_key"]
     for key in credentials:
         node.credential(key)
     # H5.7: the Compose env file is an output, which the secrets unit renders before reconcile
