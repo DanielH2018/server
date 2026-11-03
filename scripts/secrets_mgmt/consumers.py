@@ -37,17 +37,6 @@ from deployer_lib.deploy_cross_role import k8s_lookup_map
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        # The weekly AIDE check, one token per host: a setup/initial_setup cron on each of the
-        # three hosts against tiles deployed from daniel-box. initial_setup has no deploy tag, so
-        # no redeploy moves the cron's half, and daniel-server's and daniel-pi's halves cross
-        # hosts as well.
-        "aide_daniel_box_push_token",
-        "aide_daniel_server_push_token",
-        "aide_daniel_pi_push_token",
-        # The weekly rkhunter scan: the same shape as the AIDE tokens above.
-        "rkhunter_daniel_box_push_token",
-        "rkhunter_daniel_server_push_token",
-        "rkhunter_daniel_pi_push_token",
         # daniel-box timer (setup/render_records, renders /etc/render-records/config.env) +
         # k8s/uptime-kuma static tile. The pushing role runs only from initial_setup.yml and has
         # no deploy tag, so `--deploy --tags uptime-kuma` would move the tile and leave the timer

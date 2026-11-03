@@ -27,21 +27,12 @@ import re
 from lib.proc_testing import fake_bin, run, write_exec
 from _helpers import ROLES
 from _host_packages import HOSTS, shipped_text
-from _setup_render import render_setup_text
 from _shell_render import render_shell_script
 from _aide_check_run import LOGGER_STUB, verdict_of
 from test_aide_check import _textfile, push_markers
 
 SCRIPT = ("setup", "initial_setup", "rkhunter-check.sh.j2")
-PUSH_ENV = "rkhunter-kuma-push.env.j2"
 TIMER = "/usr/lib/systemd/system/homelab-rkhunter-check.timer"
-
-# Each host's push token variable. M6 batch B9's Cutover-1a deleted the tiles that received them.
-PUSH_TOKENS = {
-    "daniel-box": "rkhunter_daniel_box_push_token",
-    "daniel-server": "rkhunter_daniel_server_push_token",
-    "daniel-pi": "rkhunter_daniel_pi_push_token",
-}
 WEEK_S = 7 * 24 * 3600
 # 2026-09-30 02:02:01 UTC, the run the stale log below records.
 LAST_WEEK = 1790733721
@@ -255,19 +246,6 @@ def test_the_scan_logs_its_verdict_and_still_runs_without_a_credential(tmp_path)
     _, verdict, _, ran = _run_check(tmp_path, "", rc=0, log=_log())
     assert ran, "rkhunter did not run"
     assert verdict is not None and verdict[0] == "up", verdict
-
-
-def test_each_host_pushes_its_own_token():
-    """Rendered once per host with a different sentinel behind each variable (#3202)."""
-    sentinels = {var: f"{host}-sentinel" for host, var in PUSH_TOKENS.items()}
-    for host in PUSH_TOKENS:
-        rendered = render_setup_text(
-            "initial_setup", PUSH_ENV, {"inventory_hostname": host, **sentinels}
-        )
-        carried = [s for s in sentinels.values() if s in rendered]
-        assert carried == [f"{host}-sentinel"], (
-            f"{host} must carry its own token and no other; it carries {carried}"
-        )
 
 
 def test_the_push_deadline_covers_one_week_and_not_two():

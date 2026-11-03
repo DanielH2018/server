@@ -215,6 +215,14 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_janitorr_push_token",
         # B6c:
         "registry_gc_push_token",
+        # B9: the six per-host AIDE and rkhunter push tokens, retired after Cutover-2 stopped the
+        # push.
+        "aide_daniel_box_push_token",
+        "aide_daniel_pi_push_token",
+        "aide_daniel_server_push_token",
+        "rkhunter_daniel_box_push_token",
+        "rkhunter_daniel_pi_push_token",
+        "rkhunter_daniel_server_push_token",
         # A6-9: the 20 monitor-bridge push tokens, retired after Cutover-2 stopped the push.
         "monitor_bridge_arr_queue_push_token",
         "monitor_bridge_b2_reachable_push_token",

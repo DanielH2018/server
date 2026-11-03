@@ -29,8 +29,7 @@
 # maintenance timers (host-maintenance: the weekly reboot, apt autoremove and dpkg purge; this
 # host has neither Docker nor fwupd) and ufw (ssh-firewall). check-lib ships the textfile library
 # the scans and the maintenance wrapper source. initial_setup skips each subject on this host
-# through `initial_setup_packaged_hosts`. The scans and the reboot read three more credentials,
-# `rkhunter_daniel_server_push_token`, `aide_daniel_server_push_token` and
+# through `initial_setup_packaged_hosts`. The scans and the reboot read one more credential,
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-server`, operator-only).
 #
 # #6815 adds `worktree-sweep`, the weekly removal of merged worktrees and unreachable objects
@@ -51,8 +50,6 @@ components: [reconcile, secrets-unit, kuma-push, nut-secondary, apt-github-cli, 
 units:
   k3s-agent.service: {policy: windowed}
 credentials:
-  - rkhunter_daniel_server_push_token
-  - aide_daniel_server_push_token
   - healthchecks_ping_key
 maintainer_scripts: [preinst, postinst, prerm]
 enable:

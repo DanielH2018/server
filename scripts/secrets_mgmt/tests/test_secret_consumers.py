@@ -47,8 +47,7 @@ def test_consumer_tags_cross_host_tokens_are_manual():
     # Cross-host — the unattended cron must NOT auto-rotate these, and they must NOT pick up the
     # uptime-kuma tag either: their pusher half sits on another HOST, so a tag list would assert
     # a repair one playbook run cannot perform. This is the reject half of the multi-tag change.
-    assert consumer_tags("aide_daniel_pi_push_token") == ()
-    assert consumer_tags("rkhunter_daniel_server_push_token") == ()
+    assert consumer_tags("render_records_push_token") == ()
 
 
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():

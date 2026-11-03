@@ -37,15 +37,7 @@ from _host_packages import HOSTS, package, shipped_text
 from _setup_render import render_setup_text
 from _shell_render import render_shell_script
 
-PUSH_ENV = "aide-kuma-push.env.j2"
 TIMER = "/usr/lib/systemd/system/homelab-aide-check.timer"
-
-# Each host's push token variable. M6 batch B9's Cutover-1a deleted the tiles that received them.
-PUSH_TOKENS = {
-    "daniel-box": "aide_daniel_box_push_token",
-    "daniel-server": "aide_daniel_server_push_token",
-    "daniel-pi": "aide_daniel_pi_push_token",
-}
 WEEK_S = 7 * 24 * 3600
 
 
@@ -234,19 +226,6 @@ def test_a_report_longer_than_a_pipe_buffer_logs_no_broken_pipe(tmp_path):
     long_report = DIFF_REPORT + f"{CHANGED_CONTENT}: /home/ubuntu/x\n" * 20000
     _run_check(tmp_path, long_report, rc=4, cap=3, ignore_sigpipe=True)
     assert "Broken pipe" not in (tmp_path / "stderr").read_text()
-
-
-def test_each_host_pushes_its_own_token():
-    """Rendered once per host with a different sentinel behind each variable (#3202)."""
-    sentinels = {var: f"{host}-sentinel" for host, var in PUSH_TOKENS.items()}
-    for host in PUSH_TOKENS:
-        rendered = render_setup_text(
-            "initial_setup", PUSH_ENV, {"inventory_hostname": host, **sentinels}
-        )
-        carried = [s for s in sentinels.values() if s in rendered]
-        assert carried == [f"{host}-sentinel"], (
-            f"{host} must carry its own token and no other; it carries {carried}"
-        )
 
 
 def test_the_push_deadline_covers_one_week_and_not_two():

@@ -18,9 +18,8 @@
 # accounting), the maintenance timers (host-maintenance: the weekly reboot, apt autoremove, dpkg
 # purge and, as `has_fwupd` is true only here, the firmware update; this host has no Docker) and
 # ufw (ssh-firewall). initial_setup skips each subject on every host through
-# `initial_setup_packaged_hosts`. The scans and the reboot read three more credentials,
-# `rkhunter_daniel_box_push_token`, `aide_daniel_box_push_token` and `healthchecks_ping_key`
-# (`host_secrets.py sync daniel-box`, operator-only).
+# `initial_setup_packaged_hosts`. The scans and the reboot read one more credential,
+# `healthchecks_ping_key` (`host_secrets.py sync daniel-box`, operator-only).
 #
 # The package declares no ufw rule beyond the SSH pair and the builder's two repository allows.
 # Every other live rule belongs to a role that still writes it: the k3s join rules and the
@@ -77,8 +76,6 @@ units:
   k3s.service: {policy: windowed}
 credentials:
   - k3s_readonly_token
-  - rkhunter_daniel_box_push_token
-  - aide_daniel_box_push_token
   - healthchecks_ping_key
 # Two claude-code secrets only this host uses (H7.40's third slice). They sit here rather than in
 # the component, because host_secrets.py names every output key a component declares for each
