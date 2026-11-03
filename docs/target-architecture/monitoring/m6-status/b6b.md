@@ -163,7 +163,7 @@ B6b cuts over in the combined window of B2, B4 and B6b. The window has four stac
    render the five tokens, so none enters `PENDING_RETIREMENT`.
 2. Cutover-1b drops `shadow` from the nine rules and removes the five `CheckWithoutPager` terms.
 3. The Flux-plane Cutover-2 stops the pushes from the crowdsec sidecar and the two CronJobs.
-4. B6b's token PR retires the keys a week after Cutover-1b.
+4. B6b's token PR, [#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
 
 Flux does not promote on Sunday between 02:05 and 08:15 UTC, so a Flux-owned half that merges in
 that span waits for 08:15Z, and a revert waits with it.
@@ -190,8 +190,8 @@ leave uptime-kuma's `netpol_from` list in `daniel-box.yml`, since none dials Kum
 level; no reader calls it. The five keys (`crowdsec_remote_allowlist_push_token`,
 `monitor_bridge_appsec_push_token`, `monitor_bridge_home_allowlist_push_token`,
 `monitor_bridge_configarr_push_token`, `monitor_bridge_janitorr_push_token`) enter
-`PENDING_RETIREMENT`, and `B6B_TILE_DELETED_PUSH_TOKENS` is deleted. B6b's token PR retires the
-keys a week after Cutover-1b.
+`PENDING_RETIREMENT`, and `B6B_TILE_DELETED_PUSH_TOKENS` is deleted. B6b's token PR,
+[#6949](https://github.com/DanielH2018/server/pull/6949), retired the keys.
 
 The five tags stay in `KUMA_RETIRING_TAGS` until C-7, because pods that ran before the apply may
 still hold a log line from a refused push. The readers' `status=` lines still count as landed

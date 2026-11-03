@@ -52,3 +52,10 @@ nothing changed there. Their C-1a halves, `format_kuma` and the `KUMA_QUERY` arm
 `docs/monitor-bridge-checks.md`, `docs/k3s-node-plane-crons-and-incidents.md` and
 `docs/healthchecks-io-deadman.md`. Item 8 does not list them, and no other M6 PR row does.
 [#7056](https://github.com/DanielH2018/server/issues/7056) tracks the sweep, after C-1 and C-3a.
+
+`ansible/roles/k8s/monitor-bridge/files/bridge/common.py` is one of the files #6821 names. Two of
+its docstrings still say the bridges push to Kuma and that Kuma forwards to Discord. B-7 left
+them, because the file ships in the monitor-bridge and autofix-bridge builds. Both roles are
+flux-owned, so a docstring edit would roll two workloads in a PR that otherwise deploys nothing.
+[#7060](https://github.com/DanielH2018/server/issues/7060) rewords them in the next real edit to
+the file.
