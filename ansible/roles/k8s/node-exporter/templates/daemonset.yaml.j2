@@ -194,8 +194,8 @@ spec:
         # GET leaves the host network namespace as containerd's pulls do, so the mirror's fence
         # judges it by the same node grant. A pod network check would be refused by that fence,
         # which the registry's isolation Job proves. The endpoint is the one registries.yaml
-        # names on the node (setup/k3s's registries.yaml.j2). It reuses the exporter's image for
-        # busybox's shell and wget. No probes, as for iscsi-sessions above.
+        # names on the node (hosts/components/k3s-{server,agent}/templates/registries.yaml.j2). It
+        # reuses the exporter's image for busybox's shell and wget. No probes, as for iscsi-sessions above.
         - name: ghcr-mirror-pull
           image: {{ node_exporter_k8s_image }}
           imagePullPolicy: IfNotPresent

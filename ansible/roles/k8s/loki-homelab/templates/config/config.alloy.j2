@@ -207,13 +207,12 @@ loki.process "host" {
 }
 
 // k3s's own output, warnings and worse only (issue #6177). The k3s units write it to a file
-// because journald stores nothing below notice and every k3s line is priority info (the WHY A
-// FILE AND NOT A PRIORITY comment in roles/setup/k3s/tasks/unit-logging.yml). That file keeps
+// because journald stores nothing below notice and every k3s line is priority info (the
+// header of hosts/components/k3s-server/templates/50-homelab.conf.j2 says why). That file keeps
 // 4 rotations, so without this a crash loop's reason was gone within days. Both nodes write
-// the same path, setup/k3s's `k3s_log_file`: the agent's drop-in reads it, and daniel-box's
-// package copies it (test_k3s_server_component.py holds the copy equal). The k8s render cannot
-// read a setup role's defaults, so this is a literal, which test_alloy_ships_k3s_log.py holds
-// equal to that default.
+// the same path, the `k3s_log_file` default of the `k3s-server` and `k3s-agent` components
+// (hosts/components/). The k8s render cannot read a component's defaults, so this is a literal,
+// which test_alloy_ships_k3s_log.py holds equal to both.
 //
 // The exact file, never `k3s.log*`: a glob would tail the rotated `.1` and the `.gz` files.
 // logrotate rotates with `copytruncate`, and the tailer resets to offset 0 on a size shrink.
@@ -255,7 +254,7 @@ loki.process "k3s" {
   // kube-router warns once per IPv6 ipBlock of the traefik NetworkPolicy on every policy sync,
   // because the cluster is single-stack IPv4: 29400 of daniel-box's 29688 klog warnings in the
   // measured day, and 29701 lines on daniel-server. Shipping it would be the volume the
-  // unit-logging comment keeps k3s out of Loki for. Only that one message is dropped. A match
+  // warnings-only filter above keeps k3s out of Loki for. Only that one message is dropped. A match
   // stage rather than a bare stage.drop: test_traefik_access_log_drop.py holds every stage.drop
   // in this file inside a stage.match, so no drop can reach the pod pipeline unscoped.
   stage.match {
