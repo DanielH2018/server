@@ -147,6 +147,16 @@ class SetupReaders(NamedTuple):
     unread: dict[str, set[str]]
 
 
+def merged(a: SetupReaders, b: SetupReaders) -> SetupReaders:
+    """Both answers as one: a shipper is unread only where every half naming the path says so."""
+    unread = {}
+    for path in a.paths | b.paths:
+        halves = [h.unread.get(path, set()) for h in (a, b) if path in h.paths]
+        if left := set.intersection(*map(set, halves)):
+            unread[path] = left
+    return SetupReaders(a.paths | b.paths, unread)
+
+
 def setup_reader_paths(old_ref: str, ctx, rules: Rules) -> SetupReaders:
     """The files under `roles/setup/` at `ctx.ref` naming a key `old_ref..ctx.ref` moved (#5436).
 

@@ -83,7 +83,9 @@ def main(argv: list[str] | None = None) -> int:
         return FAILED
     refused = ""
     try:
-        found = merged(secret_keys.setup_reader_paths(args.old, ctx, rules), inventory)
+        found = secret_keys.merged(
+            secret_keys.setup_reader_paths(args.old, ctx, rules), inventory
+        )
     except (CannotNarrow, subprocess.CalledProcessError) as exc:
         refused = f"the secrets half cannot say ({exc})"
         print(f"secret-readers: cannot say ({exc})", file=sys.stderr)
@@ -95,18 +97,6 @@ def main(argv: list[str] | None = None) -> int:
         json.dumps({"paths": sorted(found.paths), "unread": unread, "refused": refused})
     )
     return OK
-
-
-def merged(
-    a: secret_keys.SetupReaders, b: secret_keys.SetupReaders
-) -> secret_keys.SetupReaders:
-    """Both answers as one: a shipper is unread only where every half naming the path says so."""
-    unread = {}
-    for path in a.paths | b.paths:
-        halves = [h.unread.get(path, set()) for h in (a, b) if path in h.paths]
-        if left := set.intersection(*map(set, halves)):
-            unread[path] = left
-    return secret_keys.SetupReaders(a.paths | b.paths, unread)
 
 
 def _deploy_tags(old: str, new: str, repo: _Path, rules, explain) -> int:

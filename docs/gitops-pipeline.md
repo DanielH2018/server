@@ -445,9 +445,16 @@ then writes a `manual_plane` line for each role it names, with the other hosts i
 `hosts` key. `clear_manual_plane_applied` never clears a line that carries `hosts`, so the
 tick's own apply of the role leaves it standing. Apply the role on each host as printed, then
 `clear-owed manual_plane <role>`. A later range reaching another host widens the line's `hosts`
-and keeps its stamp. A failed derivation records nothing and logs `setup-reach:`. The script
-covers role-directory edits only: a changed repo file a role ships, such as
-`scripts/backup/etcd_restore_drill.sh`, takes no broad arm, so the tick never asks.
+and keeps its stamp. A failed derivation records nothing and logs `setup-reach:`. A changed
+repo file a role ships, such as `scripts/backup/etcd_restore_drill.sh`, takes no broad arm, so
+the tick never asks.
+
+A moved `secrets.yml` or inventory key owes the same lines (#6968). `route_key_readers` makes
+the tick apply each role with a file that reads the key, and `setup_reach_hosts.py` adds those
+files' reach through `land_lib/key_readers.py`. A key moved in `group_vars/all.yml` or
+`secrets.yml` reaches every host the reader's task gate admits. A key moved in
+`host_vars/<h>.yml` reaches `<h>` alone. A reader's whole file counts, not only the tasks the
+range changed in it, because the task naming the key need not be one the range edited.
 
 #### The tag the remediation prints is derived, not the role tag
 

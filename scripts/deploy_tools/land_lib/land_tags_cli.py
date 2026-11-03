@@ -29,6 +29,7 @@ from pathlib import Path
 
 import shared_role_reach
 from deploy_tools.land_lib import land_tags
+from deploy_tools.land_lib.key_readers import readable_key_readers
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 from lib.cli_help import ArgumentParser
 from lib.git import git
@@ -103,7 +104,11 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     if ns.remaining_setup_hosts is not None:
         print(
             remaining_setup_hosts_note(
-                paths, ns.remaining_setup_hosts, quiet=quiet, pr_range=ns.range_
+                paths,
+                ns.remaining_setup_hosts,
+                quiet=quiet,
+                pr_range=ns.range_,
+                key_readers=readable_key_readers(ns.range_, repo),
             )
         )
         return 0

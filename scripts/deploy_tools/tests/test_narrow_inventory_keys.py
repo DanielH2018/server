@@ -12,6 +12,8 @@ import pytest
 
 import narrow_setup
 import secret_setup_readers
+from deploy_tools.land_lib.key_readers import KeyReader, key_readers
+from deploy_tools.narrow_lib import broad, inventory_keys
 
 from _narrow_fixtures import Tree, _refs
 from _setup_role_fixtures import BETA, ROLE, build, narrow
@@ -144,6 +146,53 @@ def test_a_secrets_refusal_keeps_the_inventory_readers_of_the_same_range(tree, c
 def test_role_tags_narrows_a_moved_key_to_its_readers_tag(tree):
     """No path under the role moved, and the role still needs the tag that renders the key."""
     assert narrow(tree, *_moved(tree, '"3.14.6"', '"3.15.2"')) == frozenset({"alpha"})
+
+
+def test_a_host_vars_key_is_scoped_to_its_host(tree):
+    """#6968: a `host_vars/<h>.yml` key reaches `<h>`, and a carried value keeps that host."""
+    tree.write("ansible/inventory/host_vars/daniel-server.yml", 'server_pin: "1"\n')
+    tree.commit("host vars")
+    tree.write("ansible/inventory/host_vars/daniel-server.yml", 'server_pin: "2"\n')
+    tree.write(
+        GROUP_VARS,
+        BASE_VARS.replace('"3.14.6"', '"{{ server_pin }}"'),
+    )
+    old, new = _refs(tree)
+    ctx = broad.Context(tree.root, new, set(), {}, lambda _m: None)
+    found = inventory_keys.setup_reader_paths_by_host(old, ctx)
+    assert {h: sorted(r.paths) for h, r in found.items()} == {
+        "": [f"{ROLE}/templates/alpha.conf.j2"],
+        "daniel-server": [f"{ROLE}/templates/alpha.conf.j2"],
+    }
+
+
+_SECRET = "s_key: ENC[AES256_GCM,data:aaa]\nsops:\n    mac: m1\n"
+
+
+def _secret_and_pin_moved(tree: Tree) -> str:
+    """A range moving `s_key`, which `beta` reads, and the pin, which `alpha` reads."""
+    tree.write(SECRETS, _SECRET)
+    tree.write(f"{ROLE}/templates/beta.conf.j2", "token = {{ s_key }}\n")
+    tree.commit("beta reads a secret")
+    tree.write(SECRETS, _SECRET.replace("aaa", "bbb").replace("m1", "m2"))
+    return "..".join(_moved(tree, '"3.14.6"', '"3.15.2"'))
+
+
+def test_key_readers_merges_the_secrets_half_beside_the_inventory_half(tree):
+    """#6968: both halves land under every host, neither replacing the other."""
+    assert key_readers(_secret_and_pin_moved(tree), tree.root) == [
+        KeyReader(f"{ROLE}/templates/alpha.conf.j2", frozenset()),
+        KeyReader(f"{ROLE}/templates/beta.conf.j2", frozenset()),
+    ]
+
+
+def test_key_readers_drops_a_refusing_secrets_half_and_keeps_the_inventory_half(tree):
+    """A play reading the secret refuses that half, which the tick routes nothing for."""
+    tree.write("ansible/deploy.yml", "- hosts: all\n  vars:\n    p: '{{ s_key }}'\n")
+    tree.commit("a play reads the secret")
+    assert key_readers(_secret_and_pin_moved(tree), tree.root) == [
+        KeyReader(f"{ROLE}/templates/alpha.conf.j2", frozenset())
+    ]
 
 
 def _beta_ships(tree: Tree, monkeypatch, shipped: str, text: str) -> None:

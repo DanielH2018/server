@@ -138,6 +138,7 @@ class Fakes:
     self_applied: bool = False
     self_applied_command: str = "`ansible-playbook ansible/initial_setup.yml --tags x`"
     remaining_setup: str = ""
+    key_readers: tuple = ()
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
     # `land_tags.shared_caller_tags`: each shared role the PR changes, to the tags that run it.
     shared_callers: dict[str, set[str]] = field(default_factory=dict)
@@ -263,13 +264,17 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     record = calls if calls is not None else []
 
     def remaining_setup_hosts(
-        paths, local_host, quiet=(), pr_range="", ref="", repo=None
+        paths, local_host, quiet=(), pr_range="", ref="", repo=None, key_readers=()
     ):
         # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
         # ref and repo are recorded: without them the note reads this checkout's own tree,
         # the pre-merge-checkout bug #4080 fixed.
         record.append(
-            ("remaining_setup_hosts", (local_host,), {"ref": ref, "repo": repo})
+            (
+                "remaining_setup_hosts",
+                (local_host,),
+                {"ref": ref, "repo": repo, "key_readers": list(key_readers)},
+            )
         )
         return f.remaining_setup
 
@@ -284,6 +289,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         self_applied=lambda paths, quiet=(): f.self_applied,
         self_applied_command=lambda paths, quiet=(): f.self_applied_command,
         remaining_setup_hosts=remaining_setup_hosts,
+        key_readers=lambda pr_range, repo: list(f.key_readers),
         derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
