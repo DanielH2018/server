@@ -65,9 +65,6 @@ SCRAPE_RULES = (
 LOG_PIPELINE_RULES = (
     ROLES / "k8s" / "observability" / "files" / "rules" / "log-pipeline.yaml"
 )
-CUTOVER_RULES = (
-    ROLES / "k8s" / "observability" / "files" / "rules" / "kuma-cutover.yaml"
-)
 EDGE_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "edge.yaml"
 STORAGE_RULES = ROLES / "k8s" / "observability" / "files" / "rules" / "storage.yaml"
 BRIDGE_RULES = (
@@ -190,15 +187,6 @@ def container_sets() -> dict[str, dict[str, str]]:
 
 # Each label set and the receivers Alertmanager sends it to.
 PAGING = {
-    # M6's no-pager-window guard pages from the start, critical to both channels.
-    "check-without-pager": (
-        {
-            "alertname": "CheckWithoutPager",
-            "severity": "critical",
-            "service": "uptime-kuma",
-        },
-        ["discord", "email"],
-    ),
     "warning": (
         {
             "alertname": "K8sDeploymentReplicasUnavailable",
@@ -415,17 +403,18 @@ def test_every_deploy_pipeline_rule_has_an_expected_outcome():
 
 def test_host_sets_names_every_host_check_rule():
     """Non-vacuity for `host_sets`: every shadow rule of the group, per host for the rules each
-    host carries (#6166, #6168), and the paging host-plane rules, M3's two disk-health rules
-    among them since its PR 5."""
+    host carries (#6166), and the paging host-plane rules, M3's two disk-health rules among
+    them since its PR 5 and B9's four AIDE and rkhunter rules per host since its Cutover-1b."""
     hosts = ("daniel-box", "daniel-server", "daniel-pi")
-    every_host = (
-        "TextfileCollectorError AideCheckFailed AideCheckNotReporting RkhunterScanFailed "
-        "RkhunterScanNotReporting"
-    ).split()
     assert set(host_sets(shadow=True)) == (
-        {f"{alert}/{host}" for alert in every_host for host in hosts}
+        {f"TextfileCollectorError/{host}" for host in hosts}
         | {"ComposeUpFailed/daniel-pi"}
     )
+    # B9's twelve rules page: a `warning`, which posts to Discord alone, the channel the six
+    # Kuma tiles notified.
+    b9_alerts = (
+        "AideCheckFailed AideCheckNotReporting RkhunterScanFailed RkhunterScanNotReporting"
+    ).split()
     assert set(host_sets(shadow=False)) >= {
         "DiskHealthFailed/daniel-box",
         "DiskHealthNotReporting/daniel-box",
@@ -434,7 +423,10 @@ def test_host_sets_names_every_host_check_rule():
         f"{alert}/{host}"
         for alert in ("HostReconcileFailed", "HostRebootOverdue", "HostCheckOverdue")
         for host in hosts
-    }
+    } | {f"{alert}/{host}" for alert in b9_alerts for host in hosts}
+    for alert in b9_alerts:
+        for host in hosts:
+            assert PAGING[f"{alert}/{host}"][1] == ["discord"]
 
 
 def test_loki_sets_name_every_m5_rule():
@@ -483,15 +475,12 @@ def test_every_a2_container_rule_pages_since_cutover_b():
     assert all(PAGING[name][1] == ["discord"] for name in sets)
 
 
-def test_every_a3_rule_pages_and_so_does_the_cutover_guard():
+def test_every_a3_rule_pages():
     """Non-vacuity for `literal_sets`: batch A3's scrape and log-pipeline rules all page since
-    Cutover-b, so none routes to the blackhole, and `CheckWithoutPager` still pages."""
+    Cutover-b, so none routes to the blackhole."""
     for path in (SCRAPE_RULES, LOG_PIPELINE_RULES):
         assert literal_sets(path, shadow=True) == {}
         assert literal_sets(path, shadow=False)
-    assert set(literal_sets(CUTOVER_RULES, shadow=False)) == {
-        "CheckWithoutPager/uptime-kuma"
-    }
     assert "ScrapeTargetDown/observability" in PAGING
     assert "ScrapeTargetFlapping/observability" in PAGING
     assert "LogShipperDroppingEntries/loki-homelab" in PAGING
