@@ -1,14 +1,14 @@
 {
-  "checksum": "cf7709531c74887c91185f0da11f10f7c46944b4f891b58a7bb62e6c95133116",
+  "checksum": "a82bc819ab7abe9012115c0494ebad1c399eb81a7e1b8a357ce668bc5f04a7e8",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "hosts/components/builder/CLAUDE.md#The rollout gate (H3.12)",
   "row": {
     "atoms": {
       "docs/host-packages.md": "86b9cf9178023719fe89a9954ed609bf0e9f6512bb5382279d0c80e35d11ac86",
       "hosts/lib/builder_rollout_gate.py": "d6c086fca9a78adb650d0050bf5c9d9a01e8d5c61ff901dc967f27771c24e76d",
-      "hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls": "0a14176322c20ac86d13874d46c445a07de425884a644f33bbe8e91407e5fe20"
+      "hosts/lib/tests/test_builder_component.py::test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster_ip": "2e39d4ed975588a90c5190b56143a08172c250f3ff8303b581fbbd140db523cb"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "e68ff215c"
   }
 }

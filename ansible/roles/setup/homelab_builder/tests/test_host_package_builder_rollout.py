@@ -191,6 +191,20 @@ def test_a_canary_not_yet_settled_leaves_the_gate_open(opened, case):
     assert metric(state)[:2] == ("canary", v[:12])
 
 
+def test_a_stale_canary_logs_its_sha_beside_the_gate_s(opened, capsys):
+    # #7047: the gate stayed open for hours with Prometheus answering and no line saying why.
+    lab, prom, v, _state, _ = opened
+    older = git(lab[0].path, "rev-parse", f"{v}~1")[:12]
+    prom.applied["daniel-server"], prom.reconcile["daniel-server"] = older, 1
+    capsys.readouterr()
+    run(lab, prom)
+    out = capsys.readouterr().out
+    assert (
+        f"rollout gate at {v[:12]} stays open: daniel-server reports"
+        f" sha={older} reconcile_ok=1" in out
+    )
+
+
 def test_a_canary_at_a_descendant_closes_the_gate(opened):
     lab, prom, _v, state, _ = opened
     newer = edit(lab[0], "daniel-box", "box 1")

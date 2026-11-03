@@ -50,11 +50,10 @@ users:
 defaults:
   builder_repo_port: 8791
   builder_github_repo: DanielH2018/server
-  # Loopback first: Prometheus publishes loopback only on its own node. The second entry is
   # roles/k8s/observability/defaults/main.yml:observability_prometheus_cluster_ip, and a test holds
-  # the two equal.
+  # the two equal. No loopback entry: nothing serves Prometheus on daniel-box's loopback, so one
+  # logged a refused connection on every run and said nothing (#7047).
   builder_prom_urls:
-    - http://127.0.0.1:9090
     - http://10.43.39.218:9090
 depends:
   - git

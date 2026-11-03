@@ -214,7 +214,9 @@ def test_both_units_publish_their_own_series_as_root(package):
         assert post.startswith(f"-+/bin/sh /usr/lib/homelab/publish-textfile {prefix} ")
 
 
-def test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls(package):
+def test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster_ip(
+    package,
+):
     # fact: hosts/components/builder/CLAUDE.md#The rollout gate (H3.12)
     # fact: hosts/components/builder/CLAUDE.md#What the component installs
     settings = dict(
@@ -229,7 +231,7 @@ def test_the_settings_carry_the_deployers_ci_contexts_and_two_prometheus_urls(pa
         (REPO / "ansible/roles/k8s/observability/defaults/main.yml").read_text()
     )
     ip = observability["observability_prometheus_cluster_ip"]
-    assert settings["PROMETHEUS_URLS"] == f"http://127.0.0.1:9090 http://{ip}:9090"
+    assert settings["PROMETHEUS_URLS"] == f"http://{ip}:9090"
 
 
 def test_the_nfpm_pin_is_ci_s_and_uv_matches_initial_setup():
