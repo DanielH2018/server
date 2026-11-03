@@ -1,12 +1,12 @@
 {
-  "checksum": "a8fcd0182e693f42709002bb28dd27de79146b68d4ece2a443b1df433cf8e7a6",
+  "checksum": "7cadd4ede0f55c72519462c779bc72ee378b04cd29486ca21073eff10a000eea",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
-  "key": "ansible/roles/setup/initial_setup/CLAUDE.md#Autonomous-role contract — the host crons that remain (`crons` tag)",
+  "key": "ansible/roles/setup/initial_setup/CLAUDE.md#No state-changing job remains here",
   "row": {
     "atoms": {
       "hosts/components/": "a45f320cd267d78d33d971fdc4b1d5282276637d2c25a3e0dcb56d8a23e1a1cd"
     },
     "python": "3.15",
-    "verified_sha": "ac726bb45"
+    "verified_sha": "84bb0bbf0"
   }
 }

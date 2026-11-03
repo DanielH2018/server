@@ -17,20 +17,18 @@ the name:
 - `apt-upgrade` — the Docker-engine hold, then the full dist-upgrade. The `docker_install`
   role's `CLAUDE.md` has why the hold sits here.
 - `tooling` — uv and the CLI tools; `packages` is the apt baseline.
-- `crons` — every cron and kuma-check timer in `crons.yml` and `accounting.yml`. The
-  rkhunter and AIDE crons answer to `rkhunter` and `aide` instead. Each `crons` task also
+- `crons` — every cron-removal arm and kuma-check timer in `crons.yml`. Each `crons` task also
   answers to a subject tag, so `--tags crons` is never the only way to reach it:
-  `secret-rotation` (the audit, the weekly rotation and their stamp), `weekly-restart`, `prune`, `ansible-log`,
-  `worktree-sweep`, `cert-expiry` (the retired TLS watch's removal), `infra-map`, `firmware`,
-  `setup_drift`, `loki_route_witness`, `docs`, `evals` and `apt-hygiene` (autoremove and
-  dpkg-purge). The Healthchecks ping key answers to both `prune` and `weekly-restart`, because
-  both crons source it. `ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py`
-  refuses a task whose only tag is `crons`.
-- `tuning` — the server's CPU governor and swappiness.
+  `secret-rotation` (the removal of the old audit and rotation crons), `ansible-log`,
+  `worktree-sweep`, `cert-expiry` (the retired TLS watch's removal), `infra-map`,
+  `setup_drift`, `loki_route_witness`, `docs` and `evals`.
+  `ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py` refuses a task whose only
+  tag is `crons`.
+- `tuning` — the server's CPU governor.
 - `debloat` — the server's LXD-snap removal and the networkd-dispatcher mask on both hosts.
-- `firewall` — UFW. `kernel-modules` is the blacklist plus WireGuard.
+- `kernel-modules` — the blacklist plus WireGuard.
 - `igpu` — i915 GuC for QuickSync, on `has_igpu` hosts only.
-- `accounting` — sysstat and acct.
+- `banners` — the login banners. `coredumps` — systemd-coredump suppression.
 
 ## Tooling, pins and the root HOME trap
 
@@ -69,8 +67,10 @@ the name:
   `AllowStreamLocalForwarding remote` and `StreamLocalBindUnlink yes`, for the clipboard
   bridge's reverse unix-socket forward: sshd builds the channel layer from
   `AllowTcpForwarding` alone, so `local` refuses every remote forward before
-  `AllowStreamLocalForwarding` is read. The comment above the block in `tasks/access.yml`
-  carries the derivation and the log line that tells the two refusals apart.
+  `AllowStreamLocalForwarding` is read. The comment in
+  `hosts/components/sshd/templates/90-homelab-match.conf.j2` carries the derivation. The refusal
+  from this permission check logs `to remote forward to path ... but the request was denied`.
+  The forwarding allowlist's refusal reads `Server has disabled port forwarding` instead.
 - **On daniel-pi (H7.27), daniel-server (H7.28) and daniel-box (H7.29), sshd reads the package's two drop-ins instead of the tasks.**
   `10-homelab.conf` holds the 17 settings and `90-homelab-match.conf` holds the `Match` block.
   sshd keeps the first value it reads, and `10-` sorts before cloud-init's `50-cloud-init.conf`,
@@ -80,8 +80,7 @@ the name:
   drop-in. `reload:ssh.service` runs `sshd -t` first, and
   `hosts/lib/tests/test_pi_initial_setup_part1.py` runs `sshd -T` over both drop-ins for the
   operator account and for another user. rkhunter still reads only the main `sshd_config`, so the Pi's
-  `PermitRootLogin` read is unchanged by the move. `initial_setup_packaged_hosts['sshd']` names
-  the hosts whose package owns the subject.
+  `PermitRootLogin` read is unchanged by the move. H7's last host PR deleted the role's sshd tasks.
 - **The UFW LAN allow must sort above the SSH limit rule**, which is why the `ssh-firewall`
   component declares `lan-ssh` with `position: first` and `before: ssh-limit`: UFW takes the
   first matching rule, so an allow appended below the limiter is inert (#508).
@@ -95,7 +94,7 @@ the name:
   The arm adopts each Ansible-era rule in place by relabelling it `homelab:`, deletes the stale
   `allow 51820/udp`, and leaves the hand-added 51822 allow alone. It sets a default policy only
   where it differs and enables only an inactive UFW, as the tasks did.
-  `initial_setup_packaged_hosts['ufw']` names the hosts whose package owns the subject.
+  The role keeps no firewall task for any host.
 - **On daniel-server (H7.31), the same arm owns the two SSH rules and declares nothing else.**
   The `k3s` role's agent join rules carry no `homelab:` label, so the arm leaves them until
   H7.34 declares them. It also leaves the hand-added 45876 allow from the pod network, which
@@ -135,7 +134,7 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   at the cron's slot. The weekly reboot refuses while the validation flag of `homelab-reconcile` exists. The
   push tokens and the Healthchecks.io key arrive as unit credentials, not as `/etc` env files.
   The first AIDE and rkhunter baselines and the mask on `dailyaidecheck.timer` stay host state.
-  `initial_setup_packaged_hosts['fail2ban']` and `['maintenance']` name the hosts. The weekly
+  The role keeps no task of either subject for any host. The weekly
   firmware update ships only where `has_fwupd` is true, which is daniel-box alone.
 - **AIDE and rkhunter are scheduled against each other, and the package's own timer is masked.**
   `dailyaidecheck.timer` duplicated the weekly cron nightly with broken mail alerting, at about

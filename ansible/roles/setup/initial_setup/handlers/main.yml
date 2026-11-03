@@ -1,44 +1,13 @@
 ---
 # Handlers fire in the order they are DEFINED, not the order tasks notify them, and the roles
-# in initial_setup.yml contribute theirs in role order. Two pairs below depend on that, so each
-# pair stays in this one file. optimize_pi notifies `Restart systemd-journald` and
-# `Restart Watchdog` across the role boundary; they live here rather than there because a
-# role's handlers inherit its `when:`, and optimize_pi's is gated to one host while this role
-# is unconditional.
-- name: Restart fail2ban
-  ansible.builtin.service:
-    name: fail2ban
-    state: restarted
-
-# BEFORE Restart systemd-journald. journald forwards at info (MaxLevelSyslog, see
-# tasks/system-tuning.yml), so if journald restarted first there would be a window where every
-# info line on the host reached /var/log/syslog before the filter that discards them was loaded.
+# in initial_setup.yml contribute theirs in role order. `Restart Watchdog` and `Start Watchdog
+# after provisioning` depend on that, so the pair stays in this one file. optimize_pi's
+# watchdog tasks notify across the role boundary; the handlers live here rather than there
+# because a role's handlers inherit its `when:`, and optimize_pi's is gated to one host while
+# this role is unconditional.
 - name: Restart rsyslog
   ansible.builtin.service:
     name: rsyslog
-    state: restarted
-
-- name: Restart systemd-journald
-  ansible.builtin.service:
-    name: systemd-journald
-    state: restarted
-
-- name: Reload Postfix
-  ansible.builtin.service:
-    name: postfix
-    state: reloaded
-
-# inet_interfaces changes require a full restart — `postfix reload` does not
-# rebind listening sockets (per Postfix docs), so loopback-only wouldn't take
-# effect until the next restart without this.
-- name: Restart Postfix
-  ansible.builtin.service:
-    name: postfix
-    state: restarted
-
-- name: Restart SSH
-  ansible.builtin.service:
-    name: ssh
     state: restarted
 
 - name: Reload audit rules

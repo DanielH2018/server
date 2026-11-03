@@ -80,7 +80,7 @@ NAMED_MEMBERS = [
     ("template", "Pin the node's LAN address in netplan"),
     ("get_url", "Download the pinned CoreDNS release"),
     ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
-    ("sysctl", "Apply kernel security hardening"),
+    ("sysctl", "Raise the inotify instance limit for pod log tailing"),
     ("ufw", "Allow cluster traffic from agent nodes"),
 ]
 
@@ -100,7 +100,7 @@ def test_a_shipped_file_and_a_target_are_both_searchable(real_tree):
     items = [i for items in real_tree.values() for i in items]
     assert any(i.mentions("host-corefile.j2") for i in items)
     assert any(i.mentions("k3s/tasks/static-address.yml") for i in items)
-    assert any(i.mentions("net.core.bpf_jit_harden") for i in items)
+    assert any(i.mentions("fs.inotify.max_user_instances") for i in items)
 
 
 # --- what an item is --------------------------------------------------------------------------

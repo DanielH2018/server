@@ -27,9 +27,10 @@ import re
 
 import pytest
 from lib import yaml_fast
-from _helpers import ALL_VARS, ANSIBLE
+from _helpers import ALL_VARS
+from _host_packages import HOSTS, shipped_text
 
-ACCESS_TASKS = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks" / "access.yml"
+DROP_IN = "/etc/apt/apt.conf.d/52unattended-upgrades-local"
 
 VAR = "unattended_upgrades_origins_patterns"
 # `origin=gh`, `archive=${distro_codename}-updates`, `n=stable` — a matcher, `=`, a value.
@@ -60,7 +61,7 @@ def patterns() -> list[str]:
 
 def test_var_is_defined():
     assert VAR in yaml_fast.safe_load(ALL_VARS.read_text()), (
-        f"{VAR} is missing from group_vars/all.yml; access.yml renders it unconditionally "
+        f"{VAR} is missing from group_vars/all.yml; the unattended-upgrades component renders it unconditionally "
         f"and a tag-scoped run would die on the undefined var."
     )
 
@@ -86,20 +87,17 @@ def test_pattern_tokens_are_well_formed(pattern: str):
         )
 
 
-def test_task_renders_origins_pattern_not_allowed_origins():
+@pytest.mark.parametrize("host", HOSTS)
+def test_package_ships_origins_pattern_not_allowed_origins(host: str):
     """The drop-in must append via Origins-Pattern, and must not displace the security pockets."""
-    body = ACCESS_TASKS.read_text()
-    # Comments are stripped first: the task's own comment explains the Allowed-Origins trap by
-    # name, and the check below would otherwise fire on the explanation rather than the config.
-    body = "\n".join(
-        line for line in body.splitlines() if not line.lstrip().startswith("#")
-    )
-    assert 'Unattended-Upgrade::Origins-Pattern:: "{{ pattern }}"' in body, (
-        "access.yml no longer renders the extras as Origins-Pattern:: entries"
-    )
+    body = shipped_text(host, DROP_IN)
+    for pattern in patterns():
+        assert f'Unattended-Upgrade::Origins-Pattern:: "{pattern}";' in body, (
+            f"{host}'s drop-in no longer carries {pattern!r} as an Origins-Pattern:: entry"
+        )
     assert "Unattended-Upgrade::Allowed-Origins" not in body, (
-        "access.yml declares Allowed-Origins; the extras belong in Origins-Pattern, and "
-        "the security pockets are the distro 50unattended-upgrades' to own"
+        f"{host}'s drop-in declares Allowed-Origins; the extras belong in Origins-Pattern, "
+        "and the security pockets are the distro 50unattended-upgrades' to own"
     )
     assert "Origins-Pattern {" not in body, (
         "a `{ ... }` block reads as a replacement of the distro's list; use the `::` "

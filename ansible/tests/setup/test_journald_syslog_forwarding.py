@@ -19,7 +19,6 @@ from _host_packages import HOSTS, shipped_text
 
 ROLE = SETUP_ROLES / "initial_setup"
 SYSTEM_TUNING = ROLE / "tasks" / "system-tuning.yml"
-HANDLERS = ROLE / "handlers" / "main.yml"
 
 # The host-tuning component ships the journald drop-in in every host package. The rsyslog
 # filter below stays an initial_setup task, gated on has_rsyslog.
@@ -70,14 +69,6 @@ def exempted_facilities(filter_content: str) -> set[str]:
         for part in parts[1:]:
             found.add(part.split('"')[0])
     return found
-
-
-def handler_names(path: Path) -> list[str]:
-    return [
-        h["name"]
-        for h in yaml_fast.safe_load(path.read_text()) or []
-        if isinstance(h, dict) and "name" in h
-    ]
 
 
 @pytest.mark.parametrize("host", HOSTS)
@@ -157,21 +148,6 @@ def test_the_filter_is_gated_on_has_rsyslog():
     )
 
 
-def test_rsyslog_restarts_before_journald():
-    """Handlers fire in definition order, not notify order.
-
-    journald forwards at info the moment it restarts. If it restarted first, every info line
-    on the host would reach /var/log/syslog until rsyslog loaded the filter that drops them.
-    """
-    names = handler_names(HANDLERS)
-    assert "Restart rsyslog" in names, "no Restart rsyslog handler"
-    assert "Restart systemd-journald" in names, "no Restart systemd-journald handler"
-    assert names.index("Restart rsyslog") < names.index("Restart systemd-journald"), (
-        "Restart systemd-journald is defined before Restart rsyslog, so journald begins "
-        "forwarding at info while rsyslog is still running without the filter"
-    )
-
-
 # ── The rejecting halves ──────────────────────────────────────────────────────────────────
 # A guard that fires on nothing and a guard that fires on everything look identical from the
 # passing side. Each of these feeds the checkers above the exact input they must reject.
@@ -205,8 +181,3 @@ def test_an_ungated_filter_block_is_detected(tmp_path: Path):
         "        content: stop\n"
     )
     assert filter_block_when(ungated) is None
-
-
-def test_reordered_handlers_are_detected():
-    names = ["Restart systemd-journald", "Restart rsyslog"]
-    assert names.index("Restart rsyslog") > names.index("Restart systemd-journald")

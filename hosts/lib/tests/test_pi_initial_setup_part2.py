@@ -2,24 +2,20 @@
 
 `fail2ban`, `integrity-scans`, `postfix`, `accounting`, `host-maintenance` and `ssh-firewall`, with
 the Pi package's own ufw rules, replace initial_setup's fail2ban group, maintenance crons and ufw
-tasks on daniel-pi. These tests hold what the move must keep: the role skips every task of the
-three subjects on the Pi, each cron it stops writing is retired and replaced by a timer at the same
-slot, the scans read the Pi's own tokens, the weekly reboot refuses after a failed validation, and
-reconcile adopts the Pi's Ansible-era firewall rules in place.
+tasks on daniel-pi. These tests hold what the move must keep: each cron the role once wrote is
+retired and replaced by a timer, the scans read the Pi's own tokens, the weekly reboot refuses
+after a failed validation, and reconcile adopts the Pi's Ansible-era firewall rules in place.
 
 Run: uv run pytest hosts/lib/tests/test_pi_initial_setup_part2.py
 """
 
 import json
 import os
-import re
 from pathlib import Path
 
-import jinja2
 import pytest
 from test_pi_initial_setup_part1 import seeded_pi
 
-from lib import yaml_fast
 from lib.estate import REPO_INVENTORY
 from lib.proc_testing import fake_bin, run, write_exec
 from lib.render_context import render_context
@@ -27,21 +23,8 @@ from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib import host as host_mode
 
 ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
-# The block tags of each subject's tasks (the role's `CLAUDE.md`, *Granular tags*).
-SUBJECT_TAGS = {
-    "fail2ban": "fail2ban",
-    "rkhunter": "fail2ban",
-    "aide": "fail2ban",
-    "postfix": "fail2ban",
-    "accounting": "fail2ban",
-    "apt-hygiene": "maintenance",
-    "weekly-restart": "maintenance",
-    "firmware": "maintenance",
-    "prune": "maintenance",
-    "firewall": "ufw",
-}
-# Each cron the subjects install, and the packaged timer that replaces it on the Pi. The Pi has no
-# fwupd, so the role never installed "Weekly firmware update" there.
+# Each cron the role once installed on the Pi, and the packaged timer that replaces it. The Pi has
+# no fwupd, so the role never installed "Weekly firmware update" there.
 TIMERS = {
     "Weekly apt autoremove": "homelab-apt-autoremove.timer",
     "Weekly dpkg purge orphaned configs": "homelab-dpkg-purge.timer",
@@ -50,8 +33,6 @@ TIMERS = {
     "Weekly rkhunter malware scan": "homelab-rkhunter-check.timer",
     "Weekly AIDE file integrity check": "homelab-aide-check.timer",
 }
-NOT_ON_THE_PI = {"Weekly firmware update"}
-DAYS = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 LAN = "allow from {lan} to any port 22 proto tcp"
 
 
@@ -74,96 +55,16 @@ def _text(package: host_mode.Package, dst: str) -> str:
     return package.files[dst][0].decode()
 
 
-def _tasks() -> list[dict]:
-    """Every task of the role's task files, an import's own tasks included."""
-    found = []
-    for path in sorted((ROLE / "tasks").glob("*.yml")):
-        found += [
-            t
-            for t in yaml_fast.safe_load(path.read_text()) or []
-            if isinstance(t, dict)
-        ]
-    return found
-
-
-def _whens(task: dict) -> list[str]:
-    when = task.get("when", [])
-    return [str(w) for w in (when if isinstance(when, list) else [when])]
-
-
-def _subject_tasks() -> dict[str, str]:
-    """Task name -> its subject, for every task carrying a subject's block tag.
-
-    A task also tagged `sysctl` is part 1's, which the `sysctl` subject already guards.
-    """
-    found = {}
-    for task in _tasks():
-        tags = set(task.get("tags") or [])
-        subjects = {SUBJECT_TAGS[t] for t in tags & SUBJECT_TAGS.keys()}
-        if subjects and "sysctl" not in tags:
-            [subject] = subjects
-            found[str(task["name"])] = subject
-    return found
-
-
-def test_every_task_of_the_three_subjects_skips_the_pi(context):
-    subjects = _subject_tasks()
-    assert {
-        "Deploy fail2ban jail configuration": "fail2ban",
-        "Schedule weekly AIDE integrity check": "fail2ban",
-        "Schedule sudo crontab for weekly restart": "maintenance",
-    }.items() <= subjects.items()
-    tasks = {str(t["name"]): t for t in _tasks()}
-    unguarded = [
-        name
-        for name, subject in subjects.items()
-        if f"inventory_hostname not in initial_setup_packaged_hosts['{subject}']"
-        not in _whens(tasks[name])
-    ]
-    assert not unguarded
-    for subject in set(subjects.values()):
-        assert "daniel-pi" in context["initial_setup_packaged_hosts"][subject]
-
-
-def _crons(context: dict) -> dict[str, dict]:
-    """Cron name -> the cron task's fields rendered for the Pi, for each subject cron it adds."""
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
-    subjects = _subject_tasks()
-    found = {}
-    for task in _tasks():
-        cron = task.get("ansible.builtin.cron")
-        if task.get("name") in subjects and cron and cron.get("state") != "absent":
-            found[cron["name"]] = {
-                key: env.from_string(str(cron.get(key, "*"))).render(context)
-                for key in ("minute", "hour", "weekday")
-            } | {"user": cron["user"]}
-    return found
-
-
-def test_each_cron_the_pi_stops_writing_is_retired_and_a_timer_runs_at_its_slot(
-    package, manifest, context
+def test_each_cron_the_role_once_wrote_is_retired_and_a_timer_replaces_it(
+    package, manifest
 ):
-    crons = _crons(context)
-    assert crons.keys() == TIMERS.keys() | NOT_ON_THE_PI
     retired = {e["cron"]: e["user"] for e in manifest["legacy"] if "cron" in e}
-    for name, cron in crons.items():
-        if name in NOT_ON_THE_PI:
-            continue
-        # The prune's `ansible_facts.user_id` is root, because initial_setup gathers facts with the
-        # play's become (ansible/pre_tasks/load_secrets.yml); the live Pi's sys_user crontab holds
-        # no Ansible entry (2026-10-30). So every job sat in root's crontab.
-        user = "root" if "ansible_facts" in cron["user"] else cron["user"]
-        assert retired.get(name) == user, name
-        timer = TIMERS[name]
+    # Every job sat in root's crontab: the live Pi's sys_user crontab holds no Ansible entry
+    # (2026-10-30), and the prune's `ansible_facts.user_id` was root under the play's become.
+    assert {name: retired.get(name) for name in TIMERS} == dict.fromkeys(TIMERS, "root")
+    for timer in TIMERS.values():
         assert timer in manifest["enable_links"]
-        [calendar] = re.findall(
-            r"^OnCalendar=(.*)$",
-            _text(package, f"/usr/lib/systemd/system/{timer}"),
-            re.M,
-        )
-        day = "" if cron["weekday"] == "*" else f"{DAYS[int(cron['weekday'])]} "
-        clock = f"{int(cron['hour']):02d}:{int(cron['minute']):02d}:00"
-        assert calendar.removesuffix(" UTC") == f"{day}*-*-* {clock}", name
+        assert f"/usr/lib/systemd/system/{timer}" in package.files
 
 
 def test_the_scan_packages_install_with_their_config_under_no_install_recommends(

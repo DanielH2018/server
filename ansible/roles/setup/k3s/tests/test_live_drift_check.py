@@ -17,6 +17,7 @@ import syslog
 
 import live_drift_check as ldc
 from _shell_render import rendered_shell_text
+from renderer.renderer_lib import host as host_mode
 
 
 def _applied(**spec) -> dict:
@@ -393,12 +394,7 @@ def test_a_read_failure_outranks_a_clean_comparison():
 # Derived from the Ansible source rather than hardcoded, so it goes RED from either side: if
 # the check drops back to INFO, or if the host cap is tightened past NOTICE.
 
-_SYSTEM_TUNING = (
-    pathlib.Path(__file__).resolve().parents[2]
-    / "initial_setup"
-    / "tasks"
-    / "system-tuning.yml"
-)
+_JOURNALD_DROPIN = "/etc/systemd/journald.conf.d/50-homelab.conf"
 
 # syslog severities: lower is more severe, and journald stores a line iff level <= the cap.
 _SEVERITY = {
@@ -414,11 +410,11 @@ _SEVERITY = {
 
 
 def _journald_store_cap() -> int:
-    """The MaxLevelStore initial_setup deploys, as a numeric severity."""
-    text = _SYSTEM_TUNING.read_text()
+    """The MaxLevelStore daniel-box's package installs, as a numeric severity."""
+    text = host_mode.render_host("daniel-box").files[_JOURNALD_DROPIN][0].decode()
     match = re.search(r"^\s*MaxLevelStore=(\w+)\s*$", text, re.MULTILINE)
     assert match, (
-        f"no MaxLevelStore= in {_SYSTEM_TUNING} — the derivation lost its source"
+        f"no MaxLevelStore= in {_JOURNALD_DROPIN} — the derivation lost its source"
     )
     return _SEVERITY[match.group(1)]
 

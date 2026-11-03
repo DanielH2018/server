@@ -32,6 +32,8 @@ in every listing the host offers.
 import ipaddress
 import xml.etree.ElementTree as ET
 
+import pytest
+
 from lib import yaml_fast
 
 from _fence_probe import (
@@ -43,6 +45,7 @@ from _fence_probe import (
 )
 from _helpers import ALL_VARS, HOST_VARS, ROLES
 from lib.repo_paths import K8S_ROLES
+from renderer.renderer_lib import host as host_mode
 from _setup_render import rendered_setup_text
 
 COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
@@ -53,7 +56,6 @@ NETWORK_TEMPLATE = HYPERVISOR / "templates" / "staging-network.xml.j2"
 DOMAIN_TEMPLATE = HYPERVISOR / "templates" / "etcd-drill-vm.xml.j2"
 HYPERVISOR_DEFAULTS = HYPERVISOR / "defaults" / "main.yml"
 NETWORK_TASKS = HYPERVISOR / "tasks" / "network.yml"
-FIREWALL_TASKS = ROLES / "setup" / "initial_setup" / "tasks" / "network.yml"
 
 CIDR_VAR = "staging_net_cidr"
 LAN_VAR = "lan_subnet"
@@ -306,18 +308,33 @@ def test_the_filter_is_defined_before_the_guest_that_references_it():
     )
 
 
-def test_no_ufw_rule_claims_to_fence_staging():
-    """The inert first attempt must be deleted, not left listed as protection."""
-    for task in yaml_fast.safe_load(FIREWALL_TASKS.read_text()):
-        rule = task.get("community.general.ufw")
-        if not isinstance(rule, dict) or not rule.get("route"):
-            continue
-        assert rule.get("delete"), (
-            f"{FIREWALL_TASKS} declares a ufw `route` rule ({task.get('name')!r}) that is not "
-            f"a delete. A routed rule on this host cannot fence the staging guest — libvirt's "
-            f"FORWARD accept is reached first, which is why DEFAULT_FORWARD_POLICY=DROP never "
-            f"blocked it either. Such a rule reads as protection and provides none."
-        )
+def _routed_rules(rules: list[dict]) -> list[str]:
+    """The ids of the `ufw route` rules among a package's declared rules."""
+    return [r["id"] for r in rules if r["spec"].split()[0] == "route"]
+
+
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
+def test_no_ufw_rule_claims_to_fence_staging(host):
+    """The inert first attempt must stay deleted, not come back listed as protection.
+
+    The host packages own every ufw rule since H7.7g, so the rendered `ufw:` rules are the
+    subject. A routed rule cannot fence the staging guest: libvirt's FORWARD accept is reached
+    first, which is why DEFAULT_FORWARD_POLICY=DROP never blocked it either.
+    """
+    rules = host_mode.render_host(host).ufw_rules
+    assert rules, f"{host}'s package declares no ufw rule, so this checks nothing"
+    assert _routed_rules(rules) == [], (
+        f"{host}'s package declares a ufw `route` rule. Such a rule reads as protection "
+        "for the staging guest and provides none."
+    )
+
+
+def test_a_routed_ufw_rule_is_flagged():
+    rules = [
+        {"id": "ssh", "spec": "limit 22/tcp"},
+        {"id": "fence", "spec": "route deny from 10.10.0.0/24 to 10.0.0.0/24"},
+    ]
+    assert _routed_rules(rules) == ["fence"]
 
 
 def test_the_staging_cidr_contains_the_guest():
