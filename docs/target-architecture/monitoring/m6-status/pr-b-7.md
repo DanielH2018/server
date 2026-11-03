@@ -1,7 +1,7 @@
 ### PR B-7
 
 PR B-7, the docs, skills, agents and evals that still pointed a reader at Kuma: the PR that
-adds this record, for [#7052](https://github.com/DanielH2018/server/issues/7052). It deploys
+adds this record, [#7058](https://github.com/DanielH2018/server/pull/7058), for [#7052](https://github.com/DanielH2018/server/issues/7052). It deploys
 nothing. Each item of *Phase B* item 8, and what changed:
 
 - **The root `CLAUDE.md` *Where to Look* rows.** No change. `git grep -n -i kuma -- CLAUDE.md`
