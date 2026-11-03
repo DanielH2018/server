@@ -4,21 +4,26 @@ Without the entry, containerd pulls a flux-owned GHCR image straight from ghcr.i
 holds nothing, and nut cannot cold-start during a WAN outage. The endpoint follows the same
 split as the push store's: the registry node reaches the loopback hostPort, every other node
 the Service's pinned ClusterIP. The ghcr.io entry is D5 Open question 2; lscr.io and
-docker.io are #6257.
+docker.io are #6257. Each node's host package ships its copy: daniel-box's since H6.4a and
+daniel-server's since H6.5a.
 """
+
+from functools import cache
 
 import pytest
 from lib import yaml_fast
 
-from _setup_render import render_setup_text
 from lib.repo_paths import ALL_VARS
+from renderer.renderer_lib import host as host_mode
 
 VARS = yaml_fast.safe_load(ALL_VARS.read_text())
 
 
+@cache
 def _mirrors(host: str) -> dict:
-    text = render_setup_text("k3s", "registries.yaml.j2", {"inventory_hostname": host})
-    return yaml_fast.safe_load(text)["mirrors"]
+    """The mirrors in the registries.yaml the host's package ships (k3s-server or k3s-agent)."""
+    rendered = host_mode.render_host(host).files["/etc/rancher/k3s/registries.yaml"][0]
+    return yaml_fast.safe_load(rendered)["mirrors"]
 
 
 @pytest.mark.parametrize(

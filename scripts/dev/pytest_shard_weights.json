@@ -810,6 +810,7 @@
  "ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py": 0.01,
  "ansible/tests/setup/test_integrity_scan_rule_literals.py": 0.33,
  "ansible/tests/setup/test_journald_syslog_forwarding.py": 0.0,
+ "ansible/tests/setup/test_k3s_agent_component.py": 1.32,
  "ansible/tests/setup/test_k3s_agent_hosts.py": 0.0,
  "ansible/tests/setup/test_k3s_control_plane_hardening.py": 1.24,
  "ansible/tests/setup/test_k3s_coredns_marker_follows_the_read.py": 1.4,

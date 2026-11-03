@@ -14,9 +14,8 @@ cannot refuse them.
 import shutil
 
 import pytest
-from _helpers import load_defaults
 from lib import yaml_fast
-from lib.repo_paths import K3S_ROLE, REPO
+from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
 
@@ -97,25 +96,6 @@ def test_the_unit_drop_in_replaces_the_installers_command_line(package):
     assert exec_lines == ["", "/usr/local/bin/k3s server"]
 
 
-COPIED_KEYS = ("k3s_log_file",)
-
-
-def drifted(component: dict, role: dict) -> list[str]:
-    """The copied keys whose value in the component differs from setup/k3s's twin."""
-    return [key for key in COPIED_KEYS if component.get(key) != role.get(key)]
-
-
-def test_each_copied_key_equals_its_setup_k3s_twin():
-    assert drifted(component_defaults(), load_defaults(K3S_ROLE)) == []
-
-
-def test_a_copy_that_drifts_from_its_twin_is_detected():
-    role = load_defaults(K3S_ROLE)
-    assert drifted(
-        {**component_defaults(), "k3s_log_file": "/var/log/other.log"}, role
-    ) == ["k3s_log_file"]
-
-
 def test_the_package_marks_exactly_the_startup_files_for_the_k3s_restart(package):
     marked = {path for path, action in package.activations.items() if action == ACTION}
     assert marked == STARTUP_FILES
@@ -126,7 +106,7 @@ def test_the_package_marks_exactly_the_startup_files_for_the_k3s_restart(package
 
 def test_the_logging_drop_in_sends_both_streams_to_the_log_file(package):
     content = text(package, DROPIN)
-    log_file = load_defaults(K3S_ROLE)["k3s_log_file"]
+    log_file = component_defaults()["k3s_log_file"]
     assert setting(content, "StandardOutput") == f"append:{log_file}"
     assert setting(content, "StandardError") == "inherit"
 
@@ -159,16 +139,25 @@ def test_the_audit_log_directory_and_log_file_are_created_at_boot(package):
     assert "d /var/lib/rancher/k3s/server/logs 0700 root root -" in tmpfiles
 
 
-def test_a_template_naming_an_undefined_key_fails_the_host_render(tmp_path):
+@pytest.mark.parametrize(
+    ("host", "template"),
+    [
+        ("daniel-box", "k3s-server/templates/50-homelab.conf.j2"),
+        ("daniel-server", "k3s-agent/templates/50-homelab.conf.j2"),
+    ],
+)
+def test_a_template_naming_an_undefined_key_fails_the_host_render(
+    tmp_path, host: str, template: str
+):
     hosts = tmp_path / "hosts"
     shutil.copytree(HOSTS, hosts)
     # Sources outside hosts/ resolve against the root's parent.
     for name in ("ansible", "scripts", "docs"):
         (tmp_path / name).symlink_to(REPO / name)
     host_mode.render_host(
-        "daniel-box", hosts_root=hosts
+        host, hosts_root=hosts
     )  # the accept half: the copy renders as it stands
-    broken = hosts / "components/k3s-server/templates/50-homelab.conf.j2"
+    broken = hosts / "components" / template
     broken.write_text("[Service]\nEnvironment=X={{ k3s_no_such_key }}\n")
     with pytest.raises(RenderError, match="k3s_no_such_key"):
-        host_mode.render_host("daniel-box", hosts_root=hosts)
+        host_mode.render_host(host, hosts_root=hosts)

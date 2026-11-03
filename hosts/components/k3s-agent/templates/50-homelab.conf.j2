@@ -1,0 +1,13 @@
+# Shipped by the homelab-{{ inventory_hostname }} package (hosts/components/k3s-agent) -- edits
+# here are overwritten. Send k3s's own output to a file the journald cap cannot drop.
+#
+# journald stores nothing below notice on this host (`MaxLevelStore=notice`), and every line k3s
+# writes is priority info, so the journal keeps none of it. This file is where a crash loop's
+# reason lands. `append:` is opened by systemd at exec, so logrotate must copytruncate
+# (/etc/logrotate.d/k3s-agent).
+#
+# A drop-in, not the unit: k3s-install.sh rewrites /etc/systemd/system/k3s-agent.service
+# wholesale, and a `.d/` directory is the placement it leaves alone.
+[Service]
+StandardOutput=append:{{ k3s_log_file }}
+StandardError=inherit

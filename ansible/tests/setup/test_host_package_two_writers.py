@@ -80,9 +80,7 @@ WRITERS = frozenset(
 CRON = "ansible.builtin.cron"
 # The `k3s` task files that `k3s-bringup.yml`'s join and pin plays run on an agent node
 # (`tasks_from: agent` and `tasks_from: static-address`), with the file `agent.yml` imports.
-K3S_AGENT_TASK_FILES = frozenset(
-    {"agent.yml", "static-address.yml", "unit-logging.yml"}
-)
+K3S_AGENT_TASK_FILES = frozenset({"agent.yml", "static-address.yml"})
 # Where the cron module writes a relative `cron_file:`. An absolute one replaces it on join.
 CRON_D = PurePosixPath("/etc/cron.d")
 
@@ -297,8 +295,14 @@ def test_k3s_writes_its_server_only_task_files_on_the_server_alone():
         "ansible/roles/setup/k3s/tasks/health-crons.yml" in ansible["daniel-box"][key]
     )
     assert key not in ansible["daniel-server"]
-    registries = ansible["daniel-server"][("path", "/etc/rancher/k3s/registries.yaml")]
-    assert "ansible/roles/setup/k3s/tasks/agent.yml" in registries
+
+
+def test_the_agents_registries_yaml_has_the_package_as_its_one_writer():
+    """H6.5a moved it into daniel-server's package and deleted `tasks/agent.yml`'s task."""
+    ansible, packages = _tree()
+    key = ("path", "/etc/rancher/k3s/registries.yaml")
+    assert "homelab-daniel-server" in packages["daniel-server"][key]
+    assert key not in ansible["daniel-server"]
 
 
 def test_the_package_side_finds_the_retired_heartbeat_crons():

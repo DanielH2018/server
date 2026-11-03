@@ -84,7 +84,9 @@ def test_the_k3s_agent_walk_holds_none_of_the_server_crons():
     ctx = applied.context(K3S, "daniel-server")
     wants, _ = applied_tasks.expected(K3S, "daniel-server", ctx, tuple(files))
     paths = {w.path for w in wants}
-    assert "/etc/rancher/k3s/registries.yaml" in paths
+    # The pin play's file: the agent's registries.yaml is its host package's since H6.5a.
+    assert "/etc/netplan/90-homelab-static-address.yaml" in paths
+    assert "/etc/rancher/k3s/registries.yaml" not in paths
     assert not {p for p in paths if p.startswith("/opt/longhorn-backup-health")}
     assert "/etc/rancher/k3s/kuma-push.env" not in paths
 
