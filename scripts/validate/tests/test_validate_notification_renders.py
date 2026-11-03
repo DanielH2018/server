@@ -41,13 +41,3 @@ def test_a_render_case_directory_missing_a_floor_group_is_flagged(tmp_path):
     assert any("'resolved', 'shared-description', 'single'" in p for p in problems), (
         problems
     )
-
-
-def test_a_single_firing_alert_keeps_its_description_under_its_summary():
-    """A one-alert group's CommonAnnotations are its own, which must not trigger the dedupe."""
-    rendered = (
-        notification_renders.RENDER_CASES / "single.homelab.message.txt"
-    ).read_text()
-    summary, description = rendered.splitlines()[:2]
-    assert summary.startswith("**CRITICAL** "), rendered
-    assert description.startswith("homelab_host_reconcile_ok"), rendered

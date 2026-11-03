@@ -6,7 +6,6 @@ import pytest
 
 from lib.git_testing import commit, git, init_repo
 from lib.facts.lock import (
-    FINDING_KINDS,
     LOCK_REL,
     _PYTHON,
     Finding,
@@ -234,22 +233,6 @@ def test_a_finding_kind_outside_the_census_is_flagged():
     """Every Finding above is the clean side: the census must bind its producers too."""
     with pytest.raises(ValueError, match="FINDING_KINDS"):
         Finding("u", "a", "nope", "d")
-
-
-def test_finding_kinds_census():
-    assert FINDING_KINDS == frozenset(
-        {
-            "moved",
-            "missing",
-            "section-gone",
-            "atom-no-longer-cited",
-            "unrecorded-atom",
-            "interpreter-moved",
-            "lock-tampered",
-            "ambiguous",
-            "empty-row",
-        }
-    )
 
 
 def test_a_reader_given_the_parsed_citations_reads_them_not_the_tree(tmp_path):

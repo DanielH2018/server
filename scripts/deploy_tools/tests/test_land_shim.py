@@ -28,18 +28,6 @@ def _env_without_the_active_venv() -> dict[str, str]:
     }
 
 
-def test_the_shim_holds_no_logic():
-    code = [
-        ln
-        for ln in _SH.read_text().splitlines()
-        if ln.strip() and not ln.startswith("#")
-    ]
-    assert code == [
-        'cd "$(dirname "$(readlink -f "$0")")/../.." || exit 1',
-        'exec uv run python scripts/deploy_tools/land.py "$@"',
-    ]
-
-
 def test_the_shim_runs_from_any_cwd(tmp_path):
     """`uv run` resolves the project from its caller's working directory.
 

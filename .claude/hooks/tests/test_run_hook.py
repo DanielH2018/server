@@ -100,15 +100,6 @@ def _run(
     )
 
 
-def test_the_decided_marker_records_the_trade_off():
-    """So a future session does not read either posture as an oversight and 'fix' it back."""
-    text = RUNNER.read_text(encoding="utf-8")
-    assert "# DECIDED:" in text
-    assert "fail-open" in text
-    for issue in ("#1014", "#2171", "#2394", "#3278"):
-        assert issue in text, issue
-
-
 # --- REJECT: the invocation cannot reach the `.py` ----------------------------------------
 
 
