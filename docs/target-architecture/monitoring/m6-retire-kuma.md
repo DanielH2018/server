@@ -2269,8 +2269,11 @@ uv run python scripts/diagnostics/probe.py metric 'count by (job) (homelab_check
 # Once A6-1 lands, and again after A6-7r: both gate rows export, and the difference is 0
 uv run python scripts/diagnostics/probe.py metric 'homelab_check_success{job="monitor-bridge",check=~"wan_reachable|b2_reachable"}'
 uv run python scripts/diagnostics/probe.py metric 'count(homelab_check_success{job="monitor-bridge"}) - on() homelab_check_rows{job="monitor-bridge"}'
-# Before C-1: exactly one series, the status-page sync tile
+# Before C-1a, both halves of the gate: exactly one series, the status-page sync tile
 uv run python scripts/diagnostics/probe.py metric 'count by (monitor_type, monitor_name) (monitor_status)'
+# and only status-page-sync.json declared at the commit prod holds, which this names
+kubectl -n flux-system get ocirepository homelab -o 'jsonpath={.status.artifact.metadata.org\.opencontainers\.image\.revision}'
+git show <commit>:ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2 | grep -E '\.json: \|$' | grep -vE '^ +(discord|email|tag-[a-z]+)\.json:'
 # Phase B: the health gate reads the alert plane
 uv run python scripts/diagnostics/probe.py health observability
 uv run python scripts/diagnostics/probe.py monitors
