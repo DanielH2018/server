@@ -129,7 +129,7 @@ raw response, and what it prints lands in the transcript.
 
 ### `monitors` answers "what is down"
 
-`monitors` reads four sources, in order:
+`monitors` reads three sources, in order:
 
 1. `ALERTS{alertstate="firing"}`, grouped by severity and `service`. A non-shadow `critical`
    or `warning` alert exits 1. `info` alerts print as notes, and shadow alerts print under their
@@ -137,10 +137,7 @@ raw response, and what it prints lands in the transcript.
 2. The active alerts Alertmanager holds that `ALERTS` lacks, marked `(Alertmanager only)` and
    counted the same way. The `loki-homelab` ruler sends its alerts, such as
    `HostOutOfMemoryKill`, to Alertmanager directly, so `ALERTS` never carries them.
-3. The Kuma tiles that are not up (`monitor_status{job="uptime-kuma"} != 1`). Kuma still pages
-   for the batches that have not cut over, so this arm stays until M6's C-1 deletes the scrape.
-   An empty result is clean because `KumaDown` fires on a dead or absent scrape.
-4. Alertmanager's active silences.
+3. Alertmanager's active silences.
 
 **A result without the Watchdog alert exits 75.** Rule evaluation always fires the Watchdog, so
 an empty `ALERTS` without it is a dead evaluator, not a healthy estate.

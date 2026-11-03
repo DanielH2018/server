@@ -363,7 +363,7 @@ def test_backup_health_a_failing_mktemp_is_named_in_the_pushed_message(
 
 
 def test_backup_health_pings_only_its_own_healthchecks_slug(tmp_path, logger_calls):
-    """M6 batch B1's Cutover-2 removed the second ping. `KumaDown` watches Kuma now, so the
+    """M6 batch B1's Cutover-2 removed the second ping, so the
     script sends the one `longhorn-backup-health` ping and nothing that names `uptime-kuma-alive`
     or reads `KUMA_PUSH_OK`."""
     proc, verdict, curl_calls = _run_rendered_shim(

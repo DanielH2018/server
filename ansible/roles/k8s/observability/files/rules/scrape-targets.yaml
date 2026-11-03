@@ -199,19 +199,6 @@ groups:
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
       - alert: ScrapeTargetDown
-        expr: up{job="uptime-kuma"} == 0
-        for: 10m
-        labels:
-          severity: warning
-          service: uptime-kuma
-        annotations:
-          summary: Prometheus cannot scrape the {{ $labels.job }} target {{ $labels.instance }}.
-          description: >-
-            {{ $labels.instance }} of job {{ $labels.job }} has failed its scrape for 10
-            minutes, so its exporter is down or unreachable from Prometheus and its series have
-            gone stale. Read the exporter pod's events and log, or the host's unit for a static
-            target.
-      - alert: ScrapeTargetDown
         expr: up{job="home-assistant"} == 0
         for: 10m
         labels:
@@ -316,7 +303,7 @@ groups:
             gone stale. Read the exporter pod's events and log, or the host's unit for a static
             target.
       - alert: ScrapeTargetDown
-        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
+        expr: up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"} == 0
         for: 10m
         labels:
           severity: warning
@@ -511,19 +498,6 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job="uptime-kuma"}[30m]) < 0.7 and resets(up{job="uptime-kuma"}[30m]) >= 2 and min_over_time(max_over_time(up{job="uptime-kuma"}[11m])[30m:1m]) == 1
-        for: 10m
-        labels:
-          severity: warning
-          service: uptime-kuma
-        annotations:
-          summary: Prometheus's scrapes of the {{ $labels.job }} target {{ $labels.instance }} keep failing.
-          description: >-
-            {{ $labels.instance }} of job {{ $labels.job }} failed more than 30% of its scrapes
-            over 30 minutes, failing at least twice and answering in between, so it flaps
-            rather than staying down.
-            Read the host's load and memory, then the exporter pod's restarts and log.
-      - alert: ScrapeTargetFlapping
         expr: avg_over_time(up{job="home-assistant"}[30m]) < 0.7 and resets(up{job="home-assistant"}[30m]) >= 2 and min_over_time(max_over_time(up{job="home-assistant"}[11m])[30m:1m]) == 1
         for: 10m
         labels:
@@ -628,7 +602,7 @@ groups:
             rather than staying down.
             Read the host's load and memory, then the exporter pod's restarts and log.
       - alert: ScrapeTargetFlapping
-        expr: avg_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and resets(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) >= 2 and min_over_time(max_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|uptime-kuma|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[11m])[30m:1m]) == 1
+        expr: avg_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) < 0.7 and resets(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[30m]) >= 2 and min_over_time(max_over_time(up{job!~"prometheus|otel-collector|otel-collector-internal|kube-state-metrics|loki-internal|tempo-internal|alertmanager|loki-homelab|alloy|alloy-pi|node-pi|dockerd-pi|containerd-pi|node|gpu|deploy-pipeline|monitor-bridge|autofix-bridge|flux|crowdsec|crowdsec-jobs|crowdsec-node-agents|crowdsec-traefik-agent|crowdsec-authelia-agent|traefik-k8s|speedtest|pihole|home-assistant|nut|valheim-stats|terraria-stats|longhorn|coredns-host|exportarr|kubernetes-cadvisor|kubernetes-kubelet|kubernetes-kubelet-resource|kubernetes-apiserver|etcd|blackbox-ingress|blackbox-extra|blackbox-pi-ports"}[11m])[30m:1m]) == 1
         for: 10m
         labels:
           severity: warning

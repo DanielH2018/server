@@ -211,9 +211,8 @@ tests:
         exp_alerts: []
 
   # M6 batch B1. The zero-series case: no input at all, so no k3s cron has written a verdict
-  # inside its deadline, and no Kuma `up` series exists. Each NotReporting rule fires through
-  # absent_over_time, once the longest deadline (90000s) has passed, and KumaDown fires on its
-  # absent() arm. The Failed rules read a series and stay quiet.
+  # inside its deadline. Each NotReporting rule fires through absent_over_time, once the
+  # longest deadline (90000s) has passed. The Failed rules read a series and stay quiet.
   - interval: 10m
     input_series: []
     alert_rule_test:
@@ -307,20 +306,6 @@ tests:
       - eval_time: 26h
         alertname: LiveDriftCheckFailed
         exp_alerts: []
-      - eval_time: 26h
-        alertname: KumaDown
-        exp_alerts:
-          - exp_labels:
-              job: uptime-kuma
-              severity: critical
-              service: uptime-kuma
-            exp_annotations:
-              summary: Uptime Kuma has stopped serving /metrics.
-              description: >-
-                Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has
-                no `up` series at all. Kuma still pages every check that has not moved to an alert
-                rule, so a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get
-                pods` and the pod's log.
 
   # M6 batch B1. Every check turns red from minute 3 while its file stays fresh. Each Failed
   # rule fires at once and no NotReporting rule does.
@@ -543,32 +528,6 @@ tests:
       - eval_time: 26h
         alertname: LiveDriftCheckNotReporting
         exp_alerts: []
-
-  # M6 batch B1. KumaDown's up arm: the scrape fails from minute 2, and the rule fires after
-  # its 5 minutes. While Kuma is up it stays quiet.
-  - interval: 1m
-    input_series:
-      - series: 'up{instance="uptime-kuma:3001", job="uptime-kuma"}'
-        values: '1x2 0x10'
-    alert_rule_test:
-      - eval_time: 5m
-        alertname: KumaDown
-        exp_alerts: []
-      - eval_time: 9m
-        alertname: KumaDown
-        exp_alerts:
-          - exp_labels:
-              instance: uptime-kuma:3001
-              job: uptime-kuma
-              severity: critical
-              service: uptime-kuma
-            exp_annotations:
-              summary: Uptime Kuma has stopped serving /metrics.
-              description: >-
-                Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has
-                no `up` series at all. Kuma still pages every check that has not moved to an alert
-                rule, so a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get
-                pods` and the pod's log.
 
   # A short gap: one, then two failed scrapes mark the series stale between fresh timestamps,
   # as a node-exporter roll does. A bare absent() would fire at each stale minute; the

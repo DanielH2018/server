@@ -133,9 +133,7 @@ def _forward_auth_intercepted(app, status):
     )
 
 
-# §9.1: the alert plane. §9.2: Uptime-Kuma's scrape, until M6's C-1 deletes it.
-# Both are read through Prometheus: Kuma 2.x mints its API key over Socket.IO only, so there
-# is no REST route to ask, and the scrape is the observable consequence.
+# §9.1: the alert plane, read through Prometheus.
 
 
 def _cluster_prom_query(promql):
@@ -180,23 +178,6 @@ def check_alert_plane():
             "Watchdog is not firing — rule evaluation is down, so no alert can fire",
         )
     return OK, f"{len(up)} Alertmanager target(s) up, Watchdog firing"
-
-
-def check_kuma_scrape():
-    """§9.2 — a stale prometheus_kuma_api_key leaves the uptime-kuma target at 401.
-
-    Reads `up{job=...}` rather than the targets API: the cluster route only admits /api/v1/query
-    paths, and up==0 is the same evidence the target listing gave.
-    """
-    status, body = _cluster_prom_query('up{job="uptime-kuma"}')
-    if status != 200:
-        return FAIL, f"cluster prometheus query returned {status}"
-    result = json.loads(body).get("data", {}).get("result", [])
-    if not result:
-        return SKIP, "no uptime-kuma scrape target configured"
-    if float(result[0]["value"][1]) == 1:
-        return OK, "uptime-kuma scrape target up"
-    return FAIL, "uptime-kuma target down (stale prometheus_kuma_api_key?)"
 
 
 # §9.3: *arr + jellyfin API keys
@@ -358,7 +339,6 @@ def check_authelia():
 
 CHECKS = [
     ("9.1", "Alert plane (Alertmanager scraped, Watchdog firing)", check_alert_plane),
-    ("9.2", "Kuma API key (prometheus scrape)", check_kuma_scrape),
     *[
         ("9.3", f"{app} API key", (lambda a: lambda: check_arr_key(a))(app))
         for app in ("sonarr", "radarr", "prowlarr")

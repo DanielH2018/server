@@ -205,10 +205,8 @@ pages once (`ansible/tests/services/test_alertmanager_blackbox_inhibit.py`).
 `PiHostDown` holds back `PiPortDead`, so a dead Pi pages as the host and not once per published
 port (`ansible/tests/services/test_alertmanager_pi_inhibit.py`). The inhibit has no `equal` list,
 because the two alerts share no `instance`, and the estate has one Pi.
-`KumaDown`'s `up == 0` arm holds back `ScrapeTargetDown` for the same `job` and `instance`, so a
-dead Kuma pages once, as a critical (`ansible/tests/services/test_alertmanager_kuma_inhibit.py`).
-`KumaDown` and the five k3s-cron rule pairs in `files/rules/host-checks.yaml` page since M6's
-batch B1 Cutover-1b.
+The five k3s-cron rule pairs in `files/rules/host-checks.yaml` page since M6's batch B1
+Cutover-1b.
 `files/rules/initial-setup-checks.yaml`, `other-setup-checks.yaml` and `pod-producers.yaml` hold
 the rules that replaced the Kuma tiles of M6 batches B2, B4 and B6b, and they page since the
 combined Cutover-1b. `EtcdRestoreDrillFailed` is critical, so a failed monthly drill pages Discord

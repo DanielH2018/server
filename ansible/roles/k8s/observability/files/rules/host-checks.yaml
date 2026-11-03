@@ -278,25 +278,6 @@ groups:
             textfile collector, so nothing is watching live-object drift. Read the
             `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
             /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
-      # M6 BATCH B1, LIVE SINCE ITS CUTOVER-1B, which also added the inhibit on
-      # ScrapeTargetDown{job="uptime-kuma"} (alertmanager-secret.yaml.j2): a dead Kuma pages
-      # once, as this critical after 5 minutes, and holds the 10-minute scrape warning.
-      # Prometheus scrapes Kuma's Service directly, so Authelia is not in this path. A 200
-      # from /metrics is weaker than the `uptime-kuma-alive` ping it replaces, which proved
-      # Kuma accepted a push. It goes in C-1a, before Kuma is removed.
-      - alert: KumaDown
-        expr: up{job="uptime-kuma"} == 0 or absent(up{job="uptime-kuma"})
-        for: 5m
-        labels:
-          severity: critical
-          service: uptime-kuma
-        annotations:
-          summary: Uptime Kuma has stopped serving /metrics.
-          description: >-
-            Prometheus's scrape of the uptime-kuma Service failed for 5 minutes, or the job has no
-            `up` series at all. Kuma still pages every check that has not moved to an alert rule, so
-            a dead Kuma leaves those checks silent. Read `kubectl -n uptime-kuma get pods` and the
-            pod's log.
       # M6 BATCH B9 (#6168). The weekly AIDE and rkhunter scans run on every host and write the
       # textfile beside their Kuma push, and these rules replaced the "AIDE Integrity" and
       # "rkhunter Scan" tiles that Cutover-1a deleted. Each host gets a Failed and a NotReporting
