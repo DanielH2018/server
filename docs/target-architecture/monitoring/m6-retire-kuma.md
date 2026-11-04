@@ -1875,9 +1875,10 @@ here. C-1 waits for the operator's acceptance.
       `k8s_host_files/tasks/uptime-kuma.yml`, the absent arm for the autokuma-claims staging
       directory, goes in the same PR with its import, once a read-only `ls` on daniel-box
       finds no such directory. After the promotion, the operator deletes with kubectl
-      (**operator-only**) the objects no prune removes: the two claims, and either Secret
-      that a `kubectl get secret` still finds. No promotion re-creates them, because the
-      entry is gone. C-6's PR quotes exit criterion 1's `kubectl get` returning nothing.
+      (**operator-only**) the objects no prune removes: the two claims, either Secret
+      that a `kubectl get secret` still finds, and in `flux-system` the `prepull-uptime-kuma-*`
+      Job and ConfigMap that C-1b's dropped prepull Kustomization orphaned. No promotion
+      re-creates them, because the entry is gone. C-6's PR quotes exit criterion 1's `kubectl get` returning nothing.
 3. **C-3, the plumbing**, in two PRs:
     - **C-3a, the push libraries.** Delete `kuma-push-lib.sh` with the `kuma-push` host
       component that packages it, and `hosts/lib/kuma_push.py` with its re-export from
