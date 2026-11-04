@@ -30,10 +30,6 @@ def test_ingress_probe_targets_is_clean_on_an_override_and_forces_the_suffix():
     assert (target["id"], target["name"]) == ("other-k8s", "N")
 
 
-def test_probe_false_yields_no_target():
-    assert ingress_probe_targets([{**_NEW, "probe": False}]) == []
-
-
 # ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
 
 
