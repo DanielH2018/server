@@ -36,8 +36,8 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/kuma-push-lib.sh || {
-  logger -t disk-health "kuma-push-lib.sh missing — run initial_setup on this host"
+source /usr/local/lib/homelab-check-lib.sh || {
+  logger -t disk-health "homelab-check-lib.sh missing — run initial_setup on this host"
   exit 1
 }
 
