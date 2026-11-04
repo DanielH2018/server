@@ -23,7 +23,8 @@ k8s_autodeploy_reason: "parked at replicas 0 — an auto-applied image bump woul
 # deliberate `spec.replicas: 0` as intentional, so the SessionStart banner stays quiet.
 #
 # To bring it back: set this to 1, point the music mount at a real library on the media volume,
-# flip k8s_autodeploy, and add a Kuma monitor. A monitor added now would be permanently red.
+# flip k8s_autodeploy, and delete the containers_list entry's `probe: false` so the
+# blackbox-ingress job derives its ingress probe. A probe added now would fire forever.
 #
 # This role deliberately declares no `k8s_autodeploy_snapshot_pvcs`:
 # test_every_snapshot_role_restores_its_own_replicas requires replicas >= 1 from roles that do,

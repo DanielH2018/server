@@ -21,14 +21,14 @@ conventions.
 - **Every http module sends `Accept: */*`.** Authelia answers an SSO-gated name with 302 only to a
   request whose Accept header admits it, and with 401 to one that carries none. blackbox sends
   no Accept unless the module sets one. Without the header, `http_sso_302` reads all 23 SSO
-  targets as down while Kuma reads them up. The same holds for M6 batch B8's `http_401` and
+  targets as down while they serve. The same holds for M6 batch B8's `http_401` and
   keyword modules. ENFORCED:
   `ansible/tests/services/test_blackbox_exporter_modules.py`.
-- **Names resolve exactly as Kuma's do.** The pod's `hostAliases` come from the shared
-  `ingress_host_aliases()` macro in `ansible/templates/ingress-host-aliases.yml.j2`, which
-  uptime-kuma's Deployment calls too. Every ingress name is pinned to the ingress VIP, so a
+- **Ingress names resolve pinned to the VIP.** The pod's `hostAliases` come from the
+  `ingress_host_aliases()` macro in `ansible/templates/ingress-host-aliases.yml.j2`, and this
+  role's Deployment is its only caller. Every ingress name is pinned to the ingress VIP, so a
   CoreDNS or Pi-hole fault stays out of the probe path. A routed `containers_list` change
-  therefore rolls this pod as well as Kuma's.
+  therefore rolls this pod.
 - **No deploy-order edge against `observability`.** The entry carries no `depends_on`, and no
   prose states an order between this role and Prometheus. An edge onto it would move
   `observability` last in the derived order, and under Flux it would hold every pager change
