@@ -464,6 +464,9 @@ fi
 # of the average one. Only an entry more than 1.5x from what it measured is rewritten, so noise
 # inside that band leaves no diff and a run does not churn the table.
 #
+# A row CI's gate is certain to reject stays as recorded, and that leaves no diff either, so a
+# successful run prints the step's report to the journal. Not `alert`: PUSH_MSG holds failures.
+#
 # Same degrade-not-abort handling and its own `timeout`, for the reasons the step above gives.
 REFRESH_MSG="$(timeout 600 "$UV" run --frozen python scripts/dev/pytest_shard.py \
   --refresh-drifted 8 2>&1)"
@@ -473,6 +476,8 @@ if [ "$REFRESH_RC" -ne 0 ]; then
     "$REFRESH_MSG" | tr '\n' ' ' | tail -c 300)"
   DEGRADED_MSG="refreshing drifted shard weights failed (exit ${REFRESH_RC})"
   GENERATORS_OK=0
+else
+  printf '%s\n' "$REFRESH_MSG"
 fi
 
 # REFRESH THE RUNNER-SECONDS TABLE THE CI SHARDS ARE PACKED ON, from CI's own logs (#6178). The
