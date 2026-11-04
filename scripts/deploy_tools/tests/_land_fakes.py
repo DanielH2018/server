@@ -222,8 +222,9 @@ class Fakes:
     # `tools.owners_at`: each tag that sets `owner` at a ref, by ref. A ref absent here has
     # none. An exception is raised in place of a map.
     owners: dict[str, dict[str, str] | Exception] = field(default_factory=dict)
-    # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here has
-    # none. An exception is raised in place of a set.
+    # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here keeps
+    # an entry for every tag `owners` names at any ref, so a test retires a tag only by saying
+    # so. An exception is raised in place of a set.
     k8s_tags: dict[str, set[str] | Exception] = field(default_factory=dict)
     # `tools.kustomization_exists`: the Kustomizations kubectl finds in flux-system. An
     # exception is raised for every read.
@@ -454,7 +455,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
 
     def k8s_tags_at(primary, ref):
         calls.append(("k8s_tags_at", (ref,), {"cwd": primary}))
-        answer = f.k8s_tags.get(ref, set())
+        if ref not in f.k8s_tags:
+            return {t for m in f.owners.values() if isinstance(m, dict) for t in m}
+        answer = f.k8s_tags[ref]
         if isinstance(answer, Exception):
             raise answer
         return answer

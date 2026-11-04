@@ -350,10 +350,10 @@ def test_a_pr_touching_no_cluster_file_and_no_tag_adds_no_wait(land_run, path):
 # -- the handback refusal --------------------------------------------------------------------
 
 
-def _handback(landing, kustomizations, head_tags: set[str] | Exception | None = None):
+def _handback(landing, kustomizations, k8s_tags=None):
     """A PR whose head removes `owner: released` from bento-pdf, green and left to merge.
 
-    `head_tags` is what the k8s entry read answers at the head; None keeps bento-pdf's entry.
+    `k8s_tags` is the fake's answer for the k8s entry read; None keeps bento-pdf's entry.
     """
     ln, calls = landing(
         Fakes(
@@ -364,7 +364,7 @@ def _handback(landing, kustomizations, head_tags: set[str] | Exception | None = 
                 ]
             },
             owners={BASE: {"bento-pdf": "released"}, HEAD: {}},
-            k8s_tags={HEAD: {"bento-pdf"} if head_tags is None else head_tags},
+            k8s_tags=k8s_tags or {},
             kustomizations=kustomizations,
         )
     )
@@ -400,7 +400,7 @@ def test_an_unreadable_kustomization_refuses_the_handback(landing):
 
 def test_a_retirement_merges_without_reading_its_kustomization(landing, capsys):
     """The second PR of a retirement removes the whole entry, while the Kustomization exists."""
-    ln, calls = _handback(landing, {"bento-pdf"}, head_tags=set())
+    ln, calls = _handback(landing, {"bento-pdf"}, k8s_tags={HEAD: set()})
     merge.await_merge(ln)
     assert "kustomization_exists" not in _names(calls)
     assert [c[1][3] for c in calls if c[0] == "gh"] == [
@@ -412,7 +412,7 @@ def test_a_retirement_merges_without_reading_its_kustomization(landing, capsys):
 def test_an_unreadable_entry_read_refuses_the_merge(landing):
     """No Kustomization exists, so only the failed read of the head's entries can refuse."""
     unreadable = subprocess.CalledProcessError(128, "git show")
-    ln, calls = _handback(landing, set(), head_tags=unreadable)
+    ln, calls = _handback(landing, set(), k8s_tags={HEAD: unreadable})
     with pytest.raises(Outcome) as exc:
         merge.await_merge(ln)
     assert exc.value.rc == 1
@@ -455,7 +455,6 @@ def test_a_handback_refused_through_land_sh_never_reaches_deploy_sh(land_run):
             },
         },
         owners={BASE: {"bento-pdf": "released"}, HEAD: {}},
-        k8s_tags={HEAD: {"bento-pdf"}},
         kustomizations={"bento-pdf"},
     )
     rc, out, _, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
