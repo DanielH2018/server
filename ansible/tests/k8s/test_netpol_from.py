@@ -233,5 +233,30 @@ def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
         for caller in fence["callers"]
         if caller not in labels
     }
-    # M6's C-2a deletes this grant. C-1b deleted the pod, and the grant admits nothing until then.
-    assert unknown == {("ical-proxy", "uptime-kuma")}
+    assert unknown == set()
+
+
+def test_every_bespoke_policy_peer_is_a_label_some_rendered_pod_carries(
+    verify_pod_labels,
+):
+    """A same-namespace peer naming no pod admits nothing, and is a grant its workload outlived."""
+    labels = verify_pod_labels | {
+        (pod_template(doc).get("metadata") or {}).get("labels", {}).get("app")
+        for _role, _template, doc in rendered_docs()
+    }
+    peers = {
+        (doc["metadata"]["name"], peer["podSelector"]["matchLabels"]["app"])
+        for role, _template, doc in rendered_docs()
+        if role == "netpol-baseline" and doc.get("kind") == "NetworkPolicy"
+        for rule in doc["spec"].get("ingress") or []
+        for peer in rule.get("from") or []
+        if "namespaceSelector" not in peer
+        and "app" in (peer.get("podSelector") or {}).get("matchLabels", {})
+    }
+    # Named so the walk cannot go empty and pass on nothing.
+    assert {
+        ("loki-homelab", "alloy"),
+        ("mosquitto", "blackbox-exporter"),
+        ("nut", "blackbox-exporter"),
+    } <= peers
+    assert {peer for peer in peers if peer[1] not in labels} == set()

@@ -66,19 +66,11 @@ spec:
       ports:
         - port: 1883
           protocol: TCP
-    # uptime-kuma's "k3s Mosquitto (VIP)" port monitor (roles/k8s/uptime-kuma's
-    # static-monitors.yaml.j2), found live in the same observation: it connects to the
-    # mosquitto-lan VIP (10.0.0.242:1883) from daniel-server, cross-node from the mosquitto pod
-    # on daniel-box, and arrives as its own real pod IP (10.42.1.182, 360 connections/2h) --
-    # not SNAT'd, because ETP=Local on mosquitto-lan preserves the client address for a
-    # cross-node LoadBalancer hop. This caller is not in the task-5 brief's template; omitting
-    # it would have silently fenced a live Kuma monitor the moment this policy was applied.
-    # blackbox-exporter's `tcp_connect` probe of the same VIP replaces that monitor (M6 batch
-    # B8). It is a pod on either node, so it arrives the same way.
+    # blackbox-exporter's `tcp_connect` probe connects to the mosquitto-lan VIP
+    # (10.0.0.242:1883). It is a pod on either node, and a cross-node hop arrives as its own
+    # real pod IP -- not SNAT'd, because ETP=Local on mosquitto-lan preserves the client
+    # address for a cross-node LoadBalancer hop.
     - from:
-        - podSelector:
-            matchLabels:
-              app: uptime-kuma
         - podSelector:
             matchLabels:
               app: blackbox-exporter
