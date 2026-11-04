@@ -2102,9 +2102,8 @@ The steps merged in this order.
       takes no lock, which is why the earlier draft refused one.
     - **daniel-server owes nothing.** Its armed state and its render of
       `setup-drift-check.sh.j2` do not change, so its reader reads nothing stale.
-    - **The check before D6.5.** On both hosts the setup-drift timer is active, under either
-      name (`systemctl list-timers '*-check-setup-drift*'`, before or after M6's C-3b
-      rename). After the box's first scheduled run, `homelab_check_success{check="setup-drift-check"}`
+    - **The check before D6.5.** On both hosts the setup-drift timer is active
+      (`systemctl list-timers 'kuma-check-setup-drift*'`). After the box's first scheduled run, `homelab_check_success{check="setup-drift-check"}`
       reads 1 for `origin="daniel-box"` and for `origin="daniel-server"`. D6.5 does not open
       until that holds, because D6.5's `NotReporting` arm for the box needs a sample inside
       its deadline.
@@ -2133,7 +2132,7 @@ The steps merged in this order.
       stops the crons, so no rule reads a check that has stopped.
     - **Tasks become `absent` tasks, and only these:**
         - the two timers, through the state variable of their timer imports
-          (`kuma_check_state`, or its name after M6's C-3b);
+          (`check_timer_state`);
         - the three checks' `.prom` files under `/var/lib/node-exporter-textfile/`, which B1
           added;
         - the release-staleness cron;
@@ -2231,8 +2230,8 @@ The steps merged in this order.
            be `backup-health,disk-health,etcd-snapshot`, with the same log redirect as D6.5's
            apply. It quotes the recap and names every `changed` task.
         4. It verifies the state that D6.5's apply made. `systemctl list-unit-files
-           '*-check-manifest-prune*' '*-check-live-drift*'` lists no unit under either
-           timer name (before or after M6's C-3b rename), `/etc/cron.d` and root's crontab
+           'kuma-check-manifest-prune*' 'kuma-check-live-drift*'` lists no unit,
+           `/etc/cron.d` and root's crontab
            hold no release-staleness entry, the four fragments and the three `.prom` files are
            absent, and `homelab_check_success{check="setup-drift-check",origin="daniel-box"}`
            reads 1.
@@ -2586,7 +2585,7 @@ The deletions have red proofs of their own:
 - **D6.5a.** Revert it only while D6.5 is unmerged, or after reverting D6.5, because
   D6.5's arm for the box pages `NotReporting` once the box stops writing. The revert changes
   the key and a test, so the tick applies nothing. The timer's state variable
-  (`kuma_check_state`, or its name after M6's C-3b) follows the list, so the box loses the
+  (`check_timer_state`) follows the list, so the box loses the
   timer once the session runs the same operator-attended `--tags setup_drift` apply as the
   forward PR.
 - **D6.5 and D6.5b.** D6.5 removed host units, B1's six rules and the `.prom` files. To
@@ -3734,7 +3733,7 @@ Nothing is refuted.
   after M6's C-2b, so by D6.5 the tiles are gone and B1's token PR has removed the tokens.
   D6.5 now cites B1, quotes an empty token grep instead of removing tokens, and owes no
   secrets page. It gains the removal of B1's six rules and absent tasks for the three `.prom`
-  files. D6.5b's unit check reads either timer name, because M6's C-3b renames the timers.
+  files. D6.5b's unit check reads the `kuma-check-*` names, which ADR 0026 keeps.
   X2-13's remedy, dropping the checks from M6, would leave three tiles alive at C-1, which
   M6's one-series gate refuses.
 
@@ -3791,6 +3790,6 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   box's arm in B2's rules lands in D6.5, not D6.5a: an `absent_over_time` arm fires at
   `promote` unless the box has already written a sample. Without the template edit, the PR
   routes to no setup role, so D6.5a names a hand apply on daniel-box, as D6-R1-05's
-  correction first said, and daniel-server owes nothing. D6.5a's check reads the timer
-  under either name, because M6's C-3b renames it. Open question 8 is resolved. The C-3b
+  correction first said, and daniel-server owes nothing. D6.5a's check reads the
+  `kuma-check-setup-drift` timer, whose name ADR 0026 keeps. Open question 8 is resolved. The C-3b
   and D6.5 order, part 1 of the issue, is #4609's (PR #4634).
