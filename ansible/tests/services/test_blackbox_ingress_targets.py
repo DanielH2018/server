@@ -22,6 +22,18 @@ from service_tier import in_service_tier
 
 JOB = "blackbox-ingress"
 REQUIRED_SERVICES = frozenset({"homepage", "authelia"})
+OPTED_OUT = frozenset(
+    {
+        "crowdsec",
+        "ical-proxy",
+        "jellyfin",
+        "livesync",
+        "loki-homelab",
+        "navidrome",
+        "pihole",
+        "scrutiny",
+    }
+)
 _NEW = {"name": "newsvc", "platform": "k8s", "hostname": "newsvc", "port": 8080}
 
 
@@ -60,8 +72,28 @@ def unprobed_hostnames(
     ]
 
 
+def entries_with_the_retired_key(containers_list: list[dict]) -> list[str]:
+    """The entries still carrying `kuma:`, which the filter ignores, so its opt-out is lost."""
+    return [entry["name"] for entry in containers_list if "kuma" in entry]
+
+
 def _entries() -> list[dict]:
     return copy.deepcopy(host_context()["containers_list"])
+
+
+def test_no_entry_carries_the_retired_kuma_key_is_clean():
+    assert entries_with_the_retired_key(_entries()) == []
+
+
+def test_an_entry_with_the_retired_kuma_key_is_flagged():
+    assert entries_with_the_retired_key([{**_NEW, "kuma": False}]) == ["newsvc"]
+
+
+def test_the_opted_out_entries_render_no_target():
+    routed = {e["name"] for e in _entries() if e.get("hostname")}
+    assert OPTED_OUT <= routed, sorted(OPTED_OUT - routed)
+    services = {labels["service"] for labels in job_targets().values()}
+    assert not OPTED_OUT & services, sorted(OPTED_OUT & services)
 
 
 def test_the_targets_are_the_filters_tiles_string_for_string():
