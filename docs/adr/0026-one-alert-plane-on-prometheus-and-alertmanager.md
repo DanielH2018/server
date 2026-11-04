@@ -85,9 +85,6 @@ Every check pages through Alertmanager, and Uptime Kuma is retired.
 - **A fixture tag in a scratch namespace for the health-gate drill.** `probe.py health`
   renders the tag's role, and a scratch tag has no role. It would also need the soak to
   exclude a `drill` label, which M6 Open question 4 rules out. The drill uses littlelink.
-- **A merge gate on C-3b.** It depends on a session reading `gitops_state.py` at the right
-  moment, and it still misses an apply that runs late. C-3b removes the legacy units in both
-  arms of the task file instead.
 
 ## Consequences
 
