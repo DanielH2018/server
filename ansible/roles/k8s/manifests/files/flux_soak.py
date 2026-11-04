@@ -13,7 +13,10 @@ notification-controller posts as `flux/soak`. In order, it:
    fleet;
 3. waits until every Kustomization in the set reads Ready with `lastAppliedOriginRevision`
    naming R (D5 Open question 19), and fails naming each one still pending at the deadline.
-   Each poll re-runs step 1's check, so the Job exits 1 once `homelab` stops holding R;
+   It prints the pending names whenever they change. Each poll takes the set from a fresh
+   list and also waits on the root, because that list settles only once the root has applied
+   and pruned R's Kustomizations. Each poll re-runs step 1's check, so the Job exits 1 once
+   `homelab` stops holding R;
 4. waits W past the latest first Ready among the pods R created, then fails on a restart after
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
    alert activated after T0.
@@ -42,7 +45,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
-from changed_set import changed_set
+from changed_set import ROOT, changed_set
 from flux_job_connect import Request, open_url
 
 API = "https://kubernetes.default.svc"
@@ -201,10 +204,10 @@ def read_digests(reads: Reads, source: Mapping) -> tuple[object, str]:
         return None, f"OCIRepository {name}'s artifact holds no readable {DIGESTS_FILE}"
 
 
-def scope_of(
-    reads: Reads, inputs: Inputs, sources: Mapping[str, Mapping], kustomizations: list
-) -> Scope:
-    """The Kustomizations and services R changed, widening to the fleet when a file fails."""
+def read_both_digests(
+    reads: Reads, inputs: Inputs, sources: Mapping[str, Mapping]
+) -> tuple[object, object, str]:
+    """R's and the base's `digests.json`, either one None, and why it cannot be used."""
     new, new_why = read_digests(reads, sources[SOURCE])
     base = sources.get(BASE_SOURCE)
     if base is None:
@@ -217,6 +220,11 @@ def scope_of(
         old, old_why = None, f"OCIRepository {BASE_SOURCE} already names R"
     else:
         old, old_why = read_digests(reads, base)
+    return new, old, new_why or old_why
+
+
+def scope_of(inputs: Inputs, digests: tuple, kustomizations: list) -> Scope:
+    """The Kustomizations and services R changed, widening to the fleet when a file fails."""
     depends_on = {
         k["metadata"]["name"]: [d["name"] for d in k["spec"].get("dependsOn") or []]
         for k in kustomizations
@@ -224,10 +232,11 @@ def scope_of(
     suspended = {
         k["metadata"]["name"] for k in kustomizations if k["spec"].get("suspend")
     }
+    new, old, unread = digests
     changed = changed_set(new, old, depends_on, suspended)
     names = changed.names - {SOAK}
     services = {strip(name) for name in names} & set(inputs.services)
-    return Scope(frozenset(names), frozenset(services), new_why or old_why)
+    return Scope(frozenset(names), frozenset(services), unread)
 
 
 def strip(name: str) -> str:
@@ -252,27 +261,43 @@ def pending(kustomizations: list, names: Iterable[str], revision: str) -> list[s
     )
 
 
-def await_ready(
-    reads: Reads, inputs: Inputs, names: Iterable[str], deadline: float
-) -> None:
+def read_sources(reads: Reads, revision: str) -> tuple[dict, float]:
+    """The OCIRepositories and T0, once `homelab` holds R; SoakError otherwise."""
+    sources = {s["metadata"]["name"]: s for s in reads.api(OCIREPOSITORIES)["items"]}
+    if SOURCE not in sources:
+        raise SoakError(f"OCIRepository {SOURCE} does not exist")
+    return sources, anchor(sources[SOURCE], revision)
+
+
+def await_ready(reads: Reads, inputs: Inputs, digests: tuple, deadline: float) -> Scope:
+    """The settled scope, once it and the root all read Ready at R.
+
+    `digests.json` keys no reserved-suffix name, so the live list decides those. It holds a
+    name R removes until the root prunes it and lacks a name R adds until the root applies
+    it, so a scope is final only once the root reads Ready at R.
+
+    Raises:
+        SoakError: the deadline passed, or `homelab` stopped holding R.
+    """
+    logged: list[str] = []
     while True:
-        left = pending(reads.api(KUSTOMIZATIONS)["items"], names, inputs.revision)
+        kustomizations = reads.api(KUSTOMIZATIONS)["items"]
+        scope = scope_of(inputs, digests, kustomizations)
+        left = pending(kustomizations, scope.kustomizations | {ROOT}, inputs.revision)
         if not left:
-            return
+            return scope
         if reads.clock() >= deadline:
             raise SoakError(
                 f"Kustomizations not Ready at R by the deadline: {', '.join(left)}"
             )
+        if left != logged:
+            print(f"soak: waiting for Ready at R: {', '.join(left)}", file=sys.stderr)
+            logged = left
         # A reset moves `homelab` off R, and the Kustomizations then apply another revision,
         # so none of them would ever name R. kustomize-controller holds the next promotion's
         # health check behind this Job (#5704), so the Job ends itself rather than wait out
         # its deadline.
-        sources = {
-            s["metadata"]["name"]: s for s in reads.api(OCIREPOSITORIES)["items"]
-        }
-        if SOURCE not in sources:
-            raise SoakError(f"OCIRepository {SOURCE} does not exist")
-        anchor(sources[SOURCE], inputs.revision)
+        read_sources(reads, inputs.revision)
         reads.sleep(POLL_SECONDS)
 
 
@@ -475,18 +500,17 @@ def judge_alerts(reads: Reads, scope: Scope, t0: float, verdict: Verdict) -> Non
 def soak(reads: Reads, inputs: Inputs) -> Verdict:
     """The soak's verdict on R. Raises SoakError when it cannot reach one."""
     start = reads.clock()
-    sources = {s["metadata"]["name"]: s for s in reads.api(OCIREPOSITORIES)["items"]}
-    if SOURCE not in sources:
-        raise SoakError(f"OCIRepository {SOURCE} does not exist")
-    t0 = anchor(sources[SOURCE], inputs.revision)
-    scope = scope_of(reads, inputs, sources, reads.api(KUSTOMIZATIONS)["items"])
+    sources, t0 = read_sources(reads, inputs.revision)
+    digests = read_both_digests(reads, inputs, sources)
+    scope = scope_of(inputs, digests, reads.api(KUSTOMIZATIONS)["items"])
     if scope.widened:
         print(f"soak: scope widened to the fleet: {scope.widened}", file=sys.stderr)
     verdict = Verdict()
+    if scope.services:
+        scope = await_ready(reads, inputs, digests, start + inputs.wait_seconds)
     if not scope.services:
         print("soak: R changes no service; nothing to judge")
         return verdict
-    await_ready(reads, inputs, scope.kustomizations, start + inputs.wait_seconds)
     namespaces = _namespaces(inputs, scope)
     first = workload_pods(reads, inputs, namespaces, t0)
     before = {pod["metadata"].get("uid"): _restarts(pod) for pod in first.values()}

@@ -109,6 +109,7 @@ class World:
             kustomization("authelia"),
             kustomization("sonarr"),
             kustomization(flux_soak.SOAK),
+            kustomization("homelab"),
         ]
         self.pods = {"authelia": [pod("authelia", "authelia-1")], "media": []}
         self.replicasets = {}
