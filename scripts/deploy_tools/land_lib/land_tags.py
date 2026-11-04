@@ -220,6 +220,7 @@ def plane_note(
     quiet=(),
     narrow_tags: dict[str, frozenset[str]] | None = None,
     roles_root=None,
+    role_dirs: frozenset[str] | None = None,
 ) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
@@ -253,7 +254,8 @@ def plane_note(
     clear command included: `deploy_defer.record` writes no `manual_plane` line for it.
 
     `roles_root` is the role tree `land_shared.shared_roles` checks for a deleted role, for a
-    test that needs one present; `None` reads the repo's own.
+    test that needs one present; `None` reads the repo's own. `role_dirs` is the role
+    directories at the merge commit, which `shared_roles` reads in place of `roles_root`.
     """
     files = list(files)
     quiet = set(quiet)
@@ -266,8 +268,12 @@ def plane_note(
     # unmeasured as a tag list. A change reaching no rendered manifest never gets here:
     # `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the
     # report, because an unattended tick parking a range is a different cost.
-    expanded = shared_caller_tags(files, declared, roles_root)
-    shared = [r for r in shared_roles(files, declared, roles_root) if not expanded[r]]
+    expanded = shared_caller_tags(files, declared, roles_root, role_dirs=role_dirs)
+    shared = [
+        r
+        for r in shared_roles(files, declared, roles_root, role_dirs)
+        if not expanded[r]
+    ]
     if shared:
         # Passing ONLY the shared half. k8s_remediation appends a scoped `--tags` line for
         # any deployable role it is given, and land.sh has already deployed those itself.

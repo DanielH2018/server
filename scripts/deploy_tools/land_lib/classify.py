@@ -80,10 +80,11 @@ def pr_range(ln: Landing) -> str:
 
 def _owed_to_a_hand(
     ln: Landing, paths: list[str], recorded: str, quiet: set[str]
-) -> tuple[set[str] | None, list[str], str]:
-    """The tags declared at the merge commit, and the plane note over the paths a hand owes.
+) -> tuple[set[str] | None, frozenset[str] | None, list[str], str]:
+    """The tags and role directories at the merge commit, and the note over the paths a hand owes.
 
-    Returns `(declared, plane_paths, plane)`: `declared` is None when the read failed.
+    Returns `(declared, role_dirs, plane_paths, plane)`: either of the first two is None when
+    its read failed.
     """
     # WHICH TAGS EXIST is asked of the MERGE COMMIT, not of a checkout. A PR that adds a role
     # and its `containers_list` entry together is absent from every tree until the tick
@@ -99,6 +100,16 @@ def _owed_to_a_hand(
         say(
             f"could not read containers_list at {ln.merge_sha[:8]} — "
             "classifying against this checkout instead"
+        )
+    # WHICH ROLES ARE GONE is asked of the merge commit too. A checkout can hold a directory
+    # for a role the PR deleted, and that role then reads as shared with no caller (#7108).
+    role_dirs = _classified(
+        ln, "role-directory read", ln.tools.role_dirs_at, ln.merge_sha, ln.opts.primary
+    )
+    if role_dirs is None:
+        say(
+            f"could not read the role directories at {ln.merge_sha[:8]} — "
+            "a role this PR deleted may read as shared"
         )
     # A shared role whose change reaches no rendered manifest is live for the next deploy of
     # any caller, so no hand applies it: `manifests_rollout_timeout_default` is read as a
@@ -127,8 +138,9 @@ def _owed_to_a_hand(
         plane_paths,
         declared,
         quiet=quiet,
+        role_dirs=role_dirs,
     )
-    return declared, plane_paths, plane
+    return declared, role_dirs, plane_paths, plane
 
 
 def adopt_cross_role_tables(ln: Landing) -> None:
@@ -208,8 +220,8 @@ def classify(ln: Landing) -> None:
     # landing takes. Leaving it unread keeps the override's meaning -- deploy exactly these
     # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
     # `ci.preflight`'s blockers read over the incoming range.
-    declared, plane_paths, plane = (
-        (None, paths, "")
+    declared, role_dirs, plane_paths, plane = (
+        (None, None, paths, "")
         if ln.resolved_tags
         else _owed_to_a_hand(ln, paths, recorded, quiet)
     )
@@ -218,6 +230,7 @@ def classify(ln: Landing) -> None:
         pr_range=recorded,
         quiet=frozenset(quiet),
         declared=None if declared is None else frozenset(declared),
+        role_dirs=role_dirs,
         plane_paths=tuple(plane_paths),
         plane=plane,
         self_applied=self_applied,
@@ -262,6 +275,7 @@ def classify(ln: Landing) -> None:
             c.shared_caller_tags,
             plane_paths,
             declared,
+            role_dirs=role_dirs,
         )
         # A change confined to the standalone-guard map reaches only the callers whose row
         # moved (#4932); None keeps every caller.
@@ -366,6 +380,7 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
                 cl.declared_set(),
                 quiet=cl.quiet,
                 narrow_tags=narrow,
+                role_dirs=cl.role_dirs,
             )
     except Exception as exc:
         say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")

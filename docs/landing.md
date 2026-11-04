@@ -730,7 +730,10 @@ Four things sit in that position:
   are themselves shared. A `tasks/` change to `volume-snapshot` reaches about 58
   services. A shared-role change reaching no rendered manifest fans out to nothing.
   `deploy.sh --tags <shared role>` performs the same expansion by hand, for every caller, even
-  where the landing narrows (#2717).
+  where the landing narrows (#2717). A role directory the merge commit no longer holds is
+  deleted, not shared, so it is neither deployed nor reported. The landing reads that from
+  the merge commit with `git ls-tree`, because a checkout can predate the merge or keep a
+  deleted role's ignored `__pycache__/` (#7108).
   **`manifests` is the one exception, and only for a change confined to `tasks/` or
   `handlers/`** (#3124). That role acts through the bytes it renders, so such a change moves no
   live object: the landing deploys ONE caller as a smoke test — the cheapest render target, as
