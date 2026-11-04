@@ -229,6 +229,51 @@ def test_an_unreadable_merge_commit_says_so_and_falls_back_to_this_checkout(
     assert (ln.resolved_tags == ["pihole-exporter"]) is registered_here
 
 
+# ── a role directory the merge commit lacks is deleted, not shared (#7108) ──
+
+
+def _role_pr(role: str) -> dict:
+    return {
+        "files": [{"path": f"ansible/roles/k8s/{role}/tasks/main.yml"}],
+        "changedFiles": 1,
+    }
+
+
+def test_a_role_the_merge_commit_deleted_is_not_reported_as_shared(landing):
+    """PR #7101: this checkout still held the role, so it read as a shared role and the
+    landing ended `needs-manual-apply` with a full-deploy remedy for nothing."""
+    assert (REPO / "ansible/roles/k8s/ical-proxy").is_dir()
+    declared = land_tags.declared_tags() - {"ical-proxy"}
+    ln, _ = landing(
+        Fakes(
+            gh_views={"files,changedFiles": _role_pr("ical-proxy")},
+            declared_at=declared,
+            role_dirs_at=frozenset({"k8s/manifests"}),
+        )
+    )
+    _real_derivation(ln)
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.plane == ""
+
+
+def test_a_shared_role_the_merge_commit_holds_is_still_reported(landing):
+    """The must-fire half: the merge commit, not this checkout, says the role exists."""
+    assert not (REPO / "ansible/roles/k8s/orphan-helper").exists()
+    ln, _ = landing(
+        Fakes(
+            gh_views={"files,changedFiles": _role_pr("orphan-helper")},
+            declared_at=land_tags.declared_tags(),
+            role_dirs_at=frozenset({"k8s/manifests", "k8s/orphan-helper"}),
+        )
+    )
+    _real_derivation(ln)
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert "orphan-helper" in ln.plane
+    assert "ansible/deploy.yml" in ln.plane
+
+
 def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
     """The tick runs on ONE host, so `self_applied` alone leaves the rest silent."""
     ln, calls = landing(

@@ -458,6 +458,33 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
         return None
 
 
+def role_dirs_at(ref: str, primary: Path) -> frozenset[str] | None:
+    """The `<plane>/<role>` directories under `ansible/roles/` at `ref`, or None when unreadable.
+
+    An empty listing is None too, for the reason `declared_tags_at` gives: no role existing
+    anywhere is damage, and None makes `land_shared.shared_roles` read this checkout instead.
+    """
+    try:
+        out = git(
+            "ls-tree",
+            "-d",
+            "--name-only",
+            ref,
+            "ansible/roles/k8s/",
+            "ansible/roles/setup/",
+            cwd=primary,
+            check=False,
+        )
+    except subprocess.SubprocessError, OSError:
+        return None
+    if out.returncode:
+        return None
+    dirs = frozenset(
+        line.removeprefix("ansible/roles/") for line in out.stdout.splitlines() if line
+    )
+    return dirs or None
+
+
 # Each basename `read_state` accepts, mapped to the `DeployerSnapshot` field that holds it.
 _SNAPSHOT_FIELDS = {MARKERS[f]: f for f in DeployerSnapshot._fields}
 
@@ -493,6 +520,7 @@ class PlaneNote(Protocol):
 
     `declared` pins the set of tags that exist, the same way `Derive` does — production passes
     the set read at the merge commit, and None falls back to the tree `land_tags` lives in.
+    `role_dirs` is the same answer for which role directories exist.
     """
 
     def __call__(
@@ -503,6 +531,7 @@ class PlaneNote(Protocol):
         *,
         quiet: Iterable[str] = (),
         narrow_tags: dict[str, frozenset[str]] | None = None,
+        role_dirs: frozenset[str] | None = None,
     ) -> str: ...
 
 
@@ -576,6 +605,7 @@ class Tools:
     # deploy rendered. Asked only after a failed gate; it waits out any such deploy first.
     later_deploys: Callable[..., dict[str, str]] = land_rerolls.later_deploys
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
+    role_dirs_at: Callable[[str, Path], frozenset[str] | None] = role_dirs_at
     # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
     # commit a fast-path landing deploys. None sends the caller to the subprocess.
     landing_hosts_at: Callable[[Any, str, Path, Any], dict[str, list[str]] | None] = (

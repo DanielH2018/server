@@ -127,8 +127,20 @@ def _owed_to_a_hand(
         plane_paths,
         declared,
         quiet=quiet,
+        role_dirs=role_dirs_at_merge(ln),
     )
     return declared, plane_paths, plane
+
+
+def role_dirs_at_merge(ln: Landing) -> frozenset[str] | None:
+    """The role directories at the merge commit, so a role the PR deleted is not called shared.
+
+    The checkout land.py runs from can predate the merge and still hold the role (#7108).
+    None, from a failed read, sends `land_shared.shared_roles` to that checkout.
+    """
+    return _classified(
+        ln, "role-directory read", ln.tools.role_dirs_at, ln.merge_sha, ln.opts.primary
+    )
 
 
 def adopt_cross_role_tables(ln: Landing) -> None:
@@ -366,6 +378,7 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
                 cl.declared_set(),
                 quiet=cl.quiet,
                 narrow_tags=narrow,
+                role_dirs=role_dirs_at_merge(ln),
             )
     except Exception as exc:
         say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")

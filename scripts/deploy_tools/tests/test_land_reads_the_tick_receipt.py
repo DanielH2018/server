@@ -189,7 +189,9 @@ def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
     """
     calls_made = []
 
-    def plane_note(paths, declared=None, *, quiet=False, narrow_tags=None):
+    def plane_note(
+        paths, declared=None, *, quiet=False, narrow_tags=None, role_dirs=None
+    ):
         calls_made.append(narrow_tags)
         if narrow_tags:
             raise RuntimeError("the re-render blew up")
@@ -210,7 +212,7 @@ def test_the_narrowed_render_reads_step_1s_inputs_and_only_adds_the_tags(land_ru
     `Classification`, so the only argument that differs is the narrowing (#3665)."""
     seen = []
 
-    def plane_note(paths, declared=None, *, quiet=(), narrow_tags=None):
+    def plane_note(paths, declared=None, *, quiet=(), narrow_tags=None, role_dirs=None):
         seen.append((list(paths), declared, set(quiet), narrow_tags))
         return land_tags.plane_note(
             paths, declared, quiet=quiet, narrow_tags=narrow_tags

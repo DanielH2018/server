@@ -63,7 +63,10 @@ _DEPLOY_RUN_SUBDIRS = frozenset({"tasks", "handlers"})
 
 
 def shared_roles(
-    files, declared: set[str] | None = None, roles_root: _Path | None = None
+    files,
+    declared: set[str] | None = None,
+    roles_root: _Path | None = None,
+    role_dirs: frozenset[str] | None = None,
 ) -> list[str]:
     """The changed role directories that have no `containers_list` entry.
 
@@ -78,6 +81,10 @@ def shared_roles(
     play can run it: an `include_role` still naming it fails with "role not found" rather than
     applying anything. Retiring `k8s/volume-claim` (#3387) otherwise reported a full
     `ansible/deploy.yml` as owed for a role that had no callers left to deploy.
+
+    `role_dirs` is the `<plane>/<role>` directories at the merge commit, which is the tree
+    that decides whether a role is gone. The checkout land.py runs from can predate the merge
+    and still hold the deleted role (#7108). None reads `roles_root` instead.
     """
     declared = declared_tags() if declared is None else declared
     roles_root = ROLES if roles_root is None else roles_root
@@ -87,7 +94,11 @@ def shared_roles(
         at = role_of(p)
         if not role or at is None or is_role_test_path(p):
             continue
-        if (roles_root / at.plane / role).is_dir():
+        if role_dirs is None:
+            present = (roles_root / at.plane / role).is_dir()
+        else:
+            present = f"{at.plane}/{role}" in role_dirs
+        if present:
             roles.add(role)
     return sorted(roles - declared)
 
@@ -97,6 +108,7 @@ def shared_caller_tags(
     declared: set[str] | None = None,
     roles_root: _Path | None = None,
     host_vars: _Path = HOST_VARS,
+    role_dirs: frozenset[str] | None = None,
 ) -> dict[str, set[str]]:
     """For each shared role `files` changes, the tags of the roles that run it.
 
@@ -115,7 +127,7 @@ def shared_caller_tags(
     callers = role_callers()
     return {
         r: narrowed(r, caller_tags(r, declared, callers), files, host_vars)
-        for r in shared_roles(files, declared, roles_root)
+        for r in shared_roles(files, declared, roles_root, role_dirs)
     }
 
 
