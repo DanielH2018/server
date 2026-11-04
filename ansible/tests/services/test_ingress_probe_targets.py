@@ -18,29 +18,26 @@ _NEW = {"name": "newsvc", "platform": "k8s", "hostname": "newsvc", "port": 8080}
 
 @pytest.mark.parametrize(
     "probe",
-    [{"display": "typo for name"}, "off", True],
+    [{"id": "x", "name": "the retired override"}, {}, "off", True, None],
 )
-def test_ingress_probe_targets_is_flagged_on_a_malformed_probe_key(probe):
+def test_ingress_probe_targets_is_flagged_on_a_probe_key_other_than_false(probe):
     with pytest.raises(ValueError, match="newsvc"):
         ingress_probe_targets([{**_NEW, "probe": probe}])
 
 
-def test_ingress_probe_targets_is_clean_on_an_override_and_forces_the_suffix():
-    [target] = ingress_probe_targets([{**_NEW, "probe": {"id": "other", "name": "N"}}])
-    assert (target["id"], target["name"]) == ("other-k8s", "N")
+def test_ingress_probe_targets_is_clean_on_probe_false_and_on_no_probe_key():
+    assert ingress_probe_targets([{**_NEW, "probe": False}]) == []
+    assert ingress_probe_targets([_NEW]) == [
+        {"hostname": "newsvc", "behind_sso": False, "entry": "newsvc"}
+    ]
 
 
 # ── error shape (#4505) ─────────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.parametrize(
-    "probe",
-    ["yes", {"id": "x", "colour": "red"}],
-    ids=["not-a-mapping", "unknown-key"],
-)
-def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(probe):
+def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter():
     """A render failure names the filter that refused, through the filter Ansible calls."""
-    entries = [{"name": "svc", "hostname": "svc", "probe": probe}]
+    entries = [{"name": "svc", "hostname": "svc", "probe": "yes"}]
     with pytest.raises((ValueError, AnsibleFilterError)) as caught:
         FilterModule().filters()["ingress_probe_targets"](entries)
     assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
