@@ -45,9 +45,7 @@ _REPLACED_WEEKLY = {
 
 _REPLACED_NOBACKUP = frozenset(
     {
-        "homelab/autokuma-data",
         "homelab/scrutiny-influxdb-data",
-        "homelab/uptime-kuma-data",
         "homelab/crowdsec-db",
         "homelab/code-server-config",
     }

@@ -160,7 +160,7 @@ copy from.
 **Entry point.** `def main(argv: list[str] | None = None) -> int`, parse with `argparse`, and
 close with `if __name__ == "__main__": sys.exit(main())`. The function returns an int; it does
 not call `sys.exit` itself, so a test can call it. Reference:
-`ansible/roles/k8s/uptime-kuma/files/render_status_page.py`. Google's style guide gives the
+`scripts/docs/build_docs.py`. Google's style guide gives the
 same shape ([Google Python style, main][google]).
 
 **A module family lives in a package behind one entrypoint.** A family is three or more

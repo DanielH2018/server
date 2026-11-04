@@ -93,12 +93,8 @@ listed here.
   mount (`navidrome/templates/deployment.yaml.j2`).
 - `scrutiny-influxdb-data` (no backup): kopia excluded `scrutiny/influxdb2/`, and the volume
   IS the TSDB (single mount, verified).
-- `uptime-kuma-data` (no backup): kopia excluded `uptime-kuma/data*/`. The monitors regenerate
-  from the static-monitors Secret, the admin is recreated by hand, and the history is not kept
-  (kopia's own caveat, now in this doc).
 - `crowdsec-db` (no backup): Docker's `crowdsec-db` named volume was deliberately outside
   kopia scope.
-- `autokuma-data` (no backup): regenerates from the static-monitors Secret.
 
 ## The transaction budget (2026-08-17) — what this doc's framing was missing
 

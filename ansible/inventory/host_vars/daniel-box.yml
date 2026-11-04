@@ -951,15 +951,6 @@ containers_list:
     auth_tier: one_factor
     default_dns: "{{ dns_k8s_vip }}"
 
-  - name: uptime-kuma
-    platform: k8s
-    # Retiring: its render holds only these two claims until the second retirement PR
-    # removes this entry (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
-    owner: flux
-    no_backup_claims: [uptime-kuma-data, autokuma-data]
-    # No tile on itself: Kuma cannot page that Kuma is down.
-    kuma: false
-
   # Runs WITHOUT docker plumbing — no DOCKER_HOST, so no in-IDE docker CLI or devcontainers.
   # CI's `images` job builds the image from the role's own Dockerfile and pushes it to GHCR.
   # two_factor even on the LAN: a shell as the repo user on a stolen password alone.
@@ -1336,9 +1327,7 @@ nut_host_secondary_armed: true
 # The unattended Renovate agent (roles/setup/renovate_agent). The timer fires at 06:00
 # America/Chicago daily and spends one headless session over the open Renovate PRs, landing up
 # to renovate_agent_max_prs of them through the renovate-agent-land@ lander. Setting this back
-# to false stops and disables the timer; that is the rollback. The same switch gates the
-# `Renovate Agent — Alive` tile in uptime-kuma's static-monitors, so a flip in either
-# direction also needs `./scripts/deploy.sh --tags uptime-kuma`.
+# to false stops and disables the timer; that is the rollback.
 #
 # Disarmed on 2026-10-03 and re-armed on 2026-10-05, once the session ran as its own user on
 # a repo-scoped token with no contents write (renovate_agent_gh_token) and the lander unit

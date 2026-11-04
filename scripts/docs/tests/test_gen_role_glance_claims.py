@@ -72,12 +72,12 @@ def test_the_committed_blocks_name_a_tier_from_each_list():
     """Non-vacuity: a resolver that stopped matching would print `unknown` everywhere and pass."""
     # `render_block` wraps a long Claims line, so read each doc with its whitespace folded.
     sonarr = " ".join((g.K8S_ROLES / "sonarr" / "CLAUDE.md").read_text().split())
-    kuma = " ".join((g.K8S_ROLES / "uptime-kuma" / "CLAUDE.md").read_text().split())
+    crowdsec = " ".join((g.K8S_ROLES / "crowdsec" / "CLAUDE.md").read_text().split())
     assert "`sonarr-config` (weekly -> B2 (default target))" in sonarr
     assert "`media-data` (not Longhorn (media-local))" in sonarr
     assert (
-        "`uptime-kuma-data` (no backup (listed in k3s_longhorn_nobackup_volumes))"
-        in kuma
+        "`crowdsec-db` (no backup (listed in k3s_longhorn_nobackup_volumes))"
+        in crowdsec
     )
 
 

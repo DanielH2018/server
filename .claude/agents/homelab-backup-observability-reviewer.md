@@ -20,7 +20,7 @@ operator's time).
   changes or read the kopia role as live. Per-volume tiers (daily / weekly / **no-backup**) and
   the reasoning inherited from the old `.kopiaignore` are in `docs/longhorn-backup-tiering.md`;
   recovery is `docs/longhorn-disaster-recovery.md`. Volumes deliberately NOT backed up include
-  the TSDBs (prometheus, loki, tempo, scrutiny-influxdb), uptime-kuma-data, and crowdsec-db.
+  the TSDBs (prometheus, loki, tempo, scrutiny-influxdb) and crowdsec-db.
   The Pi's data is covered separately by the `k8s/pi-peer-backup` CronJob.
 - **B2 is now a single-consumer account** (Longhorn only). The historical transaction-cap
   incidents in `docs/archive/b2-transaction-cap-monitoring-gaps.md` were driven by Kopia and Longhorn

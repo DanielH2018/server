@@ -39,7 +39,7 @@ that makes the trade-off. When an entry moves there, delete it here.
 ## backup-observability
 
 - The B2 free tier IS the offsite.
-- The no-backup volume tier is deliberate: TSDBs, uptime-kuma-data, crowdsec-db, and
+- The no-backup volume tier is deliberate: TSDBs, crowdsec-db, and
   valheim's SteamCMD install volume are re-downloadable, while valheim's *world* volume IS
   backed up. `docs/longhorn-backup-tiering.md` is the tiering doc.
 - A producer that stops reporting pages through a deadman, not a heartbeat tile: each

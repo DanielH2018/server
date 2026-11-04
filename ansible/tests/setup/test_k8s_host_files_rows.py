@@ -91,7 +91,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "registry.yml: Schedule the registry garbage collection",
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
-        "uptime-kuma.yml: Remove the k8s/volume-claim staging directory autokuma-data left behind",
     ]
 
 

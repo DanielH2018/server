@@ -47,8 +47,6 @@ _KNOWN_CLAIMS = {
     ("homelab", "home-assistant-config"): ("longhorn", "4Gi"),
     ("homelab", "terraria-stats-data"): ("longhorn", "1Gi"),
     ("homelab", "valheim-stats-data"): ("longhorn", "1Gi"),
-    ("homelab", "uptime-kuma-data"): ("longhorn", "4Gi"),
-    ("homelab", "autokuma-data"): ("longhorn", "1Gi"),
     ("homelab", "pi-peer-backup-data"): ("longhorn", "128Mi"),
     ("homelab", "mosquitto-data"): ("longhorn-nobackup", "1Gi"),
     ("homelab", "registry-data"): ("longhorn-nobackup", "10Gi"),

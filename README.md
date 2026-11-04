@@ -72,7 +72,7 @@ flowchart TD
       crowdsec[CrowdSec engine + node agents]
       apps["apps · pihole · n8n · code-server · karakeep · freshrss · livesync · wg-easy"]
       media["media · jellyfin · arr-stack · qbittorrent · tdarr · bazarr"]
-      monitoring["monitoring · prometheus · grafana · uptime-kuma · scrutiny · loki"]
+      monitoring["monitoring · prometheus · grafana · scrutiny · loki"]
       longhorn[(Longhorn PVs)]
     end
 
@@ -145,10 +145,9 @@ playbooks). The manual post-deploy setup Ansible can't do is verified by
   CrowdSec. Grafana dashboards stay provisioned as code from
   [`roles/k8s/observability/files/dashboards/`](ansible/roles/k8s/observability/files/dashboards/) — that
   tree is the single source of truth and is mounted into the cluster Grafana, which is why
-  the role survives the migration despite not being in any `containers_list`. Uptime Kuma
-  takes monitors from AutoKuma labels and a static-monitors Secret; `monitor-bridge` turns
-  Prometheus/Longhorn signals into Uptime Kuma push alerts (backup freshness, disk,
-  memory).
+  the role survives the migration despite not being in any `containers_list`.
+  `monitor-bridge` exports Prometheus/Longhorn signals (backup freshness, disk, memory) as
+  gauges that page through Alertmanager.
 - **Backups** — Longhorn takes scheduled volume backups to **Backblaze B2**; the per-volume
   tier (daily / weekly / no-backup) and its rationale are in
   [`docs/longhorn-backup-tiering.md`](docs/longhorn-backup-tiering.md). Recovery procedure:
