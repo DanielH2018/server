@@ -74,6 +74,34 @@ def test_an_edit_to_another_entrys_field_skips_a_reader_of_one_entry(tree: Tree)
     assert tree.narrow(*_refs(tree)) == {"radarr", "lidarr"}
 
 
+@pytest.mark.parametrize(
+    ("line", "reaches_the_tier_reader"),
+    [
+        ("probe: false", False),
+        ("backup_claims: [sonarr-data]", True),
+        ("weekly_backup_claims: {sonarr-data: 1}", True),
+        ("no_backup_claims: [sonarr-data]", True),
+        ("tier: home-edge", True),
+        ("namespace: media", True),
+    ],
+    ids=lambda value: value.split(":")[0] if isinstance(value, str) else None,
+)
+def test_longhorn_reconciles_tier_lists_read_only_the_fields_they_derive_from(
+    tree: Tree, line: str, reaches_the_tier_reader: bool
+):
+    """bazarr holds longhorn-reconcile's real defaults, so the row and the role's calls meet."""
+    defaults = "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml"
+    tree.write(
+        "ansible/roles/k8s/bazarr/defaults/main.yml", (REPO / defaults).read_text()
+    )
+    tree.commit("a reader of the tier lists")
+    tree.write(
+        BOX, HOST_VARS.replace("image: sonarr:1", f"image: sonarr:1\n    {line}")
+    )
+    tier_reader = {"bazarr"} if reaches_the_tier_reader else set()
+    assert tree.narrow(*_refs(tree)) == {"sonarr", "lidarr"} | tier_reader
+
+
 def test_a_lookup_by_a_variable_name_reaches_every_entrys_edit(tree: Tree):
     tree.write(
         "ansible/roles/k8s/bazarr/templates/configmap.yaml.j2",

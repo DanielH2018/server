@@ -63,11 +63,11 @@ FILTER_FIELDS: dict[str, frozenset[str]] = {
     "homepage_href": frozenset({"hostname", "name"}),
     "homepage_widget_url": frozenset({"homepage_widget", "name", "port"}),
     "in_service_tier": frozenset({"name", "tier"}),
-    "ingress_probe_targets": frozenset(
-        {"auth_tier", "hostname", "id", "name", "probe"}
-    ),
+    "ingress_probe_targets": frozenset({"auth_tier", "hostname", "name", "probe"}),
     "kuma_ingress_monitors": frozenset({"auth_tier", "hostname", "id", "kuma", "name"}),
     "lan_hostnames": frozenset({"extra_hostnames", "hostname", "platform"}),
+    "longhorn_nobackup_claims": frozenset({"namespace", "no_backup_claims"}),
+    "longhorn_weekly_claims": frozenset({"namespace", "weekly_backup_claims"}),
     "metrics_port": frozenset({"job", "metrics", "name", "params", "port"}),
     # `app`, `from`, `port` and `role_owned` are a `netpol_fences` item's keys too.
     "netpol_caller_fences": frozenset(
@@ -86,6 +86,7 @@ FILTER_FIELDS: dict[str, frozenset[str]] = {
     ),
     "published_ports": frozenset({"name", "port"}),
     "scrape_jobs": frozenset({"job", "metrics", "name", "params", "port", "service"}),
+    "tier_backup_claims": frozenset({"backup_claims", "name", "namespace", "tier"}),
     "tier_priority_class": frozenset({"name", "tier"}),
 }
 # The filters that read one entry, the one their first argument names. Called with a literal
