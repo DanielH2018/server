@@ -225,8 +225,8 @@ gate 3 needs the API server up.
    refuses a name containing `/` before it asks the cluster: `--cluster-reset-restore-path`
    takes a NAME, so a path there names no snapshot and k3s says so only after it has been
    stopped. An unknown name is reported with the snapshots the cluster does record, which
-   separates a typo from a bucket k3s has not reconciled into CRs — `k3s etcd-snapshot list
-   --etcd-s3` as root is the other listing. The read needs `k3s.cattle.io` in
+   separates a typo from a bucket k3s has not reconciled into CRs. The command under *Listing
+   what is available*, run as root, is the other listing. The read needs `k3s.cattle.io` in
    `k3s_readonly_crd_api_groups` (#2243); without it the gate exits 69 on a Forbidden.
 
    **This gate is drilled weekly, unlike gates 1 and 2.** Since 2026-09-24 the `--list-only`
@@ -240,9 +240,13 @@ gate 3 needs the API server up.
    **Exit 69 is the expected path when the API server is already down**, which is a large
    share of the reasons to be reading this page at all. It means gate 3 could not look, not
    that the snapshot is bad. Gates 1 and 2 are the ones that still bind — they read daniel-box,
-   not the cluster, and the script prints them before it reaches gate 3 — and
-   `k3s etcd-snapshot list --etcd-s3` as root is how you confirm the name without an API server.
-   Proceed on those two.
+   not the cluster, and the script prints them before it reaches gate 3. Proceed on those two.
+
+   To confirm the name while k3s is running, use the command under *Listing what is available*.
+   Its explicit `--etcd-s3-*` flags make k3s ignore `etcd-s3-config-secret`, which a bare
+   `--etcd-s3` would read from the cluster. That command still goes through the running k3s
+   server's supervisor API, so it cannot list once k3s itself is down
+   ([#7097](https://github.com/DanielH2018/server/issues/7097)).
 
 ## Restoring
 
