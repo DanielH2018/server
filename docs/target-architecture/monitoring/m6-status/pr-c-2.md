@@ -2,7 +2,8 @@
 
 #### PR C-2a
 
-[#7086](https://github.com/DanielH2018/server/issues/7086) deletes `uptime-kuma` from the bespoke
+[#7087](https://github.com/DanielH2018/server/pull/7087), from
+[#7086](https://github.com/DanielH2018/server/issues/7086), deletes `uptime-kuma` from the bespoke
 policies and from ical-proxy's `netpol_from`.
 
 **One PR holds the order.** `netpol-baseline` renders all five grants, including ical-proxy's fence
