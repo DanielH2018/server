@@ -123,9 +123,10 @@ class Options:
     window_grace: int = 0
     # Where to write PENDING, then the landing's one-line result, for a unit to hand on.
     verdict_file: str = ""
-    # Sized for a PR run plus queueing behind other PRs' runs; a PR still open after this is
-    # not being merged, and the session should look at why.
-    merge_timeout: int = 2700
+    # A PR's own CI runs the same `ci.yml` chain as master's, so a shorter wait can give up while
+    # that CI can still go green. A PR still open after this is not being merged, and the session
+    # should look at why.
+    merge_timeout: int = CI_TIMEOUT_S
     merge_poll: int = MERGE_POLL_S
     pace_master_runs: int = PACE_MASTER_RUNS
     lock_retries: int = 5

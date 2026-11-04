@@ -206,11 +206,11 @@ The rule generalises: keep the prose out of the command string and inside a file
 `--await-merge` polls the PR's state every 30s until it is merged and only then starts the
 landing. It reads the state, never the checks, so it is not hand-polling. Without it the session
 has to notice the merge itself, which every landing on 2026-09-01 did with a hand-written
-`until MERGED` loop. A PR still open after 45 minutes exits `LAND_GAVE_UP`: it is not being merged, and the
+`until MERGED` loop. A PR still open after 92 minutes exits `LAND_GAVE_UP`: it is not being merged, and the
 reason is on the PR.
 
 **A conflicting PR ends the wait at once**, exit `LAND_FAILED` with `VERDICT: merge-conflict`, rather than
-sitting out the 45 minutes. A PR that goes conflicting during the wait never merges, and
+sitting out the 92 minutes. A PR that goes conflicting during the wait never merges, and
 nothing on the PR says so — with several sessions landing at once, another merge moving master
 under an open PR is the ordinary way it happens. Rebase onto master, push, and re-run the same
 command. The wait tolerates a `mergeable` of `UNKNOWN` — GitHub computes the
@@ -444,7 +444,7 @@ Instead it reads the cluster every 30 seconds:
   starts by which the landing must print its verdict. The wait then gives up 10 minutes
   before that deadline, whatever is in flight, and the landing still ends `deferred` with a
   ledger line (#5199). So on a lander unit the wait can give up before twice `verify`'s wait.
-  `homelab-claude-land@.service` and `renovate-agent-land@.service` each set 33120. After the merge
+  `homelab-claude-land@.service` and `renovate-agent-land@.service` each set 35940. After the merge
   and master CI budgets, that leaves the wait room for `verify`'s wait on the rendered soak,
   once, and the `promote` workflow's `render`, `images` and `publish` jobs at their
   timeouts. It also covers one measured rebuild of every built image by a commit queued ahead
@@ -467,7 +467,9 @@ Instead it reads the cluster every 30 seconds:
   `host_packages` timeout then rose from 45 to 60 minutes, because a slow Ubuntu snapshot
   mirror took a leg to about 56 minutes. That moved the master CI budget from 4620s to
   5520s, and the deadline and the Renovate bounds above it by the same 900s, to 33120
-  (#7128).
+  (#7128). The merge budget then rose from 2700s to the same 5520s, because a PR's own CI
+  runs that chain and a landing ended `merge-timeout` while its CI could still go green.
+  The deadline and every bound above it rose by the same 2820s, to 35940 (#7129).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
   Inside the no-promotion window around the weekly reboot, `decide` defers every promotion (D5.2b2),
@@ -475,7 +477,7 @@ Instead it reads the cluster every 30 seconds:
   promotion starts. The first poll inside the window moves the cap by the window's remaining
   length, up to the unit's `LAND_WINDOW_GRACE`. Both lander units set the window's full
   length, and every bound above `LAND_DEADLINE` covers it: homelab-claude-land's `TimeoutStartSec` of
-  16h, and the 932min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
+  17h, and the 979min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
   Renovate lander needs it too: its unit runs on after the session ends, so a landing started
   late on a Saturday can still be waiting on Sunday's window (#5457).
 
