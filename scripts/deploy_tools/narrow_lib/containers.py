@@ -63,6 +63,9 @@ FILTER_FIELDS: dict[str, frozenset[str]] = {
     "homepage_href": frozenset({"hostname", "name"}),
     "homepage_widget_url": frozenset({"homepage_widget", "name", "port"}),
     "in_service_tier": frozenset({"name", "tier"}),
+    "ingress_probe_targets": frozenset(
+        {"auth_tier", "hostname", "id", "name", "probe"}
+    ),
     "kuma_ingress_monitors": frozenset({"auth_tier", "hostname", "id", "kuma", "name"}),
     "lan_hostnames": frozenset({"extra_hostnames", "hostname", "platform"}),
     "metrics_port": frozenset({"job", "metrics", "name", "params", "port"}),
@@ -223,7 +226,7 @@ def changed_fields(
       whatever it reads. An `owner` outside `OWNER_VALUES` counts as Ansible-owned here, as
       the widest reach.
     - A reorder of the entries both lists hold, with no field changed: `scrape_jobs` and
-      `kuma_ingress_monitors` emit in list order.
+      `ingress_probe_targets` emit in list order.
     - A name two entries share: `entries` keeps the last of them and a `NAMED_ENTRY` filter
       reads the first, so an edit to the first would go unseen.
       `test_containers_list_names_unique.py` keeps a repeated name off master, so this branch

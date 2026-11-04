@@ -148,6 +148,8 @@ class Fakes:
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.
     declared_at: set[str] | None = None
+    # `git ls-tree -d` of the role trees at the merge commit; None falls back to this checkout.
+    role_dirs_at: frozenset[str] | None = None
     # `git merge-base --is-ancestor <merge_sha> <recorded apply>`: 0 means the recorded broad
     # apply included this PR, non-zero means it ran at a commit that did not contain it.
     is_ancestor_rc: int = 0
@@ -289,7 +291,9 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         return list(f.path_k8s_only)
 
     return Classifier(
-        plane_note=lambda paths, declared=None, quiet=(), narrow_tags=None: f.plane,
+        plane_note=lambda paths, declared=None, quiet=(), narrow_tags=None, role_dirs=None: (
+            f.plane
+        ),
         self_applied=lambda paths, quiet=(): f.self_applied,
         self_applied_command=lambda paths, quiet=(): f.self_applied_command,
         remaining_setup_hosts=remaining_setup_hosts,
@@ -298,7 +302,9 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
-        shared_caller_tags=lambda paths, declared=None: f.shared_callers,
+        shared_caller_tags=lambda paths, declared=None, role_dirs=None: (
+            f.shared_callers
+        ),
         k8s_only_tags=k8s_only_tags,
     )
 
@@ -515,6 +521,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         snapshot=snapshot,
         later_deploys=later_deploys,
         declared_at=lambda ref, primary: f.declared_at,
+        role_dirs_at=lambda ref, primary: f.role_dirs_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
         flux=FluxReads(owners_at, kustomization_exists, land_wait, pins, k8s_tags_at),

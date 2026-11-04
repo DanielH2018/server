@@ -105,7 +105,7 @@ containers_list:
     # per-service DNS override.
     hostname: "crowdsec-lapi"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: the crowdsec-* allowlist and AppSec tiles.
-    kuma: false
+    probe: false
     port: 8080
     use_authelia: false
     # crowdsec-db is in k3s_longhorn_nobackup_volumes: decisions re-derive from logs.
@@ -209,7 +209,7 @@ containers_list:
     owner: flux
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
-    kuma: {id: auth, name: k3s Authelia Portal}
+    probe: {id: auth, name: k3s Authelia Portal}
     port: 9091
     use_authelia: false
     tier: home-edge
@@ -234,7 +234,7 @@ containers_list:
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
     # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
     hostname: "bento-pdf"
-    kuma: {name: k3s Ingress (bento-pdf)}
+    probe: {name: k3s Ingress (bento-pdf)}
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -259,7 +259,7 @@ containers_list:
     # docs/flux-deploy-plane.md.
     owner: flux
     hostname: "headlamp"
-    kuma: {name: k3s Headlamp}
+    probe: {name: k3s Headlamp}
     port: 4466
     use_authelia: true
     auth_tier: one_factor
@@ -474,7 +474,7 @@ containers_list:
     depends_on: [media-volume, dri-device-plugin]
     hostname: "jellyfin"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: jellyfin-lan-vip, a port check on the LAN VIP.
-    kuma: false
+    probe: false
     port: 8096
     use_authelia: false
 
@@ -528,7 +528,7 @@ containers_list:
     # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is
     # on, so none of them gets an ingress route.
     hostname: "grafana"
-    kuma: {id: grafana, name: k3s Grafana}
+    probe: {id: grafana, name: k3s Grafana}
     port: 3000
     use_authelia: true
     auth_tier: one_factor
@@ -589,7 +589,7 @@ containers_list:
     owner: flux
     weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
-    kuma: {name: k3s FreshRSS}
+    probe: {name: k3s FreshRSS}
     port: 80
     use_authelia: true
     auth_tier: one_factor
@@ -617,7 +617,7 @@ containers_list:
     hostname: "navidrome"
     # No tile while parked: the role deploys no route at replicas 0, so the tile would be
     # permanently red. Delete this line when bringing it back.
-    kuma: false
+    probe: false
     port: 4533
     use_authelia: true
     auth_tier: one_factor
@@ -633,7 +633,7 @@ containers_list:
     owner: flux
     hostname: "livesync"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: livesync-k8s, which expects CouchDB's 401.
-    kuma: false
+    probe: false
     port: 5984
     use_authelia: false
     # NO IngressRoute at all, and that is load-bearing rather than an omission. Its names
@@ -819,7 +819,7 @@ containers_list:
     owner: flux
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
-    kuma: {name: k3s Zigbee2MQTT}
+    probe: {name: k3s Zigbee2MQTT}
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -837,7 +837,7 @@ containers_list:
     # is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
     hostname: "home-assistant"
-    kuma: {name: k3s Home Assistant}
+    probe: {name: k3s Home Assistant}
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and
     # files/configuration.yaml ships verbatim, so no template can move it. Changing this moves
     # the Service, the route and the prometheus scrape target, but not the listener.
@@ -864,7 +864,7 @@ containers_list:
     owner: flux
     hostname: "pihole"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: pihole-k8s-dns, a DNS query against the VIP.
-    kuma: false
+    probe: false
     port: 80
     use_authelia: true
     auth_tier: one_factor
@@ -913,7 +913,7 @@ containers_list:
     owner: flux
     hostname: "ical-proxy"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: ical-proxy-k8s, which probes a calendar over the ClusterIP.
-    kuma: false
+    probe: false
     port: 5000
     use_authelia: false
     # Callers beyond the baseline, rendered by netpol-baseline's networkpolicy-callers.yaml.j2.
@@ -1007,7 +1007,7 @@ containers_list:
     owner: flux
     hostname: "loki-homelab"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: loki, which probes /ready over the ClusterIP.
-    kuma: false
+    probe: false
     port: 3100
     use_authelia: false
     # loki_* internals, scraped on the entry's own port. The configmap's http_listen_port sets
@@ -1135,7 +1135,7 @@ containers_list:
     no_backup_claims: [scrutiny-influxdb-data]
     hostname: "scrutiny"
     # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: scrutiny-k8s, which probes /api/health through the LAN bypass.
-    kuma: false
+    probe: false
     port: 8080
     use_authelia: true
     auth_tier: one_factor
