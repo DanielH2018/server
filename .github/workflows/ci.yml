@@ -1392,7 +1392,10 @@ jobs:
     # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
     # apt's retries can take minutes. Each leg boots a container per case, and four of the
     # bootstrap cases render and build the host packages from a clone (H7.15a).
-    timeout-minutes: 45
+    # Measured 2026-11-04 with the mirror at 28-129 kB/s: 2min of steps before the build, a
+    # 33min 45s image build and 20min 33s of cases, so about 56min at worst (#7128).
+    # scripts/deploy_tools/land_lib/options.py:CI_TIMEOUT_S moves with this value.
+    timeout-minutes: 60
     strategy:
       # Each leg reports its own conclusion, so one release's failure does not hide the other's.
       fail-fast: false
@@ -1492,7 +1495,9 @@ jobs:
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    # Builds host_packages' test image from the same mirror. Measured 2026-11-04 with the mirror
+    # slow: this job's build reached 29min 05s and host_packages' 33min 45s (#7128).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
