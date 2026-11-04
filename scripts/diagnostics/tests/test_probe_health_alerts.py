@@ -314,10 +314,10 @@ def test_an_entry_with_a_hostname_has_an_ingress_route():
     assert health_alerts.has_ingress_route({"name": TAG, "hostname": "www"})
 
 
-def test_an_entry_without_a_hostname_or_with_kuma_off_has_no_ingress_route():
+def test_an_entry_without_a_hostname_or_with_probe_off_has_no_ingress_route():
     assert not health_alerts.has_ingress_route({"name": "netpol-baseline"})
     assert not health_alerts.has_ingress_route(
-        {"name": TAG, "hostname": "www", "kuma": False}
+        {"name": TAG, "hostname": "www", "probe": False}
     )
     assert not health_alerts.has_ingress_route(None)
 

@@ -9,7 +9,10 @@ separate red-proof pairs: merging the walk must not merge the evidence that each
    shell you developed in." A root-anchored `rglob` descends into `.claude/worktrees/<name>/` —
    a full checkout per live session, holding OLDER copies of the same docs — so a guard judges
    this commit against another session's history. `git ls-files` answers with what the commit
-   actually contains (see `_helpers.discover_docs`). A tracked `.py` file must not call `.rglob(` on `REPO`, `REPO_ROOT`, `repo_root`
+   actually contains (see `_helpers.discover_docs`). Filtering the walk's results afterwards
+   still costs the walk: 69.7s on a host with 6.9M worktree files against 2s on CI, which the
+   docs-refresh cron recorded as a shard weight and CI then rejected. A tracked `.py` file
+   must not call `.rglob(` on `REPO`, `REPO_ROOT`, `repo_root`
    or `repo`. Scoping an `rglob` under a narrower subdirectory (`ansible/rglob(...)`,
    `ROLES.rglob(...)`) is fine: `.claude/worktrees/` sits at repo root, not under any of those.
 
@@ -80,13 +83,6 @@ def test_the_scan_finds_tracked_python_files():
 # case-sensitive to the conventions seen in `_helpers.py` and the `ansible/tests/` guards.
 ROOT_ANCHORED_RGLOB = re.compile(r"\b(REPO|REPO_ROOT|repo_root|repo)\.rglob\(")
 
-# test_adr_links.py rglobs from REPO but filters every result through a `SKIP_PARTS` set that
-# names "worktrees" explicitly, with its own comment on the same hazard this guard exists for
-# (its `_source_files` docstring). That is a second, independently-argued mitigation for the
-# same class-7 incident, not an unguarded instance — named here rather than left to the regex
-# to relearn what its own comment already states.
-ALREADY_MITIGATED = {"ansible/tests/repo/test_adr_links.py"}
-
 # A scanner must not scan itself: this file's own red-proof fixtures quote the exact
 # `REPO.rglob(` shape it is looking for, as strings rather than code.
 SELF = "ansible/tests/repo/test_tracked_python_hazards.py"
@@ -99,9 +95,7 @@ def test_no_tracked_file_rglobs_from_repo_root():
     offenders = [
         rel
         for rel in _tracked_python()
-        if rel not in ALREADY_MITIGATED
-        and rel != SELF
-        and ROOT_ANCHORED_RGLOB.search(_source(rel))
+        if rel != SELF and ROOT_ANCHORED_RGLOB.search(_source(rel))
     ]
     assert not offenders, (
         f"{offenders} call .rglob() directly on a repo-root path. That walks whatever is on "

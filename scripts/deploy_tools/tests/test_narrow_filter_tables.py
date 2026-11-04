@@ -38,6 +38,10 @@ VETTED_OPAQUE = {
         "`tier_entries` collects whole entries into the list it returns, and "
         "`in_service_tier` reads each one by the literal key `name`"
     ),
+    ("tier_backup_claims", "found.append()"): (
+        "`tier_entries` collects whole entries into the list it returns, and "
+        "`tier_backup_claims` reads each one by the literal keys `namespace` and `backup_claims`"
+    ),
 }
 
 
@@ -396,12 +400,16 @@ _EVERY_ARGS = {
     "homepage_href": ("target", "example.com"),
     "homepage_widget_url": ("target", "media"),
     "in_service_tier": ("target", "home-edge"),
+    "ingress_probe_targets": (),
     "kuma_ingress_monitors": (),
     "lan_hostnames": ("k8s",),
+    "longhorn_nobackup_claims": ("homelab",),
+    "longhorn_weekly_claims": ("homelab",),
     "metrics_port": ("target",),
     "netpol_caller_fences": (),
     "published_ports": (),
     "scrape_jobs": ("media",),
+    "tier_backup_claims": ("home-critical", "homelab"),
     "tier_priority_class": ("target",),
 }
 # The entry D2.1c's narrowing records by its presence alone: it carries no field a filter

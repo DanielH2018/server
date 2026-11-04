@@ -18,7 +18,6 @@ import pytest
 MANIFESTS = "/etc/rancher/k3s/manifests"
 LISTED = [
     f"{MANIFESTS}/registry-jobs",
-    f"{MANIFESTS}/autokuma-claims",
     f"{MANIFESTS}/registry-jobs/gc-job.yaml",
     f"{MANIFESTS}/registry-jobs/ghcr-mirror-gc-job.yaml",
     f"{MANIFESTS}/registry-jobs/dockerhub-mirror-gc-job.yaml",
@@ -26,7 +25,6 @@ LISTED = [
 UNLISTED = [
     f"{MANIFESTS}/registry/secret.yaml",
     f"{MANIFESTS}/registry-jobs/selftest-push-job.yaml",
-    f"{MANIFESTS}/autokuma-claims/claim-autokuma-data.yaml",
     "/etc/rancher/k3s/registries.yaml",
 ]
 HEX = "0" * 64

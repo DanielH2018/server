@@ -93,7 +93,6 @@ PATHS = (
     # it holds every staged role's secret.yaml, so each name here is exact. DENY_EXEMPT lifts
     # the two mirror GC Jobs off DENY, so every tier-1 verb answers those.
     ("/etc/rancher/k3s/manifests", "registry-jobs"),
-    ("/etc/rancher/k3s/manifests", "autokuma-claims"),
     ("/etc/rancher/k3s/manifests/registry-jobs", "gc-job.yaml"),
     ("/etc/rancher/k3s/manifests/registry-jobs", "ghcr-mirror-gc-job.yaml"),
     ("/etc/rancher/k3s/manifests/registry-jobs", "dockerhub-mirror-gc-job.yaml"),
