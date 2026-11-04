@@ -1926,7 +1926,10 @@ here. C-1 waits for the operator's acceptance.
           component renders as `/usr/lib/homelab`. Third, on each host, a read-only
           `grep -rl kuma-push-lib /usr/local/bin /usr/local/lib /usr/lib/homelab /opt` lists
           only the library's own copies: locally on daniel-box, and over `ssh` on
-          daniel-server and the Pi.
+          daniel-server and the Pi. A path under `/opt/homelab/releases/<group>/<sha>/` does not
+          fail this read unless `/opt/homelab/current/<group>` points at that `<sha>`. Retained
+          releases keep the old `source` line until `release_bin_keep` prunes them, and no
+          cron runs them.
         - **The host file.** `initial_setup/tasks/crons.yml`'s copy task is `tags: [always]`
           behind a `DECIDED` marker, and it runs on every host. C-3a replaces it with an
           `always`-tagged `state: absent` task for `/usr/local/lib/kuma-push-lib.sh`, and

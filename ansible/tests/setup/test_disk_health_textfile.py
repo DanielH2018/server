@@ -3,7 +3,7 @@
 The plan is docs/target-architecture/monitoring/m3-textfile-timer.md, *PR 2*: the producer metric
 contract's three `homelab_check_*` series, an atomic 0644 write and a boot-grace run that writes
 nothing. PR 5 removed the Kuma push, so the library stub records any `kuma_push` call and every
-case asserts there is none. The real template is rendered and run under bash. Its push library
+case asserts there is none. The real template is rendered and run under bash. Its check library
 and its env file are repointed at stubs, and `df`, `curl`,
 `logger` and `date` are stubbed on PATH, so neither the runner's uptime, its disk nor its clock
 decides a case. The assertions read the file the run leaves in `TEXTFILE_DIR`.
@@ -15,7 +15,7 @@ from lib.proc_testing import fake_bin, run, write_exec
 from _shell_render import render_shell_script
 
 TEMPLATE = ("setup", "k3s", "disk-health.sh.j2")
-REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
+REAL_LIB = "/usr/local/lib/homelab-check-lib.sh"
 HC_ENV = "/etc/healthchecks/ping.env"
 PROM = "disk-health.prom"
 SEP = "\x1e"
@@ -46,7 +46,7 @@ def _run(tmp_path, used_pct=40, boot_grace=False, textfile_dir=None):
     for literal in (REAL_LIB, HC_ENV):
         assert literal in body, f"{'/'.join(TEMPLATE)} no longer references {literal}"
 
-    lib = tmp_path / "kuma-push-lib.sh"
+    lib = tmp_path / "homelab-check-lib.sh"
     lib.write_text(LIB_STUB)
     hc_env = tmp_path / "ping.env"
     hc_env.write_text("")
