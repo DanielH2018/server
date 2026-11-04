@@ -69,8 +69,8 @@ def fence_name(entry: dict) -> str:
 
 
 # Callers whose pods render only from a role's `templates/verify/` or `templates/precheck/`, which
-# the renderer emits into `<tag>-verify` and `<tag>-precheck` and `rendered_docs()` does not read. Named so the derivation below cannot
-# quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
+# the renderer emits into `<tag>-verify` and `<tag>-precheck` and `rendered_docs()` does not read.
+# Named so the derivation below cannot quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
 # qbittorrent's verify Job keeps the label of the `kubectl run` probe it replaced at the flip.
 # janitorr's tests/test_verify_janitorr.py also checks that sonarr's and radarr's fences admit its Job.
 VERIFY_CALLERS = frozenset(
