@@ -113,7 +113,7 @@ fi
 
 # Credentials come from a 0600 root-only env file, not from this 0755 script and not from the
 # command line: k3s reads AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY from the environment, so the
-# keys never appear in `ps` output the way --s3-access-key would.
+# keys never appear in `ps` output the way --etcd-s3-access-key would.
 if [[ ! -r /etc/rancher/k3s/etcd-s3.env ]]; then
   report down "/etc/rancher/k3s/etcd-s3.env missing — cannot authenticate to R2"
   exit 0
@@ -128,16 +128,18 @@ fi
 export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
 
 # --name is a BASE name; k3s appends the node name and a UNIX timestamp, so successive runs do
-# not overwrite each other and --s3-retention has distinct objects to age out.
+# not overwrite each other and --etcd-s3-retention has distinct objects to age out.
+# The long flag names are required: k3s also reads config.yaml.d/50-homelab.yaml here, and a short
+# form of a key that drop-in sets is fatal ("Cannot use two forms of the same flag").
 OUTPUT=$(k3s etcd-snapshot save \
   --name offbox \
-  --snapshot-compress \
-  --s3 \
-  --s3-bucket "$ETCD_S3_BUCKET" \
-  --s3-folder "{{ k3s_etcd_s3_folder }}" \
-  --s3-endpoint "$ETCD_S3_ENDPOINT" \
-  --s3-region "{{ k3s_etcd_s3_region }}" \
-  --s3-retention {{ k3s_etcd_s3_retention }} 2>&1)
+  --etcd-snapshot-compress \
+  --etcd-s3 \
+  --etcd-s3-bucket "$ETCD_S3_BUCKET" \
+  --etcd-s3-folder "{{ k3s_etcd_s3_folder }}" \
+  --etcd-s3-endpoint "$ETCD_S3_ENDPOINT" \
+  --etcd-s3-region "{{ k3s_etcd_s3_region }}" \
+  --etcd-s3-retention {{ k3s_etcd_s3_retention }} 2>&1)
 RC=$?
 
 if [[ $RC -eq 0 ]]; then

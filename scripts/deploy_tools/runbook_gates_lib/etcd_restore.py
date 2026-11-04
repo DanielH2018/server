@@ -9,7 +9,7 @@ The gates, in the order the runbook gives them:
 
   1. The off-box listing leg is proven. The weekly `--list-only` drill on daniel-box writes
      `/var/lib/etcd-restore-drill/last-success-list-only` when the R2 credentials, bucket and
-     folder work and `k3s etcd-snapshot list --s3` returns real snapshots. The stamp must say
+     folder work and `k3s etcd-snapshot list --etcd-s3` returns real snapshots. The stamp must say
      `mode=list-only` and be younger than `MAX_DRILL_AGE_DAYS` — the number monitor-bridge's
      `check_etcd_restore_drill` defaults to for the same weekly cadence.
   2. The cluster token has an off-box baseline. Since 2026-08-20 the snapshot's bootstrap
@@ -167,7 +167,7 @@ def unusable_snapshot_name(name: str) -> list[str]:
     if "/" in name:
         return [
             f"{name} is a path, and --cluster-reset-restore-path takes a NAME — pass the "
-            "bare name `k3s etcd-snapshot list --s3` printed, not a file:// or s3:// location"
+            "bare name `k3s etcd-snapshot list --etcd-s3` printed, not a file:// or s3:// location"
         ]
     return []
 
@@ -190,7 +190,7 @@ def snapshot_not_restorable(name: str, doc) -> list[str]:
         return [
             f"no ETCDSnapshotFile records {name} — the cluster records {recorded}. "
             "A snapshot k3s has not reconciled into a CR has no verdict here; "
-            "`k3s etcd-snapshot list --s3` as root is the other listing"
+            "`k3s etcd-snapshot list --etcd-s3` as root is the other listing"
         ]
     status = record.get("status") or {}
     if status.get("readyToUse") is not True:

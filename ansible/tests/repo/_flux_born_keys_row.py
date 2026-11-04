@@ -122,7 +122,7 @@ FLUX_BORN_KEYS = Census(
         FluxBornKey(
             "longhorn-backup",
             "k3s_longhorn_r2_region",
-            {_TEMPLATE: '  --s3-region "{{ k3s_longhorn_r2_region }}" \\\n'},
+            {_TEMPLATE: '  --etcd-s3-region "{{ k3s_longhorn_r2_region }}" \\\n'},
         ),
         # A task reading an arm flag.
         FluxBornKey(
@@ -136,7 +136,7 @@ FLUX_BORN_KEYS = Census(
         FluxBornKey(
             "longhorn-backup",
             "k3s_longhorn_r2_region",
-            {_TEMPLATE: '  --s3-region "{{ k3s_etcd_s3_region }}" \\\n'},
+            {_TEMPLATE: '  --etcd-s3-region "{{ k3s_etcd_s3_region }}" \\\n'},
         ),
         # A longer key is not a read of the shorter one.
         FluxBornKey(

@@ -178,13 +178,18 @@ is created by hand in the console, because the slug is sent bare and never with 
 ```bash
 sudo -i
 set -a; . /etc/rancher/k3s/etcd-s3.env; set +a
-k3s etcd-snapshot list --s3 \
-  --s3-bucket "$ETCD_S3_BUCKET" --s3-endpoint "$ETCD_S3_ENDPOINT" \
-  --s3-folder etcd-snapshots --s3-region auto
+k3s etcd-snapshot list --etcd-s3 \
+  --etcd-s3-bucket "$ETCD_S3_BUCKET" --etcd-s3-endpoint "$ETCD_S3_ENDPOINT" \
+  --etcd-s3-folder etcd-snapshots --etcd-s3-region auto
 ```
 
 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` come from the env file, so no key ever goes on the
 command line.
+
+Every `k3s etcd-snapshot` call on daniel-box uses the long flag names. `k3s etcd-snapshot` also
+reads `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml`, and it refuses a short form of a key that
+file sets: `--s3` fails with `Cannot use two forms of the same flag: etcd-s3 s3`. The explicit
+`--etcd-s3-*` values make k3s ignore the `etcd-s3-config-secret` the drop-in names.
 
 ## The gates — before stopping k3s
 
@@ -221,7 +226,7 @@ gate 3 needs the API server up.
    takes a NAME, so a path there names no snapshot and k3s says so only after it has been
    stopped. An unknown name is reported with the snapshots the cluster does record, which
    separates a typo from a bucket k3s has not reconciled into CRs — `k3s etcd-snapshot list
-   --s3` as root is the other listing. The read needs `k3s.cattle.io` in
+   --etcd-s3` as root is the other listing. The read needs `k3s.cattle.io` in
    `k3s_readonly_crd_api_groups` (#2243); without it the gate exits 69 on a Forbidden.
 
    **This gate is drilled weekly, unlike gates 1 and 2.** Since 2026-09-24 the `--list-only`
@@ -236,7 +241,7 @@ gate 3 needs the API server up.
    share of the reasons to be reading this page at all. It means gate 3 could not look, not
    that the snapshot is bad. Gates 1 and 2 are the ones that still bind — they read daniel-box,
    not the cluster, and the script prints them before it reaches gate 3 — and
-   `k3s etcd-snapshot list --s3` as root is how you confirm the name without an API server.
+   `k3s etcd-snapshot list --etcd-s3` as root is how you confirm the name without an API server.
    Proceed on those two.
 
 ## Restoring

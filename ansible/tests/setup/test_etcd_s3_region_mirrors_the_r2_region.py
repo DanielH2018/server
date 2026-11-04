@@ -52,4 +52,4 @@ def test_the_off_box_script_passes_the_r2_regions_value():
     """The rendered script carries the Longhorn key's value, so the repoint changed no byte."""
     backup = yaml_fast.safe_load(BACKUP_DEFAULTS.read_text())
     rendered = rendered_shell_text("setup", "k3s", "etcd-snapshot-offbox.sh.j2")
-    assert f'--s3-region "{backup["k3s_longhorn_r2_region"]}"' in rendered
+    assert f'--etcd-s3-region "{backup["k3s_longhorn_r2_region"]}"' in rendered

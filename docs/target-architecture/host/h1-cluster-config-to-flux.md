@@ -792,7 +792,7 @@ mirrored pair, two keys with different names that a test holds equal:
       change (Baseline).
     - `k3s_longhorn_r2_region` (`auto`) is the second pair. `longhorn-backuptarget-r2.yaml.j2`
       reads it in the R2 target's URL, and `etcd-snapshot-offbox.sh.j2` reads it as
-      `--s3-region`. H1.7b defines `k3s_longhorn_r2_region` in the `longhorn-backup` role's
+      `--etcd-s3-region`. H1.7b defines `k3s_longhorn_r2_region` in the `longhorn-backup` role's
       defaults, under its baseline name, for the moved template. It adds the twin
       `k3s_etcd_s3_region` to `setup/k3s`'s defaults, beside the script's other
       `k3s_etcd_s3_*` keys, and repoints the script at it. A test holds the two equal. The
@@ -1310,7 +1310,7 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
   ansible/roles/setup/k3s/defaults/main.yml       (moved keys leave; cron-only keys and SA mirrors stay; - k3s_manage_backup_targets; + k3s_etcd_s3_region)
   ansible/roles/setup/k3s/files/longhorn_backup_health.py      (arm state and run times read from the cluster)
   ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2   (- the four baked exports)
-  ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2     (--s3-region reads k3s_etcd_s3_region, H1.7b)
+  ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2     (--etcd-s3-region reads k3s_etcd_s3_region, H1.7b)
   ansible/roles/setup/k3s/tasks/health-crons.yml  (b2-budget drops --retain)
   scripts/diagnostics/probe_lib/                  (b2-budget reads the live weekly retain)
   ansible/inventory/host_vars/daniel-box.yml      (- containers_list, H1.9)
