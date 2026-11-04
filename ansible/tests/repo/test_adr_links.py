@@ -25,6 +25,7 @@ from pathlib import Path
 import pytest
 from lib import yaml_fast
 from _helpers import REPO
+from _row_table import tracked
 
 ADR_DIR = REPO / "docs" / "adr"
 MKDOCS = REPO / "mkdocs.yml"
@@ -36,16 +37,6 @@ MARKER = re.compile(r"#\s*DECIDED:")
 COMMENT_LINE = re.compile(r"^\s*(#|--|//)")
 
 SEARCH_SUFFIXES = (".py", ".yml", ".yaml", ".j2", ".sh", ".toml", ".cfg")
-SKIP_PARTS = {
-    ".git",
-    ".venv",
-    "node_modules",
-    "__pycache__",
-    "site",
-    "collections",
-    "worktrees",
-    "Email-to-RSS",
-}
 
 VALID_STATUS = re.compile(r"^(Accepted|Proposed|Rejected|Superseded by ADR-\d{4})$")
 
@@ -67,16 +58,10 @@ def _frontmatter(path: Path) -> dict:
 
 @cache
 def _source_files() -> tuple[Path, ...]:
-    """Cached: this walks the whole repo, and two tests below each need the full set."""
+    """Cached: two tests below each need the full set."""
     out = []
-    for path in REPO.rglob("*"):
-        if not path.is_file() or path.suffix not in SEARCH_SUFFIXES:
-            continue
-        # Relative, not absolute. A session works from .claude/worktrees/<name>, so
-        # "worktrees" is a part of every ABSOLUTE path here and an absolute check skips
-        # the entire tree — leaving every link assertion vacuously true.
-        if SKIP_PARTS & set(path.relative_to(REPO).parts):
-            continue
+    for rel in tracked(*(f"*{suffix}" for suffix in SEARCH_SUFFIXES)):
+        path = REPO / rel
         # A scanner must not scan itself. This file quotes the marker syntax five times —
         # in its own docstring and in an assertion message — and each quote would count as
         # a marker, inflating the corpus floor with prose about markers rather than markers.
