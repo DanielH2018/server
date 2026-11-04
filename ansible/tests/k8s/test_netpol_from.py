@@ -221,29 +221,30 @@ def test_every_verify_caller_is_a_label_a_verify_job_carries(verify_pod_labels):
     assert VERIFY_CALLERS <= verify_pod_labels
 
 
-def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
-    """A caller naming no pod admits nothing, and the real caller stays denied."""
-    labels = verify_pod_labels | {
+@pytest.fixture(scope="module")
+def pod_labels(verify_pod_labels) -> set[str]:
+    """The `app` label of every pod the manifests and the verify Jobs render."""
+    return verify_pod_labels | {
         (pod_template(doc).get("metadata") or {}).get("labels", {}).get("app")
         for _role, _template, doc in rendered_docs()
     }
+
+
+def test_every_caller_is_a_label_some_rendered_pod_carries(pod_labels):
+    """A caller naming no pod admits nothing, and the real caller stays denied."""
     unknown = {
         (name, caller)
         for name, fence in declared_fences().items()
         for caller in fence["callers"]
-        if caller not in labels
+        if caller not in pod_labels
     }
     assert unknown == set()
 
 
-def test_every_bespoke_policy_peer_is_a_label_some_rendered_pod_carries(
-    verify_pod_labels,
-):
+def test_every_bespoke_policy_peer_is_a_label_some_rendered_pod_carries(pod_labels):
     """A same-namespace peer naming no pod admits nothing, and is a grant its workload outlived."""
-    labels = verify_pod_labels | {
-        (pod_template(doc).get("metadata") or {}).get("labels", {}).get("app")
-        for _role, _template, doc in rendered_docs()
-    }
+    # traefik's precheck Job renders from `templates/precheck/`, which `rendered_docs()` does not read.
+    labels = pod_labels | {"traefik-precheck"}
     peers = {
         (doc["metadata"]["name"], peer["podSelector"]["matchLabels"]["app"])
         for role, _template, doc in rendered_docs()
