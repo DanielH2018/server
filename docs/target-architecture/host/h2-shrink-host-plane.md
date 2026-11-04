@@ -229,8 +229,8 @@ The exit criterion has three parts:
   home. The budget listing writes the price snapshot that the next day's accounting reads, and
   `probe.py b2-spend` reads the ledger on the host.
 - **The off-box snapshot script does two jobs.** `etcd-snapshot-offbox.sh.j2` runs `k3s
-  etcd-snapshot save --name offbox --snapshot-compress` with `--s3-*` flags,
-  `--s3-region "{{ k3s_longhorn_r2_region }}"` and `--s3-retention {{ k3s_etcd_s3_retention }}`
+  etcd-snapshot save --name offbox --etcd-snapshot-compress` with `--etcd-s3-*` flags,
+  `--etcd-s3-region "{{ k3s_longhorn_r2_region }}"` and `--etcd-s3-retention {{ k3s_etcd_s3_retention }}`
   (14). It then compares the sha256 of `/var/lib/rancher/k3s/server/token` with
   `/var/lib/homelab/etcd-token.sha256` and reports DOWN on drift, on a missing stamp or on an
   unreadable side. It reports to the `Off-box etcd Snapshot` Kuma tile and the
@@ -1810,7 +1810,7 @@ carries `prune: disabled`.
   already prefer it.
 - On a fresh cluster before D5's namespace PR, the `longhorn-restore-drill` Kustomization
   reads not Ready until step 8 of H1's DR order creates `homelab`. No step-6 tag waits on it.
-- Between H2.8a and H2.8b, the script's `--s3-retention 14` and native retention both prune the
+- Between H2.8a and H2.8b, the script's `--etcd-s3-retention 14` and native retention both prune the
   shared `offbox` prefix. The off-box window shrinks to about five days for that overlap, which
   lasts about a day.
 
