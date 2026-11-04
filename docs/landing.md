@@ -110,8 +110,8 @@ re-test rather than at merge time (#6309). The `DECIDED:` marker on `PACE_MASTER
 - The cap rises by one for each 15 minutes a landing has been held, so the longest-held
   landings pass first, one at a time.
 - Once the whole wait, held time included, reaches `merge_timeout`, the landing merges without
-  pacing. The pre-merge wait therefore stays inside `merge_timeout`, which the
-  `LAND_DEADLINE` sizing below counts on.
+  pacing. The pre-merge wait therefore stays inside `merge_timeout`, or twice it when the
+  landing updates the branch, which the `LAND_DEADLINE` sizing below counts on.
 - A failed read merges without pacing. Pacing controls throughput; it is not a safety gate.
 - `LAND_PACE_MASTER_RUNS` sets the cap, and `0` turns pacing off.
 - A PR armed by hand with `gh pr merge --auto` merges without this check.
@@ -207,10 +207,11 @@ The rule generalises: keep the prose out of the command string and inside a file
 landing. It reads the state, never the checks, so it is not hand-polling. Without it the session
 has to notice the merge itself, which every landing on 2026-09-01 did with a hand-written
 `until MERGED` loop. A PR still open after 92 minutes exits `LAND_GAVE_UP`: it is not being merged, and the
-reason is on the PR.
+reason is on the PR. A landing that updates the branch waits 92 minutes more from the update,
+because the updated head's CI runs the whole chain again.
 
 **A conflicting PR ends the wait at once**, exit `LAND_FAILED` with `VERDICT: merge-conflict`, rather than
-sitting out the 92 minutes. A PR that goes conflicting during the wait never merges, and
+sitting out the wait. A PR that goes conflicting during the wait never merges, and
 nothing on the PR says so — with several sessions landing at once, another merge moving master
 under an open PR is the ordinary way it happens. Rebase onto master, push, and re-run the same
 command. The wait tolerates a `mergeable` of `UNKNOWN` — GitHub computes the
@@ -444,7 +445,7 @@ Instead it reads the cluster every 30 seconds:
   starts by which the landing must print its verdict. The wait then gives up 10 minutes
   before that deadline, whatever is in flight, and the landing still ends `deferred` with a
   ledger line (#5199). So on a lander unit the wait can give up before twice `verify`'s wait.
-  `homelab-claude-land@.service` and `renovate-agent-land@.service` each set 35940. After the merge
+  `homelab-claude-land@.service` and `renovate-agent-land@.service` each set 41460. After the merge
   and master CI budgets, that leaves the wait room for `verify`'s wait on the rendered soak,
   once, and the `promote` workflow's `render`, `images` and `publish` jobs at their
   timeouts. It also covers one measured rebuild of every built image by a commit queued ahead
@@ -469,7 +470,9 @@ Instead it reads the cluster every 30 seconds:
   5520s, and the deadline and the Renovate bounds above it by the same 900s, to 33120
   (#7128). The merge budget then rose from 2700s to the same 5520s, because a PR's own CI
   runs that chain and a landing ended `merge-timeout` while its CI could still go green.
-  The deadline and every bound above it rose by the same 2820s, to 35940 (#7129).
+  A branch update starts that chain again and gives the wait one more budget, so the
+  deadline counts two merge budgets. It and every bound above it rose by 8340s, to 41460
+  (#7129).
   `ansible/tests/setup/test_lander_deadlines_cover_the_soak.py` renders the published bundle
   and fails once a newly published tag outgrows that headroom (#5427).
   Inside the no-promotion window around the weekly reboot, `decide` defers every promotion (D5.2b2),
@@ -477,7 +480,7 @@ Instead it reads the cluster every 30 seconds:
   promotion starts. The first poll inside the window moves the cap by the window's remaining
   length, up to the unit's `LAND_WINDOW_GRACE`. Both lander units set the window's full
   length, and every bound above `LAND_DEADLINE` covers it: homelab-claude-land's `TimeoutStartSec` of
-  17h, and the 979min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
+  19h, and the 1071min the Renovate lander unit sets, with `land_renovate_pr.py`'s `LAND_TIMEOUT_S`. The
   Renovate lander needs it too: its unit runs on after the session ends, so a landing started
   late on a Saturday can still be waiting on Sunday's window (#5457).
 

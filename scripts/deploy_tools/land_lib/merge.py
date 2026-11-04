@@ -562,9 +562,11 @@ def await_merge(ln: Landing) -> None:
 
     A PR arm_merge left for a direct merge is merged here, on the first poll where await_ci
     reads its head green, unless master moved past the PR's base: then the branch is updated
-    once and the merge waits for the updated head to go green. A green head also waits while
-    master CI has a backlog (`pace.hold`). A held poll never ends the wait at `merge_timeout`:
-    once held and unheld time reach it, the merge goes ahead without pacing.
+    once and the merge waits for the updated head to go green. That update starts a whole new
+    CI chain, so it gives the wait one more `merge_timeout` from there, and LAND_DEADLINE counts
+    two. A green head also waits while master CI has a backlog (`pace.hold`). A held poll never
+    ends the wait at `merge_timeout`: once held and unheld time reach it, the merge goes ahead
+    without pacing.
     Without --arm-merge this only polls, for a PR merged some other way.
 
     A head whose every CI run skipped as a draft is named on the poll that first reads it. Once
@@ -585,6 +587,8 @@ def await_merge(ln: Landing) -> None:
     held = 0
     # The head this landing updated the branch from; empty until it does.
     updated_from = ""
+    # The `waited + held` at which the wait ends; the branch update moves it, once.
+    wait_ends_at = o.merge_timeout
     # The head the handback refusal and the pin gate last passed, so a merge GitHub refuses
     # and the wait retries reads kubectl, runs the gates and posts the status again only for a
     # new head.
@@ -681,6 +685,7 @@ def await_merge(ln: Landing) -> None:
                 if moved:
                     _update_branch(ln, head, moved)
                     updated_from = head
+                    wait_ends_at = waited + held + o.merge_timeout
                 else:
                     if head != handback_checked:
                         handback.refuse_handback_while_flux_owns(ln, head)
@@ -697,7 +702,7 @@ def await_merge(ln: Landing) -> None:
                             f"{refusal}"
                         )
                         last_refusal = refusal
-        if not hold and waited + held >= o.merge_timeout:
+        if not hold and waited + held >= wait_ends_at:
             # A run cancelled on the head never supplies a verdict on its own (#5931). A run
             # skipped as a draft names its own remedy in await_ci's line, because a re-run of
             # it skips again (#6077).
@@ -711,7 +716,7 @@ def await_merge(ln: Landing) -> None:
             else:
                 why = paced or "look at its checks or the queue"
             ln.die(
-                f"PR #{o.pr} still {state} after {o.merge_timeout}s — not being merged; {why}",
+                f"PR #{o.pr} still {state} after {waited + held}s — not being merged; {why}",
                 75,
                 Verdict.MERGE_TIMEOUT,
             )

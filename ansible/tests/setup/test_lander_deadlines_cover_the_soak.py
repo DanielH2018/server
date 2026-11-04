@@ -2,8 +2,9 @@
 
 `land_wait` gives up once `promotion.wait_cap` runs out, whatever the soak's own deadline
 says. The cap is LAND_DEADLINE less what the landing already spent and `DEADLINE_RESERVE_S`.
-Before the wait, a landing spends up to its merge and master CI budgets, the `Options`
-defaults both landers run with. The tick has no fixed budget, and the headroom covers it.
+Before the wait, a landing spends up to two merge budgets, because a branch update gives the
+wait one more, and its master CI budget, the `Options` defaults both landers run with. The tick
+has no fixed budget, and the headroom covers it.
 
 The wait needs `verify`'s wait on the soak that the publish job renders from this tree, plus
 promote's `render`, `images` and `publish` jobs, which run before any promotion can start.
@@ -145,7 +146,7 @@ def window_s() -> int:
 def shortfall(land_deadline: int, soak: dict) -> float:
     """How far land-wait's cap falls short of what a healthy promotion takes; <= 0 fits."""
     budgets = options.Options(pr="1")
-    spent = budgets.merge_timeout + budgets.ci_timeout
+    spent = 2 * budgets.merge_timeout + budgets.ci_timeout
     landing = SimpleNamespace(
         opts=SimpleNamespace(deadline=land_deadline),
         tools=SimpleNamespace(clock=lambda: float(spent)),

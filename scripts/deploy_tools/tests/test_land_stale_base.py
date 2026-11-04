@@ -47,7 +47,14 @@ def _polls(*heads: str) -> list[dict]:
 
 
 def _landing(
-    landing, polls, compare, gh_rc=(0,), tested_base=None, pr_files=None, **opts
+    landing,
+    polls,
+    compare,
+    gh_rc=(0,),
+    tested_base=None,
+    pr_files=None,
+    ci=((0, "CI green"),),
+    **opts,
 ):
     ln, calls = landing(
         Fakes(
@@ -56,6 +63,7 @@ def _landing(
             compare=compare,
             gh_merge_rc=list(gh_rc),
             pr_files=OVERLAPPING if pr_files is None else pr_files,
+            await_ci=list(ci),
         ),
         **opts,
     )
@@ -229,6 +237,36 @@ def test_a_landing_updates_the_branch_once_even_if_master_moves_again(landing):
     )
     merge.await_merge(ln)
     assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
+
+
+def test_the_updated_heads_ci_gets_a_whole_merge_budget(landing):
+    """The update starts the CI chain again, so it must not inherit what the first run spent."""
+    ln, calls = _landing(
+        landing,
+        _polls(OLD, OLD, NEW, NEW),
+        [INCIDENT_2922],
+        ci=[(75, "pending"), (0, "CI green"), (75, "pending"), (0, "CI green")],
+        merge_timeout=2,
+        merge_poll=1,
+    )
+    merge.await_merge(ln)
+    assert _gh_writes(calls) == ["update-branch aaaa", "merge bbbb"]
+
+
+def test_the_updated_heads_budget_still_ends_the_wait(landing):
+    ln, calls = _landing(
+        landing,
+        _polls(OLD, OLD, NEW, NEW, NEW)[:-1],
+        [INCIDENT_2922],
+        ci=[(75, "pending"), (0, "CI green"), (75, "pending"), (75, "pending")],
+        merge_timeout=2,
+        merge_poll=1,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.await_merge(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "merge-timeout")
+    assert "still OPEN after 3s" in exc.value.error
+    assert _gh_writes(calls) == ["update-branch aaaa"]
 
 
 def test_a_refused_update_dies_without_merging(landing):
