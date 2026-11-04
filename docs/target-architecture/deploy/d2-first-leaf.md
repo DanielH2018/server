@@ -899,7 +899,7 @@ and waits on promotion for every tag it names that is not Ansible-owned
 (`land_lib/promotion.py:owned_by_narrowing`, #5146).
 
 **`land.sh` refuses a handback merge while Flux still owns the tag.** Before it merges a PR,
-`land_lib/merge.py` compares `tag_owners` at the PR's base and head. For each tag that the
+`land_lib/handback.py` compares `tag_owners` at the PR's base and head. For each tag that the
 PR makes Ansible-owned, it reads
 `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system <tag>` with the
 read-only kubeconfig. It refuses the merge while any such Kustomization exists, and

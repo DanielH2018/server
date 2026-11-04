@@ -1997,6 +1997,9 @@ instead:
 1. **The second PR removes the `containers_list` entry and the role.** The next bundle omits
    `flux/<tag>.yaml`, and `deletionPolicy: Orphan` leaves nothing behind, because the first
    PR's prune already removed the objects. The name never joins `k8s_retired_services`.
+   The Kustomization still exists when this PR merges, and `land.sh` lets the PR through: the
+   check in [docs/landing.md](landing.md#the-merge-wait) refuses only a tag that keeps its
+   entry at the PR's head.
 1. **Delete the claim by hand (operator-only).** Prune never deletes a claim labelled
    `kustomize.toolkit.fluxcd.io/prune: disabled`, so the claim and its Longhorn volume
    outlive both PRs. Once the second PR is on master, and only when the data is no longer

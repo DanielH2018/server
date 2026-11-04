@@ -5,7 +5,7 @@ The script reader of D2's ownership flag (docs/target-architecture/deploy/d2-fir
 
 import pytest
 
-from lib.k8s_roles import tag_owners
+from lib.k8s_roles import k8s_tags, tag_owners
 
 HOST_VARS = """\
 containers_list:
@@ -29,6 +29,12 @@ def test_both_owner_values_map_every_tag_of_their_entry(tmp_path):
         "n8n": "released",
         "n8n-images": "released",
     }
+
+
+def test_k8s_tags_names_every_tag_of_every_k8s_entry(tmp_path):
+    host_vars = tmp_path / "daniel-box.yml"
+    host_vars.write_text(HOST_VARS + "  - name: wg-easy\n    platform: docker\n")
+    assert k8s_tags(host_vars) == {"bento-pdf", "n8n", "n8n-images", "sonarr"}
 
 
 @pytest.mark.parametrize("value", ["ansible", "Flux", "", "~", "[flux]"])

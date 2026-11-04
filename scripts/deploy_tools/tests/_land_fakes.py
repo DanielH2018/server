@@ -222,6 +222,9 @@ class Fakes:
     # `tools.owners_at`: each tag that sets `owner` at a ref, by ref. A ref absent here has
     # none. An exception is raised in place of a map.
     owners: dict[str, dict[str, str] | Exception] = field(default_factory=dict)
+    # `tools.k8s_tags_at`: every tag of a k8s entry at a ref, by ref. A ref absent here has
+    # none. An exception is raised in place of a set.
+    k8s_tags: dict[str, set[str] | Exception] = field(default_factory=dict)
     # `tools.kustomization_exists`: the Kustomizations kubectl finds in flux-system. An
     # exception is raised for every read.
     kustomizations: set[str] | Exception = field(default_factory=set)
@@ -449,6 +452,13 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             raise answer
         return answer
 
+    def k8s_tags_at(primary, ref):
+        calls.append(("k8s_tags_at", (ref,), {"cwd": primary}))
+        answer = f.k8s_tags.get(ref, set())
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
     def kustomization_exists(name):
         calls.append(("kustomization_exists", (name,), {}))
         if isinstance(f.kustomizations, Exception):
@@ -504,7 +514,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         declared_at=lambda ref, primary: f.declared_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
-        flux=FluxReads(owners_at, kustomization_exists, land_wait, pins),
+        flux=FluxReads(owners_at, kustomization_exists, land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,
         **host_fakes(f, calls),
         paths_a_hand_must_apply=lambda paths, pr_range, primary, declared: [

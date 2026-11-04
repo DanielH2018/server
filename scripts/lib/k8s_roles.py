@@ -239,6 +239,19 @@ def tag_owners(host_vars: Path = K8S_HOST_VARS) -> dict[str, str]:
     return owners
 
 
+def k8s_tags(host_vars: Path = K8S_HOST_VARS) -> set[str]:
+    """Every deploy tag of a k8s entry in `host_vars`, whether or not it sets `owner`.
+
+    The tags rather than the entry names, because `tag_owners` maps tags: an entry that declares
+    `tags` is selected by each of them, and its name need not be one.
+    """
+    from lib.render_guard import entry_tags
+
+    return {
+        tag for entry in k8s_entries(host_vars).values() for tag in entry_tags(entry)
+    }
+
+
 # Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`
 # when the owning role ships none of its own, mapped to that template's file name. Mirrors
 # `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml, which

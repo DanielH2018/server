@@ -450,7 +450,7 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
       `deploy_k8s_owed.py`, and a test that a flux-owned image bump lands in `cs.flux` and
       never in `cs.k8s_deploy`.
     - `scripts/lib/k8s_roles.py:tag_owners`. Its readers are `deploy_lib/tags.py`'s exit 5,
-      `land_lib/deploy.py`'s split before `deploy_by_host`, `land_lib/merge.py`'s handback
+      `land_lib/deploy.py`'s split before `deploy_by_host`, `land_lib/handback.py`'s
       refusal, `smoke_caller`, `secret_rotation.py --deploy`, `probe_lib/health.py`'s
       release-record skip and `probe_lib/releases.py`'s skip.
     - The glance and catalog line. For `owner: flux`, `gen_role_glance.py` and
@@ -895,8 +895,8 @@ removes `owner`:
     - D6.5b: `probe_lib/health.py`'s skip, with the release-record branch, and
       `probe_lib/releases.py`'s skip, with the module.
 - **`tag_owners` readers that stay until H1.9:** `secret_rotation.py --deploy`,
-  `gen_role_glance.py`, `service_catalog.py`, D6.3's census row and `land_lib/merge.py`'s
-  handback refusal. The census refuses the handback in CI first, so the merge-time refusal
+  `gen_role_glance.py`, `service_catalog.py`, D6.3's census row and `land_lib/handback.py`'s
+  refusal. The census refuses the handback in CI first, so the merge-time refusal
   is a second guard for the same commit. It reads one Kustomization only for a PR that makes
   a tag Ansible-owned, and H1.9 deletes it with `owner`.
 - **The glance blocks keep D2's Flux line.** D6.2b does not put the Renovate stance back.
@@ -2058,7 +2058,7 @@ The steps merged in this order.
       ended in `needs-manual-apply` with "deploy it by hand", and from this PR on
       `deploy.sh` refuses every k8s tag, so nobody could follow that instruction.
     - Delete D2's `tag_owners` split in `land_lib/deploy.py` with the k8s deploy arm, because
-      every k8s tag waits on promotion. `land_lib/merge.py`'s handback refusal stays until
+      every k8s tag waits on promotion. `land_lib/handback.py`'s refusal stays until
       H1.9 (*D2's ownership readers after D6*).
     - Keep `land_reach.py` and its note in `land_tags.py`.
     - Add the census row: every k8s `containers_list` entry carries `owner: flux`. It goes in
