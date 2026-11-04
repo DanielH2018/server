@@ -213,8 +213,8 @@ PROPERTIES = (
                 ),
             ),
             more_green=(("x", _cj("*/5 * * * *", ttlSecondsAfterFinished=1800)),),
-            # 14 CronJobs render. The floor is the count.
-            min_matches=14,
+            # 12 CronJobs render. The floor is the count.
+            min_matches=12,
             must_find=frozenset(
                 {
                     "configarr",

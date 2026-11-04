@@ -40,17 +40,6 @@ _NO_READINESS = {
         "crowdsec-jobs",
     ): "sidecar running the crowdsec maintenance jobs; a probe would let a job's fault pull the "
     "LAPI out of its Service, so each job reports through its own Kuma tile instead",
-    (
-        "uptime-kuma",
-        "autokuma",
-    ): "sidecar; readiness on /health would gate uptime-kuma's own Service until the first "
-    "reconcile lands — a measured 76s Service-endpoint gap per pod replacement, which is why "
-    "its startupProbe was removed for livenessProbe.initialDelaySeconds on 2026-09-06 (#1348)",
-    (
-        "uptime-kuma",
-        "discord-relay",
-    ): "sidecar queueing Kuma's Discord notifications (#5657); readiness would let a relay "
-    "fault pull uptime-kuma out of its own Service",
     # The exportarr metrics sidecars, same shape as the three above and one degree worse: a
     # readinessProbe here would let an EXPORTER outage pull its *arr out of its own Service,
     # so monitoring would take down the thing it monitors. They keep a livenessProbe, and a

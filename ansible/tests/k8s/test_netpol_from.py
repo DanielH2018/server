@@ -38,7 +38,6 @@ KNOWN_FENCES = {
     "ical-proxy": "netpol-baseline",
     "home-assistant": "netpol-baseline",
     "karakeep": "netpol-baseline",
-    "uptime-kuma": "netpol-baseline",
     "sonarr": "sonarr",
     "radarr": "radarr",
     "prowlarr": "prowlarr",
@@ -234,4 +233,5 @@ def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
         for caller in fence["callers"]
         if caller not in labels
     }
-    assert unknown == set()
+    # M6's C-2a deletes this grant. C-1b deleted the pod, and the grant admits nothing until then.
+    assert unknown == {("ical-proxy", "uptime-kuma")}

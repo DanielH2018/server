@@ -45,7 +45,6 @@ _RECREATE = {
     ("freshrss", "freshrss"): "sqlite DB plus file-based PHP sessions",
     ("navidrome", "navidrome"): "sqlite index on an RWO Longhorn volume",
     ("speedtest", "speedtest"): "sqlite results DB",
-    ("uptime-kuma", "uptime-kuma"): "sqlite DB on two RWO PVCs",
     ("n8n", "n8n"): "sqlite DB under /home/node/.n8n",
     (
         "home-assistant",

@@ -250,7 +250,7 @@ def test_a_comment_naming_a_reaper_is_clean(tmp_path: Path) -> None:
 # The CronJob and the mounted script ConfigMap that must be read, so an empty render cannot
 # pass. H2.3b adds the drill's script ConfigMap here when its tag renders one.
 CRONJOB_MEMBERS = frozenset({("CronJob", "pi-peer-backup")})
-MOUNTED_MEMBERS = frozenset({("ConfigMap", "kuma-maintenance-sync")})
+MOUNTED_MEMBERS = frozenset({("ConfigMap", "karakeep-archive-pruner")})
 
 
 def _mounted_configmaps(pod: dict) -> set[str]:

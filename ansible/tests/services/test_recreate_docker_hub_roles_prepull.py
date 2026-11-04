@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""uptime-kuma, crowdsec and Grafana pull their images before the apply that recreates them (#5867).
+"""crowdsec and Grafana pull their images before the apply that recreates them (#5867).
 
-Each runs a `Recreate` Deployment on a large Docker Hub image: louislam/uptime-kuma's 602.3 MB
-and crowdsec's alpine/k8s at 320.8 MB, compressed amd64 sizes on 2026-10-22. A digest bump
-stops the old pod before the kubelet pulls the new image, so without a pre-pull the alerting
-spine or the LAPI is down for the whole pull. `flux_prepull_timeout` in each role's defaults
+Each runs a `Recreate` Deployment on a large Docker Hub image: crowdsec's alpine/k8s is 320.8 MB,
+the compressed amd64 size on 2026-10-22. A digest bump
+stops the old pod before the kubelet pulls the new image, so without a pre-pull the LAPI is
+down for the whole pull. `flux_prepull_timeout` in each role's defaults
 adds a `<tag>-prepull` Kustomization that `<tag>` depends on, so the old pod serves through it.
 
 The test renders each role as the one published tag, as the tdarr test does, and holds the
@@ -25,7 +25,7 @@ from renderer import homelab_render
 from renderer.renderer_lib.bundle import CLUSTER_VARS_FILE
 from renderer.renderer_lib.ordering import Ordering
 
-TAGS = ("uptime-kuma", "crowdsec")
+TAGS = ("crowdsec",)
 
 
 def _docs(path) -> list[dict]:

@@ -818,9 +818,9 @@ tip then stops a push whose tile is still live, and Kuma pages DOWN 1200s later.
   `status-page-sync`, `discord`, `tag-severity` and `tag-runbook`, the entities that must
   survive until C-1. D5's flip of uptime-kuma (#5712) deleted the task, so the assert's home
   is the `INDEX_ASSERT` literal in
-  `ansible/roles/k8s/uptime-kuma/tests/test_declaration_index_flux_form.py`, which A0 edits.
+  `test_declaration_index_flux_form.py`, which A0 edits.
 - Its test evaluates the role's own assert expression, the way
-  `ansible/tests/services/test_kuma_push_token_format.py` evaluates the token-format assert.
+  `test_kuma_push_token_format.py` evaluates the token-format assert.
   An empty index must be refused. An index holding only the five survivors must be
   accepted, and so must the baseline render.
 - "Check every push token is in the format AutoKuma accepts" stays until C-1. A shrinking
@@ -1875,14 +1875,15 @@ here. C-1 waits for the operator's acceptance.
       `k8s_host_files/tasks/uptime-kuma.yml`, the absent arm for the autokuma-claims staging
       directory, goes in the same PR with its import, once a read-only `ls` on daniel-box
       finds no such directory. After the promotion, the operator deletes with kubectl
-      (**operator-only**) the objects no prune removes: the two claims, and either Secret
-      that a `kubectl get secret` still finds. No promotion re-creates them, because the
-      entry is gone. C-6's PR quotes exit criterion 1's `kubectl get` returning nothing.
+      (**operator-only**) the objects no prune removes: the two claims, either Secret
+      that a `kubectl get secret` still finds, and in `flux-system` the `prepull-uptime-kuma-*`
+      Job and ConfigMap that C-1b's dropped prepull Kustomization orphaned. No promotion
+      re-creates them, because the entry is gone. C-6's PR quotes exit criterion 1's `kubectl get` returning nothing.
 3. **C-3, the plumbing**, in two PRs:
     - **C-3a, the push libraries.** Delete `kuma-push-lib.sh` with the `kuma-push` host
       component that packages it, and `hosts/lib/kuma_push.py` with its re-export from
       `hosts/lib/host_lib.py`. Delete the `kuma_push.py` rows from
-      `deploy_cross_role.py`'s two tables, including the k8s row's `uptime-kuma` member. C-3a
+      `deploy_cross_role.py`'s two tables. C-1b dropped the k8s row's `uptime-kuma` member. C-3a
       lands after C-2b, which deletes `uptime-kuma/files/push_heartbeat.py`, whose docstring
       names `kuma_push.py`. Every reader of `kuma_push.py` changes in the same commit, or a
       copy of a missing `src` fails the role that holds it:
@@ -2717,7 +2718,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - C-1: `test_postflight.py` loses `check_kuma_scrape`'s cases.
     - C-1: `ansible/tests/k8s/test_netpol_probe_targets.py` gains the probe-row named-member
       case, and runs against the table without the uptime-kuma row.
-    - C-1: `ansible/tests/services/test_kuma_push_token_format.py`, which evaluates the
+    - C-1: `test_kuma_push_token_format.py`, which evaluates the
       deleted token-format assert, is deleted, with A0's floor test. Every other
       `test_kuma_*.py` in `ansible/tests/services/` that reads a deleted template or task,
       such as `test_kuma_static_monitors.py` and `test_kuma_entities_parse_for_autokuma.py`,

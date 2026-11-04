@@ -248,9 +248,6 @@ _ROOT_BY_DESIGN = {
 # Runs as root over root-owned data. These are the ones with real work behind them: each needs an
 # fsGroup the role currently avoids, or a one-time chown, before it can assert.
 _ROOT_OWNED_DATA = {
-    # No USER in the image, dumb-init at uid 0, /app/data root-owned. Its template avoids fsGroup
-    # deliberately — it would recursively chown the PVC on every mount — so this needs a chown Job.
-    ("uptime-kuma", "uptime-kuma"),
     # Root writing a SQLite DB + WAL in a root-owned PVC.
     ("scrutiny", "web"),
     # Data is uid-0-owned by explicit design; see the role's CLAUDE.md.

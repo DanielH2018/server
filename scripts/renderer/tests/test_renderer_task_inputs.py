@@ -8,13 +8,11 @@ real tree and a fresh stub file.
 Run: uv run pytest scripts/renderer/tests/test_renderer_task_inputs.py
 """
 
-import json
 import re
 
 import pytest
 
 from _image_builder_tag import templar_content_tag, templar_value
-from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster, task_inputs
@@ -30,12 +28,7 @@ SITES = [
 ]
 
 CHECKED_FACTS = [
-    (role, fact)
-    for role, steps in task_inputs.SET_FACTS.items()
-    for _, fact in steps
-    # Its expression renders uptime-kuma's monitors through the repo's own filters, which a
-    # bare Templar does not load. test_uptime_kuma_indexes_every_declaration covers it.
-    if fact != "kuma_declarations"
+    (role, fact) for role, steps in task_inputs.SET_FACTS.items() for _, fact in steps
 ]
 
 
@@ -102,19 +95,3 @@ def test_a_set_fact_equals_the_value_templar_computes(role, fact, stubs):
         "role_path": str(role_dir),
     }
     assert facts[fact] == templar_value(expression, variables, role_dir)
-
-
-def test_uptime_kuma_indexes_every_declaration(stubs):
-    """`kuma_declarations` is read through `default({})`, so an empty one would still render.
-
-    The census holds at least one declaration, and so does this.
-    """
-    rendered = cluster.render_tag("uptime-kuma", stubs)
-    (configmap,) = [
-        doc
-        for doc in yaml_fast.safe_load_all(
-            rendered.files["status-page-sync-configmap.yaml"]
-        )
-        if doc
-    ]
-    assert len(json.loads(configmap["data"]["index.json"])) > 0

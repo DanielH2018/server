@@ -75,7 +75,7 @@ def test_every_secret_document_renders_as_a_secret_file() -> None:
     }
     # The one Secret whose name does not say so, listed by hand: if the census stops finding it,
     # it has stopped reading the rendered tree.
-    assert ("uptime-kuma", "static-monitors.yaml.j2") in secrets
+    assert ("cluster-base", "readonly-rbac.yaml.j2") in secrets
     stray = sorted(
         f"{role}/{name}"
         for role, name in secrets

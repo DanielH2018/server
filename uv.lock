@@ -296,15 +296,6 @@ wheels = [
 ]
 
 [[package]]
-name = "importlib-resources"
-version = "7.1.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e4/06/b56dfa750b44e86157093bc8fca0ab81dccbf5260510de4eaf1cb69b5b99/importlib_resources-7.1.0.tar.gz", hash = "sha256:0722d4c6212489c530f2a145a34c0a7a3b4721bc96a15fada5930e2a0b760708", size = 44985, upload-time = "2026-04-12T16:36:09.232Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/8a/db/55a262f3606bebcae07cc14095338471ad7c0bbcaa37707e6f0ee49725b7/importlib_resources-7.1.0-py3-none-any.whl", hash = "sha256:1bd7b48b4088eddb2cd16382150bb515af0bd2c70128194392725f82ad2c96a1", size = 37232, upload-time = "2026-04-12T16:36:08.219Z" },
-]
-
-[[package]]
 name = "iniconfig"
 version = "2.3.1"
 source = { registry = "https://pypi.org/simple" }
@@ -609,31 +600,6 @@ wheels = [
 ]
 
 [[package]]
-name = "python-liquid"
-version = "2.3.6"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "babel" },
-    { name = "importlib-resources" },
-    { name = "markupsafe" },
-    { name = "python-dateutil" },
-    { name = "pytz" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/6f/32/c3f57a7854b1c2eb8d27edbeb13619c1b4896a2bd8d59a97b2662c7e08f8/python_liquid-2.3.6.tar.gz", hash = "sha256:b76c235e0006e2fe069b6fc630a70f797a321a8bc25c02aca6d71e4dacb335f8", size = 95941, upload-time = "2026-10-25T08:41:23.954Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/99/4a/055a5b43cbff0048f95eb1b6d4b8df4a563bf7e1efcb50c4b0e54b8464ba/python_liquid-2.3.6-py3-none-any.whl", hash = "sha256:450cb84fdd787a21f666ea108001108f09f7f5fc63a2717a007cd135b2596c9b", size = 141803, upload-time = "2026-10-25T08:41:22.671Z" },
-]
-
-[[package]]
-name = "pytz"
-version = "2026.6"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/f5/b0/168030b0bfcc334cf09fa3313afdb888d892c8a0027324683d1de0ec277e/pytz-2026.6.tar.gz", hash = "sha256:3b0fc2727707663d6e517936f444fd8a8b240f1fc32f4bf7ee03274245945284", size = 318520, upload-time = "2026-10-29T09:05:47.011Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/b6/25/564f3fc5b70c1398d706c51f2b1470d0ea0b1b2f96fee67877b6f5bdf3b6/pytz-2026.6-py2.py3-none-any.whl", hash = "sha256:7fed3fee8fd6bd4a2b7b75a8d56021d0624127bf69bd5691f115db929ac570b3", size = 506321, upload-time = "2026-10-29T09:05:45.14Z" },
-]
-
-[[package]]
 name = "pywin32"
 version = "312"
 source = { registry = "https://pypi.org/simple" }
@@ -776,7 +742,6 @@ dev = [
     { name = "mkdocs-material" },
     { name = "pytest" },
     { name = "pytest-xdist" },
-    { name = "python-liquid" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "ruff" },
@@ -798,7 +763,6 @@ dev = [
     { name = "mkdocs-material", specifier = ">=9.5" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-xdist" },
-    { name = "python-liquid", specifier = ">=2" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "ruff", specifier = ">=0.16" },

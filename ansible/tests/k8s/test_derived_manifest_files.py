@@ -52,10 +52,10 @@ JINJA_LIST_ROLES = frozenset({"authelia", "navidrome", "traefik"})
 
 # Members the agreement test must reach, one per arm of the rule: a shared Service and route
 # (bazarr), a secret by name (sonarr), a one-off Job (registry), a deferred file plus an
-# exclusion (pihole), a listed secret file (uptime-kuma) and an excluded shared default
+# exclusion (pihole), a listed secret file (cluster-base) and an excluded shared default
 # (scrutiny).
 NAMED_MEMBERS = frozenset(
-    {"bazarr", "sonarr", "registry", "pihole", "uptime-kuma", "scrutiny"}
+    {"bazarr", "sonarr", "registry", "pihole", "cluster-base", "scrutiny"}
 )
 
 
@@ -277,7 +277,7 @@ def test_a_listed_file_list_wins_over_the_derivation(tmp_path):
 
 
 def test_a_listed_secret_file_leaves_the_derived_files_list(tmp_path):
-    """uptime-kuma's shape: a Secret whose name does not say so, listed by hand."""
+    """A Secret whose name does not say so, listed by hand."""
     _widget(tmp_path, "deployment.yaml.j2", "secret.yaml.j2", "monitors.yaml.j2")
     ansible, python = _both(
         tmp_path, {"manifests_secret_files": ["secret.yaml", "monitors.yaml"]}, {}
@@ -306,7 +306,7 @@ def world_readable_secrets(renders, resolve) -> list[str]:
 def test_no_role_renders_a_secret_world_readable_is_clean():
     renders = rendered_texts()
     assert {
-        ("uptime-kuma", "static-monitors.yaml.j2"),
+        ("cluster-base", "readonly-rbac.yaml.j2"),
         ("sonarr", "secret-exportarr.yaml.j2"),
     } <= {(role, name) for role, name, _text in renders}, (
         "the render corpus no longer carries the two Secret templates this guard is sized on"

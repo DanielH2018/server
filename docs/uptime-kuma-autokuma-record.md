@@ -1,8 +1,7 @@
 # uptime-kuma and AutoKuma record
 
-The measured incidents and source readings behind the `uptime-kuma` role's rules.
-`ansible/roles/k8s/uptime-kuma/CLAUDE.md` carries the rules themselves; this page is the
-working-out, read before re-deriving one of them or when a rule's reason is the question.
+The measured incidents and source readings behind the Uptime Kuma workload, which M6 retired.
+The templates and guards this page names were deleted with M6's C-1b, and git history keeps them.
 
 Two moving parts sit behind every fact here: Kuma itself at the pinned `2.5.3`, and the AutoKuma
 sidecar at `2.1.0-rc.2`, which reconciles monitors, notifications and tags from this role's
@@ -41,9 +40,8 @@ faster resend raises the POST volume a long multi-tile outage sends Discord, so 
 likelier is reported rather than lost.
 
 The variable is `uptime_kuma_k8s_push_resend_down_beats` now, 90, which is six hours for a bridge-fed tile.
-`test_kuma_push_resend_beats.py` derives the spacing from the bridge's `INTERVAL` and
-`uptime_kuma_k8s_bridge_push_interval` and fails outside 4-12h, so a value that reads as hours again cannot
-land. The count cannot mean six hours for every tile — a cron-fed one on a slower cadence resends
+A test derived the spacing from the bridge's `INTERVAL` and the bridge push window and failed
+outside 4-12h, so a value that read as hours again could not land. The count cannot mean six hours for every tile — a cron-fed one on a slower cadence resends
 less often, and a dead bridge leaves only the window's own beats — which is why the unit is beats
 and not a time.
 
@@ -182,7 +180,7 @@ probes, so those do not.
 Email is the same convention, a second template. `email.json` renders `files/email-message.liquid`
 as `customBody` (plain text — the break-glass tier has to read in any client, so `htmlBody` stays
 off) and `[Homelab] {{ status }} {{ name }}` as `customSubject`, through the same context (#2067).
-`ansible/tests/services/test_kuma_email_template.py` renders it the same three ways.
+A test rendered it the same three ways.
 
 The test engine is python-liquid; Kuma's is liquidjs. The template stays in the subset both accept —
 `assign x = a == b` is the one divergence found, which is why `down` is set through an `if` — and the
@@ -243,10 +241,8 @@ The tag reference is the same NameNotFound hazard as the notification reference:
 tag the Secret no longer declares fails to parse and, under `ON_DELETE=delete`, is deleted (#2076).
 `test_every_tag_a_monitor_names_is_a_declared_tag_entity` refuses the typo; it cannot refuse a
 deliberate removal of a tag entity while monitors still name it, so remove the references first and
-the entity a deploy later. Every reader that classifies entities by type — the three guards in
-`test_kuma_static_monitors.py`, `test_status_page_groups.py`,
-`status-page-sync-configmap.yaml.j2`'s `index.json` loop and `probe_lib/monitors.py` — skips `tag`
-alongside `notification`.
+the entity a deploy later. Every reader that classified entities by type, the guards and the
+status-page sync's `index.json` loop included, skipped `tag` alongside `notification`.
 
 ## Recovery time is set on the producer
 
@@ -291,8 +287,7 @@ It reported the tile as "no beat due yet" until the tile's interval had passed s
 started, which for a weekly tile is never. It now checks the status page for the name and
 reports a declared tile absent from the page as missing. `secret_rotation.py rotate` mints `token_hex(16)`; a token added by
 hand needs the same shape. The deploy asserts the format over every rendered push tile through
-the `kuma_malformed_push_tokens` filter and names each refused id. ENFORCED:
-`ansible/tests/services/test_kuma_push_token_format.py::test_one_base64_token_is_flagged`.
+the `kuma_malformed_push_tokens` filter and names each refused id.
 
 ## The status page sync, in detail
 

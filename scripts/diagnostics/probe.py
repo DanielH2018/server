@@ -13,8 +13,8 @@ single allow-list entry valid for every subcommand:
 It reaches a service by one of four transports:
 
 - The cluster route `<name>.local.<domain>`, pinned to the MetalLB ingress VIP with
-  `curl --resolve` (`probe_lib/core.py:k8s_endpoint`). Prometheus, the homelab Loki, Scrutiny,
-  uptime-kuma and Home Assistant go this way, because this host's resolver bypasses the LAN
+  `curl --resolve` (`probe_lib/core.py:k8s_endpoint`). Prometheus, the homelab Loki, Scrutiny
+  and Home Assistant go this way, because this host's resolver bypasses the LAN
   DNS.
 - The observability Loki's ClusterIP, read from the role default that pins it
   (`core.observability_loki_ip`). That Loki has no route.

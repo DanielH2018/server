@@ -113,9 +113,9 @@ def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> objec
     dict stays a dict. Any other value renders to a string.
     """
     inner = expression[2:-2]
-    # Jinja warns on a string literal holding an escape Python does not know, such as the
-    # `'\.json$'` regex uptime-kuma's `kuma_declarations` passes to `regex_replace`. Ansible
-    # parses it with the same lexer and only prints that warning.
+    # Jinja warns on a string literal holding an escape Python does not know, such as a regex
+    # passed to `regex_replace`. Ansible parses it with the same lexer and only prints that
+    # warning.
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", ".*invalid escape sequence", DeprecationWarning

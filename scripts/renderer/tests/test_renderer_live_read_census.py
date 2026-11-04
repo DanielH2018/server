@@ -54,8 +54,8 @@ def test_the_task_walk_enters_every_file_the_play_reaches():
 def test_the_census_finds_its_named_members():
     found = real_census()
     # A task sets it, a template reads it, and the renderer derives it.
-    assert "kuma_declarations" in found.set_by_tasks.keys() & found.derived
-    assert "kuma_declarations" in found.reached
+    assert "janitorr_dry_run" in found.set_by_tasks.keys() & found.derived
+    assert "janitorr_dry_run" in found.reached
     # Templates reach it only through role defaults, which proves the definition walk.
     readers = found.reached["k8s_built_image_tags"]
     assert "k8s_built_image_tags" in found.set_by_tasks

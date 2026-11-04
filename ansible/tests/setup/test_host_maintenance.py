@@ -22,7 +22,7 @@ import os
 import re
 
 import pytest
-from _helpers import K8S_ROLES, ROLES, load_defaults
+from _helpers import ALL_VARS, K8S_ROLES, ROLES, load_defaults
 from _host_packages import package, shipped_text
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, run, write_exec
@@ -216,3 +216,17 @@ def test_each_unit_runs_the_wrapper_with_the_check_its_rules_read():
                 assert f"\nExecStart=/usr/lib/homelab/host-maintenance {check}\n" in (
                     shipped_text(host, unit)
                 ), f"{host}'s {unit} does not run the wrapper with {check}"
+
+
+@pytest.mark.parametrize("host", sorted(EVERY_HOST))
+def test_the_reboot_fires_at_the_slot_the_mute_derives_from(host):
+    """Alertmanager's `weekly-reboot` mute reads the same `weekly_reboot_*` values."""
+    values = yaml_fast.safe_load(ALL_VARS.read_text())
+    day = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")[
+        values["weekly_reboot_weekday"]
+    ]
+    at = f"{values['weekly_reboot_hour']:02d}:{values['weekly_reboot_minute']:02d}"
+    timer = shipped_text(host, "/usr/lib/systemd/system/homelab-reboot.timer")
+    assert f"OnCalendar={day} *-*-* {at}:00 {values['weekly_reboot_timezone']}" in timer
+    script = shipped_text(host, "/usr/lib/homelab/homelab-reboot")
+    assert f"shutdown -r +{values['weekly_reboot_shutdown_delay_minutes']}" in script

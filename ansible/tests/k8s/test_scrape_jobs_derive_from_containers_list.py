@@ -157,33 +157,6 @@ def test_the_alloy_pi_job_reads_its_port_from_the_pis_entry():
     assert targets["alloy-pi"] == [f"{ctx['k8s_pi_client_ip']}:9999"]
 
 
-@pytest.mark.parametrize(
-    ("role", "template"),
-    [
-        ("uptime-kuma", "deployment.yaml.j2"),
-        ("uptime-kuma", "maintenance-sync-cronjob.yaml.j2"),
-        ("uptime-kuma", "status-page-sync-cronjob.yaml.j2"),
-    ],
-)
-def test_kumas_listener_and_callers_follow_the_entry_port(role, template):
-    """Kuma and every caller read the entry's port, so none can disagree."""
-    entries = copy.deepcopy(host_context()["containers_list"])
-    entry = next(e for e in entries if e["name"] == "uptime-kuma")
-    entry["port"] = 9999
-    text = render_role_template(role, template, {"containers_list": entries})
-    assert "3001" not in text
-    assert ":9999" in text or "port: 9999" in text
-    if role == "uptime-kuma" and template == "deployment.yaml.j2":
-        kuma = next(
-            c
-            for doc in yaml_fast.safe_load_all(text)
-            if doc and doc.get("kind") == "Deployment"
-            for c in doc["spec"]["template"]["spec"]["containers"]
-            if c["name"] == "uptime-kuma"
-        )
-        assert {"name": "UPTIME_KUMA_PORT", "value": "9999"} in kuma["env"]
-
-
 def test_the_gpu_jobs_pod_filter_and_the_exporters_listener_read_one_port():
     """The gpu job discovers pods, so its port lives in a relabel regex, not in a target (#3868)."""
     entries = copy.deepcopy(host_context()["containers_list"])

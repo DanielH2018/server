@@ -50,4 +50,34 @@ preconditions quote them again.
 
 #### PR C-1b
 
-Nothing recorded.
+C-1b empties the `uptime-kuma` render down to its two claims. The PR body quotes its
+preconditions, its render and its `Removes-Object:` lines. The post-promotion read has not run:
+it needs `promote` to move `prod` to a commit that holds C-1b.
+
+**Files the plan does not list.** Each one pinned a deleted template, the deleted task, or a reader
+that went with them:
+
+- `uptime-kuma/defaults/main.yml` shrinks to the claims, because the renderer refuses
+  `flux_prepull_timeout` on a render with no workload.
+- `scripts/renderer/renderer_lib/task_inputs.py` drops `kuma_declarations`, and
+  `secret_checks.py`'s rule 5 names a different member.
+- `scripts/secrets_mgmt/consumers.py` no longer names `uptime-kuma` as a token's consumer, and
+  `kuma_status_page_sync_push_token` moves from tier `auto` to `assisted` until C-5.
+- `deploy_cross_role.py`'s k8s table loses `uptime-kuma` from the `kuma_push.py` row, which the
+  plan gave to C-3a. The row's other two members stay for C-3a.
+- `python-liquid` leaves the dev dependencies with the two tests that used it.
+- `test_cron_scripts_publish_via_pr.py`: the push corpus falls to one template, because the
+  Authelia bypass held the other `api/push` literal.
+- `test_host_maintenance.py` takes over the reboot timer's assertion from
+  `test_maintenance_window.py`, because the timer outlives the Kuma window.
+
+**The plan's precondition grep names more than the plan predicted.** The other hits are comments,
+the entry itself, C-2b's `k8s_host_files` task, C-7's `KumaNotificationDropped`, C-3a's push
+library, an inert exclusion regex in `edge.yaml` and the disarmed `render_records` role. None
+reads the entry's `port` or `hostname`, and the full cluster render passes.
+
+**The prepull Kustomization leaves two objects behind.** The render drops
+`flux/uptime-kuma-prepull.yaml`, so the root prunes that Kustomization under `deletionPolicy:
+Orphan`. The Job `prepull-uptime-kuma-dd816639` and the ConfigMap `prepull-uptime-kuma-41b32c91`
+stay in `flux-system`. The plan's post-promotion read does not see them. The operator deletes them
+with the claims after C-2b.

@@ -11,7 +11,7 @@ Python list rather than a regex group.
 The render itself comes from `_k8s_render.rendered_texts()`, which the whole suite shares — so
 reading the config here costs a YAML parse, not a second render of the tree.
 
-Kept as a `_`-prefixed sibling for the same reason `_kuma_entities.py` is one: pytest prepends a
+Kept as a `_`-prefixed sibling because pytest prepends a
 test's own directory to `sys.path`, so each guard reaches this by bare name without it being
 collected as a test itself.
 """

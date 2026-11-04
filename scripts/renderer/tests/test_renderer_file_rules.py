@@ -174,7 +174,7 @@ def test_task_computed_names_every_fact_a_template_or_default_reads():
         for name in _set_fact_names()
         if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text)
     }
-    assert "kuma_declarations" in read
+    assert "janitorr_dry_run" in read
     assert read == TASK_COMPUTED
 
 
@@ -184,8 +184,8 @@ def test_every_reader_of_a_set_fact_value_derives_it():
     `k8s_built_image_tags` is the exception: `derived_facts` sets it for every role.
     """
     readers = _task_computed_readers()
-    # Non-vacuity: uptime-kuma reads its declarations, nut its content tag.
-    assert {"uptime-kuma", "nut"} <= readers
+    # Non-vacuity: janitorr reads its dry-run flag, nut its content tag.
+    assert {"janitorr", "nut"} <= readers
     for tag in readers:
         role = cluster.K8S_ROLES / tag
         files = [*role.glob("templates/**/*"), *role.glob("defaults/*.yml")]

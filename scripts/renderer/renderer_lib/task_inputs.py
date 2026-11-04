@@ -4,7 +4,7 @@
 
 `derived_facts` computes the values a role task derives from the tree, `TASK_COMPUTED`, by
 evaluating the task's own expression read out of its tasks file: each image's content tag by
-image-builder's expression, the script checksums, `kuma_declarations` and `janitorr_dry_run`.
+image-builder's expression, the script checksums and `janitorr_dry_run`.
 `playbook_dir` and `role_path` resolve as Ansible resolves them, so a lookup reads the same
 file a deploy reads.
 
@@ -43,7 +43,6 @@ _CONTEXT_DATA = (
 # set them, as the tasks file and the fact.
 SET_FACTS = {
     "janitorr": (("main.yml", "janitorr_dry_run"),),
-    "uptime-kuma": (("main.yml", "kuma_declarations"),),
 }
 
 # The values a role task computes that a template or a role default reads. A test holds this
@@ -51,7 +50,6 @@ SET_FACTS = {
 TASK_COMPUTED = frozenset(
     {
         BUILT_IMAGE_TAGS,
-        "kuma_declarations",
         "janitorr_dry_run",
     }
 )

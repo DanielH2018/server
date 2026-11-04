@@ -152,7 +152,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     which raises on an entry name it cannot find. observability's ingress probe targets derive
     from ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key. Every caller fence
     reads its callers through ``netpol_callers``, and netpol-baseline's fences come from
-    ``netpol_caller_fences``. artifacts, monitor-bridge, pihole and uptime-kuma collect names,
+    ``netpol_caller_fences``. artifacts, monitor-bridge and pihole collect names,
     ports and hostnames through ``entry_fields``' filters. homepage's tiles build their links and
     ClusterIP widget URLs through ``homepage_href`` and ``homepage_widget_url``, which raise on
     an entry that lacks the route or the ``homepage_widget`` key.
@@ -179,8 +179,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     template census holds every filter and test name the k8s templates use to this set.
     ``from_yaml`` and ``regex_replace`` are ansible-core's too, for the role task expressions
     ``homelab-render`` evaluates: image-builder's content tag parses its context render with
-    the first, and uptime-kuma's ``kuma_declarations`` names each declaration with the second
-    and pairs names with declarations through ``zip``. ``combine`` is ansible-core's too:
+    the first. ``combine`` is ansible-core's too:
     observability's ``manifests_self_rollouts`` adds each workload's namespace with it, and
     ``homelab-render`` evaluates that list to stamp ``checksum/restart`` on those workloads.
     ``basename`` and ``dirname`` are ansible-core's for the setup-role task expressions

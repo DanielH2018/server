@@ -428,20 +428,19 @@ _LIBRARY_EXEMPT: dict[str, str] = {
 
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
 # changed. M6 batch B9's Cutover-2 took the last two shell push scripts, aide-check.sh.j2 and
-# rkhunter-check.sh.j2, out of the corpus. The two templates left carry a push URL but invoke no
-# curl of their own: authelia's config-secret (the bypass regex) and loki-homelab's config.alloy.
-# No `.sh.j2` member stands here any more, so
+# rkhunter-check.sh.j2, out of the corpus, and M6's C-1b took authelia's config-secret with its
+# bypass regex. The one template left carries a push URL but invokes no curl of its own:
+# loki-homelab's config.alloy. No `.sh.j2` member stands here any more, so
 # test_every_shell_push_script_sources_the_shared_library skips every file and passes on any
 # corpus. C-3a deletes the library, and that test with it.
 _EXPECTED_IN_CORPUS = {
-    "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
     "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2",
 }
 
-# The floor is the measured count: 2 on 2026-11-03, after B9's Cutover-2. When a later M6 batch
+# The floor is the measured count: 1 on 2026-11-04, after C-1b. When a later M6 batch
 # shrinks the corpus again, re-measure rather than estimate, because a floor above the real count
 # fails master CI.
-_MIN_CORPUS = 2
+_MIN_CORPUS = 1
 
 
 def push_corpus() -> dict[Path, str]:

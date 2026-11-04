@@ -177,9 +177,9 @@ class NamedUse(NamedTuple):
 # The uses rule 5 must accept on the real tree, so a rule that stops matching cannot pass.
 RULE5_MEMBERS = (
     NamedUse(
-        _ROLE_TEMPLATES.format("uptime-kuma", "secret.yaml.j2"),
-        "kuma_status_page_sync_push_token",
-        "filter default",
+        _ROLE_TEMPLATES.format("home-assistant", "config/secrets.yaml.j2"),
+        "google_assistant_project_id",
+        "filter to_json",
         1,
     ),
     *(NamedUse(*member) for member in ALIAS_MEMBERS),

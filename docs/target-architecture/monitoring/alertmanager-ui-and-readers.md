@@ -139,8 +139,8 @@ moves to `two_factor` for `admins`, which the `-m ui` constraint rules out today
 | `probe.py monitors` | at this survey, Kuma's rollup plus firing ingress alerts from `ALERTS`; M6 B-2 moved it onto `ALERTS` (`scripts/diagnostics/probe_lib/monitors.py`) | it lists active silences, and still shows no inhibition |
 | `probe.py alerts` | at this survey, DOWN history from Loki; M6 B-2 moved it onto `ALERTS` history (`scripts/diagnostics/probe_lib/alerts.py`) | the history of a silence lives only in Alertmanager |
 | `monitor-bridge` | serves gauges that Prometheus scrapes; pushes the rest to Kuma | none for Alertmanager. Its gates move into Alertmanager `inhibit_rules` through M6, which makes inhibitions the thing an operator most needs to see |
-| Kuma maintenance sync | keeps ONE Kuma window, the weekly reboot's (`ansible/roles/k8s/uptime-kuma/templates/maintenance-sync-cronjob.yaml.j2:4`) | none. C-1b deletes it, and nothing replaces it: Alertmanager already mutes the reboot |
-| Weekly reboot window | the `weekly-reboot` time interval (`ansible/roles/k8s/observability/templates/alertmanager-secret.yaml.j2:60`) derives from the same `weekly_reboot_*` values as the cron | none. `ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute_with_kumas_window` holds the two equal |
+| Kuma maintenance sync | keeps ONE Kuma window, the weekly reboot's (the `kuma-maintenance-sync` CronJob) | none. C-1b deleted it, and nothing replaces it: Alertmanager already mutes the reboot |
+| Weekly reboot window | the `weekly-reboot` time interval (`ansible/roles/k8s/observability/templates/alertmanager-secret.yaml.j2:60`) derives from the same `weekly_reboot_*` values as the cron | none. `ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute` holds the two equal |
 | Homepage | an Uptime Kuma widget (`ansible/roles/k8s/homepage/templates/config/services.yaml.j2:93`) | M6 B-4 replaces it with a `prometheusmetric` tile over `ALERTS`; that tile shows no silence count |
 
 **A planned window other than the reboot is a silence, not a config change.** Kuma's sync

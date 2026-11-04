@@ -369,9 +369,10 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
 
 # Each `container` value a Loki rule selects on, and the role template whose pod declares a
 # container by that name. A value with no entry here fails, so a new rule adds its mapping.
+# The containers of KumaNotificationDropped, whose pod M6's C-1b deleted. M6's C-7 deletes the
+# rule. Until then it matches nothing, and no template declares either name.
+_RETIRED_RULE_CONTAINERS = frozenset({"uptime-kuma", "discord-relay"})
 _RULE_CONTAINERS = {
-    "uptime-kuma": ("uptime-kuma", "deployment.yaml.j2"),
-    "discord-relay": ("uptime-kuma", "deployment.yaml.j2"),
     # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
     # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
     "cloudflare-ddns": ("cloudflare-ddns", "deployment-direct.yaml.j2"),
@@ -391,7 +392,9 @@ def _undeclared_containers(
 ) -> dict[str, list[str]]:
     found = {}
     for name, expr in exprs.items():
-        for value in sorted(_label_values(expr, "container")):
+        for value in sorted(
+            _label_values(expr, "container") - _RETIRED_RULE_CONTAINERS
+        ):
             if value not in mapping:
                 found.setdefault(name, []).append(f"{value}: no template is mapped")
             elif value not in _declared_containers(*mapping[value]):
@@ -405,7 +408,7 @@ def _undeclared_containers(
 def test_loki_rules_select_declared_containers_is_clean():
     exprs = _loki_rule_exprs()
     named = set().union(*(_label_values(e, "container") for e in exprs.values()))
-    assert "uptime-kuma" in named, (
+    assert "cloudflare-ddns" in named, (
         "no rule names a container, so this check reads nothing"
     )
     assert not _undeclared_containers(exprs)
@@ -416,9 +419,9 @@ def test_a_loki_rule_on_an_undeclared_container_is_flagged():
     assert _undeclared_containers({"r": expr}) == {
         "r": ["uptime-kuma2: no template is mapped"]
     }
-    mapping = {"uptime-kuma2": ("uptime-kuma", "deployment.yaml.j2")}
+    mapping = {"uptime-kuma2": ("cloudflare-ddns", "deployment-direct.yaml.j2")}
     assert _undeclared_containers({"r": expr}, mapping) == {
-        "r": ["uptime-kuma2: uptime-kuma/deployment.yaml.j2 declares none"]
+        "r": ["uptime-kuma2: cloudflare-ddns/deployment-direct.yaml.j2 declares none"]
     }
 
 

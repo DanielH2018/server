@@ -257,7 +257,6 @@ ROWS = (
             {
                 "ansible/roles/k8s/observability/templates/00-namespace.yaml.j2",
                 "ansible/roles/k8s/image-builder/templates/context-configmap.yaml.j2",
-                "ansible/roles/k8s/uptime-kuma/templates/status-page-sync-configmap.yaml.j2",
                 "ansible/templates/checksum-annotation.yml.j2",
             }
         ),

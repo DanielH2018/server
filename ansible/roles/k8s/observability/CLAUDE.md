@@ -149,10 +149,10 @@ and review the rewritten `.txt` files.
 
 **The weekly reboot mutes every paging route, never the Watchdog.** The `weekly-reboot` time
 interval derives from the reboot cron's `weekly_reboot_*` values and the mute's lead and
-recovery allowance in `group_vars/all.yml`, which Kuma's maintenance window also reads. A
-schedule written here as a literal would stop following the reboot.
-`ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute_with_kumas_window`
-holds the two windows equal, and
+recovery allowance in `group_vars/all.yml`. A schedule written here as a literal would stop
+following the reboot.
+`ansible/tests/services/test_alertmanager_reboot_mute.py::test_moving_the_reboot_moves_the_mute`
+holds the interval to that sum, and
 `ansible/tests/services/test_alertmanager_routing.py::test_every_route_a_paging_alert_reaches_is_muted`
 walks the routing tree to prove the alerts reach the mute.
 
