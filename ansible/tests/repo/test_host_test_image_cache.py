@@ -20,76 +20,63 @@ SCRIPT = REPO / "hosts" / "lib" / "tests" / "container" / "build-image.sh"
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 SEEDER = REPO / ".github" / "workflows" / "host-test-image-cache.yml"
 
-# Appends one line per call to $CALLS, and fails a call carrying --cache-from when $FAIL_CACHED is set.
-_DOCKER_STUB = """#!/bin/bash
-printf '%s\\n' "$*" >> "$CALLS"
-if [ -n "$FAIL_CACHED" ] && [[ " $* " == *" --cache-from "* ]]; then exit 1; fi
-if [ -n "$FAIL_ALL" ]; then exit 1; fi
-"""
 _DPKG_STUB = "#!/bin/bash\necho arm64\n"
 
 
 def _build(
-    tmp_path: Path, event: str, **env: str
+    tmp_path: Path, *args: str, docker_exit: int = 0
 ) -> tuple[subprocess.CompletedProcess, list[str]]:
     """Run build-image.sh 24.04 on the stubs, returning the result and each docker argv."""
     calls = tmp_path / "calls"
+    docker = f"""#!/bin/bash\nprintf '%s\\n' "$*" >> "{calls}"\nexit {docker_exit}\n"""
     result = run(
-        [str(SCRIPT), "24.04"],
-        env={
-            "PATH": "/usr/bin:/bin",
-            "CALLS": str(calls),
-            "GITHUB_EVENT_NAME": event,
-            "FAIL_CACHED": "",
-            "FAIL_ALL": "",
-            **env,
-        },
-        stub_bin=fake_bin(tmp_path / "bin", docker=_DOCKER_STUB, dpkg=_DPKG_STUB),
+        [str(SCRIPT), "24.04", *args],
+        stub_bin=fake_bin(tmp_path / "bin", docker=docker, dpkg=_DPKG_STUB),
     )
     return result, calls.read_text().splitlines()
 
 
-def test_a_pull_request_reads_the_scope_and_never_writes_it(tmp_path: Path) -> None:
-    result, (call,) = _build(tmp_path, "pull_request")
+def test_a_plain_build_reads_the_scope_and_never_writes_it(tmp_path: Path) -> None:
+    result, (call,) = _build(tmp_path)
     assert result.returncode == 0, result.stderr
     assert "--cache-from type=gha,scope=host-test-image-24.04-arm64" in call
     assert "--cache-to" not in call
 
 
-@pytest.mark.parametrize("event", ["schedule", "push", "workflow_dispatch"])
-def test_a_run_off_a_pull_request_writes_the_scope_and_tolerates_a_refusal(
-    tmp_path: Path, event: str
+def test_a_seed_build_writes_the_scope_and_does_not_tolerate_a_failed_write(
+    tmp_path: Path,
 ) -> None:
-    result, (call,) = _build(tmp_path, event)
+    result, (call,) = _build(tmp_path, "--seed")
     assert result.returncode == 0, result.stderr
-    assert (
-        "--cache-to type=gha,scope=host-test-image-24.04-arm64,mode=min,ignore-error=true"
-        in call
-    )
+    assert "--cache-to type=gha,scope=host-test-image-24.04-arm64,mode=min" in call
+    assert "ignore-error" not in call
 
 
-def test_a_failed_cached_build_runs_again_without_the_cache(tmp_path: Path) -> None:
-    result, (cached, plain) = _build(tmp_path, "pull_request", FAIL_CACHED="1")
-    assert result.returncode == 0, result.stderr
-    assert "--cache-from" in cached
-    assert "--cache-from" not in plain
-    assert "-t homelab-host-test:24.04" in plain
+@pytest.mark.parametrize("args", [(), ("--seed",)])
+def test_a_failed_build_fails_the_step_without_a_second_build(
+    tmp_path: Path, args: tuple[str, ...]
+) -> None:
+    result, calls = _build(tmp_path, *args, docker_exit=1)
+    assert result.returncode == 1
+    assert len(calls) == 1
 
 
-def test_a_build_that_fails_without_the_cache_fails_the_step(tmp_path: Path) -> None:
-    result, calls = _build(tmp_path, "pull_request", FAIL_ALL="1")
-    assert result.returncode != 0
-    assert len(calls) == 2
+def _build_lines(workflow: Path) -> list[tuple[dict, str]]:
+    """Each (job, build-image.sh line) in a workflow."""
+    return [
+        (job, line)
+        for job in yaml_fast.safe_load(workflow.read_text())["jobs"].values()
+        for step in job.get("steps", [])
+        for line in step.get("run", "").splitlines()
+        if "build-image.sh" in line
+    ]
 
 
 def _build_sites(workflow: Path) -> set[tuple[str, str]]:
     """Every (runner label, release) a workflow runs build-image.sh on."""
     sites = set()
-    for job in yaml_fast.safe_load(workflow.read_text())["jobs"].values():
-        for step in job.get("steps", []):
-            match = re.search(r"build-image\.sh \"?([^\s\"]+)", step.get("run", ""))
-            if not match:
-                continue
+    for job, line in _build_lines(workflow):
+        for match in re.finditer(r"build-image\.sh \"?([^\s\"]+)", line):
             if match.group(1) != "$RELEASE":
                 sites.add((job["runs-on"], match.group(1)))
                 continue
@@ -110,6 +97,11 @@ def test_the_seeder_covers_every_build_site_on_its_own_runner() -> None:
     }
     assert named <= sites, f"the census lost {sorted(named - sites)}"
     assert _build_sites(SEEDER) == sites
+
+
+def test_only_the_seeder_writes_the_cache() -> None:
+    assert all("--seed" in line for _, line in _build_lines(SEEDER))
+    assert not any("--seed" in line for _, line in _build_lines(CI_WORKFLOW))
 
 
 def test_the_seeder_runs_on_a_dockerfile_change_and_on_a_schedule() -> None:

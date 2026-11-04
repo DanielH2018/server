@@ -6,8 +6,8 @@ name: host-test-image-cache
 # a render changed. Actions cache scoping lets a PR read only its own ref and the default branch.
 #
 # It runs daily because GitHub evicts a cache entry nobody has read for 7 days. A run on an
-# unchanged Dockerfile only rewrites what it read. A red run here gates nothing: a PR that misses
-# the cache builds from the mirror.
+# unchanged Dockerfile only rewrites what it read. This is the only writer, and a write that fails
+# turns the run red. A red run gates nothing: a PR that misses the cache builds from the mirror.
 #
 # ansible/tests/repo/test_host_test_image_cache.py holds these jobs equal to ci.yml's build sites,
 # because build-image.sh derives the scope from the release and the runner's architecture.
@@ -47,7 +47,7 @@ jobs:
       - name: Build the test image and write its layers to the cache
         env:
           RELEASE: ${{ matrix.release }}
-        run: hosts/lib/tests/container/build-image.sh "$RELEASE"
+        run: hosts/lib/tests/container/build-image.sh "$RELEASE" --seed
 
   arm64:
     runs-on: ubuntu-24.04-arm
@@ -62,4 +62,4 @@ jobs:
       - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
 
       - name: Build the test image and write its layers to the cache
-        run: hosts/lib/tests/container/build-image.sh 24.04
+        run: hosts/lib/tests/container/build-image.sh 24.04 --seed
