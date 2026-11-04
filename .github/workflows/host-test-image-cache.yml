@@ -1,0 +1,65 @@
+name: host-test-image-cache
+
+# Seeds the BuildKit layer cache that ci.yml's host_packages and host_tools_arm64 jobs read, so a
+# PR run with an unchanged Dockerfile fetches nothing from snapshot.ubuntu.com. Those jobs cannot
+# seed it themselves: a proven master push skips them, and any other master push builds only when
+# a render changed. Actions cache scoping lets a PR read only its own ref and the default branch.
+#
+# It runs daily because GitHub evicts a cache entry nobody has read for 7 days. A run on an
+# unchanged Dockerfile only rewrites what it read. A red run here gates nothing: a PR that misses
+# the cache builds from the mirror.
+#
+# ansible/tests/repo/test_host_test_image_cache.py holds these jobs equal to ci.yml's build sites,
+# because build-image.sh derives the scope from the release and the runner's architecture.
+
+on:
+  schedule:
+    - cron: "23 4 * * *"
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/host-test-image-cache.yml
+      - hosts/lib/tests/container/Dockerfile
+      - hosts/lib/tests/container/build-image.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  amd64:
+    runs-on: ubuntu-26.04
+    # A cold build took 14-39 minutes per leg on 2026-11-04 with the mirror slow (#7133).
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        release: ["24.04", "26.04"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: Build the test image and write its layers to the cache
+        env:
+          RELEASE: ${{ matrix.release }}
+        run: hosts/lib/tests/container/build-image.sh "$RELEASE"
+
+  arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false  # nothing here pushes or fetches
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4.0.0
+
+      - name: Build the test image and write its layers to the cache
+        run: hosts/lib/tests/container/build-image.sh 24.04
