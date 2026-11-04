@@ -503,7 +503,7 @@ a need appears.
   refuse every DENY path. DENY never widens what rootq reaches. rootq tests the allowlist
   before it resolves a DENY path, so a DENY path off the list gets the same refusal whether
   it exists or not. The DENY entries in `PATHS` are exact names:
-  `/etc/claude-rc/alert-webhook.env`, and the five paths `k8s_host_files` writes or removes
+  `/etc/claude-rc/alert-webhook.env`, and the four paths `k8s_host_files` writes or removes
   under `/etc/rancher/k3s/manifests/` (#6988). That tree stays denied as a whole, because it
   holds every staged role's `secret.yaml`, so `probe.py applied` compares most of those rows
   by mode and owner only.
