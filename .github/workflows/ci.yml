@@ -1495,7 +1495,9 @@ jobs:
     needs: [prove, host_packages_build]
     if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 30
+    # Builds host_packages' test image from the same mirror. Measured 2026-11-04 with the mirror
+    # slow: this job's build reached 29min 05s and host_packages' 33min 45s (#7128).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
