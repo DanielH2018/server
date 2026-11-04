@@ -1,18 +1,18 @@
 ---
 # blackbox_exporter modules. Carried verbatim into the cluster by templates/configmap.yaml.j2.
 #
-# Both modules send `Accept: */*`. Authelia answers an SSO-gated name with 302 only when the
-# request's Accept header admits it, and with 401 when there is none; blackbox sends no Accept
-# unless a module sets one, and Go's net/http adds none. Kuma's tiles draw the 302, so this
-# header is what makes a probe see the status Kuma sees.
+# Every http module sends `Accept: */*`. Authelia answers an SSO-gated name with 302 only when
+# the request's Accept header admits it, and with 401 when there is none; blackbox sends no
+# Accept unless a module sets one, and Go's net/http adds none. http_sso_302 passes only on the
+# 302, so without this header it reads every SSO-gated name as down while the name serves.
 # ansible/tests/services/test_blackbox_exporter_modules.py pins it on every http module.
 modules:
-  # The ingress names without SSO. Kuma's default for those tiles: a 2xx, reached through
-  # redirects. TLS is verified (no insecure_skip_verify).
+  # The ingress names without SSO. A 2xx passes, reached through redirects. TLS is verified
+  # (no insecure_skip_verify).
   # `preferred_ip_protocol: ip4` is for email-rss, the one target that is not pinned to an
   # in-cluster address. Cloudflare answers it with AAAA records, blackbox prefers IPv6 by
   # default, and the cluster has no IPv6 route, so the connect failed (probe_ip_protocol 6,
-  # probe_http_status_code 0) while Kuma's IPv4-only tile read up.
+  # probe_http_status_code 0) while the name served over IPv4.
   http_2xx:
     prober: http
     http:
@@ -21,8 +21,8 @@ modules:
         Accept: "*/*"
       follow_redirects: true
       preferred_ip_protocol: ip4
-  # The ingress names behind Authelia. Kuma accepts only 302 with max_redirects: 0. The 302
-  # proves the edge and the middleware answer, not that the backend is up
+  # The ingress names behind Authelia. Only a 302 passes, and the module follows no redirect.
+  # The 302 proves the edge and the middleware answer, not that the backend is up
   # (docs/failure-classes.md, authelia-302-does-not-prove-the-backend).
   http_sso_302:
     prober: http
@@ -32,16 +32,16 @@ modules:
         Accept: "*/*"
       follow_redirects: false
       valid_status_codes: [302]
-  # M6's batch B8: the probes that replace Kuma's hand-written tiles
+  # The modules of the blackbox-extra job, from M6's batch B8
   # (docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8").
   #
-  # Kuma's `port` tile: a TCP connect and nothing else. Also the Pi's published-port probes.
+  # A TCP connect and nothing else. The blackbox-pi-ports job uses it too, for the Pi's published
+  # ports.
   tcp_connect:
     prober: tcp
     tcp:
       preferred_ip_protocol: ip4
-  # Kuma's `dns` tile for Pi-hole: an A query for a local record, sent to the VIP the target
-  # names. NOERROR with at least one answer passes, so an empty answer or an NXDOMAIN fails.
+  # The Pi-hole check: an A query for a local record, sent to the VIP the target names. NOERROR with at least one answer passes, so an empty answer or an NXDOMAIN fails.
   # The domain in the query name is a placeholder that templates/configmap.yaml.j2 replaces
   # with the LAN domain, because this file is otherwise carried into the cluster unchanged and
   # holds no inventory value.
@@ -54,7 +54,7 @@ modules:
       preferred_ip_protocol: ip4
       validate_answer_rrs:
         fail_if_not_matches_regexp: [".+"]
-  # Kuma's LiveSync tile: CouchDB's `require_valid_user` answers an unauthenticated request
+  # The LiveSync check: CouchDB's `require_valid_user` answers an unauthenticated request
   # with 401, and that is the end-to-end signal. Any redirect or other status is a failure.
   http_401:
     prober: http
@@ -64,9 +64,9 @@ modules:
         Accept: "*/*"
       follow_redirects: false
       valid_status_codes: [401]
-  # Kuma's two `keyword` tiles. Each matches a substring of the body, as Kuma does, so the
-  # match is case-sensitive: the edge self-check answers `OK` and homelab-mcp's /health
-  # answers `ok`. A status code alone reads green through a total-404 edge.
+  # The two body checks. Each matches a substring of the body, and the match is case-sensitive:
+  # the edge self-check answers `OK` and homelab-mcp's /health answers `ok`. A status code alone
+  # reads green through a total-404 edge.
   http_body_OK:
     prober: http
     http:
