@@ -165,6 +165,7 @@ def test_the_deadline_fails_naming_every_kustomization_not_ready_at_r(world, tmp
         kustomization("authelia", revision=OTHER),
         kustomization("authelia-verify", ready=False, depends=["authelia"]),
         kustomization("sonarr"),
+        kustomization("homelab"),
     ]
     code, message = run(world, tmp_path, wait_seconds=60)
     assert code == 1
@@ -174,10 +175,9 @@ def test_the_deadline_fails_naming_every_kustomization_not_ready_at_r(world, tmp
 def test_a_kustomization_the_root_prunes_after_the_scope_read_settles(
     world, tmp_path, capsys
 ):
-    # The 2026-11-04 shape (#7088): no digests.json keys the name, and the Job's one scope read
-    # landed before the root's garbage collection, so the frozen scope holds it.
+    # The 2026-11-04 shape (#7088): no digests.json keys the name, and the Job's first read
+    # landed before the root's garbage collection.
     world.kustomizations += [
-        kustomization("homelab"),
         kustomization("retired-prepull", revision=OTHER, depends=["authelia"]),
     ]
 
@@ -192,19 +192,37 @@ def test_a_kustomization_the_root_prunes_after_the_scope_read_settles(
     assert "waiting for Ready at R: retired-prepull" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize(
-    "root",
-    [
-        kustomization("homelab", revision=OTHER),
-        kustomization("homelab", ready=False),
-        None,
-    ],
-    ids=["root-before-r", "root-not-ready", "root-unlisted"],
-)
-def test_an_absent_kustomization_stays_pending_until_the_root_reads_ready_at_r(root):
-    # The name may be one R adds, which the root has not created yet.
-    listed = [root] if root else []
-    assert flux_soak.pending(listed, ["added-verify"], R) == ["added-verify"]
+def test_a_kustomization_the_root_adds_after_the_first_read_is_waited_for(
+    world, tmp_path, capsys
+):
+    # authelia reads Ready at R before the root has applied R, so only the root holds the wait.
+    world.kustomizations[-1] = kustomization("homelab", revision=OTHER)
+    steps = iter(
+        [
+            [
+                kustomization("homelab"),
+                kustomization("authelia-verify", ready=False, depends=["authelia"]),
+            ],
+            [
+                kustomization("homelab"),
+                kustomization("authelia-verify", depends=["authelia"]),
+            ],
+        ]
+    )
+    world.on_sleep = lambda w: setattr(
+        w, "kustomizations", [*w.kustomizations[:3], *next(steps, w.kustomizations[3:])]
+    )
+    assert run(world, tmp_path, wait_seconds=100_000) == (0, "")
+    err = capsys.readouterr().err
+    assert "waiting for Ready at R: homelab" in err
+    assert "waiting for Ready at R: authelia-verify" in err
+
+
+def test_a_tag_the_digests_key_stays_pending_until_it_is_listed(world, tmp_path):
+    world.new["sonarr-two"] = {"footprint": "2"}
+    code, message = run(world, tmp_path, wait_seconds=60)
+    assert code == 1
+    assert "not Ready at R by the deadline: sonarr-two" in message
 
 
 def test_the_log_names_the_pending_kustomizations_only_when_they_change(

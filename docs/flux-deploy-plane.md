@@ -1845,11 +1845,12 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
   Kustomizations. Each poll of that wait re-reads `homelab`, and the Job exits 1 once it
   no longer holds R, as after a reset (#5704). `kustomize-controller` runs one worker more than the rollout width, because
   the soak holds one from the start of the rollout.
-- **A name R removes settles when the root prunes it.** The Job reads its scope once, and that
-  read can land before the root's garbage collection, so the scope can hold a Kustomization
-  R removes (#7088). A name absent from the live list counts as settled once `homelab` reads
-  Ready at R. `kustomize-controller` writes that status after the root's apply and prune,
-  so a Kustomization R adds exists by then and is still waited for.
+- **The scope settles when the root reads Ready at R.** `digests.json` keys no reserved-suffix
+  name, so the live list decides those. Until the root has applied and pruned R, that list
+  holds a Kustomization R removes and lacks one R adds (#7088). So each poll takes the
+  changed set from a fresh list, and the wait also requires `homelab` to read Ready at R.
+  `kustomize-controller` writes that status after the root's apply and prune. A revision
+  whose first read names no service still exits at once.
 - **R's SHA moves the Job, not the footprint.** The Job's arguments carry R's SHA, so its name
   changes on every commit. `digests.json` records `soak` over a render at an all-zero SHA, so a
   docs-only commit still has an empty changed set. `homelab_render.py cluster --revision`
