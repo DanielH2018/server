@@ -15,7 +15,8 @@ does with a tag that is not Ansible-owned*. Each `deploy.sh` site asks this modu
 import subprocess
 import sys
 import tempfile
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Generator, Mapping
+from contextlib import contextmanager
 from pathlib import Path
 
 # Reach `lib.` and `deploy_tools.` from scripts/: an importer that did not bootstrap them
@@ -27,6 +28,26 @@ from lib.ansible_inventory import K8S_HOST
 from lib.exit_codes import DEPLOY_FLUX_OWNED, FAILED
 from lib.git import git
 from lib.repo_paths import REPO
+
+
+@contextmanager
+def _k8s_host_vars(repo_root: Path, at: str) -> Generator[Path]:
+    """Yield the k8s host's host_vars file in `repo_root`'s tree, or a copy of it at commit `at`.
+
+    Raises:
+        subprocess.CalledProcessError: `at` does not hold the file.
+    """
+    from lib.ansible_inventory import K8S_HOST_VARS
+
+    rel = K8S_HOST_VARS.relative_to(REPO)
+    if not at:
+        yield repo_root / rel
+        return
+    text = git("show", f"{at}:{rel.as_posix()}", cwd=repo_root).stdout
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / rel.name
+        path.write_text(text)
+        yield path
 
 
 def flux_owned(repo_root: Path = REPO, at: str = "") -> dict[str, str]:
@@ -41,17 +62,22 @@ def flux_owned(repo_root: Path = REPO, at: str = "") -> dict[str, str]:
         ValueError: an entry's `owner` is outside `lib.k8s_roles.OWNER_VALUES`.
         subprocess.CalledProcessError: `at` does not hold the k8s host's host_vars file.
     """
-    from lib.ansible_inventory import K8S_HOST_VARS
     from lib.k8s_roles import tag_owners
 
-    rel = K8S_HOST_VARS.relative_to(REPO)
-    if not at:
-        return tag_owners(repo_root / rel)
-    text = git("show", f"{at}:{rel.as_posix()}", cwd=repo_root).stdout
-    with tempfile.TemporaryDirectory() as tmp:
-        path = Path(tmp) / rel.name
-        path.write_text(text)
+    with _k8s_host_vars(repo_root, at) as path:
         return tag_owners(path)
+
+
+def declared_k8s_tags(repo_root: Path = REPO, at: str = "") -> set[str]:
+    """Every tag of a k8s `containers_list` entry, read from the file `flux_owned` reads.
+
+    Raises:
+        subprocess.CalledProcessError: `at` does not hold the k8s host's host_vars file.
+    """
+    from lib.k8s_roles import k8s_tags
+
+    with _k8s_host_vars(repo_root, at) as path:
+        return k8s_tags(path)
 
 
 def run_target(args: Collection[str]) -> str:

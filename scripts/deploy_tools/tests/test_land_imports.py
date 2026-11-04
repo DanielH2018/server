@@ -15,6 +15,7 @@ MODULES = frozenset(
         "ledger",
         "landing",
         "merge",
+        "handback",
         "pace",
         "policy",
         "classify",
@@ -83,7 +84,17 @@ ALLOWED = {
         "gh_read",
     },
     # The landing policy's checks run inside --arm-merge, before any merge call.
-    "merge": {"landing", "outcome", "pace", "pin_gate", "policy", "pr_json", "gh_read"},
+    "merge": {
+        "handback",
+        "landing",
+        "outcome",
+        "pace",
+        "pin_gate",
+        "policy",
+        "pr_json",
+        "gh_read",
+    },
+    "handback": {"landing", "outcome"},
     # The master CI backlog read that holds --await-merge's direct merge (#5526).
     "pace": {"landing", "outcome"},
     # The pin gate runs inside --await-merge's direct merge, and `land.py --regate` alone.

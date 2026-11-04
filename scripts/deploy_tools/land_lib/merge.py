@@ -77,7 +77,7 @@ from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object, as_object_list
 from lib import removes_object
 from deploy_tools import await_ci
-from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
+from deploy_tools.land_lib import gh_read, handback, pace, pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage, parse_file
@@ -390,61 +390,6 @@ def _update_branch(ln: Landing, head: str, moved: list[str]) -> None:
         )
 
 
-def _refuse_handback_while_flux_owns(ln: Landing, head: str) -> None:
-    """Die before the merge while Flux still owns a tag this PR makes Ansible-owned.
-
-    A handback is two PRs (docs/flux-deploy-plane.md, *Handing a service back*): the first
-    sets `owner: released`, the root prunes the tag's Kustomization, and only then does the
-    second remove `owner`. Merged while the Kustomization exists, the second hands the tag to
-    Ansible while Flux still reconciles it, so two writers apply it. This compares `tag_owners`
-    at the PR's merge base and at `head`, and for each tag that loses `owner`, reads the
-    Kustomization with the read-only kubectl. Only `NotFound` lets the merge proceed. A read
-    that fails refuses too, since it cannot rule the second writer out.
-
-    The guard covers only a merge `land.sh` makes. A merge made elsewhere bypasses it, and the
-    PR body's quoted `NotFound` is then the only guard (d2-first-leaf.md, *Rollback*).
-    """
-    pr = ln.opts.pr
-    ln.git(
-        "fetch", "-q", "--no-write-fetch-head", "origin", f"refs/pull/{pr}/head", BRANCH
-    )
-    base = ln.git("merge-base", f"origin/{BRANCH}", head)
-    if base.returncode != 0 or not base.stdout.strip():
-        ln.die(
-            f"could not find PR #{pr}'s merge base with {BRANCH}, so whether it hands a "
-            "tag back from Flux is unknown — not merging",
-            1,
-        )
-    try:
-        before = ln.tools.flux.owners_at(ln.opts.primary, base.stdout.strip())
-        after = ln.tools.flux.owners_at(ln.opts.primary, head)
-    except (ValueError, subprocess.SubprocessError, OSError) as exc:
-        ln.die(
-            f"could not read which tags Flux applies at PR #{pr}'s base or head, so "
-            f"whether it hands a tag back is unknown — not merging: {exc}",
-            1,
-        )
-    for tag in sorted(before.keys() - after.keys()):
-        try:
-            present = ln.tools.flux.kustomization_exists(tag)
-        except Exception as exc:
-            ln.die(
-                f"PR #{pr} hands `{tag}` back to Ansible, and the Kustomization `{tag}` "
-                f"could not be read — not merging: {exc}",
-                1,
-            )
-        if present:
-            ln.die(
-                f"PR #{pr} hands `{tag}` back to Ansible while the Kustomization `{tag}` "
-                "still exists in flux-system, so Flux and Ansible would both apply it. "
-                "Merge the PR that sets `owner: released` first, wait until `kubectl get "
-                f"kustomizations.kustomize.toolkit.fluxcd.io -n flux-system {tag}` returns "
-                "NotFound, then re-run this",
-                1,
-            )
-        say(f"`{tag}` is handed back to Ansible; its Kustomization is gone (NotFound)")
-
-
 def _require_author(ln: Landing) -> None:
     """Die unless the PR's author is `opts.require_author`; a no-op when it is unset.
 
@@ -738,7 +683,7 @@ def await_merge(ln: Landing) -> None:
                     updated_from = head
                 else:
                     if head != handback_checked:
-                        _refuse_handback_while_flux_owns(ln, head)
+                        handback.refuse_handback_while_flux_owns(ln, head)
                         gated_pins = pin_gate.gate_before_merge(ln, head)
                         handback_checked = head
                     else:
