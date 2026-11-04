@@ -377,9 +377,10 @@ Every other role M6 edits needs no edge:
 - **configarr and janitorr.** D5 flips each only after its H2 family PR (H2.5b, H2.5c) and its
   `k8s_host_files` conversion PR (`d5-bulk-move.md` item 26). H2.5b removes configarr's
   `install_host_lib.yml` and `stamp_deployed.yml` imports, and H2's janitorr PR does the same
-  for janitorr. A role whose `kuma_push.py` pair C-3a must delete is therefore still
-  Ansible-owned. A flux-owned one has no pair left, and its `/opt` copy is an absent arm in
-  `k8s_host_files`, which the tick applies (C-3a).
+  for janitorr. Both have flipped, so neither holds a `kuma_push.py` pair. Each `/opt` copy is
+  an absent arm in `k8s_host_files`, which the tick applies. B6b kept `kuma_push.py` in each
+  `health-configmap.yaml.j2`, because `host_lib.py` imports it at module level, so C-3a edits
+  both flux-owned roles (C-3a).
 
 If the index declines the monitor-bridge edge, the fallback is the owner-independent form,
 at a cost. A flux-owned monitor-bridge splits each remaining bridge-row Cutover-a in two: an
@@ -1893,12 +1894,22 @@ here. C-1 waits for the operator's acceptance.
         - The nine `stamp_deployed` pairs for `kuma_push.py` go (*Baseline*, the push
           plumbing): `gitops_deploy`, `renovate_agent`, `renovate_notify`, `fake_remux`,
           `deploy_ui`, `configarr`, `janitorr` and the two in `k3s/tasks/health-crons.yml`.
-          The baseline counted eight, before `deploy_ui` gained its pair. The configarr
-          and janitorr pairs go here only if H2.5b and H2.5c have not removed them already.
-          D5 flips neither role before its H2 PR, so a pair C-3a deletes sits in an
-          Ansible-owned role. If H2.5b landed first, configarr's CronJob ConfigMap carries
-          `kuma_push.py` until B6's configarr Cutover-2 drops it, so that Cutover-2 precedes
-          C-3a, and the precondition grep below covers its ConfigMap template.
+          The baseline counted eight, before `deploy_ui` gained its pair. H2.5b and H2.5c
+          removed the configarr and janitorr pairs, so seven remain at C-3a's base.
+        - **The two health ConfigMaps change in the same commit.** B6b's Cutover-2 kept
+          `kuma_push.py` in each `health-configmap.yaml.j2`, because `host_lib.py` imports it
+          at module level, and deleting the file breaks both Flux renders. C-3a edits both
+          ConfigMap templates, configarr's `health-cronjob.yaml.j2`, both `*_health.py`
+          docstrings and both role `CLAUDE.md` files. One promotion applies each ConfigMap and
+          its `host_lib.py` change together, and the cross-plane order gate judges the PR.
+        - **`render_records.py` loses its push.** It reads `kuma_push` through the `host_lib`
+          re-export, so `git grep kuma_push.py` does not list it. The role is pinned
+          `state: absent`, so no host runs the script, and the edit changes no host.
+        - **The `kuma-push-lib` drift fragment goes with the library.** Dropping the
+          `stamp_deployed` record task leaves
+          `/var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib` on each host, and
+          `setup-drift-lib.sh` reports a pair whose source left the repo as drift. The absent
+          task below removes both paths.
         - The setup/common `CLAUDE.md` rows that name `kuma_push.py` are reworded. B7's
           autofix-bridge Cutover-2 has already reworded that role's line.
         - **The host packages change in the same commit.** *Files under `hosts/`* in
@@ -1932,20 +1943,18 @@ here. C-1 waits for the operator's acceptance.
           cron runs them.
         - **The host file.** `initial_setup/tasks/crons.yml`'s copy task is `tags: [always]`
           behind a `DECIDED` marker, and it runs on every host. C-3a replaces it with an
-          `always`-tagged `state: absent` task for `/usr/local/lib/kuma-push-lib.sh`, and
-          drops the `stamp_deployed` record task for `kuma-push-lib`. The tick applies it on
+          `always`-tagged `state: absent` task for `/usr/local/lib/kuma-push-lib.sh` and the
+          drift fragment, and drops the `stamp_deployed` record task for `kuma-push-lib`. The
+          marker moves to the `homelab-check-lib.sh` copy task. The tick applies it on
           daniel-box. On daniel-server it is the hand run `land.sh`'s note names, run on that
           host. On the Pi it is `initial_setup.yml --tags optimize_pi -e target=daniel-pi`
           (**operator-only**), because `always` rides on any tag. C-6 deletes the absent task
           once a read-only `ls /usr/local/lib/kuma-push-lib.sh` finds no file on daniel-box,
           and over `ssh` on daniel-server and the Pi.
         - **Deploys.** The tick applies `initial_setup`, `gitops_deploy`, `renovate_agent`,
-          `renovate_notify`, `fake_remux` and `deploy_ui` on daniel-box. `land.sh` deploys `configarr` and
-          `janitorr` while each still imports `install_host_lib.yml`, which
-          `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` defers and alerts on. Once H2
-          has removed a role's import, C-3a does not edit it, and its `/opt` copy is H2's
-          absent arm: in the role while it is Ansible-owned, and in `k8s_host_files`, applied
-          by the tick, after D5's conversion PR. The `k3s` hand apply is
+          `renovate_notify`, `fake_remux` and `deploy_ui` on daniel-box. `promote` applies
+          `configarr` and `janitorr`, which are flux-owned. Their `/opt` copies are H2's absent
+          arm in `k8s_host_files`, applied by the tick. The `k3s` hand apply is
           `--tags "backup-health,live-drift"` (**operator-only**), the tags on the two `k3s` stamps and on the tasks that install
           `host_lib.py` beside the backup health reader and the live-drift check. Each host
           installs a new version of its own package through its `homelab-updater.timer`, and
@@ -2246,7 +2255,7 @@ this applies to, with what the rules predict:
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
-| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
+| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `promote` for the `configarr` and `janitorr` ConfigMaps; by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
 | C-3b | the timer rename with the legacy-unit removal; the variable rename; `glance_facts.py:timer_units` and its named-member case; the `hosts/` comments that cite the task file and the witness and audit units' down marker (*Every `hosts/` file the grep finds, by PR*) | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand; a new version of the daniel-box and daniel-server host packages |
 | C-4a | the key rename, `ingress_probes.py` and its `ansible_jinja_env.py` registration | ~160 | per the narrowing |
 | C-4b | delete `kuma_monitors.py`, its `ansible_jinja_env.py` import and registration, and its `FILTER_FIELDS` row, after D6 | ~70 removed | none once D6 has landed |

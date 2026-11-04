@@ -1,7 +1,5 @@
 ---
 # Install the shared `host_lib.py` beside a consumer script, so `import host_lib` resolves.
-# `kuma_push.py` travels with it, because host_lib re-exports the Kuma push from that file
-# (#3745); a host_lib copy without it dies at import.
 #
 # WHY A SIBLING COPY AND NOT A SHARED PATH. Every consumer is a directly-invoked script, so it
 # gets its own directory on `sys.path` and nothing else (the repo-root CLAUDE.md states the
@@ -10,8 +8,7 @@
 # in one place, so a change to any of them has one place to make.
 #
 # WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. All eight sites
-# record `/opt/<x>/host_lib.py` and `/opt/<x>/kuma_push.py` in their role's
-# `stamp_deployed_pairs` (claude_code, deploy_ui, fake_remux, gitops_deploy, renovate_agent,
+# record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs` (claude_code, deploy_ui, fake_remux, gitops_deploy, renovate_agent,
 # renovate_notify, and k3s twice).
 # Emitting a fragment here would change host state at those. Worse, a fragment is named per
 # GROUP and holds the whole group's pairs, so a second fragment written from here under the
@@ -51,5 +48,12 @@
     group: "{{ host_lib_owner | default('root') }}"
     mode: "{{ host_lib_mode | default('0755') }}"
   become: true
-  loop: [kuma_push.py, host_lib.py]
+  loop: [host_lib.py]
   notify: "{{ host_lib_notify | default([]) }}"
+
+# After the copy: an older host_lib beside this directory's scripts still imports kuma_push.py.
+- name: Remove the retired kuma_push.py from {{ host_lib_dir }}
+  ansible.builtin.file:
+    path: "{{ host_lib_dir }}/kuma_push.py"
+    state: absent
+  become: true

@@ -150,18 +150,17 @@ def test_credential_problems_is_flagged_on_a_unit_that_still_loads_one():
     ]
 
 
-def test_the_push_helper_is_a_byte_copy_no_script_sources(package):
-    source = REPO / host_mode.SHARED_FILES["kuma-push-lib.sh"]
-    assert package.files[f"{LIB}/kuma-push-lib.sh"] == (source.read_bytes(), 0o644)
-    # The heartbeats stopped sourcing it in B5's Cutover-2 and the AIDE and rkhunter scans in
-    # B9's. C-3a deletes the file.
-    for script in (
-        "pi-sd-health",
-        "pi-recovery-health",
-        "aide-check",
-        "rkhunter-check",
-    ):
-        assert "kuma-push-lib.sh" not in _text(package, f"{LIB}/{script}")
+@pytest.mark.parametrize("host", ["daniel-box", "daniel-server", "daniel-pi"])
+def test_no_host_package_ships_a_kuma_push_library(host):
+    files = host_mode.render_host(host).files
+    assert [f for f in files if f.endswith(("kuma-push-lib.sh", "kuma_push.py"))] == []
+
+
+@pytest.mark.parametrize(
+    "script", ["pi-sd-health", "pi-recovery-health", "aide-check", "rkhunter-check"]
+)
+def test_no_pi_script_sources_the_retired_push_library(package, script):
+    assert "kuma-push-lib.sh" not in _text(package, f"{LIB}/{script}")
 
 
 def test_the_check_library_is_a_byte_copy_of_initial_setups(package):

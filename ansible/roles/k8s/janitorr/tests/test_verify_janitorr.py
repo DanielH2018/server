@@ -188,7 +188,7 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     tree = tmp_path / "ansible"
     role = tree / "roles" / "k8s" / TAG
     shutil.copytree(K8S_ROLES / TAG, role)
-    # The health ConfigMap ships host_lib.py and kuma_push.py from hosts/lib by playbook_dir.
+    # The health ConfigMap ships host_lib.py from hosts/lib by playbook_dir.
     (tree / "roles" / "setup").symlink_to(ANSIBLE / "roles" / "setup")
     (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # playbook_dir/../hosts/lib
     (tree / "vars").mkdir()

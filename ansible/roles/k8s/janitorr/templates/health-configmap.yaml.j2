@@ -1,10 +1,7 @@
 {#
-  The janitorr-health CronJob's code: the reader, its verdict module, and the two setup/common
-  modules it imports, host_lib.py and kuma_push.py. The reader puts its own directory on
-  sys.path, so the four files sit flat at the mount, as they did in /opt/janitorr-health.
-
-  kuma_push.py stays because host_lib.py imports it at module level, although the reader
-  never calls it. M6 batch B6b's Cutover-2 removed the push and the janitorr-health Secret.
+  The janitorr-health CronJob's code: the reader, its verdict module, and the host_lib.py it
+  imports. The reader puts its own directory on sys.path, so the three files sit flat at the
+  mount, as they did in /opt/janitorr-health.
 
   No secret goes in here, and the pod takes none from a Secret.
   ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
@@ -23,5 +20,3 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/janitorr/files/janitorr_health_logic.py') | indent(4, true) }}
   host_lib.py: |
 {{ lookup('file', playbook_dir + '/../hosts/lib/host_lib.py') | indent(4, true) }}
-  kuma_push.py: |
-{{ lookup('file', playbook_dir + '/../hosts/lib/kuma_push.py') | indent(4, true) }}

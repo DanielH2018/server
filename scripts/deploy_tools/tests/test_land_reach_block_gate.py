@@ -40,7 +40,7 @@ _SHIPPED = (
 )
 # An ungated `copy` under a role initial_setup.yml applies everywhere. If this ever
 # narrows, the narrowing lost its evidence.
-_UNGATED = "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
+_UNGATED = "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 # A real PR's file list for `deploy_ui`, verbatim but for the two libraries #4417 moved into
 # `deploy_ui_lib/`.
 _PR_1901_PATHS = [

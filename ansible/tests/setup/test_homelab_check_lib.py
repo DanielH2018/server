@@ -115,6 +115,20 @@ def test_the_library_copy_task_and_its_stamp_are_tagged_always():
     assert copy["ansible.builtin.copy"]["dest"] == LIB_PATH
 
 
+def test_the_retired_push_library_and_its_drift_fragment_are_removed_on_every_tag():
+    # A fragment left behind names a source the repo no longer holds, and setup-drift-lib.sh
+    # reports that as drift on the host for good.
+    removal = task_named(
+        load_tasks(CRONS), "Remove the retired Kuma push library and its drift fragment"
+    )
+    assert removal["tags"] == ["always"]
+    assert removal["ansible.builtin.file"]["state"] == "absent"
+    assert removal["loop"] == [
+        "/usr/local/lib/kuma-push-lib.sh",
+        "/var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib",
+    ]
+
+
 def _unguarded_sources(text):
     """Line numbers where the library is sourced without a failing `||` guard."""
     lines = text.splitlines()

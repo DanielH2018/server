@@ -4,37 +4,23 @@
 # (secret rotation, docs refresh, infra map, eval sweep, git repair) are host-package components
 # since H7.36.
 
-- name: Deploy the shared Kuma-push helper
-  # DECIDED: `always`, not `crons` — this is a dependency of tasks in OTHER roles under other
-  # tags, so any tag that selects a consumer must also select this. optimize_pi's Pi crons are
-  # tagged `sd-health` / `recovery-health`, so the one-liner that role's CLAUDE.md documents
-  # (`initial_setup.yml --tags recovery-health -e target=daniel-pi`) rendered a cron that
-  # sources a file the same run never copied. Enumerating consumer tags here would re-break the
-  # next time a cron picks up a new tag; `always` cannot drift. Cost is one idempotent copy per
-  # tag-scoped run of initial_setup.yml.
+- name: Remove the retired Kuma push library and its drift fragment
+  # `always`, because this runs on every host and `--tags optimize_pi` is the Pi's only hand run.
+  # setup-drift-lib.sh reports a fragment whose source left the repo as drift until it goes.
   tags: [always]
-  # FIRST in this file, and initial_setup runs before deploy.yml (ansible/README.md §4): nearly
-  # every health cron on every host sources this, including secret-rotate.sh.j2 further down, so
-  # it has to be on disk before any of them are rendered. Consumers source it with a `|| exit 1`
-  # guard, so a host that somehow misses it fails its cron loudly and drops the heartbeat
-  # rather than skipping the push and reporting green.
-  # Two push scripts deliberately do NOT source it, each for a stated reason, and
-  # ansible/tests/setup/test_cron_scripts_publish_via_pr.py carries that exemption set with the reasons.
-  # The invariant that binds ALL of them — no push token ever reaches curl's argv — is asserted
-  # separately there with no exemptions at all, so opting out of the library cannot opt a script
-  # out of the security property.
-  ansible.builtin.copy:
-    src: kuma-push-lib.sh
-    dest: /usr/local/lib/kuma-push-lib.sh
-    owner: root
-    group: root
-    mode: "0644"
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
   become: true
+  loop:
+    - /usr/local/lib/kuma-push-lib.sh
+    - /var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib
 
 - name: Deploy the shared host-check library
-  # `always` for the same reason as the push helper above: consumers under other roles' tags
-  # source it with a `|| exit 1` guard, and `install_host_lib.yml` runs under each consumer's tag
-  # only. Every M6 host batch waits for this task's apply on its own host.
+  # DECIDED: `always`, not `crons` — this is a dependency of tasks in OTHER roles under other
+  # tags, so any tag that selects a consumer must also select this. Consumers source it with a
+  # `|| exit 1` guard, and enumerating their tags here would re-break the next time one picks up
+  # a new tag. Cost is one idempotent copy per tag-scoped run of initial_setup.yml.
   tags: [always]
   ansible.builtin.copy:
     src: homelab-check-lib.sh
@@ -391,18 +377,6 @@
         path: /etc/homelab/cert-expiry-webhook.env
         state: absent
 
-# kuma-push-lib.sh is sourced by EVERY health cron on every host, with a `|| exit 1` guard — so a
-# stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the copy task it records: this fragment must
-# not be left describing a version a tag-scoped run never deployed.
-- name: Record the deployed shared push library
-  tags: [always]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
-  vars:
-    stamp_deployed_name: kuma-push-lib
-    stamp_deployed_pairs:
-      - live: /usr/local/lib/kuma-push-lib.sh
-        src: ansible/roles/setup/initial_setup/files/kuma-push-lib.sh
-
 # homelab-check-lib.sh is sourced by the host checks M6 moves off Kuma, with a `|| exit 1` guard.
 # `tags: [always]`, matching the copy task it records.
 - name: Record the deployed shared host-check library
@@ -617,8 +591,7 @@
 - name: Remove the Loki read-route witness from any host that is not a witness
   tags: [crons, loki_route_witness]
   # The way out. A host dropped from loki_route_witness_hosts keeps running the check otherwise,
-  # pushing a monitor the manifest no longer declares — which Kuma answers 404, and which
-  # kuma-push-lib retries three times every hour forever. The timer and the old cron go in the
+  # writing a verdict no rule reads. The timer and the old cron go in the
   # kuma_check_timer.yml import above (its absent arm); this block removes the files.
   when: inventory_hostname not in loki_route_witness_hosts
   block:

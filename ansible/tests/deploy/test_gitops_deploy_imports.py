@@ -211,8 +211,8 @@ def test_deploy_logic_imports_without_host_lib():
     through `deploy_logic`, and each puts the role's files/ and `hosts/lib` on `sys.path`
     (`deploy_git` imports `ci_verdict` from the second). `host_lib` sits beside `ci_verdict`
     there since H7.2e, so the path no longer tells a pure chain from an impure one. A module-level
-    import chain from `deploy_logic` down to `deploy_config` would load `host_lib` and its
-    `kuma_push` into every `land.sh` run. This asserts it directly, from `sys.modules`.
+    import chain from `deploy_logic` down to `deploy_config` would load `host_lib` into every
+    `land.sh` run. This asserts it directly, from `sys.modules`.
 
     A subprocess rather than an in-process import: the in-process `sys.modules` already holds
     `host_lib` by the time this test runs, so nothing checked there can see the difference.
