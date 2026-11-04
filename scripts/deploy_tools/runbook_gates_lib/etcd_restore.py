@@ -168,7 +168,8 @@ def unusable_snapshot_name(name: str) -> list[str]:
     if "/" in name:
         return [
             f"{name} is a path, and --cluster-reset-restore-path takes a NAME — pass the "
-            "bare name `k3s etcd-snapshot list` printed, not a file:// or s3:// location"
+            "bare name the runbook's *Listing what is available* printed, not a file:// or "
+            "s3:// location"
         ]
     return []
 
@@ -191,8 +192,8 @@ def snapshot_not_restorable(name: str, doc) -> list[str]:
         return [
             f"no ETCDSnapshotFile records {name} — the cluster records {recorded}. "
             "A snapshot k3s has not reconciled into a CR has no verdict here; "
-            "the command under the runbook's *Listing what is available*, run as root, "
-            "is the other listing"
+            "the runbook's *Listing what is available*, run as root, reads the bucket itself: "
+            "`k3s etcd-snapshot list` while k3s runs, a SigV4 ListObjectsV2 once it is stopped"
         ]
     status = record.get("status") or {}
     if status.get("readyToUse") is not True:
