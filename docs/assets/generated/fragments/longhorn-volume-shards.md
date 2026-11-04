@@ -27,7 +27,5 @@
 | `scrutiny-web-config` | Weekly | B2 | Saturday |
 | `sonarr-config` | Weekly | B2 | Saturday |
 | `crowdsec-db` | None | — | — |
-| `uptime-kuma-data` | None | — | — |
-| `autokuma-data` | None | — | — |
 | `code-server-config` | None | — | — |
 | `scrutiny-influxdb-data` | None | — | — |

@@ -51,9 +51,9 @@ build `site_url`/`feed_url` from the request origin, so URLs copied out of the a
 already correct. (Before commit `fb7f2e9` they weren't, and this section told you to
 hand-edit them; that step is obsolete.)
 
-**Monitoring:** Uptime Kuma probes <https://email-rss.daniel-hunter.com/admin/login> for a
-200 every 5 min — monitor id `email-to-rss`, declared in
-`ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. That covers "the Worker is
+**Monitoring:** The `blackbox-exporter` scrape job probes <https://email-rss.daniel-hunter.com/admin/login>
+for a 2xx, with the target `service: email-to-rss` declared in
+`ansible/roles/k8s/observability/templates/prometheus.yaml.j2`. That covers "the Worker is
 routed and its script runs"; it deliberately does **not** cover the ingest path (mail landing
 via ForwardEmail, KV writes), which is unmonitored — a silent stop in newsletter delivery
 still surfaces only as feeds going quiet.

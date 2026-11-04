@@ -178,13 +178,6 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
             {"path": "{{ item }}", "state": "absent"},
         ),
     },
-    # The absent arm for the k8s/volume-claim staging directory autokuma-data left behind.
-    "uptime-kuma.yml": {
-        "Remove the k8s/volume-claim staging directory autokuma-data left behind": (
-            "ansible.builtin.file",
-            {"path": "/etc/rancher/k3s/manifests/autokuma-claims", "state": "absent"},
-        ),
-    },
     # The absent arms H2.5d left for the retired prefs drift check's host cron and script.
     "qbittorrent.yml": {
         "Remove the retired qbittorrent prefs drift check cron": (

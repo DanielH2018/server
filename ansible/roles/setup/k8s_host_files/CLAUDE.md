@@ -4,8 +4,7 @@ This role holds the host writes that D5 moves out of the k8s roles before each r
 Flux: docs's site directory, traefik's absent arm, registry's
 ghcr-mirror GC, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
 media-volume's media
-directories, observability's retired dashboard staging trees, uptime-kuma's stale
-autokuma-claims staging directory. A Flux-owned
+directories, observability's retired dashboard staging trees. A Flux-owned
 role has no Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, sections *Host-side rows* and *The
 `k8s_host_files` role enters the setup plane once (D5.1h)*.
@@ -48,8 +47,9 @@ and the pull key on daniel-pi. H7.25 moved both into the Pi package
 (`hosts/components/pi-peer-backup-target/`) and deleted the file. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which holds
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
-its script. uptime-kuma's PR wrote `tasks/uptime-kuma.yml`, the absent arm that removes
-the directory k8s/volume-claim staged autokuma-data's claim under. registry's push-store GC
+its script. uptime-kuma's PR wrote a task file holding the absent arm for the directory
+k8s/volume-claim staged autokuma-data's claim under. M6's C-2b deleted the file once rootq
+read the directory as gone. registry's push-store GC
 retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
 reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
 manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. #6536 added the

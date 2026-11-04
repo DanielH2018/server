@@ -252,8 +252,7 @@ Router port-forwarding, Cloudflare DNS and the other off-box prerequisites are i
 `deploy.yml` finishing green does **not** mean the host is done. The steps below live in each
 app's own database, which Ansible never writes. Most of them **fail silently** — the container
 stays healthy while the feature behind it does nothing (the exception is Authelia, whose role
-asserts up front and fails the deploy). Work top-down; the first two gate the whole monitoring
-fleet.
+asserts up front and fails the deploy). Work top-down.
 
 ```bash
 uv run python scripts/diagnostics/postflight.py   # exercises every item below against the live host
@@ -263,31 +262,22 @@ It authenticates with each SOPS credential exactly as the real consumers do, pri
 per item, and exits non-zero naming what's still pending. A service this host doesn't run
 reports SKIP. Run it after `deploy.yml` and again after working through the list.
 
-1. **Create the Uptime-Kuma admin** at `https://uptime-kuma.<domain>` (first-run wizard). AutoKuma
-   **cannot** create it, and until it exists AutoKuma provisions **zero** monitors — so nothing
-   in the fleet is watched and no alert can fire. Kuma runs in the cluster since Phase D
-   (2026-08-10) with its DB on a backed-up Longhorn PVC — but a from-scratch rebuild still
-   needs this wizard once.
-2. **Re-mint `prometheus_kuma_api_key`** in Kuma (Settings → API Keys) and `sops set` it. Kuma
-   issues keys into that same unbacked-up DB, so the value in `secrets.yml` is stale on any
-   fresh Kuma, and the maintenance sync's status read then keeps every monitor in the window.
-3. **Seed the *arr API keys.** `sonarr_api_key`, `radarr_api_key`, `prowlarr_api_key` and
+1. **Seed the *arr API keys.** `sonarr_api_key`, `radarr_api_key`, `prowlarr_api_key` and
    `jellyfin_api_key` in SOPS are what configarr, janitorr, homepage, monitor-bridge and
    autofix-bridge authenticate with — but a fresh *arr generates its own random key on first
    start. Either paste the SOPS value into each app's Settings → General, or stop the
    container and write it into `config.xml`'s `<ApiKey>`. Skip this and every consumer 401s
    against a service that reports healthy.
-4. **Home Assistant onboarding**, then mint four long-lived tokens (Profile → Security) for
+2. **Home Assistant onboarding**, then mint four long-lived tokens (Profile → Security) for
    `monitor_bridge_ha_token`, `homepage_ha_token`, `prometheus_ha_token`, `claude_ha_token`.
    The rest of HA's one-time setup — HACS, Zigbee pairing, the `light.bedroom_lights` group,
    companion-app sensors — is in [`roles/k8s/home-assistant/SETUP.md`](roles/k8s/home-assistant/SETUP.md).
-5. **Authelia**, on a genuinely fresh install: generate the OIDC HMAC secret, client password
+3. **Authelia**, on a genuinely fresh install: generate the OIDC HMAC secret, client password
    hash and RSA key per the setup instructions in [`roles/k8s/authelia/templates/config-secret.yaml.j2`](roles/k8s/authelia/templates/config-secret.yaml.j2)
    (header comment explains fresh-install secrets) — the role asserts they exist. Note that
    OIDC configuration is live as of E7 (2026-08-13).
 **Why these can't move into Ansible** (checked 2026-07-30, so it doesn't get re-litigated):
-Uptime-Kuma 2.x exposes setup and API-key minting over **Socket.IO only** — there is no REST
-route to drive, so items 1-2 are structurally manual. Home Assistant's `/api/onboarding/users`
+Home Assistant's `/api/onboarding/users`
 is drivable, but minting a long-lived token isn't, and seeding `.storage/` by hand corrupts
 installs. The *arr keys are deliberately left manual: writing `config.xml` under a running
 container is the kind of stateful surgery that silently breaks an app.

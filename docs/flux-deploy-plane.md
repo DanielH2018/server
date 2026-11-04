@@ -2001,7 +2001,11 @@ instead:
    `kustomize.toolkit.fluxcd.io/prune: disabled`, so the claim and its Longhorn volume
    outlive both PRs. Once the second PR is on master, and only when the data is no longer
    wanted, the operator deletes the claim with `kubectl delete pvc -n <namespace> <claim>`.
-   The agent's ServiceAccount cannot run that write.
+   The agent's ServiceAccount cannot run that write. A `longhorn`-class claim that the entry
+   listed in `no_backup_claims` leaves the no-backup list with the entry. `longhorn-reconcile`
+   then moves its volume to the `default` group, and `daily-backup` backs up that volume even
+   while it is detached. To keep the volume out of B2, delete the claim after the `<tag>`
+   Kustomization reads `NotFound` and before the next `daily-backup` run.
 
 ## Retention of old artifact versions
 

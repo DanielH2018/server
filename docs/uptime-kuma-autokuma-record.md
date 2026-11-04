@@ -1,7 +1,8 @@
 # uptime-kuma and AutoKuma record
 
 The measured incidents and source readings behind the Uptime Kuma workload, which M6 retired.
-The templates and guards this page names were deleted with M6's C-1b, and git history keeps them.
+M6's C-1b deleted the templates and guards this page names, C-2b deleted the role, and git
+history keeps them.
 
 Two moving parts sit behind every fact here: Kuma itself at the pinned `2.5.3`, and the AutoKuma
 sidecar at `2.1.0-rc.2`, which reconciles monitors, notifications and tags from this role's
@@ -399,7 +400,5 @@ The move followed a shadow soak in which the probes caught every outage the tile
 
 ## See also
 
-- `ansible/roles/k8s/uptime-kuma/CLAUDE.md` — the rules, the guards that hold them, and the
-  procedure for adding a monitor.
 - [monitor-bridge checks](monitor-bridge-checks.md) — the producer side of most push tiles,
   including Swallowed Push Verdicts.
