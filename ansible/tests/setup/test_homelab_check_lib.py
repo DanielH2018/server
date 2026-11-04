@@ -11,6 +11,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE, load_tasks, task_named
+from _shell_render import render_shell_script
 from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
@@ -160,33 +161,36 @@ def test_no_endpoints_at_all_disables_the_gate(tmp_path):
 # a call silently dropped is the regression this names, and the 2026-09-18 WAN outage paged each
 # of them beside the WAN alert.
 WAN_GATED_CRONS = [
-    "roles/setup/k3s/templates/release-staleness-check.sh.j2",
-    "roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2",
-    "../hosts/components/docs-refresh/templates/docs-refresh.sh.j2",
+    ("setup", "k3s", "release-staleness-check.sh.j2"),
+    ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),
+    ("components", "docs-refresh", "docs-refresh.sh.j2"),
 ]
+SENTINEL_URL = "https://sentinel.example"
 
 
-def _reachout_calls(text):
+def _probes_only_the_shared_list(script):
+    """True when `script` calls `reachout_verdict`, and every call ends with SENTINEL_URL."""
     # A `command -v reachout_verdict` guard is not a call.
-    return [
-        line
-        for line in text.splitlines()
+    calls = [
+        line.strip()
+        for line in script.splitlines()
         if line.lstrip().startswith("reachout_verdict ")
     ]
+    return bool(calls) and all(line.endswith(f" {SENTINEL_URL}") for line in calls)
 
 
-@pytest.mark.parametrize("path", WAN_GATED_CRONS)
-def test_every_internet_fetching_cron_probes_the_shared_endpoint_list(path):
+@pytest.mark.parametrize("cron", WAN_GATED_CRONS, ids=lambda cron: cron[2])
+def test_every_internet_fetching_cron_probes_the_shared_endpoint_list(cron):
     # The URLs are arguments, so a cron that hardcoded its own pair would probe something the
-    # bridge's WAN check never agreed to.
-    calls = _reachout_calls((ANSIBLE / path).read_text())
-    assert calls and all("wan_probe_urls" in line for line in calls), path
+    # bridge's WAN check never agreed to. The sentinel shows the call renders `wan_probe_urls`.
+    script = render_shell_script(*cron, {"wan_probe_urls": [SENTINEL_URL]})
+    assert _probes_only_the_shared_list(script)
 
 
 def test_a_cron_with_no_call_or_with_its_own_urls_is_flagged():
-    assert _reachout_calls("# reachout_verdict t {{ wan_probe_urls }}\n") == []
-    hardcoded = _reachout_calls("reachout_verdict t https://a.example\n")
-    assert not all("wan_probe_urls" in line for line in hardcoded)
+    assert _probes_only_the_shared_list(f"reachout_verdict t {SENTINEL_URL}\n")
+    assert not _probes_only_the_shared_list(f"# reachout_verdict t {SENTINEL_URL}\n")
+    assert not _probes_only_the_shared_list("reachout_verdict t https://a.example\n")
 
 
 def test_boot_grace_active_fails_open_on_a_host_past_the_grace(tmp_path):
