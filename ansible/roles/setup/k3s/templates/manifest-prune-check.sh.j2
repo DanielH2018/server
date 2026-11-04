@@ -383,7 +383,7 @@ if [[ -n "$HC_PING_KEY" ]]; then
     || logger -t manifest-prune-check "healthchecks ping failed (status=${STATUS})"
 fi
 
-# The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
+# The exit code is the timer's contract (roles/setup/common/tasks/check_timer.yml): 1 after
 # a down verdict so Restart=on-failure reruns the check until the drift is gone, 0 after up. The
 # reruns repeat the `/fail` ping above every 30 min while red; healthchecks.io notifies on a
 # status CHANGE, so a check already down is not paged again, and the first `up` clears it.

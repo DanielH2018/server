@@ -48,23 +48,23 @@
   # shares, reads the deployer's 0600 config.env for the CI gate settings, holds the gh login
   # the CI walk authenticates with and the age key the render decrypts SOPS with, and has the
   # passwordless sudo the render's `become` tasks need.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_state: "{{ render_records_state }}"
-    kuma_check_name: render-records
-    kuma_check_description: k8s render-record producer (Kuma push)
-    kuma_check_exec: >-
+    check_timer_state: "{{ render_records_state }}"
+    check_timer_name: render-records
+    check_timer_description: k8s render-record producer (Kuma push)
+    check_timer_exec: >-
       /usr/local/bin/uv run --no-project --no-python-downloads
       --python {{ host_python_version }} /opt/render-records/render_records.py
-    kuma_check_user: "{{ sys_user }}"
-    kuma_check_env_file: /etc/render-records/config.env
-    kuma_check_environment:
+    check_timer_user: "{{ sys_user }}"
+    check_timer_env_file: /etc/render-records/config.env
+    check_timer_environment:
       - "CHECKOUT_DIR={{ render_records_checkout_dir }}"
       - "RECORD_DIR={{ render_records_record_dir }}"
       - "RENDER_HOST={{ inventory_hostname }}"
       - "BOOT_GRACE_S={{ render_records_boot_grace_s }}"
-    kuma_check_on_calendar: "*-*-* *:{{ '%02d' | format(render_records_minute | int) }}:00"
-    kuma_check_restart_sec: "{{ render_records_restart_sec }}"
+    check_timer_on_calendar: "*-*-* *:{{ '%02d' | format(render_records_minute | int) }}:00"
+    check_timer_restart_sec: "{{ render_records_restart_sec }}"
 
 - name: Look for the render-records worktree before removing it
   when: render_records_state == 'absent'

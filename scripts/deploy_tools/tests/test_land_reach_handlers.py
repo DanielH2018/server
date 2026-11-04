@@ -116,7 +116,7 @@ def _widget_role(tmp_path):
                 {
                     "name": "Install the shared timer",
                     "ansible.builtin.import_tasks": "{{ role_path }}/../common/tasks/"
-                    "kuma_check_timer.yml",
+                    "check_timer.yml",
                     "vars": {"host_lib_notify": ["Run widget once"]},
                 },
             ]

@@ -430,7 +430,7 @@ The exit criterion is seven observations:
   `docker_install/tasks/teardown.yml` loops over. Of the 37 `ansible.builtin.cron` tasks, six
   carry a literal `state: absent`. Three retire a cron for good: that loop,
   `Retire the TLS cert-expiry watch` in `initial_setup/tasks/crons.yml`, and
-  `Remove the cron the kuma-check timer replaces` in `common/tasks/kuma_check_timer.yml`.
+  `Remove the cron the kuma-check timer replaces` in `common/tasks/check_timer.yml`.
   The other three are the absent half of a cron still live on another host, such as
   `Remove the firmware cron on hosts without fwupd`.
 - **`docs/facts.lock` keys rows on setup-role docs.** `grep -c` for

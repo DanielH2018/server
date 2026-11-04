@@ -18,7 +18,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 ## How one run works
 
 `files/render_records.py` runs as `{{ sys_user }}` from the shared kuma-check timer pair
-(`roles/setup/common/tasks/kuma_check_timer.yml`), hourly at `render_records_minute`
+(`roles/setup/common/tasks/check_timer.yml`), hourly at `render_records_minute`
 (`group_vars/all.yml`):
 
 1. It reads the primary checkout's `origin/master` and never fetches. The GitOps deployer

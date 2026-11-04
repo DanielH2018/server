@@ -199,8 +199,8 @@ its repo source, and has any `template:`-rendered setup script's SOURCE changed 
 rendered it?
 
 It runs from `kuma-check-setup-drift.timer` since 2026-09-19. It imports the `common` role's
-`kuma_check_timer.yml`, exits 1 after a down verdict, and reruns every 30 min under
-`Restart=on-failure` until it exits 0. The import's `kuma_check_state` follows the host gate, so
+`check_timer.yml`, exits 1 after a down verdict, and reruns every 30 min under
+`Restart=on-failure` until it exits 0. The import's `check_timer_state` follows the host gate, so
 a host dropped from the list loses the timer and the cron it replaced. The daily secret-rotation
 audit used the same form until H7.36 moved it to `homelab-secret-rotation-audit.timer` in the
 `secret-rotation` component of `homelab-daniel-box`, which keeps the exit-code contract as plain
@@ -254,7 +254,7 @@ M6 batch B2's Cutover-2.
 
 **It is a systemd timer, `kuma-check-loki-read-route.timer`, not a cron, since 2026-09-19.**
 The `Schedule the Loki read-route witness` task imports the `common` role's
-`kuma_check_timer.yml`, whose service is `Restart=on-failure` with `RestartSec=15min`: the
+`check_timer.yml`, whose service is `Restart=on-failure` with `RestartSec=15min`: the
 script exits 1 after a `down` verdict, so a red check reruns every 15 minutes until the route
 answers instead of sitting red until the next hourly slot. The timer is `Persistent=true`, so a
 slot missed inside an outage runs at boot; the script's boot-grace arm exits 1 without a verdict,

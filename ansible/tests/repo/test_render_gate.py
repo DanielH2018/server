@@ -132,7 +132,7 @@ def test_the_3219_clauses_do_not_fire_on_a_non_template_census():
 def test_a_hand_rolled_render_is_not_flagged():
     """A read whose result goes into Jinja is a render, not an assertion on template text.
 
-    `setup/test_kuma_check_timer.py` renders its two units this way, because it needs a
+    `setup/test_check_timer.py` renders its two units this way, because it needs a
     different override per test. The same read is a source read when its result is asserted on
     instead, which is the last entry of `FLAGGED_SPELLINGS`.
     """
@@ -140,7 +140,7 @@ def test_a_hand_rolled_render_is_not_flagged():
         template_source_reads(
             "def _render(template, **overrides):\n"
             "    return env.from_string(template.read_text()).render(overrides)\n\n\n"
-            'SERVICE = COMMON / "templates" / "kuma-check.service.j2"\n'
+            'SERVICE = COMMON / "templates" / "check-timer.service.j2"\n'
             "_render(SERVICE)\n"
         )
         == []
