@@ -66,6 +66,10 @@ that went with them:
 - `deploy_cross_role.py`'s k8s table loses `uptime-kuma` from the `kuma_push.py` row, which the
   plan gave to C-3a. The row's other two members stay for C-3a.
 - `python-liquid` leaves the dev dependencies with the two tests that used it.
+- `test_cron_scripts_publish_via_pr.py`: the push corpus falls to one template, because the
+  Authelia bypass held the other `api/push` literal.
+- `test_host_maintenance.py` takes over the reboot timer's assertion from
+  `test_maintenance_window.py`, because the timer outlives the Kuma window.
 
 **The plan's precondition grep names more than the plan predicted.** The other hits are comments,
 the entry itself, C-2b's `k8s_host_files` task, C-7's `KumaNotificationDropped`, C-3a's push

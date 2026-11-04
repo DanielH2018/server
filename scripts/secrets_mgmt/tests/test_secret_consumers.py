@@ -29,22 +29,14 @@ def test_consumer_tags_status_page_sync_token_is_manual():
     assert consumer_tags("kopia_restore_drill_push_token") == ()
 
 
-def test_consumer_tags_non_push_prefixed_token_gets_no_tile():
-    """`monitor_bridge_ha_token` carries the prefix for Kuma history but is an HA API token.
-
-    It is the ONE token that resolves a consumer and has no tile, so it is the reject half of
-    the `_push_token` discriminator: adding uptime-kuma here would deploy a role that renders
-    this name nowhere, which
-    `ansible/tests/k8s/test_secret_consumer_census.py::test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret`
-    would then fail on.
-    """
+def test_consumer_tags_routes_the_bridge_prefix_to_the_bridge():
+    """`monitor_bridge_ha_token` carries the prefix for Kuma history but is an HA API token."""
     assert consumer_tags("monitor_bridge_ha_token") == ("monitor-bridge",)
 
 
 def test_consumer_tags_cross_host_tokens_are_manual():
-    # Cross-host — the unattended cron must NOT auto-rotate these, and they must NOT pick up the
-    # uptime-kuma tag either: their pusher half sits on another HOST, so a tag list would assert
-    # a repair one playbook run cannot perform. This is the reject half of the multi-tag change.
+    # Cross-host: the unattended cron must NOT auto-rotate these. Their pusher sits on another
+    # HOST, so a tag would assert a repair one playbook run cannot perform.
     assert consumer_tags("render_records_push_token") == ()
 
 

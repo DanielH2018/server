@@ -36,6 +36,7 @@ _ROLES_WITH_NO_WORKLOAD = {
     "netpol-baseline": "NetworkPolicies plus the Job that probes them",
     "pi-peer-backup": "a CronJob, its PVC and its Secret",
     "traefik-crds": "upstream Traefik's CustomResourceDefinitions, vendored; no workload",
+    "uptime-kuma": "two claims, until the second retirement PR removes the role",
 }
 
 # Roles where the tag is NOT the name of every workload to check. Pinned as a LOWER bound: the
