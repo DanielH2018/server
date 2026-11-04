@@ -104,7 +104,7 @@ containers_list:
     # keys, so use_authelia false is load-bearing. hostname also feeds the Pi-hole
     # per-service DNS override.
     hostname: "crowdsec-lapi"
-    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: the crowdsec-* allowlist and AppSec tiles.
+    # `ScrapeTargetDown` (service crowdsec) and the crowdsec-jobs homelab_check_* gauges cover it.
     probe: false
     port: 8080
     use_authelia: false
@@ -209,7 +209,6 @@ containers_list:
     owner: flux
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
-    probe: {id: auth, name: k3s Authelia Portal}
     port: 9091
     use_authelia: false
     tier: home-edge
@@ -234,7 +233,6 @@ containers_list:
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
     # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
     hostname: "bento-pdf"
-    probe: {name: k3s Ingress (bento-pdf)}
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -259,7 +257,6 @@ containers_list:
     # docs/flux-deploy-plane.md.
     owner: flux
     hostname: "headlamp"
-    probe: {name: k3s Headlamp}
     port: 4466
     use_authelia: true
     auth_tier: one_factor
@@ -473,7 +470,7 @@ containers_list:
     # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
     depends_on: [media-volume, dri-device-plugin]
     hostname: "jellyfin"
-    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: jellyfin-lan-vip, a port check on the LAN VIP.
+    # blackbox-extra's tcp_connect target on the LAN VIP covers it.
     probe: false
     port: 8096
     use_authelia: false
@@ -528,7 +525,6 @@ containers_list:
     # so `otelq`, which hardcodes 127.0.0.1, can read them from the host. Content logging is
     # on, so none of them gets an ingress route.
     hostname: "grafana"
-    probe: {id: grafana, name: k3s Grafana}
     port: 3000
     use_authelia: true
     auth_tier: one_factor
@@ -589,7 +585,6 @@ containers_list:
     owner: flux
     weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
-    probe: {name: k3s FreshRSS}
     port: 80
     use_authelia: true
     auth_tier: one_factor
@@ -632,7 +627,7 @@ containers_list:
     # removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
     hostname: "livesync"
-    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: livesync-k8s, which expects CouchDB's 401.
+    # blackbox-extra's http_401 target covers it: CouchDB's 401 is the end-to-end signal.
     probe: false
     port: 5984
     use_authelia: false
@@ -819,7 +814,6 @@ containers_list:
     owner: flux
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
-    probe: {name: k3s Zigbee2MQTT}
     port: 8080
     use_authelia: true
     auth_tier: one_factor
@@ -837,7 +831,6 @@ containers_list:
     # is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
     hostname: "home-assistant"
-    probe: {name: k3s Home Assistant}
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and
     # files/configuration.yaml ships verbatim, so no template can move it. Changing this moves
     # the Service, the route and the prometheus scrape target, but not the listener.
@@ -863,7 +856,7 @@ containers_list:
     # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
     hostname: "pihole"
-    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: pihole-k8s-dns, a DNS query against the VIP.
+    # blackbox-extra's dns_a_homepage target covers it: a DNS query against the VIP.
     probe: false
     port: 80
     use_authelia: true
@@ -912,7 +905,7 @@ containers_list:
     # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
     hostname: "ical-proxy"
-    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: ical-proxy-k8s, which probes a calendar over the ClusterIP.
+    # blackbox-extra's target for /calendar1.ics covers it, over the ClusterIP.
     probe: false
     port: 5000
     use_authelia: false
@@ -1006,7 +999,7 @@ containers_list:
     # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
     hostname: "loki-homelab"
-    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: loki, which probes /ready over the ClusterIP.
+    # `ScrapeTargetDown` (service loki-homelab) covers it, through the entry's own scrape job.
     probe: false
     port: 3100
     use_authelia: false
@@ -1134,7 +1127,7 @@ containers_list:
     # daily collector runs.
     no_backup_claims: [scrutiny-influxdb-data]
     hostname: "scrutiny"
-    # A hand-written tile in uptime-kuma's static-monitors.yaml.j2 covers it: scrutiny-k8s, which probes /api/health through the LAN bypass.
+    # blackbox-extra's target for /api/health covers it, through the LAN bypass.
     probe: false
     port: 8080
     use_authelia: true
