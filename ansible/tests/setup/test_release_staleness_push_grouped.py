@@ -16,7 +16,9 @@ from lib.proc_testing import run, write_exec
 from _shell_render import render_shell_script, rendered_shell_text
 
 # `reachout_verdict` from the real library, stubbed to its WAN-reachable answer — which is what
-# every case here means: the git fetch failed and the link is fine, so the tile must page.
+# every case here means: the git fetch failed and the link is fine, so the tile must page. The
+# skip path is covered against the real function by
+# ansible/tests/setup/test_homelab_check_lib.py.
 REACHOUT_STUB = 'reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }\n'
 
 TEMPLATE = ("setup", "k3s", "release-staleness-check.sh.j2")

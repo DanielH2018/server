@@ -9,6 +9,7 @@ and every consumer sources the library with a failing guard instead of skipping 
 
 import re
 
+import pytest
 from _helpers import ANSIBLE, load_tasks, task_named
 from lib.proc_testing import run
 
@@ -98,6 +99,94 @@ def test_reachout_verdict_pages_when_the_wan_answers_and_skips_when_it_does_not(
     refuses = _bash(tmp_path, f"curl() {{ return 7; }}\n{probe}")
     assert answers.stdout == "down|\n"
     assert refuses.stdout == "up|skipped: WAN unreachable — \n"
+
+
+def _wan_probe(tmp_path, urls, rcs):
+    """Run `wan_reachable` with `curl` exiting `rcs` in sequence; return (rc, curl calls, logs).
+
+    The stub records each call in a file, because a cron can call the gate from a command
+    substitution, and `return`s because `exit` inside a shell function ends the whole shell.
+    """
+    calls = tmp_path / "calls"
+    calls.write_text("")
+    logs = tmp_path / "logs"
+    logs.write_text("")
+    result = _bash(
+        tmp_path,
+        f"""RCS=({" ".join(str(rc) for rc in rcs)})
+curl() {{
+  idx=$(wc -l < "{calls}")
+  echo x >> "{calls}"
+  return "${{RCS[$idx]}}"
+}}
+logger() {{ shift; echo "$*" >> "{logs}"; }}
+wan_reachable test-tag {" ".join(urls)}
+echo "rc=$?"
+""",
+    )
+    assert result.returncode == 0, result.stderr
+    return (
+        result.stdout.strip(),
+        len(calls.read_text().splitlines()),
+        logs.read_text().splitlines(),
+    )
+
+
+_TWO_URLS = ["https://a.example", "https://b.example"]
+
+
+def test_one_endpoint_answering_makes_the_wan_reachable(tmp_path):
+    # The second provider is never asked: a healthy path costs one request.
+    assert _wan_probe(tmp_path, _TWO_URLS, [0, 0]) == ("rc=0", 1, [])
+
+
+def test_the_second_endpoint_still_answers_for_the_first_providers_own_outage(tmp_path):
+    # Requiring both would turn one provider's outage into a skip for a real fault.
+    assert _wan_probe(tmp_path, _TWO_URLS, [6, 0]) == ("rc=0", 2, [])
+
+
+def test_every_endpoint_failing_is_the_only_no_wan_verdict(tmp_path):
+    out, probes, logs = _wan_probe(tmp_path, _TWO_URLS, [6, 28])
+    assert (out, probes) == ("rc=1", 2)
+    assert any("no endpoint answered" in line for line in logs), logs
+
+
+def test_no_endpoints_at_all_disables_the_gate(tmp_path):
+    # An empty `wan_probe_urls` must suppress nothing, the direction boot_grace_active fails in.
+    assert _wan_probe(tmp_path, [], []) == ("rc=0", 0, [])
+
+
+# The host crons that fetch from the internet. A frozen list rather than a glob: a cron renamed or
+# a call silently dropped is the regression this names, and the 2026-09-18 WAN outage paged each
+# of them beside the WAN alert.
+WAN_GATED_CRONS = [
+    "roles/setup/k3s/templates/release-staleness-check.sh.j2",
+    "roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2",
+    "../hosts/components/docs-refresh/templates/docs-refresh.sh.j2",
+]
+
+
+def _reachout_calls(text):
+    # A `command -v reachout_verdict` guard is not a call.
+    return [
+        line
+        for line in text.splitlines()
+        if line.lstrip().startswith("reachout_verdict ")
+    ]
+
+
+@pytest.mark.parametrize("path", WAN_GATED_CRONS)
+def test_every_internet_fetching_cron_probes_the_shared_endpoint_list(path):
+    # The URLs are arguments, so a cron that hardcoded its own pair would probe something the
+    # bridge's WAN check never agreed to.
+    calls = _reachout_calls((ANSIBLE / path).read_text())
+    assert calls and all("wan_probe_urls" in line for line in calls), path
+
+
+def test_a_cron_with_no_call_or_with_its_own_urls_is_flagged():
+    assert _reachout_calls("# reachout_verdict t {{ wan_probe_urls }}\n") == []
+    hardcoded = _reachout_calls("reachout_verdict t https://a.example\n")
+    assert not all("wan_probe_urls" in line for line in hardcoded)
 
 
 def test_boot_grace_active_fails_open_on_a_host_past_the_grace(tmp_path):
