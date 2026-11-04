@@ -9,7 +9,8 @@ The gates, in the order the runbook gives them:
 
   1. The off-box listing leg is proven. The weekly `--list-only` drill on daniel-box writes
      `/var/lib/etcd-restore-drill/last-success-list-only` when the R2 credentials, bucket and
-     folder work and `k3s etcd-snapshot list` with explicit `--etcd-s3-*` flags returns real snapshots. The stamp must say
+     folder work and `k3s etcd-snapshot list` with explicit `--etcd-s3-*` flags returns real
+     snapshots. The stamp must say
      `mode=list-only` and be younger than `MAX_DRILL_AGE_DAYS` — the number monitor-bridge's
      `check_etcd_restore_drill` defaults to for the same weekly cadence.
   2. The cluster token has an off-box baseline. Since 2026-08-20 the snapshot's bootstrap
