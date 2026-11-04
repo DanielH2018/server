@@ -33,8 +33,7 @@
 
    The two callers that used this route:
      - the Kuma "Loki" tile probed /ready, and is why the pod CIDR was admitted at all. It moved
-       to ClusterIP (uptime-kuma/static-monitors.yaml.j2), where networkpolicy-loki-homelab
-       admits it by podSelector. Everything else in-cluster — promtail, monitor-bridge,
+       to ClusterIP, where a podSelector could gate it, and M6 retired it. Everything else in-cluster — promtail, monitor-bridge,
        homelab-mcp, terraria/valheim-stats, Grafana, Prometheus — already used ClusterIP and is
        untouched.
      - probe.py runs on a HOST, not in a pod, so it genuinely needs the edge. It reaches only

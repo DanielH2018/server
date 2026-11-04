@@ -68,9 +68,9 @@ def fence_name(entry: dict) -> str:
     return entry.get("netpol_app", entry["name"])
 
 
-# Callers whose pods render only from a role's `templates/verify/`, which the renderer emits into
-# `<tag>-verify` and `rendered_docs()` does not read. Named so the derivation below cannot
-# quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
+# Callers whose pods render only from a role's `templates/verify/` or `templates/precheck/`, which
+# the renderer emits into `<tag>-verify` and `<tag>-precheck` and `rendered_docs()` does not read.
+# Named so the derivation below cannot quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
 # qbittorrent's verify Job keeps the label of the `kubectl run` probe it replaced at the flip.
 # janitorr's tests/test_verify_janitorr.py also checks that sonarr's and radarr's fences admit its Job.
 VERIFY_CALLERS = frozenset(
@@ -80,20 +80,26 @@ VERIFY_CALLERS = frozenset(
         "prowlarr-verify",
         "qbittorrent-reach-probe",
         "janitorr-verify",
+        "traefik-precheck",
     }
 )
 
 
 @pytest.fixture(scope="module")
 def verify_pod_labels(tmp_path_factory) -> set[str]:
-    """The `app` label of every pod a role's `templates/verify/` renders, as Flux receives it."""
+    """The `app` label of every Job a role's `verify/` or `precheck/` renders, as Flux receives it."""
     path = tmp_path_factory.mktemp("stubs") / "stubs.yml"
     assert shadow_diff.main(["stubs", "--out", str(path)]) == 0
     stubs = load_stubs(path)
     labels = set()
-    for templates in sorted(K8S_ROLES.glob("*/templates/verify")):
-        rendered = cluster.render_tag(templates.parent.parent.name, stubs)
-        for name, text in rendered.verify.items():
+    roles = {
+        templates.parent.parent.name
+        for pattern in ("*/templates/verify", "*/templates/precheck")
+        for templates in K8S_ROLES.glob(pattern)
+    }
+    for role in sorted(roles):
+        rendered = cluster.render_tag(role, stubs)
+        for name, text in [*rendered.verify.items(), *rendered.precheck.items()]:
             for doc in yaml_fast.safe_load_all(text):
                 if name != "kustomization.yaml" and doc and doc["kind"] == "Job":
                     labels.add(pod_template(doc)["metadata"]["labels"]["app"])
@@ -221,17 +227,41 @@ def test_every_verify_caller_is_a_label_a_verify_job_carries(verify_pod_labels):
     assert VERIFY_CALLERS <= verify_pod_labels
 
 
-def test_every_caller_is_a_label_some_rendered_pod_carries(verify_pod_labels):
-    """A caller naming no pod admits nothing, and the real caller stays denied."""
-    labels = verify_pod_labels | {
+@pytest.fixture(scope="module")
+def pod_labels(verify_pod_labels) -> set[str]:
+    """The `app` label of every pod the manifests and the verify Jobs render."""
+    return verify_pod_labels | {
         (pod_template(doc).get("metadata") or {}).get("labels", {}).get("app")
         for _role, _template, doc in rendered_docs()
     }
+
+
+def test_every_caller_is_a_label_some_rendered_pod_carries(pod_labels):
+    """A caller naming no pod admits nothing, and the real caller stays denied."""
     unknown = {
         (name, caller)
         for name, fence in declared_fences().items()
         for caller in fence["callers"]
-        if caller not in labels
+        if caller not in pod_labels
     }
-    # M6's C-2a deletes this grant. C-1b deleted the pod, and the grant admits nothing until then.
-    assert unknown == {("ical-proxy", "uptime-kuma")}
+    assert unknown == set()
+
+
+def test_every_bespoke_policy_peer_is_a_label_some_rendered_pod_carries(pod_labels):
+    """A same-namespace peer naming no pod admits nothing, and is a grant its workload outlived."""
+    peers = {
+        (doc["metadata"]["name"], peer["podSelector"]["matchLabels"]["app"])
+        for role, _template, doc in rendered_docs()
+        if role == "netpol-baseline" and doc.get("kind") == "NetworkPolicy"
+        for rule in doc["spec"].get("ingress") or []
+        for peer in rule.get("from") or []
+        if "namespaceSelector" not in peer
+        and "app" in (peer.get("podSelector") or {}).get("matchLabels", {})
+    }
+    # Named so the walk cannot go empty and pass on nothing.
+    assert {
+        ("loki-homelab", "alloy"),
+        ("mosquitto", "blackbox-exporter"),
+        ("nut", "blackbox-exporter"),
+    } <= peers
+    assert {peer for peer in peers if peer[1] not in pod_labels} == set()

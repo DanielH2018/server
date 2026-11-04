@@ -30,10 +30,10 @@
    /calendar{1,2,4}.ics, so every path it has is the sensitive content. There is no health
    endpoint to expose instead.
 
-   So both pod callers moved off the edge and onto ClusterIP, where the pod-level NetworkPolicy
-   can actually distinguish them:
-     - homepage's widgets  -> roles/k8s/homepage/templates/config/services.yaml.j2
-     - the Kuma monitor    -> roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2
-   The cost is that the Kuma tile no longer exercises the Traefik route, only the app. Accepted:
+   So the pod callers use ClusterIP, where the pod-level NetworkPolicy can actually distinguish
+   them:
+     - homepage's widgets      -> roles/k8s/homepage/templates/config/services.yaml.j2
+     - blackbox-exporter probe -> the `blackbox-extra` job in the observability role
+   The cost is that the probe does not exercise the Traefik route, only the app. Accepted:
    nothing reaches this service through the edge any more, so an edge break for ical-proxy has no
    consumer to affect. #}

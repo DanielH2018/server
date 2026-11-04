@@ -20,7 +20,7 @@ spec:
 {# `| bool` for the reason networkpolicy.yaml.j2 spells out in full: a string
    `-e netpol_baseline_enforced=false` is truthy to bare Jinja and False to Ansible's `when:`. #}
 {% if netpol_baseline_enforced | bool %}
-    # Five in-cluster callers plus the host-side shutdown chain, all on upsd's :3493.
+    # Four in-cluster callers plus the host-side shutdown chain, all on upsd's :3493.
     #
     # peanut is the web UI in-cluster.
     #
@@ -33,19 +33,16 @@ spec:
     # (360.0 at 2026-08-20 01:03). HA sits on daniel-box, nut is pinned to daniel-server, and
     # nut's hostPort binds `hostIP: 127.0.0.1`, so HA's only path is the ClusterIP.
     #
-    # uptime-kuma runs the `k3s nut (upsd)` port monitor
-    # (uptime-kuma/templates/static-monitors.yaml.j2:103), which dials
-    # nut.{{ k8s_namespace }}.svc.cluster.local:3493. It shares daniel-server with nut today.
-    # blackbox-exporter dials the same address for the `blackbox-extra` probe that replaces
-    # that monitor (M6 batch B8), and needs the same podSelector for the same reason.
+    # blackbox-exporter dials nut.{{ k8s_namespace }}.svc.cluster.local:3493 for the
+    # `blackbox-extra` probe.
     #
-    # BOTH need a podSelector, and no ipBlock substitutes for one: pod -> ClusterIP -> pod
+    # Each of them needs a podSelector, and no ipBlock substitutes for one: pod -> ClusterIP -> pod
     # traffic PRESERVES the caller's pod IP, same-node and cross-node alike. It is NOT
     # masqueraded to the cni0 bridge address. Proven from slice 2's own probe log
     # (netpol-baseline-probe-slice2-79xf7 ran on daniel-box and logged `isolated:` for
     # sonarr/radarr/qbittorrent, all daniel-box pods -- same-node calls that a masquerade to
     # 10.42.0.1 would instead have ADMITTED through the baseline's node ipBlocks). So the node
-    # ipBlocks below cover host processes only; they never cover these two callers.
+    # ipBlocks below cover host processes only; they never cover these pod callers.
     #
     # The node entries are daniel-server's shutdown chain: upsmon runs as a host process there,
     # so it arrives as a node address, not a pod. nut is permanently pinned to daniel-server
@@ -67,9 +64,6 @@ spec:
         - podSelector:
             matchLabels:
               app: home-assistant
-        - podSelector:
-            matchLabels:
-              app: uptime-kuma
         - podSelector:
             matchLabels:
               app: blackbox-exporter
