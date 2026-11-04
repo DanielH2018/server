@@ -399,6 +399,152 @@ def test_a_heavy_new_row_keeps_the_lower_of_two_readings(tmp_path, second, expec
     assert json.loads(table.read_text()) == {module: expected}
 
 
+def _runner_rows(count, *, heaviest=False):
+    """`count` rows of the committed runner table as (module, seconds), from one end of it.
+
+    The refusal reads that table by default, as the cron's call does. The cron rewrites it, so
+    every reading below derives from these rows, and a row is never named.
+    """
+    rows = [r for r in shard_weight_gate.load_runner_weights().items() if r[1] > 0]
+    rows.sort(key=lambda row: (row[1], row[0]), reverse=heaviest)
+    assert len(rows) >= count, "the runner table has too few rows for this test"
+    return rows[:count]
+
+
+def _lightest_runner_rows(count):
+    """The lightest rows, each light enough for every reading these tests write against it."""
+    rows = _runner_rows(count)
+    assert rows[-1][1] <= 0.1, "the runner table has no row this light"
+    return rows
+
+
+def _heaviest_runner_rows(count):
+    """The heaviest rows, each far enough above the floor that only the ratio decides."""
+    rows = _runner_rows(count, heaviest=True)
+    floor = shard_weight_gate.STALE_WEIGHT_FLOOR_SECONDS
+    ratio = shard_weight_gate.STALE_WEIGHT_FAIL_RATIO
+    assert rows[-1][1] * ratio * 0.9 >= floor, "the runner table has no row this heavy"
+    return rows
+
+
+def _table(tmp_path, rows):
+    table = tmp_path / "weights.json"
+    table.write_text(json.dumps(rows))
+    return table
+
+
+def test_a_refresh_keeps_a_row_the_runner_table_says_ci_would_reject(tmp_path):
+    """#7132: two agreeing runs on the recording host do not outvote CI's own seconds."""
+    [(module, _)] = _lightest_runner_rows(1)
+    table = _table(tmp_path, {module: 2.0})
+    measure, _ = _runs({module: 85.0})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    assert moved == []
+    assert json.loads(table.read_text()) == {module: 2.0}
+
+
+def test_a_refresh_still_writes_a_row_the_runner_table_lacks(tmp_path):
+    """#7132: only a module CI has measured can be refused, so a new one's 85s still lands."""
+    [(held, _)] = _lightest_runner_rows(1)
+    unmeasured = FILES[0]
+    assert unmeasured not in shard_weight_gate.load_runner_weights()
+    table = _table(tmp_path, {held: 2.0, unmeasured: 2.0})
+    measure, _ = _runs({held: 85.0, unmeasured: 85.0})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[held, unmeasured], measure=measure, pins={}
+    )
+
+    assert moved == [unmeasured]
+    assert json.loads(table.read_text()) == {held: 2.0, unmeasured: 85.0}
+
+
+def test_the_refusal_starts_at_the_gates_floor(tmp_path):
+    """#7132: under the floor the gate compares nothing, so no ratio there can refuse a row."""
+    floor = shard_weight_gate.STALE_WEIGHT_FLOOR_SECONDS
+    (at_floor, _), (under_floor, _) = _lightest_runner_rows(2)
+    table = _table(tmp_path, {at_floor: 1.0, under_floor: 1.0})
+    measure, _ = _runs({at_floor: floor, under_floor: floor - 0.5})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[at_floor, under_floor], measure=measure, pins={}
+    )
+
+    assert moved == [under_floor]
+    assert json.loads(table.read_text()) == {at_floor: 1.0, under_floor: floor - 0.5}
+
+
+def test_the_refusal_starts_at_the_gates_fail_ratio(tmp_path):
+    """#7132: from the annotate ratio up to the fail ratio CI lets the row through."""
+    ratio = shard_weight_gate.STALE_WEIGHT_FAIL_RATIO
+    (over, over_runner), (under, under_runner) = _heaviest_runner_rows(2)
+    under_reading = under_runner * ratio * 0.9
+    table = _table(tmp_path, {over: 1.0, under: 1.0})
+    measure, _ = _runs({over: over_runner * ratio * 1.1, under: under_reading})
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[over, under], measure=measure, pins={}
+    )
+
+    assert moved == [under]
+    assert json.loads(table.read_text()) == {over: 1.0, under: under_reading}
+
+
+def test_the_refusal_judges_the_lower_reading_the_row_would_hold(tmp_path):
+    """#7132: the row holds the lower of the two runs, so that reading is what the gate sees."""
+    (refused, refused_runner), (written, written_runner) = _heaviest_runner_rows(2)
+    table = _table(tmp_path, {refused: 1.0, written: 1.0})
+    measure, _ = _runs(
+        {refused: refused_runner * 28, written: written_runner * 28},
+        {refused: refused_runner * 25, written: written_runner * 19},
+    )
+
+    moved = pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[refused, written], measure=measure, pins={}
+    )
+
+    assert moved == [written]
+    assert json.loads(table.read_text()) == {
+        refused: 1.0,
+        written: written_runner * 19,
+    }
+
+
+def test_a_refreshed_table_passes_the_gate_on_the_runner_seconds(tmp_path):
+    """#7132: the cron never opens a PR its own gate fails on the over-recorded arm."""
+    [(module, runner)] = _lightest_runner_rows(1)
+    table = _table(tmp_path, {module: 2.0})
+    measure, _ = _runs({module: 85.0})
+
+    pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    report = f"{runner}s call {module}::t\n"
+    assert (
+        shard_weight_gate.durations_problems(report, json.loads(table.read_text()))
+        == []
+    )
+
+
+def test_a_refresh_prints_the_module_it_refused(tmp_path, capsys):
+    """#7132: a refused row leaves no diff, so the printed report is the only trace of it."""
+    [(module, _)] = _lightest_runner_rows(1)
+    table = _table(tmp_path, {module: 2.0})
+    measure, _ = _runs({module: 85.0})
+
+    pytest_shard.refresh_drifted_weights(
+        0, 1, table, files=[module], measure=measure, pins={}
+    )
+
+    captured = capsys.readouterr()
+    assert module in captured.out + captured.err
+
+
 def test_a_light_new_row_is_measured_once(tmp_path):
     """Under the gate's floor no ratio arm compares the row, so a second run buys nothing."""
     light, heavy = FILES[:2]

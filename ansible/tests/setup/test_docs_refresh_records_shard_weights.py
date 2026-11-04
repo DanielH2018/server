@@ -34,6 +34,7 @@ import pytest_shard
 
 from _helpers import REPO
 from _shell_render import rendered_shell_text, shell_template_path
+from lib.proc_testing import fake_bin, run
 
 TEMPLATE = shell_template_path("components", "docs-refresh", "docs-refresh.sh.j2")
 SCRIPT = rendered_shell_text("components", "docs-refresh", "docs-refresh.sh.j2")
@@ -191,6 +192,34 @@ def _flags(text: str, arguments: str) -> set[str]:
             if match := assigned.search(line):
                 flags |= set(re.findall(r"--[a-z][a-z-]*", match.group(1)))
     return flags
+
+
+def test_a_successful_drift_refresh_reaches_the_crons_output(tmp_path):
+    """#7132: a refused row leaves no diff, so the step's message is the only trace of it.
+
+    Runs the rendered step with a stub `uv` that exits 0. The step ends where the next
+    `pytest_shard.py` step starts, and `alert` and `logger` count as output.
+    """
+    step = re.search(r"^REFRESH_MSG=.*?(?=^RUNNER_MSG=)", SCRIPT, re.M | re.S)
+    assert step, f"{TEMPLATE.name} lost the --refresh-drifted step"
+    refused = "scripts/x/tests/test_refused.py"
+    stubs = fake_bin(
+        tmp_path / "bin",
+        uv=f"echo 'kept the recorded weight: {refused}'\n",
+        logger='echo "$@"\n',
+    )
+
+    result = run(
+        [
+            "bash",
+            "-c",
+            f'UV=uv\nGENERATORS_OK=1\nalert() {{ echo "$*"; }}\n{step.group(0)}',
+        ],
+        cwd=tmp_path,
+        stub_bin=stubs,
+    )
+
+    assert refused in result.stdout + result.stderr
 
 
 def test_the_cron_also_refreshes_weights_that_are_present():
