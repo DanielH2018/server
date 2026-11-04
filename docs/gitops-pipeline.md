@@ -191,7 +191,7 @@ with the reason.
   `setup_roles_for` drops `common` itself for a file with consumers, so the importers apply
   rather than the resolv.conf remediation `common` would print.
 - A `common/templates/` file a common task file renders inherits that task file's importers. The
-  kuma-check pair routes to the roles importing `kuma_check_timer.yml`. `narrow_setup` finds no
+  kuma-check pair routes to the roles importing `check_timer.yml`. `narrow_setup` finds no
   reader of the template in `gitops_deploy`, `render_records` or `k3s`, so those apply or are
   recorded under their whole-role tag.
 - `resolv.conf.j2` is the exception (`SETUP_FILES_ROUTED_TO_OWNER`). Both roles that render it are
@@ -1358,7 +1358,7 @@ the tick applies it on daniel-box, and daniel-server and daniel-pi need
 `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` (with `-e
 target=daniel-pi` for the Pi) run by an operator.
 
-**The two GitHub crons** are daily kuma-check timers on the deploy host (`kuma_check_timer.yml`
+**The two GitHub crons** are daily kuma-check timers on the deploy host (`check_timer.yml`
 in the `common` role). Each pushes its own Kuma tile through `kuma-push-lib.sh`, exits 1 on a
 down verdict, and `Restart=on-failure` reruns it every 30 minutes until it exits 0. Both
 authenticate with the deploy user's `gh auth token`, and without it both are red, because GitHub

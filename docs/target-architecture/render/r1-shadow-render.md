@@ -289,7 +289,7 @@ grep -rlw containers_list ansible/roles/k8s/*/templates ansible/templates \
   ansible/roles/k8s/*/defaults | wc -l                                     # 70
 grep -lE 'kubectl.*(apply|create|patch|delete|run|exec)' ansible/roles/k8s/*/tasks/*.yml \
   | grep -v /manifests/ | cut -d/ -f4 | sort -u | wc -l                    # 25, reads included
-grep -lE 'ansible.builtin.(cron|systemd|systemd_service)|kuma_check_timer|dest: /(usr|etc/systemd|etc/cron|opt|var/lib|home)' \
+grep -lE 'ansible.builtin.(cron|systemd|systemd_service)|check_timer|dest: /(usr|etc/systemd|etc/cron|opt|var/lib|home)' \
   ansible/roles/k8s/*/tasks/*.yml | cut -d/ -f4 | sort -u | wc -l          # 9
 # Task-computed names that templates read:
 grep -h -A3 'ansible.builtin.set_fact:' ansible/roles/k8s/*/tasks/*.yml \

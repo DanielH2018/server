@@ -421,19 +421,19 @@
 
 - name: Schedule the manifest-prune drift check
   tags: [manifest-prune]
-  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting on the tile for a day.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_state: present
-    kuma_check_name: manifest-prune
-    kuma_check_description: Manifest prune drift check (Kuma push)
-    kuma_check_exec: /usr/local/bin/manifest-prune-check.sh
-    kuma_check_user: root
-    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(k3s_manifest_prune_cron_hour | int) }}:{{ '%02d' | format(k3s_manifest_prune_cron_minute | int) }}:00"
-    kuma_check_restart_sec: 30min
-    kuma_check_cron_name: "Manifest prune drift check"
-    kuma_check_cron_file: manifest-prune-check
+    check_timer_state: present
+    check_timer_name: manifest-prune
+    check_timer_description: Manifest prune drift check (Kuma push)
+    check_timer_exec: /usr/local/bin/manifest-prune-check.sh
+    check_timer_user: root
+    check_timer_on_calendar: "*-*-* {{ '%02d' | format(k3s_manifest_prune_cron_hour | int) }}:{{ '%02d' | format(k3s_manifest_prune_cron_minute | int) }}:00"
+    check_timer_restart_sec: 30min
+    check_timer_cron_name: "Manifest prune drift check"
+    check_timer_cron_file: manifest-prune-check
 
 - name: Deploy the release-staleness drift check as a versioned release
   tags: [release-staleness]
@@ -530,27 +530,27 @@
   # did not — without it kubectl talks to no cluster and every kind returns an error, which the
   # check reports as exit 2 rather than as a clean run.
   #
-  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting red for a day.
   # BOOT_GRACE_S makes a Persistent catch-up run at boot exit 1 without a verdict, so the restart
   # carries the real verdict once the cluster is up.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_state: present
-    kuma_check_name: live-drift
-    kuma_check_description: Live object drift check (Kuma push)
-    kuma_check_exec: >-
+    check_timer_state: present
+    check_timer_name: live-drift
+    check_timer_description: Live object drift check (Kuma push)
+    check_timer_exec: >-
       /usr/local/bin/uv run --no-project --no-python-downloads
       --python {{ host_python_version }} /usr/local/bin/live-drift-check.py
-    kuma_check_user: "{{ sys_user }}"
-    kuma_check_environment:
+    check_timer_user: "{{ sys_user }}"
+    check_timer_environment:
       - "KUBECONFIG=/home/{{ sys_user }}/.kube/config"
       - "BOOT_GRACE_S={{ k3s_health_cron_boot_grace_s }}"
       - "DEADLINE_S={{ k3s_daily_check_deadline_s }}"
-    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(k3s_live_drift_cron_hour | int) }}:{{ '%02d' | format(k3s_live_drift_cron_minute | int) }}:00"
-    kuma_check_restart_sec: 30min
-    kuma_check_cron_name: "Live object drift check"
-    kuma_check_cron_file: live-drift-check
+    check_timer_on_calendar: "*-*-* {{ '%02d' | format(k3s_live_drift_cron_hour | int) }}:{{ '%02d' | format(k3s_live_drift_cron_minute | int) }}:00"
+    check_timer_restart_sec: 30min
+    check_timer_cron_name: "Live object drift check"
+    check_timer_cron_file: live-drift-check
 
 - name: Deploy the off-box etcd snapshot credentials
   tags: [etcd-snapshot]

@@ -189,7 +189,7 @@ def cmd_audit(args, tools: RotationTools) -> int:
     Exits 1 when `--check` is given and the registry is out of sync with secrets.yml, and 1
     when `--verdict` is given and the audit reads down — the daily audit runs under a systemd
     timer whose `Restart=on-failure` reruns it every 30 min until it exits 0
-    (roles/setup/common/tasks/kuma_check_timer.yml), and its wrapper writes the exit code as
+    (roles/setup/common/tasks/check_timer.yml), and its wrapper writes the exit code as
     the textfile verdict SecretRotationAuditFailed reads. Without `--verdict`, overdue secrets
     and malformed push tokens are reported but never fail this exit code; those are the daily
     audit's concern, not a CI gate's.

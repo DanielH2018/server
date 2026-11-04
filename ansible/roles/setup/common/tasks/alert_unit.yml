@@ -14,7 +14,7 @@
 # renames four live units, needs one shared env file some role must own, and loses the
 # per-service triage hint in the message, which a drop-in per unit would have to restore.
 #
-# NO TAGS IN THIS FILE, matching kuma_check_timer.yml. `when:` on the caller's import_tasks
+# NO TAGS IN THIS FILE, matching check_timer.yml. `when:` on the caller's import_tasks
 # applies to every task here, because the import is static.
 #
 # Both tasks notify `Reload systemd for <caller's role name>`, which every caller's handlers
@@ -48,7 +48,7 @@
 #                           a failure (claude-triage-report) says `Finished at`
 
 - name: Write the alert webhook where only systemd reads it, for {{ alert_unit_name }}
-  # `src` names the owning role outright, as kuma_check_timer.yml does.
+  # `src` names the owning role outright, as check_timer.yml does.
   ansible.builtin.template:
     src: "{{ playbook_dir }}/roles/setup/common/templates/alert-webhook.env.j2"
     dest: "{{ alert_unit_env_dir }}/alert-webhook.env"

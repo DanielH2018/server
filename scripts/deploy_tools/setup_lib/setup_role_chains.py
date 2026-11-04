@@ -182,7 +182,7 @@ def _gates_in(
                 # imported file ships is this role's, so it is not followed. The importing
                 # task is still offered as a leaf, because its own `vars:` block is where
                 # this role feeds the shared file -- gitops_deploy's install.yml passes
-                # `gitops_deploy_ruleset_drift_cron_hour` to `kuma_check_timer.yml` that
+                # `gitops_deploy_ruleset_drift_cron_hour` to `check_timer.yml` that
                 # way, and `var_consumer_chains` finds no consumer without it.
                 if keep(task, task_file):
                     found.append(chain)
@@ -285,7 +285,7 @@ def _notified_names(task: dict) -> set[str]:
 
     `notify:` is a string or a list of strings. The `vars:` arm covers the one indirect
     shape in this tree: `gitops_deploy/tasks/install.yml` imports the shared
-    `common/tasks/kuma_check_timer.yml` with `host_lib_notify: [Run gitops-deploy once]`,
+    `common/tasks/check_timer.yml` with `host_lib_notify: [Run gitops-deploy once]`,
     so the importing task -- which `_gates_in` offers as a leaf, because a cross-role
     import is not followed -- is where that notify's gate lives. Counting it is the wider
     answer, and wider is the safe direction here.

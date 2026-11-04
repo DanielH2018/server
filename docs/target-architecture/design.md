@@ -125,7 +125,7 @@ and D3, and hardening Kuma, which only guards D1.
 `files/bridge/streaks.py`, the push path
 and the check bodies that read Prometheus and Loki; 82 of the 83 push-token secrets in
 `ansible/secret_rotation.yml`, with their rotation entries;
-`ansible/roles/setup/common/tasks/kuma_check_timer.yml`; and `probe.py kuma-drift`. Of the 83,
+`ansible/roles/setup/common/tasks/check_timer.yml`; and `probe.py kuma-drift`. Of the 83,
 52 carry the `monitor_bridge_` prefix and 44 belong to the bridge's own check rows. M3 retires
 1, M5 retires 3 and M6 retires 79, `registry_gc_push_token` among them (M6 batch B6c).
 
