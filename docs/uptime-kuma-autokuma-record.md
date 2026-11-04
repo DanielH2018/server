@@ -254,7 +254,7 @@ hourly host cron therefore stayed red until that cron's next slot after the faul
 shapes:
 
 - **A host check is a `kuma-check-<name>` systemd timer** (`roles/setup/common`'s
-  `kuma_check_timer.yml`; `KNOWN_CHECKS` in `ansible/tests/setup/test_kuma_check_timer.py` names all
+  `check_timer.yml`; `KNOWN_CHECKS` in `ansible/tests/setup/test_check_timer.py` names all
   eight). The contract is the exit code: the script exits 1 after it pushes `down` and 0 after `up`,
   and the oneshot service's `Restart=on-failure` reruns it every `RestartSec` (15 min for the hourly
   checks, 30 min for the daily ones) until it exits 0. A script that pushes `down` and exits 0 is a

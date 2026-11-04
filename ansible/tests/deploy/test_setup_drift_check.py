@@ -346,12 +346,12 @@ def test_every_reader_task_is_gated_on_that_allowlist():
             # loses the file too (the Kuma push credentials M6 batch B2's Cutover-2 retired).
             continue
         if str(task.get("ansible.builtin.import_tasks", "")).endswith(
-            "common/tasks/kuma_check_timer.yml"
+            "common/tasks/check_timer.yml"
         ):
             # The schedule is a kuma-check timer import, which runs on EVERY host so its
             # absent arm can remove the timer from one dropped off the list; the gate is the
             # state expression instead of a `when`.
-            state = str(task["vars"]["kuma_check_state"])
+            state = str(task["vars"]["check_timer_state"])
             assert "inventory_hostname in setup_drift_check_hosts" in state, (
                 f"'{task['name']}' does not follow setup_drift_check_hosts"
             )

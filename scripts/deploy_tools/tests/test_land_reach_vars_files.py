@@ -114,9 +114,9 @@ def _knobs_role(tmp_path):
                 {
                     "name": "Install the shared timer",
                     "ansible.builtin.import_tasks": "{{ role_path }}/../common/tasks/"
-                    "kuma_check_timer.yml",
+                    "check_timer.yml",
                     "vars": {
-                        "kuma_check_on_calendar": "*-*-* {{ knobs_cron_hour }}:00:00"
+                        "check_timer_on_calendar": "*-*-* {{ knobs_cron_hour }}:00:00"
                     },
                 },
             ]

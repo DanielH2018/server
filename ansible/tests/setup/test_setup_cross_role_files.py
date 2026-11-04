@@ -21,7 +21,7 @@ own. The scan sees a `host_lib.py` consumer through its `stamp_deployed_pairs` e
 `test_host_lib_sibling_copies.py` requires beside every `install_host_lib.yml` import.
 
 A `templates/` file a shared task file renders inherits that task file's importers (#3319): the
-kuma-check pair reaches a host only through `kuma_check_timer.yml`, which names it under its own
+kuma-check pair reaches a host only through `check_timer.yml`, which names it under its own
 role, so the direct scan alone finds no consumer. `SETUP_FILES_ROUTED_TO_OWNER` is the one
 exclusion, and its `DECIDED:` marker in `deploy_cross_role` says why `resolv.conf.j2` records
 `common` instead.
@@ -94,8 +94,8 @@ KNOWN_EDGES = {
         "deploy_ui",
         "renovate_agent",
     },
-    # Reached only through kuma_check_timer.yml, so this is the transitive edge.
-    "ansible/roles/setup/common/templates/kuma-check.timer.j2": {
+    # Reached only through check_timer.yml, so this is the transitive edge.
+    "ansible/roles/setup/common/templates/check-timer.timer.j2": {
         "gitops_deploy",
         "initial_setup",
         "k3s",
@@ -190,8 +190,8 @@ def with_rendered_templates(
     """`edges` plus each `templates/` file an imported task file renders from its own role.
 
     The template inherits the task file's importers, because it reaches a host only when one
-    of them runs the import. `kuma_check_timer.yml` names its pair as
-    `kuma-check.{{ item }}.j2`, so a Jinja expression in the path matches any template name.
+    of them runs the import. `check_timer.yml` names its pair as
+    `check-timer.{{ item }}.j2`, so a Jinja expression in the path matches any template name.
 
     Args:
         edges: the direct edges `cross_role_files` found.

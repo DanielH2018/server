@@ -145,20 +145,20 @@ def template_loader(path: Path) -> tuple[Path, str]:
 
 # Values a CALLER passes to a shared template, keyed by template basename. `roles/setup/common`
 # is never run as a role, so it has no defaults to layer in, and its unit pair takes every
-# directive value from the importing role's `vars:` (`tasks/kuma_check_timer.yml`). A bare
+# directive value from the importing role's `vars:` (`tasks/check_timer.yml`). A bare
 # STUB in `OnCalendar=` is a parse failure, so the pair renders with one caller's shape here.
 CALLER_CONTEXT: dict[str, dict] = {
-    "kuma-check.service.j2": {
-        "kuma_check_name": "example",
-        "kuma_check_description": "Example Kuma check",
-        "kuma_check_exec": "/usr/local/bin/example.sh",
-        "kuma_check_user": "root",
-        "kuma_check_restart_sec": "15min",
+    "check-timer.service.j2": {
+        "check_timer_name": "example",
+        "check_timer_description": "Example Kuma check",
+        "check_timer_exec": "/usr/local/bin/example.sh",
+        "check_timer_user": "root",
+        "check_timer_restart_sec": "15min",
     },
-    "kuma-check.timer.j2": {
-        "kuma_check_name": "example",
-        "kuma_check_description": "Example Kuma check",
-        "kuma_check_on_calendar": "*-*-* *:23:00",
+    "check-timer.timer.j2": {
+        "check_timer_name": "example",
+        "check_timer_description": "Example Kuma check",
+        "check_timer_on_calendar": "*-*-* *:23:00",
     },
     # `tasks/alert_unit.yml`. A STUB env dir renders a relative EnvironmentFile= path.
     "unit-failure-alert.service.j2": {

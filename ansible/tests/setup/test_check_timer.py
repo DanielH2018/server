@@ -1,7 +1,7 @@
 """The shared kuma-check timer pair reruns a host check while its last verdict was DOWN.
 
 A cron-fed push monitor that pushes `down` stays red until the producer's next slot, however
-soon the fault is fixed. `roles/setup/common/tasks/kuma_check_timer.yml` replaces such a cron
+soon the fault is fixed. `roles/setup/common/tasks/check_timer.yml` replaces such a cron
 with a systemd timer and oneshot service whose contract is the exit code: the script exits 1
 after it pushes `down`, and `Restart=on-failure` reruns it every `RestartSec` until it exits 0.
 
@@ -15,14 +15,14 @@ either way:
    boot-time false `down` that costs.
 3. No `OnFailure=` alert unit. A `down` verdict is a unit failure by contract, and the
    Discord alert units page on a unit that broke.
-4. Both directions are wired: `kuma_check_state: absent` stops and disables the timer and
+4. Both directions are wired: `check_timer_state: absent` stops and disables the timer and
    removes the units and the legacy cron. A one-way door is the reverse-state bug this repo
    keeps paying for.
 5. A reboot does not end a red check's reruns (#4495). The restart loop lives in memory, and
    `Persistent=true` catches up only a slot that never fired. The service keeps a down marker,
    and a boot unit conditioned on that marker starts the service once at boot.
 
-Run: uv run pytest ansible/tests/setup/test_kuma_check_timer.py
+Run: uv run pytest ansible/tests/setup/test_check_timer.py
 """
 
 import re
@@ -36,12 +36,12 @@ from _role_census import task_files
 from _shell_render import rendered_shell_text
 
 COMMON = SETUP_ROLES / "common"
-SERVICE = COMMON / "templates" / "kuma-check.service.j2"
-TIMER = COMMON / "templates" / "kuma-check.timer.j2"
-BOOT = COMMON / "templates" / "kuma-check-boot.service.j2"
-TASKS = COMMON / "tasks" / "kuma_check_timer.yml"
+SERVICE = COMMON / "templates" / "check-timer.service.j2"
+TIMER = COMMON / "templates" / "check-timer.timer.j2"
+BOOT = COMMON / "templates" / "check-timer-boot.service.j2"
+TASKS = COMMON / "tasks" / "check_timer.yml"
 
-# Every check wired through the task file, by `kuma_check_name`. A census read by glob returns
+# Every check wired through the task file, by `check_timer_name`. A census read by glob returns
 # an empty set the moment the include moves, so the members are named here and the test says
 # which one went missing.
 KNOWN_CHECKS = frozenset(
@@ -63,12 +63,12 @@ KNOWN_CHECKS = frozenset(
 EXIT_CONTRACT = '[[ "$STATUS" == up ]] || exit 1'
 
 BASE_VARS = {
-    "kuma_check_name": "widget",
-    "kuma_check_description": "Widget check",
-    "kuma_check_exec": "/usr/local/bin/widget.sh",
-    "kuma_check_user": "ubuntu",
-    "kuma_check_on_calendar": "*-*-* *:23:00",
-    "kuma_check_restart_sec": "15min",
+    "check_timer_name": "widget",
+    "check_timer_description": "Widget check",
+    "check_timer_exec": "/usr/local/bin/widget.sh",
+    "check_timer_user": "ubuntu",
+    "check_timer_on_calendar": "*-*-* *:23:00",
+    "check_timer_restart_sec": "15min",
 }
 
 
@@ -116,14 +116,14 @@ def test_service_carries_no_alert_unit(service: str) -> None:
 
 def test_environment_file_is_emitted_only_when_given(service: str) -> None:
     assert not directive(service, "EnvironmentFile")
-    with_env = _render(SERVICE, kuma_check_env_file="/etc/homelab/widget.env")
+    with_env = _render(SERVICE, check_timer_env_file="/etc/homelab/widget.env")
     assert directive(with_env, "EnvironmentFile") == ["/etc/homelab/widget.env"]
 
 
 def test_environment_lines_are_emitted_one_per_assignment(service: str) -> None:
     assert not directive(service, "Environment")
     with_env = _render(
-        SERVICE, kuma_check_environment=["KUBECONFIG=/x/config", "BOOT_GRACE_S=420"]
+        SERVICE, check_timer_environment=["KUBECONFIG=/x/config", "BOOT_GRACE_S=420"]
     )
     assert directive(with_env, "Environment") == [
         "KUBECONFIG=/x/config",
@@ -211,7 +211,7 @@ def test_task_file_wires_both_directions() -> None:
     assert any(
         s.get("enabled") is False and s.get("state") == "stopped" for s in specs
     ), (
-        "no task stops and disables the timer: kuma_check_state: absent is a one-way door"
+        "no task stops and disables the timer: check_timer_state: absent is a one-way door"
     )
     files_absent = [
         t
@@ -221,17 +221,17 @@ def test_task_file_wires_both_directions() -> None:
     assert files_absent, "the absent arm leaves the unit files on the host"
     removed = {p for t in files_absent for p in t.get("loop") or []}
     for path in (
-        "/etc/systemd/system/kuma-check-{{ kuma_check_name }}-boot.service",
-        "/var/lib/kuma-check/{{ kuma_check_name }}.down",
+        "/etc/systemd/system/kuma-check-{{ check_timer_name }}-boot.service",
+        "/var/lib/kuma-check/{{ check_timer_name }}.down",
     ):
         assert path in removed, f"the absent arm leaves {path} on the host"
     assert any(
-        s.get("name") == "kuma-check-{{ kuma_check_name }}-boot.service"
+        s.get("name") == "kuma-check-{{ check_timer_name }}-boot.service"
         and s.get("enabled") is False
         for s in specs
     ), "the absent arm never disables the boot-rerun unit"
     assert any(
-        s.get("name") == "kuma-check-{{ kuma_check_name }}-boot.service"
+        s.get("name") == "kuma-check-{{ check_timer_name }}-boot.service"
         and s.get("enabled") is True
         and "state" not in s
         for s in specs
@@ -254,7 +254,7 @@ def test_task_file_carries_no_tags() -> None:
 
 
 def _wired_checks() -> dict[str, dict]:
-    """`kuma_check_name` -> the import task's vars, for every setup role that imports the file."""
+    """`check_timer_name` -> the import task's vars, for every setup role that imports the file."""
     found: dict[str, dict] = {}
     for tasks_file in task_files(SETUP_ROLES):
         for task in leaf_tasks(load_tasks(tasks_file)):
@@ -262,13 +262,13 @@ def _wired_checks() -> dict[str, dict]:
                 "ansible.builtin.include_tasks"
             )
             if not isinstance(target, str) or not target.endswith(
-                "common/tasks/kuma_check_timer.yml"
+                "common/tasks/check_timer.yml"
             ):
                 continue
             variables = task.get("vars") or {}
-            if variables.get("kuma_check_state") == "absent":
+            if variables.get("check_timer_state") == "absent":
                 continue  # a teardown arm, not a wiring
-            found[str(variables.get("kuma_check_name"))] = variables
+            found[str(variables.get("check_timer_name"))] = variables
     return found
 
 
@@ -276,16 +276,18 @@ def test_every_known_check_is_wired_with_the_full_contract() -> None:
     wired = _wired_checks()
     missing = KNOWN_CHECKS - wired.keys()
     assert not missing, (
-        f"checks no longer wired through kuma_check_timer.yml: {sorted(missing)}"
+        f"checks no longer wired through check_timer.yml: {sorted(missing)}"
     )
     for name, variables in wired.items():
         for key in BASE_VARS:
             assert key in variables, f"{name}: import passes no {key}"
-        assert "kuma_check_state" in variables, (
-            f"{name}: no kuma_check_state, so the host that leaves the list keeps the timer"
+        assert "check_timer_state" in variables, (
+            f"{name}: no check_timer_state, so the host that leaves the list keeps the timer"
         )
-        if variables.get("kuma_check_cron_name"):
-            assert "kuma_check_cron_user" in variables or "kuma_check_user" in variables
+        if variables.get("check_timer_cron_name"):
+            assert (
+                "check_timer_cron_user" in variables or "check_timer_user" in variables
+            )
 
 
 def _shell_template_for(exec_path: str) -> Path | None:
@@ -333,7 +335,7 @@ def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
     """A producer converted without the exit contract reruns nothing and reads as done."""
     checked = 0
     for name, variables in _wired_checks().items():
-        template = _shell_template_for(str(variables["kuma_check_exec"]))
+        template = _shell_template_for(str(variables["check_timer_exec"]))
         if template is None:
             continue
         text = template.read_text()

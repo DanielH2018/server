@@ -194,7 +194,7 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   readers are `scripts/diagnostics/probe_lib/releases_render.py`, the deployer's
   `deploy_release.py` and `deploy_cross_role.py`, `scripts/deploy_tools/narrow_setup.py` and
   `scripts/secrets_mgmt/consumers.py`.
-    - `deploy_cross_role.py:_KUMA_CHECK` names `render_records` among the roles that ship
+    - `deploy_cross_role.py:_CHECK_TIMER` names `render_records` among the roles that ship
       the shared kuma-check timer files.
       `ansible/tests/setup/test_setup_cross_role_files.py:test_the_deployers_table_equals_the_trees_cross_role_files`
       holds that table equal to the tree, so the role's deletion edits this deployer module
@@ -369,7 +369,7 @@ grep -ohE '\b(k8s|manifests)_[a-z_]+' ansible/roles/k8s/volume-revert/tasks/*.ym
 grep -n RETIRED_CLUSTER_NODES scripts/lib/kubectl.py
 grep -n -A4 '^gitops_deploy_expected_ruleset_contexts' \
   ansible/roles/setup/gitops_deploy/defaults/main.yml
-grep -n '^_KUMA_CHECK' \
+grep -n '^_CHECK_TIMER' \
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
 grep -n 'render_records_push_token' scripts/secrets_mgmt/consumers.py \
   ansible/secret_rotation.yml
@@ -748,7 +748,7 @@ line first. PR 6 then deletes the role.
 - the role's directory;
 - its entry in `ansible/initial_setup.yml`, because a playbook that names a missing role
   fails when it loads;
-- `render_records` in `deploy_cross_role.py:_KUMA_CHECK`, because the table test holds that
+- `render_records` in `deploy_cross_role.py:_CHECK_TIMER`, because the table test holds that
   table equal to the tree.
 
 That path set parks the tick (`broad_manual`, measured in the Baseline), and it also names
@@ -917,7 +917,7 @@ root is withheld, not suspended*).
 - ansible/roles/setup/render_records/
   ansible/initial_setup.yml                        (- the render_records entry)
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
-                                                   (- render_records from _KUMA_CHECK)
+                                                   (- render_records from _CHECK_TIMER)
   scripts/secrets_mgmt/consumers.py                (- render_records_push_token, after PR 6)
 - scripts/diagnostics/probe_lib/releases_render.py (if D6 left it)
   scripts/validate/render_diff_gates.py            (- the retirement arm; D6.12 names the file)
@@ -1104,7 +1104,7 @@ Two costs follow from the narrowing:
       old PR 7e, which is a design change, so it stays here.
 1. **R4.5: delete render_records** (old PR 6, deletion PR).
     - **Why alone.** It parks the tick (`broad_manual`) and owes the operator's
-      `gitops_deploy` apply. The role, its `initial_setup.yml` entry and its `_KUMA_CHECK`
+      `gitops_deploy` apply. The role, its `initial_setup.yml` entry and its `_CHECK_TIMER`
       entry leave in one commit, and its revert parks the tick the same way.
     - **Scope.** Every bullet of old PR 6, after re-running R4.1's listing for the readers
       D6 left.
@@ -1233,7 +1233,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
    `scripts/dev/new_k8s_service.py` the defaults location. `Render-diff: none`.
 6. **Delete render_records** (deletion PR, about 650 lines removed in the role alone). One
    commit deletes the role with its tests, its `initial_setup.yml` entry, `render_records`
-   from `deploy_cross_role.py:_KUMA_CHECK`, its `render_records_*` keys in
+   from `deploy_cross_role.py:_CHECK_TIMER`, its `render_records_*` keys in
    `group_vars/all.yml`, the `render-records` Kuma tile if M6 has not retired Kuma, and the
    readers D6 left (*render_records*).
     - **Tests whose subject goes:** the role's own `tests/`,
@@ -1283,7 +1283,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
 
       Commits that merged after PR 6 stay in the `<PR 6 sha>..origin/master` range, and
       the next tick routes them. A tick that fires between steps 4 and 5 routes that range
-      with the old `/opt/gitops-deploy`, whose `_KUMA_CHECK` still names `render_records`,
+      with the old `/opt/gitops-deploy`, whose `_CHECK_TIMER` still names `render_records`,
       so step 5 follows step 4 at once. The description quotes the output of steps 2 and
       3. The `group_vars/all.yml` edit needs nothing more, because a deploy-plane path
       applies nothing after D6.12.
@@ -1681,7 +1681,7 @@ daniel-box. The operator produces them, because each needs the host:
   whole: a partial revert would leave one key in both sources, and PR 2's reader raises on
   that rather than rendering.
 - **PR 6.** A revert restores the role, its tests, `render_targets.py`, PR 5's equality
-  test, the `_KUMA_CHECK` entry and the playbook entry with `render_records_state: absent`,
+  test, the `_CHECK_TIMER` entry and the playbook entry with `render_records_state: absent`,
   so it re-arms nothing. That revert also edits `initial_setup.yml`, so it parks the tick the
   same way and owes the same `initial_setup.yml --tags gitops_deploy` (**operator-only**).
   The operator clears that park with PR 6's five steps, with the revert's squash SHA in place
@@ -1841,7 +1841,7 @@ daniel-box. The operator produces them, because each needs the host:
   history; `docs/gitops-pipeline.md`, which names `render_targets.py`;
   `docs/claude-tooling.md` if it lists `probe.py releases`;
   `ansible/tests/setup/test_setup_cross_role_files.py`'s table equality, which holds the
-  edited `_KUMA_CHECK`; the deleted tests listed under PR 6; the lock rows PR 6 names.
+  edited `_CHECK_TIMER`; the deleted tests listed under PR 6; the lock rows PR 6 names.
   `ansible/secret_rotation.yml` and `consumers.py` change in the operator's secrets commit
   after PR 6, not in PR 6.
 - PR 7a: `docs/volume-snapshot-drills.md`, the revert runbook's command.
@@ -1885,7 +1885,7 @@ daniel-box. The operator produces them, because each needs the host:
   manifests role; the `tasks/` of four utility roles; the k8s play, two task files and two
   post_tasks (about 420 lines); `k8s_retire.py`, the `ansible_owned` filter and the
   retirement arm of `render_diff_gates.py`; the render-record producer, `render_targets.py`
-  and one `_KUMA_CHECK` entry; the release-record readers D6 left; `shadow_diff.py compare`
+  and one `_CHECK_TIMER` entry; the release-record readers D6 left; `shadow_diff.py compare`
   and `stubcheck` with their tests; the Ansible-mechanics tests, which PR 1 classifies from
   the 102 files in the baseline.
 - **Moved:** render metadata to defaults, about 40 `noqa` lines with it plus the rollout
@@ -1997,7 +1997,7 @@ daniel-box. The operator produces them, because each needs the host:
 
     The groups go first because an `include_role` of a role that no longer exists fails the
     syntax check. PR 6 cannot split below the role: the role, its `initial_setup.yml` entry
-    and its `_KUMA_CHECK` entry must leave in one commit (*render_records*). Its readers
+    and its `_CHECK_TIMER` entry must leave in one commit (*render_records*). Its readers
     that D6 left can go in a PR of their own before it.
 12. **Does the renderer-dependency hazard outlive R4?** PR 11 removes the `render-diff`
     gate and its hazard list. After R4, nothing then stops a renderer dependency bump that
@@ -2170,8 +2170,8 @@ number. The new steps are PR 7c and PR 11.
   with `render_targets.py`. PR 9 keeps only the `shadow_diff.py` removals and the count.
   *Rollback* says a PR 8 revert restores its tests with their subject, and that PR 7c
   reverts only after PR 8.
-- **R4-R10-H4 (high) PR 6 omitted `_KUMA_CHECK`, and "No playbook is owed" was false.**
-  *Fixed.* `deploy_cross_role.py:_KUMA_CHECK` names `render_records`, and
+- **R4-R10-H4 (high) PR 6 omitted `_CHECK_TIMER`, and "No playbook is owed" was false.**
+  *Fixed.* `deploy_cross_role.py:_CHECK_TIMER` names `render_records`, and
   `test_setup_cross_role_files.py:test_the_deployers_table_equals_the_trees_cross_role_files`
   holds it equal to the tree. The measured route of PR 6's full path set is in the Baseline,
   and it includes `broad_manual` and `setup_roles={'gitops_deploy', 'render_records'}`. The
