@@ -24,7 +24,8 @@ ENV container=docker
 # DECIDED: the bundle is a secret mount, not a bind mount from a build context. BuildKit hashes a
 # bind mount's content into this step's cache key, so a runner image with another bundle would
 # miss the cache and fetch from the mirror again. apt authenticates the packages through the
-# signed InRelease, so the bundle cannot change what this layer holds.
+# signed InRelease, so the bundle cannot change what this layer holds. The mode is 0444 because
+# apt's https method runs as _apt, and a secret mount defaults to 0400 for root.
 #
 # docker-clean goes: it deletes downloaded debs after every apt run, and it sets an empty
 # Dir::Cache::pkgcache, so the common-path case would compare a pkgcache.bin that never
@@ -42,7 +43,7 @@ ENV container=docker
 # installed here, not downloaded: bootstrap_case.py's apt-get shim simulates every install, so
 # bootstrap-host.sh's own install of them would leave no compiler, and it skips that install
 # when all three are present.
-RUN --mount=type=secret,id=runner-ca,target=/run/runner-ca.crt \
+RUN --mount=type=secret,id=runner-ca,target=/run/runner-ca.crt,mode=0444 \
     set -eu; \
     rm -f /etc/apt/apt.conf.d/docker-clean /etc/apt/sources.list; \
     . /etc/os-release; \
