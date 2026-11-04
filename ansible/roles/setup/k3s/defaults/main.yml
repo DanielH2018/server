@@ -357,7 +357,7 @@ k3s_release_staleness_grace_minutes: 60
 # DELIBERATELY A CRON, NOT A SERVER FLAG. `--etcd-s3` and friends can be set on the k3s server,
 # but changing `k3s_server_config` restarts the control plane at the next window — on a
 # cluster with MetalLB ETP-Local VIP pinning, with Pi-hole
-# serving LAN DNS from it. `k3s etcd-snapshot save --s3 ...` takes the identical flag surface as
+# serving LAN DNS from it. `k3s etcd-snapshot save --etcd-s3 ...` takes the identical flag surface as
 # a one-shot against the running server (verified against `k3s etcd-snapshot save --help`,
 # v1.36.2+k3s1), so the whole feature lands with no restart and no server-arg change.
 #
@@ -368,7 +368,7 @@ k3s_release_staleness_grace_minutes: 60
 # separate folder means that stays true if it ever grows a bucket-level sweep.)
 k3s_etcd_s3_armed: true
 k3s_etcd_s3_folder: etcd-snapshots
-# The region the off-box snapshot script passes as `--s3-region`. R2's is literally `auto`.
+# The region the off-box snapshot script passes as `--etcd-s3-region`. R2's is literally `auto`.
 # The twin of `k3s_longhorn_r2_region` in the `longhorn-backup` role's defaults, which the
 # Longhorn R2 target's URL reads: a host file may not read a key that role defines, so this
 # role keeps its own copy and ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py
@@ -376,7 +376,7 @@ k3s_etcd_s3_folder: etcd-snapshots
 k3s_etcd_s3_region: auto
 # 14 daily snapshots. Larger than k3s's local default of 5 because this is the copy that exists
 # after the box is gone. MEASURED: a snapshot is 7.85-7.87 MB compressed, against the 104 MB
-# the uncompressed local snapshots beside it take — --snapshot-compress is doing the work. Two
+# the uncompressed local snapshots beside it take — --etcd-snapshot-compress is doing the work. Two
 # weeks therefore costs ~110 MB, which is nothing against R2's 10 GB free tier next to ~8.2 GB
 # of Longhorn data. Retention could go considerably higher on cost grounds; 14 days is the recovery window,
 # not the budget.

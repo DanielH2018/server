@@ -11,7 +11,7 @@ from _gates_fakes import failing_read, fake_tools
 from deploy_tools.runbook_gates_lib import etcd_restore as gates
 
 from lib.repo_paths import REPO as _REPO
-from lib.proc_testing import run
+from lib.proc_testing import fake_bin, run
 
 _RUNBOOK = _REPO / "docs" / "k3s-etcd-restore.md"
 
@@ -172,6 +172,7 @@ def test_an_unknown_name_is_flagged_and_lists_what_the_cluster_records():
     assert f"no ETCDSnapshotFile records {SNAPSHOT}" in found[0]
     assert "records etcd-daniel-box-1789958700.zip" in found[0]
     assert "no snapshots at all" in gates.snapshot_not_restorable(SNAPSHOT, {})[0]
+    assert "ListObjectsV2" in found[0]
 
 
 def test_a_snapshot_that_is_not_ready_to_use_is_flagged_with_its_error():
@@ -310,6 +311,47 @@ def test_the_snapshot_name_is_required():
 
 
 # ── the runbook names the script ────────────────────────────────────────────────────────────
+
+
+def test_the_runbook_listing_for_a_stopped_k3s_prints_bare_names(tmp_path):
+    # The block runs for real against a stub curl, on a PATH holding no k3s binary.
+    section = _RUNBOOK.read_text().partition("### Listing while k3s is stopped")[2]
+    block = section.partition("```bash\n")[2].partition("```")[0]
+    env_file = tmp_path / "etcd-s3.env"
+    env_file.write_text(
+        "AWS_ACCESS_KEY_ID=key-id\nAWS_SECRET_ACCESS_KEY=secret-key\n"
+        "ETCD_S3_BUCKET=bucket\nETCD_S3_ENDPOINT=r2.example\n"
+    )
+    script = block.replace("sudo -i\n", "").replace(
+        "/etc/rancher/k3s/etcd-s3.env", str(env_file)
+    )
+    stub_bin = fake_bin(
+        tmp_path / "bin",
+        curl=(
+            f'echo "$@" > {tmp_path}/argv\n'
+            f"cat > {tmp_path}/stdin\n"
+            f"cat {tmp_path}/listing.xml\n"
+        ),
+    )
+    newer = "offbox-daniel-box-1789958702.zip"
+    older = "offbox-daniel-box-1789915502.zip"
+    (tmp_path / "listing.xml").write_text(
+        f"<ListBucketResult><Contents><Key>etcd-snapshots/{newer}</Key></Contents>"
+        f"<Contents><Key>etcd-snapshots/{older}</Key></Contents></ListBucketResult>"
+    )
+
+    proc = run(
+        ["bash", "-c", "set -o pipefail\n" + script],
+        env={"PATH": "/usr/bin:/bin"},
+        stub_bin=stub_bin,
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.split() == [older, newer]
+    argv = (tmp_path / "argv").read_text()
+    assert "https://r2.example/bucket/?list-type=2" in argv
+    assert "secret-key" not in argv
+    assert "key-id:secret-key" in (tmp_path / "stdin").read_text()
 
 
 def test_the_runbook_calls_the_script_and_it_runs():

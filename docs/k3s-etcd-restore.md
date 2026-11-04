@@ -175,16 +175,57 @@ is created by hand in the console, because the slug is sent bare and never with 
 
 ## Listing what is available
 
+Two commands list the off-box snapshots. Which one works depends on whether k3s is running.
+
+### Listing while k3s is running
+
 ```bash
 sudo -i
 set -a; . /etc/rancher/k3s/etcd-s3.env; set +a
-k3s etcd-snapshot list --s3 \
-  --s3-bucket "$ETCD_S3_BUCKET" --s3-endpoint "$ETCD_S3_ENDPOINT" \
-  --s3-folder etcd-snapshots --s3-region auto
+k3s etcd-snapshot list --etcd-s3 \
+  --etcd-s3-bucket "$ETCD_S3_BUCKET" --etcd-s3-endpoint "$ETCD_S3_ENDPOINT" \
+  --etcd-s3-folder etcd-snapshots --etcd-s3-region auto
 ```
 
 `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY` come from the env file, so no key ever goes on the
 command line.
+
+Every `k3s etcd-snapshot` call on daniel-box uses the long flag names. `k3s etcd-snapshot` also
+reads `/etc/rancher/k3s/config.yaml.d/50-homelab.yaml`, and it refuses a short form of a key that
+file sets: `--s3` fails with `Cannot use two forms of the same flag: etcd-s3 s3`. The explicit
+`--etcd-s3-*` values make k3s ignore the `etcd-s3-config-secret` the drop-in names.
+
+### Listing while k3s is stopped
+
+`k3s etcd-snapshot list` lists through a running k3s server's supervisor API, so it cannot list
+once k3s is stopped. It fails before it reaches S3. On v1.37.1+k3s1 a closed `--etcd-server` port
+gives this error (measured 2026-11-04 on daniel-box, with a scratch data-dir and a closed port):
+
+```text
+level=fatal msg="Error: failed to get CA certs: Get \"https://127.0.0.1:1/cacerts\": dial tcp 127.0.0.1:1: connect: connection refused"
+```
+
+To list with no k3s server, send R2 a SigV4 `ListObjectsV2` request. The monthly drill guest has
+no k3s server and lists the same way, in `ansible/roles/setup/hypervisor/files/etcd-drill-guest-run.sh`.
+
+```bash
+sudo -i
+set -a; . /etc/rancher/k3s/etcd-s3.env; set +a
+printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" |
+  curl -fsS --max-time 300 -K - --aws-sigv4 "aws:amz:auto:s3" \
+    "https://${ETCD_S3_ENDPOINT}/${ETCD_S3_BUCKET}/?list-type=2&prefix=etcd-snapshots/offbox-" |
+  grep -o '<Key>etcd-snapshots/offbox-[^<]*</Key>' |
+  sed 's|<Key>etcd-snapshots/||; s|</Key>||' |
+  LC_ALL=C sort
+```
+
+The command prints one bare name per line, with the newest last. That name is the value
+`--cluster-reset-restore-path` takes. The credentials reach curl on stdin, so no key goes on the
+command line.
+
+This block has run only against a stub curl. The drill guest's script sends the
+same request to R2, and [#7106](https://github.com/DanielH2018/server/issues/7106) tracks the
+first literal run on daniel-box.
 
 ## The gates — before stopping k3s
 
@@ -220,8 +261,8 @@ gate 3 needs the API server up.
    refuses a name containing `/` before it asks the cluster: `--cluster-reset-restore-path`
    takes a NAME, so a path there names no snapshot and k3s says so only after it has been
    stopped. An unknown name is reported with the snapshots the cluster does record, which
-   separates a typo from a bucket k3s has not reconciled into CRs — `k3s etcd-snapshot list
-   --s3` as root is the other listing. The read needs `k3s.cattle.io` in
+   separates a typo from a bucket k3s has not reconciled into CRs. The commands under *Listing
+   what is available*, run as root, read the bucket itself. The read needs `k3s.cattle.io` in
    `k3s_readonly_crd_api_groups` (#2243); without it the gate exits 69 on a Forbidden.
 
    **This gate is drilled weekly, unlike gates 1 and 2.** Since 2026-09-24 the `--list-only`
@@ -235,9 +276,13 @@ gate 3 needs the API server up.
    **Exit 69 is the expected path when the API server is already down**, which is a large
    share of the reasons to be reading this page at all. It means gate 3 could not look, not
    that the snapshot is bad. Gates 1 and 2 are the ones that still bind — they read daniel-box,
-   not the cluster, and the script prints them before it reaches gate 3 — and
-   `k3s etcd-snapshot list --s3` as root is how you confirm the name without an API server.
-   Proceed on those two.
+   not the cluster, and the script prints them before it reaches gate 3. Proceed on those two.
+
+   To confirm the name, use the command under *Listing what is available* that matches k3s's
+   state. An API server can be down while the k3s process still runs, and then
+   *Listing while k3s is stopped* is the one that answers: it needs only R2 and the env file.
+   The other command's explicit `--etcd-s3-*` flags make k3s ignore `etcd-s3-config-secret`,
+   which a bare `--etcd-s3` would read from the cluster.
 
 ## Restoring
 
