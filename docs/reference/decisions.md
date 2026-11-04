@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-04 00:29 UTC
-generated_sha: b08740cd23
+generated_at: 2026-11-04 06:17 UTC
+generated_sha: 7280f6934a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -885,7 +885,7 @@ generated_sha: b08740cd23
 | the render decides which rotated keys the cluster reads, not `.source`, so a key a template newly references is written too. The cost: once the cluster file exists, a broken k8s template render stops every rotation, host-only keys included, and it stops before the deploy. Any failure counts, not only `RenderError`. The render is in placeholder mode and holds no value, so its message is safe to print. | `scripts/secrets_mgmt/secret_rotation.py:299` | 2026-10-15 |
 | the registry tracks SOPS keys only; a hand-added non-SOPS name reads as stale, fails cmd_audit and every secrets PR, and no tier value rescues it. | `scripts/secrets_mgmt/secrets_lib/secret_registry.py:123` | 2026-09-30 |
 | 0700` marker for it and twelve did not, and three of those | `scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py:5` | 2026-09-17 |
-| no test here asserts a cross-host token is not badly overdue. 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no code change. Overdue is runtime state: the daily Secret Rotation Kuma push goes DOWN for any overdue token, cross-host ones included, and `cmd_audit --check` deliberately ignores it. `test_no_test_file_reads_the_live_clock` refuses the bare `today()` call it was built on. | `scripts/secrets_mgmt/tests/test_secret_consumers.py:71` | 2026-10-25 |
+| no test here asserts a cross-host token is not badly overdue. 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no code change. Overdue is runtime state: the daily Secret Rotation Kuma push goes DOWN for any overdue token, cross-host ones included, and `cmd_audit --check` deliberately ignores it. `test_no_test_file_reads_the_live_clock` refuses the bare `today()` call it was built on. | `scripts/secrets_mgmt/tests/test_secret_consumers.py:63` | 2026-10-25 |
 | no fourth rule for Popen. reaches `wait`/`communicate` with no `timeout=` and no preceding `kill()`. The 2026-10-01 census found seven `Popen` call sites in test modules, and that shape sorts them badly. | `scripts/tests/_test_module_rules.py:135` | 2026-10-03 |
 | ` at probe_lib/ha.py:581 and at ha_state_model.py's `cmd_refresh` (the deferred `from diagnostics.probe_lib import core`/`ha`). | `scripts/tests/test_scripts_import_direction.py:108` | 2026-09-05 |
 | ` at ha_state_checks.py's `from ha_state_model import (...)` and at ha_state_model.py's `main()` (the deferred `from ha_state_checks import check_errors`). | `scripts/tests/test_scripts_import_direction.py:113` | 2026-09-05 |

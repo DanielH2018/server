@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-10-26 06:17 UTC
-generated_sha: 53cf25d7e
+generated_at: 2026-11-04 06:17 UTC
+generated_sha: 7280f6934a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -84,11 +84,11 @@ generated_sha: 53cf25d7e
 | texbrain | k8s | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | traefik | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | traefik-crds | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
-| uptime-kuma | k8s | <span class="fqdn" data-host="uptime-kuma">uptime-kuma.&lt;domain&gt;</span> · <span class="fqdn" data-host="uptime-kuma.local">uptime-kuma.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (listed in k3s_longhorn_nobackup_volumes) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
+| uptime-kuma | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no backup (listed in k3s_longhorn_nobackup_volumes) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | valheim | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); no backup (StorageClass longhorn-nobackup) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | wg-easy | k8s | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | zigbee2mqtt | k8s | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | Authelia one_factor | daily -> R2 | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 
 ## Underivable facts
 
-32 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+33 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.

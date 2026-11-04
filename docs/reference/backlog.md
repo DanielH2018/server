@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-03 18:17 UTC
-generated_sha: e68ff215c5
+generated_at: 2026-11-04 06:17 UTC
+generated_sha: 7280f6934a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,9 +17,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
+| [#7088](https://github.com/DanielH2018/server/issues/7088) | high | gap | cicd | The soak waits out its deadline and fails a healthy revision that removes a reserved-suffix Kustomization | 2026-11-04 | 0 | - | - |
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | - | ✓ |
 | [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
-| [#7047](https://github.com/DanielH2018/server/issues/7047) | medium | gap | cicd | The builder's rollout gate waits with no reason logged, and its Pi canary reports once a day | 2026-11-03 | 0 | worktree-fanout-orchestrator-7044-7047 | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
 | [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
@@ -34,8 +34,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6769](https://github.com/DanielH2018/server/issues/6769) | low | improvement | cicd | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week | 2026-10-31 | 0 | - | ✓ |
 | [#6821](https://github.com/DanielH2018/server/issues/6821) | low | gap | docs | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 | 2026-11-01 | 0 | - | ✓ |
 | [#6882](https://github.com/DanielH2018/server/issues/6882) | low | gap | docs | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 | 2026-11-01 | 0 | - | ✓ |
-| [#6950](https://github.com/DanielH2018/server/issues/6950) | low | gap | docs | M6 status files still describe the Phase A and B token PRs as future steps | 2026-11-02 | 0 | - | ✓ |
-| [#7044](https://github.com/DanielH2018/server/issues/7044) | low | improvement | cicd | has_ample_ram and four template comments outlived the initial_setup tasks that read them | 2026-11-03 | 0 | worktree-fanout-orchestrator-7044-7047 | ✓ |
+| [#7056](https://github.com/DanielH2018/server/issues/7056) | low | gap | docs | Hand-written docs pages still describe Kuma as the pager after M6 B-7 | 2026-11-03 | 0 | - | ✓ |
+| [#7078](https://github.com/DanielH2018/server/issues/7078) | low | gap | docs | Two uptime-kuma comments still name the scrape job and postflight check that M6 C-1a deleted | 2026-11-03 | 0 | - | ✓ |
+| [#7089](https://github.com/DanielH2018/server/issues/7089) | low | improvement | docs | The renovate-prs skill's Pi image check is refused by the Docker format hook | 2026-11-04 | 0 | - | - |
 
 ## Deferred, by date
 
@@ -50,12 +51,12 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | 2026-11-08 | withheld | [#6763](https://github.com/DanielH2018/server/issues/6763) | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands |
 | 2026-11-09 | withheld | [#6821](https://github.com/DanielH2018/server/issues/6821) | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 |
 | 2026-11-09 | withheld | [#6882](https://github.com/DanielH2018/server/issues/6882) | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 |
-| 2026-11-09 | withheld | [#6950](https://github.com/DanielH2018/server/issues/6950) | M6 status files still describe the Phase A and B token PRs as future steps |
 | 2026-11-10 | withheld | [#3865](https://github.com/DanielH2018/server/issues/3865) | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap |
 | 2026-11-13 | withheld | [#6434](https://github.com/DanielH2018/server/issues/6434) | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply |
 | 2026-11-13 | withheld | [#6436](https://github.com/DanielH2018/server/issues/6436) | PR template header still says the GitOps deployer applies image pins and the deploy plane |
 | 2026-11-13 | withheld | [#6635](https://github.com/DanielH2018/server/issues/6635) | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live |
 | 2026-11-14 | withheld | [#6435](https://github.com/DanielH2018/server/issues/6435) | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template |
+| 2026-11-16 | withheld | [#7056](https://github.com/DanielH2018/server/issues/7056) | Hand-written docs pages still describe Kuma as the pager after M6 B-7 |
 | 2026-12-09 | withheld | [#4314](https://github.com/DanielH2018/server/issues/4314) | Run the ADR-0019 retirement test on facts.lock after 60 days |
 | 2026-12-15 | withheld | [#4435](https://github.com/DanielH2018/server/issues/4435) | Decide whether to move scripts/ into an installable homelab package |
 | 2027-02-01 | withheld | [#6292](https://github.com/DanielH2018/server/issues/6292) | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule |

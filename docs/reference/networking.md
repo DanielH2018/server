@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-10-22 06:17 UTC
-generated_sha: d749af07a
+generated_at: 2026-11-04 06:17 UTC
+generated_sha: 7280f6934a
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: d749af07a
 
 # Networking
 
-35 routed k8s service(s).
+34 routed k8s service(s).
 
 !!! note "The domain is filled in by your browser"
     A route answers on the LAN name, the public name or both, and a static page cannot know which one you are on, so the generator writes `<domain>`. On the docs site the routes below become links, built from the domain of the URL you are reading this on — so you get LAN links on the LAN name and public links on the public one.
@@ -57,7 +57,6 @@ generated_sha: d749af07a
 | tdarr | daniel-box | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | texbrain | daniel-box | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | traefik | daniel-box | <span class="fqdn" data-host="traefik.local">traefik.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
-| uptime-kuma | daniel-box | <span class="fqdn" data-host="uptime-kuma">uptime-kuma.&lt;domain&gt;</span> · <span class="fqdn" data-host="uptime-kuma.local">uptime-kuma.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | wg-easy | daniel-box | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | zigbee2mqtt | daniel-box | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 
