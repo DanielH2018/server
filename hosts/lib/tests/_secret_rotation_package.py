@@ -19,7 +19,7 @@ HOST = "daniel-box"
 UNITS = "/usr/lib/systemd/system"
 LIB = "/usr/lib/homelab"
 # Every checkout-timer component a test here renders, with the ones they source from.
-BASE = ("secrets-unit", "kuma-push", "check-lib")
+BASE = ("secrets-unit", "check-lib")
 
 
 def render_fixture(tmp_path: Path, components: tuple[str, ...]) -> host_mode.Package:

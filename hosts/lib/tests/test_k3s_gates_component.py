@@ -3,7 +3,7 @@
 The k3s-agent Plan's `prepare` runs /host/usr/lib/homelab/k3s_gates.py on daniel-server. Until
 #6413 only `k3s-restart` shipped the file, and daniel-server's package does not list that
 component, so H6.3d's first merge failed `prepare`. The renderer already refuses one path from
-two components (hosts/lib/tests/test_kuma_push_component.py).
+two components (scripts/renderer/tests/test_renderer_host_mode.py).
 
 Run: uv run pytest hosts/lib/tests/test_k3s_gates_component.py
 """

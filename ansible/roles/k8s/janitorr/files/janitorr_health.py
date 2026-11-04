@@ -9,7 +9,7 @@ push to the Kuma "Janitorr Errors" monitor.
 Runs as the janitorr-health CronJob (templates/health-cronjob.yaml.j2), in the repo's pinned
 python image, with kubectl copied in by an init container and the pod's own ServiceAccount
 (templates/health-rbac.yaml.j2) as its credential. host_lib.py sits beside it in the same
-ConfigMap, with kuma_push.py, which host_lib imports and this reader never calls.
+ConfigMap.
 
 Usage:
 

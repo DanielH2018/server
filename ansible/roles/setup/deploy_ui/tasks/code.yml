@@ -83,5 +83,3 @@
         src: ansible/roles/setup/deploy_ui/files/deploy_ui.html
       - live: "{{ deploy_ui_dir }}/host_lib.py"
         src: hosts/lib/host_lib.py
-      - live: "{{ deploy_ui_dir }}/kuma_push.py"
-        src: hosts/lib/kuma_push.py

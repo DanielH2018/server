@@ -43,7 +43,7 @@ Each host installs `homelab-updater` and its own package, which `hosts/<host>/pa
 lists.
 
 - `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
-- `homelab-daniel-server` ships reconcile, the secrets unit, the `kuma-push` component, the
+- `homelab-daniel-server` ships reconcile, the secrets unit, the
   UPS shutdown chain and the `k3s-gates` component, whose `/usr/lib/homelab/k3s_gates.py` the
   k3s-agent Plan's `prepare` runs (#6413).
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the

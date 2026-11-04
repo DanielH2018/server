@@ -69,7 +69,6 @@ files:
   - {lib: builder_rollout_gate.py, dst: /usr/lib/homelab/builder/builder_rollout_gate.py, mode: "0755"}
   - {lib: builder_python.py, dst: /usr/lib/homelab/builder/builder_python.py, mode: "0755"}
   - {lib: host_lib.py, dst: /usr/lib/homelab/builder/host_lib.py, mode: "0755"}
-  - {lib: kuma_push.py, dst: /usr/lib/homelab/builder/kuma_push.py, mode: "0755"}
   - {lib: publish-textfile, dst: /usr/lib/homelab/publish-textfile, mode: "0755"}
   - {lib: builder-fingerprint, dst: /usr/lib/homelab/builder-fingerprint, mode: "0755"}
   - {src: templates/builder.conf.j2, dst: /usr/lib/homelab/builder/builder.conf}

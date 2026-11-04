@@ -23,7 +23,7 @@ repository (daniel-box)* holds the design.
   `http.server` traverses the signer's to reach `repo/`.
 - `/usr/lib/homelab/builder/`, root-owned: `host_package_builder.py`, `homelab_tool_fetch.py` (the
   `homelab-tools` step below), `builder_ci_grade.py`, `builder_rollout_gate.py`, `builder_python.py`,
-  `homelab_repo_sign.py`, `host_lib.py`, `kuma_push.py` and `builder.conf`. The sources are in
+  `homelab_repo_sign.py`, `host_lib.py` and `builder.conf`. The sources are in
   `hosts/lib/`. The directory sits outside the builder's `ReadWritePaths`, so a builder run cannot
   rewrite the code the next run executes. `builder.conf` holds the deployer's CI contexts, its walk
   bound, the repo and the Prometheus URLs, and no secret.
@@ -226,9 +226,9 @@ start waits for a signer still running and never rewrites `staged/` under it.
   stdlib-only, and `pyproject.toml` formats it for 3.12.
   `ansible/roles/setup/homelab_builder/tests/test_repo_signer.py::test_the_signer_parses_with_the_3_12_grammar`
   holds it to that grammar. The signer takes its `log` and its atomic write from the `host_lib.py`
-  installed beside it, so that file and the `kuma_push.py` it imports are formatted for 3.12 too,
-  and `hosts/lib/tests/test_host_lib.py::test_host_lib_and_kuma_push_parse_with_the_3_12_grammar`
-  holds them to it (#6202).
+  installed beside it, so that file is formatted for 3.12 too, and
+  `hosts/lib/tests/test_host_lib.py::test_host_lib_parses_with_the_3_12_grammar` holds it to that
+  grammar (#6202).
 - **The sandbox.** The plan's *Sandboxing* list plus `PrivateNetwork=yes`, writing only
   `/var/lib/homelab-signer` and `staged/`.
 

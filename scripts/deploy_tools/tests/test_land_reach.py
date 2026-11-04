@@ -165,7 +165,7 @@ def test_setup_role_hosts_census_is_not_vacuous():
 def test_remaining_setup_hosts_note_flags_pr_1002():
     """`initial_setup` reaches all three hosts, the tick converges on
     daniel-box alone, and the other two are owed a hand-run."""
-    files = ["ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"]
+    files = ["ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"]
     note = land_reach.remaining_setup_hosts_note(files, "daniel-box")
     assert "daniel-server" in note
     assert "daniel-pi" in note
@@ -177,7 +177,7 @@ def test_remaining_setup_hosts_note_survives_a_hand_applied_plane_beside_it():
     applies through `k3s-bringup.yml`. The k3s half must not suppress the library's.
     """
     files = [
-        "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
+        "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
         "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
     ]
     note = land_reach.remaining_setup_hosts_note(files, "daniel-box")
@@ -306,10 +306,10 @@ def _synthetic_setup_role_tree(_synthetic_setup_inventory, tmp_path):
                     },
                 },
                 {
-                    "name": "Install the shared push library",
+                    "name": "Install the shared check library",
                     "ansible.builtin.copy": {
-                        "src": "kuma-push-lib.sh",
-                        "dest": "/usr/local/lib/kuma-push-lib.sh",
+                        "src": "homelab-check-lib.sh",
+                        "dest": "/usr/local/lib/homelab-check-lib.sh",
                     },
                 },
             ]
@@ -348,7 +348,9 @@ def test_setup_file_hosts_reads_the_gate_on_the_task_that_ships_the_file(
     ) == frozenset({"daniel-box"})
     # The accept half: an ungated task reaches wherever the role does.
     assert land_reach.setup_file_hosts(
-        "config_files", "ansible/roles/setup/config_files/files/kuma-push-lib.sh", **kw
+        "config_files",
+        "ansible/roles/setup/config_files/files/homelab-check-lib.sh",
+        **kw,
     ) == frozenset({"daniel-box", "daniel-server", "daniel-pi"})
 
 

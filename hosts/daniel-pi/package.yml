@@ -55,7 +55,7 @@
 # the builder publishes a newer homelab-daniel-pi, so a Pi canary no longer holds the rollout gate
 # until the daily fire. The daily timer below stays the fallback. No file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, kuma-push, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
+components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
 credentials:
   - healthchecks_ping_key
 # H3.11: the Pi is the arm64 pilot of homelab-tools, which ships sops and chezmoi under

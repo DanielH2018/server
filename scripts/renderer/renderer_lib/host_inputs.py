@@ -24,8 +24,7 @@ HOST_INPUTS = (
     # The ciphertext a host package carries (`host_outputs.finish`): a change to a host's file
     # changes that host's package (H4.2, H4.5).
     "ansible/vars/hosts/",
-    # Two of `host_sources.SHARED_FILES`, which H3.8b and M6 B5 copy into the Pi's package.
-    "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
+    # `host_sources.SHARED_FILES`, which M6 B5 copies into the Pi's package.
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
     # What a component's `role:` renders (`host_sources.ROLE_SOURCES`): the role's defaults and
     # the two templates daniel-server's package renders in place (H4.3a, H4.3c).
@@ -46,7 +45,7 @@ HOST_INPUTS = (
     "ansible.cfg",
     "scripts/deploy_tools/render_targets.py",
     "scripts/secrets_mgmt/cluster_vars_check.py",
-    # `host_lib.py`, `kuma_push.py` and `longhorn_lib/longhorn_backups.py`, which the filter
+    # `host_lib.py` and `longhorn_lib/longhorn_backups.py`, which the filter
     # plugins and `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since
     # H7.2e, so the two directory members above already cover them.
 )

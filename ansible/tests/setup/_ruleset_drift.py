@@ -38,7 +38,7 @@ DECLARED = [
 # The check library the script sources, with `reachout_verdict` stubbed to the WAN-reachable
 # answer — which is what every case here means: the source refused, so the tile must page. The
 # stub follows the real library because that library defines the function too. The skip path is
-# covered by ansible/tests/setup/test_kuma_push_wan_skip.py against the real function.
+# covered by ansible/tests/setup/test_homelab_check_lib.py against the real function.
 CHECK_LIB_STUB = f"""\
 . {REAL_CHECK_LIB}
 reachout_verdict() {{ REACHOUT_STATUS=down; REACHOUT_NOTE=""; }}
