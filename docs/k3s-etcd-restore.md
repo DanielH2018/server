@@ -223,6 +223,10 @@ The command prints one bare name per line, with the newest last. That name is th
 `--cluster-reset-restore-path` takes. The credentials reach curl on stdin, so no key goes on the
 command line.
 
+As of 2026-11-04 this block has run only against a stub curl. The drill guest's script sends the
+same request to R2, and [#7106](https://github.com/DanielH2018/server/issues/7106) tracks the
+first literal run on daniel-box.
+
 ## The gates — before stopping k3s
 
 Three conditions decide whether the snapshot you are about to restore is a backup at all. Two
