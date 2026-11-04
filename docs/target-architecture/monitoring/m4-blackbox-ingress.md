@@ -198,7 +198,7 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
       `scripts/diagnostics/tests/test_probe_monitors.py`, both retired by PR 4;
     - a branch of `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py:declarations`,
       whose
-      `ansible/roles/k8s/uptime-kuma/tests/test_status_page_groups.py::test_the_declaration_census_finds_every_known_monitor`
+      the declaration census in `test_status_page_groups.py`, which C-1b deleted,
       names `grafana-k8s` and floors the census at 90;
     - `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS` and
       `scripts/lib/ansible_jinja_env.py`, which stay valid while any template calls the filter.
@@ -674,7 +674,7 @@ tuned. The likely episodes:
 - In `test_status_page_groups.py`, drop the `kuma_ingress_monitors` branch of
   `declarations`. Swap `grafana-k8s` in `KNOWN_IDS` for a hand-written id, and lower the
   `>= 90` floor to the count measured after the removal.
-- `ansible/tests/services/test_kuma_static_monitors.py` names no generated ingress id at the
+- `test_kuma_static_monitors.py`, which C-1b deleted, names no generated ingress id at the
   baseline. Run it, and change nothing unless it fails.
 - Deploys `uptime-kuma`. AutoKuma deletes the 26 monitors and their history.
 - Two-writer check: in this commit the ingress probes have no pager, which is the safe

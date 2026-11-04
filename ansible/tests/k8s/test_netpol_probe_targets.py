@@ -69,10 +69,15 @@ def test_every_refused_row_names_its_policy() -> None:
 def _portless_rows_without_a_port_to_read(
     rows: list[dict], entries: list[dict]
 ) -> set[str]:
-    """Rows with no `port` whose `entry_port(service)` would raise on `entries`."""
+    """Rows that dial a port they name nowhere, so `entry_port(service)` raises on `entries`."""
     ports = {e["name"]: e.get("port") for e in entries}
     return {
-        r["service"] for r in rows if "port" not in r and not ports.get(r["service"])
+        r["service"]
+        for r in rows
+        if "expect" in r
+        and "port" not in r
+        and "service_port" not in r
+        and not ports.get(r["service"])
     }
 
 
@@ -83,7 +88,12 @@ def test_every_portless_row_names_an_entry_with_a_port_is_clean() -> None:
 
 
 def test_a_portless_row_with_no_port_to_read_is_flagged() -> None:
-    rows = [{"service": "portless"}, {"service": "absent"}, {"service": "ported"}]
+    rows = [
+        {"service": "portless", "expect": "refused"},
+        {"service": "absent", "expect": "refused"},
+        {"service": "ported", "expect": "refused"},
+        {"service": "not-dialled"},
+    ]
     entries = [{"name": "portless"}, {"name": "ported", "port": 1}]
     assert _portless_rows_without_a_port_to_read(rows, entries) == {
         "portless",

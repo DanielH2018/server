@@ -818,9 +818,9 @@ tip then stops a push whose tile is still live, and Kuma pages DOWN 1200s later.
   `status-page-sync`, `discord`, `tag-severity` and `tag-runbook`, the entities that must
   survive until C-1. D5's flip of uptime-kuma (#5712) deleted the task, so the assert's home
   is the `INDEX_ASSERT` literal in
-  `ansible/roles/k8s/uptime-kuma/tests/test_declaration_index_flux_form.py`, which A0 edits.
+  `test_declaration_index_flux_form.py`, which A0 edits.
 - Its test evaluates the role's own assert expression, the way
-  `ansible/tests/services/test_kuma_push_token_format.py` evaluates the token-format assert.
+  `test_kuma_push_token_format.py` evaluates the token-format assert.
   An empty index must be refused. An index holding only the five survivors must be
   accepted, and so must the baseline render.
 - "Check every push token is in the format AutoKuma accepts" stays until C-1. A shrinking
@@ -2717,7 +2717,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
     - C-1: `test_postflight.py` loses `check_kuma_scrape`'s cases.
     - C-1: `ansible/tests/k8s/test_netpol_probe_targets.py` gains the probe-row named-member
       case, and runs against the table without the uptime-kuma row.
-    - C-1: `ansible/tests/services/test_kuma_push_token_format.py`, which evaluates the
+    - C-1: `test_kuma_push_token_format.py`, which evaluates the
       deleted token-format assert, is deleted, with A0's floor test. Every other
       `test_kuma_*.py` in `ansible/tests/services/` that reads a deleted template or task,
       such as `test_kuma_static_monitors.py` and `test_kuma_entities_parse_for_autokuma.py`,

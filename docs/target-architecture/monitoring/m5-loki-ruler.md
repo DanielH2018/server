@@ -708,7 +708,7 @@ depends on which tags are flux-owned, and PR 4a states each case.
   selector, and the module docstring of `hosts/lib/tests/test_pi_compose_alloy.py`,
   which names `LOKI_PI_STREAM` where `LokiPiLogsSilent` now selects `{job="pi"}`.
 - Remove `"Kuma Notification Delivery"` and its comment from `EMAIL_TIER` in
-  `ansible/tests/services/test_kuma_static_monitors.py`. The tile renders from the
+  `test_kuma_static_monitors.py`, which C-1b deleted. The tile renders from the
   `kuma_notify_failures` row this PR deletes, and
   `test_email_tier_membership_is_exactly_declared` asserts that the rendered email-tier tiles
   equal `EMAIL_TIER`. The email leg moves to M1's receiver for `severity="critical"` alerts,
@@ -1149,7 +1149,7 @@ restart: PR 2a and PR 3 restart Loki anyway.
       rows and the Loki gate, and show `swallowed_verdicts` gated by `startup_grace`.
     - `ansible/roles/k8s/monitor-bridge/CLAUDE.md`'s *Gates and hysteresis* section drops
       "Loki". Its *Traps* bullet on Alloy stream labels also points at the census.
-    - `EMAIL_TIER` in `ansible/tests/services/test_kuma_static_monitors.py` loses
+    - `EMAIL_TIER` in `test_kuma_static_monitors.py`, which C-1b deleted loses
       `"Kuma Notification Delivery"` and its comment, so
       `test_email_tier_membership_is_exactly_declared` holds over the remaining tiles.
     - The comments and docs that name the deleted check as a reader: `static-monitors.yaml.j2`
