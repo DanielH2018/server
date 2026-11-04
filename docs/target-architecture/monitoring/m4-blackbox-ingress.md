@@ -192,7 +192,8 @@ PR 5 is recorded as supporting evidence only, under the rule in *Verification*.
   `[--json] promql`, so every query runs at now unless the PromQL carries `@`.
 - **Other consumers of the filter.** `git grep kuma_ingress_monitors` names, beyond the Kuma
   template:
-    - `ansible/tests/services/test_kuma_ingress_monitors.py`, which renders Kuma's entities;
+    - `ansible/tests/services/test_ingress_probe_targets.py`, which M6's C-4a renamed from
+      `test_kuma_ingress_monitors.py`, and which renders Kuma's entities;
     - the `_INGRESS_LOOP_RE` arm of `scripts/diagnostics/probe_lib/kuma_table_loop.py`, and
       the test `test_the_real_template_declares_every_ingress_tile_ungated` in
       `scripts/diagnostics/tests/test_probe_monitors.py`, both retired by PR 4;
@@ -664,7 +665,8 @@ tuned. The likely episodes:
 - In PR 3's target pytest, retire the soak-join check, which compares the targets with the
   `url` that the deleted loop rendered. The assertion that builds each target from the filter
   stays.
-- In `ansible/tests/services/test_kuma_ingress_monitors.py`, retire the six tests that render
+- In `ansible/tests/services/test_ingress_probe_targets.py`, named
+  `test_kuma_ingress_monitors.py` until M6's C-4a, retire the six tests that render
   Kuma's entities or pin AutoKuma ids. PR 3's target pytest covers the three properties that
   carry over to the probe job: an added entry gets a probe, `auth_tier` picks the module, and
   `kuma: false` opts out. Keep the filter's own

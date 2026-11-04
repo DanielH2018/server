@@ -56,6 +56,6 @@ directory, so the library mount is an `emptyDir`.
 
 ## Bringing it back
 Set `navidrome_k8s_replicas: 1`, point `navidrome_k8s_music_dir` at a real library on the
-media volume, flip `k8s_autodeploy: true`, and delete the entry's `kuma: false` so the
+media volume, flip `k8s_autodeploy: true`, and delete the entry's `probe: false` so the
 `blackbox-ingress` job derives its ingress probe (one added while parked would fire forever). The route comes back with the replica count — no separate step. Merge the change;
 `promote` applies it, because `deploy.sh --tags navidrome` exits 5 for a flux-owned tag.

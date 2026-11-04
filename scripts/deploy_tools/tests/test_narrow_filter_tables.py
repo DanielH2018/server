@@ -396,6 +396,7 @@ _EVERY_ARGS = {
     "homepage_href": ("target", "example.com"),
     "homepage_widget_url": ("target", "media"),
     "in_service_tier": ("target", "home-edge"),
+    "ingress_probe_targets": (),
     "kuma_ingress_monitors": (),
     "lan_hostnames": ("k8s",),
     "metrics_port": ("target",),

@@ -233,13 +233,13 @@ pages once, through `ScrapeTargetDown`. The two coverage-floor rules count hosts
 neither `job` nor `instance`, and a dead exporter also pages through them.
 
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
-hand-written in `prometheus.yaml.j2` and renders one target per tile the
-`kuma_ingress_monitors` filter yields. Kuma's own ingress tiles came from that filter until
-M4's PR 4 (#5625) removed them, so these probes are the only ones on the ingress names. Each
+hand-written in `prometheus.yaml.j2` and renders one target per entry the
+`ingress_probe_targets` filter yields. M4's PR 4 (#5625) removed Kuma's own ingress tiles,
+so these probes are the only ones on the ingress names. An entry opts out with `probe: false`. Each
 target sets `service`, `module` and `page_tier`, and the `ingress-probes` rules take `service`
 from the target rather than from a literal. A new routed entry therefore changes
 `prometheus.yml` and rolls Prometheus. `ansible/tests/services/test_blackbox_ingress_targets.py`
-pins the targets to the filter's tiles, and
+pins the targets to the filter's output, and
 `docs/target-architecture/monitoring/m4-blackbox-ingress.md` has the design.
 
 **A per-workload alert takes its `service` label from a recording rule.**

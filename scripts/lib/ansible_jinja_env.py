@@ -150,7 +150,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     role reads its exporter's port through ``metrics_port``; both raise on a malformed
     ``metrics`` item. Its hand-written jobs read their entry's own port through ``entry_port``,
     which raises on an entry name it cannot find. observability's ingress probe targets derive
-    from ``kuma_ingress_monitors``, which raises on a malformed ``kuma`` key. Every caller fence
+    from ``ingress_probe_targets``, which raises on a malformed ``probe`` key. Every caller fence
     reads its callers through ``netpol_callers``, and netpol-baseline's fences come from
     ``netpol_caller_fences``. artifacts, monitor-bridge and pihole collect names,
     ports and hostnames through ``entry_fields``' filters. homepage's tiles build their links and
@@ -201,6 +201,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     import grafana_dashboards
     from entry_fields import entry_names, lan_hostnames, published_ports
     import homepage_tiles
+    import ingress_probes
     import kuma_monitors
     import longhorn_groups
     import py_table
@@ -266,6 +267,9 @@ def register_ansible_filters(env: Environment) -> Environment:
     ]
     env.filters["homelab_role_label"] = role_label.FilterModule().filters()[
         "homelab_role_label"
+    ]
+    env.filters["ingress_probe_targets"] = ingress_probes.FilterModule().filters()[
+        "ingress_probe_targets"
     ]
     env.filters["kuma_ingress_monitors"] = kuma_monitors.FilterModule().filters()[
         "kuma_ingress_monitors"

@@ -246,6 +246,10 @@ def test_registering_the_filters_keeps_ansible_temp_out_of_the_home_directory(tm
             "kuma_ingress_monitors",
             ([{"name": "svc", "hostname": "svc", "kuma": "yes"}],),
         ),
+        (
+            "ingress_probe_targets",
+            ([{"name": "svc", "hostname": "svc", "probe": "yes"}],),
+        ),
         ("backup_group_label", ("no-such-group",)),
         ("weekly_backup_group", (9,)),
         ("weekly_backup_shard", ("ns/absent", {})),
