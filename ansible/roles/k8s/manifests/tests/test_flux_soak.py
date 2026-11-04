@@ -171,6 +171,56 @@ def test_the_deadline_fails_naming_every_kustomization_not_ready_at_r(world, tmp
     assert "not Ready at R by the deadline: authelia, authelia-verify" in message
 
 
+def test_a_kustomization_the_root_prunes_after_the_scope_read_settles(
+    world, tmp_path, capsys
+):
+    # The 2026-11-04 shape (#7088): no digests.json keys the name, and the Job's one scope read
+    # landed before the root's garbage collection, so the frozen scope holds it.
+    world.kustomizations += [
+        kustomization("homelab"),
+        kustomization("retired-prepull", revision=OTHER, depends=["authelia"]),
+    ]
+
+    def prune(w):
+        w.kustomizations = [
+            k for k in w.kustomizations if k["metadata"]["name"] != "retired-prepull"
+        ]
+
+    world.on_sleep = prune
+    assert run(world, tmp_path, wait_seconds=100_000) == (0, "")
+    assert world.sleeps[0] == flux_soak.POLL_SECONDS
+    assert "waiting for Ready at R: retired-prepull" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "root",
+    [
+        kustomization("homelab", revision=OTHER),
+        kustomization("homelab", ready=False),
+        None,
+    ],
+    ids=["root-before-r", "root-not-ready", "root-unlisted"],
+)
+def test_an_absent_kustomization_stays_pending_until_the_root_reads_ready_at_r(root):
+    # The name may be one R adds, which the root has not created yet.
+    listed = [root] if root else []
+    assert flux_soak.pending(listed, ["added-verify"], R) == ["added-verify"]
+
+
+def test_the_log_names_the_pending_kustomizations_only_when_they_change(
+    world, tmp_path, capsys
+):
+    world.kustomizations[0] = kustomization("authelia", revision=OTHER)
+    assert run(world, tmp_path, wait_seconds=60)[0] == 1
+    waiting = [
+        line
+        for line in capsys.readouterr().err.splitlines()
+        if line.startswith("soak: waiting")
+    ]
+    assert waiting == ["soak: waiting for Ready at R: authelia"]
+    assert len(world.sleeps) > 1
+
+
 def test_a_suspended_kustomization_never_blocks_the_wait(world, tmp_path):
     world.new["sonarr"] = {"footprint": "2"}
     world.kustomizations[1] = kustomization("sonarr", ready=False, suspend=True)

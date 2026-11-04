@@ -1845,6 +1845,11 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
   Kustomizations. Each poll of that wait re-reads `homelab`, and the Job exits 1 once it
   no longer holds R, as after a reset (#5704). `kustomize-controller` runs one worker more than the rollout width, because
   the soak holds one from the start of the rollout.
+- **A name R removes settles when the root prunes it.** The Job reads its scope once, and that
+  read can land before the root's garbage collection, so the scope can hold a Kustomization
+  R removes (#7088). A name absent from the live list counts as settled once `homelab` reads
+  Ready at R. `kustomize-controller` writes that status after the root's apply and prune,
+  so a Kustomization R adds exists by then and is still waited for.
 - **R's SHA moves the Job, not the footprint.** The Job's arguments carry R's SHA, so its name
   changes on every commit. `digests.json` records `soak` over a render at an all-zero SHA, so a
   docs-only commit still has an empty changed set. `homelab_render.py cluster --revision`
@@ -1873,6 +1878,28 @@ from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as 
   message, its `failed-services:` line. A pass prints the revision, the services it judged
   and the window, then the cluster's `event=deploy` annotation line, which Grafana reads
   through `observability_flux_deploy_annotation_expr`.
+
+#### Ending a stuck soak
+
+A soak that waits on a Kustomization runs until `--wait-seconds`, and `kustomize-controller`
+holds every later promotion's `soak` behind it. The Job prints `soak: waiting for Ready at R:
+<names>` to its log whenever the pending names change, so read the log first:
+
+```bash
+kubectl -n flux-system logs job/soak-<digest8>
+```
+
+When a named Kustomization is broken, fix that. When you decide the wait cannot finish, ending
+the Job is **operator-only**, because it needs `sudo k3s kubectl`:
+
+```bash
+sudo k3s kubectl -n flux-system delete pod -l job-name=soak-<digest8>
+```
+
+`backoffLimit: 0` then fails the Job, which ends the health check. The failure is a real
+verdict on R: `flux/soak` posts `failure`, and `settle` acts on it as *Verification* describes,
+the same as at the deadline. On 2026-11-04 that left `DEPLOY_HOLD` holding R's SHA and `prod` on
+R. To go on, follow *Clearing a hold*.
 
 ## Removing an object on purpose
 

@@ -13,7 +13,9 @@ notification-controller posts as `flux/soak`. In order, it:
    fleet;
 3. waits until every Kustomization in the set reads Ready with `lastAppliedOriginRevision`
    naming R (D5 Open question 19), and fails naming each one still pending at the deadline.
-   Each poll re-runs step 1's check, so the Job exits 1 once `homelab` stops holding R;
+   It prints the pending names whenever they change. A name that has left the live list counts
+   as settled once the root reads Ready at R, which means the root pruned it. Each poll
+   re-runs step 1's check, so the Job exits 1 once `homelab` stops holding R;
 4. waits W past the latest first Ready among the pods R created, then fails on a restart after
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
    alert activated after T0.
@@ -42,7 +44,7 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 
-from changed_set import changed_set
+from changed_set import ROOT, changed_set
 from flux_job_connect import Request, open_url
 
 API = "https://kubernetes.default.svc"
@@ -237,24 +239,36 @@ def strip(name: str) -> str:
     return name
 
 
+def _ready_at(kustomization: Mapping | None, revision: str) -> bool:
+    return (
+        kustomization is not None
+        and _true(kustomization, "Ready")
+        and (kustomization.get("status") or {}).get("lastAppliedOriginRevision")
+        == origin(revision)
+    )
+
+
 def pending(kustomizations: list, names: Iterable[str], revision: str) -> list[str]:
-    """Each of `names` that does not read Ready with its last apply at R."""
+    """Each of `names` that does not read Ready with its last apply at R.
+
+    The scope is one early read of the live list, so it can hold a Kustomization R removes.
+    A name absent from the list is settled once the root reads Ready at R: the root writes
+    that status after it applied and pruned R's Kustomizations, so a name R adds exists by
+    then, and one still absent is one R removed.
+    """
     live = {k["metadata"]["name"]: k for k in kustomizations}
+    pruned = _ready_at(live.get(ROOT), revision)
     return sorted(
         name
         for name in names
-        if not (
-            name in live
-            and _true(live[name], "Ready")
-            and (live[name].get("status") or {}).get("lastAppliedOriginRevision")
-            == origin(revision)
-        )
+        if not (_ready_at(live[name], revision) if name in live else pruned)
     )
 
 
 def await_ready(
     reads: Reads, inputs: Inputs, names: Iterable[str], deadline: float
 ) -> None:
+    logged: list[str] = []
     while True:
         left = pending(reads.api(KUSTOMIZATIONS)["items"], names, inputs.revision)
         if not left:
@@ -263,6 +277,9 @@ def await_ready(
             raise SoakError(
                 f"Kustomizations not Ready at R by the deadline: {', '.join(left)}"
             )
+        if left != logged:
+            print(f"soak: waiting for Ready at R: {', '.join(left)}", file=sys.stderr)
+            logged = left
         # A reset moves `homelab` off R, and the Kustomizations then apply another revision,
         # so none of them would ever name R. kustomize-controller holds the next promotion's
         # health check behind this Job (#5704), so the Job ends itself rather than wait out
