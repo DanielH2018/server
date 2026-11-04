@@ -302,7 +302,9 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
-        shared_caller_tags=lambda paths, declared=None: f.shared_callers,
+        shared_caller_tags=lambda paths, declared=None, role_dirs=None: (
+            f.shared_callers
+        ),
         k8s_only_tags=k8s_only_tags,
     )
 

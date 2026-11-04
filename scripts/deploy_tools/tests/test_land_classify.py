@@ -239,39 +239,85 @@ def _role_pr(role: str) -> dict:
     }
 
 
-def test_a_role_the_merge_commit_deleted_is_not_reported_as_shared(landing):
-    """PR #7101: this checkout still held the role, so it read as a shared role and the
-    landing ended `needs-manual-apply` with a full-deploy remedy for nothing."""
+def _landed_role_without_an_entry(landing, role_dirs: frozenset[str]):
+    """A landing of a change to `ical-proxy`, a role with no callers, minus its entry."""
     assert (REPO / "ansible/roles/k8s/ical-proxy").is_dir()
-    declared = land_tags.declared_tags() - {"ical-proxy"}
     ln, _ = landing(
         Fakes(
             gh_views={"files,changedFiles": _role_pr("ical-proxy")},
-            declared_at=declared,
-            role_dirs_at=frozenset({"k8s/manifests"}),
+            declared_at=land_tags.declared_tags() - {"ical-proxy"},
+            role_dirs_at=role_dirs,
         )
     )
+    return ln
+
+
+def test_a_role_the_merge_commit_deleted_is_not_reported_as_shared(landing):
+    """PR #7101: this checkout still held the role, so it read as a shared role and the
+    landing ended `needs-manual-apply` with a full-deploy remedy for nothing."""
+    ln = _landed_role_without_an_entry(landing, frozenset({"k8s/manifests"}))
     _real_derivation(ln)
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.plane == ""
 
 
-def test_a_shared_role_the_merge_commit_holds_is_still_reported(landing):
-    """The must-fire half: the merge commit, not this checkout, says the role exists."""
-    assert not (REPO / "ansible/roles/k8s/orphan-helper").exists()
+def test_a_callerless_role_both_trees_hold_is_still_reported(landing):
+    """The must-fire half: the same PR, with the role still at the merge commit."""
+    ln = _landed_role_without_an_entry(
+        landing, frozenset({"k8s/manifests", "k8s/ical-proxy"})
+    )
+    _real_derivation(ln)
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert "ical-proxy" in ln.plane
+    assert "ansible/deploy.yml" in ln.plane
+
+
+def test_a_new_helper_arriving_with_its_caller_is_not_reported(landing):
+    """Only the merge commit holds the helper and the include of it, and a checkout that
+    predates the merge has no caller to find. `bar-svc`'s tag deploys it, so nothing is owed."""
+    assert not (REPO / "ansible/roles/k8s/new-helper").exists()
     ln, _ = landing(
         Fakes(
-            gh_views={"files,changedFiles": _role_pr("orphan-helper")},
-            declared_at=land_tags.declared_tags(),
-            role_dirs_at=frozenset({"k8s/manifests", "k8s/orphan-helper"}),
+            gh_views={
+                "files,changedFiles": {
+                    "files": [
+                        {"path": "ansible/roles/k8s/new-helper/tasks/main.yml"},
+                        {"path": "ansible/roles/k8s/bar-svc/tasks/main.yml"},
+                    ],
+                    "changedFiles": 2,
+                }
+            },
+            declared_at=land_tags.declared_tags() | {"bar-svc"},
+            role_dirs_at=frozenset({"k8s/manifests", "k8s/new-helper", "k8s/bar-svc"}),
         )
     )
     _real_derivation(ln)
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert "orphan-helper" in ln.plane
-    assert "ansible/deploy.yml" in ln.plane
+    assert ln.plane == ""
+    assert ln.resolved_tags == ["bar-svc"]
+
+
+def test_a_deleted_role_does_not_deploy_the_callers_this_checkout_still_has(landing):
+    """The deploy half asks the merge commit as well, or the landing fans out to about 60
+    services for a role that no longer exists."""
+    ln, _ = landing(
+        Fakes(
+            gh_views={"files,changedFiles": _role_pr("volume-snapshot")},
+            declared_at=land_tags.declared_tags(),
+            role_dirs_at=frozenset({"k8s/manifests"}),
+        )
+    )
+    _real_derivation(ln)
+    ln.classifier = dataclasses.replace(
+        ln.classifier, shared_caller_tags=land_tags.shared_caller_tags
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.plane == ""
+    assert ln.resolved_tags == []
 
 
 def test_role_dirs_at_lists_the_role_trees_and_is_none_when_unreadable():

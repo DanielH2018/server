@@ -659,7 +659,8 @@ class Classifier:
     key_readers: Callable[[str, Path], list[KeyReader]] = readable_key_readers
     derive: Derive = land_tags.derive
     # Reads the role-caller graph from this checkout's tree, as `plane_note` always has.
-    shared_caller_tags: Callable[[list[str], set[str] | None], dict[str, set[str]]] = (
+    # `...`, not the argument list: `role_dirs` is passed by keyword.
+    shared_caller_tags: Callable[..., dict[str, set[str]]] = (
         land_tags.shared_caller_tags
     )
     # Which of those roles was narrowed to one smoke caller, so the operator line says so

@@ -85,6 +85,7 @@ class Classification:
     pr_range: str = ""
     quiet: frozenset[str] = frozenset()
     declared: frozenset[str] | None = None
+    role_dirs: frozenset[str] | None = None
     plane_paths: tuple[str, ...] = ()
     plane: str = ""
     self_applied: bool = False

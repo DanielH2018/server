@@ -83,8 +83,10 @@ def shared_roles(
     `ansible/deploy.yml` as owed for a role that had no callers left to deploy.
 
     `role_dirs` is the `<plane>/<role>` directories at the merge commit, which is the tree
-    that decides whether a role is gone. The checkout land.py runs from can predate the merge
-    and still hold the deleted role (#7108). None reads `roles_root` instead.
+    that decides whether a role is gone: the checkout land.py runs from can predate the merge,
+    or keep a deleted role's ignored `__pycache__/` (#7108). None skips that read. It only ever
+    removes a role. A role this checkout lacks stays out even when the merge commit adds it,
+    because `role_callers` reads this checkout too and would call it caller-less.
     """
     declared = declared_tags() if declared is None else declared
     roles_root = ROLES if roles_root is None else roles_root
@@ -94,11 +96,8 @@ def shared_roles(
         at = role_of(p)
         if not role or at is None or is_role_test_path(p):
             continue
-        if role_dirs is None:
-            present = (roles_root / at.plane / role).is_dir()
-        else:
-            present = f"{at.plane}/{role}" in role_dirs
-        if present:
+        gone_at_merge = role_dirs is not None and f"{at.plane}/{role}" not in role_dirs
+        if (roles_root / at.plane / role).is_dir() and not gone_at_merge:
             roles.add(role)
     return sorted(roles - declared)
 
