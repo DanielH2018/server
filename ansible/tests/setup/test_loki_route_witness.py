@@ -60,17 +60,15 @@ KUMA_PUSH_MARKERS = (
 
 
 def _timer_import() -> dict:
-    """The import of kuma_check_timer.yml that schedules the witness; its vars are the schedule."""
+    """The import of check_timer.yml that schedules the witness; its vars are the schedule."""
     for task in _flatten(CRON_TASKS):
         target = task.get("ansible.builtin.import_tasks") or ""
         if (
-            target.endswith("common/tasks/kuma_check_timer.yml")
-            and (task.get("vars") or {}).get("kuma_check_cron_name") == CRON_NAME
+            target.endswith("common/tasks/check_timer.yml")
+            and (task.get("vars") or {}).get("check_timer_cron_name") == CRON_NAME
         ):
             return task
-    raise AssertionError(
-        f"no kuma_check_timer.yml import replaces the `{CRON_NAME}` cron"
-    )
+    raise AssertionError(f"no check_timer.yml import replaces the `{CRON_NAME}` cron")
 
 
 def _flatten(tasks):
@@ -97,7 +95,7 @@ def test_both_cluster_nodes_witness_and_nothing_else_does():
 
 def test_the_deadline_exceeds_the_timer_period():
     """A deadline shorter than the producer's period fires NotReporting with nothing wrong."""
-    on_calendar = _timer_import()["vars"]["kuma_check_on_calendar"]
+    on_calendar = _timer_import()["vars"]["check_timer_on_calendar"]
     assert on_calendar.startswith("*-*-* *:"), (
         "this test reads the timer as hourly; give it a period if that changes"
     )
@@ -107,10 +105,10 @@ def test_the_deadline_exceeds_the_timer_period():
 def test_a_host_dropped_from_the_list_loses_the_timer_and_the_cron():
     """The way out. Without it a retired witness keeps writing a verdict nothing expects."""
     variables = _timer_import()["vars"]
-    assert "loki_route_witness_hosts" in variables["kuma_check_state"], (
-        "kuma_check_state must follow the witness list, or a dropped host keeps the timer"
+    assert "loki_route_witness_hosts" in variables["check_timer_state"], (
+        "check_timer_state must follow the witness list, or a dropped host keeps the timer"
     )
-    assert variables["kuma_check_cron_name"] == CRON_NAME, (
+    assert variables["check_timer_cron_name"] == CRON_NAME, (
         "the import must name the cron it replaces, or a host runs both"
     )
 

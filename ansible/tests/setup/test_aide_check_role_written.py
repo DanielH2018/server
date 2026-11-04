@@ -79,7 +79,7 @@ def _wired(tasks: list[dict], tail: str, name_var: str) -> list[tuple[str, bool]
         if (
             isinstance(target, str)
             and target.endswith(tail)
-            and variables.get("kuma_check_state") != "absent"
+            and variables.get("check_timer_state") != "absent"
         ):
             names.append(
                 (
@@ -105,9 +105,7 @@ def role_destinations(task_lists: list[list[dict]]) -> set[str]:
     """
     found: set[str] = set()
     tasks = [t for task_list in task_lists for t in leaf_tasks(task_list)]
-    for name, _ in _wired(
-        tasks, "common/tasks/kuma_check_timer.yml", "kuma_check_name"
-    ):
+    for name, _ in _wired(tasks, "common/tasks/check_timer.yml", "check_timer_name"):
         found |= {
             f"/etc/systemd/system/kuma-check-{name}{suffix}"
             for suffix in (".service", ".timer", "-boot.service")
@@ -139,7 +137,7 @@ def unlisted(destinations: set[str], pattern: re.Pattern[str]) -> list[str]:
 
 # The shared tasks name their units through the caller's variables, which `role_destinations`
 # resolves from each import, so the files themselves are not read.
-SHARED_TASK_FILES = {"kuma_check_timer.yml", "alert_unit.yml"}
+SHARED_TASK_FILES = {"check_timer.yml", "alert_unit.yml"}
 
 
 def _setup_task_lists() -> list[list[dict]]:

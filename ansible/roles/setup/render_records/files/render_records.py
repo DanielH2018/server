@@ -26,7 +26,7 @@ has a record whose `commit` is the chosen SHA, whose tree was clean, whose `host
 and whose `rendered_at` falls inside this run. A playbook that exits 0 having rendered nothing
 would otherwise read as a fresh fleet.
 
-EXIT CODES are the kuma-check timer's contract (roles/setup/common/tasks/kuma_check_timer.yml):
+EXIT CODES are the kuma-check timer's contract (roles/setup/common/tasks/check_timer.yml):
 0 after an `up` push, 1 after a `down` push. Two paths exit 1 WITHOUT a push, and the unit's
 Restart=on-failure reruns them: the boot grace, and a walk that found no green commit. Neither
 is a verdict, so neither may turn the tile green or red. A producer that keeps deferring goes

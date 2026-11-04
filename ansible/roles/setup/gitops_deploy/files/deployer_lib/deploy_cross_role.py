@@ -25,7 +25,7 @@ from pathlib import Path
 # A file one setup role installs from another's `files/`, imports from another's `tasks/`, or
 # reads a variable of from another's `defaults/`, mapped to those roles, so a change to it re-applies them beside the owner (#3306, #3317).
 # A template a shared task file renders inherits that task file's importers (#3319): the
-# kuma-check pair reaches a host only through `kuma_check_timer.yml`.
+# kuma-check pair reaches a host only through `check_timer.yml`.
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree, and
 # `test_setup_cross_role_reads.py` holds its `defaults/` rows.
 _COMMON = "ansible/roles/setup/common"
@@ -42,7 +42,7 @@ _HOST_LIB = frozenset(
 _K3S = frozenset({"k3s"})
 _LH = "scripts/lib/longhorn_lib"
 _STAMPED = _HOST_LIB | {"initial_setup"}
-_KUMA_CHECK = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
+_CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
 _ALERT_UNIT = frozenset({"gitops_deploy", "renovate_agent", "renovate_notify"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
@@ -62,10 +62,10 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_LH}/longhorn_restore_drill_stamps.py": _K3S,
     f"{_LH}/longhorn_skipped_volumes_logic.py": _K3S,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
-    f"{_COMMON}/tasks/kuma_check_timer.yml": _KUMA_CHECK,
-    f"{_COMMON}/templates/kuma-check.service.j2": _KUMA_CHECK,
-    f"{_COMMON}/templates/kuma-check.timer.j2": _KUMA_CHECK,
-    f"{_COMMON}/templates/kuma-check-boot.service.j2": _KUMA_CHECK,
+    f"{_COMMON}/tasks/check_timer.yml": _CHECK_TIMER,
+    f"{_COMMON}/templates/check-timer.service.j2": _CHECK_TIMER,
+    f"{_COMMON}/templates/check-timer.timer.j2": _CHECK_TIMER,
+    f"{_COMMON}/templates/check-timer-boot.service.j2": _CHECK_TIMER,
     f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
     # A repo file a setup task copies from the checkout by `src: "{{ playbook_dir }}/../<path>"`.
     # It sits under no role, so without a row it maps to no role and the tick fast-forwards it

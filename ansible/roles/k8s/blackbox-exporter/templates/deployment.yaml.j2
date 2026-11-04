@@ -21,8 +21,8 @@ spec:
         netpol-baseline: enforced
     spec:
 {{ pod_shell('homelab-standard', run_as_user=blackbox_exporter_k8s_uid, run_as_group=blackbox_exporter_k8s_uid, fs_group=blackbox_exporter_k8s_uid) }}
-      # The probes dial every ingress name, so they resolve each one exactly as uptime-kuma's
-      # tiles do: pinned to the ingress VIP, never through CoreDNS and its upstreams.
+      # The probes dial every ingress name, so each one resolves pinned to the ingress VIP,
+      # never through CoreDNS and its upstreams.
 {{ ingress_host_aliases() }}
       containers:
         - name: blackbox-exporter

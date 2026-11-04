@@ -18,20 +18,20 @@
   # not about catching drift fast — and GitHub's unauthenticated limit is 60 req/hr per source
   # IP, shared with renovate_notify on this same host.
   #
-  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/check_timer.yml): a red
   # verdict reruns every 30 min until it clears — two calls an hour at worst, inside the
   # unauthenticated limit even on the anonymous fallback.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_state: present
-    kuma_check_name: github-ruleset-drift
-    kuma_check_description: GitHub ruleset drift check (textfile verdict)
-    kuma_check_exec: /usr/local/bin/github-ruleset-drift.sh
-    kuma_check_user: root
-    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' | format(gitops_deploy_ruleset_drift_cron_minute | int) }}:00"
-    kuma_check_restart_sec: 30min
-    kuma_check_cron_name: "GitHub ruleset drift"
-    kuma_check_cron_file: github-ruleset-drift
+    check_timer_state: present
+    check_timer_name: github-ruleset-drift
+    check_timer_description: GitHub ruleset drift check (textfile verdict)
+    check_timer_exec: /usr/local/bin/github-ruleset-drift.sh
+    check_timer_user: root
+    check_timer_on_calendar: "*-*-* {{ '%02d' | format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' | format(gitops_deploy_ruleset_drift_cron_minute | int) }}:00"
+    check_timer_restart_sec: 30min
+    check_timer_cron_name: "GitHub ruleset drift"
+    check_timer_cron_file: github-ruleset-drift
 
 - name: Deploy the GitHub interaction-limit re-arm
   tags: [cron, gitops-deploy-github-checks]
@@ -52,17 +52,17 @@
   # Daily, ten minutes after the ruleset check. The setting only moves when it expires, so the
   # cadence is about how long a lapse can go unnoticed (one day) rather than about load.
   #
-  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/check_timer.yml): a red
   # verdict reruns every 30 min until it clears. The re-arm PUT is idempotent, so a rerun is
   # the same reconcile again.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_state: present
-    kuma_check_name: github-interaction-limit
-    kuma_check_description: GitHub interaction-limit re-arm (textfile verdict)
-    kuma_check_exec: /usr/local/bin/github-interaction-limit.sh
-    kuma_check_user: root
-    kuma_check_on_calendar: "*-*-* {{ '%02d' | format(gitops_deploy_interaction_limit_cron_hour | int) }}:{{ '%02d' | format(gitops_deploy_interaction_limit_cron_minute | int) }}:00"
-    kuma_check_restart_sec: 30min
-    kuma_check_cron_name: "GitHub interaction limit"
-    kuma_check_cron_file: github-interaction-limit
+    check_timer_state: present
+    check_timer_name: github-interaction-limit
+    check_timer_description: GitHub interaction-limit re-arm (textfile verdict)
+    check_timer_exec: /usr/local/bin/github-interaction-limit.sh
+    check_timer_user: root
+    check_timer_on_calendar: "*-*-* {{ '%02d' | format(gitops_deploy_interaction_limit_cron_hour | int) }}:{{ '%02d' | format(gitops_deploy_interaction_limit_cron_minute | int) }}:00"
+    check_timer_restart_sec: 30min
+    check_timer_cron_name: "GitHub interaction limit"
+    check_timer_cron_file: github-interaction-limit

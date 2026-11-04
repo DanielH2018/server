@@ -60,7 +60,7 @@ ROWS = (
                 "ansible/tests/k8s/_manifest_guards.py",
                 "ansible/tests/longhorn/_restore_drill.py",
                 "ansible/tests/longhorn/test_longhorn_reap_guard.py",
-                "ansible/tests/setup/test_kuma_check_timer.py",
+                "ansible/tests/setup/test_check_timer.py",
                 "ansible/tests/staging/test_staging_network.py",
                 "scripts/deploy_tools/tests/test_deploy_exit_codes.py",
                 "scripts/docs/tests/test_mkdocs_repo_links.py",

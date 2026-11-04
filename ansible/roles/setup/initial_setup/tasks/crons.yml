@@ -432,20 +432,20 @@
   # MAINTENANCE (#4540), and before the 08:30 secret-rotation audit. Root, because the
   # deployed-code arm compares live artifacts under /usr/local that are not all world-readable.
   #
-  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting on the tile for a day. The
   # state follows setup_drift_check_hosts so a host dropped from the list loses the timer and
   # the old cron.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_state: "{{ 'present' if inventory_hostname in setup_drift_check_hosts else 'absent' }}"
-    kuma_check_name: setup-drift
-    kuma_check_description: Setup-plane drift check
-    kuma_check_exec: /usr/local/bin/setup-drift-check.sh
-    kuma_check_user: root
-    kuma_check_on_calendar: "*-*-* 08:20:00"
-    kuma_check_restart_sec: 30min
-    kuma_check_cron_name: "Setup-plane drift check"
+    check_timer_state: "{{ 'present' if inventory_hostname in setup_drift_check_hosts else 'absent' }}"
+    check_timer_name: setup-drift
+    check_timer_description: Setup-plane drift check
+    check_timer_exec: /usr/local/bin/setup-drift-check.sh
+    check_timer_user: root
+    check_timer_on_calendar: "*-*-* 08:20:00"
+    check_timer_restart_sec: 30min
+    check_timer_cron_name: "Setup-plane drift check"
 
 - name: Record the rendered setup-drift check
   tags: [crons, setup_drift]
@@ -548,18 +548,18 @@
   #
   # A systemd timer rather than a cron, so a red verdict reruns every 15 min
   # until it clears instead of waiting for the next slot. The task file carries
-  # the contract; the script exits 1 after a down verdict. `kuma_check_state` wires both
+  # the contract; the script exits 1 after a down verdict. `check_timer_state` wires both
   # directions: a host outside loki_route_witness_hosts loses the timer and the old cron.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_state: "{{ 'present' if inventory_hostname in loki_route_witness_hosts else 'absent' }}"
-    kuma_check_name: loki-read-route
-    kuma_check_description: Loki read-route witness
-    kuma_check_exec: /usr/local/bin/loki-read-route-health.sh
-    kuma_check_user: "{{ sys_user }}"
-    kuma_check_on_calendar: "*-*-* *:23:00"
-    kuma_check_restart_sec: 15min
-    kuma_check_cron_name: "Loki read-route witness"
+    check_timer_state: "{{ 'present' if inventory_hostname in loki_route_witness_hosts else 'absent' }}"
+    check_timer_name: loki-read-route
+    check_timer_description: Loki read-route witness
+    check_timer_exec: /usr/local/bin/loki-read-route-health.sh
+    check_timer_user: "{{ sys_user }}"
+    check_timer_on_calendar: "*-*-* *:23:00"
+    check_timer_restart_sec: 15min
+    check_timer_cron_name: "Loki read-route witness"
 
 - name: Record the rendered Loki read-route witness
   tags: [crons, loki_route_witness]
@@ -571,8 +571,8 @@
     stamp_render_name: loki-route-witness
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2
-      - ansible/roles/setup/common/templates/kuma-check.service.j2
-      - ansible/roles/setup/common/templates/kuma-check.timer.j2
+      - ansible/roles/setup/common/templates/check-timer.service.j2
+      - ansible/roles/setup/common/templates/check-timer.timer.j2
 
 - name: Record the deployed Loki read-route verdict reader
   tags: [crons, loki_route_witness]
@@ -592,7 +592,7 @@
   tags: [crons, loki_route_witness]
   # The way out. A host dropped from loki_route_witness_hosts keeps running the check otherwise,
   # writing a verdict no rule reads. The timer and the old cron go in the
-  # kuma_check_timer.yml import above (its absent arm); this block removes the files.
+  # check_timer.yml import above (its absent arm); this block removes the files.
   when: inventory_hostname not in loki_route_witness_hosts
   block:
     - name: Remove the Loki read-route witness files

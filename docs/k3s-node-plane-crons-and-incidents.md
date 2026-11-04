@@ -136,7 +136,7 @@ health`: since M3's PR 5 its heartbeat is a textfile metric (`disk-health.prom`)
 appends to the local ledger, which is bookkeeping, not state.
 
 `Manifest prune drift check` and `Live object drift check` are kuma-check timers rather than crons
-since 2026-09-19, importing `setup/common`'s `kuma_check_timer.yml`. Each script exits 1 after it
+since 2026-09-19, importing `setup/common`'s `check_timer.yml`. Each script exits 1 after it
 pushes `down`, and the service's `Restart=on-failure` reruns it every 30 min until it exits 0, so
 a red tile clears when the fault does rather than at the next slot. The timers are
 `Persistent=true`, and both checks carry the boot grace so a catch-up run at boot exits 1 without

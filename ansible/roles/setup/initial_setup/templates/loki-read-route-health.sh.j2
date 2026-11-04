@@ -83,6 +83,6 @@ logger -p daemon.notice -t loki-read-route-health "status=${STATUS} ${MSG}"
 write_check_textfile loki-read-route-health "$([[ "$STATUS" == up ]] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
   || logger -t loki-read-route-health "textfile write failed (status=${STATUS})"
 
-# The exit code is the timer's contract (roles/setup/common/tasks/kuma_check_timer.yml): 1 after
+# The exit code is the timer's contract (roles/setup/common/tasks/check_timer.yml): 1 after
 # a down verdict so Restart=on-failure reruns the check until the route answers, 0 after up.
 [[ "$STATUS" == up ]] || exit 1

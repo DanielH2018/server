@@ -31,7 +31,7 @@ EXEMPT: dict[str, str] = {
         "edits nothing — `renovate_agent` is the role that acts, and it carries the contract"
     ),
     "common": (
-        "`templates/kuma-check.timer.j2` is the shared unit pair `tasks/kuma_check_timer.yml` "
+        "`templates/check-timer.timer.j2` is the shared unit pair `tasks/check_timer.yml` "
         "renders for an importing role; it has no schedule or check of its own, and the role "
         "that imports it owns the check the timer reruns and carries the contract for it"
     ),
