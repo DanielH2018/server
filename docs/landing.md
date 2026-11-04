@@ -719,7 +719,7 @@ which no tick ever applied (#3391).
 plane a hand applies, and a self-applied setup role the tick installed on its own host alone —
 and the verdict then prints one line per half. PR #2568 carried exactly that pairing, and until
 #2569 the plane's line suppressed the other: daniel-server and daniel-pi kept the old
-`kuma-push-lib.sh` behind a printed remediation that named neither.
+`kuma-push-lib.sh`, since deleted by #7109, behind a printed remediation that named neither.
 
 Four things sit in that position:
 

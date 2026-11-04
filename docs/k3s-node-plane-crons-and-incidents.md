@@ -130,9 +130,9 @@ unrepeated until the cron existed.
 `Longhorn backup health`, `daniel-box disk health`, `Manifest prune drift check`, `Release
 staleness drift check`, `Live object drift check`, `B2 deletion accounting`, `B2 backup budget
 listing` and the `--list-only` etcd drill read the cluster or the bucket and write nothing to
-either. The heartbeats push a Kuma tile through `kuma-push-lib.sh`, except `daniel-box disk
-health`: since M3's PR 5 its heartbeat is a textfile metric (`disk-health.prom`) that the
-`host-checks` rules page through Alertmanager, and it pushes no Kuma tile. The B2 accounting pair
+either. The Longhorn, disk, manifest prune, release staleness and live drift checks each write
+a textfile metric, such as `disk-health.prom`, that the `host-checks` rules page through
+Alertmanager. None of these crons pushes a Kuma tile. The B2 accounting pair
 appends to the local ledger, which is bookkeeping, not state.
 
 `Manifest prune drift check` and `Live object drift check` are kuma-check timers rather than crons
@@ -203,8 +203,9 @@ account, including why it runs as `sys_user` and not root, is the `#947` bullet 
 refused narrowing marks the whole fleet stale, and the per-service reasons then ran to ~7,500
 chars. Kuma puts the message into a Discord embed field capped at 1024 chars and never truncates,
 so Discord rejected the DOWN with HTTP 400 on 2026-09-17 and 2026-09-18 and the page reached
-nobody. `kuma_push` (kuma-push-lib.sh) and the bridge's `net.push` both cap the message at 900
-chars as the class fix; the reasons are `probe.py releases --stale-only`.
+nobody. `kuma_push` (kuma-push-lib.sh) and the bridge's `net.push` both capped the message at
+900 chars as the class fix, until M6 retired both push paths. The reasons are `probe.py
+releases --stale-only`.
 
 **A changed stale set re-alerts while the tile stays DOWN** (#2378). Kuma notifies on a status
 transition only, so a DOWN whose set grew or shrank reached nobody. The cron keeps the set the
