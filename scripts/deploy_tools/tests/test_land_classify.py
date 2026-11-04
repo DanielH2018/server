@@ -14,7 +14,7 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deployer_lib.deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
-from deploy_tools.land_lib import classify
+from deploy_tools.land_lib import classify, tools
 from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.land_lib.land_shared import GUARD_MAP
 from deploy_tools.land_lib.landing import Classification
@@ -272,6 +272,13 @@ def test_a_shared_role_the_merge_commit_holds_is_still_reported(landing):
     classify.classify(ln)
     assert "orphan-helper" in ln.plane
     assert "ansible/deploy.yml" in ln.plane
+
+
+def test_role_dirs_at_lists_the_role_trees_and_is_none_when_unreadable():
+    dirs = tools.role_dirs_at("HEAD", REPO)
+    assert dirs is not None
+    assert {"k8s/manifests", "setup/gitops_deploy"} <= dirs
+    assert tools.role_dirs_at("no-such-ref", REPO) is None
 
 
 def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
