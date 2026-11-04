@@ -118,8 +118,8 @@ containers_list:
     metrics:
       - job: crowdsec
         port: 6060
-      # The crowdsec-jobs sidecar's check exporter (files/jobs_metrics.py), which serves the
-      # three Kuma-pushed jobs' verdicts as homelab_check_* gauges beside the push (M6 B6b). The
+      # The crowdsec-jobs sidecar's check exporter (files/jobs_metrics.py), which serves three
+      # jobs' verdicts as homelab_check_* gauges (M6 B6b). The
       # process binds whatever JOBS_METRICS_PORT holds, and deployment.yaml.j2 hands it this
       # number, so unlike the engine's image-fixed 6060 this port moves the listener too.
       - job: crowdsec-jobs
@@ -602,7 +602,7 @@ containers_list:
                       # names `feed-cache` as a target and a grep cannot see this caller.
                       # Confirm after a deploy that the rachelbythebay feed still refreshes.
   # Parked at replicas 0 — see roles/k8s/navidrome/defaults/main.yml. The entry stays in the
-  # list so the Deployment, Service and route keep being reconciled; only the pod count is 0.
+  # list so the Deployment and Service keep being reconciled; only the pod count is 0.
   - name: navidrome
     platform: k8s
     # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8). The
@@ -610,8 +610,8 @@ containers_list:
     owner: flux
     weekly_backup_claims: {navidrome-data: 3}  # Wed
     hostname: "navidrome"
-    # No tile while parked: the role deploys no route at replicas 0, so the tile would be
-    # permanently red. Delete this line when bringing it back.
+    # No ingress probe while parked: the role deploys no route at replicas 0, so the probe
+    # would fail permanently. Delete this line when bringing it back.
     probe: false
     port: 4533
     use_authelia: true
@@ -634,14 +634,14 @@ containers_list:
     # NO IngressRoute at all, and that is load-bearing rather than an omission. Its names
     # are served by the X-Sync-Token gate in the k8s Traefik's Secret-mounted file provider
     # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2 — token router, Authelia'd
-    # /_utils carve-out at priority 200, and the LAN-only Kuma probe router whose CouchDB
+    # /_utils carve-out at priority 200, and the LAN-only `livesync-probe` router whose CouchDB
     # 401 is the end-to-end signal). The token stays out of CRDs because the readonly
     # kubeconfig can read IngressRoutes but is RBAC-denied Secrets. Replication keeps its
     # 20x limiter there — the default 300/min 429'd a phone mid-pull within an hour.
     #
     # No bare `Host(livesync…)` router may be added beside the gate's: that would break the
     # gate's whole invariant, that a request without the token matches NO router and 404s
-    # before CouchDB. `hostname` stays only to feed the Pi-hole override and Kuma's
+    # before CouchDB. `hostname` stays only to feed the Pi-hole override and blackbox-exporter's
     # hostAliases.
   - name: homepage
     platform: k8s
@@ -1141,7 +1141,7 @@ containers_list:
       - scrutiny-collector  # COLLECTOR_API_ENDPOINT (scrutiny/templates/collector-daemonset.yaml.j2),
                             # posts SMART data from both nodes
       - monitor-bridge      # SCRUTINY_URL (monitor-bridge/templates/config/env.yaml.j2), the
-                            # Kuma disk-health tile
+                            # `scrutiny` check behind SmartHealthFailing
       - homelab-mcp         # SCRUTINY_URL (homelab-mcp/templates/deployment.yaml.j2), Claude's
                             # disk-health read tool
     # homepage's Scrutiny widget dials the ClusterIP, because scrutiny's route is Authelia-gated.
@@ -1282,8 +1282,8 @@ claude_code_agent_homelab_ui_enabled: true
 claude_code_agent_dotfiles: true
 # Slice 6 (docs/claude-agent-user.md): sessions here are meant to run as `claude`, but background
 # jobs and fan-out still start as ubuntu. The login caps leave user-1000.slice, and
-# claude-cgroup-metrics.sh counts any `claude` process uid 1000 still runs, which the Memory
-# tile names in its message without paging (#5125). Rollback: delete both lines.
+# claude-cgroup-metrics.sh counts any `claude` process uid 1000 still runs. No alert rule reads
+# that count, so such a process never pages (#5125). Rollback: delete both lines.
 claude_code_login_uids: []
 claude_code_watch_uids: ["{{ claude_code_login_uid }}"]
 # `has_igpu` is deliberately unset. It means "pass /dev/dri through" (README §7) and is the
@@ -1300,7 +1300,7 @@ claude_code_watch_uids: ["{{ claude_code_login_uid }}"]
 render_gid: 993
 # Run the host-side secondary upsmon here, so a UPS shutdown powers this node off cleanly
 # instead of letting it run to battery end and lose power mid-write. This node holds etcd,
-# Longhorn's primary replicas, Traefik, Kuma, Prometheus and LAN DNS, so the unclean cut was the
+# Longhorn's primary replicas, Traefik, Prometheus and LAN DNS, so the unclean cut was the
 # most expensive one in the fleet. It draws from the same UPS as daniel-server (measured,
 # see group_vars/all.yml).
 #
