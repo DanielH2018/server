@@ -68,8 +68,8 @@ def fence_name(entry: dict) -> str:
     return entry.get("netpol_app", entry["name"])
 
 
-# Callers whose pods render only from a role's `templates/verify/`, which the renderer emits into
-# `<tag>-verify` and `rendered_docs()` does not read. Named so the derivation below cannot
+# Callers whose pods render only from a role's `templates/verify/` or `templates/precheck/`, which
+# the renderer emits into `<tag>-verify` and `<tag>-precheck` and `rendered_docs()` does not read. Named so the derivation below cannot
 # quietly stop reaching a role: each must be a pod label `verify_pod_labels` returns.
 # qbittorrent's verify Job keeps the label of the `kubectl run` probe it replaced at the flip.
 # janitorr's tests/test_verify_janitorr.py also checks that sonarr's and radarr's fences admit its Job.
@@ -80,20 +80,26 @@ VERIFY_CALLERS = frozenset(
         "prowlarr-verify",
         "qbittorrent-reach-probe",
         "janitorr-verify",
+        "traefik-precheck",
     }
 )
 
 
 @pytest.fixture(scope="module")
 def verify_pod_labels(tmp_path_factory) -> set[str]:
-    """The `app` label of every pod a role's `templates/verify/` renders, as Flux receives it."""
+    """The `app` label of every Job a role's `verify/` or `precheck/` renders, as Flux receives it."""
     path = tmp_path_factory.mktemp("stubs") / "stubs.yml"
     assert shadow_diff.main(["stubs", "--out", str(path)]) == 0
     stubs = load_stubs(path)
     labels = set()
-    for templates in sorted(K8S_ROLES.glob("*/templates/verify")):
-        rendered = cluster.render_tag(templates.parent.parent.name, stubs)
-        for name, text in rendered.verify.items():
+    roles = {
+        templates.parent.parent.name
+        for pattern in ("*/templates/verify", "*/templates/precheck")
+        for templates in K8S_ROLES.glob(pattern)
+    }
+    for role in sorted(roles):
+        rendered = cluster.render_tag(role, stubs)
+        for name, text in [*rendered.verify.items(), *rendered.precheck.items()]:
             for doc in yaml_fast.safe_load_all(text):
                 if name != "kustomization.yaml" and doc and doc["kind"] == "Job":
                     labels.add(pod_template(doc)["metadata"]["labels"]["app"])
@@ -243,8 +249,6 @@ def test_every_caller_is_a_label_some_rendered_pod_carries(pod_labels):
 
 def test_every_bespoke_policy_peer_is_a_label_some_rendered_pod_carries(pod_labels):
     """A same-namespace peer naming no pod admits nothing, and is a grant its workload outlived."""
-    # traefik's precheck Job renders from `templates/precheck/`, which `rendered_docs()` does not read.
-    labels = pod_labels | {"traefik-precheck"}
     peers = {
         (doc["metadata"]["name"], peer["podSelector"]["matchLabels"]["app"])
         for role, _template, doc in rendered_docs()
@@ -260,4 +264,4 @@ def test_every_bespoke_policy_peer_is_a_label_some_rendered_pod_carries(pod_labe
         ("mosquitto", "blackbox-exporter"),
         ("nut", "blackbox-exporter"),
     } <= peers
-    assert {peer for peer in peers if peer[1] not in labels} == set()
+    assert {peer for peer in peers if peer[1] not in pod_labels} == set()
