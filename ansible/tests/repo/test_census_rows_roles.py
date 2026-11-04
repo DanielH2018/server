@@ -351,8 +351,6 @@ ROWS = (
             {
                 "ansible/roles/k8s/configarr/templates/cronjob.yaml.j2",
                 "ansible/roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2",
-                "ansible/roles/k8s/uptime-kuma/templates/maintenance-sync-cronjob.yaml.j2",
-                "ansible/roles/k8s/uptime-kuma/templates/status-page-sync-cronjob.yaml.j2",
             }
         ),
     ),

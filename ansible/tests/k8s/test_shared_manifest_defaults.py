@@ -64,7 +64,6 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "sonarr",
         "speedtest",
         "texbrain",
-        "uptime-kuma",
         "zigbee2mqtt",
     }
 )
@@ -88,7 +87,6 @@ ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
         "sonarr",
         "tdarr",
         "texbrain",
-        "uptime-kuma",
         "wg-easy",
         "zigbee2mqtt",
     }

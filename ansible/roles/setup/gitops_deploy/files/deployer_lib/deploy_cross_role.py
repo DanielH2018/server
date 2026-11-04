@@ -120,7 +120,7 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
     # configarr, janitorr and uptime-kuma stage it into a pod's ConfigMap (#3745). autofix-bridge
     # left the list at M6 batch B7's Cutover-2, when its push went, and crowdsec at B6b's, when
     # its crowdsec-jobs sidecar stopped importing it.
-    "hosts/lib/kuma_push.py": frozenset({"configarr", "janitorr", "uptime-kuma"}),
+    "hosts/lib/kuma_push.py": frozenset({"configarr", "janitorr"}),
 }
 
 

@@ -111,7 +111,7 @@ def test_the_census_names_the_pi_package_as_a_consumer_of_autoheals_webhook():
     consumers = tree_consumers("monitor_discord_webhook_url")
 
     assert consumers["daniel-pi"] == "host"
-    assert {"monitor-bridge", "observability", "uptime-kuma"} <= set(consumers)
+    assert {"monitor-bridge", "observability"} <= set(consumers)
 
 
 def test_the_census_names_the_pi_package_as_a_consumer_of_alloys_http_password():

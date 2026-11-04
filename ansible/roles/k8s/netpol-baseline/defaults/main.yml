@@ -192,11 +192,10 @@ netpol_baseline_probe_targets:
   # to every source, so only the web port can show the fence going red.
   - {service: pihole, plane: homelab, port: 80, expect: refused, policy: networkpolicy-pihole.yaml.j2}
   # One target per fencing shape the last rollout slice introduced: a fan-in app
-  # (home-assistant, uptime-kuma), a cross-namespace one (loki-homelab), a sub-workload behind a
+  # (home-assistant), a cross-namespace one (loki-homelab), a sub-workload behind a
   # parent (karakeep-meilisearch), and one whose Service name differs from its pod label
   # (scrutiny, pods `app: scrutiny-web`), the mistake most likely to select nothing.
   - {service: home-assistant, plane: homelab, port: 8123, expect: refused, policy: "home-assistant's netpol_from (host_vars/daniel-box.yml)"}
-  - {service: uptime-kuma, plane: homelab, expect: refused, policy: "uptime-kuma's netpol_from (host_vars/daniel-box.yml)"}
   - {service: loki-homelab, plane: homelab, port: 3100, expect: refused, policy: networkpolicy-loki-homelab.yaml.j2}
   - {service: scrutiny, plane: homelab, port: 8080, expect: refused, policy: "scrutiny's netpol_from, pod label scrutiny-web"}
   - {service: karakeep-meilisearch, plane: homelab, port: 7700, expect: refused, policy: "karakeep's netpol_fences (host_vars/daniel-box.yml)"}

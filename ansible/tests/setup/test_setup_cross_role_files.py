@@ -107,11 +107,7 @@ KNOWN_EDGES = {
 }
 KNOWN_K8S_EDGES = {
     "hosts/lib/host_lib.py": {"configarr", "janitorr"},
-    "hosts/lib/kuma_push.py": {
-        "configarr",
-        "janitorr",
-        "uptime-kuma",
-    },
+    "hosts/lib/kuma_push.py": {"configarr", "janitorr"},
 }
 
 KNOWN_BUILD_CONTEXT_EDGES = {
@@ -234,7 +230,7 @@ def _k8s_task_texts() -> dict[str, str]:
         for role, text in _task_texts("k8s").items()
     }
     # A k8s role also ships a setup file from a ship list in defaults/ or a `lookup('file')` in
-    # a template, as uptime-kuma stages kuma_push.py (#3745). Only lines
+    # a template, as a pod-side role stages kuma_push.py (#3745). Only lines
     # naming `playbook_dir` count: template prose cites setup paths too, and ships nothing.
     for role_dir in role_dirs(ROLES / "k8s"):
         shipped = [

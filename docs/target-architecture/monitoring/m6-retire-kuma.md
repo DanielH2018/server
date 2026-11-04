@@ -1882,7 +1882,7 @@ here. C-1 waits for the operator's acceptance.
     - **C-3a, the push libraries.** Delete `kuma-push-lib.sh` with the `kuma-push` host
       component that packages it, and `hosts/lib/kuma_push.py` with its re-export from
       `hosts/lib/host_lib.py`. Delete the `kuma_push.py` rows from
-      `deploy_cross_role.py`'s two tables, including the k8s row's `uptime-kuma` member. C-3a
+      `deploy_cross_role.py`'s two tables. C-1b dropped the k8s row's `uptime-kuma` member. C-3a
       lands after C-2b, which deletes `uptime-kuma/files/push_heartbeat.py`, whose docstring
       names `kuma_push.py`. Every reader of `kuma_push.py` changes in the same commit, or a
       copy of a missing `src` fails the role that holds it:

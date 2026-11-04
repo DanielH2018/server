@@ -608,8 +608,6 @@ the `prometheus` gate's members. Each check's retirement note is in the reposito
   heartbeat window, which is the dead-man's switch working.
   **Post-boot flapping is fixed by widening the window, never by adding retries.** A wider window
   costs only detection latency, while a retry hands the Discord message back to the watchdog.
-  `test_push_monitors_never_retry` in `ansible/tests/services/test_kuma_static_monitors.py` is the
-  guard.
 - **`startup_grace` holds the reach-out checks that have no reachability gate and no per-check
   hysteresis**: **n8n Prod Workflows**, **Bazarr Health**, **Prowlarr Indexers** and **SMART Data /
   Health**. It is a hysteresis, not a suppression, and it is the peer of

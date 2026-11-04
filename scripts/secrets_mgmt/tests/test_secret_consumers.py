@@ -2,7 +2,7 @@
 
 Two mechanisms, tested two ways. The `consumer_tags` cases below pin the name-routing table
 against hand-written expectations. The guards after them derive their expectations from the
-tree instead — the committed registry, the uptime-kuma tile template and the deploy tag list —
+tree instead — the committed registry and the deploy tag list —
 because name routing has already been wrong in production twice and a hand-list would have
 agreed with it both times.
 
@@ -14,18 +14,16 @@ from pathlib import Path
 from secrets_mgmt.consumers import (
     CROSS_HOST_PUSH_TOKENS,
     FLUX_PATH,
-    UPTIME_KUMA_TAG,
     consumer_commands,
     consumer_tags,
 )
-from lib.repo_paths import HOST_VARS
-from secrets_mgmt.rotation_tools import REPO, load_registry
+from secrets_mgmt.rotation_tools import load_registry
 
 
 # ── consumer mapping (which redeploys apply a rotated token) ─────────────────
-def test_consumer_tags_status_page_sync_token_names_its_tile_role():
-    # Non-vacuity: a tile that still renders its token keeps the tile's role as its consumer.
-    assert UPTIME_KUMA_TAG in consumer_tags("kuma_status_page_sync_push_token")
+def test_consumer_tags_status_page_sync_token_is_manual():
+    # No render reads it, so the unattended cron must not rotate it behind a deploy.
+    assert consumer_tags("kuma_status_page_sync_push_token") == ()
     # `kopia_restore_drill_push_token` is absent from both secrets.yml and secret_rotation.yml,
     # so no arm maps it and it resolves to no consumer.
     assert consumer_tags("kopia_restore_drill_push_token") == ()
@@ -118,55 +116,6 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
         "unmatched tag, so the rotation stamps green having deployed nothing: %s"
         % unmatched
     )
-
-
-def test_uptime_kuma_is_a_consumer_iff_a_tile_exists():
-    """Derive the tile half of the consumer list from the template, never from a hand-list.
-
-    `consumer_tags` decides by name (`_push_token`), which is a proxy. The ground truth is
-    whether k8s/uptime-kuma's static-monitors template actually renders the token, and the two
-    must agree in BOTH directions:
-
-      - a token WITH a tile that omits `uptime-kuma` rotates the pusher only, so AutoKuma keeps
-        reconciling the old push_token and the monitor stops beating — the bug this change fixes;
-      - a token WITHOUT a tile that claims `uptime-kuma` deploys a role rendering it nowhere,
-        which is the mis-routing the 2026-08-25 M-8b finding was about, one role along.
-
-    The lone `monitor_bridge_ha_token` sits outside, and the tile-bearing tokens that resolve
-    NOTHING are the cross-host ones — deliberately manual, and this test must not drag them back
-    in. The bridge's own tokens have no tile since M6 batch A6, so they are not in this join.
-    """
-    tile = (
-        Path(REPO) / "ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2"
-    ).read_text()
-    reg = load_registry()
-    wrong = []
-    for name in reg["entries"]:
-        tags = consumer_tags(name)
-        if not tags:
-            continue  # manual: this test says nothing about tokens with no consumer at all
-        has_tile = ("{{ %s }}" % name) in tile
-        claims_kuma = UPTIME_KUMA_TAG in tags
-        if has_tile != claims_kuma:
-            wrong.append("%s: tile=%s but consumer_tags=%s" % (name, has_tile, tags))
-    assert not wrong, (
-        "consumer_tags disagrees with the rendered tile — each of these either rotates into a "
-        "stale Kuma monitor or deploys a role that renders the token nowhere: %s"
-        % wrong
-    )
-
-
-def test_the_tile_and_pusher_tags_are_both_real_deploy_targets():
-    """Both halves must be deployable in ONE run, which is what separates this from cross-host.
-
-    If `uptime-kuma` were not a valid deploy tag, `rotate --deploy` would exit 2 (the wrapper's
-    unmatched-tag guard) and rotate nothing — a fix that breaks the thing it fixes.
-    """
-    host_vars = (HOST_VARS / "daniel-box.yml").read_text()
-    assert "name: uptime-kuma" in host_vars, (
-        "uptime-kuma must be in daniel-box's containers_list for the tag to match anything"
-    )
-    assert "name: monitor-bridge" in host_vars
 
 
 # ── consumer_commands leaves a Flux-owned tag off the deploy.sh line (#4983) ──

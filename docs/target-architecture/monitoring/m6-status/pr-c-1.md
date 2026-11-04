@@ -50,4 +50,19 @@ preconditions quote them again.
 
 #### PR C-1b
 
-Nothing recorded.
+C-1b empties the `uptime-kuma` render down to its two claims. The PR body quotes its
+preconditions, its render and its `Removes-Object:` lines. The post-promotion read has not run:
+it needs `promote` to move `prod` to a commit that holds C-1b.
+
+**Files the plan does not list.** Each one pinned a deleted template, the deleted task, or a reader
+that went with them:
+
+- `uptime-kuma/defaults/main.yml` shrinks to the claims, because the renderer refuses
+  `flux_prepull_timeout` on a render with no workload.
+- `scripts/renderer/renderer_lib/task_inputs.py` drops `kuma_declarations`, and
+  `secret_checks.py`'s rule 5 names a different member.
+- `scripts/secrets_mgmt/consumers.py` no longer names `uptime-kuma` as a token's consumer, and
+  `kuma_status_page_sync_push_token` moves from tier `auto` to `assisted` until C-5.
+- `deploy_cross_role.py`'s k8s table loses `uptime-kuma` from the `kuma_push.py` row, which the
+  plan gave to C-3a. The row's other two members stay for C-3a.
+- `python-liquid` leaves the dev dependencies with the two tests that used it.

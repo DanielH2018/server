@@ -271,12 +271,9 @@ def test_a_removed_entry_changes_every_field():
 
 def test_the_real_tree_names_filter_readers():
     """The narrowing finds its readers by pattern, so it must still see named ones."""
-    reader = (
-        REPO
-        / "ansible/roles/k8s/uptime-kuma/templates/maintenance-sync-cronjob.yaml.j2"
-    )
+    reader = REPO / "ansible/roles/k8s/gpu-exporter/templates/daemonset.yaml.j2"
     assert containers.reader_reads(Path(reader).read_text()) == {
-        "uptime-kuma": {"name", "port"}
+        "gpu-exporter": {"name", "port"}
     }
 
 
@@ -287,7 +284,6 @@ def test_the_real_tree_names_filter_readers():
         "monitor-bridge/templates/env-secret.yaml.j2",
         "netpol-baseline/templates/networkpolicy-callers.yaml.j2",
         "pihole/templates/config/pihole-dnsmasq.conf.j2",
-        "uptime-kuma/templates/deployment.yaml.j2",
     ],
 )
 def test_a_former_list_loop_reads_named_fields_is_clean(template: str):

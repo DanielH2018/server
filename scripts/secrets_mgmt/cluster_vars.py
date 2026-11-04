@@ -117,8 +117,6 @@ ARGON2_DIGEST = re.compile(
 # of uptime-kuma's "Check every push token is in the format AutoKuma accepts" assert, which
 # stops running once D5 moves uptime-kuma to Flux (#5712). Under Flux the render carries only
 # placeholders, so `write` is the one step that reads the real token.
-# `ansible/tests/services/test_kuma_push_token_format.py` holds it equal to
-# `kuma_monitors._PUSH_TOKEN`, and holds every rendered push token to the `_push_token` suffix.
 PUSH_TOKEN = re.compile(r"[A-Za-z0-9]{32}")
 
 

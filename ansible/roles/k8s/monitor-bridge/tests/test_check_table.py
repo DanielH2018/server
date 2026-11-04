@@ -5,8 +5,6 @@ derive from it in Python, and the docs fragments derive from it through
 `ansible/filter_plugins/py_table.py`, which parses the module instead of running it. What is
 left to check is that each derivation reads what the table says.
 
-The Kuma side, that no tile carries a bridge token, is
-`ansible/tests/services/test_kuma_static_monitors.py::test_the_deleted_a6_tiles_are_not_declared`.
 The rows carry no secret since M6 batch A6-8, so nothing here reads `secrets.yml`.
 """
 

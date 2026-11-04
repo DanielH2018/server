@@ -272,9 +272,8 @@ def _bindings(
     Covers the spellings a reader takes: an assignment to a path expression, a `for` over a
     template glob (wrapped in `sorted()` or not), the same `for` inside a comprehension, a
     `@pytest.mark.parametrize` whose values enumerate templates, a `for` over a TUPLE of names
-    already bound this way — `_kuma_entities.py` reads its two
-    templates that way, which is why the resolution runs to a fixed point rather than in one
-    pass — and a name `imported` carries in from a sibling module.
+    already bound this way, which is why the resolution runs to a fixed point rather than in
+    one pass, and a name `imported` carries in from a sibling module.
 
     A path built under `tmp_path` is the module's own fixture rather than a deployed template,
     so it never binds: `test_nut_fsd_login_confined.py` lays out synthetic role trees.

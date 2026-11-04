@@ -46,41 +46,15 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
 )
 
 
-# Every push token has TWO consumers in the cluster, and this function names both. The pusher
-# reads it from its own role's env Secret; the Kuma monitor that receives the push is a static
-# AutoKuma entity rendered by k8s/uptime-kuma (`static-monitors.yaml.j2`, a
-# manifests_secret_file). AutoKuma reconciles the live monitor's `push_token` FROM that Secret,
-# so a rotation that redeploys only the pusher leaves Kuma expecting the old token: the bridge
-# then pushes a token nothing matches, the monitor stops beating, and it goes DOWN. That is
-# loud rather than silent, but it is a self-inflicted outage on every rotated push monitor, and
-# `rotate --deploy` stamped `last_rotated` green through it.
-#
-# Measured against the live registry and template: 43 tokens resolve a consumer, 42 of them
-# have a tile, and the single exception is `monitor_bridge_ha_token` — an HA API token that
-# carries the prefix for Kuma history reasons but is not a push token at all. So `_push_token`
-# is the exact discriminator, and `test_uptime_kuma_is_a_consumer_iff_a_tile_ exists` derives
-# the split from the template rather than trusting this comment.
-UPTIME_KUMA_TAG = "uptime-kuma"
-
-
 def consumer_tags(name: str) -> tuple[str, ...]:
     """Deploy tags whose redeploy makes a rotated push token take effect.
 
-    EMPTY when the consumer spans hosts or is self-referential — those stay MANUAL: the
-    unattended cron skips them, the audit still reminds. Both roles deploy from daniel-box in
-    ONE playbook run, so both tags are reachable by a single `rotate --deploy` — which is
-    exactly what distinguishes this from CROSS_HOST_PUSH_TOKENS, where the two halves sit on
-    different HOSTS and no redeploy can cover them. Those still return empty; a multi-tag
-    return there would assert a repair that cannot happen.
+    EMPTY when the consumer spans hosts or nothing reads the token: those stay MANUAL. The
+    unattended cron skips them, and the audit still reminds.
     """
     # This precedes the prefix rule below, so a token named in the set is never claimed by it.
     if name in CROSS_HOST_PUSH_TOKENS:
         return ()
-    elif name == "kuma_status_page_sync_push_token":
-        # The one token whose pusher and tile are the SAME role: the status-page-sync CronJob
-        # reads it from autokuma-credentials, and its tile is a static-file entity beside it.
-        # Returning the tag twice would be the honest reading of the rule below, and useless.
-        return (UPTIME_KUMA_TAG,)
     elif name.startswith("monitor_bridge_"):
         pusher = "monitor-bridge"
     elif name == "docker_fleet_push_token":
@@ -90,8 +64,6 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     else:
         # anything else unrecognised -> manual
         return ()
-    if name.endswith("_push_token"):
-        return (pusher, UPTIME_KUMA_TAG)
     return (pusher,)
 
 

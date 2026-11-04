@@ -31,9 +31,8 @@ and config templates) and `_shell_render` (`*.sh.j2`).
 
 Two things the rule deliberately does not reach:
 
-* **A role's `files/` copy.** `uptime-kuma/files/*.liquid` ships verbatim, so there is no
-  render to read and the text IS the artifact. `test_kuma_email_template.py` and
-  `test_kuma_discord_template.py` read one each, and neither names a `templates/` path.
+* **A role's `files/` copy.** It ships verbatim, so there is no render to read and the text
+  IS the artifact.
 #3196 named one blind spot, `test_healthchecks_pings.py`, whose `ANSIBLE.rglob("*")` census
 put no template path at its read site. #3190 converted that census to a render in the same
 wave, and the control read it kept IS visible here — so the module is a listed reader rather
@@ -90,10 +89,6 @@ TEMPLATE_SOURCE_READERS = {
     "k8s/test_priority_class_is_derived_from_tier.py": (
         "whether a tiered role's `pod_shell(...)` call passes a literal class or the derived "
         "one — both render the same `priorityClassName`, so only the source tells them apart"
-    ),
-    "services/_kuma_entities.py": (
-        "the `*_push_token` NAMES are a render INPUT — they decide which gated tiles render "
-        "at all, so they are read before the render rather than out of it"
     ),
     "setup/test_pi_service_lists_census.py": (
         "the red proof copies monitor-bridge's env template with the Pi's second key removed, "
@@ -247,10 +242,8 @@ KNOWN_MEMBERS = frozenset(
     {
         "services/_homepage_config.py",
         "services/_jellyfin_plugins.py",
-        "services/_kuma_entities.py",
         "services/test_authelia_access_tiers.py",
         "services/test_healthchecks_pings.py",
-        "services/test_kuma_static_monitors.py",
         "services/test_monitor_bridge_modules.py",
         "services/test_smtp_wiring.py",
         "services/test_strangler_bridge.py",

@@ -7,7 +7,7 @@ plane's rows, are pinned by
 """
 
 from lib import yaml_fast
-from _helpers import ALL_VARS, K8S_ROLES
+from _helpers import ALL_VARS, HOST_VARS, K8S_ROLES
 
 ROLE = K8S_ROLES / "netpol-baseline"
 DEFAULTS = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
@@ -64,3 +64,28 @@ def test_every_refused_row_names_its_policy() -> None:
         "expect": "refused",
     }
     assert _refused_rows_without_policy([*TARGETS, unnamed]) == {"sonarr-two"}
+
+
+def _portless_rows_without_a_port_to_read(
+    rows: list[dict], entries: list[dict]
+) -> set[str]:
+    """Rows with no `port` whose `entry_port(service)` would raise on `entries`."""
+    ports = {e["name"]: e.get("port") for e in entries}
+    return {
+        r["service"] for r in rows if "port" not in r and not ports.get(r["service"])
+    }
+
+
+def test_every_portless_row_names_an_entry_with_a_port_is_clean() -> None:
+    """A row without `port` reads its entry's through `entry_port`, which raises on a miss."""
+    box = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())
+    assert not _portless_rows_without_a_port_to_read(TARGETS, box["containers_list"])
+
+
+def test_a_portless_row_with_no_port_to_read_is_flagged() -> None:
+    rows = [{"service": "portless"}, {"service": "absent"}, {"service": "ported"}]
+    entries = [{"name": "portless"}, {"name": "ported", "port": 1}]
+    assert _portless_rows_without_a_port_to_read(rows, entries) == {
+        "portless",
+        "absent",
+    }
