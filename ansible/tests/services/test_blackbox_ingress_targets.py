@@ -1,6 +1,6 @@
 """The `blackbox-ingress` scrape job probes every ingress tile, built from `containers_list`.
 
-observability's `prometheus.yaml.j2` renders one target per tile the `kuma_ingress_monitors`
+observability's `prometheus.yaml.j2` renders one target per tile the `ingress_probe_targets`
 filter yields (docs/target-architecture/monitoring/m4-blackbox-ingress.md, *The probe job*).
 These guards render the job from the real inventory, with an entry added or changed where the
 question is what moves, so each states what Prometheus would receive.
@@ -16,7 +16,7 @@ Run: uv run pytest ansible/tests/services/test_blackbox_ingress_targets.py
 import copy
 
 from _k8s_render import host_context, render_role_template
-from kuma_monitors import kuma_ingress_monitors
+from ingress_probes import ingress_probe_targets
 from lib import yaml_fast
 from service_tier import in_service_tier
 
@@ -55,7 +55,7 @@ def unprobed_hostnames(
     domain = host_context()["domain"]
     return [
         tile["hostname"]
-        for tile in kuma_ingress_monitors(containers_list)
+        for tile in ingress_probe_targets(containers_list)
         if tile_url(tile["hostname"], domain) not in targets
     ]
 
@@ -69,7 +69,7 @@ def test_the_targets_are_the_filters_tiles_string_for_string():
     targets = job_targets()
     expected = [
         tile_url(tile["hostname"], ctx["domain"])
-        for tile in kuma_ingress_monitors(ctx["containers_list"])
+        for tile in ingress_probe_targets(ctx["containers_list"])
     ]
     assert list(targets) == expected
     services = {labels["service"] for labels in targets.values()}
@@ -81,7 +81,7 @@ def test_each_targets_labels_follow_its_entry_sso_and_tier():
     ctx = host_context()
     cl = ctx["containers_list"]
     targets = job_targets()
-    for tile in kuma_ingress_monitors(cl):
+    for tile in ingress_probe_targets(cl):
         critical = in_service_tier(cl, tile["entry"], "home-critical")
         assert targets[tile_url(tile["hostname"], ctx["domain"])] == {
             "service": tile["entry"],
@@ -92,7 +92,7 @@ def test_each_targets_labels_follow_its_entry_sso_and_tier():
     assert targets[tile_url("homepage", ctx["domain"])]["module"] == "http_sso_302"
 
 
-def test_a_new_entry_gets_a_target_and_kuma_false_removes_one():
+def test_a_new_entry_gets_a_target_and_probe_false_removes_one():
     domain = host_context()["domain"]
     sso = {**_NEW, "use_authelia": True, "auth_tier": "one_factor"}
     added = job_targets([*_entries(), sso])
@@ -102,7 +102,7 @@ def test_a_new_entry_gets_a_target_and_kuma_false_removes_one():
         "page_tier": "warning",
     }
     entries = _entries()
-    next(e for e in entries if e["name"] == "homepage")["kuma"] = False
+    next(e for e in entries if e["name"] == "homepage")["probe"] = False
     assert tile_url("homepage", domain) not in job_targets(entries)
 
 

@@ -1,11 +1,8 @@
 """Ansible filter plugin deriving Uptime Kuma's ingress tiles from `containers_list` (#3690).
 
-Every entry with a `hostname` is served at `https://<hostname>.local.<domain>`, and a probe of
-that URL needs nothing the entry does not already carry: the hostname gives the URL, `auth_tier`
-gives the expected status, and the entry's `tier` gives the page tier. So observability's
-`prometheus.yaml.j2` loops over `containers_list | kuma_ingress_monitors` to render one target
-per tile in the `blackbox-ingress` scrape job, which blackbox_exporter probes (M4). Kuma no
-longer renders these tiles.
+No template calls `kuma_ingress_monitors`, and no `containers_list` entry carries its `kuma`
+key: `ingress_probes.py:ingress_probe_targets` feeds the probe job. M6's C-4b deletes this
+plugin once D6 has removed the narrowing, which refuses a deleted plugin.
 
 An entry opts out with `kuma: false`. Two kinds of entry do, and each says which in a comment:
 one whose tile is hand-written because it probes something else (a path, a VIP, a ClusterIP,

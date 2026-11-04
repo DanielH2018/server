@@ -332,16 +332,16 @@ def pods_ready_at(pods_docs):
 def has_ingress_route(entry):
     """Whether `entry` renders an ingress probe target, as prometheus.yaml.j2 does.
 
-    The blackbox job loops over `containers_list | kuma_ingress_monitors`, so the same filter
+    The blackbox job loops over `containers_list | ingress_probe_targets`, so the same filter
     applied to this one entry is the render. An entry whose route was removed keeps an old
     `probe_success` series inside the lookback, which must not read as a stopped probe.
     """
     if entry is None:
         return False
     _sys.path.insert(0, str(FILTER_PLUGINS))
-    from kuma_monitors import kuma_ingress_monitors
+    from ingress_probes import ingress_probe_targets
 
-    return bool(kuma_ingress_monitors([entry]))
+    return bool(ingress_probe_targets([entry]))
 
 
 def alert_reference(tag, owner, applied_at, query):

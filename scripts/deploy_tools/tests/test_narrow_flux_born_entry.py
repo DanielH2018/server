@@ -35,7 +35,7 @@ FIELD_READERS = {
     "prowlarr": "{{ containers_list | published_ports | join(',') }}\n",
     "lidarr": "{{ containers_list | scrape_jobs('media') | to_json }}\n",
     "bazarr": "{{ containers_list | in_service_tier(peer, 'platform') }}\n",
-    "jellyfin": "{{ containers_list | kuma_ingress_monitors | to_json }}\n",
+    "jellyfin": "{{ containers_list | ingress_probe_targets | to_json }}\n",
     "radarr": "{{ containers_list | entry_names | join(',') }}\n",
 }
 EVERY_ENTRY_READERS = set(WHOLE_ENTRY_READERS) | {"radarr"}

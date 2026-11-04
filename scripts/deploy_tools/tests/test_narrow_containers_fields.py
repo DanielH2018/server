@@ -127,6 +127,7 @@ def test_an_added_entry_reaches_every_reader(tree: Tree):
         "{{ containers_list | metrics_port('crowdsec') }}",
         "{{ hostvars['daniel-pi'].containers_list | entry_port('alloy') }}",
         "{{ (containers_list | homepage_href('docs', domain)) }}",
+        "{% for tile in containers_list | ingress_probe_targets %}",
     ],
 )
 def test_a_filter_reader_has_the_filters_fields_is_clean(line: str):
@@ -245,7 +246,7 @@ def test_a_repeated_name_changes_every_field():
 
 
 def test_a_reorder_reaches_every_reader(tree: Tree):
-    """No field moves, but `scrape_jobs` and `kuma_ingress_monitors` render in list order."""
+    """No field moves, but `scrape_jobs` and `ingress_probe_targets` render in list order."""
     radarr = "  - name: radarr\n    platform: k8s\n"
     tree.write(
         BOX,
