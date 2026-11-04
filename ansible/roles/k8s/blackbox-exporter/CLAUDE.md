@@ -55,7 +55,7 @@ conventions.
 ## Editing
 - Modules: `files/blackbox.yml`, carried by `templates/configmap.yaml.j2` with the domain placeholder
   in the `dns_a_homepage` query name replaced by the LAN domain, so an
-  edit rolls the pod through the shared rollout gate. Check one with
+  edit, a comment included, moves the restart checksum and rolls the pod. Check one with
   `blackbox_exporter --config.check --config.file=files/blackbox.yml`.
 - Manifests: `templates/`. The Service renders from `ansible/templates/service-default.yaml.j2`, off the containers_list entry. No IngressRoute: callers reach it in-cluster by Service name.
 - Image pin, auto-deploy stance, resources and uid: `defaults/main.yml`.
