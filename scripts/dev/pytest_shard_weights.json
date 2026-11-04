@@ -525,6 +525,7 @@
  "ansible/tests/repo/test_host_package_case_inputs_census.py": 0.02,
  "ansible/tests/repo/test_host_package_cases_run_on_their_inputs.py": 36.65,
  "ansible/tests/repo/test_host_package_scans_run_on_every_pr.py": 0.0,
+ "ansible/tests/repo/test_host_test_image_cache.py": 0.03,
  "ansible/tests/repo/test_host_tool_pins_match_their_twins.py": 0.0,
  "ansible/tests/repo/test_host_write_rows.py": 0.0,
  "ansible/tests/repo/test_installed_units_log_level.py": 0.0,
