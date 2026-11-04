@@ -118,12 +118,13 @@ class Container:
             stdout=subprocess.DEVNULL,
         )
         # A docker exec that lands before PID 1 has its private socket up gets no answer at
-        # all, so the wait itself is retried until systemd answers.
+        # all, and one before PID 1 creates /run/systemd/system gets `offline`, so the wait
+        # itself is retried until systemd answers.
         deadline = time.monotonic() + 180
         while True:
             result = self.sh("timeout 120 systemctl is-system-running --wait")
             state = result.stdout.strip()
-            if state or time.monotonic() > deadline:
+            if state not in ("", "offline") or time.monotonic() > deadline:
                 break
             time.sleep(1)
         if state not in ("running", "degraded"):

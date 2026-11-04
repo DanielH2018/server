@@ -8,6 +8,7 @@ Run: uv run pytest scripts/validate/tests/test_bootstrap_case.py
 """
 
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -181,6 +182,26 @@ def test_a_container_boots_with_the_hostname_network_and_mounts_it_is_given(
     assert "/a:/b:ro" in named_run
     assert default_run[default_run.index("--hostname") + 1] == "daniel-pi"
     assert "--network" not in default_run
+
+
+def test_a_boot_that_reads_offline_before_systemd_starts_waits_for_it(
+    monkeypatch, tmp_path
+):
+    answers = iter(["offline\n", "", "running\n", "Python 3.12.3\n"])
+    seen = []
+
+    def fake_sh(self, command, **kwargs):
+        seen.append(command)
+        return subprocess.CompletedProcess(command, 0, next(answers), "")
+
+    monkeypatch.setattr(subprocess, "run", lambda argv, **kwargs: None)
+    monkeypatch.setattr(Container, "sh", fake_sh)
+    monkeypatch.setattr(time, "sleep", lambda seconds: None)
+
+    Container("img", "c", tmp_path).boot("3.12")
+
+    assert seen[-1] == "python3 --version"
+    assert len(seen) == 4
 
 
 def test_the_host_packages_job_runs_the_bootstrap_cases():
