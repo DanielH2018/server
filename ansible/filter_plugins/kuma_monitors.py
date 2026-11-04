@@ -4,29 +4,11 @@ No template calls `kuma_ingress_monitors`, and no `containers_list` entry carrie
 key: `ingress_probes.py:ingress_probe_targets` feeds the probe job. M6's C-4b deletes this
 plugin once D6 has removed the narrowing, which refuses a deleted plugin.
 
-An entry opts out with `kuma: false`. Two kinds of entry do, and each says which in a comment:
-one whose tile is hand-written because it probes something else (a path, a VIP, a ClusterIP,
-an expected status Authelia does not set), and one with no tile yet.
+`kuma_malformed_push_tokens` returns the push declarations AutoKuma would refuse, whose
+`push_token` is not 32 letters and digits (#3985).
 
-`kuma: {id: <stem>, name: <display name>}` overrides the derived identity. Both exist for the
-estate that predates the derivation, whose ids and names were hand-picked:
-
-- The AutoKuma id is `<stem>-k8s`, and the stem defaults to the entry's `name`. AutoKuma runs
-  with `ON_DELETE=delete` (#2076), so a changed id deletes the monitor and its history. The
-  `-k8s` suffix is forced, not defaulted, because the status page's `Services` group rule
-  matches `-k8s$` (uptime-kuma's `uptime_kuma_k8s_status_page_groups`); a generated tile can
-  therefore never land outside a named group.
-- The display name defaults to `k3s <name>`. It is what Kuma shows, but it is not the
-  identity.
-
-`kuma_malformed_push_tokens` guards the other direction: AutoKuma refuses a push declaration
-whose `push_token` is not 32 letters and digits, logs one WARN per sync, and never creates the
-monitor (#3985). The pusher then gets HTTP 404 and nothing pages. uptime-kuma's tasks assert
-over it so the deploy fails instead.
-
-No Ansible import, so `probe_lib/kuma_table_loop.py` and the status-page census read the same
-function the playbook runs. `FilterModule` registers each filter through `_as_filter`, so a
-refusal reaches the operator as `AnsibleFilterError("<filter>: ...")` (#4505).
+`FilterModule` registers each filter through `_as_filter`, so a refusal reaches the operator as
+`AnsibleFilterError("<filter>: ...")` (#4505).
 """
 
 import re
