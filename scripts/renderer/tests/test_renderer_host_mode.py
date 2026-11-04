@@ -338,17 +338,21 @@ def test_an_entry_naming_two_sources_is_flagged(hosts, sources):
 
 
 def test_a_shared_file_is_copied_byte_for_byte(hosts):
-    root = hosts({"files": [{"shared": "kuma-push-lib.sh", "dst": "/usr/lib/x.sh"}]})
-    source = root.parent / host_mode.SHARED_FILES["kuma-push-lib.sh"]
+    root = hosts(
+        {"files": [{"shared": "homelab-check-lib.sh", "dst": "/usr/lib/x.sh"}]}
+    )
+    source = root.parent / host_mode.SHARED_FILES["homelab-check-lib.sh"]
     source.parent.mkdir(parents=True)
-    source.write_text("kuma_push() { :; }\n")
+    source.write_text("check() { :; }\n")
     assert host_mode.render_host("daniel-pi", root).files["/usr/lib/x.sh"] == (
-        b"kuma_push() { :; }\n",
+        b"check() { :; }\n",
         0o644,
     )
 
 
-@pytest.mark.parametrize("name", ["../../etc/passwd", "kuma-push-lib", "secrets.yml"])
+@pytest.mark.parametrize(
+    "name", ["../../etc/passwd", "homelab-check-lib", "secrets.yml"]
+)
 def test_a_shared_name_off_the_allowlist_is_flagged(hosts, name):
     root = hosts({"files": [{"shared": name, "dst": "/x"}]})
     with pytest.raises(RenderRefused, match="is not one of"):

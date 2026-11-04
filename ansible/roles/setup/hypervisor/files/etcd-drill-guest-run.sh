@@ -64,8 +64,8 @@ echo "== k3s binary: $(k3s --version 2>/dev/null | head -1)"
 . "$S3_ENV"
 : "${AWS_ACCESS_KEY_ID:?}" "${AWS_SECRET_ACCESS_KEY:?}" "${ETCD_S3_BUCKET:?}" "${ETCD_S3_ENDPOINT:?}"
 
-# Credentials go in through a config file on stdin, never argv — the same shape kuma-push-lib.sh
-# uses for its push token. Region `auto` is what R2 signs against.
+# Credentials go in through a config file on stdin, never argv. Region `auto` is what R2 signs
+# against.
 r2_get() {
   printf 'user = "%s:%s"\n' "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" |
     curl -fsS --max-time 300 -K - --aws-sigv4 "aws:amz:auto:s3" "$@"

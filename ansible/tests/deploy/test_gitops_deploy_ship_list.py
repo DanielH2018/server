@@ -245,7 +245,6 @@ def _install(tmp_path, dest_template=None, omit=()):
         (tmp_path / name).unlink(missing_ok=True)
     for name in (
         "host_lib.py",
-        "kuma_push.py",
         *sorted(set(HOST_LIB_ONLY) - set(omit)),
     ):
         shutil.copy(HOST_LIB_FILES / name, tmp_path / name)

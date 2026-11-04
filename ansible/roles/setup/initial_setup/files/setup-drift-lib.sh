@@ -16,7 +16,7 @@
 # asserts onto k3s_server_hosts), so daniel-server — which renders the whole UPS shutdown chain —
 # had no reader at all. A second implementation there would be free to drift from this one, and
 # the fault these arms exist to catch is precisely two copies of a thing disagreeing. Same
-# reasoning, and the same /usr/local/lib home, as kuma-push-lib.sh.
+# reasoning, and the same /usr/local/lib home, as homelab-check-lib.sh.
 #
 # Callers set REPO_DIR and then call setup_drift_scan. It sets four globals rather than printing:
 #   DRIFTED  comma-joined arm-2 offenders, empty when clean

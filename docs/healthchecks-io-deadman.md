@@ -57,7 +57,7 @@ below on 2026-09-25.
 --8<-- "assets/generated/fragments/deadman-graces.md"
 
 **The 20-minute grace on the 10-minute checks is derived, not chosen.** Their crons skip
-their first run after a boot — `boot_grace_active` in `kuma-push-lib.sh`, sized by
+their first run after a boot — `boot_grace_active` in `homelab-check-lib.sh`, sized by
 `k3s_health_cron_boot_grace_s` — so the widest legitimate gap between two pings is *two* periods,
 20 minutes, not one. The grace has to cover that gap, so 20 minutes is the floor. At 30 minutes
 a genuinely dead cron would sit undetected through three slots.

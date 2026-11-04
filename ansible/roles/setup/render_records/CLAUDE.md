@@ -40,7 +40,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 5. It runs `deploy.sh --dry-run --skip-staleness-check -e manifests_render_record=true` over
    that list. The staleness gate is skipped because the chosen commit may sit below the tip;
    the record names its own commit, which is what the reader compares.
-6. It reads every record back and pushes the verdict to the `render-records` Kuma tile.
+6. It reads every record back and logs the verdict.
 
 ## Autonomous-role contract (it runs a playbook hourly with no human in the loop)
 

@@ -345,8 +345,9 @@ this a DOWN that clears is gone. The file's lines are the Pi's only entries in
 `{job="syslog"} |= "status=down"`.
 
 Two independent gaps kept daniel-pi out of that view, and closing either alone would have
-changed nothing: the crons emitted no `status=` token, because `kuma-push-lib.sh` calls
-`logger` only when the *push* fails, and there was no path to Loki for it anyway, because
+changed nothing: the crons emitted no `status=` token, because `kuma-push-lib.sh`, since
+deleted by #7109, called `logger` only when the *push* failed, and there was no path to Loki
+for it anyway, because
 rsyslog is masked on this host. A file plus a static log source needs no new daemon, and
 carries about 576 lines/day where the whole journal would be about 38k.
 

@@ -112,7 +112,7 @@ def test_the_copy_keeps_the_package_directory_on_the_host():
 
 def test_the_reader_imports_from_the_installed_layout(tmp_path):
     # Each file goes where the copy task's rendered `dest:` puts it, re-rooted at tmp_path, with
-    # host_lib and kuma_push beside the reader as install_host_lib.yml puts them. The removal
+    # host_lib beside the reader as install_host_lib.yml puts it. The removal
     # task then runs too, so a flattening `dest` leaves the package empty here as on the host.
     for src, live in _installed().items():
         target = tmp_path / live.removeprefix(f"{INSTALL_DIR}/")
@@ -122,8 +122,7 @@ def test_the_reader_imports_from_the_installed_layout(tmp_path):
         "loop"
     ]:
         (tmp_path / name).unlink(missing_ok=True)
-    for name in ("host_lib.py", "kuma_push.py"):
-        shutil.copy(HOST_LIB_FILES / name, tmp_path / name)
+    shutil.copy(HOST_LIB_FILES / "host_lib.py", tmp_path / "host_lib.py")
     proc = subprocess.run(
         [
             sys.executable,

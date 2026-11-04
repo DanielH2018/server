@@ -388,7 +388,7 @@ checks each gate suppresses.
   it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
   the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.
   The CrowdSec sidecar's job reports that as an `up` skip. Each host cron consults `wan_reachable`
-  in `ansible/roles/setup/initial_setup/files/kuma-push-lib.sh` on the failure path that reached
+  in `ansible/roles/setup/initial_setup/files/homelab-check-lib.sh` on the failure path that reached
   the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider answers.
   The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for
@@ -416,9 +416,10 @@ checks each gate suppresses.
   rest of the recovery chain at risk. No gate and no streak: a file read has no upstream to wait
   on, and a stale stamp does not heal by itself. Runbook: `k3s-etcd-restore`.)
 - **`swallowed_verdicts`** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged and then
-  lost, #1869. The library returns 0 after a failed push by design, so the cron does not fail, and
-  the verdict reaches nobody until the tile's heartbeat deadline (a day and an hour later for the
-  daily drift producers). `check_swallowed_verdicts` reads the crons' push-outcome lines out of
+  lost, #1869. The library returned 0 after a failed push by design, so the cron did not fail, and
+  the verdict reached nobody until the tile's heartbeat deadline (a day and an hour later for the
+  daily drift producers). #7109 deleted the library, so no cron writes the `push failed (` line,
+  and M6's C-7 deletes this row. `check_swallowed_verdicts` reads the crons' push-outcome lines out of
   Loki over `SWALLOWED_VERDICTS_WINDOW_S` (3h): the cron's own `status=<up|down>` line and the
   library's final `push failed (` line, with the transient-retry line excluded in the LogQL. It
   uses `src.loki_lines`, a range query, because the newest line per tag decides and no metric

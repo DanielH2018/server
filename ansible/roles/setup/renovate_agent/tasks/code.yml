@@ -53,5 +53,3 @@
         src: ansible/roles/setup/gitops_deploy/files/gitops_hold.py
       - live: /opt/renovate-agent/host_lib.py
         src: hosts/lib/host_lib.py
-      - live: /opt/renovate-agent/kuma_push.py
-        src: hosts/lib/kuma_push.py

@@ -236,10 +236,12 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
 # at that line. Every other check misses it: the templates render, ansible-lint passes, and the
 # abort only happens on the branch that reads the variable, such as the DEGRADED-run branch.
 #
-# A read is satisfied when the same template assigns it, when kuma-push-lib.sh does (every one
-# of these sources it), or when it is in _CRON_ENV below. Forms that survive `set -u` --
+# A read is satisfied when the same template assigns it, when homelab-check-lib.sh does, or when
+# it is in _CRON_ENV below. Forms that survive `set -u` --
 # ${VAR:-}, ${VAR-}, ${VAR:+}, ${VAR+}, ${VAR:=}, ${VAR=} -- are not reads. Nothing else is
 # exempt: ${VAR#...}, ${VAR//...} and ${#VAR} all abort on an unset VAR just as `$VAR` does.
+
+CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 
 # Environment the unit supplies, with provenance (test_the_cron_env_allowlist_is_still_exported).
 _CRON_ENV = {
@@ -247,8 +249,6 @@ _CRON_ENV = {
     "KUBECONFIG": "Environment= of homelab-docs-refresh.service",
     "HOME": "Environment= of homelab-eval-sweep.service",
 }
-
-KUMA_PUSH_LIB = REPO / "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"
 
 # Templates whose reads are checked, and one name each that the read census MUST contain. A
 # census that silently stops matching returns an empty set, and "no unsatisfied reads" is what
@@ -306,10 +306,10 @@ def shell_assignments(text: str) -> set[str]:
 
 
 def unsatisfied_reads(text: str) -> set[str]:
-    """Names the script reads that neither it, the shared library, nor the cron env supplies."""
+    """Names the script reads that neither it, the check library, nor the cron env supplies."""
     supplied = (
         shell_assignments(text)
-        | shell_assignments(KUMA_PUSH_LIB.read_text())
+        | shell_assignments(CHECK_LIB.read_text())
         | set(_CRON_ENV)
     )
     return shell_reads(text) - supplied
@@ -324,7 +324,7 @@ def test_every_variable_a_cron_reads_is_one_it_can_see(path):
     missing = unsatisfied_reads(read(path))
     assert not missing, (
         f"{path.name} reads {sorted(missing)} under `set -u` without assigning them, sourcing "
-        f"them from kuma-push-lib.sh, or their being cron environment named in _CRON_ENV. "
+        f"them from homelab-check-lib.sh, or their being cron environment named in _CRON_ENV. "
         f"Each one aborts the script at that line the first time its branch is taken."
     )
 
@@ -387,7 +387,7 @@ def test_the_cron_env_allowlist_is_still_exported():
 #
 # /proc is mounted without hidepid on all three hosts, so any local user can read another user's
 # /proc/<pid>/cmdline. A Kuma push token in there is enough to forge or suppress a heartbeat,
-# which hides a real outage. kuma-push-lib.sh:26-30 states the threat model; the fix is to feed
+# which hides a real outage. The fix is to feed
 # the token-bearing URL to curl on stdin as a config file (`-K -`) instead of as an argument.
 #
 # WHY THE CORPUS IS DERIVED, NOT LISTED. A guard that iterates only the files its own fix
@@ -420,19 +420,11 @@ _ASSIGNMENT = re.compile(r"\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=")
 # curl's config-file flag. Bounded so `--keepalive` and `-Ku` do not count as a match.
 _CURL_CONFIG_FLAG = re.compile(r"(?<![\w-])-K(?![\w-])")
 
-# Sources kuma-push-lib.sh (any install path), with the reason each exemption is honest.
-_LIBRARY_EXEMPT: dict[str, str] = {
-    # Empty since M6 batch B4's Cutover-1a dropped renovate-notify.service.j2's inline push, the
-    # last exemption. A new one is a named template with the reason it cannot source the library.
-}
-
 # Files whose disappearance from the corpus means the derivation broke, not that the estate
 # changed. M6 batch B9's Cutover-2 took the last two shell push scripts, aide-check.sh.j2 and
 # rkhunter-check.sh.j2, out of the corpus, and M6's C-1b took authelia's config-secret with its
 # bypass regex. The one template left carries a push URL but invokes no curl of its own:
-# loki-homelab's config.alloy. No `.sh.j2` member stands here any more, so
-# test_every_shell_push_script_sources_the_shared_library skips every file and passes on any
-# corpus. C-3a deletes the library, and that test with it.
+# loki-homelab's config.alloy.
 _EXPECTED_IN_CORPUS = {
     "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2",
 }
@@ -508,36 +500,7 @@ def test_no_push_token_reaches_curls_argv():
         "these templates pass a token-bearing push URL to curl as an argv element, which "
         "exposes it in /proc/<pid>/cmdline for the life of the call. Feed it in on stdin "
         'instead -- `printf \'url = "%s"\\n\' "$URL" | curl -G -K - ...`, as '
-        f"kuma-push-lib.sh:41-46 does: {offenders}"
-    )
-
-
-def test_every_shell_push_script_sources_the_shared_library():
-    """crons.yml:15-19 asserts this in prose.
-
-    A file that cannot source it is named with its reason in _LIBRARY_EXEMPT (none is today) and stays bound by the
-    argv assertion above.
-    """
-    offenders = []
-    for path, text in push_corpus().items():
-        if path.name in _LIBRARY_EXEMPT or not path.name.endswith(".sh.j2"):
-            continue
-        if "kuma-push-lib.sh" not in text:
-            offenders.append(str(path.relative_to(REPO)))
-    assert not offenders, (
-        "these push scripts do not source the shared library, contradicting crons.yml:15-19. "
-        "Either source it or add a named exemption to _LIBRARY_EXEMPT with the reason: "
-        + ", ".join(offenders)
-    )
-
-
-def test_the_library_exemptions_still_name_live_files():
-    """An exemption for a file that no longer exists silently widens the next one."""
-    names = {path.name for path in push_corpus()}
-    stale = set(_LIBRARY_EXEMPT) - names
-    assert not stale, (
-        "_LIBRARY_EXEMPT names templates that are no longer in the push corpus: "
-        + ", ".join(sorted(stale))
+        f"not as an argument: {offenders}"
     )
 
 

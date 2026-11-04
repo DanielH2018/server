@@ -198,9 +198,8 @@ with the reason.
   hand applies, since `k3s` runs from `k3s-bringup.yml` and `optimize_pi` runs on daniel-pi only,
   so it routes `common` to `manual_plane`, whose remediation names both commands.
 
-A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` and
-`kuma_push.py` into their health CronJobs' ConfigMaps, and `autofix-bridge` and `uptime-kuma`
-stage `kuma_push.py`. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.k8s` when a file
+A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` into
+their health CronJobs' ConfigMaps. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.k8s` when a file
 it stages changes. The deployer applies a k8s role only for an image-pin bump, so each one defer-and-alerts
 and records a `k8s_unapplied` line. The same test holds that table to the k8s roles' tasks.
 
@@ -1359,8 +1358,9 @@ the tick applies it on daniel-box, and daniel-server and daniel-pi need
 target=daniel-pi` for the Pi) run by an operator.
 
 **The two GitHub crons** are daily kuma-check timers on the deploy host (`check_timer.yml`
-in the `common` role). Each pushes its own Kuma tile through `kuma-push-lib.sh`, exits 1 on a
-down verdict, and `Restart=on-failure` reruns it every 30 minutes until it exits 0. Both
+in the `common` role). Each writes its verdict through `write_check_textfile`, which the rules
+in `gitops-checks.yaml` read, and pushes to nothing. Each exits 1 on a down verdict, and
+`Restart=on-failure` reruns it every 30 minutes until it exits 0. Both
 authenticate with the deploy user's `gh auth token`, and without it both are red, because GitHub
 shows a ruleset's bypass list only to an admin. The timers are `Persistent=true`, so a slot missed
 inside an outage runs at boot. `teardown.yml` imports the same names absent, which reaps the

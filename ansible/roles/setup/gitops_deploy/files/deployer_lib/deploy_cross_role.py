@@ -54,7 +54,6 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     # alone (`gitops_deploy/tasks/code.yml` copies it), and the longhorn_lib modules are the
     # k3s role's backup-health reader's (`k3s/tasks/health-crons.yml` copies them).
     "hosts/lib/host_lib.py": _HOST_LIB,
-    "hosts/lib/kuma_push.py": _HOST_LIB,
     "hosts/lib/ci_verdict.py": frozenset({"gitops_deploy"}),
     f"{_LH}/longhorn_backup_health_logic.py": _K3S,
     f"{_LH}/longhorn_backups.py": _K3S,
@@ -113,14 +112,10 @@ SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
 # naming them in `cs.k8s` is what keeps their copy of `host_lib.py` from going stale unseen.
 # `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
 # No k8s role copies host_lib.py onto a host since H2.5c: configarr's and janitorr's health
-# readers stage host_lib.py and kuma_push.py into their CronJobs' ConfigMaps, so no k8s role
+# readers stage host_lib.py into their CronJobs' ConfigMaps, so no k8s role
 # imports install_host_lib.yml or stamp_deployed.yml any more.
 K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
     "hosts/lib/host_lib.py": frozenset({"configarr", "janitorr"}),
-    # configarr and janitorr stage it into a pod's ConfigMap (#3745). autofix-bridge left the
-    # list at M6 batch B7's Cutover-2, when its push went, crowdsec at B6b's, when its
-    # crowdsec-jobs sidecar stopped importing it, and uptime-kuma at C-1b, with its CronJobs.
-    "hosts/lib/kuma_push.py": frozenset({"configarr", "janitorr"}),
 }
 
 

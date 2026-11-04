@@ -198,7 +198,6 @@ files:
   - {src: files/claude_triage_run.py, dst: /opt/claude-triage/claude_triage_run.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: files/claude_triage_poll.py, dst: /opt/claude-triage/claude_triage_poll.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {lib: host_lib.py, dst: /opt/claude-triage/host_lib.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
-  - {lib: kuma_push.py, dst: /opt/claude-triage/kuma_push.py, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-prompt.txt.j2, dst: /opt/claude-triage/prompt.txt, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-config.env.j2, dst: /etc/claude-triage/config.env, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
   - {src: templates/claude-triage-tmpfiles.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-claude-triage.conf, when: "claude_code_agent_user_enabled and claude_code_triage_enabled"}
