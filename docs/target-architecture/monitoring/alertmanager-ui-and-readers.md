@@ -1,6 +1,6 @@
 # Alertmanager's UI and the services that read or silence it
 
-Status: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), closed 2026-10-31). B-6a shipped the `admins` option ([#6743](https://github.com/DanielH2018/server/pull/6743)); the operator has not recorded the ruling on open question 1.
+Status: DECIDED (spike [#6688](https://github.com/DanielH2018/server/issues/6688), closed 2026-10-31). B-6a shipped the `admins` option ([#6743](https://github.com/DanielH2018/server/pull/6743)); the operator accepted that option on 2026-11-05 (open question 1).
 
 Alertmanager became the homelab's paging path when M6 began retiring Uptime Kuma. Nothing
 outside the cluster can see it. During M6's cutovers on 2026-10-30 and 2026-10-31, every read of
@@ -118,8 +118,8 @@ only, so the second route needs a sentence in the observability role's `CLAUDE.m
 has no groups and no TOTP (`docs/claude-tooling.md:485`), so it cannot pass a `two_factor`
 rule. The `claude-ui` user has a seeded TOTP and is in `admins`
 (`ansible/roles/k8s/authelia/defaults/main.yml:150`). A `-m ui` test can therefore load the
-Alertmanager UI. The same reach means a Claude-driven browser on that tier could create a
-silence. Open question 1 asks the operator whether that is acceptable.
+Alertmanager UI. The same reach means a Claude-driven browser on that tier can create a
+silence. The operator accepted that on 2026-11-05 (open question 1).
 
 **To silence an alert during a planned window, the operator uses (b).** They open
 `alertmanager.local.<domain>`, pass Authelia with a second factor, and create a silence with a
@@ -214,11 +214,14 @@ the operator can see a silence they create during Phase C.
 ## Open questions
 
 1. **Can a Claude-driven browser silence a page?** The `claude-ui` user is in `admins` and has
-   a seeded TOTP, so it passes B-6a's rule. The options are to accept it, which keeps `-m ui`
+   a seeded TOTP, so it passes B-6a's rule. The options were to accept it, which keeps `-m ui`
    coverage of the Alertmanager UI, or to name a narrower group that excludes `claude-ui` and
-   cover the UI by hand. **Operator-only.** B-6a shipped the `admins` option
-   ([#6743](https://github.com/DanielH2018/server/pull/6743), 2026-10-31); the operator has
-   not recorded the ruling.
+   cover the UI by hand. B-6a shipped the `admins` option
+   ([#6743](https://github.com/DanielH2018/server/pull/6743), 2026-10-31).
+   **Answered 2026-11-05: accept** (the operator's ruling, recorded under
+   [#7249](https://github.com/DanielH2018/server/issues/7249)). The `claude-ui` user stays in
+   `admins`, so a Claude-driven browser may silence a page, and `-m ui` keeps its coverage of
+   the Alertmanager UI.
 2. **Is an unauthenticated LAN read of `/api/v2/alerts` and `/api/v2/silences` acceptable?**
    It exposes silence comments and creators beyond what the Prometheus door exposes.
    **Answered 2026-10-31: yes** (the operator's ruling on
