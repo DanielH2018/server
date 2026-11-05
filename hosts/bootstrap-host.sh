@@ -113,6 +113,12 @@ K3S_BIN=/usr/local/bin/k3s
 # 504 for about five minutes (CI run 42054080101), and a wrong pin costs the same wait to fail.
 RETRY_ATTEMPTS=13
 RETRY_DELAY=30
+# Covers the whole transfer: uv, the largest archive at 17 MB, needs 140 KB/s to finish in time.
+# curl's own --retry repeats a timed-out request, so a host that stalls every request takes
+# about 110 minutes to reach die.
+FETCH_MAX_TIME=120
+# install.sh's own curl has no limit. The k3s binary is 82 MB, which needs 140 KB/s to finish in time.
+K3S_INSTALLER_MAX_TIME=600
 SYSTEMD_DIR=/etc/systemd/system
 # The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
 # as the updater's own fetch does.
@@ -312,7 +318,7 @@ fetch() {
         [ -f "$kit/$name" ] || die "the offline kit has no $name"
         cp "$kit/$name" "$3"
     else
-        retry "the fetch of $name" curl -fsSL --retry 3 -o "$3" "$1" || die "cannot fetch $1"
+        retry "the fetch of $name" curl -fsSL --retry 3 --max-time "$FETCH_MAX_TIME" -o "$3" "$1" || die "cannot fetch $1"
     fi
     [ "$(sha_of "$3")" = "$2" ] || die "$name does not match its pinned sha256 $2"
 }
@@ -332,12 +338,12 @@ run_k3s_installer() {
             INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC=server \
             INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_START=true \
             INSTALL_K3S_SKIP_DOWNLOAD="$skip_download" \
-            sh "$k3s_tmp/install.sh"
+            timeout "$K3S_INSTALLER_MAX_TIME" sh "$k3s_tmp/install.sh"
     else
         INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC=agent \
             INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_START=true \
             INSTALL_K3S_SKIP_DOWNLOAD="$skip_download" \
-            sh "$k3s_tmp/install.sh"
+            timeout "$K3S_INSTALLER_MAX_TIME" sh "$k3s_tmp/install.sh"
     fi
 }
 

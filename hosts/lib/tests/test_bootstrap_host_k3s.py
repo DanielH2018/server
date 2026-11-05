@@ -115,6 +115,29 @@ def test_an_installer_that_fails_once_is_run_again_and_the_bootstrap_continues(
     assert "stopped after step 4" in result.stdout
 
 
+@pytest.mark.parametrize(
+    ("hostname", "env"),
+    [("daniel-server", AGENT_ENV), ("daniel-box", {})],
+    ids=["agent", "server"],
+)
+def test_an_installer_that_stalls_is_killed_at_its_bound_and_run_again(
+    tmp_path, hostname, env
+):
+    host = FakeHost(tmp_path, hostname=hostname)
+    host.stock_kit()
+    host.pin("K3S_INSTALLER_MAX_TIME=600", "K3S_INSTALLER_MAX_TIME=1")
+    host._stub("sleep", f'echo "sleep $*" >> {host.log}')
+
+    # capture_output waits for the pipes to close, so a surviving child also fails this run.
+    result = host.run(
+        hostname, "--offline", str(host.kit), "--until", "4", HANG_RUNS="1", **env
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert (host.root / "installer.runs").read_text().splitlines() == ["run", "run"]
+    assert host.commands() == ["sleep 30"]
+
+
 def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
     host = stocked_server(tmp_path)
     host._stub("sleep", f'echo "sleep $*" >> {host.log}')
