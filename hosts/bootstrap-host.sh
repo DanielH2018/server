@@ -109,6 +109,8 @@ ROOT=${HOMELAB_ROOT:-}
 KEYRING=/usr/share/keyrings/homelab-archive-keyring.gpg
 SOURCES=/etc/apt/sources.list.d/homelab.sources
 K3S_BIN=/usr/local/bin/k3s
+RETRY_ATTEMPTS=4
+RETRY_DELAY=30
 SYSTEMD_DIR=/etc/systemd/system
 # The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
 # as the updater's own fetch does.
@@ -287,6 +289,20 @@ sha_of() {
     sha256sum "$1" | awk '{ print $1 }'
 }
 
+# retry <what> <command...>: run the command up to RETRY_ATTEMPTS times, RETRY_DELAY seconds apart.
+# A release outage outlasts curl's own --retry, whose backoff totals 7 seconds.
+retry() {
+    what=$1
+    shift
+    attempt=1
+    until "$@"; do
+        [ "$attempt" -lt "$RETRY_ATTEMPTS" ] || return 1
+        echo "bootstrap-host: $what failed on attempt $attempt of $RETRY_ATTEMPTS, so it runs again in ${RETRY_DELAY}s"
+        attempt=$((attempt + 1))
+        sleep "$RETRY_DELAY"
+    done
+}
+
 # fetch <url> <sha256> <dest>: download, or copy from the kit, then check the pin.
 fetch() {
     name=${1##*/}
@@ -294,9 +310,26 @@ fetch() {
         [ -f "$kit/$name" ] || die "the offline kit has no $name"
         cp "$kit/$name" "$3"
     else
-        curl -fsSL --retry 3 -o "$3" "$1" || die "cannot fetch $1"
+        retry "the fetch of $name" curl -fsSL --retry 3 -o "$3" "$1" || die "cannot fetch $1"
     fi
     [ "$(sha_of "$3")" = "$2" ] || die "$name does not match its pinned sha256 $2"
+}
+
+# The installer's mode is explicit, and K3S_URL and K3S_TOKEN reach it on an agent only.
+# Neither the token nor the environment is printed.
+run_k3s_installer() {
+    if [ "$k3s_mode" = server ]; then
+        env -u K3S_URL -u K3S_TOKEN \
+            INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC=server \
+            INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_START=true \
+            INSTALL_K3S_SKIP_DOWNLOAD="$skip_download" \
+            sh "$k3s_tmp/install.sh"
+    else
+        INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC=agent \
+            INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_START=true \
+            INSTALL_K3S_SKIP_DOWNLOAD="$skip_download" \
+            sh "$k3s_tmp/install.sh"
+    fi
 }
 
 # Step 4: the one-time host steps, each behind a guard that reads the state first.
@@ -367,20 +400,9 @@ if [ -n "$k3s_mode" ]; then
             install -D -m 0755 "$kit/$kit_bin" "$ROOT$K3S_BIN"
             skip_download=true
         fi
-        # The installer's mode is explicit, and K3S_URL and K3S_TOKEN reach it on an agent only.
-        # Neither the token nor the environment is printed.
-        if [ "$k3s_mode" = server ]; then
-            env -u K3S_URL -u K3S_TOKEN \
-                INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC=server \
-                INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_START=true \
-                INSTALL_K3S_SKIP_DOWNLOAD="$skip_download" \
-                sh "$k3s_tmp/install.sh" || die "the k3s installer failed"
-        else
-            INSTALL_K3S_VERSION="$K3S_VERSION" INSTALL_K3S_EXEC=agent \
-                INSTALL_K3S_SKIP_ENABLE=true INSTALL_K3S_SKIP_START=true \
-                INSTALL_K3S_SKIP_DOWNLOAD="$skip_download" \
-                sh "$k3s_tmp/install.sh" || die "the k3s installer failed"
-        fi
+        # install.sh's binary download makes one request, and a failed one writes nothing to the
+        # host. Every write after it replaces its target, so a rerun is safe at any point.
+        retry "the k3s installer" run_k3s_installer || die "the k3s installer failed"
     fi
     # Exactly one k3s unit exists, the one this host's role names.
     [ -e "$ROOT$SYSTEMD_DIR/$k3s_unit" ] || die "$k3s_unit does not exist after the installer"

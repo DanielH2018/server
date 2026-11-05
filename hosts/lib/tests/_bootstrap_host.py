@@ -24,10 +24,19 @@ AGE_KEY = "etc/homelab/age.key"
 NFPM_ARCHIVE = "nfpm_2.48.0_Linux_x86_64.tar.gz"
 UV_ARCHIVE = "uv-x86_64-unknown-linux-gnu.tar.gz"
 
+AGENT_ENV = {
+    "K3S_URL": "https://server.invalid:6443",
+    "K3S_TOKEN": "secret-token-value",
+}
+
 # Records what the installer was given, then creates the unit its mode names. A case that sets
-# WRONG_UNIT=1 makes it create the other mode's unit.
+# WRONG_UNIT=1 makes it create the other mode's unit, and FAIL_RUNS=n makes its first n runs fail.
 INSTALLER = """#!/bin/sh
 echo run >> "$HOMELAB_ROOT/installer.runs"
+if [ "$(wc -l < "$HOMELAB_ROOT/installer.runs")" -le "${FAIL_RUNS:-0}" ]; then
+    echo '[ERROR]  Download failed' >&2
+    exit 1
+fi
 echo "$INSTALL_K3S_EXEC $INSTALL_K3S_VERSION skipenable=$INSTALL_K3S_SKIP_ENABLE \
 skipstart=$INSTALL_K3S_SKIP_START url=${K3S_URL:-unset} token=${K3S_TOKEN:+set}" \
 > "$HOMELAB_ROOT/installer.args"
@@ -190,3 +199,10 @@ class FakeHost:
 
     def written(self) -> list[Path]:
         return [path for path in self.root.rglob("*") if path.is_file()]
+
+
+def stocked_server(tmp_path: Path) -> FakeHost:
+    """A fake daniel-server with a stocked offline kit."""
+    host = FakeHost(tmp_path, hostname="daniel-server")
+    host.stock_kit()
+    return host
