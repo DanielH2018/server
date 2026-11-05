@@ -337,15 +337,15 @@ def test_without_project_drops_the_pair_by_position():
         "issue",
         "create",
         "--title",
-        "Claude findings",
+        "Server Issue Tracking",
         "--project",
-        "Claude findings",
+        "Server Issue Tracking",
     ]
     assert without_project(argv) == [
         "issue",
         "create",
         "--title",
-        "Claude findings",
+        "Server Issue Tracking",
     ]
 
 
@@ -366,7 +366,7 @@ def test_open_retries_without_project_and_warns(tmp_path, capsys, make_tools):
     assert findings.main(_open_argv(body), tools) == 0
     out = capsys.readouterr()
     assert "#42 created" in out.out
-    assert 'not added to Project "Claude findings": could not resolve' in out.err
+    assert 'not added to Project "Server Issue Tracking": could not resolve' in out.err
     assert "--project" in calls.gh[0] and "--project" not in calls.gh[1]
 
 

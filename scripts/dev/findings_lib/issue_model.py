@@ -80,7 +80,7 @@ for _d in DOMAINS:
 # what the operator looks at. `gh issue create --project <title>` adds the item in the same
 # call, so no second write and no item id. It needs the `project` token scope, so the board
 # is best-effort: `cmd_open` retries without it and warns rather than losing the finding.
-PROJECT_TITLE = "Claude findings"
+PROJECT_TITLE = "Server Issue Tracking"
 # The Date field on that board that mirrors an issue's `not-before:` label, so the board can
 # sort and filter by it. `findings_lib/board.py` owns the writes; the label stays the record.
 NOT_BEFORE_FIELD = "Not before"

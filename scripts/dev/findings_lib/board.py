@@ -1,4 +1,4 @@
-"""The "Not before" Date field on the Claude findings board, kept equal to the label.
+"""The "Not before" Date field on the Server Issue Tracking board, kept equal to the label.
 
 GitHub's issue list cannot match a label prefix or sort by a label, so the `not-before:` label
 alone gives no view of every deferred issue in date order. The Project board can: a Date
@@ -104,7 +104,7 @@ def parse_board_state(data: dict) -> BoardState:
     """Reads a `_READ` response into a `BoardState`.
 
     The `projectsV2(query:)` search is fuzzy, so the board is the one whose title is EXACTLY
-    `PROJECT_TITLE`; a board named "Claude findings archive" must not take the write.
+    `PROJECT_TITLE`; a board named "Server Issue Tracking archive" must not take the write.
     """
     repo = data["data"]["repository"]
     issue = repo["issue"]
