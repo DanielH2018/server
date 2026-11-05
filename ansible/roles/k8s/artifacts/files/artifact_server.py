@@ -12,12 +12,18 @@ that wrote the file:
     /                       the GUI
     /api/index.json         the index every search reads
     /api/star               POST: star or unstar one artifact (see StarStore)
+                            GET ?host=&path=: that artifact's star, and whether it can change
+    /api/star.js            the star button each served HTML artifact loads
     /a/<host>/<relpath>     one artifact, served from ROOT/<host>/<relpath>
     /healthz                liveness
 
 The star list is the one thing the server writes. Every artifact tree stays mounted read-only;
 the list lives in its own file, ARTIFACTS_STARS_FILE, which prune-artifacts.sh on each host
 reads so that a starred artifact is never aged out.
+
+Each HTML artifact is served with one added `<script src="/api/star.js">` tag, so the page can
+be starred where it is read. The file on disk is never changed, so a copied artifact carries no
+button. The tag is added only when a star list is configured.
 
 The index is built ON REQUEST and cached against a signature of (path, mtime, size) for
 every file under ROOT. It is not built on a timer: prune-artifacts.sh deletes artifacts
@@ -45,6 +51,7 @@ Environment:
 from __future__ import annotations
 
 import contextlib
+import html
 import json
 import os
 import posixpath
@@ -55,12 +62,12 @@ import time
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 # Flat siblings in the same directory, mounted together at /app from one ConfigMap, so a
 # plain import resolves both under `python3 /app/artifact_server.py` and under the tests'
 # path insert. Neither module imports back.
-from _gui_html import GUI_HTML
+from _gui_html import GUI_HTML, STAR_JS
 from artifact_meta import (
     apply_metadata,
     load_known_services,
@@ -311,8 +318,8 @@ def safe_path(root: Path, host: str, rel: str) -> Path | None:
     """
     if not host or "/" in host or host in (".", ".."):
         return None
-    base = os.path.realpath(os.path.join(root, host))
     try:
+        base = os.path.realpath(os.path.join(root, host))
         resolved = os.path.realpath(os.path.join(base, rel))
     except OSError, ValueError:
         return None
@@ -322,6 +329,16 @@ def safe_path(root: Path, host: str, rel: str) -> Path | None:
     if not target.is_file():
         return None
     return target
+
+
+def add_star_tag(body: bytes, host: str, rel: str) -> bytes:
+    """Inserts the star button's script tag before the page's last `</body>`, or at the end."""
+    tag = (
+        f'<script src="/api/star.js" data-host="{html.escape(host)}" '
+        f'data-path="{html.escape(rel)}" defer></script>'
+    ).encode()
+    at = body.lower().rfind(b"</body>")
+    return body + tag if at < 0 else body[:at] + tag + body[at:]
 
 
 def render_gui() -> bytes:
@@ -375,6 +392,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/healthz":
             self._send(200, b"ok\n", "text/plain; charset=utf-8")
             return
+        if path == "/api/star":
+            self._get_star()
+            return
+        if path == "/api/star.js":
+            self._send(200, STAR_JS.encode("utf-8"), "text/javascript; charset=utf-8")
+            return
         if path == "/api/index.json":
             body = json.dumps(self.cache.get()).encode("utf-8")
             self._send(200, body, "application/json")
@@ -423,9 +446,8 @@ class Handler(BaseHTTPRequestHandler):
         ):
             self._send(400, b"expected {host, path, starred}\n", text)
             return
-        rel = posixpath.normpath(rel).lstrip("/")
-        # A newline would split one key into two lines of the star file.
-        if "\n" in rel or "\r" in rel or safe_path(self.cache.root, host, rel) is None:
+        rel = self._star_rel(host, rel)
+        if rel is None:
             self._send(404, b"no such artifact\n", text)
             return
         try:
@@ -436,12 +458,40 @@ class Handler(BaseHTTPRequestHandler):
         body = json.dumps({"host": host, "path": rel, "starred": starred})
         self._send(200, body.encode("utf-8"), "application/json")
 
+    def _star_rel(self, host: str, rel: str) -> str | None:
+        """Normalises an artifact's relpath for the star list, or None when it names none."""
+        rel = posixpath.normpath(rel).lstrip("/")
+        # A newline would split one key into two lines of the star file.
+        if "\n" in rel or "\r" in rel or safe_path(self.cache.root, host, rel) is None:
+            return None
+        return rel
+
+    def _get_star(self) -> None:
+        """Answers `{"starred", "writable"}` for the artifact named by ?host=&path=.
+
+        404 when starring is off or the pair names no artifact, which the star button reads
+        as "draw nothing".
+        """
+        text = "text/plain; charset=utf-8"
+        stars = self.stars
+        if stars is None:
+            self._send(404, b"starring is not enabled on this server\n", text)
+            return
+        query = parse_qs(urlparse(self.path).query)
+        host = query.get("host", [""])[0]
+        rel = self._star_rel(host, query.get("path", [""])[0])
+        if not host or rel is None:
+            self._send(404, b"no such artifact\n", text)
+            return
+        body = {"starred": f"{host}/{rel}" in stars.load(), "writable": stars.writable}
+        self._send(200, json.dumps(body).encode("utf-8"), "application/json")
+
     def _serve_artifact(self, rest: str) -> None:
         host, _, rel = rest.partition("/")
         # posixpath.normpath collapses `.`/`..` before safe_path resolves; both run, because
         # normpath alone does not stop a symlink and resolve() alone does not stop `%2e%2e`.
         rel = posixpath.normpath(rel).lstrip("/")
-        target = safe_path(ROOT, host, rel)
+        target = safe_path(self.cache.root, host, rel)
         if target is None:
             self._send(404, b"not found\n", "text/plain; charset=utf-8")
             return
@@ -451,6 +501,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, b"not found\n", "text/plain; charset=utf-8")
             return
         ctype = CONTENT_TYPES.get(target.suffix.lower(), "application/octet-stream")
+        if self.stars is not None and ctype.startswith("text/html"):
+            body = add_star_tag(body, host, rel)
         st = target.stat()
         self._send(
             200,
