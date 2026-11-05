@@ -332,6 +332,7 @@ def test_an_inventory_change_runs_no_deploy_playbook_and_owes_nothing(
     `promote`. The tick fast-forwards past the path as it passes a docs-only one: no
     `deploy.yml`, no receipt naming it, no ledger line.
     """
+    tick.declare(DECLARES_SONARR)
     tick.paths = ["ansible/inventory/group_vars/all.yml"]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
