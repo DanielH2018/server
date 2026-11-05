@@ -10,7 +10,8 @@
   vars:
     # Read only by the preamble's stub-file refusal. True only where this play deploys nothing
     # from a stub file: a host with no Docker entry. Read before the filter below, so it filters
-    # the inventory list itself. A stubbed `-e target=daniel-pi` run stops before any Pi role.
+    # the inventory list itself. A stubbed run aimed at a host with a Docker entry stops before
+    # any role.
     load_secrets_stubs_allowed: "{{ containers_list | default([]) | filter_by_platform('docker') | length == 0 }}"
   pre_tasks:
     # The preamble refuses a local-connection deploy aimed at a different host before any task
@@ -28,9 +29,11 @@
         containers_list_unfiltered: "{{ containers_list }}"
       tags: always
 
-    # Runs in list order, with no dependency resolution: daniel-pi is the only Docker host, and
-    # its one ordering constraint (docker-proxy before autoheal) is its containers_list order.
-    # ansible/tests/deploy/test_platform_filter_real_inventory.py pins that order.
+    # DECIDED: this play stays, inert, until R4 or H7 deletes this file's last play. It runs no
+    # role on any host: scripts/validate/compose_templates.py refuses a containers_list entry
+    # that is not `platform: k8s`, and the Pi's services deploy from `compose_services` in its
+    # package. The snapshot above still feeds the k8s play. Long form:
+    # docs/target-architecture/host/h5-pi-compose.md, H5-R1-06.
     - name: Restrict this play to Docker-platform containers
       ansible.builtin.set_fact:
         containers_list: "{{ containers_list | filter_by_platform('docker') }}"
