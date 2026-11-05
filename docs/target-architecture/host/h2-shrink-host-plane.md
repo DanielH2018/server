@@ -2400,7 +2400,7 @@ cross-slice notes rather than edits.
   D5's crowdsec conversion and H5.8 belongs to D5 and H5, and H5 already carries it.
 - **X-21 (medium): the lock steps ran unconditionally.** Fixed. H2.2c and H2.3b run
   `fact_status.py verify` and commit `docs/facts.lock` only until G2 retires the lock, in R4's
-  wording.
+  wording. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 Two edits follow from other slices' renumbering: H6.4 is now H6.4b, the PR that adds the
 config drop-in, and H1.7 is now H1.7b.
@@ -2490,7 +2490,7 @@ handed over as cross-slice notes.
   `_etcd_offbox_retention` at the drop-in's `etcd-snapshot-retention` and regenerates the
   fragment.
 - **H2-R10-18 (medium): the off-box actuator stayed in the contract, and the disarm lever
-  died.** Fixed. H2.8b edits the contract with its facts-lock step. The disarm is `etcd-s3:
+  died.** Fixed. H2.8b edits the contract with its facts-lock step. G2's PR 3 has since retired the lock, and #7231 removed this step. The disarm is `etcd-s3:
   false` in `k3s_server_config`, and check 12 reports it as DOWN.
 - **H2-R10-19 (medium): the images were unspecified.** Fixed. Shell jobs run in a
   digest-pinned `alpine/k8s`. Python jobs run in the pinned `python:3.14-alpine` with

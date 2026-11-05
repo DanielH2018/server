@@ -3073,7 +3073,7 @@ listed after the findings.
   missing.** Fixed. Classes 2, 3, 5 and 8 are named correctly. `manifest_declares.py` and its
   test are in D6.5, which edits class 5's row.
 - **D6-R1-16 (medium): `facts.lock` was re-verified only in D6.8.** Fixed. Each PR verifies
-  the recorded sections it edits, and the Baseline lists them. Open question 9 covers G2.
+  the recorded sections it edits, and the Baseline lists them. Open question 9 covers G2. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **D6-R1-17 (medium): exit 5 could not be checked.** Fixed. Exit 5 is now a `git ls-files`
   absence check, a per-symbol grep and the import grep.
 - **D6-R1-18 (medium): the route of `_BROAD_DEPLOY_PREFIXES` paths was undefined.** Fixed.
@@ -3238,7 +3238,7 @@ round 2's choice to switch `<tag>-deferred`.
 - **D6-R10-12 (medium): root `CLAUDE.md`'s merge section stayed false from D6.1 to D6.8a.**
   Fixed. D6.1 edits the three-planes sentence and the k8s bullets of *When to wait*, and
   D6.3 edits the `deploy.sh` exit-3 bullet. Each verifies its section's lock row
-  (`docs/facts.lock` records `CLAUDE.md#When to wait` and the merge section).
+  (`docs/facts.lock` records `CLAUDE.md#When to wait` and the merge section). G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **D6-R10-13 (medium): the `owner: flux` census row named no member and no floor.** Fixed.
   The row names `bento-pdf` and `flux` and a floor, and a cross-slice note asks H1.9 to
   repoint or retire it.

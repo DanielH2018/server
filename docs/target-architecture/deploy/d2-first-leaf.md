@@ -2050,7 +2050,7 @@ also need edits in other documents, which this round hands to their owners.
   title now says so, and Open question 1 asks the operator to accept a production drill.
   The stage gates in R4, D6 and H2 are outside this file.
 - **X-21 (medium): D2.3 ran `fact_status.py verify` with no G2 condition.** Fixed with R4's
-  wording, "Until G2 retires `docs/facts.lock`".
+  wording, "Until G2 retires `docs/facts.lock`". G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 Also fixed while making these edits:
 

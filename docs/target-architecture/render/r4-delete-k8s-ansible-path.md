@@ -2087,7 +2087,7 @@ checked out against the tree at `70591c307`.
   computes both predicates over one tree, with a member floor.
 - **R4-M3 (medium)** The DR runbooks still said `deploy.sh`, and no Flux bootstrap procedure
   existed. *Fixed:* PR 8 edits the three runbooks and adds the operator-only bootstrap,
-  exercised on stage. The `facts.lock` step is listed.
+  exercised on stage. The `facts.lock` step is listed. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **R4-M4 (medium)** PR 2 was oversized and left two sources. *Fixed:* split into PR 2, four
   PR 3 groups and PR 5. No key has two sources at any commit. The glance-marker change is in
   PR 8, and the `noqa` lines are counted.
@@ -2225,7 +2225,7 @@ number. The new steps are PR 7c and PR 11.
   `deploy.yml` atoms. `docs/facts.lock` cites `ansible/deploy.yml` as a path atom in root
   `CLAUDE.md#Adding a New Service` and `janitorr/CLAUDE.md#Notable`. A path atom hashes
   existence, and `deploy.yml` keeps the Pi's play. Their prose still describes the k8s
-  play's toposort, so PR 8 edits and verifies both sections anyway.
+  play's toposort, so PR 8 edits and verifies both sections anyway. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **R4-R10-M3 (medium) R4 said D6 had not stated the post-D6 route.** *Fixed.* Open
   question 7 is resolved, citing D6's *The route of a deploy-plane path after D6*. The
   Baseline, the class-B risk and PR 8 say the paths fast-forward with no apply, and PR 1

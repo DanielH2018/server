@@ -1741,7 +1741,7 @@ refuted. Two design changes go beyond the findings:
 - **H5-R1-18 (medium)** H5.7 was far larger than one PR. *Fixed:*
     - The retirement is split into H5.10 to H5.13, with the Docker play left to R4 or H7.
     - The Pi's key stays empty until H7.
-    - H5.12 names the `CLAUDE.md`, skill, rule and `docs/facts.lock` changes.
+    - H5.12 names the `CLAUDE.md`, skill, rule and `docs/facts.lock` changes. G2's PR 3 has since retired the lock, and #7231 removed this step.
     - The setup work is split the same way: H5.1, H5.2a, H5.2b, H5.3 and H5.4. H5.5 keeps
       the number H7 cites.
 - **H5-R1-19 (medium)** The cost of unattended compose runs was unmeasured. *Fixed:* H5.4
@@ -1794,7 +1794,7 @@ questions* 5.
   C4's *Removal* gets the Pi's owner.
 - **X-21 (medium)** H5.12 committed `docs/facts.lock` with no condition. *Fixed:* the step
   now reads "Until G2 retires `docs/facts.lock`", in R4's wording, and drops once the lock
-  is gone.
+  is gone. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round 10 (per-slice adversarial review)
 
@@ -1848,7 +1848,7 @@ a sub-claim that does not hold, and each entry records the correction with its e
   `docker_install/CLAUDE.md#Notable` and runs `verify` on it. H5.7, H5.8 and H5.9 run
   `forget` on the deleted roles' six rows, each named by key. H5.12 keeps the sweep, which
   now names root `CLAUDE.md#Where to Look (task → start here)`, the row that cites
-  `common/CLAUDE.md`.
+  `common/CLAUDE.md`. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **H5-R10-05 (medium)** C4, H5 and H7 named three different removals of the Pi's key.
   *Fixed:* the stale "C4 names H1 only" sentence is gone. *What stays with Ansible until H7*
   names H7.20d. *Open questions* 5 asks C4 to name H7.20d and its reader set.

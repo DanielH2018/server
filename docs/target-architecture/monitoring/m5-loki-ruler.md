@@ -1543,7 +1543,7 @@ against the sibling pages before the fix.
   link) and the shipper entry in `docs/monitor-bridge-checks.md`. PR 4a rewrites each site
   to name `KumaNotificationDropped` on the ruler. It also says that the `Homelab Alerts` name
   no longer binds, because the rule's filter names no notification. *The tree* and *Tests and
-  docs* list the files, and `docs/facts.lock` where a reworded `CLAUDE.md` citation moves.
+  docs* list the files, and `docs/facts.lock` where a reworded `CLAUDE.md` citation moves. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round f0 (per-slice adversarial review, 2026-10-12)
 

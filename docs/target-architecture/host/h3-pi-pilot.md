@@ -3066,7 +3066,7 @@ reason is given.
 - **H3-C2-06 (medium) H3.8b removed `optimize_pi` sections that `docs/facts.lock`
   records.** Fixed. `docs/facts.lock` records five sections of that `CLAUDE.md`. H3.8b's
   same-PR list now runs `fact_status.py forget` for the removed contract section and
-  `verify` for each changed one. It also covers three more breaks of the same kind:
+  `verify` for each changed one. G2's PR 3 has since retired the lock, and #7231 removed this step. It also covers three more breaks of the same kind:
     - the `# fact:` marker in
       `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py:test_a_dead_container_is_restarted`
       that names the removed section;

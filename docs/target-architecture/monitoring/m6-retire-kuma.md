@@ -3125,7 +3125,7 @@ Raised: 4 high, 5 medium. Fixed: 9, two of them in part. Refuted in part: 2.
 - **M6-C1-08 (medium)** B-2 deletes `kuma-drift`, but the docs that point readers to it change
   only in B-7. **Fixed in part, refuted in part.** The root `CLAUDE.md` bullet,
   `docs/claude-tooling.md` and the add-secret skill's steps moved into B-2, with
-  `fact_status.py verify`. The facts lint's `vanished-identifier` rule would block B-2
+  `fact_status.py verify`. G2's PR 3 has since retired the lock, and #7231 removed this step. The facts lint's `vanished-identifier` rule would block B-2
   without them. `cli_parser.py`, `subcommands.py` and `pi_plane.py` joined B-2's scope.
   Refuted: `monitors` carries no `--pi` at `70591c307`. `probe_lib/cli_parser.py` adds `--pi`
   only to `targets`, `kuma-drift` and `alerts`. B-2 states what `alerts --pi` selects.

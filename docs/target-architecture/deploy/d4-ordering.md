@@ -1413,7 +1413,7 @@ kustomize-controller v1.9.6 read through `gh`, before the fix was written.
   window. The D4.1 rollback says that a revert lands the same way.
 - **D4-R1-07 (medium). The must-precede test duplicates `DOCUMENTED_ORDERINGS`.** Fixed. D4.1
   extends that table with the five pairs and adds one `K8S_APPLIES_LAST` test in the same
-  file. The crowdsec exemption is explicit, and the `docs/facts.lock` step is included.
+  file. The crowdsec exemption is explicit, and the `docs/facts.lock` step is included. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **D4-R1-08 (medium). netpol-baseline's `dependsOn` leaves out the `-deferred`
   Kustomizations.** Fixed. The rule excludes netpol-baseline's own `-deferred` and `soak`,
   because a literal "every `-deferred`" would form a cycle. The cycle test carries both cases.
@@ -1470,7 +1470,7 @@ documents, or against kustomize-controller and source-controller v1.9.6 read thr
 - **X-21 (medium). D4.1 runs `fact_status.py verify` and commits `docs/facts.lock` with no
   condition, though G2 retires both.** Fixed. D4.1's step and its *Tests and docs* line now
   start "Until G2 retires `docs/facts.lock`", R4's wording, and say the step does not run
-  after G2.
+  after G2. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round 10 (per-slice review)
 

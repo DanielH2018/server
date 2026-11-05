@@ -1153,7 +1153,7 @@ One finding was raised against this slice, and it was fixed. None was refuted.
   *Tests and docs* now opens with one step for those three PRs, worded "Until G2 retires
   `docs/facts.lock`" as R4 words it. The
   step names the hook, `verify` for an unfolded `moved` or `missing` finding, and what drops
-  once G2's PR 3 deletes the hook, `cmd_verify` and the lock.
+  once G2's PR 3 deletes the hook, `cmd_verify` and the lock. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round 10 — per-slice adversarial review
 

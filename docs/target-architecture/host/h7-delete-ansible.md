@@ -3738,7 +3738,7 @@ was checked against the tree and the other slice plans before the fix.
   shared-modules design, H7.2e's and H7.19b's docs rows, and failure class 8 in *Risks*.
   Each now starts "Until G2 retires `docs/facts.lock`", in R4's wording. After G2, the
   H7.2e citation repoint still stands, because G2 keeps `fact_status.py lint`, which fails
-  a citation that does not resolve.
+  a citation that does not resolve. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round 10 (per-slice adversarial review)
 
@@ -3832,7 +3832,7 @@ mechanism the finding offered as its alternative, or a narrower one, and each sa
 - **H7-R10-11 (medium) The facts.lock steps covered `verify` only.** Fixed. Confirmed: 57
   rows key on setup-role docs. Every PR that moves or empties a role's `CLAUDE.md` runs
   `forget` for each old key and `verify` for each new one, in *Steps*, *Tests and docs* and
-  failure class 8.
+  failure class 8. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **H7-R10-12 (medium) checkout-sync dropped the deployer's CI gate and had no red
   proof.** Fixed. checkout-sync grades the tip with `ci_verdict` from `hosts/lib/`, through
   the authenticated token, and merges only a green tip. Not reading `DEPLOY_HOLD` is
