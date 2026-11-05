@@ -9,6 +9,11 @@ landing (`land_lib/land_shared.py`), the deployer's `owned_only` split
 (`probe_lib/releases_consumers.py`) all read it. `lib.k8s_roles` re-exports it, where those
 readers import it from.
 
+A task file that does not load raises `CannotNarrow`, because it can hold the only edge to a
+helper. The broad narrowing defers the plane, the deployer keeps its `k8s_unapplied` lines, the
+landing dies naming the file, the `--tags` expansion leaves the name for the tag validation to
+refuse, and the staleness consumers keep every shared role fleet-wide.
+
 Split out of `lib.k8s_roles`, which sat at its length cap.
 
 Run: uv run pytest scripts/lib/tests/test_k8s_role_callers.py
@@ -23,6 +28,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
+from lib.narrow_git import CannotNarrow
 from lib.repo_paths import K8S_ROLES, REPO
 
 __all__ = ["role_callers"]
@@ -97,6 +103,10 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     ``repo`` names the checkout to walk, for a caller that reads a tree other than the one
     this module was imported from (``narrow_broad.narrow(cwd=...)``). Omitted, it walks
     ``lib.repo_paths.K8S_ROLES``, which is this file's own checkout.
+
+    Raises:
+        CannotNarrow: a task file does not load. It can hold the only edge from a caller to a
+            helper, and a graph short by that edge names too few tags.
     """
     roles_dir = K8S_ROLES if repo is None else Path(repo) / K8S_ROLES.relative_to(REPO)
     callers: dict[str, set[str]] = {}
@@ -115,8 +125,8 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
         for task_file in sorted(role_dir.glob("tasks/*.yml")):
             try:
                 reached |= _callees(yaml_fast.parse_yaml(task_file.read_text()))
-            except yaml_fast.UnparsableYaml, RecursionError:
-                continue
+            except (yaml_fast.UnparsableYaml, RecursionError) as exc:
+                raise CannotNarrow(f"{task_file} does not load: {exc}") from exc
         for callee in reached - {caller}:
             callers.setdefault(callee, set()).add(caller)
     return callers

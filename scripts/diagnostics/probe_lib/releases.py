@@ -513,11 +513,16 @@ def compute_stale(
         )
         plane = {}
         if plane_changed:
-            if context is None:
-                context = _narrow_broad().context_for(
+            nb = _narrow_broad()
+            try:
+                context = context or nb.context_for(
                     ref, repo_root, declared=declared, callers=callers
                 )
-            plane = _deploy_plane_stale(commit, services, plane_changed, context)
+            except nb.CannotNarrow as exc:
+                wide = [f"{p} [every service: {exc}]" for p in plane_changed]
+                plane = dict.fromkeys(services, wide)
+            else:
+                plane = _deploy_plane_stale(commit, services, plane_changed, context)
         for svc in services:
             svc_paths = role_paths_for(svc, shared_roles, consumers)
             hits = [p for p in changed if any(p.startswith(rp) for rp in svc_paths)]

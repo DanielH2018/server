@@ -121,12 +121,17 @@ def shared_caller_tags(
     The landing deploys these tags, and `land_tags.plane_note` drops every role this gives a
     non-empty set. An empty set is a role nothing deploys, which stays in the note.
     `host_vars` is the inventory `smoke_caller` reads; a test passes a fixture copy.
+
+    Raises:
+        CannotNarrow: a shared role changed and `role_callers` refuses a task file.
     """
     declared = declared_tags() if declared is None else declared
-    callers = role_callers()
+    roles = shared_roles(files, declared, roles_root, role_dirs)
+    # Only when a shared role changed: `role_callers` refuses on any unloadable task file.
+    callers = role_callers() if roles else {}
     return {
         r: narrowed(r, caller_tags(r, declared, callers), files, host_vars)
-        for r in shared_roles(files, declared, roles_root, role_dirs)
+        for r in roles
     }
 
 
@@ -200,9 +205,10 @@ def narrowed_roles(
     cannot be derived from the tag count alone — a role with one caller is not narrowed.
     """
     declared = declared_tags() if declared is None else declared
-    callers = role_callers()
+    roles = shared_roles(files, declared)
+    callers = role_callers() if roles else {}
     out = set()
-    for role in shared_roles(files, declared):
+    for role in roles:
         tags = caller_tags(role, declared, callers)
         if tags and narrowed(role, tags, files, host_vars) != tags:
             out.add(role)

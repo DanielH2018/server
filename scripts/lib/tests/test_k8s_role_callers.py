@@ -13,6 +13,7 @@ Run: uv run pytest scripts/lib/tests/test_k8s_role_callers.py
 import pytest
 
 from lib.k8s_roles import k8s_entries, role_callers
+from lib.narrow_git import CannotNarrow
 
 # The helper roles: every role under ansible/roles/k8s/ that another role reaches and that has
 # no containers_list entry of its own. Named, not counted -- a rename or a moved tasks file
@@ -112,9 +113,10 @@ def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
     ["d: 2026-13-45\n", "- &x {block: [*x]}\n", "- [unclosed\n"],
     ids=["impossible-date", "recursive-alias", "syntax"],
 )
-def test_a_task_file_that_cannot_be_read_is_skipped_like_a_syntax_error(tmp_path, text):
+def test_a_task_file_that_cannot_be_read_refuses_by_name(tmp_path, text):
     tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
     tasks.mkdir(parents=True)
     (tasks / "bad.yml").write_text(text)
     (tasks / "good.yml").write_text("- include_role:\n    name: k8s/helper\n")
-    assert role_callers(tmp_path) == {"helper": {"caller"}}
+    with pytest.raises(CannotNarrow, match=r"bad\.yml"):
+        role_callers(tmp_path)

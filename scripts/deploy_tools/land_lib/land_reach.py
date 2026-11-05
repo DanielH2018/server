@@ -97,7 +97,7 @@ def _initial_setup_roles(playbook: Path = _INITIAL_SETUP_YML) -> dict[str, objec
     cannot drift when this repo's own gates change (mirrors `deploy_tags.py`'s
     `host_vars: Path = HOST_VARS` pattern).
     """
-    play = yaml_fast.safe_load(playbook.read_text())[0]
+    play = yaml_fast.parse_yaml(playbook.read_text())[0]
     roles: dict[str, object] = {}
     for entry in play["roles"]:
         name = entry if isinstance(entry, str) else entry["role"]

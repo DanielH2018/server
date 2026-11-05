@@ -32,8 +32,6 @@ import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib import yaml_fast
@@ -69,7 +67,7 @@ def task_chains(
     path = role_dir / "tasks" / task_file
     try:
         tasks = _parse_tasks(path, path.stat().st_mtime_ns)
-    except OSError, yaml.YAMLError:
+    except OSError, yaml_fast.UnparsableYaml:
         return None
     if tasks is None:
         return None
@@ -83,11 +81,31 @@ def _parse_tasks(path: Path, _mtime_ns: int) -> list | None:
     `setup_repo_file_hosts` asks every setup role whether it ships one changed repo file, so
     a PR with several of them walks the same 18 task trees once per file. The cache makes
     that one parse per file on disk rather than one per question; a rewrite changes the
-    mtime and misses. Returns None for a tasks file that parses to something other than a
-    list, which `task_chains` reads the same way as an unreadable one.
+    mtime and misses. Returns what `_task_list` returns, and `task_chains` reads its None the
+    same way as an unreadable file.
     """
-    tasks = yaml_fast.safe_load(path.read_text()) or []
-    return tasks if isinstance(tasks, list) else None
+    return _task_list(path.read_text())
+
+
+def _task_list(text: str) -> list | None:
+    """`text` parsed as a task list, or None when no walk here can read it as one.
+
+    Every reader here compares tasks as `json.dumps` text, and two of them pair that text with
+    the chains a walk returns, so a tree it cannot serialise is refused before any walk starts:
+    a recursive alias, or a date. Refusing part way through a walk would leave `keep` having
+    seen tasks whose chains never arrive.
+
+    Raises:
+        yaml_fast.UnparsableYaml: the text does not load.
+    """
+    tasks = yaml_fast.parse_yaml(text) or []
+    if not isinstance(tasks, list):
+        return None
+    try:
+        json.dumps(tasks)
+    except TypeError, ValueError, RecursionError:
+        return None
+    return tasks
 
 
 def task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
@@ -253,8 +271,8 @@ def var_consumer_chains(role_dir: Path, vars_file: Path) -> list[tuple] | None:
     hides an unconverged host, where wider costs an operator one no-op command.
     """
     try:
-        defined = yaml_fast.safe_load(vars_file.read_text())
-    except OSError, yaml.YAMLError:
+        defined = yaml_fast.parse_yaml(vars_file.read_text())
+    except OSError, yaml_fast.UnparsableYaml:
         return None
     leaves = _leaf_chains_with_text(role_dir)
     if not isinstance(defined, dict) or not defined or leaves is None:
@@ -329,8 +347,8 @@ def handler_notifier_chains(role_dir: Path, handlers_file: Path) -> list[tuple] 
     its own.
     """
     try:
-        defined = yaml_fast.safe_load(handlers_file.read_text())
-    except OSError, yaml.YAMLError:
+        defined = yaml_fast.parse_yaml(handlers_file.read_text())
+    except OSError, yaml_fast.UnparsableYaml:
         return None
     if not isinstance(defined, list) or not defined:
         return None
@@ -429,11 +447,10 @@ def _removed_task_chains(
     block or import changed, a leaf added or edited, or no import of `task_file` found.
     """
     try:
-        old = yaml_fast.safe_load(old_text) or []
-        new = yaml_fast.safe_load(new_text) or []
-    except yaml.YAMLError:
+        old, new = _task_list(old_text), _task_list(new_text)
+    except yaml_fast.UnparsableYaml:
         return None
-    if not (isinstance(old, list) and isinstance(new, list)):
+    if old is None or new is None:
         return None
     old_leaves, old_frames = _split_leaves(old)
     new_leaves, new_frames = _split_leaves(new)
@@ -467,7 +484,7 @@ def _import_chains(
     path = role_dir / "tasks" / task_file
     try:
         tasks = _parse_tasks(path, path.stat().st_mtime_ns)
-    except OSError, yaml.YAMLError:
+    except OSError, yaml_fast.UnparsableYaml:
         return []
     return _imports_in(tasks or [], role_dir, target, inherited)
 
@@ -506,11 +523,10 @@ def changed_task_texts(old_text: str, new_text: str) -> set[str] | None:
     `when:` in its place; or no changed leaf at all.
     """
     try:
-        old = yaml_fast.safe_load(old_text) or []
-        new = yaml_fast.safe_load(new_text) or []
-    except yaml.YAMLError:
+        old, new = _task_list(old_text), _task_list(new_text)
+    except yaml_fast.UnparsableYaml:
         return None
-    if not (isinstance(old, list) and isinstance(new, list)):
+    if old is None or new is None:
         return None
     old_leaves, old_frames = _split_leaves(old)
     new_leaves, new_frames = _split_leaves(new)

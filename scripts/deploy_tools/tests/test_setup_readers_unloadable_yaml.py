@@ -144,3 +144,24 @@ def test_land_reach_reads_a_playbook_date_as_a_syntax_error(tmp_path):
     assert _answer(_playbook_reach, tmp_path / "date", play) == _answer(
         _playbook_reach, tmp_path / "syntax", SYNTAX_ERROR
     )
+
+
+@pytest.mark.parametrize("reader", (_task_chains, _changed_new_side), ids=_ids)
+def test_a_task_holding_a_date_reads_as_a_syntax_error(tmp_path, reader):
+    """A date loads, but `json.dumps` raises `TypeError` on it, and every reader compares text."""
+    dated = "- name: Say something\n  vars: {d: 2026-01-01}\n"
+    assert _answer(reader, tmp_path / "date", dated) == _answer(
+        reader, tmp_path / "syntax", SYNTAX_ERROR
+    )
+
+
+def test_a_recursive_alias_below_an_import_keeps_the_var_consumers_wide(tmp_path):
+    """Refused mid-walk, `keep` would hold a text whose chain never came back, and `zip` raises."""
+    role = _role(tmp_path, "- ansible.builtin.import_tasks: sub.yml\n")
+    (role / "tasks" / "sub.yml").write_text(
+        "- name: Reads my_var\n  ansible.builtin.debug: {msg: my_var}\n"
+        + RECURSIVE_ALIAS
+    )
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text("my_var: 1\n")
+    assert chains.var_consumer_chains(role, role / "defaults" / "main.yml") is None

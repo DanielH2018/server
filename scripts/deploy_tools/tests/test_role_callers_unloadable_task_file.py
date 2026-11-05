@@ -12,14 +12,18 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
 from _deploy_sh_fakes import make_snapshot_repo, run_front_half, scrub_process_git_env
 from _narrow_fixtures import DECLARED, Tree, _refs, build_tree
 from deploy_tools import shared_role_callers
+from deploy_tools.land_lib import classify
 from deploy_tools.narrow_lib import broad as narrow_broad
 from lib import k8s_role_callers
+from lib.narrow_git import CannotNarrow
 from lib.proc_testing import run
 from lib.repo_paths import REPO
 
@@ -132,3 +136,43 @@ def test_the_tags_expansion_leaves_the_name_or_names_the_dropped_caller(
     _, calls = run_front_half(monkeypatch, repo, ["--tags", "helper", "--check"])
     validated = next((call[1] for call in calls if call[0] == "validate"), None)
     assert validated is None or {"helper", "beta"} & set(validated), validated
+
+
+def test_the_owned_only_split_refuses_naming_the_file_with_no_traceback(
+    tree: Tree, capsys
+):
+    _write_callers(tree.root, "sonarr", "radarr", "- [unclosed\n")
+    tree.commit("radarr's include does not load")
+    capsys.readouterr()
+    assert shared_role_callers.main(["helper", "--repo", str(tree.root)]) == 1
+    assert "radarr/tasks/helper.yml does not load" in capsys.readouterr().err
+
+
+def test_a_landing_that_changes_no_shared_role_is_not_stopped_by_a_bad_task_file(
+    tmp_path,
+):
+    """One bad task file stops only a landing whose answer needs the graph."""
+    _write_callers(tmp_path, "sonarr", "radarr", "- [unclosed\n")
+    _landing_in_a_copy(
+        tmp_path, {"sonarr"}
+    )  # For its copy of the code; its own run refuses.
+    code = (
+        "from deploy_tools.land_lib import land_shared\n"
+        "print(land_shared.shared_caller_tags(['docs/x.md'], {'sonarr'}))\n"
+        "print(sorted(land_shared.narrowed_roles(['docs/x.md'], {'sonarr'})))\n"
+    )
+    done = run([sys.executable, "-c", code], cwd=tmp_path / "scripts")
+    assert done.returncode == 0, done.stderr
+    assert done.stdout.split() == ["{}", "[]"]
+
+
+def test_the_landing_dies_naming_the_task_file_it_refuses():
+    def die(message, _rc):
+        raise SystemExit(message)
+
+    def refuse():
+        raise CannotNarrow("radarr/tasks/helper.yml does not load")
+
+    ln: Any = SimpleNamespace(die=die)
+    with pytest.raises(SystemExit, match=r"radarr/tasks/helper\.yml"):
+        classify._classified(ln, "expansion", refuse)

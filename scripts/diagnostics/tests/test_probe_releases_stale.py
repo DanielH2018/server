@@ -423,6 +423,27 @@ def test_a_deploy_plane_path_no_rule_attributes_flags_every_service_on_the_recor
     assert "hosts.ini [every service:" in stale["jellyfin"]
 
 
+def test_a_caller_graph_that_does_not_load_flags_every_service_on_the_record(tmp_path):
+    repo, base = _deploy_plane_repo(tmp_path)
+    tip = _commit(
+        repo,
+        {
+            "ansible/inventory/group_vars/all.yml": "lan_subnet: 10.0.1.0/24\n",
+            "ansible/roles/k8s/sonarr/tasks/bad.yml": "- [unclosed\n",
+        },
+        "the LAN moves and a task file breaks",
+    )
+    _set_origin_master(repo, tip)
+
+    stale = pr.compute_stale(
+        [_record("jellyfin", commit=base)],
+        repo_root=repo,
+        shared_roles=set(),
+        declared=_DECLARED,
+    )
+    assert "[every service:" in stale["jellyfin"], stale
+
+
 def test_a_role_only_range_never_reads_host_vars(tmp_path):
     """The context is built only when a census path changed: this repo has no host_vars, so
     reading `declared` at the tip would raise, and nothing here passes it."""
