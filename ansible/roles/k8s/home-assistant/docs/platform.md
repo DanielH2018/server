@@ -275,5 +275,5 @@ To read a large pull after its Pod events expire, use Prometheus:
   `kube_pod_init_container_status_terminated_reason` reads `Completed`. A pod with init
   containers reports that reason during the main container's pull.
 
-Prometheus had already dropped the 2026-10-10 samples by 2026-11-05, despite its `30d` retention
-time, so read them within about three weeks.
+Read them soon after the rollout. Prometheus' `7GiB` retention size ends the window before its
+`30d` retention time: on 2026-11-05 its oldest sample was 21.5 days old.
