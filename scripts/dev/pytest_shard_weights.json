@@ -500,6 +500,7 @@
  "ansible/tests/repo/test_ci_tool_pins_do_not_move_backwards.py": 0.0,
  "ansible/tests/repo/test_claude_md_paragraphs_have_one_home.py": 0.16,
  "ansible/tests/repo/test_cold_start_runbooks_link_bootstrap.py": 0.0,
+ "ansible/tests/repo/test_component_contract_row.py": 0.0,
  "ansible/tests/repo/test_cross_directory_importer_bootstraps_sys_path.py": 0.03,
  "ansible/tests/repo/test_doc_fragments_hook.py": 0.52,
  "ansible/tests/repo/test_docs_quote_current_values.py": 0.0,
