@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-05 13:35 UTC
-generated_sha: fa85103da7
+generated_at: 2026-11-05 18:17 UTC
+generated_sha: 588588c710
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: fa85103da7
 
 # Scripts
 
-474 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+475 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -108,7 +108,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-367 script(s) — imported by another script — not an entry point.
+368 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -254,7 +254,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land_lib/health_verdict.py` | deploy_tools | Step 7: the health verdict, and the two halves a healthy deploy can still leave open. | imported by pipeline.py | `test_land_health_verdict.py` | — |
 | `scripts/dev/fanout_lib/review/held_hooks.py` | dev | The project hooks and settings a review pipeline holds from start, outside the worktree. | imported by review.py | — | — |
 | `scripts/dev/findings_lib/history_cli.py` | dev | The two history subcommands: `history` searches past findings, `show` prints one. | imported by findings.py | — | — |
-| `scripts/renderer/renderer_lib/host.py` | renderer | Host and package modes: one host's package, or one shared package, rendered from the git tree. | imported by engine_case.py, homelab_render.py, host_fixtures.py, secrets_case.py, setup_census.py, unit_templates.py | — | — |
+| `scripts/renderer/renderer_lib/host.py` | renderer | Host and package modes: one host's package, or one shared package, rendered from the git tree. | imported by engine_case.py, homelab_render.py, host_fixtures.py, package_timers.py, secrets_case.py, setup_census.py, unit_templates.py | — | — |
 | `scripts/renderer/renderer_lib/host_arms.py` | renderer | The `activate:` field of a file entry and the `ufw:` key, which feed the reconcile manifest. | imported by host.py, host_manifest.py | `test_renderer_host_arms.py` | — |
 | `scripts/renderer/renderer_lib/host_compose.py` | renderer | The Pi's Compose project in host mode: the include renderer and the inputs hash (H5.2a1). | imported by host.py | — | — |
 | `scripts/validate/validate_lib/host_container.py` | validate | A booted test container for the host_packages container cases, driven with `docker exec`. | imported by bootstrap_case.py, bootstrap_repo_case.py, conffile_case.py, engine_case.py, host_package_cases.py, repos_case.py, secrets_case.py, shadow_case.py | — | — |
@@ -328,7 +328,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/infra_map/model.py` | infra_map | Reconciliation: overlay live state onto the declared skeleton. | imported by gen_infra_map.py | — | — |
 | `scripts/diagnostics/probe_lib/monitors.py` | diagnostics | `probe.py monitors` -- what is down, read from the alert plane. | imported by subcommands.py | `test_probe_monitors.py` | — |
 | `scripts/renderer/renderer_lib/namespace.py` | renderer | The shared kind `homelab-namespace`: the `homelab` Namespace and its LimitRange (D5 step 30). | imported by bundle.py, ordering.py | — | — |
-| `scripts/lib/narrow_git.py` | lib | The reads the two narrowing derivations share: a refusal, a `git show`, and a key diff. | imported by broad.py, digest_covers.py, filters.py, foreign_keys.py, guard_map.py, inventory_keys.py, key_readers.py, narrow_setup.py, paths.py, releases_render.py, secret_keys.py, secret_setup_readers.py, setup_index.py, shared_role_reach.py, task_walk.py, templates.py | `test_narrow_git.py` | — |
+| `scripts/lib/narrow_git.py` | lib | The reads the two narrowing derivations share: a refusal, a `git show`, and a key diff. | imported by broad.py, containers.py, digest_covers.py, filters.py, foreign_keys.py, guard_map.py, inventory_keys.py, key_readers.py, narrow_setup.py, paths.py, releases_render.py, secret_keys.py, secret_setup_readers.py, setup_index.py, setup_playbook.py, shared_role_reach.py, task_walk.py, templates.py | `test_narrow_git.py` | — |
 | `scripts/lib/facts/notice.py` | lib | The facts diff notice: each ``CLAUDE.md`` section citing an atom that a diff moved. | imported by fact_status.py, replay.py, report.py | — | — |
 | `scripts/validate/notification_renders.py` | validate | Hold the Alertmanager notification template to the text it must render. | imported by alert_rules.py | — | — |
 | `scripts/dev/fanout_lib/notify.py` | dev | Page the operator when a fan-out batch's unit stops on any state but `done` (#4602). | imported by launch.py | `test_fanout_notify.py` | — |
@@ -346,6 +346,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/deploy_lib/owners.py` | deploy_tools | Which deploy tags are not Ansible's to deploy, and what `deploy.sh` does with each. | imported by land_flux.py, run.py, shared_role_callers.py, tags.py | — | — |
 | `scripts/deploy_tools/land_lib/pace.py` | deploy_tools | Merge pacing: hold a green PR's merge while master CI already has a backlog (#5526). | imported by merge.py | `test_land_pace.py` | — |
 | `scripts/validate/validate_lib/package_roots.py` | validate | The two scans of the `host_packages` job that read rendered package roots (H4.1c). | imported by host_packages.py | `test_package_roots.py` | — |
+| `scripts/docs/catalog_lib/package_timers.py` | docs | The timers the host packages ship, read from each package as the renderer builds it. | imported by crons.py, glance_facts.py, state.py | `test_package_timers.py` | — |
 | `scripts/deploy_tools/narrow_lib/paths.py` | deploy_tools | The rules `narrow_broad` keeps outside itself: a path shape, and a role-directory read. | imported by broad.py, digest_covers.py, narrow_setup.py | — | — |
 | `scripts/dev/findings_lib/peer_trees.py` | dev | The worktrees the other host's checkout registers, read over ssh (#6840). | imported by boundaries.py | `test_findings_peer_trees.py` | — |
 | `scripts/validate/validate_lib/pi_host_seed.py` | validate | Host state the real Pi has and the systemd test container lacks (H7.27, H7.25). | imported by secrets_case.py | `test_pi_host_seed.py` | — |
@@ -451,7 +452,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/promote_lib/supersede.py` | deploy_tools | `decide` promoting T over a verification in flight: when it may, and against what (D7.5). | imported by promote.py | `test_promote_supersede.py` | — |
 | `scripts/deploy_tools/promote_lib/superseded.py` | deploy_tools | `verify` after a later run moved `prod` past T: the superseded verdict (slice D7.2). | imported by verify_promotion.py | — | — |
 | `scripts/renderer/renderer_lib/suspension.py` | renderer | The rule against `suspend: false` on a Flux object (C3 *Suspension*, D5.1b). | imported by bundle.py, cluster.py | — | — |
-| `scripts/lib/systemd_timer.py` | lib | A systemd timer's triggers read from its unit text, and a daily `OnCalendar=` expanded. | imported by host_reader.py, host_schedule.py, host_wait.py, lander.py | — | — |
+| `scripts/lib/systemd_timer.py` | lib | A systemd timer's triggers read from its unit text, and a daily `OnCalendar=` expanded. | imported by host_reader.py, host_schedule.py, host_wait.py, lander.py, package_timers.py | — | — |
 | `scripts/deploy_tools/deploy_lib/tags.py` | deploy_tools | Validate the --tags a deploy was given, before Ansible silently accepts them. | imported by deploy_cli.py, detach_notify.py, land_shared.py, land_tags.py, releases.py, releases_consumers.py, run.py, staleness.py | `test_deploy_tags.py` | — |
 | `scripts/diagnostics/probe_lib/takeover.py` | diagnostics | `probe.py takeover <tag>` — the fields Flux's first apply of a tag strips (D5.1g). | imported by subcommands.py, takeover_census.py | `test_probe_takeover.py` | — |
 | `scripts/dev/fanout_lib/target.py` | dev | Which repo a batch works: its register, its primary checkout and the branch it merges to. | imported by _fanout_fakes.py, _review_fakes.py, abandon.py, autoland.py, batch_holds.py, brief.py, claim_cli.py, claims.py, clean.py, launch.py, manifest.py, notify.py, own_surface.py, place.py, review.py, review_ci.py, review_unit.py, status.py, transport.py | `test_fanout_target.py` | — |
@@ -478,7 +479,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/worktree_owner.py` | lib | Which Unix user's clone a worktree branch belongs to, read from the branch name alone. | imported by claim.py, target.py | — | — |
 | `scripts/dev/fanout_lib/review/worktree_reset.py` | dev | The reset that returns a red batch's worktree to one commit. | imported by review.py | — | — |
 | `scripts/lib/worktrees.py` | lib | What a Claude session worktree is, and whether it is done with: the worktree library. | imported by _findings_fakes.py, boundaries.py, claim.py, clean.py, peer_trees.py, place.py, prune_worktrees.py, target.py, transport.py, worktree_orphans.py | `test_worktrees.py` | — |
-| `scripts/lib/yaml_fast.py` | lib | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by _job_census.py, _land_wait_fakes.py, _live_read_census.py, _sops_type_proof.py, alert_conventions.py, applied.py, applied_hosts.py, applied_tasks.py, asset_pins.py, atoms.py, bootstrap_drill.py, bundle_census.py, bundle_gates.py, ci_contexts.py, cluster.py, cluster_pins.py, cluster_vars.py, cluster_vars_check.py, compose_templates.py, consumers.py, context.py, cron_targets.py, cronjob_gate.py, crons.py, cross_plane_order.py, deletion_drill.py, digest_covers.py, digest_provable.py, flux_probe.py, foreign_keys.py, forward_only.py, fragment_readers.py, fragments_hosts.py, gen_doc_fragments.py, git_dates.py, glance_facts.py, ha_state_checks.py, ha_state_model.py, health_plumbing.py, health_vendored.py, homelab_render.py, host.py, host_compose.py, host_packages.py, host_secrets.py, host_wait.py, images.py, inventory.py, invocation_sites.py, jinja_defaults.py, k3s_binary_sum.py, k8s_autodeploy_counts.py, k8s_role_callers.py, k8s_roles.py, land_reach.py, lander.py, landing_blockers.py, longhorn_upgrade.py, namespace.py, narrow_git.py, object_loss.py, order_only.py, ordering.py, package_roots.py, pinned_rotation.py, placeholders.py, prepull.py, reboot_window.py, release_bin_groups.py, render_guard.py, restart.py, role_installs.py, rotation_tools.py, roundtrip.py, route_facts.py, secret_bearing_host_paths.py, setup_census_items.py, setup_gates.py, setup_index.py, setup_playbook.py, setup_role_chains.py, setup_routing.py, setup_templates.py, shadow.py, shadow_diff.py, shell_templates.py, snapshot.py, soak.py, sops_entries.py, state.py, stateful.py, suspension.py, takeover.py, task_inputs.py, task_walk.py, validate_ha_config.py, var_aliases.py, vendor_manifest.py, verify_promotion.py | `test_yaml_fast.py` | — |
+| `scripts/lib/yaml_fast.py` | lib | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by _job_census.py, _land_wait_fakes.py, _live_read_census.py, _sops_type_proof.py, alert_conventions.py, applied.py, applied_hosts.py, applied_tasks.py, asset_pins.py, atoms.py, bootstrap_drill.py, bundle_census.py, bundle_gates.py, ci_contexts.py, cluster.py, cluster_pins.py, cluster_vars.py, cluster_vars_check.py, compose_templates.py, consumers.py, context.py, cron_targets.py, cronjob_gate.py, crons.py, cross_plane_order.py, deletion_drill.py, digest_covers.py, digest_provable.py, flux_probe.py, foreign_keys.py, forward_only.py, fragment_readers.py, fragments_hosts.py, gen_doc_fragments.py, git_dates.py, glance_facts.py, ha_state_checks.py, ha_state_model.py, health_plumbing.py, health_vendored.py, homelab_render.py, host.py, host_compose.py, host_packages.py, host_secrets.py, host_wait.py, hosts.py, images.py, inventory.py, invocation_sites.py, jinja_defaults.py, k3s_binary_sum.py, k8s_autodeploy_counts.py, k8s_role_callers.py, k8s_roles.py, land_reach.py, lander.py, landing_blockers.py, longhorn_upgrade.py, namespace.py, narrow_git.py, object_loss.py, order_only.py, ordering.py, package_roots.py, package_timers.py, pinned_rotation.py, placeholders.py, prepull.py, reboot_window.py, release_bin_groups.py, render_guard.py, restart.py, role_installs.py, rotation_tools.py, roundtrip.py, route_facts.py, secret_bearing_host_paths.py, setup_census_items.py, setup_gates.py, setup_index.py, setup_playbook.py, setup_role_chains.py, setup_routing.py, setup_templates.py, shadow.py, shadow_diff.py, shell_templates.py, snapshot.py, soak.py, sops_entries.py, state.py, stateful.py, suspension.py, takeover.py, task_inputs.py, task_walk.py, validate_ha_config.py, var_aliases.py, vendor_manifest.py, verify_promotion.py | `test_yaml_fast.py` | — |
 
 ## Run by hand
 

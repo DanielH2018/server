@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-11-05 06:17 UTC
-generated_sha: f0e5cf0cfe
+generated_at: 2026-11-05 18:17 UTC
+generated_sha: 588588c710
 ---
 
 !!! warning "Generated file — do not edit"
@@ -105,7 +105,7 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `r2_secret_access_key` | 2026-04-11 | 2027-04-10 | 156 |
 | `radarr_api_key` | 2026-08-29 | 2027-08-05 | 273 |
 | `renovate_agent_claude_oauth_token` | 2026-06-01 | 2027-05-21 | 197 |
-| `renovate_agent_gh_token` | 2026-07-21 | 2027-07-13 | 250 |
+| `renovate_agent_gh_token` | 2026-11-05 | 2027-10-28 | 357 |
 | `scrutiny_influxdb_admin_password` | 2026-07-23 | 2027-06-29 | 236 |
 | `scrutiny_influxdb_token` | 2026-03-10 | 2027-02-09 | 96 |
 | `smtp_notify_app_password` | 2026-04-29 | 2027-04-24 | 170 |

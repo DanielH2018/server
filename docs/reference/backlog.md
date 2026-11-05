@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-05 06:17 UTC
-generated_sha: f0e5cf0cfe
+generated_at: 2026-11-05 18:17 UTC
+generated_sha: 588588c710
 ---
 
 !!! warning "Generated file — do not edit"
@@ -23,9 +23,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | worktree-d5-orchestrator-wave16 | ✓ |
 | [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
 | [#7094](https://github.com/DanielH2018/server/issues/7094) | medium | gap | cicd | The soak race fix from #7093 is not live until DEPLOY_HOLD on 64d8b24e clears (deploy-failed) | 2026-11-04 | 0 | - | ✓ |
-| [#7208](https://github.com/DanielH2018/server/issues/7208) | medium | gap | docs | A rebuilt Pi gets no log2ram package, although two files call it a bootstrap install | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7293](https://github.com/DanielH2018/server/issues/7293) | medium | gap | cicd | Treat every YAML parse failure in the narrowing as unparsable through one helper | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
-| [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
 | [#6434](https://github.com/DanielH2018/server/issues/6434) | low | improvement | cicd | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply | 2026-10-28 | 0 | - | - |
@@ -47,7 +46,14 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#7183](https://github.com/DanielH2018/server/issues/7183) | low | gap | docs | Apply the k3s role on daniel-box for PR 7180's needs-manual-apply landing | 2026-11-05 | 0 | - | ✓ |
 | [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
 | [#7195](https://github.com/DanielH2018/server/issues/7195) | low | improvement | security | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token | 2026-11-05 | 0 | - | ✓ |
-| [#7214](https://github.com/DanielH2018/server/issues/7214) | low | improvement | cicd | H7.47: point the readers of the setup tree at the host packages | 2026-11-05 | 0 | - | ✓ |
+| [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
+| [#7232](https://github.com/DanielH2018/server/issues/7232) | low | improvement | docs | Read the G3 freshness measurement and bring the operator the decision | 2026-11-05 | 0 | - | ✓ |
+| [#7238](https://github.com/DanielH2018/server/issues/7238) | low | gap | security | Decide whether the remote allowlist fixture address in git history matters — *no vetted remediation* | 2026-11-05 | 0 | - | ✓ |
+| [#7247](https://github.com/DanielH2018/server/issues/7247) | low | improvement | docs | README and a deploy.yml comment describe a Docker play that has no entries to run | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7284](https://github.com/DanielH2018/server/issues/7284) | low | gap | cicd | A recursive YAML alias in a task file escapes the narrowing's walks as a RecursionError | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7287](https://github.com/DanielH2018/server/issues/7287) | low | improvement | docs | stats_lib.py cites the root CLAUDE.md for the sys.path rule it no longer describes | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7289](https://github.com/DanielH2018/server/issues/7289) | low | gap | cicd | Bound each request of bootstrap-host's fetch so a stalled download reaches the retry | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7291](https://github.com/DanielH2018/server/issues/7291) | low | improvement | docs | loki_route_health.py cites the root CLAUDE.md for a failure class it does not name | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
 
 ## Deferred, by date
 
@@ -68,9 +74,11 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | 2026-11-14 | withheld | [#6435](https://github.com/DanielH2018/server/issues/6435) | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template |
 | 2026-11-16 | withheld | [#7056](https://github.com/DanielH2018/server/issues/7056) | Hand-written docs pages still describe Kuma as the pager after M6 B-7 |
 | 2026-11-19 | withheld | [#4188](https://github.com/DanielH2018/server/issues/4188) | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands |
+| 2026-11-20 | withheld | [#7195](https://github.com/DanielH2018/server/issues/7195) | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token |
 | 2026-11-21 | withheld | [#7175](https://github.com/DanielH2018/server/issues/7175) | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects |
-| 2026-12-09 | withheld | [#4314](https://github.com/DanielH2018/server/issues/4314) | Run the ADR-0019 retirement test on facts.lock after 60 days |
+| 2026-12-05 | withheld | [#7232](https://github.com/DanielH2018/server/issues/7232) | Read the G3 freshness measurement and bring the operator the decision |
 | 2026-12-15 | withheld | [#4435](https://github.com/DanielH2018/server/issues/4435) | Decide whether to move scripts/ into an installable homelab package |
+| 2027-01-04 | withheld | [#7220](https://github.com/DanielH2018/server/issues/7220) | Delete the lock-retired lint rule once no branch predates the G2 flip |
 | 2027-02-01 | withheld | [#6292](https://github.com/DanielH2018/server/issues/6292) | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule |
 
 ## Settled findings — do not re-flag
