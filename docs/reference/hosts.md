@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-11-05 06:17 UTC
-generated_sha: f0e5cf0cfe
+generated_at: 2026-11-05 18:17 UTC
+generated_sha: 588588c710
 ---
 
 !!! warning "Generated file — do not edit"
@@ -22,7 +22,7 @@ k3s server / control-plane node. Ansible runs here, and so do the GitOps timer, 
 | Fact | Value |
 |---|---|
 | LAN address | `10.0.0.215` |
-| Ansible connection | `local` |
+| Host package | `homelab-daniel-box` (27 components) |
 | Services declared | 66 |
 | Runs the GitOps timer | yes |
 | Has Docker | no |
@@ -34,7 +34,7 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 | Fact | Value |
 |---|---|
 | LAN address | `10.0.0.139` |
-| Ansible connection | `ssh` |
+| Host package | `homelab-daniel-pi` (23 components) |
 | Services declared | 0 |
 | Runs the GitOps timer | no |
 | Has Docker | yes |
@@ -46,11 +46,11 @@ k3s agent node. Intel iGPU for transcoding, LVM storage, and the UPS hardware be
 | Fact | Value |
 |---|---|
 | LAN address | `10.0.0.161` |
-| Ansible connection | `local` |
+| Host package | `homelab-daniel-server` (20 components) |
 | Services declared | 0 |
 | Runs the GitOps timer | no |
 | Has Docker | no |
 
 ## Running a playbook against a host
 
-`hosts.ini` pins both cluster nodes to `ansible_connection=local`, so a play's `hosts:` defaults to the local hostname. **`--limit daniel-pi` therefore matches zero hosts** — target the Pi with `-e target=daniel-pi` instead. A one-shot play that ignores this runs on the wrong box while appearing to succeed.
+Both cluster nodes run plays on themselves, so a play's `hosts:` defaults to the local hostname. **`--limit daniel-pi` therefore matches zero hosts** — target the Pi with `-e target=daniel-pi` instead. A one-shot play that ignores this runs on the wrong box while appearing to succeed.

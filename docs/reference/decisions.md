@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-05 13:35 UTC
-generated_sha: fa85103da7
+generated_at: 2026-11-05 18:17 UTC
+generated_sha: 588588c710
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: fa85103da7
 
 # Decisions
 
-930 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+931 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -20,13 +20,13 @@ generated_sha: fa85103da7
     * `.claude/agents/homelab-cicd-reviewer.md:51` and `.claude/hooks/tests/test_hook_shim_fail_open.py:14`
     * `.claude/agents/homelab-cicd-reviewer.md:51` and `ansible/roles/setup/gitops_deploy/CLAUDE.md:95`
     * `.claude/agents/homelab-cicd-reviewer.md:51` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
-    * `.claude/agents/homelab-cicd-reviewer.md:51` and `docs/gitops-pipeline.md:690`
+    * `.claude/agents/homelab-cicd-reviewer.md:51` and `docs/gitops-pipeline.md:694`
     * `.claude/hooks/_claude_guard.py:19` and `scripts/lib/_claude_worktree.py:11`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `ansible/roles/setup/gitops_deploy/CLAUDE.md:95`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:690`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1690`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:694`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1694`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/monitor-bridge-checks.md:486`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:348`
@@ -44,7 +44,7 @@ generated_sha: fa85103da7
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `docs/gitops-pipeline.md:1279`
+    * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `docs/gitops-pipeline.md:1283`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `scripts/lib/b2.py:21`
     * `ansible/roles/k8s/authelia/tasks/main.yml:15` and `ansible/roles/k8s/nut/tasks/main.yml:22`
@@ -135,32 +135,32 @@ generated_sha: fa85103da7
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/optimize_pi/tasks/main.yml:8`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
     * `ansible/roles/setup/gitops_deploy/CLAUDE.md:95` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
-    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:95` and `docs/gitops-pipeline.md:690`
+    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:95` and `docs/gitops-pipeline.md:694`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_broad_k8s.py:324` and `scripts/lib/tests/test_ansible_jinja_env.py:171`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `docs/gitops-pipeline.md:1279`
+    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `docs/gitops-pipeline.md:1283`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1279`
+    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `docs/gitops-pipeline.md:1283`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25` and `docs/gitops-pipeline.md:1279`
+    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25` and `docs/gitops-pipeline.md:1283`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15` and `ansible/tests/repo/test_adr_links.py:12`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15` and `docs/gitops-pipeline.md:1279`
+    * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15` and `docs/gitops-pipeline.md:1283`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15` and `scripts/lib/b2.py:21`
     * `ansible/roles/setup/homelab_builder/tasks/main.yml:7` and `ansible/roles/setup/nut_host/tasks/main.yml:7`
@@ -175,48 +175,48 @@ generated_sha: fa85103da7
     * `ansible/tests/_ratchet.py:56` and `ansible/tests/_ratchet.py:332`
     * `ansible/tests/repo/test_adr_links.py:1` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:170`
     * `ansible/tests/repo/test_adr_links.py:12` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1279`
+    * `ansible/tests/repo/test_adr_links.py:12` and `docs/gitops-pipeline.md:1283`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/lib/b2.py:21`
     * `ansible/tests/repo/test_adr_links.py:34` and `ansible/tests/repo/test_census_rows_roles.py:255`
-    * `ansible/tests/setup/test_aide_check.py:13` and `docs/gitops-pipeline.md:838`
+    * `ansible/tests/setup/test_aide_check.py:13` and `docs/gitops-pipeline.md:842`
     * `docs/adr/0025-suc-upgrades-k3s-and-homelab-k3s-restart-restarts-it.md:135` and `docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md:121`
     * `docs/adr/index.md:9` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:100`
     * `docs/adr/template.md:51` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:372`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:162` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:344`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:7`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:690`
+    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:694`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1690`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1694`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/monitor-bridge-checks.md:486`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1279`
+    * `docs/archive/docs-ui-and-adrs/design.md:27` and `docs/gitops-pipeline.md:1283`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1690`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1694`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/monitor-bridge-checks.md:486`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:690`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1690`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:694`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1694`
     * `docs/archive/post-merge-automation.md:268` and `docs/monitor-bridge-checks.md:486`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/break-glass.md:297` and `scripts/deploy_tools/shared_role_reach.py:22`
-    * `docs/gitops-pipeline.md:690` and `docs/gitops-pipeline.md:1690`
-    * `docs/gitops-pipeline.md:690` and `docs/monitor-bridge-checks.md:486`
-    * `docs/gitops-pipeline.md:690` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:690` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/gitops-pipeline.md:1072` and `scripts/deploy_tools/shared_role_callers.py:24`
-    * `docs/gitops-pipeline.md:1279` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
-    * `docs/gitops-pipeline.md:1279` and `scripts/lib/b2.py:21`
-    * `docs/gitops-pipeline.md:1690` and `docs/monitor-bridge-checks.md:486`
-    * `docs/gitops-pipeline.md:1690` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:1690` and `scripts/diagnostics/tests/test_probe_health.py:348`
+    * `docs/break-glass.md:300` and `scripts/deploy_tools/shared_role_reach.py:22`
+    * `docs/gitops-pipeline.md:694` and `docs/gitops-pipeline.md:1694`
+    * `docs/gitops-pipeline.md:694` and `docs/monitor-bridge-checks.md:486`
+    * `docs/gitops-pipeline.md:694` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:694` and `scripts/diagnostics/tests/test_probe_health.py:348`
+    * `docs/gitops-pipeline.md:1076` and `scripts/deploy_tools/shared_role_callers.py:24`
+    * `docs/gitops-pipeline.md:1283` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
+    * `docs/gitops-pipeline.md:1283` and `scripts/lib/b2.py:21`
+    * `docs/gitops-pipeline.md:1694` and `docs/monitor-bridge-checks.md:486`
+    * `docs/gitops-pipeline.md:1694` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1694` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/monitor-bridge-checks.md:486` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/monitor-bridge-checks.md:486` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/target-architecture/contracts.md:327` and `docs/target-architecture/deploy/d2-first-leaf.md:755`
@@ -591,7 +591,7 @@ generated_sha: fa85103da7
 | drop one destination, do not allowlist. | `ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2:23` | 2026-08-28 |
 | the UUID is pinned, derived from the filter's own name. | `ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2:44` | 2026-08-28 |
 | the cluster's pod and Service ranges are fenced alongside the LAN, and the | `ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2:62` | 2026-08-28 |
-| ` comment, because they read HOST HISTORY | `ansible/roles/setup/initial_setup/CLAUDE.md:34` | 2026-10-31 |
+| ` comment, because they read HOST HISTORY | `ansible/roles/setup/initial_setup/CLAUDE.md:42` | 2026-10-31 |
 | `always`, not `crons` — this is a dependency of tasks in OTHER roles under other tags, so any tag that selects a consumer must also select this. Consumers source it with a `\|\| exit 1` guard, and enumerating their tags here would re-break the next time one picks up a new tag. Cost is one idempotent copy per tag-scoped run of initial_setup.yml. | `ansible/roles/setup/initial_setup/tasks/crons.yml:8` | 2026-11-04 |
 | a copy of the agent users the host packages declare, not a read of claude_code's defaults (#6831). Role defaults are play-wide, so reading them made that file an input of this role, and the file is leaving the role (#6773). Each host's list copies the `users:` entry of that host's package.yml; a clone is `<home>/server`. Switching an agent off on a host deletes its `users:` entry there, and ansible/tests/setup/test_worktree_holders_install.py fails until this host's list drops it too, which revokes the agent's scan at the next apply. A host missing here gets none. | `ansible/roles/setup/initial_setup/tasks/crons.yml:161` | 2026-11-01 |
 | the map entry is the per-user grant (#4295), and the socket's group is only the gate on who may connect. The service refuses any uid this map does not name, so dropping an agent from initial_setup_worktree_holders_agents_by_host revokes its scan at the next apply, though it keeps the group. A group alone could not be the grant: a membership reaches a process only at its next login, and the claude-code host component's claude-agent-setup owns each agent's exact group list. | `ansible/roles/setup/initial_setup/tasks/crons.yml:196` | 2026-10-10 |
@@ -691,7 +691,7 @@ generated_sha: fa85103da7
 | the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s | `scripts/deploy_tools/land_lib/tools.py:291` | 2026-09-16 |
 | a `toposort.py` change is order-only when running the k8s sort chain at both ends yields the same entries and leaves its input untouched (#4842). `deploy.yml` reads the plugin as `filter_by_platform('k8s')`, then `build_k8s_dep_map` into `toposort_containers`, whose result becomes the `containers_list` every role reads through `item`; and as `filter_by_platform('docker')` for the Docker play. So a change whose outputs are a permutation of identical entries, and that writes no entry in place, moves deploy order and nothing a role does. #4841 and #4844 read the code's syntax for writes instead, and each review found a new aliasing bypass: Python mutation cannot be tracked soundly from syntax. Running the code imports it, which `filters.py` never does; here both ends are commits the deploy itself imports, under the same interpreter. A side effect outside the returned entries that leaves the process, such as a file write, an environment change or a child process, ends the run through the runner's audit hook, and a path that appears under the temp tree fails it too (#4846). `os.mkfifo` and `os.mknod` raise no audit event, so the runner replaces them with a call that ends the run (#4999). The calls in `_dbm`, `_gdbm`, `_posixshmem` and `_multiprocessing` that create or remove a filesystem entry raise no event either, so the runner imports those modules first and replaces the calls the same way (#5063). Any other C module can hold state and make calls that no audit event reports, so the runner ends the run when a C module outside its `c_modules` list, the ones the real chain imports, is created through the two `_imp` calls every built-in and shared-object module is created through (#5201). Those calls run before the module's code does. A plugin written to evade the wrap can still reach the original calls, through the wrapper's closure or with a spec whose name changes after the check. The good-faith limit at the end of this block covers that case. A side effect that stays in the process is compared between the two ends rather than refused: importing Ansible rebinds `sys.intern` at both (#4995). That covers an attribute of another module added, rebound or deleted, a module loaded, and an in-place change to an object the walk copies. The walk copies every object at every depth below a module attribute, taking each object at the shallowest depth any module attribute reaches it: an item of a list, dict, set or deque, an attribute in an object's `__dict__`, or a member of a heap type, which includes every `__slots__` value (#5107). So it sees `logging.disable` writing `logging.root.manager`, `logging.root.addFilter` adding to `logging.root.filters`, a named logger's `disabled` flag under `logging.Logger.manager.loggerDict` (#5085), and that logger's `filters` a level below. The runner's `readers` table reads C objects' state through their own C getters: a random generator's and a decimal context's (#5107), and an `RLock`'s holder and an `itertools.count`'s next value, which the walk reaches through a bound slot's `__self__` (#5209). It also covers process state no module attribute holds, such as the umask, a signal handler or mask, a pending timer, an atexit callback, the recursion limit, the dlopen flags, gc's freeze count (#5060), the thread stack size (#5107), gc's debug flags, the coroutine origin tracking depth, the inheritable flag of fds 0-2, `_socket`'s default timeout or the thread's decimal context (#5209). No function reads back the codec registries, the at-fork handlers, faulthandler's handlers and watchdog or a signal's `siginterrupt` flag, so the runner wraps the calls that change them and compares how many returned. An `open` whose mode string writes ends the run as its flags do, because a C-level `fopen` such as `readline.write_history_file` raises the event with flags 0 (#5081). A second walk, once the plugin's module code has run, copies the objects that code created, such as a logger the base end makes and the head end's filter call disables (#5085). Neither walk sees what the module code wrote to such an object before it, so the report also compares each one's `signature` between the ends (#5107): its `bool`, `int`, `str` and container-length attributes, a tuple's items, a reference to a walked object as that object's walk path, a function or method by its qualified name and a bound method's `__self__` (#6433), and the same of every object below it that no walk copied (#5209). A walk path through a set item follows hash order, so a reference to an object under one reads as that object's own contents instead (#6425). A logger first created while the chain runs sits in neither walk, so the report compares the `signature` of each such logger (#5085), which reaches its handlers and filters (#5209). The gaps taken: a branch HEAD's data does not exercise; a reference re-pointed between two objects under set items whose contents read alike; a function replaced by another of the same qualified name, such as one lambda for another; state inside a C object outside the `readers` table, or in a static C type's members, when its module is one the runner loads before its hook or lists in `c_modules`; process state the runner neither reads nor counts; a counted call through a reference taken before the runner wrapped it; an unaudited call it does not replace in a C module of either kind; and a role whose bytes depend on list order, which the render proof the caller still requires catches. The runner is distinguishable from a deploy. Its cwd ends in `/cwd` under an `order-only-` temp dir, `sys.flags.isolated` is 1, and `sys.argv[0]` is `-c`. So the check holds only for a plugin written in good faith. It catches an accidental side effect, not an evasive one, such as a fresh `posix` from `_imp.create_builtin` that still has `mknod`. We accept that limit, because a commit that can land a hostile filter plugin on master can act through any deploy anyway. The operator confirmed on 2026-10-16 that the check's bar is an accidental side effect, so a review finding that needs an evasive plugin is out of scope. In-process Python cannot hide a reference from code in the same interpreter, so meeting the other bar would take a separate process, not another wrap. | `scripts/deploy_tools/narrow_lib/order_only.py:34` | 2026-10-13 |
 | ` on `is_doc` says why that | `scripts/deploy_tools/narrow_lib/paths.py:40` | 2026-09-30 |
-| ` comment says why), and refusing on them made the role's most-edited task file narrow nothing. A file whose ONLY tag is `always` still refuses, since no tag is left to name its work. | `scripts/deploy_tools/narrow_lib/task_walk.py:34` | 2026-10-11 |
+| ` comment says why), and refusing on them made the role's most-edited task file narrow nothing. A file whose ONLY tag is `always` still refuses, since no tag is left to name its work. | `scripts/deploy_tools/narrow_lib/task_walk.py:32` | 2026-10-11 |
 | a shipped file this role renders only through another role's task file refuses here; it is not resolved through that task file's readers (#3322). The check-timer templates reach gitops_deploy, render_records and k3s only through `common/tasks/check_timer.yml`, so a change to them falls back to the whole-role tag. That costs a longer apply and never misses one. Those templates changed twice in the repo's history, and each routing layer added from 2026-10-01 on found the next indirection, so one more layer was not worth its code. Reopen it if the trigger recurs or the fallback grows costlier than a longer apply; #3322's close reason is the long form. | `scripts/deploy_tools/narrow_setup.py:617` | 2026-10-03 |
 | the grace is a fixed 15 minutes, not `verify`'s timeout. | `scripts/deploy_tools/promote_lib/controller_rollout.py:17` | 2026-10-23 |
 | a first run has no `last-good` and no `prod` to bound the range, so it reads the same window its walk examined and takes the oldest commit in it as the lower bound. The first run predates every forward-only pin by construction. | `scripts/deploy_tools/promote_lib/forward_only.py:274` | 2026-10-16 |
@@ -740,7 +740,7 @@ generated_sha: fa85103da7
 | refuse on change, never restore. | `scripts/dev/fanout_lib/review/git_state.py:10` | 2026-10-10 |
 | pin settings rather than snapshot and restore the config file. | `scripts/dev/fanout_lib/review/hardened_runs.py:68` | 2026-10-10 |
 | in this repo's batch, every phase that starts after the implementer ran (review, fix, | `scripts/dev/fanout_lib/review/held_hooks.py:11` | 2026-10-09 |
-| the implement phase keeps the project source only when no red phase ran before it. | `scripts/dev/fanout_lib/review/held_hooks.py:21` | 2026-10-09 |
+| the implement phase keeps the project source only when no red phase ran before it. | `scripts/dev/fanout_lib/review/held_hooks.py:24` | 2026-10-09 |
 | the red phase and every test run the pipeline starts are reaped, and nothing else. | `scripts/dev/fanout_lib/review/processes.py:13` | 2026-10-11 |
 | a function or import that was in the file before the red commits, and that no red node | `scripts/dev/fanout_lib/review/red_lock.py:47` | 2026-10-12 |
 | a constant may be built from another constant (#5229). | `scripts/dev/fanout_lib/review/red_lock.py:55` | 2026-10-22 |
@@ -749,7 +749,7 @@ generated_sha: fa85103da7
 | a table the fix appends may hold lambdas when no red test reads its name (#5520). | `scripts/dev/fanout_lib/review/red_lock.py:79` | 2026-10-29 |
 | a refused red commit does not stop the batch. | `scripts/dev/fanout_lib/review/review.py:39` | 2026-10-10 |
 | the fix round resumes the implementer session rather than starting a fresh one. | `scripts/dev/fanout_lib/review/review.py:44` | 2026-10-08 |
-| one module, even past the line guideline, rather than a mixin. green gate read the pipeline's state and call its `_claude`, `_git` and argv builders, so a module holding them alone could not be read without this class (#3661's `conjoined:` rule). | `scripts/dev/fanout_lib/review/review.py:174` | 2026-10-24 |
+| one module, even past the line guideline, rather than a mixin. green gate read the pipeline's state and call its `_claude`, `_git` and argv builders, so a module holding them alone could not be read without this class (#3661's `conjoined:` rule). | `scripts/dev/fanout_lib/review/review.py:176` | 2026-10-24 |
 | the CI resume gets no delta review. is the independent verdict on it. | `scripts/dev/fanout_lib/review/review_ci.py:340` | 2026-10-13 |
 | the worktree's own `land.sh` runs, the copy the model ran before. | `scripts/dev/fanout_lib/review/review_land.py:14` | 2026-10-10 |
 | 0.5, not 0.6 (#3675). at 0.5-0.55 were material defects the fix round never saw; at 0.45 it was 3 of 7. | `scripts/dev/fanout_lib/review/review_record.py:23` | 2026-10-11 |
@@ -795,7 +795,7 @@ generated_sha: fa85103da7
 | homepage's expectation stays `My Awesome Homepage`; do NOT relax it to `Homepage`. `Homepage` is the app's OWN fallback — `initialSettings.title \|\| "Homepage"` at `src/pages/index.jsx:410` in gethomepage/homepage v1.13.2, the revision this cluster runs — so seeing it means the page rendered with NO settings at all, which is the failure this entry exists to catch. Verified 2026-09-06 against the live pod: `__NEXT_DATA__.props.pageProps.initialSettings.title` reads `My Awesome Homepage`, and `title:` at `roles/k8s/homepage/templates/config/settings.yaml.j2:2` is what puts it there. Issue #1399 read a `Homepage` failure as a stale expectation and proposed both relaxing this line and deleting that setting; both would have made the check permanently green on the broken state. | `scripts/diagnostics/tests/test_ui_smoke.py:49` | 2026-09-06 |
 | `speedtest-tracker` is not enrolled, and its `table` panel is not why `exportarr-arr-stack` is. Two of the four boards above already carry a `table` (claude-code-otel, traefik-custom), so `table` is not a new shape — flatness is. speedtest-tracker is that same flat shape carrying only `stat` and `timeseries`, both enrolled twice over, so under this list's own one-per-shape rule it adds nothing while costing another board in the single browser the 2Gi limit bounds. Re-enrol it only against a shape argument, not because it is unenrolled. Issue #1387. Re-measured live 2026-09-06 after `Download queue depth` (panel id 14) landed: the board drew 13 headers when it was enrolled, and draws 14 now. Re-measured live 2026-09-10 after `sonarr episode quality mix` (panel id 15, a flat `piechart`) landed: enrolled at 999 and read the observed count out of the failure — `the dashboard mounted but drew 15 panel header(s)`. That is how to re-measure this list; a derivation from the board's panel count only holds while it carries no `row`. | `scripts/diagnostics/tests/test_ui_smoke_grafana.py:67` | 2026-09-06 |
 | the blocks stay, rather than moving these facts into `docs/reference/services.md`. | `scripts/docs/gen_role_glance.py:17` | 2026-09-28 |
-| the hook regenerates at commit time rather than `inject-nested-docs` generating | `scripts/docs/gen_role_glance.py:65` | 2026-10-09 |
+| the hook regenerates at commit time rather than `inject-nested-docs` generating | `scripts/docs/gen_role_glance.py:66` | 2026-10-09 |
 | module-level and one-way in practice, not deferred — checks are a pure function of the model, so this edge is the real dependency, not an artifact of split order. The reverse edge (ha_state_model.py:520, `main()`'s `check` subcommand calling check_errors) is the deferred one; see the DECIDED marker there for why it isn't worth a third module. | `scripts/home_assistant/ha_state_checks.py:34` | 2026-09-05 |
 | deferred, the reverse edge of probe_lib/ha.py:581's `run_ha_state`. function needs build_model() to render `ha state`; `refresh` here needs core/ha's live-HTTP helpers (ha_base/ha_resolve/ha_token/ha_get_json) to snapshot external entities. Both edges stay inside the one function that needs them, so neither runs at import time. Fixing it means carving the HA HTTP client out of probe_lib.ha into a module neither side owns — real restructuring, so it is pinned in ALLOWED_CYCLES instead. | `scripts/home_assistant/ha_state_model.py:425` | 2026-09-05 |
 | deferred, the reverse edge of ha_state_checks.py:34's module-level import of this module's build_model/DERIVED_YAML/etc. That import is real and load-bearing (the checks are a pure function of the model), so it cannot move here instead. This one is deferred only because it exists to serve the CLI's `check` subcommand — every other subcommand (generate/refresh) never touches ha_state_checks at all. Moving the CLI dispatch itself into a third module would break the cycle but turns a working two-module split into three for one subcommand; pinned in ALLOWED_CYCLES instead. | `scripts/home_assistant/ha_state_model.py:516` | 2026-09-05 |
@@ -906,6 +906,7 @@ generated_sha: fa85103da7
 | ` comment at the code line it governs — that is | `docs/adr/index.md:9` | 2026-08-24 |
 | ` literal and carries the reference after it — | `docs/adr/index.md:15` | 2026-08-24 |
 | … (ADR-0011)`, never `# DECIDED (ADR-0011):`. | `docs/adr/index.md:16` | 2026-08-24 |
+| `origin\[:8\]`' ansible/roles/setup/gitops_deploy/files/ | `docs/adr/index.md:28` | 2026-11-05 |
 | ` marker referencing this record. | `docs/adr/template.md:45` | 2026-08-24 |
 | ` literal and puts the reference after it**, like this: | `docs/adr/template.md:48` | 2026-08-24 |
 | 8 chars, not 12 — minimum-not-width, and the assert fires before the scale-down. (ADR-0011) | `docs/adr/template.md:51` | 2026-08-24 |
@@ -938,24 +939,24 @@ generated_sha: fa85103da7
 | ` block has to be redone: | `docs/archive/self-hosted-runner-spike.md:190` | 2026-09-22 |
 | ` marker above the retirement tasks in `roles/setup/gitops_deploy/tasks/install.yml`. | `docs/archive/staging-phase-c.md:529` | 2026-09-24 |
 | ` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the | `docs/authelia-sessions-and-crowdsec-init.md:135` | 2026-09-29 |
-| ` comment on | `docs/break-glass.md:297` | 2026-10-04 |
-| ` marker for that rule. | `docs/break-glass.md:546` | 2026-10-24 |
+| ` comment on | `docs/break-glass.md:300` | 2026-10-04 |
+| ` marker for that rule. | `docs/break-glass.md:549` | 2026-10-24 |
 | no | `docs/crowdsec-waf-record.md:32` | 2026-09-29 |
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:226` | 2026-10-10 |
 | ` at `chained_timeout.py:VERIFY_CAP_S` records | `docs/flux-deploy-plane.md:1324` | 2026-10-22 |
 | ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:217` | 2026-10-10 |
-| ` marker. | `docs/gitops-pipeline.md:690` | 2026-10-24 |
-| ` on | `docs/gitops-pipeline.md:794` | 2026-10-10 |
-| ` at the fallback in `deploy_narrow.py` says why doubt | `docs/gitops-pipeline.md:796` | 2026-10-10 |
-| ` marker and the measurement. | `docs/gitops-pipeline.md:838` | 2026-10-10 |
-| ` at | `docs/gitops-pipeline.md:1072` | 2026-10-10 |
-| ` | `docs/gitops-pipeline.md:1279` | 2026-10-10 |
-| ` at that task says why the | `docs/gitops-pipeline.md:1359` | 2026-10-10 |
-| ` marker | `docs/gitops-pipeline.md:1690` | 2026-10-10 |
+| ` marker. | `docs/gitops-pipeline.md:694` | 2026-10-24 |
+| ` on | `docs/gitops-pipeline.md:798` | 2026-10-10 |
+| ` at the fallback in `deploy_narrow.py` says why doubt | `docs/gitops-pipeline.md:800` | 2026-10-10 |
+| ` marker and the measurement. | `docs/gitops-pipeline.md:842` | 2026-10-10 |
+| ` at | `docs/gitops-pipeline.md:1076` | 2026-10-10 |
+| ` | `docs/gitops-pipeline.md:1283` | 2026-10-10 |
+| ` at that task says why the | `docs/gitops-pipeline.md:1363` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1694` | 2026-10-10 |
 | ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:153` | 2026-09-29 |
 | ` the names stay generated, and a label sits beside them. | `docs/issue-claiming-and-fanout.md:251` | 2026-10-11 |
-| HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:364` | 2026-10-02 |
-| this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:437` | 2026-10-02 |
+| HMAC-SHA256 under a host-local key` | `docs/k8s-manifest-cycle-record.md:372` | 2026-10-02 |
+| this digest names the bytes` | `docs/k8s-manifest-cycle-record.md:445` | 2026-10-02 |
 | ` marker on `PACE_MASTER_RUNS` in | `docs/landing.md:100` | 2026-10-29 |
 | ` marker on `descendant_verdict` records why that is accepted. | `docs/landing.md:284` | 2026-10-12 |
 | ` at `smoke_caller` holds | `docs/landing.md:751` | 2026-10-01 |
@@ -969,9 +970,9 @@ generated_sha: fa85103da7
 | ` marker for the 3 GiB free-bytes floor sits there too. | `docs/monitor-bridge-checks.md:496` | 2026-10-31 |
 | ` markers for the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen | `docs/monitor-bridge-checks.md:505` | 2026-10-31 |
 | stays at 20` marker, which records | `docs/monitor-bridge-checks.md:546` | 2026-10-31 |
-| ` marker with the byte | `docs/pi-host-tuning-record.md:67` | 2026-10-10 |
-| ` marker carries the | `docs/pi-host-tuning-record.md:320` | 2026-09-30 |
-| ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:278` | 2026-10-24 |
+| ` marker with the byte | `docs/pi-host-tuning-record.md:69` | 2026-10-10 |
+| ` marker carries the | `docs/pi-host-tuning-record.md:322` | 2026-09-30 |
+| ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:285` | 2026-10-24 |
 | ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` comment beside it accepts a grouped VERSION bump paging four days early as the cost. | `docs/renovate-notify-internals.md:82` | 2026-10-02 |
 | ` marker in `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2` holds the evidence. | `docs/security-tools.md:25` | 2026-10-12 |
@@ -979,7 +980,7 @@ generated_sha: fa85103da7
 | a verification in flight is guarded by two checks`. | `docs/target-architecture/contracts.md:327` | 2026-10-15 |
 | a verification in flight is guarded by two checks` in | `docs/target-architecture/deploy/d2-first-leaf.md:755` | 2026-10-15 |
 | ` marker at `ALLOWED_IMPORTS` in | `docs/target-architecture/deploy/d5-bulk-move.md:25` | 2026-10-16 |
-| the notice never blocks a merge … (ADR-0023)`, added in | `docs/target-architecture/docs-guard/g2-retire-lock.md:257` | 2026-10-17 |
+| the notice never blocks a merge … (ADR-0023)`, added in | `docs/target-architecture/docs-guard/g2-retire-lock.md:258` | 2026-10-17 |
 | ` marker beside the member in `secret_checks.py` records the choice. | `docs/target-architecture/host/h1-cluster-config-to-flux.md:935` | 2026-10-22 |
 | ` marker in the | `docs/target-architecture/monitoring/m6-status/a1.md:134` | 2026-10-31 |
 | ` marker in | `docs/target-architecture/monitoring/m6-status/b5.md:42` | 2026-10-31 |
@@ -1021,12 +1022,12 @@ generated_sha: fa85103da7
 | ansible-lint gets its own job, again. 2026-08-14, and restored it on 2026-09-10 (#1332). The revert is not a precedent to re-apply, because the two facts it rested on have both gone: | `.github/workflows/ci.yml:166` | 2026-09-10 |
 | the notice never blocks a merge, during the soak or after the lock retires. PR that moves a cited atom gets a notice, not a red check. The trade, and the coverage it gives up, is in docs/adr/0023-fact-support-is-a-diff-notice.md. (ADR-0023) | `.github/workflows/ci.yml:322` | 2026-10-17 |
 | `[A-Z][A-Z]+`, not `[A-Z]{2,}`. `{2,}` form parses as two broken patterns. The first attempt silently ignored nothing; wrapped in a group, it failed with "missing closing )". | `.vale.ini:85` | 2026-09-25 |
-| ` at the line it governs.** A decision recorded only in a | `CLAUDE.md:224` | 2026-08-22 |
-| `origin\[:8\]`' | `CLAUDE.md:228` | 2026-09-18 |
+| ` at the line it governs.** Reviewer briefs grep for the | `CLAUDE.md:179` | 2026-11-05 |
 | the home is `ansible/filter_plugins/`, not a directory outside it. | `ansible/filter_plugins/filter_errors.py:6` | 2026-10-12 |
 | a task names a group by its own spelling, `'no-backup' \| backup_group_label`, not by | `ansible/filter_plugins/longhorn_groups.py:19` | 2026-10-10 |
 | the shard is declared per claim, never derived from a position. | `ansible/filter_plugins/longhorn_groups.py:95` | 2026-10-10 |
 | ` marker named. | `ansible/filter_plugins/role_label.py:10` | 2026-10-04 |
+| deploy.yml's Docker play and this filter's `docker` default stay until R4 or H7 deletes that file's last play. The play runs no role, and its snapshot pre_task feeds the k8s play. Long form: docs/target-architecture/host/h5-pi-compose.md, H5-R1-06. | `ansible/filter_plugins/toposort.py:176` | 2026-11-05 |
 | cni0 alone, for netpol_baseline_node_cidrs. `netpol_baseline_node_cidrs` reads the pair above and NOT the flannel pair below, deliberately. A host process reaching a baseline-selected pod on the other node is denied — measured 2026-09-10 (#1725) with the pod's node as the only variable: from daniel-box, sonarr's ClusterIP (pod on daniel-box) answered 200 while prowlarr's (pod on daniel-server) timed out, and from daniel-server the two verdicts swapped. The census found ONE host caller of that shape, `get_via_service()` in scripts/diagnostics/postflight.py, and it already falls back to the workload's Traefik route when the ClusterIP does not answer (#1633) — which is why the *arr `-monitoring` routes had to admit the flannel pair in #1697. Traefik itself is immune: its policy's first ingress rule carries ports 8000/8443 with no `from:`, so the three host crons that dial it are unaffected by this list. Adding the flannel pair here would re-scope every pod the namespace-scoped baseline selects, to buy a fast path that already has a working fallback. Contradict this with a NAMED host caller that has no route fallback. The two nodes' flannel.1 VXLAN addresses — the OTHER source a host process can arrive as. Which of the two sets a host request carries depends on where the traefik pod sits: traffic to a pod on the SAME node leaves via cni0 and arrives as that node's cni0 gateway above, while traffic to a pod on the OTHER node crosses the overlay and arrives as the sending node's flannel.1 address. Traefik is pinned to daniel-box, so daniel-box arrives as 10.42.0.1 and daniel-server as 10.42.1.0 — measured 2026-09-10 (#1693): from a daniel-server shell `ip route get` to a daniel-box pod reads `src 10.42.1.0`, and the same day's #1683 measurement read `ClientHost: 10.42.1.0` off Traefik's access log. | `ansible/inventory/group_vars/all.yml:130` | 2026-09-11 |
 | 40x CPU / 32x memory default-to-request, two namespaces only; do not tighten it, and do not extend it to longhorn-system (instance-manager already peaks near a 2Gi limit). | `ansible/inventory/group_vars/all.yml:466` | 2026-09-30 |
 | off, and the DB-size risk is covered by a proxy instead. re-encrypts every Secret (#2294), k3s-bringup.yml is manual-plane by construction, and the flag opens an unauthenticated :2381 — more cost than the gap is worth on a single voter, where leader changes and WAL fsync latency carry little signal anyway. The one series that does matter, the DB size against its 2 GiB quota, is readable WITHOUT the flag: `apiserver_storage_size_bytes` is scraped unconditionally, and #2403 reports it matching the etcd snapshot's size. The `EtcdDBNearQuota` rule reads it (ansible/roles/k8s/observability/files/rules/storage.yaml, #2403). Reopen this with evidence that fsync latency or leader churn is what broke, not with the observation that the etcd series are empty — that is this decision, not a finding. | `ansible/inventory/group_vars/all.yml:504` | 2026-09-25 |
@@ -1121,7 +1122,7 @@ generated_sha: fa85103da7
 | ` marker in `ansible/roles/k8s/observability/defaults/main.yml` records it.\n- [operator] Keep PeaNUT, although nut-exporter and the Grafana UPS board cover the same data. | `evals/cases/homelab-review/002-drop-settled.json:5` | 2026-10-22 |
 | ` marker in the | `hosts/components/builder/CLAUDE.md:110` | 2026-10-25 |
 | the anchor is a commit`. | `hosts/components/builder/CLAUDE.md:112` | 2026-10-25 |
-| ` at `CANARY_ORDER`). | `hosts/components/builder/CLAUDE.md:154` | 2026-11-03 |
+| ` at `CANARY_ORDER`). | `hosts/components/builder/CLAUDE.md:159` | 2026-11-03 |
 | the two rules admit every pod on daniel-server as well as the host itself. masquerades a pod's traffic to an address outside the pod CIDR to that node's LAN IP, so a pod arrives as daniel-server's `server_ip` and matches the allow. The repository serves only signed, public packages, so the wider reach exposes no data, and nothing at L3 tells the host apart from its pods. | `hosts/components/builder/component.yml:83` | 2026-10-25 |
 | the scripts keep their /usr/local paths (/usr/local/bin/rootq, the clone and dotfiles syncs, homelab-rootq and its socket helper). The scripts, the sudoers grant and the dotfiles' claude-guard allowlist name those paths. dpkg took each file the role had installed over at install. | `hosts/components/claude-code/component.yml:36` | 2026-10-30 |
 | worktree, not same-dir. thing this repo's parallel-session rule forbids, and `prune_worktrees.py` already collects finished worktrees while respecting a live session's lock. | `hosts/components/claude-code/defaults/main.yml:36` | 2026-08-23 |
@@ -1166,9 +1167,9 @@ generated_sha: fa85103da7
 | `config` runs here only as `--services`, which prints names. interpolated model, which holds every secret value in compose.env. | `hosts/components/pi-compose/compose-adopt:10` | 2026-10-24 |
 | the engine never moves through the updater (#1961, H7-R1-02). no `depends:` on docker-ce, containerd.io or the plugins, and ships no apt preferences pin for them, because a pin above priority 1000 forces a version change on the next apt run. The packages stay held, and homelab-docker-engine.service is the one path that installs or moves them. Reconcile never starts it (`policy: manual`, no enable link on the service). An operator starts it from a LAN session, or homelab-docker-engine.timer starts it at 00:30 UTC, the Pi's quiet window (operator ruling 2026-10-30). The unit does nothing while every package sits at its pin, so the timer acts only after a pin moved. hosts/lib/tests/test_pi_docker_component.py holds these rules. | `hosts/components/pi-docker/component.yml:10` | 2026-10-30 |
 | 00:30 UTC (the Pi's clock is UTC), operator ruling 2026-10-30 on H7 Open question 8. The slot is chosen against the Pi's own schedule, each entry in UTC: - homelab-updater.timer (hosts/daniel-pi/units/homelab-updater.timer.conf) fires once a day at 03:05, after this unit's 90-minute worst case, and the unit masks the timer and waits out a running updater regardless. - The midnight cluster runs 23:55 to 00:10: log2ram's sync, logrotate, dpkg-db-backup and sysstat. 00:30 follows it. - man-db runs 01:00 to 03:00, and the rotated-log sweep at 01:40. Both come after 00:30. - The other gap, 04:00 to 05:59, is not usable: pi-peer-backup pulls the wg-easy configs from the Pi at 23:00 America/Chicago, which is 04:00 UTC under CDT and 05:00 UTC under CST, and the Pi's apt timers run at 04:20 and 05:20 plus up to 10 minutes. The upgrade recreates wg-easy and takes the dpkg lock, so it must not meet either. The unit's apt run takes minutes. The unit masks the updater timer before it stops anything, so an upgrade that outlasts 03:05 still meets no updater run. | `hosts/components/pi-docker/units/homelab-docker-engine.timer:6` | 2026-10-30 |
-| ` marker has the declined re-proposal. - Next-run review: a repeat `restarted:` for the same container needs fixing upstream. Read the week's status=down lines before widening the watch set. | `hosts/components/pi-heartbeats/component.yml:48` | 2026-10-16 |
+| ` marker has the declined re-proposal. - Next-run review: a repeat `restarted:` for the same container needs fixing upstream. Read the week's status=down lines before widening the watch set. | `hosts/components/pi-heartbeats/component.yml:50` | 2026-10-16 |
 | STATUS stays `down` even when the restart worked. successful recovery would make an auto-restart loop invisible: a container crashing every 5 minutes would read green forever, which is the failure mode that makes self-healing worse than no healing. One failing verdict per cycle that needed intervention keeps the episode in Prometheus and in the alert history, and the next clean cycle clears it. Re-proposed by #1784 as "an UP with a warning would read more honestly", after two single-cycle `not running: autoheal; restarted: autoheal` episodes on 2026-09-02/03, and declined 2026-09-11: those two episodes ARE the loop this rule exists to keep visible, and no evidence was offered against the original reasoning. The recurring fault worth fixing is that autoheal stops at all, filed separately. | `hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2:161` | 2026-11-01 |
-| the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false (#2694, #2726). Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file --delete-after`, and that pair corrupts files whose content ends in NUL bytes: `--sparse` seeks over a run of NULs in the source, and `--inplace` makes the destination the live file, so whatever the previous file left at those offsets survives. Measured on daniel-pi 2026-09-26: 6 of 9 rotated /var/log/apt/history.log.*.gz failed `gzip -t` while their CRC32 matched, because the gzip ISIZE field's trailing NULs carried stale bytes. Dropping `--sparse` alone made the transfer byte-identical under rsync 3.2.7, the Pi's version. Dropping `--inplace` instead writes a full temp copy of /var/log on every sync. USE_RSYNC=false takes the `cp -rfup --sparse=always` fallback, which has no `--delete`, so files deleted from the tmpfs would return at boot into the 128 MB /var/log. The cost this choice carries: every hole in a journald archive lands on the SD card as real zeros, which 60-homelab-pi.conf bounds with SystemMaxFiles= (#4583). Log2Ram 1.7.2 is the installed version. The script stays at /usr/lib/homelab/log2ram because the log2ram package owns /usr/local/bin/log2ram, and a package shipping an owned path makes dpkg refuse the unpack. vendor/log2ram-1.7.2 is the upstream script; test_pi_tuning_component.py holds the difference between the two to the two `--sparse` words. An `apt upgrade` of log2ram rewrites the upstream copy and not this one, so a new upstream version needs a new vendored file and a re-diff. config_files' survivor (spec, *Baseline*): the SOPS export. Its other dotfiles stay as the Pi holds them; a rebuilt Pi gets Ubuntu's own ~/.bashrc and no ~/.gitconfig. | `hosts/components/pi-tuning/component.yml:49` | 2026-10-25 |
+| the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false (#2694, #2726). Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file --delete-after`, and that pair corrupts files whose content ends in NUL bytes: `--sparse` seeks over a run of NULs in the source, and `--inplace` makes the destination the live file, so whatever the previous file left at those offsets survives. Measured on daniel-pi 2026-09-26: 6 of 9 rotated /var/log/apt/history.log.*.gz failed `gzip -t` while their CRC32 matched, because the gzip ISIZE field's trailing NULs carried stale bytes. Dropping `--sparse` alone made the transfer byte-identical under rsync 3.2.7, the Pi's version. Dropping `--inplace` instead writes a full temp copy of /var/log on every sync. USE_RSYNC=false takes the `cp -rfup --sparse=always` fallback, which has no `--delete`, so files deleted from the tmpfs would return at boot into the 128 MB /var/log. The cost this choice carries: every hole in a journald archive lands on the SD card as real zeros, which 60-homelab-pi.conf bounds with SystemMaxFiles= (#4583). Log2Ram 1.7.2 is the installed version. The script stays at /usr/lib/homelab/log2ram because the log2ram package owns /usr/local/bin/log2ram, and a package shipping an owned path makes dpkg refuse the unpack. vendor/log2ram-1.7.2 is the upstream script; test_pi_tuning_component.py holds the difference between the two to the two `--sparse` words. An `apt upgrade` of log2ram rewrites the upstream copy and not this one, so a new upstream version needs a new vendored file and a re-diff. config_files' survivor (spec, *Baseline*): the SOPS export. Its other dotfiles stay as the Pi holds them; a rebuilt Pi gets Ubuntu's own ~/.bashrc and no ~/.gitconfig. | `hosts/components/pi-tuning/component.yml:50` | 2026-10-25 |
 | a plain tail, not eval-run's and docs-refresh's prek-hook filter. reports `git commit --no-verify` below, so no pre-commit hook runs and the log can never name one; the filter would never match and always fall back to this same tail. Drop --no-verify and this must take the filtered body from eval-run.sh.j2. ENFORCED by ansible/tests/setup/test_eval_run_failure_path.py::test_secret_rotate_keeps_its_plain_tail_only_while_it_skips_hooks. | `hosts/components/secret-rotation/templates/secret-rotate.sh.j2:91` | 2026-10-03 |
 | the author email is `secret-rotate@<domain>`, not the `email` secret the Ansible-era script rendered. The renderer withholds every secret from a package, and an author address on a --no-verify, auto-merged rotation commit names the job, not a person. | `hosts/components/secret-rotation/templates/secret-rotate.sh.j2:186` | 2026-10-25 |
 | a wrapper in a host component, not a symlink in homelab-tools. installs nothing on PATH (scripts/renderer/renderer_lib/host_tools.py), and a component file needs no renderer change. /usr/local/bin precedes /usr/bin on PATH, so each host package lists the sops_setup role's /usr/local/bin/sops as a legacy entry beside this component. | `hosts/components/sops/component.yml:6` | 2026-10-30 |
