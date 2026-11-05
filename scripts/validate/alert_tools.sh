@@ -123,10 +123,10 @@ provision() {
   if [[ "$(cat "$stamp" 2>/dev/null || true)" != "$base" ]]; then
     rm -rf "$dir"
     tmp="$(mktemp -d "$cache/.fetch.XXXXXX")"
-    # The speed bound aborts a connection that stalls below 1 KB/s for a minute. Without it a
-    # hung fetch blocks a local commit with no output and no end.
-    curl -fsSL --speed-limit 1024 --speed-time 60 -o "$tmp/$base.$ext" "$url/$base.$ext"
-    curl -fsSL --speed-limit 1024 --speed-time 60 -o "$tmp/$sums" "$url/$sums"
+    # The speed bound aborts a connection that stalls below 1 KB/s for a minute, so a hung fetch
+    # cannot block a commit forever. --retry rides out a transient 5xx from the release host.
+    curl -fsSL --retry 5 --retry-delay 10 --speed-limit 1024 --speed-time 60 -o "$tmp/$base.$ext" "$url/$base.$ext"
+    curl -fsSL --retry 5 --retry-delay 10 --speed-limit 1024 --speed-time 60 -o "$tmp/$sums" "$url/$sums"
     want="$(awk -v f="$base.$ext" '$2 == f {print $1}' "$tmp/$sums")"
     got="$(sha256sum "$tmp/$base.$ext" | cut -d' ' -f1)"
     if [[ -z "$want" || "$want" != "$got" ]]; then

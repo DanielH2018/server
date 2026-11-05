@@ -74,8 +74,6 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
     - `.github/pull_request_template.md`'s header comment and its *Blast radius* checkbox
       say the tick applies only the setup plane, and that `promote` and Flux apply every
       k8s change, image pins and deploy-plane paths included (#6436).
-    - Every `docs/facts.lock` section that D6 edits is re-verified, unless G2 has retired
-      the lock.
     - `mkdocs build --strict` passes.
 5. **The deletion list holds.**
     - `git ls-files` lists no path from the deletion list.
@@ -504,16 +502,7 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
 
   `ansible/tests/repo/test_failure_class_detectors.py` fails until a deleted cited test
   leaves the table.
-- **`docs/facts.lock` records the sections D6 edits:**
-    - in the gitops_deploy role's `CLAUDE.md`: *Safety*, *Which apply clears a hold*, *Traps*
-      and the title section;
-    - in the k3s role's `CLAUDE.md`: *Autonomous-role contract*, *Layout*, *Notable* and the
-      title section;
-    - in the render_records role's `CLAUDE.md`: all three sections;
-    - in the renovate_agent role's `CLAUDE.md`: *Autonomous-role contract*;
-    - in root `CLAUDE.md`: *After a PR Merges — Pull, Deploy, Verify*.
-
-  The `facts-lint-changed` hook runs `vanished-identifier`, which fails a commit while any
+- **The `facts-lint-changed` hook runs `vanished-identifier`,** which fails a commit while any
   section still names an identifier the branch deleted.
 - **The docs pages that describe deleted behaviour:**
     - `docs/gitops-pipeline.md` (1,534 lines), whose sections include *A deploy-plane change
@@ -1417,9 +1406,6 @@ Each deletion PR removes one coherent subject and states the census rows it remo
 - **Failure classes.** A deleted test cited in `docs/failure-classes.md` forces an edit to
   that table, because `ansible/tests/repo/test_failure_class_detectors.py` fails until the
   edit is made.
-- **Facts.** Each PR that edits a section recorded in `docs/facts.lock` runs
-  `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` for that section, and
-  commits the lock. If G2 has retired the lock, this step drops.
 - **The two-writer rule (C4).** No PR here changes ownership of a live object, so the rule has
   nothing to check. D6.3's census enforces the end state.
 
@@ -1702,8 +1688,7 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Waits on:** every other D6 PR, with D6.20 or the operator's ruling that D6 ends at
       `Orphan`. Also G5, if G5 has started.
     - **Operator gates:** approving the ADR (**operator-only**).
-    - **Before merge:** `fact_status.py verify` for each edited section,
-      `test_adr_links.py`, `mkdocs build --strict`, and exit 6's two counts.
+    - **Before merge:** `test_adr_links.py`, `mkdocs build --strict`, and exit 6's two counts.
     - **Rollback:** *Rollback*'s D6.8b bullet. An accepted ADR is never rewritten.
     - **Exit criterion:** exits 3, 4 and 6.
 
@@ -1910,9 +1895,8 @@ The steps merged in this order.
     - **Root `CLAUDE.md`.** From this PR on, the deployer applies neither an image-pin bump
       nor a deploy-plane change. So the PR edits the sentence in *After a PR Merges — Pull,
       Deploy, Verify* that says the deployer applies three planes, and the bullets of *When
-      to wait* that name a k8s health gate or a deploy-plane apply. It runs
-      `fact_status.py verify` for both sections. Every session reads this section after a
-      merge (failure class 8), so it cannot wait for D6.8a.
+      to wait* that name a k8s health gate or a deploy-plane apply. Every session reads this
+      section after a merge (failure class 8), so it cannot wait for D6.8a.
     - **Before merging,** the PR body quotes four things: the import grep with its symbol
       half (*Order: an importer goes before what it imports*), an import of
       `gitops_deploy.py` from a copy of `files/` laid out as `tasks/code.yml` installs it,
@@ -2071,8 +2055,7 @@ The steps merged in this order.
       relies on. H1.9 moves the list to `cluster/services.yml` and must repoint the row
       (cross-slice note).
     - **Root `CLAUDE.md`.** Edit the `deploy.sh` exit-3 bullet of *When to wait*, because
-      `deploy.sh` now refuses every k8s tag, and run `fact_status.py verify` for that
-      section.
+      `deploy.sh` now refuses every k8s tag.
     - **Test.** In `scripts/deploy_tools/tests/`, a range over `gh`'s 100-file page that
       holds an `ansible/templates/` path reaches `land-wait` with the changed set of a
       fixture pair of `digests.json` files, and ends without `needs-manual-apply`. Its red half is
@@ -2265,8 +2248,7 @@ The steps merged in this order.
       test fails (*D2's ownership readers after D6*).
     - Rewrite the prose that names those symbols: `deploy_cross_role.py`'s module docstring,
       `reach.py`'s docstrings, and the sentence in `ansible/roles/setup/common/CLAUDE.md`
-      that names `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`, with `fact_status.py
-      verify` for its section if the lock records it.
+      that names `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`.
     - `ansible/tests/setup/test_setup_cross_role_files.py` loses its k8s table.
     - **Test.** In `scripts/deploy_tools/tests/`, a PR whose only path is under
       `ansible/roles/k8s/bento-pdf/templates/` reaches `land-wait` with `bento-pdf` after
@@ -2395,8 +2377,7 @@ The steps merged in this order.
       on a red run, or on a run that printed `skipped`.
 16. **D6.8a — The root docs and the archive** (about 400 lines changed, most of them moved).
     - Rewrite *After a PR Merges* and *When to wait* in full, on top of D6.1's and D6.3's
-      edits, run `fact_status.py verify` for each edited section, and commit
-      `docs/facts.lock`.
+      edits.
     - Move the k8s sections of `docs/gitops-pipeline.md` to `docs/archive/`, with a pointer.
 17. **D6.8b — The ADR** (about 150 lines).
     - Write or accept the ADR, set ADR-0010's status, and add both rows to
@@ -2459,7 +2440,6 @@ find /var/lib/renovate-agent-land -name '*.verdict' -newer /opt/renovate-agent/l
 
 # Exit 3 and 4.
 uv run pytest ansible/tests/repo/test_adr_links.py ansible/tests/repo/test_documented_paths_exist.py
-uv run python scripts/dev/fact_status.py status | grep -v ' IN '
 uv run mkdocs build --strict --site-dir /tmp/d6-site
 
 # Exit 5.
@@ -2766,13 +2746,12 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - the four landing tests in `scripts/deploy_tools/tests/`, and the removal of D3.4's
       interim `cluster-vars` rule with its test;
     - the gitops_deploy role's `CLAUDE.md` (*Safety*, *Autonomous-role contract* and *Which
-      apply clears a hold*), with their `facts.lock` rows;
+      apply clears a hold*);
     - in `docs/gitops-pipeline.md`, *Broad changes* and *A deploy-plane change is narrowed
       before it is applied*;
     - in `docs/landing.md`, the cross-plane gate, which now describes the render-diff gates
       without arm 1, and in `docs/flux-deploy-plane.md`, the module's new name;
-    - root `CLAUDE.md`'s *After a PR Merges — Pull, Deploy, Verify* and *When to wait*, with
-      their `facts.lock` rows;
+    - root `CLAUDE.md`'s *After a PR Merges — Pull, Deploy, Verify* and *When to wait*;
     - the deleted tests under `ansible/roles/setup/gitops_deploy/tests/` and
       `ansible/tests/deploy/`, arm 1's tests in `scripts/validate/tests/`, and the kept arms'
       tests renamed with the module;
@@ -2791,7 +2770,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       `test_deployer_state.py`;
     - `test_land_renovate_pr.py`, for the lander's new source and its two refusals, and the
       agreement test in `test_renovate_automerge_follows_the_autodeploy_denylist.py`;
-    - the renovate_agent role's `CLAUDE.md` *Scope / exclusions*, with its `facts.lock` row,
+    - the renovate_agent role's `CLAUDE.md` *Scope / exclusions*,
       and the lander paragraph of `docs/renovate-agent-bounds-and-digest.md`;
     - the import lines of the Renovate tests and R4's gate tests;
     - `scripts/lib/tests/` for the moved functions;
@@ -2806,21 +2785,21 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - the tests in `scripts/deploy_tools/tests/` for the deleted arms;
     - the census row's fixtures;
     - the fallback landing test in `scripts/deploy_tools/tests/`;
-    - root `CLAUDE.md`'s *When to wait*, with its `facts.lock` row.
+    - root `CLAUDE.md`'s *When to wait*.
 - **D6.5a:**
     - the `group_vars` comment and `test_setup_drift_check.py`;
     - the initial_setup role's `CLAUDE.md` *Notable*;
     - `docs/host-baseline-record.md`'s setup-drift section.
 - **D6.5:**
     - the k3s role's `CLAUDE.md` (*Autonomous-role contract*, *Notable*, and its generated
-      `## At a glance` block), with their `facts.lock` rows;
+      `## At a glance` block);
     - `docs/k3s-node-plane-crons-and-incidents.md`, for the units it removes;
     - observability's `files/rules/host-checks.yaml` and `tests/rules/host-checks.test.yaml`,
       for daniel-box's arm in B2's setup-drift rules;
     - `scripts/secrets_mgmt/` tests for `CROSS_HOST_PUSH_TOKENS`, `ansible/secret_rotation.yml`
       and D3's cluster file.
 - **D6.5b:**
-    - the k3s role's `CLAUDE.md` *Layout*, with its `facts.lock` row;
+    - the k3s role's `CLAUDE.md` *Layout*;
     - `docs/k8s-manifest-cycle-record.md`;
     - the render_records role's `CLAUDE.md`, which names `probe.py releases` as its reader;
     - `docs/failure-classes.md`;
@@ -2852,7 +2831,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
     - D5.1a1's renderer test for `Orphan`, narrowed to the kept set over `SHARED_KINDS`
       with `flux`, `flux-deferred` and `cluster-vars` named, and the renderer test that no
       `<tag>` but `flux` carries `Orphan`.
-- **D6.8a:** root `CLAUDE.md`, `docs/facts.lock`, and `docs/archive/` for the moved sections.
+- **D6.8a:** root `CLAUDE.md` and `docs/archive/` for the moved sections.
 - **D6.8b:** the ADR, ADR-0010, `docs/adr/index.md` and the `mkdocs.yml` nav.
 
 ## Complexity delta
@@ -2946,8 +2925,8 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
 8. **Does daniel-box get its own setup-drift tile?** Resolved (#4632): no. Kuma is gone
    before D6 opens, and M3's per-host series makes a second tile and its token
    unnecessary. D6.5 gives the box its own arm in B2's two rules instead.
-9. **Does G2 retire `docs/facts.lock` before D6?** No dependency edge orders them. Resolution:
-   each PR runs `fact_status.py verify` only while the lock exists.
+9. **Does G2 retire `docs/facts.lock` before D6?** No dependency edge ordered them. Resolution:
+   G2's PR 3 retired the lock, so no later D6 PR has a lock step.
 10. **Does `flux-deletion-drill` become a required check?** As a required check, it would
     hold a `flux_version` bump that changes deletion behaviour, not only D6.7. Resolution: the
     operator decides in D6.7a's review (**operator-only**, a GitHub settings change). The job
@@ -3093,7 +3072,7 @@ listed after the findings.
   missing.** Fixed. Classes 2, 3, 5 and 8 are named correctly. `manifest_declares.py` and its
   test are in D6.5, which edits class 5's row.
 - **D6-R1-16 (medium): `facts.lock` was re-verified only in D6.8.** Fixed. Each PR verifies
-  the recorded sections it edits, and the Baseline lists them. Open question 9 covers G2.
+  the recorded sections it edits, and the Baseline lists them. Open question 9 covers G2. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **D6-R1-17 (medium): exit 5 could not be checked.** Fixed. Exit 5 is now a `git ls-files`
   absence check, a per-symbol grep and the import grep.
 - **D6-R1-18 (medium): the route of `_BROAD_DEPLOY_PREFIXES` paths was undefined.** Fixed.
@@ -3258,7 +3237,7 @@ round 2's choice to switch `<tag>-deferred`.
 - **D6-R10-12 (medium): root `CLAUDE.md`'s merge section stayed false from D6.1 to D6.8a.**
   Fixed. D6.1 edits the three-planes sentence and the k8s bullets of *When to wait*, and
   D6.3 edits the `deploy.sh` exit-3 bullet. Each verifies its section's lock row
-  (`docs/facts.lock` records `CLAUDE.md#When to wait` and the merge section).
+  (`docs/facts.lock` records `CLAUDE.md#When to wait` and the merge section). G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **D6-R10-13 (medium): the `owner: flux` census row named no member and no floor.** Fixed.
   The row names `bento-pdf` and `flux` and a floor, and a cross-slice note asks H1.9 to
   repoint or retire it.
