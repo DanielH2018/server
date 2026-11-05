@@ -311,6 +311,36 @@ def test_a_fetch_that_always_fails_dies_after_the_last_attempt(tmp_path):
     assert host.commands().count("sleep 30") == 12
 
 
+def test_a_fetch_that_stalls_is_cut_off_at_its_bound_and_requested_again(tmp_path):
+    host = FakeHost(tmp_path, hostname="daniel-box")
+    host.stock_kit()
+    host.pin("FETCH_MAX_TIME=120", "FETCH_MAX_TIME=1")
+    requests = tmp_path / "nfpm.requests"
+    # Stands in for curl's --max-time: without the flag the first request never returns. The
+    # absolute paths step around the fake host's `sleep`, which returns at once.
+    host._stub(
+        "curl",
+        'for arg; do [ "$prev" = -o ] && dest=$arg\n'
+        '    [ "$prev" = --max-time ] && max=$arg; prev=$arg; url=$arg; done\n'
+        f"case $url in *{NFPM_ARCHIVE})\n"
+        f"    echo request >> {requests}\n"
+        f'    if [ "$(wc -l < {requests})" -eq 1 ]; then\n'
+        '        /usr/bin/timeout "${max:-3600}" /bin/sleep 3600\n'
+        "        exit 28\n"
+        "    fi ;;\n"
+        "esac\n"
+        f'cp "{host.kit}/${{url##*/}}" "$dest"',
+    )
+    host._stub("sleep", f'echo "sleep $*" >> {host.log}')
+
+    result = host.run("daniel-box", "--local-build", str(host.clone(tmp_path)))
+
+    assert result.returncode == 0, result.stderr
+    assert len(requests.read_text().splitlines()) == 2
+    assert host.commands().count("sleep 30") == 1
+    assert (host.root / "nfpm.versions").exists()
+
+
 def test_the_repo_venv_build_rides_out_a_five_minute_outage(tmp_path):
     host, _ = _online_box_whose_nfpm_fetch_fails(tmp_path, failures=0)
 

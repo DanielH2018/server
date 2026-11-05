@@ -113,6 +113,10 @@ K3S_BIN=/usr/local/bin/k3s
 # 504 for about five minutes (CI run 42054080101), and a wrong pin costs the same wait to fail.
 RETRY_ATTEMPTS=13
 RETRY_DELAY=30
+# Covers the whole transfer: uv, the largest archive at 17 MB, needs 140 KB/s to finish in time.
+# curl's own --retry repeats a timed-out request, so a host that stalls every request takes
+# about 110 minutes to reach die.
+FETCH_MAX_TIME=120
 SYSTEMD_DIR=/etc/systemd/system
 # The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
 # as the updater's own fetch does.
@@ -312,7 +316,7 @@ fetch() {
         [ -f "$kit/$name" ] || die "the offline kit has no $name"
         cp "$kit/$name" "$3"
     else
-        retry "the fetch of $name" curl -fsSL --retry 3 -o "$3" "$1" || die "cannot fetch $1"
+        retry "the fetch of $name" curl -fsSL --retry 3 --max-time "$FETCH_MAX_TIME" -o "$3" "$1" || die "cannot fetch $1"
     fi
     [ "$(sha_of "$3")" = "$2" ] || die "$name does not match its pinned sha256 $2"
 }
