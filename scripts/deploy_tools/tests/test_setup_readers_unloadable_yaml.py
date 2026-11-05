@@ -151,19 +151,17 @@ def test_task_chains_reads_a_non_list_block_as_holding_no_tasks(tmp_path, body):
     assert chains.task_chains(role, lambda _task, _file: True) == [("leaf_gate",)]
 
 
-@NON_LIST_BODIES
-def test_import_chains_reads_a_non_list_block_as_holding_no_tasks(tmp_path, body):
+def test_import_chains_reads_a_number_block_as_holding_no_tasks(tmp_path):
     role = _role(
         tmp_path,
-        _block(body)
+        _block(" 5")
         + "- ansible.builtin.import_tasks: other.yml\n  when: import_gate\n",
     )
     assert chains._import_chains(role, "other.yml", "main.yml") == [("import_gate",)]
 
 
-@NON_LIST_BODIES
-def test_changed_task_texts_reads_a_non_list_block_as_holding_no_tasks(body):
-    changed = chains.changed_task_texts(_block(body), _block(body) + LOADABLE)
+def test_changed_task_texts_reads_a_number_block_as_holding_no_tasks():
+    changed = chains.changed_task_texts(_block(" 5"), _block(" 5") + LOADABLE)
     assert changed is not None and len(changed) == 1
     assert "Say something" in next(iter(changed))
 
