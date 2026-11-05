@@ -17,9 +17,9 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
-import yaml
 
 from lib import yaml_fast
+from lib.narrow_git import YAML_PARSE_ERRORS
 
 
 def playbook_roles(text: str | None) -> set[str]:
@@ -37,7 +37,7 @@ def playbook_roles(text: str | None) -> set[str]:
         return set()
     try:
         plays = yaml_fast.safe_load(text)
-    except yaml.YAMLError:
+    except YAML_PARSE_ERRORS:
         return set()
     names: set[str] = set()
     for play in plays if isinstance(plays, list) else []:
@@ -108,7 +108,7 @@ def play_role_includes(
         return []
     try:
         plays = yaml_fast.safe_load(text)
-    except yaml.YAMLError:
+    except YAML_PARSE_ERRORS:
         return []
     out: list[tuple[str, frozenset[str] | str]] = []
     for play in plays if isinstance(plays, list) else []:

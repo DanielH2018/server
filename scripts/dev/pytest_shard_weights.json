@@ -1106,6 +1106,7 @@
  "scripts/deploy_tools/tests/test_narrow_setup_plugins.py": 0.81,
  "scripts/deploy_tools/tests/test_narrow_setup_task_file_kinds.py": 0.99,
  "scripts/deploy_tools/tests/test_narrow_setup_vars_walk.py": 3.52,
+ "scripts/deploy_tools/tests/test_narrow_setup_yaml_values.py": 0.17,
  "scripts/deploy_tools/tests/test_order_only.py": 1.75,
  "scripts/deploy_tools/tests/test_owed_run.py": 0.1,
  "scripts/deploy_tools/tests/test_promote_ci_contexts.py": 0.0,

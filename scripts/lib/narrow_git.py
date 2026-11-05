@@ -27,6 +27,9 @@ import yaml
 from lib import yaml_fast
 from lib.git import git
 
+# PyYAML's constructor raises a bare ValueError for a timestamp-shaped scalar (`2026-13-45`).
+YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError)
+
 
 class CannotNarrow(Exception):
     """This change reaches something no narrow tag list covers.
@@ -73,7 +76,7 @@ def mapping_at(text: str, label: str) -> dict:
     """
     try:
         loaded = yaml_fast.safe_load(text) or {}
-    except yaml.YAMLError as exc:
+    except YAML_PARSE_ERRORS as exc:
         raise CannotNarrow(f"{label} does not parse: {exc}") from exc
     if not isinstance(loaded, dict):
         raise CannotNarrow(f"{label} is not a mapping of keys")
