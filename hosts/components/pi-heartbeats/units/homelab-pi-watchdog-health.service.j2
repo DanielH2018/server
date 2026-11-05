@@ -1,0 +1,12 @@
+# Shipped by homelab-daniel-pi. Started by homelab-pi-watchdog-health.timer.
+[Unit]
+Description=Write the state of the Pi's watchdog daemon for Prometheus
+
+[Service]
+Type=oneshot
+# This host's journald stores notice and above (MaxLevelStore=notice), so stdout logs at notice.
+SyslogLevel=notice
+User={{ sys_user }}
+ExecStart=/usr/lib/homelab/pi-watchdog-health
+# /var/log/pi-health holds health.log. systemd creates it, owned by User=.
+LogsDirectory=pi-health

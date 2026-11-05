@@ -1,5 +1,5 @@
-# The Pi's three heartbeats (H3.8b, docs/target-architecture/host/h3-pi-pilot.md). Until H3.8b
-# the optimize_pi role installed them as three crons. Each script runs as a oneshot service on a
+# The Pi's four heartbeats (H3.8b, docs/target-architecture/host/h3-pi-pilot.md). Until H3.8b
+# the optimize_pi role installed the first three as crons. Each script runs as a oneshot service on a
 # timer, as sys_user. The recovery unit grants that user the `docker` group itself, with
 # `SupplementaryGroups=docker`, because no task adds sys_user to it on a rebuilt Pi.
 # No unit loads a credential.
@@ -10,9 +10,12 @@
 # - homelab-pi-gz-integrity, daily at 01:40: `gzip -t` over every rotated log, written as the
 #   verdict the SD-health heartbeat reads. It alerts nothing itself.
 # - homelab-pi-recovery, every 5 minutes: the contract below.
+# - homelab-pi-watchdog-health, every 5 minutes: watchdog.service's state, written to
+#   pi-watchdog-health.prom, where PiWatchdogFailed reads it. It reports a stopped daemon and never
+#   starts one, because initial_setup stops the daemon on purpose for the length of an apply.
 #
 # Autonomous-role contract (the container-recovery heartbeat restarts what it finds dead).
-# The other two heartbeats only read and report. This one acts: pi-recovery-health runs
+# The other three heartbeats only read and report. This one acts: pi-recovery-health runs
 # `docker start` on any watched container it finds not running, every 5 minutes, unattended.
 #
 # - Scope / exclusions: exactly the containers this host deploys, which is every
@@ -88,6 +91,7 @@ files:
   - {src: templates/pi-sd-health.sh.j2, dst: /usr/lib/homelab/pi-sd-health, mode: "0755"}
   - {src: templates/pi-gz-integrity.sh.j2, dst: /usr/lib/homelab/pi-gz-integrity, mode: "0755"}
   - {src: templates/pi-recovery-health.sh.j2, dst: /usr/lib/homelab/pi-recovery-health, mode: "0755"}
+  - {src: templates/pi-watchdog-health.sh.j2, dst: /usr/lib/homelab/pi-watchdog-health, mode: "0755"}
   # A package-owned copy of initial_setup's textfile writer (M6 B5), which stays the single
   # source: the two scripts call its write_check_textfile, so Prometheus reads each cycle's
   # verdict.
@@ -100,10 +104,13 @@ files:
   - {src: units/homelab-pi-gz-integrity.timer, dst: /usr/lib/systemd/system/homelab-pi-gz-integrity.timer}
   - {src: units/homelab-pi-recovery.service.j2, dst: /usr/lib/systemd/system/homelab-pi-recovery.service}
   - {src: units/homelab-pi-recovery.timer, dst: /usr/lib/systemd/system/homelab-pi-recovery.timer}
+  - {src: units/homelab-pi-watchdog-health.service.j2, dst: /usr/lib/systemd/system/homelab-pi-watchdog-health.service}
+  - {src: units/homelab-pi-watchdog-health.timer, dst: /usr/lib/systemd/system/homelab-pi-watchdog-health.timer}
 enable:
   homelab-pi-sd-health.timer: timers.target
   homelab-pi-gz-integrity.timer: timers.target
   homelab-pi-recovery.timer: {target: timers.target, when: optimize_pi_recovery_restart_enabled}
+  homelab-pi-watchdog-health.timer: timers.target
 # What optimize_pi installed before H3.8b. Reconcile retires each once the timers above have
 # started, so a heartbeat never runs twice or not at all.
 legacy:

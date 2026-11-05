@@ -94,6 +94,12 @@ log2ram mounts its tmpfs only at boot, and reconcile marks the host reboot-pendi
 The hardware watchdog is `dtparam=watchdog=on` plus the `watchdog` daemon, which reboots the
 board when the 1-minute load passes 24.
 
+A stopped daemon looks healthy from outside, because `wd_keepalive` takes over the device and
+only the load test goes away. `homelab-pi-watchdog-health.timer` reads the unit's state every 5
+minutes, and `PiWatchdogFailed` fires once it has stayed down for 30 minutes. That wait outlasts
+the stop an `initial_setup` apply holds on purpose, which took 7m53s on 2026-11-01. The heartbeat
+only reports. To clear the alert, run `sudo systemctl start watchdog` on the Pi.
+
 The debloat step purges Open vSwitch, which was installed with no bridges and no netplan
 config yet mlockall-pinned about 14 MB, and snapd, which had zero snaps. Both are
 dependency-safe: netplan only Suggests OVS. It also purges fwupd — its hourly

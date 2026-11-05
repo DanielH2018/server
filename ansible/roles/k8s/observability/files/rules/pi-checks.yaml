@@ -1,5 +1,6 @@
-# The B5 Pi checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5): the
-# SD-card health heartbeat and the container-recovery heartbeat. Both ship in the homelab-daniel-pi
+# The B5 Pi checks of M6 (docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5), the
+# SD-card health heartbeat and the container-recovery heartbeat, plus the watchdog daemon heartbeat,
+# which replaced no tile. All three ship in the homelab-daniel-pi
 # package (hosts/components/pi-heartbeats/) and write a `homelab_check_*` textfile to the
 # `node-pi` scrape job, so these rules read the metric contract of
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
@@ -87,3 +88,38 @@ groups:
             `systemctl status homelab-pi-recovery.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-recovery-health.prom. A host that sets
             optimize_pi_recovery_restart_enabled false drops the timer and fires this on purpose.
+      # `for` outlasts the stop an initial_setup apply holds on purpose, measured at 7m53s on
+      # 2026-11-01. wd_keepalive keeps the hardware watchdog meanwhile, so 30m of waiting costs
+      # only the load test.
+      - alert: PiWatchdogFailed
+        expr: homelab_check_success{check="pi-watchdog-health",origin="daniel-pi"} == 0
+        for: 30m
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's watchdog.service is not active.
+          description: >-
+            watchdog.service on daniel-pi has not been active for 30 minutes. wd_keepalive holds the
+            device, so the board keeps its hardware watchdog, but the `max-load-1 = 24` load test is
+            off. An interrupted initial_setup run is the known cause. Run `sudo systemctl start
+            watchdog` on daniel-pi. The `pi-watchdog-health` lines in /var/log/pi-health/health.log
+            date the stop.
+      - alert: PiWatchdogNotReporting
+        expr: |
+          (
+              time() - homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health",origin="daniel-pi"} > 900
+            or
+              absent_over_time(homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health",origin="daniel-pi"}[900s])
+          )
+          unless on (origin) (up{job="node-pi"} == 0)
+        labels:
+          severity: warning
+          service: daniel-pi
+        annotations:
+          summary: daniel-pi's watchdog daemon heartbeat has stopped reporting.
+          description: >-
+            No pi-watchdog-health verdict newer than 15 minutes reached Prometheus from daniel-pi's
+            textfile collector, so nothing confirms the watchdog daemon is being watched. Read
+            `systemctl status homelab-pi-watchdog-health.timer` on daniel-pi, then
+            /var/lib/node-exporter-textfile/pi-watchdog-health.prom.
