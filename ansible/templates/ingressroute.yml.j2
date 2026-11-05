@@ -174,8 +174,8 @@ spec:
 
   The guards it is MEANT to provide, kept in the rule so they are real once it routes:
     1. ClientIP — `k8s_bridge_client_ip` (daniel-server's LAN address) plus whatever
-       `extra_client_cidrs` adds. `extra_client_cidrs` is a per-caller widening, such as the
-       Kuma prober's, whose probes arrive from the pod CIDR.
+       `extra_client_cidrs` adds. `extra_client_cidrs` is a per-caller widening, such as a
+       prober whose probes arrive from the pod CIDR.
 
        `include_bridge_ip=false` drops the prepend for a route whose callers are all in
        `extra_client_cidrs`. The prepend names daniel-server's own address, but a pod arrives

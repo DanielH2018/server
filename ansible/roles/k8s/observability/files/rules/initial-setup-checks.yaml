@@ -5,14 +5,14 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# THESE RULES PAGE SINCE M6's BATCH B2 CUTOVER-1B. Each one ports the Kuma tile of the same check,
+# THESE RULES PAGE SINCE M6's BATCH B2 CUTOVER-1B. Each one ports the tile of the same check,
 # and Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule back.
 # Severity is `warning` because every one of the six tiles notified Discord only. `service` is the host as a literal, because a node is not a
 # workload (M3's open question 3). Each pair is `<Check>Failed` and `<Check>NotReporting`, the
 # shape M3 fixed: NotReporting reads the timestamp against the deadline, falls back to
 # absent_over_time over the same deadline, and leaves a dead exporter to the `targets` check.
 #
-# Each deadline is the DEADLINE_S its producer renders, which equalled the interval of the Kuma
+# Each deadline is the DEADLINE_S its producer renders, which equalled the interval of the
 # tile it replaced. Both literals of a NotReporting rule are pinned to it by
 # ansible/tests/services/test_initial_setup_check_rule_literals.py (M1 convention 1).
 #
@@ -23,7 +23,7 @@
 groups:
   - name: initial-setup-checks
     rules:
-      # Kuma tile "Docs Refresh".
+      # Replaced the "Docs Refresh" tile.
       - alert: DocsRefreshFailed
         expr: homelab_check_success{check="docs-refresh",origin="daniel-box"} == 0
         labels:
@@ -54,7 +54,7 @@ groups:
             textfile collector, so nothing confirms the generated docs are refreshing. Read the
             `Refresh generated docs` cron and the `docs-refresh` syslog tag, then
             /var/lib/node-exporter-textfile/docs-refresh.prom on the host.
-      # Kuma tile "Homelab Evals".
+      # Replaced the "Homelab Evals" tile.
       - alert: EvalSweepFailed
         expr: homelab_check_success{check="eval-run",origin="daniel-box"} == 0
         labels:
@@ -84,7 +84,7 @@ groups:
             collector, so nothing confirms the eval sweep is running. Read the `Homelab eval
             sweep` cron and the `eval-run` syslog tag, then
             /var/lib/node-exporter-textfile/eval-run.prom on the host.
-      # Kuma tile "Secret Rotation".
+      # Replaced the "Secret Rotation" tile.
       - alert: SecretRotationAuditFailed
         expr: homelab_check_success{check="secret-rotation-audit",origin="daniel-box"} == 0
         labels:
@@ -115,7 +115,7 @@ groups:
             daniel-box's textfile collector, so nothing confirms secret rotation is being
             audited. Read `systemctl status homelab-secret-rotation-audit` on daniel-box,
             then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
-      # Kuma tile "Setup Plane Drift (agent hosts)".
+      # Replaced the "Setup Plane Drift (agent hosts)" tile.
       - alert: SetupDriftFailed
         expr: homelab_check_success{check="setup-drift-check",origin="daniel-server"} == 0
         labels:
@@ -147,7 +147,7 @@ groups:
             compared with the repo. Read `systemctl status kuma-check-setup-drift` on
             daniel-server, then /var/lib/node-exporter-textfile/setup-drift-check.prom on the
             host.
-      # Kuma tile "Loki Read Route (daniel-box)".
+      # Replaced the "Loki Read Route (daniel-box)" tile.
       - alert: LokiReadRouteFailed
         expr: homelab_check_success{check="loki-read-route-health",origin="daniel-box"} == 0
         labels:
@@ -179,7 +179,7 @@ groups:
             daniel-box's textfile collector, so nothing confirms the Loki read route is being
             witnessed. Read `systemctl status homelab-loki-route-witness` on daniel-box, then
             /var/lib/node-exporter-textfile/loki-read-route-health.prom on the host.
-      # Kuma tile "Loki Read Route (daniel-server)".
+      # Replaced the "Loki Read Route (daniel-server)" tile.
       - alert: LokiReadRouteFailed
         expr: homelab_check_success{check="loki-read-route-health",origin="daniel-server"} == 0
         labels:

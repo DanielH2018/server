@@ -6,7 +6,7 @@
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
 # THE FOUR GITHUB RULES PAGE since M6's batch B3 Cutover-1b. They ran with `shadow: "true"` beside
-# the Kuma tiles of the same checks until Cutover-1a deleted those tiles. Severity is `warning`
+# the tiles of the same checks until Cutover-1a deleted those tiles. Severity is `warning`
 # because both tiles notified Discord only. Each pair is `<Check>Failed` and
 # `<Check>NotReporting`, the shape M3 fixed: NotReporting reads the timestamp against the
 # deadline, falls back to absent_over_time over the same deadline, and leaves a dead exporter to
@@ -19,21 +19,21 @@
 # repository's settings, so both carry `service: github`. A node is not a workload, and the
 # gitops_deploy timers are only where the question is asked.
 #
-# Each deadline is the DEADLINE_S its producer renders, which equals the interval of the Kuma tile
+# Each deadline is the DEADLINE_S its producer renders, which equals the interval of the tile
 # the rule replaced. Both literals of a NotReporting rule are pinned to it by
 # ansible/tests/services/test_gitops_check_rule_literals.py (M1 convention 1).
 #
 # The last two rules read the deployer's own `gitops_tick.prom`, which
 # roles/setup/gitops_deploy/files/gitops_tick_metrics.py rewrites at the end of every tick (#6164).
 # They carry `service: gitops-deploy`, as bridge-exporter.yaml's GitOpsDeployerNotTicking does, and
-# stay shadow beside it and the Kuma "GitOps Deploy — Alive" tile until the operator promotes them.
+# stay shadow beside it until the operator promotes them.
 # GitOpsTickStale's 5400s is the unit's TimeoutStartSec (70min) plus one timer interval (10min)
 # plus 10min of slack, the longest gap between two writes a healthy deployer leaves. The same test
 # file pins it to both values.
 groups:
   - name: gitops-checks
     rules:
-      # Replaced Kuma tile "GitHub Ruleset Drift".
+      # Replaced the "GitHub Ruleset Drift" tile.
       - alert: GitHubRulesetDrift
         expr: homelab_check_success{check="github-ruleset-drift",origin="daniel-box"} == 0
         labels:
@@ -65,7 +65,7 @@ groups:
             textfile collector, so nothing confirms the merge gate matches the repo. Read
             `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
             /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
-      # Replaced Kuma tile "GitHub Interaction Limit".
+      # Replaced the "GitHub Interaction Limit" tile.
       - alert: GitHubInteractionLimitNotArmed
         expr: homelab_check_success{check="github-interaction-limit",origin="daniel-box"} == 0
         labels:

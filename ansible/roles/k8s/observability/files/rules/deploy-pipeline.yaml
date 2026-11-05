@@ -71,7 +71,7 @@ groups:
             probe.py landing's prod line with gh variable get PROD_DIGEST, and read the
             package's version history for who pushed the tag.
       # The family's zero-series alert (M1 convention 2). The first arm pages a missing scrape
-      # job, which no Kuma tile can see. The second pages a scrape that works but lacks any one
+      # job, which no other check can see. The second pages a scrape that works but lacks any one
       # gauge: a failed GitHub or GHCR read, an empty token, or a deleted variable each export no
       # series for what they feed, never a 0. It is conjoined with up == 1, because
       # ScrapeTargetDown already pages a failed scrape of the job (M1 convention 5) since M6's

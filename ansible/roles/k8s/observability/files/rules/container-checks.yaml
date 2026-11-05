@@ -3,7 +3,7 @@
 # file verbatim. The design is M6's batch A2
 # (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
 #
-# These rules page since A2's Cutover-b. They ran with `shadow: "true"` beside the Kuma tiles
+# These rules page since A2's Cutover-b. They ran with `shadow: "true"` beside the retired tiles
 # `k3s Container Restarts`, `k3s Container OOM` and `k3s CPU Throttling` until then, and the
 # census rule, CAdvisorCoverageShortfall, replaced the bridge's `_cadvisor_blind` page.
 #
@@ -105,10 +105,10 @@ groups:
       # max_over_time(...[5m:1m]) holds the condition through a dip shorter than one bridge
       # cycle. A controller that throttles in bursts drops under the floor for a minute in every
       # few, and each dip reset a bare `for:` while the bridge, sampling every 300s, paged: the
-      # A2 shadow soak missed two Kuma pages for kustomize-controller that way. The smoothing
+      # A2 shadow soak missed two of the bridge's pages for kustomize-controller that way. The smoothing
       # also holds the alert up to 5m after the condition clears, as the tile held until the
-      # next clean cycle. The alert stays per pod, where the bridge's streak counts any
-      # offender, so a streak that hops from one pod to another pages Kuma alone.
+      # next clean cycle. The alert stays per pod, where the bridge's streak counted any
+      # offender, so a streak that hops from one pod to another does not page here.
       - alert: ContainerCPUThrottled
         expr: |
           (

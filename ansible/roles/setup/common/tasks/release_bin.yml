@@ -37,7 +37,7 @@
 # rather than the test for it. Retention is the
 # problem, not the render: keeping five releases of those would leave five copies of a rotated
 # token on disk, turning a rollback convenience into a credential archive. Scripts that SOURCE a
-# token from a separate env file (the kuma-push pattern) are fine and are what these groups hold.
+# token from a separate env file are fine and are what these groups hold.
 # ENFORCED by ansible/tests/setup/test_release_bin_groups_have_no_secrets.py.
 #
 # DECIDED: repo content only, never an upstream download. A release here is named after the

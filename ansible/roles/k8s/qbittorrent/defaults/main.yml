@@ -103,7 +103,7 @@ qbittorrent_k8s_mem_request: 256Mi
 # host cron, whose clock is UTC; setup/k8s_host_files keeps the absent arms that remove it. The host
 # cron's fields, unchanged. Daily, not */10 like the health readers: a WebUI edit or a Longhorn
 # restore that reverts files/apply_prefs.py's eight throughput settings is rare, and there is
-# no Kuma watchdog interval this needs to stay under (files/prefs_check.py logs, it does not
+# no deadline this needs to stay under (files/prefs_check.py logs, it does not
 # push).
 qbittorrent_k8s_prefs_check_schedule: "37 6 * * *"
 

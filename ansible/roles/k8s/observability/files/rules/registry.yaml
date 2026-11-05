@@ -181,7 +181,7 @@ groups:
             mirror endpoint serves pulls. Read the log of the node-exporter pod's
             `dockerhub-mirror-pull` container on daniel-server.
       # M6 BATCH B6c (#6926). registry-gc.sh writes the registry-gc textfile, and these two rules
-      # replaced the "Registry GC" Kuma tile that Cutover-1a deleted. The NotReporting literals
+      # replaced the "Registry GC" tile that Cutover-1a deleted. The NotReporting literals
       # equal the DEADLINE_S the script renders, which equals the deleted tile's interval:
       # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins both. The
       # tile notified Discord only, so both rules are `warning`.

@@ -5,7 +5,7 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# THESE RULES PAGE SINCE M6's BATCH B4 CUTOVER-1B. Each one ports the Kuma tile of the same
+# THESE RULES PAGE SINCE M6's BATCH B4 CUTOVER-1B. Each one ports the tile of the same
 # check, and Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule
 # back. Severity is the tile's: `critical` for both UPS
 # secondaries and the full drill, which email as well as notify Discord, and `warning` for the
@@ -22,7 +22,7 @@
 #
 # THE RENOVATE PAIR HAS NO Failed RULE. Both units run their textfile line as an ExecStartPost,
 # which systemd runs only after a clean ExecStart, so the file only ever says success 1. A crash
-# writes nothing, which is how the Kuma tile reads it too: a missed beat. OnFailure pages the
+# writes nothing, which reads as a missed beat. OnFailure pages the
 # crash at once, and NotReporting is the rule that replaces the tile.
 #
 # A DISARMED AGENT IS SILENT, NOT LATE. With renovate_agent_enabled false the timer is stopped,
@@ -34,7 +34,7 @@
 # Each deadline is the DEADLINE_S its producer renders, and both literals of a NotReporting rule
 # are pinned to it by ansible/tests/setup/test_b4_rule_literals.py (M1 convention 1). The two
 # 10-minute producers render 2 x period + 300 = 1500, M3's rule. The drills render the cadence
-# plus slack that their Kuma tiles carry, 3024000 (35 days). The renovate units render their
+# plus slack that their retired tiles carried, 3024000 (35 days). The renovate units render their
 # tiles' own intervals, 129600 and 100800.
 #
 # The drills' NotReporting rules fired from the deploy until the first run after it wrote its
@@ -45,7 +45,7 @@
 groups:
   - name: other-setup-checks
     rules:
-      # Kuma tile "UPS Secondary (daniel-box)".
+      # Replaced the "UPS Secondary (daniel-box)" tile.
       - alert: UpsSecondaryFailed
         expr: homelab_check_success{check="ups-secondary-health",origin="daniel-box"} == 0
         labels:
@@ -77,7 +77,7 @@ groups:
             textfile collector, so nothing confirms the secondary upsmon can still hear upsd. Read
             the `UPS secondary watchdog` cron and the `ups-secondary-health` syslog tag, then
             /var/lib/node-exporter-textfile/ups-secondary-health.prom on the host.
-      # Kuma tile "UPS Secondary (daniel-server)".
+      # Replaced the "UPS Secondary (daniel-server)" tile.
       - alert: UpsSecondaryFailed
         expr: homelab_check_success{check="ups-secondary-health",origin="daniel-server"} == 0
         labels:
@@ -110,7 +110,7 @@ groups:
             still hear upsd. Read the `UPS secondary watchdog` cron and the
             `ups-secondary-health` syslog tag, then
             /var/lib/node-exporter-textfile/ups-secondary-health.prom on the host.
-      # Kuma tile "Fake Remux Scan".
+      # Replaced the "Fake Remux Scan" tile.
       - alert: FakeRemuxScanFailed
         expr: homelab_check_success{check="fake-remux-scan",origin="daniel-box"} == 0
         labels:
@@ -140,7 +140,7 @@ groups:
             textfile collector, so nothing confirms the scan's state file is being read. Read the
             `fake-remux health` cron and the `fake-remux-health` syslog tag, then
             /var/lib/node-exporter-textfile/fake-remux-scan.prom on the host.
-      # Kuma tile "Fake Remux Replace".
+      # Replaced the "Fake Remux Replace" tile.
       - alert: FakeRemuxReplaceFailed
         expr: homelab_check_success{check="fake-remux-replace",origin="daniel-box"} == 0
         labels:
@@ -170,7 +170,7 @@ groups:
             textfile collector, so nothing confirms the reconciler's state file is being read.
             Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
             /var/lib/node-exporter-textfile/fake-remux-replace.prom on the host.
-      # Kuma tile "MKV Attachment Repair".
+      # Replaced the "MKV Attachment Repair" tile.
       - alert: MkvAttachmentRepairFailed
         expr: homelab_check_success{check="mkv-attachment-repair",origin="daniel-box"} == 0
         labels:
@@ -201,7 +201,7 @@ groups:
             textfile collector, so nothing confirms the repair sweep's state file is being read.
             Read the `fake-remux health` cron and the `fake-remux-health` syslog tag, then
             /var/lib/node-exporter-textfile/mkv-attachment-repair.prom on the host.
-      # Kuma tile "etcd Restore Drill (full)".
+      # Replaced the "etcd Restore Drill (full)" tile.
       - alert: EtcdRestoreDrillFailed
         expr: homelab_check_success{check="etcd-restore-drill-vm",origin="daniel-server"} == 0
         labels:
@@ -233,7 +233,7 @@ groups:
             1st-of-month cron slot plus four days of slack. Read the `Full etcd restore drill in
             a throwaway guest` cron on daniel-server, cron.log under /var/log/etcd-restore-drill,
             then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom on the host.
-      # Kuma tile "etcd Restore Drill (egress fence)".
+      # Replaced the "etcd Restore Drill (egress fence)" tile.
       - alert: EtcdRestoreDrillEgressFenceFailed
         expr: homelab_check_success{check="etcd-restore-drill-egress-fence",origin="daniel-server"} == 0
         labels:
@@ -265,7 +265,7 @@ groups:
             leg executes writes nothing here, so the fence went unmeasured this month. Read the
             newest run directory under /var/log/etcd-restore-drill, then
             /var/lib/node-exporter-textfile/etcd-restore-drill-egress-fence.prom on the host.
-      # Kuma tile "Renovate Notifier — Alive". No Failed rule: see the header.
+      # Replaced the "Renovate Notifier — Alive" tile. No Failed rule: see the header.
       - alert: RenovateNotifyNotReporting
         expr: |
           (
@@ -284,7 +284,7 @@ groups:
             textfile collector: the daily 13:00 timer did not fire or the run failed, and
             OnFailure will also have posted to Discord. It says nothing about Renovate itself.
             Read `systemctl status renovate-notify.timer` and `journalctl -u renovate-notify`.
-      # Kuma tile "Renovate Agent — Alive". No Failed rule: see the header.
+      # Replaced the "Renovate Agent — Alive" tile. No Failed rule: see the header.
       - alert: RenovateAgentNotReporting
         expr: |
           (
