@@ -33,7 +33,7 @@ work already executed.
 
 ```
 ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
-  deploy.yml          # Deploy playbook — a Docker play (dependency-ordered) + a k8s play
+  deploy.yml          # Deploy playbook — a k8s play (dependency-ordered) + a Docker play with no entries
   k3s-bringup.yml     # Cluster foundation (k3s, Longhorn, Traefik CRDs, …)
   initial_setup.yml   # Host hardening / bootstrap
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
@@ -98,10 +98,12 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 `deploy.yml` runs two plays over the host's `containers_list`, split by each entry's
 `platform:` key:
 
-- **Docker play** (`platform: docker`, only daniel-pi) — deploys roles in `containers_list`
-  order. The Pi's one ordering constraint, docker-proxy before autoheal, is that list's order,
-  and `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it. A tagged run
-  (`--tags autoheal`) deploys only the tagged role and does not pull up its dependency.
+- **Docker play** (`platform: docker`) — deploys nothing, because no host lists a Docker entry:
+  `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
+  containers are `compose_services` entries that its `homelab-daniel-pi` package deploys, so
+  `deploy.yml` never starts them. The Pi's ordering, docker-proxy before autoheal and alloy, is
+  each service file's `depends_on`, and
+  `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
 
 - **k8s play** (`platform: k8s`) — toposorts `roles/k8s/<name>` with `build_k8s_dep_map` /
   `toposort_containers` (`ansible/filter_plugins/toposort.py`, unit-tested in
@@ -115,13 +117,12 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 Both plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`
 are `ansible_connection=local` in `hosts.ini`, so `-e target=` only selects whose *variables*
 to use while tasks still execute locally. A pre-task refuses that case outright. Only
-`daniel-pi` is genuinely remote, so `-e target=daniel-pi` works as it reads.
+`daniel-pi` is genuinely remote, so the setup plays' `-e target=daniel-pi` works as it reads.
 
 ```bash
 uv run ansible-playbook ansible/deploy.yml --tags "<service>"          # deploy one service (+ unmet deps)
 uv run ansible-playbook ansible/deploy.yml --tags "<service>" --check  # dry run
 uv run ansible-playbook ansible/deploy.yml                             # deploy everything
-uv run ansible-playbook ansible/deploy.yml --tags "<service>" -e target=daniel-pi
 uv run ansible-playbook ansible/k3s-bringup.yml                        # cluster foundation
 uv run ansible-playbook ansible/initial_setup.yml                      # host bootstrap/hardening
 ```
