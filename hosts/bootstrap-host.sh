@@ -109,7 +109,9 @@ ROOT=${HOMELAB_ROOT:-}
 KEYRING=/usr/share/keyrings/homelab-archive-keyring.gpg
 SOURCES=/etc/apt/sources.list.d/homelab.sources
 K3S_BIN=/usr/local/bin/k3s
-RETRY_ATTEMPTS=4
+# Six minutes of waits between the first and last attempt: GitHub's release host has answered
+# 504 for about five minutes (CI run 42054080101), and a wrong pin costs the same wait to fail.
+RETRY_ATTEMPTS=13
 RETRY_DELAY=30
 SYSTEMD_DIR=/etc/systemd/system
 # The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
