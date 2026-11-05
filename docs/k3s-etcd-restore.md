@@ -8,8 +8,8 @@ seconds end to end.
 
 A weekly `--list-only` drill on daniel-box (`k3s_etcd_restore_drill_cron`, armed by
 `k3s_etcd_restore_drill_armed`) proves the listing leg. `check_etcd_restore_drill()` in
-monitor-bridge reads its stamp fail-closed onto the `etcd Restore Drill` Kuma tile. The monthly
-drill reports through `EtcdRestoreDrillFailed` and `EtcdRestoreDrillNotReporting`.
+monitor-bridge reads its stamp fail-closed, and `EtcdRestoreDrillFailing` pages on the verdict.
+The monthly drill reports through `EtcdRestoreDrillFailed` and `EtcdRestoreDrillNotReporting`.
 
 No drill exercises the steps after the object graph comes back: the agent rejoin, the Longhorn
 reattach, and the restore onto a replacement host rather than into a scratch data-dir. Those
@@ -168,8 +168,8 @@ cron exists to find), and anything created outside the repo.
 
 The `EtcdSnapshotOffboxFailed` and `EtcdSnapshotOffboxNotReporting` alert rules (read from the
 cron's node_exporter textfile verdict) plus the `etcd-snapshot-offbox` Healthchecks.io check
-cover the cron. The alert rules page since M6 batch B1's Cutover-1b, which replaced the Kuma tile.
-The Healthchecks ping is sent from the first run regardless — but it is discarded until the check
+cover the cron. The alert rules page since M6 batch B1's Cutover-1b, which replaced the static
+Kuma monitor. The Healthchecks ping is sent from the first run regardless — but it is discarded until the check
 is created by hand in the console, because the slug is sent bare and never with `?create=1`. See
 `healthchecks-io-deadman.md` for its schedule and grace.
 
