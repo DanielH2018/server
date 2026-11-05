@@ -867,7 +867,9 @@ less its own `===== <doc> (applies to <trigger>) =====` header. The first line o
 `--report` output below prints both pairs of figures, computed from the hook's own constants.
 No CI check holds a doc under that effective budget, by the operator's ruling on #2826. The
 report prints each doc's margin under it, and a head's notice states the doc's own budget
-rather than the payload limit (#3245).
+rather than the payload limit (#3245). A head's log row carries `form=head` before its
+`bytes=` field, and `fact_status.py report` ranks the heads by those rows, so a trim can start
+with the long doc sessions read most.
 
 `uv run --no-sync python .claude/hooks/inject-nested-docs.py --report` lists every instruction
 file the hook serves. It prints one row per tracked `CLAUDE.md` other than the root one and per

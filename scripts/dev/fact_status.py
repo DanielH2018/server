@@ -2,9 +2,9 @@
 """Lint, report and diff notice for the fact stores — the one entry point.
 
 ``lint`` reports citations that cannot be support. ``report`` reads git and the instructions
-log: the sections citing nothing ranked by how often their doc loads, the instruction bytes
-each session loaded, and the notice replayed over the window (``--json`` for a cron or an
-agent). ``notice`` lists every section citing an atom that the diff from the merge base of
+log: the sections citing nothing ranked by how often their doc loads, the docs read as a head
+ranked by reads, the instruction bytes each session loaded, and the notice replayed over the
+window (``--json`` for a cron or an agent). ``notice`` lists every section citing an atom that the diff from the merge base of
 ``--since`` to ``--head``, or to the working tree, moved.
 It exits 0 with rows or without, and 2 only when git cannot resolve the merge base.
 """

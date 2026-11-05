@@ -165,6 +165,32 @@ FOO_DOC = "ansible/roles/k8s/foo/CLAUDE.md"
 FOO_FILE = "ansible/roles/k8s/foo/templates/deployment.yaml.j2"
 
 
+def _logged_row(repo, log_dir, text):
+    """The row `context` logs for `text` as foo's doc."""
+    (repo / FOO_DOC).write_text(text)
+    assert _mod.context(
+        {
+            "tool_name": "Bash",
+            "session_id": "sess-form-0001",
+            "cwd": str(repo),
+            "tool_input": {"command": f"cat {FOO_FILE}"},
+        }
+    )
+    (row,) = (log_dir / "instructions.log").read_text().splitlines()
+    return row
+
+
+def test_a_head_row_carries_form_head_before_its_size(repo, tmp_path):
+    fields = _logged_row(repo, tmp_path, _big_doc()).split()
+    assert fields[-2] == "form=head"
+    assert fields[-1].startswith("bytes=")
+
+
+def test_a_whole_row_has_no_form_even_when_the_doc_quotes_the_notice(repo, tmp_path):
+    quoted = f"# Foo\n\nA head's notice says {_mod._HEAD_NOTICE_MARK}\n"
+    assert "form=" not in _logged_row(repo, tmp_path, quoted)
+
+
 def _head_notice(repo, text):
     """The notice line a session reads for `text` as foo's doc, and the header it sits under."""
     (repo / FOO_DOC).write_text(text)

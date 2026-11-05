@@ -9,6 +9,7 @@ from ablate import (
     REPO,
     SWEEP_WEEKDAY,
     doc_without,
+    main,
     split_sections,
     with_doc,
 )
@@ -81,3 +82,12 @@ def test_sweep_weekday_matches_the_timer():
     # Python's weekday() counts Monday as 0.
     timer_weekday = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].index(m.group(1))
     assert timer_weekday == SWEEP_WEEKDAY
+
+
+def test_rank_counts_a_row_with_a_form_and_a_size_in_its_tail(tmp_path, capsys):
+    log = tmp_path / "instructions.log"
+    log.write_text(
+        "t [s] bash_path_match Project a/CLAUDE.md trigger=a/x form=head bytes=7\n"
+    )
+    assert main(["rank", "--log", str(log)]) == 0
+    assert capsys.readouterr().out.split() == ["1", "a/CLAUDE.md"]

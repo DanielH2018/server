@@ -100,7 +100,9 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
   (30 by default). It ranks every section that cites nothing by how
   often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
   primary checkout and its rotated `.1`, so the span the report prints is usually days, not
-  the window. Last, it prints the instruction bytes each session loaded, summed from the
+  the window. Next, it ranks the docs delivered as a head by their `form=head` rows, which
+  `inject-nested-docs.py` writes, rules included. That is the order a trim should follow.
+  Then it prints the instruction bytes each session loaded, summed from the
   `bytes=` field `log-instructions.py` ends each row with. A user-level file such as
   `~/.claude/CLAUDE.md` counts. A subagent's row and a row without the field do not. The
   harness fires no InstructionsLoaded event for the auto-memory `MEMORY.md` or the output
