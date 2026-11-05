@@ -5,8 +5,8 @@ WHY THE EXIT CODE CANNOT BE THE VERDICT (issue #1712). `probe.py` builds its cur
 `-f` (`scripts/diagnostics/probe_lib/core.py`, `curl_argv`), so a request Traefik refuses returns
 the body `404 page not found` and exits **0**. A check that pushed on the exit code alone would
 have read UP through the entire window #1693 describes, when this route was dead from
-daniel-server — green and inert, which is the failure this repo has paid for twice
-(repo-root CLAUDE.md).
+daniel-server — green and inert. `docs/failure-classes.md` records this as class 2, a check that
+observes a proxy rather than the property.
 
 So the verdict is read from the BODY: valid JSON, `status: success`, and a non-empty `data`
 array. Anything else is DOWN, including a body that parses but carries no label names — Loki
