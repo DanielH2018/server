@@ -32,8 +32,8 @@
 #   on log2ram: Azlux's apt source arrives in the same package (apt-azlux), so a rebuilt Pi
 #   could not resolve the dependency on first install. The log2ram package stays a bootstrap
 #   install (H7.42), and it is installed on the live Pi.
-# - The debloat purge (Open vSwitch, snapd, fwupd), rsyslog's and wpa_supplicant's mask, and the
-#   one-off cleanups of stale rsyslog, AIDE and audit rotations are one-time state. They persist
+# - The debloat purge (Open vSwitch, snapd, fwupd, appstream), rsyslog's and wpa_supplicant's mask,
+#   and the one-off cleanups of stale rsyslog, AIDE and audit rotations are one-time state. They persist
 #   on the live Pi, and the bootstrap debloat step carries them for a rebuild (spec, *The
 #   bootstrap script*).
 # - The check that log2ram.conf's JOURNALD_AWARE lines agree was a read, not a write. A test in

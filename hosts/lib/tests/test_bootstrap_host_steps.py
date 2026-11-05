@@ -39,6 +39,32 @@ def test_the_pi_purges_only_what_is_installed_then_starts_the_engine(tmp_path):
     assert not (host.root / "installer.runs").exists()
 
 
+def test_the_pi_purges_appstream(tmp_path):
+    host = FakeHost(tmp_path)
+    host._stub(
+        "dpkg-query",
+        "case $3 in appstream) echo 'install ok installed' ;; *) exit 1 ;; esac",
+    )
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    purge = [call for call in host.apt_calls() if call.startswith("purge")]
+    assert purge == ["purge -y --autoremove appstream"]
+
+
+def test_a_cluster_node_keeps_appstream(tmp_path):
+    host = _server(tmp_path)
+    host._stub("dpkg-query", "echo 'install ok installed'")
+
+    result = host.run(
+        "daniel-server", "--until", "4", "--offline", str(host.kit), **AGENT_ENV
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert [call for call in host.apt_calls() if call.startswith("purge")] == []
+
+
 def test_the_pi_skips_the_engine_when_no_package_ships_its_unit_yet(tmp_path):
     host = FakeHost(tmp_path)
     host._stub(
