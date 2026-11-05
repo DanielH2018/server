@@ -1,10 +1,11 @@
 # G4 — Drop the CI size test
 
-Status: IN PROGRESS
+Status: DONE. PR 3 merged as [#7234](https://github.com/DanielH2018/server/pull/7234) on 2026-11-05.
 
 PR 1a, #4696 (issue #4694), moves the inline-budget arithmetic into `_inline_budget.py`.
 PR 1b, #4704 (issue #4698), adds the hook's `--report` mode.
 PR 2, #4717 (issue #4712), drops the CI size test, on the operator's ruling of 2026-10-12.
+PR 3, #7234 (issue #7227), ranks the docs that sessions read as a head.
 
 Depends on: none. PR 2 waits on an **operator-only** ruling (step 0). The optional PR 3
 lands after G2's PR 2.
