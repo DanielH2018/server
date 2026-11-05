@@ -1,19 +1,11 @@
 #!/usr/bin/env python3
-"""Status, verification and lint for the fact stores — the one entry point.
+"""Lint, report and diff notice for the fact stores — the one entry point.
 
-``status`` derives every CLAUDE.md section's status from the tree and ``docs/facts.lock``
-and exits 1 when any section is OUT. ``verify`` re-hashes the named sections' atoms into
-the lock at HEAD — the only path from OUT back to IN — and ``--unverified`` does it for every
-section that has no row yet. ``reverify`` is the prek hook's half: it re-hashes a section
-whose citation set an edit changed, records a section the edit gave its first citation, and
-refuses one whose recorded atom moved. ``forget`` drops a lock row whose
-section no longer exists, which is the way out of a ``section-gone`` finding: a renamed
-heading is a new unit, and the old row cannot be hand-deleted without tripping the lock's
-own checksum. ``lint`` reports citations that cannot be support. ``report`` reads git and
-the instructions log, never the lock: the sections citing nothing ranked by how often their
-doc loads, the instruction bytes each session loaded, and the notice replayed over the window
-(``--json`` for a cron or an agent). ``notice`` lists every section citing an atom
-that the diff from the merge base of ``--since`` to ``--head``, or to the working tree, moved.
+``lint`` reports citations that cannot be support. ``report`` reads git and the instructions
+log: the sections citing nothing ranked by how often their doc loads, the instruction bytes
+each session loaded, and the notice replayed over the window (``--json`` for a cron or an
+agent). ``notice`` lists every section citing an atom that the diff from the merge base of
+``--since`` to ``--head``, or to the working tree, moved.
 It exits 0 with rows or without, and 2 only when git cannot resolve the merge base.
 """
 
@@ -31,163 +23,18 @@ from lib.cli_help import ArgumentParser
 from lib.exit_codes import FACT_STATUS_BAD_ARGS, FACT_STATUS_BAD_REF
 
 from lib.facts.citations import repo_citations
-from lib.facts.lint import changed_units, first_cited_units, lint_sections
-from lib.facts.lock import (
-    LOCK_REL,
-    build_repo_edb,
-    check_lock,
-    forget_units,
-    read_lock,
-    reverify_benign,
-    verify_units,
-)
+from lib.facts.lint import changed_units, lint_sections
 from lib.facts.notice import FORMATS, resolve_base, scan
 from lib.facts.notice import render as render_notice
-from lib.facts.relations import derive, status_of
 from lib.facts.report import build, default_log, render
-from lib.git import git_stdout
 from lib.repo_paths import REPO
 
 _USAGE = FACT_STATUS_BAD_ARGS
 
 # The next step each command prints after its findings, so a red run ends on what to do (#4448).
-FIX_ATOMS = (
-    "fix: edit the section so what it cites holds, or re-record it with "
-    "`fact_status.py verify '<doc>#<heading>'` and commit docs/facts.lock. A renamed "
-    "heading also needs `fact_status.py forget '<old key>'`."
-)
-FIX_ONE_WAY = "fix: add `# fact: <doc>#<heading>` to the body of each cited test above."
 FIX_LINT = (
     "fix: .claude/rules/facts.md describes each rule above and how to resolve it."
 )
-
-
-def cmd_status(args: argparse.Namespace) -> int:
-    repo = Path(args.repo)
-    lock_path = repo / LOCK_REL
-    # One parse of the docs feeds the status, the lock check and the unit list. Every cited
-    # unit is a section key, so unioning the cited set in adds nothing; two sections with
-    # one heading text share a key here, and the `duplicate-heading` lint names them.
-    by_unit = repo_citations(repo)
-    edb = build_repo_edb(repo, read_lock(lock_path), by_unit)
-    idb = derive(edb)
-    for u in sorted(by_unit):
-        print(f"{status_of(idb, u)}  {u}")
-    findings = check_lock(repo, lock_path, by_unit)
-    for f in findings:
-        print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}")
-    for u, a in sorted(idb.one_way):
-        print(f"  one-way: {u} cites {a} which carries no `# fact: {u}`")
-    if idb.out or findings:
-        print(FIX_ATOMS)
-    if idb.one_way:
-        print(FIX_ONE_WAY)
-    return 1 if idb.out or findings else 0
-
-
-def cmd_verify(args: argparse.Namespace) -> int:
-    repo = Path(args.repo)
-    by_unit = repo_citations(repo)
-    units = list(args.units)
-    if args.unverified:
-        # Sections with NO lock row only. The flag can therefore never launder a `moved`
-        # atom — a verified section is untouched by it, whatever state it is in — so
-        # raising coverage in bulk is safe in a way re-verifying in bulk would not be.
-        recorded = set(read_lock(repo / LOCK_REL))
-        fresh = sorted(set(by_unit) - recorded - set(units))
-        # A section citing nothing is a convention and never had a row to write.
-        units += [u for u in fresh if by_unit[u]]
-    if not units:
-        if not args.unverified:
-            print("name a section, or pass --unverified", file=_sys.stderr)
-            return _USAGE
-        print("every section that cites an atom already has a lock row")
-        return 0
-    args.units = units
-    unknown = [u for u in units if u not in by_unit]
-    if unknown:
-        print(
-            f"no section named {unknown}; `fact_status.py status` lists the keys",
-            file=_sys.stderr,
-        )
-        return _USAGE
-    if git_stdout("status", "--porcelain", cwd=repo):
-        print(
-            "working tree is dirty; verified_sha names HEAD, not this state",
-            file=_sys.stderr,
-        )
-    head = git_stdout("rev-parse", "--short=9", "HEAD", cwd=repo)
-    lock, skipped = verify_units(repo, repo / LOCK_REL, args.units, head, by_unit)
-    for u in args.units:
-        if u in lock:
-            print(f"verified {u} at {head}: {len(lock[u]['atoms'])} atoms")
-        else:
-            print(f"{u} cites nothing, so it has no row; `status` grades it CONVENTION")
-    if skipped:
-        print(f"skipped {len(skipped)} unresolved: {', '.join(skipped)}")
-    return 0
-
-
-def cmd_reverify(args: argparse.Namespace) -> int:
-    """Re-hash the edited sections whose findings are benign; refuse the rest.
-
-    The prek hook's entry point. It exits 1 when it wrote the lock, the way a formatter does:
-    the commit stops, the author stages the lock the hook just wrote, and the re-hash lands in
-    the same commit as the edit that needed it rather than in a follow-up.
-    """
-    repo = Path(args.repo)
-    try:
-        changed = changed_units(repo, args.changed_since)
-    except ValueError as unresolvable:
-        print(unresolvable, file=_sys.stderr)
-        return _USAGE
-    head = git_stdout("rev-parse", "--short=9", "HEAD", cwd=repo)
-    first = first_cited_units(repo, args.changed_since, changed)
-    done, blocking = reverify_benign(repo, repo / LOCK_REL, changed, head, None, first)
-    # Two headings, because the remedy differs. A finding in a section this commit edits is
-    # one the author is looking at. A finding elsewhere is CI's next failure, and saying so
-    # here is cheaper than letting them push and read it from the run.
-    here = [f for f in blocking if f.unit in changed or not f.unit]
-    elsewhere = [f for f in blocking if f not in here]
-    for f in here:
-        print(f"{f.kind}: {f.unit} {f.atom} — {f.detail}", file=_sys.stderr)
-    if elsewhere:
-        print("not folded, and CI fails on these:", file=_sys.stderr)
-        for f in elsewhere:
-            print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}", file=_sys.stderr)
-    if blocking:
-        print(FIX_ATOMS, file=_sys.stderr)
-    recorded = read_lock(repo / LOCK_REL)
-    for u in done:
-        if u not in recorded:
-            print(f"dropped the row of {u}: the section cites nothing now")
-        elif u in first:
-            print(f"recorded {u} at {head}: the commit gives it its first citation")
-        else:
-            print(
-                f"re-verified {u} at {head}: its citation set changed, no recorded atom moved"
-            )
-    if done:
-        print(
-            f"\n{LOCK_REL} rewritten — `git add {LOCK_REL}` and commit again.",
-            file=_sys.stderr,
-        )
-    return 1 if done or blocking else 0
-
-
-def cmd_forget(args: argparse.Namespace) -> int:
-    repo = Path(args.repo)
-    try:
-        forget_units(repo / LOCK_REL, args.units)
-    except KeyError as missing:
-        print(
-            f"no lock row for {missing.args[0]!r}; `fact_status.py status` lists the keys",
-            file=_sys.stderr,
-        )
-        return _USAGE
-    for u in args.units:
-        print(f"forgot {u}")
-    return 0
 
 
 def cmd_lint(args: argparse.Namespace) -> int:
@@ -232,8 +79,8 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
     """Add ``--repo``/``--store`` to a subparser.
 
     On the top-level parser alone these must precede the subcommand token
-    (``fact_status.py --repo P status``); every caller here writes the flag
-    after the subcommand instead (``status --repo P``), which argparse only
+    (``fact_status.py --repo P lint``); every caller here writes the flag
+    after the subcommand instead (``lint --repo P``), which argparse only
     accepts when each subparser carries its own copy.
     """
     sp.add_argument("--repo", default=str(REPO))
@@ -243,26 +90,6 @@ def _add_common(sp: argparse.ArgumentParser) -> None:
 def main(argv: list[str] | None = None) -> int:
     p = ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
-    st = sub.add_parser("status")
-    _add_common(st)
-    st.set_defaults(fn=cmd_status)
-    v = sub.add_parser("verify")
-    _add_common(v)
-    v.add_argument("units", nargs="*")
-    v.add_argument(
-        "--unverified",
-        action="store_true",
-        help="also verify every section that cites atoms and has no lock row yet",
-    )
-    v.set_defaults(fn=cmd_verify)
-    rv = sub.add_parser("reverify")
-    _add_common(rv)
-    rv.add_argument("--changed-since", default="origin/master")
-    rv.set_defaults(fn=cmd_reverify)
-    fg = sub.add_parser("forget")
-    _add_common(fg)
-    fg.add_argument("units", nargs="+")
-    fg.set_defaults(fn=cmd_forget)
     ln = sub.add_parser("lint")
     _add_common(ln)
     ln.add_argument("--changed-since", default=None)

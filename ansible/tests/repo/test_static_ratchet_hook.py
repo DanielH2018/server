@@ -26,7 +26,7 @@ CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 # dropped from the entry fails here by name.
 EXPECTED_MODULES = {
     "ansible/tests/repo/test_module_length_ratchet.py",
-    "ansible/tests/repo/test_facts_lock_matches_tree.py",
+    "ansible/tests/repo/test_every_section_lints_clean.py",
     "ansible/tests/repo/test_pytest_shards_partition_the_suite.py",
     "scripts/docs/tests/test_gen_doc_fragments.py",
     "ansible/tests/repo/test_role_claude_md.py",
@@ -122,7 +122,6 @@ def test_the_hook_runs_every_expected_module_and_each_exists():
         "scripts/dev/fact_status.py",
         "CLAUDE.md",
         "ansible/roles/k8s/traefik/CLAUDE.md",
-        "docs/facts.lock/0123456789abcdef.json",
         "scripts/dev/pytest_shard_weights.json",
         "ansible/tests/repo/module_length_allowlist.txt",
         "ansible/roles/k8s/traefik/defaults/main.yml",

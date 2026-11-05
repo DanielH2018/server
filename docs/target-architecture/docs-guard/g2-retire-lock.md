@@ -1,6 +1,8 @@
 # G2 — Retire the lock; ADR amending 0019
 
 Status: IN PROGRESS. PR 1 merged as [#5478](https://github.com/DanielH2018/server/pull/5478) on 2026-10-17.
+PR 2 merged as `15e427549` on 2026-11-03. PR 2b and PR 3 ship as one PR, under
+[#7215](https://github.com/DanielH2018/server/issues/7215). PR 4 and PR 5 remain.
 
 Depends on: [G1](g1-diff-notice.md)
 
