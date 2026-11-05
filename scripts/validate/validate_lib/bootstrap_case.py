@@ -117,6 +117,34 @@ def kit_pins(script: str) -> dict[str, tuple[str, str]]:
     return pins
 
 
+def split_log2ram(host: str, calls: str) -> tuple[str, list[str]]:
+    """Take step 5's Azlux update and log2ram install out of the shim's log.
+
+    The Pi makes those two calls after its packages, so a check of the package install reads
+    the rest. The simulation installs nothing, so no Azlux source exists for the install to read.
+
+    Args:
+        host: The host the script ran for.
+        calls: The shim's log, one apt-get argument list per line.
+
+    Returns:
+        The log without those calls, and a problem when the count is not two on the Pi and none
+        on any other host.
+    """
+    lines = calls.splitlines()
+    rest = [
+        line
+        for line in lines
+        if "azlux.sources" not in line and not line.endswith(" log2ram")
+    ]
+    found = len(lines) - len(rest)
+    want = 2 if host == "daniel-pi" else 0
+    problems = (
+        [] if found == want else [f"{host} ran {found} log2ram calls, not {want}"]
+    )
+    return "\n".join(rest), problems
+
+
 def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
     """What is wrong with step 5's install, from the shim's call log and the script's output.
 
@@ -126,8 +154,11 @@ def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
         stdout: The script's standard output, which holds apt's simulation.
     """
     want = ["homelab-tools", "homelab-updater", f"homelab-{host}"]
+    package_calls, log2ram_problems = split_log2ram(host, calls)
     installs = [
-        line.split() for line in calls.splitlines() if line.startswith("install")
+        line.split()
+        for line in package_calls.splitlines()
+        if line.startswith("install")
     ]
     if len(installs) != 1:
         return [f"apt-get ran {len(installs)} installs, not one: {installs}"]
@@ -139,7 +170,7 @@ def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
         for package in want
         if not re.search(rf"^Inst {re.escape(package)} ", stdout, re.MULTILINE)
     ]
-    return problems
+    return problems + log2ram_problems
 
 
 def red_kit(green: Path, out: Path, name: str, data: bytes | None) -> Path:
