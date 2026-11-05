@@ -15,9 +15,10 @@ def test_rank_docs_counts_repo_docs_and_drops_user_level_paths():
         "t [s] session_start User /home/u/.claude/CLAUDE.md",
         "t [s] bash_path_match Project roles/x/CLAUDE.md trigger=roles/x/a.py",
         "t [s] path_glob_match Project roles/x/CLAUDE.md trigger=roles/x/b.py",
+        "t [s] bash_path_match Project roles/x/CLAUDE.md trigger=roles/x/c.py form=head bytes=7",
         "malformed",
     ]
-    assert rank_docs(log) == [("roles/x/CLAUDE.md", 2), ("CLAUDE.md", 1)]
+    assert rank_docs(log) == [("roles/x/CLAUDE.md", 3), ("CLAUDE.md", 1)]
 
 
 def _turn(role, content):

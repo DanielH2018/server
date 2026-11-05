@@ -69,6 +69,8 @@ class FakeRunner:
         # What `git show <rev>:<path>` answers: the file at the fix head, by path. A path
         # absent from it has no such file there.
         self.tree = {"scripts/x.py": "a\nb\nboom = 1\nd\n"}
+        # What `git diff --name-only -z` answers: the paths the batch's range changed.
+        self.changed_paths = []
         # The landing the pipeline runs: each `bash -l` command, the VERDICT line land.sh's
         # log ends on ("" for none), land.sh's exit code, and cc-wait's exit codes in order.
         self.lands = []
@@ -109,7 +111,9 @@ class FakeRunner:
                         argv, 128, "", "fatal: no such path"
                     )
                 return subprocess.CompletedProcess(argv, 0, self.tree[path], "")
-            if "merge-base" in argv:
+            if "diff" in argv and "--name-only" in argv:
+                out = "\0".join(self.changed_paths)
+            elif "merge-base" in argv:
                 out = "base0"
             elif "symbolic-ref" in argv:
                 out = BRANCH

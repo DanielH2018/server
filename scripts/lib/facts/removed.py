@@ -1,9 +1,7 @@
 """Identifier-shaped tokens a range of commits removed, and whether the tree still holds them.
 
-Two readers share this. The ``vanished-identifier`` lint rule (``lint.vanished_identifiers``)
-flags a section that names a token the branch removed from the tree. The ``moved`` finding
-(``evidence.moved_evidence``) names the tokens a moved atom's range removed, so its author
-can tell a refactor from a change the prose describes.
+The ``vanished-identifier`` lint rule (``lint.vanished_identifiers``) reads this to flag a
+section that names a token the branch removed from the tree.
 """
 
 import re
@@ -20,11 +18,8 @@ _TOKEN = re.compile(r"[A-Za-z0-9_./-]*[A-Za-z_][A-Za-z0-9_./-]*")
 # #4012 ruled must not arrive red over documentation.
 _VERSIONISH = re.compile(r"v?\d")
 _EDGE = re.compile(r"^(?:\./|[-/])+")
-# Markdown is the prose under test, not the tree it describes, and the lock records citations.
-# `lock.LOCK_REL`, restated: `lock` imports this module through `evidence`, so importing the
-# constant back would be a cycle. `test_facts_lock_evidence.py` pins the two together.
-LOCK_PATH = "docs/facts.lock"
-_CODE = (".", ":!*.md", f":!{LOCK_PATH}")
+# Markdown is the prose under test, not the tree it describes.
+_CODE = (".", ":!*.md")
 
 
 def identifiers(text: str) -> set[str]:

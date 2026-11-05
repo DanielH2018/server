@@ -104,7 +104,10 @@ otherwise; none of the values below are secrets themselves, only names and locat
     - **The offline bootstrap files.** `sudo hosts/bootstrap-host.sh <host> --offline <kit-dir>`
       reads every fetch from one directory and checks each file against the pin the download
       path checks. A file that is missing or differs from its pin stops the script and names
-      the file. The directory holds, for the node's architecture:
+      the file. The kit holds no `log2ram` package. On the Pi, step 5 installs it from
+      `packages.azlux.fr`. If that host does not answer, the script prints a warning and goes on
+      with `/var/log` on the SD card. To install the package, rerun the script once the host
+      answers. The directory holds, for the node's architecture:
         - `install.sh` at `K3S_VERSION`, whose sha256 is `K3S_INSTALL_SHA256` in the script;
         - the `k3s` binary (`k3s-arm64` on arm64) and the release's `sha256sum-<arch>.txt`;
         - the `nfpm` and `uv` archives that the script's pins name:

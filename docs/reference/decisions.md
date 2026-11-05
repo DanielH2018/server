@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-05 07:15 UTC
-generated_sha: 9608bbce2f
+generated_at: 2026-11-05 13:35 UTC
+generated_sha: fa85103da7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 9608bbce2f
 
 # Decisions
 
-936 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+930 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -806,14 +806,11 @@ generated_sha: 9608bbce2f
 | not age-gated, for the reason `manual_plane_lines` is not. gate this marker (`checks/gitops.py`, 7h), and the asymmetry is deliberate rather than drift: the bridge PAGES, so it needs a threshold that a tick which applies the bump on its next pass clears. A banner line is a passive notice to a reader who is already reading, and a bump merged ten minutes ago is exactly the one this session can still clear cheaply. | `scripts/lib/deployer_park.py:355` | 2026-09-25 |
 | no age gate here, and no monitor behind it either — unlike `k8s_deferred_lines` above, which is ungated on the banner while monitor-bridge pages on the same marker at 7h. Forty of the fifty-four k8s roles are denylisted, so a page on this class would be red as normal operation, which is the measured ground #2471 ruled the marker out on. A banner line costs a reader one glance and the marker discharges itself off the release record, so the set stays the changes nobody has deployed. | `scripts/lib/deployer_park.py:385` | 2026-09-25 |
 | deploy.sh and the tick print that same shape under their OWN prefix rather than under `VERDICT:`. A landing runs both as subprocesses with stdout INHERITED (`land_lib/tools.py:run_deploy`), so their lines reach the landing's own logfile ABOVE its verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report the deploy's outcome as the landing's on every landing, with nothing failing. One format, three prefixes, one renderer. Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it carries the measurement. | `scripts/lib/exit_messages.py:33` | 2026-10-12 |
-| a path atom hashes EXISTENCE, not content. for the rule and the measurement behind it. | `scripts/lib/facts/atoms.py:146` | 2026-09-28 |
-| {c.selector}" in ln | `scripts/lib/facts/atoms.py:177` | 2026-10-10 |
+| a path atom hashes EXISTENCE, not content. for the rule and the measurement behind it. | `scripts/lib/facts/atoms.py:141` | 2026-09-28 |
+| {c.selector}" in ln | `scripts/lib/facts/atoms.py:172` | 2026-10-10 |
 | (?P<sel>\S.*)$")), | `scripts/lib/facts/citations.py:53` | 2026-09-19 |
 | no repo-root prefix is required. matched 4 citations in the whole tree, because the docs overwhelmingly cite from context -- `roles/k8s/manifests/tasks/main.yml:112`, `deploy_logic.py:458`. A guard that checks four things is a guard that passes vacuously, which is why the guard asserts a citation count. The extension must begin with a letter, which is what keeps `127.0.0.1:3100` and `10.0.0.240:51820` from parsing as a file called `127.0.0.` with extension `1`. Four role docs and two networking docs cite host:port pairs exactly that way. | `scripts/lib/facts/citations.py:114` | 2026-10-03 |
-| ``verified_sha`` is usually not on master. | `scripts/lib/facts/evidence.py:91` | 2026-10-10 |
-| one file per section, named by a hash of its key, never one file for the whole | `scripts/lib/facts/lock.py:81` | 2026-10-17 |
-| this skips the whole unit, not only the hash comparison. would still be valid here — set membership does not depend on the interpreter — but its remedy is the same `verify` run, and one actionable finding beats several. | `scripts/lib/facts/lock.py:300` | 2026-09-19 |
-| content counts as a substring, not a whole word. | `scripts/lib/facts/removed.py:86` | 2026-10-10 |
+| content counts as a substring, not a whole word. | `scripts/lib/facts/removed.py:81` | 2026-10-10 |
 | lazy, not registered with `register_ansible_filters` at the top of this module. heavy tier imports ansible-core, and this module stays light for `probe.py monitors` (the | `scripts/lib/k8s_context.py:38` | 2026-10-22 |
 | ` marker in `resolve_vars` below gives the measurement). until a default calls the filter, and then the call builds the heavy environment once. | `scripts/lib/k8s_context.py:40` | 2026-10-22 |
 | the shim is `ansible_jinja_env.ansible_bool`, not ansible-core's `to_bool` that `lib.ansible_jinja_env.register_ansible_filters` binds for every render guard. `to_bool` would make the two paths agree by identity, but importing `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/health.py` imports this module — `probe.py health` reaches no ansible-core module today (measured 2026-11-01, `sys.modules` after the import). The shim copies `to_bool`'s tables and fallback, and `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy to the real filter, so the two paths agree by test rather than by identity (#2074). | `scripts/lib/k8s_context.py:115` | 2026-10-09 |
@@ -846,9 +843,6 @@ generated_sha: 9608bbce2f
 | keep it`.\n" | `scripts/lib/tests/test_facts_lint.py:41` | 2026-09-19 |
 | keep`\n") | `scripts/lib/tests/test_facts_lint.py:123` | 2026-09-30 |
 | keep it\n# DECIDED: keep that\n") | `scripts/lib/tests/test_facts_lint.py:124` | 2026-09-19 |
-| keep the cap\n") | `scripts/lib/tests/test_facts_lock.py:181` | 2026-09-19 |
-| keep`") | `scripts/lib/tests/test_facts_lock.py:183` | 2026-09-19 |
-| keep the cap\n# DECIDED: keep the floor\n" | `scripts/lib/tests/test_facts_lock.py:187` | 2026-09-19 |
 | keep one\n# DECIDED: keep two\n" | `scripts/lib/tests/test_facts_notice.py:180` | 2026-10-12 |
 | keep"), "a/b.py": twice, "c.txt": "1\n"}, | `scripts/lib/tests/test_facts_notice.py:183` | 2026-10-12 |
 | keep"), "a/b.py": "# DECIDED: keep one\n"}, | `scripts/lib/tests/test_facts_notice.py:246` | 2026-10-12 |

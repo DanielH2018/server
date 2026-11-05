@@ -7,7 +7,7 @@ import pytest
 from lib.facts.citations import Citation
 from lib.facts.notice import Notice
 from lib.facts.replay import notice_replay
-from lib.facts.report import build, doc_reads, ranked_backlog, session_bytes
+from lib.facts.report import build, doc_reads, ranked_backlog, render, session_bytes
 from lib.git_testing import commit, git, git_out, init_repo, scrubbed_env
 
 # A fixed epoch: the log rows and commit dates are set against it, never the live clock.
@@ -63,6 +63,40 @@ def test_the_backlog_is_the_sections_citing_nothing_ranked_by_their_docs_reads(
         ("a/CLAUDE.md#Rule", 3),
         ("CLAUDE.md#Root", 2),
         ("b/CLAUDE.md#Old", 0),
+    ]
+
+
+def test_the_docs_read_as_a_head_are_ranked_by_reads(tmp_path):
+    stamp = _NOW.strftime("%Y-%m-%dT%H:%M:%SZ")
+    old = (_NOW - timedelta(days=40)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    tail = "bash_path_match  Project "
+    log = tmp_path / "instructions.log"
+    (tmp_path / "instructions.log.1").write_text(
+        f"{stamp} [aaaaaaaa] {tail} b/CLAUDE.md trigger=b/x form=head bytes=9\n"
+    )
+    log.write_text(
+        f"{stamp} [aaaaaaaa] {tail} a/CLAUDE.md trigger=a/x form=head bytes=9\n"
+        f"{stamp} [bbbbbbbb] {tail} .claude/rules/r.md trigger=b/x agent=z form=head bytes=9\n"
+        f"{stamp} [bbbbbbbb] {tail} b/CLAUDE.md trigger=b/y form=head bytes=9\n"
+        f"{stamp} [cccccccc] {tail} a/CLAUDE.md trigger=a/x bytes=9\n"
+        f"{stamp} [cccccccc] {tail} c/CLAUDE.md trigger=c/x bytes=9\n"
+        f"{old} [dddddddd] {tail} a/CLAUDE.md trigger=a/x form=head bytes=9\n"
+    )
+    repo = init_repo(tmp_path)
+    _dated_commit(repo, "seed", 50, README="x\n")
+
+    report = build(repo, {}, 30, log, now=_NOW, notice=lambda *_: [])
+
+    assert report["heads"] == [
+        {"doc": "b/CLAUDE.md", "reads": 2},
+        {"doc": ".claude/rules/r.md", "reads": 1},
+        {"doc": "a/CLAUDE.md", "reads": 1},
+    ]
+    rows = render(report, top=2).split("Docs read as a head")[1].splitlines()
+    assert rows[2:5] == [
+        "      2  b/CLAUDE.md",
+        "      1  .claude/rules/r.md",
+        "  ... 1 more; --top or --json lists them",
     ]
 
 

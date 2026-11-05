@@ -38,7 +38,12 @@ import sys
 import tempfile
 from pathlib import Path
 
-from validate.validate_lib.bootstrap_case import SCRIPT, install_apt_shim, APT_CALLS
+from validate.validate_lib.bootstrap_case import (
+    APT_CALLS,
+    SCRIPT,
+    install_apt_shim,
+    split_log2ram,
+)
 from validate.validate_lib.host_container import PORT, CaseFailed, Container, expect
 from validate.validate_lib.host_fixtures import TEST_KEYRING
 
@@ -113,7 +118,8 @@ def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
         calls: The shim's log, one apt-get argument list per line.
         stdout: The script's standard output, which holds apt's simulations.
     """
-    lines = [line.split() for line in calls.splitlines()]
+    package_calls, log2ram_problems = split_log2ram(host, calls)
+    lines = [line.split() for line in package_calls.splitlines()]
     updates = [line for line in lines if line[:1] == ["update"]]
     problems = []
     if len(updates) != 1 or "--error-on=any" not in updates[0]:
@@ -132,7 +138,7 @@ def apt_problems(host: str, calls: str, stdout: str) -> list[str]:
         for package in ("homelab-tools", "homelab-updater", f"homelab-{host}")
         if not re.search(rf"^Inst {re.escape(package)} ", stdout, re.MULTILINE)
     ]
-    return problems
+    return problems + log2ram_problems
 
 
 def _body(cases, c: Container, scratch: Path) -> None:

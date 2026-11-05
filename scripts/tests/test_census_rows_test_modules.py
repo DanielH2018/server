@@ -84,7 +84,6 @@ ROWS = (
                 "scripts/deploy_tools/tests/test_land_tools.py",
                 "scripts/dev/tests/test_prune_worktrees.py",
                 "scripts/diagnostics/tests/_release_fixtures.py",
-                "scripts/lib/tests/test_facts_lock.py",
                 "scripts/lib/tests/test_render_guard.py",
             }
         ),

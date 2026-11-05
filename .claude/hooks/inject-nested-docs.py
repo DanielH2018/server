@@ -23,7 +23,8 @@ doc is returned as PreToolUse `additionalContext` ONCE per session, and once mor
 subagent (its payload's `agent_id`), whose context starts empty. Every injection is logged
 to `instructions.log` with reason `bash_path_match`, so the same log that measured the gap
 grades the fix. Each row ends in `bytes=<n>`, the UTF-8 size of the block injected for its
-doc. The root `CLAUDE.md` is never injected: it loads at session start.
+doc, and the row of a doc delivered as a head carries `form=head` before that. The root
+`CLAUDE.md` is never injected: it loads at session start.
 
 ONLY DOCS THIS HOOK CHOSE ARE EVER READ. A path lifted from the command selects a directory;
 the files opened are `CLAUDE.md` at an ancestor of that directory and the rule files under
@@ -47,7 +48,8 @@ Headings alone bought almost nothing over no injection: sessions read the full d
 23% of outline injections, against 16% of Bash-only pairs with no hook. The head spends the
 same budget on text a session can act on without a second read: a role doc opens with its
 generated `## At a glance` block and its operative rules. No CI check holds a doc under the
-budget, so the head path is permanent: `--report` names each doc that reads as a head. A doc's
+budget, so the head path is permanent: `--report` names each doc that reads as a head, and
+`fact_status.py report` ranks those docs by the `form=head` rows they logged. A doc's
 budget is what `_fits_inline` leaves it, `INLINE_MAX_CHARS` less the preamble and the header,
 not `INLINE_MAX_CHARS` itself (#3245), and the head's notice states that budget.
 
@@ -340,6 +342,7 @@ def _head_lines(lines, max_chars, max_lines):
 
 
 _CUT_LINE = "----- sections of this file NOT shown above -----"
+_HEAD_NOTICE_MARK = "so this is its head."
 
 # A head shorter than this many lines is deferred, like one under `MIN_HEAD_CHARS`.
 _MIN_HEAD_LINES = 20
@@ -361,9 +364,17 @@ def _notice(doc, text, header):
         over.append((f"{lines:,} lines", f"{lines + lines_left:,}-line"))
     size, budget = (" and ".join(part) for part in zip(*over, strict=True))
     return (
-        f"This file is {size}, over the {budget} budget this hook leaves it, so this is its "
-        f"head. Read `{doc}` for the rest before you change anything it covers."
+        f"This file is {size}, over the {budget} budget this hook leaves it, "
+        f"{_HEAD_NOTICE_MARK} Read `{doc}` for the rest before you change anything it covers."
     )
+
+
+def _is_head(block):
+    """True for a `_head_block` block, whose second line is the notice.
+
+    Only that line counts: a doc delivered whole may quote the notice in its body.
+    """
+    return _HEAD_NOTICE_MARK in block.split("\n", 2)[1]
 
 
 def _head_overhead(doc, text, header, trailer):
@@ -547,8 +558,13 @@ def context(payload):
     for doc, trigger, block in chosen:
         # The block, not the file: `fact_status.py report` totals what entered context (#4653).
         size = f" bytes={len(block.encode('utf-8'))}"
+        form = " form=head" if _is_head(block) else ""
         append_instructions_row(
-            REASON, "Project", doc, session_id, " trigger=" + trigger + tag + size
+            REASON,
+            "Project",
+            doc,
+            session_id,
+            " trigger=" + trigger + tag + form + size,
         )
     return text
 

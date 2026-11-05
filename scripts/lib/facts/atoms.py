@@ -6,21 +6,16 @@ docstrings stripped (a reword must not invalidate a claim about a value), a YAML
 atom does not resolve.
 
 A **path** atom is about location, not content, so its hash is over the path itself: the atom
-resolves while the file or directory is there and reads ``None`` once it is gone. A delete or
-a rename therefore still fails CI, though the finding it raises is ``atom-no-longer-cited``
-rather than ``missing`` — a citation stops being support the moment it stops naming a tracked
-file, so the atom leaves the section's citations before it can fail to hash. The finer claim —
-a value, a key, a decision, a test's body — has a form of its own, and those content-hash.
-Hashing a cited file's bytes instead made every edit anywhere in it a finding about a
-sentence that only said where the file lives: 687 of the 1,253 commits in the 30 days to
-2026-09-28 raised one, and none corrected a documented claim in the lock's first 9 days.
+resolves while the file or directory is there and reads ``None`` once it is gone. The finer
+claim — a value, a key, a decision, a test's body — has a form of its own, and those
+content-hash. Hashing a cited file's bytes instead made every edit anywhere in it a finding
+about a sentence that only said where the file lives: 687 of the 1,253 commits in the 30 days
+to 2026-09-28 raised one, and none corrected a documented claim.
 
 A Python node is hashed through ``ast.unparse``, never ``ast.dump``. A dump names every AST
-field, so a CPython release that adds one (``type_params`` in 3.12) moves every recorded
-symbol and test hash at once, and the whole lock reads OUT after an interpreter upgrade that
-changed nothing about the code. ``ast.unparse`` renders source, which is the thing the
-citation is actually about. ``lock.check_lock`` carries the belt-and-braces half: a row
-recorded under another minor version is reported rather than compared.
+field, so a CPython release that adds one (``type_params`` in 3.12) moves every symbol and
+test hash at once, after an interpreter upgrade that changed nothing about the code.
+``ast.unparse`` renders source, which is the thing the citation is actually about.
 """
 
 import ast
