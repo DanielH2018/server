@@ -31,7 +31,7 @@ monitor_bridge_builder_max_fetch_age_s: 1800
 # Deliberately explicit rather than a `files/*.py` glob: files/ also holds the pytest suite
 # and conftest.py, which must not reach the image.
 # ENFORCED by ansible/tests/services/test_monitor_bridge_modules.py, which fails when a runtime module
-# in files/ is absent here.
+# in files/ is absent here, unless that test's CHECKOUT_ONLY set names it.
 # Paths relative to files/. Each module ships in its own ConfigMap, named from the path with
 # `.py` dropped and `/` and `_` replaced by `-`. Its key is the path with `/` replaced by `_`
 # (a key cannot contain a slash), and the Deployment's `items:` mounts that key back at the
@@ -46,7 +46,6 @@ monitor_bridge_modules:
   - gitops_markers.py
   - gitops_ledger.py
   - gitops_hold.py
-  - longhorn_robustness.py
   - deploy_pipeline.py
   - verdict_export.py
   - bridge/types.py

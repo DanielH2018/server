@@ -1,9 +1,9 @@
 # uptime-kuma and AutoKuma record
 
 **HISTORY —** this page holds the measured incidents and source readings behind the Uptime Kuma
-workload, which M6 retired. M6's C-1b deleted the templates and guards this page names, C-2b
-deleted the role, and git history keeps them. Every present-tense sentence below describes that
-workload as it ran.
+workload, which M6 retired. M6's PR B-2 deleted `probe.py kuma-drift`, C-1b deleted the templates
+and guards this page names, C-2b deleted the role, and git history keeps them. Every present-tense
+sentence below describes that workload as it ran.
 
 Two moving parts sit behind every fact here: Kuma itself at the pinned `2.5.3`, and the AutoKuma
 sidecar at `2.1.0-rc.2`, which reconciles monitors, notifications and tags from this role's
@@ -76,9 +76,9 @@ Read at `louislam/uptime-kuma` tag `2.5.3`, `server/model/monitor.js`, `beat()`:
 
 What this bounds: Kuma's UI and its Discord notifications are DB-backed and see nothing wrong. Only
 the readers of `monitor_status` are blind — `probe.py monitors`, `postflight.py`'s Kuma gate and the
-uptime-kuma Grafana board. `monitors` prints a coverage line when the exported set is smaller than
-the ungated declared one, so the ratio cannot be read as full coverage; `kuma-drift` already
-separates a pending tile from a missing one.
+uptime-kuma Grafana board. `monitors` printed a coverage line when the exported set was smaller than
+the ungated declared one, so the ratio could not be read as full coverage; `kuma-drift` already
+separated a pending tile from a missing one.
 
 Two directions #1779 floated, rejected: shortening the 25h intervals buys nothing for detection (it
 was never blind) and tightens the dead-man on producers that genuinely run daily; a Prometheus
@@ -286,8 +286,8 @@ A push tile's token must be exactly 32 letters and digits. AutoKuma refuses any 
 one WARN per sync in the AutoKuma sidecar's log and never creates the monitor, so the pusher gets
 HTTP 404 and nothing pages (#3985). Until #4005, `probe.py kuma-drift` could not see it either.
 It reported the tile as "no beat due yet" until the tile's interval had passed since Kuma
-started, which for a weekly tile is never. It now checks the status page for the name and
-reports a declared tile absent from the page as missing. `secret_rotation.py rotate` mints `token_hex(16)`; a token added by
+started, which for a weekly tile is never. From #4005 it checked the status page for the name and
+reported a declared tile absent from the page as missing. `secret_rotation.py rotate` mints `token_hex(16)`; a token added by
 hand needs the same shape. The deploy asserts the format over every rendered push tile through
 the `kuma_malformed_push_tokens` filter and names each refused id.
 

@@ -37,8 +37,8 @@ from lib.kubectl import MissingKubectl, Tools, WrongCluster, kubectl_json
 from lib.repo_paths import MONITOR_BRIDGE_FILES
 
 # The robustness allow-list is monitor-bridge's, shared rather than restated (#3668). Appended,
-# not prepended, so that role's `check.py`, `gates.py` and packages cannot shadow anything a
-# caller of this module imports later.
+# not prepended, so that role's `check.py` and packages cannot shadow anything a caller of this
+# module imports later.
 sys.path.append(str(MONITOR_BRIDGE_FILES))
 from longhorn_robustness import unsafe_volumes as _unsafe_states
 

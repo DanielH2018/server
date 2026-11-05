@@ -34,6 +34,31 @@ def write(root, host, name, body="<title>T</title>"):
     return path
 
 
+@pytest.fixture
+def serve(root):
+    servers = []
+
+    def start(store):
+        handler = type(
+            "StarHandler",
+            (srv.Handler,),
+            {"cache": srv.IndexCache(root, store), "stars": store},
+        )
+        server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+        threading.Thread(
+            target=server.serve_forever,
+            kwargs={"poll_interval": 0.01},
+            daemon=True,
+        ).start()
+        servers.append(server)
+        return HTTPConnection("127.0.0.1", server.server_address[1])
+
+    yield start
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+
+
 class TestStarStore:
     def test_a_missing_file_stars_nothing(self, stars):
         assert stars.load() == set()
@@ -104,30 +129,6 @@ class TestIndex:
 
 class TestStarEndpoint:
     """End-to-end over a real socket, with the store passed to a Handler subclass."""
-
-    @pytest.fixture
-    def serve(self, root):
-        servers = []
-
-        def start(store):
-            handler = type(
-                "StarHandler",
-                (srv.Handler,),
-                {"cache": srv.IndexCache(root, store), "stars": store},
-            )
-            server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
-            threading.Thread(
-                target=server.serve_forever,
-                kwargs={"poll_interval": 0.01},
-                daemon=True,
-            ).start()
-            servers.append(server)
-            return HTTPConnection("127.0.0.1", server.server_address[1])
-
-        yield start
-        for server in servers:
-            server.shutdown()
-            server.server_close()
 
     def post(self, conn, payload, ctype="application/json"):
         body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
@@ -213,3 +214,93 @@ class TestStarEndpoint:
             "POST", "/api/index.json", b"{}", {"Content-Type": "application/json"}
         )
         assert conn.getresponse().status == 404
+
+
+class TestStarOnArtifactPage:
+    """The button a served artifact loads: its script tag, its script and its state read."""
+
+    PAGE = "<html><body>plan</body></html>"
+    TAG = (
+        '<script src="/api/star.js" data-host="daniel-box" '
+        'data-path="plan.html" defer></script>'
+    )
+
+    @pytest.fixture
+    def get(self, serve):
+        def request(store, path):
+            conn = serve(store)
+            conn.request("GET", path)
+            res = conn.getresponse()
+            return res.status, res.read()
+
+        return request
+
+    def test_no_star_list_serves_the_file_byte_for_byte(self, get, root):
+        write(root, "daniel-box", "plan.html", self.PAGE)
+        assert get(None, "/a/daniel-box/plan.html") == (200, self.PAGE.encode())
+
+    def test_a_star_list_adds_the_tag_and_leaves_the_file_alone(self, get, root, stars):
+        path = write(root, "daniel-box", "plan.html", self.PAGE)
+        status, body = get(stars, "/a/daniel-box/plan.html")
+        assert status == 200
+        assert body.decode() == f"<html><body>plan{self.TAG}</body></html>"
+        assert path.read_text() == self.PAGE
+
+    def test_a_non_html_artifact_is_served_unchanged(self, get, root, stars):
+        write(root, "daniel-box", "notes.md", "# Notes\n</body>")
+        status, body = get(stars, "/a/daniel-box/notes.md")
+        assert (status, body) == (200, b"# Notes\n</body>")
+
+    def test_the_script_route_serves_the_button_as_javascript(self, serve, stars):
+        conn = serve(stars)
+        conn.request("GET", "/api/star.js")
+        res = conn.getresponse()
+        assert res.status == 200
+        # X-Content-Type-Options: nosniff makes a browser refuse a script of any other type.
+        assert res.getheader("Content-Type") == "text/javascript; charset=utf-8"
+        assert res.read() == srv.STAR_JS.encode()
+
+    def test_get_star_reports_the_star_and_that_it_can_change(self, get, root, stars):
+        write(root, "daniel-box", "plan.html")
+        url = "/api/star?host=daniel-box&path=plan.html"
+        assert json.loads(get(stars, url)[1]) == {"starred": False, "writable": True}
+        stars.mark("daniel-box/plan.html", True)
+        assert json.loads(get(stars, url)[1]) == {"starred": True, "writable": True}
+
+    def test_get_star_on_a_read_only_store_reports_not_writable(self, get, root, stars):
+        write(root, "daniel-box", "plan.html")
+        stars.mark("daniel-box/plan.html", True)
+        readonly = srv.StarStore(stars.path, writable=False)
+        status, body = get(readonly, "/api/star?host=daniel-box&path=plan.html")
+        assert status == 200
+        assert json.loads(body) == {"starred": True, "writable": False}
+
+    @pytest.mark.parametrize(
+        "query",
+        [
+            "host=daniel-box&path=absent.html",
+            "host=daniel-box&path=../daniel-server/b.html",
+            "host=daniel-box",
+            "path=plan.html",
+            "host=daniel%00box&path=plan.html",
+        ],
+    )
+    def test_get_star_naming_no_artifact_is_404(self, get, root, stars, query):
+        write(root, "daniel-box", "plan.html")
+        write(root, "daniel-server", "b.html")
+        assert get(stars, f"/api/star?{query}")[0] == 404
+
+    def test_get_star_with_starring_off_is_404(self, get, root):
+        write(root, "daniel-box", "plan.html")
+        assert get(None, "/api/star?host=daniel-box&path=plan.html")[0] == 404
+
+    def test_the_tag_escapes_its_attributes_and_appends_without_a_body_close(self):
+        assert srv.add_star_tag(b"<p>x", "h", 'a"b.html') == (
+            b'<p>x<script src="/api/star.js" data-host="h" '
+            b'data-path="a&quot;b.html" defer></script>'
+        )
+
+    def test_the_tag_goes_before_the_last_body_close_in_any_case(self):
+        body = srv.add_star_tag(b"<pre></body></pre></BODY>", "h", "p.html")
+        assert body.startswith(b"<pre></body></pre><script ")
+        assert body.endswith(b"</script></BODY>")

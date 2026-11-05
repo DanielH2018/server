@@ -1,4 +1,4 @@
-"""The "Not before" date on the Claude findings board follows the `not-before:` label.
+"""The "Not before" date on the Server Issue Tracking board follows the `not-before:` label.
 
 Run: uv run pytest scripts/dev/tests/test_findings_board.py
 """
@@ -57,7 +57,7 @@ def test_a_board_without_the_field_is_refused_with_the_command_that_creates_it()
 
 
 def test_a_board_whose_title_only_contains_the_name_is_not_written():
-    state = _state(title="Claude findings archive")
+    state = _state(title="Server Issue Tracking archive")
     assert state.project_id is None
     assert "no Project titled" in plan_board_date(state, DAY)
 

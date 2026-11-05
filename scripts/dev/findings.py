@@ -98,7 +98,7 @@ label on the issue. `next` and `claim` withhold it while today is before that da
 nothing to clear: the label expires by comparison, which `manual` cannot. `next` still names a deferred issue —
 under a `deferred:` line, and on stderr under `--json` so the array stays the free set — because a silently
 withheld issue reads as a closed one to whoever looks at the backlog. `defer <n> --clear` lifts it early.
-Both also copy the date into the "Not before" field on the Claude findings Project, which the board sorts and
+Both also copy the date into the "Not before" field on the Server Issue Tracking Project, which the board sorts and
 filters on; a board failure only warns. `board-dates` makes every open issue's board date match its label.
 
 RESERVING AN ISSUE FOR THE OPERATOR. `manual <n>` (or `open --manual`) adds the `manual`

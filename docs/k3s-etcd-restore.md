@@ -227,9 +227,12 @@ The command prints one bare name per line, with the newest last. That name is th
 `--cluster-reset-restore-path` takes. The credentials reach curl on stdin, so no key goes on the
 command line.
 
-This block has run only against a stub curl. The drill guest's script sends the
-same request to R2, and [#7106](https://github.com/DanielH2018/server/issues/7106) tracks the
-first literal run on daniel-box.
+The operator ran this block as root on daniel-box on 2026-11-05 with k3s running. It printed bare
+names with the newest last. The drill guest's script sends the same request to R2.
+
+The error quoted above the block was measured with a scratch data-dir and a closed port.
+[#7106](https://github.com/DanielH2018/server/issues/7106) tracks reading it against port 6443 at
+the next scheduled k3s outage.
 
 ## The gates — before stopping k3s
 

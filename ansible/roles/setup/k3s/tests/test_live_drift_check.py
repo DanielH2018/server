@@ -387,9 +387,8 @@ def test_a_read_failure_outranks_a_clean_comparison():
 
 # ── the syslog line has to survive the host's own journald cap ──────────────────────────
 #
-# log_verdict()'s docstring says its syslog line is what makes this check visible to `probe.py
-# alerts` and the Alert History board. That is only true if the level it logs at is one the
-# host actually stores.
+# log_verdict()'s docstring calls its syslog line the local record of the verdict, which Loki
+# keeps. That is only true if the level it logs at is one the host actually stores.
 #
 # Derived from the Ansible source rather than hardcoded, so it goes RED from either side: if
 # the check drops back to INFO, or if the host cap is tightened past NOTICE.
