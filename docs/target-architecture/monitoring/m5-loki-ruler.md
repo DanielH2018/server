@@ -527,7 +527,6 @@ stays until M6's A7, and `test_loki_selectors_use_real_stream_labels` stays with
 ~  monitor-bridge-checks.md               three rows and the Loki gate out (PR 4a)
 ~  monitor-bridge-internals.md            the same (PR 4a)
 ~  uptime-kuma-autokuma-record.md         the drop line's reader is KumaNotificationDropped (PR 4a)
-~  facts.lock                             only if a reworded CLAUDE.md section changes a citation (PR 4a)
  docs/assets/generated/fragments/
 ~  bridge-*.md                           rewritten by the regen-doc-fragments hook
 ~  secret-tiers.md                        the auto tier loses three rows (PR 4a)
@@ -731,9 +730,6 @@ depends on which tags are flux-owned, and PR 4a states each case.
       remaining LogQL checks.
     - The entries in `docs/monitor-bridge-checks.md` that compare themselves with Loki Log
       Ingestion, the shipper entry among them. They name the silence rules instead.
-
-  `docs/facts.lock` moves only if a reworded `CLAUDE.md` sentence adds or drops a citation.
-  The `facts-reverify-changed` hook then re-hashes it in the same commit.
 - In `test_check_swallowed_verdicts.py`, the assertion that `swallowed_verdicts` is in
   `gates.LOKI_DEPENDENT` becomes one that it is in `gates.STARTUP_GRACE`.
 - Delete the `loki_reachable` gate wiring in the same commit, or the bridge fails at import
@@ -1547,7 +1543,7 @@ against the sibling pages before the fix.
   link) and the shipper entry in `docs/monitor-bridge-checks.md`. PR 4a rewrites each site
   to name `KumaNotificationDropped` on the ruler. It also says that the `Homelab Alerts` name
   no longer binds, because the rule's filter names no notification. *The tree* and *Tests and
-  docs* list the files, and `docs/facts.lock` where a reworded `CLAUDE.md` citation moves.
+  docs* list the files, and `docs/facts.lock` where a reworded `CLAUDE.md` citation moves. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round f0 (per-slice adversarial review, 2026-10-12)
 

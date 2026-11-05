@@ -914,11 +914,8 @@ adds one service to the package. The PR body records the output of
       its upstream.
     - Change the `has_gitops: false` comment ("No GitOps auto-deploy path to the Pi") to name
       the package path. Keep its sentence on why the key stays explicit.
-    - **The facts lock**, until G2 retires `docs/facts.lock`. Edit
-      `ansible/roles/setup/docker_install/CLAUDE.md#Notable`, which cites the deleted
-      docker-proxy doc, and run
-      `uv run python scripts/dev/fact_status.py verify 'ansible/roles/setup/docker_install/CLAUDE.md#Notable'`.
-      docker-proxy's own `CLAUDE.md` has no lock row.
+    - Edit `ansible/roles/setup/docker_install/CLAUDE.md#Notable`, which cites the deleted
+      docker-proxy doc.
 7. **H5.7 autoheal.**
     - Same shape. Add `depends_on: docker-proxy-lifecycle`.
     - Legacy entry: `/home/ubuntu/server/containers/autoheal/docker-compose.yml`.
@@ -934,9 +931,6 @@ adds one service to the package. The PR body records the output of
       asserts
       that `tree_consumers('monitor_discord_webhook_url')` still names the Pi package after
       the move. H5.8 adds `alloy_pi_http_password` to that test.
-    - **The facts lock**, until G2 retires it: run `fact_status.py forget` for
-      `ansible/roles/containers/autoheal/CLAUDE.md#At a glance` and
-      `ansible/roles/containers/autoheal/CLAUDE.md#Notable`.
     - For the seconds between remove and create, no container restarts on an unhealthy check.
 8. **H5.8 alloy.**
     - **Operator-only, before merge:** the operator approves or declines the password's move
@@ -954,9 +948,6 @@ adds one service to the package. The PR body records the output of
     - `docs/secret-rotation.md`'s assisted-tier procedure gains the same `sync` step.
     - The consumer census test gains `tree_consumers('alloy_pi_http_password')`, which must
       name the Pi package.
-    - **The facts lock**, until G2 retires it: run `fact_status.py forget` for
-      `ansible/roles/containers/alloy/CLAUDE.md#At a glance` and
-      `ansible/roles/containers/alloy/CLAUDE.md#Notable`.
     - **Ordering against D5's crowdsec conversion.** If D5's PR has added the Alloy metrics
       stage, this PR moves it with the template, and the tooling test asserts it by D5's
       label. If this PR lands first, D5 edits the component's template instead (*Rows H5
@@ -971,9 +962,6 @@ adds one service to the package. The PR body records the output of
 9. **H5.9 wg-easy.**
     - Same shape as autoheal. wg-easy reads the plain variable `domain`, which renders into its compose file at build time and not through `compose.env` (*Open questions* 7, the 2026-10-24 ruling).
     - Legacy entry: `/home/ubuntu/server/containers/wg-easy/docker-compose.yml`.
-    - **The facts lock**, until G2 retires it: run `fact_status.py forget` for
-      `ansible/roles/containers/wg-easy/CLAUDE.md#Notable` and
-      `ansible/roles/containers/wg-easy/CLAUDE.md#wg-easy — WireGuard VPN server + UI`.
     - **Timer hold.** H3.9 arms the Pi's updater timer every 15 minutes, so a merge alone moves
       wg-easy within about 17 minutes. The operator follows four steps from a LAN session:
         1. Run `sudo systemctl stop homelab-updater.timer` on the Pi before merging.
@@ -1470,9 +1458,6 @@ upstream, revert its downstreams before it.
       or into `docs/`;
     - any test that renders the role template retargets the component;
     - H5.6 replaces the `PI_ORDERING` test;
-    - until G2 retires `docs/facts.lock`, each PR runs the lock commands its step names:
-      `verify` on `ansible/roles/setup/docker_install/CLAUDE.md#Notable` in H5.6, and
-      `forget` on the deleted role's rows in H5.7, H5.8 and H5.9;
     - H5.7 extends `scripts/secrets_mgmt/consumers.py` and its tests, and H5.8 adds the alloy
       member;
     - H5.7 and H5.8 change `docs/secret-rotation.md`;
@@ -1491,12 +1476,9 @@ upstream, revert its downstreams before it.
       `roles/containers`;
     - every page that `git grep -l 'roles/containers' -- docs ':!docs/archive'` lists, edited
       or marked `**HISTORY —`;
-    - Until G2 retires `docs/facts.lock`, sweep what the move PRs left. Edit root
-      `CLAUDE.md#Where to Look (task → start here)`, which cites the deleted
-      `ansible/roles/containers/common/CLAUDE.md`, and run
-      `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` on it and on any
-      other section that cites a path this PR deletes. Commit the lock. Once G2 has retired
-      the lock, this step drops.
+    - Sweep what the move PRs left. Edit root `CLAUDE.md#Where to Look (task → start here)`,
+      which cites the deleted `ansible/roles/containers/common/CLAUDE.md`, and any other
+      section that cites a path this PR deletes.
 - **H5.13:** `ansible/roles/setup/gitops_deploy/CLAUDE.md` (the *Pi Docker changes are never
   auto-deployed* line and the contract's scope) and `docs/gitops-pipeline.md`.
 - **H5.14:**
@@ -1759,7 +1741,7 @@ refuted. Two design changes go beyond the findings:
 - **H5-R1-18 (medium)** H5.7 was far larger than one PR. *Fixed:*
     - The retirement is split into H5.10 to H5.13, with the Docker play left to R4 or H7.
     - The Pi's key stays empty until H7.
-    - H5.12 names the `CLAUDE.md`, skill, rule and `docs/facts.lock` changes.
+    - H5.12 names the `CLAUDE.md`, skill, rule and `docs/facts.lock` changes. G2's PR 3 has since retired the lock, and #7231 removed this step.
     - The setup work is split the same way: H5.1, H5.2a, H5.2b, H5.3 and H5.4. H5.5 keeps
       the number H7 cites.
 - **H5-R1-19 (medium)** The cost of unattended compose runs was unmeasured. *Fixed:* H5.4
@@ -1812,7 +1794,7 @@ questions* 5.
   C4's *Removal* gets the Pi's owner.
 - **X-21 (medium)** H5.12 committed `docs/facts.lock` with no condition. *Fixed:* the step
   now reads "Until G2 retires `docs/facts.lock`", in R4's wording, and drops once the lock
-  is gone.
+  is gone. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round 10 (per-slice adversarial review)
 
@@ -1866,7 +1848,7 @@ a sub-claim that does not hold, and each entry records the correction with its e
   `docker_install/CLAUDE.md#Notable` and runs `verify` on it. H5.7, H5.8 and H5.9 run
   `forget` on the deleted roles' six rows, each named by key. H5.12 keeps the sweep, which
   now names root `CLAUDE.md#Where to Look (task → start here)`, the row that cites
-  `common/CLAUDE.md`.
+  `common/CLAUDE.md`. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **H5-R10-05 (medium)** C4, H5 and H7 named three different removals of the Pi's key.
   *Fixed:* the stale "C4 names H1 only" sentence is gone. *What stays with Ansible until H7*
   names H7.20d. *Open questions* 5 asks C4 to name H7.20d and its reader set.

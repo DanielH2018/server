@@ -818,10 +818,6 @@ conditions of dispatch runs.
     - configarr's comment "THE ONE CONSUMER-SIDE BARRIER IN THE k8s PLAY" names
       netpol-baseline's drain as the second. This edit waits for D4.1, which already reaches
       every service, so that D4.0's landing stays one tag.
-    - Until G2 retires `docs/facts.lock`, and only if `fact_status.py` reports the pairwise
-      test's atom as moved, run
-      `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` for each of the
-      three sections, and commit the lock. Once G2 has retired it, this step does not run.
     - **Landing.** `toposort.py` is play-called, so the narrowing refuses and the tick
       records a `k8s_unapplied` line for every k8s service. `land.sh` reports
       `needs-manual-apply`. The edges move no render. The list move can reorder the output
@@ -1241,9 +1237,6 @@ Each bound below says how long a PR can be reverted alone.
       "netpol-baseline last", and one line in `docs/networkpolicy-slice-answers.md` pointing
       at it;
     - configarr's tasks comment, which names the second drain.
-
-  Until G2 retires `docs/facts.lock`, the lock changes too, if the pairwise test's atom
-  moved.
 - D4.2: tests in `scripts/renderer/tests/` and the `Census` row.
   `docs/flux-deploy-plane.md` gains the ordering section, including the edge rule and the
   reserved `-deferred` suffix.
@@ -1420,7 +1413,7 @@ kustomize-controller v1.9.6 read through `gh`, before the fix was written.
   window. The D4.1 rollback says that a revert lands the same way.
 - **D4-R1-07 (medium). The must-precede test duplicates `DOCUMENTED_ORDERINGS`.** Fixed. D4.1
   extends that table with the five pairs and adds one `K8S_APPLIES_LAST` test in the same
-  file. The crowdsec exemption is explicit, and the `docs/facts.lock` step is included.
+  file. The crowdsec exemption is explicit, and the `docs/facts.lock` step is included. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **D4-R1-08 (medium). netpol-baseline's `dependsOn` leaves out the `-deferred`
   Kustomizations.** Fixed. The rule excludes netpol-baseline's own `-deferred` and `soak`,
   because a literal "every `-deferred`" would form a cycle. The cycle test carries both cases.
@@ -1477,7 +1470,7 @@ documents, or against kustomize-controller and source-controller v1.9.6 read thr
 - **X-21 (medium). D4.1 runs `fact_status.py verify` and commits `docs/facts.lock` with no
   condition, though G2 retires both.** Fixed. D4.1's step and its *Tests and docs* line now
   start "Until G2 retires `docs/facts.lock`", R4's wording, and say the step does not run
-  after G2.
+  after G2. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round 10 (per-slice review)
 
