@@ -79,7 +79,7 @@ Two facts stay here because they bite from outside those procedures:
 
 ## Common Commands
 Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + the
-`community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
+`community.docker` deps `requests`/`docker` — see `docs/python-code-organization.md`). Bare `ansible-playbook`
 (the uv-tool shim) lacks those module deps and deploys will fail.
 **Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. A
 deploy cannot interleave with any holder of the git-tree lock on the tree, nor with another
@@ -285,14 +285,11 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age. Edit them with `sops`
   or the `/add-secret` skill.
-- `ansible/.sops.yaml` (tracked — public keys only) lists the age recipients new/updated
-  secrets are encrypted to, and auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/`
-  directories (SOPS searches upward from the file, so this lives at `ansible/`, not root)
-- At runtime, `community.sops.sops_decrypt` lookup decrypts values
+- `ansible/.sops.yaml` lists the age recipients and sets which paths auto-encrypt.
+  `.claude/rules/secrets.md` holds its scope and the `grep -c` check that a key exists.
 - **After adding a secret, run `uv run python scripts/secrets_mgmt/secret_rotation.py sync`
-  and commit.** `ansible/secret_rotation.yml` is the rotation registry. The tiers, the DANGER
-  `pinned` procedure, and how to rename or retire a key without resetting its clock are in
-  `docs/secret-rotation.md`.
+  and commit.** `ansible/secret_rotation.yml` is the rotation registry, and
+  `docs/secret-rotation.md` owns the tiers and the DANGER `pinned` procedure.
 - **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
   `diff=sops`, so git decrypts the file before diffing it, and a value exposed that way needs
   rotating. To see THAT it changed without seeing anything it holds, use `git diff --stat
@@ -301,56 +298,36 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   it, and `docs/claude-shell-permissions.md` has why.
 - **An agent never decrypts `ansible/vars/secrets.yml`.** The user-level guard denies every
   `sops` decrypt form, `--extract` included, because the plaintext lands in the transcript.
-  Key names stay plaintext in the encrypted file, so `grep -c '^<name>:'` on it checks that a
-  key exists, and `grep -c '^<name>: ENC\['` checks that its value is ciphertext; both print
-  a count, never a value. A runbook step that decrypts is marked operator-only.
+  A runbook step that decrypts is marked operator-only.
   `docs/claude-shell-permissions.md` has the guard's location.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
-- **The cluster file is generated, never hand-edited.** `cluster-vars.sops.env`, with its
-  `cluster-vars.source` and the manifests under `cluster-manifests/`, sits in `ansible/vars/`
-  and holds the values Flux substitutes into a flux-owned role. Only `cluster_vars.py write`
-  writes it: the operator, or the rotation cron after it rotates a key. A hand edit breaks the
-  file's SOPS MAC, and `cluster_vars.py check` runs in CI to refuse a stale or hand-edited file.
+- **The cluster file is generated, never hand-edited.** `cluster-vars.sops.env` sits in
+  `ansible/vars/`, and only `cluster_vars.py write` writes it. `docs/secret-rotation.md` owns
+  the mechanics.
 - **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
   secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
   **`add-secret` skill** has the onboarding through `ansible/bootstrap.yml`.
 
 ## Pre-commit Hooks
-The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
+The repo uses [prek](https://prek.j178.dev). `prek.toml` holds the config and each hook's history.
 Run `prek run --all-files` to check before committing. **That does not run the suite.** No
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
 its `static-ratchet-tests-*` siblings: at commit time it runs twenty-nine static ratchet, lint
-and census test files, which caused most of the PR reds that the author's own code did not
-(#3605, #4008, #4904, #5481, and six more measured 2026-10-25). Each sibling carries its own `files` gate, so a commit runs
-only the siblings whose inputs it touches. CI's `pytest` job runs the
-suite whole on every PR, and `land.sh` waits on that job before it merges. To see a red test
-before CI does, run `uv run pytest` yourself. A fan-out batch is the exception: it names test
-paths, and `.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run, because a
-local full run held 2.3 GiB and CI's run is the one the pipeline waits on. A pre-push hook that re-ran the suite was removed on 2026-10-02: it
-cost 89s on an idle daniel-box and 235s under load on every push, for a verdict CI repeats
-in parallel shards. The slowest of those took 4m29s on 2026-10-24 (run 40125170130).
-The `validate-compose-templates` hook shells out to `uv` (see **Python & Tests**), so uv must be
-installed for a full `prek run`. `mkdocs-strict` builds the docs site the way the cron does
-and fails on a broken `--8<--` include or a dead internal link; its site directory is covered
-by `.gitignore`'s root deny, which is load-bearing — one untracked file parks the deployer.
+and census test files. CI's `pytest` job runs the suite whole on every PR, and `land.sh` waits
+on that job before it merges. To see a red test before CI does, run `uv run pytest` yourself.
+A fan-out batch names test paths instead, and `.claude/hooks/block-batch-full-suite.py` refuses
+its whole-suite run.
+`.gitignore`'s root deny is load-bearing — one untracked file parks the deployer.
 
 ## Python & Tests
-Dev/test tooling is managed by [uv](https://docs.astral.sh/uv/) (`pyproject.toml` + `uv.lock`).
-The repo isn't a Python package — `[tool.uv] package = false` makes it a "virtual" project that
-only pins the test deps (the `dev` dependency group) and the pytest config.
+`uv run pytest` runs every suite `testpaths` in `pyproject.toml` names, and `uv run pytest
+scripts` runs one. `docs/python-code-organization.md` has the uv setup.
 
-```bash
-# One-time: install uv — https://docs.astral.sh/uv/getting-started/installation/
-uv run pytest                 # all repo unit tests (auto-syncs the env from uv.lock first)
-uv run pytest scripts         # just one suite
-```
-
-- **Suites:** `testpaths` in `pyproject.toml` names every one, for both `uv run pytest` and
-  CI's `pytest` job. Where a new test or module goes is `.claude/rules/python-layout.md`.
 - **A new check ships with a proof it can go RED**, a named member it must find if it finds its
   subject by pattern, and a measured transport if it reaches over a network.
-  `.claude/rules/python-layout.md` has the three rules and the incidents behind them.
+  `.claude/rules/python-layout.md` has the three rules and the incidents behind them, and says
+  where a new test or module goes.
 
 CI (`.github/workflows/ci.yml`) runs `prek run --all-files` on every PR and on push to master:
 these tests plus lint, template validation, and secret scanning.

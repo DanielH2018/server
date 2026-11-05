@@ -2,17 +2,25 @@
 paths:
   - "ansible/vars/**"
   - "ansible/inventory/**"
+  - "ansible/.sops.yaml"
 ---
 
 # Secrets Rules
 
-CLAUDE.md covers the SOPS/age secrets workflow (edit `ansible/vars/secrets.yml` via `sops` or the
-`/add-secret` skill; reference values as `{{ name }}` through the `sops_decrypt` lookup). This file
-only adds the path-specific enforcement detail not spelled out there:
+The root `CLAUDE.md`, *Secrets Management*, is the home of the safety rules: what `git diff` of
+`secrets.yml` prints, never decrypt, and never commit plaintext. This file is the home of the
+`.sops.yaml` and key-check mechanics, and of the enforcement detail these paths carry. A template
+reads a value as `{{ name }}`, and the `community.sops.sops_decrypt` lookup decrypts it at runtime.
 
 - A direct Edit/Write to `secrets.yml` is **denied by the block-protected-edits hook** (content-based
   detection of the SOPS markers) — there's no way to "just quickly edit" it; use `sops` / `/add-secret`.
-- `.sops.yaml` auto-encrypts on save only inside a `vars/` or `secrets/` directory. **`inventory/` is
-  NOT auto-encrypted and NOT hook-guarded** — a secret pasted into `host_vars`/`group_vars` would be
-  committed in plaintext (gitleaks may catch it, but don't rely on that). Keep secrets in
-  `vars/secrets.yml` and reference them from inventory, never inline them.
+- `ansible/.sops.yaml` is tracked and holds public keys only. It lists the age recipients new and
+  updated secrets are encrypted to. SOPS searches upward from the file, so the config sits at
+  `ansible/`, not the repo root.
+- `.sops.yaml` auto-encrypts a `.yml` or `.yaml` on save only inside a `vars/` or `secrets/`
+  directory. **`inventory/` is NOT auto-encrypted and NOT hook-guarded** — a secret pasted into
+  `host_vars`/`group_vars` would be committed in plaintext (gitleaks may catch it, but don't rely
+  on that). Keep secrets in `vars/secrets.yml` and reference them from inventory, never inline them.
+- Key names stay plaintext in the encrypted file, so `grep -c '^<name>:'` on it checks that a key
+  exists, and `grep -c '^<name>: ENC\['` checks that its value is ciphertext. Both print a count,
+  never a value.

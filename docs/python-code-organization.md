@@ -43,6 +43,13 @@ source are recorded so the next reader can check whether the reason still holds.
 
 ### A virtual uv project, not a package
 
+[uv](https://docs.astral.sh/uv/) manages the dev and test tooling from `pyproject.toml` and
+`uv.lock`. A virtual project pins only its `dev` dependency group and the pytest config.
+That group is uv's default for `uv run`, and it holds the test deps plus the deploy-side
+`ansible-core` and the `community.docker` deps `requests` and `docker`. `uv run pytest` syncs
+the env from `uv.lock` first, and needs [uv installed][uv-install] once. The
+`validate-compose-templates` hook shells out to `uv` too, so a full `prek run` needs it as well.
+
 `[tool.uv] package = false` in `pyproject.toml`. uv's own guidance is that a project does not
 need a package when it is "writing scripts, building a simple application, using a flat
 layout," and needs one to "add commands to the project, distribute the project to others, use
@@ -322,6 +329,7 @@ erases it.
 ## Sources
 
 [uv-config]: https://docs.astral.sh/uv/concepts/projects/config/
+[uv-install]: https://docs.astral.sh/uv/getting-started/installation/
 [uv-ws]: https://docs.astral.sh/uv/concepts/projects/workspaces/
 [src-flat]: https://packaging.python.org/en/latest/discussions/src-layout-vs-flat-layout/
 [pep420]: https://peps.python.org/pep-0420/
