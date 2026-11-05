@@ -428,7 +428,9 @@ def land_wait(
                 if soak != "success":
                     pending = [f"{SOAK_CONTEXT} on {revision[:8]} ({soak})"]
             if not pending and not all_paused:
-                annotate_promotion(reads.annotate, tags, revision)
+                # A PR that moved no bundle tag deployed nothing, so it marks no dashboard.
+                if tags:
+                    annotate_promotion(reads.annotate, tags, revision)
                 return WaitResult(
                     "settled",
                     detail=f"{len(names)} Kustomizations applied {revision[:8]}",

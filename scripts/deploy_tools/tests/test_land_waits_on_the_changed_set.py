@@ -78,6 +78,20 @@ def _annotation(tags: str) -> list[str]:
     return [f"event=deploy services={tags} sha={M[:8]} result=ok source=promote"]
 
 
+def test_a_pr_that_moves_no_bundle_tag_waits_on_homelab_and_writes_no_annotation(
+    land_run_main,
+):
+    """The empty changed set: a deploy annotation would name no service."""
+    same = digests(authelia="a", bento_pdf="b", texbrain="t")
+    sim = Sim(polls=[at(M)], published={M: same, P: same})
+    rc, out, calls = _land(land_run_main, ["scripts/dev/fanout.py"], sim)
+    assert "VERDICT: nothing-to-deploy" in out, out
+    assert rc == 0
+    assert [c[1] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
+    assert sim.annotations == []
+    assert _gated(calls) == []
+
+
 SERVICE_MANIFEST = "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2"
 
 

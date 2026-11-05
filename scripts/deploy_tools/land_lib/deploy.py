@@ -407,7 +407,7 @@ def deploy_phase(ln: Landing) -> None:
     changed set names the tags the gate reads (D6.12). A PR that moves no bundle file, or
     whose changed set names no tag, ends in `no_tag_outcome` when deploy.sh had nothing either.
     A plane it also carries, such as the rotation note for `secrets.yml`, is reported by the
-    health step after the wait.
+    health step after a settled wait, and by `wait_on_promotion` when the wait ends the landing.
     """
     t = ln.tools
     if ln.needs_diff:
@@ -437,7 +437,6 @@ def deploy_phase(ln: Landing) -> None:
     ln.deploy_ended_at = t.wall_clock()
     if waits:
         promotion.wait_on_promotion(ln)
-        ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
     # Step 5's own time on the board, the promotion wait included.
     ln.ledger.t_deploy = t.clock()
     if not ln.resolved_tags and not ln.owned_tags:

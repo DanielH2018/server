@@ -350,11 +350,12 @@ def test_a_filter_plugin_no_setup_role_calls_applies_nothing(
     gitops_deploy, tick, state
 ):
     """A deploy-plane path: the renderer reads it and `promote` applies it (D6.12)."""
+    tick.declare("containers_list:\n  - name: sonarr\n    platform: k8s\n")
     tick.paths = ["ansible/filter_plugins/py_table.py"]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == []
-    assert state.manual_plane_pending() == []
+    assert not (state.read("owed") or "").strip()
 
 
 def test_a_setup_role_the_deployer_can_apply_logs_no_park(

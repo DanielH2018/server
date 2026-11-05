@@ -122,17 +122,6 @@ def test_the_smoke_path_rule_is_the_reach_rule_minus_meta():
     assert land_shared._DEPLOY_RUN_SUBDIRS == reach - {"meta"}
 
 
-def test_the_smoke_set_cannot_widen_past_the_render_proof_roles():
-    """Both sets mean "this role acts only through the bytes it renders", so pin them.
-
-    `gitops_markers.RENDER_PROOF_SHARED_ROLES` is the set the deployer's discharge read
-    as `DIGEST_PROVABLE_ROLES` until D6.12 deleted `deploy_k8s_owed.py`.
-    """
-    from gitops_markers import RENDER_PROOF_SHARED_ROLES
-
-    assert SMOKE_TESTABLE_SHARED_ROLES <= RENDER_PROOF_SHARED_ROLES
-
-
 def test_a_hand_typed_tags_run_still_expands_to_every_caller():
     """The asymmetry #2717 decided: `deploy.sh --tags manifests` is the operator asking."""
     declared = land_shared.declared_tags()

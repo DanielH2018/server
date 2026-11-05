@@ -15,6 +15,7 @@ from dataclasses import replace
 from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.land_lib import deploy, land_flux, merge, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
+from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.promote_lib.wait import WaitResult
 
 HEAD = "c" * 40
@@ -118,6 +119,35 @@ def test_a_held_promotion_is_deploy_failed_with_promote_held(land_run):
     assert "DEPLOY_HOLD holds abc" in out
     assert "cause=promote-held" in logline
     assert "gate" not in _names(calls)
+
+
+def test_a_held_promotion_records_the_changed_sets_tags_on_the_ledger(land_run):
+    held = WaitResult(
+        "deploy-failed", "promote-held", "DEPLOY_HOLD holds abc", tags=("bento-pdf",)
+    )
+    rc, _, _, _, logline = land_run([], _fakes(land_wait=[held]))
+    assert rc == 1
+    assert "tags=bento-pdf" in logline
+
+
+def test_a_held_promotion_still_names_the_plane_and_the_host_it_carries(land_run):
+    """The wait ends the landing before the health step and the host wait print these."""
+    held = WaitResult("deploy-failed", "promote-held", "DEPLOY_HOLD holds abc")
+    fakes = _fakes(
+        land_wait=[held],
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": "hosts/daniel-pi/package.yml"}],
+                "changedFiles": 1,
+            }
+        },
+        plane="rotate it by hand",
+        host_targets=[HostTarget("daniel-pi", armed=True)],
+    )
+    rc, out, _, _, _ = land_run([], fakes)
+    assert rc == 1 and "VERDICT: deploy-failed" in out
+    assert "it needs applying by hand: rotate it by hand" in out
+    assert "it also changes the package of daniel-pi" in out
 
 
 def test_a_failed_soak_is_deploy_failed_with_soak_failed(land_run):

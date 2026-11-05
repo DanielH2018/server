@@ -47,6 +47,8 @@ from deploy_tools.land_lib.outcome import (
     PROMOTE_TIMEOUT_NOTE,
     Cause,
     Verdict,
+    host_not_waited_note,
+    remaining_hosts_note,
     say,
 )
 from lib.repo_paths import GITOPS_DEPLOY_FILES
@@ -170,6 +172,18 @@ def wait_cap(ln: Landing) -> float | None:
     return max(0.0, ln.opts.deadline - spent - DEADLINE_RESERVE_S)
 
 
+def _print_what_else_it_owes(ln: Landing) -> None:
+    """The notes a landing ended by this wait never reaches: the health step and the host wait."""
+    if ln.plane:
+        print(f"  it needs applying by hand: {ln.plane}")
+    if ln.classification.remaining_setup:
+        print(remaining_hosts_note(ln.classification.remaining_setup))
+    for line in ln.tick_half_open_lines():
+        print(line)
+    if ln.host_targets:
+        print(host_not_waited_note(ln.host_targets))
+
+
 def wait_on_promotion(ln: Landing) -> None:
     """Wait until a promotion covers the merge commit; return on `settled`, else end the landing.
 
@@ -184,6 +198,8 @@ def wait_on_promotion(ln: Landing) -> None:
     )
     for tag in _flux_owned(ln, result.tags):
         ln.owned_tags.setdefault(tag, "flux")
+    # Before any `finish` below, so a failed landing's ledger line names the changed set.
+    ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
     tags = ",".join(ln.owned_tags) or "homelab"
     if result.tags:
         say(f"the changed set names {','.join(result.tags)}")
@@ -208,11 +224,14 @@ def wait_on_promotion(ln: Landing) -> None:
     if result.verdict == "suspended":
         if ln.resolved_tags:
             return
+        _print_what_else_it_owes(ln)
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,
             0,
             f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}",
         )
+    if result.verdict != "suspended":
+        _print_what_else_it_owes(ln)
     if result.verdict == "deploy-failed" and result.cause == Cause.SOAK_FAILED:
         ln.ledger.cause = Cause.SOAK_FAILED
         ln.finish(
