@@ -1,9 +1,13 @@
 # G5 — Shrink root CLAUDE.md
 
-Status: IN PROGRESS. PRs 0 to 4 have run; PR 3 merged as
-[#7269](https://github.com/DanielH2018/server/pull/7269). PR 4 measured 270 lines against the
-exit figure of under 200, and 21,057 characters against at most 17,000. No directive was cut to
-reach a figure. The graded count is 23, so `MIN_GRADED_PARAGRAPHS` stays at 20.
+Status: IN PROGRESS. PR 0 merged as [#7235](https://github.com/DanielH2018/server/pull/7235),
+PR 1 as [#7240](https://github.com/DanielH2018/server/pull/7240), PR 2 as
+[#7251](https://github.com/DanielH2018/server/pull/7251) and PR 3 as
+[#7269](https://github.com/DanielH2018/server/pull/7269). PR 4, the last planned PR, measured 270
+lines against the exit figure of under 200, and 21,057 characters against at most 17,000. No
+directive was cut to reach a figure, and
+[#7277](https://github.com/DanielH2018/server/issues/7277) tracks the gap. The graded count is 23,
+so `MIN_GRADED_PARAGRAPHS` stays at 20.
 
 Depends on: [G2](g2-retire-lock.md)
 
