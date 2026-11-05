@@ -1,11 +1,11 @@
 # Ansible-managed. Do not edit by hand.
 #
 # SHARED BY EVERY HOST THAT RESOLVES THROUGH PI-HOLE — rendered by roles/setup/k3s
-# (daniel-box) and roles/setup/optimize_pi (daniel-pi), each passing its own
+# (daniel-box) and hosts/components/pi-resolver/ (daniel-pi), each passing its own
 # `common_resolver_nameservers`. It lives in setup/common rather than in either caller
 # because what drifts is the REASONING below, not the four lines of config at the bottom.
-# Templates resolve against the calling role's own templates/ directory, so both callers
-# name this file by absolute path.
+# Templates resolve against the calling role's own templates/ directory, so k3s names this
+# file by absolute path, and pi-resolver loads it with `role: common`.
 #
 # This host resolves through the in-cluster Pi-hole, with a public resolver behind it, and
 # switches between them per query in BOTH directions with no daemon watching anything.

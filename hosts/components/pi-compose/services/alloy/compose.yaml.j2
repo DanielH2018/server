@@ -137,7 +137,7 @@ services:
     depends_on:
       - docker-proxy
     # Docker copies the HOST's resolver options into every container's resolv.conf, and this
-    # host's are `timeout:2 attempts:1` (optimize_pi_dns_options) — sized so a dead Pi-hole
+    # host's are `timeout:2 attempts:1` (pi-resolver's common_resolver_options) — sized so a dead Pi-hole
     # costs one 2s wait before 1.1.1.1 answers. Inside a container that same single 2s try
     # also governs the hop to Docker's embedded DNS at 127.0.0.11, which is dockerd itself,
     # and dockerd stalls for seconds on this Zero 2 W whenever it is busy with a container or
@@ -217,7 +217,7 @@ services:
       #
       # DECIDED: GOGC=off under GOMEMLIMIT, to cut how often this heap is faulted back in,
       # and the faults that remain are accepted (#1967). This host swaps by design
-      # (`vm.swappiness=130` to zram, roles/setup/optimize_pi), global reclaim swaps this
+      # (`vm.swappiness=130` to zram, hosts/components/pi-tuning/), global reclaim swaps this
       # heap out between cycles, and the mark phase faults it back in. Measured 2026-09-18 at
       # GOGC=50: 28,423 major faults on this cgroup in 300 s (95/s), a third of the host's
       # 84,938, 0.52 cycles a minute — 10,800 faults a cycle against a 9,500-page heap, so by
@@ -310,7 +310,7 @@ services:
     # one sample and at most three; the container-log rate is 1.6-1.7 lines/s in every hour;
     # and no cron or timer on the host fires where the daily maxima fall (#1944). The reading
     # is noisy the other way too — 22 MB one scrape and 70 MB the next — because this host
-    # swaps by design (`vm.swappiness=130` to zram, roles/setup/optimize_pi) and every GC
+    # swaps by design (`vm.swappiness=130` to zram, hosts/components/pi-tuning/) and every GC
     # cycle faults the swapped heap back in: 66-127 major faults/s, a third of the host's.
     # Do not size from RSS or `max_over_time` of it; the cgroup is what the cap governs.
     #

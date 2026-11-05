@@ -792,7 +792,7 @@ groups:
       # so a paging collector alert would page twice for one cause. Until A1 its value is the
       # diagnosis it leaves in ALERTS. One rule per host whose node_exporter runs the textfile
 # collector, so `service` stays a literal: the two k3s nodes, and daniel-pi, whose host unit
-# reads the same directory (optimize_pi/templates/node_exporter.service.j2, #6166).
+# reads the same directory (hosts/components/pi-node-exporter/units/node_exporter.service.j2, #6166).
       - alert: TextfileCollectorError
         expr: node_textfile_scrape_error{origin="daniel-box"} == 1
         for: 10m

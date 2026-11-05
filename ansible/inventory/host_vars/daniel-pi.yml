@@ -42,12 +42,12 @@ has_docker: true
 has_low_memory_board: true
 # Boots the Raspberry Pi kernel, so `linux-raspi` is a real package here.
 has_raspi_kernel: true
-# optimize_pi masks rsyslog here (journald is the log of record; rsyslog's text logs landed in
+# rsyslog is masked here (journald is the log of record; rsyslog's text logs landed in
 # the RAM-backed log2ram tmpfs), so initial_setup must not render its rsyslog filter or
 # notify `Restart rsyslog` -- a masked unit fails that handler and the recap reads failed=1
 # for a run whose changes are all live. See group_vars/all.yml for the default.
 has_rsyslog: false
-# Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (optimize_pi) can't add
+# Disk-backed swap for the 512 MB Zero 2 W. The RAM-resident zram (hosts/components/pi-tuning/) can't add
 # real capacity, so heavy one-shot apt/dpkg steps (apt-show-versions cache build, `upgrade: dist`,
 # AIDE init) OOM-kill mid-transaction and corrupt the package DB. Created by the initial_setup
 # role BEFORE its apt tasks run. See ansible/roles/setup/initial_setup/tasks/main.yml.
@@ -80,7 +80,7 @@ container_healthcheck_retries: 5
 # nothing; scripts/validate/compose_templates.py refuses one.
 containers_list: []
   # Host metrics for the central Prometheus are NOT a container here: node_exporter runs as a
-  # host unit from roles/setup/optimize_pi (section 10), on the LAN IP and port 9100 the
+  # host unit from hosts/components/pi-node-exporter/, on the LAN IP and port 9100 the
   # cluster's `node-pi` scrape job reads. The cluster `node` scrape job uses pod discovery, so
   # it covers the two k3s nodes and structurally cannot reach a host that runs no kubelet.
   #

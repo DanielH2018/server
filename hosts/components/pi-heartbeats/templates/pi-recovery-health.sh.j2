@@ -196,9 +196,9 @@ write_check_textfile pi-recovery-health "$([ "$STATUS" = up ] && echo 1 || echo 
 # live-DOWN.
 #
 # It goes to a FILE rather than to `logger`, because daniel-pi ships no journal: rsyslog is
-# masked here on purpose (see the debloat section of optimize_pi's tasks — journald is the log
-# of record, and a second text logger would write into the RAM-backed /var/log), and the
-# Pi's Alloy (roles/containers/alloy/) ships container logs and /var/log/pi-health/*.log, never
+# masked here on purpose (journald is the log of record, and a second text logger would
+# write into the RAM-backed /var/log), and the
+# Pi's Alloy (hosts/components/pi-compose/services/alloy/) ships container logs and /var/log/pi-health/*.log, never
 # the journal. `logger` would reach the local journal and stop. Alloy tails this path under
 # `job="syslog"` instead, matching the label the server's own syslog stream carries so one
 # parser reads both estates.

@@ -1,5 +1,5 @@
 {
-  "checksum": "61ae5a529929325966b86d87f50a0fbb2592c37e420fd438d9b4e670e819e8b9",
+  "checksum": "753b21e46d3a2c405df1124679ba038c7b109ad391061669cf0160c00aa0c95d",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/common/CLAUDE.md#`setup/common` — task files the other setup roles import",
   "row": {
@@ -7,11 +7,12 @@
       "ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only": "2122e7f858854cabb3ce4c0423d471ffb5e1ac21efbab355f2abefe3041433cf",
       "ansible/tests/setup/test_alert_unit.py": "9242c911a99a94490915ad95d4b6f280aeda78a26cdb42eead43acf5272d9fc3",
       "ansible/tests/setup/test_check_timer.py": "6b710d5407f7c0d105ce3f8e5ee6f6d148adcbb2839c694fe520cb05c7434509",
+      "hosts/components/pi-resolver/": "4a6ea57dd3b062e35af447f20e01dcba7ff2ec4fc159a799b795d2b1b3d1b267",
       "hosts/lib/host_lib.py": "f825874cb8265053e2398c593b82682ef3d7f72aa09027108eebd2576734f8d2",
       "hosts/lib/tests/": "0d07fe612cd335ee9bdfac0e2a62ea4e263a35c7b0709fbcb0a24b2a6ed8024b",
       "scripts/deploy_tools/prune_releases.py": "4ab7a8c31c717f247f029308833fff7b27201ca6d2f78e67e03ed2130103a519"
     },
     "python": "3.15",
-    "verified_sha": "05c63c1e9"
+    "verified_sha": "3892e03fc"
   }
 }
