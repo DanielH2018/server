@@ -233,6 +233,10 @@ def test_a_lock_a_stale_branch_brought_back_is_flagged(tmp_path):
 
 def test_a_tree_without_the_lock_is_clean(tmp_path):
     repo = _repo(tmp_path, "## A\n`t/m.py:LIMIT`\n")
+    lock = repo / "docs" / "facts.lock"
+    lock.mkdir(parents=True)
+    assert [f for f in lint_sections(repo, None) if f.rule == "lock-retired"]
+    lock.rmdir()
     assert not [f for f in lint_sections(repo, None) if f.rule == "lock-retired"]
 
 

@@ -206,7 +206,7 @@ FINDINGS_BAD_ARGS = USAGE_ERROR
 
 # -- scripts/dev/fact_status.py ---------------------------------------------------------
 FACT_STATUS_OK = OK
-FACT_STATUS_OUT = FAILED
+FACT_STATUS_LINT_FAILED = FAILED
 FACT_STATUS_BAD_ARGS = USAGE_ERROR
 FACT_STATUS_BAD_REF = 2
 
@@ -653,12 +653,12 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             FACT_STATUS_OK,
             "FACT_STATUS_OK",
-            "every section read is IN, the write is done, or `notice` ran.",
+            "`lint` found no error rule, or `report` or `notice` ran.",
         ),
         _c(
-            FACT_STATUS_OUT,
-            "FACT_STATUS_OUT",
-            "a section is OUT, a lint finding blocks, or `reverify` wrote the lock.",
+            FACT_STATUS_LINT_FAILED,
+            "FACT_STATUS_LINT_FAILED",
+            "`lint` found an error rule.",
         ),
         _c(FACT_STATUS_BAD_ARGS, "FACT_STATUS_BAD_ARGS", "the command line is wrong."),
         _c(FACT_STATUS_BAD_REF, "FACT_STATUS_BAD_REF", "`notice` found no merge base."),
