@@ -29,10 +29,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 import re
 
-import yaml
 
 from lib import yaml_fast
-from lib.narrow_git import CannotNarrow, mapping_at, show_at
+from lib.narrow_git import YAML_PARSE_ERRORS, CannotNarrow, mapping_at, show_at
 from deploy_tools.narrow_lib.setup_index import (
     _is_role_yaml,
     _scalars,
@@ -80,7 +79,7 @@ def _carriers(owner: str, ref: str, repo: str):
         if rel.startswith("tasks/"):
             try:
                 doc = yaml_fast.safe_load(text)
-            except yaml.YAMLError as exc:
+            except YAML_PARSE_ERRORS as exc:
                 raise CannotNarrow(f"{path} does not parse: {exc}") from exc
             facts += _fact_values(doc if isinstance(doc, list) else [])
         else:

@@ -14,6 +14,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_edges.py
 import pytest
 
 import narrow_setup
+from deploy_tools.narrow_lib import setup_playbook, task_walk
+from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 
 from _narrow_fixtures import _refs
 from _setup_role_fixtures import (
@@ -28,6 +30,7 @@ from _setup_role_fixtures import (
 )
 
 DEFAULTS_WITH_A_DERIVED_KEY = DEFAULTS + 'demo_derived: "x{{ demo_alpha_mode }}"\n'
+IMPOSSIBLE_DATE = "- name: x\n  d: 2026-13-45\n"
 
 
 @pytest.fixture
@@ -243,6 +246,40 @@ def test_a_task_file_that_does_not_parse_is_flagged(tree):
         narrow(tree, *_refs(tree))
 
 
+# ── a timestamp-shaped value that is no date reads as a text that does not parse ────────
+
+
+def test_a_task_file_holding_an_impossible_date_is_flagged(tree):
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA + IMPOSSIBLE_DATE)
+    with pytest.raises(narrow_setup.CannotNarrow, match="does not parse"):
+        narrow(tree, *_refs(tree))
+
+
+def test_an_owner_task_file_holding_an_impossible_date_stops_the_key_walk(tree):
+    tree.write(f"{ROLE}/tasks/alpha.yml", IMPOSSIBLE_DATE)
+    ref = tree.commit("a task file holding an impossible date")
+    with pytest.raises(narrow_setup.CannotNarrow, match="does not parse"):
+        keys_reaching(
+            f"{ROLE}/defaults/main.yml", {"demo_alpha_mode"}, ref, str(tree.root)
+        )
+
+
+def test_an_impossible_date_is_never_the_same_task_file():
+    assert task_walk.runs_the_same(IMPOSSIBLE_DATE, IMPOSSIBLE_DATE) is False
+
+
+def test_an_impossible_date_declines_the_changed_task_answer():
+    assert task_walk.changed_task_tags(IMPOSSIBLE_DATE, ALPHA) is None
+
+
+def test_a_playbook_holding_an_impossible_date_lists_no_role():
+    assert setup_playbook.playbook_roles(IMPOSSIBLE_DATE) == set()
+
+
+def test_a_playbook_holding_an_impossible_date_lists_no_include():
+    assert setup_playbook.play_role_includes(IMPOSSIBLE_DATE, "demo") == []
+
+
 # ── a template named in both a `src:` and a `defaults/` structure names both tags (#2344) ─
 
 DEFAULTS_NAMING_ALPHA_CONF = """\
@@ -433,6 +470,13 @@ def test_another_roles_task_file_holding_a_mapping_is_flagged(tree):
     old = _two_role_tree_json(tree, '{"name": "not a list of tasks"}\n')
     tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
     with pytest.raises(narrow_setup.CannotNarrow, match="is not a list of tasks"):
+        _narrow_two(tree, old, tree.commit("edit alpha"))
+
+
+def test_another_roles_task_file_holding_an_impossible_date_is_flagged(tree):
+    old = _two_role_tree_json(tree, IMPOSSIBLE_DATE, name="other.yml")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="does not parse"):
         _narrow_two(tree, old, tree.commit("edit alpha"))
 
 
