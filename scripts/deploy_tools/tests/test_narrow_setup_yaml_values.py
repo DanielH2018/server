@@ -129,3 +129,27 @@ def test_the_reachability_walk_refuses_a_task_file_holding_no_real_date(tmp_path
 def test_runs_the_same_reads_a_recursive_alias_as_not_the_same():
     recursive = "- command: x\n  vars: &v {a: *v}\n"
     assert runs_the_same(recursive, recursive) is False
+
+
+@pytest.mark.parametrize(
+    "before, after",
+    [
+        ("{d: 2026-01-01}", '{d: "2026-01-01"}'),
+        ("{1: x}", '{"1": x}'),
+        ("{x: 1, y: 2}", "{y: 2, x: 1}"),
+    ],
+    ids=["date-to-string", "int-key-to-string-key", "mapping-reorder"],
+)
+def test_changed_task_tags_keeps_a_value_edit_beside_another_changed_task(
+    before, after
+):
+    """The `beta` edit alone would narrow to `beta` and drop the `alpha` task's tag."""
+    text = "- command: a\n  vars: {}\n  tags: [alpha]\n- command: {}\n  tags: [beta]\n"
+    old = text.replace("vars: {}", f"vars: {before}", 1).replace(
+        "command: {}", "command: b"
+    )
+    new = text.replace("vars: {}", f"vars: {after}", 1).replace(
+        "command: {}", "command: c"
+    )
+    both = frozenset({"alpha", "beta"})
+    assert changed_task_tags(old, new) == (both, both)

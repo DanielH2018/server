@@ -14,7 +14,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 import difflib
-import json
 
 
 from lib import yaml_fast
@@ -230,7 +229,7 @@ def runs_the_same(before: str, after: str) -> bool:
     names elsewhere (`stale-checkout-guard.yml`'s rows name the tasks they guard).
 
     `same_value` decides, so `retries: 1` and `retries: true` differ, and so does a reordered
-    mapping, whose answer widens to the file's tags rather than running nothing.
+    mapping, whose task then counts as edited rather than running nothing.
 
     A text that does not parse is never the same, so the caller's own parse refuses it. Nor is
     one holding a recursive alias, which neither the name walk nor `same_value` can finish.
@@ -292,8 +291,7 @@ def changed_task_tags(
       - a file that sets a fact, loads vars or registers a result at either text, since a
         changed task may read a variable an unchanged task in the file sets under another tag;
       - a deleted task no tag of its own selects;
-      - an edit that leaves no tag once `always` is dropped, such as a pure reorder or an
-        `always`-only change.
+      - an edit that leaves no tag once `always` is dropped, such as an `always`-only change.
     """
     try:
         old, new = yaml_fast.safe_load(before), yaml_fast.safe_load(after)
@@ -304,8 +302,9 @@ def changed_task_tags(
     if _set_facts(old) or _set_facts(new) or _loads_vars(old) or _loads_vars(new):
         return None
 
+    # `repr`, so a value's type and a mapping's key order count, as they do in `same_value`.
     def canonical(task) -> str:
-        return json.dumps(_without_import_names(task), sort_keys=True, default=str)
+        return repr(_without_import_names(task))
 
     matcher = difflib.SequenceMatcher(
         None, [canonical(t) for t in old], [canonical(t) for t in new], autojunk=False
