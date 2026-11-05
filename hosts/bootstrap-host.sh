@@ -317,6 +317,13 @@ fetch() {
     [ "$(sha_of "$3")" = "$2" ] || die "$name does not match its pinned sha256 $2"
 }
 
+# Builds the repo venv with the flags every later `uv run` uses. uv can download the interpreter
+# from the release host fetch reads, so this runs under retry on an online build.
+build_repo_venv() {
+    # shellcheck disable=SC2086
+    (cd "$work/tree" && $uv_run python --version)
+}
+
 # The installer's mode is explicit, and K3S_URL and K3S_TOKEN reach it on an agent only.
 # Neither the token nor the environment is printed.
 run_k3s_installer() {
@@ -456,7 +463,7 @@ else
         uv_run="$uv_run --no-python-downloads --offline"
         echo "bootstrap-host: --offline: the clone at $sha is unchecked; the operator who chose it is its trust root"
     else
-        # The first `uv run` builds the repo venv, and PyYAML ships no wheel for every
+        # build_repo_venv builds the repo venv, and PyYAML ships no wheel for every
         # interpreter host_python_version can name. pyproject.toml forces its libyaml
         # extension, so that build needs a compiler and libyaml's headers; the host package
         # that depends on libyaml-dev is not installed yet. A kit's uv-cache holds the build.
@@ -470,6 +477,8 @@ else
                 { apt-get update && apt-get install -y --no-install-recommends $build_deps; } ||
                 die "apt-get install of PyYAML's build dependencies failed"
         fi
+        retry "the repo venv build" build_repo_venv ||
+            die "cannot build the repo venv for Python $python_version"
         # shellcheck disable=SC2086
         (cd "$work/tree" && $uv_run python hosts/lib/bootstrap_anchor.py "$clone" "$sha" \
             --repo "$GITHUB_REPO") || die "the clone's HEAD $sha is not a green first-parent commit of master"
