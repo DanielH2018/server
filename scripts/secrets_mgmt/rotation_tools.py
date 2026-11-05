@@ -9,8 +9,8 @@ other module in the package can import. The one fact both files hold is the tier
 each spells the literal out; `DEFAULT_TIER_DAYS` below says why, and which test holds the two
 equal.
 
-WHY THE REAL IMPLEMENTATIONS TAKE A `run` KEYWORD. `sops_set` and `decrypted_values` build an
-argv whose exact shape is the security property: a freshly minted token travels on stdin,
+WHY THE REAL IMPLEMENTATIONS TAKE A `run` KEYWORD. `sops_set` builds an argv whose exact
+shape is the security property: a freshly minted token travels on stdin,
 never in `/proc/<pid>/cmdline`. A test that replaces the whole field with a fake stops
 checking that argv. Injecting the runner instead lets a test drive the REAL builder and keep
 asserting what it hands the process.
@@ -117,38 +117,6 @@ def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
         fh.write(body)
 
 
-def decrypted_values(
-    path: str = SECRETS_FILE, *, run: Callable = subprocess.run
-) -> dict | None:
-    """Plaintext secrets, or None when this host cannot decrypt (no age key — e.g. CI).
-
-    None is a legitimate answer, not an error: the audit's other arms are deliberately
-    decrypt-free so they run in CI, and this one simply has nothing to say there. Nothing from
-    the subprocess is echoed on failure — stdout holds the plaintext, so putting it in a
-    message or a traceback is the one way this helper could leak.
-    """
-    try:
-        r = run(
-            ["sops", "--decrypt", path],
-            capture_output=True,
-            text=True,
-            check=True,
-            cwd=REPO,
-            # A hung decrypt would otherwise hang the daily cron and the prek gate, which
-            # runs `audit` on every commit touching the store, the registry or this file.
-            timeout=30,
-        )
-        data = yaml_fast.safe_load(r.stdout) or {}
-    except (
-        OSError,
-        subprocess.CalledProcessError,
-        subprocess.TimeoutExpired,
-        yaml.YAMLError,
-    ):
-        return None
-    return {k: v for k, v in data.items() if k != "sops"}
-
-
 def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
     """Redeploy the rotated secrets' consumers; returns the playbook's exit code."""
     cmd = [
@@ -235,7 +203,6 @@ class RotationTools:
     save_registry: Callable[..., None] = save_registry
     sops_names: Callable[..., list[str]] = sops_names
     host_file_keys: Callable[[], frozenset[str]] = host_file_keys
-    sops_decrypt: Callable[..., dict | None] = decrypted_values
     sops_set: Callable[[str, str], None] = sops_set
     deploy: Callable[[list[str]], int] = run_deploy
     owners: Callable[[], Mapping[str, str]] = tree_owners
