@@ -1353,9 +1353,7 @@ change at merge time*).
       `longhorn-trim-volumes.sh.j2`, and drop it from `k3s_render_stamp_groups`.
     - Hand apply: `k3s-bringup.yml --tags backup-health` (**operator-only**).
     - The two cron-evidence tests change, and their node ids in
-      `ansible/roles/setup/k3s/CLAUDE.md` change with them. Until G2 retires
-      `docs/facts.lock`, run `uv run python scripts/dev/fact_status.py verify` for the edited
-      section and commit the lock.
+      `ansible/roles/setup/k3s/CLAUDE.md` change with them.
 5. **H2.3a Drill readers first.**
     - Add the ConfigMap arm, `seen` and `success` included, to the stamps module, checks 7 and
       8, `runbook_gates_lib/longhorn_upgrade.py` and `state.py`, each with its host-directory
@@ -1536,8 +1534,7 @@ change at merge time*).
       the PR body quotes `git grep -n <the key> -- ansible/ scripts/` showing the off-box
       script and the key's definition as its only hits. If any other reader remains, such as
       the moved BackupTarget template in `longhorn-backup`, H2.8b leaves the key in place.
-    - Remove the off-box actuator from the `setup/k3s` contract. Until G2 retires
-      `docs/facts.lock`, run `fact_status.py verify` for that section and commit the lock.
+    - Remove the off-box actuator from the `setup/k3s` contract.
     - Hand apply: `k3s-bringup.yml --tags backup-health,etcd-snapshot` (**operator-only**).
       The PR thread then quotes check 12's first UP reading.
     - **Operator-only**, root: delete the five orphaned local `etcd-snapshot-daniel-box-*`
@@ -1930,7 +1927,6 @@ carries `prune: disabled`.
       `longhorn-trim-volumes.sh.j2`;
     - `ansible/roles/setup/k3s/CLAUDE.md`, whose contract restates the trim's abort valve and
       evidence;
-    - `docs/facts.lock`, until G2 retires it;
     - `docs/k3s-node-plane-crons-and-incidents.md`.
 - **H2.3a:** the stamps module's tests, `ansible/roles/setup/k3s/tests/test_longhorn_restore_drill_checks.py`,
   `scripts/deploy_tools/tests/test_longhorn_upgrade_gates.py`,
@@ -1965,8 +1961,7 @@ carries `prune: disabled`.
       red case;
     - the contract moves from `ansible/roles/setup/k3s/CLAUDE.md` to the
       `longhorn-restore-drill` role's page, and states that the evidence is the pod log, read with `probe.py loki-query
-      '{container="longhorn-restore-drill"}'`. Until G2 retires `docs/facts.lock`, run `uv run
-      python scripts/dev/fact_status.py verify` for both sections and commit the lock;
+      '{container="longhorn-restore-drill"}'`;
     - `docs/longhorn-upgrade.md` gate 2 and `docs/k3s-node-plane-crons-and-incidents.md` give
       the **operator-only** hand run and the pinned run (Design, *Hand runs*).
 - **H2.3f:** `docs/longhorn-disaster-recovery.md` drops the host paths;
@@ -2017,7 +2012,7 @@ carries `prune: disabled`.
     - the `k3s_etcd_s3_armed` defaults comment and its marker, now deleted with the key;
     - the off-box script's region key in `setup/k3s` defaults, deleted with any equality test
       that holds it;
-    - the `setup/k3s` `CLAUDE.md` contract, and `docs/facts.lock` until G2;
+    - the `setup/k3s` `CLAUDE.md` contract;
     - the `EtcdSnapshotOffbox*` annotations in `host-checks.yaml`;
     - `docs/healthchecks-io-deadman.md`;
     - `docs/k3s-etcd-restore.md`, which names `etcd-token-drift.sh` as the daily comparison

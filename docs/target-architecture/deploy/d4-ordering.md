@@ -818,10 +818,6 @@ conditions of dispatch runs.
     - configarr's comment "THE ONE CONSUMER-SIDE BARRIER IN THE k8s PLAY" names
       netpol-baseline's drain as the second. This edit waits for D4.1, which already reaches
       every service, so that D4.0's landing stays one tag.
-    - Until G2 retires `docs/facts.lock`, and only if `fact_status.py` reports the pairwise
-      test's atom as moved, run
-      `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` for each of the
-      three sections, and commit the lock. Once G2 has retired it, this step does not run.
     - **Landing.** `toposort.py` is play-called, so the narrowing refuses and the tick
       records a `k8s_unapplied` line for every k8s service. `land.sh` reports
       `needs-manual-apply`. The edges move no render. The list move can reorder the output
@@ -1241,9 +1237,6 @@ Each bound below says how long a PR can be reverted alone.
       "netpol-baseline last", and one line in `docs/networkpolicy-slice-answers.md` pointing
       at it;
     - configarr's tasks comment, which names the second drain.
-
-  Until G2 retires `docs/facts.lock`, the lock changes too, if the pairwise test's atom
-  moved.
 - D4.2: tests in `scripts/renderer/tests/` and the `Census` row.
   `docs/flux-deploy-plane.md` gains the ordering section, including the edge rule and the
   reserved `-deferred` suffix.

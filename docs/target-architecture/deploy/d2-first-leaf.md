@@ -1752,10 +1752,7 @@ later slices size against:
 - D2.3: tests in `scripts/deploy_tools/tests/`, and the third emitter in
   `ansible/tests/deploy/test_deploy_annotations.py`. `docs/landing.md`,
   `.claude/skills/land-after-merge/SKILL.md`. Root `CLAUDE.md`'s *After a PR Merges* gains
-  one sentence on flux-owned services. Until G2 retires `docs/facts.lock`, and if the new
-  sentence cites an atom, run `uv run python scripts/dev/fact_status.py verify 'CLAUDE.md#After
-  a PR Merges — Pull, Deploy, Verify'` and commit the lock. `docs/flux-deploy-plane.md`
-  gains the handback order.
+  one sentence on flux-owned services. `docs/flux-deploy-plane.md` gains the handback order.
 - D2.4a: tests in `ansible/roles/setup/k3s/tests/`. The k3s role's `CLAUDE.md` names the
   prune check's skip and the drift check's handback rule.
 - D2.4b: tests in `scripts/deploy_tools/tests/`, `scripts/renderer/tests/`,

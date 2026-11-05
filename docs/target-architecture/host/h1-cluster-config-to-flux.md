@@ -2410,8 +2410,7 @@ subject's tests.
   the calls the script makes. Gate 2 reads a stamp on daniel-box's disk, so `land.sh` refuses
   the pin gate elsewhere.
 - **Failure class 8, prose that nothing re-derives.** The `setup/k3s` `CLAUDE.md` contract
-  moves with the actuators, and its ENFORCED node ids move in the same PR. Until G2 retires
-  `docs/facts.lock`, each touched section is re-verified with `fact_status.py verify`.
+  moves with the actuators, and its ENFORCED node ids move in the same PR.
 
 ## Tests and docs that change in the same PR
 
@@ -2615,9 +2614,6 @@ subject's tests.
     - `ansible/preflight.yml` and its tests;
     - `.claude/rules/` and `CLAUDE.md` prose that names `host_vars/daniel-box.yml` as the
       service list.
-- **Every PR that edits a `CLAUDE.md` section citing atoms:** until G2 retires
-  `docs/facts.lock`, run `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'`
-  and commit the lock.
 
 ## Complexity delta
 

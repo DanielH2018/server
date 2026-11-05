@@ -938,23 +938,6 @@ is shown to come from a Prometheus that answered:
 
 ## Tests and docs that change in the same PR
 
-**`docs/facts.lock`, until G2 retires it.** PR 1, PR 3, PR 4a and PR 4b edit the
-observability, uptime-kuma, monitor-bridge and valheim `CLAUDE.md` files, and each of those
-files has sections with rows in the lock. Until G2 retires `docs/facts.lock`, each of the four
-PRs runs this step:
-
-- When the `facts-reverify-changed` hook rewrites the lock, stage the lock and commit it with
-  the PR.
-- When the hook or CI's `test_every_recorded_atom_hashes_as_recorded` reports a `moved` or
-  `missing` finding that the hook does not fold, run
-  `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` for that section and
-  commit the lock.
-
-Once G2's PR 3 has merged, the hook, the `verify` subcommand and the lock are gone, and the
-step drops. A branch cut before that merge still runs the hook from its own `prek.toml`. On
-rebase it takes the lock's deletion, as G2's *Risks* says. G2's `lock-retired` rule fails a
-branch that adds the file back.
-
 - **PR 1.**
     - `workload-service.test.yaml`, and `PrometheusRuleEvaluationFailures`' case in
       `alerting-meta.test.yaml`.
@@ -1012,8 +995,7 @@ branch that adds the file back.
       `bridge-gate-sets.md`, and all three are committed with the PR. The gate-sets fragment
       moves because the row leaves the `prometheus` set and joins `startup_grace`.
     - `ansible/roles/k8s/monitor-bridge/CLAUDE.md` loses the *Traps* item on sanitised
-      resource names, which moves to the rule. The *Traps* section has no row in
-      `docs/facts.lock`. The monitor-bridge glance block regenerates.
+      resource names, which moves to the rule. The monitor-bridge glance block regenerates.
     - The `ansible/roles/k8s/home-assistant/templates/deployment.yaml.j2` comment stays,
       because it records a dated incident ("2026-08-23: 3 restarts, paging k3s Workload
       Health") that remains true.

@@ -658,7 +658,7 @@ Kuma is untouched, because no push is involved.
 ## Tests and docs that change in the same PR
 
 - **PR 1.** The node-exporter role's `CLAUDE.md`, the DaemonSet comment and the cgroup script's
-  header. If the `facts-reverify-changed` hook rewrites `docs/facts.lock`, commit that too.
+  header.
 - **PR 2.**
     - The script test and the deadline derivation test.
     - `test_health_cron_boot_grace.py` is unchanged, because the boot-grace path is unchanged.

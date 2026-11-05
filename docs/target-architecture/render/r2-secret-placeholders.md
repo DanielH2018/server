@@ -1748,11 +1748,6 @@ remains the gate.
   `ansible/tests/services/`. `docs/homelab-render.md` drops `GUARD_DEFERRED`'s one member.
 - `docs/secret-rotation.md` gains a paragraph per dedicated Secret: rotating its key now means
   rendering that one Secret.
-- Until G2 retires `docs/facts.lock`, when a role `CLAUDE.md` section edited in PRs 1c to 7b
-  gains a backticked path or symbol, that PR runs
-  `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commits the lock.
-  After G2, the PR does neither: G2 deletes the lock, and its `lock-retired` rule fails
-  while the file exists.
 
 ## Complexity delta
 

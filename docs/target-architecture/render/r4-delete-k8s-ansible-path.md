@@ -289,18 +289,6 @@ again (*Steps, as PRs*, *The edge to D6, narrowed*).
   `scripts`, `ansible/roles/k8s` and `.claude`, lists 270 files. PR 1 sorts that wider set:
   tests that PRs 3 to 5 retarget at defaults, tests that PR 7c retargets at the renderer,
   tests that PR 6 or PR 8 deletes with their subject, and code that is not a test.
-- **`docs/facts.lock` records rows that R4 breaks.** A path atom hashes existence, so a row
-  goes `missing` when its file is deleted. A symbol atom hashes content. At the baseline:
-    - `ansible/roles/setup/render_records/CLAUDE.md` has three rows, and
-      `#How one run works` cites `scripts/deploy_tools/render_targets.py`.
-    - `ansible/roles/k8s/manifests/CLAUDE.md` has four rows. `#Release records` cites
-      `ansible/roles/setup/render_records/`, and `#Rules a caller can break` cites
-      `ansible/tasks/k8s_batch.yml` and `ansible/post_tasks/k8s_stabilise_gate.yml`.
-    - Two `ansible/roles/k8s/crowdsec/CLAUDE.md` rows cite crowdsec's `tasks/main.yml` and
-      `tasks/verify.yml`.
-    - Root `CLAUDE.md#Adding a New Service` and `ansible/roles/k8s/janitorr/CLAUDE.md#Notable`
-      cite `ansible/deploy.yml` as a path atom. That file keeps the Pi's play, so those
-      atoms survive, but their prose names the k8s play.
 - **Ansible-core reaches the renderer by three routes.**
     - `scripts/lib/ansible_jinja_env.py:register_ansible_filters` imports `b64encode`,
       `comment`, `get_hash`, `mandatory`, `to_bool` and `to_uuid` from
@@ -376,8 +364,6 @@ grep -n 'render_records_push_token' scripts/secrets_mgmt/consumers.py \
 grep -rln 'deploy_play' ansible/tests scripts --include='*.py'
 grep -rlE 'roles/k8s/[a-z0-9-]+/tasks|k8s/manifests/(defaults|files)|/ "tasks"|roles/k8s/manifests/tasks|ansible/deploy.yml|"deploy.yml"|k8s_batch|k8s_stabilise_gate|k8s_image_drift_gate|k8s_retire' \
   ansible/tests scripts ansible/roles/k8s .claude --include='*.py' | wc -l  # 270
-grep -nE '^    "ansible/roles/(k8s/manifests|setup/render_records)/CLAUDE.md#' \
-  docs/facts.lock                                                          # 4 + 3 rows
 grep -rln 'render_targets' scripts ansible --include='*.py'      # the file + 4 callers
 grep -n 'import_tasks\|include_tasks' ansible/roles/k8s/*/tasks/*.yml \
   | grep -v '/manifests/\|/image-builder/'   # game-stats imports its checksum files
@@ -1028,9 +1014,7 @@ table:
 **Size.** R4.5 and R4.7 are deletion PRs, sized by subject rather than by line count, on the
 amendment that Open question 11 names. A deletion PR removes one subject together with the
 tests whose subject it is and the docs that describe it. Its description carries the census
-command that proves nothing still names what it deleted. Until G2 retires
-`docs/facts.lock`, it also names every lock row it moves: `fact_status.py verify` for a
-section it edits, and `fact_status.py forget` for a section it deletes. Every other PR aims
+command that proves nothing still names what it deleted. Every other PR aims
 at about 300 to 800 changed lines. Every PR carries a `Render-diff:` line and quotes the
 deployer route of its paths, measured with `services_from_changed_paths` at its base.
 
@@ -1207,9 +1191,7 @@ PRs 6 and 8 are deletion PRs, sized by subject rather than by line count. That s
 on a contract amendment that has not landed (Open question 11). A deletion PR removes one
 subject together with the tests whose subject it is and the docs that describe it. Its
 description carries the census command that proves nothing still names what it deleted.
-Until G2 retires `docs/facts.lock`, it also names every lock row it moves:
-`fact_status.py verify` for a section it edits, and `fact_status.py forget` for a section
-it deletes. Every other PR stays within about 200 lines. Every PR carries a `Render-diff:` line and quotes the
+Every other PR stays within about 200 lines. Every PR carries a `Render-diff:` line and quotes the
 deployer route of its paths, measured with `services_from_changed_paths` at its base.
 
 1. **Inventory, the precondition and the render-diff gate** (about 200 lines).
@@ -1249,9 +1231,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
         - the 270 files the wider selector lists, which name the play, the batch, the
           post_tasks, a role's `tasks/` or the manifests role's `defaults/` and `files/`.
           Each is assigned to PRs 3 to 5, PR 6, PR 7c or PR 8, or marked as code that is not
-          a test (Baseline, *Kept tests read the play*);
-        - the `docs/facts.lock` rows that cite a path R4 deletes, each assigned to the PR
-          that deletes it.
+          a test (Baseline, *Kept tests read the play*).
     - It records the revert runbook's entry point. If `ansible/volume-revert.yml` exists and
       includes `k8s/volume-revert` alone, PR 7a is skipped.
     - It confirms the render_records units are gone. If they are not, a first PR disarms the
@@ -1294,9 +1274,8 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       tests that list setup roles, `scripts/deploy_tools/tests/test_render_targets.py`, and
       PR 5's equality test. `scripts/deploy_tools/render_targets.py` goes too, because
       `render_records.py` was its last caller. PR 5's floor test stays.
-    - **Lock rows:** `forget` the three `ansible/roles/setup/render_records/CLAUDE.md` rows.
-      Edit `ansible/roles/k8s/manifests/CLAUDE.md#Release records`, which cites the role's
-      directory, and `verify` it, unless D6 already removed that section.
+    - **Stale sections.** Edit `ansible/roles/k8s/manifests/CLAUDE.md#Release records`, which
+      cites the role's directory, unless D6 already removed that section.
     - **The park and the owed apply.** The range parks the tick (`broad_manual`), with the
       route quoted in the Baseline. Extra commits in the parked range are the expected
       case, not an exception. The comment above the CI walk depth in
@@ -1497,11 +1476,10 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       that an allowlisted runbook file reads stays: at the baseline, `k8s_namespace`,
       `k8s_dry_run` and `k8s_no_mutate`. `k8s_autodeploy_snapshot_pvcs` stays in role
       defaults, because `<tag>-snapshot` reads it.
-    - **Lock rows:** `forget` the four `ansible/roles/k8s/manifests/CLAUDE.md` rows. If D5
-      left crowdsec's task files, edit and `verify` the two crowdsec rows that cite them.
-      Root `CLAUDE.md#Adding a New Service` and `janitorr/CLAUDE.md#Notable` keep their
-      `ansible/deploy.yml` path atom, but their prose describes the k8s play's toposort, so
-      edit and `verify` both.
+    - **Stale sections.** If D5 left crowdsec's task files, edit the two crowdsec sections
+      that cite them. Root `CLAUDE.md#Adding a New Service` and `janitorr/CLAUDE.md#Notable`
+      keep their `ansible/deploy.yml` path atom, but their prose describes the k8s play's
+      toposort, so edit both.
     - **The runbook still resolves.** A test in `ansible/tests/longhorn/` lists every
       variable the allowlisted task files read. It also lists the names that a
       `group_vars/all.yml` value it uses reads in turn, so `k8s_no_mutate` brings in
@@ -1895,7 +1873,7 @@ daniel-box. The operator produces them, because each needs the host:
   history; `docs/gitops-pipeline.md`, which names `render_targets.py`;
   `docs/claude-tooling.md` if it lists `probe.py releases`;
   `ansible/tests/setup/test_setup_cross_role_files.py`'s table equality, which holds the
-  edited `_CHECK_TIMER`; the deleted tests listed under PR 6; the lock rows PR 6 names.
+  edited `_CHECK_TIMER`; the deleted tests listed under PR 6.
   `ansible/secret_rotation.yml`, `consumers.py`, `git_dates.py`, the `secret-tiers` fragment
   and the tests that name the key or require an `auto` row change in the operator's secrets
   commit after PR 6, not in PR 6.
@@ -1918,10 +1896,6 @@ daniel-box. The operator produces them, because each needs the host:
     - `ansible/tests/longhorn/` gains the runbook-resolution test.
     - Every k8s role's generated glance block, rewritten by the `regen-role-glance` hook.
     - The tests whose subject PR 8 deletes, and their citations in the docs.
-    - Until G2 retires `docs/facts.lock`: `uv run python scripts/dev/fact_status.py forget
-      '<doc>#<heading>'` for each row of a deleted doc, and `fact_status.py verify` for each
-      edited section, root `CLAUDE.md` and `janitorr/CLAUDE.md` among them. The lock commits
-      with the PR.
 - PRs 6, 8 and 9: `docs/failure-classes.md` loses any detector citation whose test goes, as
   that page's own meta-test requires.
 - PR 7d: the dialect ADR, `docs/adr/index.md` and the `mkdocs.yml` nav; the spec tests and
@@ -2038,7 +2012,7 @@ daniel-box. The operator produces them, because each needs the host:
     The slice document format asks for about 100–200 lines per PR, and the exemption for a
     pure deletion is listed under *Requested amendments not yet applied* (D6 Open question
     6). *Resolution:* R4 relies on that amendment for PRs 6 and 8. If it is refused, PR 8
-    splits by subject in this order, each part with its own tests, docs, lock rows and
+    splits by subject in this order, each part with its own tests, docs and
     `Render-diff: none`:
     1. the `tasks/` directories of the roles under `ansible/roles/k8s/`, in groups, which
        removes every `include_role` of the manifests role. The precondition test goes with

@@ -89,8 +89,7 @@ else.
   `git grep -n -w -E 'six|seven|eight|two workloads'` over the observability role, its three
   tests and the netpol-baseline role lists them:
     - `ansible/roles/k8s/observability/CLAUDE.md`, *One config change, one restart*: "The
-      snapshot handing these six to the play gate". PR 2 runs `fact_status.py verify` on that
-      section.
+      snapshot handing these six to the play gate".
     - `ansible/roles/k8s/observability/tasks/main.yml`: the restart task's comment ("would
       restart all six", "this task runs for exactly the two workloads that read one"), the
       comment at the `manifests_self_rollouts` include ("these six live in"), and the
@@ -937,10 +936,8 @@ and those edits must land with the workload.
   more, so move text to `docs/observability-dashboards.md` before adding either.
 - Correct the one-register prose for the new Secret reader: the comment above
   `observability_stabilise_workloads` and the role `CLAUDE.md`'s *One config change, one
-  restart* section, as *Tests and docs that change in the same PR* lists. The stabilise entry
-  moves a recorded fact atom, so PR 2 runs `fact_status.py verify` on that section until G2
-  retires `docs/facts.lock`. The section's "these six" goes in the same edit, before the
-  `verify`.
+  restart* section, as *Tests and docs that change in the same PR* lists. The section's
+  "these six" goes in the same edit.
 - Drop the count from every passage that *Baseline* lists under "A seventh workload". A count
   rewritten as "seven" would go stale again with the next workload, so each passage names the
   set instead: "these workloads", "the workloads that read one", "this role's manifests".
@@ -1132,9 +1129,7 @@ and those edits must land with the workload.
 - Docs: the observability role's `CLAUDE.md`, *One config change, one restart*, replaces the
   one-register sentence that PR 2 leaves with the per-Secret rule. The rule covers the
   restart, the snapshot and the Grafana password sync, so an Alertmanager config edit restarts
-  and soaks Alertmanager alone and never execs the Grafana CLI. The `defaults/main.yml`
-  edit moves the same recorded fact atom as PR 2's, so PR 5 also runs `fact_status.py verify`
-  on that section until G2 retires `docs/facts.lock`.
+  and soaks Alertmanager alone and never execs the Grafana CLI.
 - PR 5 lands and deploys before M2's first edit to `alertmanager.yml`.
 - Two-writer check: no ownership moves.
 
@@ -1312,7 +1307,7 @@ Each risk names its class from `docs/failure-classes.md`.
 - **Class 8, prose that M1 makes false.** Three passages say no Alertmanager or rule exists,
   and a seventh workload falsifies every passage that counts the role's workloads, manifests,
   Secret readers or tier-1 templates (*Baseline*). Mitigation: PR 2 drops each count rather
-  than raising it, before it runs `verify` on the one recorded section. PR 3 rewrites the
+  than raising it. PR 3 rewrites the
   `prometheus.yaml.j2` comment and PR 4 the deadman doc. The k3s script comment stays stale
   until M6's B1, for the reason PR 4 gives.
 - **Class 2, the template's bytes as a proxy for the staged bytes.** `homelab_role_label`
@@ -1419,8 +1414,7 @@ Each risk names its class from `docs/failure-classes.md`.
       password restarts Prometheus and Alertmanager too. The same section loses "these six".
       The comment above `observability_stabilise_workloads` in `defaults/main.yml` gets the
       same correction. The comments in `tasks/main.yml` and the netpol-baseline observability
-      policy lose their counts. PR 2 then re-verifies that section, as the `docs/facts.lock`
-      item below says.
+      policy lose their counts.
 - **PR 3.**
     - Tests: the promtool test file with its zero-series case, the validator's Python-phase
       pairs (the rule-list agreement and zero-series checks among them), and the
@@ -1450,23 +1444,8 @@ Each risk names its class from `docs/failure-classes.md`.
     - Docs: the observability role's `CLAUDE.md`, *One config change, one restart*. In
       `tasks/main.yml`, the comments above the snapshot and the Grafana password sync describe
       the per-file condition.
-- **`docs/facts.lock`, until G2 retires it.**
-    - Until G2 retires `docs/facts.lock`, PR 2 and PR 5 each run
-      `uv run python scripts/dev/fact_status.py verify 'ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart'`
-      and commit the lock. That section cites
-      `ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads`
-      as a YAML atom, and a YAML atom hashes the key's whole value
-      (`scripts/lib/facts/atoms.py:atom_content`). PR 2 appends the `alertmanager` entry, and
-      PR 5 adds two keys to three entries, so the atom reads as `moved` after each PR. The
-      `facts-reverify-changed` hook refuses to fold a moved atom, because `moved` is not in
-      `scripts/lib/facts/lock.py:BENIGN_KINDS`.
-    - Until G2 retires `docs/facts.lock`, M1's other `CLAUDE.md` edits move no recorded atom.
-      At most they add or drop a citation, as PR 2's *Alert plane* paragraph or PR 3's reload
-      marker may. The `facts-reverify-changed` hook re-hashes such a section and exits 1 like
-      a formatter, so stage `docs/facts.lock` and commit again.
-    - Once G2's PR 3 has merged, neither step runs. That PR deletes the lock and the hook, and
-      G2's `lock-retired` rule rejects a recreated lock. The G1 notice on the PR then names any
-      section whose cited atom moved, and the PR edits that section if its prose is stale.
+- **Cited atoms.** The G1 notice on each PR names any section whose cited atom moved, and the
+  PR edits that section if its prose is stale.
 
 ## Complexity delta
 
@@ -1673,36 +1652,18 @@ Also changed this round, outside the findings:
 
 ### Round 2 (integration review, 2026-10-11)
 
-One finding, medium. It is fixed. One claim in it is refuted in part, and fixing it exposed a
-second gap in the same step. Each claim was checked against the tree at `70591c307`.
+One finding, medium. It is fixed. The claim was checked against the tree at `70591c307`.
 
-- **X-21, medium.** Many slices commit `docs/facts.lock` unconditionally, although G2 deletes
-  the lock and the `facts-reverify-changed` hook. **Fixed** in *Tests and docs that change in
-  the same PR*, and in PR 2's and PR 5's *Steps*. Every lock step carries R4's condition,
-  "Until G2 retires `docs/facts.lock`". The item also says that neither step runs once G2's
-  PR 3 has merged.
-    - **Refuted in part.** M1 never ran `fact_status.py verify`. Its only lock step committed
-      what the `facts-reverify-changed` hook writes. The step was still unconditional, so the
-      fix stands.
-    - **A second gap in the same step.** The hook alone cannot keep the lock in step for PR 2
-      and PR 5. `ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart`
-      records the YAML atom
-      `ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads`.
-      `scripts/lib/facts/atoms.py:atom_content` hashes a YAML atom as the key's whole value,
-      and PR 2 and PR 5 both change that value. `moved` is not in
-      `scripts/lib/facts/lock.py:BENIGN_KINDS`, and the docstring of
-      `scripts/lib/facts/lock.py:reverify_benign` says a moved atom "stays a person's
-      `verify`". Both PRs therefore run `fact_status.py verify` on that section. A grep of
-      `docs/facts.lock` found no other content atom that M1 changes. The other atoms M1 touches
-      are path atoms, which hash existence, and M1 deletes none of their files.
+- **X-21, medium.** Many slices committed `docs/facts.lock` unconditionally, although G2 deletes
+  the lock and its hook. **Fixed** at the time with R4's condition, "Until G2 retires
+  `docs/facts.lock`". G2's PR 3 has since retired the lock, so M1 carries no lock step.
 
 Also changed this round, outside the findings:
-- After PR 2, the section that PR 2 re-verifies would have been false. It says only Prometheus
+- After PR 2, the role's *One config change, one restart* section would have been false. It
+  says only Prometheus
   and Grafana declare `restart_on: [secret]`, and that one register covers three Secret
   manifests. With Alertmanager as a third reader, a Grafana password rotation also restarts
-  Alertmanager. PR 2 corrects all three claims, and the same comment in `defaults/main.yml`,
-  before it runs `verify`. PR 2's and PR 5's *Steps* now name the `verify` too, so each PR's
-  scope matches *Tests and docs that change in the same PR*.
+  Alertmanager. PR 2 corrects all three claims, and the same comment in `defaults/main.yml`.
 
 ### Round 10 (per-slice adversarial review, 2026-10-11)
 
@@ -1742,7 +1703,7 @@ was checked against the tree at `70591c307` before the fix.
 - **M1-R10-03, medium. Prose and comments that M1 makes false are not listed.** Confirmed by
   `git grep -n -w -E 'six|seven|eight|two workloads'` over the role, its three tests and
   netpol-baseline. **Fixed**: *Baseline* lists the counting passages. PR 2 drops each count
-  rather than raising it, and fixes the section's "these six" before its `verify`. The five
+  rather than raising it, and fixes the section's "these six". The five
   tier-4 comments stop calling Prometheus "the one exception". Two passages stay: the "seven"
   workloads in `defaults/main.yml` and `prometheus.yaml.j2` are the cluster-wide set that
   `kube-state-metrics.yaml.j2`'s header names from the migration's slice 3, not this role's.

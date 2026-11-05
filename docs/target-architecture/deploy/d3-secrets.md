@@ -1277,9 +1277,7 @@ kubectl -n flux-system get kustomizations.kustomize.toolkit.fluxcd.io bento-pdf 
   `docs/host-baseline-record.md`, `docs/secret-rotation.md` and the `initial_setup` role's
   `CLAUDE.md` for `TRACKED` finds no other record of the cron's file list.
 - D3.2c: the test that runs `check` on the tree, in `scripts/secrets_mgmt/tests/`. The
-  `CLAUDE.md` *Secrets Management* section gains one sentence on the cluster file. Until G2
-  retires `docs/facts.lock`, run `fact_status.py verify` on that section if it cites an
-  atom.
+  `CLAUDE.md` *Secrets Management* section gains one sentence on the cluster file.
 - D3.2d: tests in `scripts/secrets_mgmt/tests/`, and the named member in
   `ansible/tests/services/test_authelia_argon2_parameters_agree.py`.
   `docs/secret-rotation.md` gains one sentence: `write` refuses a malformed or duplicated

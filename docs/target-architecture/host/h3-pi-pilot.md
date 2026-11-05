@@ -1305,7 +1305,6 @@ daniel-pi: homelab-updater.timer ─▶ apt-get install homelab-updater homelab-
   ansible/tests/setup/test_setup_cron_roles_have_a_contract.py  (optimize_pi named member retired, H3.8b)
 + docs/host-packages.md                                (the runbook, H3.4b and H3.5b)
   mkdocs.yml                                           (+ the runbook's nav entry, H3.4b)
-  docs/facts.lock                                      (optimize_pi sections forgotten or re-verified, H3.8b)
   docs/pi-host-tuning-record.md                        (heartbeats and disarm on the package path)
   .gitignore                                           (+ !/hosts)
 ```
@@ -2494,13 +2493,6 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
       the component;
     - its `## Autonomous-role contract` moves into a header comment in
       `hosts/components/pi-heartbeats/component.yml`;
-    - `docs/facts.lock` follows those edits, or CI's
-      `test_every_recorded_atom_hashes_as_recorded` goes red. The lock records five
-      sections of that `CLAUDE.md`. Run `uv run python scripts/dev/fact_status.py forget`
-      for the removed *Autonomous-role contract* section's key, and `fact_status.py verify`
-      for *Where it runs*, *What it does* and any other section whose citations the PR
-      changes. *What it does* cites a test node in the Pi log-line shape test, which this PR
-      retargets;
     - the `# fact:` marker in
       `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py:test_a_dead_container_is_restarted`
       names the removed section, so it goes in the same edit;
@@ -2528,9 +2520,6 @@ follow-up and H3.8b each publish a new Pi version before H3.9b arms the timer.
     - `docs/landing.md` gains the host-wait paragraph and when it ends `deferred`;
     - `.claude/skills/land-after-merge/SKILL.md` and root `CLAUDE.md` (*After a PR Merges*)
       gain one line each: a PR touching a host package waits for that host;
-    - `docs/facts.lock` records `CLAUDE.md#After a PR Merges — Pull, Deploy, Verify`. When
-      the new line cites a path or symbol, run `fact_status.py verify` on that key in the
-      same commit, or the citation reads as `unrecorded-atom`;
     - a land test for the first-parent enable-link rule, and `docs/landing.md` names the
       operator's hand start for a PR that arms a host's timer.
 - **H3.9c:** the daniel-pi `promtool test rules` cases for `HostUpdateStale`, its

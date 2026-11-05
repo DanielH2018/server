@@ -433,11 +433,6 @@ The exit criterion is seven observations:
   `Remove the cron the kuma-check timer replaces` in `common/tasks/check_timer.yml`.
   The other three are the absent half of a cron still live on another host, such as
   `Remove the firmware cron on hosts without fwupd`.
-- **`docs/facts.lock` keys rows on setup-role docs.** `grep -c` for
-  `ansible/roles/setup/*/CLAUDE.md#` in `docs/facts.lock` prints 57, among them 7 for
-  `claude_code`, 7 for `initial_setup` and 5 for `gitops_deploy`. Root `CLAUDE.md` says a
-  vanished heading "reads as `section-gone` instead: verify the new key, then
-  `fact_status.py forget '<old key>'`".
 - **Contract checks derive from setup tasks.**
   `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` derives the cron-installing set from `tasks/`, and `ansible/tests/repo/test_role_claude_md.py`
   requires a `CLAUDE.md` per setup role. Both pass vacuously once the roles are gone.
@@ -962,8 +957,7 @@ At `70591c307` the first three greps find three groups of modules:
       with its stamp pair, and gives it a routing key that re-applies `gitops_deploy`. The
       PR body quotes `test_gitops_deploy_ship_list.py` passing, including its
       scratch-install import check. Root `CLAUDE.md`'s citation and
-      `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py` repoint in the same PR,
-      with the `docs/facts.lock` steps that *Tests and docs* gives.
+      `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py` repoint in the same PR.
 
 `initial_setup/files/kuma-push-lib.sh` and `setup-drift-lib.sh` do not move. Only tests and
 one eval record name them from outside the tree (Baseline), and those tests move or retire
@@ -1755,10 +1749,6 @@ form the `land-after-merge` skill gives, naming the tags the line lists. When th
 holds tags from another session's change, that session applies and clears its own first.
 This step lasts until H7.19b deletes the ledger.
 
-**Before G2, every PR that moves or empties a role's `CLAUDE.md`** runs `uv run python
-scripts/dev/fact_status.py forget '<old key>'` for each section key it removes and `verify`
-for each new key, then commits `docs/facts.lock`. 57 rows key on setup-role docs (Baseline).
-
 ### The re-sliced PRs
 
 The 65 planned PRs merge into the 37 below. The re-slicing changes no design. Each re-sliced
@@ -1838,7 +1828,7 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 ### What each re-sliced PR carries
 
 Every per-role PR keeps the rules above the table: H3's handoff rule, the emptied-role stub,
-the `manual_plane` clearing, the facts-lock `forget` and `verify`, and *Rollback*'s
+the `manual_plane` clearing, and *Rollback*'s
 **operator-only** hand re-apply and `--clear-hold`. The notes name only what a merge moves.
 
 1. **H7.21** (about 580 lines, 270 of them reconcile source). The activation step, the drift
@@ -3293,10 +3283,7 @@ progress.
   its own package, and the `preinst` refuses a hostname mismatch.
 - **Failure class 8, prose that nothing re-derives.** Every setup role's `CLAUDE.md` holds
   ENFORCED citations into `ansible/tests/setup/`. Each per-role PR rewrites or archives that
-  doc. Until G2 retires `docs/facts.lock`, the same commit runs `fact_status.py forget` for
-  each section key it removes and `verify` for each new key, then commits the lock. A moved
-  heading reads as `section-gone`, so `verify` alone leaves the old row behind. After G2,
-  the PR reads G2's notice instead.
+  doc, and reads G1's notice for any other section whose cited atom moved.
 
 ## Tests and docs that change in the same PR
 
@@ -3310,10 +3297,7 @@ progress.
     - its `CLAUDE.md` moves into the component's `CLAUDE.md` or into `docs/`, and an
       emptied role keeps a stub `CLAUDE.md` that points at the component;
     - `gen_role_glance.py` stops listing it;
-    - its `pyproject.toml` `extra-paths` entry goes;
-    - until G2 retires `docs/facts.lock`, `uv run python scripts/dev/fact_status.py forget
-      '<old key>'` for each section key the move removes, `verify '<new key>'` for each new
-      section, and a commit of the lock.
+    - its `pyproject.toml` `extra-paths` entry goes.
 - **H7.1:** `docs/break-glass.md` records the age-key decision.
 - **H7.2e:** `pyproject.toml`, root `CLAUDE.md`'s `_CI_NO_VERDICT_CONCLUSIONS` citation,
   `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py`,
@@ -3327,9 +3311,7 @@ progress.
   `ansible/tests/setup/test_host_lib_sibling_copies.py`'s `HOST_LIB_SRC`,
   `ansible/tests/deploy/test_gitops_deploy_ship_list.py` for the new `ci_verdict.py` entry,
   and `ansible/roles/setup/common/CLAUDE.md`'s table rows for the two modules and its
-  routing paragraph. Until G2 retires `docs/facts.lock`, run `uv run python
-  scripts/dev/fact_status.py verify '<doc>#<heading>'` for each edited section, `forget` for
-  each removed one, and commit the lock.
+  routing paragraph.
 - **H7.4:**
     - `k8s_host_files`' `CLAUDE.md` loses the two Pi rows;
     - `ansible/roles/k8s/pi-peer-backup/CLAUDE.md`'s *Auth* line, which says the role
@@ -3397,9 +3379,6 @@ progress.
       `held_sha` parity case and the `gitops-deploy.timer` exemption), and edits the
       `k3s-restart` component's `CLAUDE.md` wherever it names the lock step or the
       server-mode hold check.
-
-  Until G2 retires `docs/facts.lock`, each PR runs `fact_status.py verify` for each edited
-  root `CLAUDE.md` section and commits the lock.
 - **H7.2e**, for the walk bound: `config.env.j2` keeps rendering the role default, which
   now refers to `ci_ancestor_walk_max`, so `gitops_deploy/tests/test_deploy_config.py`
   passes unchanged, and the PR body quotes it passing.
@@ -3411,9 +3390,7 @@ progress.
   the doc that transcludes the gitops fragment, and the fragment file;
   `.claude/hooks/session-health.py` and its tests in `.claude/hooks/tests/`; the `deploy`
   skill; `docs/landing.md` again, for the setup and Pi arms; `docs/deploying.md`; root
-  `CLAUDE.md`'s *Common Commands*. Until G2
-  retires `docs/facts.lock`, run `uv run python scripts/dev/fact_status.py verify
-  '<doc>#<heading>'` for each edited root `CLAUDE.md` section and commit the lock.
+  `CLAUDE.md`'s *Common Commands*.
 - **H7.20:**
     - the ADR, which records the package-per-host design, checkout-sync's narrowing to the
       CI gate without `DEPLOY_HOLD`, and the decision to keep the agent on the server
@@ -3585,7 +3562,7 @@ progress.
     (**operator-only**), with `git mv` only and every path constant changed through
     `scripts/lib/repo_paths.py`. The same PR moves `ansible/.sops.yaml` beside `vars/`,
     because SOPS searches upward from the file, and updates `.gitleaks.toml`, the Renovate
-    rules, the prek hooks, the CI path filters and the `docs/facts.lock` rows. Resolution:
+    rules, the prek hooks and the CI path filters. Resolution:
     the H7 ADR records the follow-on. The PR runs when no other slice has a branch open,
     because every open branch conflicts with it.
 14. **Two offline items need more than a kit file.** The offline branch takes every fetch
