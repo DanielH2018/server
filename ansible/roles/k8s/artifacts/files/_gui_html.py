@@ -1,6 +1,6 @@
-"""The single-page GUI artifact_server.py serves at `/`.
+"""The GUI artifact_server.py serves at `/` and the star button it serves at `/api/star.js`.
 
-One raw string, no Python logic. It is a module rather than a `.html` file so that the pod
+Raw strings, no Python logic. It is a module rather than a `.html` file so that the pod
 needs only the ConfigMap keys it already mounts — a separate asset would need its own key,
 its own mount and its own read at request time, for a page that never changes between
 deploys.
@@ -202,4 +202,61 @@ $("list").addEventListener("click", e => {
 load();
 </script>
 </body></html>
+"""
+
+# Served at /api/star.js and loaded by the tag artifact_server.py adds to each HTML artifact
+# it serves. It draws nothing until GET /api/star answers, so a copy saved from the browser
+# and opened anywhere else shows no button.
+STAR_JS = r"""(() => {
+  const me = document.currentScript;
+  if (!me) return;
+  const host = me.dataset.host, path = me.dataset.path;
+  const url = "/api/star?host=" + encodeURIComponent(host) + "&path=" + encodeURIComponent(path);
+  fetch(url).then(r => r.ok ? r.json() : null).then(state => {
+    if (!state) return;
+    let starred = state.starred;
+    const box = document.createElement("div");
+    // A closed shadow root keeps the artifact's CSS off the button and the button's off the page.
+    const root = box.attachShadow({mode: "closed"});
+    root.innerHTML = `<style>
+:host{position:fixed;top:12px;right:12px;z-index:2147483647}
+button,span{display:block;font:20px/1 system-ui,sans-serif;padding:6px 9px;border-radius:999px;
+  border:1px solid #45475a;background:#1e1e2ee6;color:#a6adc8;box-shadow:0 1px 4px #0004}
+button{cursor:pointer}button:hover,.on{color:#f9e2af}
+button:focus-visible{outline:2px solid #f9e2af;outline-offset:2px}
+@media print{:host{display:none}}
+</style>`;
+    const el = document.createElement(state.writable ? "button" : "span");
+    const draw = () => {
+      el.textContent = starred ? "★" : "☆";
+      el.className = starred ? "on" : "";
+      el.title = state.writable
+        ? (starred ? "Starred: never pruned. Click to unstar." : "Star to keep it from being pruned")
+        : (starred ? "Starred: never pruned" : "Not starred");
+      if (state.writable) el.setAttribute("aria-pressed", String(starred));
+    };
+    if (state.writable) {
+      el.type = "button";
+      el.setAttribute("aria-label", "Star this artifact");
+      el.addEventListener("click", async () => {
+        el.disabled = true;
+        try {
+          const res = await fetch("/api/star", {method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({host, path, starred: !starred})});
+          if (!res.ok) throw new Error((await res.text()).trim() || res.status);
+          starred = (await res.json()).starred;
+          draw();
+        } catch (err) {
+          el.title = "Could not change the star: " + err.message;
+        } finally {
+          el.disabled = false;
+        }
+      });
+    }
+    draw();
+    root.append(el);
+    document.body.append(box);
+  }).catch(() => {});
+})();
 """

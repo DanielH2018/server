@@ -121,6 +121,7 @@ lands stays put and an abandoned one clears itself. **Executable files are never
 generated script is a tool, not a report. If a session writes one here it must be `chmod +x` or
 it ages out with the docs.
 
-**Starred artifacts are never pruned either.** The GUI's star writes `stars.txt` in
-`artifacts_stars_dir`, the pod's only writable mount, and each host's prune reads its own copy.
+**Starred artifacts are never pruned either.** The star on a GUI card and the star button on a
+served HTML artifact both write `stars.txt` in `artifacts_stars_dir`, the pod's only writable
+mount, and each host's prune reads its own copy.
 `docs/artifacts-star-list.md` covers how the list reaches each host, and the window before it does.
