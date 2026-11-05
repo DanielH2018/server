@@ -23,6 +23,8 @@ can move because of it:
     reaches none (#4412). A play-tree caller refuses, as `toposort.py`'s in `deploy.yml` does.
   - `ansible/vars/secrets.yml`: every role that reads a key whose ciphertext changed
     (`secret_keys.py`, #5409). A key only a setup role reads reaches no tag.
+  - a play file (`ansible/deploy.yml`, `pre_tasks/`, `tasks/`, `post_tasks/`) whose parsed YAML
+    is unchanged: no tags, since Ansible discards a comment. Any other play-file change refuses.
 
 ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
 `k8s_unapplied`, naming every candidate, rather than running the whole play (#4333).
@@ -59,7 +61,13 @@ from deploy_tools.narrow_lib import containers, filters, guard_map, paths, secre
 from deploy_tools.narrow_lib import templates as narrow_templates
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.git import git, git_stdout
-from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
+from lib.narrow_git import (
+    CannotNarrow,
+    changed_mapping_keys,
+    mapping_at,
+    same_parsed_yaml,
+    show_at,
+)
 from lib.render_guard import service_tags_at
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
@@ -84,9 +92,14 @@ ROLE_TREES = ("ansible/roles/k8s",)
 SHARED_TEMPLATES = "ansible/templates/"
 INVENTORY = "ansible/inventory/"
 # The two broad-deploy trees a census reads. `broad_path_tags` refuses a `PLAY_PREFIXES` path
-# other than a filter plugin, and a census counting one would mark every service stale for a
-# change to how a deploy RUNS.
+# other than a filter plugin or an unchanged play file, and a census counting one would mark
+# every service stale for a change to how a deploy RUNS.
 CENSUS_PREFIXES = _BROAD_CENSUS_PREFIXES
+
+
+def is_play_file(path: str) -> bool:
+    """Whether `path` is a YAML file Ansible parses as part of every play."""
+    return path.startswith(PLAY_PREFIXES) and path.endswith((".yml", ".yaml"))
 
 
 class Importers(NamedTuple):
@@ -376,9 +389,18 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
         return set()
     if filters.is_plugin(path):
         return _filter_tags(path, old_ref, ctx)
-    if any(path.startswith(p) for p in PLAY_PREFIXES):
-        raise CannotNarrow(f"{path} is read by every deploy")
     after = show_at(ctx.ref, path, ctx.cwd)
+    if any(path.startswith(p) for p in PLAY_PREFIXES):
+        before = show_at(old_ref, path, ctx.cwd)
+        if (
+            is_play_file(path)
+            and before is not None
+            and after is not None
+            and same_parsed_yaml(before, after)
+        ):
+            ctx.explain(f"narrow: {path} parses the same -> (nothing)")
+            return set()
+        raise CannotNarrow(f"{path} is read by every deploy")
     if path.startswith(SHARED_TEMPLATES):
         name = path[len(SHARED_TEMPLATES) :]
         if narrow_templates.comment_edit(path, old_ref, after, ctx.cwd, ctx.explain):

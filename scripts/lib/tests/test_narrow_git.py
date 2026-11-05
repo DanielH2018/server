@@ -2,7 +2,31 @@
 
 import pytest
 
-from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at
+from lib.narrow_git import (
+    CannotNarrow,
+    changed_mapping_keys,
+    mapping_at,
+    same_parsed_yaml,
+)
+
+
+def test_a_comment_or_layout_edit_parses_the_same():
+    assert same_parsed_yaml("a: [1, 2]\n", "# Why.\na:\n  - 1\n  - 2\n")
+
+
+@pytest.mark.parametrize(
+    "after",
+    [
+        "serial: true\n",
+        "serial: 1.0\n",
+        "serial: '1'\n",
+        "serial: {\n",
+        "d: 2026-13-45\n",
+    ],
+    ids=["bool", "float", "string", "unparseable", "bad-timestamp"],
+)
+def test_a_value_python_calls_equal_or_an_unloadable_text_differs(after: str):
+    assert not same_parsed_yaml("serial: 1\n", after)
 
 
 def test_an_empty_file_is_an_empty_mapping():
@@ -18,6 +42,11 @@ def test_a_file_that_does_not_parse_refuses():
 def test_a_file_that_is_not_a_mapping_refuses():
     with pytest.raises(CannotNarrow, match="is not a mapping of keys"):
         mapping_at("---\n- a\n- list\n", "defaults/main.yml")
+
+
+@pytest.mark.parametrize("after", [True, 1.0], ids=["bool", "float"])
+def test_a_value_python_calls_equal_counts_as_changed(after):
+    assert changed_mapping_keys({"a": 1}, {"a": after}, "main.yml") == {"a"}
 
 
 def test_a_removed_key_counts_as_changed():

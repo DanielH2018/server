@@ -80,14 +80,42 @@ def mapping_at(text: str, label: str) -> dict:
     return loaded
 
 
+def same_value(a, b) -> bool:
+    """Whether two parsed YAML values are the same, type and mapping key order included.
+
+    `repr` as well as `==`, because Python reads `1`, `1.0` and `true` as equal and a rendered
+    template does not.
+
+    Raises:
+        RecursionError: both values hold a recursive alias, which `==` cannot walk.
+    """
+    return a == b and repr(a) == repr(b)
+
+
+def same_parsed_yaml(before: str, after: str) -> bool:
+    """Whether two YAML texts load to the same value, so only comments or layout moved.
+
+    A key reordered reads as a change, and text that does not load is never the same.
+    """
+    try:
+        return same_value(yaml_fast.safe_load(before), yaml_fast.safe_load(after))
+    # A timestamp-shaped scalar such as 2026-13-45 raises ValueError from the constructor.
+    except yaml.YAMLError, ValueError, RecursionError:
+        return False
+
+
 def changed_mapping_keys(before: dict, after: dict, label: str) -> set[str]:
     """The top-level keys whose value differs between two parsed mappings.
 
     A key removed counts as changed: the tasks and templates reading it change behaviour.
     """
     try:
-        return {k for k in set(before) | set(after) if before.get(k) != after.get(k)}
+        return {
+            k
+            for k in set(before) | set(after)
+            if not same_value(before.get(k), after.get(k))
+        }
     except RecursionError as exc:
-        # A recursive alias (`k: &l [1, *l]`) loads as a value containing itself, and `!=`
+        # A recursive alias (`k: &l [1, *l]`) loads as a value containing itself, and `==`
         # recurses into it until the stack runs out.
         raise CannotNarrow(f"{label} holds a recursive alias") from exc

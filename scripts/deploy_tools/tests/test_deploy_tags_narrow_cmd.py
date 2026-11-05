@@ -50,6 +50,19 @@ def test_the_command_prints_nothing_and_exits_zero_when_it_narrows_to_nothing(
     assert capsys.readouterr().out == ""
 
 
+def test_a_comment_only_deploy_yml_range_reaches_no_rendered_output(tree: Tree, capsys):
+    tree.write(
+        "ansible/deploy.yml",
+        "# A comment.\n- hosts: all\n  vars:\n    p: '{{ play_key }}'\n",
+    )
+    old, new = _refs(tree)
+    rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
+    assert rc == DEPLOY_OK
+    out = capsys.readouterr()
+    assert out.out == ""
+    assert "reaches no rendered output" in out.err
+
+
 def test_the_command_exits_three_when_it_cannot_narrow(tree: Tree, capsys):
     tree.write("ansible/inventory/hosts.ini", "[all]\ndaniel-box\ndaniel-pi\n")
     old, new = _refs(tree)

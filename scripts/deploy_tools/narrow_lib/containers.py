@@ -35,6 +35,7 @@ from typing import NamedTuple
 
 from lib.ansible_inventory import containers_entries_in
 from lib.k8s_roles import OWNER_VALUES
+from lib.narrow_git import same_value
 from lib.render_guard import entry_tags
 
 _MENTION = re.compile(r"(?<!\w)containers_list(?!\w)")
@@ -258,7 +259,7 @@ def changed_fields(
             key
             for key in set(entry) | set(old[name])
             if key not in DEPLOY_MECHANICS_FIELDS
-            and entry.get(key) != old[name].get(key)
+            and not same_value(entry.get(key), old[name].get(key))
         )
         if keys:
             changed[name] = keys
@@ -398,7 +399,7 @@ def entry_change_tags(
             f" via {path}"
         )
     for name, entry in sorted(new.items()):
-        if old.get(name) != entry:
+        if not same_value(old.get(name), entry):
             found = set(entry_tags(entry))
             explain(
                 f"narrow: containers_list/{name} -> {','.join(sorted(found))} via {path}"
