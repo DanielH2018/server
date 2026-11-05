@@ -16,6 +16,7 @@ the estate would go quiet rather than loud.
 The list is deliberately explicit rather than a `files/*.py` glob: nothing on disk stops a
 future test file from landing in `files/` instead of the sibling `tests/` directory, and if
 one did, it must not reach the image. This test is what keeps the explicit list honest.
+`CHECKOUT_ONLY` names the modules that stay off the list, and no shipped module may import one.
 
 A module is identified by its dotted path under `files/` (`bridge/config.py` is
 `bridge.config`), and the ship list carries paths relative to `files/`, so the census sees a
