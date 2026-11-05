@@ -55,14 +55,6 @@ class Sources:
         """Total log lines for `selector` over `window`, or None when no stream matches."""
         return bridge.net.loki_count(self.cfg, selector, window, opener=self.opener)
 
-    def loki_lines(
-        self, logql: str, window_s: int, limit: int
-    ) -> list[tuple[int, str]]:
-        """The raw lines matching `logql` over the last `window_s` seconds, oldest first."""
-        return bridge.net.loki_lines(
-            self.cfg, logql, window_s, limit, opener=self.opener
-        )
-
     def get_json(self, url: str, headers: dict[str, str] | None = None) -> JsonValue:
         """GET `url` and parse the JSON body. An HTTPError is re-raised with its `code` intact."""
         return bridge.net._get_json(url, headers, opener=self.opener)

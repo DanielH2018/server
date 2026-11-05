@@ -315,6 +315,12 @@ tokens a week later.
   reading with `pytest_shard_runner_weights.json`. At `STALE_WEIGHT_FLOOR_SECONDS` and
   `STALE_WEIGHT_FAIL_RATIO` or more of CI's seconds, it keeps the recorded weight and names the
   module in the journal under the tag `docs-refresh`.
+- **Why a new row can hold CI's seconds (#7136).** `--record-missing` applies the same comparison
+  to a new row, which has no recorded weight to keep. It writes the module's seconds from
+  `pytest_shard_runner_weights.json` and names the module in the journal. Writing no row would
+  leave the module unweighted, so every tick would measure it twice for as long as the local cost
+  lasts. The row stays stable: `--refresh-drifted` refuses to raise it, and `assign` packs the
+  module on the runner table regardless.
 - **A red suite is not a case degradation saves**: the script runs the suite before its commit
   and exits 1 on a failure, because no prek hook runs the suite: #2827 moved the `pytest` hook
   to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine and the measurement alone

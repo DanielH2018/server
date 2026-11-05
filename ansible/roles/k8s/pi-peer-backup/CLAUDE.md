@@ -69,9 +69,8 @@ replaced the retired Kopia scope for the Pi.
   cluster outage silences the CronJob and every rule that reads it. See
   `docs/healthchecks-io-deadman.md`. The Kuma push monitor went at M6 batch B7's Cutover-1a and
   the push at Cutover-2. The script still writes its verdict to stdout in the host crons'
-  syslog shape (`<ts> <pod> pi-peer-backup: status=… `), so monitor-bridge's Swallowed Push
-  Verdicts check reads this pusher through its `{container="pi-peer-backup"}` selector (#1943)
-  until C-7 deletes it. **What the verdict means:** "the nightly 23:00 run happened," not "some
+  syslog shape (`<ts> <pod> pi-peer-backup: status=… `), and
+  `probe.py loki-query '{container="pi-peer-backup"}'` reads it. **What the verdict means:** "the nightly 23:00 run happened," not "some
   run happened recently." The gate run below skips the ping and the export, so a routine
   promotion can't mask a missed scheduled firing or page from a deploy-time run instead of the
   backup itself. `configarr` takes the OPPOSITE position: its health reader counts a gate run

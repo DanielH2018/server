@@ -6,8 +6,8 @@ loki_homelab_k8s_alloy_image: grafana/alloy:v1.20.1@sha256:2aa2099af76c0098d4af7
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the log store the Alert History reconstruction, the ruler's own rules
-# (homelab-logs) and monitor-bridge's remaining LogQL checks (swallowed_verdicts, the
-# workload log arm, the HA ban arm) read from — a broken deploy blinds those without
+# (homelab-logs) and monitor-bridge's remaining LogQL check (the HA ban arm) read from
+# — a broken deploy blinds those without
 # paging about it. ALSO Recreate + a PVC (loki-homelab-data) on its
 # own state, which compounds the risk but isn't the primary reason.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]

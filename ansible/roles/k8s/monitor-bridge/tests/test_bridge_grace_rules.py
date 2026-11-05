@@ -10,8 +10,8 @@ table is the only source for each:
   2026-11-02 ruling named, so a row that loses its grace,
   or a row that gains a `for:` on top of an in-body streak, fails;
 - no such rule carries `requires`, since a `startup_grace` row names no gate;
-- severity follows the row's `critical` flag, and `swallowed_verdicts` is the warning that
-  stays on `service: monitor-bridge` and names no `verify` label.
+- severity follows the row's `critical` flag, and `service` names the thing checked, never the
+  bridge.
 
 Run: uv run pytest ansible/roles/k8s/monitor-bridge/tests/test_bridge_grace_rules.py
 """
@@ -30,9 +30,6 @@ GRACE_FOR = "10m"
 # 07:44Z, and so carry `for: 10m` without being `startup_grace` rows (operator ruling 2026-11-02).
 # Named, not derived: a fourth row that wants a `for:` has to be added here in a reviewed PR.
 REBOOT_ROWS = frozenset({"b2_reachable", "b2_storage", "host_packages"})
-# The `service` label names the thing checked (operator ruling, 2026-10-23), except for the one
-# row whose subject is the bridge's own log read.
-BRIDGE_SERVICE_ROW = "swallowed_verdicts"
 
 
 def all_rules() -> list[dict]:
@@ -67,14 +64,13 @@ def for_problems(rules: list[dict]) -> list[str]:
     return problems
 
 
-def test_the_family_is_the_six_startup_grace_rows_the_exporter_rules_cover():
+def test_the_family_is_the_five_startup_grace_rows_the_exporter_rules_cover():
     assert {r.name for r in family()} == {
         "n8n",
         "bazarr",
         "prowlarr_indexers",
         "scrutiny",
         "speedtest",
-        "swallowed_verdicts",
     }
 
 
@@ -128,14 +124,9 @@ def test_severity_follows_the_rows_critical_flag():
         ), row.name
 
 
-def test_service_names_the_thing_checked_and_swallowed_verdicts_names_the_bridge():
+def test_service_names_the_thing_checked():
+    # Operator ruling, 2026-10-23.
     rules = all_rules()
     for row in family():
         [rule] = rules_for(row.name, rules)
-        service = rule["labels"]["service"]
-        if row.name == BRIDGE_SERVICE_ROW:
-            assert service == "monitor-bridge"
-            assert rule["labels"]["severity"] == "warning"
-            assert "verify" not in rule["labels"]
-        else:
-            assert service != "monitor-bridge", row.name
+        assert rule["labels"]["service"] != "monitor-bridge", row.name

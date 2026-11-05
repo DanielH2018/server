@@ -53,10 +53,7 @@ TIMEOUT = int(os.environ.get("CONFIGARR_KUBECTL_TIMEOUT_S", "30"))
 # kube-state-metrics exports to Prometheus. Empty exports nothing.
 VERDICT_CONFIGMAP = os.environ.get("CONFIGARR_VERDICT_CONFIGMAP", "")
 # The pod log is the evidence, in the `<ts> <host> <tag>: <message>` shape rsyslog gave the host
-# script's `logger -t` lines (the H2 plan's *Evidence goes to stdout*). monitor-bridge's
-# Swallowed Push Verdicts check parses exactly two tokens before the tag, so a bare
-# `<tag>: <message>` line would match its LogQL and never count (#5569). The check reads
-# this line as a landed sibling, which is harmless: it pages only on a failed push.
+# script's `logger -t` lines (the H2 plan's *Evidence goes to stdout*).
 TAG = "configarr-health"
 
 

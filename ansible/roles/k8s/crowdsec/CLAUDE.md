@@ -105,8 +105,7 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
   remote allowlist, AppSec verify and home allowlist verdicts as gauges on `/metrics` for the
   `pod-producers` rules, and pushes nothing to Kuma since M6 batch B6b's Cutover-2.
   Read the jobs with `probe.py loki-query '{container="crowdsec-jobs"}'`. The prefix is
-  the host crons' syslog shape, so monitor-bridge's Swallowed Push Verdicts and `probe.py
-  alerts` read this container as they read the host crons.
+  the host crons' syslog shape.
 - **Only the sidecar holds a Kubernetes token.** The pod does not automount one; a projected
   volume at `/var/run/crowdsec-jobs` reaches the sidecar alone, and `kubectl` finds it through
   the kubeconfig in the `crowdsec-jobs` ConfigMap. Its Role reads every homelab pod's log,

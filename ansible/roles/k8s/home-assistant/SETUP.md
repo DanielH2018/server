@@ -36,10 +36,10 @@ deploy.** Flux applies the role (`owner: flux`), so merge the change and `promot
 | Aqara FP300 presence sensor | Zigbee2MQTT | `binary_sensor.aqara_fp300_presence` / `_pir_detection`, `sensor.aqara_fp300_{illuminance,temperature,humidity,battery,target_distance}` |
 | Aqara T1 light sensor (GZCGQ11LM) | Zigbee2MQTT (Z2M name `Aqara T1`) | `sensor.aqara_t1_{illuminance,battery,voltage}`, `number.aqara_t1_detection_period` — drives the auto-light lux gate (`< 90` lux) since 2026-09-01 |
 | AirGradient ONE air monitor | AirGradient (local) | `sensor.bedroom_airgradient_one_{carbon_dioxide,pm2_5,voc_index,nox_index,temperature,humidity}` |
-| DREO tower fan | `dreo` (HACS, cloud) | `fan.tower_fan` |
+| DREO tower fan | `dreo` (Marketplace, cloud) | `fan.tower_fan` |
 | APC UPS | NUT | (power monitoring) |
 | Pixel 9 Pro + Pixel Watch 3 | HA companion apps | `person.daniel`, `device_tracker.{pixel_9_pro,pixel_watch_3}`, `sensor.pixel_9_pro_{do_not_disturb_sensor,sleep_duration}`, `sensor.pixel_watch_3_next_alarm`, `binary_sensor.pixel_watch_3_bedtime_mode`, `notify.mobile_app_pixel_9_pro`, `notify.mobile_app_pixel_watch_3` |
-| Adaptive Lighting | HACS | `switch.bedroom_adaptive_lighting_bedroom` (master), `switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom` |
+| Adaptive Lighting | Marketplace | `switch.bedroom_adaptive_lighting_bedroom` (master), `switch.adaptive_lighting_bedroom_adaptive_lighting_sleep_mode_bedroom` |
 
 ---
 
@@ -47,7 +47,7 @@ deploy.** Flux applies the role (`owner: flux`), so merge the change and `promot
 
 These are **not** captured by `deploy.yml` — they're device/app/UI state:
 
-1. **HACS integrations** — install **Adaptive Lighting** and **DREO** via HACS *before* deploying
+1. **Marketplace integrations** — install **Adaptive Lighting** and **DREO** via Marketplace *before* deploying
    (a full HA restart loads them; the deploy does that). `configuration.yaml` declares the
    `adaptive_lighting:` block.
 2. **Zigbee** — pair the bulbs, Tap Dial, and FP300 in the Z2M UI; name them (Lamp / Left Light /
@@ -104,7 +104,7 @@ of use:
 - **`docs/alerts-and-notifications.md`** — threshold alerts, `bedroom_notify` routing, away-hold,
   UPS/CO2/sensor-offline/Zigbee-bridge alerts.
 - **`docs/climate-and-air.md`** — fan control, the dashboard, outdoor AQI and the window advisor.
-- **`docs/platform.md`** — auth, HACS, entity naming, the PVC, pod networking.
+- **`docs/platform.md`** — auth, Marketplace, entity naming, the PVC, pod networking.
 - The file headers in `files/automations/*.yaml` and `files/scripts/*.yaml` carry the per-file
   rationale (e.g. `system.yaml`'s header on why the Zigbee-bridge alert exists alongside the
   per-device offline alert).

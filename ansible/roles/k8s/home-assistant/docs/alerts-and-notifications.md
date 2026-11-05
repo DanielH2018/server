@@ -72,7 +72,7 @@ that reports rather than actuates.
   `bedroom_notify` + a case in the dispatcher.
 - **Update-available digest (since 2026-06-18).** `automation.update_available_digest` (homelab-wide,
   no `bedroom_` prefix) — Sunday 10:00, notifies a digest of any `update.*` entity that is `on`
-  (Zigbee/sensor firmware + HACS integrations — the gap Renovate doesn't cover; LSIO container HA has
+  (Zigbee/sensor firmware + Marketplace integrations — the gap Renovate doesn't cover; LSIO container HA has
   no `update.home_assistant_*`). Generic over `states.update | selectattr('state','eq','on')` so new
   devices join automatically; gated to only fire when ≥1 update is pending. **Notify-only — never
   auto-flashes.** Routine via `bedroom_notify`. Zigbee versions/names are opaque (build ints / IEEE)
