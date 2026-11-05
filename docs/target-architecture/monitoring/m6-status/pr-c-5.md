@@ -4,8 +4,12 @@ Tracked by [#7173](https://github.com/DanielH2018/server/issues/7173). C-5 retir
 `kuma_status_page_sync_push_token`, `prometheus_kuma_api_key`, `uptime_kuma_password` and
 `uptime_kuma_username`. A `git grep` on 2026-11-05 found no reader of any of them. `secretq keys`
 on the same day found none of them in a host SOPS file or the cluster file, so the operator's
-`cluster_vars.py write` and `host_secrets.py sync` are expected to change nothing, and the PR waits
-on no host package.
+`cluster_vars.py write` is expected to change nothing.
+
+The operator runs `host_secrets.py check` rather than `host_secrets.py sync`. `sync` re-encrypts
+even with an unchanged key set, and a host file ships in its host package, so committing one
+would make the landing wait on that host for no change in content. Without a host file in the
+commit, the PR waits on no host package.
 
 The code half adds the four names to `git_dates.RETIRED`. It deletes
 `sops_io.malformed_push_tokens` and `cluster_vars.py`'s `_push_token` refusal, as the plan assigns,
