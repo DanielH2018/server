@@ -269,7 +269,7 @@ gate 3 needs the API server up.
    drill on daniel-box runs `runbook_gates.py etcd-restore --gate 3` against the snapshot it just
    listed, and treats any non-zero exit — 69 included — as a drill failure (#2420). So a k3s
    change to the `ETCDSnapshotFile` CR, or a loss of the read-only ServiceAccount's access to
-   it, shows up on the **etcd Restore Drill** tile within a week rather than on the day you
+   it, fires `EtcdRestoreDrillFailing` within about a week rather than waiting for the day you
    read this page. The drill cannot run gates 1 and 2: gate 1 reads the stamp that drill
    writes, and gate 2's stamp is taken by hand.
 
