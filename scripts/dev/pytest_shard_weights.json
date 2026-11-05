@@ -833,6 +833,7 @@
  "ansible/tests/setup/test_pi_node_exporter_host_unit.py": 2.04,
  "ansible/tests/setup/test_pi_recovery_restarts_and_reports.py": 3.55,
  "ansible/tests/setup/test_pi_service_lists_census.py": 6.36,
+ "ansible/tests/setup/test_pi_watchdog_alert.py": 1.1,
  "ansible/tests/setup/test_pi_watchdog_restarts_after_provisioning.py": 0.08,
  "ansible/tests/setup/test_register_producers_carry_consumer_tags.py": 0.37,
  "ansible/tests/setup/test_release_bin_groups_have_no_secrets.py": 0.52,
