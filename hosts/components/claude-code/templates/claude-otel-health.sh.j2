@@ -22,9 +22,9 @@
 #
 # What is deliberately not here any more: the four Deployments plus the DaemonSet readiness arm,
 # which the `k8s-workloads` rules in observability now page (`K8sDeploymentZeroAvailable` and
-# its siblings), and the `otelcol_exporter_send_failed_*` arm, which folded into monitor-bridge
-# as `checks/logs.py:with_export_failures` on the Log Shipper Dropped Entries tile. Nothing here reads Prometheus or the cluster any more, which is
-# why the kubeconfig and the ClusterIP resolution are gone with them.
+# its siblings), and the `otelcol_exporter_send_failed_*` arm, which observability's
+# `OtelCollectorExportFailing` rule pages. Nothing here reads Prometheus or the cluster any more,
+# which is why the kubeconfig and the ClusterIP resolution are gone with them.
 #
 # Push, not poll: this is a host timer that reports its own verdict, as a journal line and a
 # textfile.

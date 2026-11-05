@@ -12,9 +12,11 @@ to the sorted hosts other than HOST that the range's change to it reaches. `{}` 
 does. `land_lib.land_reach.remaining_setup_hosts` holds the derivation that `land.sh`'s note
 reads too, so the tick and the landing name the same hosts.
 
-A role reaches here through a path the range changed under it, or through a file of it reading
-a `secrets.yml` or inventory key the range moved (#6968), which `route_key_readers` makes the
-tick apply. A key moved in `host_vars/<h>.yml` reaches `<h>` alone. When the key derivation
+A role reaches here through a path the range changed under it, through a repo file
+`SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes to it such as the etcd drill script, or through a
+file of it reading a `secrets.yml` or inventory key the range moved (#6968), which
+`route_key_readers` makes the tick apply. A key moved in `host_vars/<h>.yml` reaches `<h>`
+alone. When the key derivation
 fails, stderr says so and the answer keeps the changed paths' reach, because the tick parks on
 that failure before it would record anything from it.
 

@@ -220,7 +220,8 @@ push-token secret remains.
       `etcd_db_size`, `host_temp`, `ups`, `shipper_dropped`, `cluster_targets`,
       `longhorn_volumes`, `pvc_fullness`, `snapshot_headroom` and `kubelet_plugin_readonly`.
       The folded arms on `memory` (`checks/host.py:with_claude_cgroups`) and
-      `shipper_dropped` (`checks/logs.py:with_export_failures`) read Prometheus too.
+      `shipper_dropped` (its export-failure arm, which C-7's `OtelCollectorExportFailing` rule
+      replaced) read Prometheus too.
     - **1 reads Prometheus and a TCP connect:** `pi_pressure`.
       `checks/host_edge.py:check_pi_pressure` ends in `with_pi_ports`, which TCP-connects from
       the bridge to each of the Pi's published ports (`PI_PUBLISHED_PORTS`, rendered from

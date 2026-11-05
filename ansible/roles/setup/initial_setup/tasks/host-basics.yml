@@ -3,15 +3,18 @@
 # The Zero 2 W has 512 MB RAM; apt-show-versions' cache build and
 # `upgrade: dist` OOM-kill mid-dpkg without disk-backed swap, corrupting the
 # package DB (the classic "dpkg was interrupted" deploy hang). The thrash can
-# also trip the optimize_pi watchdog (max-load-1=24) into rebooting mid-apt,
-# so we stop the watchdog for the run. This lives here, not in optimize_pi, because optimize_pi
-# runs LAST in initial_setup.yml — too late to protect these apt tasks.
+# also trip the watchdog (`max-load-1 = 24`, hosts/components/pi-tuning/) into rebooting mid-apt,
+# so we stop the watchdog for the run.
 #
 # The stop notifies a handler that starts the daemon again, because handlers run at the end of
-# the play whichever tags were selected. Relying on optimize_pi's own `state: started` task left
-# the watchdog daemon dead after any run that reached `pi-swap` without the `watchdog` tag:
+# the play whichever tags were selected. A `state: started` task behind a `watchdog` tag left
+# the watchdog daemon dead after any run that reached `pi-swap` without that tag:
 # the 2026-09-27 23:28 run stopped it, wd_keepalive took over the device, and the daemon's load
 # test stayed off for four days (#3241).
+#
+# The stop reports `changed` even on a stopped daemon, because Ansible fires a handler only on
+# `changed`. Reporting `ok` there would leave a daemon that an interrupted run stopped dead through
+# every later run (#7202).
 - name: Gather service facts
   tags: [pi-swap]
   ansible.builtin.service_facts:
@@ -23,6 +26,7 @@
     name: watchdog
     state: stopped
   become: true
+  changed_when: true
   notify: Start Watchdog after provisioning
   when:
     - has_low_memory_board
