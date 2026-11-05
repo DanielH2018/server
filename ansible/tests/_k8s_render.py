@@ -384,7 +384,7 @@ K8S_PLAY_NAME = "Deploy k8s workloads"
 def deploy_play() -> dict:
     """deploy.yml's k8s play, selected by its exact name.
 
-    deploy.yml opens with the Docker play for the Pi, so the k8s play is not the first. An
+    deploy.yml opens with the inert Docker play, so the k8s play is not the first. An
     exact name rather than a substring, so a second play with `k8s` in its name cannot be
     picked up in its place.
     """

@@ -33,7 +33,7 @@ work already executed.
 
 ```
 ansible/          # Playbooks, roles, inventory, templates   ← EDIT HERE
-  deploy.yml          # Deploy playbook — a Docker play (no entries) + a k8s play
+  deploy.yml          # Deploy playbook — a k8s play (dependency-ordered) + a Docker play with no entries
   k3s-bringup.yml     # Cluster foundation (k3s, Longhorn, Traefik CRDs, …)
   initial_setup.yml   # Host hardening / bootstrap
   roles/k8s/          # One role per k8s workload (manifests rendered from templates)
@@ -98,11 +98,12 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 `deploy.yml` runs two plays over the host's `containers_list`, split by each entry's
 `platform:` key:
 
-- **Docker play** (`platform: docker`, which a missing key also reads as) — runs no role on any
-  host, because every `containers_list` entry is `platform: k8s`.
-  `scripts/validate/compose_templates.py` refuses any other entry. The Pi's Docker services are
-  `compose_services` entries that its `homelab-daniel-pi` package deploys, so `deploy.yml` does
-  not reach them.
+- **Docker play** (`platform: docker`) — deploys nothing, because no host lists a Docker entry:
+  `scripts/validate/compose_templates.py:undeployed_docker_entries` refuses one. The Pi's
+  containers are `compose_services` entries that its `homelab-daniel-pi` package deploys, so
+  `deploy.yml` never starts them. The Pi's ordering, docker-proxy before autoheal and alloy, is
+  each service file's `depends_on`, and
+  `ansible/tests/deploy/test_platform_filter_real_inventory.py` pins it.
 
 - **k8s play** (`platform: k8s`) — toposorts `roles/k8s/<name>` with `build_k8s_dep_map` /
   `toposort_containers` (`ansible/filter_plugins/toposort.py`, unit-tested in
@@ -116,7 +117,7 @@ namespace. Where policies do exist, **ingress** rules are enforced; **egress** r
 Both plays run against the host named by `-e target=` — but `daniel-server` and `daniel-box`
 are `ansible_connection=local` in `hosts.ini`, so `-e target=` only selects whose *variables*
 to use while tasks still execute locally. A pre-task refuses that case outright. Only
-`daniel-pi` is genuinely remote, so the setup plays reach it with `-e target=daniel-pi`.
+`daniel-pi` is genuinely remote, so the setup plays' `-e target=daniel-pi` works as it reads.
 
 ```bash
 uv run ansible-playbook ansible/deploy.yml --tags "<service>"          # deploy one service (+ unmet deps)
@@ -183,6 +184,5 @@ doesn't matter — the k8s play toposorts on derived Traefik-CRD and authelia ed
 the name.
 
 For the Pi's Docker services, the `new-container` skill adds a `pi-compose` service: a
-`compose_services` entry in `host_vars/daniel-pi.yml`, a compose file under
-`hosts/components/pi-compose/services/<name>/`, and any secrets. See `CLAUDE.md` → "Adding a
-New Service".
+`compose_services` entry in `host_vars/daniel-pi.yml` and the service's compose file. See
+`CLAUDE.md` → "Adding a New Service".

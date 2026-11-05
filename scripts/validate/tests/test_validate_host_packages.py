@@ -9,6 +9,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_host_packages.py
 """
 
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 from lib import proc_testing
@@ -237,7 +238,10 @@ class _Body:
     def __call__(self, request, timeout=None):
         import io
 
-        return io.BytesIO(self.body)
+        class Response(io.BytesIO):
+            headers: ClassVar[dict[str, str]] = {}
+
+        return Response(self.body)
 
 
 def test_a_pin_whose_download_matches_is_placed_in_every_architecture(tmp_path):

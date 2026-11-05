@@ -22,8 +22,8 @@ deliberately reads more than the `entry=`/`run:` field alone — its own test
 `other = "..."` as a valid invocation, which a strict `entry=`-only extraction would miss.
 Field-scoping it to match the guard test would narrow the classifier's coverage.
 
-Import it through the same bootstrap as any other cross-directory `lib` import (repo-root
-CLAUDE.md, *Directory Structure*)::
+Import it through the same bootstrap as any other cross-directory `lib` import (see
+`.claude/rules/python-layout.md`)::
 
     _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
     from lib.invocation_sites import cron_jobs  # noqa: E402

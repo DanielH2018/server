@@ -120,12 +120,14 @@ touching SOPS:
    - Any hardware capability flags a role you plan to deploy expects — e.g. `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `group_vars/all.yml`).
-   - `has_gitops: false` **until the host's first successful manual deploy**. It defaults to
-     `true`, and the `gitops_deploy` role's "Run gitops-deploy once" handler shells a full
-     `uv run ansible-playbook deploy.yml` at the end of §8's `initial_setup.yml` — failing the
-     play if that deploy fails. On a brand-new host that fires before you have ever deployed
-     by hand, so a single bad service takes down the whole OS-hardening run. Flip it to `true`
-     and re-run `--tags gitops_deploy` once §8's `deploy.yml` succeeds.
+   - `has_gitops: false` **until the host's first successful manual deploy**.
+     `group_vars/all.yml` sets the same `false`. Write the line anyway, because
+     `deploy_inventory.declares_no_gitops` reads a host's own file and fails open on an absent
+     key. With `has_gitops: true`, the `gitops_deploy` role's "Run gitops-deploy once" handler
+     shells a full `uv run ansible-playbook deploy.yml` at the end of §8's `initial_setup.yml`,
+     and fails the play if that deploy fails. On a brand-new host that fires before you have
+     ever deployed by hand, so a single bad service takes down the whole OS-hardening run. Flip
+     it to `true` and re-run `--tags gitops_deploy` once §8's `deploy.yml` succeeds.
 
 ## 5. Onboard the host to SOPS
 

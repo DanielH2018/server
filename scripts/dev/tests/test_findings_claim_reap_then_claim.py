@@ -12,6 +12,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_claim_reap_then_claim.py
 
 import json
 
+import pytest
 from _findings_fakes import Fakes, build_tools, facts, make_issue
 
 from dev.findings import main
@@ -213,3 +214,15 @@ def test_claim_refuses_rather_than_reaps_an_operator_claim_read_by_the_agent_use
     capsys.readouterr()
     assert main(["next", "--json"], tools) == 0
     assert json.loads(capsys.readouterr().out) == []
+
+
+def test_claim_help_names_subcommands_that_read_and_release_claims(capsys):
+    tools = build_tools(Fakes())[0]
+    with pytest.raises(SystemExit):
+        main(["claim", "--help"], tools)
+    plain = capsys.readouterr().out
+    for subcommand in ("claims", "reap"):
+        assert f"`{subcommand}`" in plain
+        with pytest.raises(SystemExit) as parsed:
+            main([subcommand, "--help"], tools)
+        assert parsed.value.code == 0

@@ -136,4 +136,4 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
 - **Revoking Claude's two_factor reach** is deleting the `claude-ui` block from
   `templates/config-secret.yaml.j2` and redeploying. The rules are domain-scoped except
   Alertmanager's, which `claude-ui` passes through its `admins` group by the operator's ruling
-  of 2026-10-31 (#6689).
+  of 2026-11-05 (#7249).

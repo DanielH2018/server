@@ -19,7 +19,7 @@ already import them from this module; a script that wants only a path imports
 ``repo_paths`` directly and skips the ``jinja2`` import this module costs.
 
 Imported as ``from lib.render_guard import ...`` after the caller's own ``sys.path``
-bootstrap puts ``scripts/`` on the path (repo-root CLAUDE.md, *Directory Structure*).
+bootstrap puts ``scripts/`` on the path (`.claude/rules/python-layout.md`).
 """
 
 import copy

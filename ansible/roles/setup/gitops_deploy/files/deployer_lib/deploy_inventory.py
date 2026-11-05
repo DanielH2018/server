@@ -168,9 +168,10 @@ def declares_no_gitops(hostvars_text: str | None) -> bool:
     inventory has demoted refuses to tick.
 
     Fails OPEN on everything but an unambiguous top-level `has_gitops: false`: a missing or
-    unreadable host_vars file (None), an absent key (group_vars defaults it to true), `true`,
-    an indented occurrence, and a commented-out line all proceed. A false refusal on the real
-    deployer parks every landing in the fleet, which is strictly worse than one stale tick.
+    unreadable host_vars file (None), an absent key (this reader never consults group_vars, whose
+    default is false), `true`, an indented occurrence, and a commented-out line all proceed. A
+    false refusal on the real deployer parks every landing in the fleet, which is strictly worse
+    than one stale tick.
     """
     if hostvars_text is None:
         return False

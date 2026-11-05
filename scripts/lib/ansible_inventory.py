@@ -63,8 +63,9 @@ def containers_entries_in(data: dict | None) -> list[dict]:
     return [e for e in entries if isinstance(e, dict) and e.get("name")]
 
 
-# The two keys that list the Pi's services (H5): Ansible's Docker play deploys `containers_list`,
-# and the `homelab-daniel-pi` package deploys `compose_services`. A service is in exactly one.
+# The two keys that list the Pi's services (H5): `containers_list` stays empty because nothing
+# deploys a Docker entry, and the `homelab-daniel-pi` package deploys `compose_services`. A service
+# is in exactly one.
 PI_LIST_KEYS = ("containers_list", "compose_services")
 
 

@@ -957,6 +957,8 @@ The banner ends with a triage line of whole `probe.py` commands joined by `or`: 
 
 Three more sections print whether or not anything is unhealthy: the other live Claude sessions
 in this repo, merged worktrees ready to remove, and fan-out worktrees running on another host.
+The hook derives the live-session list from `git worktree list` and `/proc`, not from anything a
+session declares.
 The fan-out section names a batch only within a day of its launch. Older batches whose
 worktree `fanout.py place clean` never removed fold into one count per host, so a run nobody
 cleaned stops listing its batches in every session.
@@ -975,6 +977,27 @@ the turn (issue #2816). Under `claude -p` the Stop hook fires, and a `block` con
 `fanout.py place status` reads the same two patterns from the
 same final text. A batch reads `done` only with a PR URL, `needs-input` with a blocker line and
 `no-pr` otherwise.
+
+## Worktree sessions
+
+The long form of the worktree rules in `CLAUDE.md` → *Parallel Claude Sessions*.
+
+Name the worktree the branch slug you want. `containers-role-cleanup` gets a readable branch and
+`cleanup` doesn't. Accept the `worktree-` prefix: renaming the branch afterwards only detaches it
+from the worktree git has registered.
+
+The Claude Code binary refused 412 Bash commands as "too complex to verify" in the 7 days to
+2026-10-31, at a cost of one turn each (#6732). Literal commands joined by `;`, `&&` or a pipe
+pass, and so does a redirect to a literal path. Two habits avoid most refusals:
+
+- Drop `echo rc=$?`, because the Bash tool reports a non-zero exit itself.
+- For a throwaway script, Write it to a literal `/tmp/<name>.py` path and run that file.
+
+A refusal can quote a `gh --jq` template such as `\(.number)`. Every measured one sat inside one
+of the constructs the root lists, so remove the construct. To avoid the question, build the row
+with `[…] | @tsv` instead of `\(…)`.
+
+A headless `claude -p` batch runs without isolation and draws none of these refusals.
 
 ## `auto-mode-bridge` internals
 
