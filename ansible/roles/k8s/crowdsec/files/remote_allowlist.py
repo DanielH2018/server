@@ -69,10 +69,10 @@ LOG_WINDOW = "6m"
 # daily-used exit costs one rewrite every 3.5 days, not one per run.
 TTL = timedelta(hours=168)
 REFRESH_BELOW = TTL / 2
-# The cap is the bound on the trade-off named in the module docstring. Eight is several times
-# the number of exits one operator uses in a week; hitting it means something is feeding the
-# list that is not the operator, and the DOWN message lists the entries so that can be read.
-CAP = 8
+# The cap is the bound on the trade-off named in the module docstring. The operator ruled 16 on
+# 2026-11-05, after authenticated addresses filled a cap of 8 and it refused a new one. Hitting
+# it means the list needs reading, and the DOWN message lists the entries so that can be done.
+CAP = 16
 # The sidecar's initContainers copy both binaries into the shared `tools` emptyDir
 # (`templates/deployment.yaml.j2`).
 CSCLI = "/tools/cscli"
