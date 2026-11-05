@@ -242,3 +242,37 @@ interactive. Rejected, and the reasons are worth keeping because the proposal re
   with the ingress-routed setup here. It has never been needed: the Zigbee coordinator is
   network-attached (SLZB-06M over TCP), which is also what let the whole smart-home stack move
   hosts at slice 5. Revisit only if you add local hardware.
+
+## Slow rollouts come from the image pull, not the volume
+
+A cold pull of the Home Assistant image caused the October 2026 rollout outages (#4188). The
+Deployment is `Recreate`, so the old pod stopped before the new pod's pull began, and HA was
+down for the whole pull.
+
+- **The 2026.10.0 bump, 2026-10-10.** HA was down for about 28 minutes. Loki's
+  `NodePublishVolume` line for the new pod reads 04:02:41Z. The next pod's reads 04:30:12Z.
+- **The 2026.10.2 bump, 2026-10-17.** The main container read `PodInitializing` from 06:25Z to
+  06:49:30Z. daniel-box received 722 MB more than in the preceding 26 minutes, which is the
+  720 MB image at about 0.46 MB/s.
+- **The longer part of that outage was the rollback, in a path HA no longer takes.** The stuck
+  pods held the volume until 06:50Z, so `k8s/volume-revert` timed out on its detach wait. It
+  had already scaled the Deployment to zero, and HA stayed at zero until 11:57Z. Flux owns this
+  role, so no automated rollback runs here.
+- **The volume was healthy both times.** `config-install` writes to the volume, and it read
+  `Completed` in both stuck pods on 2026-10-17. Longhorn logged no detach until 06:50Z.
+
+The `home-assistant-prepull` Kustomization moves the pull ahead of the restart. Rollouts with it
+were down for about 2 minutes on 2026-10-25 and 2026-10-27, but neither was a large pull: the
+Job lasted under 2 minutes and daniel-box received about 8 MB more than the baseline.
+
+To read a large pull after its Pod events expire, use Prometheus:
+
+- **The pull's length:** `kube_job_status_active{job_name=~"prepull-home-assistant-.*"}`.
+- **The outage's length:** `probe_success{instance=~".*home-assistant.*"}`.
+- **A pull that the pre-pull missed:** `kube_pod_container_status_waiting_reason` reads
+  `PodInitializing` on the main container while
+  `kube_pod_init_container_status_terminated_reason` reads `Completed`. A pod with init
+  containers reports that reason during the main container's pull.
+
+Prometheus had already dropped the 2026-10-10 samples by 2026-11-05, despite its `30d` retention
+time, so read them within about three weeks.
