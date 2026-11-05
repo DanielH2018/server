@@ -126,7 +126,9 @@ Deployment's projected volume mounts every one back at its path under `/app`. On
 module, because the shared role's client-side apply caps each object near 256 KiB and the
 modules total about 700 KB. A module missing from the list kills the pod at import on its next
 roll; `ansible/tests/services/test_monitor_bridge_modules.py` and its mount-layout sibling catch
-that. A module edit changes the render, so the shared role's rollout restart rolls the pod, and
+that. `longhorn_robustness.py` is the exception: only the runbook gates import it, from the
+checkout, so it sits off the list and in that test's `CHECKOUT_ONLY`, and the test fails if a
+shipped module imports it. A module edit changes the render, so the shared role's rollout restart rolls the pod, and
 under Flux the renderer's restart annotation (`RESTART_ANNOTATION` in
 `scripts/renderer/renderer_lib/restart.py`) hashes every ConfigMap the volume names.
 `scripts/renderer/tests/test_renderer_monitor_bridge_script.py` holds the embed, the size and

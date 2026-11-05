@@ -19,7 +19,8 @@ runbook.
 
 This module is the allow-list both sides hold. It stays in monitor-bridge's `files/`, where the
 runbook gates run from the checkout and reach it through a `sys.path` insert of
-`lib.repo_paths.MONITOR_BRIDGE_FILES`. Stdlib only and import-free, so neither side drags the
+`lib.repo_paths.MONITOR_BRIDGE_FILES`. It does not ship in the pod, so no module on
+`monitor_bridge_modules` may import it. Stdlib only and import-free, so neither side drags the
 other's dependencies in.
 """
 
