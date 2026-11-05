@@ -17,4 +17,4 @@ still renders it, and `consumers.py:CROSS_HOST_PUSH_TOKENS` still names it. R4 o
 in the secrets commit that follows its role deletion (`docs/target-architecture/render/r4-delete-k8s-ansible-path.md`,
 *The push token leaves after the role*). After C-5, `grep -c '_push_token:'` prints 1 for both
 `ansible/secret_rotation.yml` and `ansible/vars/secrets.yml`, so exit criterion 2 holds only once
-R4's commit lands.
+R4's commit lands. [#7178](https://github.com/DanielH2018/server/issues/7178) tracks that.
