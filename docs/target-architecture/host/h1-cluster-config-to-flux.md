@@ -2410,8 +2410,7 @@ subject's tests.
   the calls the script makes. Gate 2 reads a stamp on daniel-box's disk, so `land.sh` refuses
   the pin gate elsewhere.
 - **Failure class 8, prose that nothing re-derives.** The `setup/k3s` `CLAUDE.md` contract
-  moves with the actuators, and its ENFORCED node ids move in the same PR. Until G2 retires
-  `docs/facts.lock`, each touched section is re-verified with `fact_status.py verify`.
+  moves with the actuators, and its ENFORCED node ids move in the same PR.
 
 ## Tests and docs that change in the same PR
 
@@ -2615,9 +2614,6 @@ subject's tests.
     - `ansible/preflight.yml` and its tests;
     - `.claude/rules/` and `CLAUDE.md` prose that names `host_vars/daniel-box.yml` as the
       service list.
-- **Every PR that edits a `CLAUDE.md` section citing atoms:** until G2 retires
-  `docs/facts.lock`, run `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'`
-  and commit the lock.
 
 ## Complexity delta
 
@@ -2923,7 +2919,7 @@ from the tree, as noted under H1-R1-16.
 - **H1-R1-24 (medium)** Failure classes 2 and 7 were missing. *Fixed:* both are in Risks with
   their mitigations.
 - **H1-R1-25 (medium)** Docs describing the retired hand applies were not listed. *Fixed:*
-  each one is listed under the PR that retires it, with the `fact_status.py verify` step.
+  each one is listed under the PR that retires it, with the `fact_status.py verify` step. G2's PR 3 has since retired the lock, and #7231 removed this step.
 - **H1-R1-26 (medium)** H1.9's premise about `containers_list` readers was false. *Fixed:*
   H1.9 narrows `preflight.yml`, `_example.yml` keeps its empty list, and C4's removal is said
   to complete with H5.
@@ -2989,7 +2985,7 @@ as noted under X-06. The parts that belong to other slices are cross-slice notes
   the Pi's entries into `hosts/daniel-pi/package.yml` is gone. *Open questions* 4 proposes
   the C4 wording that names H7.
 - **X-21 (medium)** `fact_status.py verify` ran unconditionally. *Fixed:* both steps read
-  "until G2 retires `docs/facts.lock`", which is R4's wording.
+  "until G2 retires `docs/facts.lock`", which is R4's wording. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 ### Round 10 (per-slice adversarial review)
 

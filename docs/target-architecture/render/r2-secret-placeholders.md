@@ -1748,11 +1748,6 @@ remains the gate.
   `ansible/tests/services/`. `docs/homelab-render.md` drops `GUARD_DEFERRED`'s one member.
 - `docs/secret-rotation.md` gains a paragraph per dedicated Secret: rotating its key now means
   rendering that one Secret.
-- Until G2 retires `docs/facts.lock`, when a role `CLAUDE.md` section edited in PRs 1c to 7b
-  gains a backticked path or symbol, that PR runs
-  `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commits the lock.
-  After G2, the PR does neither: G2 deletes the lock, and its `lock-retired` rule fails
-  while the file exists.
 
 ## Complexity delta
 
@@ -2129,7 +2124,7 @@ handed over as cross-slice notes, and this log does not record them as done.
   and that it depends on the `stubs` writer and on stub mode. Open question 9 and a risk ask
   R4 to keep or move both and to edit the CI step in the same PR.
 - **X-21.** Confirmed: G2's `lock-retired` rule fails while `docs/facts.lock` exists. The
-  `fact_status.py verify` step now runs only until G2 retires the lock, in R4's wording.
+  `fact_status.py verify` step now runs only until G2 retires the lock, in R4's wording. G2's PR 3 has since retired the lock, and #7231 removed this step.
 
 Also corrected while editing: the Design said rule 2 catches a sentinel inside a
 `b64encode`. A base64 sentinel leaves no textual fragment, so rule 5 catches it at its

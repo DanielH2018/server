@@ -935,8 +935,7 @@ files that the rows above name only by their Ansible path. Each goes with the PR
   which deletes the library and `kuma_push.py`, so no shipped script can push any more
   (`.claude/rules/python-layout.md`, *A check retires when its subject does*). C-6 rewrites
   the bullet's lead to say that each run writes a check file and neither unit loads a
-  credential. The rewritten bullet names Kuma nowhere and drops the ENFORCED line. It runs
-  `fact_status.py verify` on the section, because the cited test is gone. C-6 retires the test of
+  credential. The rewritten bullet names Kuma nowhere and drops the ENFORCED line. C-6 retires the test of
   the same name in `ansible/tests/services/test_gitops_check_rule_literals.py` the same way,
   with the sentence in `ansible/roles/setup/gitops_deploy/CLAUDE.md` that cites it.
 
@@ -1645,7 +1644,7 @@ reach A6-7a, fail the bijection test and lose its only pager.
       `CLAUDE.md` *Claude Tooling* bullet, `docs/claude-tooling.md`, and the `kuma-drift` steps
       in `.claude/skills/add-secret/SKILL.md`. The facts lint's `vanished-identifier` rule
       flags a backticked `kuma-drift` once B-2 removes it from the code, so B-2 cannot land
-      without them. B-2 runs `fact_status.py verify` on each edited `CLAUDE.md` section.
+      without them.
       `docs/reference/scripts.md` is generated and regenerates on its own, and the
       `evals/review_coverage/` JSON files are history.
 3. **postflight**, in the same PR as item 2, because `postflight.py` imports `kuma_live` and
@@ -2639,9 +2638,7 @@ M4's rules.
 
 ## Tests and docs that change in the same PR
 
-Each PR that edits a cited path also edits the `CLAUDE.md` section citing it, and runs
-`uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` (or `forget` for a removed
-heading), unless G2 has retired `docs/facts.lock` by then. A PR that changes a role's tasks,
+Each PR that edits a cited path also edits the `CLAUDE.md` section citing it. A PR that changes a role's tasks,
 timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.py`.
 
 - **Each Phase A batch.**
@@ -2720,8 +2717,7 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
   `test_probe_monitors.py`). Its replacement detector is `BridgeCheckStale`'s missing-row
   firing case. `test_probe_registry.py` and `test_probe_pi_plane.py` lose their `kuma-drift`
   cases. The root `CLAUDE.md` *Claude Tooling* bullet, `docs/claude-tooling.md` and the
-  add-secret skill's `kuma-drift` steps change here, with `fact_status.py verify` on the
-  edited `CLAUDE.md` section.
+  add-secret skill's `kuma-drift` steps change here.
 - **B-4.** `test_homepage_block_label_overrides.py`.
 - **B-6a.** The render test, in `ansible/tests/services/` beside
   `test_authelia_access_tiers.py`.
@@ -3129,7 +3125,7 @@ Raised: 4 high, 5 medium. Fixed: 9, two of them in part. Refuted in part: 2.
 - **M6-C1-08 (medium)** B-2 deletes `kuma-drift`, but the docs that point readers to it change
   only in B-7. **Fixed in part, refuted in part.** The root `CLAUDE.md` bullet,
   `docs/claude-tooling.md` and the add-secret skill's steps moved into B-2, with
-  `fact_status.py verify`. The facts lint's `vanished-identifier` rule would block B-2
+  `fact_status.py verify`. G2's PR 3 has since retired the lock, and #7231 removed this step. The facts lint's `vanished-identifier` rule would block B-2
   without them. `cli_parser.py`, `subcommands.py` and `pi_plane.py` joined B-2's scope.
   Refuted: `monitors` carries no `--pi` at `70591c307`. `probe_lib/cli_parser.py` adds `--pi`
   only to `targets`, `kuma-drift` and `alerts`. B-2 states what `alerts --pi` selects.

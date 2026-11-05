@@ -48,6 +48,7 @@ LOKI_DEFAULTS = (
 
 FAKE_CURL = """#!/usr/bin/env bash
 set -euo pipefail
+printf '%s\\n' "$*" >>"$CURL_LOG.args"
 out="" url=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -240,3 +241,12 @@ def test_lokitool_unpacks_from_a_zip_at_the_loki_image_tag_is_clean(checkout):
     ), _fetches(checkout)
     tool_dir = checkout / ".git" / "alert-tools" / f"loki-{LOKI_VERSION}"
     assert (tool_dir / ".provisioned").read_text().strip() == f"lokitool-linux-{ARCH}"
+
+
+def test_every_fetch_retries_a_transient_server_error_is_clean(checkout):
+    result = _run(checkout, "promtool", "--version")
+
+    assert result.returncode == 0, result.stderr
+    calls = (checkout.parent / "curl.log.args").read_text().splitlines()
+    assert len(calls) >= 2, calls
+    assert all("--retry 5 --retry-delay 10" in call for call in calls), calls
