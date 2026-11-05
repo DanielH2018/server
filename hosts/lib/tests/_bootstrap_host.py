@@ -30,9 +30,13 @@ AGENT_ENV = {
 }
 
 # Records what the installer was given, then creates the unit its mode names. A case that sets
-# WRONG_UNIT=1 makes it create the other mode's unit, and FAIL_RUNS=n makes its first n runs fail.
+# WRONG_UNIT=1 makes it create the other mode's unit, FAIL_RUNS=n makes its first n runs fail, and
+# HANG_RUNS=n makes its first n runs wait on a child process that does not return.
 INSTALLER = """#!/bin/sh
 echo run >> "$HOMELAB_ROOT/installer.runs"
+if [ "$(wc -l < "$HOMELAB_ROOT/installer.runs")" -le "${HANG_RUNS:-0}" ]; then
+    /bin/sleep 3600
+fi
 if [ "$(wc -l < "$HOMELAB_ROOT/installer.runs")" -le "${FAIL_RUNS:-0}" ]; then
     echo '[ERROR]  Download failed' >&2
     exit 1
