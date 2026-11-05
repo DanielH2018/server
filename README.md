@@ -182,7 +182,6 @@ doesn't matter — the k8s play toposorts on derived Traefik-CRD and authelia ed
 `depends_on:` the entry declares — so add it wherever reads best. Deploy tags derive from
 the name.
 
-For the Pi's Docker services, `ansible/roles/containers/` + the `new-container` workflow
-scaffold a role: a `tasks/main.yml`, a `templates/docker-compose.yml.j2` (Traefik + AutoKuma
-labels, healthcheck, resource limits), an entry in `host_vars/daniel-pi.yml`
-`containers_list`, and any secrets. See `CLAUDE.md` → "Adding a New Container Service".
+For the Pi's Docker services, the `new-container` skill adds a `pi-compose` service: a
+`compose_services` entry in `host_vars/daniel-pi.yml` and the service's compose file. See
+`CLAUDE.md` → "Adding a New Service".
