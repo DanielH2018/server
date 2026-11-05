@@ -885,6 +885,7 @@
  "hosts/components/claude-code/tests/test_takeover_check_install.py": 0.02,
  "hosts/lib/tests/test_bootstrap_anchor.py": 0.0,
  "hosts/lib/tests/test_bootstrap_host.py": 0.15,
+ "hosts/lib/tests/test_bootstrap_host_log2ram.py": 0.12,
  "hosts/lib/tests/test_bootstrap_host_pins.py": 0.0,
  "hosts/lib/tests/test_bootstrap_host_steps.py": 0.6,
  "hosts/lib/tests/test_box_initial_setup_part1.py": 1.73,
