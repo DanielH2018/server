@@ -173,6 +173,9 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
     return dep_map
 
 
+# DECIDED: deploy.yml's Docker play and this filter's `docker` default stay until R4 or H7 deletes
+# that file's last play. The play runs no role, and its snapshot pre_task feeds the k8s play.
+# Long form: docs/target-architecture/host/h5-pi-compose.md, H5-R1-06.
 def filter_by_platform(containers_list, platform="docker"):
     """Select containers_list entries targeting a given deploy platform.
 
