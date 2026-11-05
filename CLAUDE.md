@@ -36,7 +36,7 @@ review — routes through the skill listing rather than this table.
 |---|---|
 | Adding / changing a service (k3s — the default) | `/new-k8s-service` skill (it scaffolds with `scripts/dev/new_k8s_service.py`; no sibling copying) · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract every k8s role includes (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them) |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands) |
-| Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once · `findings.py claims` shows who holds what, `findings.py reap` releases the claims whose worktree is gone. Claim before you start: `findings.py claim <n> --worktree <branch>`. A claim `next` marks stale is reaped by `claim` itself, so a refusal there means the claim is LIVE — find the other session before you take the issue. |
+| Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once. Claim before you start: `findings.py claim <n> --worktree <branch>`; `findings.py claim --help` says what a refusal means and which subcommands read and release claims. |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** (a file carrying a `generated_from:` banner); a hook denies the write. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
@@ -188,78 +188,51 @@ One directive per tool. `docs/claude-tooling.md` is the full reference, and a ho
 denies prints its own reason.
 
 - **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt);
-  `--list` prints every subcommand. `monitors` answers "what is down", from Prometheus'
-  `ALERTS` and Alertmanager. **`health <svc>` is the k8s post-deploy gate**: its argument is a deploy
-  TAG, and it gates the PRODUCTION cluster unless you pass `--cluster stage`. `ha automation
-  <id-or-alias>` resolves the alias-slug≠id trap.
-- **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a
-  service's UI — the half `probe.py health` structurally cannot cover.
-- **`rootq`** — reads root-only host state through one read-only sudoers grant to the
-  operator's account, on daniel-box and daniel-server: redacted nftables, ufw, `sshd -T`,
-  root's crontab and netplan, and the `stat`, SHA-256 or repo match of an allowlisted file. A session gets no other sudo, and the
-  agent user gets none at all, so never probe with `sudo -n true`.
+  `--list` prints every subcommand. **`health <svc>` is the k8s post-deploy gate**, and its
+  argument is a deploy TAG.
+- **`homelab-ui` MCP server** — a headless Chromium that can *see* a service's UI, which
+  `probe.py health` cannot.
+- **`rootq`** — reads root-only host state on daniel-box and daniel-server through one read-only
+  sudoers grant to the operator's account. A session gets no other sudo, and the agent user gets
+  none at all, so never probe with `sudo -n true`.
 
 ## Review & Memory Hygiene (making judgment cumulative)
 The rules for promoting a review learning into memory live in the `memory-consolidation` and
 `homelab-review` skills, which run at the moment they apply.
 - **Mark a settled trade-off `# DECIDED:` at the line it governs.** A decision recorded only in a
-  memory file or a commit message is a decision every future reviewer re-derives; one written as a
-  comment where the code makes the trade-off is one they trip over before they spend an hour on it.
-  Write the marker, then the reasoning, and point at the long form rather than at a line number
-  that drifts. Cite a marker by its text, not its line: `grep -rn 'DECIDED: `origin\[:8\]`'
-  ansible/roles/setup/gitops_deploy/files/` finds the live example wherever it lands, and it
-  reads `a fixed slice while volume-snapshot names with --short=8, a MINIMUM width … Full
-  analysis in this role's CLAUDE.md.` Reviewer briefs grep for it
-  (`.claude/skills/homelab-review/SKILL.md`, step 3), so the marker is what carries the decision to
-  the agent that would otherwise re-open it. It is a prior, not a verdict: contradict one with new
-  evidence at a cited `file:line` and name the marker you are contradicting.
+  memory file or a commit message is a decision every future reviewer re-derives. Reviewer briefs
+  grep for the marker (`.claude/skills/homelab-review/SKILL.md`, step 3). `docs/adr/index.md` has
+  how to write, cite and contradict one.
 - **A decision recorded in a Claude artifact moves into `docs/` in the PR that acts on it.**
   `prune-artifacts.sh` deletes an artifact 30 days after its last update, and artifacts are in
-  neither git nor the break-glass bundle. When an artifact holds a plan or a decision that
-  outlives the session, write its substance into `docs/` or `docs/adr/` and keep the artifact as
-  a rendering. `docs/claude-agent-user.md` is the worked example (#3657).
+  neither git nor the break-glass bundle. Write the substance into `docs/` or `docs/adr/`.
+  `docs/claude-agent-user.md` is the worked example (#3657).
 - **A finding you will not fix this session is filed, not remembered.** Run `findings.py open`
-  before the session ends (flags: `findings.py <cmd> --help`; the `homelab-review` skill covers
-  the review-specific ones) — for a review finding, a remediation the fix-skeptic refused, or an
-  improvement you noticed while doing something else. List the issue numbers in the end-of-job
-  report. A memory file, `PLANS.md`, or a "3 pending" line in the session notes has no status
-  field and no owner; an issue closes from the fixing PR's `Closes #<n>`. Refuted findings close
-  with `--refuted --reason` and a true finding the operator decided to live with closes with
-  `--accepted --reason`; the wrapper refuses to reopen either, so the do-not-re-flag list does
-  not carry them. Open items are `findings.py list`'s register, not a memory file's.
+  before the session ends, and list the issue numbers in the end-of-job report. Open items are
+  `findings.py list`'s register, not a memory file's. `findings.py <cmd> --help` has the flags,
+  and `findings.py close --help` has what each way of closing means.
 
 ## Parallel Claude Sessions
 Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout.
 
 - **One worktree per session, one PR per session.** Need a second piece of work? Open a
   second worktree rather than stacking it on the first.
-- **Name the worktree the branch slug you want.** `EnterWorktree` derives the branch from
-  the worktree name (prefixing `worktree-`), so `containers-role-cleanup` gets a readable
-  branch and `cleanup` doesn't. Accept the prefix; renaming the branch afterwards only
-  detaches it from the worktree git has registered.
+- **Name the worktree the branch slug you want.** `EnterWorktree` derives the branch from the
+  worktree name, prefixing `worktree-`.
 - **In an isolated session or Agent subagent, write each Bash command so the Claude Code
   binary can verify it stays inside the worktree.** The binary refuses a command it cannot
-  verify ("too complex to verify"), and no hook can lift the refusal. 412 refusals in the 7
-  days to 2026-10-31 cost a turn each (#6732). Open a compound command with `cd <your
-  worktree> &&`. Literal commands joined by `;`, `&&` or a pipe pass, and so does a redirect
-  to a literal path. Three kinds of construct draw the refusal, with or without the prefix:
+  verify ("too complex to verify"), and no hook can lift the refusal. Open a compound command
+  with `cd <your worktree> &&`. `docs/claude-tooling.md`, *Worktree sessions*, has the rest.
+  Three kinds of construct draw the refusal, with or without the prefix:
   - **A shell expansion:** `$VAR`, `$TMPDIR`, `$?`, `$(…)`, backticks or brace expansion
-    `{a,b}`. Write the literal path. Drop `echo rc=$?`, because the Bash tool reports a
-    non-zero exit itself.
+    `{a,b}`. Write the literal path.
   - **Control flow:** a `for` or `while` loop, a shell function, a `( … )` subshell, a
     trailing `&` or a `<(…)`. Make one call per item, or run a script file that holds the loop.
   - **A here-document:** `cat > f <<'EOF'` or `python3 - <<'EOF'`. Write file content with
-    the Write tool. For a throwaway script, Write it to a literal `/tmp/<name>.py` path and run
-    that file.
-
-  A refusal can quote a `gh --jq` template such as `\(.number)`. Every measured one sat
-  inside one of the constructs above, so remove the construct. To avoid the question, build
-  the row with `[…] | @tsv` instead of `\(…)`. A headless `claude -p` batch runs without
-  isolation and draws none of these refusals.
+    the Write tool.
 - **The SessionStart banner lists the other live sessions** and the paths each has changed
-  vs `origin/master`. It's derived from `git worktree list` and `/proc`, not from anything a
-  session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,
-  `group_vars/`, a shared role) rather than assuming you're alone.
+  vs `origin/master`. Check it before editing a file several sessions are near (`CLAUDE.md`,
+  `group_vars/`, a shared role).
 - **Never pass `discard_changes` to `ExitWorktree`** when it refuses a merged worktree. That is
   how unlanded work is lost. Retiring a worktree is the `worktree-cleanup` skill.
 

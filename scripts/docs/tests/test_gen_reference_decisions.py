@@ -207,6 +207,12 @@ def test_markdown_opens_with_the_provenance_banner(tmp_path):
     assert "generated_from: scripts/docs/reference/decisions.py" in out
 
 
+def test_markdown_names_the_adr_index_as_the_home_of_the_marker_form(tmp_path):
+    _write(tmp_path, "a.py", "# DECIDED: use the retry flag.\n")
+    out = g.render_markdown(_rows(tmp_path))
+    assert "at the line it governs, per `docs/adr/index.md`" in out
+
+
 def test_markdown_renders_the_duplicates_warning(tmp_path):
     _write(tmp_path, "a.py", "# DECIDED: use the retry flag.\n")
     _write(tmp_path, "b.py", "# DECIDED: Use the retry flag.\n")
@@ -259,9 +265,8 @@ def test_live_tree_yields_at_least_100_markers():
 def test_live_tree_includes_the_gitops_deploy_origin_slice_marker():
     """A named member the census must find, per the same CLAUDE.md rule.
 
-    This is the marker CLAUDE.md's own "Review & Memory Hygiene" section cites as the
-    worked example (`origin[:8]` is a fixed slice ... a MINIMUM width). It sits in
-    `deploy_handlers.py`, beside `_rollback_k8s`, which is the code that makes the trade-off —
+    This is the marker `docs/adr/index.md` cites as the worked example (`origin[:8]` is a fixed
+    slice ... a MINIMUM width). It sits in `deploy_handlers.py`, beside `_rollback_k8s`, which is the code that makes the trade-off —
     a marker travels with that code rather than with the module it was written in.
     """
     rows = _live_rows()
