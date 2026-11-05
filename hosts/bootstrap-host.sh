@@ -299,7 +299,9 @@ fetch() {
 # Step 4: the one-time host steps, each behind a guard that reads the state first.
 if [ "$host" = daniel-pi ]; then
     purge=""
-    for package in openvswitch-switch-dpdk openvswitch-switch openvswitch-common snapd fwupd; do
+    # appstream's apt hook thrashes the 512 MB board for an hour on every apt-get update
+    # (#7163, docs/pi-host-tuning-record.md).
+    for package in openvswitch-switch-dpdk openvswitch-switch openvswitch-common snapd fwupd appstream; do
         if dpkg-query -W -f='${Status}' "$package" 2> /dev/null | grep -q 'install ok installed'; then
             purge="$purge $package"
         fi
