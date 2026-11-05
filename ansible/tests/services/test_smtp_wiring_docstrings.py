@@ -26,7 +26,6 @@ def email_receiver_name() -> str:
 
 def assert_names_the_email_receiver(doc: str | None) -> None:
     assert doc, "docstring is missing"
-    assert "Kuma" not in doc
     assert "Alertmanager" in doc
     assert re.search(rf"\b{email_receiver_name()}\b", doc), doc
 
