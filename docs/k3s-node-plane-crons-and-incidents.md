@@ -208,9 +208,9 @@ deployer's own `behind_since`, so nothing else says the cluster is still running
 `release-staleness-check.prom`, which the Prometheus rule `ReleaseStalenessCheckFailed` reads,
 while any service's applied commit sits behind `origin/master` under its role paths, or under an
 inventory key or shared macro its render reads (#1993). A merge younger than `k3s_release_staleness_grace_minutes` is named in the
-`up` message and not counted, so a landing still deploying its own merge does not page. The full
-account, including why it runs as `sys_user` and not root, is the `#947` bullet in
-`ansible/roles/setup/gitops_deploy/CLAUDE.md`.
+`up` message and not counted, so a landing still deploying its own merge does not page. The
+comment on the check's release task in `ansible/roles/setup/k3s/tasks/health-crons.yml` says why it
+runs as `sys_user` and not root.
 
 **The DOWN message carries the stale services' names and a count, not their reasons** (#2013). A
 refused narrowing marks the whole fleet stale, and the per-service reasons then ran to ~7,500
