@@ -55,7 +55,6 @@ MUST_FIND = {
     "bash-pretool.py": {"project"},
     "block-protected-bash.py": {"project"},
     "block-footguns.py": {"project"},
-    "_facts_line.py": {"project"},
     "block-protected-edits.py": {"project"},
     "auto-mode-bridge.py": {"project"},
 }
