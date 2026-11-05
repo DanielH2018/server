@@ -303,8 +303,9 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **The cluster file is generated, never hand-edited.** `cluster-vars.sops.env` sits in
-  `ansible/vars/`, and only `cluster_vars.py write` writes it. `docs/secret-rotation.md` owns
-  the mechanics.
+  `ansible/vars/`, and only `cluster_vars.py write` writes it. That command decrypts, so only
+  the operator or the rotation cron runs it, never an agent. `docs/secret-rotation.md` owns the
+  mechanics.
 - **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
   secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
   **`add-secret` skill** has the onboarding through `ansible/bootstrap.yml`.
