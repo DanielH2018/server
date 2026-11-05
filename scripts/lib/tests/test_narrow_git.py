@@ -15,6 +15,11 @@ def test_a_file_that_does_not_parse_refuses():
         mapping_at("---\nbad: [unclosed\n", "defaults/main.yml")
 
 
+def test_a_timestamp_shaped_value_that_is_no_date_refuses():
+    with pytest.raises(CannotNarrow, match="does not parse"):
+        mapping_at("d: 2026-13-45\n", "defaults/main.yml")
+
+
 def test_a_file_that_is_not_a_mapping_refuses():
     with pytest.raises(CannotNarrow, match="is not a mapping of keys"):
         mapping_at("---\n- a\n- list\n", "defaults/main.yml")

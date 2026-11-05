@@ -73,7 +73,8 @@ def mapping_at(text: str, label: str) -> dict:
     """
     try:
         loaded = yaml_fast.safe_load(text) or {}
-    except yaml.YAMLError as exc:
+    # The constructor raises a bare ValueError for a timestamp-shaped scalar (`2026-13-45`).
+    except (yaml.YAMLError, ValueError) as exc:
         raise CannotNarrow(f"{label} does not parse: {exc}") from exc
     if not isinstance(loaded, dict):
         raise CannotNarrow(f"{label} is not a mapping of keys")
