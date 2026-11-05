@@ -61,7 +61,7 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import ansible_local_temp
 from lib.cli_help import ArgumentParser
 from lib.git import git
-from lib.narrow_git import CannotNarrow, same_parsed_yaml, show_at
+from lib.narrow_git import CannotNarrow, same_parsed_yaml, same_value, show_at
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 from deploy_tools import digest_provable
@@ -233,11 +233,13 @@ def _play_reason(path: str, before: str, after: str, head: str, repo: Path):
         new = _strip(path, yaml_fast.safe_load(after))
     except yaml.YAMLError as exc:
         return f"{path} does not parse as YAML: {exc}"
-    if old == new:
+    if same_value(old, new):
         return None
     old_defs, new_defs = _var_defs(old, Counter()), _var_defs(new, Counter())
     changed = {name for name, _ in (old_defs - new_defs) + (new_defs - old_defs)}
-    if not changed or _drop_vars(old, changed) != _drop_vars(new, changed):
+    if not changed or not same_value(
+        _drop_vars(old, changed), _drop_vars(new, changed)
+    ):
         return f"{path} changes a task that is not an assert, fail or debug"
     for name in sorted(changed):
         reader = _var_reader(name, head, repo)

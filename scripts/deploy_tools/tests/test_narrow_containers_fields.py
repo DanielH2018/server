@@ -38,6 +38,13 @@ from _narrow_fixtures import (
 BOX = "ansible/inventory/host_vars/daniel-box.yml"
 
 
+def test_a_field_moving_from_1_to_true_reaches_its_entry_and_reader(tree: Tree):
+    tree.write(BOX, HOST_VARS.replace("image: sonarr:1", "port: 1"))
+    tree.commit("the field")
+    tree.write(BOX, HOST_VARS.replace("image: sonarr:1", "port: true"))
+    assert {"sonarr", "prowlarr"} <= tree.narrow(*_refs(tree))
+
+
 @pytest.fixture
 def tree(tmp_path) -> Tree:
     t = build_tree(tmp_path)

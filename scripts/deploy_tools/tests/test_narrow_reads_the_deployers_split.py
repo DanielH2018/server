@@ -12,6 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_reads_the_deployers_sp
 
 import pytest
 
+import digest_covers
 from deploy_tools.narrow_lib import broad as narrow_broad
 
 from _narrow_fixtures import Tree, _refs, build_tree
@@ -54,6 +55,24 @@ def test_a_comment_edit_beside_a_service_change_narrows_to_that_service(tree: Tr
 
 
 @pytest.mark.parametrize(
+    "unread_var",
+    ["", "    unread: {}\n"],
+    ids=["a-task-value", "a-task-value-beside-an-unread-variable"],
+)
+def test_a_play_value_python_calls_equal_is_flagged_by_both_readers(
+    tree: Tree, unread_var: str
+):
+    tree.write("ansible/deploy.yml", PLAY + unread_var.format("a") + "  serial: 1\n")
+    tree.commit("the play")
+    tree.write("ansible/deploy.yml", PLAY + unread_var.format("b") + "  serial: true\n")
+    old, new = _refs(tree)
+    with pytest.raises(narrow_broad.CannotNarrow, match=r"ansible/deploy\.yml"):
+        tree.narrow(old, new)
+    why = digest_covers.Classifier(tree.root).reason("sonarr", old, new)
+    assert "changes a task" in (why or "")
+
+
+@pytest.mark.parametrize(
     ("path", "before", "after"),
     [
         pytest.param(
@@ -70,8 +89,8 @@ def test_a_comment_edit_beside_a_service_change_narrows_to_that_service(tree: Tr
         ),
         pytest.param(
             "ansible.cfg",
-            "[defaults]\nforks = 5\n",
-            "# Why.\n[defaults]\nforks = 5\n",
+            "forks = 5\n",
+            "# Why.\nforks = 5\n",
             id="a-play-prefix-file-that-is-not-yaml",
         ),
     ],

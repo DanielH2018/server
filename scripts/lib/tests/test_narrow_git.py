@@ -44,6 +44,11 @@ def test_a_file_that_is_not_a_mapping_refuses():
         mapping_at("---\n- a\n- list\n", "defaults/main.yml")
 
 
+@pytest.mark.parametrize("after", [True, 1.0], ids=["bool", "float"])
+def test_a_value_python_calls_equal_counts_as_changed(after):
+    assert changed_mapping_keys({"a": 1}, {"a": after}, "main.yml") == {"a"}
+
+
 def test_a_removed_key_counts_as_changed():
     """The tasks reading it change behaviour, so dropping it is not "nothing changed"."""
     assert changed_mapping_keys({"a": 1, "b": 2}, {"a": 1}, "main.yml") == {"b"}
