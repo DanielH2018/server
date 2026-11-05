@@ -24,7 +24,7 @@ ssh_config_path: /etc/ssh/sshd_config
 # this is undefined. See the repo-root CLAUDE.md → "Adding a New Service".
 #
 # Give each entry `platform: k8s`, which puts it in deploy.yml's k8s play. An entry without the
-# key reads as `docker`, which no play can deploy: scripts/validate/compose_templates.py refuses
+# key reads as `docker`, which nothing deploys: scripts/validate/compose_templates.py refuses
 # it. A Compose service on `daniel-pi` goes in that host's `compose_services`, never here.
 containers_list: []
 
