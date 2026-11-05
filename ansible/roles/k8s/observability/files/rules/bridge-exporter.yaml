@@ -333,17 +333,3 @@ groups:
           description: >-
             The last speedtest-tracker run is older than 8 h, did not complete, or downloaded
             under 100 Mbps. Open the speedtest UI and check its scheduler and last result.
-      # `swallowed_verdicts` reads loki-homelab, not Prometheus, and is not `critical`, so its
-      # rule is a warning. Its `service` stays `monitor-bridge`, the component that evaluates it
-      # until C-7 deletes the row. It names no `verify` label, so it gates no tag.
-      - alert: SwallowedPushVerdicts
-        expr: homelab_check_success{job="monitor-bridge", check="swallowed_verdicts"} == 0
-        for: 10m
-        labels:
-          severity: warning
-          service: monitor-bridge
-        annotations:
-          summary: A host cron pushed a down verdict and the push failed while a sibling's landed.
-          description: >-
-            The verdict was lost rather than the network. The monitor-bridge log names the cron;
-            run it by hand and read its logger lines.

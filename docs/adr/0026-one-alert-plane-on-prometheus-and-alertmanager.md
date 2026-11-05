@@ -118,5 +118,5 @@ The M6 plan leaves these open. Each is the operator's or another slice's to sett
 
 ## Governs
 
-No `# DECIDED:` marker references this record yet. The M6 PRs that add the `swallowed_verdicts`
-exclusion and the gate skip add the markers and fill the `governs:` list in the same PR.
+No `# DECIDED:` marker references this record yet. The M6 PRs that add the gate skip add the
+markers and fill the `governs:` list in the same PR.

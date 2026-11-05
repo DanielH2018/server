@@ -215,7 +215,7 @@ def test_an_owner_value_nothing_emits_is_flagged():
 def test_the_consumer_census_finds_its_named_members():
     consumers = _consumers()
     for name in (
-        "logs.py SWALLOWED_VERDICTS_LOGQL",
+        "b2_spend.py SPEND_LOGQL",
         "observability_deploy_annotation_expr",
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
@@ -369,9 +369,6 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
 
 # Each `container` value a Loki rule selects on, and the role template whose pod declares a
 # container by that name. A value with no entry here fails, so a new rule adds its mapping.
-# The containers of KumaNotificationDropped, whose pod M6's C-1b deleted. M6's C-7 deletes the
-# rule. Until then it matches nothing, and no template declares either name.
-_RETIRED_RULE_CONTAINERS = frozenset({"uptime-kuma", "discord-relay"})
 _RULE_CONTAINERS = {
     # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
     # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
@@ -392,9 +389,7 @@ def _undeclared_containers(
 ) -> dict[str, list[str]]:
     found = {}
     for name, expr in exprs.items():
-        for value in sorted(
-            _label_values(expr, "container") - _RETIRED_RULE_CONTAINERS
-        ):
+        for value in sorted(_label_values(expr, "container")):
             if value not in mapping:
                 found.setdefault(name, []).append(f"{value}: no template is mapped")
             elif value not in _declared_containers(*mapping[value]):

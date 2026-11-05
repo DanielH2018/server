@@ -4,8 +4,8 @@ These decide; `checks/notify.py` fetches. `discord_webhook_ok` takes its inputs 
 reads no module-level config, which is what makes it safe to live here — see bridge/parsing.py's
 header for the rule and why breaking it fails silently rather than loudly.
 
-Split out of verdicts/service.py on 2026-09-04, alongside verdicts/logs.py, for the same reason:
-that module was the catch-all, and this verdict has exactly one consumer.
+Split out of verdicts/service.py on 2026-09-04: that module was the catch-all, and this verdict
+has exactly one consumer.
 """
 
 

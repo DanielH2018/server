@@ -32,11 +32,11 @@ CRITICAL = {
 
 
 def test_every_a6_bridge_rule_pages():
-    """Non-vacuity for the A6 sets: 21 rules, none in `SHADOW`, the critical ones on both
+    """Non-vacuity for the A6 sets: 20 rules, none in `SHADOW`, the critical ones on both
     channels and the rest on Discord alone."""
     assert literal_sets(BRIDGE_RULES, shadow=True) == {}
     sets = literal_sets(BRIDGE_RULES, shadow=False)
-    assert len(sets) == 21
+    assert len(sets) == 20
     assert {labels["alertname"] for labels in sets.values()} >= CRITICAL
     for key, labels in sets.items():
         assert key in PAGING and key not in SHADOW, key

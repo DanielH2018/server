@@ -663,8 +663,6 @@ tests:
         values: "0x12"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="speedtest"}
         values: "0x12"
-      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="swallowed_verdicts"}
-        values: "0x12"
     alert_rule_test:
       - eval_time: 9m
         alertname: N8nWorkflowsFailing
@@ -680,9 +678,6 @@ tests:
         exp_alerts: []
       - eval_time: 9m
         alertname: SpeedtestDegraded
-        exp_alerts: []
-      - eval_time: 9m
-        alertname: SwallowedPushVerdicts
         exp_alerts: []
       - eval_time: 10m
         alertname: N8nWorkflowsFailing
@@ -744,18 +739,6 @@ tests:
             exp_annotations:
               summary: "The newest speedtest result is stale, incomplete or under 100 Mbps."
               description: "The last speedtest-tracker run is older than 8 h, did not complete, or downloaded under 100 Mbps. Open the speedtest UI and check its scheduler and last result."
-      - eval_time: 10m
-        alertname: SwallowedPushVerdicts
-        exp_alerts:
-          - exp_labels:
-              job: monitor-bridge
-              instance: monitor-bridge.homelab.svc:9181
-              check: swallowed_verdicts
-              severity: warning
-              service: monitor-bridge
-            exp_annotations:
-              summary: "A host cron pushed a down verdict and the push failed while a sibling's landed."
-              description: "The verdict was lost rather than the network. The monitor-bridge log names the cron; run it by hand and read its logger lines."
 
   # A one-cycle blip never fires. A gauge that reads 0 for one 300s cycle spans five to seven
   # 1-minute samples (the A6 soak saw both five and six), so the 0 samples at minutes 0 to 6
@@ -772,8 +755,6 @@ tests:
         values: "0x6 1x8"
       - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="speedtest"}
         values: "0x6 1x8"
-      - series: homelab_check_success{job="monitor-bridge",instance="monitor-bridge.homelab.svc:9181",check="swallowed_verdicts"}
-        values: "0x6 1x8"
     alert_rule_test:
       - eval_time: 13m
         alertname: N8nWorkflowsFailing
@@ -789,9 +770,6 @@ tests:
         exp_alerts: []
       - eval_time: 13m
         alertname: SpeedtestDegraded
-        exp_alerts: []
-      - eval_time: 13m
-        alertname: SwallowedPushVerdicts
         exp_alerts: []
 
   # The zero-series case for the startup-grace family: a missing row is BridgeCheckStale's page,
@@ -813,9 +791,6 @@ tests:
         exp_alerts: []
       - eval_time: 12m
         alertname: SpeedtestDegraded
-        exp_alerts: []
-      - eval_time: 12m
-        alertname: SwallowedPushVerdicts
         exp_alerts: []
 
   # THE HOST-PACKAGES ROW (operator ruling 2026-10-31, `for: 10m` from 2026-11-02). The gauge is 0

@@ -1,8 +1,7 @@
 """Service-health verdicts for check.py — n8n, the *arrs, Prowlarr, Home Assistant, GitOps.
 
-Loki's freshness and dropped-shipper verdicts live in verdicts/logs.py and the Discord webhook
-verdict in verdicts/notify.py; they moved out of here because this module had become the place
-a verdict landed when no sibling named its subject.
+The Discord webhook verdict lives in verdicts/notify.py; it moved out of here because this
+module had become the place a verdict landed when no sibling named its subject.
 
 These decide; check.py fetches. Each takes its inputs as arguments and reads no module-level
 config, which is what makes it safe to live here — see bridge/parsing.py's header for the rule

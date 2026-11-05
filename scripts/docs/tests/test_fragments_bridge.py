@@ -112,7 +112,7 @@ def test_tunables_never_carry_a_value_built_from_a_variable():
 def test_every_check_row_reaches_the_checks_fragment():
     rows = fb.read_check_rows(fb.CHECK_TABLE.read_text())
     body = fb.render_bridge_checks(rows)
-    assert len(rows) >= 19
+    assert len(rows) >= 18
     assert all(f"`{row['name']}`" in body for row in rows)
 
 
@@ -132,7 +132,7 @@ def test_every_non_gate_check_is_in_exactly_one_gate_set_row():
 
 def test_thresholds_fragment_finds_the_template_tunables():
     found = dict(fb.read_env_tunables(fb.ENV_SETTINGS.read_text()))
-    assert len(found) >= 34
+    assert len(found) >= 32
     assert found["INTERVAL"] == "300"
     assert "GRACE_CYCLES" not in found
 
@@ -203,7 +203,7 @@ def test_every_live_check_has_a_bullet_and_every_bullet_a_live_check():
     names = {row["name"] for row in rows}
     page = CHECKS_PAGE.read_text()
     titles = live_check_titles(page)
-    assert len(titles) >= 19
+    assert len(titles) >= 18
     assert {"etcd_restore_drill", "b2_storage"} <= set(titles)
     assert title_drift(page, names) == (set(), set())
 
