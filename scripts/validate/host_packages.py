@@ -155,7 +155,9 @@ def lint_deb(deb: Path) -> list[str]:
 def fetch_tools(render: Path, cache: Path, opener=None) -> list[str]:
     """Fetch, verify and place the binaries of every `tools.json` tree under `render`.
 
-    Returns one `[FAIL]` line per tree whose pins did not verify. `opener` replaces `urlopen`.
+    Returns one `[FAIL]` line per tree whose pins did not verify, and stops at the first tree
+    whose download stayed unavailable, because the next tree would wait out the same outage.
+    `opener` replaces `urlopen`.
     A render with no such tree has nothing to fetch, which is how a merge base from before
     H3.11 reads.
     """
@@ -169,6 +171,8 @@ def fetch_tools(render: Path, cache: Path, opener=None) -> list[str]:
             builder.install_tools(tree, cache, opener)
         except builder.Failure as exc:
             problems.append(f"[FAIL] {tree}: {exc}")
+            if isinstance(exc, builder.Unavailable):
+                break
     return problems
 
 

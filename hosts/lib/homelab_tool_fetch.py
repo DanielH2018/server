@@ -31,6 +31,10 @@ class Failure(Exception):
         self.reason = reason
 
 
+class Unavailable(Failure):
+    """A download whose transient errors outlasted `TOOL_RETRY_WINDOW_S`."""
+
+
 # A rendered `homelab-tools` tree carries its pins in this file beside `nfpm.yaml`, and the
 # package installs each binary under `TOOLS_BIN` in its `root/`. A test holds both equal to
 # scripts/renderer/renderer_lib/host_tools.py, which this script cannot import.
@@ -41,10 +45,11 @@ TOOLS_CACHE = "tools-cache"
 # about 60 MB.
 TOOL_MAX_BYTES = 256 * 1024 * 1024
 TOOL_TIMEOUT_S = 120
-# Requests for one pin, and the wait between them. The first pin to exhaust these ends the run,
-# so a failing fetch stays well inside the builder unit's TimeoutStartSec.
-TOOL_FETCH_ATTEMPTS = 4
-TOOL_RETRY_DELAY_S = 10
+# One pin's retries stop this long after its first request, because the release host has answered
+# 504 for five minutes. A fetch gives up within window + delay + timeout, 8.5 minutes, and the
+# first pin to give up ends the run, so it stays well inside the builder's TimeoutStartSec.
+TOOL_RETRY_WINDOW_S = 360
+TOOL_RETRY_DELAY_S = 30
 _TOOL_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 # One optional directory segment: uv ships `uv-x86_64-unknown-linux-gnu/uv`.
@@ -85,16 +90,19 @@ def _download_with_retries(
     partial: Path,
     opener: Callable[..., Any] | None,
     sleep: Callable[[float], None],
+    monotonic: Callable[[], float],
 ) -> str:
-    """`_write_download`, repeated up to `TOOL_FETCH_ATTEMPTS` times for a transient error.
+    """`_write_download`, repeated for a transient error until `TOOL_RETRY_WINDOW_S` has passed.
 
     A 5xx, a timeout and a connection error are transient. Any other HTTP status fails at once,
     because a wrong pin never heals. `partial` does not exist after a failure.
 
     Raises:
-        Failure: reason `tools`, because the download failed or exceeds `TOOL_MAX_BYTES`.
+        Unavailable: reason `tools`, because transient errors outlasted the window.
+        Failure: reason `tools`, because the download failed for good or exceeds
+            `TOOL_MAX_BYTES`.
     """
-    attempt = 1
+    started = monotonic()
     while True:
         try:
             return _write_download(url, partial, opener)
@@ -104,12 +112,13 @@ def _download_with_retries(
             if isinstance(exc, urllib.error.HTTPError):
                 exc.close()
                 permanent = exc.code < 500
-            if permanent or attempt == TOOL_FETCH_ATTEMPTS:
+            if permanent:
                 raise Failure("tools", f"cannot fetch {url}: {exc}") from exc
+            if monotonic() - started >= TOOL_RETRY_WINDOW_S:
+                raise Unavailable("tools", f"cannot fetch {url}: {exc}") from exc
         except Failure:
             partial.unlink(missing_ok=True)
             raise
-        attempt += 1
         sleep(TOOL_RETRY_DELAY_S)
 
 
@@ -118,6 +127,7 @@ def download_tool(
     cache: Path,
     opener: Callable[..., Any] | None = None,
     sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
 ) -> Path:
     """The file `pin` names, verified against its sha256 and cached at `cache/<sha256>`.
 
@@ -139,7 +149,7 @@ def download_tool(
         return path
     cache.mkdir(parents=True, exist_ok=True)
     partial = cache / f"{want}.part"
-    got = _download_with_retries(url, partial, opener, sleep)
+    got = _download_with_retries(url, partial, opener, sleep, monotonic)
     if got != want:
         partial.unlink(missing_ok=True)
         raise Failure(

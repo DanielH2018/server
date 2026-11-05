@@ -11,6 +11,7 @@ Run: uv run pytest scripts/validate/tests/test_validate_host_packages.py
 from pathlib import Path
 from typing import ClassVar
 
+import homelab_tool_fetch
 import pytest
 from lib import proc_testing
 from lib.repo_paths import REPO
@@ -260,3 +261,17 @@ def test_a_pin_whose_download_differs_is_flagged_for_every_architecture(tmp_path
     assert len(problems) == 2
     assert all(p.startswith("[FAIL] ") and "the pin names" in p for p in problems)
     assert not list(render.rglob("usr/lib/homelab/bin/sops"))
+
+
+def test_an_unavailable_download_stops_at_the_first_architecture(tmp_path):
+    render = _tools_render(tmp_path, b"binary")
+    calls = []
+
+    def opener(request, timeout=None):
+        calls.append(request.full_url)
+        raise homelab_tool_fetch.Unavailable("tools", "cannot fetch: HTTP Error 504")
+
+    problems = host_packages.fetch_tools(render, tmp_path / "cache", opener)
+    assert len(problems) == 1
+    assert problems[0].startswith("[FAIL] ") and "504" in problems[0]
+    assert len(calls) == 1
