@@ -71,7 +71,7 @@ def test_every_include_resolves_and_every_record_file_is_included_once():
 def _record_branch(repo, branch: str, path: str, record: str) -> None:
     git(repo, "checkout", "-q", "-b", branch, "master")
     target = repo / path
-    # Append rather than replace "Nothing recorded.", so a pair that already holds records works.
+    # Append, so a file that already holds a record still changes and commits.
     commit(repo, branch, **{path: f"{target.read_text()}\n{record}\n"})
 
 
@@ -80,13 +80,7 @@ def test_two_batches_recording_side_by_side_merge_without_conflict(tmp_path):
     shutil.copytree(DOCS / "target-architecture", repo / "target-architecture")
     commit(repo, "base")
     # Adjacent includes are the worst case: their records sit next to each other on the page.
-    # The pair must both be stubs, or a branch's record replaces nothing and commits nothing.
-    includes = _includes()
-    first, second = next(
-        pair
-        for pair in zip(includes, includes[1:], strict=False)
-        if all("Nothing recorded." in (DOCS / i).read_text() for i in pair)
-    )
+    first, second = _includes()[:2]
     _record_branch(repo, "first", first, "Soak read: first batch.")
     _record_branch(repo, "second", second, "Soak read: second batch.")
     merged = git(repo, "merge-tree", "--write-tree", "first", "second", check=False)

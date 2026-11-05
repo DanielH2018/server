@@ -116,8 +116,6 @@ spec:
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
 {{ lsio_env() }}
-            - name: DOCKER_MODS
-              value: linuxserver/mods:homeassistant-hacs
           volumeMounts:
             - name: home-assistant-config
               mountPath: /config

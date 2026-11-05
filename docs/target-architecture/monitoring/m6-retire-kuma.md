@@ -2022,11 +2022,12 @@ here. C-1 waits for the operator's acceptance.
       deleted the narrowing. `narrow_lib/filters.py` refuses any deleted plugin, so this PR
       waits for D6, which deletes the narrowing. Until then the file, its registration and
       that row are on the allowlist.
-5. **C-5, secrets.** **Operator-only:** remove every remaining push token,
+5. **C-5, secrets.** **Operator-only:** remove `kuma_status_page_sync_push_token`,
    `uptime_kuma_username`, `uptime_kuma_password` and `prometheus_kuma_api_key` from
    `secrets.yml`. The same commit deletes their rows from `ansible/secret_rotation.yml`, adds
    them to `RETIRED`, and carries the regenerated fragment. That is the token-PR rule in
-   *Steps*.
+   *Steps*. `render_records_push_token` stays for R4, which removes it after deleting the
+   role that renders it, so exit criterion 2 holds only after R4's secrets commit.
 6. **C-6, the census row.** It holds `kuma` to its allowlist from then on (exit criterion 3).
    Under `hosts/`, the grep below also matches the Kuma push producers and the push plumbing
    that moved into host packages after this plan was written, such as `hosts/lib/kuma_push.py`
@@ -2056,6 +2057,12 @@ here. C-1 waits for the operator's acceptance.
       by then. The same commit rewords the `kuma-push-lib.sh` and `kuma_push.cap_kuma_msg`
       comments in `bridge/common.py` and the row's comment in `check_table.py`. Its token
       retired in A6-9.
+    - **What the reads at C-7's base changed.** `loki_count` stays, with `LOKI_URL`, because
+      `checks/service.py`'s HA ban arm reads it, so only `loki_lines` goes. `host_uptime_s`,
+      `SWALLOWED_VERDICTS_WINDOW_S` and `BOOT_SETTLE_S` had the row as their only reader, so
+      they go rather than being reworded. The cap comment sits in `bridge/msgfmt.py`. Both
+      modules, `checks/logs.py` and `verdicts/logs.py`, held the row alone and go whole. The
+      pod producers' verdict lines keep their shape, and their comments stop naming the row.
     - **Its deploys.** `observability`, `monitor-bridge` and `loki-homelab`, each by its
       owner: `land.sh` while Ansible-owned, the merge once `owner: flux`. loki-homelab is
       flux-owned from D5's Wave A', and monitor-bridge may be by then too. The row's gauge

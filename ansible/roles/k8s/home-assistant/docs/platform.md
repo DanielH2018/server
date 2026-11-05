@@ -4,7 +4,7 @@ Split out of the role's `CLAUDE.md` on 2026-08-15; the content is unchanged.
 How HA itself is configured, authenticated and persisted — as opposed to what the
 automations do.
 
-## Auth, HACS and configuration.yaml
+## Auth, Marketplace and configuration.yaml
 - **Auth: HA's own login, NOT Authelia.** `use_authelia: false` is deliberate —
   Authelia forward-auth breaks the HA companion mobile app, webhooks, and long-lived
   API tokens (none can complete the portal login flow). The route still gets Traefik
@@ -34,12 +34,15 @@ automations do.
     `home-assistant.<domain>`), so MFA is the compensating control for Authelia-off; `ip_ban` is
     defense-in-depth on top. If MFA is ever reset/lost, re-enrol: HA → Profile → Multi-factor
     Authentication → TOTP (and keep the recovery code from enrolment).
-- **HACS preinstalled** via `DOCKER_MODS=linuxserver/mods:homeassistant-hacs`
-  (LSIO Docker mod that drops the Home Assistant Community Store into `/config`).
-  **The mod installs HACS itself and nothing else.** A HACS integration or card lands in
-  `/config/custom_components/` or `/config/www/`, which are PVC state — the repo has no init
-  pattern that declares one, so every HACS package here is a one-time dashboard action and
-  survives only because the Longhorn PVC does. Record any such install in this file.
+- **Marketplace installs community integrations.** Home Assistant ships it built in from
+  2026.11, where it replaces HACS and migrates HACS's content on the first start. Do not add
+  `DOCKER_MODS=linuxserver/mods:homeassistant-hacs` back: that mod downloads `hacs.zip`
+  whenever `custom_components/hacs/` is absent, with no version check, so it reinstalls the
+  integration the migration removed.
+  **A Marketplace integration or card lands in** `/config/custom_components/` or `/config/www/`,
+  which are PVC state — the repo has no init pattern that declares one, so every such package is
+  a one-time dashboard action and survives only because the Longhorn PVC does. Record any such
+  install in this file.
 - **Two files reach `/config` from Secrets, not from git.** The `config-install` init container
   installs `secrets.yaml` from the `home-assistant-secrets` Secret, which
   `templates/config/secrets.yaml.j2` renders, and `google_service_account.json` from the

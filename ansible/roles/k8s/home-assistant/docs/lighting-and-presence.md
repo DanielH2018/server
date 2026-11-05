@@ -142,10 +142,10 @@ and the bedtime/wake routines that drive them.
   chase it. The wake ramp is gated on `person.daniel`, not the FP300, so it is unaffected.
   **Changing `motion_sensitivity` causes a ~26 s false `presence: false` blip.** The blip can
   switch the lights off once while you tune.
-- **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
-  `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
+- **Adaptive Lighting is a Marketplace dependency (since 2026-06-18).** `configuration.yaml` declares
+  `adaptive_lighting:` for the bedroom group; the integration code installs via Marketplace into
   `custom_components/adaptive_lighting/` (on the config PVC, not templated — like `dreo`). Install it
-  via HACS BEFORE deploying, or HA logs "integration not found" and skips the block. The deploy's
+  via Marketplace BEFORE deploying, or HA logs "integration not found" and skips the block. The deploy's
   full restart loads a newly added custom component (a YAML "Quick Reload" does not).
 - **Light/fan mediator — single guarded writer (Phase 2, since 2026-06-22).** AUTO/programmatic
   writes of `light.bedroom_lights` go through `script.bedroom_lights_set(reason)` and of

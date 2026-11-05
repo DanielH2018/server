@@ -41,13 +41,12 @@ SCRIPTS = REPO / "scripts"
 # be PRESENT in the live graph makes that failure name the pair that went missing instead.
 FACADE_EDGES = frozenset(
     {
-        # scripts/secrets_mgmt/: `secret_rotation.py` is the entry point; the other five are its
+        # scripts/secrets_mgmt/: `secret_rotation.py` is the entry point; the other four are its
         # leaves. rotation_tools.py's docstring is the one that spells the rule out.
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.consumers"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.git_dates"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.rotation_tools"),
         ("secrets_mgmt.secret_rotation", "secrets_mgmt.secrets_lib.secret_registry"),
-        ("secrets_mgmt.secret_rotation", "secrets_mgmt.sops_io"),
         # scripts/docs/reference/scripts.py renders the page; the census was split into lib/
         # so the `--help` test could reach it without importing the generator.
         ("docs.reference.scripts", "lib.script_classify"),

@@ -12,7 +12,6 @@
 | `scrutiny` | `startup_grace` | yes |  |
 | `ha_heartbeat` | none |  |  |
 | `speedtest` | `startup_grace` |  |  |
-| `swallowed_verdicts` | `startup_grace` |  |  |
 | `discord` | `wan_reachable` | yes |  |
 | `r2_usage` | `wan_reachable` | yes | `longhorn-backup-tiering` |
 | `cloudflare_ips_drift` | `wan_reachable` |  |  |

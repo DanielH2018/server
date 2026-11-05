@@ -20,10 +20,9 @@ fake_remux_host_data_root: /srv/media
 # container on this node to exec into, and none is needed: the library is a local directory here.
 fake_remux_jellyfin_container: ""
 
-# Resolved at deploy time from the cluster Service rather than hardcoded. A ClusterIP is stable for
-# a Service's life but NOT across a delete, which is the same reasoning telemetry-health.sh gives
-# for resolving rather than pinning. The *arr is not reachable by name from the host (no cluster
-# DNS), so the ClusterIP is the honest path.
+# Resolved at deploy time from the cluster Service rather than hardcoded, because a ClusterIP is
+# stable for a Service's life but NOT across a delete. The *arr is not reachable by name from the
+# host (no cluster DNS), so the ClusterIP is the honest path.
 fake_remux_sonarr_namespace: homelab
 fake_remux_sonarr_service: sonarr
 fake_remux_sonarr_port: 8989

@@ -215,6 +215,11 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_janitorr_push_token",
         # B6c:
         "registry_gc_push_token",
+        # M6 C-5: Kuma's last status-page token, its login and its Prometheus scrape key.
+        "kuma_status_page_sync_push_token",
+        "prometheus_kuma_api_key",
+        "uptime_kuma_password",
+        "uptime_kuma_username",
         # B9: the six per-host AIDE and rkhunter push tokens, retired after Cutover-2 stopped the
         # push.
         "aide_daniel_box_push_token",

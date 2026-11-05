@@ -24,7 +24,6 @@ FETCHERS = frozenset(
         "prom_scalar",
         "prom_vector",
         "loki_count",
-        "loki_lines",
         "_get_json",
         "_post_json",
     }
@@ -59,7 +58,6 @@ def test_no_check_body_calls_the_transport_directly():
     # Named members, so a move of the package reads as a failure rather than an empty pass.
     assert {
         "checks/host_edge.py",
-        "checks/logs.py",
         "check.py",
     } <= set(modules)
     offenders = {
@@ -97,10 +95,6 @@ _VECTOR = {
     "status": "success",
     "data": {"result": [{"metric": {"job": "node"}, "value": [0, "2"]}]},
 }
-_STREAMS = {
-    "status": "success",
-    "data": {"result": [{"stream": {}, "values": [["5", "line"]]}]},
-}
 
 
 @pytest.mark.parametrize(
@@ -120,13 +114,6 @@ _STREAMS = {
             "/loki/api/v1/query",
             {"query": 'sum(count_over_time({job="x"}[5m]))'},
             2.0,
-        ),
-        (
-            lambda s: s.loki_lines("q", 60, 7),
-            _STREAMS,
-            "/loki/api/v1/query_range",
-            {"query": "q", "limit": "7", "direction": "forward"},
-            [(5, "line")],
         ),
         (
             lambda s: s.get_json("http://api.test/x?a=1"),

@@ -27,7 +27,6 @@ from checks import (
     healthchecks,
     host_edge,
     host_thermal,
-    logs,
     notify,
     r2,
     service,
@@ -57,11 +56,6 @@ CHECKS: tuple[PushCheck, ...] = (
     # The producer is the bridge re-reading the newest result every cycle, not the 6-hourly run;
     # the check's staleness arm catches a dead scheduler.
     PushCheck(name="speedtest", fn=host_edge.check_speedtest, gate="startup_grace"),
-    # #1869: kuma-push-lib.sh logs a lost push and returns 0, so a lost DOWN surfaced only at the
-    # monitor's deadline, a day late for the daily producers. Reads that log line out of Loki and
-    # pages only when a sibling cron's push landed in the same window, or when Kuma itself
-    # rejected the push (`by=kuma`): a fleet-wide loss is the edge or host monitors' page.
-    PushCheck(name="swallowed_verdicts", fn=logs.check_swallowed_verdicts, gate="startup_grace"),
     PushCheck(name="discord", fn=notify.check_discord, gate="wan_reachable", critical=True),
     # WAN-gated rather than startup-graced since #2784; the WAN gate covers the reboot transient.
     PushCheck(name="r2_usage", fn=r2.check_r2_usage, gate="wan_reachable", critical=True, runbook="longhorn-backup-tiering"),

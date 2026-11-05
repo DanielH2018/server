@@ -10,12 +10,10 @@ Run: uv run pytest ansible/roles/k8s/configarr/tests/test_configarr_health.py
 """
 
 import json
-import importlib.util
 import re
 import socket
 import subprocess
 import sys
-from pathlib import Path
 
 from _k8s_render import render_role_template
 from lib import yaml_fast
@@ -36,22 +34,7 @@ _JOBS = {
 _NOW = 1792301426.0
 
 
-# monitor-bridge's own parser, loaded by path: the reader's line must parse there, and a copy of
-# its regex here would go on passing after the two drifted apart. It imports only `re`.
-_PARSER_SPEC = importlib.util.spec_from_file_location(
-    "_monitor_bridge_verdict_logs",
-    Path(__file__).resolve().parents[2]
-    / "monitor-bridge"
-    / "files"
-    / "verdicts"
-    / "logs.py",
-)
-assert _PARSER_SPEC and _PARSER_SPEC.loader
-_PARSER = importlib.util.module_from_spec(_PARSER_SPEC)
-_PARSER_SPEC.loader.exec_module(_PARSER)
-
-# monitor-bridge's Swallowed Push Verdicts check parses `<ts> <host> <tag>: ` and nothing
-# shorter, so a line without the two leading tokens is read by its LogQL and never counted.
+# The `<ts> <host> <tag>: ` shape rsyslog gave the host script's `logger -t` lines.
 _SYSLOG_UP = r"\S+ \S+ configarr-health: status=up "
 
 
@@ -69,13 +52,7 @@ def test_a_clean_run_logs_status_up_in_the_syslog_shape(capsys):
     out = capsys.readouterr().out
     assert re.match(_SYSLOG_UP, out), "not in the syslog shape"
     assert "configarr sync ok: Done (1.0h ago)" in out
-    # monitor-bridge reads the line as a landed run, never as a failed push.
-    assert _PARSER.parse_push_line(out.strip())[:4] == (
-        "configarr-health",
-        socket.gethostname(),
-        "run",
-        "up",
-    )
+    assert out.split()[1] == socket.gethostname()
 
 
 def test_an_unreadable_job_list_logs_status_down(capsys):

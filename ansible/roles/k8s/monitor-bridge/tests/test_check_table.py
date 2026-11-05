@@ -124,7 +124,7 @@ def test_the_deploy_reads_every_field_but_fn_off_each_row():
         for f in dataclasses.fields(PushCheck)
         if f.default is not dataclasses.MISSING
     }
-    assert len(parsed) == len(CHECKS) >= 19
+    assert len(parsed) == len(CHECKS) >= 18
     for row, read in zip(CHECKS, parsed, strict=True):
         expected = dataclasses.asdict(row)
         del expected["fn"]

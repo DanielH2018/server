@@ -2,7 +2,7 @@
 
 Neither bridge pushes to Kuma: monitor-bridge stopped at M6 A6's Cutover-2 and autofix-bridge at
 B7's. Each exports its verdicts to Prometheus, and Alertmanager delivers a firing alert to
-Discord (#7060). The `kuma-push-lib.sh` mention inside another docstring is out of scope here.
+Discord (#7060).
 """
 
 from bridge import common

@@ -60,11 +60,8 @@ GATE_RUN=0
 [[ "${HOSTNAME:-}" == pi-peer-backup-deploy-gate-* ]] && GATE_RUN=1
 
 # The verdict is written in the host crons' syslog shape — `<ts> <host> pi-peer-backup:
-# status=<up|down> <msg>` — because there is no `logger` in this pod and monitor-bridge's
-# swallowed-verdicts check parses that prefix (`verdicts/logs.py`) until C-7 deletes it. Alloy
-# labels this container's stdout `{container="pi-peer-backup"}`, not `{job="syslog"}`, and the
-# check reads that stream too (#1943). Until B7's Cutover-2 a failed Kuma push logged `push
-# failed (...)` here in the same shape; the tag stays in KUMA_RETIRING_TAGS until C-7.
+# status=<up|down> <msg>` — because there is no `logger` in this pod. Alloy labels this
+# container's stdout `{container="pi-peer-backup"}`, not `{job="syslog"}`.
 # busybox `date` has no `-Is`, hence the explicit format.
 report() { # line
   echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) ${HOSTNAME:-pi-peer-backup} pi-peer-backup: $1"

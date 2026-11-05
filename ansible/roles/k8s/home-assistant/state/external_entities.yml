@@ -49,11 +49,15 @@ entities:
   - button.aqara_fp300_restart_device
   - button.aqara_fp300_spatial_learning
   - button.aqara_fp300_track_target_distance
+  - button.aqara_t1_identify
   - button.bedroom_airgradient_one_calibrate_co2_sensor
   - button.bedroom_airgradient_one_test_led_bar
   - button.behind_bed_reset_total_energy
   - button.desk_surge_protector_strip_reset_total_energy
   - button.google_assistant_synchronize_devices
+  - button.lamp_identify
+  - button.left_light_identify
+  - button.right_light_identify
   - button.zigbee2mqtt_bridge_restart
   - conversation.home_assistant
   - device_tracker.pixel_9_pro
@@ -173,6 +177,7 @@ entities:
   - sensor.backup_backup_manager_state
   - sensor.backup_last_attempted_automatic_backup
   - sensor.backup_last_successful_automatic_backup
+  - sensor.backup_last_successful_automatic_backup_size
   - sensor.backup_next_scheduled_automatic_backup
   - sensor.bedroom_airgradient_one_carbon_dioxide
   - sensor.bedroom_airgradient_one_humidity
@@ -254,7 +259,6 @@ entities:
   - update.behind_bed
   - update.desk_surge_protector_strip
   - update.dreo_smart_device_integration_update
-  - update.hacs_update
   - update.window_sensor
   - weather.forecast_home
   - zone.home

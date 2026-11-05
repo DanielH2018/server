@@ -23,7 +23,7 @@ Pure: no I/O, no bridge imports, so `probe.py` can load it without the pod's con
 
 from collections.abc import Mapping
 
-# The same 900 as kuma-push-lib.sh's cap; this module must load under probe.py on a host.
+# The longest message this module builds; it must load under probe.py on a host.
 LIMIT = 900
 NAMES_PER_REASON = 5
 

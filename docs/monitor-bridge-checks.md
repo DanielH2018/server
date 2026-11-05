@@ -367,7 +367,8 @@ checks each gate suppresses.
   the internet-reaching checks, and the peer of Prometheus and B2 Reachable. An internet outage
   had no gate until a single WAN outage on 2026-09-18 turned 11 tiles red inside 90 minutes,
   including four host crons and `b2_reachable`, `r2_usage`, `discord`, the since-deleted Kuma
-  Notification Delivery tile, `cloudflare-ip-drift`, `swallowed_verdicts` and `gitops_alive`. It gates the `wan_reachable` rows:
+  Notification Delivery tile, `cloudflare-ip-drift`, the since-deleted Swallowed Push Verdicts
+  tile and `gitops_alive`. It gates the `wan_reachable` rows:
   `r2_usage`, `cloudflare_ips_drift`, `healthchecks_drift`, `discord`.
   **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's problem,
   and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare outage. The
@@ -380,8 +381,6 @@ checks each gate suppresses.
   `b2_reachable` is the tile's PEER rather than a member: it is itself a gate, and
   a row names at most one gate, and a gate row has none of its own. Two tiles
   for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
-  `swallowed_verdicts` is not a member either: it reads in-cluster Loki, and what failed for it
-  was Kuma's own outbound send, a real fault the tile should report.
   **The HOST crons are covered by a separate half** (#2793). `release-staleness-check`,
   `docs-refresh` and, until M6 batch B3's Cutover-2, `github-ruleset-drift` run on the host and push their own tiles, so this
   gate structurally cannot suppress them. `crowdsec-home-allowlist` was a fourth until H2.4c moved
@@ -415,50 +414,6 @@ checks each gate suppresses.
   the Longhorn `Backup` CRs that locate the volume backups, so a restore nobody can prove puts the
   rest of the recovery chain at risk. No gate and no streak: a file read has no upstream to wait
   on, and a stale stamp does not heal by itself. Runbook: `k3s-etcd-restore`.)
-- **`swallowed_verdicts`** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged and then
-  lost, #1869. The library returned 0 after a failed push by design, so the cron did not fail, and
-  the verdict reached nobody until the tile's heartbeat deadline (a day and an hour later for the
-  daily drift producers). #7109 deleted the library, so no cron writes the `push failed (` line,
-  and M6's C-7 deletes this row. `check_swallowed_verdicts` reads the crons' push-outcome lines out of
-  Loki over `SWALLOWED_VERDICTS_WINDOW_S` (3h): the cron's own `status=<up|down>` line and the
-  library's final `push failed (` line, with the transient-retry line excluded in the LogQL. It
-  uses `src.loki_lines`, a range query, because the newest line per tag decides and no metric
-  query returns a line's timestamp.
-  `down` when some tag's newest line is a swallowed `status=down` AND some other tag landed a push
-  in the window. When nothing landed, the loss is fleet-wide (Kuma unreachable, a total-404 edge,
-  the host that runs Kuma down), and the message names the edge/host tiles as the owner instead of
-  paging a second time for one cause. That gate separates this check from the plain count of push
-  failures that `uptime-kuma/CLAUDE.md` measured and rejected. A swallowed `up` is not counted:
-  its tile goes red at the deadline for a cron that ran, which is the library's retry case
-  (#1010).
-  **It never reads back past the node's boot** (#2783). uptime-kuma's Service has no endpoint for
-  ~16 minutes of the weekly restart, so every host cron whose slot falls in there loses its push
-  for one known cause, and a daily producer's lost verdict stays the newest line for its tag until
-  the next day. Inside `BOOT_SETTLE_S` (1200 s) the cycle is skipped and says so. After it, the
-  lookback is the smaller of the configured window and the time since the settle window ended, so
-  the full window returns on its own and the first verdict lost for any other reason pages.
-  `BOOT_SETTLE_S=0` restores the plain window.
-  One push is counted whatever its status and company: one Kuma REJECTED, marked `by=kuma` in the
-  http/rc pair, which the library appends when the 404 came back as Kuma's own
-  `application/json` rather than Traefik's `text/plain` page (#1803). The edge and Kuma are both
-  up, so no other tile pages. Kuma answers 404 for any exception in its push handler, so the
-  rejection is either a token no live monitor holds or a Kuma-side error, such as the 2026-10-11
-  `SQLITE_CONSTRAINT` on `stat_hourly` that a redeploy did not clear (#4481). The library logs
-  Kuma's own `msg` on a `push rejected by kuma (http=<code>): <msg>` line just before the
-  failure line, with the push token redacted, and the page names that line. The `crowdsec-jobs`
-  sidecar writes the same line to its container log, as pi-peer-backup does to its pod log. A token mismatch
-  reads `Monitor not found or not active.`, and its verdicts are lost for as long as the cron
-  and the static monitors carry different tokens. A burst of `http=404` lines from Traefik rejecting every router belongs to
-  `TraefikEntrypoint404Flood` (#1322).
-  Gated by `startup_grace`, and it fails open on a Loki error. A fetch that hits the 5000-line cap says so in the message. Two pushers
-  bypass the library's shape and are read by a second selector (#1943): the `crowdsec-jobs`
-  sidecar of the CrowdSec engine pod and the pi-peer-backup, configarr-health and
-  janitorr-health CronJobs (#5569). No such pod has a `logger`, so each
-  echoes its `status=` and `push failed (` lines in the syslog prefix shape to stdout.
-  `SWALLOWED_VERDICTS_POD_LOGQL`
-  (`{container=~"pi-peer-backup|crowdsec-jobs|configarr-health|janitorr-health"}`) reads
-  them, and the two fetches are merged before the verdict. The selector is not
-  `job=~"syslog|k8s"`, because the cap was sized against the syslog stream alone.)
 - **`discord`** (GET-verifies **all five** Discord notification webhooks: Kuma's own
   `monitor_discord_webhook_url`; CrowdSec's `crowdsec_discord_webhook_url`, which CrowdSec posts
   ban alerts to *directly*, not via Kuma; `gitops_deploy_discord_webhook`, which delivers the
@@ -491,6 +446,12 @@ checks each gate suppresses.
   streak wrapper are unit-tested.)
 
 ## Retired and moved checks
+
+Swallowed Push Verdicts (M6's C-7) retired without a successor because its subject is gone. It
+read `kuma-push-lib.sh`'s final `push failed (` line out of Loki and paged a DOWN verdict that
+one cron lost while a sibling's push landed (#1869). C-3a deleted the library, so no host pushes
+to Kuma and no cron writes that line. `git log --all -- ansible/roles/k8s/monitor-bridge/files/checks/logs.py` has the
+check and its post-reboot window (#2783).
 
 Prometheus Reachable (M6 batch A6's Cutover-2) retired without a rule of its own, by design. It
 was a trivial `vector(1)` query that ordered the exporter-health probe, and `ScrapeTargetDown`
