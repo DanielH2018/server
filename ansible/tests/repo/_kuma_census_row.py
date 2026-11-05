@@ -34,6 +34,15 @@ GENERATED_RECORDS = frozenset(
     }
 )
 
+# Base64 ciphertext can spell `kuma` by chance, so a rotation could fail the row with nothing to
+# reword. Every tracked SOPS file is secrets.yml or carries `.sops.` in its name.
+_SECRETS_FILE = "ansible/vars/secrets.yml"
+
+
+def _is_encrypted(rel: str) -> bool:
+    return rel == _SECRETS_FILE or ".sops." in rel.rsplit("/", 1)[-1]
+
+
 _C4B = "`kuma_ingress_monitors` until C-4b, which waits for D6, deletes the filter."
 _REDACTION = "`/api/push/` is an output redaction rule, not a Kuma read (#7195)."
 
@@ -287,11 +296,15 @@ _PROSE_HOLDERS = {
 }
 
 
-def _census_files() -> list[str]:
+def census_files() -> list[str]:
     selected = tracked(
         "ansible", "hosts", "scripts", ".claude", ":!*/tests/*", ":!*/test_*"
     )
-    return [rel for rel in selected if rel not in GENERATED_RECORDS]
+    return [
+        rel
+        for rel in selected
+        if rel not in GENERATED_RECORDS and not _is_encrypted(rel)
+    ]
 
 
 def kuma_mentions(subject: Subject) -> list[str]:
@@ -312,7 +325,7 @@ KUMA_IDENTIFIERS = Census(
         "nothing. Each file left here holds these identifiers for the reason its entry names. "
         "Removing a file's last identifier means deleting its entry."
     ),
-    files=_census_files,
+    files=census_files,
     offence=_identifier_hits,
     red=(
         Subject("a.sh", "source /usr/local/lib/kuma-push-lib.sh\n"),
@@ -345,7 +358,7 @@ KUMA_MENTIONS = Census(
         "pages now. To name the plan, cite it: a citation is stripped first. Rewording a file's "
         "last mention means deleting its entry from `_PROSE_HOLDERS`."
     ),
-    files=_census_files,
+    files=census_files,
     offence=kuma_mentions,
     red=(
         Subject("a.py", "kuma_url = x  # m6-retire-kuma.md\n"),

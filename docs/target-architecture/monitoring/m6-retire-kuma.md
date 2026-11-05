@@ -153,7 +153,9 @@ push-token secret remains.
           `scripts/dev/pytest_shard_runner_weights.json`: generated records keyed by test node
           ids, which can name deleted tests. The docs-refresh cron rewrites both, so the row
           leaves them out of its selector rather than listing them, because a stale-allow
-          failure would turn master red on the cron's own commit.
+          failure would turn master red on the cron's own commit. The selector also leaves out
+          every SOPS-encrypted file: a rotation rewrites them unattended, and base64 ciphertext
+          can spell `kuma` by chance.
         - The census row itself and its red fixture.
         - The `kuma-check-` unit-name prefix, and the `/var/lib/kuma-check/` directory
           of the same units' down markers, wherever a file holds them. ADR 0026 records

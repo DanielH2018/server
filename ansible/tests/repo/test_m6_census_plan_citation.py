@@ -10,7 +10,7 @@ Run: uv run pytest ansible/tests/repo/test_m6_census_plan_citation.py
 
 import re
 
-from _kuma_census_row import PLAN_CITATION
+from _kuma_census_row import PLAN_CITATION, census_files
 from _markdown_section import section, steps
 from lib.proc_testing import run
 from lib.repo_paths import REPO
@@ -61,6 +61,14 @@ def test_the_census_rule_names_the_plan_directory_path_it_strips():
         f"neither exit criterion 3 nor C-6 says how the census row treats a "
         f"`{PLAN_DIR_PREFIX}` path"
     )
+
+
+def test_the_census_reads_no_encrypted_file():
+    # A rotation rewrites these unattended, and ciphertext can spell `kuma` by chance.
+    argv = ["git", "grep", "-l", "-F", "ENC[AES256_GCM", "--", *CENSUS_TREES]
+    encrypted = set(run(argv, cwd=REPO).stdout.split())
+    assert "ansible/vars/secrets.yml" in encrypted
+    assert not encrypted & set(census_files())
 
 
 def _named_in(rel: str, rule: str) -> bool:
