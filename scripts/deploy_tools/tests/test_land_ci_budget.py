@@ -60,3 +60,9 @@ def test_land_shs_budget_covers_ci_ymls_chain_into_the_gate():
     _minutes, path = chain_into(workflow["jobs"], GATE)
     assert "host_packages" in path, path
     assert budget_problem(workflow["jobs"], options.Options.ci_timeout) is None
+
+
+def test_land_shs_merge_wait_covers_ci_ymls_chain_into_the_gate():
+    """A PR's own CI runs the same chain, so a shorter wait ends `merge-timeout` too early (#7129)."""
+    workflow = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
+    assert budget_problem(workflow["jobs"], options.Options.merge_timeout) is None
