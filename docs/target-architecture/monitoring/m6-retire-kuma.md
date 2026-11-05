@@ -172,7 +172,7 @@ push-token secret remains.
           `ansible/roles/k8s/loki-homelab/CLAUDE.md` bullet and
           `scripts/diagnostics/probe_lib/core.py`.
         - Any file the B-7 and C-6 PRs could not reword, with its reason. At C-6 these are
-          the 170 files of `_PROSE_HOLDERS`, none of which may hold an identifier above. C-6
+          the 167 files of `_PROSE_HOLDERS`, none of which may hold an identifier above. C-6
           measured 553 lines in 208 files against its budget of about 100, so it reworded the
           files this plan assigns to it and #7194 owns the rest.
     - Test directories are outside the selector. Many tests use `uptime-kuma` as a sample deploy

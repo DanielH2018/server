@@ -18,6 +18,6 @@ at base `decdee190`, with daniel-box on `0.6776+gc0f46a5e9157`, daniel-server on
 
 The census found far more than the plan's budget: 553 lines in 208 files, against about 100
 lines. C-6 reworded what the plan assigns to it, which leaves `hosts/` holding only the Pi compose
-files and rootq. The remaining 170 files sit in `_PROSE_HOLDERS`, each with its reason.
+files and rootq. The remaining 167 files sit in `_PROSE_HOLDERS`, each with its reason.
 [#7194](https://github.com/DanielH2018/server/issues/7194) owns those, and
 [#7195](https://github.com/DanielH2018/server/issues/7195) owns the redaction rules.

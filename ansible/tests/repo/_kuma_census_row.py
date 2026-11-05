@@ -95,9 +95,6 @@ _PROSE_HOLDERS = {
         (
             "ansible/roles/setup/k3s/CLAUDE.md",
             "ansible/roles/setup/k3s/tasks/health-crons.yml",
-            "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
-            "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
-            "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
         ),
         _K3S_COMMENT,
     ),
