@@ -42,14 +42,14 @@ D6.12: `promote` publishes the bundle and Flux applies it.
   change, a red or unfinished CI verdict, or a held SHA.
 - **Mode (explicit + reversible):** `has_gitops` in `host_vars` arms it on one host and tears it
   down elsewhere, so hand-deploy is that flip plus `initial_setup.yml --tags gitops_deploy`.
-- **Authoritative sources:** `origin/master` as fetched this tick, GitHub's check-runs API, and
-  the live rollout state — never a cached verdict, never the working tree.
+- **Authoritative sources:** `origin/master` as fetched this tick, GitHub's check-runs API, never a
+  cached verdict, never the working tree.
 - **Abort valves:** the CI gate; `hold_sha` and `hold_plane`; `BROAD_DEPLOY_TIMEOUT_S`, which
   bounds one tick's apply.
 - **Required evidence:** `last_run` every tick (GitOps-Alive expires without it), a Discord post
   per apply, hold and deferral, and a `hold_sha` that pages **GitOps Deploy — Status**.
-- **Next-run review:** before widening scope, read the last week's Discord log for the holds and
-  rollbacks that fired; the record page lists what an earlier widening cost.
+- **Next-run review:** before widening scope, read the last week's Discord log for the holds that
+  fired; the record page lists what an earlier widening cost.
   `increase(gitops_tick_runs_total[7d])` counts the same week by outcome, lock skips and
   parks included. `files/gitops_tick_metrics.py` writes it each tick, and the unit's second
   `ExecStopPost=` writes it for a tick `flock` skipped. Two shadow rules in

@@ -252,7 +252,6 @@ def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir,
 
 
 # ── the host-plane pages, now that no k8s module carries them (D6.12) ─────────────────────────
-WG_EASY_TASKS = "ansible/roles/containers/wg-easy/tasks/main.yml"
 SETUP_TEMPLATE = "ansible/roles/setup/gitops_deploy/templates/config.env.j2"
 SECRETS = "ansible/vars/secrets.yml"
 
