@@ -20,7 +20,7 @@ from deploy_tools.narrow_lib.task_walk import (
     file_tags,
     runs_the_same,
 )
-from lib.exit_codes import NARROW_SETUP_NARROWED
+from lib.exit_codes import NARROW_SETUP_NARROWED, NARROW_SETUP_REFUSED
 from lib.narrow_git import CannotNarrow
 
 from _setup_role_fixtures import ALPHA, PLAYBOOK, ROLE, build
@@ -153,3 +153,76 @@ def test_changed_task_tags_keeps_a_value_edit_beside_another_changed_task(
     )
     both = frozenset({"alpha", "beta"})
     assert changed_task_tags(old, new) == (both, both)
+
+
+RECURSIVE_BLOCK = "- &x {block: [*x], tags: [a]}\n"
+RECURSIVE_VARS = "- command: x\n  vars: &v {a: *v}\n  tags: [a]\n"
+
+
+def test_file_tags_refuses_a_recursive_alias():
+    with pytest.raises(CannotNarrow, match="recursive alias"):
+        file_tags(RECURSIVE_BLOCK)
+
+
+@pytest.mark.parametrize(
+    "before, after",
+    [
+        (RECURSIVE_VARS, "- command: y\n  tags: [a]\n"),
+        ("- command: y\n  tags: [a]\n", RECURSIVE_VARS),
+        (RECURSIVE_BLOCK, "- command: y\n  tags: [a]\n"),
+    ],
+    ids=["before-vars", "after-vars", "before-block"],
+)
+def test_changed_task_tags_gives_no_answer_for_a_recursive_alias(before, after):
+    assert changed_task_tags(before, after) is None
+
+
+def test_narrow_setup_refuses_a_task_file_holding_a_recursive_alias(tmp_path, capsys):
+    tree = build(tmp_path)
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA + "# A comment.\n")
+    old = tree.commit("before")
+    tree.write(f"{ROLE}/tasks/alpha.yml", RECURSIVE_BLOCK)
+    new = tree.commit("a recursive alias")
+
+    argv = ["demo", old, new, "--playbook", PLAYBOOK, "--repo", str(tree.root)]
+    assert narrow_setup.main(argv) == NARROW_SETUP_REFUSED
+    assert "recursive alias" in capsys.readouterr().err
+
+
+def test_foreign_tags_refuses_another_roles_recursive_alias(tmp_path):
+    tree = build(tmp_path)
+    tree.write("ansible/roles/setup/other/tasks/main.yml", RECURSIVE_BLOCK)
+    ref = tree.commit("another role's task file")
+    playbook = "- hosts: all\n  roles: [demo, other]\n"
+    with pytest.raises(CannotNarrow, match="recursive alias"):
+        foreign_tags("demo", playbook, ref, str(tree.root))
+
+
+def test_keys_reaching_refuses_an_owner_task_files_recursive_alias(tmp_path):
+    tree = build(tmp_path)
+    tree.write(f"{ROLE}/tasks/gamma.yml", RECURSIVE_BLOCK)
+    ref = tree.commit("an owner task file")
+    with pytest.raises(CannotNarrow, match="recursive alias"):
+        keys_reaching(
+            f"{ROLE}/defaults/main.yml", {"demo_alpha_mode"}, ref, str(tree.root)
+        )
+
+
+def test_play_role_includes_is_empty_for_a_recursive_alias():
+    playbook = "- hosts: all\n  tasks: &t\n    - block: *t\n"
+    assert play_role_includes(playbook, "demo") == []
+
+
+# The same swap as above, for the two reads that took no guard at all: `_included_from` and the
+# `tags_of` branch for a dynamically included file.
+@pytest.mark.parametrize("text", [NOT_A_DATE, RECURSIVE_BLOCK], ids=["date", "alias"])
+def test_the_dynamic_include_walks_refuse_a_text_they_cannot_read(tmp_path, text):
+    tree = build(tmp_path)
+    index = RoleIndex("demo", "HEAD", str(tree.root))
+    index.task_text["tasks/alpha.yml"] = text
+    with pytest.raises(CannotNarrow):
+        index._included_from(frozenset({"tasks/alpha.yml"}))
+    index.reachable = frozenset()
+    index.included = {"tasks/alpha.yml": frozenset({"alpha"})}
+    with pytest.raises(CannotNarrow):
+        index.tags_of("tasks/alpha.yml")

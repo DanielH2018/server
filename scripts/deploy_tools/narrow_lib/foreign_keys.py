@@ -30,8 +30,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 import re
 
 
-from lib import yaml_fast
-from lib.narrow_git import YAML_PARSE_ERRORS, CannotNarrow, mapping_at, show_at
+from lib.narrow_git import (
+    CannotNarrow,
+    mapping_at,
+    refuse_deep_walk,
+    show_at,
+    walk_yaml,
+)
 from deploy_tools.narrow_lib.setup_index import (
     _is_role_yaml,
     _scalars,
@@ -77,11 +82,11 @@ def _carriers(owner: str, ref: str, repo: str):
             continue
         text = show_at(ref, path, repo) or ""
         if rel.startswith("tasks/"):
-            try:
-                doc = yaml_fast.safe_load(text)
-            except YAML_PARSE_ERRORS as exc:
-                raise CannotNarrow(f"{path} does not parse: {exc}") from exc
-            facts += _fact_values(doc if isinstance(doc, list) else [])
+            facts += walk_yaml(
+                text,
+                path,
+                lambda doc: _fact_values(doc if isinstance(doc, list) else []),
+            )
         else:
             docs.append(mapping_at(text, path))
     for path in _tracked(ref, INVENTORY, repo):
@@ -121,11 +126,12 @@ def keys_reaching(path: str, keys: set[str], ref: str, repo: str) -> set[str]:
                     f"{other} names {name}, and it is not a YAML mapping this walk can follow"
                 )
         found: set[str] = set().union(*(_top_level_keys_naming(d, word) for d in docs))
-        found |= {
-            fact
-            for fact, value in facts
-            if any(word.search(s) for s in _scalars(value, set()))
-        }
+        with refuse_deep_walk(path):
+            found |= {
+                fact
+                for fact, value in facts
+                if any(word.search(s) for s in _scalars(value, set()))
+            }
         for other in sorted(found - out):
             out.add(other)
             todo.append(other)

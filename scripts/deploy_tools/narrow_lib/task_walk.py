@@ -17,7 +17,7 @@ import difflib
 
 
 from lib import yaml_fast
-from lib.narrow_git import YAML_PARSE_ERRORS, CannotNarrow, same_value
+from lib.narrow_git import CannotNarrow, same_value, walk_yaml
 
 # Ansible's two tags that do not select a subset. `--tags never` selects exactly the tasks
 # opted out of every ordinary run, and `--tags always` selects the tasks that run whatever is
@@ -193,16 +193,16 @@ def file_tags(text: str) -> frozenset[str] | None:
     imports. Those inherit their tags from
     the import site, so a hit in one says nothing about which tag applies it.
     """
-    try:
-        doc = yaml_fast.safe_load(text)
-    except YAML_PARSE_ERRORS as exc:
-        raise CannotNarrow(f"a task file does not parse: {exc}") from exc
-    if not isinstance(doc, list):
-        raise CannotNarrow("a task file is not a list of tasks")
-    per_task = _task_tags(doc, frozenset())
-    if not per_task or any(not tags for tags in per_task):
-        return None
-    return frozenset().union(*per_task)
+
+    def tags_of_doc(doc) -> frozenset[str] | None:
+        if not isinstance(doc, list):
+            raise CannotNarrow("a task file is not a list of tasks")
+        per_task = _task_tags(doc, frozenset())
+        if not per_task or any(not tags for tags in per_task):
+            return None
+        return frozenset().union(*per_task)
+
+    return walk_yaml(text, "a task file", tags_of_doc)
 
 
 def _without_import_names(node):
@@ -235,9 +235,9 @@ def runs_the_same(before: str, after: str) -> bool:
     one holding a recursive alias, which neither the name walk nor `same_value` can finish.
     """
     try:
-        old, new = yaml_fast.safe_load(before), yaml_fast.safe_load(after)
+        old, new = yaml_fast.parse_yaml(before), yaml_fast.parse_yaml(after)
         return same_value(_without_import_names(old), _without_import_names(new))
-    except (*YAML_PARSE_ERRORS, RecursionError):
+    except yaml_fast.UnparsableYaml, RecursionError:
         return False
 
 
@@ -287,16 +287,20 @@ def changed_task_tags(
     Longhorn instances' tags, and `--tags longhorn` re-ran the Longhorn install.
 
     None means the per-task answer is not safe, and the caller keeps the whole-file one:
-      - a text that does not parse, or is not a task list;
+      - a text that does not parse, is not a task list, or holds a recursive alias;
       - a file that sets a fact, loads vars or registers a result at either text, since a
         changed task may read a variable an unchanged task in the file sets under another tag;
       - a deleted task no tag of its own selects;
       - an edit that leaves no tag once `always` is dropped, such as an `always`-only change.
     """
     try:
-        old, new = yaml_fast.safe_load(before), yaml_fast.safe_load(after)
-    except YAML_PARSE_ERRORS:
+        return _changed_tags(yaml_fast.parse_yaml(before), yaml_fast.parse_yaml(after))
+    except yaml_fast.UnparsableYaml, RecursionError:
         return None
+
+
+def _changed_tags(old, new) -> tuple[frozenset[str], frozenset[str]] | None:
+    """`changed_task_tags` over the two parsed values."""
     if not isinstance(old, list) or not isinstance(new, list):
         return None
     if _set_facts(old) or _set_facts(new) or _loads_vars(old) or _loads_vars(new):

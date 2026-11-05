@@ -254,7 +254,7 @@ def test_the_derivation_follows_a_fact_through_the_role_index(tree):
 
 def test_a_set_fact_option_is_not_read_as_a_fact():
     """`cacheable:` is `set_fact`'s own option, so it is not a variable the role derives."""
-    doc = narrow_setup_index.yaml_fast.safe_load(
+    doc = yaml_fast.safe_load(
         "---\n- name: Derive\n  ansible.builtin.set_fact:\n"
         "    demo_key: value\n    cacheable: true\n"
     )

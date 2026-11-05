@@ -59,12 +59,14 @@ from typing import Callable, NamedTuple
 
 from deploy_tools.narrow_lib import containers, filters, guard_map, paths, secret_keys
 from deploy_tools.narrow_lib import templates as narrow_templates
+from lib import yaml_fast
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib.git import git, git_stdout
 from lib.narrow_git import (
     CannotNarrow,
     changed_mapping_keys,
     mapping_at,
+    refuse_deep_walk,
     same_parsed_yaml,
     show_at,
 )
@@ -291,8 +293,9 @@ def _containers_list_tags(
     A bare read counts against every host's list, as the rendering play picks the host; a
     `hostvars['<host>']` read names its host, so another host's edit skips it (#4422).
     """
-    own = containers.entry_change_tags(before, after, ctx.explain, path)
-    edit = containers.edit(before, after, path, ctx.explain)
+    with refuse_deep_walk(path):
+        own = containers.entry_change_tags(before, after, ctx.explain, path)
+        edit = containers.edit(before, after, path, ctx.explain)
     return own | _list_reader_tags(ctx, path, edit)
 
 
@@ -549,10 +552,16 @@ def context_for(
     Raises:
         subprocess.CalledProcessError: `ref` carries no host_vars, so `declared` cannot be
             read. A test driving a throwaway repo passes `declared` instead.
+        CannotNarrow: a host_vars file at `ref` does not parse.
     """
     cwd = Path(cwd)
     if declared is None:
-        declared = service_tags_at(ref, cwd)
+        try:
+            declared = service_tags_at(ref, cwd)
+        except yaml_fast.UnparsableYaml as exc:
+            raise CannotNarrow(
+                f"a host_vars file does not parse at {ref}: {exc}"
+            ) from exc
     if callers is None:
         from lib.k8s_roles import role_callers
 

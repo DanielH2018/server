@@ -143,7 +143,7 @@ def _run(
         host_vars = git(
             "show", f"{head}:ansible/inventory/host_vars/{K8S_HOST}.yml", cwd=repo
         )
-        entries = yaml_fast.safe_load(host_vars.stdout)["containers_list"]
+        entries = yaml_fast.parse_yaml(host_vars.stdout)["containers_list"]
         data = json.dumps(entries)
         with tempfile.TemporaryDirectory(prefix="order-only-") as tmp:
             root = Path(tmp)
@@ -183,6 +183,7 @@ def _run(
         ValueError,
         TypeError,
         KeyError,
+        RecursionError,
         tarfile.TarError,
     ):
         return None

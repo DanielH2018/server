@@ -96,3 +96,36 @@ def test_the_command_exits_three_when_a_ref_cannot_be_read(tree: Tree, capsys):
     rc = narrow_broad.narrow_cmd(old, "0" * 40, cwd=tree.root, callers={})
     assert rc == DEPLOY_BROAD
     assert "could not read the range" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["d: 2026-13-45\n", "d: !!bool x\n"],
+    ids=["impossible-date", "bad-bool-tag"],
+)
+def test_the_command_refuses_host_vars_the_declared_read_cannot_load(
+    tree: Tree, capsys, text: str
+):
+    """No `declared=`, so the read of the tags at the new commit is the one under test."""
+    tree.write("ansible/inventory/host_vars/daniel-pi.yml", text)
+    old, new = _refs(tree)
+    assert narrow_broad.narrow_cmd(old, new, cwd=tree.root, callers={}) == DEPLOY_BROAD
+    out = capsys.readouterr()
+    assert "a host_vars file does not parse" in out.err
+    assert out.out == ""
+
+
+def test_the_command_refuses_a_containers_list_holding_a_recursive_alias(
+    tree: Tree, capsys
+):
+    """A list that grows differs by length alone, so the entry compare is the first to recurse."""
+    entry = "containers_list:\n  - &e {name: radarr, platform: k8s, x: [*e]}\n"
+    tree.write("ansible/inventory/host_vars/daniel-pi.yml", entry)
+    tree.commit("a recursive entry")
+    tree.write(
+        "ansible/inventory/host_vars/daniel-pi.yml", entry + "  - {name: sonarr}\n"
+    )
+    old, new = _refs(tree)
+    rc = narrow_broad.narrow_cmd(old, new, cwd=tree.root, declared=DECLARED, callers={})
+    assert rc == DEPLOY_BROAD
+    assert "recursive alias" in capsys.readouterr().err

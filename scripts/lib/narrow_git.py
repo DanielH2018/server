@@ -22,13 +22,11 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import yaml
+import contextlib
+from collections.abc import Callable, Generator
 
 from lib import yaml_fast
 from lib.git import git
-
-# PyYAML's constructor raises a bare ValueError for a timestamp-shaped scalar (`2026-13-45`).
-YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError)
 
 
 class CannotNarrow(Exception):
@@ -68,16 +66,45 @@ def show_at(ref: str, path: str, repo) -> str | None:
     return r.stdout if r.returncode == 0 else None
 
 
+@contextlib.contextmanager
+def refuse_deep_walk(label: str) -> Generator[None]:
+    """Refuse when a recursive walk over a parsed value runs out of stack.
+
+    A recursive alias (`k: &l [1, *l]`) loads as a value containing itself, and very deep
+    nesting exhausts the stack the same way.
+
+    Raises:
+        CannotNarrow: the body raised `RecursionError`.
+    """
+    try:
+        yield
+    except RecursionError as exc:
+        raise CannotNarrow(
+            f"{label} holds a recursive alias or nests too deeply"
+        ) from exc
+
+
+def walk_yaml[T](text: str, label: str, walk: Callable[[object], T]) -> T:
+    """`walk` over `text`'s parsed value, or a refusal naming `label`.
+
+    Raises:
+        CannotNarrow: the text does not parse, or `walk` runs out of stack.
+    """
+    with refuse_deep_walk(label):
+        try:
+            doc = yaml_fast.parse_yaml(text)
+        except yaml_fast.UnparsableYaml as exc:
+            raise CannotNarrow(f"{label} does not parse: {exc}") from exc
+        return walk(doc)
+
+
 def mapping_at(text: str, label: str) -> dict:
     """`text` parsed as a YAML mapping, or a refusal naming `label`.
 
     An empty file is an empty mapping: a vars file emptied by a range defines no key, which is
     a real answer rather than a doubt.
     """
-    try:
-        loaded = yaml_fast.safe_load(text) or {}
-    except YAML_PARSE_ERRORS as exc:
-        raise CannotNarrow(f"{label} does not parse: {exc}") from exc
+    loaded = walk_yaml(text, label, lambda doc: doc) or {}
     if not isinstance(loaded, dict):
         raise CannotNarrow(f"{label} is not a mapping of keys")
     return loaded
@@ -101,9 +128,8 @@ def same_parsed_yaml(before: str, after: str) -> bool:
     A key reordered reads as a change, and text that does not load is never the same.
     """
     try:
-        return same_value(yaml_fast.safe_load(before), yaml_fast.safe_load(after))
-    # A timestamp-shaped scalar such as 2026-13-45 raises ValueError from the constructor.
-    except yaml.YAMLError, ValueError, RecursionError:
+        return same_value(yaml_fast.parse_yaml(before), yaml_fast.parse_yaml(after))
+    except yaml_fast.UnparsableYaml, RecursionError:
         return False
 
 
@@ -112,13 +138,9 @@ def changed_mapping_keys(before: dict, after: dict, label: str) -> set[str]:
 
     A key removed counts as changed: the tasks and templates reading it change behaviour.
     """
-    try:
+    with refuse_deep_walk(label):
         return {
             k
             for k in set(before) | set(after)
             if not same_value(before.get(k), after.get(k))
         }
-    except RecursionError as exc:
-        # A recursive alias (`k: &l [1, *l]`) loads as a value containing itself, and `==`
-        # recurses into it until the stack runs out.
-        raise CannotNarrow(f"{label} holds a recursive alias") from exc

@@ -22,8 +22,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import re
 from pathlib import Path
 
-import yaml
-
 from lib import yaml_fast
 from lib.repo_paths import K8S_ROLES, REPO
 
@@ -116,10 +114,9 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
         reached = _looked_up(role_dir)
         for task_file in sorted(role_dir.glob("tasks/*.yml")):
             try:
-                tasks = yaml_fast.safe_load(task_file.read_text())
-            except yaml.YAMLError:
+                reached |= _callees(yaml_fast.parse_yaml(task_file.read_text()))
+            except yaml_fast.UnparsableYaml, RecursionError:
                 continue
-            reached |= _callees(tasks)
         for callee in reached - {caller}:
             callers.setdefault(callee, set()).add(caller)
     return callers

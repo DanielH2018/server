@@ -7,6 +7,8 @@ file whose top level is a list reaches a ``.get`` several calls later.
 import os
 from pathlib import Path
 
+import pytest
+
 import render_guard
 from render_guard import (
     HOST_VARS,
@@ -19,6 +21,7 @@ from render_guard import (
     service_tags_at_or_none,
 )
 from repo_paths import ANSIBLE, INVENTORY, ROLES
+from lib import yaml_fast
 from lib.git_testing import commit, init_repo
 
 # One commit declaring a service, and one adding a second. `deploy.sh --at <sha>` validates
@@ -218,3 +221,10 @@ def test_every_public_name_is_listed_in_all():
     assert render_guard.__all__ == sorted(render_guard.__all__)
     for name in render_guard.__all__:
         assert hasattr(render_guard, name), name
+
+
+def test_load_yaml_raises_the_one_parse_failure_for_an_impossible_date(tmp_path):
+    path = tmp_path / "vars.yml"
+    path.write_text("d: 2026-13-45\n")
+    with pytest.raises(yaml_fast.UnparsableYaml):
+        load_yaml(path)
