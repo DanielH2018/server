@@ -21,9 +21,9 @@ highest-signal findings.
   backup tier that matches `docs/longhorn-backup-tiering.md`, and a `checksum/config` pod
   annotation wherever a ConfigMap/Secret change must roll the pod. `roles/k8s/sonarr` and
   `roles/k8s/freshrss` are good reference shapes.
-- **One trap to respect:** `kubectl apply` leaves **stale Secret keys** behind, so a removed
-  manifest key persists live. (The k8s deploy play toposorts `containers_list` on derived
-  Traefik-CRD and authelia edges, so a new entry's position no longer needs checking.)
+- **One trap to respect:** for **stale Secret keys**, see `.claude/rules/k8s-templates.md`,
+  *Removing a key from a Secret template*. (The k8s deploy play toposorts `containers_list` on
+  derived Traefik-CRD and authelia edges, so a new entry's position no longer needs checking.)
 - **Egress NetworkPolicies are not enforced** by this cluster's CNI. Never report one as a control,
   and don't propose an egress policy as a fix.
 - **Retired Compose roles live in git history only.** H5.12 deleted `ansible/roles/containers/`.
