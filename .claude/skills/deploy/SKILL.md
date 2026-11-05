@@ -93,8 +93,9 @@ Steps:
        deploy failure — read `describe`'s Events.
      - If a ConfigMap/Secret change appears not to have taken effect, check whether the
        Deployment carries a `checksum/config` pod annotation; without it the pod isn't
-       rolled. Also note `kubectl apply` leaves **stale Secret keys** behind — a key removed
-       from the manifest persists live until patched out.
+       rolled. A key removed from a `secret.yaml.j2` stays live only when a field manager
+       other than Flux holds it; `.claude/rules/k8s-templates.md`, *Removing a key from a
+       Secret template*, has the rule.
    - **Docker (Pi only), after the package installs:** `uv run python
      scripts/diagnostics/probe.py health <service> --docker` — exit 0 = running + healthy;
      allow-listed. Run it from daniel-box as written: `--docker` reaches the Pi's Docker daemon
