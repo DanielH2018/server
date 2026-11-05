@@ -791,9 +791,9 @@ That path set routes to `{'secrets': True}` (Baseline), the deployer's secrets-d
 it merges without a deploy and alerts once. The removal waits for PR 6, because before it the
 role's template still references the key.
 
-**That commit retires the last `*_push_token` key.** M6's C-5 retires the only other one, so
-the commit also leaves `CROSS_HOST_PUSH_TOKENS` empty and the registry with no `auto` tier. The
-commit re-reads each reader of the suffix and of the set, and it deletes the ones with no
+**That commit retires the last `*_push_token` key once M6's C-5 has merged.** C-5 retires the
+only other one. The commit also leaves `CROSS_HOST_PUSH_TOKENS` empty and the registry with no
+`auto` tier. The commit re-reads each reader of the suffix and of the set, and it deletes the ones with no
 subject left, or files a finding for each one it keeps:
 
 - `scripts/secrets_mgmt/secrets_lib/secret_classify.py:classify`, the `_push_token` rule;
@@ -801,6 +801,8 @@ subject left, or files a finding for each one it keeps:
   step's `*_push_token` clause;
 - `consumers.py:CROSS_HOST_PUSH_TOKENS`, with its readers in `consumer_tags`,
   `test_secret_consumers.py` and the note in `scripts/deploy_tools/land_lib/land_tags.py`.
+  `scripts/deploy_tools/tests/test_land_tags.py` asserts that note names the set, so the test
+  changes with the note.
 
 The commit's description quotes the reads for M6's exit criterion 2:
 `grep -c '_push_token:' ansible/secret_rotation.yml` and the same read on
