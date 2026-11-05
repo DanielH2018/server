@@ -82,11 +82,9 @@ def _uncovered(files: set[str], pathspecs: list[str]) -> list[str]:
 def _case_input_members() -> set[str]:
     """What CASE_INPUTS must cover: the cases, their imports, the image and the bootstrap."""
     (image,) = [step for step in _job_steps() if step.get("name") == IMAGE_STEP]
-    match = re.search(
-        r"docker build\b.*?-t \S+ (\S+)", image["run"].replace("\\\n", " ")
-    )
-    assert match, f"no `docker build ... -t <tag> <context>` in {IMAGE_STEP!r}"
-    context = match.group(1).rstrip("/")
+    match = re.search(r"(\S+)/build-image\.sh\b", image["run"])
+    assert match, f"no `<context>/build-image.sh` in {IMAGE_STEP!r}"
+    context = match.group(1)
     return {
         CASES_SCRIPT,
         BOOTSTRAP_SCRIPT,
