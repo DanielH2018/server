@@ -367,8 +367,8 @@ k3s_etcd_s3_cron_minute: "45"
 #
 # DECIDED: `--list-only`, weekly, and NOT the full restore. --list-only proves the off-box leg
 # end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass
-# on daniel-box at all — five structural failures documented at scripts/backup/etcd_restore_drill.sh:43-64
-# — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and
+# on daniel-box at all — five structural failures listed in scripts/backup/etcd_restore_drill.sh's
+# header, under `It does NOT pass beside a live k3s` — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and
 # scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two
 # restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled
 # list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the

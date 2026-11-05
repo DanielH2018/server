@@ -316,12 +316,10 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "probe.py": "scheduled",
         "docs_provenance.py": "library",
         "core.py": "library",
-        # "gate" rather than "adhoc" because of the call graph, not the classifier. The staging
-        # gate has always ended in `deploy.sh`, but it reached it through a script PIPED over
-        # ssh, which is invisible to a scan of the tree. The restricted key's dispatcher is a
-        # role template, so the chain dispatcher -> staging_gate_remote.sh -> deploy.sh is
-        # visible and deploy.sh inherits the caller's kind. A person also runs it by hand; the
-        # gate is simply a caller the classifier can see.
+        # "gate" rather than "adhoc" because the deployer's `gitops_markers.py` builds the
+        # `./scripts/deploy.sh --tags` command, and the classifier reads that as a deploy-plane
+        # caller. A person also runs it by hand; the gate is simply a caller the classifier
+        # can see.
         "deploy.sh": "gate",
         "etcd_restore_drill.sh": "gate",  # a role copies it; its crons hide behind wrappers
     }
