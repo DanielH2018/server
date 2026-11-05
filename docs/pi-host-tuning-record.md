@@ -48,8 +48,10 @@ turns off readahead on a random-access device, worth about 8× lower swap-in lat
 
 ## Log2Ram, and why `--sparse` is patched out
 
-The role adds the Azlux repo and installs `log2ram` to spare the SD card from log writes.
-**Then it patches `--sparse` out of both of Log2Ram's `rsync` command lines**, because
+`homelab-daniel-pi` ships the Azlux source, and step 5 of `hosts/bootstrap-host.sh` installs
+`log2ram` from it to spare the SD card from log writes. A rebuilt Pi moves `/var/log` to RAM at
+its first reboot after that step.
+**The package runs a copy with `--sparse` patched out of both of Log2Ram's `rsync` command lines**, because
 `--sparse` with `--inplace` corrupts any file whose content ends in NUL bytes. rsync seeks
 over the source's NUL run rather than writing it, and `--inplace` writes into the live
 destination, so the previous file's bytes survive at those offsets. That clobbered the

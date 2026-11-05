@@ -1311,7 +1311,11 @@ steps are:
 5. Install `chezmoi` from `homelab-tools`, then run `apt-get install homelab-updater
    homelab-<hostname>`, then `systemd-tmpfiles --create`, as boot does. That creates each
    directory a package declares in `tmpfiles.d`, the Pi's textfile directory (H7.4) among
-   them, before the updater's first run writes into it. daniel-box serves the repo it installs from, so it cannot bootstrap
+   them, before the updater's first run writes into it. On the Pi, it then updates from the
+   Azlux source the package ships and installs `log2ram`, which the package cannot depend on
+   because that source arrives with it. dpkg runs under `--force-confnew`, because reconcile
+   may already have written `/etc/log2ram.conf`. If Azlux's host does not answer, the script
+   warns and goes on, and a rerun installs the package. daniel-box serves the repo it installs from, so it cannot bootstrap
    from `http://10.0.0.215:8791`, and it uses `--local-build <clone>` instead. That flag
    builds every package daniel-box needs from the clone:
     - It checks the clone's `HEAD` against C5's anchor, the rule the builder applies
@@ -1401,7 +1405,8 @@ for a wrong hostname, a missing host var and a missing key.
    baselines and masks `dailyaidecheck.timer`, which takes over an hour. The component
    leaves that state to bootstrap rather than carrying it (#6674). Afterwards
    `/var/lib/aide/aide.db` and `/var/lib/rkhunter/db/rkhunter.dat` exist, and
-   `systemctl is-enabled dailyaidecheck.timer` prints `masked`.
+   `systemctl is-enabled dailyaidecheck.timer` prints `masked`. To move `/var/log` to RAM,
+   reboot the Pi, because `log2ram` mounts only at boot. Then `findmnt /var/log` shows a tmpfs.
 7. If step 3 created a key, the operator adds it as a recipient **without removing the old
    one** (**operator-only**). The old key leaves the recipient list only after the rebuild
    is accepted.

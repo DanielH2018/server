@@ -252,6 +252,9 @@ REPO_CALLS = (
     " -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0\n"
     "install -y homelab-tools\n"
     "install -y homelab-updater homelab-daniel-pi\n"
+    "update --error-on=any -o Dir::Etc::sourcelist=sources.list.d/azlux.sources"
+    " -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0\n"
+    "install -y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confnew log2ram\n"
 )
 REPO_SIMULATION = "".join(
     f"Inst {package} (0.1+gabc homelab:homelab [all])\n"
@@ -261,6 +264,18 @@ REPO_SIMULATION = "".join(
 
 def test_a_repository_install_of_the_three_packages_by_name_is_clean():
     assert repo_case.apt_problems("daniel-pi", REPO_CALLS, REPO_SIMULATION) == []
+
+
+def test_a_pi_without_its_log2ram_calls_or_another_host_with_them_is_flagged():
+    azlux, log2ram = REPO_CALLS.splitlines()[-2:]
+    only_packages = REPO_CALLS.replace(f"{azlux}\n{log2ram}\n", "")
+
+    assert repo_case.apt_problems("daniel-pi", only_packages, REPO_SIMULATION) == [
+        "daniel-pi ran 0 log2ram calls, not 2"
+    ]
+    assert case.split_log2ram("daniel-box", REPO_CALLS)[1] == [
+        "daniel-box ran 2 log2ram calls, not 0"
+    ]
 
 
 def test_a_repository_install_that_missed_the_homelab_update_or_a_package_is_flagged():

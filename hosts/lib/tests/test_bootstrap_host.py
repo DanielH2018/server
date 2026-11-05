@@ -66,7 +66,7 @@ def test_the_named_host_gets_the_keyring_the_source_and_both_packages(host):
     # test_lan_facts_have_one_source.py holds the address itself.
     assert [line for line in sources if line.startswith("URIs: http://")]
     assert f"Signed-By: /{INSTALLED_KEYRING}" in sources
-    update, tools, install = host.apt_calls()
+    update, tools, install, *_log2ram = host.apt_calls()
     assert update.startswith("update --error-on=any ")
     assert "-o Dir::Etc::sourcelist=sources.list.d/homelab.sources" in update
     assert "-o Dir::Etc::sourceparts=-" in update

@@ -39,8 +39,9 @@ must not break.
 - Step 4 also removes rsyslog's text logs, and step 7 removes the report `aideinit` leaves at
   `/var/log/aide/aide.log`. Audit rotations need no step, because the `pi-tuning` cap is in place
   before a rebuilt Pi has any to spare.
-- Installing `log2ram` stays a bootstrap step: Azlux's apt source arrives in the same package, so
-  the package cannot depend on it.
+- Step 5 of `hosts/bootstrap-host.sh` installs `log2ram` after the package. Azlux's apt source
+  arrives in the same package, so the package cannot depend on it. The install runs before step 6
+  stops the stub resolver, and `/var/log` moves to RAM at the next boot.
 - The Ansible-era edits stay in the files as harmless duplicates, and the interim push-token
   files under `/etc/homelab/interim/` are legacy entries of the Pi package.
 
