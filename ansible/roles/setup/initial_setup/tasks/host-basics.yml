@@ -11,6 +11,10 @@
 # the watchdog daemon dead after any run that reached `pi-swap` without that tag:
 # the 2026-09-27 23:28 run stopped it, wd_keepalive took over the device, and the daemon's load
 # test stayed off for four days (#3241).
+#
+# The stop reports `changed` even on a stopped daemon, because Ansible fires a handler only on
+# `changed`. Reporting `ok` there would leave a daemon that an interrupted run stopped dead through
+# every later run (#7202).
 - name: Gather service facts
   tags: [pi-swap]
   ansible.builtin.service_facts:
@@ -22,6 +26,7 @@
     name: watchdog
     state: stopped
   become: true
+  changed_when: true
   notify: Start Watchdog after provisioning
   when:
     - has_low_memory_board

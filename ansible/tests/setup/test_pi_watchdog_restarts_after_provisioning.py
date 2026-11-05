@@ -4,6 +4,10 @@ initial_setup stops the watchdog daemon before its heavy apt work on the Pi. Onl
 own task started it again, so a run that reached the stop without the `watchdog` tag left the
 daemon dead (#3241). The handler is what makes the restart independent of tag selection.
 
+Ansible fires a handler only when the notifying task reports `changed`, and stopping a stopped
+daemon reports `ok`. A run that died before the handlers therefore left the daemon stopped through
+every later run (#7202), so each stop must force `changed_when: true`.
+
 Run: uv run pytest ansible/tests/setup/test_pi_watchdog_restarts_after_provisioning.py
 """
 
@@ -63,6 +67,15 @@ def stops_left_stopped(tasks: list[dict], handlers: list[dict]) -> list[str]:
     return offenders
 
 
+def stops_that_can_report_ok(tasks: list[dict]) -> list[str]:
+    """Names of watchdog-stopping tasks that skip their notify on an already stopped daemon."""
+    return [
+        task["name"]
+        for task in watchdog_stops(tasks)
+        if task.get("changed_when") is not True
+    ]
+
+
 def _real_tasks() -> list[dict]:
     tasks: list[dict] = []
     for tasks_file in task_files(SETUP):
@@ -105,3 +118,24 @@ def test_a_stop_whose_handler_only_reloads_is_flagged() -> None:
         "ansible.builtin.service": {"name": "watchdog", "state": "reloaded"},
     }
     assert stops_left_stopped([stop], [reload]) == ["stop it"]
+
+
+def test_every_real_watchdog_stop_notifies_on_a_stopped_daemon() -> None:
+    assert stops_that_can_report_ok(_real_tasks()) == []
+
+
+def test_a_stop_that_forces_changed_is_clean() -> None:
+    stop = {
+        "name": "stop it",
+        "ansible.builtin.systemd": {"name": "watchdog", "state": "stopped"},
+        "changed_when": True,
+    }
+    assert stops_that_can_report_ok([stop]) == []
+
+
+def test_a_stop_that_can_report_ok_is_flagged() -> None:
+    stop = {
+        "name": "stop it",
+        "ansible.builtin.systemd": {"name": "watchdog", "state": "stopped"},
+    }
+    assert stops_that_can_report_ok([stop]) == ["stop it"]
