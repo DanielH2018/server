@@ -15,7 +15,9 @@ def _names(calls):
 
 def test_nothing_to_deploy_is_decided_before_the_ci_wait(land_run):
     """Sixteen of 45 landings waited a median seven minutes of CI to learn this."""
-    rc, out, _, calls, logline = land_run([], Fakes(derived=([], "pr")))
+    files = {"files": [{"path": "docs/landing.md"}], "changedFiles": 1}
+    fakes = Fakes(gh_views={"files,changedFiles": files}, derived=([], "pr"))
+    rc, out, _, calls, logline = land_run([], fakes)
     assert rc == 0 and "VERDICT: nothing-to-deploy" in out
     assert "await_ci" not in _names(calls)
     assert "verdict=nothing-to-deploy cause= exit=0" in logline

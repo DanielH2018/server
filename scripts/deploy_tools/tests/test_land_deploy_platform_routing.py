@@ -15,7 +15,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy_platform_routing.
 """
 
 from _land_fakes import MERGE_SHA, Fakes
-from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 
 
@@ -125,24 +124,6 @@ def test_a_tag_the_range_proves_but_this_landing_never_deploys_drops_out(landing
     )
     deploy.derive_from_diff(ln)
     assert ln.k8s_only == ["wg-easy"]
-
-
-def test_the_deployers_own_narrowing_proves_no_platform(landing):
-    """`narrow` maps a broad path to the services whose render it reaches, and no path names
-    those tags, so that branch never asks."""
-    ln, calls = _fallback(
-        landing,
-        Fakes(
-            changed_rc=DEPLOY_BROAD,
-            narrowed_rc=0,
-            narrowed="wg-easy\n",
-            diff_paths=[_K8S_PATH],
-            path_k8s_only=["wg-easy"],
-        ),
-    )
-    deploy.derive_from_diff(ln)
-    assert (ln.resolved_tags, ln.k8s_only) == (["wg-easy"], [])
-    assert [c[0] for c in calls if c[0] == "k8s_only_tags"] == []
 
 
 def test_a_path_read_that_fails_routes_to_both_platforms(landing):

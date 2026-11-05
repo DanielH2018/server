@@ -34,7 +34,9 @@ K3S_SETUP = "ansible/roles/setup/k3s/tasks/longhorn-backup.yml"
 # A bring-up playbook: the plane the deployer must never apply itself.
 BRINGUP = "ansible/k3s-bringup.yml"
 # A deploy-plane path, for the range that carries both halves.
-GROUP_VARS = "ansible/inventory/group_vars/all.yml"
+# A setup role this tick applies itself; its narrowing is unscripted, so it applies whole.
+APPLYABLE = "ansible/roles/setup/gitops_deploy/tasks/main.yml"
+APPLY_GITOPS_DEPLOY = ["ansible/initial_setup.yml", "--tags", "gitops_deploy"]
 
 
 # ── the plane that still parks ─────────────────────────────────────────────────────────
@@ -286,23 +288,22 @@ def test_an_idle_tick_with_no_pending_role_says_nothing(
     assert "manual_plane: pending" not in capsys.readouterr().out
 
 
-def test_a_mixed_range_applies_the_deploy_plane_and_still_records_the_role(
+def test_a_mixed_range_applies_the_applyable_role_and_still_records_the_other(
     gitops_deploy, tick, state
 ):
     """A range carrying both halves: the applyable one is applied, the other is recorded.
 
-    Parking the range would hold BOTH, so an inventory change sharing a push with a
-    `roles/setup/k3s/` change would wait on a hand that never comes for it.
+    Parking the range would hold BOTH, so a setup change the tick can apply, sharing a push
+    with a `roles/setup/k3s/` change, would wait on a hand that never comes for it.
     """
-    tick.paths = [GROUP_VARS, K3S_SETUP]
-    tick.narrow = (0, "sonarr")
+    tick.paths = [APPLYABLE, K3S_SETUP]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
-    assert tick.playbooks[0][-3:] == ["ansible/deploy.yml", "--tags", "sonarr"]
+    assert tick.playbooks[0][-3:] == APPLY_GITOPS_DEPLOY
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
-    assert receipt_applied(state) == {"ansible/deploy.yml": ("sonarr",)}, (
-        "the half that WAS applied still records it"
-    )
+    assert receipt_applied(state) == {
+        "ansible/initial_setup.yml": ("gitops_deploy",)
+    }, "the half that WAS applied still records it"
 
 
 def test_a_mixed_range_writes_one_receipt_naming_both_halves(
@@ -310,12 +311,11 @@ def test_a_mixed_range_writes_one_receipt_naming_both_halves(
 ):
     """The receipt `land.sh` reads instead of re-deriving (#3391): the plane the tick applied,
     with its tags, and the role it left to a hand, under the one origin SHA it crossed to."""
-    tick.paths = [GROUP_VARS, K3S_SETUP]
-    tick.narrow = (0, "sonarr")
+    tick.paths = [APPLYABLE, K3S_SETUP]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     (receipt,) = parse_receipts(state.read("receipts"))
     assert receipt.origin == ORIGIN
-    assert receipt.applied == {"ansible/deploy.yml": ("sonarr",)}
+    assert receipt.applied == {"ansible/initial_setup.yml": ("gitops_deploy",)}
     assert list(receipt.manual) == ["k3s"]
 
 
@@ -330,10 +330,9 @@ def test_a_filter_plugin_a_bring_up_role_calls_records_that_role(
     table = deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS
     monkeypatch.setitem(table, plugin, frozenset({"k3s"}))
     tick.paths = [plugin]
-    tick.narrow = (0, "sonarr")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
-    assert tick.playbooks[0][-3:] == ["ansible/deploy.yml", "--tags", "sonarr"]
+    assert tick.playbooks == [], "the deploy plane applies nothing on this host (D6.12)"
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
 
 
@@ -342,24 +341,19 @@ def test_a_filter_plugin_an_initial_setup_role_calls_applies_that_role(
 ):
     """`gitops_deploy` renders `k8s_autodeploy_denylist`, and the tick can apply it itself."""
     tick.paths = ["ansible/filter_plugins/k8s_autodeploy.py"]
-    tick.narrow = (0, "sonarr")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert [p[-3:] for p in tick.playbooks] == [
-        ["ansible/initial_setup.yml", "--tags", "gitops_deploy"],
-        ["ansible/deploy.yml", "--tags", "sonarr"],
-    ]
+    assert [p[-3:] for p in tick.playbooks] == [APPLY_GITOPS_DEPLOY]
     assert state.manual_plane_pending() == []
 
 
-def test_a_filter_plugin_no_setup_role_calls_stays_on_the_deploy_plane(
+def test_a_filter_plugin_no_setup_role_calls_applies_nothing(
     gitops_deploy, tick, state
 ):
+    """A deploy-plane path: the renderer reads it and `promote` applies it (D6.12)."""
     tick.paths = ["ansible/filter_plugins/py_table.py"]
-    tick.narrow = (0, "monitor-bridge")
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
-    assert [p[-3:] for p in tick.playbooks] == [
-        ["ansible/deploy.yml", "--tags", "monitor-bridge"]
-    ]
+    assert tick.merges == [ORIGIN]
+    assert tick.playbooks == []
     assert state.manual_plane_pending() == []
 
 
@@ -384,8 +378,7 @@ def test_a_failed_apply_still_records_the_role(gitops_deploy, tick, state):
     operator fixes forward and origin advances past the hold, `local..origin` no longer
     carries that commit — the broad arm never sees the role again.
     """
-    tick.paths = [GROUP_VARS, K3S_SETUP]
-    tick.narrow = (0, "sonarr")
+    tick.paths = [APPLYABLE, K3S_SETUP]
     tick.playbook_outcomes = [RuntimeError("boom")]
     gitops_deploy.main(tick.tools, tick.config, state)
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
@@ -451,8 +444,7 @@ def test_a_contended_tick_on_an_already_pending_role_keeps_the_earlier_row(
     state.record_manual_plane_tags(
         "k3s", frozenset({"kubeconfig"}), line_predates=False
     )
-    tick.paths = [GROUP_VARS, K3S_SETUP]
-    tick.narrow = (0, "sonarr")
+    tick.paths = [APPLYABLE, K3S_SETUP]
     tick.narrow_setup["k3s"] = (0, "coredns")
     tick.playbook_outcomes = [deploy_locks.ServiceLockBusy("busy")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0

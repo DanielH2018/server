@@ -6,7 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy.py
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, receipt
-from lib.exit_codes import DEPLOY_BROAD, LAND_GAVE_UP
+from lib.exit_codes import LAND_GAVE_UP
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
@@ -251,14 +251,6 @@ def test_the_diff_fallback_drops_an_empty_tag_element(landing):
     assert ln.resolved_tags == ["sonarr", "radarr"]
     deploy_argv = [c for c in calls if c[0] == "deploy"]
     assert deploy_argv and deploy_argv[0][1][1] == ["sonarr", "radarr"]
-
-
-def test_a_broad_diff_fallback_is_handed_to_a_hand(landing):
-    ln, _ = _ready(landing, Fakes(changed_rc=DEPLOY_BROAD), since="abc")
-    ln.needs_diff = True
-    with pytest.raises(Outcome) as exc:
-        deploy.deploy_phase(ln)
-    assert exc.value.rc == 1 and "deploy it by hand" in exc.value.error
 
 
 def test_a_stale_tree_waits_on_its_own_merge_commit_before_reticking(landing):

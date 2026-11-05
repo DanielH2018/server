@@ -280,7 +280,9 @@ def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
 
 # The tick's own deferral of a deploy plane it could not narrow (#4333): the range is
 # merged, its receipt applies nothing and records the owed services under `deferred`, and
-# each of them holds a `k8s_unapplied` line until a deploy or the render proof covers it.
+# each of them holds a `k8s_unapplied` line. No tick writes one since D6.12, and a deploy-plane
+# PR no longer needs `ansible/deploy.yml` from the tick, so the deferral's own tests went with
+# it; the reader stays until D6.6. The case below keeps a stale receipt from passing.
 OWED = ("sonarr", "radarr")
 DEFERRED_RECEIPT = receipt({}, deferred={"ansible/deploy.yml": list(OWED)})
 OWED_LINES = {
@@ -306,61 +308,6 @@ def _deferred(landing, state: dict, pr_path: str = DEPLOY_PLANE_PATH):
     )
     ln.classification = replace(ln.classification, pr_paths=(pr_path,))
     return ln
-
-
-def test_a_deploy_plane_the_tick_deferred_prints_the_deferral_not_deploy_yml(
-    landing, capsys
-):
-    """#4843: the ledger lines are the remedy, not a whole deploy.yml after an ff-merge."""
-    ln = _deferred(landing, DEFERRED_RECEIPT | OWED_LINES)
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    out = capsys.readouterr().out
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "k8s_unapplied ledger: 2 of its services are still owed" in out
-    assert "probe.py gitops-state" in out
-    assert "Apply it:" not in out
-    assert "ff-only" not in out
-    assert "never see this range again" not in out
-
-
-def test_a_deferred_plane_whose_services_all_discharged_is_settled(landing):
-    """The receipt outlives the lines, so a re-run after the render proof reads applied."""
-    ln = _deferred(landing, DEFERRED_RECEIPT)
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (0, "settled")
-
-
-def test_a_deferred_plane_that_owed_no_service_is_not_settled(landing, capsys):
-    """#4865: an empty set counted 0 owed and read as discharged, for a plane nothing ran.
-
-    A deployer before #4865 wrote one when host_vars was unreadable, so the remedy is the
-    stranded-range note and the deploy.yml command, not the ledger lines.
-    """
-    ln = _deferred(landing, receipt({}, deferred={"ansible/deploy.yml": []}))
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    out = capsys.readouterr().out
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert f"Apply it: {DEPLOY_PLANE_COMMAND}" in out
-    assert "k8s_unapplied ledger" not in out
-
-
-def test_a_deferred_plane_with_an_unreadable_ledger_still_names_the_deferral(
-    landing, capsys
-):
-    """An unread count proves nothing either way: not settled, and not stranded either."""
-    ln = _deferred(landing, DEFERRED_RECEIPT)
-    ln.tools.read_state = lambda root, name: (
-        None if name == MARKERS["owed"] else DEFERRED_RECEIPT.get(name, "")
-    )
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    out = capsys.readouterr().out
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "an unknown number of its services are still owed" in out
-    assert "Apply it:" not in out
 
 
 @pytest.mark.parametrize(

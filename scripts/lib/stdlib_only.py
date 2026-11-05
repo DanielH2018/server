@@ -32,8 +32,7 @@ keys a staged member by its tree source; `members()` keeps each staged copy with
 install's directories, because `host_lib.py` ships to a dozen of them and a union of their
 directories would resolve an import through a sibling only another install carries.
 
-The deployer's subprocess helpers (`narrow_setup.py`, `setup_routing.py`,
-`shared_role_callers.py`, `digest_provable.py`) are not callers: they run `uv run --frozen`, in
+The deployer's subprocess helpers (`narrow_setup.py`, `setup_routing.py`) are not callers: they run `uv run --frozen`, in
 the venv, and `test_the_deployers_subprocess_helpers_run_in_the_venv` pins that.
 
 Run: uv run pytest scripts/lib/tests/test_stdlib_only.py

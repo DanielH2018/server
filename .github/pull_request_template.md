@@ -1,8 +1,8 @@
 <!--
-Merging is not shipping here. The GitOps deployer applies an image-pin bump to a
-non-denylisted k8s service, a setup-role change and a deploy-plane change on its own; an
-ordinary manifest or template change to one k8s role fast-forwards onto the primary checkout
-and is never applied. The boxes below are the follow-through, not paperwork.
+Merging is not shipping here. The GitOps deployer applies a setup-role change on its own.
+`promote` and Flux apply every k8s change after master CI, image pins and deploy-plane paths
+included. `land.sh` waits on that promotion and gates the tags its changed set names. The
+boxes below are the follow-through, not paperwork.
 Full procedure: CLAUDE.md → "After a PR Merges — Pull, Deploy, Verify".
 -->
 
@@ -36,7 +36,7 @@ pod. Say what you exercised.
 
 - [ ] This is a **broad** change (`ansible/roles/setup/`, `ansible/inventory/`, `ansible/templates/`,
       `ansible.cfg`, or a bring-up playbook). The GitOps deployer applies a setup-plane change as
-      `initial_setup.yml --tags <role>` and a deploy-plane change as `deploy.yml`, so do not
+      `initial_setup.yml --tags <role>`, and `promote` applies a deploy-plane change, so do not
       hand-run those. Only a bring-up playbook (`bootstrap.yml`, `k3s-bringup.yml`,
       `initial_setup.yml`) parks the tick for every session and needs its playbook run by hand.
       A setup role whose tag the deployer cannot derive merges and lands in `manual_plane`;

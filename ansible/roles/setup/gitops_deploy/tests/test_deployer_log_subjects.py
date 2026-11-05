@@ -96,7 +96,9 @@ def _log_calls() -> list[tuple[str, int, str | None]]:
 
 def test_every_deployer_log_line_opens_with_one_subject_convention() -> None:
     calls = _log_calls()
-    assert len(calls) >= 70, f"found only {len(calls)} log() calls under {FILES}"
+    # 58 after D6.12 deleted the four k8s modules; the floor sits under it with room for a
+    # small refactor, and far over what a scan that stopped reading the tree would find.
+    assert len(calls) >= 50, f"found only {len(calls)} log() calls under {FILES}"
     missing = MUST_SCAN - {rel for rel, _, _ in calls}
     assert not missing, f"the census found no log() call in {sorted(missing)}"
 

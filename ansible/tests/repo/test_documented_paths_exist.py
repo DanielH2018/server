@@ -294,10 +294,12 @@ def node_resolves(cited: str, name: str, source: Path) -> bool:
 
 def test_node_resolution_accepts_a_context_relative_citation():
     """A runtime module citing its sibling test by bare filename, the common shape."""
-    source = REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s.py"
+    source = (
+        REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py"
+    )
     assert node_resolves(
         "test_deploy_k8s_declarations.py",
-        "test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role",
+        "test_declared_denylist_collects_roles_declaring_false",
         source,
     )
 
@@ -308,10 +310,12 @@ def test_node_resolution_rejects_a_renamed_test_and_a_renamed_file():
     A file that no longer exists, and a test name nothing defines. Matching on the file
     alone would accept the second.
     """
-    source = REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_k8s.py"
+    source = (
+        REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py"
+    )
     assert not node_resolves(
         "test_deploy_logic.py",
-        "test_declares_snapshot_claims_agrees_with_yaml_for_every_k8s_role",
+        "test_declared_denylist_collects_roles_declaring_false",
         source,
     )
     assert not node_resolves(

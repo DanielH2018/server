@@ -14,14 +14,13 @@ from pathlib import Path
 
 import pytest
 
-from validate import cross_plane_order as gate
+from validate import render_diff_gates as gate
 
 # authelia reads `containers_list`, so it moves if the first PR edits the entry.
 ROLES = ("bento-pdf", "authelia")
 ROLE = "ansible/roles/k8s/bento-pdf"
 DOC = gate.REPO / "docs/flux-deploy-plane.md"
 SECTION = "## Retiring a flux-owned service\n"
-PATHS = [f"{ROLE}/templates/deployment.yaml.j2", f"{ROLE}/tasks/main.yml"]
 
 
 def documented_include_vars(text: str) -> str:
@@ -56,8 +55,8 @@ def test_step_1_of_a_flux_owned_retirement_renders_no_object(tmp_path, head_snap
     assert head_snapshot.objects["bento-pdf"]
     assert "bento-pdf" in head.renders
     assert not head.objects.get("bento-pdf")
-    assert gate.counted(head_snapshot, head, PATHS, {}) == {"bento-pdf"}
-    assert gate.problems(head_snapshot, head, PATHS, {}) == []
+    assert gate.counted(head_snapshot, head) == {"bento-pdf"}
+    assert gate.problems(head_snapshot, head) == []
     declared = set(head_snapshot.objects["bento-pdf"])
     assert gate.removal_problems(head_snapshot, head, declared) == []
 

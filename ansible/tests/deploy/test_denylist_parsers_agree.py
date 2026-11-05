@@ -8,7 +8,7 @@ auto-deploy on a host that is actually converged — so pin them together agains
 import tempfile
 from pathlib import Path
 
-from deployer_lib.deploy_logic import SHARED_K8S_ROLES, declared_denylist
+from deployer_lib.deploy_phases import SHARED_K8S_ROLES, declared_denylist
 from k8s_autodeploy import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
 from _helpers import REPO as _REPO
 

@@ -186,37 +186,29 @@ def test_an_edit_that_renders_differently_still_reaches_its_importers(
     assert importer.narrow(*_refs(importer)) == {"sonarr"}
 
 
-# -- a Jinja-comment-only shared-template edit applies no deploy.yml (#4926) -------------
+# -- a Jinja-comment-only shared-template edit is quiet (#4926) ---------------------------
 #
 # PR #4925 edited only the `{# ... #}` doc block of a shared template, and the landing named a
 # full `ansible/deploy.yml` for it. In a `.j2` a `#` line is rendered content, so the RED twin
-# edits one of those and must stay loud.
+# edits one of those and must stay loud. No tick applies `ansible/deploy.yml` since D6.12, so
+# the quiet set is what is left to pin.
 
 _SHARED_TEMPLATE = "ansible/templates/checksum-annotation.yml.j2"
 _TEMPLATE_BEFORE = "{# Doc block. #}\n# rendered: yes\nchecksum: {{ x }}\n"
 
 
 @pytest.mark.parametrize(
-    "after, quiet, playbooks",
+    "after, quiet",
     [
         (
             "{# Doc block,\n   reworded. #}\n# rendered: yes\nchecksum: {{ x }}\n",
             {_SHARED_TEMPLATE},
-            frozenset(),
         ),
-        (
-            "{# Doc block. #}\n# rendered: no\nchecksum: {{ x }}\n",
-            set(),
-            frozenset({"ansible/deploy.yml"}),
-        ),
+        ("{# Doc block. #}\n# rendered: no\nchecksum: {{ x }}\n", set()),
     ],
     ids=["jinja-comment-only", "yaml-hash-line-is-content"],
 )
-def test_a_jinja_comment_only_template_edit_applies_no_deploy_playbook(
-    after, quiet, playbooks
-):
-    from deploy_tools.land_lib import land_tags
-
+def test_a_jinja_comment_only_template_edit_is_quiet(after, quiet):
     texts = {
         ("old", _SHARED_TEMPLATE): _TEMPLATE_BEFORE,
         ("new", _SHARED_TEMPLATE): after,
@@ -225,4 +217,3 @@ def test_a_jinja_comment_only_template_edit_applies_no_deploy_playbook(
         [_SHARED_TEMPLATE], "old", "new", lambda ref, path: texts[(ref, path)]
     )
     assert found == quiet
-    assert land_tags.self_applied_playbooks([_SHARED_TEMPLATE], found) == playbooks

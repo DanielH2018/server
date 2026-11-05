@@ -1,6 +1,6 @@
 """`promote.py land-wait`: wait until a promotion covers a merge commit.
 
-`land.sh` runs it after merging M when the PR carries a tag Flux applies. It waits until a
+`land.sh` runs it after merging M for every PR that may move the bundle. It waits until a
 promotion covers M, never on one `promote` run, because GitHub may evict a queued run and a run
 may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first-leaf.md,
 *How `land.sh` waits*, and contract C6 in docs/target-architecture/contracts.md.
@@ -10,10 +10,12 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
   is missing or unreadable widens the set to every name. `sha-<M>` is usually not published
   yet when the wait starts, so until it is, the set is every name and the read repeats each
   poll.
-- `--also <name,...>` adds names the digests may not show, and every Kustomization that
-  depends on one of them, read from the live `dependsOn` graph each poll. `land.sh` passes
-  `cluster-vars` for a PR that changes a cluster file (D3.4): a change to
-  `cluster-vars.source` alone moves no digest.
+- The deploy tags of that changed set, joined with `--services`, are the PR's tags: the
+  annotation names them, and `WaitResult.tags` hands them to the landing's health gate.
+  `land.sh` derives no k8s tag from paths since D6.12, so the changed set alone names them
+  (docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*).
+  D3.4's `--also` went in the same PR: a `cluster-vars` change moves the footprint of every
+  substituting tag, so the changed set already holds them.
 - It polls every POLL_S seconds until one of four outcomes:
     settled        Every expected Kustomization is Ready, and its
                    `status.lastAppliedOriginRevision` names a commit R that is M or descends
@@ -26,9 +28,9 @@ may promote a newer commit. The plan is docs/target-architecture/deploy/d2-first
                    revision superseded R's soak (D7.2), and R's own verdict comes from it.
     gave-up        LAND_WAIT_TIMEOUT_S passed, or the later deadline below. Cause
                    `promote-timeout`.
-    suspended      Every one of `--services` is `suspended` in M's `digests.json`, so Flux
-                   applies nothing for them until a PR resumes them (D5.1d), and no `--also`
-                   name is left: the first poll that reads M's file and a `none` DEPLOY_HOLD.
+    suspended      Every one of the PR's tags is `suspended` in M's `digests.json`, so Flux
+                   applies nothing for them until a PR resumes them (D5.1d): the first poll
+                   that reads M's file and a `none` DEPLOY_HOLD.
                    The suspend PR ends this way. Cause `promote-suspended`. Some suspended,
                    the wait settles on the rest; one M changed while suspended at both ends
                    is left to `decide`'s hold.
@@ -55,8 +57,7 @@ Like `promote.py`, it reaches GitHub, GHCR, the cluster and syslog only through 
 `flux_host.py`, and starts no subprocess itself
 (scripts/deploy_tools/tests/test_promote_forge_boundary.py).
 
-Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> --services <tag,...>
-     [--also <name,...>]
+Run: uv run python scripts/deploy_tools/promote.py land-wait <sha> [--services <tag,...>]
 """
 
 from collections.abc import Callable
@@ -78,6 +79,7 @@ from host_lib import deploy_event
 
 import forge
 from chained_timeout import OCI_INTERVAL_S, seconds
+from renderer.renderer_lib.bundle import FLUX_NAMESPACE, SHARED_KINDS
 from renderer.renderer_lib.ordering import split_kind
 from changed_set import (
     ROOT,
@@ -92,7 +94,6 @@ from deploy_tools.kustomizations import (
     kustomization_graph,
     kustomization_name as _name,
     origin_commit,
-    with_dependents,
 )
 from deploy_tools.promote_lib import reboot_window
 
@@ -209,6 +210,8 @@ class WaitResult:
         revision: R, the commit `homelab` applied, for `settled`.
         widened: why the set was every name, or "" when the digests decided it.
         suspended: the PR's tags suspended at M, which the wait left out.
+        tags: the PR's tags, `services` joined with the changed set's own (`changed_tags`),
+            as the last poll read them. Every flux-owned tag when the set widened.
     """
 
     verdict: str
@@ -217,6 +220,17 @@ class WaitResult:
     revision: str = ""
     widened: str = ""
     suspended: tuple[str, ...] = ()
+    tags: tuple[str, ...] = ()
+
+
+# The changed-set names that are no deploy tag: the root, the shared kinds, and Flux's own
+# bootstrap Kustomization, which a widened set lists beside the bundle's.
+_NOT_A_TAG = SHARED_KINDS | {ROOT, FLUX_NAMESPACE}
+
+
+def changed_tags(names) -> set[str]:
+    """The deploy tags a changed set's Kustomization names belong to."""
+    return {tag for name in names if (tag := split_kind(name)[0]) not in _NOT_A_TAG}
 
 
 def hold_detail(hold: str, services: list[str] | None = None) -> str:
@@ -339,7 +353,6 @@ def land_wait(
     services: list[str],
     timeout_s: int = LAND_WAIT_TIMEOUT_S,
     poll_s: int = POLL_S,
-    also: frozenset[str] = frozenset(),
     cap_s: float | None = None,
     window_grace_s: int = 0,
 ) -> WaitResult:
@@ -350,10 +363,10 @@ def land_wait(
     Args:
         reads: the facts it reads.
         merge: M, the merge commit the landing waits on.
-        services: the PR's published tags, named in the settled annotation.
+        services: tags the landing names on its own, such as `land.sh --tags`'s. The
+            changed set's tags join them (`changed_tags`), and the annotation names both.
         timeout_s: the seconds after which it gives up.
         poll_s: the seconds between polls.
-        also: names to wait on whatever the digests say, each with its live dependents.
         cap_s: the seconds after which it gives up whatever an in-flight verification says,
             or None for no cap. `land.sh` passes what its own deadline leaves.
         window_grace_s: the most the reboot's no-promotion window may add to `cap_s`. The
@@ -368,6 +381,7 @@ def land_wait(
     expected = _Expected(reads, merge)
     last = widened = ""
     paused, all_paused = [], False
+    tags = own = sorted(set(services))
     while True:
         try:
             items = reads.kustomizations()
@@ -375,17 +389,19 @@ def land_wait(
             items, line = None, f"the Kustomizations could not be read: {err}"
         if items is not None:
             cs = expected.changes(items)
-            widened, paused = cs.widened, expected.suspended(services)
+            tags = sorted(set(services) | changed_tags(cs.names))
+            # A widened set names every tag, so a hold's failed names are no evidence of this
+            # PR's own (#6199): the attribution reads the tags the digests decided.
+            own = tags if not cs.widened else sorted(services)
+            widened, paused = cs.widened, expected.suspended(tags)
             # Every tag the wait covers is suspended, so nothing of M is left to wait on.
-            all_paused = bool(paused) and set(paused) == set(services) and not also
+            all_paused = bool(paused) and set(paused) == set(tags)
             # A suspended tag's Kustomizations never apply M, so the rest are waited on.
             # `soak` is never waited on Ready. It reads Ready only once its Job has judged,
             # so the wait reads R's `flux/soak` verdict instead (D5, *The soak as a Job*).
             names = {
                 n for n in cs.names if split_kind(n)[0] not in paused and n != SOAK
             } | {ROOT}
-            if also:
-                names |= with_dependents(also, *kustomization_graph(items))
             pending, revision = _pending(reads, merge, items, names)
             if SOAK in cs.names:
                 deadline = max(deadline, started + soak_deadline_s(items))
@@ -407,17 +423,19 @@ def land_wait(
                         f"names the services it failed: `{SOAK_READ}`",
                         revision=revision,
                         widened=widened,
+                        tags=tuple(tags),
                     )
                 if soak != "success":
                     pending = [f"{SOAK_CONTEXT} on {revision[:8]} ({soak})"]
             if not pending and not all_paused:
-                annotate_promotion(reads.annotate, services, revision)
+                annotate_promotion(reads.annotate, tags, revision)
                 return WaitResult(
                     "settled",
                     detail=f"{len(names)} Kustomizations applied {revision[:8]}",
                     revision=revision,
                     widened=widened,
                     suspended=tuple(paused),
+                    tags=tuple(tags),
                 )
             line = f"waiting on {', '.join(pending)}"
             if widened:
@@ -430,8 +448,9 @@ def land_wait(
             return WaitResult(
                 "deploy-failed",
                 HOLD_CAUSE,
-                hold_detail(hold, services),
+                hold_detail(hold, own),
                 widened=widened,
+                tags=tuple(tags),
             )
         if all_paused:
             return WaitResult(
@@ -441,6 +460,7 @@ def land_wait(
                 "nothing for it until a PR removes its flux_suspend",
                 widened=widened,
                 suspended=tuple(paused),
+                tags=tuple(tags),
             )
         now = reads.clock()
         commit, note = _earlier_in_flight(reads, merge)
@@ -469,6 +489,7 @@ def land_wait(
                 "at the `promote` workflow's failed `publish` jobs: a publish refusal leaves "
                 "no sha-<commit> tag to promote",
                 widened=widened,
+                tags=tuple(tags),
             )
         reads.sleep(poll_s)
 
@@ -574,13 +595,8 @@ def add_parser(commands, repo: Path) -> None:
     waiter.add_argument(
         "--services",
         default="",
-        help="the PR's published tags, comma-separated, named in the settled annotation",
-    )
-    waiter.add_argument(
-        "--also",
-        default="",
-        help="Kustomizations to wait on whatever the digests say, comma-separated, each "
-        "with every Kustomization that depends on it",
+        help="tags to name beside the changed set's own, comma-separated, in the settled "
+        "annotation",
     )
     waiter.add_argument(
         "--repo",

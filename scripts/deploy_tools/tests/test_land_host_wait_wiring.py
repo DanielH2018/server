@@ -71,11 +71,12 @@ def test_a_hosts_only_pr_does_not_finish_before_ci(land_run):
 
 
 def test_paths_that_only_looked_like_host_inputs_end_nothing_to_deploy(land_run):
+    """No host differs, and the promotion's changed set names no tag (D6.12)."""
     rc, out, _, calls, _ = land_run([], _hosts_only(host_targets=[]))
     assert rc == 0 and "VERDICT: nothing-to-deploy" in out
     assert _names(calls).index("host_targets") > _names(calls).index("await_ci")
     assert "wait_for_hosts" not in _names(calls)
-    assert "tick" not in _names(calls)
+    assert "land_wait" in _names(calls)
 
 
 def test_a_red_master_ci_never_renders(land_run):

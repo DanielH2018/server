@@ -434,8 +434,6 @@ def test_the_deployers_subprocess_helpers_run_in_the_venv(monkeypatch):
     setup_roles = importlib.import_module("deployer_lib.deploy_setup_roles")
     argvs = [
         narrow.narrow_setup_argv("r", "t", "p", "a", "b"),
-        narrow.shared_callers_argv(["r"]),
-        narrow.digest_provable_argv(["r"]),
         setup_roles.routing_argv("HEAD", "h"),
     ]
     for argv in argvs:

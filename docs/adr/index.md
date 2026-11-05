@@ -25,11 +25,11 @@ they spend an hour on it.
 Cite a marker by its text, not its line. This command finds the live example wherever it lands:
 
 ```bash
-grep -rn 'DECIDED: `origin\[:8\]`' ansible/roles/setup/gitops_deploy/files/
+grep -rn 'DECIDED: the lock order' ansible/roles/setup/gitops_deploy/files/
 ```
 
-The marker it finds reads `a fixed slice while volume-snapshot names with --short=8, a MINIMUM
-width … Full analysis in this role's CLAUDE.md.`
+The marker it finds reads `the lock order is server-deploy-all.lock first … then each service's
+own lock in sorted order.`
 
 A marker is a prior, not a verdict. Contradict one with new evidence at a cited `file:line`, and
 name the marker you are contradicting. The marker is what carries the decision to the agent that

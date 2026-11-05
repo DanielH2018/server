@@ -13,7 +13,7 @@ at a handback, is exempt. A rename is not a removal: an object whose name, with 
 renderer's trailing `-<digest8>` removed, still renders in T passes, as the soak Job and its
 ConfigMap do on every revision. Nor is an object labelled or annotated
 `kustomize.toolkit.fluxcd.io/prune: disabled`, which Flux's prune leaves in place (D5.1f,
-*What it exempts*). The PR gate's arm 3, `scripts/validate/cross_plane_order.py`, applies both
+*What it exempts*). The PR gate's arm 3, `scripts/validate/render_diff_gates.py`, applies both
 exemptions through `stem` and `prune_disabled` here, so the two checks cannot drift (#5291).
 
 `decide` reads `prod`'s bundle once per run and each weighed candidate's once, and skips an

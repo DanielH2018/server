@@ -81,11 +81,12 @@ Only `--dry-run` shows the manifests to an API server. The `deploy` skill has th
 ## After a PR Merges — Pull, Deploy, Verify
 
 **The default is that a merge is followed through to a verified deploy, in the same session,
-without asking.** Merging is not shipping here. The *Safety* section of
-`ansible/roles/setup/gitops_deploy/CLAUDE.md` owns which planes the GitOps deployer applies on
-its own. An ordinary manifest or template change to one k8s role is in none of them, so it sits
-undeployed behind a green master until the next session to deploy that service ships it as a
-side effect of unrelated work.
+without asking.** Merging is not shipping here. The GitOps deployer applies one plane on its
+own, a setup-role change; the *Safety* section of `ansible/roles/setup/gitops_deploy/CLAUDE.md`
+owns which paths fall in it. `promote` and Flux apply every k8s change, a template or
+inventory change included, after master CI. Nothing reports whether that promotion settled
+and the changed workloads came up healthy except `land.sh`, which waits on the promotion and
+gates the tags its changed set names.
 
 Do not ask permission between the steps. The user asking for the change *is* the ask to deploy
 it; stop only for one of the reasons in *When to wait* below, or for a command the harness
@@ -125,8 +126,8 @@ Say which of these applies, then stop. `probe.py landing` reads the hold, master
 conditions.
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
-- The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
-  broad apply failed. `hold_plane` names each failed playbook when it was the latter.
+- The host holds a non-empty `hold_sha`: a setup-plane apply failed. `hold_plane` names each
+  failed playbook.
 - A change in one of the bring-up playbooks sits in the `local..origin` range, and it is another
   session's: `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`, the list
   `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES`
