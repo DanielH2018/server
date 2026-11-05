@@ -706,8 +706,8 @@ key before the load, so neither assert fires.
   is refused even in an allowed dry run, because sonarr's API reads skip on the sentinel
   alone. Only `ansible/deploy.yml` sets that variable. Its
   k8s play sets it to true. Its Docker play sets it to true only where the host's
-  `containers_list` holds no Docker entry, so a stubbed run aimed at daniel-pi stops before
-  any Pi role. A stub file passed to any other playbook stops at its preamble, dry run or
+  `containers_list` holds no Docker entry, so a stubbed run aimed at a host with a Docker entry
+  stops before any role. A stub file passed to any other playbook stops at its preamble, dry run or
   not.
 - "Refuse a stub file that does not stub every key" reads the key names from the ciphertext
   `secrets.yml` and names each key that does not hold exactly its stub. A stub file written

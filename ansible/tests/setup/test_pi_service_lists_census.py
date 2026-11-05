@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """The Pi's two service lists hold each service once, and every reader reads both (H5.1).
 
-daniel-pi's host_vars list its services under `containers_list`, which Ansible's Docker play
-deploys, and `compose_services`, which the `homelab-daniel-pi` package deploys. H3's two-writer
-rule applies to the pair, and so does a reader rule: a service that moves from one key to the
+daniel-pi's host_vars hold two service keys: `containers_list`, which stays empty because nothing
+deploys a Docker entry, and `compose_services`, which the `homelab-daniel-pi` package deploys.
+H3's two-writer rule applies to the pair, and so does a reader rule: a service that moves from one key to the
 other must change nothing a reader renders. This census fails on three conditions:
 
 - a name appears in both keys;
