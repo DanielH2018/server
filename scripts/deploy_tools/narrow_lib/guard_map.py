@@ -3,9 +3,9 @@
 `manifests/tasks/main.yml` reads only `.get(manifests_service, [])` of the map, so a row that
 changed can change no other caller's deploy. Without this rule `narrow` mapped the map like
 any other `manifests` path, to every role that includes `manifests`, and tripped its own
-fleet-coverage ceiling. Measured on the H2.5b branch: one uptime-kuma `netpol_from` edit plus
+fleet-coverage ceiling. Measured on the H2.5b branch: one `netpol_from` edit in a third role plus
 one configarr row printed `cannot narrow (58 of 61 services ...)`, where the range reached
-`configarr,netpol-baseline,uptime-kuma`.
+only `configarr`, `netpol-baseline` and that role.
 
 `land_shared.guard_map_rows` asks the same question for a landing, and the deployer's owed
 line asks it per caller (`deploy_k8s_owed._guard_row_carries`, #5106). This leaf cannot import

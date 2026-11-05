@@ -30,17 +30,16 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib.deploy_cross_role import k8s_lookup_map
 
-# Push tokens whose pusher and AutoKuma `push_token` label live on DIFFERENT hosts, or which
+# Push tokens whose pusher and reader live on DIFFERENT hosts, or which
 # reference the rotation tool itself — one redeploy cannot update both halves atomically, so these
 # stay MANUAL: consumer_tags returns (), the unattended cron skips them, the audit still reminds.
 # The single source the guard test derives its allowlist from; a new cross-host token is added
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        # daniel-box timer (setup/render_records, renders /etc/render-records/config.env) +
-        # k8s/uptime-kuma static tile. The pushing role runs only from initial_setup.yml and has
-        # no deploy tag, so `--deploy --tags uptime-kuma` would move the tile and leave the timer
-        # pushing the old value.
+        # daniel-box timer (setup/render_records, renders /etc/render-records/config.env). The
+        # pushing role runs only from initial_setup.yml and has no deploy tag, so no
+        # `--deploy --tags` reaches it.
         "render_records_push_token",
     }
 )
@@ -58,8 +57,7 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     elif name.startswith("monitor_bridge_"):
         pusher = "monitor-bridge"
     elif name == "docker_fleet_push_token":
-        # The monitor-bridge role renders the host cron script; the monitor itself is a
-        # static-file entity in the cluster Kuma (slice-7 Phase D KD2).
+        # The monitor-bridge role renders the host cron script.
         pusher = "monitor-bridge"
     else:
         # anything else unrecognised -> manual
@@ -152,8 +150,7 @@ def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
                 continue
             corpus.append((text, role, plane))
             # A k8s role that `lookup()`s this file from another role renders what it holds,
-            # so it is a consumer too: uptime-kuma renders every bridge push token out of
-            # monitor-bridge's files/check_table.py (#3781).
+            # so it is a consumer too (#3781).
             rel = os.path.relpath(os.path.join(dirpath, filename), ansible_dir)
             for reader in sorted(lookups.get(rel, ())):
                 corpus.append((text, reader, _ROLE_PLANES["k8s"]))

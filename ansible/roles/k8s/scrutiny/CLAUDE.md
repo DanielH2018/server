@@ -16,7 +16,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 
 - **The Authelia bypass is GET/HEAD only**, on three paths — `/api/summary`, `/api/health`, `/api/device/<wwn>/details` — from the LAN
   and the pod CIDR, configured in the authelia role, not here. It exists for `probe.py
-  scrutiny` and the Kuma monitor `k3s Scrutiny`, the only two callers that cross the
+  scrutiny` and the `blackbox-extra` job's probe of `/api/health`, the only two callers that cross the
   route. Every writer addresses the ClusterIP `http://scrutiny:8080` instead and never
   meets Authelia: the collector DaemonSet (`COLLECTOR_API_ENDPOINT`), monitor-bridge
   (`SCRUTINY_URL`) and homelab-mcp. Scrutiny's web app has no auth of its own, so a wider
@@ -84,7 +84,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   `check_scrutiny` reads `/api/summary` on a poll of at most 300 s and pages on a non-zero
   `device_status`, which is the same SMART self-assessment and the same Scrutiny attribute
   thresholds scrutiny's own alert fired on. It also covers freshness, wear and temperature,
-  it drives a Kuma up/down tile, and it pages when the collector stops reporting at all.
+  it exports an up/down verdict, and it pages when the collector stops reporting at all.
   The shoutrrr `SCRUTINY_NOTIFY_URLS` path went on 2026-09-28 (#2832) because it was a
   second page for one failed disk, and it added no threshold the bridge lacks.
 - **Do not re-add a notify path here without moving `check_scrutiny` out of the way first.**

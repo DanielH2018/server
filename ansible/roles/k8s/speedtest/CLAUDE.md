@@ -58,8 +58,8 @@ repo-root `CLAUDE.md` for shared conventions.
   pin would freeze with no update signal.
 - **Prometheus scrape (#996) needs the manual UI toggle above — there is no declarative
   alternative, checked at the exact pinned build.** monitor-bridge's `speedtest` check
-  reads the app's REST API and pushes a verdict to Kuma, which keeps a tile, not a
-  series — a degradation (the 2026-09-03 78.8 Mbps DOWN, itself below the worst-ever
+  reads the app's REST API and exports an up/down verdict, not the speed — a
+  degradation (the 2026-09-03 78.8 Mbps DOWN, itself below the worst-ever
   119 Mbps this pinned server had returned) had no history. The image natively exposes
   `/prometheus` (`speedtest_tracker_download_bits`, `_upload_bits`, `_ping_ms`, etc.,
   labeled by server/ISP), scraped by observability's `prometheus.yaml.j2`

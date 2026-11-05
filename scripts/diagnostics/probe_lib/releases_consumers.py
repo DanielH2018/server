@@ -4,7 +4,7 @@
 `ansible/roles/k8s/` supply bytes to somebody's applied manifests". It does not answer whose,
 and `role_paths_for` used the first answer for the second: every census role sat on every
 service's path list. Without that, an edit to `game-stats-lib/files/stats_lib.py` would mark
-sonarr, traefik, uptime-kuma and wg-easy stale for a file none of them embeds, and `Release
+sonarr, traefik and wg-easy stale for a file none of them embeds, and `Release
 Staleness Drift` would stay DOWN with no deploy tag able to clear it.
 
 THE EDGE IS ALREADY DERIVED ONCE. `lib.k8s_roles.role_callers` reads it: one k8s role reaches

@@ -33,7 +33,7 @@ highest-signal findings.
   `hosts/components/pi-compose/services/<svc>/compose.yaml.j2`. Always cite that path, never
   the rendered project under `/usr/lib/homelab/compose/` on the Pi.
 - **A service tree has no `ansible/templates` on its search path**, so the Pi's compose files
-  write out what the shared macros (`autokuma.yml.j2`, `networks.yml.j2`, `resources.yml.j2`)
+  write out what the shared macros (`networks.yml.j2`, `resources.yml.j2`)
   render; don't flag the inlined blocks. Write the `healthcheck:` and `ports:` blocks
   directly, publishing a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never
   `0.0.0.0`) with no Traefik labels, since the Pi has no Traefik in front of it.

@@ -47,15 +47,13 @@ and the pull key on daniel-pi. H7.25 moved both into the Pi package
 (`hosts/components/pi-peer-backup-target/`) and deleted the file. qbittorrent's PR wrote `tasks/qbittorrent.yml`, which holds
 the absent arms for the prefs drift check's retired host cron and script. traefik's PR wrote
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
-its script. uptime-kuma's PR wrote a task file holding the absent arm for the directory
-k8s/volume-claim staged autokuma-data's claim under. M6's C-2b deleted the file once rootq
-read the directory as gone. registry's push-store GC
+its script. registry's push-store GC
 retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
 reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
 manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. #6536 added the
 dockerhub-mirror's Job manifest, `templates/dockerhub-mirror-gc-job.yaml.j2`, which the same
 script applies in a second phase. #6913 added a host-side record of `registry-gc.sh`'s
-SHA-256, because the script's render held the Kuma push token as a STUB. M6 batch B6c's Cutover-2 dropped the push and the record task, so
+SHA-256, because the script's render held a push token as a STUB. M6 batch B6c's Cutover-2 dropped the push and the record task, so
 `probe.py applied` hashes the real render. #6987 deleted the probe's reader of the record and
 added an absent arm in `tasks/registry.yml` that removes the record directory from daniel-box.
 crowdsec's first conversion
@@ -142,7 +140,7 @@ crowdsec's retired crons.
   changes this role.
 - **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes the
   `registry-gc` textfile under `/var/lib/node-exporter-textfile/` and pings healthchecks.io
-  as `registry-gc`. It pushes nothing to Kuma since B6c's Cutover-2. The `registry-gc` journal
+  as `registry-gc`. The `registry-gc` journal
   (`journalctl -t registry-gc`) shows both mirror phases. A conversion apply leaves the cron
   file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
   blobs through the mirror's loopback hostPort and writes nothing to the cluster. The run's

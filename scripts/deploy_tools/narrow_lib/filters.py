@@ -4,7 +4,7 @@
 THE PROBLEM. `ansible/filter_plugins/` is a play-level prefix, so `narrow_broad` refused every
 change under it as "read by every deploy" and the tick ran the whole `ansible/deploy.yml`. That
 is right for a filter the play calls (`toposort.py`'s, from `deploy.yml`), and wrong for one
-only role templates call: `py_table.py` reaches monitor-bridge and uptime-kuma and nothing else.
+only role templates call, which reaches those roles and nothing else.
 
 WHAT THIS KNOWS. The filter names a plugin registers, read from the literal dict its
 `FilterModule.filters()` returns, at both ends of the range so a renamed filter keeps its old

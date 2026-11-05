@@ -167,7 +167,7 @@ if [[ "$CONTINUE" == true ]]; then
 
 ============================================================
  Deployed. Now finish README §9 — the app-database setup
- Ansible cannot do (Uptime-Kuma admin, *arr API keys, HA
+ Ansible cannot do (*arr API keys, HA
  tokens, ...). Most of it fails SILENTLY, so verify with:
         uv run python scripts/diagnostics/postflight.py
 ============================================================
