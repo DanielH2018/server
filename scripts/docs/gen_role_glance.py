@@ -38,7 +38,8 @@ roles:
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
   `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
-  with its schedule; every systemd timer it ships, with its `[Timer]` cadence keys;
+  with its schedule; every systemd timer it ships, with its `[Timer]` cadence keys; and each
+  timer of a host component naming it as `role:`, with the hosts that receive it;
 
 A doc with no `## At a glance` heading is refused on the k8s plane (all of them carry it,
 and `test_service_role_claude_md_has_at_a_glance.py` requires it) and given one on the setup plane: the

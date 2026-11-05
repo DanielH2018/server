@@ -36,6 +36,7 @@
 #   runs `/usr/lib/homelab/aide-check --accept`.
 # - Authoritative sources: AIDE's own exit code and report, dpkg's file lists and digests, and
 #   rkhunter's log summary; each script's header has why the exit code alone cannot say.
+# - Abort valves: a DOWN advances no baseline, and a missing `aide.db` stays missing.
 # - Required evidence, every run: an `aide-check` or `rkhunter-check` line in the journal and the
 #   textfile the `host-checks` rule group reads (#6168).
 role: initial_setup

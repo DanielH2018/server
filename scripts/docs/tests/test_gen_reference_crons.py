@@ -207,3 +207,30 @@ def test_a_variable_the_resolver_cannot_settle_is_printed_as_written(tmp_path):
         r["name"]: r for r in g.build_rows(_var_gated_role(tmp_path, "no_such_host"))
     }
     assert rows["Var gated"]["host"] == "{{ no_such_host }}"
+
+
+def test_a_timer_whose_command_names_only_a_wrapper_needs_the_script_read():
+    service = "[Service]\nExecStart=/usr/lib/homelab/docs-refresh\n"
+    assert g._timer_changes_state(service) == "read the script"
+
+
+def test_a_timer_whose_command_names_a_mutating_word_is_flagged():
+    service = "[Service]\nExecStart=/usr/lib/homelab/secret-rotate\n"
+    assert g._timer_changes_state(service) == "yes (rotate)"
+
+
+def test_the_live_page_lists_both_a_packaged_timer_and_a_role_cron(tmp_path):
+    """Named members: an empty read of either source fails here."""
+    out = tmp_path / "crons.md"
+    assert g.main(["--out", str(out)]) == 0
+    page = out.read_text()
+    assert (
+        "| homelab-docs-refresh.timer | `OnCalendar=*-*-* 06,18:17:00` | daniel-box |"
+        in page
+    )
+    assert "| etcd restore drill |" in page
+
+
+def test_hosts_that_differ_on_a_timers_schedule_get_a_row_each():
+    rows = [r for r in g.build_timer_rows() if r["name"] == "homelab-updater.timer"]
+    assert {r["host"] for r in rows} == {"daniel-box, daniel-server", "daniel-pi"}

@@ -44,6 +44,8 @@ GENERATORS = {
         "glance_facts",
     ),
     f"{DOCS}/reference/networking.py": ("route_facts",),
+    f"{DOCS}/reference/crons.py": ("package_timers",),
+    f"{DOCS}/reference/state.py": ("package_timers",),
 }
 
 # Runs a script the way `python <path>` does (its own directory at sys.path[0]), then reports

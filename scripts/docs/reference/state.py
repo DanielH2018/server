@@ -25,7 +25,8 @@ and `unreadable` are exhaustive; there is no "unknown cadence" status -- a loop 
 this generator cannot derive reads `ok` as long as it has ever run, because "late relative to
 an interval we cannot state" is not a claim this page makes.
 
-CADENCE comes from crons.cadence_minutes() wherever the loop is an `ansible.builtin.cron`
+CADENCE comes from a loop's packaged timer (`package_timers.cadence_minutes`), or from
+crons.cadence_minutes() wherever the loop is an `ansible.builtin.cron`
 task (matched by job name against crons.build_rows()) or its own systemd timer interval
 (gitops-deploy, renovate-agent, renovate-notify -- none of which are cron jobs, so they
 carry a hardcoded value read once from the role that defines the timer, cited in a comment
@@ -54,15 +55,19 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+# This directory's secrets.py would shadow the stdlib module the host renderer needs.
+if __name__ == "__main__":
+    _sys.path.remove(str(_Path(__file__).resolve().parent))
 
 import yaml
 from lib.cli_help import ArgumentParser
 from lib import yaml_fast
 
+from docs.catalog_lib import package_timers
 from docs.reference import crons as crons_mod
 from lib.git import git
 from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K8S_ROLES, REPO, ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K8S_ROLES, REPO
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -166,9 +171,9 @@ def renovate_notify_run(state_dir: Path = Path("/var/lib/renovate-notify")) -> L
 
 
 def docs_refresh_run(build_info: Path = _DOCS_SITE_BUILD_INFO) -> LoopRun:
-    """The twice-daily docs-refresh cron.
+    """The twice-daily docs refresh.
 
-    Cadence: crons.build_rows() job "Refresh generated docs". Reads build-info.json, the
+    Cadence: `homelab-docs-refresh.timer`. Reads build-info.json, the
     served-site stamp build_docs.py writes -- see
     hosts/components/docs-refresh/templates/docs-refresh.sh.j2.
     """
@@ -186,9 +191,9 @@ def docs_refresh_run(build_info: Path = _DOCS_SITE_BUILD_INFO) -> LoopRun:
 
 
 def secret_rotate_run(repo: Path = REPO) -> LoopRun:
-    """The weekly secret-rotation cron.
+    """The weekly secret rotation.
 
-    Cadence: crons.build_rows() job "Weekly secret rotation (auto tier)".
+    Cadence: `homelab-secret-rotation.timer`.
 
     No local state file -- this is the last commit that touched the plaintext rotation
     registry, which also moves on a manual `secret_rotation.py rotate`, not only the cron. A
@@ -307,20 +312,25 @@ def _k3s_default_var(name: str, defaults_path: Path = K3S_DEFAULTS) -> str | Non
     return str(value) if value is not None else None
 
 
-def _cron_job_cadence(job_name: str, roles: Path = ROLES) -> float | None:
-    """cadence_minutes() applied to a cron job's own schedule, found by its `name:`."""
-    rows = {row["name"]: row for row in crons_mod.build_rows(roles)}
-    row = rows.get(job_name)
-    if row is None:
-        return None
-    return crons_mod.cadence_minutes(row["schedule"])
+def _timer_cadence(unit: str) -> float:
+    """The cadence of a timer the host packages ship.
+
+    Raises:
+        ValueError: No package ships `unit`, or its schedule has no shape to size. Either
+            would otherwise print as an unknown cadence, which never reads late.
+    """
+    for timer in package_timers.package_timers():
+        if timer.unit == unit:
+            cadence = package_timers.cadence_minutes(timer.triggers)
+            if cadence is None:
+                raise ValueError(f"{unit} triggers {timer.triggers} have no cadence")
+            return cadence
+    raise ValueError(f"no host package ships {unit}")
 
 
 # name, reader, cadence (minutes) -- built once at call time so tests can import the
 # individual reader functions above without paying for a live git/yaml read at import time.
-def _loops(
-    roles: Path = ROLES, tools: Tools = DEFAULT_TOOLS
-) -> list[tuple[str, LoopRun, float | None]]:
+def _loops(tools: Tools = DEFAULT_TOOLS) -> list[tuple[str, LoopRun, float | None]]:
     longhorn_default = _k3s_default_var(
         "k3s_longhorn_restore_drill_cron", DRILL_DEFAULTS
     )
@@ -332,12 +342,12 @@ def _loops(
         (
             "docs-refresh",
             docs_refresh_run(),
-            _cron_job_cadence("Refresh generated docs", roles),
+            _timer_cadence("homelab-docs-refresh.timer"),
         ),
         (
             "secret-rotate",
             secret_rotate_run(),
-            _cron_job_cadence("Weekly secret rotation (auto tier)", roles),
+            _timer_cadence("homelab-secret-rotation.timer"),
         ),
         (
             "longhorn-restore-drill",
@@ -378,15 +388,12 @@ def _format_duration(minutes: float | None) -> str:
 
 
 def build_rows(
-    roles: Path = ROLES,
     now: dt.datetime | None = None,
     tools: Tools = DEFAULT_TOOLS,
 ) -> list[dict[str, str]]:
     """One row per autonomous loop, statuses computed against `now` (default: real time).
 
     Args:
-        roles: Root directory `_cron_job_cadence` searches for the loops backed by an
-            `ansible.builtin.cron` task.
         now: The instant to compute age/status against. Defaults to the real current time;
             tests pass a fixed instant so a fixture's freshness does not rot.
         tools: The kubectl boundary the Longhorn drill's stamp ConfigMap read crosses.
@@ -397,7 +404,7 @@ def build_rows(
     """
     now = now or dt.datetime.now(dt.timezone.utc)
     rows = []
-    for name, run, cadence in _loops(roles, tools):
+    for name, run, cadence in _loops(tools):
         last_run_local = run.last_run.astimezone() if run.last_run else None
         age = (
             _format_duration((now - run.last_run).total_seconds() / 60)
@@ -462,12 +469,11 @@ def main(argv: list[str] | None = None) -> int:
     """
     parser = ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, required=True, help="output file path")
-    parser.add_argument("--roles", type=Path, default=ROLES)
     args = parser.parse_args(argv)
 
     from lib.docs_provenance import finish_generator
 
-    rows = build_rows(args.roles)
+    rows = build_rows()
     return finish_generator(
         "docs.reference.state", args.out, rows, render_markdown, "loop"
     )

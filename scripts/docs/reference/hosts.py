@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Generate docs/reference/hosts.md — the three hosts and what each one is.
 
-STATIC PARSING ONLY. Reads ansible/inventory/hosts.ini and host_vars/*.yml with
-yaml.safe_load and plain text parsing, never `ansible` or `kubectl`. A fresh worktree has
+STATIC PARSING ONLY. Reads ansible/inventory/hosts.ini, host_vars/*.yml and each
+hosts/<host>/package.yml with yaml.safe_load and plain text parsing, never `ansible` or
+`kubectl`. A fresh worktree has
 no Ansible collections installed, and the inventory contains SOPS lookups that do not
 render outside a real deploy.
 
@@ -26,10 +27,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.cli_help import ArgumentParser
 
+from lib import yaml_fast
 from lib.estate import Estate, Inventory
-from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI
+from lib.repo_paths import ALL_VARS, HOST_VARS, HOSTS_INI, REPO
 
 UNKNOWN = "unknown"
+HOSTS = REPO / "hosts"
 
 # What each host is for. Not derivable: the inventory records connection details and
 # feature flags, never a host's purpose. Kept here so the page states it, with the
@@ -61,10 +64,20 @@ def _flag(estate: Estate, host: str, key: str) -> str:
     return value if source == "host" else f"{value} (group default)"
 
 
+def _package(name: str, hosts_root: Path) -> str:
+    """The host's package and how many components it lists, or why there is none to name."""
+    spec = hosts_root / name / "package.yml"
+    if not spec.is_file():
+        return f"{UNKNOWN} (no hosts/{name}/package.yml)"
+    components = (yaml_fast.safe_load(spec.read_text()) or {}).get("components") or []
+    return f"`homelab-{name}` ({len(components)} components)"
+
+
 def build_rows(
     hosts_ini: Path = HOSTS_INI,
     host_vars: Path = HOST_VARS,
     all_vars: Path = ALL_VARS,
+    hosts_root: Path = HOSTS,
 ) -> list[dict[str, str]]:
     """Collect every host in `hosts_ini` into one row of inventory facts each.
 
@@ -72,6 +85,7 @@ def build_rows(
         hosts_ini: Path to the Ansible `hosts.ini` inventory.
         host_vars: Directory holding each host's `host_vars` file.
         all_vars: Path to `group_vars/all.yml`, read for group-default flag values.
+        hosts_root: The `hosts/` tree, read for each host's package.
 
     Returns:
         One dict per host, keyed by the columns rendered in `render_markdown`.
@@ -91,7 +105,7 @@ def build_rows(
                 "name": name,
                 "role": ROLES.get(name, f"{UNKNOWN} (no description recorded)"),
                 "ip": str(data.get("server_ip", f"{UNKNOWN} (server_ip not declared)")),
-                "connection": host.connection,
+                "package": _package(name, hosts_root),
                 "services": str(len(estate.entries(name))),
                 "gitops": _flag(estate, name, "has_gitops"),
                 "docker": _flag(estate, name, "has_docker"),
@@ -121,14 +135,14 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         parts.append("| Fact | Value |")
         parts.append("|---|---|")
         parts.append(f"| LAN address | `{row['ip']}` |")
-        parts.append(f"| Ansible connection | `{row['connection']}` |")
+        parts.append(f"| Host package | {row['package']} |")
         parts.append(f"| Services declared | {row['services']} |")
         parts.append(f"| Runs the GitOps timer | {row['gitops']} |")
         parts.append(f"| Has Docker | {row['docker']} |")
 
     parts.append(
         "\n## Running a playbook against a host\n\n"
-        "`hosts.ini` pins both cluster nodes to `ansible_connection=local`, so a play's "
+        "Both cluster nodes run plays on themselves, so a play's "
         "`hosts:` defaults to the local hostname. **`--limit daniel-pi` therefore matches "
         "zero hosts** — target the Pi with `-e target=daniel-pi` instead. A one-shot play "
         "that ignores this runs on the wrong box while appearing to succeed.\n"

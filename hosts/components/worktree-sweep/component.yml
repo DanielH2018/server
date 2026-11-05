@@ -18,6 +18,8 @@
 # only the agents structurally unable to act on it. This timer is the arm that removes; the
 # SessionStart banner only reports.
 #
+# Autonomous-role contract (the timer removes worktrees and branches with no human in the loop).
+#
 # - Scope / exclusions: merged worktrees under `.claude/worktrees/`, orphan `worktree-*` branches
 #   whose content is on origin/master, unregistered worktree directories whose every file a ref
 #   already reaches, and unreachable objects older than a day. On `ops_cron_host` alone it also

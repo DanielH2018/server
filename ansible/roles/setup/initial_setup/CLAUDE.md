@@ -14,6 +14,14 @@ host checks in full, and the journald-cap forensics.
 - **Applied by:** `initial_setup.yml --tags "initial_setup"`
 - **Timers (2):** `kuma-check-setup-drift.timer` (`OnCalendar=*-*-* 08:20:00`),
   `kuma-check-loki-read-route.timer` (`OnCalendar=*-*-* *:23:00`)
+- **Packaged timers:** `homelab-aide-check.timer` (`OnCalendar=Mon *-*-* 03:00:00`) on
+  daniel-box, daniel-pi, daniel-server; `homelab-apt-autoremove.timer` (`OnCalendar=Sun *-*-*
+  02:00:00`) on daniel-box, daniel-pi, daniel-server; `homelab-docker-prune.timer`
+  (`OnCalendar=*-*-* 06:30:00`) on daniel-pi; `homelab-dpkg-purge.timer` (`OnCalendar=Sun *-*-*
+  02:15:00`) on daniel-box, daniel-pi, daniel-server; `homelab-firmware-update.timer`
+  (`OnCalendar=Sun *-*-* 07:00:00`) on daniel-box; `homelab-reboot.timer` (`OnCalendar=Sun
+  *-*-* 07:30:00 UTC`) on daniel-box, daniel-pi, daniel-server; `homelab-rkhunter-check.timer`
+  (`OnCalendar=Wed *-*-* 02:00:00`) on daniel-box, daniel-pi, daniel-server
 <!-- /generated_from -->
 
 ## Where it runs

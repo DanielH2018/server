@@ -42,7 +42,7 @@ spec:
               imagePullPolicy: Always
               env:
                 - name: PI_SRC
-                  value: "{{ hostvars['daniel-pi'].ansible_user | default('ubuntu') }}@{{ hostvars['daniel-pi'].ansible_host }}:{{ pi_peer_backup_src_dir }}"
+                  value: "{{ pi_peer_backup_ssh_user }}@{{ hostvars['daniel-pi'].server_ip }}:{{ pi_peer_backup_src_dir }}"
                 # Optional off-premises ping; empty when unconfigured. No checksum/config
                 # annotation is needed to pick up a Secret change here the way a Deployment
                 # would: each scheduled run creates a fresh pod that reads the Secret at start.

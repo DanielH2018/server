@@ -39,6 +39,9 @@ pi_peer_backup_k8s_job_ttl_seconds: 172800
 # that schedule.
 pi_peer_backup_k8s_verdict_configmap: pi-peer-backup-verdict
 
+# The Pi account the job connects as, which holds the pull key's forced command.
+pi_peer_backup_ssh_user: ubuntu
+
 # The one directory the pull key may read. Named once because two places must agree on it:
 # the CronJob's PI_SRC and the forced command sshd pins the key to (files/pi-peer-backup-shell.sh
 # refuses any other path).

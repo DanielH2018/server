@@ -6,6 +6,7 @@ inventory, which changes.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_hosts.py
 """
 
+import re
 import textwrap
 
 from docs.reference import hosts as g
@@ -103,3 +104,25 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
     out = g.render_markdown(g.build_rows(ini, host_vars))
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
+
+
+def test_the_page_names_each_hosts_package_and_no_inventory_connection_key(tmp_path):
+    ini, host_vars = _make_inventory(tmp_path)
+    hosts_root = tmp_path / "hosts"
+    (hosts_root / "daniel-pi").mkdir(parents=True)
+    (hosts_root / "daniel-pi" / "package.yml").write_text("components: [a, b]\n")
+    rows = g.build_rows(ini, host_vars, hosts_root=hosts_root)
+    by_name = {r["name"]: r for r in rows}
+    assert by_name["daniel-pi"]["package"] == "`homelab-daniel-pi` (2 components)"
+    assert by_name["daniel-server"]["package"].startswith("unknown")
+    page = g.render_markdown(rows)
+    assert "| Host package | `homelab-daniel-pi` (2 components) |" in page
+    assert "ansible_connection" not in page
+
+
+def test_every_live_host_names_its_package_with_a_nonzero_component_count():
+    """Named members: a moved `hosts/` tree or `components` key fails here, not silently."""
+    packages = {r["name"]: r["package"] for r in g.build_rows()}
+    assert set(packages) == {"daniel-box", "daniel-pi", "daniel-server"}
+    for name, package in packages.items():
+        assert re.fullmatch(rf"`homelab-{name}` \([1-9]\d* components\)", package), name

@@ -23,6 +23,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from pathlib import Path
 
 from deploy_tools.setup_lib.setup_gates import role_end_guard
+from docs.catalog_lib.package_timers import package_timers
 from lib import yaml_fast
 from lib.json_types import JsonObject, JsonValue, as_object
 from lib.jinja_comments import strip_jinja_comments
@@ -230,6 +231,24 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
     return units
 
 
+def packaged_timer_cells(role: str) -> list[str]:
+    """One cell per timer of the components declaring `role: <role>`, sorted by unit."""
+    triggers: dict[str, list[str]] = {}
+    hosts: dict[str, list[str]] = {}
+    for timer in package_timers():
+        if timer.role == role:
+            triggers[timer.unit] = [
+                f"`{key}={value}`"
+                for key, values in timer.triggers.items()
+                for value in values
+            ]
+            hosts.setdefault(timer.unit, []).append(timer.host)
+    return [
+        f"`{unit}` ({', '.join(triggers[unit])}) on {', '.join(hosts[unit])}"
+        for unit in sorted(triggers)
+    ]
+
+
 def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list[str]:
     """The block's bullet lines for one setup role, unwrapped.
 
@@ -261,11 +280,15 @@ def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list
             f"; ends on hosts where `{_when_text(guard)}` (leading `meta: end_role`)"
         )
 
+    packaged = packaged_timer_cells(role_dir.name)
+    packaged_line = (
+        [f"- **Packaged timers:** {'; '.join(packaged)}"] if packaged else []
+    )
     if guard == "True":
         lines.append(
             "- **Crons / timers:** none (the role ends on every host before its first task)"
         )
-        return lines
+        return lines + packaged_line
     jobs = cron_jobs(role_dir)
     if jobs:
         # One sub-bullet per cron: k3s installs twelve and initial_setup seventeen, and a
@@ -285,4 +308,4 @@ def setup_glance_lines(role_dir: Path, *, playbooks_dir: Path = ANSIBLE) -> list
             "- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, "
             "no `templates/*.timer.j2`)"
         )
-    return lines
+    return lines + packaged_line
