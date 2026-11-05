@@ -62,15 +62,15 @@ def test_only_routes_carrying_the_authelia_middleware_are_authenticated_routers(
 
 
 def test_a_2xx_on_an_authelia_router_from_a_public_address_is_clean():
-    lines = [_line(AUTH_ROUTER, 200, "173.249.254.219")]
-    assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"173.249.254.219"}
+    lines = [_line(AUTH_ROUTER, 200, "1.1.1.1")]
+    assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"1.1.1.1"}
 
 
 def test_a_cloudflare_chain_counts_its_rightmost_entry_and_never_the_client_sent_one():
     # The measured shape: the client sent XFF, Cloudflare appended the address it saw, and
     # Traefik logged the whole header.
-    lines = [_line(AUTH_ROUTER, 200, "8.8.8.8, 9.9.9.9,173.249.254.219")]
-    assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"173.249.254.219"}
+    lines = [_line(AUTH_ROUTER, 200, "8.8.8.8, 9.9.9.9,1.1.1.1")]
+    assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"1.1.1.1"}
 
 
 @pytest.mark.parametrize(
@@ -79,15 +79,15 @@ def test_a_cloudflare_chain_counts_its_rightmost_entry_and_never_the_client_sent
         _line(
             ra.router_name("homelab", "karakeep-public-api-trpc", TRPC_MATCH),
             200,
-            "173.249.254.219",
+            "1.1.1.1",
         ),
-        _line(AUTH_ROUTER, 302, "173.249.254.219"),  # Authelia's own redirect
-        _line(AUTH_ROUTER, 403, "173.249.254.219"),  # the bouncer
+        _line(AUTH_ROUTER, 302, "1.1.1.1"),  # Authelia's own redirect
+        _line(AUTH_ROUTER, 403, "1.1.1.1"),  # the bouncer
         _line(
             AUTH_ROUTER, 200, "10.0.0.50"
         ),  # LAN — an Authelia bypass rule could pass this
         _line(AUTH_ROUTER, 200, "100.64.3.9"),  # CGNAT
-        _line(AUTH_ROUTER, 200, "173.249.254.219,10.0.0.50"),  # chain ending in the LAN
+        _line(AUTH_ROUTER, 200, "1.1.1.1,10.0.0.50"),  # chain ending in the LAN
         _line(AUTH_ROUTER, 200, "not-an-ip"),
         "not json at all",
     ],
@@ -106,23 +106,25 @@ def _item(value, hours_left):
 
 
 def test_a_new_address_is_added_and_a_fresh_one_left_alone():
-    decided = ra.plan({"1.1.1.1", "2.2.2.2"}, [_item("2.2.2.2", 150)], NOW)
+    decided = ra.plan({"1.1.1.1", "198.51.100.2"}, [_item("198.51.100.2", 150)], NOW)
     assert decided.add == ["1.1.1.1"]
     assert decided.refresh == []
-    assert decided.live == ["1.1.1.1", "2.2.2.2"]
+    assert decided.live == ["1.1.1.1", "198.51.100.2"]
 
 
 def test_an_address_under_half_ttl_is_refreshed_and_an_expired_one_pruned():
-    items = [_item("2.2.2.2", 10), _item("3.3.3.3", -1)]
-    decided = ra.plan({"2.2.2.2"}, items, NOW)
-    assert decided.refresh == ["2.2.2.2"]
-    assert decided.prune == ["3.3.3.3"]
-    assert decided.live == ["2.2.2.2"]
+    items = [_item("198.51.100.2", 10), _item("198.51.100.3", -1)]
+    decided = ra.plan({"198.51.100.2"}, items, NOW)
+    assert decided.refresh == ["198.51.100.2"]
+    assert decided.prune == ["198.51.100.3"]
+    assert decided.live == ["198.51.100.2"]
 
 
 def test_an_unreadable_expiry_counts_as_due_for_refresh():
-    decided = ra.plan({"2.2.2.2"}, [{"value": "2.2.2.2", "expiration": "soon"}], NOW)
-    assert decided.refresh == ["2.2.2.2"]
+    decided = ra.plan(
+        {"198.51.100.2"}, [{"value": "198.51.100.2", "expiration": "soon"}], NOW
+    )
+    assert decided.refresh == ["198.51.100.2"]
 
 
 def test_the_cap_stops_additions_and_names_what_it_left_out():
@@ -198,7 +200,7 @@ def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
             return json.dumps(IRS)
         if argv[0] == ra.KUBECTL and "logs" in argv:
             return (
-                _line(AUTH_ROUTER, 200, "173.249.254.219")
+                _line(AUTH_ROUTER, 200, "1.1.1.1")
                 + "\n"
                 + _line(AUTH_ROUTER, 200, "10.0.0.5")
                 + "\n"
@@ -225,7 +227,7 @@ def test_main_writes_exactly_the_plan_and_refuses_with_no_authelia_router():
             "allowlists",
             "add",
             ra.ALLOWLIST,
-            "173.249.254.219",
+            "1.1.1.1",
             "-e",
             "168h",
             "-d",
