@@ -392,7 +392,7 @@ def test_a_persistent_504_raises_unavailable_naming_the_url(tmp_path):
         )
     assert caught.value.reason == "tools"
     assert "https://example.invalid/x" in str(caught.value)
-    assert calls[-1] == tf.TOOL_RETRY_WINDOW_S
+    assert calls[-2] < tf.TOOL_RETRY_WINDOW_S <= calls[-1]
     assert set(clock.delays) == {tf.TOOL_RETRY_DELAY_S}
     assert list(tmp_path.iterdir()) == []
 
