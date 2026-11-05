@@ -61,7 +61,6 @@ _IDENTIFIER_HOLDERS = {
     ),
 }
 
-_GUIDANCE = "Tells a reviewer or author not to add a Kuma monitor or token (#7194)."
 _INERT_LABEL = (
     "The inert `org.homelab.kuma-docker-monitor` label: a label change recreates the container, "
     "so these go in the next Pi compose change (the plan's open question 7)."
@@ -72,8 +71,6 @@ _LIVE_NAME = (
     "--kuma` or the webhook labelled Kuma: renaming it touches its readers (#7194)."
 )
 _R4_DELETES = "The render_records role, which R4 deletes (#7178)."
-_ROLE_DOC = "A role doc that names Kuma as history (#7194)."
-_SCRIPT_COMMENT = "A comment or docstring that names Kuma as history (#7194)."
 _SHIPPED_COMMENT = (
     "A comment in a file the role renders or ships names Kuma as history: rewording it changes "
     "the bytes that deploy, so it goes with the role's next change (#7194)."
@@ -81,14 +78,6 @@ _SHIPPED_COMMENT = (
 _UNIT_FAMILY = "Names the `kuma-check` unit family without the prefix: ADR 0026 keeps the units (#7194)."
 
 _PROSE_HOLDERS = {
-    **dict.fromkeys(
-        (
-            ".claude/agents/homelab-backup-observability-reviewer.md",
-            ".claude/skills/add-secret/SKILL.md",
-            ".claude/skills/homelab-review/accepted-designs.md",
-        ),
-        _GUIDANCE,
-    ),
     **dict.fromkeys(
         (
             "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
@@ -99,10 +88,7 @@ _PROSE_HOLDERS = {
         _INERT_LABEL,
     ),
     **dict.fromkeys(
-        (
-            "ansible/roles/setup/k3s/CLAUDE.md",
-            "ansible/roles/setup/k3s/tasks/health-crons.yml",
-        ),
+        ("ansible/roles/setup/k3s/tasks/health-crons.yml",),
         _K3S_COMMENT,
     ),
     **dict.fromkeys(
@@ -119,7 +105,6 @@ _PROSE_HOLDERS = {
             "scripts/diagnostics/probe_lib/releases.py",
             "scripts/diagnostics/probe_lib/releases_format.py",
             "scripts/diagnostics/probe_lib/releases_render.py",
-            "scripts/validate/unit_templates.py",
         ),
         _LIVE_NAME,
     ),
@@ -135,53 +120,6 @@ _PROSE_HOLDERS = {
     ),
     **dict.fromkeys(
         (
-            "ansible/roles/k8s/artifacts/CLAUDE.md",
-            "ansible/roles/k8s/autofix-bridge/CLAUDE.md",
-            "ansible/roles/k8s/blackbox-exporter/CLAUDE.md",
-            "ansible/roles/k8s/cloudflare-ddns/CLAUDE.md",
-            "ansible/roles/k8s/crowdsec/CLAUDE.md",
-            "ansible/roles/k8s/homelab-mcp/CLAUDE.md",
-            "ansible/roles/k8s/monitor-bridge/CLAUDE.md",
-            "ansible/roles/k8s/nut/CLAUDE.md",
-            "ansible/roles/k8s/observability/CLAUDE.md",
-            "ansible/roles/k8s/pi-peer-backup/CLAUDE.md",
-            "ansible/roles/k8s/qbittorrent/CLAUDE.md",
-            "ansible/roles/k8s/registry/CLAUDE.md",
-            "ansible/roles/k8s/scrutiny/CLAUDE.md",
-            "ansible/roles/k8s/speedtest/CLAUDE.md",
-            "ansible/roles/k8s/valheim/CLAUDE.md",
-            "ansible/roles/setup/fake_remux/CLAUDE.md",
-            "ansible/roles/setup/initial_setup/CLAUDE.md",
-            "ansible/roles/setup/k8s_host_files/CLAUDE.md",
-            "ansible/roles/setup/renovate_notify/CLAUDE.md",
-        ),
-        _ROLE_DOC,
-    ),
-    **dict.fromkeys(
-        (
-            "scripts/deploy_tools/narrow_lib/filters.py",
-            "scripts/deploy_tools/narrow_lib/guard_map.py",
-            "scripts/deploy_tools/narrow_lib/secret_keys.py",
-            "scripts/deploy_tools/prune_releases.py",
-            "scripts/deploy_tools/publish_pr.py",
-            "scripts/deploy_tools/reach.py",
-            "scripts/deploy_tools/runbook_gates_lib/etcd_restore.py",
-            "scripts/diagnostics/probe_lib/alerts.py",
-            "scripts/diagnostics/probe_lib/releases_consumers.py",
-            "scripts/lib/exit_codes.py",
-            "scripts/lib/k8s_role_callers.py",
-            "scripts/lib/k8s_yaml.py",
-            "scripts/renderer/renderer_lib/context.py",
-            "scripts/secrets_mgmt/consumers.py",
-            "scripts/secrets_mgmt/secret_bearing_host_paths.py",
-            "scripts/secrets_mgmt/secret_rotation.py",
-            "scripts/validate/validate_lib/k8s_schema.py",
-        ),
-        _SCRIPT_COMMENT,
-    ),
-    **dict.fromkeys(
-        (
-            "ansible/bring-up.sh",
             "ansible/deploy.yml",
             "ansible/filter_plugins/py_table.py",
             "ansible/filter_plugins/scrape_jobs.py",
@@ -276,16 +214,15 @@ _PROSE_HOLDERS = {
             "ansible/roles/setup/renovate_agent/files/renovate_agent.py",
             "ansible/templates/git-tree-lock.j2",
             "ansible/templates/ingressroute.yml.j2",
+            "scripts/deploy_tools/prune_releases.py",
         ),
         _SHIPPED_COMMENT,
     ),
     **dict.fromkeys(
         (
-            "ansible/roles/setup/common/CLAUDE.md",
             "ansible/roles/setup/common/tasks/check_timer.yml",
             "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py",
             "ansible/roles/setup/gitops_deploy/tasks/teardown.yml",
-            "scripts/deploy_tools/narrow_setup.py",
         ),
         _UNIT_FAMILY,
     ),

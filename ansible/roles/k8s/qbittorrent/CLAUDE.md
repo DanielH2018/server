@@ -102,8 +102,8 @@ The `qbittorrent-prefs-check` CronJob (`templates/prefs-check-cronjob.yaml.j2`, 
 `ansible/roles/k8s/qbittorrent/defaults/main.yml:qbittorrent_k8s_prefs_check_schedule` on
 Etc/UTC) runs `files/prefs_check.py`, which runs `files/apply_prefs.py --dry-run` against the
 WebUI Service and prints one `qbittorrent-prefs-check: <verdict>` line to the pod log. **It never
-writes to qBittorrent** — the prefs Job applies on a roll, and a hand run applies between rolls. It is deliberately not a Kuma
-monitor and reads the script's exit codes as a contract (`EXIT_DRIFT` is 3, `--dry-run` only);
+writes to qBittorrent** — the prefs Job applies on a roll, and a hand run applies between rolls. It deliberately pages
+nobody and reads the script's exit codes as a contract (`EXIT_DRIFT` is 3, `--dry-run` only);
 the docs page has why.
 
 - **The pod carries `app: qbittorrent-prefs-check`, never `app: qbittorrent`.** The WebUI

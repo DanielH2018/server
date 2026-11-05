@@ -5,7 +5,7 @@ series' consecutive samples are one episode; a gap longer than the splitting gap
 next. Prometheus keeps 30 days (`observability_prometheus_retention`), so a wider window
 returns nothing older.
 
-Shadow alerts are listed and marked: their batch still pages through Kuma, and this is where
+Shadow alerts are listed and marked: Alertmanager pages nobody for them, and this is where
 their history is read. Watchdog fires always and is left out.
 
 The loki-homelab ruler's alerts are missing: the ruler sends them to Alertmanager directly, so

@@ -1288,7 +1288,8 @@ steps are:
    needed.
 4. Run the one-time host steps, each behind a guard that reads the state first:
     - the LVM volumes, on daniel-server only;
-    - the debloat purge, on the Pi only;
+    - the debloat purge, the rsyslog and `wpa_supplicant` masks and the removal of rsyslog's
+      text logs, on the Pi only;
     - the k3s binary at `k3s_version`, from the release's `install.sh` checked against
       `k3s_install_script_sha256`, on the two cluster nodes. Both values, and
       `k3s_install_script_url`, are the script's embedded pins (*Architecture-specific
@@ -1334,7 +1335,11 @@ steps are:
     - The local `homelab-updater` ships `homelab.sources`, and `homelab-daniel-box` starts
       the signer, the builder and the repo. The next updater run moves the host onto the
       signed repo, at the same version or a newer one.
-6. On the Pi only, start `homelab-docker-engine.service` once. The package shipped it in
+6. On the Pi only, stop and disable `systemd-resolved`, then start
+   `homelab-docker-engine.service` once. The disable waits for this step because step 5's
+   `apt-get` reaches Ubuntu's archive through the stub resolver, and `/etc/resolv.conf` links
+   to that stub until the package replaces the link. The step refuses if the link is still
+   there. The package shipped the engine unit in
    step 5 as a `manual` unit, so nothing else starts it. On a host with no `docker-ce` it
    installs the pinned versions, holds them, and starts `homelab-compose.service`, which
    failed in step 5 for want of an engine.
@@ -1345,7 +1350,7 @@ steps are:
       print `masked`. The aide package's own timer would run a second, nightly full scan.
       The mask comes before `aideinit`, so a failed init still leaves the timer masked;
     - `aideinit -y`, when `/var/lib/aide/aide.db` is missing. It runs for over an hour on
-      the Pi.
+      the Pi. The step then removes the report at `/var/log/aide/aide.log`.
 
    The step runs last, so both baselines record every package the earlier steps installed.
    The package does not carry these as a first-run oneshot (#6674). A oneshot would

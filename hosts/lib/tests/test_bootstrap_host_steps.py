@@ -65,6 +65,146 @@ def test_a_cluster_node_keeps_appstream(tmp_path):
     assert [call for call in host.apt_calls() if call.startswith("purge")] == []
 
 
+def _pi_with_units(host: FakeHost, is_enabled: str, is_active: int) -> None:
+    """Make every unit on `host` print `is_enabled` and exit `is_active` from `is-active`."""
+    host._stub(
+        "systemctl",
+        f'echo "systemctl $*" >> {host.log}\n'
+        f"case $1 in is-enabled) echo {is_enabled} ;; is-active) exit {is_active} ;; "
+        "is-failed) exit 1 ;; esac",
+    )
+
+
+@pytest.mark.parametrize("unit", ["rsyslog.service", "wpa_supplicant.service"])
+def test_a_fresh_pi_disables_masks_and_stops_rsyslog_and_wpa_supplicant_in_step_4(
+    tmp_path, unit
+):
+    host = FakeHost(tmp_path)
+    _pi_with_units(host, "enabled", 0)
+
+    result = host.run("daniel-pi", "--until", "4")
+
+    assert result.returncode == 0, result.stderr
+    writes = [
+        c
+        for c in host.commands()
+        if c.endswith(unit) and c.split()[1] in {"disable", "mask", "stop"}
+    ]
+    assert writes == [
+        f"systemctl disable {unit}",
+        f"systemctl mask {unit}",
+        f"systemctl stop {unit}",
+    ]
+
+
+def test_a_pi_rerun_with_the_masks_in_place_writes_nothing(tmp_path):
+    host = FakeHost(tmp_path)
+    _pi_with_units(host, "masked", 3)
+
+    result = host.run("daniel-pi", "--until", "4")
+
+    assert result.returncode == 0, result.stderr
+    assert "systemctl is-enabled rsyslog.service" in host.commands()
+    assert not [
+        c for c in host.commands() if c.split()[1] in {"disable", "mask", "stop"}
+    ]
+
+
+def test_resolved_stays_up_until_the_last_apt_call_of_step_5(tmp_path):
+    host = FakeHost(tmp_path)
+    _pi_with_units(host, "enabled", 0)
+    host._stub("apt-get", f'echo "apt-get $*" >> {host.log}')
+
+    result = host.run("daniel-pi", "--until", "6")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    last_apt = max(i for i, c in enumerate(commands) if c.startswith("apt-get"))
+    resolved_writes = [
+        i
+        for i, c in enumerate(commands)
+        if c
+        in {
+            "systemctl disable systemd-resolved.service",
+            "systemctl stop systemd-resolved.service",
+        }
+    ]
+    assert len(resolved_writes) == 2
+    assert last_apt < min(resolved_writes)
+
+
+def test_step_4_removes_rsyslogs_text_logs_and_leaves_other_logs(tmp_path):
+    host = FakeHost(tmp_path)
+    _touch(host, "var/log/syslog.1", "var/log/auth.log", "var/log/dpkg.log")
+
+    result = host.run("daniel-pi", "--until", "4")
+
+    assert result.returncode == 0, result.stderr
+    assert not (host.root / "var/log/syslog.1").exists()
+    assert not (host.root / "var/log/auth.log").exists()
+    assert (host.root / "var/log/dpkg.log").exists()
+
+
+def test_a_first_aide_init_removes_its_report_and_keeps_the_log_the_guard_reads(
+    tmp_path,
+):
+    host = _scans_host(tmp_path, "aide")
+    logs = host.root / "var/log/aide"
+    host._stub(
+        "aideinit", f"mkdir -p {logs}; touch {logs}/aide.log {logs}/aideinit.log"
+    )
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    assert not (logs / "aide.log").exists()
+    assert (logs / "aideinit.log").exists()
+
+
+def test_the_pi_stops_and_disables_resolved_before_it_starts_the_engine(tmp_path):
+    host = FakeHost(tmp_path)
+    _pi_with_units(host, "enabled", 0)
+
+    result = host.run("daniel-pi", "--until", "6")
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    disable = commands.index("systemctl disable systemd-resolved.service")
+    stop = commands.index("systemctl stop systemd-resolved.service")
+    assert (
+        disable < stop < commands.index("systemctl start homelab-docker-engine.service")
+    )
+
+
+def test_a_resolv_conf_still_linked_to_the_stub_stops_step_6(tmp_path):
+    host = FakeHost(tmp_path)
+    _pi_with_units(host, "enabled", 0)
+    (host.root / "etc").mkdir()
+    (host.root / "etc/resolv.conf").symlink_to(
+        "../run/systemd/resolve/stub-resolv.conf"
+    )
+
+    result = host.run("daniel-pi", "--until", "6")
+
+    assert result.returncode == 1
+    assert "/etc/resolv.conf is still a symlink" in result.stderr
+    assert not [c for c in host.commands() if "systemd-resolved" in c]
+    assert "systemctl start homelab-docker-engine.service" not in host.commands()
+
+
+def test_a_cluster_node_keeps_rsyslog_wpa_supplicant_and_resolved(tmp_path):
+    host = _server(tmp_path)
+
+    result = host.run("daniel-server", "--offline", str(host.kit), **AGENT_ENV)
+
+    assert result.returncode == 0, result.stderr
+    assert not [
+        c
+        for c in host.commands()
+        if any(name in c for name in ("rsyslog", "wpa_supplicant", "systemd-resolved"))
+    ]
+
+
 def test_the_pi_skips_the_engine_when_no_package_ships_its_unit_yet(tmp_path):
     host = FakeHost(tmp_path)
     host._stub(

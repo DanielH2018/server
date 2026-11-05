@@ -70,8 +70,8 @@ longer exists. `k8s/terraria` is the sibling this role copies.
 - **`SETGID` is load-bearing, and its absence is silent** — the container's own cron calls
   `initgroups()` for the hourly world backup, and without the capability every tick fails
   behind a healthy-looking log.
-- **No Kuma tile, deliberately** — Kuma's port monitor is TCP-only and Valheim is UDP, the
-  same reason wg-easy's tunnel has no tile. Pod death surfaces through the `k8s-workloads`
+- **No port probe, deliberately** — a TCP probe cannot test Valheim's UDP port, the
+  same reason wg-easy's tunnel has no probe. Pod death surfaces through the `k8s-workloads`
   rules `K8sDeploymentZeroAvailable` and `K8sContainerCrashLooping` instead, and a port monitor added here would sit permanently red on a closed TCP port.
 - **First rollout is slow** — SteamCMD downloads ~1.8 G before anything binds, and
   `ansible/roles/k8s/valheim/defaults/main.yml:manifests_rollout_timeout` is the budget that

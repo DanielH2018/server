@@ -196,7 +196,7 @@ over 30 minutes and went down at least twice, with no 11-minute window of the 30
 scrape. That is the flapping case the per-series 10-minute hold
 never fires on (#6626). `ansible/tests/services/test_scrape_target_flap_rule.py` holds the two
 sets equal. These rules and `files/rules/log-pipeline.yaml` page since M6's batch A3
-Cutover-b, which replaced Kuma's scrape and log-shipper tiles. `BlackboxExporterDown` holds back
+Cutover-b. `BlackboxExporterDown` holds back
 `ScrapeTargetDown` for job `blackbox-ingress` through an Alertmanager inhibit, so a dead exporter
 pages once (`ansible/tests/services/test_alertmanager_blackbox_inhibit.py`).
 `FluxControllerDown`'s `up == 0` arm holds back `ScrapeTargetDown` for the same `job` and
@@ -208,14 +208,14 @@ because the two alerts share no `instance`, and the estate has one Pi.
 The five k3s-cron rule pairs in `files/rules/host-checks.yaml` page since M6's batch B1
 Cutover-1b.
 `files/rules/initial-setup-checks.yaml`, `other-setup-checks.yaml` and `pod-producers.yaml` hold
-the rules that replaced the Kuma tiles of M6 batches B2, B4 and B6b, and they page since the
+the rules of M6 batches B2, B4 and B6b, and they page since the
 combined Cutover-1b. `EtcdRestoreDrillFailed` is critical, so a failed monthly drill pages Discord
 and email until a drill run passes.
-`files/rules/extra-probes.yaml` holds the rules that replaced Kuma's 14 hand-written probe tiles
+`files/rules/extra-probes.yaml` holds the rules for the 14 hand-written probes
 and the Pi's port arm. Its per-target alerts take `service` from the `blackbox-extra` and
 `blackbox-pi-ports` scrape jobs, so their rule labels carry none, and they page since M6's batch B8
 Cutover-b.
-`files/rules/pods.yaml` holds the rules that replaced the Kuma tiles of autofix-bridge, the two
+`files/rules/pods.yaml` holds the rules for autofix-bridge, the two
 cloudflare-ddns Deployments and the pi-peer-backup CronJob, and they page since M6's batch B7
 Cutover-1b. An inhibit in `alertmanager-secret.yaml.j2` lets `AutofixBridgeDown` hold the
 `ScrapeTargetDown` rule for the same job, so one dead exporter pages once.
@@ -234,8 +234,7 @@ neither `job` nor `instance`, and a dead exporter also pages through them.
 
 **The `blackbox-ingress` job probes every ingress tile through blackbox-exporter.** It is
 hand-written in `prometheus.yaml.j2` and renders one target per entry the
-`ingress_probe_targets` filter yields. M4's PR 4 (#5625) removed Kuma's own ingress tiles,
-so these probes are the only ones on the ingress names. An entry opts out with `probe: false`. Each
+`ingress_probe_targets` filter yields. These probes are the only ones on the ingress names. An entry opts out with `probe: false`. Each
 target sets `service`, `module` and `page_tier`, and the `ingress-probes` rules take `service`
 from the target rather than from a literal. A new routed entry therefore changes
 `prometheus.yml` and rolls Prometheus. `ansible/tests/services/test_blackbox_ingress_targets.py`

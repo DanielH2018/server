@@ -2,8 +2,7 @@
 """Publish a cron's local commit as a pull request, and start the landing that merges it.
 
 The three unattended crons that commit -- docs-refresh, eval-run and secret-rotate -- each
-carried this sequence inline, byte for byte, in a template that also carries a Kuma push
-token. A repository ruleset rejects every direct write to master, so the only way a cron
+carried this sequence inline, byte for byte, in a template. A repository ruleset rejects every direct write to master, so the only way a cron
 lands anything is: put the commit on a fresh branch, push that, take the commit back off
 the local master so gitops-deploy's ``--ff-only`` still succeeds when the squash lands
 under a new SHA, open the PR, and hand it to a detached ``land.py`` that merges it.
@@ -105,7 +104,7 @@ sys.path.insert(0, str(HOST_LIB_FILES))
 from ci_verdict import CI_GATE_NAME, CI_GATE_NEEDS_JOBS
 
 # Same bound the shell's `tr '\n' ' ' | tail -c 400` applied: enough to carry the ruleset's
-# rejection line, short enough for a Kuma message.
+# rejection line, short enough for a one-line report.
 FAILURE_TAIL = 400
 
 # Two contracts over the same integers -- `publish` says what state the tree is in, `unlanded`

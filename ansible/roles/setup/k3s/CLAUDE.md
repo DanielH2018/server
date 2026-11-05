@@ -162,8 +162,8 @@ holds that schedule.
 - **The five heartbeat checks write a textfile verdict and push nothing (M6 batch B1).** Longhorn
   backup health, the cluster-token drift check, the manifest-prune and release-staleness checks, and
   the live-drift check each write the three homelab_check_* series to node_exporter's textfile
-  directory. Rules in observability's host-checks.yaml page the files through Alertmanager. Since
-  B1's Cutover-2 no check reads a Kuma credential or pushes: the tasks that rendered the two
+  directory. Rules in observability's host-checks.yaml page the files through Alertmanager. No
+  check reads a push credential or pushes: the tasks that rendered the two
   credential files now remove them, and a skipped boot-grace run writes nothing. The deadline of a
   */N cron derives from its minute variable, and the three daily checks share
   k3s_daily_check_deadline_s. A change to a schedule moves its deadline, and the rule's literal

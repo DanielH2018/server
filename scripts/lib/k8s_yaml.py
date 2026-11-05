@@ -124,8 +124,8 @@ def to_json_stub(value, **kwargs) -> str:
     """Ansible's ``to_json`` for looked-up templates.
 
     ``default=str`` so a StubUndefined serializes as its placeholder instead of aborting the render.
-    Other keywords reach ``json.dumps`` as Ansible's filter passes them: uptime-kuma's bridge
-    tiles render their names with ``ensure_ascii=False``.
+    Other keywords, such as ``ensure_ascii=False``, reach ``json.dumps`` as Ansible's filter
+    passes them.
     """
     return json.dumps(value, default=str, **kwargs)
 

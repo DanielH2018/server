@@ -104,8 +104,8 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     callers: dict[str, set[str]] = {}
     if not roles_dir.is_dir():
         return callers
-    # DECIDED: a lookup into a DECLARED role is an edge too (uptime-kuma -> monitor-bridge,
-    # authelia and traefik -> crowdsec), rather than filtered out. Filtering would need the
+    # DECIDED: a lookup into a DECLARED role is an edge too (authelia and traefik ->
+    # crowdsec), rather than filtered out. Filtering would need the
     # walked tree's host_vars, which the throwaway tree a test walks does not have. The
     # landing, the deployer, the broad narrowing and the `--tags` expansion stop at a declared
     # role, so they never read such an edge. `releases_consumers._closure` does not stop, and

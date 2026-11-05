@@ -69,8 +69,7 @@ schedule, the lock, and the contract below.
   one much longer clears the DOWN it exists to make sticky) and a deadline of two health periods
   plus 300 s rendered from `fake_remux_health_cron_minute`. The rules in
   `ansible/roles/k8s/observability/files/rules/other-setup-checks.yaml` read them (M6 batch B4),
-  and a `status=` syslog line per state file carries the message. B4's Cutover-2 removed the
-  three Kuma pushes.
+  and a `status=` syslog line per state file carries the message.
 - **Next-run review:** before widening scope (a looser detection threshold, a higher cap,
   a second library root), read `outcomes.jsonl` and the Discord log for what the previous
   runs actually replaced and what they got wrong.

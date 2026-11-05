@@ -19,7 +19,7 @@ consumers apply on the tick, and `k3s` is recorded in `manual_plane` under its o
 remediation, which names the wrong roles, and leave one more marker to clear after the
 consumers are applied. A PR may add a file and its table entry together: the tick classifies
 a range that edits `deploy_cross_role.py` with origin's copy of it, not the installed one
-(#3512). The kuma-check templates route to the importers of
+(#3512). The check-timer templates route to the importers of
 `check_timer.yml`, the task file that renders them (#3319), and the alert pair routes
 to the importers of `alert_unit.yml` the same way. The release pruner `scripts/deploy_tools/prune_releases.py`, which
 `tasks/release_bin.yml` copies from the checkout, routes to that file's importer, `k3s` (#6411). No k8s role imports

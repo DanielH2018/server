@@ -109,8 +109,7 @@ checks it every `nut_host_watchdog_interval_minutes` (10 min), from the persiste
 own `ups-secondary-health.prom` textfile, which Prometheus labels with the host's origin, and
 `UpsSecondaryFailed` and `UpsSecondaryNotReporting` in
 `ansible/roles/k8s/observability/files/rules/other-setup-checks.yaml` read each host's series
-apart, so one host's `up` cannot mask the other's `down` (issue #952). Each host pushed its own
-Kuma tile until M6 batch B4's Cutover-2.
+apart, so one host's `up` cannot mask the other's `down` (issue #952).
 
 **Arming the watchdog on a new host needs no ordering.** The rules select the host's `origin`
 label, so a new host needs its own pair of rules in the same change; no other side has to exist

@@ -44,8 +44,7 @@ conventions.
   restart wiring too. Rotating a token without both names in
   `manifests_extra_rollouts` leaves both pods running on the stale token (found 2026-08-30,
   both monitors DOWN behind a green deploy).
-- Neither Deployment pushes a Kuma heartbeat since M6 batch B7's Cutover-2, so favonia's
-  Kuma ping setting is gone. The rules below are the only watch on them.
+- Neither Deployment pushes a heartbeat, so the rules below are the only watch on them.
 
 - favonia's image serves no metrics, so two rule families watch it and page since M6 batch B7's Cutover-1b.
   `CloudflareDdnsUnavailable` in observability's `pods` group reads each Deployment's available

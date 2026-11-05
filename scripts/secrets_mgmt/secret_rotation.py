@@ -357,9 +357,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
                 % (name, ",".join(consumer_tags(name)) or "?", days_left)
             )
             continue
-        new = pysecrets.token_hex(
-            16
-        )  # 32 hex chars — the format Kuma push tokens require
+        new = pysecrets.token_hex(16)  # 32 hex chars — the format push tokens require
         try:
             tools.sops_set(name, new)
         except (
@@ -558,7 +556,7 @@ def main(argv=None) -> int:
     prec.set_defaults(func=cmd_record)
     args = p.parse_args(argv)
     # One `RotationTools` per run, built here and threaded down: every git call, sops call,
-    # registry read or write, Kuma push and clock read a subcommand makes goes through it.
+    # registry read or write and clock read a subcommand makes goes through it.
     return args.func(args, RotationTools())
 
 

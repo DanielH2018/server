@@ -70,7 +70,7 @@ def normalise_octal(node):
     perfectly good ``defaultMode: 0o444`` volumes as type errors.
 
     This is not a guess about which parser wins. The live objects were read while writing this:
-    ``scrutiny-web``, ``scrutiny-influxdb`` and ``uptime-kuma`` all carry
+    ``scrutiny-web`` and ``scrutiny-influxdb`` both carry
     ``secret.defaultMode: 292`` — 0444 — from exactly those templates.
 
     (The comment above mosquitto's ``defaultMode: 288`` claims the opposite, that kubectl reads

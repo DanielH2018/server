@@ -49,16 +49,15 @@ which only the operator can write. Step 6 tells you which case you are in.
      keys): **DO NOT** `sops set` these — rotating/altering them is a DANGER procedure with
      data-loss risk. Stop and point the user at the `pinned` runbook in `docs/secret-rotation.md`.
    - **auto** — locally generated, no external coupling. Safe to generate. The registry's
-     `auto` entries are the Kuma push tokens M6 has not yet retired; do not add another.
+     only `auto` entry is `render_records_push_token`, which goes with its role; do not add another.
    - **assisted / external** — value comes from a provider console or has an app-side step.
 
 3. **Add the secret** (`.sops.yaml` auto-encrypts anything under `vars/`, so the file stays
    encrypted on disk):
    - **Preferred (value stays private):** tell the user to run it themselves —
      `! sops ansible/vars/secrets.yml` — add the `name: value` line in the editor, save, exit.
-   - **Never add a Kuma push token.** Uptime Kuma is being retired
-     (`docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`), and a new check pages
-     through an Alertmanager rule, which needs no per-check secret. If a task asks for a
+   - **Never add a push token.** A new check pages through an Alertmanager rule, which needs no
+     per-check secret (`docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`). If a task asks for a
      `*_push_token`, stop and point the user at the ADR's producer recipes.
    - **A generated value (auto tier):** generate and set without echoing the value:
      `openssl rand -base64 32 | jq -Rc . | sops set --value-stdin ansible/vars/secrets.yml '["<name>"]'`

@@ -196,10 +196,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   from GHCR and still answers 200.
 - The GC run reports two ways: the off-site healthchecks.io `registry-gc` dead-man and the
   `registry-gc` textfile that observability's `RegistryGcFailed` and `RegistryGcNotReporting`
-  read. The script pushed to a `Registry GC` Kuma tile until M6 batch B6c
-  (`docs/target-architecture/monitoring/m6-retire-kuma.md`): Cutover-1a deleted the tile,
-  Cutover-1b made the two rules page Discord, and Cutover-2 dropped the push. B6c's token PR
-  then retired the push token.
+  read.
   - Both rules are `warning`, the deleted tile's channel mix. Their deadline is the script's
     `DEADLINE_S`, which equals the deleted tile's interval.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
