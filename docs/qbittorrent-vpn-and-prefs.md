@@ -125,10 +125,9 @@ point, `files/prefs_check.py`, runs `apply_prefs.py --dry-run --connect-wait 60`
 `uv run python scripts/diagnostics/probe.py loki-query '{container="qbittorrent-prefs-check"}' --since 48h`.
 Five decisions inside it are deliberate:
 
-- **Not a Kuma monitor.** The 2026-08-27 review that found this gap also found six live Kuma push
-  tokens leaking into `curl` argv across the estate, one world-readable. Adding a seventh for a
-  low-urgency drift check would grow the exact class being remediated in the same review, so the
-  check pushes nothing and the pod log is the record.
+- **It pages nothing.** The drift is low-urgency, so the pod log is the record. The 2026-08-27
+  review that found this gap also found six live Kuma push tokens leaking into `curl` argv across
+  the estate, one world-readable, which ruled out a seventh for this check.
 - **No new SOPS surface.** It reuses the `qbittorrent_username`/`qbittorrent_password` keys that
   `homepage`'s widget already renders. They reach the pod from the `qbittorrent-prefs-check`
   Secret as one value, `QBT_CREDENTIALS`, the username and the password on two lines. One value

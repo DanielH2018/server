@@ -62,7 +62,7 @@ passes neither:
   in the tree was already named that way. A template that renders a Secret under any other name
   would stage 0644 and outside `no_log`, so
   `ansible/tests/k8s/test_derived_manifest_files.py` refuses one unless the role lists its secret
-  files itself. uptime-kuma does, for `static-monitors.yaml`.
+  files itself.
 - **The files** are the rest of those templates plus a shared `service.yaml` for an entry with a
   `port` and a shared `ingressroute.yaml` for one with a `hostname`. The list leaves out:
   - a one-off `*-job.yaml` (the registry's self-test and GC Jobs, the netpol probes), which the
@@ -449,8 +449,8 @@ carries the same conclusion at the line that writes the digest.
 
 **`ansible/roles/setup/render_records/` is the hourly producer** (#2587). It renders every service
 `scripts/deploy_tools/render_targets.py` lists, at the newest origin/master commit whose CI is
-green, from its own detached worktree, and pushes a Kuma tile that goes red when a run leaves any
-record unrefreshed or the producer stops. It shipped disarmed until #2614 guarded every host write
+green, from its own detached worktree. `render_records_state` pins the role `absent` until R4
+deletes it, and its Kuma tile went with M6. It shipped disarmed until #2614 guarded every host write
 in a role that includes this one (host scripts, crons, node-staged modules) on
 `not k8s_dry_run | bool`. Without that guard, an hourly dry run would ship origin/master's host
 half ahead of its landing. `render_records_enabled` switches it off.

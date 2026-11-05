@@ -110,7 +110,7 @@ perfectly the whole time. Removed 2026-08-27 rather than left rendering nothing;
 has been empty since 2026-08-14.
 
 Alerting did not go with it: monitor-bridge's `check_b2_storage` still sizes the bucket every
-cycle and pushes the **B2 Storage Usage** Kuma monitor. What was lost is the human-facing runway
+cycle, and `B2FreeTierHeadroomLow` pages its verdict. What was lost is the human-facing runway
 curve, because that check yields a pass/fail verdict rather than a series.
 
 **Restoring the curve needs a writer, and two things decide whether it is honest.** The textfile

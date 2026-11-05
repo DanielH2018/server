@@ -102,8 +102,8 @@ is 60 seconds and widens past about a week to stay under Prometheus' per-series 
 Prometheus keeps 30 days, so a wider window returns nothing older.
 
 **Every episode row carries both ends, in UTC**, so a row compares directly against
-`journalctl --utc` output. Shadow alerts are listed and marked `shadow`, because their batch
-still pages through Kuma until it cuts over. Watchdog fires always and is left out.
+`journalctl --utc` output. Shadow alerts are listed and marked `shadow`, because Alertmanager
+routes them to its `blackhole` receiver and they page nobody. Watchdog fires always and is left out.
 
 **The `loki-homelab` ruler's alerts have no history here.** The ruler sends them to Alertmanager
 directly, so they never reach `ALERTS`, and Alertmanager keeps none. `monitors` shows the ones
@@ -529,7 +529,7 @@ these tests need the host's age key, LAN reachability and a browser — none of 
 runner has.
 
 Pin the **exact** page title when adding a service. Several apps carry their own login behind
-Authelia (`FreshRSS` lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`), so a
+Authelia (`FreshRSS` lands on `/i/`, karakeep on `/signin`), so a
 substring like `FreshRSS` also matches `Login · FreshRSS` and scores a broken app green.
 
 **The title is read back after the page settles, not taken from the navigate report.** A

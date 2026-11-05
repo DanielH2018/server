@@ -143,7 +143,7 @@ staleness drift check`, `Live object drift check`, `B2 deletion accounting`, `B2
 listing` and the `--list-only` etcd drill read the cluster or the bucket and write nothing to
 either. The Longhorn, disk, manifest prune, release staleness and live drift checks each write
 a textfile metric, such as `disk-health.prom`, that the `host-checks` rules page through
-Alertmanager. None of these crons pushes a Kuma tile. The B2 accounting pair
+Alertmanager. The B2 accounting pair
 appends to the local ledger, which is bookkeeping, not state.
 
 `Manifest prune drift check` and `Live object drift check` are kuma-check timers rather than crons

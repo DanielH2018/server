@@ -89,8 +89,9 @@ The state dir `/var/lib/autofix-fake-remux` is created `sys_user`-owned. Both cr
 shared `host_lib.py`, which the role installs beside the scripts from `roles/setup/common`, and
 run via `uv run --no-project --python <pin>`, the `host_python_version` pin in
 `ansible/inventory/group_vars/all.yml`. monitor-bridge no longer reads these state files, so no
-deploy order applies between `autofix-bridge` and `monitor-bridge`: `fake-remux-health.sh` pushes
-the three Kuma tiles from the state files itself.
+deploy order applies between `autofix-bridge` and `monitor-bridge`: `fake-remux-health.sh` reads
+the state files itself and writes the three textfile verdicts that the `other-setup-checks` rules
+read.
 
 ## Running either cron by hand
 

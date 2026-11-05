@@ -297,7 +297,5 @@ the drain's `b2_list_file_versions` above, one level up.
 
 - WAL-less restores are consistent-as-of-last-checkpoint (kopia's rule header) — a
   Longhorn snapshot is crash-consistent, strictly better.
-- uptime-kuma DR: recreate the first-run admin by hand, then AutoKuma backfills from the
-  static files (was: from labels).
 - LiveSync: the vault's source of truth is the markdown on each Obsidian client;
   "Rebuild everything" re-uploads the DB from a device.

@@ -105,8 +105,7 @@ the per-volume map and each exclusion's rationale:
   A volume added to the tier recently holds fewer recovery points than the retain until it
   has run that many weeks.
 - **No-backup** (16 volumes): rebuilt, not restored. The notable rebuild paths:
-  uptime-kuma (recreate the first-run admin by hand; AutoKuma backfills monitors from the
-  static-monitors Secret; history is gone), `scrutiny` (TSDB refills from collector runs),
+  `scrutiny` (TSDB refills from collector runs),
   Pi-hole (`pihole -g` rebuilds gravity; config is Ansible-rendered), `livesync` (a client
   runs "Rebuild everything" — the vault's source of truth is the markdown on each
   Obsidian device), registry/caches/TSDBs (repopulate on use).
@@ -195,9 +194,8 @@ the per-volume map and each exclusion's rationale:
    applies every Kustomization at `prod`. Workloads bind the existing PVCs; no-backup volumes
    provision empty and rebuild per the list above.
 6. **Verify**: `uv run python scripts/diagnostics/probe.py targets` and `health <svc>` for the
-   restored tier; `probe.py ha verify-automations` for HA; monitor-bridge's board goes
-   green as services come up. Restore the Kuma admin + check tiles last (its DB was
-   deliberately not restored).
+   restored tier; `probe.py ha verify-automations` for HA; `probe.py monitors` stops listing
+   firing alerts as services come up.
 
 ## After a whole-cluster cold start (both nodes down at once)
 
@@ -237,7 +235,7 @@ because the next night's run closes them.
 **What to do after a cold start.** Do not seed every weekly volume whose backup predates the
 recovery. Most of them belong to shards that ran normally before the outage, and seeding them
 spends the day's B2 budget. Seed only the weekly volumes a catch-up Job skipped. Check 11 names
-them as `weekly volume(s) a RecurringJob skipped`. The tile shows only the top-ranked problem,
+them as `weekly volume(s) a RecurringJob skipped`. The check's message shows only the top-ranked problem,
 and after a cold start another problem usually outranks this one, so read the full list with
 `journalctl -t longhorn-backup-health`. The Jobs log each skip, so this query also names them,
 including skips in the daily tier and skips whose pod has since been replaced:

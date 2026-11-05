@@ -467,10 +467,13 @@ authenticates by client certificate, which no `oidc-*` flag touches.
 
 For a second person without deep familiarity with the repo:
 
-1. Check the Uptime Kuma board first — most red tiles link to a specific service or
+1. Check the firing alerts first. Discord carries every page, and email carries the critical
+   ones. `uv run python scripts/diagnostics/probe.py monitors` lists what is firing, and so does
+   the Alertmanager UI at `alertmanager.local.<domain>`, which needs an `admins` login. Most alerts
+   name a specific service or
    subsystem. `docs/reference/services.md` names what each service is and who/what depends
    on it.
-2. If Kuma itself is unreachable (its own outage, or a cluster/WAN outage), check
+2. If Alertmanager itself is unreachable (its own outage, or a cluster/WAN outage), check
    Healthchecks.io instead — it is off-site by design for exactly this case
    (`docs/healthchecks-io-deadman.md`, *What is wired*). A silent check there means the
    underlying cron or the cluster itself stopped, not just the alert path.

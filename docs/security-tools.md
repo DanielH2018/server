@@ -10,7 +10,7 @@ This document covers the security and monitoring tools deployed by `ansible/role
 
 **Schedule:** Weekly, Wednesday at 2:00 AM, on every host (staggered off the Monday AIDE check). The cron runs `/usr/local/bin/rkhunter-check.sh`, which writes the warnings to syslog tagged `rkhunter` and writes a verdict textfile that `RkhunterScanFailed` and `RkhunterScanNotReporting` read. A Kuma tile took the verdict until M6 batch B9 retired it.
 
-**What the tile means.** rkhunter exits 1 both when it finds a warning and when it fails, so the script reads `/var/log/rkhunter.log` instead (#4598). A scan completed only if this run rewrote the log and the log holds its `System checks summary`.
+**What the verdict means.** rkhunter exits 1 both when it finds a warning and when it fails, so the script reads `/var/log/rkhunter.log` instead (#4598). A scan completed only if this run rewrote the log and the log holds its `System checks summary`.
 
 | Scan | Tile | Message |
 |------|------|---------|
@@ -26,7 +26,7 @@ Every warning pages (#4638). Before that change, every host warned every week fr
 
 To clear a warning, find its cause first. rkhunter reports a user or group added to `/etc/passwd` or `/etc/group` once, the week after a package or the operator adds it. Once you have confirmed the account is yours, run `sudo /usr/local/bin/rkhunter-check.sh` again; rkhunter stored the new account list on the run that warned, so the rerun reads UP. A benign warning that recurs every week needs an `ALLOW*` line in `ansible/roles/setup/initial_setup/templates/rkhunter.conf.local.j2`, applied with `--tags rkhunter`.
 
-To prove the tile pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the tile goes DOWN within seconds:
+To prove the alert pages, make rkhunter fail to start on one host and run the script by hand. `ionice` then cannot execute it and exits 126 without touching the log, so the verdict goes DOWN within seconds:
 
 ```bash
 sudo chmod -x /usr/bin/rkhunter
@@ -34,7 +34,7 @@ sudo /usr/local/bin/rkhunter-check.sh
 sudo chmod +x /usr/bin/rkhunter
 ```
 
-The tile stays DOWN until the next run. To clear it, run `sudo /usr/local/bin/rkhunter-check.sh` again; a scan takes two to three minutes.
+The verdict stays DOWN until the next run. To clear it, run `sudo /usr/local/bin/rkhunter-check.sh` again; a scan takes two to three minutes.
 
 **Check for findings:**
 
@@ -76,7 +76,7 @@ Running it to silence a warning you haven't explained re-blesses whatever caused
 
 Every `aide` command needs `--config=/etc/aide/aide.conf`. AIDE 0.18 has no default config path, so without it the command exits with `ERROR: missing configuration` and checks nothing.
 
-**What the tile means.** The script runs `aide --update`, reads its exit code (#4594), and classifies each difference against the package database (#4599):
+**What the verdict means.** The script runs `aide --update`, reads its exit code (#4594), and classifies each difference against the package database (#4599):
 
 | Exit | Differences | Tile | Baseline |
 |------|-------------|------|----------|
@@ -115,7 +115,7 @@ It refuses when `aide.db` is missing, because a deleted baseline must stay an er
 
 The script logs at most 2000 report lines. A longer report ends with a `report truncated` line. To see the rest, run the check by hand. Its verdict goes to syslog tagged `aide-check` as `status=<up|down> <message>`.
 
-To prove the tile pages, force an error exit on one host and run the script by hand. Rename the database, run `sudo /usr/lib/homelab/aide-check`, then put the database back. AIDE exits 18 at once, and the tile goes DOWN with `open (read-only) failed for file '/var/lib/aide/aide.db'` in its message:
+To prove the alert pages, force an error exit on one host and run the script by hand. Rename the database, run `sudo /usr/lib/homelab/aide-check`, then put the database back. AIDE exits 18 at once, and the verdict goes DOWN with `open (read-only) failed for file '/var/lib/aide/aide.db'` in its message:
 
 ```bash
 sudo mv /var/lib/aide/aide.db /var/lib/aide/aide.db.held
@@ -123,7 +123,7 @@ sudo /usr/lib/homelab/aide-check
 sudo mv /var/lib/aide/aide.db.held /var/lib/aide/aide.db
 ```
 
-The tile stays DOWN until the next run. To clear it, run `sudo /usr/lib/homelab/aide-check` again. That run scans the whole filesystem, so on the Pi it takes over an hour.
+The verdict stays DOWN until the next run. To clear it, run `sudo /usr/lib/homelab/aide-check` again. That run scans the whole filesystem, so on the Pi it takes over an hour.
 
 **Check for findings:**
 
@@ -312,8 +312,8 @@ sudo unattended-upgrade --dry-run --debug
 | Sensitive file modified | `sudo ausearch -k identity` or `-k sshd` |
 | Rootkit / backdoor suspicion | `sudo rkhunter --check` |
 | Unexpected file change | `sudo aide --config=/etc/aide/aide.conf --check` |
-| rkhunter tile DOWN | `sudo journalctl -t rkhunter-check -t rkhunter --since -7d` and `/var/log/rkhunter.log` |
-| AIDE tile DOWN | `sudo journalctl -t aide-check -t aide --since -7d` |
+| `RkhunterScanFailed` | `sudo journalctl -t rkhunter-check -t rkhunter --since -7d` and `/var/log/rkhunter.log` |
+| `AideCheckFailed` | `sudo journalctl -t aide-check -t aide --since -7d` |
 | Unusual commands run as root | `sudo lastcomm` |
 | Unusual I/O or CPU activity | `sar -d` / `sar -u` |
 | Brute-force attempts / banned IPs | `sudo fail2ban-client status sshd` |

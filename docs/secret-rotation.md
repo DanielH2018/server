@@ -3,9 +3,10 @@
 Secrets in `ansible/vars/secrets.yml` are tracked for rotation by a plaintext registry
 (`ansible/secret_rotation.yml`) and the tool `scripts/secrets_mgmt/secret_rotation.py`. A daily server
 timer (`homelab-secret-rotation-audit.timer`, the `secret-rotation` component of the
-`homelab-daniel-box` package) pushes the **"Secret Rotation"** Uptime
-Kuma monitor — it goes **down** when any secret is past its per-tier window, or when a
-secret exists in `secrets.yml` but not the registry.
+`homelab-daniel-box` package) writes the `secret-rotation-audit` textfile verdict.
+`SecretRotationAuditFailed` pages when any secret is past its per-tier window, or when a
+secret exists in `secrets.yml` but not the registry. `SecretRotationAuditNotReporting` pages when
+no verdict has arrived for 25 hours.
 
 Due dates are **staggered** by a deterministic per-name offset, so the registered secrets
 come due a few at a time across the year — never all on one day. The offset lives in the
@@ -191,8 +192,7 @@ by an edit to its `tier` in the registry after that `sync`, and `sync` preserves
 date. Then every reader must render again. `secret_rotation.py consumers <key>` prints the
 `deploy.sh` line for an Ansible-owned reader. A Flux-owned reader, such as monitor-bridge,
 takes the value once the commit lands, and `deploy.sh` exits 5 on its tag.
-Uptime Kuma honours the new push token on the next push — no Kuma
-UI step. Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
+Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
 one weekly cron interval, so a token rotates the Sunday *before* it goes overdue and the
 daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.
 
@@ -517,7 +517,7 @@ before you destroy the old one):
    instant it succeeds the old key opens nothing and the step-1 backup is the only way back.
    Assume in-place unless the tool documents otherwise.
 4. **Only then** `sops set` the new value and redeploy the consumer.
-5. **Verify live** (audit resets green, Kuma monitor green, a real restore/login works) — and only
+5. **Verify live** (audit resets green, `SecretRotationAuditFailed` resolved, a real restore/login works) — and only
    after that delete the pre-rotation backup. If any step fails, restore the step-1 backup;
    see step 3 for why the old value itself may no longer be a fallback.
 
