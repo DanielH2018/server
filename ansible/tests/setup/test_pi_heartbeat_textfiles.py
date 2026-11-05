@@ -30,7 +30,11 @@ RULES = K8S_ROLES / "observability" / "files" / "rules" / "pi-checks.yaml"
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 # Alert prefix -> the script, and the `check` label, whose textfile its rules read.
-PRODUCERS = {"PiSdHealth": "pi-sd-health", "PiRecovery": "pi-recovery-health"}
+PRODUCERS = {
+    "PiSdHealth": "pi-sd-health",
+    "PiRecovery": "pi-recovery-health",
+    "PiWatchdog": "pi-watchdog-health",
+}
 # Every container the recovery heartbeat watches, so a run with all of them up is a clean cycle.
 # Both of the Pi's lists, since the recovery heartbeat watches the union (H5.1), plus the
 # sub-proxy the docker-proxy compose file declares.
@@ -145,7 +149,7 @@ def deadlines(tmp_path_factory) -> dict[str, int]:
 
 def test_literal_problems_is_clean_on_the_shipped_rules(deadlines):
     rules = not_reporting_rules(RULES.read_text())
-    # Non-vacuity: both producers are found, and each has its rule.
+    # Non-vacuity: every producer is found, and each has its rule.
     assert set(deadlines) == set(rules) == set(PRODUCERS)
     assert literal_problems(rules, deadlines) == []
 

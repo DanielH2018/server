@@ -220,3 +220,110 @@ tests:
       - eval_time: 12m
         alertname: PiSdHealthNotReporting
         exp_alerts: []
+
+  # PiWatchdogFailed outlasts a stop an apply holds: the unit stops at minute 4, the rule waits out
+  # its 30m `for` and fires, and the verdict returning to 1 at minute 44 quiets it.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x3 0x40 1x10'
+    alert_rule_test:
+      - eval_time: 33m
+        alertname: PiWatchdogFailed
+        exp_alerts: []
+      - eval_time: 35m
+        alertname: PiWatchdogFailed
+        exp_alerts:
+          - exp_labels: {check: pi-watchdog-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
+            exp_annotations:
+              summary: daniel-pi's watchdog.service is not active.
+              description: >-
+                watchdog.service on daniel-pi has not been active for 30 minutes. wd_keepalive holds
+                the device, so the board keeps its hardware watchdog, but the `max-load-1 = 24` load
+                test is off. An interrupted initial_setup run is the known cause. Run `sudo
+                systemctl start watchdog` on daniel-pi. The `pi-watchdog-health` lines in
+                /var/log/pi-health/health.log date the stop.
+      - eval_time: 46m
+        alertname: PiWatchdogFailed
+        exp_alerts: []
+
+  # An apply's stop, 8 minutes long, ends before the `for` does, so the rule never fires.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_success{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x3 0x7 1x40'
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: PiWatchdogFailed
+        exp_alerts: []
+      - eval_time: 40m
+        alertname: PiWatchdogFailed
+        exp_alerts: []
+
+  # PiWatchdogNotReporting's three states: a frozen timestamp fires one minute past the deadline, a
+  # fresh one stays quiet, and a dead exporter leaves it to PiHostDown.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0x30'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: PiWatchdogNotReporting
+        exp_alerts: []
+      - eval_time: 16m
+        alertname: PiWatchdogNotReporting
+        exp_alerts:
+          - exp_labels: {check: pi-watchdog-health, instance: daniel-pi, job: node-pi, origin: daniel-pi, severity: warning, service: daniel-pi}
+            exp_annotations:
+              summary: daniel-pi's watchdog daemon heartbeat has stopped reporting.
+              description: >-
+                No pi-watchdog-health verdict newer than 15 minutes reached Prometheus from
+                daniel-pi's textfile collector, so nothing confirms the watchdog daemon is being
+                watched. Read `systemctl status homelab-pi-watchdog-health.timer` on daniel-pi,
+                then /var/lib/node-exporter-textfile/pi-watchdog-health.prom.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+300x10'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x30'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PiWatchdogNotReporting
+        exp_alerts: []
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x1 stale'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x1 0x40'
+    alert_rule_test:
+      - eval_time: 30m
+        alertname: PiWatchdogNotReporting
+        exp_alerts: []
+
+  # The file is gone with the exporter up, so the absent_over_time arm fires with only its matchers'
+  # labels. The exporter-down case above is its control.
+  - interval: 1m
+    input_series:
+      - series: 'homelab_check_last_run_timestamp_seconds{check="pi-watchdog-health", instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '0+60x1 stale'
+      - series: 'up{instance="daniel-pi", job="node-pi", origin="daniel-pi"}'
+        values: '1x40'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: PiWatchdogNotReporting
+        exp_alerts: []
+      - eval_time: 30m
+        alertname: PiWatchdogNotReporting
+        exp_alerts:
+          - exp_labels: {check: pi-watchdog-health, origin: daniel-pi, severity: warning, service: daniel-pi}
+            exp_annotations:
+              summary: daniel-pi's watchdog daemon heartbeat has stopped reporting.
+              description: >-
+                No pi-watchdog-health verdict newer than 15 minutes reached Prometheus from
+                daniel-pi's textfile collector, so nothing confirms the watchdog daemon is being
+                watched. Read `systemctl status homelab-pi-watchdog-health.timer` on daniel-pi,
+                then /var/lib/node-exporter-textfile/pi-watchdog-health.prom.

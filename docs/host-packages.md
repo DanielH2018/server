@@ -395,8 +395,8 @@ LAN session:
 `homelab-daniel-pi` links these timers in `timers.target`:
 
 - `homelab-updater.timer` installs the newest packages and runs reconcile;
-- `homelab-pi-sd-health.timer`, `homelab-pi-gz-integrity.timer` and `homelab-pi-recovery.timer`
-  run the three heartbeats of `hosts/components/pi-heartbeats/`;
+- `homelab-pi-sd-health.timer`, `homelab-pi-gz-integrity.timer`, `homelab-pi-recovery.timer` and
+  `homelab-pi-watchdog-health.timer` run the four heartbeats of `hosts/components/pi-heartbeats/`;
 - `homelab-crowdsec-probe.timer` (H5.14, `hosts/components/crowdsec-probe/`) runs CrowdSec's edge
   probe once a minute, as the same user as the heartbeats.
 
