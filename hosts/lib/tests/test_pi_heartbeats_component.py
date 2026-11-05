@@ -1,4 +1,4 @@
-"""The rendered `pi-heartbeats` component: the Pi's three heartbeats as packaged timers (H3.8b).
+"""The rendered `pi-heartbeats` component: the Pi's heartbeats as packaged timers (H3.8b).
 
 The scripts' own behaviour is run against stubs in `ansible/tests/setup/test_pi_*.py`. These
 tests hold what the move added: the units that run the scripts, the absence of any credential

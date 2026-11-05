@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""The Pi's two heartbeats write a homelab_check_* textfile and push nothing (M6 B5).
+"""The Pi's verdict heartbeats write a homelab_check_* textfile and push nothing (M6 B5).
 
 docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5: pi-sd-health and
 pi-recovery-health each write `<check>.prom` through homelab-check-lib.sh, so the rules in
 `pi-checks.yaml` page for the "Daniel Pi SD Health" and "Daniel Pi Recovery" tiles that Cutover-1a
-deleted. Cutover-2 dropped the Kuma pushes. Each case runs the rendered script through
+deleted. Cutover-2 dropped the Kuma pushes. pi-watchdog-health follows the same contract, and
+test_pi_watchdog_alert.py runs it. Each case here runs the rendered script through
 `_pi_health` against stubs, with the role's check library and `TEXTFILE_DIR` pointed at a temp
 directory.
 
