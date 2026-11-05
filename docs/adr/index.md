@@ -16,7 +16,7 @@ The marker keeps `# DECIDED:` literal and carries the reference after it —
 `# DECIDED: … (ADR-0011)`, never `# DECIDED (ADR-0011):`. The reviewer brief greps the
 literal form, so moving the colon hides the marker from the one reader who needs it.
 
-## The `# DECIDED:` marker
+## Writing and citing a marker
 
 Write the marker, then the reasoning, and point at the long form rather than at a line number
 that drifts. A comment where the code makes the trade-off is one a reviewer trips over before
