@@ -116,7 +116,7 @@ def test_a_clobbered_trailer_reads_down_and_names_the_file(tmp_path):
 
 
 def test_many_clobbered_files_are_summarised_rather_than_all_named(tmp_path):
-    """A verdict naming all 37 paths would be unreadable, so it names three and counts the rest."""
+    """Kuma truncated a push msg at 900 chars, so the sweep names three and counts the rest."""
     roots = [tmp_path / "log"]
     good_gz(roots[0], FLOOR)
     for i in range(6):
