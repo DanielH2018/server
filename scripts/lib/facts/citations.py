@@ -235,9 +235,9 @@ def sections(doc_path: str, text: str) -> list[Section]:
     Ownership is by leaf: an atom cited under a subheading belongs to that subheading alone,
     never to the heading it nests under. Every atom in the document has exactly one owning
     unit — the innermost section it appears in — so the key ``<doc>#<heading>`` names both
-    the unit ``facts.lock`` is keyed by and the section a reader actually opens for it. A
-    renamed heading is a new unit and the old lock row surfaces as a missing section — which
-    is the right verdict, since nobody can tell a rename from a deletion by reading the text.
+    the unit the fact tools key a section by and the section a reader actually opens for it. A
+    renamed heading is a new unit, since nobody can tell a rename from a deletion by reading
+    the text.
 
     A trailing ATX closer (``## Title ##``) is not heading text, the same as in Markdown:
     the key is ``<doc>#Title`` whether or not the author closed the heading.

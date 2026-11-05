@@ -1,10 +1,8 @@
 """The YAML keys whose value Renovate rewrites, from ``renovate.json`` and its built-in managers.
 
 A ``yaml`` atom hashes its key's value, so citing a key Renovate manages turns every bump of
-that pin into a ``moved`` atom. The bump's PR then fails
-``test_every_recorded_atom_hashes_as_recorded``, and neither Renovate nor its agent can run
-``fact_status.py verify`` to clear it (#4012, four times by 2026-10-05). The lint rejects such
-a citation instead. The section cites the file as a path atom and names the variable in prose.
+that pin into a ``moved`` atom. The diff notice then lists the section on every bump PR, for a
+section whose prose the bump cannot change. The lint rejects such a citation instead. The section cites the file as a path atom and names the variable in prose.
 
 The set is read from the config Renovate itself reads, never listed by hand: each
 ``customManagers`` entry's ``matchStrings`` runs over the files its ``managerFilePatterns``
