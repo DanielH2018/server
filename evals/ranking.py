@@ -17,9 +17,10 @@ from pathlib import Path
 def rank_docs(log_lines: list[str]) -> list[tuple[str, int]]:
     """Count instructions.log loads per repo-relative doc, most-loaded first.
 
-    A log line is `<ts> [<session>] <reason> <scope> <path> [trigger=...]`. Absolute paths
-    are the user-level docs the dotfiles repo owns, so they are dropped here. The log
-    records whole docs, never headings; section_reads ranks the sections of one doc.
+    A log line is `<ts> [<session>] <reason> <scope> <path>`, then any `key=value` fields such
+    as `trigger=`, which this ignores. Absolute paths are the user-level docs the dotfiles repo
+    owns, so they are dropped here. The log records whole docs, never headings; section_reads
+    ranks the sections of one doc.
     """
     counts = Counter()
     for line in log_lines:
