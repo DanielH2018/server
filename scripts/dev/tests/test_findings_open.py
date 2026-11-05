@@ -14,6 +14,7 @@ from _findings_fakes import Fakes, build_tools
 from dev import findings
 from dev.findings_lib.issue_model import (
     LABELS,
+    NO_REOPEN,
     PROJECT_TITLE,
     claim_comment,
     fingerprint,
@@ -439,9 +440,10 @@ def test_open_on_a_refuted_issue_with_a_null_closed_at(
     assert not calls.gh
 
 
-def test_close_help_says_open_refuses_to_reopen_refuted_and_accepted(capsys):
+def test_close_help_names_every_outcome_open_will_not_reopen(capsys):
     with pytest.raises(SystemExit):
         findings.main(["close", "--help"], build_tools(Fakes())[0])
-    assert "refuses to reopen a refuted or accepted issue" in " ".join(
-        capsys.readouterr().out.split()
-    )
+    # Only the epilog says "to reopen"; each flag's own help also names its outcome.
+    _, marker, epilog = " ".join(capsys.readouterr().out.split()).partition("to reopen")
+    assert marker
+    assert [outcome for outcome in NO_REOPEN if outcome not in epilog] == []

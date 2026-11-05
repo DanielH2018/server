@@ -216,9 +216,13 @@ def test_claim_refuses_rather_than_reaps_an_operator_claim_read_by_the_agent_use
     assert json.loads(capsys.readouterr().out) == []
 
 
-def test_claim_help_says_a_refusal_means_the_claim_is_live(capsys):
+def test_claim_help_names_subcommands_that_read_and_release_claims(capsys):
+    tools = build_tools(Fakes())[0]
     with pytest.raises(SystemExit):
-        main(["claim", "--help"], build_tools(Fakes())[0])
-    assert "a refusal here means the claim is LIVE" in " ".join(
-        capsys.readouterr().out.split()
-    )
+        main(["claim", "--help"], tools)
+    plain = capsys.readouterr().out
+    for subcommand in ("claims", "reap"):
+        assert f"`{subcommand}`" in plain
+        with pytest.raises(SystemExit) as parsed:
+            main([subcommand, "--help"], tools)
+        assert parsed.value.code == 0
