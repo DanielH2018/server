@@ -290,6 +290,14 @@ class _DropsAfterFirstChunk(_Response):
         raise ConnectionResetError("connection reset by peer")
 
 
+class _DeclaresLength(_Response):
+    """A response whose Content-Length header says `length`, whatever its body holds."""
+
+    def __init__(self, body: bytes, length: int):
+        super().__init__(body)
+        self.headers = {"Content-Length": str(length)}
+
+
 @pytest.mark.parametrize(
     "first",
     [
@@ -298,8 +306,16 @@ class _DropsAfterFirstChunk(_Response):
         urllib.error.URLError(ConnectionRefusedError("connection refused")),
         _DropsAfterFirstChunk(b"bin"),
         http.client.BadStatusLine("garbled"),
+        _DeclaresLength(b"bin", 6),
     ],
-    ids=["504", "timeout", "connection-refused", "reset-mid-body", "bad-status-line"],
+    ids=[
+        "504",
+        "timeout",
+        "connection-refused",
+        "reset-mid-body",
+        "bad-status-line",
+        "closed-mid-body",
+    ],
 )
 def test_a_transient_failure_is_retried_and_returns_the_content(tmp_path, first):
     body = b"binary"
@@ -309,6 +325,14 @@ def test_a_transient_failure_is_retried_and_returns_the_content(tmp_path, first)
     assert path.read_bytes() == body
     assert len(opener.calls) == 2
     assert delays == [tf.TOOL_RETRY_DELAY_S]
+
+
+def test_a_body_matching_its_content_length_takes_one_request(tmp_path):
+    body = b"binary"
+    opener = scripted(_DeclaresLength(body, len(body)))
+    delays: list[float] = []
+    assert tf.download_tool(pin(body), tmp_path, opener, sleep=delays.append)
+    assert delays == []
 
 
 def test_a_404_fails_after_one_attempt(tmp_path):

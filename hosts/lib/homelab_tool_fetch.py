@@ -73,6 +73,10 @@ def _write_download(url: str, partial: Path, opener: Callable[..., Any] | None) 
                 raise Failure("tools", f"{url} exceeds {TOOL_MAX_BYTES} bytes")
             digest.update(chunk)
             out.write(chunk)
+        # HTTPResponse.read(amt) returns b"" when the peer closes early, without raising.
+        expected = resp.headers.get("Content-Length", "")
+        if expected.isdigit() and size < int(expected):
+            raise ConnectionError(f"the body ended after {size} of {expected} bytes")
     return digest.hexdigest()
 
 
