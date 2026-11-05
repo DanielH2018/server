@@ -149,7 +149,13 @@ def _parser(description: str) -> argparse.ArgumentParser:
     t.add_argument("number", type=int)
     t.add_argument("--source", default="session")
 
-    cl = sub.add_parser("claim", help="claim issues for a worktree")
+    cl = sub.add_parser(
+        "claim",
+        help="claim issues for a worktree",
+        epilog="`claim` itself reaps a claim that `next` marks stale, so a refusal here means "
+        "the claim is LIVE: find the other session before you take the issue. `claims` shows "
+        "who holds what, and `reap` releases the claims whose worktree is gone.",
+    )
     _add_dry_run(cl, suppress=True)
     _add_repo(cl)
     cl.add_argument("numbers", nargs="+", type=int)
@@ -188,7 +194,13 @@ def _parser(description: str) -> argparse.ArgumentParser:
     _add_dry_run(rp, suppress=True)
     _add_repo(rp)
 
-    c = sub.add_parser("close", help="close as fixed, refuted or accepted")
+    c = sub.add_parser(
+        "close",
+        help="close as fixed, refuted or accepted",
+        epilog="An issue normally closes as fixed from the fixing PR's `Closes #<n>`. `open` "
+        "refuses to reopen a refuted or accepted issue, so the do-not-re-flag list does not "
+        "carry either.",
+    )
     _add_dry_run(c, suppress=True)
     _add_repo(c)
     c.add_argument("number", type=int)

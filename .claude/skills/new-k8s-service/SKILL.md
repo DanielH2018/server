@@ -152,9 +152,8 @@ Add to `ansible/vars/secrets.yml` (`sops ansible/vars/secrets.yml`) and referenc
 `{{ variable_name }}` in a `secret.yaml.j2`. The `add-secret` skill covers the rotation
 registry that has to be updated alongside.
 
-Flux removes a key you drop from the template when Flux owns that key. A key that another field
-manager holds stays live, so patch it out and verify. `.claude/rules/k8s-templates.md`, *Removing
-a key from a Secret template*, has the rule.
+To avoid **stale Secret keys**, read `.claude/rules/k8s-templates.md`, *Removing a key from a
+Secret template*, before you remove a key from a `secret.yaml.j2`.
 
 ## 4. Deploy
 

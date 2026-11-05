@@ -77,7 +77,7 @@ def test_daniel_pi_is_fully_drained():
     assert len(containers) == 0
 
 
-# The Docker play deploys containers_list in order, and the package's Compose project (H5) runs
+# The Pi's containers_list stays empty, and the package's Compose project (H5) runs
 # `compose_services` through homelab-compose.service, independent of the play. Each pair is
 # (upstream, downstream): autoheal restarts containers through docker-proxy-lifecycle, and alloy
 # discovers logs through docker-proxy. From H5.6 an upstream moves no later than its downstream:

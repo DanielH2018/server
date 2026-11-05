@@ -3,8 +3,8 @@
 `toposort_containers` orders the k8s play by the map `build_k8s_dep_map` derives from each
 role's templates and entry, and `filter_by_platform` splits the list between the Docker and k8s
 plays. `ansible_owned` drops the entries another deployer owns from the k8s play's batch loop.
-The Docker play runs in containers_list order: the Pi is its only host, and its one
-ordering constraint (docker-proxy before autoheal) is that list's order.
+The Docker play runs no role: every entry is `platform: k8s`, and the Pi's services deploy from
+`compose_services` in its package.
 """
 
 import heapq
@@ -173,12 +173,15 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
     return dep_map
 
 
+# DECIDED: deploy.yml's Docker play and this filter's `docker` default stay until R4 or H7 deletes
+# that file's last play. The play runs no role, and its snapshot pre_task feeds the k8s play.
+# Long form: docs/target-architecture/host/h5-pi-compose.md, H5-R1-06.
 def filter_by_platform(containers_list, platform="docker"):
     """Select containers_list entries targeting a given deploy platform.
 
-    A missing `platform` key means "docker". That default is load-bearing:
-    every pre-migration entry omits the key, so defaulting any other way would
-    silently drop every service from the next deploy.
+    A missing `platform` key means "docker", as it does in `entry_fields` and
+    `deploy_inventory`. `scripts/validate/compose_templates.py` refuses such an entry, so the
+    k8s play never drops a service that omitted the key.
     """
     return [c for c in containers_list if c.get("platform", "docker") == platform]
 
