@@ -54,8 +54,11 @@ def test_a_service_on_another_port_is_flagged():
 
 
 def test_the_job_carries_no_origin_label():
-    """No `origin` keeps the job among the cluster targets. `ScrapeTargetDown` pages a failed
-    scrape, as the DeployPipelineExporterAbsent rule's `up == 1` conjunct assumes (M1
-    convention 5)."""
+    """No `origin`, because `ScrapeTargetsMissing` floors `up{origin="daniel-server"}` at 1.
+
+    A job carrying that origin would put one more series behind the floor and weaken it.
+    `ScrapeTargetDown` selects by `job`, so it pages a failed scrape either way, as the
+    DeployPipelineExporterAbsent rule's `up == 1` conjunct assumes (M1 convention 5).
+    """
     [static] = scrape_job()["static_configs"]
     assert "origin" not in static.get("labels", {})

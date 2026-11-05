@@ -10,8 +10,8 @@ stub.
 Two properties each case pins:
 
 - the file carries success 1 for an up verdict and 0 for a down one, and the stamped time;
-- since B2's Cutover-2 no render pushes to Kuma: no library, no `kuma_push`, no push URL and no
-  push credential, so a run needs neither to write its verdict.
+- since B2's Cutover-2 every render pushes nothing to Kuma: no library, no `kuma_push`, no push URL
+  and no push credential, so a run needs neither to write its verdict.
 
 Run: uv run pytest ansible/tests/setup/test_initial_setup_check_textfiles.py
 """

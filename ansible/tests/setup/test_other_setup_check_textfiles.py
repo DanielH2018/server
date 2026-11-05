@@ -12,8 +12,8 @@ Properties the cases pin:
 
 - the file carries success 1 for an up verdict and 0 for a down one, the stamped time and the
   rendered deadline;
-- since B4's Cutover-2 no render pushes to Kuma: no library, no `kuma_push`, no push URL and no
-  push credential, so a run needs neither to write its verdict.
+- since B4's Cutover-2 every render pushes nothing to Kuma: no library, no `kuma_push`, no push URL
+  and no push credential, so a run needs neither to write its verdict.
 
 The rule literals are pinned to the rendered deadlines in test_b4_rule_literals.py.
 

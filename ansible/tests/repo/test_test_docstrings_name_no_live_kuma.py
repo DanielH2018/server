@@ -81,3 +81,56 @@ def test_no_test_docstring_describes_kuma_as_a_live_pager():
         "M6 deleted Kuma, so say what pages instead, or put the sentence in the past tense:\n"
         + "\n".join(offenders)
     )
+
+
+# No exemption word: "paged" and "pushes nothing to" stay out by their own shape, so a present-tense
+# claim cannot pass on a "since" or "once" elsewhere in the sentence.
+STATES_KUMA_PAGES = re.compile(
+    r"(?<!\bno )\bKuma(?:'s)?(?: (?!as\b)[\w-]+){0,4} "
+    r"(?:pages?|alerts?|notifies|goes|proves|truncates|reads|watches)\b"
+    r"|\bKuma is (?!gone\b)"
+    r"|\b(?:through|via|pushes to|pushes into) (?:prod's )?(?:Uptime )?Kuma\b"
+)
+
+
+def test_a_plain_statement_that_kuma_pages_is_flagged():
+    for sentence in (
+        "This pages through Uptime Kuma.",
+        "Uptime Kuma pages the operator on a failed scrape.",
+        "Kuma alerts on a stale heartbeat.",
+        "Kuma is the second alert channel.",
+        "The Kuma push goes DOWN for any overdue secret.",
+        "Kuma's Cluster Scrape Targets tile pages a failed scrape once it stops.",
+        "Kuma's tile pages it since the scrape failed.",
+        "Every heartbeat pushes to Kuma, which had a grace period.",
+    ):
+        assert STATES_KUMA_PAGES.search(sentence), sentence
+
+
+def test_kuma_named_as_history_is_clean():
+    for sentence in (
+        "Kuma's Cluster Scrape Targets tile paged that case.",
+        "M6 batch B2's Cutover-2 removed the Kuma push.",
+        "disk-health.sh pushes nothing to Kuma.",
+        "A rule that regains `shadow` pages nobody while no Kuma tile pages in its place.",
+        "A comment that cites the plan stays true after Kuma is gone.",
+        "`monitor_bridge_ha_token` carries the prefix for Kuma history but is an HA API token.",
+    ):
+        assert not STATES_KUMA_PAGES.search(sentence), sentence
+
+
+def test_no_test_docstring_states_that_kuma_pages():
+    files = [
+        rel
+        for rel in tracked("ansible/tests/**", "scripts/**/tests/**")
+        if rel.endswith(".py")
+    ]
+    assert "ansible/tests/services/test_smtp_wiring.py" in files
+    offenders = [
+        f"{rel}::{owner}: {sentence}"
+        for rel in files
+        for owner, doc in docstrings(rel)
+        for sentence in re.split(r"(?<=[.;:])\s+", doc)
+        if STATES_KUMA_PAGES.search(sentence)
+    ]
+    assert not offenders, "M6 deleted Kuma:\n" + "\n".join(offenders)
