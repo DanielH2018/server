@@ -82,7 +82,7 @@ Three observations rule out an AppSec failure window:
 
 - **Only the banned address was refused.** During the 10-23 21:20 run, the edge answered
   `10.0.0.139` 403 46 times in ten minutes. In the same ten minutes it served a public client
-  (`173.249.254.192`) 200, 304 and 307, and served in-cluster clients 200 and 302. AppSec
+  200, 304 and 307, and served in-cluster clients 200 and 302. AppSec
   inspects every client's request, so its failure-block would have refused other clients too.
 - **The refusals were cache hits.** Their `Duration` was 0.2 to 0.5 ms, too short for a round
   trip to the AppSec engine.
