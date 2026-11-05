@@ -182,6 +182,8 @@ class _Walk:
         self.skips: list[Skip] = []
         # The task file being walked, for an UNCHECKED line.
         self.file = "tasks/main.yml"
+        # The task files on the import path down to the one being walked.
+        self.importers: set[Path] = set()
         self.text_env = make_ansible_env([role_dir / "templates"])
         self.gate_env = make_ansible_env(undefined_cls=StrictUndefined)
         # Names a `set_fact` or `register` sets during the run, in any of the role's task
@@ -243,11 +245,13 @@ class _Walk:
 
     def tasks(self, path: Path, whens: list) -> None:
         outer, self.file = self.file, _shown(path, self.role_dir)
+        self.importers.add(path.resolve())
         try:
             for task in yaml_fast.safe_load(path.read_text()) or []:
                 if isinstance(task, dict):
                     self.task(task, whens)
         finally:
+            self.importers.discard(path.resolve())
             self.file = outer
 
     def task(self, task: dict, whens: list) -> None:
@@ -400,6 +404,10 @@ class _Walk:
         items = self.loop_items(task)
         if items is None:
             why = "it loops over a list that is not literal"
+            self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
+            return
+        if path.resolve() in self.importers:
+            why = f"{target!r} is already on the import path, so it imports itself"
             self.skips.append(Skip(f"{self.file}: {label}", why, unchecked=True))
             return
         loop_var = (task.get("loop_control") or {}).get("loop_var", "item")

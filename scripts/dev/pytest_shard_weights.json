@@ -1142,6 +1142,7 @@
  "scripts/deploy_tools/tests/test_setup_gates_packaged_guard.py": 0.0,
  "scripts/deploy_tools/tests/test_setup_reach_hosts.py": 6.12,
  "scripts/deploy_tools/tests/test_setup_routing.py": 0.0,
+ "scripts/deploy_tools/tests/test_setup_walks_import_cycle.py": 0.0,
  "scripts/deploy_tools/tests/test_shared_role_callers.py": 0.05,
  "scripts/deploy_tools/tests/test_shared_role_reach.py": 0.5,
  "scripts/deploy_tools/tests/test_shared_role_smoke_caller.py": 0.37,
