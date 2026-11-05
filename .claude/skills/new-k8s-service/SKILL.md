@@ -152,8 +152,8 @@ Add to `ansible/vars/secrets.yml` (`sops ansible/vars/secrets.yml`) and referenc
 `{{ variable_name }}` in a `secret.yaml.j2`. The `add-secret` skill covers the rotation
 registry that has to be updated alongside.
 
-`kubectl apply` leaves **stale Secret keys** behind: removing a key from the manifest does not
-remove it live. Patch it out and verify.
+To avoid **stale Secret keys**, read `.claude/rules/k8s-templates.md`, *Removing a key from a
+Secret template*, before you remove a key from a `secret.yaml.j2`.
 
 ## 4. Deploy
 
