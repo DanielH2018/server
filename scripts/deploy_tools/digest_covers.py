@@ -53,7 +53,6 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
@@ -218,8 +217,8 @@ def _var_reader(name: str, head: str, repo: Path) -> str | None:
             return hit
         text = show_at(head, hit, repo)
         try:
-            doc = _drop_vars(_strip(hit, yaml_fast.safe_load(text or "")), {name})
-        except yaml.YAMLError:
+            doc = _drop_vars(_strip(hit, yaml_fast.parse_yaml(text or "")), {name})
+        except yaml_fast.UnparsableYaml:
             return hit
         if word.search(json.dumps(doc, default=str)):
             return hit
@@ -229,9 +228,9 @@ def _var_reader(name: str, head: str, repo: Path) -> str | None:
 def _play_reason(path: str, before: str, after: str, head: str, repo: Path):
     """Why a play file's change is not confined to inert tasks, or None when it is."""
     try:
-        old = _strip(path, yaml_fast.safe_load(before))
-        new = _strip(path, yaml_fast.safe_load(after))
-    except yaml.YAMLError as exc:
+        old = _strip(path, yaml_fast.parse_yaml(before))
+        new = _strip(path, yaml_fast.parse_yaml(after))
+    except yaml_fast.UnparsableYaml as exc:
         return f"{path} does not parse as YAML: {exc}"
     if same_value(old, new):
         return None
@@ -355,7 +354,7 @@ def main(argv: list[str] | None = None) -> int:
                 if role and base and head
                 else "not ROLE:BASE:HEAD"
             )
-        except (CannotNarrow, OSError, ValueError, yaml.YAMLError) as exc:
+        except (CannotNarrow, OSError, ValueError, RecursionError) as exc:
             why = f"{type(exc).__name__}: {exc}"
         if why:
             print(f"digest_covers: {item}: kept, {why}", file=sys.stderr)

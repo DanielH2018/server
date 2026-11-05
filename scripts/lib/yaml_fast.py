@@ -45,6 +45,31 @@ import yaml
 Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
 
+class UnparsableYaml(yaml.YAMLError, ValueError):
+    """A text that does not load as YAML, whichever exception PyYAML raised for it.
+
+    Both bases, so a caller already catching `yaml.YAMLError` or `ValueError` still catches it.
+    """
+
+
+def parse_yaml(text: str):
+    """`safe_load`, with every way a text can fail to load raised as one exception.
+
+    Returns:
+        The parsed value. It can still hold a recursive alias, because loading one succeeds, so
+        a recursive walk over the value catches `RecursionError` itself.
+
+    Raises:
+        UnparsableYaml: the text does not load.
+    """
+    try:
+        return safe_load(text)
+    # The boundary around untrusted text: PyYAML's constructor raises whatever a bad scalar
+    # triggers (ValueError for `2026-13-45`, KeyError for `!!bool x`, IndexError for `!!int ""`).
+    except Exception as exc:
+        raise UnparsableYaml(str(exc)) from exc
+
+
 def safe_load(stream):
     """`yaml.safe_load`, parsed by libyaml. Same schema, same exceptions."""
     return yaml.load(stream, Loader=Loader)

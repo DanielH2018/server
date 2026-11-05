@@ -19,7 +19,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
 
 from lib import yaml_fast
-from lib.narrow_git import YAML_PARSE_ERRORS
 
 
 def playbook_roles(text: str | None) -> set[str]:
@@ -36,8 +35,8 @@ def playbook_roles(text: str | None) -> set[str]:
     if text is None:
         return set()
     try:
-        plays = yaml_fast.safe_load(text)
-    except YAML_PARSE_ERRORS:
+        plays = yaml_fast.parse_yaml(text)
+    except yaml_fast.UnparsableYaml:
         return set()
     names: set[str] = set()
     for play in plays if isinstance(plays, list) else []:
@@ -106,17 +105,17 @@ def play_role_includes(
     """
     if text is None:
         return []
-    try:
-        plays = yaml_fast.safe_load(text)
-    except YAML_PARSE_ERRORS:
-        return []
     out: list[tuple[str, frozenset[str] | str]] = []
-    for play in plays if isinstance(plays, list) else []:
-        if not isinstance(play, dict):
-            continue
-        inherited = _tag_set(play.get("tags"))
-        for section in ("pre_tasks", "tasks", "post_tasks"):
-            out += _role_includes(play.get(section), role, inherited)
+    try:
+        plays = yaml_fast.parse_yaml(text)
+        for play in plays if isinstance(plays, list) else []:
+            if not isinstance(play, dict):
+                continue
+            inherited = _tag_set(play.get("tags"))
+            for section in ("pre_tasks", "tasks", "post_tasks"):
+                out += _role_includes(play.get(section), role, inherited)
+    except yaml_fast.UnparsableYaml, RecursionError:
+        return []
     return out
 
 

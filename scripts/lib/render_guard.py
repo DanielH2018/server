@@ -28,7 +28,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import yaml
 from jinja2 import ChainableUndefined, Environment, FileSystemLoader, StrictUndefined
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -152,6 +151,9 @@ def load_yaml(path: Path) -> dict:
 
     Every caller indexes the result as a dict, so a file whose top level is a list or a
     scalar returns ``{}`` rather than leaking through to a ``TypeError`` several calls later.
+
+    Raises:
+        yaml_fast.UnparsableYaml: the file does not load.
     """
     if not path.is_file():
         return {}
@@ -165,7 +167,7 @@ def load_yaml(path: Path) -> dict:
 # render paid for again on every render_context call (#5592).
 @functools.lru_cache(maxsize=512)
 def _parsed_mapping(text: str) -> dict:
-    loaded = yaml_fast.safe_load(text)
+    loaded = yaml_fast.parse_yaml(text)
     return loaded if isinstance(loaded, dict) else {}
 
 
@@ -299,7 +301,8 @@ def containers_entries_at(ref: str, cwd: Path) -> list[tuple[str, dict]]:
     The read ``service_records_at`` above is expressed on, kept separate because that one
     flattens an entry to its tags and a caller asking which tags ONE entry declares cannot
     recover the grouping from the flattened form. Raises ``CalledProcessError`` on an
-    unreadable ref, as its caller's docstring says.
+    unreadable ref, as its caller's docstring says, and ``yaml_fast.UnparsableYaml`` on a file
+    that does not load at ``ref``.
     """
     entries: list[tuple[str, dict]] = []
     for name in git_stdout(
@@ -307,7 +310,7 @@ def containers_entries_at(ref: str, cwd: Path) -> list[tuple[str, dict]]:
     ).splitlines():
         if not name.endswith(".yml") or name.startswith("_"):
             continue
-        loaded = yaml_fast.safe_load(
+        loaded = yaml_fast.parse_yaml(
             git("show", f"{ref}:{HOST_VARS_IN_TREE}/{name}", cwd=cwd).stdout
         )
         host = name.removesuffix(".yml")
@@ -342,7 +345,7 @@ def service_records_at_or_none(
     ``git``, and an empty answer is indistinguishable from that here, so both become None and
     the caller falls back to the tree it can read.
 
-    ``yaml.YAMLError`` is in the set because the read parses YAML fetched from ``ref``: a
+    ``yaml_fast.UnparsableYaml`` is in the set because the read parses YAML fetched from ``ref``: a
     host_vars file that does not parse at that commit is a damaged read like any other, and
     letting it escape turns ``deploy_tags.py validate --at <sha>`` into a traceback that
     ``deploy.sh`` maps to its tag-miss exit -- "a --tags value matched no service", for a file
@@ -350,7 +353,7 @@ def service_records_at_or_none(
     """
     try:
         return service_records_at(ref, cwd) or None
-    except subprocess.SubprocessError, OSError, ValueError, yaml.YAMLError:
+    except subprocess.SubprocessError, OSError, ValueError, yaml_fast.UnparsableYaml:
         return None
 
 

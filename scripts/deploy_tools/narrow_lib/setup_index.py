@@ -22,13 +22,20 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 
+import functools
 import posixpath
 import re
+from collections.abc import Callable
 
 
-from lib import yaml_fast
 from lib.git import git
-from lib.narrow_git import YAML_PARSE_ERRORS, CannotNarrow, mapping_at, show_at
+from lib.narrow_git import (
+    CannotNarrow,
+    mapping_at,
+    refuse_deep_walk,
+    show_at,
+    walk_yaml,
+)
 from deploy_tools.narrow_lib.setup_playbook import (
     declared_tags,
     play_role_includes,
@@ -76,30 +83,33 @@ def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> s
             text = show_at(ref, path, repo)
             if text is None:
                 continue
-            try:
-                doc = yaml_fast.safe_load(text)
-            except YAML_PARSE_ERRORS as exc:
-                raise CannotNarrow(f"{path} does not parse: {exc}") from exc
-            # A mapping here is unreadable, not empty: `declared_tags` walks a list, so a
-            # file of some other shape contributes no tags and a collision it alone declares
-            # would be missed — the printed `--tags` would then run the other role's tasks
-            # too, which is the #2350 failure this function exists to prevent. Skipping it
-            # silently also left the module disagreeing with itself: `file_tags` raises on
-            # the same shape (#2445). Reachable since #2437 widened the filter above to every
-            # extension Ansible loads, so a `tasks/main.json` holding a mapping gets here.
-            if doc is None:
-                # An EMPTY document is the one non-list shape that is knowable rather than
-                # unreadable: a file with no tasks declares no tags, so it cannot hide a
-                # collision. Refusing on it would be a false refusal with the widest possible
-                # blast radius — this loop reads every OTHER setup role, so one empty
-                # `tasks/*.yml` anywhere in `roles/setup/` would stop narrowing for every
-                # setup change. `file_tags` reads one file, the changed role's own, and can
-                # afford to refuse.
-                continue
-            if not isinstance(doc, list):
-                raise CannotNarrow(f"{path} is not a list of tasks")
-            out |= declared_tags(doc)
+            out |= walk_yaml(
+                text, path, functools.partial(_foreign_doc_tags, path=path)
+            )
     return out
+
+
+def _foreign_doc_tags(doc, path: str) -> set[str]:
+    """The tags another role's parsed task file declares, or a refusal for an unreadable shape."""
+    # A mapping here is unreadable, not empty: `declared_tags` walks a list, so a
+    # file of some other shape contributes no tags and a collision it alone declares
+    # would be missed — the printed `--tags` would then run the other role's tasks
+    # too, which is the #2350 failure this function exists to prevent. Skipping it
+    # silently also left the module disagreeing with itself: `file_tags` raises on
+    # the same shape (#2445). Reachable since #2437 widened the filter above to every
+    # extension Ansible loads, so a `tasks/main.json` holding a mapping gets here.
+    if doc is None:
+        # An EMPTY document is the one non-list shape that is knowable rather than
+        # unreadable: a file with no tasks declares no tags, so it cannot hide a
+        # collision. Refusing on it would be a false refusal with the widest possible
+        # blast radius — this loop reads every OTHER setup role, so one empty
+        # `tasks/*.yml` anywhere in `roles/setup/` would stop narrowing for every
+        # setup change. `file_tags` reads one file, the changed role's own, and can
+        # afford to refuse.
+        return set()
+    if not isinstance(doc, list):
+        raise CannotNarrow(f"{path} is not a list of tasks")
+    return declared_tags(doc)
 
 
 def _scalars(value, seen: set[int]):
@@ -144,12 +154,13 @@ def _top_level_keys_naming(doc: dict, name: str | re.Pattern) -> set[str]:
     mentions = (
         name if isinstance(name, re.Pattern) else re.compile(re.escape(name))
     ).search
-    return {
-        str(key)
-        for key, value in doc.items()
-        if any(mentions(s) for s in _scalars(key, set()))
-        or any(mentions(s) for s in _scalars(value, set()))
-    }
+    with refuse_deep_walk("a vars file"):
+        return {
+            str(key)
+            for key, value in doc.items()
+            if any(mentions(s) for s in _scalars(key, set()))
+            or any(mentions(s) for s in _scalars(value, set()))
+        }
 
 
 # The names Ansible loads from a role's `tasks/`, `defaults/` and `vars/`, read off its own
@@ -247,11 +258,15 @@ class RoleIndex:
 
     def _facts_set_by(self, rel: str) -> frozenset[str]:
         """The facts one task file derives, read off its parsed tasks."""
-        try:
-            doc = yaml_fast.safe_load(self.task_text[rel])
-        except YAML_PARSE_ERRORS as exc:
-            raise CannotNarrow(f"{rel} does not parse: {exc}") from exc
-        return frozenset(_set_facts(doc if isinstance(doc, list) else []))
+        return frozenset(self._walk_tasks(rel, _set_facts))
+
+    def _walk_tasks[T](self, rel: str, walk: Callable[[list], T]) -> T:
+        """`walk` over one task file's parsed tasks, with no tasks for a non-list document."""
+        return walk_yaml(
+            self.task_text[rel],
+            rel,
+            lambda doc: walk(doc if isinstance(doc, list) else []),
+        )
 
     def _main_task_file(self, ref: str) -> str:
         """The `tasks/main` file Ansible would load, by its own extension precedence.
@@ -277,11 +292,7 @@ class RoleIndex:
             if rel in seen or rel not in self.task_text:
                 continue
             seen.add(rel)
-            try:
-                doc = yaml_fast.safe_load(self.task_text[rel])
-            except YAML_PARSE_ERRORS as exc:
-                raise CannotNarrow(f"{rel} does not parse: {exc}") from exc
-            for name in _static_imports(doc if isinstance(doc, list) else []):
+            for name in self._walk_tasks(rel, _static_imports):
                 todo.append(posixpath.normpath(f"tasks/{name}"))
         return frozenset(seen)
 
@@ -289,8 +300,7 @@ class RoleIndex:
         """Every task file `files` include dynamically, and the tags selecting it."""
         out: dict[str, frozenset[str] | str] = {}
         for rel in sorted(files):
-            doc = yaml_fast.safe_load(self.task_text[rel])
-            for name, answer in _dynamic_includes(doc if isinstance(doc, list) else []):
+            for name, answer in self._walk_tasks(rel, _dynamic_includes):
                 target = posixpath.normpath(f"tasks/{name}")
                 if target in files:
                     continue
@@ -333,8 +343,7 @@ class RoleIndex:
         answer = self.play_included[rel]
         if isinstance(answer, str):
             raise CannotNarrow(answer)
-        doc = yaml_fast.safe_load(self.task_text[rel])
-        per_task = _task_tags(doc if isinstance(doc, list) else [], frozenset())
+        per_task = self._walk_tasks(rel, lambda t: _task_tags(t, frozenset()))
         if any("never" in t for t in per_task):
             raise CannotNarrow(
                 f"{rel} carries the special tag never, which selects opt-in tasks "
@@ -378,8 +387,7 @@ class RoleIndex:
             # Per task, not `self.tags[rel]`: that is None for a file with any untagged task,
             # which is the shape an include exists for. `apply` adds the include's tag to a
             # `never` task in it, so that tag would run the opt-in work.
-            doc = yaml_fast.safe_load(self.task_text[rel])
-            per_task = _task_tags(doc if isinstance(doc, list) else [], frozenset())
+            per_task = self._walk_tasks(rel, lambda t: _task_tags(t, frozenset()))
             if any("never" in t for t in per_task):
                 raise CannotNarrow(
                     f"{rel} carries the special tag never, which selects opt-in tasks "

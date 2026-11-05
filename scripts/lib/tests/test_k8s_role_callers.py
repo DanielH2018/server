@@ -105,3 +105,16 @@ def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
     assert derived == {"helper": {"caller"}}, derived
     assert callers, "the live graph is empty, so the reject half below proves nothing"
     assert not (set(derived) & set(callers)), derived
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["d: 2026-13-45\n", "- &x {block: [*x]}\n", "- [unclosed\n"],
+    ids=["impossible-date", "recursive-alias", "syntax"],
+)
+def test_a_task_file_that_cannot_be_read_is_skipped_like_a_syntax_error(tmp_path, text):
+    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "bad.yml").write_text(text)
+    (tasks / "good.yml").write_text("- include_role:\n    name: k8s/helper\n")
+    assert role_callers(tmp_path) == {"helper": {"caller"}}

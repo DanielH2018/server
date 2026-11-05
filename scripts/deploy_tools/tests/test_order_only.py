@@ -7,8 +7,10 @@ judged end to end.
 Run: uv run pytest scripts/deploy_tools/tests/test_order_only.py
 """
 
+from _narrow_fixtures import Tree
 from deploy_tools.narrow_lib import order_only
 from deploy_tools.narrow_lib import filters
+from lib.ansible_inventory import K8S_HOST
 from lib.git_testing import git_out
 from lib.repo_paths import REPO
 
@@ -82,3 +84,11 @@ def test_no_tracked_module_keeps_the_static_write_analysis():
         check=False,  # no match exits 1
     )
     assert out.split() == []
+
+
+def test_host_vars_with_a_syntax_error_give_no_run(tmp_path):
+    """`_run` answers None on any doubt, and its except tuple names no `yaml.YAMLError`."""
+    tree = Tree(tmp_path)
+    tree.write(f"ansible/inventory/host_vars/{K8S_HOST}.yml", "a: [unclosed\n")
+    head = tree.commit("host_vars")
+    assert order_only._run(tree.root, f"{head}:ansible", head) is None
