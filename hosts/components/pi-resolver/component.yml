@@ -15,9 +15,9 @@
 #   (`manage_etc_hosts` is unset), and no package owns it.
 #
 # The file lands in /etc/resolv.conf as a regular file. A rebuilt Pi starts with the systemd-resolved
-# stub symlink; dpkg replaces the link with the file, and the bootstrap debloat step stops and
-# disables systemd-resolved (spec, *The bootstrap script*). The live Pi already has resolved
-# disabled. Docker pins its upstream resolvers when a container starts, so a later change to this
+# stub symlink; dpkg replaces the link with the file in step 5 of hosts/bootstrap-host.sh, and
+# step 6 stops and disables systemd-resolved. The order is the safety property: step 5 still
+# needs the stub to reach Ubuntu's archive. The live Pi already has resolved disabled. Docker pins its upstream resolvers when a container starts, so a later change to this
 # file leaves running containers on the old ones until they restart. The Ansible role restarted
 # every container after a change. The package does not, so the operator restarts the containers
 # by hand after such a change (docs/pi-host-tuning-record.md has the 2026-09-01 incident).
