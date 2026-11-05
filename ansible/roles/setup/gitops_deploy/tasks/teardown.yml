@@ -61,7 +61,7 @@
   vars:
     check_timer_state: absent
     check_timer_name: github-ruleset-drift
-    check_timer_description: GitHub ruleset drift check (Kuma push)
+    check_timer_description: GitHub ruleset drift check (textfile verdict)
     check_timer_exec: /usr/local/bin/github-ruleset-drift.sh
     check_timer_user: root
     check_timer_on_calendar: "*-*-* 06:40:00"
@@ -75,7 +75,7 @@
   vars:
     check_timer_state: absent
     check_timer_name: github-interaction-limit
-    check_timer_description: GitHub interaction-limit re-arm (Kuma push)
+    check_timer_description: GitHub interaction-limit re-arm (textfile verdict)
     check_timer_exec: /usr/local/bin/github-interaction-limit.sh
     check_timer_user: root
     check_timer_on_calendar: "*-*-* 06:50:00"

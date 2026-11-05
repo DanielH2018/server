@@ -1,26 +1,25 @@
 ---
-# Schedule a Kuma-fed host check as a systemd timer that RERUNS while the check is red.
+# Schedule a host check as a systemd timer that RERUNS while the check is red.
 #
-# THE PROBLEM. A check that feeds a push monitor from cron pushes `down`, and the tile stays red
-# until the cron's next slot — 1 h to 25 h later — however soon the fault is fixed, because
-# nothing pushes `up` in between. Kuma has no poll rate to raise for a push monitor, and
-# AutoKuma reverts any runtime edit to a monitor within 60 s (uptime-kuma role). The only place
-# a recovery is observable is the producer, so the producer is what reruns.
+# THE PROBLEM. A check run from cron writes `down` to its textfile, and the Prometheus rule stays
+# firing until the cron's next slot — 1 h to 25 h later — however soon the fault is fixed,
+# because nothing writes `up` in between. The only place a recovery is observable is the
+# producer, so the producer is what reruns.
 #
 # THE SHAPE. One oneshot service and one timer per check, rendered from the shared pair in
-# roles/setup/common/templates/. The contract is the exit code: the script exits 1 after it
-# pushes `down` and 0 after `up`, and `Restart=on-failure` reruns it every `RestartSec` until
+# roles/setup/common/templates/. The contract is the exit code: the script exits non-zero
+# after it writes `down` and 0 after `up`, and `Restart=on-failure` reruns it every `RestartSec` until
 # it exits 0. Chosen over a marker-file runner (a third scheduler beside cron and
 # monitor-bridge) and over moving the checks into monitor-bridge (most read the host checkout,
 # root-only files or the host's `gh` login).
 #
 # A REBOOT ENDS THE RESTART LOOP (#4495). `Persistent=true` catches up only a slot that never
-# fired, and the slot that pushed `down` already had. So the service's ExecStopPost= keeps one
+# fired, and the slot that wrote `down` already had. So the service's ExecStopPost= keeps one
 # marker per check, /var/lib/kuma-check/<name>.down, present while the last run did not exit 0.
 # A third unit, kuma-check-<name>-boot.service, is conditioned on that marker and starts the
 # service once at boot. It schedules nothing: the timer and the restart loop still own every
 # run after that. Chosen over `OnBootSec=` on the timer, which would rerun every check at every
-# boot, and push a false down for up to one RestartSec from each check without a boot grace.
+# boot, and write a false down for up to one RestartSec from each check without a boot grace.
 #
 # BOTH DIRECTIONS. `check_timer_state: absent` stops and disables the timer, removes the unit
 # files and removes the legacy cron, so a host that leaves a `*_hosts` list keeps neither. The

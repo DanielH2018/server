@@ -188,9 +188,9 @@ k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
 # `k3s_longhorn_weekly_volumes`, live in the `longhorn-reconcile` role's defaults since H1.7a.
 # That job is their only reader that applies them to the cluster.
 
-# Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
-# monitor rather than being polled, because monitor-bridge runs on daniel-server and cannot
-# see this cluster.
+# Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). A host cron writes a check
+# textfile that a Prometheus rule reads; that template's DECIDED marker says why it is not a
+# monitor-bridge check.
 #
 # 30h against a 03:30 daily job: one full day plus 6h of slack, so a single late or slow run
 # does not page, while a genuinely missed day does — ~26.5h after the fact. Deliberately looser
@@ -210,13 +210,14 @@ k3s_longhorn_backup_error_max_age_hours: 24
 # reasoning scaled to a weekly 04:30 job: 8 days plus 6h, so one late or skipped run pages while
 # a normal ~7-day-old backup does not. Without a second bound these volumes would be walked by
 # nothing — the daily 30h could never apply to them, so they would simply be left out of the coverage
-# loop and could stop backing up indefinitely with the tile green. The bound is per-volume, so
+# loop and could stop backing up indefinitely with the check green. The bound is per-volume, so
 # the weekday sharding (each volume still backed up every 7 days) leaves it unchanged.
 k3s_longhorn_weekly_backup_max_age_hours: 198
 
 # */10 rather than the Pi crons' */5: this queries the k8s API rather than reading a local file,
-# and nothing here changes faster than the daily backup it watches. The Kuma monitor's heartbeat
-# interval must stay above this (see the uptime-kuma role) so a dead cron trips the watchdog.
+# and nothing here changes faster than the daily backup it watches. The script derives DEADLINE_S
+# from this value, and LonghornBackupHealthNotReporting's literal must follow it
+# (ansible/tests/services/test_b1_rule_literals.py).
 k3s_longhorn_backup_health_cron_minute: "*/10"
 
 # The B2 deletion ledger's two crons (tasks/health-crons.yml). 07:10 charges the day's completed
@@ -282,8 +283,8 @@ k3s_longhorn_daily_backup_budget: 16
 
 # Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's
 # storageMinimalAvailablePercentage=25 stops replica scheduling once the disk passes 75% used, so
-# this pages at the line where the storage plane starts degrading, not after. Same */10-cron /
-# 1200s-Kuma-interval pairing as the backup heartbeat above.
+# this pages at the line where the storage plane starts degrading, not after. Same */10 cron and
+# derived textfile deadline as the backup heartbeat above.
 k3s_disk_max_pct: 75
 k3s_disk_health_cron_minute: "*/10"
 
@@ -323,8 +324,7 @@ k3s_manifest_prune_cron_hour: "5"
 k3s_manifest_prune_cron_minute: "15"
 
 # The longest legitimate gap between two textfile writes of a once-a-day check (manifest-prune,
-# live-drift and etcd-snapshot-offbox): a day plus an hour, which is the interval of each one's
-# Kuma tile. The textfile rules carry it as a literal, pinned to this value by
+# live-drift and etcd-snapshot-offbox): a day plus an hour. The textfile rules carry it as a literal, pinned to this value by
 # ansible/tests/services/test_b1_rule_literals.py. Move the three schedules and this together.
 k3s_daily_check_deadline_s: 90000
 
@@ -499,7 +499,7 @@ k3s_host_dns_max_fails: 2
 
 # Answers served from cache never reach an upstream, so this bounds how stale a Pi-hole
 # blocklist change can be on this node. 30s is short enough that a blocklist edit takes
-# effect within one Kuma poll and long enough to absorb a boot's worth of repeat lookups.
+# effect within a minute and long enough to absorb a boot's worth of repeat lookups.
 k3s_host_dns_cache_ttl: 30
 
 # Metrics bind to the node's LAN address, NOT 127.0.0.1. Prometheus scrapes from inside a
@@ -704,8 +704,8 @@ k3s_agent_node_ips: []
 # is static, so each task keeps its own tags and `--tags backup-health` still selects; a
 # dynamic include would hide those tags from selection and break the tag-based deploys.
 
-# The host heartbeat crons: Kuma push URLs, Healthchecks.io ping keys, the backup-plane and
-# restore-drill checks. Off anywhere that must not push into prod's monitoring, which would
+# The host heartbeat crons: Healthchecks.io ping keys, the backup-plane and restore-drill
+# checks. Off anywhere that must not ping prod's monitoring, which would
 # make a staging failure page a real operator.
 k3s_manage_health_crons: true
 

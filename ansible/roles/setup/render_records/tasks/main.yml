@@ -52,7 +52,7 @@
   vars:
     check_timer_state: "{{ render_records_state }}"
     check_timer_name: render-records
-    check_timer_description: k8s render-record producer (Kuma push)
+    check_timer_description: k8s render-record producer (textfile verdict)
     check_timer_exec: >-
       /usr/local/bin/uv run --no-project --no-python-downloads
       --python {{ host_python_version }} /opt/render-records/render_records.py
