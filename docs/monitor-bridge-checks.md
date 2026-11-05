@@ -382,7 +382,7 @@ checks each gate suppresses.
   a row names at most one gate, and a gate row has none of its own. Two tiles
   for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
   **The HOST crons are covered by a separate half** (#2793). `release-staleness-check`,
-  `docs-refresh` and, until M6 batch B3's Cutover-2, `github-ruleset-drift` run on the host and push their own tiles, so this
+  `docs-refresh` and `github-ruleset-drift` run on the host and write their own textfile verdicts, so this
   gate structurally cannot suppress them. `crowdsec-home-allowlist` was a fourth until H2.4c moved
   it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
   the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.
@@ -391,12 +391,12 @@ checks each gate suppresses.
   the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider answers.
   The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for
-  twice, and a GitHub 403 while the link is up makes the probe succeed, so that tile still pages.
+  twice, and a GitHub 403 while the link is up makes the probe succeed, so that alert still pages.
   The endpoint list is `ansible/inventory/group_vars/all.yml:wan_probe_urls`, pinned equal to this
   gate's `WAN_PROBE_DEFAULT` by a test, because two halves disagreeing about what "the internet"
   means would leave a single-endpoint outage reported by nothing. The one wrong case is an
-  HTTP-level failure coinciding with a WAN outage, reported as a skip; both tiles would have been
-  red for one root cause anyway.
+  HTTP-level failure coinciding with a WAN outage, reported as a skip; both alerts would have
+  fired for one root cause anyway.
   `r2_usage` and `healthchecks_drift` left `startup_grace` to join this set, as `pi_pressure` did
   when it gained the Prometheus gate (#2004): the two sets must stay disjoint so a graced check
   reaches the evaluation path every cycle, and the gate covers the post-boot transient the grace
@@ -460,13 +460,15 @@ and the scrape-job rules already report an unreachable Prometheus. `host_package
 exporter holds it beside `ScrapeTargetDown`. #1359 and #3788 are the history of the gate's
 member list.
 
-Checks that left `CHECKS` push their monitors from elsewhere, with the same tokens, so each
-monitor keeps its history. The direct pushers are the `pi-peer-backup` k8s CronJob (WG Pi Peer
+**HISTORY —** Checks that left `CHECKS` pushed their monitors from elsewhere, with the same
+tokens, so each monitor kept its history. The direct pushers were the `pi-peer-backup` k8s CronJob (WG Pi Peer
 Backup), the `crowdsec-jobs` sidecar in the CrowdSec pod (CrowdSec Home Allowlist, CrowdSec
 Remote Allowlist and CrowdSec AppSec), the `fake_remux` setup role's
 `fake-remux-health.sh` (Fake Remux Scan / Replace), `renovate-notify`'s `ExecStartPost`
 (Renovate Notifier — Alive), and the configarr and janitorr roles' health crons (Configarr
-Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has no successor.
+Sync, Janitorr Errors).
+
+Disk Autoprune retired with the Docker daemon and has no successor.
 Scrape Targets, Cluster Scrape Targets and Log Shipper Dropped Entries (M6 batch A3) retired
 into the `scrape-targets` and `log-pipeline` rule groups in observability, and their tiles,
 rows and env keys are gone. The numbers those groups carry are pinned in
