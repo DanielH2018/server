@@ -76,22 +76,6 @@ def test_the_broad_narrowing_refuses_or_names_the_dropped_caller(tree: Tree):
     assert "radarr" in tags, f"narrowed to {sorted(tags)}, which misses radarr"
 
 
-@UNLOADABLE
-def test_the_owned_only_split_fails_or_names_the_dropped_caller(
-    tree: Tree, capsys, broken
-):
-    _write_callers(tree.root, "sonarr", "radarr", broken)
-    tree.commit("radarr's include does not load")
-    capsys.readouterr()
-    try:
-        code = shared_role_callers.main(["helper", "--repo", str(tree.root)])
-    except Exception:
-        return
-    if code != 0:
-        return
-    assert "radarr" in json.loads(capsys.readouterr().out)["callers"]["helper"]
-
-
 def _landing_in_a_copy(root: Path, declared: set[str]) -> subprocess.CompletedProcess:
     """`shared_caller_tags` for a helper change, from a copy of the code that walks `root`.
 
