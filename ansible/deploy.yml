@@ -10,7 +10,8 @@
   vars:
     # Read only by the preamble's stub-file refusal. True only where this play deploys nothing
     # from a stub file: a host with no Docker entry. Read before the filter below, so it filters
-    # the inventory list itself. A stubbed `-e target=daniel-pi` run stops before any Pi role.
+    # the inventory list itself. No host lists a Docker entry, so it is true on every host, and a
+    # stubbed `-e target=daniel-pi` run passes the refusal and runs no role.
     load_secrets_stubs_allowed: "{{ containers_list | default([]) | filter_by_platform('docker') | length == 0 }}"
   pre_tasks:
     # The preamble refuses a local-connection deploy aimed at a different host before any task
@@ -28,9 +29,9 @@
         containers_list_unfiltered: "{{ containers_list }}"
       tags: always
 
-    # Runs in list order, with no dependency resolution: daniel-pi is the only Docker host, and
-    # its one ordering constraint (docker-proxy before autoheal) is its containers_list order.
-    # ansible/tests/deploy/test_platform_filter_real_inventory.py pins that order.
+    # Leaves an empty list on every host, so this play runs no role. The Pi's services deploy from
+    # `compose_services` in its package, and daniel-pi's containers_list stays empty.
+    # ansible/tests/deploy/test_platform_filter_real_inventory.py pins that.
     - name: Restrict this play to Docker-platform containers
       ansible.builtin.set_fact:
         containers_list: "{{ containers_list | filter_by_platform('docker') }}"
@@ -49,8 +50,7 @@
       tags: always
 
 # Second play, not a branch inside the first: the k8s play has its own ordering pre_tasks and
-# batched rollout, and keeping the plays separate means a broken k8s manifest cannot stop a
-# Docker deploy, and vice versa.
+# batched rollout.
 #
 # Self-guarding on hosts that run no k8s workloads: filter_by_platform returns [] there and
 # the loop does nothing, so this needs no `when: inventory_hostname == ...` to skip

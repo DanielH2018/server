@@ -202,12 +202,15 @@ def test_the_real_stub_file_passes_only_where_it_is_allowed(tmp_path: Path) -> N
         tmp_path,
         {
             "box_dry_run": _SHADOW,
-            "pi_dry_run": {"k8s_dry_run": True, "load_secrets_stubs_allowed": False},
+            "not_allowed_dry_run": {
+                "k8s_dry_run": True,
+                "load_secrets_stubs_allowed": False,
+            },
         },
         extra_vars=shadow_diff.stub_file_text(names),
     )
     assert _verdict(results["box_dry_run"]) == "passed"
-    assert _verdict(results["pi_dry_run"]) == OUTSIDE
+    assert _verdict(results["not_allowed_dry_run"]) == OUTSIDE
 
 
 def test_the_asserts_precede_the_sops_load_and_always_run() -> None:
@@ -255,7 +258,7 @@ def test_only_deploy_yml_allows_a_stub_file() -> None:
 def test_the_docker_play_allows_a_stub_file_only_on_a_host_with_no_docker_entry() -> (
     None
 ):
-    """Evaluated against the real inventory: daniel-box passes, daniel-pi is refused."""
+    """Evaluated against the real inventory, whose hosts all pass, and a host with a Docker entry."""
     from ansible.parsing.dataloader import DataLoader
     from ansible.template import Templar, trust_as_template
     from toposort import filter_by_platform
