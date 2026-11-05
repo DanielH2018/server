@@ -44,9 +44,9 @@ The rules below shaped those memberships.
 
 ## Exporter plumbing
 
-- **The bridge pushes nothing to Uptime Kuma.** M6 batch A6's Cutover-2 deleted the push path,
-  and the `KUMA_PUSH_*` env keys. `uptime_kuma_k8s_bridge_push_interval` has no template
-  reader left, and C-1 deletes it with the uptime-kuma role. A6-9 retired the 20
+- **HISTORY — the bridge's Kuma push.** M6 batch A6's Cutover-2 deleted the push path,
+  and the `KUMA_PUSH_*` env keys. `uptime_kuma_k8s_bridge_push_interval` went with the uptime-kuma
+  role. A6-9 retired the 20
   `monitor_bridge_*_push_token` keys and deleted the pending-retirement allowance.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.

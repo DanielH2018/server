@@ -1084,8 +1084,8 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
       `origin/master` under that service's own role AND the shared roles that supply bytes to
       every service's manifests (`probe_lib/releases.py`'s `manifest_affecting_shared_roles()`).
-      It pushes the "Release Staleness Drift" Kuma monitor down when any service is stale or has
-      no record.
+      It writes the `release-staleness-check` textfile verdict, which `ReleaseStalenessCheckFailed`
+      pages, and the verdict is down when any service is stale or has no record.
     - A record whose service no `containers_list` entry declares is dropped first
       (`releases_retired.py`), because a retired role's record outlives the role and the commit
       that deleted it would read as drift no deploy tag can clear.
@@ -1221,9 +1221,9 @@ reaps their basenames. Every reader goes through one function per class:
 
 **`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
 deferral goes here (#2449). The deferral post names it once and the range is merged, so no
-later tick's `local..origin` carries the bump. `Release Staleness Drift` reads the unapplied
-pin, but that monitor is DOWN for any stale record in the fleet, so a new deferral adds
-nothing to an already-red tile. `gitops_status` therefore pages on the line's own age, at
+later tick's `local..origin` carries the bump. `ReleaseStalenessCheckFailed` reads the unapplied
+pin, but that alert fires for any stale record in the fleet, so a new deferral adds
+nothing to an alert already firing. `gitops_status` therefore pages on the line's own age, at
 the six hours `manual_plane` uses.
 
 **`k8s_unapplied` records the hand-edited and denylisted classes** (#2570). Most k8s roles are

@@ -1,6 +1,6 @@
 # Uptime Robot — the off-premises reachability monitors
 
-Uptime Robot is the third alerting system in this homelab, alongside Uptime Kuma (on-prem, the
+Uptime Robot is the third alerting system in this homelab, alongside Alertmanager (on-prem, the
 spine) and Healthchecks.io (off-site, dead-man's switches). It watches the public hostnames from
 outside the house, which is the one thing neither of the others can do.
 
@@ -108,8 +108,9 @@ all four monitors sat behind that one ingress, so each was certain to fire.
   subscription decision, not a config change.
 - **The free-plan lever is fewer monitors**, and that is what changed: four became two.
 
-Each of the four services already held an on-prem Kuma tile at a 60-second interval, and Kuma
-answers whether the service is healthy. Uptime Robot adds the one fact no tile can report:
+Each of the four services then held an on-prem Kuma tile at a 60-second interval, which answered
+whether the service is healthy. The `blackbox-ingress` job answers that since M4's PR 4. Uptime
+Robot adds the one fact no on-prem probe can report:
 whether the outside world reaches the house (DNS, Cloudflare, the public route, the WAN link).
 
 - **`Auth Health` stayed as the edge probe** (then named `Auth Keyword`). It exercises DNS,
@@ -138,7 +139,7 @@ host returns the same `"status":"OK"` beside the session fields.
 ## If this should stop being un-auditable
 
 The way out is an `uptimerobot_api_key` in SOPS and a reconcile script under
-`scripts/diagnostics/`, in the shape of the AutoKuma static-monitor files: monitors declared in the
+`scripts/diagnostics/`: monitors declared in the
 repo, the script asserting the console agrees. Uptime Robot's v3 API can list and update monitors,
 so the read half alone — a drift check that pages when the console stops matching this file — would
 close most of the gap without any write credential leaving the repo.

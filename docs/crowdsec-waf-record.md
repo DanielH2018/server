@@ -120,7 +120,7 @@ engine start. Until H2.4b the job was a daniel-box root cron, `crowdsec-prune-bo
 
 Each run logs one `crowdsec-bouncer-prune: status=<up|down> <summary>` line to the sidecar's
 container log, taken from a second `cscli bouncers list` after the prune. It names the rows deleted, the count of `k8straefik` rows left and
-the oldest `last_pull` among them; a refusal reads `status=down`. There is no Kuma monitor,
+the oldest `last_pull` among them; a refusal reads `status=down`. No alert reads that line,
 because a failed run only lets rows accumulate until the next run succeeds. To stop pruning,
 delete the `crowdsec-bouncer-prune` row from `JOBS` in `files/crowdsec_jobs.py` and deploy
 the `crowdsec` tag.

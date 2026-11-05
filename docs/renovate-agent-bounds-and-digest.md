@@ -1,4 +1,4 @@
-# `renovate_agent` — what bounds a run, and what its digest and tile measure
+# `renovate_agent` — what bounds a run, and what its digest measures
 
 Working-out moved off `ansible/roles/setup/renovate_agent/CLAUDE.md` (#2995), which a session
 reads on every touch of the unattended agent. The role doc keeps the arming procedure and the

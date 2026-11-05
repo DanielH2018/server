@@ -294,8 +294,8 @@ reboot, and the heartbeat would then report a missing verdict for up to a day.
 
 ## Container-recovery heartbeat
 
-AutoKuma reconciles monitors from the `uptime-kuma` role's rendered declarations and has no
-Docker source, so the Pi's containers have no liveness monitor of their own. The two that die silently are `autoheal`, which restarts unhealthy
+Nothing outside the Pi reads its Docker state, so `PiPortDead` sees a container only through a
+published port. The two that die silently are `autoheal`, which restarts unhealthy
 containers, and `docker-proxy`, the read-only socket Alloy's container-log discovery reads: a
 dead autoheal stops recovering Pi containers, and a dead docker-proxy stops this host's
 container logs reaching Loki while Alloy keeps running with zero targets.
@@ -376,8 +376,8 @@ is the intended signal, not a second fault.
 ## The durable health log
 
 Both token heartbeats leave a record at `/var/log/pi-health/health.log`, which the Pi's Alloy
-tails as its `pi_health` source under `job="syslog"`. Kuma keeps only current state, so without
-this a DOWN that clears is gone. The file's lines are the Pi's only entries in
+tails as its `pi_health` source under `job="syslog"`. Kuma kept only current state when this landed, so without
+it a DOWN that cleared was gone. The file's lines are the Pi's only entries in
 `{job="syslog"} |= "status=down"`.
 
 Two independent gaps kept daniel-pi out of that view, and closing either alone would have
@@ -395,9 +395,9 @@ Adding this stream meant excluding it from monitor-bridge's Loki file-tail arm
 (`machine!="daniel-pi"` in `LOKI_STREAM`) — a Pi stream under `job="syslog"` would otherwise
 stop a total cluster file-tail outage from ever reaching that arm's zero threshold.
 
-**Two hosts activate a new heartbeat**: the Pi installs the `homelab-daniel-pi` version that
-ships it, and `uptime-kuma` redeploys on daniel-box so AutoKuma provisions the monitor. Do both
-close together, or the fresh push monitor false-DOWNs until the first heartbeat lands.
+**Two steps activate a new heartbeat**: the Pi installs the `homelab-daniel-pi` version that
+ships it, and `promote` publishes the `observability` rules that read its verdict. Do both close
+together, or the fresh `NotReporting` rule pages until the first heartbeat lands.
 
 ## Resolver
 

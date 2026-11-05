@@ -1,8 +1,9 @@
 # uptime-kuma and AutoKuma record
 
-The measured incidents and source readings behind the Uptime Kuma workload, which M6 retired.
-M6's C-1b deleted the templates and guards this page names, C-2b deleted the role, and git
-history keeps them.
+**HISTORY —** this page holds the measured incidents and source readings behind the Uptime Kuma
+workload, which M6 retired. M6's C-1b deleted the templates and guards this page names, C-2b
+deleted the role, and git history keeps them. Every present-tense sentence below describes that
+workload as it ran.
 
 Two moving parts sit behind every fact here: Kuma itself at the pinned `2.5.3`, and the AutoKuma
 sidecar at `2.1.0-rc.2`, which reconciles monitors, notifications and tags from this role's
@@ -34,13 +35,12 @@ the down transition and then one resend a day. One of those resends was lost out
 it does not retry a failed send. Since #1891 monitor-bridge read that line out of Loki — and
 since #1895 the ERROR-level reason line Kuma writes right after it, so the tile named the status —
 and paged the **Kuma Notification Delivery** tile, which notified email as well as Discord. The
-`loki-homelab` rule `KumaNotificationDropped` replaces that tile. M5's PR 4a deletes the tile, and
-PR 4b makes the rule page through Alertmanager's `critical` receiver, which sends to email as well
-as Discord. A
+`loki-homelab` rule `KumaNotificationDropped` replaced that tile in M5, and M6 deleted the rule
+with the workload. A
 faster resend raises the POST volume a long multi-tile outage sends Discord, so the drop it makes
 likelier is reported rather than lost.
 
-The variable is `uptime_kuma_k8s_push_resend_down_beats` now, 90, which is six hours for a bridge-fed tile.
+The variable was `uptime_kuma_k8s_push_resend_down_beats`, 90, which is six hours for a bridge-fed tile.
 A test derived the spacing from the bridge's `INTERVAL` and the bridge push window and failed
 outside 4-12h, so a value that read as hours again could not land. The count cannot mean six hours for every tile — a cron-fed one on a slower cadence resends
 less often, and a dead bridge leaves only the window's own beats — which is why the unit is beats

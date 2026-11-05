@@ -453,7 +453,7 @@ sudo rm /etc/homelab-builder/hold
 ```
 
 The next builder run builds the newest green commit and stages again any set the hold kept.
-The signer then publishes it. The "Host Packages — Status" tile pages once a hold has left a
+The signer then publishes it. `HostPackageBuilderStalled` pages once a hold has left a
 commit waiting to be built for 90060 seconds, the lag grace (*The rollout gate*).
 
 To stop the pipeline for longer than an incident, pause the timer instead. Run
@@ -475,7 +475,7 @@ the Pi the canary. The Pi's `homelab-updater-poll.timer` starts its updater with
 minutes of a newer `homelab-daniel-pi` publish, once per version (#7065), so daniel-box's package
 waits for that run. When the poll skips, because the updater timer is masked or apt is busy,
 or the started run fails, the wait runs to the Pi's next daily fire. The
-series then carries `host="daniel-pi"`, and the "Host Packages — Status" tile pages once that
+series then carries `host="daniel-pi"`, and `HostPackageBuilderStalled` pages once that
 gate has stayed open for 90060 seconds, a grace derived from that gap, which
 `ansible/filter_plugins/updater_lag_grace.py` reads from the Pi's timer drop-in. A gate whose
 canary is any other host pages after 7200 seconds, like every other reason (#6919). To release daniel-box's package sooner, start the Pi's updater by hand or write
@@ -645,19 +645,19 @@ such as a full disk while writing the metric, keeps them, because the live index
 
 ## The builder's pages
 
-The builder pages once per new failure through `homelab-alert@homelab-builder.service`. The Uptime
-Kuma tile "Host Packages — Status" (monitor-bridge's `host_packages` row, in "Automation &
-Drift") pages on a condition that persists, in two cases:
+The builder pages once per new failure through `homelab-alert@homelab-builder.service`.
+`HostPackageBuilderStalled` (monitor-bridge's `host_packages` row) pages on a condition that
+persists, in two cases:
 
 - the builder's last good fetch of master is older than 30 minutes, or its series is absent.
   That covers a dead `homelab-builder.timer`, a missing token and a fetch that keeps failing;
 - a commit of master has waited more than 7200 seconds to be built, or 90060 seconds behind a gate
   whose canary is daniel-pi, which covers the Pi's longest gap between updater fires, a day on its
   daily schedule (#6919). The builder runs and exits 0 in each of these cases,
-  so only the tile reports them.
+  so only the alert reports them.
 
-The tile's message names the `reason` and `sha` labels of
-`homelab_builder_unbuilt_since_timestamp_seconds`, which name the case. The tile stays silent
+The check's message names the `reason` and `sha` labels of
+`homelab_builder_unbuilt_since_timestamp_seconds`, which name the case. The alert stays silent
 while daniel-box's node exporter is down, because Scrape Targets pages that instead. Every procedure below that
 edits the builder's state stops its timer first, so no run overwrites the edit:
 

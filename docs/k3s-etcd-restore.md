@@ -54,7 +54,7 @@ so a run that overlaps the cron refuses rather than building a second guest.
 What this proves and does not: everything the script header says — the off-box snapshot is
 complete, readable by this k3s version, and its object graph comes back. It does not exercise the
 agent rejoin or the Longhorn reattach; only a real restore (*Restoring* below) does. The weekly
-`--list-only` cron on daniel-box and its monitor-bridge tile are unchanged.
+`--list-only` cron on daniel-box and its monitor-bridge check are unchanged.
 
 The stamp `/var/lib/etcd-restore-drill/last-success-full` on daniel-server records the latest
 pass, and each run's logs sit under `/var/log/etcd-restore-drill/<run-id>/`.

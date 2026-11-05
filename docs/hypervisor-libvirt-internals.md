@@ -172,7 +172,7 @@ guest before it touches production. It is run by hand and never scheduled. The H
   is red for another reason does not pass. The Kustomization's reason and message are written
   verbatim to `rehearsal-verdict.txt`, which H6.1c reads to pin the string.
 - **What it leaves alone.** It stages no cluster token and no R2 credential. It writes no
-  `last-success-full` stamp, no textfile verdict and no Kuma push, so a rehearsal never stands in
+  `last-success-full` stamp and no textfile verdict, so a rehearsal never stands in
   for the monthly drill. It takes the drill's lock, so the cron and a rehearsal cannot hold the
   guest together. It ignores `hypervisor_etcd_drill_armed`, which is the cron's switch.
 - **Evidence.** The run directory under `/var/log/etcd-restore-drill/` also holds
