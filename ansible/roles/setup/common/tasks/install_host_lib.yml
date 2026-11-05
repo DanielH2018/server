@@ -2,8 +2,8 @@
 # Install the shared `host_lib.py` beside a consumer script, so `import host_lib` resolves.
 #
 # WHY A SIBLING COPY AND NOT A SHARED PATH. Every consumer is a directly-invoked script, so it
-# gets its own directory on `sys.path` and nothing else (the repo-root CLAUDE.md states the
-# rule). Eight callers across seven roles therefore need a copy of the SAME file in their own
+# gets its own directory on `sys.path` and nothing else (`.claude/rules/python-layout.md` states
+# the rule). Eight callers across seven roles therefore need a copy of the SAME file in their own
 # /opt directory. This file holds the source path, the `host_lib.py` basename and the 0755 mode
 # in one place, so a change to any of them has one place to make.
 #

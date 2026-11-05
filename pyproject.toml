@@ -321,8 +321,8 @@ select = [
 [tool.ty.environment]
 python-version = "3.15"
 # This repo has no `__init__.py` files and no installed package: a script reaches a sibling
-# directory through the `sys.path` bootstrap the root CLAUDE.md describes, and a test reaches its
-# role's `files/` the same way. ty resolves imports from search paths alone, so without this list
+# directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
+# test reaches its role's `files/` the same way. ty resolves imports from search paths alone, so without this list
 # it reports 189 unresolved-import diagnostics for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
 # sibling of every `testpaths` entry — the same three sources the bootstrap draws on.

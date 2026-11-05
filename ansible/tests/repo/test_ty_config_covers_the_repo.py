@@ -8,8 +8,8 @@ ty 0.0.77 and `include` absent, a deliberately broken file at the repo root was 
 while the same file under `scripts/` still was.
 
 This repo has no `__init__.py` files and installs nothing: a script reaches a sibling directory
-through the `sys.path` bootstrap the root CLAUDE.md describes, and a role's test reaches its
-`files/` the same way. Two tools have to be told about that, and they are told separately —
+through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a role's test
+reaches its `files/` the same way. Two tools have to be told about that, and they are told separately —
 pytest by `[tool.pytest.ini_options] pythonpath`, ty by `[tool.ty.environment] extra-paths`.
 
 Two hand-kept lists over one convention, so both drift. They are guarded for different reasons.

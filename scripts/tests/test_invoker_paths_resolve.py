@@ -4,8 +4,8 @@ A cron, a systemd unit, a prek hook `entry:`, a CI step, or a `.claude/hooks` wr
 names a script by a stale path only fails at RUNTIME -- no other test walks these invocation
 sites.
 
-`pyproject.toml`'s `pythonpath` list is a pytest-only mechanism (see the repo-root CLAUDE.md,
-the block near line 29): it lets pytest itself resolve a cross-directory import, but a cron or
+`pyproject.toml`'s `pythonpath` list is a pytest-only mechanism (see
+`.claude/rules/python-layout.md`): it lets pytest itself resolve a cross-directory import, but a cron or
 a prek hook invokes the script directly, with no pytest involved, so a stale path there raises
 nothing pytest can see. This test reads the same invocation sites a human would check by hand
 after a rename -- prek's `entry =`, a GitHub Actions `run:` step, an `ansible.builtin.cron`
