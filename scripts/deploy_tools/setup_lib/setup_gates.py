@@ -17,8 +17,6 @@ import sys
 from collections.abc import Iterable
 from pathlib import Path
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib import yaml_fast
@@ -72,7 +70,7 @@ def _vars_file(path: Path) -> dict:
 
 @functools.lru_cache(maxsize=32)
 def _parse_vars_file(path: Path, _mtime_ns: int) -> dict:
-    return yaml_fast.safe_load(path.read_text()) or {}
+    return yaml_fast.parse_yaml(path.read_text()) or {}
 
 
 class GateUnreadable(Exception):
@@ -141,7 +139,7 @@ def _eval_when(
     """
     try:
         return eval_when_strict(expr, host, all_vars, host_vars_dir, role_defaults)
-    except GateUnreadable, yaml.YAMLError:
+    except GateUnreadable, yaml_fast.UnparsableYaml:
         return True
 
 
@@ -164,7 +162,7 @@ def role_end_guard(role_dir: Path) -> JsonValue | None:
     path = role_dir / "tasks" / "main.yml"
     if not path.is_file():
         return None
-    tasks = yaml_fast.safe_load(path.read_text())
+    tasks = yaml_fast.parse_yaml(path.read_text())
     if not isinstance(tasks, list) or not tasks or not isinstance(tasks[0], dict):
         return None
     first = tasks[0]

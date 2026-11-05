@@ -52,7 +52,7 @@ _IMPORT_KEYS = (
 SHIPPED_DIRS = ("templates", "files")
 
 # A YAML date loads as a `date`, which plain `json.dumps` refuses.
-_task_text = functools.partial(json.dumps, default=str, skipkeys=True)
+task_text = functools.partial(json.dumps, default=str, skipkeys=True)
 
 
 def task_chains(
@@ -104,7 +104,7 @@ def _task_list(text: str) -> list | None:
     if not isinstance(tasks, list):
         return None
     try:
-        _task_text(tasks)
+        task_text(tasks)
     except ValueError, RecursionError:
         return None
     return tasks
@@ -122,7 +122,7 @@ def task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
     """
     return task_chains(
         role_dir,
-        lambda task, _: basename in _task_text(task) or _ships_via_loop(task, basename),
+        lambda task, _: basename in task_text(task) or _ships_via_loop(task, basename),
     )
 
 
@@ -158,13 +158,13 @@ def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]
 
 def _ships_repo_path(task: dict, repo_path: str) -> bool:
     """Whether `repo_path` appears in `task` anywhere but its `name:`."""
-    return repo_path in _task_text({k: v for k, v in task.items() if k != "name"})
+    return repo_path in task_text({k: v for k, v in task.items() if k != "name"})
 
 
 def _ships_via_loop(task: dict, basename: str) -> bool:
     """Whether `task` ships `basename` through a `loop:` of bare names and `{{ item }}`.
 
-    `basename in _task_text(task)` misses gitops-deploy's systemd-unit shape: `src: "{{
+    `basename in task_text(task)` misses gitops-deploy's systemd-unit shape: `src: "{{
     item }}.j2"` over `loop: [gitops-deploy.service, ...]` never puts the literal string
     `gitops-deploy.timer.j2` (the shipped file's basename, under `templates/`) anywhere in
     the task's own text -- the loop items are the bare unit names, without the `.j2` `src`
@@ -180,7 +180,7 @@ def _ships_via_loop(task: dict, basename: str) -> bool:
     loop = task.get("loop")
     if not isinstance(loop, list) or not all(isinstance(item, str) for item in loop):
         return False
-    text = _task_text(task)
+    text = task_text(task)
     if basename in loop and "{{ item }}" in text:
         return True
     stem = basename.removesuffix(".j2")
@@ -228,7 +228,7 @@ def _leaf_chains_with_text(role_dir: Path) -> list[tuple[str, tuple]] | None:
     texts: list[str] = []
 
     def keep(task, _task_file) -> bool:
-        texts.append(_task_text(task))
+        texts.append(task_text(task))
         return True
 
     chains = task_chains(role_dir, keep)
@@ -389,7 +389,7 @@ def task_file_chains(role_dir: Path, path: str, pr_range: str, repo: Path):
     matched: set[str] = set()
 
     def keep(task, f) -> bool:
-        text = _task_text(task)
+        text = task_text(task)
         if f == task_file and text in changed:
             matched.add(text)
             return True
@@ -474,7 +474,7 @@ def _removed_task_chains(
         chain
         for entry in entries
         for chain in _gates_in(
-            old, role_dir, lambda t, _: _task_text(t) in removed, task_file, entry
+            old, role_dir, lambda t, _: task_text(t) in removed, task_file, entry
         )
     ]
 
@@ -550,7 +550,7 @@ def changed_task_texts(old_text: str, new_text: str) -> set[str] | None:
 
 def _name_and_gate(text: str) -> tuple[str, str]:
     task = json.loads(text)
-    return _task_text(task.get("name")), _task_text(task.get("when"))
+    return task_text(task.get("name")), task_text(task.get("when"))
 
 
 def _split_leaves(tasks) -> tuple[list[str], list[str]]:
@@ -566,14 +566,14 @@ def _split_leaves(tasks) -> tuple[list[str], list[str]]:
             continue
         target = next((task[k] for k in _IMPORT_KEYS if k in task), None)
         if isinstance(target, str) and "{{" not in target:
-            frames.append(_task_text(task, sort_keys=True))
+            frames.append(task_text(task, sort_keys=True))
         elif "block" in task:
-            frames.append(_task_text({k: v for k, v in task.items() if k != "block"}))
+            frames.append(task_text({k: v for k, v in task.items() if k != "block"}))
             sub_leaves, sub_frames = _split_leaves(task["block"] or [])
             leaves += sub_leaves
             frames += sub_frames
         else:
-            leaves.append(_task_text(task))
+            leaves.append(task_text(task))
     return leaves, frames
 
 

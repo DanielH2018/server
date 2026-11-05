@@ -83,7 +83,10 @@ def _looked_up(role_dir: Path) -> set[str]:
     """Every k8s role whose file a template or task of `role_dir` `lookup()`s by path."""
     found: set[str] = set()
     for src in [*role_dir.glob("templates/**/*.j2"), *role_dir.glob("tasks/*.yml")]:
-        found.update(_ROLE_LOOKUP.findall(src.read_text(errors="ignore")))
+        try:
+            found.update(_ROLE_LOOKUP.findall(src.read_text(errors="ignore")))
+        except OSError as exc:
+            raise CannotNarrow(f"{src} does not load: {exc}") from exc
     return found
 
 
@@ -125,7 +128,12 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
         for task_file in sorted(role_dir.glob("tasks/*.yml")):
             try:
                 reached |= _callees(yaml_fast.parse_yaml(task_file.read_text()))
-            except (yaml_fast.UnparsableYaml, RecursionError) as exc:
+            except (
+                OSError,
+                UnicodeDecodeError,
+                yaml_fast.UnparsableYaml,
+                RecursionError,
+            ) as exc:
                 raise CannotNarrow(f"{task_file} does not load: {exc}") from exc
         for callee in reached - {caller}:
             callers.setdefault(callee, set()).add(caller)

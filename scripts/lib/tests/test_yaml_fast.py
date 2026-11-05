@@ -90,6 +90,7 @@ def _narrowing_modules() -> list[str]:
         "scripts/deploy_tools/narrow_setup.py",
         "scripts/deploy_tools/digest_covers.py",
         "scripts/deploy_tools/land_lib/land_reach.py",
+        "scripts/deploy_tools/setup_lib/setup_gates.py",
         "scripts/deploy_tools/setup_lib/setup_role_chains.py",
         "scripts/lib/narrow_git.py",
         "scripts/lib/render_guard.py",

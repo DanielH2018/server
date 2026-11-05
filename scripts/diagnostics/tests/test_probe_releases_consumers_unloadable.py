@@ -26,3 +26,14 @@ def test_consumers_keep_a_role_whose_caller_does_not_load_wide(tmp_path):
     except Exception:
         return
     assert "helper" not in narrowed or "radarr" in narrowed["helper"], narrowed
+
+
+def test_a_caller_that_does_not_load_keeps_the_role_on_every_services_paths(tmp_path):
+    tasks = tmp_path / "ansible" / "roles" / "k8s" / "radarr" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(INCLUDE + "- [unclosed\n")
+    consumers = rc.consumers_for(["helper"], repo=tmp_path)
+    assert "helper" not in consumers
+    for service in ("radarr", "jellyfin"):
+        paths = rc.role_paths_for(service, ["helper"], consumers)
+        assert "ansible/roles/k8s/helper/" in paths

@@ -25,6 +25,7 @@ from deploy_tools.narrow_lib import broad as narrow_broad
 from lib import k8s_role_callers
 from lib.narrow_git import CannotNarrow
 from lib.proc_testing import run
+from lib.repo_paths import INVENTORY
 from lib.repo_paths import REPO
 
 INCLUDE = "- ansible.builtin.include_role:\n    name: k8s/helper\n"
@@ -138,10 +139,11 @@ def test_the_tags_expansion_leaves_the_name_or_names_the_dropped_caller(
     assert validated is None or {"helper", "beta"} & set(validated), validated
 
 
+@UNLOADABLE
 def test_the_owned_only_split_refuses_naming_the_file_with_no_traceback(
-    tree: Tree, capsys
+    tree: Tree, capsys, broken
 ):
-    _write_callers(tree.root, "sonarr", "radarr", "- [unclosed\n")
+    _write_callers(tree.root, "sonarr", "radarr", broken)
     tree.commit("radarr's include does not load")
     capsys.readouterr()
     assert shared_role_callers.main(["helper", "--repo", str(tree.root)]) == 1
@@ -176,3 +178,28 @@ def test_the_landing_dies_naming_the_task_file_it_refuses():
     ln: Any = SimpleNamespace(die=die)
     with pytest.raises(SystemExit, match=r"radarr/tasks/helper\.yml"):
         classify._classified(ln, "expansion", refuse)
+
+
+def test_the_tags_expansion_hands_the_typed_name_to_the_tag_validation(
+    tmp_path, monkeypatch
+):
+    repo = make_snapshot_repo(tmp_path / "repo")
+    _write_callers(repo, "alpha", "beta", "- [unclosed\n")
+    _, calls = run_front_half(monkeypatch, repo, ["--tags", "helper", "--check"])
+    assert [call[1] for call in calls if call[0] == "validate"] == [("helper",)]
+
+
+def test_the_fanout_brief_line_names_the_task_file_it_cannot_read(tmp_path):
+    """`fanout place` renders this after claiming a batch, so a raise strands the claims."""
+    _write_callers(tmp_path, "sonarr", "radarr", "- [unclosed\n")
+    _landing_in_a_copy(
+        tmp_path, {"sonarr"}
+    )  # For its copy of the code; its own run refuses.
+    shutil.copytree(INVENTORY, tmp_path / "ansible" / "inventory")
+    code = (
+        "from dev.findings_lib.precomputed import deploy_line\n"
+        f"print(deploy_line([{HELPER_TEMPLATE!r}]))\n"
+    )
+    done = run([sys.executable, "-c", code], cwd=tmp_path / "scripts")
+    assert done.returncode == 0, done.stderr
+    assert "radarr/tasks/helper.yml does not load" in done.stdout

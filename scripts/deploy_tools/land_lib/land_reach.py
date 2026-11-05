@@ -19,7 +19,6 @@ and what a PR range changed in it, for those gates; this one evaluates the chain
 
 import contextlib
 from collections.abc import Sequence
-import json
 import sys
 from pathlib import Path
 
@@ -70,6 +69,7 @@ from deploy_tools.setup_lib.setup_role_chains import (
     task_file_chains,
     task_gates_naming,
     task_gates_shipping_repo_path,
+    task_text,
     tree_at,
     var_consumer_chains,
 )
@@ -178,7 +178,7 @@ def _hosts_passing(
     """
     if () in chains:
         return frozenset(hosts)
-    distinct = {json.dumps(chain, sort_keys=True): chain for chain in chains}.values()
+    distinct = {task_text(chain, sort_keys=True): chain for chain in chains}.values()
     defaults = role_dir / "defaults" / "main.yml"
     return frozenset(
         h
@@ -308,7 +308,7 @@ def setup_shipped_file_hosts(
     names = _shipping_names(path, roles_dir)
     chains = task_chains(
         roles_dir / role,
-        lambda task, _: any(name in json.dumps(task) for name in names),
+        lambda task, _: any(name in task_text(task) for name in names),
     )
     if not chains:
         return role_hosts

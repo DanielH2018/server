@@ -120,3 +120,19 @@ def test_a_task_file_that_cannot_be_read_refuses_by_name(tmp_path, text):
     (tasks / "good.yml").write_text("- include_role:\n    name: k8s/helper\n")
     with pytest.raises(CannotNarrow, match=r"bad\.yml"):
         role_callers(tmp_path)
+
+
+def test_a_task_file_that_is_not_utf8_refuses_by_name(tmp_path):
+    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "bad.yml").write_bytes(b"- name: \xff\n")
+    with pytest.raises(CannotNarrow, match=r"bad\.yml"):
+        role_callers(tmp_path)
+
+
+def test_a_dangling_task_file_symlink_refuses_by_name(tmp_path):
+    tasks = tmp_path / "ansible" / "roles" / "k8s" / "caller" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "bad.yml").symlink_to(tmp_path / "gone.yml")
+    with pytest.raises(CannotNarrow, match=r"bad\.yml"):
+        role_callers(tmp_path)

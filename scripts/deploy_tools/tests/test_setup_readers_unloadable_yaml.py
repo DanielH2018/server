@@ -6,11 +6,13 @@ so the syntax-error behaviour is the oracle and no expected value is copied into
 Run: uv run pytest scripts/deploy_tools/tests/test_setup_readers_unloadable_yaml.py
 """
 
+import datetime
 from pathlib import Path
 
 import pytest
 
 from deploy_tools.land_lib import land_reach
+from deploy_tools.setup_lib import setup_gates
 from deploy_tools.setup_lib import setup_role_chains as chains
 
 SYNTAX_ERROR = "- [unclosed\n"
@@ -166,3 +168,56 @@ def test_a_recursive_alias_below_an_import_keeps_the_var_consumers_wide(tmp_path
     (role / "defaults").mkdir()
     (role / "defaults" / "main.yml").write_text("my_var: 1\n")
     assert chains.var_consumer_chains(role, role / "defaults" / "main.yml") is None
+
+
+def _gate_tree(root: Path, tasks: str, all_vars: str = "ups_host: daniel-server\n"):
+    """A playbook running `demo`, and the arguments the host readers take after it."""
+    root.mkdir()
+    (root / "initial_setup.yml").write_text("- hosts: x\n  roles: [demo]\n")
+    (root / "all.yml").write_text(all_vars)
+    (root / "host_vars").mkdir()
+    (root / "roles").mkdir()
+    _role(root / "roles" / "demo", tasks)
+    return (
+        root / "initial_setup.yml",
+        root / "all.yml",
+        root / "host_vars",
+        root / "roles",
+    )
+
+
+def test_a_shipped_file_read_keeps_the_gate_on_a_task_holding_a_date(tmp_path):
+    tasks = (
+        "- name: Ships it\n  src: shipped.j2\n  vars: {d: 2026-01-01}\n"
+        "  when: inventory_hostname == ups_host\n"
+        "- name: Something else\n  ansible.builtin.debug: {}\n"
+    )
+    args = _gate_tree(tmp_path / "tree", tasks)
+    path = "ansible/roles/setup/common/files/shipped.j2"
+    assert land_reach.setup_shipped_file_hosts("demo", path, *args) == {"daniel-server"}
+
+
+def test_a_date_in_a_when_chain_reads_as_every_host(tmp_path):
+    _, all_vars, host_vars, roles = _gate_tree(tmp_path / "tree", LOADABLE)
+    chain = (datetime.date(2026, 1, 1),)
+    hosts = frozenset(land_reach._HOSTS)
+    assert (
+        land_reach._hosts_passing([chain], hosts, all_vars, host_vars, roles / "demo")
+        == hosts
+    )
+
+
+@pytest.mark.parametrize("vars_text", [IMPOSSIBLE_DATE, BAD_BOOL, SYNTAX_ERROR])
+def test_a_vars_file_that_does_not_load_reads_as_every_host(tmp_path, vars_text):
+    _, all_vars, host_vars, _ = _gate_tree(tmp_path / "tree", LOADABLE, vars_text)
+    assert land_reach._eval_when("no_such_var == 1", "daniel-box", all_vars, host_vars)
+
+
+@pytest.mark.parametrize("text", [IMPOSSIBLE_DATE, BAD_BOOL])
+def test_the_end_role_guard_read_refuses_as_a_syntax_error_does(tmp_path, text):
+    def guard(root: Path, tasks: str):
+        return setup_gates.role_end_guard(_role(root, tasks))
+
+    assert _answer(guard, tmp_path / "bad", text) == _answer(
+        guard, tmp_path / "syntax", SYNTAX_ERROR
+    )
