@@ -773,12 +773,59 @@ every apply it owes. PR 6's step holds the procedure.
 **The push token leaves after the role.** PR 6 keeps `render_records_push_token` in
 `consumers.py:CROSS_HOST_PUSH_TOKENS`. The consumers census fails on an `auto`-tier registry
 token that has no consumer, and the token stays in `ansible/secret_rotation.yml` until the
-operator removes it. A follow-up commit after PR 6 does three things at once. The operator
-removes the key from `secrets.yml` with `sops` (**operator-only**). The same commit runs
-`secret_rotation.py sync`, which drops the registry row, and drops the `consumers.py`
-entry. That path set routes to `{'secrets': True}` (Baseline), the deployer's secrets-defer
-path, so it merges without a deploy and alerts once. The removal waits for PR 6, because
-before it the role's template and the Kuma tile still reference the key.
+operator removes it. A follow-up commit after PR 6 makes these changes at once:
+
+- The operator removes the key from `secrets.yml` with `sops` (**operator-only**).
+- `secret_rotation.py sync` drops the registry row.
+- The `consumers.py` entry goes.
+- `scripts/secrets_mgmt/git_dates.py:RETIRED` gains the name.
+  `scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py` fails on a departed
+  key that is in neither `RETIRED` nor `RENAMED_FROM`. It also fails on a `RETIRED` name still
+  in the store, so the name cannot join `RETIRED` before this commit.
+- Two tests that name the key stop naming it.
+  `test_secret_consumers.py:test_consumer_tags_cross_host_tokens_are_manual` loses its subject.
+  `test_secret_bearing_host_paths.py:test_the_ignore_tier_is_excluded_from_the_tracked_names`
+  names another tracked credential instead.
+- Two tests that require an `auto` row in the real registry change, because this key is the
+  only one. `test_secret_consumers.py:test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual`
+  drops its `assert auto`.
+  `scripts/docs/tests/test_gen_doc_fragments.py:test_registry_counts_cover_every_registered_secret`
+  drops its `"auto" in counts`.
+- `docs/assets/generated/fragments/secret-tiers.md` regenerates, because its `auto` count moves.
+  The `regen-doc-fragments` prek hook rewrites it, and
+  `test_every_committed_fragment_matches_what_the_generator_writes_now` fails without it.
+
+That path set routes to `{'secrets': True}` (Baseline), the deployer's secrets-defer path, so
+it merges without a deploy and alerts once. The removal waits for PR 6, because before it the
+role's template still references the key.
+
+**That commit retires the last `*_push_token` key once M6's C-5 has merged.** C-5 retires the
+only other one. The commit also leaves `CROSS_HOST_PUSH_TOKENS` empty and the registry with no
+`auto` tier. The commit re-reads each reader of the suffix and of the set, and it deletes the
+ones with no subject left, or files a finding for each one it keeps:
+
+- `scripts/secrets_mgmt/secrets_lib/secret_classify.py:classify`, the `_push_token` rule.
+  Deleting the rule fails `test_secret_classify.py:test_push_tokens_are_auto` and
+  `test_secret_registry.py:test_sync_adds_missing_and_preserves_existing`, so both change with
+  it;
+- `.claude/skills/add-secret/SKILL.md`, the *Never add a Kuma push token* step and the `sync`
+  step's `*_push_token` clause;
+- `consumers.py:CROSS_HOST_PUSH_TOKENS`, with its readers in `consumer_tags`,
+  `test_secret_consumers.py` and the note in `scripts/deploy_tools/land_lib/land_tags.py`.
+  `scripts/deploy_tools/tests/test_land_tags.py` asserts that note names the set, so the test
+  changes with the note.
+
+**Readers of the `auto` tier outlive the commit, so it files a finding for them.** The weekly
+`homelab-secret-rotation` job in `hosts/components/secret-rotation/` selects only `auto` rows,
+so every run logs "nothing to rotate in the auto tier". `docs/secret-rotation.md` keeps its
+`auto` section, its cron contract and its line about Uptime Kuma honouring a new push token.
+Retiring the job is a host package change with its own landing, so the commit does not do it.
+The finding names the job and that doc, and its owner decides whether the tier stays for a
+future generated secret.
+
+The commit's description quotes the reads for M6's exit criterion 2:
+`grep -c '_push_token:' ansible/secret_rotation.yml` and the same read on
+`ansible/vars/secrets.yml` both print 0, and `secret_rotation.py audit --check` exits 0.
 
 ### The revert runbook
 
@@ -919,6 +966,7 @@ root is withheld, not suspended*).
   ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py
                                                    (- render_records from _CHECK_TIMER)
   scripts/secrets_mgmt/consumers.py                (- render_records_push_token, after PR 6)
+  scripts/secrets_mgmt/git_dates.py                (+ the name in RETIRED, after PR 6)
 - scripts/diagnostics/probe_lib/releases_render.py (if D6 left it)
   scripts/validate/render_diff_gates.py            (- the retirement arm; D6.12 names the file)
 + scripts/renderer/renderer_lib/targets.py         (render_targets logic, task-free)
@@ -1110,7 +1158,8 @@ Two costs follow from the narrowing:
       D6 left.
     - **Operator-only.** Old PR 6's five park steps in one sitting, ending in
       `initial_setup.yml --tags gitops_deploy` and every apply step 3 names. The secrets
-      commit after R4.5, which removes `render_records_push_token`. The removal of
+      commit after R4.5, which removes `render_records_push_token` and adds it to
+      `git_dates.RETIRED`, as *render_records* lists. The removal of
       `/var/lib/homelab/k8s-renders.d`.
     - **Verification.** The three outputs of *PR 6's landing*.
 1. **R4.6: a standalone entry for the revert runbook** (old PR 7a, conditional, about 60
@@ -1289,8 +1338,9 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       applies nothing after D6.12.
     - **Operator-only, after this PR:** the secrets commit from *render_records* removes
       `render_records_push_token` with `sops`, runs
-      `uv run python scripts/secrets_mgmt/secret_rotation.py sync`, and drops the token
-      from `consumers.py:CROSS_HOST_PUSH_TOKENS`. It merges without a deploy and alerts
+      `uv run python scripts/secrets_mgmt/secret_rotation.py sync`, drops the token
+      from `consumers.py:CROSS_HOST_PUSH_TOKENS`, adds it to `git_dates.RETIRED`, and makes
+      the other changes *render_records* lists. It merges without a deploy and alerts
       once.
     - **Operator-only:** remove `/var/lib/homelab/k8s-renders.d` on daniel-box. It needs
       root, which the agent's permissions deny.
@@ -1688,7 +1738,7 @@ daniel-box. The operator produces them, because each needs the host:
   of PR 6's. The fast-forward stops at the revert's commit, never at `origin/master`, and an
   extra commit that the `rev-list` check finds gets its route quoted and its applies run.
   If the operator's secrets commit has landed, revert it first, because the restored role
-  and tile reference `render_records_push_token`. That second revert is a `sops` edit too.
+  references `render_records_push_token`. That second revert is a `sops` edit too.
   A revert after PR 8 has one more ordering. Revert PR 8 first, or drop PR 5's equality
   test from the revert. The old predicate, `render_targets.py:includes_manifests`, greps a
   role's task files for `k8s/manifests`, and after PR 8 no role outside the runbook
@@ -1842,8 +1892,9 @@ daniel-box. The operator produces them, because each needs the host:
   `docs/claude-tooling.md` if it lists `probe.py releases`;
   `ansible/tests/setup/test_setup_cross_role_files.py`'s table equality, which holds the
   edited `_CHECK_TIMER`; the deleted tests listed under PR 6; the lock rows PR 6 names.
-  `ansible/secret_rotation.yml` and `consumers.py` change in the operator's secrets commit
-  after PR 6, not in PR 6.
+  `ansible/secret_rotation.yml`, `consumers.py`, `git_dates.py`, the `secret-tiers` fragment
+  and the tests that name the key or require an `auto` row change in the operator's secrets
+  commit after PR 6, not in PR 6.
 - PR 7a: `docs/volume-snapshot-drills.md`, the revert runbook's command.
 - PR 7b changes no test and no doc. D5's bootstrap drill PR and flux PR write
   *Bootstrapping Flux on a rebuilt cluster*, its drill, its renderer test and the text
