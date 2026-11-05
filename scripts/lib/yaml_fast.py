@@ -44,16 +44,6 @@ import yaml
 # specifically rather than "a loader was chosen".
 Loader = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
 
-# PyYAML's constructor raises plain Python exceptions for a tagged or typed scalar it cannot
-# build: ValueError for `2026-13-45`, KeyError for `!!bool x`, AttributeError for `!!timestamp x`.
-_PARSE_FAILURES = (
-    yaml.YAMLError,
-    ValueError,
-    KeyError,
-    AttributeError,
-    RecursionError,
-)
-
 
 class UnparsableYaml(yaml.YAMLError, ValueError):
     """A text that does not load as YAML, whichever exception PyYAML raised for it.
@@ -74,7 +64,9 @@ def parse_yaml(text: str):
     """
     try:
         return safe_load(text)
-    except _PARSE_FAILURES as exc:
+    # The boundary around untrusted text: PyYAML's constructor raises whatever a bad scalar
+    # triggers (ValueError for `2026-13-45`, KeyError for `!!bool x`, IndexError for `!!int ""`).
+    except Exception as exc:
         raise UnparsableYaml(str(exc)) from exc
 
 

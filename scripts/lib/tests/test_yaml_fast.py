@@ -58,9 +58,17 @@ def test_malformed_yaml_still_raises_yamlerror():
         "a: 2026-13-45\n",
         "a: !!bool x\n",
         "a: !!timestamp x\n",
+        'a: !!int ""\n',
         "{<<: " * 1200 + "{a: 1}" + "}" * 1200,
     ],
-    ids=["syntax", "impossible-date", "bad-bool", "bad-timestamp", "nested-merges"],
+    ids=[
+        "syntax",
+        "impossible-date",
+        "bad-bool",
+        "bad-timestamp",
+        "empty-int",
+        "nested-merges",
+    ],
 )
 def test_parse_yaml_raises_one_exception_for_a_text_that_does_not_load(text):
     with pytest.raises(yaml_fast.UnparsableYaml):
@@ -73,26 +81,51 @@ def test_the_parse_failure_is_caught_by_a_yaml_error_or_a_value_error_catch():
     assert issubclass(yaml_fast.UnparsableYaml, ValueError)
 
 
+_LOADS = frozenset({"safe_load", "safe_load_all"})
+
+
 def _narrowing_modules() -> list[str]:
     return [
         *tracked("scripts/deploy_tools/narrow_lib/*.py"),
         "scripts/deploy_tools/narrow_setup.py",
+        "scripts/deploy_tools/digest_covers.py",
         "scripts/lib/narrow_git.py",
         "scripts/lib/render_guard.py",
         "scripts/lib/k8s_role_callers.py",
     ]
 
 
+def _direct_parse(node: ast.AST) -> str | None:
+    """What `node` does to reach PyYAML's loader without `parse_yaml`, or None."""
+    if isinstance(node, ast.Import):
+        if any(alias.name.split(".")[0] == "yaml" for alias in node.names):
+            return "imports yaml"
+    elif isinstance(node, ast.ImportFrom):
+        if (node.module or "").split(".")[0] == "yaml":
+            return "imports from yaml"
+        if any(alias.name in _LOADS for alias in node.names):
+            return f"imports {node.names[0].name}"
+    elif isinstance(node, ast.Call):
+        func = node.func
+        if isinstance(func, ast.Name) and func.id in _LOADS:
+            return f"calls {func.id}"
+        if isinstance(func, ast.Attribute):
+            if func.attr in _LOADS:
+                return f"calls .{func.attr}"
+            if func.attr in {"load", "load_all"} and (
+                isinstance(func.value, ast.Attribute) and func.value.attr == "yaml"
+            ):
+                return f"calls yaml.{func.attr}"
+    return None
+
+
 def _direct_parses(subject: Subject) -> list[str]:
-    """Each CALL to `safe_load[_all]` on `yaml` or `yaml_fast`; a docstring is not a call."""
+    """Each way the module reaches PyYAML's loader; a docstring naming one is not a call."""
     return [
-        f"line {node.lineno}: {node.func.value.id}.{node.func.attr}"
+        f"line {node.lineno}: {found}"
         for node in ast.walk(ast.parse(subject.text))
-        if isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in {"safe_load", "safe_load_all"}
-        and isinstance(node.func.value, ast.Name)
-        and node.func.value.id in {"yaml", "yaml_fast"}
+        if isinstance(node, ast.Import | ast.ImportFrom | ast.Call)
+        and (found := _direct_parse(node))
     ]
 
 
@@ -110,9 +143,22 @@ NARROWING_CENSUS = Census(
         Subject("a.py", "doc = yaml.safe_load(text)\n"),
         Subject("b.py", "doc = yaml_fast.safe_load(text)\n"),
         Subject("c.py", "docs = list(yaml_fast.safe_load_all(text))\n"),
+        Subject(
+            "d.py", "import yaml as y\n\ndoc = y.load(text, Loader=y.SafeLoader)\n"
+        ),
+        Subject("e.py", "from lib.yaml_fast import safe_load\n"),
+        Subject(
+            "f.py", "from lib import yaml_fast as yf\n\ndoc = yf.safe_load(text)\n"
+        ),
+        Subject("g.py", "doc = yaml_fast.yaml.safe_load(text)\n"),
+        Subject("h.py", "doc = yaml_fast.yaml.load(text, Loader=yaml_fast.Loader)\n"),
+        Subject("i.py", "from yaml import load\n"),
     ),
     green=(
-        Subject("a.py", "doc = yaml_fast.parse_yaml(text)\n"),
+        Subject(
+            "a.py", "from lib import yaml_fast\n\ndoc = yaml_fast.parse_yaml(text)\n"
+        ),
+        Subject("c.py", "doc = json.load(handle)\n"),
         Subject("b.py", '"""`yaml.safe_load` raises ValueError on a bad date."""\n'),
     ),
     must_find=frozenset(

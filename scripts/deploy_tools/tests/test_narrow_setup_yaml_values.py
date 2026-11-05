@@ -9,8 +9,12 @@ that is no real date, so each parse has to answer it the way it answers `yaml.YA
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_yaml_values.py
 """
 
+import json
+from pathlib import Path
+
 import pytest
 
+import digest_covers
 import narrow_setup
 from deploy_tools.narrow_lib.foreign_keys import keys_reaching
 from deploy_tools.narrow_lib.setup_index import RoleIndex, foreign_tags
@@ -23,7 +27,10 @@ from deploy_tools.narrow_lib.task_walk import (
 from lib.exit_codes import NARROW_SETUP_NARROWED, NARROW_SETUP_REFUSED
 from lib.narrow_git import CannotNarrow
 
+
 from _setup_role_fixtures import ALPHA, PLAYBOOK, ROLE, build
+from _narrow_fixtures import Tree
+from test_digest_covers import BASE, DEPLOY
 
 NOT_A_DATE = "d: 2026-13-45\n"
 
@@ -226,3 +233,36 @@ def test_the_dynamic_include_walks_refuse_a_text_they_cannot_read(tmp_path, text
     index.included = {"tasks/alpha.yml": frozenset({"alpha"})}
     with pytest.raises(CannotNarrow):
         index.tags_of("tasks/alpha.yml")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "- hosts: all\n  x: !!bool x\n",
+        "- hosts: all\n  x: !!timestamp x\n",
+        '- hosts: all\n  x: !!int ""\n',
+    ],
+    ids=["bad-bool", "bad-timestamp", "empty-int"],
+)
+def test_digest_covers_keeps_a_play_file_that_does_not_load(text):
+    reason = digest_covers._play_reason(
+        "ansible/deploy.yml", DEPLOY, text, "HEAD", Path(".")
+    )
+    assert reason and "does not parse" in reason
+
+
+def test_the_digest_covers_cli_keeps_a_line_whose_play_file_recurses(tmp_path, capsys):
+    """`x` sorts first, so `same_value` recurses before it reaches the `hosts` that differ."""
+    tree = Tree(tmp_path / "repo")
+    for path, text in BASE.items():
+        tree.write(path, text)
+    tree.write("ansible/deploy.yml", "- &p {x: [*p], hosts: all}\n")
+    base = tree.commit("a recursive play")
+    tree.write("ansible/deploy.yml", "- &p {x: [*p], hosts: other}\n")
+    head = tree.commit("another recursive play")
+
+    item = f"authelia:{base}:{head}"
+    assert digest_covers.main([item, "--repo", str(tree.root)]) == 0
+    captured = capsys.readouterr()
+    assert json.loads(captured.out) == {item: False}
+    assert "RecursionError" in captured.err

@@ -100,8 +100,8 @@ def test_the_command_exits_three_when_a_ref_cannot_be_read(tree: Tree, capsys):
 
 @pytest.mark.parametrize(
     "text",
-    ["d: 2026-13-45\n", "d: !!bool x\n"],
-    ids=["impossible-date", "bad-bool-tag"],
+    ["d: 2026-13-45\n", "d: !!bool x\n", 'd: !!int ""\n'],
+    ids=["impossible-date", "bad-bool-tag", "empty-int"],
 )
 def test_the_command_refuses_host_vars_the_declared_read_cannot_load(
     tree: Tree, capsys, text: str
