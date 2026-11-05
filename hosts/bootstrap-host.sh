@@ -14,8 +14,8 @@
 #   2  install the keyring once it carries the pinned key and nothing else, then homelab.sources
 #      (--local-build installs the keyring only, because no repository is running yet)
 #   3  create /etc/homelab/age.key when missing, and print its public key
-#   4  the one-time host steps: the Pi's debloat purge and its rsyslog and wpa_supplicant masks;
-#      on a cluster node, the k3s binary
+#   4  the one-time host steps: the Pi's debloat purge, its rsyslog and wpa_supplicant masks and
+#      the removal of rsyslog's text logs; on a cluster node, the k3s binary
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them)
 #   6  the Pi only: stop and disable systemd-resolved, then start homelab-docker-engine.service once
@@ -332,6 +332,10 @@ if [ "$host" = daniel-pi ]; then
             systemctl stop "$unit" || die "cannot stop $unit"
         fi
     done
+    # rsyslog ran from first boot, and log2ram would copy these into its RAM-backed /var/log.
+    rm -f "$ROOT"/var/log/syslog* "$ROOT"/var/log/kern.log* "$ROOT"/var/log/auth.log* \
+        "$ROOT"/var/log/daemon.log* "$ROOT"/var/log/user.log* "$ROOT"/var/log/messages* \
+        "$ROOT"/var/log/debug*
 fi
 
 if [ -n "$k3s_mode" ]; then
@@ -569,5 +573,7 @@ if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
         # -y overwrites an aide.db.new that an interrupted run left behind.
         aideinit -y || die "aideinit failed"
         baseline_written aide-baseline
+        # The report is dead RAM under log2ram. aideinit.log stays: first_baseline reads it.
+        rm -f "$ROOT/var/log/aide/aide.log"
     fi
 fi

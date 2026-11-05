@@ -36,8 +36,9 @@ must not break.
   and `systemd-resolved`'s disable are state the live Pi already holds. `hosts/bootstrap-host.sh`
   carries them for a rebuild: step 4 runs the purge and the masks, and step 6 disables
   `systemd-resolved`, because step 5's install still needs its stub resolver.
-- The one-off cleanups of stale rsyslog, AIDE and audit logs removed files the live Pi had
-  accumulated, so a rebuild has nothing to carry.
+- Step 4 also removes rsyslog's text logs, and step 7 removes the report `aideinit` leaves at
+  `/var/log/aide/aide.log`. Audit rotations need no step, because the `pi-tuning` cap is in place
+  before a rebuilt Pi has any to spare.
 - Installing `log2ram` stays a bootstrap step: Azlux's apt source arrives in the same package, so
   the package cannot depend on it.
 - The Ansible-era edits stay in the files as harmless duplicates, and the interim push-token

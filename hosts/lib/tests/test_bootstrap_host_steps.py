@@ -110,14 +110,55 @@ def test_a_pi_rerun_with_the_masks_in_place_writes_nothing(tmp_path):
     ]
 
 
-def test_step_4_leaves_resolved_running_for_step_5s_apt(tmp_path):
+def test_resolved_stays_up_until_the_last_apt_call_of_step_5(tmp_path):
     host = FakeHost(tmp_path)
     _pi_with_units(host, "enabled", 0)
+    host._stub("apt-get", f'echo "apt-get $*" >> {host.log}')
 
-    result = host.run("daniel-pi", "--until", "5")
+    result = host.run("daniel-pi", "--until", "6")
 
     assert result.returncode == 0, result.stderr
-    assert not [c for c in host.commands() if "systemd-resolved" in c]
+    commands = host.commands()
+    last_apt = max(i for i, c in enumerate(commands) if c.startswith("apt-get"))
+    resolved_writes = [
+        i
+        for i, c in enumerate(commands)
+        if c
+        in {
+            "systemctl disable systemd-resolved.service",
+            "systemctl stop systemd-resolved.service",
+        }
+    ]
+    assert len(resolved_writes) == 2
+    assert last_apt < min(resolved_writes)
+
+
+def test_step_4_removes_rsyslogs_text_logs_and_leaves_other_logs(tmp_path):
+    host = FakeHost(tmp_path)
+    _touch(host, "var/log/syslog.1", "var/log/auth.log", "var/log/dpkg.log")
+
+    result = host.run("daniel-pi", "--until", "4")
+
+    assert result.returncode == 0, result.stderr
+    assert not (host.root / "var/log/syslog.1").exists()
+    assert not (host.root / "var/log/auth.log").exists()
+    assert (host.root / "var/log/dpkg.log").exists()
+
+
+def test_a_first_aide_init_removes_its_report_and_keeps_the_log_the_guard_reads(
+    tmp_path,
+):
+    host = _scans_host(tmp_path, "aide")
+    logs = host.root / "var/log/aide"
+    host._stub(
+        "aideinit", f"mkdir -p {logs}; touch {logs}/aide.log {logs}/aideinit.log"
+    )
+
+    result = host.run("daniel-pi")
+
+    assert result.returncode == 0, result.stderr
+    assert not (logs / "aide.log").exists()
+    assert (logs / "aideinit.log").exists()
 
 
 def test_the_pi_stops_and_disables_resolved_before_it_starts_the_engine(tmp_path):

@@ -1288,7 +1288,8 @@ steps are:
    needed.
 4. Run the one-time host steps, each behind a guard that reads the state first:
     - the LVM volumes, on daniel-server only;
-    - the debloat purge and the rsyslog and `wpa_supplicant` masks, on the Pi only;
+    - the debloat purge, the rsyslog and `wpa_supplicant` masks and the removal of rsyslog's
+      text logs, on the Pi only;
     - the k3s binary at `k3s_version`, from the release's `install.sh` checked against
       `k3s_install_script_sha256`, on the two cluster nodes. Both values, and
       `k3s_install_script_url`, are the script's embedded pins (*Architecture-specific
@@ -1349,7 +1350,7 @@ steps are:
       print `masked`. The aide package's own timer would run a second, nightly full scan.
       The mask comes before `aideinit`, so a failed init still leaves the timer masked;
     - `aideinit -y`, when `/var/lib/aide/aide.db` is missing. It runs for over an hour on
-      the Pi.
+      the Pi. The step then removes the report at `/var/log/aide/aide.log`.
 
    The step runs last, so both baselines record every package the earlier steps installed.
    The package does not carry these as a first-run oneshot (#6674). A oneshot would
