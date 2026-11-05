@@ -103,8 +103,7 @@ def allowed_age_s(read_drop_in: Callable[[], str]) -> int | tuple[int, str]:
 def _s3_snapshot_time(item: dict) -> float | None:
     """When a usable S3 snapshot was taken; None for a local, failed or undated entry.
 
-    k3s records a failed upload as an entry too, so `readyToUse` is what keeps one from reading as
-    a fresh backup.
+    An entry whose `readyToUse` is not true must not read as a fresh backup.
     """
     spec = item.get("spec") or {}
     status = item.get("status") or {}
