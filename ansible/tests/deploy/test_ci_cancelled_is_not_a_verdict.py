@@ -1,9 +1,8 @@
 """A `cancelled` check-run holds the CI verdict at pending, and the operator docs say so.
 
 Two merges in quick succession cancel the first run, so a merge commit whose merge was
-immediately followed by another reads `completed cancelled` forever. The post-merge procedure in
-the repo CLAUDE.md tells an operator to poll that commit's own check-runs, so without this the
-documented gate waits on a run that can never go green.
+immediately followed by another reads `completed cancelled` forever, so without this a gate on
+that commit's own check-runs waits on a run that can never go green.
 
 `hosts/lib/ci_verdict.py` already gets this right. What these guard is that it keeps getting it right,
 and that the doc keeps naming the constant an operator would go read.
@@ -51,7 +50,7 @@ def test_the_operator_docs_name_the_constant():
     """`docs/landing.md` owns the rule; the root doc keeps a pointer; both name the constant.
 
     Textual on purpose. The behavioural tests above cover the deployer, and this covers the
-    half a reader acts on — the post-merge procedure they follow by hand. A rename of the
+    half a reader acts on — the rule that a cancelled run is no verdict. A rename of the
     constant must break both docs rather than hide; a reword of either leaves this green.
     """
     assert "_CI_NO_VERDICT_CONCLUSIONS" in LANDING_DOC, (
