@@ -16,6 +16,25 @@ The marker keeps `# DECIDED:` literal and carries the reference after it —
 `# DECIDED: … (ADR-0011)`, never `# DECIDED (ADR-0011):`. The reviewer brief greps the
 literal form, so moving the colon hides the marker from the one reader who needs it.
 
+## The `# DECIDED:` marker
+
+Write the marker, then the reasoning, and point at the long form rather than at a line number
+that drifts. A comment where the code makes the trade-off is one a reviewer trips over before
+they spend an hour on it.
+
+Cite a marker by its text, not its line. This command finds the live example wherever it lands:
+
+```bash
+grep -rn 'DECIDED: `origin\[:8\]`' ansible/roles/setup/gitops_deploy/files/
+```
+
+The marker it finds reads `a fixed slice while volume-snapshot names with --short=8, a MINIMUM
+width … Full analysis in this role's CLAUDE.md.`
+
+A marker is a prior, not a verdict. Contradict one with new evidence at a cited `file:line`, and
+name the marker you are contradicting. The marker is what carries the decision to the agent that
+would otherwise re-open it.
+
 ## Superseding
 
 An ADR is never deleted or rewritten to match a reversed decision. Write a new one and set

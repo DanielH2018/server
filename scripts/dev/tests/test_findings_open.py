@@ -9,7 +9,8 @@ Run: uv run pytest scripts/dev/tests/test_findings_open.py
 
 import subprocess
 
-from _findings_fakes import Fakes
+import pytest
+from _findings_fakes import Fakes, build_tools
 from dev import findings
 from dev.findings_lib.issue_model import (
     LABELS,
@@ -436,3 +437,11 @@ def test_open_on_a_refuted_issue_with_a_null_closed_at(
     assert findings.main(_open_argv(body), tools) == 3
     assert "refuted" in capsys.readouterr().out
     assert not calls.gh
+
+
+def test_close_help_says_open_refuses_to_reopen_refuted_and_accepted(capsys):
+    with pytest.raises(SystemExit):
+        findings.main(["close", "--help"], build_tools(Fakes())[0])
+    assert "refuses to reopen a refuted or accepted issue" in " ".join(
+        capsys.readouterr().out.split()
+    )

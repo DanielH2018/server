@@ -12,6 +12,7 @@ Run: uv run pytest scripts/dev/tests/test_findings_claim_reap_then_claim.py
 
 import json
 
+import pytest
 from _findings_fakes import Fakes, build_tools, facts, make_issue
 
 from dev.findings import main
@@ -213,3 +214,11 @@ def test_claim_refuses_rather_than_reaps_an_operator_claim_read_by_the_agent_use
     capsys.readouterr()
     assert main(["next", "--json"], tools) == 0
     assert json.loads(capsys.readouterr().out) == []
+
+
+def test_claim_help_says_a_refusal_means_the_claim_is_live(capsys):
+    with pytest.raises(SystemExit):
+        main(["claim", "--help"], build_tools(Fakes())[0])
+    assert "a refusal here means the claim is LIVE" in " ".join(
+        capsys.readouterr().out.split()
+    )

@@ -420,8 +420,8 @@ def render_markdown(rows: list[dict[str, str]], root: Path = REPO) -> str:
     parts.append("# Decisions\n")
     parts.append(
         f"{len(rows)} `DECIDED:` marker(s) found across the tree. A marker is a settled "
-        "trade-off recorded as a comment at the line it governs, per CLAUDE.md's "
-        '"Review & Memory Hygiene" section — written so a reviewer trips over the reasoning '
+        "trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — "
+        "written so a reviewer trips over the reasoning "
         "before re-opening a decision that already has one. A reviewer brief greps the "
         "literal marker text before flagging something as new; this page exists so a human "
         "can browse the same set instead of guessing a phrase to grep.\n"
