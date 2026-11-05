@@ -280,6 +280,21 @@ class scripted:
         return outcome
 
 
+class _Clock:
+    """A clock that only `sleep` advances."""
+
+    def __init__(self):
+        self.now = 0.0
+        self.delays: list[float] = []
+
+    def monotonic(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.delays.append(seconds)
+        self.now += seconds
+
+
 class _DropsAfterFirstChunk(_Response):
     """A response whose connection resets once `body` has been read."""
 
@@ -344,15 +359,41 @@ def test_a_404_fails_after_one_attempt(tmp_path):
     assert delays == []
 
 
-def test_a_persistent_504_raises_failure_naming_the_url(tmp_path):
-    opener = scripted(*[http_error(504)] * tf.TOOL_FETCH_ATTEMPTS)
-    delays: list[float] = []
-    with pytest.raises(tf.Failure) as caught:
-        tf.download_tool(pin(b"binary"), tmp_path, opener, sleep=delays.append)
+def test_a_504_outage_of_five_minutes_recovers_within_the_window(tmp_path):
+    body = b"binary"
+    clock = _Clock()
+
+    def opener(request, timeout=None):
+        if clock.now < 300:
+            raise http_error(504)
+        return _Response(body)
+
+    path = tf.download_tool(
+        pin(body), tmp_path, opener, sleep=clock.sleep, monotonic=clock.monotonic
+    )
+    assert path.read_bytes() == body
+
+
+def test_a_persistent_504_raises_unavailable_naming_the_url(tmp_path):
+    clock = _Clock()
+    calls: list[float] = []
+
+    def opener(request, timeout=None):
+        calls.append(clock.now)
+        raise http_error(504)
+
+    with pytest.raises(tf.Unavailable) as caught:
+        tf.download_tool(
+            pin(b"binary"),
+            tmp_path,
+            opener,
+            sleep=clock.sleep,
+            monotonic=clock.monotonic,
+        )
     assert caught.value.reason == "tools"
     assert "https://example.invalid/x" in str(caught.value)
-    assert len(opener.calls) == tf.TOOL_FETCH_ATTEMPTS
-    assert delays == [tf.TOOL_RETRY_DELAY_S] * (tf.TOOL_FETCH_ATTEMPTS - 1)
+    assert calls[-2] < tf.TOOL_RETRY_WINDOW_S <= calls[-1]
+    assert set(clock.delays) == {tf.TOOL_RETRY_DELAY_S}
     assert list(tmp_path.iterdir()) == []
 
 

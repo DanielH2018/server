@@ -1148,11 +1148,13 @@ jobs:
       # The renderer imports no Galaxy collection, so no Galaxy cache.
       - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
 
+      # 12 retries 30s apart outlast a release-host outage, as TOOL_RETRY_WINDOW_S does for the
+      # pins below. A persistent outage fails at the first download, inside the job's timeout.
       - name: Fetch the pinned nfpm and check its sha256
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/bin"
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo "$RUNNER_TEMP/nfpm.tar.gz" \
+          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo "$RUNNER_TEMP/nfpm.tar.gz" \
             "https://github.com/goreleaser/nfpm/releases/download/$NFPM_VERSION/nfpm_${NFPM_VERSION#v}_Linux_x86_64.tar.gz"
           echo "$NFPM_SHA256  $RUNNER_TEMP/nfpm.tar.gz" | sha256sum -c --strict
           tar -xzf "$RUNNER_TEMP/nfpm.tar.gz" -C "$RUNNER_TEMP/bin" nfpm
@@ -1264,8 +1266,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/leaks"
           cd "$RUNNER_TEMP/leaks"
           base="https://github.com/gitleaks/gitleaks/releases/download/v$version"
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLO "$base/gitleaks_${version}_linux_x64.tar.gz"
-          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo checksums.txt "$base/gitleaks_${version}_checksums.txt"
+          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLO "$base/gitleaks_${version}_linux_x64.tar.gz"
+          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo checksums.txt "$base/gitleaks_${version}_checksums.txt"
           # --ignore-missing skips the other platforms' lines; a run that verifies no file fails.
           sha256sum -c --ignore-missing --strict checksums.txt
           tar -xzf "gitleaks_${version}_linux_x64.tar.gz" gitleaks
