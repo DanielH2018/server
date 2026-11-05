@@ -76,8 +76,6 @@ legacy:
   - {path: /etc/homelab/interim/pi_sd_health_push_token}
   - {path: /etc/homelab/interim/pi_recovery_push_token}
   - {path: /etc/homelab/interim}
-  # The Pi-only Kuma push helper that the packaged heartbeats superseded.
-  - {path: /usr/local/lib/pi-kuma-push-lib.sh}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
   # H7.30: the maintenance wrapper the crons ran, and the Healthchecks.io key file they sourced. The

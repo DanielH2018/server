@@ -119,7 +119,6 @@ legacy:
   - {path: /opt/homelab-builder/builder_rollout_gate.py}
   - {path: /opt/homelab-builder/publish-textfile}
   - {path: /opt/homelab-builder/host_lib.py}
-  - {path: /opt/homelab-builder/kuma_push.py}
   - {path: /opt/homelab-builder/bin/uv}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/homelab-builder}
   - {path: /var/lib/homelab/setup-render-manifest.d/homelab-builder}

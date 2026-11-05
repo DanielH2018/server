@@ -134,7 +134,8 @@ push-token secret remains.
       `netpol-probe-job.yaml.j2` reads the entry's port through `entry_port(t.service)`. The
       named-member case C-1 adds to `ansible/tests/k8s/test_netpol_probe_targets.py` holds
       that read instead.
-    - A ratchet census row in `ansible/tests/repo/test_census_rows_text.py` holds every other
+    - A ratchet census row in `ansible/tests/repo/test_census_rows_text.py`, defined in
+      `ansible/tests/repo/_kuma_census_row.py` beside it, holds every other
       mention of `kuma` in those trees to a frozen allowlist. Each allowlist entry names its
       file and its reason. The list only shrinks, and a file outside it that mentions `kuma`
       fails CI.
@@ -148,8 +149,13 @@ push-token secret remains.
       names the identifiers it may still hold:
         - `scripts/secrets_mgmt/git_dates.py`: `RETIRED` names retired keys by design, so it
           holds `kuma_push` inside key names.
-        - `scripts/dev/pytest_shard_weights.json`: a generated record keyed by test node
-          ids, which can name deleted tests.
+        - `scripts/dev/pytest_shard_weights.json` and
+          `scripts/dev/pytest_shard_runner_weights.json`: generated records keyed by test node
+          ids, which can name deleted tests. The docs-refresh cron rewrites both, so the row
+          leaves them out of its selector rather than listing them, because a stale-allow
+          failure would turn master red on the cron's own commit. The selector also leaves out
+          every SOPS-encrypted file: a rotation rewrites them unattended, and base64 ciphertext
+          can spell `kuma` by chance.
         - The census row itself and its red fixture.
         - The `kuma-check-` unit-name prefix, and the `/var/lib/kuma-check/` directory
           of the same units' down markers, wherever a file holds them. ADR 0026 records
@@ -163,7 +169,14 @@ push-token secret remains.
           `kuma_ingress_monitors` registration in `scripts/lib/ansible_jinja_env.py`, and
           the `kuma_ingress_monitors` row in
           `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS`.
-        - Any file the B-7 and C-6 PRs could not reword, with its reason.
+        - The other output redaction rules, which hold `/api/push/` until #7195 retires them:
+          `ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2`, its
+          `ansible/roles/k8s/loki-homelab/CLAUDE.md` bullet and
+          `scripts/diagnostics/probe_lib/core.py`.
+        - Any file the B-7 and C-6 PRs could not reword, with its reason. At C-6 these are
+          the 167 files of `_PROSE_HOLDERS`, none of which may hold an identifier above. C-6
+          measured 553 lines in 208 files against its budget of about 100, so it reworded the
+          files this plan assigns to it and #7194 owns the rest.
     - Test directories are outside the selector. Many tests use `uptime-kuma` as a sample deploy
       tag, and a test that reads Kuma is deleted with its subject (`.claude/rules/python-layout.md`,
       *A check retires when its subject does*).
@@ -889,19 +902,18 @@ files that the rows above name only by their Ansible path. Each goes with the PR
 - **C-6 deletes the reconcile `legacy:` entries that name Kuma.** Each entry retires a file
   or unit that an Ansible apply installed. C-6 deletes an entry once a read-only check finds
   that file or unit gone on its host:
-    - The three `kuma-check-loki-read-route` units in
-      `hosts/components/loki-route-witness/component.yml` and the three
-      `kuma-check-secret-rotation-audit` units in
+    - The three `kuma-check-secret-rotation-audit` units in
       `hosts/components/secret-rotation/component.yml`, with the header comment in each
       file that names the old timer. The read is
-      `systemctl list-unit-files 'kuma-check-loki-read-route*' 'kuma-check-secret-rotation-audit*'`
-      on daniel-box.
+      `systemctl list-unit-files 'kuma-check-secret-rotation-audit*'` on daniel-box. The three
+      `kuma-check-loki-read-route` units and `/var/lib/kuma-check/loki-read-route.down` stay in
+      `hosts/components/loki-route-witness/component.yml`: daniel-server still runs them, and
+      reconcile retires them through these entries when its package takes the component.
     - `/opt/homelab-builder/kuma_push.py` in `hosts/components/builder/component.yml`. The
       read is C-3a's `ls /opt/*/kuma_push.py` on daniel-box.
     - `/usr/local/lib/pi-kuma-push-lib.sh` in `hosts/daniel-pi/package.yml`. The read is a
       read-only `ls` of that path over `ssh daniel-pi`.
-    - The Ansible-era push env files and down marker: `/etc/homelab/loki-route-kuma-push.env`
-      and `/var/lib/kuma-check/loki-read-route.down` in
+    - The Ansible-era push env files: `/etc/homelab/loki-route-kuma-push.env` in
       `hosts/components/loki-route-witness/component.yml`,
       `/etc/homelab/rkhunter-kuma-push.env` and `/etc/homelab/aide-kuma-push.env` in
       `hosts/components/integrity-scans/component.yml`, and `/etc/nut/kuma-push.env` in
@@ -916,7 +928,7 @@ files that the rows above name only by their Ansible path. Each goes with the PR
   a redaction rule, not a Kuma read, so it belongs on the allowlist (#6862).
 - **`hosts/components/claude-code/CLAUDE.md`**, in *The artifacts node's two timers*, says
   "Neither timer pushes to Kuma", and its ENFORCED line cites
-  `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`,
+  `test_neither_producer_pushes_to_kuma` in `hosts/lib/tests/test_claude_artifacts_node_timers.py`,
   which holds both scripts to "no Kuma library". Rewording only the quoted markers would
   leave `kuma` in the test name. C-6 deletes the test, the `KUMA_PUSH_MARKERS` tuple, the
   `kuma_push_markers` helper and the red case `test_a_script_that_pushes_to_kuma_is_flagged`. Their subject goes with C-3a,
@@ -924,7 +936,9 @@ files that the rows above name only by their Ansible path. Each goes with the PR
   (`.claude/rules/python-layout.md`, *A check retires when its subject does*). C-6 rewrites
   the bullet's lead to say that each run writes a check file and neither unit loads a
   credential. The rewritten bullet names Kuma nowhere and drops the ENFORCED line. It runs
-  `fact_status.py verify` on the section, because the cited test is gone.
+  `fact_status.py verify` on the section, because the cited test is gone. C-6 retires the test of
+  the same name in `ansible/tests/services/test_gitops_check_rule_literals.py` the same way,
+  with the sentence in `ansible/roles/setup/gitops_deploy/CLAUDE.md` that cites it.
 
 **Every `hosts/` file the grep finds, by PR.** `git grep -il kuma -- hosts ':!*/tests/*'
 ':!*/test_*'` lists 45 files at `d67fb3b9b`. The identifier grep that C-6 quotes finds about a

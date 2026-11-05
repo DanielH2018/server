@@ -58,9 +58,6 @@ TIMERS = {
         "claude_code_telemetry_health_minute",
     ),
 }
-# M6 batch B6a's Cutover-2: the journal line and the textfile are the only verdict a timer sends.
-# A script that sources the Kuma library, calls kuma_push or builds a push URL has its push back.
-KUMA_PUSH_MARKERS = ("kuma-push-lib", "kuma_push", "/api/push/")
 # What the role installed, which the component's legacy list retires.
 ANSIBLE_ERA = [
     {"cron_file": "sync-artifacts"},
@@ -69,11 +66,6 @@ ANSIBLE_ERA = [
     {"path": "/usr/local/bin/claude-otel-health.sh"},
     {"path": "/var/lib/homelab/setup-render-manifest.d/claude-code-node-crons"},
 ]
-
-
-def kuma_push_markers(body: str) -> list[str]:
-    """The Kuma push markers a shipped script still carries, or nothing."""
-    return [marker for marker in KUMA_PUSH_MARKERS if marker in body]
 
 
 def twin_mismatches(claude_code: dict, k8s: dict[Path, dict]) -> list[str]:
@@ -136,24 +128,6 @@ def test_each_timer_runs_its_script_as_the_sys_user_with_its_tag(box, name):
     assert f"SyslogIdentifier={tag}\n" in unit
     # Nothing is left to push to, so the unit loads no credential.
     assert "LoadCredential" not in unit
-
-
-@pytest.mark.parametrize("name", sorted(TIMERS))
-def test_neither_producer_pushes_to_kuma(box, name):
-    # fact: hosts/components/claude-code/CLAUDE.md#The artifacts node's two timers
-    script, _, _ = TIMERS[name]
-    body = _text(box, script)
-    # Non-vacuity: the shipped bytes are the real script, which still records its verdict.
-    assert "write_check_textfile" in body
-    assert kuma_push_markers(body) == []
-
-
-def test_a_script_that_pushes_to_kuma_is_flagged():
-    pushing = (
-        "source /usr/lib/homelab/kuma-push-lib.sh\n"
-        'kuma_push "$1" "$2" "https://kuma/api/push/x"\n'
-    )
-    assert kuma_push_markers(pushing) == list(KUMA_PUSH_MARKERS)
 
 
 @pytest.mark.parametrize("name", sorted(TIMERS))

@@ -15,6 +15,7 @@ import pytest
 from _workflow_rows import WORKFLOW_ROWS
 from _shimmed_path_row import SHIMMED_PATHS
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
+from _kuma_census_row import KUMA_IDENTIFIERS, KUMA_MENTIONS
 from _deploy_sh_callers_row import (
     DEPLOY_SH_CALLERS,
     DEPLOY_SH_ENTRY_POINTS,
@@ -411,7 +412,7 @@ ROWS = (
 )
 
 ROWS += WORKFLOW_ROWS
-ROWS += (SHIMMED_PATHS, ETCD_SNAPSHOT_LONG_FLAGS)
+ROWS += (SHIMMED_PATHS, ETCD_SNAPSHOT_LONG_FLAGS, KUMA_IDENTIFIERS, KUMA_MENTIONS)
 
 _IDS = [row.name for row in ROWS]
 

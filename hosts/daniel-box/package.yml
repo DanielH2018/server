@@ -5,8 +5,7 @@
 # every key this tree names, and `host_secrets.py sync daniel-box` rewrites it (operator-only).
 #
 # H7.33 adds the UPS secondary (hosts/components/nut-secondary): its upsmon.conf output reads
-# `nut_monitor_password` from the same SOPS file. Its watchdog loaded `ups_secondary_push_token`
-# until M6 batch B4's Cutover-2 dropped the Kuma push.
+# `nut_monitor_password` from the same SOPS file.
 #
 # Since H7.29 it ships the first three subjects of initial_setup, the same components as daniel-pi
 # and daniel-server: apt's unattended upgrades, the sshd drop-ins and the kernel, journald, limits

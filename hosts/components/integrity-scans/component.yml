@@ -5,8 +5,7 @@
 # in place through `role: initial_setup` until the last host PR moves them, so the hosts that still
 # apply the role cannot fork them.
 #
-# No unit loads a credential, because M6 batch B9's Cutover-2 dropped the Kuma pushes, and B9's
-# token PR retired the six per-host push tokens from the host packages and their SOPS files.
+# No unit loads a credential: each scan writes a textfile, and that is its only verdict.
 #
 # What the component leaves to bootstrap: hosts/bootstrap-host.sh step 7 runs these once on a
 # host whose package ships the two timers, and the live hosts already hold all three.
@@ -78,7 +77,5 @@ legacy:
   - {cron: "Weekly AIDE file integrity check", user: root}
   - {path: /usr/local/bin/rkhunter-check.sh}
   - {path: /usr/local/bin/aide-check.sh}
-  - {path: /etc/homelab/rkhunter-kuma-push.env}
-  - {path: /etc/homelab/aide-kuma-push.env}
   - {path: /var/lib/homelab/setup-render-manifest.d/rkhunter-check}
   - {path: /var/lib/homelab/setup-render-manifest.d/aide-check}

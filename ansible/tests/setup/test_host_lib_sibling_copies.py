@@ -366,17 +366,6 @@ def test_a_notified_handler_exists_in_the_calling_role():
             )
 
 
-def test_the_shared_task_file_removes_kuma_push_after_it_copies_host_lib():
-    # Removing first would leave the old host_lib beside no kuma_push.py if the play dies between
-    # the two tasks, and the deployer imports its host_lib on the next tick.
-    copy, removal = load_tasks(ROLES / "setup" / SHARED_TASK)
-    assert copy["loop"] == ["host_lib.py"]
-    assert removal["ansible.builtin.file"] == {
-        "path": "{{ host_lib_dir }}/kuma_push.py",
-        "state": "absent",
-    }
-
-
 def test_the_shared_task_file_carries_no_tags():
     """Tags UNION in Ansible, so a tag here would also inherit the caller's.
 

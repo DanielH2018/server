@@ -96,7 +96,6 @@ def test_the_package_retires_the_ansible_era_cron_timer_and_scripts(package):
     assert {e.get("cron") or e.get("unit") or e.get("path") for e in legacy} >= {
         "Weekly secret rotation (auto tier)",
         "Daily secret rotation audit",
-        "kuma-check-secret-rotation-audit.timer",
         "/usr/local/bin/secret-rotate.sh",
         "/usr/local/bin/secret-rotation-audit.sh",
     }

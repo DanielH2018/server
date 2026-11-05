@@ -34,8 +34,8 @@
 # (claude_code_telemetry_health_minute). It probes the OTLP receiver on the node's loopback,
 # logs a `status=<up|down>` line under the `claude-otel-health` tag and writes
 # `claude-otel-health.prom` for node_exporter's textfile collector. Prometheus's OtlpDoorClosed and
-# OtlpDoorNotReporting rules page from that file. Until M6 batch B6a's Cutover-2 the verdict also
-# went to a Kuma push monitor. claude_code_otlp_host_ip and claude_code_otlp_port are held equal
+# OtlpDoorNotReporting rules page from that file. claude_code_otlp_host_ip and
+# claude_code_otlp_port are held equal
 # to observability's pair by hosts/lib/tests/test_claude_artifacts_node_timers.py.
 set -uo pipefail
 

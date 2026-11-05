@@ -92,7 +92,7 @@ TREND_OUT=""
 
 # DEFAULTS TO down, matching docs-refresh.sh: every exit path that is genuinely fine sets
 # PUSH_STATUS explicitly, so a crash or an unhandled path reports down rather than going
-# silent. The PUSH_ prefix dates from the Kuma push that M6 batch B2's Cutover-2 removed.
+# silent. The PUSH_ prefix is historical: nothing is pushed.
 PUSH_STATUS=down
 PUSH_MSG="eval-run exited without setting a status"
 # The longest legitimate gap between two textfile writes: the cron is weekly (Sunday 02:00,

@@ -11,8 +11,7 @@
 # Runs from homelab-sync-artifacts.service on daniel-box as the sys user, every 5 minutes by
 # default (claude_code_artifacts_sync_minute). Each run logs a `status=<up|down>` line under the
 # `sync-artifacts` tag and writes `sync-artifacts.prom` for node_exporter's textfile collector;
-# Prometheus's ArtifactsSyncFailed and ArtifactsSyncNotReporting rules page from that file. Until
-# M6 batch B6a's Cutover-2 the verdict also went to a Kuma push monitor.
+# Prometheus's ArtifactsSyncFailed and ArtifactsSyncNotReporting rules page from that file.
 # Environment, optional: SYNC_ARTIFACTS_STATE_DIR (default /tmp), which holds
 # the lock and the per-peer failure counters. The peers it pulls from are the
 # claude_code_artifacts_peer_sources entries rendered into this file.
