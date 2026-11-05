@@ -249,8 +249,9 @@ A cold pull of the Home Assistant image caused the October 2026 rollout outages 
 Deployment is `Recreate`, so the old pod stopped before the new pod's pull began, and HA was
 down for the whole pull.
 
-- **The 2026.10.0 bump, 2026-10-10.** HA was down for about 28 minutes. Loki's
-  `NodePublishVolume` line for the new pod reads 04:02:41Z. The next pod's reads 04:30:12Z.
+- **The 2026.10.0 bump, 2026-10-10.** HA was down for about 28 minutes. Loki holds
+  `NodePublishVolume` lines at 04:02:41Z and 04:15:42Z, one for each pod that waited. Both of
+  those pods unpublished at 04:30:12Z, and the pod that started at 04:30:13Z served.
 - **The 2026.10.2 bump, 2026-10-17.** The main container read `PodInitializing` from 06:25Z to
   06:49:30Z. daniel-box received 722 MB more than in the preceding 26 minutes, which is the
   720 MB image at about 0.46 MB/s.
