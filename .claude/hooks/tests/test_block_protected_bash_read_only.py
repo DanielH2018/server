@@ -131,6 +131,7 @@ CLEAN = [
     "timeout 5 git log -1",
     "uv run python scripts/diagnostics/probe.py health docs",
     "uv run python scripts/dev/fact_status.py lint",
+    "uv run python scripts/dev/fact_status.py notice --since origin/master",
     "ssh daniel-server 'journalctl -u k3s -n 50 | grep -i error'",
     "for f in a b; do cat $f; done",
     "cat $(git rev-parse --show-toplevel)/CLAUDE.md",

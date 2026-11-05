@@ -116,7 +116,7 @@ class Tree:
         """The tracked paths that hold a file: all of ``tracked`` at a revision.
 
         In the working tree, ``tracked`` lists the index, which still holds a file deleted
-        from disk without ``git rm``. This set leaves such a file out, as the lock's
+        from disk without ``git rm``. This set leaves such a file out, as
         ``atoms.hash_atom`` does by checking ``is_file()``.
         """
         if self._blobs is not None:
@@ -230,7 +230,7 @@ def _content(c: Citation, tree: Tree) -> str | None:
 def _kind(c: Citation, base: Tree, head: Tree) -> str | None:
     """The kind of row ``c`` gives, or None when the diff did not move it."""
     if c.form == "path":
-        # The lock hashes a path atom's existence, so a path atom can go but never move.
+        # A path atom records only existence, so it can go but never move.
         gone = in_tree(c, base.tracked) and not in_tree(c, head.present())
         return "gone" if gone else None
     try:
@@ -241,7 +241,7 @@ def _kind(c: Citation, base: Tree, head: Tree) -> str | None:
     except _UNPARSABLE:
         return "unparsable"
     if before is None:
-        # An atom that resolves only at the head is new, and the lock holds no hash for it.
+        # An atom that resolves only at the head is new, so the diff moved nothing it held.
         return None
     if after is None:
         return "gone"

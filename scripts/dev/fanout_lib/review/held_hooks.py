@@ -60,7 +60,7 @@ HELD_SECRET_PATHS = "secret_bearing_host_paths.json"
 # its transcript.
 UNHELD_EVENTS = ("SessionStart",)
 # The trees beside `HOOKS_DIR` that a hook reaches through its own `__file__`, with the files
-# held from each: `block-footguns.py` and `_facts_line.py` import from `scripts/`, and the
+# held from each: `block-footguns.py` imports from `scripts/`, and the
 # inventory is data `lib.ansible_inventory` reads (#4420). `block-protected-bash.py` reads the
 # agents' frontmatter for the set it holds to read-only (#4617).
 HELD_TREES = (

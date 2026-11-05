@@ -15,7 +15,6 @@ from lib.facts.lint import (
     host_pattern,
     lint_sections,
 )
-from lib.facts.lock import LOCK_REL, row_file_name, write_lock
 from lib.repo_paths import REPO
 
 
@@ -210,7 +209,7 @@ def test_rule_census():
             "unresolved-atom",
             "ambiguous-marker",
             "one-way-test",
-            "lock-tampered",
+            "lock-retired",
             "date-as-verification",
             "duplicate-heading",
             "unbalanced-fence",
@@ -223,17 +222,22 @@ def test_rule_census():
     assert WARN_RULES == frozenset({"one-way-test", "version-as-fact"})
 
 
-def test_hand_edited_lock_is_flagged(tmp_path):
-    """The clean side (no lock file) is already covered by every other test above."""
+def test_a_lock_a_stale_branch_brought_back_is_flagged(tmp_path):
     repo = _repo(tmp_path, "## A\n`t/m.py:LIMIT`\n")
-    write_lock(
-        repo / LOCK_REL,
-        {"CLAUDE.md#A": {"verified_sha": "abc", "atoms": {"t/m.py:LIMIT": "h"}}},
-    )
-    p = repo / LOCK_REL / row_file_name("CLAUDE.md#A")
-    p.write_text(p.read_text().replace('"h"', '"hh"'))
-    found = {(f.unit, f.rule): f.warn for f in lint_sections(repo, None)}
-    assert found[("", "lock-tampered")] is False
+    (repo / "docs" / "facts.lock").mkdir(parents=True)
+    (repo / "docs" / "facts.lock" / "0123456789abcdef.json").write_text("{}\n")
+    found = [f for f in lint_sections(repo, None) if f.rule == "lock-retired"]
+    assert [(f.unit, f.warn) for f in found] == [("", False)]
+    assert "git rm -r docs/facts.lock" in found[0].detail
+
+
+def test_a_tree_without_the_lock_is_clean(tmp_path):
+    repo = _repo(tmp_path, "## A\n`t/m.py:LIMIT`\n")
+    lock = repo / "docs" / "facts.lock"
+    lock.mkdir(parents=True)
+    assert [f for f in lint_sections(repo, None) if f.rule == "lock-retired"]
+    lock.rmdir()
+    assert not [f for f in lint_sections(repo, None) if f.rule == "lock-retired"]
 
 
 # ── retired-host ─────────────────────────────────────────────────────────────────────────

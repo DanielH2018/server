@@ -2,14 +2,13 @@
 paths:
   - "CLAUDE.md"
   - "**/CLAUDE.md"
-  - "docs/facts.lock/**"
   - "scripts/lib/facts/**"
   - "scripts/dev/fact_status.py"
 ---
 
 # Fact support — how a `CLAUDE.md` section cites what holds it up
 
-A `CLAUDE.md` section's status is derived from the atoms it cites, never stated. A section
+A `CLAUDE.md` section names what holds it up by citing atoms. A section
 is the text under one heading up to the next heading of any level, so every citation has
 exactly one owning section, keyed `<doc>#<heading text>`. Heading text is not scanned for
 citations: a backticked span in a heading names the section, never an atom in it.
@@ -47,8 +46,8 @@ names a tracked file or a directory holding one, so an untracked path is prose. 
 are in the module docstrings under `scripts/lib/facts/`.
 
 A YAML key whose value Renovate bumps is not citable as a YAML atom. Every bump would move the
-atom, and the Renovate PR cannot run `verify`, so it stays red until a person commits to it
-(#4012). Cite the file as a path atom and name the key in prose. The lint's `renovate-pin`
+atom, which puts a notice on every bump PR for a section whose prose the bump cannot change.
+Cite the file as a path atom and name the key in prose. The lint's `renovate-pin`
 rule derives the managed keys from `renovate.json`'s `customManagers`, plus the built-in
 github-actions and ansible managers, whose default file patterns `scripts/lib/facts/pins.py`
 restates. A claim that must hold for one specific version belongs in a
@@ -56,8 +55,8 @@ test, which the bump PR runs.
 
 ## Rules that read prose, and the history marker
 
-The lock hashes cited atoms only, so a sentence that cites nothing can go stale behind an IN
-grade. Some lint rules therefore read the prose itself.
+The notice compares cited atoms only, so a sentence that cites nothing can go stale with no
+row to show it. Some lint rules therefore read the prose itself.
 
 - `retired-host` (error) flags a host-shaped word that names no host in
   `ansible/inventory/hosts.ini`. The rule derives the host prefix from the inventory, never
@@ -93,30 +92,12 @@ continuation lines and nested bullets with it; a history paragraph ends at the n
 
 ## Commands
 
-`docs/facts.lock/` records the hashes each verified section was checked against. The tool
-writes it, and a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
-It is a directory holding one file per section, named by a hash of the section key, and each
-file carries its own `checksum`. Two PRs that verify different sections therefore edit
-different files, and git merges them without a conflict (#5341). A hand-deleted file is not
-flagged, because it reads the same as `forget`. To find a section's file, grep the directory
-for its key.
-
-A row's `verified_sha` is the HEAD that `verify` ran at, which is often a branch commit the
-squash merge left off master. Do not read it as a master commit. The commit on master that
-carries the row is the squash commit that wrote its hash into the lock, and
-`git log -S'<hash>' -- docs/facts.lock` finds it.
-
-- `fact_status.py status` prints every section's status.
-- `fact_status.py verify '<doc>#<heading>'` is the only path from OUT back to IN.
-- `fact_status.py verify --unverified` records every section with no lock row yet. It never
-  touches an existing row. The reverify hook below records a section in the commit that gives
-  it its first citation, so this is for a commit that skipped the hook, and nothing fails on
-  an UNVERIFIED section.
-- `fact_status.py forget '<doc>#<heading>'` drops the row of a renamed or deleted heading.
-  It also clears an `empty-row` finding: a row whose section cites nothing records nothing,
-  and `verify` writes no row for such a section.
-- `fact_status.py report` reads git and the instructions log, never the lock, over `--days`
-  (30 by default). It ranks every section that cites nothing, a CONVENTION section, by how
+- `fact_status.py lint [--changed-since <ref>]` reports the citations that cannot be support
+  and the prose rules above, and exits 1 on an error rule. `lock-retired` is one of those
+  rules: it fires when a stale branch's merge or rebase brings `docs/facts.lock` back, and
+  the fix is to take the deletion.
+- `fact_status.py report` reads git and the instructions log over `--days`
+  (30 by default). It ranks every section that cites nothing by how
   often its doc loaded. The counts come from `.claude/logs/instructions.log` in the
   primary checkout and its rotated `.1`, so the span the report prints is usually days, not
   the window. Last, it prints the instruction bytes each session loaded, summed from the
@@ -142,33 +123,13 @@ carries the row is the squash commit that wrote its hash into the lock, and
   `markdown`, `github` or `json`. The rules for each row and each format are on
   `scripts/lib/facts/notice.py:moved_sections` and `scripts/lib/facts/notice.py:render`. The
   command exits 0 with rows or without, and exits 2 only when git cannot resolve the merge
-  base. It runs beside the lock, and G2 of the plan decides whether it replaces the lock.
-  `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan.
+  base. `docs/target-architecture/docs-guard/g1-diff-notice.md` is the plan that built it.
 
-`docs/adr/0023-fact-support-is-a-diff-notice.md` retires `docs/facts.lock`, `verify`,
-`reverify` and their CI tests, and keeps `lint` with its prose rules. Slice G2's PR 3
-deletes them, and they keep running until it merges. `report` no longer measures the
-lock's precision, which was ADR-0019's retirement criterion. ADR-0023's *Context* records
-the last figure, and `docs/adr/0019-fact-support-stops-at-the-repo-store.md` records the
-criterion.
-
-Two prek hooks run on a commit. `facts-lint-changed` lints the sections the branch edits, and
-runs `vanished-identifier` over every section. It fires on a commit that touches a `CLAUDE.md`
-or any non-Markdown file other than the paths the docs-refresh and eval-run crons commit.
-`facts-reverify-changed` re-hashes a section whose prose you edited, when only a citation was
-added or dropped. It also records a section with no lock row that the commit gives its first
-citation, and drops the row of a section left citing nothing. A renamed heading or a moved doc
-reads as such a section, so the hook skips one that cites an atom the old row recorded at
-another hash; the `section-gone` finding then asks for `verify`. It writes the lock and exits
-non-zero like a formatter, so `git add docs/facts.lock` and commit again. A `moved` or
-`missing` atom stays red until a person re-reads the section and runs `verify`.
-
-A `moved` finding names the identifiers its change removed that the section's prose names,
-as a cue for that reading. It reads two kinds, with the token shape `vanished-identifier`
-uses. Both diff from a base commit: the row's `verified_sha` when HEAD's history holds it,
-else the newest commit on HEAD that wrote the recorded hash into the lock and whose tree
-still hashes the atom to it. The atom-scoped kind is what the atom's own content lost since
-the base. The range-wide kind is what any non-Markdown file lost in `<base>..HEAD` that no
-tracked file still holds. When the section names none of them, the finding says so. The
-evidence changes no verdict: a refactor that leaves the prose true still needs `verify`. When
-no base qualifies, as in a shallow clone, the finding keeps the plain message.
+`docs/adr/0023-fact-support-is-a-diff-notice.md` records why the notice replaced the stored
+hashes and their blocking test. A moved atom gets a notice and never blocks a merge. `lint`
+still blocks, through two checks.
+`ansible/tests/repo/test_every_section_lints_clean.py` fails CI on any error rule in any
+section, except `vanished-identifier`, which needs a range. The `facts-lint-changed` prek hook
+lints the sections the branch edits, and runs `vanished-identifier` over every section. It
+fires on a commit that touches a `CLAUDE.md` or any non-Markdown file other than the paths the
+docs-refresh and eval-run crons commit.

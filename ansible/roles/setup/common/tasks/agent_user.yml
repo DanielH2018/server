@@ -121,7 +121,7 @@
   become: true
 
 - name: Give the agent user the operator's pinned prek
-  # The commit hooks (gitleaks, the static ratchets, facts-reverify-changed) run through prek,
+  # The commit hooks (gitleaks, the static ratchets) run through prek,
   # and without a binary the agent's commits skip every one of them (#4100). A copy of the one
   # initial_setup pins as a uv tool, for the reason uv is copied above: a third `prek==` pin
   # would be one more twin for test_host_tool_pins_match_their_twins.py to hold equal. The

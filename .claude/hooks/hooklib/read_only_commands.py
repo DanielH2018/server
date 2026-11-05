@@ -319,7 +319,7 @@ def _tee_check(repo_root, is_scratch):
 # subcommand: `probe.py` is the read-only diagnostics entry point by design.
 READ_SCRIPTS = {
     "scripts/diagnostics/probe.py": None,
-    "scripts/dev/fact_status.py": frozenset({"status", "lint"}),
+    "scripts/dev/fact_status.py": frozenset({"lint", "notice"}),
     "scripts/dev/findings.py": frozenset(
         {"list", "show", "history", "claims", "next", "verify"}
     ),

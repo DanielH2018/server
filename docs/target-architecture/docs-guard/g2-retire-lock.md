@@ -1,6 +1,10 @@
 # G2 — Retire the lock; ADR amending 0019
 
 Status: IN PROGRESS. PR 1 merged as [#5478](https://github.com/DanielH2018/server/pull/5478) on 2026-10-17.
+PR 2 merged as `15e427549` on 2026-11-03. PR 2b and PR 3 ship as one PR, under
+[#7215](https://github.com/DanielH2018/server/issues/7215). PR 3 merged as
+[#7221](https://github.com/DanielH2018/server/pull/7221) on 2026-11-05. PR 4 ships under
+[#7223](https://github.com/DanielH2018/server/issues/7223). PR 5 remains.
 
 Depends on: [G1](g1-diff-notice.md)
 
@@ -715,7 +719,9 @@ Each risk is checked against `docs/failure-classes.md`.
 - **A stale comment in a setup role.** `agent_user.yml` keeps naming
   `facts-reverify-changed`. Editing it alone would re-apply `renovate_agent` and
   `claude_code` for a comment. PR 3 files a finding to fix it with that file's next
-  functional change.
+  functional change. PR 4 removed the name in a comment-only edit after all, because
+  `deploy_changes.comment_only_broad_changes` reads that edit as no change and the deployer
+  re-applies nothing for it.
 - **Another slice runs a lock step after PR 3.**
     - On a branch based on master after PR 3, the step fails loudly.
       `scripts/dev/fact_status.py:main` builds its subcommands with
