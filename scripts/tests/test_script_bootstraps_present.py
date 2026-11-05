@@ -1,7 +1,7 @@
 """Guard 2: every cross-directory `scripts/**/*.py` import carries a working `sys.path` bootstrap.
 
-Repo-root CLAUDE.md (~:29-40): a directly-invoked script gets only its OWN directory on `sys.path`;
-`pyproject.toml`'s `pythonpath` list is a pytest-only setting. So a module that does `from
+`.claude/rules/python-layout.md`: a directly-invoked script gets only its OWN directory on
+`sys.path`; `pyproject.toml`'s `pythonpath` list is a pytest-only setting. So a module that does `from
 lib.docs_provenance import ...` (or reaches into another `scripts/` subdirectory, or across into
 `ansible/filter_plugins`/a role's `files/`) resolves fine under pytest and then raises
 `ModuleNotFoundError` the moment a cron or a human runs it directly with `uv run python
@@ -104,8 +104,8 @@ def build_import_index() -> dict[str, set[Path]]:
 
     A flat module `foo.py` directly in a pythonpath dir `D` needs `D` on `sys.path` to import
     `foo`. A namespace-package subdirectory of `D` (no `__init__.py`, by design -- see
-    CLAUDE.md) also needs `D` on `sys.path` to import `<subdir>.<anything>` -- this is how
-    `lib.docs_provenance` resolves via `scripts` (the parent of `scripts/lib`).
+    `.claude/rules/python-layout.md`) also needs `D` on `sys.path` to import
+    `<subdir>.<anything>` -- this is how `lib.docs_provenance` resolves via `scripts` (the parent of `scripts/lib`).
     """
     index: dict[str, set[Path]] = {}
     for d in PYTHONPATH_DIRS:

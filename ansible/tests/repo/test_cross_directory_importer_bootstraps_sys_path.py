@@ -1,7 +1,7 @@
 """A `scripts/` module that imports a sibling directory inserts `scripts/` on `sys.path` first.
 
-Repo CLAUDE.md: a directly-invoked script gets its OWN directory on `sys.path` and nothing
-else, and `pythonpath` in pyproject.toml is a pytest setting — so `from lib import yaml_fast`
+`.claude/rules/python-layout.md`: a directly-invoked script gets its OWN directory on `sys.path`
+and nothing else, and `pythonpath` in pyproject.toml is a pytest setting — so `from lib import yaml_fast`
 in `scripts/docs/build_docs.py` resolves under pytest and raises `ModuleNotFoundError` under
 the cron or prek hook that actually runs it. Every module reaching outside its directory
 therefore carries its own `_sys.path.insert(0, ...)` ABOVE the import. The suite
