@@ -21,10 +21,7 @@ def test_consumers_keep_a_role_whose_caller_does_not_load_wide(tmp_path):
     }
 
     (roles / "radarr" / "tasks" / "main.yml").write_text(INCLUDE + "- [unclosed\n")
-    try:
-        narrowed = rc.consumers_for(["helper"], repo=tmp_path)
-    except Exception:
-        return
+    narrowed = rc.consumers_for(["helper"], repo=tmp_path)
     assert "helper" not in narrowed or "radarr" in narrowed["helper"], narrowed
 
 
