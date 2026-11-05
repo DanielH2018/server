@@ -73,7 +73,7 @@ configarr_k8s_health_kubectl_image: alpine/k8s:1.37.2@sha256:dcb7185e112a453aa72
 # Above the reader's worst case; the gate Job copies it, and `bundle.flux_files` raises the
 # `configarr-verify` timeout above it. The worst case is two 30 s
 # kubectl calls (CONFIGARR_KUBECTL_TIMEOUT_S). The rest is the cold pull of both images, which
-# counts against the deadline too. The figure kept the margin the Kuma push needed until
+# counts against the deadline too. The figure kept the margin the retired push needed until
 # M6 batch B6b's Cutover-2. A deadline that fires before the
 # container starts fails the deploy.
 configarr_k8s_health_deadline_seconds: 420

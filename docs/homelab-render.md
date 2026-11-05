@@ -260,10 +260,6 @@ templates render in, so the renderer never restates one:
 - **Script checksums.** monitor-bridge and autofix-bridge hash their staged modules with
   `lookup('file', ..., rstrip=False) | hash('sha1')`. game-stats embeds its scripts in
   rendered ConfigMaps instead (#5444), so it computes no checksum in a task.
-- **`kuma_declarations`.** uptime-kuma's task renders `static-monitors.yaml.j2` and parses
-  its `stringData`. The template reads it through `default({})`, so a missing value would
-  still render, and a test holds the rendered index above 50 declarations, as the role's own
-  assert does.
 - **`janitorr_dry_run`**, which janitorr's task copies from `janitorr_k8s_dry_run`.
 
 `SET_FACTS` in the same module lists the roles and facts besides the content tags. A role
@@ -272,8 +268,7 @@ the context with the values as overrides, the precedence `set_fact` has over eve
 layer.
 
 Tests in `scripts/renderer/tests/` hold each derived value equal to the value
-ansible-core's `Templar` computes from the same expression and variables. `kuma_declarations`
-is the exception, because its render needs the repo's filter plugins.
+ansible-core's `Templar` computes from the same expression and variables.
 
 `lookup('template')` keeps the render's trailing newlines, as ansible-core's lookup does. The
 content tag hashes those bytes, so a lookup that stripped them gave every build a tag Ansible

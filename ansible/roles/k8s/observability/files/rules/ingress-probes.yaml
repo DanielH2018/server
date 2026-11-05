@@ -10,7 +10,7 @@
 groups:
   - name: ingress-probes
     rules:
-      # The ingress pager since M4's PR 5, which dropped `shadow` once PR 4 deleted Kuma's
+      # The ingress pager since M4's PR 5, which dropped `shadow` once PR 4 deleted the
       # generated ingress tiles. `for: 2m` at the job's 60s interval keeps the tiles'
       # three-strikes timing (interval 60, maxretries 2).
       - alert: IngressProbeFailedCritical
@@ -55,7 +55,7 @@ groups:
             series is back.
       # The exporter pager since M6's batch A3 Cutover-b. Every target at 0 at once means the
       # exporter itself is down or unreachable, not one ingress. The job's up series carry no
-      # `origin` label, so Kuma's Cluster Scrape Targets tile paged this until Cutover-a1 deleted
+      # `origin` label, so the Cluster Scrape Targets tile paged this until Cutover-a1 deleted
       # it. A single target at 0 is a failed scrape, which ScrapeTargetDown pages alone, and an
       # Alertmanager inhibit holds that page back while this one fires. Restores the 5-minute
       # critical page for a dead exporter that M4's PR 5 deferred to A3.

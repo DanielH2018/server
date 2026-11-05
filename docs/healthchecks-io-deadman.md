@@ -1,11 +1,12 @@
 # Healthchecks.io — the off-premises dead-man's switch
 
-Every heartbeat in this homelab pushes to Uptime Kuma, which runs on the cluster those
-heartbeats watch. A cluster or WAN outage therefore silences the push *and* the monitor
-waiting for it: the failure and the alarm share a failure domain, and nothing alerts.
+Every heartbeat in this homelab writes a verdict that Prometheus reads and Alertmanager pages.
+Both run on the cluster those heartbeats watch. A cluster or WAN outage therefore silences the
+verdict *and* the alert waiting for it: the failure and the alarm share a failure domain, and
+nothing alerts.
 
 Healthchecks.io closes exactly that hole. It is off-site, and it alerts on **silence** —
-the one signal an on-prem monitor structurally cannot produce. It does not replace Kuma;
+the one signal an on-prem monitor structurally cannot produce. It does not replace Alertmanager;
 it is a second destination for the handful of jobs whose silence actually matters.
 
 ## What is wired
@@ -37,7 +38,7 @@ and fires false alarms.
 These live only in the Healthchecks.io console; nothing in this repo can set them. Until
 2026-08-30 only three of the seven were written down anywhere, so the other four could not be
 verified against their crons at all. Set them to match this table. monitor-bridge's
-*Healthchecks.io Console Drift* tile compares the console against it every day (see *The
+`healthchecks_drift` check compares the console against it every day (see *The
 console drifts* below).
 
 The period or expression comes from the cron in the table above. A `*/10` minute cron is a
@@ -77,12 +78,13 @@ than a wider grace — see the boot-grace note under *Watching the spine itself*
 
 ## Watching the spine itself
 
-The job checks above all answer "did this job run and succeed." Nothing watches Kuma's own
-liveness, because every check pages from Alertmanager and a dead Kuma silences only its
-`Status Page Sync` tile. M6 batch B1 replaced the `uptime-kuma-alive` check with the `KumaDown`
+The job checks above all answer "did this job run and succeed." `alertmanager-watchdog` watches
+the pager itself (*Alertmanager's watcher* below). A *cluster* outage is caught off-site, because
+the pinging scripts go silent with it.
+
+**HISTORY —** M6 batch B1 replaced the `uptime-kuma-alive` check with the `KumaDown`
 rule, and M6's C-1a deleted that rule. `longhorn-backup-health.sh` used to carry its Kuma push's
-exit status to that slug, and the script no longer pushes or pings it. A *cluster* outage is
-caught off-site, because the pinging scripts go silent with it.
+exit status to that slug, and the script no longer pushes or pings it.
 
 ### The first run after a boot is skipped
 
@@ -112,9 +114,10 @@ lists it under `DAILY_TIMER_SCRIPTS` and keeps the arm in place. The rerun on a 
 sends `/fail` again each time, which healthchecks.io collapses into one alert, and the first
 `/success` after the fix clears it within 30 minutes rather than at the next day's slot.
 
-What it does not cover: Kuma accepting pushes while failing to *deliver* notifications. The
-`Discord Delivery` tile watches the Discord leg from inside Kuma, and the email tier is the
-second channel. A Kuma that accepts a push and then drops the alert still reads green here.
+What it does not cover: Alertmanager accepting an alert while failing to *deliver* it.
+`AlertmanagerNotificationsFailing` and `DiscordDeliveryFailing` watch the Discord leg from inside
+the cluster, and the `email` receiver is the second channel. An Alertmanager that accepts an alert
+and then drops it still reads green here.
 
 ### Alertmanager's watcher
 
@@ -141,7 +144,7 @@ minutes. The operator accepted the 30 minutes on 2026-10-12
 ## What leaves the house
 
 Healthchecks.io stores the ping body (first 100 kB per ping), so the body is the disclosure
-surface. Some checks send a generic string instead of their Kuma message, because theirs name
+surface. Some checks send a generic string instead of their full message, because theirs name
 internal infrastructure, and some send no body at all:
 
 | Check | Body sent off-site | Why |
@@ -155,7 +158,7 @@ internal infrastructure, and some send no body at all:
 | `alertmanager-watchdog` | `{"status": "firing"}` | The receiver's `payload` carries the alert's status alone, so no label, annotation or URL goes off-site. |
 | `weekly-reboot-<host>`, `<host>-docker-prune` | none | Status only. The ping discards curl's output, and the cron sends no body. |
 
-The withheld detail is still in Kuma, on the LAN. The off-site copy only has to carry *that*
+The withheld detail stays on the LAN, in the check's local log. The off-site copy only has to carry *that*
 something is wrong; the diagnosis is available as soon as you can reach the house.
 
 ## The ping key
@@ -166,9 +169,8 @@ someone hold your checks green, suppressing the alerts this mechanism exists to 
 is why it is not inlined into the heartbeat scripts.
 
 The `{{ sys_user }}`-run scripts are `0755` (their crons must execute them), so anything inlined
-in them is readable by every local account on daniel-box — which is already true of the Kuma push
-tokens sitting in them today. The ping key has a wider blast radius than a Kuma token (one
-spoofs a single monitor, the other spoofs every check in the project), so it lives in
+in them is readable by every local account on daniel-box. The ping key spoofs every check in the
+project, so it lives in
 `/etc/healthchecks/ping.env` at `0640 root:{{ sys_user }}` and is sourced at runtime. That
 covers every caller: `manifest-prune-check` and `registry-gc` run as root, the other two as
 `{{ sys_user }}`. Same shape as `/etc/renovate-notify/config.env`.
@@ -215,7 +217,7 @@ lock by hand for that playbook.
 The one time the whole cluster was down for hours, this path is the only one that recorded
 the outage as it happened. daniel-box powered off at 13:55:46 UTC and came back with no
 carrier on `eno1`; k3s crash-looped until the link returned at 20:10:39 (#1804, #1918).
-Kuma runs on that cluster and recorded only the 20:14→21:49 recovery. The flips below are the record
+Kuma ran on that cluster and recorded only the 20:14→21:49 recovery. The flips below are the record
 the Healthchecks.io API returns, read with `healthchecks_api_read_only_key`:
 
 | Check slug | Down | Up | Detection after power-off |
@@ -249,9 +251,9 @@ Nothing in the repo can set these values. Since #2566, monitor-bridge reads them
 `checks/healthchecks.py` calls `GET /api/v3/checks/` with `healthchecks_api_read_only_key` and
 compares every slug above against `monitor_bridge_healthchecks_expected`. It checks the
 schedule type, the Simple period or the Cron expression and timezone, and the grace. A
-difference or a missing slug turns the *Healthchecks.io Console Drift* tile DOWN, and the
-message names the slug and field. A clean read is cached for a day, and a red one is re-read
-every five minutes, so the tile clears one cycle after the console is fixed.
+difference or a missing slug turns the check down, `HealthchecksConsoleDrifted` pages, and the
+check's message names the slug and field. A clean read is cached for a day, and a red one is
+re-read every five minutes, so the alert clears one cycle after the console is fixed.
 
 That expectation list is a literal in monitor-bridge's defaults.
 `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py` holds it to the cron
@@ -279,14 +281,14 @@ catches by silence.
 
 ## What is deliberately not wired
 
-- **`gitops-deploy.service`** — the role documents "no Kuma pushing from the deployer" as a
-  decision: liveness is a `/var/lib/gitops-deploy/last_run` timestamp that monitor-bridge
-  reads. Adding a push here would reverse that decision, which is a separate call to make.
+- **`gitops-deploy.service`** — its liveness is a `/var/lib/gitops-deploy/last_run` timestamp
+  that monitor-bridge reads. An off-site ping here would be a second signal for the same fact,
+  which is a separate call to make.
 - **Longhorn's `daily-backup` / `weekly-backup-d*` CronJobs** — generated by Longhorn from its
   RecurringJob CRDs, not rendered by this repo, so there is no command to append to.
   `longhorn-backup-health` covers the same ground and covers it better: it asserts backup
   *freshness and coverage* rather than that a job ran.
-- **The other ~15 Kuma push sites.** Free-tier headroom is 20 checks, and the cadence table
+- **The other host checks.** Free-tier headroom is 20 checks, and the cadence table
   above lists the slugs in use; the limit is not the reason. An off-site check earns its slot only where the silence is both
-  invisible and consequential, and adding the rest would mostly duplicate what Kuma already
+  invisible and consequential, and adding the rest would mostly duplicate what Alertmanager already
   reports correctly whenever the cluster is up enough to have a problem worth reporting.

@@ -15,16 +15,15 @@ nut_host_upsd_host: "{{ '127.0.0.1' if inventory_hostname == ups_host else nut_h
 # The assert in tasks/main.yml proves reachability exactly once, at deploy. The two things
 # that would break it in between — the nut Service being
 # recreated with a different ClusterIP, or nut-monitor dying — are both invisible until the
-# power cut this chain exists for. The k8s "nut (upsd)" Kuma tile does not cover it: that probe
+# power cut this chain exists for. The k8s "nut (upsd)" probe does not cover it: that probe
 # runs from a POD and re-resolves Service DNS every cycle, while this host's upsmon connects
 # from the host netns to a ClusterIP frozen into /etc/nut/upsmon.conf at deploy time. A green
-# tile there says nothing about this path.
+# probe there says nothing about this path.
 nut_host_watchdog_armed: true
 
-# One value drives both the cron cadence and the Kuma tile's interval below, so a schedule
-# change cannot leave the tile with a grace period derived from the old one. The tile gets 2x
-# the cadence, which is one missed run of slack — the same ratio the k3s Longhorn Backup tile
-# uses (10 min cron, 1200 s interval).
+# One value drives both the timer cadence and the check's DEADLINE_S, so a schedule change
+# cannot leave the deadline derived from the old one. The deadline is 2x the cadence plus
+# 300 s, which is one missed run of slack (M3's rule).
 nut_host_watchdog_interval_minutes: 10
 
 # ── The packaged watchdog (H4.3b3) ──────────────────────────────────────────────

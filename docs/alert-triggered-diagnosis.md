@@ -12,9 +12,11 @@ Arming any such role is the operator's decision. This page decides nothing on it
 
 ## What was proposed
 
-Nothing starts a Claude session from an event. Sessions start from the phone
-(`claude-rc.service`), the daily Renovate timer, the weekly eval sweep and fan-out launches.
-A DOWN from Uptime Kuma or monitor-bridge starts nothing. The proposal was an "outer loop"
+When this note was written, nothing started a Claude session from an event. Sessions started
+from the phone (`claude-rc.service`), the daily Renovate timer, the weekly eval sweep and fan-out
+launches, and a DOWN from Uptime Kuma or monitor-bridge started nothing.
+`docs/claude-agent-user.md`, *Slice 2: the poller*, has what reads alerts on a timer since. The
+proposal was an "outer loop"
 agent (12-factor-agents, factor 11): an alert starts a bounded, read-only session, which posts
 a first diagnosis to Discord before the operator opens a session.
 
@@ -32,7 +34,7 @@ rebuilt DOWN episodes from Loki. M6's PR B-2 moved it onto Prometheus' `ALERTS`,
 days, so `--limit` and the Loki cap below no longer apply to it.
 
 `probe.py alerts` read the DOWN lines from two streams in the `loki-homelab` store:
-monitor-bridge's checks, and the host crons that push to Kuma through syslog. Loki keeps 744h
+monitor-bridge's checks, and the host crons that pushed to Kuma through syslog. Loki keeps 744h
 (`loki_homelab_retention` in `ansible/roles/k8s/loki-homelab/defaults/main.yml`), so **the
 issue's 90-day question cannot be answered from Loki at all.** A 90-day figure below is an
 extrapolation from 31 days.
@@ -136,9 +138,8 @@ each. The gates that make the spend small are also code a reviewer has to keep c
 
 ## The design, if it is ever built
 
-**Source: a pull timer, not a webhook.** Kuma's `discord` notification is its webhook
-provider (`docs/uptime-kuma-autokuma-record.md`), so a second webhook could post to a host
-listener. That adds an inbound port on daniel-box, triggered by text that includes alert
+**Source: a pull timer, not a webhook.** A second Alertmanager webhook receiver could post
+to a host listener. That adds an inbound port on daniel-box, triggered by text that includes alert
 messages. A host timer that runs `probe.py monitors` and `probe.py alerts` every few minutes
 needs no listener. It also matches the pull model of the GitOps deployer
 (`docs/adr/0010-pull-based-gitops-over-argo-and-flux.md`). A hook inside monitor-bridge is
@@ -174,7 +175,7 @@ The wrapper, not the session, posts the result to Discord, as the Renovate agent
 
 ## What it would retire
 
-Nothing. Kuma and monitor-bridge keep paging, because the diagnosis depends on their alerts.
+Nothing. Alertmanager keeps paging, because the diagnosis depends on its alerts.
 The phone host keeps running, because the operator still has to act on the diagnosis. No
 check's message gets shorter. Under the flat-complexity rule this alone decides the
 recommendation.

@@ -116,8 +116,8 @@ checks each gate suppresses.
   `indexers_down()` is unit-tested.)
 - **`gitops_alive`** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
   `gitops_deploy` deployer rewrites each non-crashing tick. `down` once it is older than
-  `GITOPS_MAX_AGE_MIN`, which means the deployer stalled or the host is down. The deployer does
-  not push to Kuma itself; see `ansible/roles/setup/gitops_deploy/CLAUDE.md`)
+  `GITOPS_MAX_AGE_MIN`, which means the deployer stalled or the host is down. See
+  `ansible/roles/setup/gitops_deploy/CLAUDE.md`)
 - **`gitops_status`** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`,
   `/gitops-state/contention_since`, `/gitops-state/manual_plane` **and
   `/gitops-state/behind_since`**. `down` while a rolled-back commit is held pending the operator
@@ -306,8 +306,8 @@ checks each gate suppresses.
   banned `10.42.0.1`, the node's pod-network gateway, and HA 403'd the kubelet probes arriving from
   it into a crash loop. The probes now exec curl to `127.0.0.1` and cannot be banned, which fixes
   the crash loop and makes a ban SILENT: HA keeps serving while whatever shares that source IP
-  stays locked out. This arm is the visibility half. It is folded into this monitor because a new
-  Kuma monitor needs a new push token in SOPS, and a ban is an HA fault. A ban wins the message and
+  stays locked out. This arm is the visibility half. It is folded into this check because a ban is an HA fault, and a new
+  Kuma monitor needed a new push token in SOPS when the arm landed. A ban wins the message and
   keeps the heartbeat's text after it. It **skips `down_streak`**, because a ban either happened in
   the window or did not, and a second cycle adds nothing.
   **It watches the ban EVENT, not the ban STATE.** `Banned IP` is logged once, at ban time, so the
@@ -316,9 +316,9 @@ checks each gate suppresses.
   restart (which logs nothing), is invisible. **A green `ha_heartbeat` means "no ban was issued in
   the last `HA_BAN_WINDOW`," not "no IP is banned."** That is the only signal available, because HA
   does not log its ongoing 403s to a banned peer and this pod cannot read HA's PVC. The durable
-  artifact is the **Discord notification** Kuma fires on the down transition, not the monitor's
-  colour. When one fires, read `/config/ip_bans.yaml` by hand rather than waiting for the monitor
-  to clear.
+  artifact is the **Discord notification** `HomeAssistantAutomationsStalled` sends when it fires,
+  not the alert's state. When one fires, read `/config/ip_bans.yaml` by hand rather than waiting
+  for the alert to clear.
   **`ha_heartbeat` is deliberately not gated on Loki**: a Loki gate would suppress the WHOLE check
   during a Loki outage, which would blind the real heartbeat. The ban arm fails open on a Loki
   error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is unit-tested.)
@@ -382,7 +382,7 @@ checks each gate suppresses.
   a row names at most one gate, and a gate row has none of its own. Two tiles
   for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
   **The HOST crons are covered by a separate half** (#2793). `release-staleness-check`,
-  `docs-refresh` and, until M6 batch B3's Cutover-2, `github-ruleset-drift` run on the host and push their own tiles, so this
+  `docs-refresh` and `github-ruleset-drift` run on the host and write their own textfile verdicts, so this
   gate structurally cannot suppress them. `crowdsec-home-allowlist` was a fourth until H2.4c moved
   it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
   the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.
@@ -391,12 +391,12 @@ checks each gate suppresses.
   the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider answers.
   The probe classifies, not the error text: parsing curl exit codes and git stderr across
   heterogeneous crons is the "green and inert" shape that library's header records paying for
-  twice, and a GitHub 403 while the link is up makes the probe succeed, so that tile still pages.
+  twice, and a GitHub 403 while the link is up makes the probe succeed, so that alert still pages.
   The endpoint list is `ansible/inventory/group_vars/all.yml:wan_probe_urls`, pinned equal to this
   gate's `WAN_PROBE_DEFAULT` by a test, because two halves disagreeing about what "the internet"
   means would leave a single-endpoint outage reported by nothing. The one wrong case is an
-  HTTP-level failure coinciding with a WAN outage, reported as a skip; both tiles would have been
-  red for one root cause anyway.
+  HTTP-level failure coinciding with a WAN outage, reported as a skip; both alerts would have
+  fired for one root cause anyway.
   `r2_usage` and `healthchecks_drift` left `startup_grace` to join this set, as `pi_pressure` did
   when it gained the Prometheus gate (#2004): the two sets must stay disjoint so a graced check
   reaches the evaluation path every cycle, and the gate covers the post-boot transient the grace
@@ -414,35 +414,35 @@ checks each gate suppresses.
   the Longhorn `Backup` CRs that locate the volume backups, so a restore nobody can prove puts the
   rest of the recovery chain at risk. No gate and no streak: a file read has no upstream to wait
   on, and a stale stamp does not heal by itself. Runbook: `k3s-etcd-restore`.)
-- **`discord`** (GET-verifies **all five** Discord notification webhooks: Kuma's own
+- **`discord`** (GET-verifies **all five** Discord notification webhooks: Alertmanager's
   `monitor_discord_webhook_url`; CrowdSec's `crowdsec_discord_webhook_url`, which CrowdSec posts
-  ban alerts to *directly*, not via Kuma; `gitops_deploy_discord_webhook`, which delivers the
+  ban alerts to *directly*, not via Alertmanager; `gitops_deploy_discord_webhook`, which delivers the
   `gitops-deploy` rollback alert AND every `renovate_notify` digest (the Renovate Notifier — Alive
   marker greens even when the POST fails); `arr_discord_webhook_url`, which Sonarr/Radarr/Prowlarr
   POST their own onHealthIssue alerts to through in-app Discord Connect (the config lives in the
   app DBs, and the Arr Queue check covers stuck downloads, not indexer or download-client
   health); and `healthchecks_discord_webhook_url`, the retired self-hosted healthchecks app's
   check-down/up webhook (#2806), which stays verified because nothing in the repo records whether
-  the healthchecks.io account's own integrations post to it. The latter four have no Kuma
-  backstop. `down` if ANY is invalid, naming which; each empty URL is skipped. A rotated, revoked
-  or deleted webhook makes those alerts fail silently while every monitor stays green in the Kuma
-  UI. No other monitor, not even the off-box UptimeRobot host dead-man, exercises this delivery
+  the healthchecks.io account's own integrations post to it. The latter four have no
+  Alertmanager backstop. `down` if ANY is invalid, naming which; each empty URL is skipped. A
+  rotated, revoked or deleted webhook makes those alerts fail silently while every other check
+  stays green. No other monitor, not even the off-box UptimeRobot host dead-man, exercises this delivery
   hop. A webhook GET returns Discord's metadata (200) when valid and 404 once gone, and posts no
   message, unlike a test POST.
-  **It also probes the alert-EMAIL second channel** (`email_backstop`): the Gmail SMTP
-  notification attached only to THIS monitor as the escape hatch when the Discord webhook is dead.
-  The probe is a throttled SMTP login with the creds Kuma uses (`SMTP_USER`/`SMTP_PASSWORD`), so a
-  revoked app-password flips this monitor down and still pages over the working Discord channel.
+  **It also probes the alert-EMAIL second channel** (`email_backstop`): Alertmanager's `email`
+  receiver takes every `severity="critical"` alert beside Discord, which is the escape hatch when
+  the Discord webhook is dead. The probe is a throttled SMTP login with the app password that
+  receiver uses (`SMTP_USER`/`SMTP_PASSWORD`), so a revoked app-password flips this check down and
+  still pages over the working Discord channel.
   It runs at most once per `EMAIL_PROBE_INTERVAL_S` (6h, because Gmail flags frequent `AUTH`
   commands): a success is cached and a failure re-probes every cycle. Empty `SMTP_PASSWORD`
   disables that probe.
   The webhooks and SMTP reach the public internet, so `DISCORD_CONSECUTIVE` (2) adds the streak
-  hysteresis of the HA heartbeat: one transient non-200 or network failure pushes `up` with a "down
+  hysteresis of the HA heartbeat: one transient non-200 or network failure reads `up` with a "down
   streak n/N" `msg`, and the second straight failure pages. Empty `DISCORD_WEBHOOK_URL` disables
   the check (stays up). The check verifies that the webhook is DELIVERABLE (it catches a rotated or
-  revoked URL). It does not assert that Kuma still has the notification *attached* to each
-  monitor, which AutoKuma re-applies on every deploy through the `kuma()` macro's
-  `notification_name_list`. Pure `discord_webhook_ok()`, `email_backstop()`'s throttle and the
+  revoked URL). It does not assert that a route sends to the webhook:
+  `ansible/tests/services/test_alertmanager_routing.py` walks the routing tree. Pure `discord_webhook_ok()`, `email_backstop()`'s throttle and the
   streak wrapper are unit-tested.)
 
 ## Retired and moved checks
@@ -460,13 +460,15 @@ and the scrape-job rules already report an unreachable Prometheus. `host_package
 exporter holds it beside `ScrapeTargetDown`. #1359 and #3788 are the history of the gate's
 member list.
 
-Checks that left `CHECKS` push their monitors from elsewhere, with the same tokens, so each
-monitor keeps its history. The direct pushers are the `pi-peer-backup` k8s CronJob (WG Pi Peer
+**HISTORY —** Checks that left `CHECKS` pushed their monitors from elsewhere, with the same
+tokens, so each monitor kept its history. The direct pushers were the `pi-peer-backup` k8s CronJob (WG Pi Peer
 Backup), the `crowdsec-jobs` sidecar in the CrowdSec pod (CrowdSec Home Allowlist, CrowdSec
 Remote Allowlist and CrowdSec AppSec), the `fake_remux` setup role's
 `fake-remux-health.sh` (Fake Remux Scan / Replace), `renovate-notify`'s `ExecStartPost`
 (Renovate Notifier — Alive), and the configarr and janitorr roles' health crons (Configarr
-Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has no successor.
+Sync, Janitorr Errors).
+
+Disk Autoprune retired with the Docker daemon and has no successor.
 Scrape Targets, Cluster Scrape Targets and Log Shipper Dropped Entries (M6 batch A3) retired
 into the `scrape-targets` and `log-pipeline` rule groups in observability, and their tiles,
 rows and env keys are gone. The numbers those groups carry are pinned in
@@ -550,28 +552,31 @@ cannot see it; `loki_prometheus_rule_*` and the ruler's notification counters ar
 Cluster Prometheus Reachable retired as a gate (#2825), and its four members are in
 the `prometheus` gate's members. Each check's retirement note is in the repository history.
 
-## Push-monitor mechanics, and what set each number
+## Check mechanics, and what set each number
 
 - The pod-count, target and route checks use `prom_vector()` (keeps series labels) so the
   alert names *which* container / target / route / certificate is failing; the others use
   `prom_scalar()`.
-- An explicit `down` gives a fast, descriptive alert. The push monitor's heartbeat interval
-  (`uptime_kuma_k8s_bridge_push_interval`, 1200 s = 4x the loop) is the backstop for "the bridge
-  itself died", the same dead-man's-switch idea as `cloudflare-ddns` and the
-  `kuma(..., monitor_type='push')` macro. At 1200 s the monitor absorbs three missed pushes, so a
-  host restart does not page. At 600 s one restart (8m35s on 2026-08-30) flipped nine bridge-fed
-  tiles DOWN for an event that had already ended. The knob is the interval and not `max_retries`,
-  which buys the same tolerance and costs the descriptive message (next bullet).
-- **All push monitors set `max_retries=0`.** With retries, Kuma parks a pushed `down` in PENDING,
-  and the 60 s watchdog, which only `up` pushes satisfy, crosses `maxretries` first. Every DOWN
-  event then reads "No heartbeat in the time window" instead of the check's named-offender
-  `msg`. With zero retries the bridge's own push flips the state, so the descriptive `msg` lands
-  in the event and the Discord notification. A dead bridge therefore pages after one missed
-  heartbeat window, which is the dead-man's switch working.
-  **Post-boot flapping is fixed by widening the window, never by adding retries.** A wider window
-  costs only detection latency, while a retry hands the Discord message back to the watchdog.
-- **`startup_grace` holds the reach-out checks that have no reachability gate and no per-check
-  hysteresis**: **n8n Prod Workflows**, **Bazarr Health**, **Prowlarr Indexers** and **SMART Data /
+- **`startup_grace` rows hold nothing in the bridge.** Their rules carry `for: 10m`, which rides
+  out the weekly reboot.
+- **HISTORY — the Kuma push window.** An explicit `down` gave a fast, descriptive alert. The push
+  monitor's heartbeat interval (`uptime_kuma_k8s_bridge_push_interval`, 1200 s = 4x the loop) was
+  the backstop for "the bridge itself died," the same dead-man's-switch idea as `cloudflare-ddns`
+  and the `kuma(..., monitor_type='push')` macro. At 1200 s the monitor absorbed three missed
+  pushes, so a host restart did not page. At 600 s one restart (8m35s on 2026-08-30) flipped nine
+  bridge-fed tiles DOWN for an event that had already ended. The knob was the interval and not
+  `max_retries`, which bought the same tolerance and cost the descriptive message (next bullet).
+- **HISTORY — all push monitors set `max_retries=0`.** With retries, Kuma parked a pushed `down`
+  in PENDING, and the 60 s watchdog, which only `up` pushes satisfied, crossed `maxretries` first.
+  Every DOWN event then read "No heartbeat in the time window" instead of the check's
+  named-offender `msg`. With zero retries the bridge's own push flipped the state, so the
+  descriptive `msg` landed in the event and the Discord notification. A dead bridge therefore paged
+  after one missed heartbeat window, which was the dead-man's switch working.
+  **Post-boot flapping was fixed by widening the window, never by adding retries.** A wider window
+  cost only detection latency, while a retry handed the Discord message back to the watchdog.
+- **HISTORY — `startup_grace` in the bridge.** It held the reach-out checks that have no
+  reachability gate and no per-check
+  hysteresis: **n8n Prod Workflows**, **Bazarr Health**, **Prowlarr Indexers** and **SMART Data /
   Health**. It is a hysteresis, not a suppression, and it is the peer of
   the `prometheus` gate's members. The cause is the weekly Sunday 07:30 host reboot: the
   bridge's first cycle runs before those heavy apps finish starting, so each un-graced

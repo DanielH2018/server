@@ -1,10 +1,10 @@
-# The five Kuma-pushing producers that run in pods: the crowdsec-jobs sidecar's three jobs, and the
+# The five check producers that run in pods: the crowdsec-jobs sidecar's three jobs, and the
 # configarr-health and janitorr-health CronJobs. Plain YAML, never Jinja: prometheus-rules.yaml.j2
 # carries this file verbatim. The design is docs/target-architecture/monitoring/m6-retire-kuma.md,
 # batch B6b, and the operator's ruling of 2026-10-23 that a pod exports its verdict through a
 # metrics endpoint rather than a textfile or a Pushgateway.
 #
-# THESE RULES PAGE SINCE B6b's CUTOVER-1b. Each one ports the Kuma tile of a producer, and
+# THESE RULES PAGE SINCE B6b's CUTOVER-1b. Each one ports the tile of a producer, and
 # Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule back.
 #
 # TWO SOURCES.
@@ -21,7 +21,7 @@
 # test_pod_producer_rule_literals.py pins the two CronJob limits and the ConfigMap names to the
 # roles' defaults (M1 convention 1).
 #
-# NO `for:` ON A FAILED RULE. Kuma's tiles have max_retries 0, so one down push pages today, and a
+# NO `for:` ON A FAILED RULE. The retired tiles had max_retries 0, so one down push paged, and a
 # run that fails is a verdict, not a sample. The stale and absent rules hold 5m or 10m, because a
 # restart or a rolled kube-state-metrics leaves a gap that is not a fault.
 groups:

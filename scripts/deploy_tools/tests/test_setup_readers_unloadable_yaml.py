@@ -1,7 +1,8 @@
 """The setup-role readers answer every unloadable YAML as they answer a syntax error (#7297).
 
 Each case compares a reader's answer on an unloadable text with its answer on a syntax error,
-so the syntax-error behaviour is the oracle and no expected value is copied into this file.
+so the syntax-error behaviour is the oracle and no expected value is copied into this file. A
+`block:` whose body is not a list does load, so those cases state their answer instead (#7305).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_setup_readers_unloadable_yaml.py
 """
@@ -132,6 +133,48 @@ def test_a_recursive_alias_reads_as_a_syntax_error(tmp_path, reader):
     assert _answer(reader, tmp_path / "alias", RECURSIVE_ALIAS) == _answer(
         reader, tmp_path / "syntax", SYNTAX_ERROR
     )
+
+
+def _block(body: str) -> str:
+    return f"- block:{body}\n  when: block_gate\n"
+
+
+NON_LIST_BODIES = pytest.mark.parametrize(
+    "body", ["", " 5"], ids=["empty_block", "number_block"]
+)
+
+
+@NON_LIST_BODIES
+def test_task_chains_reads_a_non_list_block_as_holding_no_tasks(tmp_path, body):
+    leaf = "- name: Leaf\n  ansible.builtin.debug: {}\n  when: leaf_gate\n"
+    role = _role(tmp_path, _block(body) + leaf)
+    assert chains.task_chains(role, lambda _task, _file: True) == [("leaf_gate",)]
+
+
+def test_import_chains_reads_a_number_block_as_holding_no_tasks(tmp_path):
+    role = _role(
+        tmp_path,
+        _block(" 5")
+        + "- ansible.builtin.import_tasks: other.yml\n  when: import_gate\n",
+    )
+    assert chains._import_chains(role, "other.yml", "main.yml") == [("import_gate",)]
+
+
+def test_changed_task_texts_reads_a_number_block_as_holding_no_tasks():
+    changed = chains.changed_task_texts(_block(" 5"), _block(" 5") + LOADABLE)
+    assert changed is not None and len(changed) == 1
+    assert "Say something" in next(iter(changed))
+
+
+@NON_LIST_BODIES
+def test_land_reach_keeps_the_role_reach_on_a_role_of_one_non_list_block(
+    tmp_path, body
+):
+    args = _gate_tree(tmp_path / "tree", _block(body))
+    every_host = frozenset(land_reach._HOSTS)
+    path = "ansible/roles/setup/demo/files/shipped.j2"
+    assert land_reach.setup_role_hosts("demo", *args) == every_host
+    assert land_reach.setup_shipped_file_hosts("demo", path, *args) == every_host
 
 
 def _playbook_reach(root: Path, text: str):

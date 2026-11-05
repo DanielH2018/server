@@ -570,7 +570,7 @@ The build runs in slices, and each slice is exercised before the next starts:
 | 2 | The polling timer, first in a shadow mode that only logs what it would start | Built, in shadow mode |
 | 3 | The `claude-restart@` broker and its allowlist | Planned |
 | 4 | A fix phase that opens a PR and lands it through `homelab-claude-land@` | Planned. It needs the bot account visible again (#5126). |
-| 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retires Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
+| 5 | A weekly summary | Planned. The Kuma alive push it also planned is dropped, because M6 retired Kuma and `ClaudeTriagePollNotReporting` already pages a poller that stopped. |
 
 ### Slice 1: one run, started by hand
 
@@ -627,7 +627,7 @@ minutes.
 The code is root-owned under `/opt/claude-triage`, like the runner's.
 
 - **It reads the firing `ALERTS` vector**, without `Watchdog`, shadow and drill alerts, and
-  Prometheus's own start time. It has no Kuma source (M6's B-10), because every Kuma pager has
+  Prometheus's own start time. It has no Kuma source (M6's B-10), because every Kuma pager had
   an `ALERTS` rule. Prometheus publishes its port
   on loopback only on the node it runs on, so the poller tries loopback, then the pinned
   ClusterIP `observability_prometheus_cluster_ip`. A refused connection on loopback is the

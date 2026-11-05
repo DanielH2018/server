@@ -445,12 +445,11 @@ class TestServing:
     """End-to-end over a real socket — the handler wiring is where a route typos itself."""
 
     @pytest.fixture
-    def client(self, root, monkeypatch):
+    def client(self, root):
         import threading
         from http.client import HTTPConnection
         from http.server import ThreadingHTTPServer
 
-        monkeypatch.setattr(srv, "ROOT", root)
         srv.Handler.cache = srv.IndexCache(root)
         server = ThreadingHTTPServer(("127.0.0.1", 0), srv.Handler)
         # shutdown() blocks until serve_forever notices, which it does once per poll interval —

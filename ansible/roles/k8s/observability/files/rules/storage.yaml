@@ -6,7 +6,7 @@
 # carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, batch A5.
 #
-# These rules page since A5's Cutover-b. They ran with `shadow: "true"` beside the Kuma tiles of
+# These rules page since A5's Cutover-b. They ran with `shadow: "true"` beside the retired tiles of
 # the rows they port until then. All ten are critical, so Discord and email.
 #
 # NO INHIBIT. PVCFreeFloorUnmonitored and PVCCoverageShortfall fire beside ScrapeTargetDown when

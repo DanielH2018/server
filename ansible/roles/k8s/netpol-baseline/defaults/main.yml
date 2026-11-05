@@ -44,7 +44,7 @@ netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
 # networkpolicy-traefik.yaml.j2. Cloudflare's published ranges, so a public `Host(x.<domain>)`
 # is reachable only through Cloudflare's edge; the LAN and the WireGuard client range, which
 # reach the `.local.` names direct; and the whole pod CIDR, because in-cluster callers of a
-# `.local.` route (the Kuma prober, monitor-bridge, homepage's widgets, ~14 roles) reach the
+# `.local.` route (monitor-bridge, homepage's widgets, ~14 roles) reach the
 # VIP as their own 10.42.x.y address. Composed here rather than in the template so a test can
 # read the list by name and a fifth source is a one-line change.
 #
@@ -127,7 +127,7 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 #   port    — the POD port, from the target's own NetworkPolicy `port:`. A dialled row may omit
 #             it when `service` names a containers_list entry; the Job then reads the entry's
 #             `port` through `entry_port`, so the row follows the entry rather than copying it
-#             (uptime-kuma's, #3867). The lookup sits in the template because role defaults
+#             (#3867). The lookup sits in the template because role defaults
 #             resolve without this repo's filter plugins in the render guards.
 #   service_port — the port the leg dials, for a Service that does NOT map its port to the pod
 #             port 1:1. Absent on every row whose Service does, and the leg then dials `port`.
@@ -155,8 +155,7 @@ netpol_baseline_obs_node_cidrs: "{{ k3s_cni0_gateways + k3s_flannel_node_ips }}"
 # (#3848). Its `expect: open` leg opens a TCP connection to :7777, and on 1.4.5.7 a bare TCP
 # connect can crash the server (#822). Scaling to 1 is only the first step of #822's restore
 # checklist, so a row that followed the replica count would dial a server that is not yet safe
-# to dial, on every netpol-baseline deploy. Add the row once the image is past 1.4.5.7, the same
-# condition that restores the Kuma port monitor:
+# to dial, on every netpol-baseline deploy. Add the row once the image is past 1.4.5.7:
 # `{service: terraria, plane: homelab, port: 7777, expect: open, policy: networkpolicy-terraria.yaml.j2}`.
 # `ansible/tests/k8s/test_netpol_probe_targets.py` fails if the row is present while the count is 0.
 netpol_baseline_probe_targets:

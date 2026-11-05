@@ -123,7 +123,8 @@ authenticated is the pass.
 Authelia used the **file** notifier until 2026-09-09, which put identity-verification codes in
 `/config/notification.txt` inside the pod and made every password reset an operator task. It
 now uses the SMTP notifier against Gmail on `submissions://smtp.gmail.com:465`, authenticating
-with `smtp_notify_app_password` — the same app password Uptime Kuma and monitor-bridge use.
+with `smtp_notify_app_password` — the same app password Alertmanager's `email` receiver and
+monitor-bridge use.
 Codes go to the operator's inbox; nothing needs `exec`.
 
 **`disable_startup_check: true` is deliberate, and it belongs to `notifier`, not to
@@ -131,8 +132,8 @@ Codes go to the operator's inbox; nothing needs `exec`.
 fails. This portal is the forward-auth gate in front of most public routes and rolls under
 `Recreate`, so a Gmail blip would take SSO down for the fleet — including the tools to fix
 it — to protect a mail nobody is waiting on. The credential is not unwatched: monitor-bridge's
-`email_backstop` re-authenticates it on a throttle and pages through Uptime Kuma. The
-`DECIDED:` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the
+`email_backstop` re-authenticates it on a throttle, and `DiscordDeliveryFailing` pages a
+failure. The `DECIDED:` marker sits at the line; `ansible/tests/services/test_smtp_wiring.py` holds the
 nesting, because one level deeper is valid YAML that renders and lints clean and then fails to
 boot.
 

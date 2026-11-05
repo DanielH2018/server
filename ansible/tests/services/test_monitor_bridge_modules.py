@@ -16,6 +16,7 @@ the estate would go quiet rather than loud.
 The list is deliberately explicit rather than a `files/*.py` glob: nothing on disk stops a
 future test file from landing in `files/` instead of the sibling `tests/` directory, and if
 one did, it must not reach the image. This test is what keeps the explicit list honest.
+`CHECKOUT_ONLY` names the modules that stay off the list, and no shipped module may import one.
 
 A module is identified by its dotted path under `files/` (`bridge/config.py` is
 `bridge.config`), and the ship list carries paths relative to `files/`, so the census sees a
@@ -42,6 +43,8 @@ ROLE = REPO / "ansible" / "roles" / "k8s" / "monitor-bridge"
 FILES = ROLE / "files"
 TESTS = ROLE / "tests"
 ENTRYPOINT = "cli.py"
+# The runbook gates import these from the checkout, and the pod never receives them.
+CHECKOUT_ONLY = frozenset({"longhorn_robustness.py"})
 
 
 def _ship_list():
@@ -50,14 +53,37 @@ def _ship_list():
 
 
 def _runtime_modules():
-    """Every production .py under files/, as a path relative to files/, at any depth."""
+    """Every production .py the pod needs, as a path relative to files/, at any depth."""
+    on_disk = {p.relative_to(FILES).as_posix() for p in python_modules(FILES).values()}
+    return sorted(on_disk - CHECKOUT_ONLY)
+
+
+def _shipped_importers(shipped, checkout_only, root):
+    """The modules in `shipped` that import a module in `checkout_only`, which crashes the pod."""
+    ids = {module_id(root / m, root) for m in checkout_only}
     return sorted(
-        p.relative_to(FILES).as_posix() for p in python_modules(FILES).values()
+        m
+        for m in shipped
+        if imported_module_ids(ast.parse((root / m).read_text()), ids)
     )
 
 
 def test_ship_list_matches_the_runtime_modules_on_disk():
     assert sorted(_ship_list()) == _runtime_modules()
+
+
+def test_no_shipped_module_imports_a_checkout_only_module_is_clean():
+    missing = {m for m in CHECKOUT_ONLY if not (FILES / m).is_file()}
+    assert not missing, f"CHECKOUT_ONLY names modules not in files/: {sorted(missing)}"
+    assert _shipped_importers(_ship_list(), CHECKOUT_ONLY, FILES) == []
+
+
+def test_shipped_module_importing_a_checkout_only_module_is_flagged(tmp_path):
+    (tmp_path / "local_only.py").write_text("X = 1\n")
+    (tmp_path / "bad.py").write_text("def f():\n    from local_only import X\n")
+    (tmp_path / "good.py").write_text("import json\n")
+    importers = _shipped_importers(["bad.py", "good.py"], {"local_only.py"}, tmp_path)
+    assert importers == ["bad.py"]
 
 
 def test_ship_list_carries_the_entrypoint():

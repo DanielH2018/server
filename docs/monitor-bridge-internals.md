@@ -44,9 +44,9 @@ The rules below shaped those memberships.
 
 ## Exporter plumbing
 
-- **The bridge pushes nothing to Uptime Kuma.** M6 batch A6's Cutover-2 deleted the push path,
-  and the `KUMA_PUSH_*` env keys. `uptime_kuma_k8s_bridge_push_interval` has no template
-  reader left, and C-1 deletes it with the uptime-kuma role. A6-9 retired the 20
+- **HISTORY — the bridge's Kuma push.** M6 batch A6's Cutover-2 deleted the push path,
+  and the `KUMA_PUSH_*` env keys. `uptime_kuma_k8s_bridge_push_interval` went with the uptime-kuma
+  role. A6-9 retired the 20
   `monitor_bridge_*_push_token` keys and deleted the pending-retirement allowance.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
@@ -108,7 +108,7 @@ The rules below shaped those memberships.
 | `gitops_markers.py`, `gitops_ledger.py`, `gitops_hold.py` | generated verbatim copies of the deployer's marker parsers, written by `scripts/dev/gen_gitops_markers.py` (edit the source under `roles/setup/gitops_deploy/files/`, never the copy). `gitops_markers.py` holds the line-format markers, `gitops_ledger.py` the `owed` ledger and tick receipt, and `gitops_hold.py` the `DeployerSnapshot` that `check_gitops_status` reads every marker through |
 | `deploy_pipeline.py` | the deploy-pipeline exporter: `collect(cfg, src, now)` reads `promote`'s state with three `api.github.com` GETs and two `ghcr.io` GETs into four `homelab_deploy_*` gauges, adds `homelab_deploy_reboot_window_active` from the `WEEKLY_REBOOT_*` schedule, and `Exposition` serves them on `DEPLOY_PIPELINE_PORT` from a daemon thread. `cli.main()` starts the listener and calls `refresh` after each cycle |
 | `verdict_export.py` | the check exporter: `CheckExposition` (a `deploy_pipeline.Exposition` on its own port, `CHECK_EXPORTER_PORT`) serves `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per row and `homelab_check_rows` for the table. `check.run_once` records each row's verdict through `export`; `cli.main()` sets the row count from `check_table.CHECKS` |
-| `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Import-free, because `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` imports the same file from the checkout to judge the CRs (#3668) |
+| `longhorn_robustness.py` | `SAFE_ROBUSTNESS` and `unsafe_volumes` — which Longhorn robustness states are lost redundancy. Checkout-only: it does not ship in the pod, and `scripts/deploy_tools/runbook_gates_lib/gate_runner.py` imports it from the checkout to judge the CRs (#3668) |
 | `bridge/types.py` | `PushCheck`, `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
 | `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `host_thermal` (Scrutiny), `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `wan`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py` and `gitops_ledger.py`, the generated copies of the deployer's modules; the second reads the `owed` ledger's `manual_plane`, `k8s_deferred` and `hold_plane` classes. `check_gitops_status` reads every marker it judges through `gitops_hold.DeployerSnapshot`, the third generated copy. `host_edge`'s entry points take the probe function as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `PVC_EXCLUDE` stays in `config.py` because a repo test greps for it by text |

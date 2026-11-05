@@ -60,8 +60,8 @@ FILTER_PLUGINS = ANSIBLE / "filter_plugins"
 # deploy_logic.py lives in the role that deploys it, so a script that has to agree with the
 # deployer imports it from here rather than carrying a second derivation.
 GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
-# `longhorn_robustness.py` ships in monitor-bridge's pod, so its one copy lives in that role's
-# `files/`; the runbook gates import it from here (#3668).
+# `longhorn_robustness.py`'s one copy lives in monitor-bridge's `files/` without shipping in its
+# pod; the runbook gates import it from here (#3668).
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
 # `host_lib.py` and `ci_verdict.py`, the modules the host packages and the setup
 # roles ship beside a host script (H7.2e moved them out of `setup/common/files/`). A tool that

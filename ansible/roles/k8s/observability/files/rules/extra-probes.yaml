@@ -1,9 +1,9 @@
-# The probes that replace Kuma's hand-written non-push tiles and the Pi's port arm, read from
+# The probes that replaced the retired hand-written non-push tiles and the Pi's port arm, read from
 # the `blackbox-extra` and `blackbox-pi-ports` scrape jobs. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, "B0, B5, B7 and B8".
 #
-# THESE RULES PAGE since B8's Cutover-b. They ran with shadow="true" beside Kuma's 14 hand-written
+# THESE RULES PAGE since B8's Cutover-b. They ran with shadow="true" beside 14 hand-written
 # tiles and monitor-bridge's `pi_pressure` row until then. The 14 tiles are the 12 that became a
 # probe here, the Pi ping that became `PiHostDown`, and Loki's /ready, which ScrapeTargetDown
 # (service loki-homelab) covers. ExtraProbeFailedCritical is critical, so Discord and email; the
@@ -31,7 +31,7 @@
 # sat inside a check that EXPORTER_DEPENDENT["node-pi"] suppressed while the Pi's exporter was
 # down, so a dead Pi paged as the host and not once per port. The inhibit has no `equal` list:
 # PiHostDown carries the exporter's `instance` and PiPortDead the port's, and the estate has one
-# Pi. wg-easy's ExtraProbeFailed is not held, as Kuma's WG Easy tile paged beside the ping tile.
+# Pi. wg-easy's ExtraProbeFailed is not held, as the retired WG Easy tile paged beside the ping tile.
 #
 # The per-target rules carry no literal `service`. Each series takes it from the scrape target
 # that `prometheus.yaml.j2` renders per probe, and scripts/validate/alert_rules.py accepts that
@@ -41,7 +41,7 @@ groups:
   - name: extra-probes
     rules:
       # `for: 2m` at the job's 60s interval keeps the tiles' three-strikes timing (interval 60,
-      # maxretries 2). The critical tier is the edge all-clear, which Kuma tags critical, and the
+      # maxretries 2). The critical tier is the edge all-clear, which its retired tile tagged critical, and the
       # mosquitto and pihole probes while their entries are home-critical.
       - alert: ExtraProbeFailedCritical
         expr: probe_success{job="blackbox-extra", page_tier="critical"} == 0
@@ -95,7 +95,7 @@ groups:
             node_exporter unit is down. Ping the host, then read the unit with `ssh daniel-pi
             systemctl status node_exporter`.
       # This family's zero-series alert. A job dropped from prometheus.yml leaves every rule
-      # above evaluating to nothing, and no Kuma tile watches the new jobs, so this pages
+      # above evaluating to nothing, and no other check watches these jobs, so this pages
       # without a shadow label.
       - alert: ExtraProbesMissing
         expr: absent(up{job="blackbox-extra"}) or absent(up{job="blackbox-pi-ports"})

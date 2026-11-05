@@ -227,11 +227,19 @@ def _gates_in(
             found.extend(imported or [])
         elif "block" in task:
             found.extend(
-                _gates_in(task["block"], role_dir, keep, task_file, chain, importers)
+                _gates_in(
+                    _block_body(task), role_dir, keep, task_file, chain, importers
+                )
             )
         elif keep(task, task_file):
             found.append(chain)
     return found
+
+
+def _block_body(task: dict) -> list:
+    """The tasks under `task`'s `block:`, or none when its body is not a list."""
+    body = task["block"]
+    return body if isinstance(body, list) else []
 
 
 VARS_DIRS = ("defaults", "vars")
@@ -538,7 +546,7 @@ def _imports_in(
                 found.extend(_import_chains(role_dir, target, name, chain, importers))
         elif "block" in task:
             found.extend(
-                _imports_in(task["block"] or [], role_dir, target, chain, importers)
+                _imports_in(_block_body(task), role_dir, target, chain, importers)
             )
     return found
 
@@ -603,7 +611,7 @@ def _split_leaves(tasks) -> tuple[list[str], list[str]]:
             frames.append(task_text(task, sort_keys=True))
         elif "block" in task:
             frames.append(task_text({k: v for k, v in task.items() if k != "block"}))
-            sub_leaves, sub_frames = _split_leaves(task["block"] or [])
+            sub_leaves, sub_frames = _split_leaves(_block_body(task))
             leaves += sub_leaves
             frames += sub_frames
         else:

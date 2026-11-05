@@ -27,7 +27,7 @@ groups:
             prometheus.yml or its target was renamed. No rule that reads the homelab Loki's
             metrics can fire until the series is back.
       # Each evaluation is a Loki query, so this also catches a Loki that answers its scrape
-      # but fails its queries. Kuma's Loki Reachable and Loki Log Ingestion tiles are gone
+      # but fails its queries. The Loki Reachable and Loki Log Ingestion tiles are gone
       # (M5's PR 4a), so this rule is that fault's pager. A one-off failure
       # holds the 10m increase above zero for 10 minutes, less than the 15m hold, so only a
       # recurring failure fires.
@@ -71,7 +71,7 @@ groups:
             in 10 minutes, or its rule_group series is gone. Read the loki-homelab pod's log for
             the ruler, and compare `probe.py metric loki_prometheus_rule_group_rules` with the
             rule_group this alert selects.
-      # Pages: no Kuma tile reads the ruler's sends. Loki v3.7.8 vendors Prometheus's notifier,
+      # Pages: no other check reads the ruler's sends. Loki v3.7.8 vendors Prometheus's notifier,
       # whose sendLoop.sendAll adds the batch's alert count to the error counter on each
       # failed send, so one refused batch steps it by however many alerts were firing. A threshold on its
       # increase cannot tell one refused batch of four alerts from a broken path with one rule
