@@ -3,6 +3,8 @@ services:
   - adaptive_lighting.apply
   - adaptive_lighting.change_switch_settings
   - adaptive_lighting.set_manual_control
+  - ai_task.clear_images
+  - ai_task.evaluate
   - ai_task.generate_data
   - ai_task.generate_image
   - alarm_control_panel.alarm_arm_away
@@ -77,6 +79,7 @@ services:
   - file.read_file
   - frontend.reload_themes
   - frontend.set_theme
+  - google_assistant.reload
   - google_assistant.request_sync
   - group.reload
   - group.remove
@@ -125,6 +128,7 @@ services:
   - lawn_mower.dock
   - lawn_mower.pause
   - lawn_mower.start_mowing
+  - lawn_mower.stop
   - light.toggle
   - light.turn_off
   - light.turn_on
@@ -134,6 +138,7 @@ services:
   - logbook.log
   - logger.set_default_level
   - logger.set_level
+  - lovelace.reload_resources
   - media_player.browse_media
   - media_player.clear_playlist
   - media_player.join

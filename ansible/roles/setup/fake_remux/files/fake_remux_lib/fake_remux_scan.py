@@ -280,8 +280,8 @@ def scan(cfg):
 
     # SONARR_URL wins when set. On daniel-box there is no Docker to inspect, so the address comes
     # from the cluster Service — resolved at deploy time into this config rather than hardcoded,
-    # for the reason telemetry-health.sh gives: a ClusterIP is stable for the Service's life but
-    # not across a delete. resolve_ip stays as the fallback so daniel-server is unchanged.
+    # because a ClusterIP is stable for the Service's life but not across a delete. resolve_ip
+    # stays as the fallback so daniel-server is unchanged.
     base = cfg.get("SONARR_URL", "").rstrip("/")
     if not base:
         base = "http://%s:%s" % (

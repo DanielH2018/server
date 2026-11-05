@@ -237,7 +237,7 @@ wrong. Four behaviours combine to produce that appearance.
 
 So: **do not diagnose this stack from counters alone.** Rising metric points prove the transport
 works, not that anything useful is flowing. The two watchers deliberately check reachability and
-export *failures* — `telemetry-health.sh` the OTLP door, monitor-bridge's `with_export_failures`
+export *failures* — `claude-otel-health` the OTLP door, monitor-bridge's `with_export_failures`
 the collector's send-failed counters. Neither can detect "nobody is using it," and a no-data alarm
 would fire every time daniel-box sits idle.
 
