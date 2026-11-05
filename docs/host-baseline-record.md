@@ -309,6 +309,12 @@ tokens a week later.
   one hash slice of the table serially on this host, and every entry once in four days. It
   rewrites only an entry more than `DRIFT_RATIO` (1.5x) from what it measured, so noise inside
   that band leaves no diff.
+- **Why a refresh can keep a drifted weight (#7132).** Two agreeing runs defend against one-off
+  load, not against a cost that is real on this host alone. The cron wrote 85.09s for a module
+  CI measured at 2.08s, and CI's gate failed the cron's PR. `--refresh-drifted` compares the
+  reading with `pytest_shard_runner_weights.json`. At `STALE_WEIGHT_FLOOR_SECONDS` and
+  `STALE_WEIGHT_FAIL_RATIO` or more of CI's seconds, it keeps the recorded weight and names the
+  module in the journal under the tag `docs-refresh`.
 - **A red suite is not a case degradation saves**: the script runs the suite before its commit
   and exits 1 on a failure, because no prek hook runs the suite: #2827 moved the `pytest` hook
   to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine and the measurement alone
