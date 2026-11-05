@@ -121,8 +121,10 @@ _PROSE_HOLDERS = {
     ),
     **dict.fromkeys(
         (
+            "ansible/deploy.yml",
             "ansible/filter_plugins/py_table.py",
             "ansible/filter_plugins/scrape_jobs.py",
+            "ansible/inventory/host_vars/daniel-pi.yml",
             "ansible/roles/k8s/artifacts/files/artifact_meta.py",
             "ansible/roles/k8s/authelia/templates/config-secret.yaml.j2",
             "ansible/roles/k8s/autofix-bridge/files/autofix.py",

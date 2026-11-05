@@ -149,8 +149,8 @@
     #
     # `ansible_owned` drops an entry that carries `owner` (Flux applies it, or a handback has
     # released it) here and not in the containers_list fact above: templates read that fact, and
-    # pihole reads it through hostvars, so an entry Ansible skips still has to be
-    # visible to it. docs/target-architecture/deploy/d2-first-leaf.md has the ownership flag.
+    # pihole and uptime-kuma read it through hostvars, so an entry Ansible skips still has to be
+    # visible to them. docs/target-architecture/deploy/d2-first-leaf.md has the ownership flag.
     - name: Deploy k8s workloads in batches
       ansible.builtin.include_tasks: tasks/k8s_batch.yml
       loop: "{{ containers_list | ansible_owned | batch(k8s_rollout_batch_width | int) | list }}"
