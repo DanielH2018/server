@@ -152,7 +152,6 @@ def _token_drift(tmp_path, token: str | None, stamp: str | None) -> tuple[str, s
 
 
 def test_a_matching_token_is_clean(tmp_path):
-    # printf with no newline, as `sha256sum` hashes the file's exact bytes.
     token_hash = hashlib.sha256(b"token").hexdigest()
     success, logged = _token_drift(tmp_path, "token", token_hash + "\n")
     assert success == "1"
