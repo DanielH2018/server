@@ -464,3 +464,31 @@ def test_a_gate_through_basename_or_dirname_is_evaluated(tmp_path, path, kept):
     wants, skips = applied_tasks.expected(_role(tmp_path, tasks), "daniel-box", ctx)
     assert skips == []
     assert [w.path for w in wants] == (["/etc/x/drop-in"] if kept else [])
+
+
+WRITE_A = "- name: Write a\n  ansible.builtin.copy: {content: a, dest: /etc/x/a}\n"
+IMPORTS_ITSELF = {
+    "self": {"main.yml": "- ansible.builtin.import_tasks: main.yml\n"},
+    "mutual": {
+        "main.yml": "- ansible.builtin.import_tasks: extra.yml\n",
+        "extra.yml": "- ansible.builtin.import_tasks: main.yml\n",
+    },
+}
+
+
+@pytest.mark.parametrize("files", IMPORTS_ITSELF.values(), ids=IMPORTS_ITSELF)
+def test_a_task_file_importing_itself_is_flagged(tmp_path, files):
+    role = _role(tmp_path)
+    for name, text in files.items():
+        (role / "tasks" / name).write_text(WRITE_A + text)
+    wants, skips = applied_tasks.expected(role, "daniel-box", CTX)
+    assert {w.path for w in wants} == {"/etc/x/a"}
+    assert [s.unchecked for s in skips] == [True]
+    assert "main.yml' is already on the import path" in skips[0].reason
+
+
+def test_a_task_file_imported_twice_is_clean(tmp_path):
+    tasks = "- ansible.builtin.import_tasks: gated.yml\n" * 2
+    wants, skips = applied_tasks.expected(_role(tmp_path, tasks), "daniel-box", CTX)
+    assert [w.path for w in wants] == ["/etc/x/gated", "/etc/x/gated"]
+    assert skips == []
