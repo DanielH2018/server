@@ -1,13 +1,15 @@
 # G5 — Shrink root CLAUDE.md
 
-Status: IN PROGRESS. PR 0 merged as [#7235](https://github.com/DanielH2018/server/pull/7235),
-PR 1 as [#7240](https://github.com/DanielH2018/server/pull/7240), PR 2 as
-[#7251](https://github.com/DanielH2018/server/pull/7251) and PR 3 as
-[#7269](https://github.com/DanielH2018/server/pull/7269). PR 4, the last planned PR, measured 270
-lines against the exit figure of under 200, and 21,057 characters against at most 17,000. No
-directive was cut to reach a figure, and
-[#7277](https://github.com/DanielH2018/server/issues/7277) tracks the gap. The graded count is 23,
-so `MIN_GRADED_PARAGRAPHS` stays at 20.
+Status: DONE. The root `CLAUDE.md` is 260 lines and 18,711 characters (`wc -l`, `wc -m`).
+
+PR 0 merged as [#7235](https://github.com/DanielH2018/server/pull/7235), PR 1 as
+[#7240](https://github.com/DanielH2018/server/pull/7240), PR 2 as
+[#7251](https://github.com/DanielH2018/server/pull/7251), PR 3 as
+[#7269](https://github.com/DanielH2018/server/pull/7269) and PR 4 as
+[#7278](https://github.com/DanielH2018/server/pull/7278). PR 4 measured 270 lines and 21,057
+characters. The closing trim, [#7277](https://github.com/DanielH2018/server/issues/7277), reached
+the figures above. No directive was cut to reach a figure. The graded count is 22, so
+`MIN_GRADED_PARAGRAPHS` stays at 20, the count minus 2.
 
 Depends on: [G2](g2-retire-lock.md)
 
@@ -30,9 +32,12 @@ keeps every citation in a `CLAUDE.md`, because only a `CLAUDE.md` citation is ch
 
 **Exit criterion.**
 
-- `wc -l CLAUDE.md` prints fewer than 200 lines, down from 309.
-- `wc -m CLAUDE.md` prints at most 17,000 characters, down from 25,903. Lines alone could be
-  met by joining lines, so the character figure keeps the change honest.
+- `wc -l CLAUDE.md` prints at most 260 lines, down from 356 when G5 started.
+- `wc -m CLAUDE.md` prints at most 18,711 characters, down from 29,083 when G5 started. Lines
+  alone could be met by joining lines, so the character figure keeps the change honest.
+- The operator chose these two figures on 2026-11-05, in place of fewer than 200 lines and at most
+  17,000 characters, with the ruling that no directive is cut to reach a number. The figures are
+  what the closing trim reached.
 - Every heading present at `70591c307` is still present. Pointers in code, skills and
   setup roles name these headings.
 - Every in-tree citation the root held just before each G5 PR is still cited by some
@@ -50,8 +55,7 @@ keeps every citation in a `CLAUDE.md`, because only a `CLAUDE.md` citation is ch
 - A held fan-out phase gets `.claude/rules/` text appended to its prompt (PR 0): the reviewer
   and each resumed phase get the rules the batch's range matches, and the implement phase
   after a red phase gets every rule.
-- [G4](g4-drop-size-test.md)'s report prints the root line count under 200, if G4 has
-  landed.
+- [G4](g4-drop-size-test.md)'s report prints the root line count, if G4 has landed.
 
 ## Baseline at `70591c307`
 
@@ -468,7 +472,15 @@ with high and low counts.
     - PR 4 runs whether or not a D or H slice has work open on these sections. The
       *Ordering with other slices* rule in *Design* settles any overlap.
 
-The arithmetic is 309 − 30 − 32 − 29 − 26 = 192. PRs 1 to 3 alone reach about 218.
+The arithmetic is 309 − 30 − 32 − 29 − 26 = 192. PRs 1 to 3 alone reach about 218. PRs 1 to 4
+reached 270, because the file was 356 lines rather than 309 when G5 started.
+
+5. **The closing trim**, [#7277](https://github.com/DanielH2018/server/issues/7277), after the
+   operator's ruling of 2026-11-05: one more trim, then close G5.
+    - `fact_status.py report` gives every root section that cites nothing the same read count,
+      because each session loads the whole file. The trim therefore follows character mass, and
+      *Where to Look* held a quarter of the file.
+    - Its cells become pointers. The config-hash sentence moves to `.claude/rules/docker.md`.
 
 ## Verification
 
@@ -483,12 +495,12 @@ prek run --all-files
 uv run --no-sync python .claude/hooks/inject-nested-docs.py --report | tail -1
 ```
 
-- `wc` prints fewer than 200 lines and at most 17,000 characters.
+- `wc` prints at most 260 lines and at most 18,711 characters.
 - `comm` prints nothing: no heading was lost. One line it may print is
   `# One-time: install uv …`, which is a shell comment inside the *Python & Tests* fence,
   not a heading. PR 1 may drop that fence.
 - The tests and hooks pass.
-- The report's last line shows the root under 200 lines, when G4 is in place.
+- The report's last line shows the root's line count, when G4 is in place.
 
 **Citation diff, every PR.** These commands print each in-tree citation the PR removed from
 the root:
@@ -686,8 +698,9 @@ Each risk is checked against `docs/failure-classes.md`.
   `report` ranks the sections that cite nothing by reads, which gives the order for that
   rewrite. Resolution: no slice owns it. This is reported as a contract gap.
 - **Is 200 lines the right target for this repo?** Anthropic recommends it, as quoted
-  in the area design. Resolution: the exit criterion uses it with a character ceiling beside
-  it. G4's report keeps showing both after G5.
+  in the area design. Resolution: no. The operator ruled on 2026-11-05 that the directives stay
+  and the exit figures are what the closing trim reached. G4's report keeps showing both after
+  G5.
 
 ## Review log
 
