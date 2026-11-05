@@ -105,12 +105,11 @@ minimal roles: role `a` defines a handler, and role `b`'s task notifies it.
 
 The looped failure reads `The requested handler 'Handler from a' was not found in either the
 main handlers list nor in the listening handlers list`. The probe returned the same result with
-`--tags b`, and with `b` placed before `a` in the list. In this tree, `optimize_pi` notifies two
-handlers that `initial_setup` defines (`ansible/tests/setup/test_setup_handlers_resolve.py`).
-`initial_setup` is unconditional, so that notify resolves in both shapes. A future
-cross-role notify into a GATED role would fail the play under a loop, where the static playbook
-skips it silently. That test reads the `roles:` list, so it is one of the readers below and can
-carry the rule.
+`--tags b`, and with `b` placed before `a` in the list. A cross-role notify into an unconditional
+role such as `initial_setup` resolves in both shapes. A cross-role notify into a GATED role would
+fail the play under a loop, where the static playbook skips it silently.
+`ansible/tests/setup/test_setup_handlers_resolve.py` reads the `roles:` list, so it is one of the
+readers below and can carry the rule.
 
 The harness and the probe leave two differences unmeasured, and neither applies to this tree:
 

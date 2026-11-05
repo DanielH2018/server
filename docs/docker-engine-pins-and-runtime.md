@@ -151,9 +151,8 @@ retires Docker.
 
 ## The deb822 repo migration
 
-The APT repo is a deb822 `.sources` file, the same shape as `ansible/roles/setup/optimize_pi/`'s
-Log2Ram repo. Both need `python3-debian`, both fetch the key with `get_url` and an explicit `mode:`,
-and both remove the legacy one-line `.list`.
+The APT repo is a deb822 `.sources` file, the same shape as `hosts/components/apt-azlux/`'s Log2Ram
+repo. `hosts/components/apt-docker/` ships the source and its key as package files.
 
 ## The `default-address-pools` derivation
 

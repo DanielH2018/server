@@ -171,7 +171,7 @@ def runtime_vars(setup: Path = SETUP) -> frozenset[str]:
     `tasks/**/*.yml` under the setup roles rather than listed, so renaming the producer without
     the consumer is exactly what stops matching. Deliberately plane-wide rather than per-role:
     `roles/setup/common/templates/resolv.conf.j2` reads `common_resolver_nameservers`, which the
-    k3s and optimize_pi roles set before including it.
+    k3s role sets before including it.
     """
     out: set[str] = set()
     for tasks in sorted(setup.glob("*/tasks/**/*.yml")):

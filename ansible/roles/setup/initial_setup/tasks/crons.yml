@@ -482,7 +482,7 @@
   # *The textfile directory's owner*), the same values as the k3s role's task on daniel-box:
   # the group gets write access, and setgid keeps it on new files. Files are written 0644, which
   # node_exporter (uid 65534) reads. Gated on the witness hosts like the rest of this block, which
-  # is both k3s nodes; the Pi's directory belongs to optimize_pi.
+  # is both k3s nodes; the Pi's directory is hosts/components/pi-node-exporter/'s tmpfiles.d line.
   when:
     - inventory_hostname in loki_route_witness_hosts
     - inventory_hostname not in initial_setup_packaged_hosts['loki_route_witness']

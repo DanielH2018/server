@@ -1,5 +1,5 @@
 # Azlux's apt source and key, for the Pi's log2ram package (H7.24a, old step H7.1). Only daniel-pi
-# runs optimize_pi, so only its package lists this component. The files land at the paths
+# installs log2ram, so only its package lists this component. The files land at the paths
 # optimize_pi wrote, so dpkg takes them over; none is a conffile.
 #
 # The key's fingerprint is 98B824A5 FA7D3A10 FDB225B7 CA548A0A 0312D8E6, and the file's sha256 is

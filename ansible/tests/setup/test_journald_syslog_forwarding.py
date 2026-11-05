@@ -126,7 +126,7 @@ def filter_block_when(path: Path):
 
 
 def test_the_filter_is_gated_on_has_rsyslog():
-    """optimize_pi masks rsyslog on daniel-pi, and a masked unit fails the restart handler.
+    """rsyslog is masked on daniel-pi, and a masked unit fails the restart handler.
 
     Without the gate, `initial_setup.yml -e target=daniel-pi` applies every task and then fails
     at `Restart rsyslog`, so the recap reads failed=1 for a run whose changes are all live. The

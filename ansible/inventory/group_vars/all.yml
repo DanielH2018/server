@@ -325,8 +325,8 @@ k3s_agent_hosts:
 # An allowlist for the same reason as k3s_server_hosts above, though the failure directions
 # differ: naming a host that already runs manifest-prune-check gives it a second, redundant
 # reader, while forgetting one leaves it unwatched. Redundancy is the safe direction, so a host
-# in doubt belongs here. daniel-pi is deliberately absent — it renders setup templates
-# (optimize_pi) but stamps none, so a reader there would report only that it is unarmed.
+# in doubt belongs here. daniel-pi is deliberately absent — it stamps no setup templates,
+# so a reader there would report only that it is unarmed.
 # ENFORCED by ansible/tests/deploy/test_setup_drift_check.py.
 setup_drift_check_hosts:
   - daniel-server
@@ -717,7 +717,7 @@ renovate_agent_host: daniel-box
 # role entry is evaluated before that role's defaults are in scope, the same reason
 # renovate_notify_host is.
 fake_remux_host: daniel-box
-# The Raspberry Pi that gets the SD-card, log2ram and Pi-health tuning in the optimize_pi role.
+# The Raspberry Pi the emptied optimize_pi role gates on; hosts/components/pi-tuning/ ships its tuning.
 # Here rather than in the role's defaults for the reason fake_remux_host gives above.
 optimize_pi_host: daniel-pi
 # The one host that runs the repo-level ops crons `initial_setup/tasks/crons.yml` gates to a
@@ -823,7 +823,7 @@ docker_engine_packages:
   - docker-buildx-plugin
 # Whether rsyslog runs on this host. True by default -- it writes /var/log/{syslog,auth.log},
 # which promtail ships and the crowdsec node agent tails. daniel-pi overrides this false:
-# optimize_pi MASKS rsyslog there (journald is the log of record, and rsyslog's text logs
+# rsyslog is MASKED there (journald is the log of record, and rsyslog's text logs
 # landed in the RAM-backed log2ram tmpfs), so initial_setup's rsyslog filter tasks skip it --
 # their `Restart rsyslog` handler fails on a masked unit.
 has_rsyslog: true

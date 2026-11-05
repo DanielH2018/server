@@ -5,13 +5,13 @@
 #   per key, with `activate: sysctl`. The regexp is `^\s*<key>\s*=`, which matches the
 #   `<key>=<value>` line the module wrote, so the first reconcile adopts that line. No homelab
 #   sysctl.d file may declare one of these keys, because /etc/sysctl.conf is read last and would
-#   override it. The Pi's vm.swappiness and vm.page-cluster are optimize_pi's and move with H7.3.
+#   override it. The Pi's vm.swappiness and vm.page-cluster are pi-tuning's.
 # - /etc/ufw/sysctl.conf is ufw's conffile. Ubuntu ships `log_martians=0` uncommented there, and
 #   ufw re-applies the file on every enable and reload, so both log_martians lines must read 1 in
 #   both files (#2977). Reconcile runs the line arm before the ufw arm for the same reason.
 # - /etc/login.defs is the `login` package's conffile. The six edits keep the regexps of the
 #   lineinfile tasks they replace.
-# - journald's cap lands in a drop-in. The Pi's optimize_pi adds 60-homelab-pi.conf beside it, and
+# - journald's cap lands in a drop-in. The Pi's pi-tuning adds 60-homelab-pi.conf beside it, and
 #   that file wins where the two disagree. The rsyslog info filter that pairs with MaxLevelSyslog
 #   stays an Ansible task gated on has_rsyslog, which the Pi does not have.
 # - `* hard core 0` moves to limits.d. The line the Ansible task wrote stays in limits.conf as a
