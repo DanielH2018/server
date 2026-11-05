@@ -120,7 +120,7 @@
 - name: Install Raspberry Pi-specific packages
   # openvswitch-switch-dpdk is deliberately absent from this list: it is never
   # configured (no bridges, no netplan stanzas) and mlockall-pins ~14 MB on the
-  # 512 MB board. optimize_pi's debloat task purges it, and listing it here
+  # 512 MB board. Step 4 of hosts/bootstrap-host.sh purges it, and listing it here
   # would reinstall it on every full run.
   tags: [packages]
   ansible.builtin.apt:
@@ -134,8 +134,9 @@
 # apt-show-versions hooks EVERY apt invocation with a full cache rebuild — 10-30 min
 # of swap-thrash on the 512 MB Pi. The Pi
 # gets nothing from it (apticron-style reporting), so it's roomy-hosts-only.
-# The Pi removal runs BEFORE any other package work so a missing base package
-# can't trigger one final hook grind on the way in.
+# The Pi removal runs before the base-package install below, so a missing base package
+# can't trigger one final hook grind on the way in. The dist-upgrade and the Pi-specific
+# install above run first, so a host still carrying it can pay their hook runs.
 - name: Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)
   ansible.builtin.apt:
     name: apt-show-versions
