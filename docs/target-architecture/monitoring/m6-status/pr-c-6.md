@@ -10,9 +10,12 @@ at base `decdee190`, with daniel-box on `0.6776+gc0f46a5e9157`, daniel-server on
   daniel-server, read by name. `/opt/containerd` denies the `find`, and it holds no consumer.
 - **The `legacy:` entries.** `ls` reports no such file for each path C-6 deletes, on every host,
   and `systemctl list-unit-files` prints no `kuma-check-loki-read-route` or
-  `kuma-check-secret-rotation-audit` unit on daniel-box. Those two components ship on daniel-box
-  alone. daniel-server still runs `kuma-check-loki-read-route` from the `initial_setup` role, and
-  no entry C-6 deletes reaches it.
+  `kuma-check-secret-rotation-audit` unit on daniel-box. C-6 deletes the secret-rotation entries.
+  It keeps the three `kuma-check-loki-read-route` units and their down marker in
+  `hosts/components/loki-route-witness/component.yml`, against the plan's list. daniel-server
+  still runs them from the `initial_setup` role, and reconcile retires them through these entries
+  when daniel-server's package takes the component. Without them that move would leave the old
+  timer running, with the entry for its script deleting the script under it.
 - **Exit criterion 3.** The precondition grep lists only the allowlist's identifier holders and
   the two generated records. C-4b's three entries stay until D6.
 

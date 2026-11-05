@@ -899,19 +899,18 @@ files that the rows above name only by their Ansible path. Each goes with the PR
 - **C-6 deletes the reconcile `legacy:` entries that name Kuma.** Each entry retires a file
   or unit that an Ansible apply installed. C-6 deletes an entry once a read-only check finds
   that file or unit gone on its host:
-    - The three `kuma-check-loki-read-route` units in
-      `hosts/components/loki-route-witness/component.yml` and the three
-      `kuma-check-secret-rotation-audit` units in
+    - The three `kuma-check-secret-rotation-audit` units in
       `hosts/components/secret-rotation/component.yml`, with the header comment in each
       file that names the old timer. The read is
-      `systemctl list-unit-files 'kuma-check-loki-read-route*' 'kuma-check-secret-rotation-audit*'`
-      on daniel-box.
+      `systemctl list-unit-files 'kuma-check-secret-rotation-audit*'` on daniel-box. The three
+      `kuma-check-loki-read-route` units and `/var/lib/kuma-check/loki-read-route.down` stay in
+      `hosts/components/loki-route-witness/component.yml`: daniel-server still runs them, and
+      reconcile retires them through these entries when its package takes the component.
     - `/opt/homelab-builder/kuma_push.py` in `hosts/components/builder/component.yml`. The
       read is C-3a's `ls /opt/*/kuma_push.py` on daniel-box.
     - `/usr/local/lib/pi-kuma-push-lib.sh` in `hosts/daniel-pi/package.yml`. The read is a
       read-only `ls` of that path over `ssh daniel-pi`.
-    - The Ansible-era push env files and down marker: `/etc/homelab/loki-route-kuma-push.env`
-      and `/var/lib/kuma-check/loki-read-route.down` in
+    - The Ansible-era push env files: `/etc/homelab/loki-route-kuma-push.env` in
       `hosts/components/loki-route-witness/component.yml`,
       `/etc/homelab/rkhunter-kuma-push.env` and `/etc/homelab/aide-kuma-push.env` in
       `hosts/components/integrity-scans/component.yml`, and `/etc/nut/kuma-push.env` in

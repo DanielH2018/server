@@ -50,8 +50,12 @@ enable:
 # carry the names the role's stamp tasks give them, which differ: the render stamp is
 # `loki-route-witness` and the deployed stamp is `loki-route-health` (#6279).
 legacy:
+  - {unit: kuma-check-loki-read-route.timer}
+  - {unit: kuma-check-loki-read-route.service}
+  - {unit: kuma-check-loki-read-route-boot.service}
   - {cron: "Loki read-route witness", user: "{{ sys_user }}"}
   - {path: /usr/local/bin/loki-read-route-health.sh}
   - {path: /opt/loki-route-health/loki_route_health.py}
+  - {path: /var/lib/kuma-check/loki-read-route.down}
   - {path: /var/lib/homelab/setup-render-manifest.d/loki-route-witness}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/loki-route-health}
