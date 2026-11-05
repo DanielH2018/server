@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-03 18:17 UTC
-generated_sha: e68ff215c5
+generated_at: 2026-11-05 06:17 UTC
+generated_sha: f0e5cf0cfe
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,9 +17,13 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
-| [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | - | ✓ |
+| [#7091](https://github.com/DanielH2018/server/issues/7091) | high | gap | cicd | DEPLOY_HOLD on 64d8b24e from the soak race stops every promotion, including #7087 (deploy-failed) | 2026-11-04 | 0 | - | ✓ |
+| [#7103](https://github.com/DanielH2018/server/issues/7103) | high | gap | backup-observability | Confirm the off-box etcd snapshot uploads and EtcdSnapshotOffboxFailed clears after #7100's apply | 2026-11-04 | 0 | - | ✓ |
+| [#7138](https://github.com/DanielH2018/server/issues/7138) | high | gap | cicd | Remove the stray empty file a fan-out batch left in the primary checkout's .github/workflows | 2026-11-04 | 0 | - | ✓ |
+| [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | worktree-d5-orchestrator-wave16 | ✓ |
 | [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
-| [#7047](https://github.com/DanielH2018/server/issues/7047) | medium | gap | cicd | The builder's rollout gate waits with no reason logged, and its Pi canary reports once a day | 2026-11-03 | 0 | worktree-fanout-orchestrator-7044-7047 | ✓ |
+| [#7094](https://github.com/DanielH2018/server/issues/7094) | medium | gap | cicd | The soak race fix from #7093 is not live until DEPLOY_HOLD on 64d8b24e clears (deploy-failed) | 2026-11-04 | 0 | - | ✓ |
+| [#7208](https://github.com/DanielH2018/server/issues/7208) | medium | gap | docs | A rebuilt Pi gets no log2ram package, although two files call it a bootstrap install | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
 | [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
 | [#4314](https://github.com/DanielH2018/server/issues/4314) | low | improvement | docs | Run the ADR-0019 retirement test on facts.lock after 60 days | 2026-10-10 | 0 | - | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
@@ -34,8 +38,16 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#6769](https://github.com/DanielH2018/server/issues/6769) | low | improvement | cicd | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week | 2026-10-31 | 0 | - | ✓ |
 | [#6821](https://github.com/DanielH2018/server/issues/6821) | low | gap | docs | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 | 2026-11-01 | 0 | - | ✓ |
 | [#6882](https://github.com/DanielH2018/server/issues/6882) | low | gap | docs | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 | 2026-11-01 | 0 | - | ✓ |
-| [#6950](https://github.com/DanielH2018/server/issues/6950) | low | gap | docs | M6 status files still describe the Phase A and B token PRs as future steps | 2026-11-02 | 0 | - | ✓ |
-| [#7044](https://github.com/DanielH2018/server/issues/7044) | low | improvement | cicd | has_ample_ram and four template comments outlived the initial_setup tasks that read them | 2026-11-03 | 0 | worktree-fanout-orchestrator-7044-7047 | ✓ |
+| [#7056](https://github.com/DanielH2018/server/issues/7056) | low | gap | docs | Hand-written docs pages still describe Kuma as the pager after M6 B-7 | 2026-11-03 | 0 | - | ✓ |
+| [#7106](https://github.com/DanielH2018/server/issues/7106) | low | gap | docs | The runbook's stopped-k3s snapshot listing has not run literally against R2 | 2026-11-04 | 0 | - | ✓ |
+| [#7124](https://github.com/DanielH2018/server/issues/7124) | low | improvement | docs | Reword the daniel-box.yml comments that still describe retired Kuma machinery | 2026-11-04 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7161](https://github.com/DanielH2018/server/issues/7161) | low | gap | docs | Apply the k3s role on daniel-box for PR 7152's needs-manual-apply landing | 2026-11-05 | 0 | - | ✓ |
+| [#7175](https://github.com/DanielH2018/server/issues/7175) | low | gap | backup-observability | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects | 2026-11-05 | 0 | - | ✓ |
+| [#7178](https://github.com/DanielH2018/server/issues/7178) | low | gap | cicd | M6 exit criterion 2 waits for R4 to retire render_records_push_token | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7183](https://github.com/DanielH2018/server/issues/7183) | low | gap | docs | Apply the k3s role on daniel-box for PR 7180's needs-manual-apply landing | 2026-11-05 | 0 | - | ✓ |
+| [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7195](https://github.com/DanielH2018/server/issues/7195) | low | improvement | security | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token | 2026-11-05 | 0 | - | ✓ |
+| [#7214](https://github.com/DanielH2018/server/issues/7214) | low | improvement | cicd | H7.47: point the readers of the setup tree at the host packages | 2026-11-05 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -43,19 +55,20 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 
 | Not before | State | # | Finding |
 |---|---|---|---|
-| 2026-11-05 | withheld | [#4188](https://github.com/DanielH2018/server/issues/4188) | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands |
 | 2026-11-07 | withheld | [#6769](https://github.com/DanielH2018/server/issues/6769) | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week |
 | 2026-11-08 | withheld | [#6697](https://github.com/DanielH2018/server/issues/6697) | Drop longhorn_robustness.py from monitor-bridge's shipped modules |
 | 2026-11-08 | withheld | [#6762](https://github.com/DanielH2018/server/issues/6762) | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings |
 | 2026-11-08 | withheld | [#6763](https://github.com/DanielH2018/server/issues/6763) | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands |
 | 2026-11-09 | withheld | [#6821](https://github.com/DanielH2018/server/issues/6821) | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 |
 | 2026-11-09 | withheld | [#6882](https://github.com/DanielH2018/server/issues/6882) | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 |
-| 2026-11-09 | withheld | [#6950](https://github.com/DanielH2018/server/issues/6950) | M6 status files still describe the Phase A and B token PRs as future steps |
 | 2026-11-10 | withheld | [#3865](https://github.com/DanielH2018/server/issues/3865) | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap |
 | 2026-11-13 | withheld | [#6434](https://github.com/DanielH2018/server/issues/6434) | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply |
 | 2026-11-13 | withheld | [#6436](https://github.com/DanielH2018/server/issues/6436) | PR template header still says the GitOps deployer applies image pins and the deploy plane |
 | 2026-11-13 | withheld | [#6635](https://github.com/DanielH2018/server/issues/6635) | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live |
 | 2026-11-14 | withheld | [#6435](https://github.com/DanielH2018/server/issues/6435) | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template |
+| 2026-11-16 | withheld | [#7056](https://github.com/DanielH2018/server/issues/7056) | Hand-written docs pages still describe Kuma as the pager after M6 B-7 |
+| 2026-11-19 | withheld | [#4188](https://github.com/DanielH2018/server/issues/4188) | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands |
+| 2026-11-21 | withheld | [#7175](https://github.com/DanielH2018/server/issues/7175) | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects |
 | 2026-12-09 | withheld | [#4314](https://github.com/DanielH2018/server/issues/4314) | Run the ADR-0019 retirement test on facts.lock after 60 days |
 | 2026-12-15 | withheld | [#4435](https://github.com/DanielH2018/server/issues/4435) | Decide whether to move scripts/ into an installable homelab package |
 | 2027-02-01 | withheld | [#6292](https://github.com/DanielH2018/server/issues/6292) | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule |
@@ -84,6 +97,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#3766](https://github.com/DanielH2018/server/issues/3766) | accepted | monitor-bridge keeps its own B2 authorize client outside lib/b2.py | Operator decision 2026-10-09: keep monitor-bridge's own B2 client. Unifying on scripts/lib/b2.py would need B2Error to separate billed from unbilled failures, a configurable authorize URL, a transport seam for FakeSources, and shipping lib/b2.py into the bridge ConfigMap so every edit to it rolls the alert pipeline. That is roughly 150-250 changed lines to remove about 45. The DECIDED marker on b2_authorize_data in checks/b2.py records the reasons. |
 | [#4114](https://github.com/DanielH2018/server/issues/4114) | accepted | Confirm or reverse navidrome's kept Uptime Kuma opt-out from #3886 | Operator decision 2026-10-10: keep navidrome's kuma: false opt-out. The role is parked at navidrome_k8s_replicas: 0 and prunes its route, so a derived tile would page DOWN permanently. Revisit when navidrome is unparked. |
 | [#6405](https://github.com/DanielH2018/server/issues/6405) | refuted | Drop shadow from the host-maintenance NotReporting rules once each cron has written its textfile | PR #6406 shipped the host-maintenance NotReporting rules without shadow, guarding the absent arm with present_over_time instead, so there is no shadow to drop. |
+| [#7098](https://github.com/DanielH2018/server/issues/7098) | accepted | A retired no-backup claim moves to the daily B2 tier until the operator deletes it | Operator ruled 2026-11-04: the documented delete deadline in docs/flux-deploy-plane.md, Retiring a flux-owned service, is enough. A missed deadline costs one backup and a stray backup to delete and loses no data, and a list of retiring claims would be state that needs its own removal. |
 
 ### cicd
 
@@ -150,6 +164,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2164](https://github.com/DanielH2018/server/issues/2164) | accepted | Make gitops_tick.sh's permission deterministic and collapse its duplicated classifier paragraph | Doc half landed in PR #2209; the determinism half is #2207, which the operator chose to live with (auto-mode-bridge retries the ~1-in-7 denial). |
 | [#3244](https://github.com/DanielH2018/server/issues/3244) | accepted | inject-nested-docs head form left facts.md out of 4 of 132 payloads with no later delivery | Operator decision 2026-10-02: 4 facts.md misses in 132 head-form payloads is an acceptable residual; the editing-rule gating works as designed. |
 | [#3964](https://github.com/DanielH2018/server/issues/3964) | refuted | Cut the issue-fanout skill's Agent() fallback to one paragraph | Its precondition failed: the Agent() fallback ran on 2026-10-09 (session 4bc48d84, worktree issue-fanout-2026-10-09-wave1, 14 Agent worktrees), so the fallback is in use and cannot be retired. Evidence is in the issue thread. |
+| [#7164](https://github.com/DanielH2018/server/issues/7164) | accepted | H6.7's PR reordered the plan's exit criterion with no operator ruling | Operator ruled 2026-11-05: H6.7 may land before H6.6. PR 7156's rewrite of the exit criterion stands; record H6.6's pre-upgrade state after H6.7's restart so it cannot falsely satisfy Exit 2. |
 
 ### network
 

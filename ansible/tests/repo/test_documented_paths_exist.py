@@ -27,7 +27,7 @@ directory exists nowhere but this tree, so a bare citation of it is still a clai
 tree now. And a `file.py::test_name` node id, in docs AND in runtime modules, which names the
 check that holds an invariant closed. `scripts/lib/facts/citations.py` owns all three
 grammars (`line_numbered_citations`, `guard_path_citations`, `node_citations`), beside the
-`facts.lock` citation forms, and their paired tests sit beside it. This module keeps what
+`CLAUDE.md` citation forms, and their paired tests sit beside it. This module keeps what
 depends on the tree: resolution, the extension filter, and the corpus. One corpus walk and one
 tracked-file set serve all three.
 """

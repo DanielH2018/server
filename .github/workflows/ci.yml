@@ -317,9 +317,7 @@ jobs:
           echo "This PR changes $(wc -l < "$RUNNER_TEMP/changed.txt") file(s) and deletes $(wc -l < "$RUNNER_TEMP/deleted.txt")."
 
       # The facts notice lists every CLAUDE.md section that cites an atom this PR moved, as
-      # annotations and as a job-summary table. It runs beside docs/facts.lock for G1's 30-day
-      # soak, and the lock stays the only blocking check, so the notice never fails the job. The
-      # long form is docs/target-architecture/docs-guard/g1-diff-notice.md, *Design*.
+      # annotations and as a job-summary table. It never fails the job. The long form is docs/target-architecture/docs-guard/g1-diff-notice.md, *Design*.
       #
       # DECIDED: the notice never blocks a merge, during the soak or after the lock retires. A
       # PR that moves a cited atom gets a notice, not a red check. The trade, and the coverage

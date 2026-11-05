@@ -890,17 +890,6 @@ cannot grow, because the remote-control wire path truncates at 8,000 chars / 200
 budgets are the payload's, not one doc's, so a head that fills the payload defers the next doc
 to the next command.
 
-A `CLAUDE.md` inlined whole carries one more line under its header when `docs/facts.lock` has
-no verify row for some of the doc's sections that cite the tree: the sections
-`fact_status.py status` grades UNVERIFIED. `.claude/hooks/_facts_line.py` writes it, for
-example `facts.lock: not verified: "Traps"`, naming at most six sections and then `(+N more)`.
-A section that cites nothing is never named, and a doc whose citing sections all have a row
-gets no line. The line says what the lock lacks, not that a section with a row is true. The
-library reads the lock's keys, `git ls-files` and the doc through
-`scripts/lib/facts/citations.py`, and hashes no atom, because master CI already fails on a
-section whose recorded hashes moved. The line is added only when the doc plus the line fits the
-budget, and a head never carries it, so the line never turns a whole doc into a head. A failure to import or read anything costs the line, never the injection.
-
 An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
 (`secrets.md` and `facts.md`, which a read needs) is injected only for a path the command
 writes, as `block-protected-bash`'s `written_paths` finds it, or for every named path when the

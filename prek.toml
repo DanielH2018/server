@@ -457,9 +457,6 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 # test_every_deployed_role_block_matches_what_the_generator_writes_now and cost a fix commit.
 # The test stays as the backstop for a commit that skipped prek.
 #
-# It sits above `facts-reverify-changed`: several `#At a glance` sections are rows in
-# docs/facts.lock, so the reverify has to read the rewritten block, not the stale one.
-#
 # `files` is every input the generator reads: the roles, the inventory, the shared templates
 # whose macros declare claims, the bring-up playbooks at ansible/ (`glance_facts.
 # SETUP_PLAYBOOKS`), the filter plugin it imports, and the Python under scripts/docs and
@@ -501,23 +498,6 @@ language = "system"
 pass_filenames = false
 files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|ansible/[^/]+\\.ya?ml|scripts/.*\\.py|docs/assets/generated/fragments/.*)$"
 
-# Re-hashes a verified section whose citation SET an edit changed, in the commit making the
-# edit, and fails like a formatter so the author stages what it wrote. It refuses any section
-# whose recorded atom MOVED -- that is content drift, and re-reading the prose is a human's
-# call. Without it every such edit lands behind a green master and costs a second commit
-# after CI names it.
-# It sits beside the other commit-stage hooks rather than beside `facts-lint-changed`: the
-# suite's test_every_recorded_atom_hashes_as_recorded reads the lock off disk, and the one
-# prek hook that runs it, `static-ratchet-tests`, sits after this one, so this has already
-# rewritten the lock by the time that test reads it.
-[[repos.hooks]]
-id = "facts-reverify-changed"
-name = "re-hash edited CLAUDE.md sections whose citations changed"
-entry = "uv run --frozen python scripts/dev/fact_status.py reverify --changed-since origin/master"
-language = "system"
-pass_filenames = false
-files = "(^|/)CLAUDE\\.md$|^(scripts/dev/fact_status\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|git|repo_paths|yaml_fast)\\.py|scripts/lib/facts/[^/]+\\.py)$"
-
 # Lower each ratchet allowlist entry to what its file is today, so a PR that SHRINKS a listed
 # module needs no hand edit. An entry has to MATCH its file (the `DECIDED:` marker in
 # ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched
@@ -546,9 +526,8 @@ pass_filenames = false
 files = "(\\.py|^ansible/tests/repo/(module_length|monkeypatch)_allowlist\\.txt)$"
 
 # Lint the fact citations in any CLAUDE.md section this branch touched, against origin/master
-# rather than the committed docs/facts.lock (`ansible/tests/repo/test_facts_lock_units_lint_clean.py`
-# holds the converted set already in the lock; this is the ratchet for everything not yet
-# converted). `--changed-since` needs a real git history, which `--all-files` on a shallow
+# (`ansible/tests/repo/test_every_section_lints_clean.py` holds every section at every commit;
+# this names the finding at commit time). `--changed-since` needs a real git history, which `--all-files` on a shallow
 # runner may not have for origin/master — see the `land-after-merge`/CI fetch-depth notes.
 # CI's prek jobs check out with fetch-depth: 0 and fetch the base branch, so origin/master is
 # there on a PR; on a push to master it is HEAD, and the range is empty.
@@ -602,8 +581,8 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # The module length ratchet and the Python census rows now bound it, each about 7.5s alone with
 # `-n0` on daniel-box at load average 9.7.
 #
-# It sits after `tighten-ratchet-allowlists` and `facts-reverify-changed` because the ratchet
-# and facts tests read the files those two rewrite. `files` is wider than `.py`: a `moved`
+# It sits after `tighten-ratchet-allowlists` because the ratchet test reads the lists that hook
+# rewrites. `files` is wider than `.py`: a cited
 # facts atom is often a YAML key or a `DECIDED:` marker in a template, and the doc fragments
 # read role defaults, inventory and the fail2ban template. The shard partition test reads
 # ci.yml and pyproject.toml's `testpaths`. test_role_claude_md reads every role's CLAUDE.md
@@ -632,11 +611,11 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # The shell, `hosts/` and wait-source paths are the scripts the shimmed-path census row reads.
 [[repos.hooks]]
 id = "static-ratchet-tests"
-name = "Static ratchet tests (module length, facts.lock, shard partition, doc fragments, role CLAUDE.md, census rows)"
-entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_facts_lock_matches_tree.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py ansible/tests/repo/test_census_rows_suite.py ansible/tests/repo/test_census_rows_roles.py ansible/tests/repo/test_census_rows_text.py ansible/tests/repo/test_census_rows_layout.py"
+name = "Static ratchet tests (module length, section lint, shard partition, doc fragments, role CLAUDE.md, census rows)"
+entry = "uv run --frozen pytest -q -p no:cacheprovider ansible/tests/repo/test_module_length_ratchet.py ansible/tests/repo/test_every_section_lints_clean.py ansible/tests/repo/test_pytest_shards_partition_the_suite.py scripts/docs/tests/test_gen_doc_fragments.py ansible/tests/repo/test_role_claude_md.py ansible/tests/repo/test_census_rows_python.py ansible/tests/repo/test_census_rows_suite.py ansible/tests/repo/test_census_rows_roles.py ansible/tests/repo/test_census_rows_text.py ansible/tests/repo/test_census_rows_layout.py"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|(^|/)CLAUDE\\.md$|^docs/facts\\.lock/|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$|^ansible/roles/[^/]+/[^/]+/(templates|defaults|files)/|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
+files = "(\\.py$|(^|/)CLAUDE\\.md$|^scripts/dev/pytest_shard_weights\\.json$|^ansible/tests/repo/module_length_allowlist\\.txt$|^pyproject\\.toml$|^\\.github/workflows/[^/]+\\.yml$|^ansible/.*\\.(ya?ml|j2|ini)$|^ansible/roles/[^/]+/[^/]+/(templates|defaults|files)/|^(\\.claude/(skills|agents)|evals/cases)/.*\\.(md|json)$|\\.(pyc|so)$|(^|/)__pycache__/|\\.(sh|bash)$|^hosts/(lib|components)/|^\\.claude/wait-sources/)"
 
 # The two census modules over the pytest-only modules, `_test_module_rules.pytest_only_modules`:
 # the git and subprocess rows and the render-and-path rows. They were the slowest two in the

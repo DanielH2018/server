@@ -1,7 +1,7 @@
 """Lint for the fact stores: the forms the spec excludes, and the atoms that do not resolve.
 
 Two severities. An error is a citation that cannot be support (a rejected form, an atom that
-does not resolve, an ambiguous marker), a support record someone edited by hand, or a document
+does not resolve, an ambiguous marker), a retired lock a stale branch brought back, or a document
 shape the section parser reads as something the author did not mean (two sections under one
 heading text, a fence with no closing marker), or prose naming a host the inventory no longer
 holds. A warning is a habit the spec asks writers to
@@ -32,7 +32,6 @@ from .citations import (
     spans,
     tracked_files,
 )
-from .lock import LOCK_REL, lock_tampered
 from .pins import image_pins, pinned_keys, split_image_ref
 from .removed import identifiers, removed_tokens, still_present
 
@@ -43,7 +42,7 @@ RULES = frozenset(
         "unresolved-atom",
         "ambiguous-marker",
         "one-way-test",
-        "lock-tampered",
+        "lock-retired",
         "date-as-verification",
         "duplicate-heading",
         "unbalanced-fence",
@@ -60,6 +59,7 @@ _FENCE_MARK = re.compile(r"```")
 _DATE_CLAIM = re.compile(r"\bverified\b[^.\n]{0,40}\b\d{4}-\d{2}-\d{2}\b", re.I)
 
 INVENTORY_REL = "ansible/inventory/hosts.ini"
+RETIRED_LOCK_REL = "docs/facts.lock"
 
 
 def host_pattern(hosts: frozenset[str]) -> re.Pattern | None:
@@ -110,8 +110,6 @@ def lint_sections(
     """Every ``RULES`` finding in the named sections, or in every section when ``unit_keys`` is None.
 
     Errors and warnings come back in one list; the caller splits them on ``LintFinding.warn``.
-    Unlike ``lock.check_lock`` this reads no lock row: a never-verified section is linted the
-    same as a verified one, which is what makes ``lint --changed-since`` a ratchet.
 
     ``since`` adds ``vanished-identifier``, which needs a range to read. Its findings land in
     whichever section names the vanished token, inside ``unit_keys`` or not: the commit that
@@ -129,20 +127,20 @@ def lint_sections(
             pins[rel] = pinned_keys(repo, rel)
         return pins[rel]
 
-    if lock_tampered(repo / LOCK_REL):
+    if (repo / RETIRED_LOCK_REL).exists():
         out.append(
             _f(
                 "",
-                "lock-tampered",
-                f"{LOCK_REL} has a row whose checksum does not match it; regenerate with `fact_status.py verify`",
+                "lock-retired",
+                f"{RETIRED_LOCK_REL} is retired (ADR-0023) and a merge or rebase brought it back; take the deletion with `git rm -r {RETIRED_LOCK_REL}`",
             )
         )
     for doc in repo_docs(repo):
         rel = doc.relative_to(repo).as_posix()
         secs = sections(rel, doc.read_text(encoding="utf-8"))
-        # Two sections with one heading text share one key, so the lock holds one row for
-        # both and every keyed reader (`citations.repo_citations`, `changed_units`) keeps the
-        # last one: the first section's atoms are never graded. Nothing downstream can
+        # Two sections with one heading text share one key, so every keyed reader
+        # (`citations.repo_citations`, `changed_units`) keeps the last one: the first
+        # section's atoms are never read. Nothing downstream can
         # tell the two apart, so the document is what has to change.
         for key, n in Counter(s.key for s in secs).items():
             if n > 1 and (unit_keys is None or key in unit_keys):
@@ -150,7 +148,7 @@ def lint_sections(
                     _f(
                         key,
                         "duplicate-heading",
-                        f"{n} sections in {rel} carry this heading and collapse onto one lock row; rename one",
+                        f"{n} sections in {rel} carry this heading and collapse onto one section key; rename one",
                     )
                 )
         for sec in secs:
@@ -233,7 +231,7 @@ def lint_sections(
                     _f(
                         sec.key,
                         "date-as-verification",
-                        f"'{m.group(0)}': the lock's verified_sha is the only stamp",
+                        f"'{m.group(0)}': a date in prose cannot show that the claim still holds",
                     )
                 )
             prose = mask_history(sec.body)

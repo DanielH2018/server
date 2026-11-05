@@ -72,7 +72,7 @@ instruction bytes per session.
 **The lock's cost.** At `70591c307`, 116 of the 1,282 commits in 30 days were lock commits.
 A Renovate PR that bumps a cited YAML key stays red until a person commits a `verify` to it
 (#4012). Master push run 35729601483 failed on 2026-09-22, on head `b86d87d60`, because the
-lock test `ansible/tests/repo/test_facts_lock_matches_tree.py` raised an AssertionError on
+lock test `test_facts_lock_matches_tree.py` raised an AssertionError on
 `ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract`. The coordinator checked that
 run's log on 2026-10-17.
 
