@@ -23,6 +23,11 @@ def test_an_added_ignore_on_an_import_of_a_missing_module_is_named():
     ]
 
 
+def test_an_added_ignore_naming_the_rule_ty_prints_for_a_missing_module_is_named():
+    red = BASE + ADDED.replace("unresolved-import", "import-not-found")
+    assert stale_suppressions(BASE, red) == ["line 6: `# ty: ignore[import-not-found]`"]
+
+
 def test_a_blanket_ignore_in_either_spelling_is_named():
     red = BASE + "x = 1  # type: ignore\ny = 2  # ty:ignore\n"
     assert stale_suppressions(BASE, red) == [

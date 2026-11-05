@@ -13,7 +13,7 @@ width unless the run is `-vv`, which is how the red gate runs it.
 
 WHAT IT SUPPRESSES (#4439). The red author commits with a plain `git commit`, so the `ty` hook
 checks the red tree, and ty reports an import of a module that does not exist yet as an
-`unresolved-import` error. A `# ty: ignore[unresolved-import]` passes that commit. Once the fix
+`import-not-found` error. A `# ty: ignore[import-not-found]` passes that commit. Once the fix
 adds the module, ty reports the same comment as an `unused-ignore-comment` warning, the hook
 fails on it, and the fix commits nothing: the red file is not the fix's to edit, and in #4403
 the auto-mode classifier denied removing the comments as a CI bypass. `stale_suppressions`
@@ -60,10 +60,12 @@ def red_by_absence(output: str, nodes: list[str]) -> list[str]:
 # A type-checker suppression inside one comment, with the rules its brackets name. ty honours
 # mypy's `type: ignore` spelling as well as its own.
 _SUPPRESSION = re.compile(r"\b(?:ty|type):\s*ignore\b(?:\[([^\]]*)\])?")
-# ty's rules for a name that is not there yet, as `ty explain rule` lists them in 0.0.86. A fix
-# that adds the name leaves a suppression of any of them unused.
+# ty's rules for a name that is not there yet, as `ty explain rule` lists them in 0.0.97. A fix
+# that adds the name leaves a suppression of any of them unused. `unresolved-import` is the older
+# name of `import-not-found`, and ty still honours a suppression that spells it.
 ABSENCE_RULES = frozenset(
     {
+        "import-not-found",
         "unresolved-import",
         "unresolved-attribute",
         "unresolved-reference",
