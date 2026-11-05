@@ -126,10 +126,45 @@ def test_an_unreadable_expiry_counts_as_due_for_refresh():
 
 
 def test_the_cap_stops_additions_and_names_what_it_left_out():
-    items = [_item(f"10{i}.0.0.1", 100) for i in range(ra.CAP)]
+    items = [_item(f"203.0.113.{i + 1}", 100) for i in range(ra.CAP)]
     decided = ra.plan({"9.9.9.9"}, items, NOW)
     assert decided.add == []
     assert decided.over_cap == ["9.9.9.9"]
+
+
+def _main_with_live_entries(count, sighting):
+    """Run `main` over `count` unexpired entries and one sighting; return its exit and writes."""
+    writes = []
+
+    def runner(argv):
+        if argv[:2] == [ra.KUBECTL, "get"]:
+            return json.dumps(IRS)
+        if argv[0] == ra.KUBECTL:
+            return _line(AUTH_ROUTER, 200, sighting)
+        if "inspect" in argv and ra.ALLOWLIST in argv:
+            items = [_item(f"203.0.113.{i + 1}", 100) for i in range(count)]
+            return json.dumps({"name": ra.ALLOWLIST, "items": items})
+        if "inspect" in argv:
+            return ""
+        writes.append(argv[1:4])
+        return ""
+
+    return ra.main(runner=runner, now=NOW), writes
+
+
+def test_a_sixteenth_address_is_added():
+    code, writes = _main_with_live_entries(15, "9.9.9.9")
+    assert code == 0
+    assert writes == [["allowlists", "add", ra.ALLOWLIST]]
+
+
+def test_a_seventeenth_address_is_refused_with_a_line_naming_the_entries(capsys):
+    code, writes = _main_with_live_entries(16, "9.9.9.9")
+    assert code == 1
+    assert writes == []
+    line = capsys.readouterr().out.strip().splitlines()[-1]
+    assert line.startswith("remote-ips at cap (16): live 203.0.113.1,")
+    assert line.endswith("; not added 9.9.9.9")
 
 
 HOME = ra.home_networks(
@@ -138,7 +173,7 @@ HOME = ra.home_networks(
 
 
 def test_a_sighting_inside_home_ips_takes_no_slot():
-    items = [_item(f"10{i}.0.0.1", 100) for i in range(ra.CAP - 1)]
+    items = [_item(f"203.0.113.{i + 1}", 100) for i in range(ra.CAP - 1)]
     seen = {"198.51.100.7", "2001:db8:1:2:aaaa::1", "9.9.9.9"}
     decided = ra.plan(seen, items, NOW, home=HOME)
     assert decided.add == ["9.9.9.9"]
@@ -147,7 +182,7 @@ def test_a_sighting_inside_home_ips_takes_no_slot():
 
 def test_a_live_entry_inside_home_ips_is_pruned_to_free_its_slot():
     items = [_item("2001:db8:1:2:bbbb::1", 150), _item("198.51.100.7", 150)]
-    items += [_item(f"10{i}.0.0.1", 100) for i in range(ra.CAP - 2)]
+    items += [_item(f"203.0.113.{i + 1}", 100) for i in range(ra.CAP - 2)]
     decided = ra.plan({"9.9.9.9", "2001:db8:1:3::1"}, items, NOW, home=HOME)
     assert decided.prune == ["2001:db8:1:2:bbbb::1", "198.51.100.7"]
     assert decided.add == ["2001:db8:1:3::1", "9.9.9.9"]
