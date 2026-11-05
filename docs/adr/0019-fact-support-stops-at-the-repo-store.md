@@ -80,4 +80,5 @@ this record is the only tracked trace of it.
 ## Governs
 
 None. The decision is a scope, and no single line enforces it.
-`scripts/lib/facts/relations.py:STATUSES` holds the four remaining statuses.
+`relations.py` held the four remaining statuses until
+[ADR-0023](0023-fact-support-is-a-diff-notice.md) retired them with the lock.

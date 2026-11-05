@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-11-05 06:17 UTC
-generated_sha: f0e5cf0cfe
+generated_at: 2026-11-05 13:35 UTC
+generated_sha: fa85103da7
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f0e5cf0cfe
 
 # Scripts
 
-477 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+474 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -72,7 +72,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/digest_covers.py` | deploy_tools | Whether a role's render digest covers everything a range changed for it (#4781). | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_digest_covers.py` | — |
 | `scripts/deploy_tools/digest_provable.py` | deploy_tools | Which k8s roles act ONLY through the bytes their render digest covers. | deploy: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py | `test_digest_provable.py` | — |
 | `scripts/backup/etcd_restore_drill.sh` | backup | prove an off-box etcd snapshot actually restores, without an outage. | deploy: ansible/roles/setup/hypervisor/tasks/etcd_drill.yml | — | — |
-| `scripts/dev/fact_status.py` | dev | Status, verification and lint for the fact stores — the one entry point. | prek hook (every commit) | — | [0, 1, 64, 2](#scriptsdevfactstatuspy) |
+| `scripts/dev/fact_status.py` | dev | Lint, report and diff notice for the fact stores — the one entry point. | prek hook (every commit) | — | [0, 1, 64, 2](#scriptsdevfactstatuspy) |
 | `scripts/dev/gen_hook_settings.py` | dev | Render the `hooks` key of `.claude/settings.json` from the hook files' own declarations. | prek hook (every commit) | `test_gen_hook_settings.py` | — |
 | `scripts/docs/gen_role_glance.py` | docs | Generate the mechanical half of every role's `## At a glance` block, in place. | prek hook (every commit) | `test_gen_role_glance.py` | — |
 | `scripts/deploy_tools/gitops_state.py` | deploy_tools | Operate on the GitOps deployer's own state markers, from the deploy host's shell. | deploy: ansible/roles/k8s/monitor-bridge/files/gitops_markers.py | `test_gitops_state.py` | — |
@@ -108,7 +108,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-370 script(s) — imported by another script — not an entry point.
+367 script(s) — imported by another script — not an entry point.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -127,7 +127,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/arr.py` | diagnostics | `probe.py arr <app> <api-path>` — read-only *arr API GETs against sonarr/radarr/prowlarr. | imported by cli_parser.py, postflight.py, subcommands.py | — | — |
 | `scripts/deploy_tools/artifact_retention.py` | deploy_tools | Choose which versions of the manifest artifact `promote.py prune` deletes. | imported by pin_gate.py, pin_reads.py, prune.py, reads.py, reset.py, supersede.py, verify_promotion.py, wait_reads.py | — | — |
 | `scripts/validate/asset_pins.py` | validate | Fetch every pinned download in the roles' and host components' defaults and check its checksum. | imported by vendor_manifest.py | — | — |
-| `scripts/lib/facts/atoms.py` | lib | Resolve a citation against a checkout and hash the thing it names. | imported by evidence.py, lint.py, lock.py, notice.py | — | — |
+| `scripts/lib/facts/atoms.py` | lib | Resolve a citation against a checkout and hash the thing it names. | imported by lint.py, notice.py | — | — |
 | `scripts/deploy_tools/await_ci.py` | deploy_tools | Wait for master CI to reach a verdict on one SHA. | imported by merge.py, tools.py | `test_await_ci.py` | [0, 1, 2, 4, 75](#scriptsdeploytoolsawaitcipy) |
 | `scripts/lib/b2.py` | lib | One Backblaze B2 native-API session: authorize, list a prefix, delete a version. | imported by b2_api.py, b2_drain.py | `test_b2.py` | — |
 | `scripts/diagnostics/probe_lib/b2_api.py` | diagnostics | The Longhorn listing from B2 and its parser. | imported by longhorn.py | — | — |
@@ -156,7 +156,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/changed_set.py` | deploy_tools | The changed set: which Kustomizations a commit's bundle changes, from two `digests.json` files. | imported by chained_timeout.py, cross_plane_order.py, forward_only.py, promote.py, stateful.py, supersede.py, verify_promotion.py, wait.py | `test_changed_set.py` | — |
 | `scripts/deploy_tools/land_lib/ci.py` | deploy_tools | Step 2, pre-flight, and step 3, the master CI wait -- in that order, on purpose. | imported by deploy.py, pipeline.py | `test_land_ci.py` | — |
 | `scripts/deploy_tools/promote_lib/ci_contexts.py` | deploy_tools | The CI contexts a promotion requires, read from the checkout, and `promote.py ci-verdict`. | imported by promote.py, reads.py | `test_promote_ci_contexts.py` | — |
-| `scripts/lib/facts/citations.py` | lib | The closed citation grammar for the two fact stores. | imported by atoms.py, evidence.py, fact_status.py, lint.py, lock.py, notice.py, report.py | — | — |
+| `scripts/lib/facts/citations.py` | lib | The closed citation grammar for the two fact stores. | imported by atoms.py, fact_status.py, lint.py, notice.py, report.py | — | — |
 | `scripts/dev/findings_lib/claim.py` | dev | Whether a claim on an issue is still live, decided from the worktree that holds it. | imported by claim_cli.py, findings.py | — | — |
 | `scripts/dev/findings_lib/claim_cli.py` | dev | The four claim subcommands: `claim`, `release`, `claims` and `reap`. | imported by findings.py | `test_findings_claim_cli.py` | — |
 | `scripts/dev/fanout_lib/claims.py` | dev | The claims a fan-out takes under the orchestrator's own branch, and the batch specs they cover. | imported by place.py | — | — |
@@ -196,7 +196,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/renderer/renderer_lib/environment.py` | renderer | The strict Jinja environment the renderer renders templates and task expressions in. | imported by cluster.py, cronjob_gate.py, host.py, host_sources.py, images.py, placeholders.py, prepull.py, prune_label.py, restart.py, secret_checks.py, snapshot.py, standalone_map.py, task_inputs.py | — | — |
 | `scripts/lib/estate.py` | lib | The inventory as the docs generators read it: hosts, each host's vars, and its entries. | imported by catalog_backup.py, context.py, fragment_readers.py, fragments_hosts.py, fragments_storage.py, gen_doc_fragments.py, gen_role_glance.py, host.py, host_fixtures.py, host_sources.py, hosts.py, k8s_roles.py, networking.py, render_context.py, service_catalog.py, shell_templates.py | `test_estate.py` | — |
 | `scripts/deploy_tools/runbook_gates_lib/etcd_restore.py` | deploy_tools | Run the stop conditions of `docs/k3s-etcd-restore.md` in order, exit code naming the first failure. | no `__main__` guard; imported by test_runbook_gates_etcd_restore.py | `test_runbook_gates_etcd_restore.py` | — |
-| `scripts/lib/facts/evidence.py` | lib | Diff evidence for a ``moved`` finding: which removed identifiers the section's prose names. | imported by lock.py | — | — |
 | `scripts/lib/exit_codes.py` | lib | Every exit-code contract this repo's entry points share, named once. | imported by _land_fakes.py, alertmanager_api.py, alerts.py, applied.py, await_ci.py, b2_drain.py, backups.py, bootstrap_drill.py, broad.py, build_docs.py, builder.py, bundle_census.py, ci.py, ci_contexts.py, claim_cli.py, classify.py, cli_help.py, cli_parser.py, cluster_vars.py, core.py, deletion_drill.py, deploy.py, detach_notify.py, detach_run.py, exit_messages.py, fact_status.py, fanout.py, findings.py, flags.py, flux.py, flux_probe.py, fragments_deploy.py, gate_runner.py, gen_infra_map.py, gitops_view.py, handoff.py, headroom_probe.py, health.py, health_backup_targets.py, history_cli.py, homelab_render.py, host_secrets.py, label_worktree.py, land.py, land_tags.py, lander.py, longhorn_reap.py, merge.py, monitors.py, narrow_setup.py, notify.py, outcome.py, owners.py, pi_plane.py, place.py, playbook.py, probe.py, promote.py, promotion.py, prune.py, prune_worktrees.py, publish_pr.py, push_rules.py, readonly_rbac.py, renovate_branch_sweep.py, renovate_rebase.py, reset.py, review_unit.py, roundtrip.py, run.py, runbook_gates.py, scripts.py, secret_rotation.py, secret_setup_readers.py, setup_reach_hosts.py, shadow.py, shadow_diff.py, snapshots.py, stale_retarget.py, staleness.py, standalone_map.py, stateful.py, status.py, tags.py, takeover_census.py, tick.py, tools.py, under_locks.py, vendor_manifest.py, verify_promotion.py, vip_placement.py, wait.py, wait_probe.py | `test_exit_codes.py` | — |
 | `scripts/lib/exit_messages.py` | lib | What an entry point prints about its own exit code, read from `lib.exit_codes.CONTRACTS`. | imported by messages.py, probe.py | — | — |
 | `scripts/dev/findings_lib/export_cli.py` | dev | The `export` subcommand: the whole `claude` register, every state, written as one JSON file. | imported by findings.py | — | — |
@@ -223,7 +222,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/gh.py` | lib | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by autoland.py, boundaries.py, clean.py, label_worktree.py, land_tested_base.py, own_surface.py, pipeline_timeline.py, promote_state.py, publish_pr.py, push_rules.py, pytest_shard.py, renovate_branch_sweep.py, renovate_rebase.py, signing.py, tools.py, transport.py | `test_gh.py` | — |
 | `scripts/dev/findings_lib/gh_calls.py` | dev | The gh reads and writes `findings.py` makes, and the one place a plan is executed. | imported by backlog.py, board.py, claim_cli.py, export_cli.py, findings.py, history_cli.py | — | — |
 | `scripts/deploy_tools/land_lib/gh_read.py` | deploy_tools | A read-only `gh` call retried through a transient failure before the landing refuses (#5503). | imported by landing.py, merge.py, policy.py | — | — |
-| `scripts/lib/git.py` | lib | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by autoland.py, await_ci.py, bootstrap_case.py, broad.py, citations.py, clean.py, cluster_pins.py, cluster_vars.py, cross_plane_order.py, cross_plane_replay.py, decisions.py, digest_covers.py, doc_freshness.py, docs_provenance.py, evidence.py, fact_status.py, filters.py, flux.py, forward_only.py, health_checkout.py, host_packages.py, host_wait.py, inventory_keys.py, k3s_binary_sum.py, label_worktree.py, land.py, land_tags_cli.py, lint.py, lock.py, narrow_git.py, narrow_setup.py, notice.py, order_only.py, owed_run.py, owners.py, paths.py, place.py, prune_worktrees.py, publish_pr.py, push_rules.py, pytest_shard.py, reads.py, releases.py, releases_diff.py, releases_render.py, removed.py, render_guard.py, renovate_branch_sweep.py, replay.py, root_ignored_files.py, rotation_tools.py, run.py, secret_keys.py, setup_index.py, setup_reach_hosts.py, setup_role_chains.py, shared_role_reach.py, soak.py, staleness.py, state.py, tags.py, templates.py, tools.py, tracked_paths.py, transport.py, under_locks.py, wait_reads.py, worktree_orphans.py, worktrees.py | `test_git.py` | — |
+| `scripts/lib/git.py` | lib | One way to run git from a script, with the repository chosen by ``cwd`` alone. | imported by autoland.py, await_ci.py, bootstrap_case.py, broad.py, citations.py, clean.py, cluster_pins.py, cluster_vars.py, cross_plane_order.py, cross_plane_replay.py, decisions.py, digest_covers.py, doc_freshness.py, docs_provenance.py, filters.py, flux.py, forward_only.py, health_checkout.py, host_packages.py, host_wait.py, inventory_keys.py, k3s_binary_sum.py, label_worktree.py, land.py, land_tags_cli.py, lint.py, narrow_git.py, narrow_setup.py, notice.py, order_only.py, owed_run.py, owners.py, paths.py, place.py, prune_worktrees.py, publish_pr.py, push_rules.py, pytest_shard.py, reads.py, releases.py, releases_diff.py, releases_render.py, removed.py, render_guard.py, renovate_branch_sweep.py, replay.py, root_ignored_files.py, rotation_tools.py, run.py, secret_keys.py, setup_index.py, setup_reach_hosts.py, setup_role_chains.py, shared_role_reach.py, soak.py, staleness.py, state.py, tags.py, templates.py, tools.py, tracked_paths.py, transport.py, under_locks.py, wait_reads.py, worktree_orphans.py, worktrees.py | `test_git.py` | — |
 | `scripts/secrets_mgmt/git_dates.py` | secrets_mgmt | When each secret's ciphertext last changed, read out of git. | imported by host_secrets.py, secret_rotation.py | — | — |
 | `scripts/dev/fanout_lib/review/git_state.py` | dev | The git state outside a red batch's worktree that the red author could write (#3864, #3879). | imported by review.py | `test_fanout_git_state.py` | — |
 | `scripts/lib/git_testing.py` | lib | Build a throwaway git repository for a test, with the inherited `GIT_*` environment gone. | imported by _deploy_sh_fakes.py, _narrow_fixtures.py, _release_fixtures.py, _scratch_pytest.py | `test_git_testing.py` | — |
@@ -308,7 +307,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/land_lib/ledger.py` | deploy_tools | What the Landings board reads: one logfmt line per landing, from a Ledger of stamps. | imported by land.py, landing.py | `test_land_ledger.py` | — |
 | `scripts/lib/facts/lint.py` | lib | Lint for the fact stores: the forms the spec excludes, and the atoms that do not resolve. | imported by fact_status.py, notice.py | — | — |
 | `scripts/infra_map/live.py` | infra_map | Live state: what the cluster and the Pi report is actually running. | imported by gen_infra_map.py | — | — |
-| `scripts/lib/facts/lock.py` | lib | ``docs/facts.lock/``: the recorded hashes for every verified CLAUDE.md section. | imported by fact_status.py, lint.py | — | — |
 | `scripts/backup/longhorn_reap_lib/logic.py` | backup | Pure decision core shared by the two Longhorn reapers behind `longhorn_reap.py`. | imported by backups.py, selection.py, snapshots.py | `test_longhorn_reap_logic.py` | — |
 | `scripts/diagnostics/probe_lib/longhorn.py` | diagnostics | Longhorn's B2 backup objects: what the estate holds and what it costs. | imported by b2_ledger.py, cli_parser.py, subcommands.py | `test_probe_longhorn.py` | — |
 | `scripts/lib/longhorn_lib/longhorn_backup_health_logic.py` | lib | Pure decision core for the Longhorn backup-plane heartbeat (longhorn_backup_health.py). | no `__main__` guard; imported by test_longhorn_backup_health.py, test_longhorn_restore_drill_checks.py | — | — |
@@ -384,7 +382,6 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/review/red_lock.py` | dev | What a fix may change in a red test file, and what it may delete from a conftest. | imported by red_gate.py | `test_fanout_red_lock.py` | — |
 | `scripts/dev/fanout_lib/review/red_registry.py` | dev | What a fix may change in a patch registry the red commits touched (#4875). | imported by red_gate.py | — | — |
 | `scripts/dev/fanout_lib/review/red_tests.py` | dev | The rules a red test is held to: why it failed and what it suppresses. | imported by hunk_check.py, red_gate.py, review.py | — | — |
-| `scripts/lib/facts/relations.py` | lib | The status algebra: the spec's Datalog rules as set comprehensions over finite relations. | imported by fact_status.py, lock.py | — | — |
 | `scripts/lib/release_bin_groups.py` | lib | Resolve which source files a `release_bin.yml` group deploys. | imported by cron_targets.py | — | — |
 | `scripts/diagnostics/probe_lib/releases.py` | diagnostics | `probe.py releases` -- which commit produced the manifests each k8s service is running. | imported by health.py, land_rerolls.py, subcommands.py | `test_probe_releases.py` | — |
 | `scripts/diagnostics/probe_lib/releases_consumers.py` | diagnostics | Which services a byte-supplying shared k8s role can actually make stale. | imported by releases.py | `test_probe_releases_consumers.py` | — |
@@ -392,7 +389,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/releases_format.py` | diagnostics | Renderers for `probe.py releases` -- the table, the cron-facing list and the Kuma push line. | imported by releases.py | — | — |
 | `scripts/diagnostics/probe_lib/releases_render.py` | diagnostics | The render digest, which is `probe.py releases`' primary answer on staleness. | imported by releases.py | `test_probe_releases_render.py` | — |
 | `scripts/diagnostics/probe_lib/releases_retired.py` | diagnostics | Release records for services the inventory no longer declares. | imported by health.py, releases.py, releases_consumers.py | — | — |
-| `scripts/lib/facts/removed.py` | lib | Identifier-shaped tokens a range of commits removed, and whether the tree still holds them. | imported by evidence.py, lint.py | — | — |
+| `scripts/lib/facts/removed.py` | lib | Identifier-shaped tokens a range of commits removed, and whether the tree still holds them. | imported by lint.py | — | — |
 | `scripts/lib/removes_object.py` | lib | The `Removes-Object:` line: a commit's declaration that it removes a cluster object on purpose. | imported by cross_plane_order.py, merge.py, reads.py | — | — |
 | `scripts/infra_map/render.py` | infra_map | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | — | — |
 | `scripts/lib/render_context.py` | lib | The variable context a role template renders with, in Ansible's precedence. | imported by applied.py, compose_templates.py, context.py, host.py, k8s_manifests.py, setup_census.py, setup_census_items.py, setup_templates.py, shell_templates.py, unit_templates.py | `test_render_context.py` | — |
@@ -645,8 +642,8 @@ The sections below split them by **how each one is run**, which is derived from 
 
 | Exit | Name | Meaning | What to do |
 |---|---|---|---|
-| 0 | `FACT_STATUS_OK` | every section read is IN, the write is done, or `notice` ran. | — |
-| 1 | `FACT_STATUS_OUT` | a section is OUT, a lint finding blocks, or `reverify` wrote the lock. | — |
+| 0 | `FACT_STATUS_OK` | `lint` found no error rule, or `report` or `notice` ran. | — |
+| 1 | `FACT_STATUS_LINT_FAILED` | `lint` found an error rule. | — |
 | 64 | `FACT_STATUS_BAD_ARGS` | the command line is wrong. | — |
 | 2 | `FACT_STATUS_BAD_REF` | `notice` found no merge base. | — |
 
