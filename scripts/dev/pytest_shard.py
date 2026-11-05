@@ -67,7 +67,8 @@ rewritten only when both runs drift and agree with each other within the band. O
 run wrote 0.0s for a 16s module and 62s for a 1s one, and CI failed the bot's branch (#6286).
 Two agreeing runs cannot catch a cost that is real on this host alone, such as a test walking
 untracked files: 85.09s against CI's 2.08s. So the refresh keeps the recorded weight and prints
-the module when the runner table says the gate would reject the row (#7132).
+the module when the runner table says the gate would reject the row (#7132). A new row has no
+recorded weight to keep, so `--record-missing` writes the runner seconds instead (#7136).
 
 THE GATE FAILS ONLY WHERE SOMEONE CAN APPLY THE REPAIR. On a pull request the author re-records
 and pushes. On a push to master nobody can, and a red master run still reaches the deployer's
@@ -119,14 +120,16 @@ from shard_weight_gate import (
     RUNNER_HEAVY_FAIL_SECONDS,
     RUNNER_HEAVY_SECONDS,
     RUNNER_WEIGHTS_PATH,
+    STALE_WEIGHT_FAIL_RATIO,
     STALE_WEIGHT_FLOOR_SECONDS,
     STALE_WEIGHT_RATIO,
+    drifted,
     gate_complaints,
-    load_runner_weights,
     packing_table,
     parse_durations,
     readings_the_gate_accepts,
-    runner_weights,
+    readings_the_gate_rejects,
+    refresh_runner_weights,
     write_runner_weights,
 )
 
@@ -144,13 +147,6 @@ _TEST_FILE_GLOBS = ("test_*.py", "*_test.py")
 # which is how the 357-file shard became the pole while the model called every shard equal.
 _PER_FILE_SECONDS = 0.028
 
-# How far apart a module's recorded and measured seconds may sit, either way, before
-# `--refresh-drifted` rewrites the entry. It is #4888's Verify-by bound, so a refreshed table
-# holds every module within it, and a re-measurement inside it is treated as noise.
-DRIFT_RATIO = 1.5
-# An entry within this many seconds of what it measured stays, whatever the ratio: 0.02s
-# measuring 0.05s is 2.5x and changes no shard's balance.
-DRIFT_FLOOR_SECONDS = 0.5
 # The docs-refresh cron runs at 06:17 and 18:17. Two runs 12 hours apart always fall in
 # consecutive periods of this length, so successive runs visit successive slices.
 _SLICE_PERIOD_SECONDS = 12 * 60 * 60
@@ -321,7 +317,9 @@ def record_missing_weights(
     Seconds rather than the full run's minutes, which is what lets the docs-refresh cron run
     this on every tick. A recorded path no longer in the census is dropped on the way
     through, so the table does not keep a weight for a module that was deleted. A new row of
-    `STALE_WEIGHT_FLOOR_SECONDS` or more is measured twice and keeps the lower reading.
+    `STALE_WEIGHT_FLOOR_SECONDS` or more is measured twice and keeps the lower reading. A new
+    row whose reading the gate's over-recorded arm would reject against the committed runner
+    table holds the runner seconds instead, and a line on stdout names it.
     """
     files = census() if files is None else files
     known = load_weights(path)
@@ -337,6 +335,18 @@ def record_missing_weights(
         heavy = [f for f in missing if kept[f] >= STALE_WEIGHT_FLOOR_SECONDS]
         again = measure(heavy) if heavy else {}
         kept |= {f: min(kept[f], again[f]) for f in heavy if again.get(f)}
+        # DECIDED: a reading the gate would reject writes the runner seconds, not no row. With no
+        # row the module is measured twice on every tick, under the git-tree lock, for as long as
+        # the local cost lasts. `assign` packs this module on the runner table either way, the
+        # row passes the gate, and `--refresh-drifted` refuses to raise it again (#7136).
+        rejected = readings_the_gate_rejects({f: kept[f] for f in missing})
+        for module, seconds in rejected.items():
+            print(
+                f"recorded {module} at the runner table's {seconds:.2f}s: this host read "
+                f"{kept[module]:.2f}s, and CI's gate rejects a row "
+                f"{STALE_WEIGHT_FAIL_RATIO:g}x or more above the runner table"
+            )
+        kept |= rejected
     return _write_weights(kept, path)
 
 
@@ -384,14 +394,6 @@ def refresh_slice(path: str, slices: int) -> int:
 def slice_at(seconds: float, slices: int) -> int:
     """The 0-based slice a `--refresh-drifted` run at epoch `seconds` re-measures."""
     return int(seconds // _SLICE_PERIOD_SECONDS) % slices
-
-
-def drifted(recorded: float, measured: float) -> bool:
-    """Whether `measured` is far enough from `recorded`, either way, to rewrite the entry."""
-    if abs(measured - recorded) < DRIFT_FLOOR_SECONDS:
-        return False
-    low, high = sorted((recorded, measured))
-    return high > DRIFT_RATIO * low
 
 
 def refresh_drifted_weights(
@@ -510,34 +512,6 @@ def fetch_runner_logs(runs: int, gh=gh_mod.gh) -> list[str]:
             f"{CI_BRANCH} run(s) of {CI_WORKFLOW}, not the {runs} asked for"
         )
     return reports
-
-
-def refresh_runner_weights(
-    reports: list[str], keep: list[str], path: Path = RUNNER_WEIGHTS_PATH
-) -> list[str]:
-    """Merge the medians in `reports` into the runner table; return the modules it wrote.
-
-    A merge, not `write_runner_weights`'s rewrite. The newest runs change with every merge to
-    master, so a rewrite would move most rows on every cron run and publish a PR each time.
-    Here a module the table lacks is added, a present one is rewritten only when `drifted`
-    judges it out of band, and a module no longer in `keep` is dropped. A module the reports
-    did not measure keeps its row, so a module that skipped on these runs is not packed cold.
-    """
-    measured = runner_weights(reports)
-    if not measured:
-        raise ValueError(
-            "no durations line in any report, so there is nothing to record"
-        )
-    kept = set(keep)
-    table = {m: s for m, s in load_runner_weights(path).items() if m in kept}
-    moved = sorted(
-        m
-        for m, s in measured.items()
-        if m in kept and (m not in table or drifted(table[m], s))
-    )
-    table |= {m: measured[m] for m in moved}
-    path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n")
-    return moved
 
 
 def _summary(shards: int) -> str:

@@ -194,14 +194,23 @@ def _flags(text: str, arguments: str) -> set[str]:
     return flags
 
 
-def test_a_successful_drift_refresh_reaches_the_crons_output(tmp_path):
-    """#7132: a refused row leaves no diff, so the step's message is the only trace of it.
+@pytest.mark.parametrize(
+    ("message", "next_message"),
+    [
+        pytest.param("WEIGHTS_MSG", "REFRESH_MSG", id="record-missing"),
+        pytest.param("REFRESH_MSG", "RUNNER_MSG", id="refresh-drifted"),
+    ],
+)
+def test_a_successful_weight_step_reaches_the_crons_output(
+    tmp_path, message, next_message
+):
+    """#7132, #7136: nothing in the diff shows a reading the gate refused, only this message.
 
     Runs the rendered step with a stub `uv` that exits 0. The step ends where the next
     `pytest_shard.py` step starts, and `alert` and `logger` count as output.
     """
-    step = re.search(r"^REFRESH_MSG=.*?(?=^RUNNER_MSG=)", SCRIPT, re.M | re.S)
-    assert step, f"{TEMPLATE.name} lost the --refresh-drifted step"
+    step = re.search(rf"^{message}=.*?(?=^{next_message}=)", SCRIPT, re.M | re.S)
+    assert step, f"{TEMPLATE.name} lost the {message} step"
     refused = "scripts/x/tests/test_refused.py"
     stubs = fake_bin(
         tmp_path / "bin",

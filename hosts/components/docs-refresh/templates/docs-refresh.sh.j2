@@ -450,6 +450,10 @@ if [ "$WEIGHTS_RC" -ne 0 ]; then
     "$WEIGHTS_MSG" | tr '\n' ' ' | tail -c 300)"
   DEGRADED_MSG="recording shard weights failed (exit ${WEIGHTS_RC})"
   GENERATORS_OK=0
+else
+  # A new row holding the runner seconds looks like any other row in the diff, so the journal
+  # is where the local reading it replaced stays visible.
+  printf '%s\n' "$WEIGHTS_MSG"
 fi
 
 # REFRESH THE WEIGHTS THAT DRIFTED, one eighth of the table per run (#4888). The step above
