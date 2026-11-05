@@ -175,8 +175,8 @@ tick and no hand apply is involved.
 3. `unitq cat homelab-sync-artifacts.service` and `unitq cat homelab-claude-otel-health.service`
    show no `LoadCredential=` line.
 
-**The test.** `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`
-holds both shipped scripts to no Kuma library, `kuma_push` or push URL. Its red case is
+**The test.** `test_neither_producer_pushes_to_kuma` in
+`hosts/lib/tests/test_claude_artifacts_node_timers.py`, which C-6 retired, held both shipped scripts to no Kuma library, `kuma_push` or push URL. Its red case is
 `test_a_script_that_pushes_to_kuma_is_flagged`. The two script tests read the verdict back from
 the journal line a `logger` stub records, in place of a stubbed `kuma_push`.
 
