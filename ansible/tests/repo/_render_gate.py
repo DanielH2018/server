@@ -52,7 +52,7 @@ _WRAPPERS = frozenset(
 )
 # Jinja's two entry points for a template string. A read whose result goes straight into one of
 # these renders the template rather than asserting on its text, so it is not a source read:
-# `setup/test_kuma_check_timer.py` renders its two units that way, with per-test overrides.
+# `setup/test_check_timer.py` renders its two units that way, with per-test overrides.
 _RENDER_CALLS = frozenset({"from_string", "Template"})
 
 

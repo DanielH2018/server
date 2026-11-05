@@ -30,7 +30,6 @@ from _shell_render import rendered_shell_texts
 # would answer the caller's own `--help` with the library's comment and exit the caller.
 EXEMPT = {
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
-    "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
     "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh",
     # Sourced by login shells, never executed.
     "hosts/components/pi-tuning/templates/homelab-profile.sh",

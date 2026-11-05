@@ -3,13 +3,13 @@
 
 Reads the cluster through the read-only ServiceAccount kubeconfig, the restore drill's stamp
 ConfigMap among it, and the B2 deletion accounting cron's journal. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
-wrapper to log and push to Kuma. It never exits nonzero on a bad verdict: a DOWN is data to
+wrapper to write as its check textfile, which a Prometheus rule reads. It never exits nonzero on a bad verdict: a DOWN is data to
 report, not a crash. Same shape as configarr_health.py: this file does the I/O,
 longhorn_backup_health_logic.py holds every threshold and decides up-or-down, and the split is
 what makes the decisions unit-testable without a cluster.
 
 Runs on daniel-box via `uv run --no-project --python <pin>` (host_python_version in
-ansible/inventory/group_vars/all.yml). The Kuma push token stays in the templated wrapper, which
+ansible/inventory/group_vars/all.yml). The Healthchecks.io ping key stays in the templated wrapper, which
 sources it from an 0640 env file at runtime, and never appears here.
 
 Usage: longhorn_backup_health.py   (takes no arguments; -h/--help prints this text)
@@ -587,7 +587,7 @@ def main(now: float | None = None) -> int:
 
     # Log the FULL verdict before printing the ranked one, unconditionally — matching the
     # original script's "log before push" ordering, so a DOWN status logged here still leaves a
-    # journalctl trail even though only `push_msg` reaches the wrapper's stdout/Kuma.
+    # journalctl trail even though only `push_msg` reaches the wrapper's stdout.
     _syslog(f"status={status} {msg}")
 
     print("%s\t%s" % (status, push_msg))

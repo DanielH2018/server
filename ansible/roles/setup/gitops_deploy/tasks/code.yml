@@ -204,7 +204,5 @@
         src: ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_setup_roles.py
       - live: /opt/gitops-deploy/host_lib.py
         src: hosts/lib/host_lib.py
-      - live: /opt/gitops-deploy/kuma_push.py
-        src: hosts/lib/kuma_push.py
       - live: /opt/gitops-deploy/ci_verdict.py
         src: hosts/lib/ci_verdict.py

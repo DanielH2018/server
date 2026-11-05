@@ -129,7 +129,7 @@ push-token secret remains.
     - None of these identifiers appears in a non-test file under `ansible/`, `hosts/`,
       `scripts/` or `.claude/`, outside the allowlist below: `/api/push/`, `kuma_push`, `KUMA_URL`,
       `KUMA_PUSH_`, `monitor_status`, `entry_port('uptime-kuma')`, `kuma-push-lib`,
-      `kuma_ingress_monitors`, `kuma-check-`. C-6 quotes the `git grep` that shows it
+      `kuma_ingress_monitors`. C-6 quotes the `git grep` that shows it
       (*Phase C* item 6). A read through an indirection escapes that grep:
       `netpol-probe-job.yaml.j2` reads the entry's port through `entry_port(t.service)`. The
       named-member case C-1 adds to `ansible/tests/k8s/test_netpol_probe_targets.py` holds
@@ -151,6 +151,9 @@ push-token secret remains.
         - `scripts/dev/pytest_shard_weights.json`: a generated record keyed by test node
           ids, which can name deleted tests.
         - The census row itself and its red fixture.
+        - The `kuma-check-` unit-name prefix, and the `/var/lib/kuma-check/` directory
+          of the same units' down markers, wherever a file holds them. ADR 0026 records
+          the operator's ruling that the timers keep their names.
         - `ansible/templates/autokuma.yml.j2`, and the four Pi compose templates under
           `hosts/components/pi-compose/services/` with their inert
           `org.homelab.kuma-docker-monitor` labels (see *Open questions*, item 7).
@@ -377,9 +380,10 @@ Every other role M6 edits needs no edge:
 - **configarr and janitorr.** D5 flips each only after its H2 family PR (H2.5b, H2.5c) and its
   `k8s_host_files` conversion PR (`d5-bulk-move.md` item 26). H2.5b removes configarr's
   `install_host_lib.yml` and `stamp_deployed.yml` imports, and H2's janitorr PR does the same
-  for janitorr. A role whose `kuma_push.py` pair C-3a must delete is therefore still
-  Ansible-owned. A flux-owned one has no pair left, and its `/opt` copy is an absent arm in
-  `k8s_host_files`, which the tick applies (C-3a).
+  for janitorr. Both have flipped, so neither holds a `kuma_push.py` pair. Each `/opt` copy is
+  an absent arm in `k8s_host_files`, which the tick applies. B6b kept `kuma_push.py` in each
+  `health-configmap.yaml.j2`, because `host_lib.py` imports it at module level, so C-3a edits
+  both flux-owned roles (C-3a).
 
 If the index declines the monitor-bridge edge, the fallback is the owner-independent form,
 at a cost. A flux-owned monitor-bridge splits each remaining bridge-row Cutover-a in two: an
@@ -888,8 +892,9 @@ files that the rows above name only by their Ansible path. Each goes with the PR
       `hosts/components/loki-route-witness/component.yml` and the three
       `kuma-check-secret-rotation-audit` units in
       `hosts/components/secret-rotation/component.yml`, with the header comment in each
-      file that names the old timer. The read is C-3b's
-      `systemctl list-unit-files 'kuma-check-*'` on daniel-box.
+      file that names the old timer. The read is
+      `systemctl list-unit-files 'kuma-check-loki-read-route*' 'kuma-check-secret-rotation-audit*'`
+      on daniel-box.
     - `/opt/homelab-builder/kuma_push.py` in `hosts/components/builder/component.yml`. The
       read is C-3a's `ls /opt/*/kuma_push.py` on daniel-box.
     - `/usr/local/lib/pi-kuma-push-lib.sh` in `hosts/daniel-pi/package.yml`. The read is a
@@ -965,7 +970,7 @@ not name.
     - B4's: `hosts/daniel-server/package.yml`, both its header line that calls the UPS
       watchdog's token the one credential and the comment above `credentials:`.
     - B5's: `hosts/daniel-pi/package.yml`.
-- **C-3b**, with the timer rename:
+- **C-3b**, with the task-file rename:
     - The comments that cite `roles/setup/common/tasks/kuma_check_timer.yml` or call the
       contract "the kuma-check form M6 left":
       `hosts/components/loki-route-witness/templates/loki-read-route-health.sh.j2`,
@@ -974,21 +979,9 @@ not name.
       `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.service.j2`,
       `hosts/components/loki-route-witness/component.yml` and
       `hosts/components/secret-rotation/component.yml`. They cite `check_timer.yml` after it.
-    - The down marker `/var/lib/kuma-check/<name>.down` moves to
-      `/var/lib/homelab-check/<name>.down` in the four witness and audit units: the
-      `ExecStopPost=` of `homelab-loki-route-witness.service.j2` and
-      `homelab-secret-rotation-audit.service.j2`, and the `ConditionPathExists=` of
-      `hosts/components/loki-route-witness/units/homelab-loki-route-witness-boot.service` and
-      `hosts/components/secret-rotation/units/homelab-secret-rotation-audit-boot.service`. A
-      check that is red when its host
-      installs the new version loses one boot rerun, because the boot unit reads the new
-      path. Its timer reruns it at the next slot, so the cost is one missed rerun. Two tests
-      pin the old path and change with it: `hosts/lib/tests/test_loki_route_witness_component.py`
-      and `hosts/lib/tests/test_secret_rotation_component.py`.
-      Allowlisting the old path instead would keep `kuma-check` in two host packages for
-      good. Each old marker joins its component's `legacy:` list, and C-6 deletes the entry
-      once a read-only `ls` finds no file. This adds the daniel-box and daniel-server packages to
-      C-3b's deploys.
+    - The down marker stays `/var/lib/kuma-check/<name>.down`, because the units keep their
+      names under ADR 0026. The comment edits still add the daniel-box and daniel-server
+      packages to C-3b's deploys, because the comments render into both packages.
 - **C-6**, which rewords each comment that names Kuma only as history:
     - The producers whose push a Cutover-2 removed:
       `hosts/components/docs-refresh/templates/docs-refresh.sh.j2`,
@@ -1893,12 +1886,22 @@ here. C-1 waits for the operator's acceptance.
         - The nine `stamp_deployed` pairs for `kuma_push.py` go (*Baseline*, the push
           plumbing): `gitops_deploy`, `renovate_agent`, `renovate_notify`, `fake_remux`,
           `deploy_ui`, `configarr`, `janitorr` and the two in `k3s/tasks/health-crons.yml`.
-          The baseline counted eight, before `deploy_ui` gained its pair. The configarr
-          and janitorr pairs go here only if H2.5b and H2.5c have not removed them already.
-          D5 flips neither role before its H2 PR, so a pair C-3a deletes sits in an
-          Ansible-owned role. If H2.5b landed first, configarr's CronJob ConfigMap carries
-          `kuma_push.py` until B6's configarr Cutover-2 drops it, so that Cutover-2 precedes
-          C-3a, and the precondition grep below covers its ConfigMap template.
+          The baseline counted eight, before `deploy_ui` gained its pair. H2.5b and H2.5c
+          removed the configarr and janitorr pairs, so seven remain at C-3a's base.
+        - **The two health ConfigMaps change in the same commit.** B6b's Cutover-2 kept
+          `kuma_push.py` in each `health-configmap.yaml.j2`, because `host_lib.py` imports it
+          at module level, and deleting the file breaks both Flux renders. C-3a edits both
+          ConfigMap templates, configarr's `health-cronjob.yaml.j2`, both `*_health.py`
+          docstrings and both role `CLAUDE.md` files. One promotion applies each ConfigMap and
+          its `host_lib.py` change together, and the cross-plane order gate judges the PR.
+        - **`render_records.py` loses its push.** It reads `kuma_push` through the `host_lib`
+          re-export, so `git grep kuma_push.py` does not list it. The role is pinned
+          `state: absent`, so no host runs the script, and the edit changes no host.
+        - **The `kuma-push-lib` drift fragment goes with the library.** Dropping the
+          `stamp_deployed` record task leaves
+          `/var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib` on each host, and
+          `setup-drift-lib.sh` reports a pair whose source left the repo as drift. The absent
+          task below removes both paths.
         - The setup/common `CLAUDE.md` rows that name `kuma_push.py` are reworded. B7's
           autofix-bridge Cutover-2 has already reworded that role's line.
         - **The host packages change in the same commit.** *Files under `hosts/`* in
@@ -1932,20 +1935,18 @@ here. C-1 waits for the operator's acceptance.
           cron runs them.
         - **The host file.** `initial_setup/tasks/crons.yml`'s copy task is `tags: [always]`
           behind a `DECIDED` marker, and it runs on every host. C-3a replaces it with an
-          `always`-tagged `state: absent` task for `/usr/local/lib/kuma-push-lib.sh`, and
-          drops the `stamp_deployed` record task for `kuma-push-lib`. The tick applies it on
+          `always`-tagged `state: absent` task for `/usr/local/lib/kuma-push-lib.sh` and the
+          drift fragment, and drops the `stamp_deployed` record task for `kuma-push-lib`. The
+          marker moves to the `homelab-check-lib.sh` copy task. The tick applies it on
           daniel-box. On daniel-server it is the hand run `land.sh`'s note names, run on that
           host. On the Pi it is `initial_setup.yml --tags optimize_pi -e target=daniel-pi`
           (**operator-only**), because `always` rides on any tag. C-6 deletes the absent task
           once a read-only `ls /usr/local/lib/kuma-push-lib.sh` finds no file on daniel-box,
           and over `ssh` on daniel-server and the Pi.
         - **Deploys.** The tick applies `initial_setup`, `gitops_deploy`, `renovate_agent`,
-          `renovate_notify`, `fake_remux` and `deploy_ui` on daniel-box. `land.sh` deploys `configarr` and
-          `janitorr` while each still imports `install_host_lib.yml`, which
-          `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` defers and alerts on. Once H2
-          has removed a role's import, C-3a does not edit it, and its `/opt` copy is H2's
-          absent arm: in the role while it is Ansible-owned, and in `k8s_host_files`, applied
-          by the tick, after D5's conversion PR. The `k3s` hand apply is
+          `renovate_notify`, `fake_remux` and `deploy_ui` on daniel-box. `promote` applies
+          `configarr` and `janitorr`, which are flux-owned. Their `/opt` copies are H2's absent
+          arm in `k8s_host_files`, applied by the tick. The `k3s` hand apply is
           `--tags "backup-health,live-drift"` (**operator-only**), the tags on the two `k3s` stamps and on the tasks that install
           `host_lib.py` beside the backup health reader and the live-drift check. Each host
           installs a new version of its own package through its `homelab-updater.timer`, and
@@ -1954,30 +1955,25 @@ here. C-1 waits for the operator's acceptance.
         - **The `/opt` copies.** C-6 deletes the `install_host_lib.yml` absent task once a
           read-only `ls /opt/*/kuma_push.py` finds no file on daniel-box and, over `ssh`, on
           daniel-server.
-    - **C-3b, the timer rename.** Rename `kuma_check_timer.yml` to `check_timer.yml`, its units
-      to `homelab-check-<name>`, its variables `kuma_check_name`, `kuma_check_on_calendar` and
-      `kuma_check_state` to `check_timer_name`, `check_timer_on_calendar` and
-      `check_timer_state` at every importer, and `test_kuma_check_timer.py` with them. Without
-      the variable rename, every importer fails the census row. The task file
-      gains a legacy-unit removal, mirroring its legacy-cron removal: stop, disable and delete
-      `kuma-check-<name>.{service,timer}`, so the old and new timers never both run. The
-      removal runs in both arms, not only the present arm. An absent import must also remove
-      the old name, or a `kuma-check-*` unit that a hand apply has not yet removed outlives
-      the rename (*When D6.17 or D6.18 has landed first*). A test case asserts each arm. The removal names `kuma-check-`, which exit criterion 3 forbids, so
-      C-6 deletes it once a read-only `systemctl list-unit-files 'kuma-check-*'` lists nothing
-      on daniel-box, daniel-server and the Pi. Update `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, `narrow_setup.py`,
+    - **C-3b, the task-file rename.** ADR 0026 records the operator's ruling of 2026-10-24: the
+      `kuma-check-*` units keep their names (*Open questions*, item 6). Rename
+      `kuma_check_timer.yml` to `check_timer.yml`, its three templates to `check-timer.*.j2`,
+      every `kuma_check_*` variable to `check_timer_*` at every importer, and
+      `test_kuma_check_timer.py` with them. Without the variable rename, every importer fails
+      the census row. The units and their down markers do not move, so the task file gains no
+      legacy-unit removal. Update `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, `narrow_setup.py`,
       `setup_role_chains.py` and `test_setup_cross_role_files.py`, unless D6 has deleted them.
-      Regenerate the glance blocks that name the timers, after fixing their reader:
+      Fix the reader of the glance blocks that name the timers:
         - `scripts/docs/catalog_lib/glance_facts.py:timer_units` finds a timer import only
-          when the target ends in `common/tasks/kuma_check_timer.yml`. It reads the
-          `kuma_check_*` variables and emits `kuma-check-<name>.timer`.
+          when the target ends in `common/tasks/kuma_check_timer.yml`, and it reads the
+          `kuma_check_*` variables.
         - Unchanged, it finds nothing after the rename. The `regen-role-glance` hook would
           then rewrite the k3s, initial_setup, gitops_deploy and render_records blocks
           without their timers, and CI would agree with the generator (class 3).
-        - C-3b points it at `check_timer.yml` and the new variables, and makes it emit
-          `homelab-check-<name>.timer`. A named-member case in
+        - C-3b points it at `check_timer.yml` and the new variables, and it keeps emitting
+          `kuma-check-<name>.timer`. A named-member case in
           `scripts/docs/tests/test_gen_role_glance.py` asserts that the k3s role yields
-          `homelab-check-manifest-prune.timer` and `homelab-check-live-drift.timer`, and it
+          `kuma-check-manifest-prune.timer` and `kuma-check-live-drift.timer`, and it
           fails when the generator finds none.
 
       The rerun-while-red contract stays,
@@ -1995,15 +1991,12 @@ here. C-1 waits for the operator's acceptance.
           import whose state is the literal `absent`, and C-3b keeps that skip under
           `check_timer_state`. Without the skip, the glance block would list two timers that
           are not installed. The named-member case therefore excludes the two k3s imports.
-          It asserts that initial_setup yields `homelab-check-setup-drift.timer` instead. The
+          It asserts that initial_setup yields `kuma-check-setup-drift.timer` instead. The
           `k3s` hand apply stays `--tags "manifest-prune,live-drift"`.
         - If D6.17 has merged but its hand apply has not run, C-3b can still merge first.
           D6.17's apply then runs on a tree that holds C-3b's rename, so the k3s absent arm
-          is the renamed one. That arm removes the legacy `kuma-check-<name>` units as well
-          as the `homelab-check-<name>` ones, so the apply still stops
-          `kuma-check-manifest-prune` and `kuma-check-live-drift`. An absent arm that removed
-          only `homelab-check-*` would leave both old units running behind a green recap,
-          and nothing would catch them before D6.18's step 4 (#4636).
+          is the renamed one, and it stops `kuma-check-manifest-prune` and
+          `kuma-check-live-drift` as before.
         - If D6.18 has deleted the two timer imports, C-3b renames no k3s import and has no
           `k3s` hand apply. Its named-member case asserts the same initial_setup timer.
         - C-3a's `k3s` hand apply stays `--tags "backup-health,live-drift"` until D6.18
@@ -2041,7 +2034,7 @@ here. C-1 waits for the operator's acceptance.
    each hit to its PR.
    Its precondition, quoted in the PR, is the read for exit criterion 3's first bullet. It
    must list allowlist entries only:
-   `git grep -l -E "/api/push/|kuma_push|KUMA_URL|KUMA_PUSH_|monitor_status|entry_port\('uptime-kuma'\)|kuma-push-lib|kuma_ingress_monitors|kuma-check-" -- ansible hosts scripts .claude ':!*/tests/*' ':!*/test_*'`.
+   `git grep -l -E "/api/push/|kuma_push|KUMA_URL|KUMA_PUSH_|monitor_status|entry_port\('uptime-kuma'\)|kuma-push-lib|kuma_ingress_monitors" -- ansible hosts scripts .claude ':!*/tests/*' ':!*/test_*'`.
    C-6 rewords any other hit whose PR missed it. Before C-4b, the C-4b entries stay listed.
    C-6 also deletes C-3a's two absent tasks, for `kuma-push-lib.sh` and for the `/opt` copies
    of `kuma_push.py`, once the reads C-3a names find no file. C-6 lands after C-7: until C-7,
@@ -2246,8 +2239,8 @@ this applies to, with what the rules predict:
 | C-1b | empty the uptime-kuma render down to its claims: the seven templates, the declaration task and the tests that render them, the include's secret list and rollout; the Authelia bypass; the entry's routed fields and the probe row; the probe-row named-member case; `Removes-Object:` lines; the operator's `cluster_vars.py write`; a quoted `homelab-render cluster --role uptime-kuma netpol-baseline`; after C-1a's reads | ~3,050 removed, ~40 added | the promotion (`authelia`, `blackbox-exporter`, `pihole`, `uptime-kuma`, then `netpol-baseline`) |
 | C-2a | the bespoke grants | ~55 removed | the edited roles, then `netpol-baseline` |
 | C-2b | the role directory, the entry and `k8s_host_files/tasks/uptime-kuma.yml`, after C-1b's prune reads `NotFound`; then the **operator-only** delete of the claims and any Secret left | ~100 removed | the promotion |
-| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `land.sh` for `configarr` and `janitorr` only while H2 has not removed their `install_host_lib.yml` import (*When D5 flips a role M6 edits*); by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
-| C-3b | the timer rename with the legacy-unit removal; the variable rename; `glance_facts.py:timer_units` and its named-member case; the `hosts/` comments that cite the task file and the witness and audit units' down marker (*Every `hosts/` file the grep finds, by PR*) | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand; a new version of the daniel-box and daniel-server host packages |
+| C-3a | `kuma-push-lib.sh` (an absent task on every host), `kuma_push.py`, the re-export, the `install_host_lib.yml` loop and an absent task for the `/opt` copies, the nine stamp pairs, the cross-role table rows; the `kuma-push` component, the `hosts/` copies of `kuma_push.py` and the renderer's two `kuma-push-lib.sh` rows; after B7's autofix-bridge Cutover-2, after B9's Cutover-2 on all three hosts and after C-2b | ~500 removed | a new version of all three host packages; the tick (initial_setup, gitops_deploy, renovate_agent, renovate_notify, fake_remux, deploy_ui on daniel-box); `promote` for the `configarr` and `janitorr` ConfigMaps; by hand on daniel-server and the Pi; `k3s --tags "backup-health,live-drift"` by hand |
+| C-3b | the task-file and template rename; the variable rename; `glance_facts.py:timer_units` and its named-member case; the `hosts/` comments that cite the task file (*Every `hosts/` file the grep finds, by PR*) | ~300 changed | the tick; `k3s --tags "manifest-prune,live-drift"` by hand; a new version of the daniel-box and daniel-server host packages |
 | C-4a | the key rename, `ingress_probes.py` and its `ansible_jinja_env.py` registration | ~160 | per the narrowing |
 | C-4b | delete `kuma_monitors.py`, its `ansible_jinja_env.py` import and registration, and its `FILTER_FIELDS` row, after D6 | ~70 removed | none once D6 has landed |
 | C-5 | secrets (**operator-only** half first) | ~100 | none |
@@ -2420,9 +2413,8 @@ M4's rules.
   textfile before the push, a restarted container reads success 0, and the rules' deadline literals equal `DEADLINE_S`.
 - The B-6a render test: `alertmanager.local.<domain>` resolves to `two_factor` at first
   match, and it fails if the rule sits behind the `*.local` wildcard.
-- C-3b: two test cases in which a host carries a `kuma-check-<name>` unit, one per arm.
-  The present arm removes it, and so does the absent arm. Also the glance case that fails when `timer_units` finds no
-  `homelab-check-*` timer in the k3s role.
+- C-3b: the glance cases that fail when `timer_units` finds no `kuma-check-*` timer in the
+  k3s role, and that read an import of `check_timer.yml`.
 - A0: the named-member floor refuses an empty index and accepts the five survivors, and
   A0's PR quotes a green `--dry-run --tags uptime-kuma` on the real render.
 - C-1: the dry run's prune-guard task passes on the emptied role, and the probe Job renders
@@ -2485,9 +2477,8 @@ M4's rules.
     - Reverting C-3a restores both libraries, the loop entry and the stamp pairs. Each
       consumer copies `kuma_push.py` again on its next apply, through the same planes C-3a
       names. Nothing pushes through it by then, because every Cutover-2 has applied.
-    - Reverting C-3b alone would leave the `homelab-check-*` units running beside the
-      restored `kuma-check-*` ones, because the restored task file does not know the new
-      names. The revert therefore adds a removal of the `homelab-check-*` units.
+    - Reverting C-3b restores the task file and the variable names. The units keep their
+      names either way, so nothing is left running beside them.
 - **A0.** Revert it only while no Kuma-side PR has landed. After the first one, the restored
   numeric floor can refuse every `uptime-kuma` deploy.
 - **A partial C-1.** Between C-1a and C-1b, Kuma runs unwatched and unscraped. Nothing pages
@@ -2858,9 +2849,9 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    slice reaches a cron first converts it, and the other slice's plan drops that cron from its
    list.
 6. **The `kuma-check-*` timer rename.** Renaming touches 8 timers on two hosts for a cosmetic
-   gain, and C-3b needs a legacy-unit removal to be safe. Resolution: C-3b renames them. If the
-   operator prefers, the names stay, C-3b shrinks to the task-file rename, and `kuma-check-`
-   joins the census allowlist.
+   gain, and C-3b needs a legacy-unit removal to be safe. Resolution: the operator ruled on
+   2026-10-24 that the names stay (ADR 0026). C-3b shrinks to the task-file rename, and
+   `kuma-check-` joins the census allowlist.
 7. **The Pi's AutoKuma labels.** `ansible/templates/autokuma.yml.j2` and the
    `org.homelab.kuma-docker-monitor` label in
    `hosts/components/pi-compose/services/{alloy,autoheal,docker-proxy,wg-easy}/compose.yaml.j2`

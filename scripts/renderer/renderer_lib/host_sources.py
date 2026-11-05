@@ -25,12 +25,10 @@ from renderer.renderer_lib.cluster import RenderRefused
 from renderer.renderer_lib.environment import renderer_env
 
 # Each file a `shared` entry may name, by its repo path. The file stays single at its Ansible
-# path, because a role still installs it there: initial_setup installs kuma-push-lib.sh and
-# homelab-check-lib.sh on every host, and the Pi heartbeats' package copies read the same bytes
-# (H3.8b, and M6 B5 for the check library). A named
+# path, because a role still installs it there: initial_setup installs homelab-check-lib.sh on
+# every host, and the Pi heartbeats' package copies read the same bytes (M6 B5). A named
 # allowlist rather than a path, so a component cannot copy any other file of the repo.
 SHARED_FILES = {
-    "kuma-push-lib.sh": "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
     "homelab-check-lib.sh": "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
 }
 

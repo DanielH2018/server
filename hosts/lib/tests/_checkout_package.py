@@ -14,7 +14,7 @@ from renderer.renderer_lib import host as host_mode
 
 # The components every checkout timer's package carries beside its own: the secrets unit that
 # fills the credentials, and the push and check libraries its script sources.
-BASE_COMPONENTS = ("secrets-unit", "kuma-push", "check-lib")
+BASE_COMPONENTS = ("secrets-unit", "check-lib")
 
 
 def render_daniel_box(tmp_path: Path, *components: str) -> host_mode.Package:

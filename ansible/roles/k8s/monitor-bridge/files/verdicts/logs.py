@@ -21,7 +21,7 @@ _SYSLOG_LINE_RE = re.compile(
 # `push failed (status=...)` with no code on the Pi and in the pre-retry library. Since #1803
 # the http/rc pair carries ` by=kuma` when the answer was Kuma's own JSON rather than the
 # edge's page, so the pair is `http=… rc=…` followed by any further `k=v` words. The Python
-# twin, setup/common's kuma_push.py, logs `http=<code>[ by=kuma]` with no rc, or
+# twin logged `http=<code>[ by=kuma]` with no rc, or
 # `error=<exception class>` for a transport failure, so `rc=` is one of the optional words. The
 # transient-retry line reads `push failed transiently (...)` and matches neither.
 _RUN_RE = re.compile(r"^status=(?P<status>up|down)\b")
@@ -85,7 +85,7 @@ HC_ROUTED_TAGS: frozenset[str] = frozenset()
 
 # The producers whose Kuma tile M6 is deleting (docs/target-architecture/monitoring/m6-retire-kuma.md,
 # "The cutover order"). From a batch's Cutover-1a until its Cutover-2, the producer still pushes
-# into a token whose tile is gone, and kuma_push logs that refused push as a `rejected` line. A
+# into a token whose tile is gone, and the library logs that refused push as a `rejected` line. A
 # tag listed here is left out of the `rejected` set ONLY: a lost `status=down` push still counts,
 # and its `status=` lines still count as landed siblings. Each batch's shadow PR adds its tags, a
 # week before its Cutover-1a, so the exclusion is deployed before any tile goes. A tag is the one

@@ -35,13 +35,6 @@ from _role_census import every_plane_role_dirs, role_task_files
 MODULE = "host_lib"
 SHARED_TASK = "common/tasks/install_host_lib.yml"
 HOST_LIB_SRC = "hosts/lib/host_lib.py"
-# The include copies these files together: host_lib re-exports the Kuma push from kuma_push.py
-# (#3745), so each needs its own stamp pair.
-INSTALLED_SRCS = {
-    "host_lib.py": HOST_LIB_SRC,
-    "kuma_push.py": "hosts/lib/kuma_push.py",
-}
-
 # The census's non-vacuity assertion. A scan that finds its own subject by glob returns an empty
 # set the moment those files move, and an `all()` over nothing passes. Naming the members
 # means the failure says WHICH role went missing rather
@@ -57,13 +50,6 @@ EXPECTED_CONSUMERS = frozenset(
         "renovate_notify",
     }
 )
-
-# Consumers that import host_lib from ANOTHER role's install directory rather than a copy of their
-# own, mapped to the role that installs it. render_records puts /opt/gitops-deploy first on
-# sys.path to import the deployer's CI walk (`deploy_toolbox`, which imports host_lib itself), so
-# a sibling copy of its own would be shadowed and never read. Named here so the exemption is
-# visible, and checked below so the lender still installs a copy.
-BORROWING_CONSUMERS = {"render_records": "gitops_deploy"}
 
 # Consumers whose script runs in a pod, mapped to the template that stages host_lib.py into the
 # pod's ConfigMap. No host copy exists for them, so no include applies. configarr's and
@@ -151,10 +137,9 @@ def unstamped_host_lib_installs(role: Path) -> list[str]:
     `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into` makes in reverse.
     """
     installed = {
-        (f"{v['host_lib_dir']}/{name}", src)
+        (f"{v['host_lib_dir']}/host_lib.py", HOST_LIB_SRC)
         for v in includes_of(role)
         if v.get("host_lib_dir")
-        for name, src in INSTALLED_SRCS.items()
     }
     stamped = {
         (pair["live"], pair.get("src"))
@@ -201,9 +186,7 @@ def _role(name: str) -> Path:
 
 
 def test_the_census_finds_exactly_the_known_consumers():
-    assert consumers(ROLES) == (
-        set(EXPECTED_CONSUMERS) | set(BORROWING_CONSUMERS) | set(POD_STAGED_CONSUMERS)
-    )
+    assert consumers(ROLES) == (set(EXPECTED_CONSUMERS) | set(POD_STAGED_CONSUMERS))
 
 
 def test_every_pod_staged_consumer_stages_host_lib_into_its_configmap():
@@ -214,12 +197,10 @@ def test_every_pod_staged_consumer_stages_host_lib_into_its_configmap():
         )
 
 
-def test_every_borrowing_consumer_reads_a_role_that_installs_host_lib():
-    for borrower, lender in BORROWING_CONSUMERS.items():
-        assert lender in EXPECTED_CONSUMERS and includes_of(_role(lender)), (
-            f"{borrower} imports host_lib from {lender}'s directory, but {lender} no longer "
-            f"installs it through {SHARED_TASK}"
-        )
+def test_no_pod_staged_consumer_stages_the_deleted_kuma_push_module():
+    # A key left behind fails the whole role's render: its `lookup('file', ...)` has no file.
+    for role, template in POD_STAGED_CONSUMERS.items():
+        assert "kuma_push" not in (ROLES / template).read_text(), role
 
 
 def test_the_shared_task_file_exists_where_every_caller_names_it():
@@ -349,25 +330,14 @@ def test_a_consumer_that_stamps_its_scripts_but_not_host_lib_is_flagged(tmp_path
         "      - live: /opt/halfstamped/reader.py\n"
         "        src: ansible/roles/setup/halfstamped/files/reader.py\n"
     )
-    assert unstamped_host_lib_installs(role.parent) == [
-        "/opt/halfstamped/host_lib.py",
-        "/opt/halfstamped/kuma_push.py",
-    ]
-
-    # Stamping host_lib alone still leaves its kuma_push.py sibling unwatched.
-    (role / "main.yml").write_text(
-        (role / "main.yml").read_text()
-        + "      - live: /opt/halfstamped/host_lib.py\n"
-        + f"        src: {HOST_LIB_SRC}\n"
-    )
-    assert unstamped_host_lib_installs(role.parent) == ["/opt/halfstamped/kuma_push.py"]
+    assert unstamped_host_lib_installs(role.parent) == ["/opt/halfstamped/host_lib.py"]
 
     # And the accepting half on the same role, so a detector that flagged every install fails
     # here rather than reading as strictness.
     (role / "main.yml").write_text(
         (role / "main.yml").read_text()
-        + "      - live: /opt/halfstamped/kuma_push.py\n"
-        + f"        src: {INSTALLED_SRCS['kuma_push.py']}\n"
+        + "      - live: /opt/halfstamped/host_lib.py\n"
+        + f"        src: {HOST_LIB_SRC}\n"
     )
     assert unstamped_host_lib_installs(role.parent) == []
 
@@ -394,6 +364,17 @@ def test_a_notified_handler_exists_in_the_calling_role():
                 f"{name} notifies {handler!r} from its host_lib include, but no handler by that "
                 f"name exists in {role / 'handlers' / 'main.yml'} — the notify is a silent no-op."
             )
+
+
+def test_the_shared_task_file_removes_kuma_push_after_it_copies_host_lib():
+    # Removing first would leave the old host_lib beside no kuma_push.py if the play dies between
+    # the two tasks, and the deployer imports its host_lib on the next tick.
+    copy, removal = load_tasks(ROLES / "setup" / SHARED_TASK)
+    assert copy["loop"] == ["host_lib.py"]
+    assert removal["ansible.builtin.file"] == {
+        "path": "{{ host_lib_dir }}/kuma_push.py",
+        "state": "absent",
+    }
 
 
 def test_the_shared_task_file_carries_no_tags():

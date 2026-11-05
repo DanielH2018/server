@@ -15,6 +15,7 @@ import yaml
 import gen_role_glance as g
 from docs.catalog_lib import glance_facts as f
 from lib.estate import Inventory
+from lib.repo_paths import K3S_ROLE
 
 KNOWN_SERVICES = frozenset(
     {"sonarr", "traefik", "authelia", "home-assistant", "pihole"}
@@ -156,12 +157,12 @@ def test_timer_units_reads_the_cadence_keys_in_a_fixed_order(tmp_path):
     ]
 
 
-KUMA_CHECK_TASKS = """\
+CHECK_TIMER_TASKS = """\
 - name: Schedule the widget check
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
-    kuma_check_name: widget
-    kuma_check_on_calendar: "*-*-* *:23:00"
+    check_timer_name: widget
+    check_timer_on_calendar: "*-*-* *:23:00"
 - name: Stamp the widget render
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
@@ -169,14 +170,34 @@ KUMA_CHECK_TASKS = """\
 """
 
 
-def test_timer_units_reads_a_kuma_check_import_and_ignores_other_common_imports(
+def test_timer_units_reads_a_check_timer_import_and_ignores_other_common_imports(
     tmp_path,
 ):
     role = tmp_path / "widget"
-    _write(role / "tasks" / "main.yml", KUMA_CHECK_TASKS)
+    _write(role / "tasks" / "main.yml", CHECK_TIMER_TASKS)
     assert f.timer_units(role) == [
         ("kuma-check-widget.timer", ["OnCalendar=*-*-* *:23:00"])
     ]
+
+
+def test_timer_units_skips_an_import_whose_state_is_absent(tmp_path):
+    role = tmp_path / "widget"
+    _write(
+        role / "tasks" / "main.yml",
+        CHECK_TIMER_TASKS.replace(
+            "check_timer_name: widget",
+            "check_timer_state: absent\n    check_timer_name: widget",
+        ),
+    )
+    assert f.timer_units(role) == []
+
+
+def test_timer_units_finds_the_k3s_roles_named_timers():
+    units = {unit for unit, _ in f.timer_units(K3S_ROLE)}
+    assert {
+        "kuma-check-manifest-prune.timer",
+        "kuma-check-live-drift.timer",
+    } <= units, sorted(units)
 
 
 def test_setup_glance_lines_names_every_source_when_a_role_has_none(tmp_path):

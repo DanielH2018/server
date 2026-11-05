@@ -194,8 +194,8 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
     """`(unit, ["OnCalendar=…", …])` for every timer a role installs.
 
     Two sources: a `templates/*.timer.j2` the role ships, and an import of the shared
-    `roles/setup/common/tasks/kuma_check_timer.yml`, whose `kuma_check_name` and
-    `kuma_check_on_calendar` vars name the unit and its cadence. The second is read from
+    `roles/setup/common/tasks/check_timer.yml`, whose `check_timer_name` and
+    `check_timer_on_calendar` vars name the unit and its cadence. The second is read from
     `tasks/` because the template lives in `common`, not in the importing role.
     """
     units: list[tuple[str, list[str]]] = []
@@ -211,14 +211,14 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
         for task in _walk_tasks(load_yaml_list(tasks_file)):
             target = task.get("ansible.builtin.import_tasks")
             if not isinstance(target, str) or not target.endswith(
-                "common/tasks/kuma_check_timer.yml"
+                "common/tasks/check_timer.yml"
             ):
                 continue
             variables = as_object(task.get("vars") or {}, f"{tasks_file.name} vars")
-            if variables.get("kuma_check_state") == "absent":
+            if variables.get("check_timer_state") == "absent":
                 continue  # a teardown arm removes the timer; it installs nothing
-            name = variables.get("kuma_check_name", "unnamed")
-            cadence = variables.get("kuma_check_on_calendar")
+            name = variables.get("check_timer_name", "unnamed")
+            cadence = variables.get("check_timer_on_calendar")
             units.append(
                 (
                     f"kuma-check-{name}.timer",

@@ -13,8 +13,7 @@ so it can be driven here without a real restore. Sourcing the script for that wo
 the whole drill — argument parsing, the root check, live S3 credentials — so the script itself
 carries a `BASH_SOURCE` guard (the same one `verify_staging_gate_key.sh` uses) that returns before
 any of that when it is sourced rather than executed. A stub `k3s` function stands in for the real
-`kubectl get ... | wc -l` pipeline: it reports the counts the test hands it, the same way
-`kuma-push-lib.sh`'s tests stub `curl`.
+`kubectl get ... | wc -l` pipeline: it reports the counts the test hands it.
 """
 
 import ipaddress

@@ -199,8 +199,8 @@ its repo source, and has any `template:`-rendered setup script's SOURCE changed 
 rendered it?
 
 It runs from `kuma-check-setup-drift.timer` since 2026-09-19. It imports the `common` role's
-`kuma_check_timer.yml`, exits 1 after a down verdict, and reruns every 30 min under
-`Restart=on-failure` until it exits 0. The import's `kuma_check_state` follows the host gate, so
+`check_timer.yml`, exits 1 after a down verdict, and reruns every 30 min under
+`Restart=on-failure` until it exits 0. The import's `check_timer_state` follows the host gate, so
 a host dropped from the list loses the timer and the cron it replaced. The daily secret-rotation
 audit used the same form until H7.36 moved it to `homelab-secret-rotation-audit.timer` in the
 `secret-rotation` component of `homelab-daniel-box`, which keeps the exit-code contract as plain
@@ -215,7 +215,7 @@ daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
 `/etc/nut/upsmon.conf` was dated Aug 17 against a template changed on 2026-08-28 (review M-10).
 
 - **The two arms are not reimplemented** — both readers source `files/setup-drift-lib.sh`,
-  copied to `/usr/local/lib` like `kuma-push-lib.sh`. Two copies of a drift check are free to
+  copied to `/usr/local/lib` like `homelab-check-lib.sh`. Two copies of a drift check are free to
   drift from each other, which is the fault a drift check reports.
 - **It does NOT carry the orphan arm.** That needs `/etc/rancher/k3s/manifests` and the control
   plane's staged set; an agent node has neither, and an arm that structurally cannot fire reads
@@ -254,7 +254,7 @@ M6 batch B2's Cutover-2.
 
 **It is a systemd timer, `kuma-check-loki-read-route.timer`, not a cron, since 2026-09-19.**
 The `Schedule the Loki read-route witness` task imports the `common` role's
-`kuma_check_timer.yml`, whose service is `Restart=on-failure` with `RestartSec=15min`: the
+`check_timer.yml`, whose service is `Restart=on-failure` with `RestartSec=15min`: the
 script exits 1 after a `down` verdict, so a red check reruns every 15 minutes until the route
 answers instead of sitting red until the next hourly slot. The timer is `Persistent=true`, so a
 slot missed inside an outage runs at boot; the script's boot-grace arm exits 1 without a verdict,
@@ -309,6 +309,12 @@ tokens a week later.
   one hash slice of the table serially on this host, and every entry once in four days. It
   rewrites only an entry more than `DRIFT_RATIO` (1.5x) from what it measured, so noise inside
   that band leaves no diff.
+- **Why a refresh can keep a drifted weight (#7132).** Two agreeing runs defend against one-off
+  load, not against a cost that is real on this host alone. The cron wrote 85.09s for a module
+  CI measured at 2.08s, and CI's gate failed the cron's PR. `--refresh-drifted` compares the
+  reading with `pytest_shard_runner_weights.json`. At `STALE_WEIGHT_FLOOR_SECONDS` and
+  `STALE_WEIGHT_FAIL_RATIO` or more of CI's seconds, it keeps the recorded weight and names the
+  module in the journal under the tag `docs-refresh`.
 - **A red suite is not a case degradation saves**: the script runs the suite before its commit
   and exits 1 on a failure, because no prek hook runs the suite: #2827 moved the `pytest` hook
   to pre-push, and it was removed on 2026-10-02. What degradation saves is the suite being fine and the measurement alone

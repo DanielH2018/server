@@ -88,10 +88,6 @@ files:
   - {src: templates/pi-sd-health.sh.j2, dst: /usr/lib/homelab/pi-sd-health, mode: "0755"}
   - {src: templates/pi-gz-integrity.sh.j2, dst: /usr/lib/homelab/pi-gz-integrity, mode: "0755"}
   - {src: templates/pi-recovery-health.sh.j2, dst: /usr/lib/homelab/pi-recovery-health, mode: "0755"}
-  # The Kuma push helper, /usr/lib/homelab/kuma-push-lib.sh, is the `kuma-push` component's.
-  # These scripts do not source it; the Pi's integrity scans do, so daniel-pi's package lists
-  # both components.
-  #
   # A package-owned copy of initial_setup's textfile writer (M6 B5), which stays the single
   # source: the two scripts call its write_check_textfile, so Prometheus reads each cycle's
   # verdict.

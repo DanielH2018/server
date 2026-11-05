@@ -6,10 +6,9 @@
   to resolvers that can answer the public wildcard `*.local.<domain>` with the wrong address.
   The pin keeps a CoreDNS or Pi-hole fault out of the probe path.
 
-  Why one macro: uptime-kuma and blackbox-exporter probe the same ingress names, and both
-  Deployments call this, so the two lists cannot drift. Each caller says at its call site why
-  that pod probes the ingress. The list is rendered from `containers_list` | lan_hostnames,
-  plus the one literal probe host that fronts no workload.
+  blackbox-exporter's Deployment is the only caller, and says at its call site why that pod
+  probes the ingress. The list is rendered from `containers_list` | lan_hostnames, plus the one
+  literal probe host that fronts no workload.
 
   Emits the `hostAliases:` key at pod-spec indent (6 spaces) and no trailing newline, so a
   caller writes `{{ ingress_host_aliases() }}` on a line of its own. Each item writes its newline

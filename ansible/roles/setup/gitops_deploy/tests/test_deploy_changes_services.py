@@ -181,11 +181,11 @@ def test_a_checkout_file_a_setup_role_copies_reaches_that_role():
     assert services_from_changed_paths(pruner).setup_roles == {"k3s"}
 
 
-def test_a_kuma_check_template_change_reaches_the_roles_importing_its_task_file():
-    """`kuma_check_timer.yml` renders the kuma-check pair, so a template edit reaches a host
+def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file():
+    """`check_timer.yml` renders the kuma-check pair, so a template edit reaches a host
     only through that task file's importers (#3319). `common` is not recorded, so the alert
     does not print the resolv.conf remediation for it."""
-    path = "ansible/roles/setup/common/templates/kuma-check.timer.j2"
+    path = "ansible/roles/setup/common/templates/check-timer.timer.j2"
     consumers = {"gitops_deploy", "initial_setup", "render_records"}
     assert setup_roles_for(path) == consumers | {"k3s"}
     assert setup_tags_for([path]) == consumers
@@ -223,7 +223,7 @@ def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
         "ansible/roles/setup/common/tasks/stamp_deployed.yml",
     ):
         assert services_from_changed_paths([path]).k8s == set()
-    timer = ["ansible/roles/setup/common/tasks/kuma_check_timer.yml"]
+    timer = ["ansible/roles/setup/common/tasks/check_timer.yml"]
     assert services_from_changed_paths(timer).k8s == set()
 
 

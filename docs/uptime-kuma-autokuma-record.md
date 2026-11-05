@@ -88,8 +88,8 @@ every replacement for a window in which detection is live.
 
 ## A fleet-wide `push failed (http=404)` burst is the edge, not the tokens
 
-`kuma-push-lib.sh` (the host crons' shared pusher) logs `push failed (http=… rc=…)` only after all
-three attempts fail. Issue #1803 read 226 such lines carrying `http=404` and `status=up` on
+`kuma-push-lib.sh` (the host crons' shared pusher until #7109 deleted it) logged `push failed
+(http=… rc=…)` only after all three attempts failed. Issue #1803 read 226 such lines carrying `http=404` and `status=up` on
 2026-09-06 as Kuma rejecting the pushers' tokens — a monitor set that had moved ahead of, or behind,
 the crons — and asked for an ordering constraint. Loki has the cause: Traefik restarted at 07:41:43
 after a host reboot, failed to download the CrowdSec bouncer plugin, and rejected every router that
@@ -215,7 +215,8 @@ Four things the arrangement depends on:
     - **It answers Kuma at once, before Discord does.** The push route in
       `server/routers/api-router.js` awaits `sendNotification` before it answers the pusher. A
       relay that held each request until Discord accepted it would hold every push open behind
-      the queue, and `kuma-push-lib.sh` gives up after 10 s.
+      the queue, and `kuma-push-lib.sh`, the host pusher until #7109 deleted it, gave up after
+      10 s.
     - **A drop is still counted.** The relay logs a message it gives up on with Kuma's own
       `Cannot send notification to Homelab Alerts` text, and `KumaNotificationDropped` selects
       both containers. It gives up on a 4xx other than 429, on a message older than
@@ -254,7 +255,7 @@ hourly host cron therefore stayed red until that cron's next slot after the faul
 shapes:
 
 - **A host check is a `kuma-check-<name>` systemd timer** (`roles/setup/common`'s
-  `kuma_check_timer.yml`; `KNOWN_CHECKS` in `ansible/tests/setup/test_kuma_check_timer.py` names all
+  `check_timer.yml`; `KNOWN_CHECKS` in `ansible/tests/setup/test_check_timer.py` names all
   eight). The contract is the exit code: the script exits 1 after it pushes `down` and 0 after `up`,
   and the oneshot service's `Restart=on-failure` reruns it every `RestartSec` (15 min for the hourly
   checks, 30 min for the daily ones) until it exits 0. A script that pushes `down` and exits 0 is a

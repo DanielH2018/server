@@ -1,13 +1,10 @@
 {#
-  The configarr-health CronJob's code: the reader, its two configarr_lib modules, and the two
-  setup/common modules it imports, host_lib.py and kuma_push.py.
+  The configarr-health CronJob's code: the reader, its two configarr_lib modules, and the
+  host_lib.py it imports.
 
   Flat keys, because a ConfigMap key cannot hold a `/`. The CronJob's volume maps each
   configarr_lib key back under configarr_lib/ with `items:`, so `from configarr_lib import ...`
   resolves beside the reader as it did on the host.
-
-  kuma_push.py stays because host_lib.py imports it at module level, although the reader
-  never calls it. M6 batch B6b's Cutover-2 removed the push and the configarr-health Secret.
 
   No secret goes in here, and the pod takes none from a Secret.
   ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
@@ -28,5 +25,3 @@ data:
 {{ lookup('file', playbook_dir + '/roles/k8s/configarr/files/configarr_lib/configarr_status.py') | indent(4, true) }}
   host_lib.py: |
 {{ lookup('file', playbook_dir + '/../hosts/lib/host_lib.py') | indent(4, true) }}
-  kuma_push.py: |
-{{ lookup('file', playbook_dir + '/../hosts/lib/kuma_push.py') | indent(4, true) }}

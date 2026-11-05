@@ -33,9 +33,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   applies through `initial_setup.yml`, so they survive janitorr's Flux flip.
 - **The pod holds no Secret.** M6 batch B6b's Cutover-2 removed the `janitorr-health`
   Secret and its `KUMA_PUSH_URL`. The reader's code ships in the `janitorr-health` ConfigMap,
-  beside `host_lib.py` and `kuma_push.py` from `setup/common`. `host_lib.py` imports
-  `kuma_push.py` at module level, so the file stays although the reader never calls it. No
-  secret goes in the ConfigMap (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
+  beside `host_lib.py`. No secret goes in the ConfigMap (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `janitorr-health-verdict`
   ConfigMap, which the role renders with no annotations so the reader is their only writer.

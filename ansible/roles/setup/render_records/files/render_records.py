@@ -26,7 +26,7 @@ has a record whose `commit` is the chosen SHA, whose tree was clean, whose `host
 and whose `rendered_at` falls inside this run. A playbook that exits 0 having rendered nothing
 would otherwise read as a fresh fleet.
 
-EXIT CODES are the kuma-check timer's contract (roles/setup/common/tasks/kuma_check_timer.yml):
+EXIT CODES are the kuma-check timer's contract (roles/setup/common/tasks/check_timer.yml):
 0 after an `up` push, 1 after a `down` push. Two paths exit 1 WITHOUT a push, and the unit's
 Restart=on-failure reruns them: the boot grace, and a walk that found no green commit. Neither
 is a verdict, so neither may turn the tile green or red. A producer that keeps deferring goes
@@ -40,9 +40,8 @@ Run hourly by the render-records kuma-check timer as the sys_user, installed as
   RECORD_DIR     where the per-service records are written (required)
   RENDER_HOST    this host's inventory name, which each record must carry (required)
   GITOPS_CONFIG  the deployer's config file (default /etc/gitops-deploy/config.env)
-  BOOT_GRACE_S   exit 1 with no push while uptime is under this many seconds (default 0)
+  BOOT_GRACE_S   exit 1 with no verdict while uptime is under this many seconds (default 0)
   DEPLOYER_DIR   directory holding the deployer's modules (default /opt/gitops-deploy)
-  KUMA_HOST, PUSH_TOKEN   the Kuma push target, from the unit's env file
 """
 
 from __future__ import annotations
@@ -65,7 +64,6 @@ if DEPLOYER_DIR not in sys.path:
 from deployer_lib.deploy_config import load_config, read_config_file  # noqa: E402
 from deployer_lib.deploy_git import ci_walk_candidates  # noqa: E402
 from deployer_lib.deploy_toolbox import fetch_ci_verdict, github_authenticated  # noqa: E402
-from host_lib import kuma_push  # noqa: E402
 
 TIMESTAMP = "%Y-%m-%dT%H:%M:%SZ"
 
@@ -129,7 +127,7 @@ def record_problems(
 def verdict_message(
     targets: list[str], problems: dict[str, str], sha: str, rc: int
 ) -> tuple[str, str]:
-    """The Kuma (status, message) for one run."""
+    """The (status, message) verdict for one run."""
     if not problems:
         return "up", f"{len(targets)} render records at {sha[:8]}"
     named = ", ".join(f"{svc} ({why})" for svc, why in sorted(problems.items()))
@@ -215,21 +213,6 @@ def log(status: str, message: str) -> None:
         syslog.closelog()
 
 
-def push(status: str, message: str) -> None:
-    """Push to Kuma through host_lib, which retries a rollout's 404s and caps the message.
-
-    A push still lost after the retries is printed and ignored; the monitor's interval
-    catches it.
-    """
-    kuma_push(
-        status,
-        message,
-        os.environ.get("KUMA_HOST", ""),
-        os.environ.get("PUSH_TOKEN", ""),
-        log=lambda line: print(f"render-records: {line}", file=sys.stderr),
-    )
-
-
 def host_uptime_s() -> float | None:
     try:
         with open("/proc/uptime", encoding="ascii") as f:
@@ -300,7 +283,6 @@ def main() -> int:
     if listed.returncode != 0 or not targets:
         message = f"render_targets.py found nothing to render at {sha[:8]}: {listed.stderr.strip()}"
         log("down", message)
-        push("down", message)
         return 1
 
     # Floored to the second, the resolution `rendered_at` is written at.
@@ -340,7 +322,6 @@ def main() -> int:
     status, message = verdict_message(targets, problems, sha, rc)
     message += f" in {int(time.monotonic() - began)}s"
     log(status, message)
-    push(status, message)
     return 0 if status == "up" else 1
 
 

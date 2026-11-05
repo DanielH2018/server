@@ -153,7 +153,7 @@ def test_the_daily_crons_do_not():
 
 def test_the_daily_timer_checks_exit_without_a_verdict_inside_the_grace():
     # The exception to the rule above, and why: a daily check on a kuma-check TIMER
-    # (roles/setup/common/tasks/kuma_check_timer.yml) is Persistent, so a slot missed in an
+    # (roles/setup/common/tasks/check_timer.yml) is Persistent, so a slot missed in an
     # outage runs seconds after boot. Skipping there costs 30 minutes (Restart=on-failure), not
     # a day — so the guard is wired, and its skip path exits 1 with no push and no hc ping.
     for name in DAILY_TIMER_SCRIPTS:

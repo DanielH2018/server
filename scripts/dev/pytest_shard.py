@@ -65,6 +65,9 @@ that band leaves the table alone, which is what keeps a twice-daily run from chu
 Noise outside the band is caught by a second run of only the drifted files: an entry is
 rewritten only when both runs drift and agree with each other within the band. One outlying
 run wrote 0.0s for a 16s module and 62s for a 1s one, and CI failed the bot's branch (#6286).
+Two agreeing runs cannot catch a cost that is real on this host alone, such as a test walking
+untracked files: 85.09s against CI's 2.08s. So the refresh keeps the recorded weight and prints
+the module when the runner table says the gate would reject the row (#7132).
 
 THE GATE FAILS ONLY WHERE SOMEONE CAN APPLY THE REPAIR. On a pull request the author re-records
 and pushes. On a push to master nobody can, and a red master run still reaches the deployer's
@@ -122,6 +125,7 @@ from shard_weight_gate import (
     load_runner_weights,
     packing_table,
     parse_durations,
+    readings_the_gate_accepts,
     runner_weights,
     write_runner_weights,
 )
@@ -406,7 +410,9 @@ def refresh_drifted_weights(
     slice usually leaves the table byte-identical. A drifted entry is measured a second time,
     and it is rewritten with the lower of the two only when the two runs agree. A run that
     omits a file measured nothing and reads as 0.0. A recorded path no longer in the census is
-    dropped, as `record_missing_weights` drops it.
+    dropped, as `record_missing_weights` drops it. An entry whose lower reading the gate's
+    over-recorded arm would reject against the committed runner table keeps its recorded
+    weight, and a line on stdout names it.
 
     Args:
         index: The 0-based slice to re-measure.
@@ -430,15 +436,15 @@ def refresh_drifted_weights(
     # drifted files run once more, and a row moves only when the second run drifts too and
     # agrees with the first within DRIFT_RATIO. Load only adds time, so it keeps the lower run.
     confirmed = measure(candidates) if candidates else {}
-    moved = sorted(
-        f
+    agreed = {
+        f: min(measured.get(f, 0.0), confirmed.get(f, 0.0))
         for f in candidates
         if drifted(kept[f], confirmed.get(f, 0.0))
         and not drifted(measured.get(f, 0.0), confirmed.get(f, 0.0))
-    )
-    kept |= {f: min(measured.get(f, 0.0), confirmed.get(f, 0.0)) for f in moved}
-    _write_weights(kept, path, pins)
-    return moved
+    }
+    moved = readings_the_gate_accepts(agreed)
+    _write_weights(kept | moved, path, pins)
+    return sorted(moved)
 
 
 # Where `--refresh-runner` reads its logs: the green runs of CI's workflow on pushes to master.

@@ -48,7 +48,6 @@ components:
   - secrets-unit
   - k3s-gates
   - k3s-restart
-  - kuma-push
   - nut-secondary
   - check-lib
   - fail2ban

@@ -18,9 +18,9 @@ The `include` gap is the quiet one, and `test_every_tracked_python_file_is_insid
 is the check for it. A file outside every source root is neither checked nor skipped; the gate
 reads green and nobody learns the file exists to ty.
 
-The `extra-paths` gaps are loud: ty reports `unresolved-import` on code that imports fine at
+The `extra-paths` gaps are loud: ty reports `import-not-found` on code that imports fine at
 runtime. They are guarded anyway because loud in the wrong place is still misleading — the
-reflex fix for an `unresolved-import` on first-party code is to silence the rule, not to add the
+reflex fix for an `import-not-found` on first-party code is to silence the rule, not to add the
 missing search path, and these tests name the path instead. Two shapes are covered: a
 `pythonpath` entry with no `extra-paths` twin, and a `testpaths` entry whose sibling `files/` is
 missing from `extra-paths` (a role's tests reach its module through that directory).
@@ -125,7 +125,7 @@ def test_every_pythonpath_entry_is_a_ty_search_path():
     missing = _missing(_pythonpath(cfg), _extra_paths(cfg))
     assert not missing, (
         "pytest imports from these directories but ty cannot resolve modules in them, so ty "
-        "will report `unresolved-import` on first-party code that runs fine: "
+        "will report `import-not-found` on first-party code that runs fine: "
         f"{missing}. Add them to [tool.ty.environment] extra-paths."
     )
 

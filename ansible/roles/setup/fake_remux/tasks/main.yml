@@ -248,8 +248,6 @@
       # once unless the drift check can see it.
       - live: "{{ fake_remux_opt_dir }}/host_lib.py"
         src: hosts/lib/host_lib.py
-      - live: "{{ fake_remux_opt_dir }}/kuma_push.py"
-        src: hosts/lib/kuma_push.py
       - live: "{{ fake_remux_opt_dir }}/state_push.py"
         src: ansible/roles/setup/fake_remux/files/state_push.py
       - live: "{{ fake_remux_opt_dir }}/fake_remux.py"

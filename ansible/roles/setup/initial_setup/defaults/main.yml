@@ -58,7 +58,7 @@ initial_setup_worktree_holders_group: worktree-holders
 initial_setup_packaged_hosts:
   loki_route_witness: [daniel-box]
 
-# Where the rkhunter and AIDE scripts source kuma-push-lib.sh and homelab-check-lib.sh from.
-# crons.yml installs both under /usr/local/lib; the integrity-scans host component sets
-# /usr/lib/homelab, where the kuma-push and check-lib components ship them.
+# Where the rkhunter and AIDE scripts source homelab-check-lib.sh from. crons.yml installs it
+# under /usr/local/lib; the integrity-scans host component sets /usr/lib/homelab, where the
+# check-lib component ships it.
 initial_setup_host_lib_dir: /usr/local/lib

@@ -217,7 +217,7 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     tree = tmp_path / "ansible"
     role = tree / "roles" / "k8s" / TAG
     shutil.copytree(K8S_ROLES / TAG, role)
-    # The jobs ConfigMap ships hosts/lib/kuma_push.py and k8s/manifests' helper.
+    # The jobs ConfigMap ships k8s/manifests' helper.
     (tree / "roles" / "setup").symlink_to(ANSIBLE / "roles" / "setup")
     (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # playbook_dir/../hosts/lib
     (tree / "roles" / "k8s" / "manifests").symlink_to(K8S_ROLES / "manifests")

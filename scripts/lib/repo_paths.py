@@ -63,7 +63,7 @@ GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
 # `longhorn_robustness.py` ships in monitor-bridge's pod, so its one copy lives in that role's
 # `files/`; the runbook gates import it from here (#3668).
 MONITOR_BRIDGE_FILES = K8S_ROLES / "monitor-bridge" / "files"
-# `host_lib.py`, `kuma_push.py` and `ci_verdict.py`, the modules the host packages and the setup
+# `host_lib.py` and `ci_verdict.py`, the modules the host packages and the setup
 # roles ship beside a host script (H7.2e moved them out of `setup/common/files/`). A tool that
 # imports one of the deployer's IMPURE modules (`deploy_state`, `deploy_config`) puts this on
 # `sys.path` for `host_lib`. A tool that imports `deploy_logic` puts it there for `ci_verdict`,

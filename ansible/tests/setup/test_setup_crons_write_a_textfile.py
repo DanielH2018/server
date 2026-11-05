@@ -8,7 +8,7 @@ The `homelab_check_*` textfile of `homelab-check-lib.sh:write_check_textfile` is
 and the textfile tests were fixed per-batch lists.
 
 The subject is DERIVED from `tasks/` the way `test_setup_cron_roles_have_a_contract.py` derives
-it: every `ansible.builtin.cron` task not `state: absent`, every `kuma_check_timer.yml` import
+it: every `ansible.builtin.cron` task not `state: absent`, every `check_timer.yml` import
 not literally absent, and every `templates/*.timer.j2`. A member writes a textfile when its
 command, or the file a task installs at a path the command names, carries the producer
 contract. `EXEMPT` names each member that writes none, with the reason. A reason starting
@@ -25,7 +25,7 @@ from _role_census import role_dirs, role_task_files
 
 # Either the shared helper, or a producer that writes the contract's series itself.
 MARKERS = ("write_check_textfile", "homelab_check_last_run_timestamp_seconds")
-KUMA_TIMER = "kuma_check_timer.yml"
+CHECK_TIMER = "check_timer.yml"
 _INSTALL_MODULES = ("ansible.builtin.copy", "ansible.builtin.template")
 
 EXEMPT: dict[str, str] = {
@@ -77,9 +77,12 @@ def _command_members(role: Path) -> dict[str, str]:
                 "ansible.builtin.include_tasks"
             )
             kuma = task.get("vars") or {}
-            if KUMA_TIMER in str(imported) and kuma.get("kuma_check_state") != "absent":
-                key = f"{role.name}: timer `kuma-check-{kuma.get('kuma_check_name')}`"
-                members[key] = str(kuma.get("kuma_check_exec"))
+            if (
+                CHECK_TIMER in str(imported)
+                and kuma.get("check_timer_state") != "absent"
+            ):
+                key = f"{role.name}: timer `kuma-check-{kuma.get('check_timer_name')}`"
+                members[key] = str(kuma.get("check_timer_exec"))
     if role.name == "common":
         # common's kuma-check pair is the template every import above instantiates.
         return members

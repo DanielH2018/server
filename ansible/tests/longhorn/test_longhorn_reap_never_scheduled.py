@@ -10,7 +10,7 @@ autonomous-role contract therefore lists them under **Never a cron**, and this g
 The census is STRUCTURAL, not textual. The names appear on purpose in `defaults/main.yml`
 comments, in the scripts' own docstrings and in the role docs, so "the name appears nowhere under
 `roles/setup/`" would fail on prose. What is forbidden is a SCHEDULE: a `cron:` task's fields, a
-`kuma_check_timer.yml` import's vars, and a systemd `.service.j2`/`.timer.j2` template.
+`check_timer.yml` import's vars, and a systemd `.service.j2`/`.timer.j2` template.
 
 A fourth surface arrives with target slice H2, which moves host crons into CronJobs: a rendered
 k8s CronJob whose command, or a ConfigMap it mounts, names the reaper (the CronJob arm below).
@@ -87,7 +87,7 @@ def scheduled_texts(setup_root: Path) -> dict[str, str]:
     """Every scheduling surface under `setup_root`, keyed by where it was read.
 
     Three shapes schedule a command here: a `cron:` task (its fields are the schedule), an
-    `import_tasks` of `kuma_check_timer.yml` (its `vars` carry `kuma_check_exec`), and a
+    `import_tasks` of `check_timer.yml` (its `vars` carry `check_timer_exec`), and a
     systemd unit template (`ExecStart=`), which `unit_texts` reads off the render.
     """
     found: dict[str, str] = {}
@@ -99,7 +99,7 @@ def scheduled_texts(setup_root: Path) -> dict[str, str]:
                     found[key] = json.dumps(task[module])
             for module in INCLUDE_MODULES:
                 target = task.get(module)
-                if isinstance(target, str) and target.endswith("kuma_check_timer.yml"):
+                if isinstance(target, str) and target.endswith("check_timer.yml"):
                     found[key] = json.dumps(task.get("vars") or {})
     found.update(unit_texts(setup_root))
     return found
@@ -146,15 +146,15 @@ def test_census_finds_the_scheduled_heartbeat() -> None:
     """Non-vacuity: the scanner must see a real schedule before its silence means anything.
 
     The backup-plane heartbeat is a `cron:` task in `k3s/tasks/health-crons.yml`, and the kuma-check
-    timers reach the census through their `kuma_check_exec` var; both surfaces have to be read
+    timers reach the census through their `check_timer_exec` var; both surfaces have to be read
     for a silent scan to mean "nothing schedules a reaper".
     """
     texts = scheduled_texts(SETUP)
     assert any("longhorn-backup-health.sh" in t for t in texts.values()), (
         "the cron census no longer sees the backup-health heartbeat — the scanner is reading nothing"
     )
-    assert any("kuma_check_exec" in t for t in texts.values()), (
-        "the census no longer sees a kuma_check_timer.yml import's vars"
+    assert any("check_timer_exec" in t for t in texts.values()), (
+        "the census no longer sees a check_timer.yml import's vars"
     )
     assert any(k.endswith(".timer.j2") for k in texts), (
         "the census no longer reads systemd timer templates"
@@ -191,9 +191,9 @@ def test_a_scratch_timer_import_naming_a_reaper_is_flagged(tmp_path: Path) -> No
     tasks.mkdir(parents=True)
     (tasks / "main.yml").write_text(
         "- name: Reap stranded snapshots on a timer\n"
-        '  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"\n'
+        '  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"\n'
         "  vars:\n"
-        "    kuma_check_exec: /srv/server/scripts/backup/longhorn_reap.py snapshots\n"
+        "    check_timer_exec: /srv/server/scripts/backup/longhorn_reap.py snapshots\n"
     )
     assert scheduled_reapers(tmp_path) == [
         ("scratch/tasks/main.yml#0", "longhorn_reap.py")

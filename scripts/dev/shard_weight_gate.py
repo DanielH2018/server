@@ -100,7 +100,8 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # seconds of balance in a shard that projects around 40s, which is what this arm is about.
 # `UNDER_WEIGHT_RATIO` uses twenty for the same runner-versus-workstation variance, and the
 # 190x entry this arm exists for still fails. An entry in the band stays visible as an
-# annotation, and the docs-refresh cron's `--refresh-drifted` rewrites it.
+# annotation, and the docs-refresh cron's `--refresh-drifted` rewrites it. That refresh refuses
+# to write a row this ratio or more above the runner table, because this arm would reject it.
 STALE_WEIGHT_FAIL_RATIO = 20.0
 
 # How many times its recorded weight a module may measure on the runner before the shard gate
@@ -197,6 +198,18 @@ def heavy_unweighted(
     )
 
 
+def over_recorded(
+    recorded: float,
+    measured: float,
+    ratio: float = STALE_WEIGHT_RATIO,
+    floor: float = STALE_WEIGHT_FLOOR_SECONDS,
+) -> bool:
+    """Whether a weight of `recorded` seconds is `ratio`x or more of `measured`, from `floor` up."""
+    return recorded >= floor and recorded >= ratio * max(
+        measured, _DURATIONS_MIN_SECONDS
+    )
+
+
 def stale_overweight(
     text: str,
     weights: dict[str, float],
@@ -217,9 +230,7 @@ def stale_overweight(
     flagged = [
         (f, weights[f], measured[f])
         for f in measured
-        if f in weights
-        and weights[f] >= floor
-        and weights[f] >= ratio * max(measured[f], _DURATIONS_MIN_SECONDS)
+        if f in weights and over_recorded(weights[f], measured[f], ratio, floor)
     ]
     return sorted(flagged, key=lambda item: (-item[1], item[0]))
 
@@ -529,6 +540,28 @@ def load_runner_weights(path: Path = RUNNER_WEIGHTS_PATH) -> dict[str, float]:
     if not path.exists():
         return {}
     return {k: float(v) for k, v in json.loads(path.read_text()).items()}
+
+
+def readings_the_gate_accepts(readings: dict[str, float]) -> dict[str, float]:
+    """The local readings whose row CI's over-recorded arm would not fail, by the runner table.
+
+    A module the table lacks has no CI seconds to judge against, so it stays. A line on stdout
+    names each one dropped.
+    """
+    runner = load_runner_weights()
+    accepted = {}
+    for module, reading in readings.items():
+        if module in runner and over_recorded(
+            reading, runner[module], STALE_WEIGHT_FAIL_RATIO
+        ):
+            print(
+                f"kept the recorded weight of {module}: this host read {reading:.2f}s, the "
+                f"runner table holds {runner[module]:.2f}s, and CI's gate rejects a row "
+                f"{STALE_WEIGHT_FAIL_RATIO:g}x or more above it"
+            )
+        else:
+            accepted[module] = reading
+    return accepted
 
 
 def write_runner_weights(

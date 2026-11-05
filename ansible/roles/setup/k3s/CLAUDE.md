@@ -78,7 +78,8 @@ docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recove
 
 ## Autonomous-role contract (the crons that change state with no human in the loop)
 
-`tasks/health-crons.yml` installs a dozen crons; most read the cluster and push a Kuma tile.
+`tasks/health-crons.yml` installs a dozen crons; most read the cluster and write a check
+textfile that a Prometheus rule reads.
 One changes state. Its authority is written here so a later edit cannot quietly widen it.
 Four state-changing actuators left this role. The volume-label reconcile left at H1.6, and its
 contract is the `longhorn-reconcile` role's `CLAUDE.md`. The Longhorn RecurringJobs left at

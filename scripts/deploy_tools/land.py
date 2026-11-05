@@ -122,8 +122,9 @@ master's after it.
 
 A PR WHOSE BASE IS BEHIND MASTER IS RE-TESTED BEFORE THE MERGE. When the PR's head reads green
 and master has changed any path since its merge base, `--arm-merge --await-merge` updates the
-PR branch from master once and merges only after CI is green on the updated head. A refused
-update stops the landing with rc 1 and asks for a rebase. `land_lib/merge.py` has the rule.
+PR branch from master once and merges only after CI is green on the updated head. The update
+gives the wait one more merge budget. A refused update stops the landing with rc 1 and asks for
+a rebase. `land_lib/merge.py` has the rule.
 """
 
 import contextlib

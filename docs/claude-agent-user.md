@@ -504,13 +504,13 @@ runs `sudo machinectl shell claude@ /bin/bash -lc 'cd ~/server && exec claude ag
   the fleet bound on `user.slice`. An ID that leaves the list has its slice drop-in and
   `environment.d` file removed on the next apply, and `claude_code_login_caps_enabled: false`
   removes every one.
-- **A metric and a page watch for a session as the wrong account.** `claude-cgroup-metrics.sh`
+- **A metric counts sessions that run as the wrong account.** `claude-cgroup-metrics.sh`
   writes `claude_uid_processes{uid}` for each uid in `claude_code_watch_uids`, an explicit 0
   included. It counts processes named `claude` by their real uid in `/proc/<pid>/status`.
   daniel-box watches uid 1000. The list defaults to empty, so daniel-server writes no series.
-  monitor-bridge's Memory tile names the host and the uid in its message while any watched uid
-  runs `claude`, and stays up. It paged until 2026-10-17 (#5125): background jobs and fan-out
-  still start as `ubuntu`, so the page held the tile DOWN for days and hid real memory pages.
+  No alert rule reads the series, so a watched uid running `claude` never pages. It paged until
+  2026-10-17 (#5125): background jobs and fan-out still start as `ubuntu`, so the page held
+  monitor-bridge's Memory tile DOWN for days and hid real memory pages.
 - **daniel-box sets `claude_code_login_uids: []`,** which removes the caps from `user-1000.slice`.
   The fleet bound on `user.slice` still covers it.
 
@@ -658,8 +658,8 @@ The code is root-owned under `/opt/claude-triage`, like the runner's.
 - **A storm is one run.** More than three keys at or above the floor falling in one poll make
   a single storm episode that lists them all. Skipped falls never count towards a storm.
 - **Two gates defer an episode.** One is a firing `DeployHoldActive`. The other is the mute window
-  around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Kuma and
-  Alertmanager mutes. A deferred key opens its episode once the gate lifts, if it is still down.
+  around the weekly reboot, read from the same `weekly_reboot_*` group vars as the Alertmanager
+  mute. A deferred key opens its episode once the gate lifts, if it is still down.
 - **The runner holds the daily cap.** A run past six in a UTC day writes a `capped` record and
   page, and starts no session. The cap sits in the runner, because polkit lets `claude` start a
   run directly.
@@ -790,7 +790,7 @@ operator can log in as `claude`, so only the operator can run the checks that st
 | 3 | A session as `claude` runs `land.sh --pr <n> --arm-merge --await-merge --detach && cc-wait land <n>` on three PRs. A deployable change ends in `VERDICT: settled` and the verdict file in `/var/lib/homelab-claude-land/<n>.verdict` ends with the same line. An approval-list path, a gate-imported module or an import shape such as a symlink refuses with `need the operator's approval: <path>`. After the operator approves the head, the lander logs `merged directly at the checked head`. | `claude_code_lander_enabled: false` removes the polkit rule and the unit. `claude` still opens PRs, and the operator lands them. |
 | 4 | From the phone, a session prints `id` (it must show `claude`), names the entries in the copied `MEMORY.md`, and writes an artifact and a new memory file. The artifact renders under `/a/daniel-box-claude/`, which proves the artifacts pod can traverse to the file. As `ubuntu`, `cat` of both new files succeeds. A permission error on the memory file means Claude Code created it `0600`, which `UMask=0027` cannot widen, so file a finding with `findings.py open`. `journalctl -u claude-memory-sync` shows a run that copied the file to daniel-server. | `claude_code_user: ubuntu`. A `User=` change restarts the host and drops its live sessions. |
 | 5 | As `claude` on daniel-box, `uv run python scripts/dev/fanout.py place read` prints a reading for both hosts, each with `signing=ok`. For the login alone, `uv run python scripts/diagnostics/ui_login.py && uv run python scripts/diagnostics/ui_login.py --verify homepage` succeeds, and homelab-ui renders a service page. | `claude_agent_ssh_login_enabled: false` in daniel-server's host_vars removes the key and the group. `claude_code_agent_user_enabled: false` there also expires the account and stops its linger. `claude_code_agent_homelab_ui_enabled: false` removes the browser, and deleting the `claude-agent` block from the authelia role revokes the login. |
-| 6 | Starting `claude` as `ubuntu` shows up as `claude_uid_processes{uid="1000"}` within one 30-second timer interval. | Delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns to uid 1000, and an empty `claude_code_watch_uids` stops the series and the page with it. |
+| 6 | Starting `claude` as `ubuntu` shows up as `claude_uid_processes{uid="1000"}` within one 30-second timer interval. | Delete the two lines in daniel-box's host_vars. `claude_code_login_uids` returns to uid 1000, and an empty `claude_code_watch_uids` stops the series. |
 | rootq socket | After `claude-rc.service` restarts, in a session as `claude` on each host: `rootq-socket nft` prints the host's ruleset (several chains, not an empty one), `rootq-socket cat /etc/shadow` and `rootq-socket cat /etc/netplan/../shadow` exit 2, and `id` lists `homelab-rootq`. As `ubuntu`, `rootq nft` still works through sudo. | `claude_code_rootq_socket_enabled: false` in that host's `host_vars` removes the socket, its units, the helper, the client and the group, and the agent leaves the group. The operator's `rootq` stays. |
 | dotfiles | A scratch run of the sync script as `claude` against the dotfiles branch applies the agent variant, leaves `~/.claude` at the mode it started with and keeps a pre-existing `.profile` and `.gitconfig`. The rendered `settings.json` carries every guard hook with `SUDO_ASKPASS` unset, `CLAUDE_ARTIFACTS_HOST=daniel-box-claude` and `OTEL_RESOURCE_ATTRIBUTES=process.owner=claude`. A second run is a no-op with an empty `chezmoi diff`. A source that predates the flag makes the script exit 1 and apply nothing. | Delete `claude_code_agent_dotfiles: true` from that host's `host_vars`. The next apply there stops the timer, removes its units, and installs the subset again. |
 

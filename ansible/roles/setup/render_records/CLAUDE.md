@@ -18,7 +18,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 ## How one run works
 
 `files/render_records.py` runs as `{{ sys_user }}` from the shared kuma-check timer pair
-(`roles/setup/common/tasks/kuma_check_timer.yml`), hourly at `render_records_minute`
+(`roles/setup/common/tasks/check_timer.yml`), hourly at `render_records_minute`
 (`group_vars/all.yml`):
 
 1. It reads the primary checkout's `origin/master` and never fetches. The GitOps deployer
@@ -40,7 +40,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 5. It runs `deploy.sh --dry-run --skip-staleness-check -e manifests_render_record=true` over
    that list. The staleness gate is skipped because the chosen commit may sit below the tip;
    the record names its own commit, which is what the reader compares.
-6. It reads every record back and pushes the verdict to the `render-records` Kuma tile.
+6. It reads every record back and logs the verdict.
 
 ## Autonomous-role contract (it runs a playbook hourly with no human in the loop)
 
