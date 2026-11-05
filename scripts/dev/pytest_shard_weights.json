@@ -11,7 +11,6 @@
  ".claude/hooks/tests/test_block_protected_bash_read_only.py": 0.0,
  ".claude/hooks/tests/test_block_protected_edits.py": 0.0,
  ".claude/hooks/tests/test_claude_guard_import.py": 0.17,
- ".claude/hooks/tests/test_facts_line.py": 0.04,
  ".claude/hooks/tests/test_fanout_stop.py": 0.0,
  ".claude/hooks/tests/test_hook_common.py": 0.0,
  ".claude/hooks/tests/test_hook_imports_run_standalone.py": 2.37,

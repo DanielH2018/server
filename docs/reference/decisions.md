@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-05 06:17 UTC
-generated_sha: f0e5cf0cfe
+generated_at: 2026-11-05 07:10 UTC
+generated_sha: 6404a87b22
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: f0e5cf0cfe
 
 # Decisions
 
-937 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+936 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per CLAUDE.md's "Review & Memory Hygiene" section — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -30,14 +30,14 @@ generated_sha: f0e5cf0cfe
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/monitor-bridge-checks.md:486`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `.claude/rules/facts.md:30` and `scripts/lib/tests/test_facts_citations.py:86`
+    * `.claude/rules/facts.md:29` and `scripts/lib/tests/test_facts_citations.py:86`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100`
-    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22`
+    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/wg-easy/CLAUDE.md:83`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:28`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/tests/_ratchet.py:33`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
-    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `prek.toml:522`
+    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `prek.toml:502`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13`
     * `ansible/roles/k8s/artifacts/CLAUDE.md:97` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25`
@@ -76,12 +76,12 @@ generated_sha: f0e5cf0cfe
     * `ansible/roles/k8s/longhorn/defaults/main.yml:177` and `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17`
     * `ansible/roles/k8s/longhorn/defaults/main.yml:177` and `ansible/roles/k8s/metallb/defaults/main.yml:36`
     * `ansible/roles/k8s/longhorn/defaults/main.yml:177` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
-    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22`
+    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `ansible/roles/k8s/wg-easy/CLAUDE.md:83`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `ansible/roles/setup/common/CLAUDE.md:28`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `ansible/tests/_ratchet.py:33`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
-    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `prek.toml:522`
+    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:100` and `prek.toml:502`
     * `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17` and `ansible/roles/k8s/metallb/defaults/main.yml:36`
     * `ansible/roles/k8s/longhorn-backup/defaults/main.yml:17` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
     * `ansible/roles/k8s/media-volume/CLAUDE.md:47` and `ansible/roles/k8s/qbittorrent/CLAUDE.md:145`
@@ -96,11 +96,11 @@ generated_sha: f0e5cf0cfe
     * `ansible/roles/k8s/mosquitto/templates/deployment.yaml.j2:26` and `ansible/roles/k8s/terraria/templates/deployment.yaml.j2:27`
     * `ansible/roles/k8s/mosquitto/templates/deployment.yaml.j2:26` and `ansible/roles/k8s/traefik/templates/deployment.yaml.j2:28`
     * `ansible/roles/k8s/observability/CLAUDE.md:108` and `ansible/roles/k8s/observability/templates/prometheus.yaml.j2:1056`
-    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22` and `ansible/roles/k8s/wg-easy/CLAUDE.md:83`
-    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22` and `ansible/roles/setup/common/CLAUDE.md:28`
-    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22` and `ansible/tests/_ratchet.py:33`
-    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
-    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22` and `prek.toml:522`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/roles/k8s/wg-easy/CLAUDE.md:83`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/roles/setup/common/CLAUDE.md:28`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/tests/_ratchet.py:33`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `prek.toml:502`
     * `ansible/roles/k8s/observability/templates/collector.yaml.j2:106` and `ansible/roles/k8s/observability/templates/grafana.yaml.j2:139`
     * `ansible/roles/k8s/observability/templates/collector.yaml.j2:106` and `ansible/roles/k8s/observability/templates/kube-state-metrics.yaml.j2:138`
     * `ansible/roles/k8s/observability/templates/collector.yaml.j2:106` and `ansible/roles/k8s/observability/templates/loki.yaml.j2:94`
@@ -121,7 +121,7 @@ generated_sha: f0e5cf0cfe
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:83` and `ansible/roles/setup/common/CLAUDE.md:28`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:83` and `ansible/tests/_ratchet.py:33`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:83` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:83` and `prek.toml:522`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:83` and `prek.toml:502`
     * `ansible/roles/setup/claude_code/tasks/main.yml:6` and `ansible/roles/setup/config_files/tasks/main.yml:7`
     * `ansible/roles/setup/claude_code/tasks/main.yml:6` and `ansible/roles/setup/homelab_builder/tasks/main.yml:7`
     * `ansible/roles/setup/claude_code/tasks/main.yml:6` and `ansible/roles/setup/nut_host/tasks/main.yml:7`
@@ -129,7 +129,7 @@ generated_sha: f0e5cf0cfe
     * `ansible/roles/setup/claude_code/tasks/main.yml:6` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
     * `ansible/roles/setup/common/CLAUDE.md:28` and `ansible/tests/_ratchet.py:33`
     * `ansible/roles/setup/common/CLAUDE.md:28` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
-    * `ansible/roles/setup/common/CLAUDE.md:28` and `prek.toml:522`
+    * `ansible/roles/setup/common/CLAUDE.md:28` and `prek.toml:502`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/homelab_builder/tasks/main.yml:7`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/nut_host/tasks/main.yml:7`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/optimize_pi/tasks/main.yml:8`
@@ -171,7 +171,7 @@ generated_sha: f0e5cf0cfe
     * `ansible/roles/setup/nut_host/tasks/main.yml:7` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
     * `ansible/roles/setup/optimize_pi/tasks/main.yml:8` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
     * `ansible/tests/_ratchet.py:33` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
-    * `ansible/tests/_ratchet.py:33` and `prek.toml:522`
+    * `ansible/tests/_ratchet.py:33` and `prek.toml:502`
     * `ansible/tests/_ratchet.py:56` and `ansible/tests/_ratchet.py:332`
     * `ansible/tests/repo/test_adr_links.py:1` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:170`
     * `ansible/tests/repo/test_adr_links.py:12` and `docs/archive/docs-ui-and-adrs/design.md:27`
@@ -221,7 +221,7 @@ generated_sha: f0e5cf0cfe
     * `docs/monitor-bridge-checks.md:486` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/target-architecture/contracts.md:327` and `docs/target-architecture/deploy/d2-first-leaf.md:755`
     * `docs/target-architecture/monitoring/m6-status/a1.md:134` and `hosts/components/builder/CLAUDE.md:110`
-    * `docs/target-architecture/monitoring/m6-status/b5.md:42` and `prek.toml:522`
+    * `docs/target-architecture/monitoring/m6-status/b5.md:42` and `prek.toml:502`
     * `hosts/components/claude-code/templates/claude-triage-poll.service.j2:20` and `hosts/components/claude-code/templates/claude-triage@.service.j2:40`
     * `scripts/deploy_tools/tests/test_chained_timeout.py:279` and `scripts/deploy_tools/tests/test_chained_timeout.py:289`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
@@ -419,7 +419,7 @@ generated_sha: f0e5cf0cfe
 | 30m, and the floor is the worst inter-restart SPACING, not the CrashLoopBackOff 5-min backoff cap. The 2026-08-13 homepage incident spread 31 restarts over a night, ~15-19 min apart; a window inside that spacing resolves in the gaps and refires, and every resolve and refire is a notification. 30m clears two spacings. The spacing could not be re-measured, because cluster Prometheus retains 7d and the incident is older, so this is the conservative floor. ansible/tests/services/test_k8s_workloads_rule_literals.py holds the window at 30m or more. | `ansible/roles/k8s/observability/files/rules/k8s-workloads.yaml:119` | 2026-10-22 |
 | the later page is the price of expressing the grace in PromQL, and the 168h soak found no episode where it mattered. - SHIPPER_BACKLOG_GRACE_S (21600s). After a reboot Alloy ships a backlog for hours and Loki discards the late part as `too_far_behind` (#2783). That one reason is held for 6h, and every other reason pages through it. | `ansible/roles/k8s/observability/files/rules/log-pipeline.yaml:16` | 2026-10-23 |
 | ` marker in test_scrape_target_rule_jobs.py has why 3000. | `ansible/roles/k8s/observability/files/rules/log-pipeline.yaml:36` | 2026-10-30 |
-| ` marker in hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2) and the textfile follows it. | `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:22` | 2026-11-01 |
+| ` marker in hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2) and the textfile follows it. | `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` | 2026-11-01 |
 | service is the deploy tag of the role that deploys the target (Open question 2 of the M6 plan), with `k3s` for the control plane's own endpoints, `daniel-pi` for the Pi's host-level exporters and `exportarr` for the *arr sidecars, whose pods belong to three roles at once. The three blackbox jobs carry service="blackbox-exporter" by this rule's literal, which overrides the per-probe `service` its targets set, because a failed scrape of that job means the exporter is unreachable and says nothing about the probed service. | `ansible/roles/k8s/observability/files/rules/scrape-targets.yaml:20` | 2026-10-23 |
 | observability tiers` in this role's CLAUDE.md. | `ansible/roles/k8s/observability/templates/alertmanager.yaml.j2:32` | 2026-10-12 |
 | observability tiers` in this role's CLAUDE.md names the tier-1 exceptions. | `ansible/roles/k8s/observability/templates/collector.yaml.j2:106` | 2026-10-12 |
@@ -842,10 +842,10 @@ generated_sha: f0e5cf0cfe
 | a", "m.py", "a"), tmp_path) | `scripts/lib/tests/test_facts_atoms.py:225` | 2026-09-19 |
 | zzz", "m.py", "zzz"), tmp_path) | `scripts/lib/tests/test_facts_atoms.py:227` | 2026-09-19 |
 | a fixed slice while`" | `scripts/lib/tests/test_facts_citations.py:86` | 2026-10-11 |
-| keep it\n") | `scripts/lib/tests/test_facts_lint.py:27` | 2026-09-19 |
-| keep it`.\n" | `scripts/lib/tests/test_facts_lint.py:42` | 2026-09-19 |
-| keep`\n") | `scripts/lib/tests/test_facts_lint.py:124` | 2026-09-30 |
-| keep it\n# DECIDED: keep that\n") | `scripts/lib/tests/test_facts_lint.py:125` | 2026-09-19 |
+| keep it\n") | `scripts/lib/tests/test_facts_lint.py:26` | 2026-09-19 |
+| keep it`.\n" | `scripts/lib/tests/test_facts_lint.py:41` | 2026-09-19 |
+| keep`\n") | `scripts/lib/tests/test_facts_lint.py:123` | 2026-09-30 |
+| keep it\n# DECIDED: keep that\n") | `scripts/lib/tests/test_facts_lint.py:124` | 2026-09-19 |
 | keep the cap\n") | `scripts/lib/tests/test_facts_lock.py:181` | 2026-09-19 |
 | keep`") | `scripts/lib/tests/test_facts_lock.py:183` | 2026-09-19 |
 | keep the cap\n# DECIDED: keep the floor\n" | `scripts/lib/tests/test_facts_lock.py:187` | 2026-09-19 |
@@ -976,7 +976,7 @@ generated_sha: f0e5cf0cfe
 | ` markers for the 1h temperature hold, the sanity-bounded hwmon limits, the Ryzen | `docs/monitor-bridge-checks.md:505` | 2026-10-31 |
 | stays at 20` marker, which records | `docs/monitor-bridge-checks.md:546` | 2026-10-31 |
 | ` marker with the byte | `docs/pi-host-tuning-record.md:67` | 2026-10-10 |
-| ` marker carries the | `docs/pi-host-tuning-record.md:314` | 2026-09-30 |
+| ` marker carries the | `docs/pi-host-tuning-record.md:320` | 2026-09-30 |
 | ` marker at the top of `module_length_allowlist.txt` is the ruling. | `docs/python-code-organization.md:278` | 2026-10-24 |
 | ` marker in the tree. | `docs/reference/scripts.md:35` | 2026-10-03 |
 | ` comment beside it accepts a grouped VERSION bump paging four days early as the cost. | `docs/renovate-notify-internals.md:82` | 2026-10-02 |
@@ -985,7 +985,7 @@ generated_sha: f0e5cf0cfe
 | a verification in flight is guarded by two checks`. | `docs/target-architecture/contracts.md:327` | 2026-10-15 |
 | a verification in flight is guarded by two checks` in | `docs/target-architecture/deploy/d2-first-leaf.md:755` | 2026-10-15 |
 | ` marker at `ALLOWED_IMPORTS` in | `docs/target-architecture/deploy/d5-bulk-move.md:25` | 2026-10-16 |
-| the notice never blocks a merge … (ADR-0023)`, added in | `docs/target-architecture/docs-guard/g2-retire-lock.md:253` | 2026-10-17 |
+| the notice never blocks a merge … (ADR-0023)`, added in | `docs/target-architecture/docs-guard/g2-retire-lock.md:255` | 2026-10-17 |
 | ` marker beside the member in `secret_checks.py` records the choice. | `docs/target-architecture/host/h1-cluster-config-to-flux.md:935` | 2026-10-22 |
 | ` marker in the | `docs/target-architecture/monitoring/m6-status/a1.md:134` | 2026-10-31 |
 | ` marker in | `docs/target-architecture/monitoring/m6-status/b5.md:42` | 2026-10-31 |
@@ -997,21 +997,20 @@ generated_sha: f0e5cf0cfe
 | Marker | File | Decided |
 |---|---|---|
 | ` marker). | `.claude/agents/homelab-cicd-reviewer.md:51` | 2026-10-29 |
-| '` that role's tree. | `.claude/agents/homelab-docs-freshness-reviewer.md:81` | 2026-10-10 |
+| '` that role's tree. | `.claude/agents/homelab-docs-freshness-reviewer.md:77` | 2026-10-10 |
 | no fallback to a stale local copy when the deploy is missing. slice-3 ledger's #484 half-deploy (~/.claude/artifacts/claude-guard-slice3/sdd-ledger/ progress.md) is why: a machine mid-deploy can have the new hook code without yet having the dotfiles package behind it, and a private fallback copy would keep serving a permission decision that looks current but was pinned at whatever the fallback last held — nobody sees that it fell behind. This module raises; `_hook_common.py` catches it and reports the segmenter as missing, and each guard turns that into its own posture on an unreadable command. | `.claude/hooks/_claude_guard.py:19` | 2026-09-17 |
 | every arm runs under its own `try/except`, and an arm that raises loses its verdict | `.claude/hooks/bash-pretool.py:52` | 2026-09-24 |
 | the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload carries no `cwd`. Every arm joins `repo_root` as a path prefix — `os.path.join` for a relative write target and for the derivation's `ansible/` tree, and as `find_repo_root`'s fallback for a target in no checkout — and an empty prefix resolves against the process cwd implicitly, the same silent probe `read_cwd`'s docstring refuses for `git -C ""`. Naming the directory says which checkout those paths resolve in. The shim's `cd` makes it the primary checkout, a real repo root, so both arms keep a tree to read. Issue #2135. | `.claude/hooks/block-protected-bash.py:280` | 2026-09-21 |
 | the check reads the final text and never asks GitHub whether the branch has a PR. | `.claude/hooks/fanout-stop.py:31` | 2026-09-28 |
 | deny, not arm 1's ask. operator's own session. Here the session is an agent that has declared it writes nothing, so a false positive costs it one rephrased read, while a missed write is the injected action the arm exists to stop. Outside git and gh, each command is judged against the allowlist in `read_only_commands.py`, whose docstring says why it is an allowlist. A wrapper (`timeout`, `env`, `xargs`, `uv run`, …) is read past, an `ssh` remote command and a `$( )` body are judged as commands of their own, and a nested shell or `eval` is denied. | `.claude/hooks/hooklib/read_only_agents.py:31` | 2026-10-12 |
 | allowlist, not denylist. | `.claude/hooks/hooklib/read_only_commands.py:9` | 2026-10-12 |
-| the doc's text outranks the facts line. plus the line fits both the doc budget and what is left of the payload, and a head never carries it, so no doc is cut or deferred to make room for it. | `.claude/hooks/inject-nested-docs.py:462` | 2026-10-10 |
 | the `cd` arm and a missing `.py` both ask under `--ask-on-cd`; every other failure stays fail-open. Issue #1014 made all three failure paths fail-open so that a broken guard does not brick every tool call, and gave the `cd` arm the stderr line the other two already had. An `ask` is a prompt, not a brick: the operator reads why a DENY guard could not run and decides once, where a bare `exit 0` disarmed it in silence (#2171). #2394 made one shim carry a posture that used to be split: three of the five PreToolUse:Bash arms asked on a failed `cd` and two stayed silent, and a single process can only do one thing, so it asks and the reason names every guard that did not run. The two silent arms cost a missed approval and a missed doc injection, which is a prompt and a re-read, not a bypass. | `.claude/hooks/run-hook.sh:30` | 2026-10-03 |
 | return [] on any error, so a broken health read never blocks a session start; SESSION_HEALTH_VERBOSE=1 forces output. | `.claude/hooks/session-health.py:42` | 2026-09-30 |
 | the gen-hooks block above carries no `matcher`, so the hook also fires on `compact`. A compaction is not a no-op here: `main` rows `MEMORY.md` under `compact` before it returns, because Claude Code reloads the file with no InstructionsLoaded event (#4668). A `startup\|resume\|clear` matcher would drop that row (#6153). A second, `compact`-only entry pointing at a row-only script saves nothing: `run-hook.sh` starts the same `uv run` interpreter for every registration, and that start is the whole cost of a compaction here. | `.claude/hooks/session-health.py:44` | 2026-10-24 |
 | ` marker. | `.claude/hooks/tests/test_hook_shim_fail_open.py:14` | 2026-10-03 |
 | ` documents.""" | `.claude/hooks/tests/test_hook_shim_fail_open.py:170` | 2026-10-09 |
-| marker, cited by text prefix | `.claude/rules/facts.md:29` | 2026-09-21 |
-| a fixed slice while | `.claude/rules/facts.md:30` | 2026-10-11 |
+| marker, cited by text prefix | `.claude/rules/facts.md:28` | 2026-09-21 |
+| a fixed slice while | `.claude/rules/facts.md:29` | 2026-10-11 |
 | `ha-review` stays its own skill, not a `/homelab-review` domain** (#2428, | `.claude/skills/ha-review/SKILL.md:72` | 2026-09-24 |
 | ` marker there (step 7). | `.claude/skills/homelab-review/SKILL.md:51` | 2026-09-28 |
 | ` marker makes the alternative fail. | `.claude/skills/homelab-review/SKILL.md:97` | 2026-08-29 |
@@ -1026,7 +1025,7 @@ generated_sha: f0e5cf0cfe
 | callers write `uses: ./.github/actions/setup` with a `zizmor: ignore[self-repository]` comment, not GitHub's `$/.github/actions/setup` form (added 2026-07-30). zizmor 1.30.1 asks for `$/`, but the pinned actionlint rejects it as "ref is missing", and actionlint is the hook that validates each caller's `with:` keys against the inputs below. Measured 2026-10-09. Switch to `$/` and drop the ignores once a Renovate bump gives actionlint the syntax. | `.github/actions/setup/action.yml:20` | 2026-10-09 |
 | a cancelled or failed `prove` runs the dependents ahead of `!cancelled()` and the proof. A job timeout and a user's cancel look the same to an expression, so a run cancelled by hand while `prove` is running still starts the sweep. That costs free runner minutes on a public repo; the alternative is a red master on every hung runner. A cancel after `prove` concluded still stops the sweep, through `!cancelled()`. `proven` cannot be trusted from a cancelled or failed job, because the job set it and then did not succeed. | `.github/workflows/ci.yml:128` | 2026-10-22 |
 | ansible-lint gets its own job, again. 2026-08-14, and restored it on 2026-09-10 (#1332). The revert is not a precedent to re-apply, because the two facts it rested on have both gone: | `.github/workflows/ci.yml:166` | 2026-09-10 |
-| the notice never blocks a merge, during the soak or after the lock retires. PR that moves a cited atom gets a notice, not a red check. The trade, and the coverage it gives up, is in docs/adr/0023-fact-support-is-a-diff-notice.md. (ADR-0023) | `.github/workflows/ci.yml:324` | 2026-10-17 |
+| the notice never blocks a merge, during the soak or after the lock retires. PR that moves a cited atom gets a notice, not a red check. The trade, and the coverage it gives up, is in docs/adr/0023-fact-support-is-a-diff-notice.md. (ADR-0023) | `.github/workflows/ci.yml:322` | 2026-10-17 |
 | `[A-Z][A-Z]+`, not `[A-Z]{2,}`. `{2,}` form parses as two broken patterns. The first attempt silently ignored nothing; wrapped in a group, it failed with "missing closing )". | `.vale.ini:85` | 2026-09-25 |
 | ` at the line it governs.** A decision recorded only in a | `CLAUDE.md:224` | 2026-08-22 |
 | `origin\[:8\]`' | `CLAUDE.md:228` | 2026-09-18 |
@@ -1173,7 +1172,7 @@ generated_sha: f0e5cf0cfe
 | `config` runs here only as `--services`, which prints names. interpolated model, which holds every secret value in compose.env. | `hosts/components/pi-compose/compose-adopt:10` | 2026-10-24 |
 | the engine never moves through the updater (#1961, H7-R1-02). no `depends:` on docker-ce, containerd.io or the plugins, and ships no apt preferences pin for them, because a pin above priority 1000 forces a version change on the next apt run. The packages stay held, and homelab-docker-engine.service is the one path that installs or moves them. Reconcile never starts it (`policy: manual`, no enable link on the service). An operator starts it from a LAN session, or homelab-docker-engine.timer starts it at 00:30 UTC, the Pi's quiet window (operator ruling 2026-10-30). The unit does nothing while every package sits at its pin, so the timer acts only after a pin moved. hosts/lib/tests/test_pi_docker_component.py holds these rules. | `hosts/components/pi-docker/component.yml:10` | 2026-10-30 |
 | 00:30 UTC (the Pi's clock is UTC), operator ruling 2026-10-30 on H7 Open question 8. The slot is chosen against the Pi's own schedule, each entry in UTC: - homelab-updater.timer (hosts/daniel-pi/units/homelab-updater.timer.conf) fires once a day at 03:05, after this unit's 90-minute worst case, and the unit masks the timer and waits out a running updater regardless. - The midnight cluster runs 23:55 to 00:10: log2ram's sync, logrotate, dpkg-db-backup and sysstat. 00:30 follows it. - man-db runs 01:00 to 03:00, and the rotated-log sweep at 01:40. Both come after 00:30. - The other gap, 04:00 to 05:59, is not usable: pi-peer-backup pulls the wg-easy configs from the Pi at 23:00 America/Chicago, which is 04:00 UTC under CDT and 05:00 UTC under CST, and the Pi's apt timers run at 04:20 and 05:20 plus up to 10 minutes. The upgrade recreates wg-easy and takes the dpkg lock, so it must not meet either. The unit's apt run takes minutes. The unit masks the updater timer before it stops anything, so an upgrade that outlasts 03:05 still meets no updater run. | `hosts/components/pi-docker/units/homelab-docker-engine.timer:6` | 2026-10-30 |
-| ` marker has the declined re-proposal. - Next-run review: a repeat `restarted:` for the same container needs fixing upstream. Read the week's status=down lines before widening the watch set. | `hosts/components/pi-heartbeats/component.yml:45` | 2026-10-16 |
+| ` marker has the declined re-proposal. - Next-run review: a repeat `restarted:` for the same container needs fixing upstream. Read the week's status=down lines before widening the watch set. | `hosts/components/pi-heartbeats/component.yml:48` | 2026-10-16 |
 | STATUS stays `down` even when the restart worked. successful recovery would make an auto-restart loop invisible: a container crashing every 5 minutes would read green forever, which is the failure mode that makes self-healing worse than no healing. One failing verdict per cycle that needed intervention keeps the episode in Prometheus and in the alert history, and the next clean cycle clears it. Re-proposed by #1784 as "an UP with a warning would read more honestly", after two single-cycle `not running: autoheal; restarted: autoheal` episodes on 2026-09-02/03, and declined 2026-09-11: those two episodes ARE the loop this rule exists to keep visible, and no evidence was offered against the original reasoning. The recurring fault worth fixing is that autoheal stops at all, filed separately. | `hosts/components/pi-heartbeats/templates/pi-recovery-health.sh.j2:161` | 2026-11-01 |
 | the patched copy drops `--sparse`, never `--inplace` and never USE_RSYNC=false (#2694, #2726). Log2Ram ships both syncs as `rsync -aXv --sparse --inplace --no-whole-file --delete-after`, and that pair corrupts files whose content ends in NUL bytes: `--sparse` seeks over a run of NULs in the source, and `--inplace` makes the destination the live file, so whatever the previous file left at those offsets survives. Measured on daniel-pi 2026-09-26: 6 of 9 rotated /var/log/apt/history.log.*.gz failed `gzip -t` while their CRC32 matched, because the gzip ISIZE field's trailing NULs carried stale bytes. Dropping `--sparse` alone made the transfer byte-identical under rsync 3.2.7, the Pi's version. Dropping `--inplace` instead writes a full temp copy of /var/log on every sync. USE_RSYNC=false takes the `cp -rfup --sparse=always` fallback, which has no `--delete`, so files deleted from the tmpfs would return at boot into the 128 MB /var/log. The cost this choice carries: every hole in a journald archive lands on the SD card as real zeros, which 60-homelab-pi.conf bounds with SystemMaxFiles= (#4583). Log2Ram 1.7.2 is the installed version. The script stays at /usr/lib/homelab/log2ram because the log2ram package owns /usr/local/bin/log2ram, and a package shipping an owned path makes dpkg refuse the unpack. vendor/log2ram-1.7.2 is the upstream script; test_pi_tuning_component.py holds the difference between the two to the two `--sparse` words. An `apt upgrade` of log2ram rewrites the upstream copy and not this one, so a new upstream version needs a new vendored file and a re-diff. config_files' survivor (spec, *Baseline*): the SOPS export. Its other dotfiles stay as the Pi holds them; a rebuilt Pi gets Ubuntu's own ~/.bashrc and no ~/.gitconfig. | `hosts/components/pi-tuning/component.yml:49` | 2026-10-25 |
 | a plain tail, not eval-run's and docs-refresh's prek-hook filter. reports `git commit --no-verify` below, so no pre-commit hook runs and the log can never name one; the filter would never match and always fall back to this same tail. Drop --no-verify and this must take the filtered body from eval-run.sh.j2. ENFORCED by ansible/tests/setup/test_eval_run_failure_path.py::test_secret_rotate_keeps_its_plain_tail_only_while_it_skips_hooks. | `hosts/components/secret-rotation/templates/secret-rotate.sh.j2:91` | 2026-10-03 |
@@ -1194,9 +1193,9 @@ generated_sha: f0e5cf0cfe
 | raising CEILING is an operator ruling, never part of an ordinary change. is design.md's trigger to cut reconcile, to raise the ceiling in the H7 ADR with a reason, or to switch the host plan to ansible-pull. The ceiling and its derivation are in docs/target-architecture/host/h7-delete-ansible.md, *Reconcile's line ceiling*. | `hosts/lib/tests/test_reconcile_size_census.py:28` | 2026-10-24 |
 | chezmoi is pinned as its .tar.gz. and `member` names the file the builder installs from inside the archive. | `hosts/packages/homelab-tools/package.yml:15` | 2026-10-23 |
 | docs/archive stays; size was never the concern, and a PR number is not greppable offline the way the linked record is. Deleting the archive in favour of PR numbers was re-examined on 2026-09-28 (#2808) and kept. | `mkdocs.yml:116` | 2026-09-30 |
-| ` marker in ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting. It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on it -- and it writes unconditionally, never running the suite first, which is what keeps it out of the #1799 repair deadlock. | `prek.toml:522` | 2026-09-28 |
-| ` marker in a template, and the doc fragments read role defaults, inventory and the fail2ban template. The shard partition test reads ci.yml and pyproject.toml's `testpaths`. test_role_claude_md reads every role's CLAUDE.md beside its tasks and templates. The census rows read tracked `.py` files, and four more kinds of path: - every workflow under .github/workflows/, for the runner-pin and shared-fetch rows; - any file under a role's templates/, defaults/ or files/, for the row that refuses a literal uptime-kuma port, because a `.sh` or `.conf` there can dial it; - Markdown and JSON under .claude/skills/, .claude/agents/ and evals/cases/, for the rows on the review surfaces' standing-list slug and the agents' inline re-flag list; - a compiled module (`.pyc`, `.so`, anything under __pycache__/), for the row that refuses a tracked one. The macro row reads every Markdown doc under docs/ and .claude/ and every CLAUDE.md, and only the CLAUDE.md files, the skills and the agents are gated. A docs/ page or a .claude/rules/ file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the cost above, and the edit that usually breaks the row deletes a macro template, which `.j2` already gates. | `prek.toml:607` | 2026-10-05 |
-| never widen this hook to docs/reference/; the docs-refresh cron commits those paths with hooks running, so a strict failure stops every refresh. A style error there aborts the commit and alerts on every run until someone fixes the generator. ENFORCED by the same test. | `prek.toml:962` | 2026-09-30 |
-| the generated fragments under docs/assets/generated/fragments/ are linted here, although the docs-refresh cron commits them with hooks running. The operator chose this on 2026-09-30 (#3008) so that a generator's prose is gated in CI and not only by a hand `vale docs` run, where #3006 was found. The cost is accepted: a Vale error in a fragment aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out. | `prek.toml:984` | 2026-09-30 |
+| ` marker in ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting. It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on it -- and it writes unconditionally, never running the suite first, which is what keeps it out of the #1799 repair deadlock. | `prek.toml:502` | 2026-09-28 |
+| ` marker in a template, and the doc fragments read role defaults, inventory and the fail2ban template. The shard partition test reads ci.yml and pyproject.toml's `testpaths`. test_role_claude_md reads every role's CLAUDE.md beside its tasks and templates. The census rows read tracked `.py` files, and four more kinds of path: - every workflow under .github/workflows/, for the runner-pin and shared-fetch rows; - any file under a role's templates/, defaults/ or files/, for the row that refuses a literal uptime-kuma port, because a `.sh` or `.conf` there can dial it; - Markdown and JSON under .claude/skills/, .claude/agents/ and evals/cases/, for the rows on the review surfaces' standing-list slug and the agents' inline re-flag list; - a compiled module (`.pyc`, `.so`, anything under __pycache__/), for the row that refuses a tracked one. The macro row reads every Markdown doc under docs/ and .claude/ and every CLAUDE.md, and only the CLAUDE.md files, the skills and the agents are gated. A docs/ page or a .claude/rules/ file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the cost above, and the edit that usually breaks the row deletes a macro template, which `.j2` already gates. | `prek.toml:586` | 2026-10-05 |
+| never widen this hook to docs/reference/; the docs-refresh cron commits those paths with hooks running, so a strict failure stops every refresh. A style error there aborts the commit and alerts on every run until someone fixes the generator. ENFORCED by the same test. | `prek.toml:941` | 2026-09-30 |
+| the generated fragments under docs/assets/generated/fragments/ are linted here, although the docs-refresh cron commits them with hooks running. The operator chose this on 2026-09-30 (#3008) so that a generator's prose is gated in CI and not only by a hand `vale docs` run, where #3006 was found. The cost is accepted: a Vale error in a fragment aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out. | `prek.toml:963` | 2026-09-30 |
 | compile at sync, as the syncing user, so a root importer finds fresh bytecode and writes no root-owned __pycache__ a session cannot delete. Costs ~0.4s per cold sync on 16 cores and ~1.2s on 2 (measured in #6984). | `pyproject.toml:8` | 2026-11-03 |
 | Markdown stays out of ruff's scope. blocks inside .md, which pulled every prose file in the repo into a gate whose stated job is first-party Python — and its output mangles the plan docs, exploding readable two-element dict keys across four lines. Excluding *.md holds the gate to the same Python files ruff 0.15 covered; `uv run ruff format --check` prints the count, so don't restate one here. `ansible/collections` is the vendored third-party tree, never linted or formatted. | `pyproject.toml:191` | 2026-08-23 |

@@ -890,9 +890,6 @@ cannot grow, because the remote-control wire path truncates at 8,000 chars / 200
 budgets are the payload's, not one doc's, so a head that fills the payload defers the next doc
 to the next command.
 
-`.claude/hooks/_facts_line.py` adds no line under a `CLAUDE.md`, because the lock it reads
-is retired (ADR-0023). Slice G2's PR 4 deletes the module.
-
 An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
 (`secrets.md` and `facts.md`, which a read needs) is injected only for a path the command
 writes, as `block-protected-bash`'s `written_paths` finds it, or for every named path when the
