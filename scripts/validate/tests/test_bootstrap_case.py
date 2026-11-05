@@ -7,9 +7,14 @@ for each, and holds that the job runs them.
 Run: uv run pytest scripts/validate/tests/test_bootstrap_case.py
 """
 
+import email.message
+import hashlib
+import io
 import subprocess
 import time
+import urllib.error
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 from lib.git import git
@@ -290,3 +295,45 @@ def test_a_repository_install_that_missed_the_homelab_update_or_a_package_is_fla
     other_host = repo_case.apt_problems("daniel-box", REPO_CALLS, REPO_SIMULATION)
     assert other_host[0].startswith("apt-get ran installs")
     assert "apt's simulation installs no homelab-daniel-box" in other_host
+
+
+class _Body(io.BytesIO):
+    headers: ClassVar[dict[str, str]] = {}
+
+
+def test_a_kit_download_retries_a_504_and_lands_at_its_name(tmp_path):
+    body = b"binary"
+    outcomes = [
+        urllib.error.HTTPError("u", 504, "Gateway", email.message.Message(), None),
+        _Body(body),
+    ]
+
+    def opener(request, timeout=None):
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    dest = tmp_path / "nfpm.tar.gz"
+    case._download(
+        "https://example.invalid/nfpm.tar.gz",
+        hashlib.sha256(body).hexdigest(),
+        dest,
+        tmp_path / "cache",
+        opener,
+        sleep=lambda _: None,
+    )
+    assert dest.read_bytes() == body
+
+
+def test_a_kit_download_differing_from_its_pin_is_flagged(tmp_path):
+    dest = tmp_path / "nfpm.tar.gz"
+    with pytest.raises(CaseFailed, match="the pin names"):
+        case._download(
+            "https://example.invalid/nfpm.tar.gz",
+            hashlib.sha256(b"binary").hexdigest(),
+            dest,
+            tmp_path / "cache",
+            lambda request, timeout=None: _Body(b"other"),
+        )
+    assert not dest.exists()

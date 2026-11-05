@@ -10,6 +10,26 @@ from _row_table import Census, Subject, lines_matching, tracked
 
 _RUNS_ON = re.compile(r"^\s*runs-on:\s*(.+?)\s*$", re.MULTILINE)
 _VERSIONED = re.compile(r"^[a-z]+-\d+(\.\d+)?(-[a-z]+)?$")
+_PACKAGE_BUILD_JOB = re.compile(
+    r"^  host_packages_build:\n(.*?)^  host_packages:", re.MULTILINE | re.DOTALL
+)
+_CURL_STEP = re.compile(r"^\s*(?:run:\s*)?curl\b.*$", re.MULTILINE)
+_CURL_RETRIES = re.compile(r"--retry (\d+)\b.*--retry-delay (\d+)\b")
+# The span of the 504s in run 42054080101.
+_RELEASE_OUTAGE_S = 300
+
+
+def _package_build_download_offences(text: str) -> list[str]:
+    job = _PACKAGE_BUILD_JOB.search(text)
+    curls = _CURL_STEP.findall(job.group(1)) if job else []
+    if not curls:
+        return ["host_packages_build holds no curl download"]
+    offences = []
+    for line in curls:
+        retries = _CURL_RETRIES.search(line)
+        if not retries or int(retries[1]) * int(retries[2]) < _RELEASE_OUTAGE_S:
+            offences.append(line.strip())
+    return offences
 
 
 WORKFLOW_ROWS = (
@@ -96,5 +116,34 @@ WORKFLOW_ROWS = (
         must_find=frozenset(
             {".github/workflows/ci.yml", ".github/workflows/promote.yml"}
         ),
+    ),
+    Census(
+        name="package-build-downloads-outlast-a-release-outage",
+        reason=(
+            "GitHub's release host answered 504 for about five minutes in run 42054080101. A "
+            "download in `host_packages_build` with a shorter retry window fails the job there, "
+            "and land.sh reads that as a red landing of the PR under test. "
+            "`hosts/lib/homelab_tool_fetch.py:TOOL_RETRY_WINDOW_S` covers the pinned tools."
+        ),
+        files=lambda: tracked(".github/workflows/ci.yml"),
+        offence=lambda s: _package_build_download_offences(s.text),
+        red=(
+            Subject(
+                "a.yml",
+                "  host_packages_build:\n"
+                "          curl --retry 5 --retry-all-errors --retry-delay 5 -fsSLo x \\\n"
+                "  host_packages:\n",
+            ),
+            Subject("b.yml", "  host_packages_build:\n  host_packages:\n"),
+        ),
+        green=(
+            Subject(
+                "a.yml",
+                "  host_packages_build:\n"
+                "          curl --retry 12 --retry-all-errors --retry-delay 30 -fsSLo x \\\n"
+                "  host_packages:\n",
+            ),
+        ),
+        must_find=frozenset({".github/workflows/ci.yml"}),
     ),
 )

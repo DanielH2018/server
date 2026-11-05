@@ -152,6 +152,13 @@ def lint_deb(deb: Path) -> list[str]:
     return problems
 
 
+def tool_fetch_module():
+    """`homelab_tool_fetch`, which sits in `hosts/lib/`, outside `scripts/`."""
+    if str(_TOOL_FETCH_DIR) not in sys.path:
+        sys.path.insert(0, str(_TOOL_FETCH_DIR))
+    return importlib.import_module("homelab_tool_fetch")
+
+
 def fetch_tools(render: Path, cache: Path, opener=None) -> list[str]:
     """Fetch, verify and place the binaries of every `tools.json` tree under `render`.
 
@@ -161,9 +168,7 @@ def fetch_tools(render: Path, cache: Path, opener=None) -> list[str]:
     A render with no such tree has nothing to fetch, which is how a merge base from before
     H3.11 reads.
     """
-    if str(_TOOL_FETCH_DIR) not in sys.path:
-        sys.path.insert(0, str(_TOOL_FETCH_DIR))
-    builder = importlib.import_module("homelab_tool_fetch")
+    builder = tool_fetch_module()
     trees = sorted(pins.parent for pins in render.rglob(builder.PINS_FILE))
     problems = []
     for tree in trees:

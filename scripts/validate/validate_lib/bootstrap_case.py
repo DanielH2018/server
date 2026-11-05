@@ -49,13 +49,13 @@ import shutil
 import subprocess
 import sys
 import tarfile
-import urllib.request
+import time
 from pathlib import Path
 from typing import NamedTuple
 
 from lib.git import git, git_process
 from lib.repo_paths import REPO
-from validate.host_packages import fetch_tools
+from validate.host_packages import fetch_tools, tool_fetch_module
 from validate.validate_lib.host_container import CaseFailed, Container, expect
 
 SCRIPT = REPO / "hosts" / "bootstrap-host.sh"
@@ -189,17 +189,21 @@ def red_kit(green: Path, out: Path, name: str, data: bytes | None) -> Path:
     return out
 
 
-def _download(url: str, sha256: str, dest: Path) -> None:
-    for attempt in range(3):
-        try:
-            with urllib.request.urlopen(url, timeout=120) as response:
-                dest.write_bytes(response.read())
-            break
-        except OSError:
-            if attempt == 2:
-                raise
-    digest = hashlib.sha256(dest.read_bytes()).hexdigest()
-    expect(digest == sha256, f"{url} has sha256 {digest}, not its pin {sha256}")
+def _download(
+    url: str, sha256: str, dest: Path, cache: Path, opener=None, sleep=time.sleep
+) -> None:
+    """Copy the file `url` names to `dest`, through the tool fetch's retry window.
+
+    Raises:
+        CaseFailed: The download stayed unavailable, or its digest differs from `sha256`.
+    """
+    tool_fetch = tool_fetch_module()
+    pin = {"url": url, "sha256": sha256}
+    try:
+        path = tool_fetch.download_tool(pin, cache, opener, sleep)
+    except tool_fetch.Failure as exc:
+        raise CaseFailed(str(exc)) from exc
+    shutil.copyfile(path, dest)
 
 
 def _git(*argv: str, cwd: Path) -> None:
@@ -266,7 +270,7 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
     kit.mkdir(parents=True)
     script = SCRIPT.read_text()
     for name, (url, sha256) in kit_pins(script).items():
-        _download(url, sha256, kit / name)
+        _download(url, sha256, kit / name, cases.work / "bootstrap-kit-downloads")
     # The script checks k3s against the kit's own checksum list, so a stand-in that answers
     # `--version` at the pin stands for the 70 MB binary.
     k3s = f'#!/bin/sh\necho "k3s version {script_value(script, "K3S_VERSION")}"\n'
