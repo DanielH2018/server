@@ -4,14 +4,12 @@
 Docker + k3s homelab managed with Ansible and deployed across three hosts via infrastructure-as-code. Docker survives only on `daniel-pi`. `docs/reference/services.md` holds the service count and the per-service host/route/auth/backup/auto-deploy facts; the `docs-refresh` cron regenerates it, and `docs.local.<domain>` serves it.
 
 **Hosts:**
-- `daniel-box` — k3s server / control-plane node (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads since 2026-08 migration). Ansible runs on this host.
+- `daniel-box` — k3s server / control-plane node (Traefik edge, Authelia+OIDC, Pi-hole DNS, Longhorn storage, most workloads). Ansible runs on this host.
 - `daniel-server` — k3s agent node (Intel XE graphics, LVM storage, UPS hardware + the
-  `nut_host` shutdown chain; Docker uninstalled 2026-08-14 — the migration's end state)
+  `nut_host` shutdown chain)
 - `daniel-pi` — Raspberry Pi, the **only** remaining Docker host (LAN-only: wg-easy, alloy,
   autoheal, docker-proxy). Its containers ship in its `homelab-daniel-pi` package; Ansible's
   setup plays still reach it over SSH with `-e target=daniel-pi`.
-
-**Key technologies:** k3s (Kubernetes), Ansible, Docker Compose (Pi only), Traefik (reverse proxy), Cloudflare DNS, Authelia (SSO), SOPS/age (secret encryption), Longhorn (storage), CrowdSec (WAF)
 
 ## Directory Structure
 ```
@@ -29,26 +27,25 @@ docs/             # Runbooks, design specs, security notes
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly. A task a skill
-covers — deploying, landing, secrets, Renovate PRs, a GitOps tick, worktree cleanup, a homelab
-review — routes through the skill listing rather than this table.
+covers routes through the skill listing rather than this table.
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill (it scaffolds with `scripts/dev/new_k8s_service.py`; no sibling copying) · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract every k8s role includes (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them) |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · `ansible/roles/k8s/manifests/CLAUDE.md` for the render → apply → queue contract every k8s role includes |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands) |
-| Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once. Claim before you start: `findings.py claim <n> --worktree <branch>`; `findings.py claim --help` says what a refusal means and which subcommands read and release claims. |
+| Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once. Claim before you start: `findings.py claim <n> --worktree <branch>`; `findings.py claim --help` has the rest. |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
-| Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
-| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** (a file carrying a `generated_from:` banner); a hook denies the write. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
+| Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` · `/ha-edit-automation` |
+| Answering "what runs here / where / behind what" | `docs/reference/`: services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** (a file carrying a `generated_from:` banner); a hook denies the write. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
 | Changing code that a `CLAUDE.md` section cites | Run `uv run python scripts/dev/fact_status.py notice --since origin/master`, and re-read each listed section whose prose the PR left unchanged. `.claude/rules/facts.md` has the citation grammar. |
-| Writing a Python module or a test, and deciding where it goes | `.claude/rules/python-layout.md` — the `sys.path` bootstrap a cross-directory import needs, the `tests/` sibling rule and the `ansible/tests/` taxonomy. It loads on its own when you touch a path it governs; read it first when you are choosing the path. |
+| Writing a Python module or a test, and deciding where it goes | `.claude/rules/python-layout.md`. Read it first when you are choosing the path. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `ansible/roles/k8s/monitor-bridge/files/registry.py` (the check registry) **first** — mature setup, most are handled |
-| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server (`docs/claude-tooling.md`). `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. |
-| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A file embedded in a rendered ConfigMap needs nothing more; `ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2` is the worked example. Content that reaches the cluster another way needs its own `checksum/<thing>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. |
-| A config edit won't recreate the container (Docker, the Pi) | `hosts/components/pi-compose/services/alloy/compose.yaml.j2` — its `homelab.config-sha256` label carries the bind-mounted config's hash, so a config edit changes the service and `up -d` recreates it |
-| Starting Claude Code sessions from a phone | `hosts/components/claude-code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
-| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. Every setup role whose cron or timer changes state carries one, and every setup role has a `CLAUDE.md` (`ansible/tests/repo/test_role_claude_md.py`) — `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` derives the cron-installing set from `tasks/` and names the heartbeat-only exemptions. A host component's timer owes one too: the `component-timers-carry-a-contract` census row in `ansible/tests/repo/_component_contract_row.py` holds it |
-| Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `findings.py open --help`) — files a GitHub Issue labelled `claude`, deduped by title/file. `--repo OWNER/NAME` files into another repo's register, such as the dotfiles repo. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
+| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server (`docs/claude-tooling.md`). **Grafana is the exception**: drive it with `uv run pytest -m ui -k grafana`. |
+| A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. `ansible/roles/k8s/manifests/CLAUDE.md` has the central rollout-restart, and `ansible/roles/k8s/monitor-bridge/templates/script-configmap.yaml.j2` is the worked example. Content that reaches the cluster another way needs its own `checksum/<thing>` pod annotation from `ansible/templates/checksum-annotation.yml.j2`. |
+| A config edit won't recreate the container (Docker, the Pi) | `.claude/rules/docker.md` · `hosts/components/pi-compose/services/alloy/compose.yaml.j2` is the worked example |
+| Starting Claude Code sessions from a phone | `hosts/components/claude-code/CLAUDE.md`, *The two Remote Control modes are different features* |
+| Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. A host component's timer owes one too. `ansible/tests/repo/test_role_claude_md.py`, `ansible/tests/setup/test_setup_cron_roles_have_a_contract.py` and `ansible/tests/repo/_component_contract_row.py` enforce it |
+| Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `findings.py open --help`). `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
 
 ## Adding a New Service
 
@@ -56,8 +53,7 @@ review — routes through the skill listing rather than this table.
 on `daniel-pi` (LAN-only utilities, WireGuard) — `daniel-server` and `daniel-box` have no
 Docker at all, so a Compose service there deploys nothing.
 
-- **k3s** → the `new-k8s-service` skill, which opens with `scripts/dev/new_k8s_service.py`
-  (#2855).
+- **k3s** → the `new-k8s-service` skill, which opens with `scripts/dev/new_k8s_service.py`.
 - **Docker on `daniel-pi`** → the `new-container` skill.
 
 **`containers_list` position does not matter for a k8s entry.** `ansible/deploy.yml` toposorts
@@ -174,25 +170,21 @@ denies prints its own reason.
   argument is a deploy TAG.
 - **`homelab-ui` MCP server** — a headless Chromium that can *see* a service's UI, which
   `probe.py health` cannot.
-- **`rootq`** — reads root-only host state on daniel-box and daniel-server through one read-only
-  sudoers grant to the operator's account. A session gets no other sudo, and the agent user gets
-  none at all, so never probe with `sudo -n true`.
+- **`rootq`** — reads root-only host state on daniel-box and daniel-server. A session gets no
+  other sudo, and the agent user gets none at all, so never probe with `sudo -n true`.
 
 ## Review & Memory Hygiene (making judgment cumulative)
 The rules for promoting a review learning into memory live in the `memory-consolidation` and
 `homelab-review` skills, which run at the moment they apply.
-- **Mark a settled trade-off `# DECIDED:` at the line it governs.** A decision recorded only in a
-  memory file or a commit message is a decision every future reviewer re-derives. Reviewer briefs
-  grep for the marker (`.claude/skills/homelab-review/SKILL.md`, step 3). `docs/adr/index.md` has
+- **Mark a settled trade-off `# DECIDED:` at the line it governs.** Reviewer briefs grep for the
+  marker (`.claude/skills/homelab-review/SKILL.md`, step 3). `docs/adr/index.md` has
   how to write, cite and contradict one.
 - **A decision recorded in a Claude artifact moves into `docs/` in the PR that acts on it.**
-  `prune-artifacts.sh` deletes an artifact 30 days after its last update, and artifacts are in
-  neither git nor the break-glass bundle. Write the substance into `docs/` or `docs/adr/`.
-  `docs/claude-agent-user.md` is the worked example (#3657).
+  Write the substance into `docs/` or `docs/adr/`. `docs/claude-agent-user.md` is the worked
+  example and says why.
 - **A finding you will not fix this session is filed, not remembered.** Run `findings.py open`
-  before the session ends, and list the issue numbers in the end-of-job report. Open items are
-  `findings.py list`'s register, not a memory file's. `findings.py <cmd> --help` has the flags,
-  and `findings.py close --help` has what each way of closing means.
+  before the session ends, and list the issue numbers in the end-of-job report.
+  `findings.py close --help` has what each way of closing means.
 
 ## Parallel Claude Sessions
 Several sessions work this repo at once, each in its own `.claude/worktrees/<name>` checkout.
@@ -238,10 +230,9 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `docs/claude-shell-permissions.md` has the guard's location.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
-- **The cluster file is generated, never hand-edited.** `cluster-vars.sops.env` sits in
-  `ansible/vars/`, and only `cluster_vars.py write` writes it. That command decrypts, so only
-  the operator or the rotation cron runs it, never an agent. `docs/secret-rotation.md` owns the
-  mechanics.
+- **The cluster file is generated, never hand-edited.** Only `cluster_vars.py write` writes
+  `cluster-vars.sops.env`. It decrypts, so an agent never runs it. `docs/secret-rotation.md` owns
+  the mechanics.
 - **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
   secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
   **`add-secret` skill** has the onboarding through `ansible/bootstrap.yml`.
@@ -251,8 +242,7 @@ The repo uses [prek](https://prek.j178.dev). `prek.toml` holds the config and ea
 Run `prek run --all-files` to check before committing. **That does not run the suite.** No
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
 its `static-ratchet-tests-*` siblings: at commit time it runs twenty-nine static ratchet, lint
-and census test files. CI's `pytest` job runs the suite whole on every PR, and `land.sh` waits
-on that job before it merges. To see a red test before CI does, run `uv run pytest` yourself.
+and census test files. CI's `pytest` job runs the suite whole on every PR. To see a red test before CI does, run `uv run pytest` yourself.
 A fan-out batch names test paths instead, and `.claude/hooks/block-batch-full-suite.py` refuses
 its whole-suite run.
 `.gitignore`'s root deny is load-bearing — one untracked file parks the deployer.

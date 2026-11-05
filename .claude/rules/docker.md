@@ -24,6 +24,9 @@ used to render them (`ansible/roles/containers/`).
 
 ## Conventions
 
+- A bind-mounted config's edit recreates its container through a label: alloy's
+  `homelab.config-sha256` carries the config's hash, so an edit changes the service and `up -d`
+  recreates it (`hosts/components/pi-compose/services/alloy/compose.yaml.j2`)
 - All containers use Traefik labels for reverse proxy routing
 - Docker network: `proxy`
 - PUID/PGID: `1000`/`1000`, user: `ubuntu`
