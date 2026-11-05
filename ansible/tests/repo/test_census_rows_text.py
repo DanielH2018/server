@@ -14,6 +14,7 @@ from functools import cache
 import pytest
 from _workflow_rows import WORKFLOW_ROWS
 from _shimmed_path_row import SHIMMED_PATHS
+from _component_contract_row import COMPONENT_TIMERS_CARRY_A_CONTRACT
 from _etcd_snapshot_flags_row import ETCD_SNAPSHOT_LONG_FLAGS
 from _kuma_census_row import KUMA_IDENTIFIERS, KUMA_MENTIONS
 from _deploy_sh_callers_row import (
@@ -413,7 +414,13 @@ ROWS = (
 )
 
 ROWS += WORKFLOW_ROWS
-ROWS += (SHIMMED_PATHS, ETCD_SNAPSHOT_LONG_FLAGS, KUMA_IDENTIFIERS, KUMA_MENTIONS)
+ROWS += (
+    SHIMMED_PATHS,
+    ETCD_SNAPSHOT_LONG_FLAGS,
+    KUMA_IDENTIFIERS,
+    KUMA_MENTIONS,
+    COMPONENT_TIMERS_CARRY_A_CONTRACT,
+)
 
 _IDS = [row.name for row in ROWS]
 

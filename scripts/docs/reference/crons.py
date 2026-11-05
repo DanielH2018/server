@@ -3,9 +3,13 @@
 
 WHY THIS PAGE IS WORTH HAVING. Some of these jobs commit, push, deploy or delete without a
 human in the loop. That set is the reason to read the page, and it is not obvious from any
-single role: the tasks are spread across roles/setup/ and roles/k8s/.
+single role: the jobs are spread across roles/setup/, roles/k8s/ and the host packages.
 
-STATIC PARSING ONLY. Every `ansible.builtin.cron` task is read with yaml.safe_load. Jinja
+TWO SOURCES. A timer row comes from the rendered host packages
+(`docs.catalog_lib.package_timers`), so it shows what each host receives. A cron row comes
+from the tasks of the roles that still install one.
+
+STATIC PARSING ONLY for the crons. Every `ansible.builtin.cron` task is read with yaml.safe_load. Jinja
 in a schedule or user, and a variable a `when:` compares `inventory_hostname` against, resolve
 only where every host would get the same value: their variables
 come from role defaults or `group_vars/all.yml` and no `host_vars` file sets them
@@ -34,14 +38,20 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+# This directory's secrets.py would shadow the stdlib module the host renderer needs.
+if __name__ == "__main__":
+    _sys.path.remove(str(_Path(__file__).resolve().parent))
 
 from lib.cli_help import ArgumentParser
 
+from docs.catalog_lib.package_timers import package_timers
 from lib import yaml_fast
 from lib.docs_provenance import md_cell
 from lib.jinja_defaults import resolve
 
 from lib.repo_paths import REPO, ROLES
+
+HOSTS = REPO / "hosts"
 
 # Commands that change durable state somewhere. Deliberately over-broad: a job wrongly
 # flagged as state-changing costs a reader one moment, and one wrongly cleared could cost
@@ -232,6 +242,60 @@ def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
     return rows
 
 
+def _timer_changes_state(service: str) -> str:
+    """The state verdict for a timer's service, never "no".
+
+    An `ExecStart=` usually names a wrapper under `/usr/lib/homelab/`, whose name says nothing
+    about what it does, so a command with no mutating keyword still needs the script read.
+    """
+    command = " ".join(
+        line.partition("=")[2]
+        for line in service.splitlines()
+        if line.startswith("ExecStart")
+    )
+    verdict = _changes_state(command)
+    return "read the script" if verdict.startswith("no") else verdict
+
+
+def build_timer_rows(hosts_root: Path = HOSTS) -> list[dict[str, str]]:
+    """One row per timer the host packages ship, hosts that agree on it sharing the row.
+
+    Args:
+        hosts_root: The `hosts/` tree to render.
+
+    Returns:
+        One dict per timer and schedule, keyed by the columns rendered in `render_markdown`.
+    """
+    grouped: dict[tuple[str, ...], list[str]] = {}
+    for timer in package_timers(hosts_root):
+        schedule = ", ".join(
+            f"{key}={value}"
+            for key, values in timer.triggers.items()
+            for value in values
+        )
+        user = re.search(r"^User=(.+)$", timer.service, re.M)
+        key = (
+            timer.unit,
+            schedule,
+            user.group(1) if user else "root",
+            _timer_changes_state(timer.service),
+            timer.source,
+        )
+        host = timer.host if timer.enabled else f"{timer.host} (no enable link)"
+        grouped.setdefault(key, []).append(host)
+    return [
+        {
+            "name": unit,
+            "schedule": schedule,
+            "host": ", ".join(hosts),
+            "user": user,
+            "changes_state": changes_state,
+            "source": source,
+        }
+        for (unit, schedule, user, changes_state, source), hosts in grouped.items()
+    ]
+
+
 def render_markdown(rows: list[dict[str, str]]) -> str:
     """Render `rows` as the "Scheduled jobs" reference page, banner and schedule notes included.
 
@@ -245,7 +309,9 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
     parts = [generated_banner("scripts/docs/reference/crons.py")]
     parts.append("# Scheduled jobs\n")
-    parts.append(f"{len(rows)} cron entrie(s) installed across the roles.\n")
+    parts.append(
+        f"{len(rows)} job(s) scheduled by the roles' crons and the host packages' timers.\n"
+    )
     parts.append(
         '!!! warning "The state column is a heuristic"\n'
         "    It is judged from the command text, and nothing in a cron task declares its "
@@ -267,7 +333,10 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         "shows the value every host resolves when its variables come from role defaults or "
         "`group_vars/all.yml` and no host overrides them. A value still showing `{{ ... }}` "
         "differs by host or does not evaluate statically, so it only resolves at deploy "
-        "time, and the template is the honest rendering.\n"
+        "time, and the template is the honest rendering.\n\n"
+        "A host package's timer shows its triggers as systemd reads them, each host's "
+        "drop-ins applied. A host marked `(no enable link)` receives the unit and does not "
+        "arm it.\n"
     )
     return "\n".join(parts).rstrip("\n") + "\n"
 
@@ -285,9 +354,9 @@ def main(argv: list[str] | None = None) -> int:
 
     from lib.docs_provenance import finish_generator
 
-    rows = build_rows(args.roles)
+    rows = build_rows(args.roles) + build_timer_rows()
     return finish_generator(
-        "docs.reference.crons", args.out, rows, render_markdown, "cron"
+        "docs.reference.crons", args.out, rows, render_markdown, "job"
     )
 
 

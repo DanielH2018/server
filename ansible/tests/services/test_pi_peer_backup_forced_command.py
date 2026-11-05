@@ -13,8 +13,9 @@ import os
 import re
 
 import pytest
+from lib import yaml_fast
 from lib.proc_testing import fake_bin, path_with, run
-from lib.repo_paths import REPO
+from lib.repo_paths import HOST_VARS, REPO
 from renderer.renderer_lib import host as host_mode
 from _helpers import stub_logger_on_path
 from _k8s_render import rendered_docs
@@ -133,3 +134,23 @@ def test_the_key_is_pinned_to_the_wrapper_the_package_installs():
     )
     pi_src = next(e["value"] for e in env if e["name"] == "PI_SRC")
     assert pi_src.rpartition(":")[2] == pinned.group(1) == SRC, (pi_src, options)
+
+
+def test_the_pull_target_is_the_role_default_user_at_the_pis_server_ip():
+    """`ansible_host` and `ansible_user` leave the inventory with Ansible (H7.18d)."""
+    defaults = yaml_fast.safe_load(
+        (REPO / "ansible/roles/k8s/pi-peer-backup/defaults/main.yml").read_text()
+    )
+    pi = yaml_fast.safe_load((HOST_VARS / "daniel-pi.yml").read_text())
+    target = f"{defaults['pi_peer_backup_ssh_user']}@{pi['server_ip']}:{SRC}"
+    values = [
+        env["value"]
+        for role, _tpl, doc in rendered_docs()
+        if role == "pi-peer-backup" and doc.get("kind") == "CronJob"
+        for container in doc["spec"]["jobTemplate"]["spec"]["template"]["spec"][
+            "containers"
+        ]
+        for env in container["env"]
+        if env["name"] == "PI_SRC"
+    ]
+    assert values == [target]

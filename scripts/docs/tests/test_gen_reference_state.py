@@ -6,6 +6,7 @@ generator reads in production.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_state.py
 """
 
+import pytest
 import datetime as dt
 import json
 import subprocess
@@ -220,24 +221,15 @@ def test_cadence_twice_daily_from_a_comma_hour_list():
     assert crons.cadence_minutes("17 6,18 * * *") == 720.0
 
 
-def test_state_cron_job_cadence_calls_the_shared_parser(tmp_path):
-    """`_cron_job_cadence` must go through crons.cadence_minutes, not a private copy."""
-    role = tmp_path / "docsrefresh" / "tasks"
-    role.mkdir(parents=True)
-    (role / "main.yml").write_text(
-        textwrap.dedent(
-            """\
-            ---
-            - name: Schedule it
-              ansible.builtin.cron:
-                name: "Refresh generated docs"
-                minute: "17"
-                hour: "6,18"
-                job: "/bin/true"
-            """
-        )
-    )
-    assert g._cron_job_cadence("Refresh generated docs", tmp_path) == 720.0
+def test_the_docs_refresh_and_rotation_cadences_come_from_their_packaged_timers():
+    """Named members: each loop's cron left the roles, so a cron lookup reads unknown."""
+    assert g._timer_cadence("homelab-docs-refresh.timer") == 720.0
+    assert g._timer_cadence("homelab-secret-rotation.timer") == 10080.0
+
+
+def test_a_loop_naming_a_timer_no_package_ships_fails_rather_than_reading_unknown():
+    with pytest.raises(ValueError, match=r"no host package ships homelab-gone\.timer"):
+        g._timer_cadence("homelab-gone.timer")
 
 
 def test_cadence_hourly_from_minute_only():

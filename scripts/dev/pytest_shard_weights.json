@@ -1343,6 +1343,7 @@
  "scripts/docs/tests/test_gen_role_glance_ghcr.py": 0.1,
  "scripts/docs/tests/test_mkdocs_freshness.py": 0.0,
  "scripts/docs/tests/test_mkdocs_repo_links.py": 0.35,
+ "scripts/docs/tests/test_package_timers.py": 2.68,
  "scripts/docs/tests/test_route_facts.py": 0.0,
  "scripts/docs/tests/test_service_catalog.py": 0.0,
  "scripts/grafana/tests/test_export_grafana_dashboards.py": 0.0,

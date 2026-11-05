@@ -10,6 +10,8 @@ The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` mar
 - **Applied by:** `initial_setup.yml --tags "nut_host"` when `inventory_hostname == ups_host or
   nut_host_secondary_armed | bool`; ends on hosts where `True` (leading `meta: end_role`)
 - **Crons / timers:** none (the role ends on every host before its first task)
+- **Packaged timers:** `homelab-ups-watchdog.timer` (`OnCalendar=*:0/10`) on daniel-box,
+  daniel-server
 <!-- /generated_from -->
 
 ## Where the work went

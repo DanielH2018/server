@@ -96,7 +96,7 @@ TIER_DAYS = {
     "ignore": None,
 }
 
-# The unattended rotate cron is WEEKLY (Sunday 09:00, initial_setup). Rotating only
+# The unattended rotate timer is WEEKLY (Sunday 09:00, homelab-secret-rotation.timer). Rotating only
 # already-overdue tokens would leave each one overdue up to 6 days first — with the daily
 # 08:30 audit paging SecretRotationAuditFailed the whole time for a rotation
 # that was always going to happen anyway. Anything due within one cron interval (+1 day
@@ -182,7 +182,7 @@ def cmd_audit(args, tools: RotationTools) -> int:
     Exits 1 when `--check` is given and the registry is out of sync with secrets.yml, and 1
     when `--verdict` is given and the audit reads down — the daily audit runs under a systemd
     timer whose `Restart=on-failure` reruns it every 30 min until it exits 0
-    (roles/setup/common/tasks/check_timer.yml), and its wrapper writes the exit code as
+    (homelab-secret-rotation-audit.service), and its wrapper writes the exit code as
     the textfile verdict SecretRotationAuditFailed reads. Without `--verdict`, overdue secrets
     are reported but never fail this exit code; those are the daily audit's concern, not a CI
     gate's.

@@ -450,3 +450,15 @@ def test_a_flux_owned_role_glance_is_flagged(tmp_path):
     unwrapped = " ".join(block.split())
     assert "`deploy.sh` refuses `--tags=littlelink` with exit 5" in unwrapped
     assert "Deploy tag" not in block and "Auto-deploy" not in block
+
+
+def test_a_role_lists_the_timers_its_component_ships_in_the_host_packages():
+    """Named member: an emptied role's timer now lives in a component that names the role."""
+    cells = f.packaged_timer_cells("nut_host")
+    assert cells == [
+        "`homelab-ups-watchdog.timer` (`OnCalendar=*:0/10`) on daniel-box, daniel-server"
+    ]
+
+
+def test_a_role_no_component_names_lists_no_packaged_timer():
+    assert f.packaged_timer_cells("widget") == []
