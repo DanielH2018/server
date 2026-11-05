@@ -258,12 +258,13 @@ down for the whole pull.
   pods held the volume until 06:50Z, so `k8s/volume-revert` timed out on its detach wait. It
   had already scaled the Deployment to zero, and HA stayed at zero until 11:57Z. Flux owns this
   role, so no automated rollback runs here.
-- **The volume was healthy both times.** `config-install` writes to the volume, and it read
-  `Completed` in both stuck pods on 2026-10-17. Longhorn logged no detach until 06:50Z.
+- **The volume was not the cause.** `config-install` writes to the volume, and it read
+  `Completed` in both stuck pods on 2026-10-17. Longhorn logged no detach during either wait.
 
 The `home-assistant-prepull` Kustomization moves the pull ahead of the restart. Rollouts with it
-were down for about 2 minutes on 2026-10-25 and 2026-10-27, but neither was a large pull: the
-Job lasted under 2 minutes and daniel-box received about 8 MB more than the baseline.
+were down for about 2 minutes on 2026-10-25 and 2026-10-27, but neither was a large pull. On
+2026-10-25 the Job lasted under 2 minutes and daniel-box received about 8 MB more than the
+baseline. The 2026-10-27 rollout changed only the init image.
 
 To read a large pull after its Pod events expire, use Prometheus:
 
