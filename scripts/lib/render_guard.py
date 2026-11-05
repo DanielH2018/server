@@ -108,7 +108,6 @@ BASE_CONTEXT = {
     "email": "stub@example.com",
     "domain": "example.com",
     "server_ip": "10.0.0.1",
-    "kuma_docker_host": 1,
     "k8s_built_image_tags": BUILT_IMAGE_TAG_STUBS,
 }
 

@@ -63,8 +63,8 @@ _IDENTIFIER_HOLDERS = {
 
 _GUIDANCE = "Tells a reviewer or author not to add a Kuma monitor or token (#7194)."
 _INERT_LABEL = (
-    "The inert `org.homelab.kuma-docker-monitor` label and its macro: a label change recreates "
-    "the container, so these go in the next Pi compose change (the plan's open question 7)."
+    "The inert `org.homelab.kuma-docker-monitor` label: a label change recreates the container, "
+    "so these go in the next Pi compose change (the plan's open question 7)."
 )
 _K3S_COMMENT = "A setup/k3s comment that names Kuma as a check's reader (#7147, #6882)."
 _LIVE_NAME = (
@@ -84,7 +84,6 @@ _PROSE_HOLDERS = {
     **dict.fromkeys(
         (
             ".claude/agents/homelab-backup-observability-reviewer.md",
-            ".claude/agents/homelab-container-reviewer.md",
             ".claude/skills/add-secret/SKILL.md",
             ".claude/skills/homelab-review/accepted-designs.md",
         ),
@@ -92,7 +91,6 @@ _PROSE_HOLDERS = {
     ),
     **dict.fromkeys(
         (
-            "ansible/templates/autokuma.yml.j2",
             "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
             "hosts/components/pi-compose/services/autoheal/compose.yaml.j2",
             "hosts/components/pi-compose/services/docker-proxy/compose.yaml.j2",
@@ -121,8 +119,6 @@ _PROSE_HOLDERS = {
             "scripts/diagnostics/probe_lib/releases.py",
             "scripts/diagnostics/probe_lib/releases_format.py",
             "scripts/diagnostics/probe_lib/releases_render.py",
-            "scripts/lib/render_guard.py",
-            "scripts/validate/compose_templates.py",
             "scripts/validate/unit_templates.py",
         ),
         _LIVE_NAME,

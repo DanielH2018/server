@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render every Pi Compose service's compose.yaml.j2 and assert it parses as YAML.
 
-This guards against template edits — especially to the shared ``autokuma.yml.j2``
-and ``networks.yml.j2`` macros — that silently produce malformed YAML or
+This guards against template edits — especially to the shared ``networks.yml.j2``
+macro — that silently produce malformed YAML or
 broken indentation. It renders structure, not values: secrets and other runtime
 variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
 needed.

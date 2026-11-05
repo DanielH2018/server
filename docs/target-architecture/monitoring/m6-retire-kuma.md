@@ -160,7 +160,7 @@ push-token secret remains.
         - The `kuma-check-` unit-name prefix, and the `/var/lib/kuma-check/` directory
           of the same units' down markers, wherever a file holds them. ADR 0026 records
           the operator's ruling that the timers keep their names.
-        - `ansible/templates/autokuma.yml.j2`, and the four Pi compose templates under
+        - The four Pi compose templates under
           `hosts/components/pi-compose/services/` with their inert
           `org.homelab.kuma-docker-monitor` labels (see *Open questions*, item 7).
         - `hosts/components/claude-code/files/homelab_rootq.py`: its `/api/push/` pattern is
@@ -2874,10 +2874,10 @@ timers or entry regenerates its glance block with `scripts/docs/gen_role_glance.
    gain, and C-3b needs a legacy-unit removal to be safe. Resolution: the operator ruled on
    2026-10-24 that the names stay (ADR 0026). C-3b shrinks to the task-file rename, and
    `kuma-check-` joins the census allowlist.
-7. **The Pi's AutoKuma labels.** `ansible/templates/autokuma.yml.j2` and the
-   `org.homelab.kuma-docker-monitor` label in
+7. **The Pi's AutoKuma labels.** The `org.homelab.kuma-docker-monitor` label in
    `hosts/components/pi-compose/services/{alloy,autoheal,docker-proxy,wg-easy}/compose.yaml.j2`
-   are inert once Kuma is gone. H5 rewrote the Pi compose files into the `pi-compose` service
+   is inert once Kuma is gone. The shared macro that once emitted it had no caller, and
+   [#7210](https://github.com/DanielH2018/server/issues/7210) deleted it. H5 rewrote the Pi compose files into the `pi-compose` service
    trees and kept the label. Changing it recreates every Pi container, which is a Pi deploy
    this slice does not schedule. Resolution: the four files stay on the census allowlist,
    with the comments beside the label and the header comments that name AutoKuma or Uptime
