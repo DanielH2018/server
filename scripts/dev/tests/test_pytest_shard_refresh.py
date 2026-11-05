@@ -545,6 +545,25 @@ def test_a_refresh_prints_the_module_it_refused(tmp_path, capsys):
     assert module in captured.out + captured.err
 
 
+def test_a_new_row_ci_would_reject_holds_the_runner_seconds(tmp_path, capsys):
+    """#7136: an 85s row fails the gate, and leaving the row out re-measures it on every tick."""
+    [(module, runner)] = _lightest_runner_rows(1)
+    table = _table(tmp_path, {})
+    measure, calls = _runs({module: 85.0}, {module: 85.0})
+
+    pytest_shard.record_missing_weights(table, files=[module], measure=measure)
+
+    written = json.loads(table.read_text())
+    assert written == {module: runner}
+    assert module in capsys.readouterr().out
+    report = f"{runner}s call {module}::t\n"
+    assert shard_weight_gate.durations_problems(report, written) == []
+
+    measured_so_far = len(calls)
+    pytest_shard.record_missing_weights(table, files=[module], measure=measure)
+    assert len(calls) == measured_so_far
+
+
 def test_a_light_new_row_is_measured_once(tmp_path):
     """Under the gate's floor no ratio arm compares the row, so a second run buys nothing."""
     light, heavy = FILES[:2]

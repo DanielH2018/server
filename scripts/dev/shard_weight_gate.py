@@ -100,8 +100,10 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # seconds of balance in a shard that projects around 40s, which is what this arm is about.
 # `UNDER_WEIGHT_RATIO` uses twenty for the same runner-versus-workstation variance, and the
 # 190x entry this arm exists for still fails. An entry in the band stays visible as an
-# annotation, and the docs-refresh cron's `--refresh-drifted` rewrites it. That refresh refuses
-# to write a row this ratio or more above the runner table, because this arm would reject it.
+# annotation, and the docs-refresh cron's `--refresh-drifted` rewrites it. Neither of the cron's
+# writers records a local reading this ratio or more above the runner table, because this arm
+# would reject the row: `--refresh-drifted` keeps the recorded weight, and `--record-missing`
+# writes the runner seconds.
 STALE_WEIGHT_FAIL_RATIO = 20.0
 
 # How many times its recorded weight a module may measure on the runner before the shard gate
@@ -517,10 +519,26 @@ def gate_complaints(
 RUNNER_WEIGHTS_PATH = (
     Path(__file__).resolve().with_name("pytest_shard_runner_weights.json")
 )
+# How far apart a module's recorded and measured seconds may sit, either way, before
+# `--refresh-drifted` rewrites the entry. It is #4888's Verify-by bound, so a refreshed table
+# holds every module within it, and a re-measurement inside it is treated as noise.
+DRIFT_RATIO = 1.5
+# An entry within this many seconds of what it measured stays, whatever the ratio: 0.02s
+# measuring 0.05s is 2.5x and changes no shard's balance.
+DRIFT_FLOOR_SECONDS = 0.5
+
 # A recorded weight below this is too small to give a meaningful runner-to-recorded ratio.
 _RATIO_FLOOR_SECONDS = 0.5
 # A GitHub job log prefixes each line with a timestamp, and pytest colours its report.
 _LOG_NOISE = re.compile(r"^\S+Z |\x1b\[[0-9;]*m", re.M)
+
+
+def drifted(recorded: float, measured: float) -> bool:
+    """Whether `measured` is far enough from `recorded`, either way, to rewrite the entry."""
+    if abs(measured - recorded) < DRIFT_FLOOR_SECONDS:
+        return False
+    low, high = sorted((recorded, measured))
+    return high > DRIFT_RATIO * low
 
 
 def runner_weights(reports: list[str]) -> dict[str, float]:
@@ -542,26 +560,33 @@ def load_runner_weights(path: Path = RUNNER_WEIGHTS_PATH) -> dict[str, float]:
     return {k: float(v) for k, v in json.loads(path.read_text()).items()}
 
 
+def readings_the_gate_rejects(readings: dict[str, float]) -> dict[str, float]:
+    """The local readings CI's over-recorded arm would fail, each mapped to its runner seconds.
+
+    A module the runner table lacks has no CI seconds to judge against, so it is never rejected.
+    """
+    runner = load_runner_weights()
+    return {
+        module: runner[module]
+        for module, reading in readings.items()
+        if module in runner
+        and over_recorded(reading, runner[module], STALE_WEIGHT_FAIL_RATIO)
+    }
+
+
 def readings_the_gate_accepts(readings: dict[str, float]) -> dict[str, float]:
     """The local readings whose row CI's over-recorded arm would not fail, by the runner table.
 
-    A module the table lacks has no CI seconds to judge against, so it stays. A line on stdout
-    names each one dropped.
+    A line on stdout names each one dropped.
     """
-    runner = load_runner_weights()
-    accepted = {}
-    for module, reading in readings.items():
-        if module in runner and over_recorded(
-            reading, runner[module], STALE_WEIGHT_FAIL_RATIO
-        ):
-            print(
-                f"kept the recorded weight of {module}: this host read {reading:.2f}s, the "
-                f"runner table holds {runner[module]:.2f}s, and CI's gate rejects a row "
-                f"{STALE_WEIGHT_FAIL_RATIO:g}x or more above it"
-            )
-        else:
-            accepted[module] = reading
-    return accepted
+    rejected = readings_the_gate_rejects(readings)
+    for module, seconds in rejected.items():
+        print(
+            f"kept the recorded weight of {module}: this host read {readings[module]:.2f}s, the "
+            f"runner table holds {seconds:.2f}s, and CI's gate rejects a row "
+            f"{STALE_WEIGHT_FAIL_RATIO:g}x or more above it"
+        )
+    return {m: r for m, r in readings.items() if m not in rejected}
 
 
 def write_runner_weights(
@@ -579,6 +604,34 @@ def write_runner_weights(
         )
     path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n")
     return table
+
+
+def refresh_runner_weights(
+    reports: list[str], keep: list[str], path: Path = RUNNER_WEIGHTS_PATH
+) -> list[str]:
+    """Merge the medians in `reports` into the runner table; return the modules it wrote.
+
+    A merge, not `write_runner_weights`'s rewrite. The newest runs change with every merge to
+    master, so a rewrite would move most rows on every cron run and publish a PR each time.
+    Here a module the table lacks is added, a present one is rewritten only when `drifted`
+    judges it out of band, and a module no longer in `keep` is dropped. A module the reports
+    did not measure keeps its row, so a module that skipped on these runs is not packed cold.
+    """
+    measured = runner_weights(reports)
+    if not measured:
+        raise ValueError(
+            "no durations line in any report, so there is nothing to record"
+        )
+    kept = set(keep)
+    table = {m: s for m, s in load_runner_weights(path).items() if m in kept}
+    moved = sorted(
+        m
+        for m, s in measured.items()
+        if m in kept and (m not in table or drifted(table[m], s))
+    )
+    table |= {m: measured[m] for m in moved}
+    path.write_text(json.dumps(table, indent=1, sort_keys=True) + "\n")
+    return moved
 
 
 def packing_weights(
