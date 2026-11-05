@@ -66,7 +66,8 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   `loki.process "host"` stage extracts the rsyslog tag from syslog and authlog lines (#6163).
   `HostLogErrors` counts syslog's fatal-pattern lines per machine and program over 6h, and
   `HostOutOfMemoryKill` pages on the first host-wide OOM kill. The stage runs
-  only `stage.regex` and `stage.labels`, because probe.py parses the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
+  only `stage.regex` and `stage.labels`, because those rules' line filters and the `event=`
+  logfmt queries read the raw rsyslog line. `ansible/tests/k8s/test_alloy_labels_host_program.py` fails on a missing
   label or an added stage. A `uv run` cron logs under the tag `uv`, so the line names the script.
 - **k3s's own log ships warnings and worse only, as `{job="k3s"}` on each node** (#6177).
   `/var/log/k3s.log` is kept out of the journal and syslog on purpose, and Alloy tails the file

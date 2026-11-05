@@ -4,8 +4,8 @@ The HostLogErrors rule groups host syslog by a `program` label, which this stage
 the rsyslog tag (#6163). The stage has two ways to be wrong:
 
 - it labels nothing, or labels the wrong field, and HostLogErrors fires with `program` empty;
-- it rewrites the line, and probe.py's `SYSLOG_ALERT_LOGQL`,
-  which parses the raw rsyslog shape, stops matching.
+- it rewrites the line, and the LogQL that reads the raw rsyslog line stops matching: the line
+  filters in HostLogErrors and HostOutOfMemoryKill, and the `event=` logfmt queries.
 
 The expression is READ OUT of the rendered config rather than restated here. Alloy compiles it
 as RE2 after decoding the River string; Python's `re` stands in, which is equivalent for an anchored pattern with `\\S`, `\\s`, a
