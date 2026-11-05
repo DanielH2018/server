@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-05 07:10 UTC
-generated_sha: 6404a87b22
+generated_at: 2026-11-05 07:15 UTC
+generated_sha: 9608bbce2f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -985,7 +985,7 @@ generated_sha: 6404a87b22
 | a verification in flight is guarded by two checks`. | `docs/target-architecture/contracts.md:327` | 2026-10-15 |
 | a verification in flight is guarded by two checks` in | `docs/target-architecture/deploy/d2-first-leaf.md:755` | 2026-10-15 |
 | ` marker at `ALLOWED_IMPORTS` in | `docs/target-architecture/deploy/d5-bulk-move.md:25` | 2026-10-16 |
-| the notice never blocks a merge … (ADR-0023)`, added in | `docs/target-architecture/docs-guard/g2-retire-lock.md:255` | 2026-10-17 |
+| the notice never blocks a merge … (ADR-0023)`, added in | `docs/target-architecture/docs-guard/g2-retire-lock.md:257` | 2026-10-17 |
 | ` marker beside the member in `secret_checks.py` records the choice. | `docs/target-architecture/host/h1-cluster-config-to-flux.md:935` | 2026-10-22 |
 | ` marker in the | `docs/target-architecture/monitoring/m6-status/a1.md:134` | 2026-10-31 |
 | ` marker in | `docs/target-architecture/monitoring/m6-status/b5.md:42` | 2026-10-31 |

@@ -719,8 +719,8 @@ Each risk is checked against `docs/failure-classes.md`.
 - **A stale comment in a setup role.** `agent_user.yml` keeps naming
   `facts-reverify-changed`. Editing it alone would re-apply `renovate_agent` and
   `claude_code` for a comment. PR 3 files a finding to fix it with that file's next
-  functional change. **HISTORY — PR 4 removed the name in a comment-only edit.**
-  `deploy_changes.comment_only_broad_changes` reads that edit as no change, so the deployer
+  functional change. PR 4 removed the name in a comment-only edit after all, because
+  `deploy_changes.comment_only_broad_changes` reads that edit as no change and the deployer
   re-applies nothing for it.
 - **Another slice runs a lock step after PR 3.**
     - On a branch based on master after PR 3, the step fails loudly.
