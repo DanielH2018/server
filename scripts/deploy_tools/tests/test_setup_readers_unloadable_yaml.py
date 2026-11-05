@@ -146,13 +146,14 @@ def test_land_reach_reads_a_playbook_date_as_a_syntax_error(tmp_path):
     )
 
 
-@pytest.mark.parametrize("reader", (_task_chains, _changed_new_side), ids=_ids)
-def test_a_task_holding_a_date_reads_as_a_syntax_error(tmp_path, reader):
-    """A date loads, but `json.dumps` raises `TypeError` on it, and every reader compares text."""
-    dated = "- name: Say something\n  vars: {d: 2026-01-01}\n"
-    assert _answer(reader, tmp_path / "date", dated) == _answer(
-        reader, tmp_path / "syntax", SYNTAX_ERROR
-    )
+def test_a_date_in_an_imported_task_file_keeps_its_chain(tmp_path):
+    """A date loads, so refusing the file would drop its chain and narrow the hosts."""
+    dated = "- name: Say something\n  src: shipped.j2\n  vars: {d: 2026-01-01}\n"
+    role = _role(tmp_path, "- ansible.builtin.import_tasks: sub.yml\n")
+    (role / "tasks" / "sub.yml").write_text(dated)
+    assert chains.task_chains(role, lambda _task, _file: True) == [()]
+    assert chains.task_gates_naming(role, "shipped.j2") == [()]
+    assert chains.changed_task_texts(LOADABLE, dated)
 
 
 def test_a_recursive_alias_below_an_import_keeps_the_var_consumers_wide(tmp_path):
