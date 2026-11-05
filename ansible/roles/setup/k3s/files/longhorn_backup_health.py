@@ -2,7 +2,7 @@
 """Longhorn backup-plane heartbeat — the cluster-reading half of longhorn-backup-health.sh.
 
 Reads the cluster through the read-only ServiceAccount kubeconfig, the restore drill's stamp
-ConfigMap among it, and the B2 deletion accounting cron's journal. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
+ConfigMap among it, the B2 deletion accounting cron's journal and k3s's config drop-in. Then prints one tab-separated line, `up<TAB>msg` or `down<TAB>msg`, for the
 wrapper to write as its check textfile, which a Prometheus rule reads. It never exits nonzero on a bad verdict: a DOWN is data to
 report, not a crash. Same shape as configarr_health.py: this file does the I/O,
 longhorn_backup_health_logic.py holds every threshold and decides up-or-down, and the split is
@@ -19,7 +19,7 @@ templates/longhorn-backup-health.sh.j2, a cron every 10 minutes) exports every s
 calls it. It refuses to start unless the shim exported all of them: LONGHORN_BACKUP_NAMESPACE,
 LONGHORN_BACKUP_KUBECTL, LONGHORN_BACKUP_KUBECTL_TIMEOUT_S, the LONGHORN_*_MAX_AGE_HOURS and
 LONGHORN_DAILY_BACKUP_BUDGET thresholds, LONGHORN_RESTORE_DRILL_* (namespace and ages),
-LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired stamp), LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
+LONGHORN_B2_DELETIONS_CRON_* (cron file, expected flag, fired stamp), LONGHORN_ETCD_DROP_IN, LONGHORN_JOURNALCTL, LONGHORN_JOURNAL_TIMEOUT_S and LONGHORN_CRON_EVIDENCE_WINDOW_HOURS.
 
 It takes no arm flag and no schedule from the shim. Each backup target's arm state comes from the
 cluster: a blank `spec.backupTargetURL` is a disarmed target (H1.7a). The daily and weekly run
@@ -38,6 +38,7 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
 if __name__ == "__main__":
     if any(arg in ("-h", "--help") for arg in sys.argv[1:]):
@@ -50,6 +51,7 @@ from longhorn_lib import longhorn_backup_health_logic as logic
 from longhorn_lib import longhorn_backups as backups
 from longhorn_lib import longhorn_cluster_state as cluster_state
 from longhorn_lib import longhorn_cron_evidence_logic as cron_evidence
+from longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from longhorn_lib import longhorn_restore_drill_stamps as drill_stamps
 from longhorn_lib import longhorn_skipped_volumes_logic as skipped
 
@@ -127,6 +129,8 @@ B2_DELETIONS_CRON = cron_evidence.cron_state(
     _require_bool_env("LONGHORN_B2_DELETIONS_CRON_EXPECTED"),
     _require_env("LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP"),
 )
+# Check 12's drop-in. The schedule and the arm state are read from it each run.
+ETCD_DROP_IN = Path(_require_env("LONGHORN_ETCD_DROP_IN"))
 
 # Check 9's B2 transport. Its own deadline rather than TIMEOUT: journalctl answers from a local
 # file in milliseconds, and the shim sizes the reader's worst-case run against its 600s cron
@@ -350,6 +354,23 @@ def _check_restore_drill(
             problems.append(problem)
 
 
+def _check_etcd_s3_snapshot(
+    problems: list[tuple[int, str]], now_s: float
+) -> float | None:
+    """Check 12; returns the newest S3 snapshot's age, or None when it has no reading."""
+    allowed_s = etcd_s3.allowed_age_s(ETCD_DROP_IN.read_text)
+    if isinstance(allowed_s, tuple):
+        problems.append(allowed_s)
+        return None
+    items = _fetch_items(problems, "etcd snapshot list", *etcd_s3.LIST_ARGS)
+    if items is None:
+        return None
+    snapshot_problem, age_s = etcd_s3.check_newest_snapshot(items, allowed_s, now_s)
+    if snapshot_problem:
+        problems.append(snapshot_problem)
+    return age_s
+
+
 def main(now: float | None = None) -> int:
     """Run the checks and print the up/down<TAB>msg verdict.
 
@@ -570,6 +591,9 @@ def main(now: float | None = None) -> int:
         if skipped_problem:
             problems.append(skipped_problem)
 
+    # ── check 12: k3s's native etcd snapshots reach S3 ───────────────────────────────────
+    etcd_age_s = _check_etcd_s3_snapshot(problems, now_s)
+
     status, msg, push_msg = logic.build_verdict(
         problems,
         backup_targets=backup_targets,
@@ -584,6 +608,9 @@ def main(now: float | None = None) -> int:
         graced_seeded=result.graced_seeded,
         graced_seeded_vols=result.graced_seeded_vols,
     )
+    if status == "up" and etcd_age_s is not None:
+        msg += f", newest S3 etcd snapshot {int(etcd_age_s / 3600)}h old"
+        push_msg = msg
 
     # Log the FULL verdict before printing the ranked one, unconditionally — matching the
     # original script's "log before push" ordering, so a DOWN status logged here still leaves a

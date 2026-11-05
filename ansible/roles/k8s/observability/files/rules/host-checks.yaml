@@ -165,11 +165,11 @@ groups:
           severity: critical
           service: daniel-box
         annotations:
-          summary: daniel-box's off-box etcd snapshot check is red.
+          summary: daniel-box's cluster-token drift check is red.
           description: >-
-            etcd-snapshot-offbox.sh on daniel-box could not take or upload the etcd snapshot, or the
-            cluster token changed since the off-box copy was stamped. `journalctl -t
-            etcd-snapshot-offbox` names which. Read docs/k3s-etcd-restore.md after it.
+            etcd-token-drift.sh on daniel-box found the cluster token changed since the off-box copy
+            was stamped, or could not compare the two. `journalctl -t etcd-snapshot-offbox` names
+            which. Read docs/k3s-etcd-restore.md after it.
           runbook_url: https://docs.local.daniel-hunter.com/k3s-etcd-restore/
       - alert: EtcdSnapshotOffboxNotReporting
         expr: |
@@ -186,8 +186,8 @@ groups:
           summary: daniel-box's etcd-snapshot-offbox check has stopped reporting.
           description: >-
             No etcd-snapshot-offbox verdict newer than 25 hours reached Prometheus from daniel-box's
-            textfile collector, so nothing is watching the off-box etcd snapshot. Read the `Off-box
-            etcd snapshot` cron and the `etcd-snapshot-offbox` syslog tag, then
+            textfile collector, so nothing is comparing the cluster token with its stamp. Read the
+            `etcd token drift` cron and the `etcd-snapshot-offbox` syslog tag, then
             /var/lib/node-exporter-textfile/etcd-snapshot-offbox.prom on the host.
       - alert: ManifestPruneCheckFailed
         expr: homelab_check_success{check="manifest-prune-check",origin="daniel-box"} == 0

@@ -31,7 +31,7 @@ GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]
 
 # The */10 crons the grace is derived against, and the daily ones it deliberately does not cover.
 FREQUENT_SCRIPTS = ("longhorn-backup-health.sh.j2", "disk-health.sh.j2")
-DAILY_SCRIPTS = ("etcd-snapshot-offbox.sh.j2",)
+DAILY_SCRIPTS = ("etcd-token-drift.sh.j2",)
 # Daily checks on a kuma-check timer: the guard IS wired there, with a different skip shape.
 DAILY_TIMER_SCRIPTS = ("manifest-prune-check.sh.j2",)
 

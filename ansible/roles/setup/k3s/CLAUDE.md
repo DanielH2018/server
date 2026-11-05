@@ -49,7 +49,7 @@ come from `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_pin_c
   - `B2 backup budget listing` — `20 7 * * *`
   - `daniel-box disk health` — `*/10 * * * *`
   - `Release staleness drift check` — `*/30 * * * *`
-  - `Off-box etcd snapshot` — `45 2 * * *`
+  - `etcd token drift` — `45 2 * * *`
   - `etcd restore drill` — `20 10 * * 1`
 - **Timers (2):** `kuma-check-manifest-prune.timer` (`OnCalendar=*-*-* 05:15:00`),
   `kuma-check-live-drift.timer` (`OnCalendar=*-*-* 05:45:00`)
@@ -80,15 +80,17 @@ docs/ page — `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recove
 
 `tasks/health-crons.yml` installs a dozen crons; most read the cluster and write a check
 textfile that a Prometheus rule reads.
-One changes state. Its authority is written here so a later edit cannot quietly widen it.
-Four state-changing actuators left this role. The volume-label reconcile left at H1.6, and its
-contract is the `longhorn-reconcile` role's `CLAUDE.md`. The Longhorn RecurringJobs left at
-H1.7b, and the filesystem trim became one of them at H2.2c; their contract is the
+None changes the cluster or a backup store. Their limits are written here so a later edit cannot
+quietly widen them. Five state-changing actuators left this role. The volume-label reconcile left
+at H1.6, and its contract is the `longhorn-reconcile` role's `CLAUDE.md`. The Longhorn RecurringJobs
+left at H1.7b, and the filesystem trim became one of them at H2.2c; their contract is the
 `longhorn-backup` role's `CLAUDE.md`. The restore drill left at H2.3d, and its contract is the
-`longhorn-restore-drill` role's `CLAUDE.md`.
+`longhorn-restore-drill` role's `CLAUDE.md`. The off-box etcd upload left at H2.8b, when k3s's
+native schedule replaced it; `k3s_server_config` in `hosts/components/k3s-server/component.yml`
+holds that schedule.
 
-- **Scope.** The **off-box etcd snapshot** (`etcd-snapshot-offbox.sh`, daily) uploads the
-  snapshot and never the cluster token.
+- **Scope.** The crons read and report. `etcd-token-drift.sh` compares the cluster token with the
+  operator's stamp and writes neither.
 - **Never a cron:** the two reapers delete stranded objects, operator-invoked and dry-run by
   default; scheduling either is out of contract. They are the `backups` and `snapshots`
   subcommands of `scripts/backup/longhorn_reap.py` and run from the repo checkout, so this role
@@ -103,6 +105,8 @@ H1.7b, and the filesystem trim became one of them at H2.2c; their contract is th
   names the regex and the file to edit together. ENFORCED:
   `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`,
   `scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_trim_is_flagged_when_its_cronjob_is_gone`.
+  Check 12 reads k3s's newest S3 snapshot, against a bound from the installed drop-in's schedule.
+  ENFORCED: `scripts/lib/tests/test_longhorn_etcd_s3.py::test_a_snapshot_past_the_bound_is_flagged`.
 - **Next-run review:** read the B2 ledger before widening scope.
 
 ## Notable
@@ -156,7 +160,7 @@ H1.7b, and the filesystem trim became one of them at H2.2c; their contract is th
   last row. A checkout older than H1.7b still carries its own guard, so this tree's empty copy
   protected nothing. To revive it, take it from #5316 in git history.
 - **The five heartbeat checks write a textfile verdict and push nothing (M6 batch B1).** Longhorn
-  backup health, the off-box etcd snapshot, the manifest-prune and release-staleness checks, and
+  backup health, the cluster-token drift check, the manifest-prune and release-staleness checks, and
   the live-drift check each write the three homelab_check_* series to node_exporter's textfile
   directory. Rules in observability's host-checks.yaml page the files through Alertmanager. Since
   B1's Cutover-2 no check reads a Kuma credential or pushes: the tasks that rendered the two

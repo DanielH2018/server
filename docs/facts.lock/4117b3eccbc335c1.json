@@ -1,15 +1,14 @@
 {
-  "checksum": "7e19c4327eeecd34f89849c6d1e4005ab2e86ab6b7cf7ea8426ecd35e73ef283",
+  "checksum": "524bcba83b11a117522ac55c158608b0a37a86c46743442d5f212b26945d3838",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/k8s/longhorn-backup/CLAUDE.md#At a glance",
   "row": {
     "atoms": {
       "ansible/tests/longhorn/test_longhorn_backup_render.py::test_the_etcd_s3_secret_lands_in_kube_system_with_flux_substitution_only_there": "0af9d626532b413c009616268f4c684a294aab9abe7bbfb0bc21089e704ed905",
       "ansible/tests/repo/test_census_rows_roles.py::test_census_row_holds_on_the_tree": "3517271dec93e78a96e775ed1530225b87c538ea15b6f25186cd223d4dfce72d",
-      "ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py::test_a_changed_twin_is_flagged": "29ea0e727cf66bef72e6b02c306398b9ae832b4493e2dd87a72d80f8dbb0bd85",
       "scripts/renderer/renderer_lib/secret_checks.py:PLACEHOLDER_KIND_EXEMPT": "6e9966ad203330c80ee6fe732a345762e31941c8610f5b1c8dabf6a5c6194854"
     },
     "python": "3.15",
-    "verified_sha": "00cdc5de2"
+    "verified_sha": "7f3ec44c0"
   }
 }
