@@ -786,6 +786,14 @@ operator removes it. A follow-up commit after PR 6 makes these changes at once:
   `test_secret_consumers.py:test_consumer_tags_cross_host_tokens_are_manual` loses its subject.
   `test_secret_bearing_host_paths.py:test_the_ignore_tier_is_excluded_from_the_tracked_names`
   names another tracked credential instead.
+- Two tests that require an `auto` row in the real registry change, because this key is the
+  only one. `test_secret_consumers.py:test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual`
+  drops its `assert auto`.
+  `scripts/docs/tests/test_gen_doc_fragments.py:test_registry_counts_cover_every_registered_secret`
+  drops its `"auto" in counts`.
+- `docs/assets/generated/fragments/secret-tiers.md` regenerates, because its `auto` count moves.
+  The `regen-doc-fragments` prek hook rewrites it, and
+  `test_every_committed_fragment_matches_what_the_generator_writes_now` fails without it.
 
 That path set routes to `{'secrets': True}` (Baseline), the deployer's secrets-defer path, so
 it merges without a deploy and alerts once. The removal waits for PR 6, because before it the
@@ -793,16 +801,27 @@ role's template still references the key.
 
 **That commit retires the last `*_push_token` key once M6's C-5 has merged.** C-5 retires the
 only other one. The commit also leaves `CROSS_HOST_PUSH_TOKENS` empty and the registry with no
-`auto` tier. The commit re-reads each reader of the suffix and of the set, and it deletes the ones with no
-subject left, or files a finding for each one it keeps:
+`auto` tier. The commit re-reads each reader of the suffix and of the set, and it deletes the
+ones with no subject left, or files a finding for each one it keeps:
 
-- `scripts/secrets_mgmt/secrets_lib/secret_classify.py:classify`, the `_push_token` rule;
+- `scripts/secrets_mgmt/secrets_lib/secret_classify.py:classify`, the `_push_token` rule.
+  Deleting the rule fails `test_secret_classify.py:test_push_tokens_are_auto` and
+  `test_secret_registry.py:test_sync_adds_missing_and_preserves_existing`, so both change with
+  it;
 - `.claude/skills/add-secret/SKILL.md`, the *Never add a Kuma push token* step and the `sync`
   step's `*_push_token` clause;
 - `consumers.py:CROSS_HOST_PUSH_TOKENS`, with its readers in `consumer_tags`,
   `test_secret_consumers.py` and the note in `scripts/deploy_tools/land_lib/land_tags.py`.
   `scripts/deploy_tools/tests/test_land_tags.py` asserts that note names the set, so the test
   changes with the note.
+
+**Readers of the `auto` tier outlive the commit, so it files a finding for them.** The weekly
+`homelab-secret-rotation` job in `hosts/components/secret-rotation/` selects only `auto` rows,
+so every run logs "nothing to rotate in the auto tier". `docs/secret-rotation.md` keeps its
+`auto` section, its cron contract and its line about Uptime Kuma honouring a new push token.
+Retiring the job is a host package change with its own landing, so the commit does not do it.
+The finding names the job and that doc, and its owner decides whether the tier stays for a
+future generated secret.
 
 The commit's description quotes the reads for M6's exit criterion 2:
 `grep -c '_push_token:' ansible/secret_rotation.yml` and the same read on
@@ -1873,8 +1892,9 @@ daniel-box. The operator produces them, because each needs the host:
   `docs/claude-tooling.md` if it lists `probe.py releases`;
   `ansible/tests/setup/test_setup_cross_role_files.py`'s table equality, which holds the
   edited `_CHECK_TIMER`; the deleted tests listed under PR 6; the lock rows PR 6 names.
-  `ansible/secret_rotation.yml`, `consumers.py`, `git_dates.py` and the two tests that name
-  the key change in the operator's secrets commit after PR 6, not in PR 6.
+  `ansible/secret_rotation.yml`, `consumers.py`, `git_dates.py`, the `secret-tiers` fragment
+  and the tests that name the key or require an `auto` row change in the operator's secrets
+  commit after PR 6, not in PR 6.
 - PR 7a: `docs/volume-snapshot-drills.md`, the revert runbook's command.
 - PR 7b changes no test and no doc. D5's bootstrap drill PR and flux PR write
   *Bootstrapping Flux on a rebuilt cluster*, its drill, its renderer test and the text
