@@ -28,7 +28,8 @@ Afterwards, no Ansible task upgrades or reconfigures k3s on a running node. The 
 name. `homelab-k3s-restart` applies a config change inside a window. Ansible keeps only the
 fresh-host install until H7.
 
-The exit criterion is three observations, in order:
+The exit criterion is three observations. The first two come in order. The third needs H6.4b
+and H6.7, not H6.6 (step H6.7 says what running it first asks of H6.6's record):
 
 1. **A no-op pin.** With both Plans selecting their node at the running version, each
    node's `plan.upgrade.cattle.io/<plan>` label equals its Plan's `status.latestHash`.
@@ -1328,6 +1329,10 @@ running node, so its verification ends with `gitops_state.py clear-owed manual_p
       `k3s_server_config`, in `hosts/components/k3s-server/component.yml`. 85 is the
       kubelet's default value.
     - Observe exactly one restart at the next window.
+    - H6.7 can land before H6.6. An H6.7 restart still pending when H6.6 records its
+      pre-upgrade state moves daniel-box's `ExecMainStartTimestamp` on its own, and that
+      satisfies Exit 2's "differ from the recorded ones" without SUC. So when H6.7 lands first,
+      H6.6 records that state only after the Exit 3 read passes.
 
 ## Verification
 
