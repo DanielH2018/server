@@ -31,7 +31,7 @@ covers routes through the skill listing rather than this table.
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · `ansible/roles/k8s/manifests/CLAUDE.md` for the render → apply → queue contract every k8s role includes |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill (no sibling copying) · `ansible/roles/k8s/manifests/CLAUDE.md` for the render → apply → queue contract every k8s role includes |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands) |
 | Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once. Claim before you start: `findings.py claim <n> --worktree <branch>`; `findings.py claim --help` has the rest. |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
@@ -242,9 +242,9 @@ The repo uses [prek](https://prek.j178.dev). `prek.toml` holds the config and ea
 Run `prek run --all-files` to check before committing. **That does not run the suite.** No
 hook runs it, neither at commit nor at push. The one exception is `static-ratchet-tests` and
 its `static-ratchet-tests-*` siblings: at commit time it runs twenty-nine static ratchet, lint
-and census test files. CI's `pytest` job runs the suite whole on every PR. To see a red test before CI does, run `uv run pytest` yourself.
-A fan-out batch names test paths instead, and `.claude/hooks/block-batch-full-suite.py` refuses
-its whole-suite run.
+and census test files. CI's `pytest` job runs the suite whole on every PR. To see a red test
+before CI does, run `uv run pytest` yourself. A fan-out batch names test paths instead, and
+`.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run.
 `.gitignore`'s root deny is load-bearing — one untracked file parks the deployer.
 
 ## Python & Tests

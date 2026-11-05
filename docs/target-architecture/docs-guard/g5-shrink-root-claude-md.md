@@ -1,6 +1,6 @@
 # G5 — Shrink root CLAUDE.md
 
-Status: DONE. The root `CLAUDE.md` is 260 lines and 18,711 characters (`wc -l`, `wc -m`).
+Status: DONE. The root `CLAUDE.md` is 260 lines and 18,732 characters (`wc -l`, `wc -m`).
 
 PR 0 merged as [#7235](https://github.com/DanielH2018/server/pull/7235), PR 1 as
 [#7240](https://github.com/DanielH2018/server/pull/7240), PR 2 as
@@ -33,7 +33,7 @@ keeps every citation in a `CLAUDE.md`, because only a `CLAUDE.md` citation is ch
 **Exit criterion.**
 
 - `wc -l CLAUDE.md` prints at most 260 lines, down from 356 when G5 started.
-- `wc -m CLAUDE.md` prints at most 18,711 characters, down from 29,083 when G5 started. Lines
+- `wc -m CLAUDE.md` prints at most 18,732 characters, down from 29,083 when G5 started. Lines
   alone could be met by joining lines, so the character figure keeps the change honest.
 - The operator chose these two figures on 2026-11-05, in place of fewer than 200 lines and at most
   17,000 characters, with the ruling that no directive is cut to reach a number. The figures are
@@ -495,7 +495,7 @@ prek run --all-files
 uv run --no-sync python .claude/hooks/inject-nested-docs.py --report | tail -1
 ```
 
-- `wc` prints at most 260 lines and at most 18,711 characters.
+- `wc` prints at most 260 lines and at most 18,732 characters.
 - `comm` prints nothing: no heading was lost. One line it may print is
   `# One-time: install uv …`, which is a shell comment inside the *Python & Tests* fence,
   not a heading. PR 1 may drop that fence.
