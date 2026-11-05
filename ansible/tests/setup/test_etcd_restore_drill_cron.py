@@ -152,14 +152,19 @@ def test_the_scripts_ordering_note_still_matches_reality() -> None:
         "the drill IS now scheduled by health-crons.yml; leaving that claim in place would tell "
         "the next reader the reader-half is still blocked when it is not"
     )
-    assert "monitor-bridge/check.py" in header, (
-        "the block must keep naming check.py as the reader's owner — longhorn-backup-health.sh "
-        "would be reading a second drill's evidence out of the first drill's watchdog"
+    assert "monitor-bridge/files/checks/service.py" in header, (
+        "the block must keep naming monitor-bridge as the reader's owner — "
+        "longhorn-backup-health.sh would be reading a second drill's evidence out of the first "
+        "drill's watchdog"
+    )
+    assert "EtcdRestoreDrillFailing" in header, (
+        "the block must name the alert rule that pages on the reader's verdict"
     )
     for stale in (
         "it is not yet written",
         "When the reader lands",
         "has no cron",
+        "Kuma monitor",
     ):
         assert stale not in header, (
             f"the header still says {stale!r}. The reader shipped in PR #535 as "

@@ -160,13 +160,15 @@ log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 # DECIDED: the stamp is read, and both halves are shipped. health-crons.yml schedules
 # `--list-only` weekly under the `etcd-snapshot` tag (k3s_etcd_restore_drill_cron, Monday 10:20),
 # run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness
-# reader is `check_etcd_restore_drill` in monitor-bridge/check.py, since PR #535: it reads
-# `last-success-list-only` from this STAMP_DIR and pushes the `etcd Restore Drill` Kuma monitor.
+# reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py, since PR #535:
+# it reads `last-success-list-only` from this STAMP_DIR, monitor-bridge serves the verdict as
+# `homelab_check_success{check="etcd_restore_drill"}`, and the `EtcdRestoreDrillFailing` rule in
+# observability's bridge-exporter.yaml pages on it.
 #
 # The ordering this block fixed is kept rather than deleted, because it is the reason the pair
 # works. A fail-closed reader wired BEFORE the cron existed would have sat red essentially
 # always, which is a pager that trains the operator to ignore it; the cron is what makes a red
-# mean something. monitor-bridge/check.py is the owner because it already aggregates unrelated
+# mean something. monitor-bridge is the owner because it already aggregates unrelated
 # stamps — not longhorn-backup-health.sh, which would be reading a second drill's evidence out of
 # the first drill's watchdog (2026-08-23b review M7).
 #
