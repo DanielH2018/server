@@ -788,7 +788,9 @@ operator removes it. A follow-up commit after PR 6 makes these changes at once:
   names another tracked credential instead.
 - Two tests that require an `auto` row in the real registry change, because this key is the
   only one. `test_secret_consumers.py:test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual`
-  drops its `assert auto`.
+  drops its `assert auto`, which would fail on an empty tier, and stays dormant. With no `auto`
+  row, `unrotatable` is always empty, so the test passes on any `consumer_tags` until someone
+  registers a new `auto` key. The finding below names it.
   `scripts/docs/tests/test_gen_doc_fragments.py:test_registry_counts_cover_every_registered_secret`
   drops its `"auto" in counts`.
 - `docs/assets/generated/fragments/secret-tiers.md` regenerates, because its `auto` count moves.
@@ -819,9 +821,11 @@ ones with no subject left, or files a finding for each one it keeps:
 `homelab-secret-rotation` job in `hosts/components/secret-rotation/` selects only `auto` rows,
 so every run logs "nothing to rotate in the auto tier". `docs/secret-rotation.md` keeps its
 `auto` section, its cron contract and its line about Uptime Kuma honouring a new push token.
-Retiring the job is a host package change with its own landing, so the commit does not do it.
-The finding names the job and that doc, and its owner decides whether the tier stays for a
-future generated secret.
+`test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual` checks nothing until the
+tier has a row again. Retiring the job is a host package change with its own landing, so the
+commit does not do it. The finding names the job, that doc and the dormant test, and its owner
+decides whether the tier stays for a future generated secret. If the tier stays, the test stays
+to catch a new `auto` key with no consumer. If the tier goes, the test goes with it.
 
 The commit's description quotes the reads for M6's exit criterion 2:
 `grep -c '_push_token:' ansible/secret_rotation.yml` and the same read on
