@@ -125,6 +125,6 @@ def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
 
     assert result.returncode == 1
     assert "bootstrap-host: the k3s installer failed\n" in result.stderr
-    assert (host.root / "installer.runs").read_text().splitlines() == ["run"] * 4
-    assert host.commands() == ["sleep 30"] * 3
+    assert (host.root / "installer.runs").read_text().splitlines() == ["run"] * 13
+    assert host.commands() == ["sleep 30"] * 12
     assert host.apt_calls() == []

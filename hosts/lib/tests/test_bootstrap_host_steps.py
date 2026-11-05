@@ -288,6 +288,18 @@ def test_a_fetch_that_fails_once_is_requested_again_and_the_build_continues(tmp_
     assert (host.root / "nfpm.versions").exists()
 
 
+def test_a_fetch_rides_out_a_five_minute_outage(tmp_path):
+    host, requests = _online_box_whose_nfpm_fetch_fails(tmp_path, failures=10)
+
+    result = host.run("daniel-box", "--local-build", str(host.clone(tmp_path)))
+
+    assert result.returncode == 0, result.stderr
+    assert len(requests.read_text().splitlines()) == 11
+    waits = [c.split()[1] for c in host.commands() if c.startswith("sleep ")]
+    assert sum(map(int, waits)) >= 300
+    assert (host.root / "nfpm.versions").exists()
+
+
 def test_a_fetch_that_always_fails_dies_after_the_last_attempt(tmp_path):
     host, requests = _online_box_whose_nfpm_fetch_fails(tmp_path, failures=99)
 
@@ -295,8 +307,33 @@ def test_a_fetch_that_always_fails_dies_after_the_last_attempt(tmp_path):
 
     assert result.returncode == 1
     assert "cannot fetch" in result.stderr and NFPM_ARCHIVE in result.stderr
-    assert len(requests.read_text().splitlines()) == 4
-    assert host.commands().count("sleep 30") == 3
+    assert len(requests.read_text().splitlines()) == 13
+    assert host.commands().count("sleep 30") == 12
+
+
+def test_the_repo_venv_build_rides_out_a_five_minute_outage(tmp_path):
+    host, _ = _online_box_whose_nfpm_fetch_fails(tmp_path, failures=0)
+
+    result = host.run(
+        "daniel-box", "--local-build", str(host.clone(tmp_path)), VENV_FAILURES="10"
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert host.commands().count("sleep 30") == 10
+    assert (host.root / "nfpm.versions").exists()
+
+
+def test_a_repo_venv_that_cannot_build_is_not_reported_as_a_refused_commit(tmp_path):
+    host, _ = _online_box_whose_nfpm_fetch_fails(tmp_path, failures=0)
+
+    result = host.run(
+        "daniel-box", "--local-build", str(host.clone(tmp_path)), VENV_FAILURES="99"
+    )
+
+    assert result.returncode == 1
+    assert "cannot build the repo venv" in result.stderr
+    assert "not a green first-parent commit" not in result.stderr
+    assert "bootstrap_anchor.py" not in (host.root / "uv.calls").read_text()
 
 
 def test_a_kit_without_the_k3s_binary_is_refused_naming_the_file(tmp_path):
