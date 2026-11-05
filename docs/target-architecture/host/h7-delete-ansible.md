@@ -1314,7 +1314,8 @@ steps are:
    them, before the updater's first run writes into it. On the Pi, it then updates from the
    Azlux source the package ships and installs `log2ram`, which the package cannot depend on
    because that source arrives with it. dpkg runs under `--force-confnew`, because reconcile
-   may already have written `/etc/log2ram.conf`. daniel-box serves the repo it installs from, so it cannot bootstrap
+   may already have written `/etc/log2ram.conf`. If Azlux's host does not answer, the script
+   warns and goes on, and a rerun installs the package. daniel-box serves the repo it installs from, so it cannot bootstrap
    from `http://10.0.0.215:8791`, and it uses `--local-build <clone>` instead. That flag
    builds every package daniel-box needs from the clone:
     - It checks the clone's `HEAD` against C5's anchor, the rule the builder applies

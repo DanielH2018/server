@@ -3,6 +3,7 @@
 Run: uv run pytest hosts/lib/tests/test_bootstrap_host_log2ram.py
 """
 
+import pytest
 from _bootstrap_host import FakeHost
 
 
@@ -28,18 +29,21 @@ def test_a_fresh_pi_installs_log2ram_from_the_azlux_source_after_its_package(tmp
     assert not replaced.exists()
 
 
-def test_a_failed_azlux_update_stops_before_the_log2ram_install(tmp_path):
+@pytest.mark.parametrize("failing", ["*azlux.sources*", "*log2ram"])
+def test_an_unreachable_azlux_warns_and_an_offline_pi_still_starts_the_engine(
+    tmp_path, failing
+):
     host = FakeHost(tmp_path)
     host._stub(
         "apt-get",
-        f'echo "$*" >> {host.calls}\ncase "$*" in *azlux.sources*) exit 100 ;; esac',
+        f'echo "$*" >> {host.calls}\ncase "$*" in {failing}) exit 100 ;; esac',
     )
 
-    result = host.run("daniel-pi")
+    result = host.run("daniel-pi", "--until", "6", "--offline", str(host.kit))
 
-    assert result.returncode == 1
-    assert "apt-get update of the Azlux source failed" in result.stderr
-    assert not [call for call in host.apt_calls() if call.endswith(" log2ram")]
+    assert result.returncode == 0, result.stderr
+    assert "warning: log2ram is not installed" in result.stderr
+    assert "systemctl start homelab-docker-engine.service" in host.commands()
 
 
 def test_a_pi_rerun_with_log2ram_installed_makes_no_azlux_call(tmp_path):

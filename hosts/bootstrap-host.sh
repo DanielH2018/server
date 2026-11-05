@@ -498,12 +498,15 @@ echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host
 # would stop at a conffile prompt on that file, and upstream's copy already holds the arm's values.
 if [ "$host" = daniel-pi ] &&
     ! dpkg-query -W -f='${Status}' log2ram 2> /dev/null | grep -q 'install ok installed'; then
+    # Azlux's host is outside the kit, and an outage must not keep step 6 from starting wg-easy.
     # shellcheck disable=SC2086
-    apt-get update --error-on=any $AZLUX_APT || die "apt-get update of the Azlux source failed"
-    apt-get install -y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confnew log2ram ||
-        die "apt-get install log2ram failed"
-    rm -f "$ROOT/etc/log2ram.conf.dpkg-old"
-    echo "bootstrap-host: installed log2ram, which mounts /var/log at the next boot"
+    if apt-get update --error-on=any $AZLUX_APT &&
+        apt-get install -y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confnew log2ram; then
+        rm -f "$ROOT/etc/log2ram.conf.dpkg-old"
+        echo "bootstrap-host: installed log2ram, which mounts /var/log at the next boot"
+    else
+        echo "bootstrap-host: warning: log2ram is not installed, so /var/log stays on the SD card; rerun this script once packages.azlux.fr answers" >&2
+    fi
 fi
 stop_after 5
 
