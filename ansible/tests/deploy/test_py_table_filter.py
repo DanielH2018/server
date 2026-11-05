@@ -1,8 +1,8 @@
 """Unit tests for `py_table` in filter_plugins/py_table.py.
 
-monitor-bridge's env-secret and uptime-kuma's static monitors both read the bridge's check
-table through this filter (#3659, #3781). A row the filter drops is a check pushing nowhere and
-a tile AutoKuma deletes, so each way it can lose a row raises instead.
+monitor-bridge's env-secret reads the bridge's check table through this filter (#3659, #3781).
+A row the filter drops is a check missing from the rendered Secret, so each way it can lose a
+row raises instead.
 
 Lives in ansible/tests/ (not under filter_plugins/) so Ansible's filter-plugin loader doesn't
 import it as a plugin.

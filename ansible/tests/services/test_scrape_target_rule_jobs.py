@@ -5,7 +5,7 @@ jobs in `prometheus.yml`. It is one rule per owning role, each with a literal `s
 last rule that catches any job the others do not name (M1 convention 1 and 3). The first half
 of this module holds that table to the rendered scrape config: every job is in exactly one
 named rule, so the "unmapped" fallback pages a job nobody mapped and is never where a job
-lives. Kuma's two tiles exempt no job, and neither may this rule.
+lives. The two Kuma tiles these rules replaced exempted no job, and neither may this rule.
 
 The second half holds the numbers `log-pipeline.yaml` and `scrape-targets.yaml` ported from
 monitor-bridge's two deleted checks. Cutover-a2 removed their env keys, so the literals below

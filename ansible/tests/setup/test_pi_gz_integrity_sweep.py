@@ -4,7 +4,7 @@
 `gzip -t` is the only reader that disagrees with a clobbered gzip trailer: that corruption
 leaves every CRC32 matching, so `zcat` recovers every byte and nothing else on the host notices.
 The sweep runs that test daily and writes a verdict; `pi-sd-health` reads the verdict
-every 5 minutes and folds it into the Kuma push.
+every 5 minutes and folds it into its own textfile verdict.
 
 Two failure modes get their own tests here, because both read GREEN from the passing side:
 
@@ -116,7 +116,7 @@ def test_a_clobbered_trailer_reads_down_and_names_the_file(tmp_path):
 
 
 def test_many_clobbered_files_are_summarised_rather_than_all_named(tmp_path):
-    """Kuma truncates a push msg at 900 chars, so 37 paths would lose the count as well."""
+    """A verdict naming all 37 paths would be unreadable, so it names three and counts the rest."""
     roots = [tmp_path / "log"]
     good_gz(roots[0], FLOOR)
     for i in range(6):

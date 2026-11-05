@@ -4,8 +4,8 @@
 the fields it carries, so the deployer applies only the list readers those fields reach. This
 census renders the real tree with a fixture entry appended to daniel-box's `containers_list`,
 in the role context and in `hostvars`, and compares it with a control render through the same
-override and the list unchanged. The override alone moves pihole's ConfigMap and uptime-kuma's
-Deployment, which is why the control is not the plain inventory render.
+override and the list unchanged. The override alone moves pihole's ConfigMap, which is why the
+control is not the plain inventory render.
 
 The comparison is by tag, never by template path. pihole's `configmap.yaml.j2` reads the list
 only through `{% include 'config/pihole-dnsmasq.conf.j2' %}`, so the narrowing keeps the

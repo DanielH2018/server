@@ -428,8 +428,8 @@ def _bypass_permits_mutation(rule: dict, path: str) -> bool:
 def test_scrutiny_bypass_is_read_only_and_path_scoped():
     """A bypass granting `^/api/.*$` with no `methods` key hands the LAN
     and every pod scrutiny's whole mutating route table. Two callers cross this route
-    and both only read: `probe.py scrutiny` (/api/summary) and the Kuma monitor `k3s Scrutiny`
-    (/api/health). Every writer addresses the ClusterIP, so nothing here needs a verb past
+    and both only read: `probe.py scrutiny` (/api/summary) and the blackbox probe of
+    scrutiny (/api/health). Every writer addresses the ClusterIP, so nothing here needs a verb past
     HEAD."""
     rules = _k8s_authelia_config()["access_control"]["rules"]
     scrutiny = [

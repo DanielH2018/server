@@ -9,7 +9,7 @@ state needs that heading. That every setup role HAS a CLAUDE.md is the setup row
 The subject is DERIVED from `tasks/` (an `ansible.builtin.cron` task not `state: absent`, or a
 `templates/*.timer.j2` unit) rather than listed, so a new cron-installing role joins the check
 the day it lands. `EXEMPT` names the roles whose crons change no state, each with the reason —
-a heartbeat that only pushes Kuma is not an autonomous actor, and demanding a contract of it
+a heartbeat that only writes a verdict is not an autonomous actor, and demanding a contract of it
 would teach readers the heading means nothing.
 
 Red-proof pairs use fixture roles under `tmp_path`; non-vacuity pins named members the live

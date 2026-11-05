@@ -1,8 +1,8 @@
 """One Gmail app password feeds three services, and one of them can break silently.
 
-`smtp_notify_app_password` is Uptime Kuma's second alert channel, the credential
-monitor-bridge's `email_backstop` re-authenticates on a throttle, and the credential
-Authelia sends with. Authelia's failure mode renders clean:
+`smtp_notify_app_password` is the credential Alertmanager's `email` receiver sends with,
+the credential monitor-bridge's `email_backstop` re-authenticates on a throttle, and the
+credential Authelia sends with. Authelia's failure mode renders clean:
 
 - **Authelia.** `disable_startup_check` belongs to `notifier`, not to `notifier.smtp`.
   Indented one level deeper it is still valid YAML, the manifest validator still parses it,
@@ -86,7 +86,7 @@ def test_wired_notifier_is_clean():
 
 
 def test_starttls_address_is_flagged():
-    """465 is the transport Kuma already proves against Gmail; `smtp://` is a different one."""
+    """Alertmanager's `email` receiver already proves 465 against Gmail; `smtp://` is different."""
     bad = {
         **GOOD_NOTIFIER,
         "smtp": {**GOOD_SMTP, "address": "smtp://smtp.gmail.com:587"},

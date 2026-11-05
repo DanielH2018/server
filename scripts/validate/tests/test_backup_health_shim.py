@@ -201,9 +201,9 @@ def test_backup_health_kubectl_stderr_does_not_contaminate_the_status(
 
     With `OUT=$(... 2>&1)`, any stderr byte the reader's own `logger` subprocess writes —
     `logger: socket /dev/log: ...`, e.g. — lands ahead of the reader's real stdout line once the
-    two streams are merged, silently turning `up` into garbage that Kuma reads as DOWN and pings
-    healthchecks.io `/fail` on a backup plane that was fine. This patches in a fake reader that
-    writes junk to stderr before printing `up<TAB>ok` and asserts on the verdict the textfile
+    two streams are merged, silently turning `up` into garbage that the shim records as `down` and
+    pings healthchecks.io `/fail` on a backup plane that was fine. This patches in a fake reader
+    that writes junk to stderr before printing `up<TAB>ok` and asserts on the verdict the textfile
     write actually receives — proving the fix at the point that matters (what reaches
     Prometheus) rather than just that the fix's source text exists.
 
@@ -288,10 +288,10 @@ def test_backup_health_reader_failure_is_logged_through_the_stub(
 # ── STATUS must be Kuma's own "up"/"down" vocabulary ─────────────────────────────────────────
 
 
-def test_backup_health_a_recognized_down_status_reaches_kuma_unchanged(
+def test_backup_health_a_recognized_down_status_reaches_the_textfile_unchanged(
     tmp_path, logger_calls
 ):
-    """The clean half: a real DOWN from the reader must reach Kuma verbatim."""
+    """The clean half: a real DOWN from the reader must reach the textfile verbatim."""
     proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'down\\tbackup target unavailable\\n'\n"
     )
@@ -304,8 +304,8 @@ def test_backup_health_a_tabless_last_line_is_flagged_not_pushed_as_is(
     tmp_path, logger_calls
 ):
     """The flagged half. A stray final stdout line with no tab would make STATUS the whole
-    line — neither "up" nor "down" — pushed to Kuma as-is; `[[ "$STATUS" == "up" ]]` then
-    reads false and pings healthchecks.io `/fail` on a status string Kuma never defined.
+    line — neither "up" nor "down" — written to the textfile as-is; `[[ "$STATUS" == "up" ]]`
+    then reads false and pings healthchecks.io `/fail` on a status no reader defines.
     """
     proc, verdict, curl_calls = _run_rendered_shim(
         tmp_path, "printf 'a stray line with no tab at all\\n'\n"

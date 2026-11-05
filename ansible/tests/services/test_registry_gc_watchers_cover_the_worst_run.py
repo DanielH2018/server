@@ -4,9 +4,9 @@ registry-gc.sh collects the ghcr-mirror's store and then the dockerhub-mirror's,
 healthchecks.io and writes its textfile only when it ends. Each phase is bounded
 by the pod-exit wait, the unfinished Job's delete wait, the Job deadline, the rollout wait and
 that mirror's warm budget, and the run waits up to `flock -w` for the lock first. The two
-allowances are literals, because neither monitor-bridge's nor uptime-kuma's render can read a
-setup role's defaults. This guard derives the worst case from the rendered script, and holds
-each literal to the whole hour that covers it (#6569).
+allowances are literals, because neither monitor-bridge's render nor observability's rule file
+can read a setup role's defaults. This guard derives the worst case from the rendered script,
+and holds each literal to the whole hour that covers it (#6569).
 
 The script also writes its verdict to the `registry-gc` textfile with a DEADLINE_S, and
 observability's RegistryGcNotReporting carries that deadline as two literals. The deadline covers

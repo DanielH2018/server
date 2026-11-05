@@ -3,7 +3,7 @@
 
 `secret_rotation.py audit` answers "what is due"; this census answers "who is still holding
 the old one". A rotation that misses a consumer leaves it holding a dead credential: a missed
-Sonarr or Radarr API key makes exportarr 401 across seven Kuma monitors. `setup/fake_remux` is
+Sonarr or Radarr API key makes exportarr 401 on every scrape. `setup/fake_remux` is
 the consumer `deploy.sh` structurally cannot reach.
 
 `tree_consumers()` measures the answer from the tree. These tests pin the two invariants that

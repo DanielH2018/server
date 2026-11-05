@@ -4,7 +4,7 @@
 deadline as a literal twice: the `>` of the stale-file arm and the `[<n>s]` window of the
 absent_over_time arm. The producer renders DEADLINE_S, and a producer moved to a slower cadence
 without its rule would page on every healthy gap, while one moved faster would leave the rule
-slower than the Kuma tile it shadows (M1 convention 1).
+slower to page than the producer's cadence calls for (M1 convention 1).
 
 The Loki witness renders one script that both nodes run, so one DEADLINE_S pins both of its rules.
 

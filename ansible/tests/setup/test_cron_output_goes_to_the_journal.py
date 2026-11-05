@@ -16,7 +16,7 @@ run prints nothing still prints when it fails, and that is the output worth keep
 The judge splits a job at top-level `;`, `&&` and `||`, so an unbraced chain is judged stage
 by stage rather than by its last pipe. It does not judge the stderr of a pipeline's earlier
 stages, which prints only on failure. A `>/dev/null 2>&1` stage passes it, so the crons that
-must keep their output are named in `JOURNAL_ROUTED` as well. The Kuma and Healthchecks crons
+must keep their output are named in `JOURNAL_ROUTED` as well. The Healthchecks crons
 route curl's stderr away at both surfaces, and `ansible/tests/services/test_healthchecks_pings.py` holds
 the ping half.
 

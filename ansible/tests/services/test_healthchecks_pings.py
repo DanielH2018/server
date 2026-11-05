@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """The off-premises Healthchecks.io pings must stay honest.
 
-WHY THIS IS A TEST AND NOT A COMMENT. Every on-prem heartbeat here pushes to Uptime
-Kuma, which runs on the cluster those heartbeats watch — so a cluster or WAN outage
-silences the push *and* the monitor waiting for it. The hc-ping.com calls exist purely to
+WHY THIS IS A TEST AND NOT A COMMENT. Every on-prem heartbeat here writes a verdict
+that Prometheus reads and Alertmanager pages on, and both run on the cluster those
+heartbeats watch — so a cluster or WAN outage silences the verdict *and* the rule waiting
+for it. The hc-ping.com calls exist purely to
 be the signal that survives that, and they have two failure modes that leave a check
 sitting green forever while nothing is actually watched:
 

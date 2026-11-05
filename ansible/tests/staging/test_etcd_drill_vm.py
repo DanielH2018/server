@@ -7,8 +7,9 @@ reads green from every other gate:
 
 - the guest's MAC and the staging network's DHCP reservation for it (a mismatch boots a guest
   on a dynamic lease, and the orchestrator waits on an address nothing answers);
-- the Kuma tile's deadline and the cron it is derived from (a deadline shorter than the period
-  pages every month for nothing; one far longer lets a dead drill sit green for a year);
+- the drill's deadline (`etcd_drill_full_kuma_interval_s`) and the cron it is derived from
+  (a deadline shorter than the period pages every month for nothing; one far longer lets a dead
+  drill sit green for a year);
 - the cron task's shape: root, armed by the flag, day-of-month cadence, off every backup window.
 
 This guest is the only one on the staging network, so

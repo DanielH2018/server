@@ -2,7 +2,7 @@
 
 `roles/setup/k3s/tasks/main.yml` imports its topic files. One of them is gated so a staging
 cluster can decline work that only makes sense against prod — `health-crons.yml` pushes into
-prod's Kuma and Healthchecks.io. `longhorn-backup.yml`, the other gated file until H1.7b, held the
+prod's Healthchecks.io. `longhorn-backup.yml`, the other gated file until H1.7b, held the
 B2/R2 credentials and left with `k3s_manage_backup_targets`.
 
 The hazard is direction. A gate whose default is false silently stops doing prod's work,
