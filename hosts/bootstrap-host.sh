@@ -109,8 +109,8 @@ ROOT=${HOMELAB_ROOT:-}
 KEYRING=/usr/share/keyrings/homelab-archive-keyring.gpg
 SOURCES=/etc/apt/sources.list.d/homelab.sources
 K3S_BIN=/usr/local/bin/k3s
-K3S_INSTALL_ATTEMPTS=4
-K3S_INSTALL_RETRY_DELAY=30
+RETRY_ATTEMPTS=4
+RETRY_DELAY=30
 SYSTEMD_DIR=/etc/systemd/system
 # The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
 # as the updater's own fetch does.
@@ -289,6 +289,20 @@ sha_of() {
     sha256sum "$1" | awk '{ print $1 }'
 }
 
+# retry <what> <command...>: run the command up to RETRY_ATTEMPTS times, RETRY_DELAY seconds apart.
+# A release outage outlasts curl's own --retry, whose backoff totals 7 seconds.
+retry() {
+    what=$1
+    shift
+    attempt=1
+    until "$@"; do
+        [ "$attempt" -lt "$RETRY_ATTEMPTS" ] || return 1
+        echo "bootstrap-host: $what failed on attempt $attempt of $RETRY_ATTEMPTS, so it runs again in ${RETRY_DELAY}s"
+        attempt=$((attempt + 1))
+        sleep "$RETRY_DELAY"
+    done
+}
+
 # fetch <url> <sha256> <dest>: download, or copy from the kit, then check the pin.
 fetch() {
     name=${1##*/}
@@ -296,7 +310,7 @@ fetch() {
         [ -f "$kit/$name" ] || die "the offline kit has no $name"
         cp "$kit/$name" "$3"
     else
-        curl -fsSL --retry 3 -o "$3" "$1" || die "cannot fetch $1"
+        retry "the fetch of $name" curl -fsSL --retry 3 -o "$3" "$1" || die "cannot fetch $1"
     fi
     [ "$(sha_of "$3")" = "$2" ] || die "$name does not match its pinned sha256 $2"
 }
@@ -388,13 +402,7 @@ if [ -n "$k3s_mode" ]; then
         fi
         # install.sh's binary download makes one request, and a failed one writes nothing to the
         # host. Every write after it replaces its target, so a rerun is safe at any point.
-        attempt=1
-        until run_k3s_installer; do
-            [ "$attempt" -lt "$K3S_INSTALL_ATTEMPTS" ] || die "the k3s installer failed"
-            echo "bootstrap-host: the k3s installer failed on attempt $attempt of $K3S_INSTALL_ATTEMPTS, so it runs again in ${K3S_INSTALL_RETRY_DELAY}s"
-            attempt=$((attempt + 1))
-            sleep "$K3S_INSTALL_RETRY_DELAY"
-        done
+        retry "the k3s installer" run_k3s_installer || die "the k3s installer failed"
     fi
     # Exactly one k3s unit exists, the one this host's role names.
     [ -e "$ROOT$SYSTEMD_DIR/$k3s_unit" ] || die "$k3s_unit does not exist after the installer"

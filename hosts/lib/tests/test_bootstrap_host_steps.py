@@ -5,6 +5,7 @@ Run: uv run pytest hosts/lib/tests/test_bootstrap_host_steps.py
 """
 
 import subprocess
+from pathlib import Path
 
 import pytest
 from _bootstrap_host import AGENT_ENV, NFPM_ARCHIVE, FakeHost, stocked_server
@@ -255,6 +256,47 @@ def test_the_online_local_build_asks_the_anchor_and_a_refusal_installs_nothing(
     # The anchor's own venv needs PyYAML's build dependencies, which come from Ubuntu's
     # archive; nothing the unverified clone built is installed.
     assert installs == ["install -y --no-install-recommends gcc libc6-dev libyaml-dev"]
+
+
+def _online_box_whose_nfpm_fetch_fails(
+    tmp_path, failures: int
+) -> tuple[FakeHost, Path]:
+    host = FakeHost(tmp_path, hostname="daniel-box")
+    host.stock_kit()
+    requests = tmp_path / "nfpm.requests"
+    host._stub(
+        "curl",
+        'for arg; do [ "$prev" = -o ] && dest=$arg; prev=$arg; url=$arg; done\n'
+        f"case $url in *{NFPM_ARCHIVE})\n"
+        f"    echo request >> {requests}\n"
+        f'    [ "$(wc -l < {requests})" -gt {failures} ] || exit 22 ;;\n'
+        "esac\n"
+        f'cp "{host.kit}/${{url##*/}}" "$dest"',
+    )
+    host._stub("sleep", f'echo "sleep $*" >> {host.log}')
+    return host, requests
+
+
+def test_a_fetch_that_fails_once_is_requested_again_and_the_build_continues(tmp_path):
+    host, requests = _online_box_whose_nfpm_fetch_fails(tmp_path, failures=1)
+
+    result = host.run("daniel-box", "--local-build", str(host.clone(tmp_path)))
+
+    assert result.returncode == 0, result.stderr
+    assert len(requests.read_text().splitlines()) == 2
+    assert "sleep 30" in host.commands()
+    assert (host.root / "nfpm.versions").exists()
+
+
+def test_a_fetch_that_always_fails_dies_after_the_last_attempt(tmp_path):
+    host, requests = _online_box_whose_nfpm_fetch_fails(tmp_path, failures=99)
+
+    result = host.run("daniel-box", "--local-build", str(host.clone(tmp_path)))
+
+    assert result.returncode == 1
+    assert "cannot fetch" in result.stderr and NFPM_ARCHIVE in result.stderr
+    assert len(requests.read_text().splitlines()) == 4
+    assert host.commands().count("sleep 30") == 3
 
 
 def test_a_kit_without_the_k3s_binary_is_refused_naming_the_file(tmp_path):
