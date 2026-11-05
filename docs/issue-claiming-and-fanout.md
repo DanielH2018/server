@@ -59,7 +59,7 @@ The label cannot give a list of every deferred issue in date order. GitHub's iss
 no prefix match on label names and sorts only by created, updated, comments, reactions and
 interactions. Two views fill that gap, and both read from the label:
 
-- **The "Not before" Date field on the Claude findings Project.** `defer` and `open
+- **The "Not before" Date field on the Server Issue Tracking Project.** `defer` and `open
   --not-before` copy the date into it through `findings_lib/board.py`, adding the issue to the
   board first when it is missing. `findings.py board-dates` makes every open issue's field
   match its label, which backfills issues deferred before the field existed and repairs a date

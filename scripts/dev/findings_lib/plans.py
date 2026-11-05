@@ -415,7 +415,7 @@ def plan_close(
 def without_project(argv: list[str]) -> list[str]:
     """``argv`` with the ``--project <title>`` pair removed.
 
-    Removal is by position, not by value: a finding titled "Claude findings" would otherwise
+    Removal is by position, not by value: a finding titled "Server Issue Tracking" would otherwise
     lose its own ``--title`` argument.
     """
     out = []
