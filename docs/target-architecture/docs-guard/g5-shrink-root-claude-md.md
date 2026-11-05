@@ -480,7 +480,7 @@ reached 270, because the file was 356 lines rather than 309 when G5 started.
     - `fact_status.py report` gives every root section that cites nothing the same read count,
       because each session loads the whole file. The trim therefore follows character mass, and
       *Where to Look* held a quarter of the file.
-    - Its cells become pointers. The config-hash sentence moves to `.claude/rules/docker.md`.
+    - Its cells become pointers. The `new-container` skill owns the config-hash sentence.
 
 ## Verification
 
