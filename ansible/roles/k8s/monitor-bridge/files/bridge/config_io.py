@@ -52,8 +52,6 @@ class IoConfig:
     HEALTHCHECKS_API_KEY: str = field(repr=False)
     HEALTHCHECKS_EXPECTED: tuple[dict, ...]
     HEALTHCHECKS_PROBE_INTERVAL_S: float
-    SWALLOWED_VERDICTS_WINDOW_S: int
-    BOOT_SETTLE_S: int
     DISCORD_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
     DISCORD_GITOPS_WEBHOOK_URL: str = field(repr=False)
@@ -237,28 +235,6 @@ def io_config(
         HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
         HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED")),
         HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S"),
-        # How far back check_swallowed_verdicts reads the host crons' push-outcome lines. Long
-        # enough that a lost DOWN verdict stays paged past a cycle or two of Loki ingest lag,
-        # and past the next run of a */30 producer that may land; short enough that the fetch
-        # stays a few hundred lines. The daily producers the check exists for run once inside
-        # any window, so the window does not need to reach their period — the page fires
-        # within a cycle and the tile's own deadline reports the same verdict a day later.
-        SWALLOWED_VERDICTS_WINDOW_S=_int("SWALLOWED_VERDICTS_WINDOW_S"),
-        # The post-reboot window (#2783). The weekly Sunday 07:30 reboot held swallowed_verdicts
-        # red for 2.9h on 2026-09-27 after every other tile recovered, because it reads a window
-        # that still contained the reboot. It is keyed on the NODE's uptime
-        # (bridge.common.host_uptime_s), never on this pod's age: a deploy restarts the pod
-        # without rebooting anything.
-        #
-        # BOOT_SETTLE_S is how long the reboot itself takes to stop producing push failures.
-        # uptime-kuma's Service has no endpoint at all for ~16 minutes of the reboot (the
-        # measurement in uptime-kuma/templates/status-page-sync-cronjob.yaml.j2), so every host
-        # cron whose slot falls in there loses its push — real losses with one known cause, and
-        # a daily producer's lost verdict is the newest line for its tag until tomorrow.
-        # check_swallowed_verdicts skips entirely inside this window and then reads only back to
-        # the end of it, so the reboot's own failures are never in range and the tile clears at
-        # recovery instead of 2.9h later.
-        BOOT_SETTLE_S=_int("BOOT_SETTLE_S"),
         # Discord delivery: Kuma fires every alert by POSTing to its Discord webhook
         # (monitor_discord_webhook_url). A rotated/revoked/deleted webhook leaves every monitor
         # green-in-UI while Discord goes silent — the one link in the alert chain no other

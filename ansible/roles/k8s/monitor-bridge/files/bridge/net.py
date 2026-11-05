@@ -22,7 +22,6 @@ prove where the origin pin lands.
 
 from collections.abc import Callable
 import json
-import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -243,41 +242,3 @@ def loki_count(
     if not result:
         return None
     return _sample_value(result[0])
-
-
-def loki_lines(
-    cfg: Config, logql: str, window_s: int, limit: int, opener: Opener | None = None
-) -> list[tuple[int, str]]:
-    """Range LogQL query: the raw lines matching `logql` over the last `window_s` seconds.
-
-    Returns [(loki_ts_ns, line), ...] oldest first. The metric helpers above answer "how
-    many"; this one exists for a verdict that needs ORDER — which of a cron's lines is the
-    most recent — and no LogQL metric function returns a line's timestamp. A caller that
-    receives exactly `limit` lines has hit the cap and holds a truncated window, and has to
-    say so rather than decide on the part it got.
-
-    Measured 2026-09-17 against the live Loki, this function, three runs: `{job="syslog"}`
-    filtered to the push-outcome lines returned 529 lines over 3h in 0.02s each, so a 5000
-    cap is ~9x the population.
-    """
-    now_ns = time.time_ns()
-    params = {
-        "query": logql,
-        "limit": str(limit),
-        "start": str(now_ns - window_s * 1_000_000_000),
-        "end": str(now_ns),
-        "direction": "forward",
-    }
-    url = cfg.LOKI_URL + "/loki/api/v1/query_range?" + urllib.parse.urlencode(params)
-    streams = as_object_list(
-        _query_result(_get_json(url, opener=opener), "loki"), "loki result"
-    )
-    lines: list[tuple[int, str]] = []
-    for stream in streams:
-        for entry in as_list(stream.get("values", []), "loki stream values"):
-            ts, line = as_list(entry, "loki stream entry")
-            if not isinstance(ts, (str, int)) or not isinstance(line, str):
-                raise RuntimeError("loki stream entry is not [timestamp, line]")
-            lines.append((int(ts), line))
-    lines.sort()
-    return lines

@@ -11,15 +11,16 @@ closing lines, and exit 255 passed through. The verdict is the line the script l
 """
 
 import os
+import re
 
 import pytest
 from _helpers import ROLES
 from lib.proc_testing import fake_bin, path_with, run
-from verdicts.logs import parse_push_line
 
 SCRIPT_PATH = ROLES / "k8s/pi-peer-backup/files/pull-pi-peers.sh"
 POD = "pi-peer-backup-29312345-x7k2q"
 HOST_KEY_MESSAGE = "daniel-pi host key differs from the committed pin"
+VERDICT_LINE = re.compile(r"^\S+ \S+ pi-peer-backup: status=(up|down) (.*)$")
 
 # What OpenSSH prints when StrictHostKeyChecking=yes meets a key that differs from the pin.
 CHANGED_KEY = """\
@@ -59,12 +60,12 @@ def _run_script(tmp_path, ssh_stderr: str):
         "PI_SRC": "ubuntu@192.0.2.1:/src/",
     }
     result = run(["bash", str(SCRIPT_PATH)], env=env)
-    return result, _verdict(result.stdout)[4]
+    return result, _verdict(result.stdout)[1]
 
 
 def _verdict(stdout: str):
-    lines = [parse_push_line(line) for line in stdout.splitlines()]
-    verdicts = [line for line in lines if line is not None]
+    verdicts = [VERDICT_LINE.match(line) for line in stdout.splitlines()]
+    verdicts = [line.groups() for line in verdicts if line]
     assert len(verdicts) == 1, stdout
     return verdicts[0]
 
@@ -73,7 +74,7 @@ def test_a_changed_host_key_reports_the_named_message(tmp_path):
     result, msg = _run_script(tmp_path, CHANGED_KEY)
     assert result.returncode == 1, result.stderr
     assert msg == HOST_KEY_MESSAGE
-    assert _verdict(result.stdout)[3:] == ("down", HOST_KEY_MESSAGE)
+    assert _verdict(result.stdout) == ("down", HOST_KEY_MESSAGE)
 
 
 @pytest.mark.parametrize(

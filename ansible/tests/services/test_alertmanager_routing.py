@@ -438,7 +438,6 @@ def test_loki_sets_name_every_m5_rule():
         "LokiHostLogsSilent",
         "LokiPodLogsSilent",
         "LokiPiLogsSilent",
-        "KumaNotificationDropped",
         "LokiHomelabMetricsMissing",
         "LokiRulerEvaluationFailing",
         "LokiRulerNotEvaluating",

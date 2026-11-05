@@ -38,7 +38,6 @@ _METHODS = (
     "prom_scalar",
     "prom_vector",
     "loki_count",
-    "loki_lines",
     "get_json",
     "get_bytes",
     "post_json",
@@ -88,9 +87,6 @@ class FakeSources(Sources):
 
     def loki_count(self, selector, window):
         return self._answer("loki_count", selector, window)
-
-    def loki_lines(self, logql, window_s, limit):
-        return self._answer("loki_lines", logql, window_s, limit)
 
     def get_json(self, url, headers=None):
         if headers is None:

@@ -25,8 +25,7 @@ slot comes is skipped for that slot, as `concurrencyPolicy: Forbid` would skip i
 does what each job's bash wrapper did on the host: it takes the child's exit code and last
 output line as the verdict, prints `<tag>: status=<up|down> <summary>` to stdout, and records
 the verdict for `/metrics`. Each stdout line carries the host crons' syslog prefix,
-`<UTC time> <pod name> <tag>: <message>`, and is flushed as it is written. monitor-bridge's
-Swallowed Push Verdicts check parses that shape from `{container="crowdsec-jobs"}`.
+`<UTC time> <pod name> <tag>: <message>`, and is flushed as it is written.
 
 No job runs in the first `STARTUP_GRACE_S` seconds. The engine container writes
 `/etc/crowdsec` on start, and a job that ran before it finished would page a fault that does

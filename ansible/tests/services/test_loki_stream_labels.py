@@ -11,7 +11,7 @@ selectors from it. Neither direction is checked by the render alone, so this hol
 
 Consumers that cannot render an Ansible var are read where they live: the Grafana dashboards'
 queries against loki-homelab, the deploy-annotation expr, every module-level `*_LOGQL`
-constant in monitor-bridge and probe.py, and every rule in loki-homelab's `files/rules/`. The
+constant in probe.py, and every rule in loki-homelab's `files/rules/`. The
 observability Loki is a separate store (decision KL1) with its own labels, so dashboard queries
 against it are out of scope.
 
@@ -47,10 +47,7 @@ OWNER_MACHINES = {labels["machine"] for labels in OWNER.values() if "machine" in
 
 _OBSERVABILITY = REPO / "ansible/roles/k8s/observability"
 _LOKI_RULES = REPO / "ansible/roles/k8s/loki-homelab/files/rules"
-_LOGQL_MODULE_ROOTS = (
-    REPO / "ansible/roles/k8s/monitor-bridge/files",
-    REPO / "scripts/diagnostics/probe_lib",
-)
+_LOGQL_MODULE_ROOT = REPO / "scripts/diagnostics/probe_lib"
 
 
 def _emitted_jobs(alloy_config: str) -> set[str]:
@@ -99,20 +96,19 @@ def _monitor_bridge_selectors() -> dict[str, str]:
 
 
 def _logql_constants() -> dict[str, str]:
-    """Every module-level `*_LOGQL` string constant under the monitor-bridge and probe roots."""
+    """Every module-level `*_LOGQL` string constant under the probe root."""
     found = {}
-    for root in _LOGQL_MODULE_ROOTS:
-        for path in sorted(root.rglob("*.py")):
-            for node in ast.parse(path.read_text()).body:
-                if (
-                    isinstance(node, ast.Assign)
-                    and len(node.targets) == 1
-                    and isinstance(node.targets[0], ast.Name)
-                    and node.targets[0].id.endswith("_LOGQL")
-                    and isinstance(node.value, ast.Constant)
-                    and isinstance(node.value.value, str)
-                ):
-                    found[f"{path.name} {node.targets[0].id}"] = node.value.value
+    for path in sorted(_LOGQL_MODULE_ROOT.rglob("*.py")):
+        for node in ast.parse(path.read_text()).body:
+            if (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+                and node.targets[0].id.endswith("_LOGQL")
+                and isinstance(node.value, ast.Constant)
+                and isinstance(node.value.value, str)
+            ):
+                found[f"{path.name} {node.targets[0].id}"] = node.value.value
     return found
 
 
@@ -215,7 +211,7 @@ def test_an_owner_value_nothing_emits_is_flagged():
 def test_the_consumer_census_finds_its_named_members():
     consumers = _consumers()
     for name in (
-        "logs.py SWALLOWED_VERDICTS_LOGQL",
+        "b2_spend.py SPEND_LOGQL",
         "observability_deploy_annotation_expr",
         "observability_flux_deploy_annotation_expr",
         "homelab-logs.yaml LokiPodLogsSilent",
@@ -369,9 +365,6 @@ def test_a_loki_rule_on_an_unknown_machine_is_flagged():
 
 # Each `container` value a Loki rule selects on, and the role template whose pod declares a
 # container by that name. A value with no entry here fails, so a new rule adds its mapping.
-# The containers of KumaNotificationDropped, whose pod M6's C-1b deleted. M6's C-7 deletes the
-# rule. Until then it matches nothing, and no template declares either name.
-_RETIRED_RULE_CONTAINERS = frozenset({"uptime-kuma", "discord-relay"})
 _RULE_CONTAINERS = {
     # Both cloudflare-ddns Deployments name their container this; the rules tell them apart by
     # `pod`, which test_a_cloudflare_ddns_rule_names_a_deployment_the_role_renders holds.
@@ -392,9 +385,7 @@ def _undeclared_containers(
 ) -> dict[str, list[str]]:
     found = {}
     for name, expr in exprs.items():
-        for value in sorted(
-            _label_values(expr, "container") - _RETIRED_RULE_CONTAINERS
-        ):
+        for value in sorted(_label_values(expr, "container")):
             if value not in mapping:
                 found.setdefault(name, []).append(f"{value}: no template is mapped")
             elif value not in _declared_containers(*mapping[value]):

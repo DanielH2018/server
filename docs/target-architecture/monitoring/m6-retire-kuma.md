@@ -2056,6 +2056,12 @@ here. C-1 waits for the operator's acceptance.
       by then. The same commit rewords the `kuma-push-lib.sh` and `kuma_push.cap_kuma_msg`
       comments in `bridge/common.py` and the row's comment in `check_table.py`. Its token
       retired in A6-9.
+    - **What the reads at C-7's base changed.** `loki_count` stays, with `LOKI_URL`, because
+      `checks/service.py`'s HA ban arm reads it, so only `loki_lines` goes. `host_uptime_s`,
+      `SWALLOWED_VERDICTS_WINDOW_S` and `BOOT_SETTLE_S` had the row as their only reader, so
+      they go rather than being reworded. The cap comment sits in `bridge/msgfmt.py`. Both
+      modules, `checks/logs.py` and `verdicts/logs.py`, held the row alone and go whole. The
+      pod producers' verdict lines keep their shape, and their comments stop naming the row.
     - **Its deploys.** `observability`, `monitor-bridge` and `loki-homelab`, each by its
       owner: `land.sh` while Ansible-owned, the merge once `owner: flux`. loki-homelab is
       flux-owned from D5's Wave A', and monitor-bridge may be by then too. The row's gauge
