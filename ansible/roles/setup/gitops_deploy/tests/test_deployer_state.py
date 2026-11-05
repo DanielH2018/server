@@ -315,6 +315,15 @@ def test_every_alert_slot_lives_in_the_one_keyed_file(state):
     )
 
 
+def test_a_line_from_a_deleted_channel_survives_a_rewrite_without_raising(state):
+    """daniel-box's marker holds `k8s` and `stale_denylist` lines from before D6.12."""
+    pathlib.Path(state.path("alerted")).write_text(f"k8s {SHA}\nstale_denylist {SHA}")
+    state.record_alerted("broad", SHA)
+    assert pathlib.Path(state.path("alerted")).read_text() == (
+        f"broad {SHA}\nk8s {SHA}\nstale_denylist {SHA}"
+    )
+
+
 def test_clearing_a_slot_leaves_the_others_and_removes_an_emptied_file(state):
     state.record_alerted("broad", SHA)
     state.record_alerted("ci", SHA)
