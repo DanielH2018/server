@@ -153,18 +153,18 @@ def _main_with_live_entries(count, sighting):
 
 
 def test_a_sixteenth_address_is_added():
-    code, writes = _main_with_live_entries(15, "173.249.254.219")
+    code, writes = _main_with_live_entries(15, "9.9.9.9")
     assert code == 0
     assert writes == [["allowlists", "add", ra.ALLOWLIST]]
 
 
 def test_a_seventeenth_address_is_refused_with_a_line_naming_the_entries(capsys):
-    code, writes = _main_with_live_entries(16, "173.249.254.219")
+    code, writes = _main_with_live_entries(16, "9.9.9.9")
     assert code == 1
     assert writes == []
     line = capsys.readouterr().out.strip().splitlines()[-1]
     assert line.startswith("remote-ips at cap (16): live 203.0.113.1,")
-    assert line.endswith("; not added 173.249.254.219")
+    assert line.endswith("; not added 9.9.9.9")
 
 
 HOME = ra.home_networks(
