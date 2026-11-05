@@ -56,7 +56,11 @@ task_text = functools.partial(json.dumps, default=str, skipkeys=True)
 
 
 def task_chains(
-    role_dir: Path, keep, task_file: str = "main.yml", inherited: tuple = ()
+    role_dir: Path,
+    keep,
+    task_file: str = "main.yml",
+    inherited: tuple = (),
+    importers: frozenset[str] = frozenset(),
 ) -> list[tuple] | None:
     """Every `when:` chain (import and block gates, then its own) on each leaf `keep` accepts.
 
@@ -66,7 +70,12 @@ def task_chains(
     sits in, and every accepted leaf contributes one chain. Returns None when `task_file`
     cannot be read, so the caller falls back rather than narrows; an unreadable file
     further down the import tree contributes nothing, as before.
+
+    `importers` holds the files on the import path down to `task_file`. A file on it is
+    importing itself, and reads as an unreadable file.
     """
+    if task_file in importers:
+        return None
     path = role_dir / "tasks" / task_file
     try:
         tasks = _parse_tasks(path, path.stat().st_mtime_ns)
@@ -74,7 +83,7 @@ def task_chains(
         return None
     if tasks is None:
         return None
-    return _gates_in(tasks, role_dir, keep, task_file, inherited)
+    return _gates_in(tasks, role_dir, keep, task_file, inherited, importers)
 
 
 @functools.lru_cache(maxsize=256)
@@ -188,7 +197,12 @@ def _ships_via_loop(task: dict, basename: str) -> bool:
 
 
 def _gates_in(
-    tasks, role_dir: Path, keep, task_file: str, inherited: tuple
+    tasks,
+    role_dir: Path,
+    keep,
+    task_file: str,
+    inherited: tuple,
+    importers: frozenset[str] = frozenset(),
 ) -> list[tuple]:
     found: list[tuple] = []
     for task in tasks:
@@ -207,9 +221,14 @@ def _gates_in(
                 if keep(task, task_file):
                     found.append(chain)
                 continue
-            found.extend(task_chains(role_dir, keep, Path(target).name, chain) or [])
+            imported = task_chains(
+                role_dir, keep, Path(target).name, chain, importers | {task_file}
+            )
+            found.extend(imported or [])
         elif "block" in task:
-            found.extend(_gates_in(task["block"], role_dir, keep, task_file, chain))
+            found.extend(
+                _gates_in(task["block"], role_dir, keep, task_file, chain, importers)
+            )
         elif keep(task, task_file):
             found.append(chain)
     return found
@@ -480,18 +499,31 @@ def _removed_task_chains(
 
 
 def _import_chains(
-    role_dir: Path, target: str, task_file: str, inherited: tuple = ()
+    role_dir: Path,
+    target: str,
+    task_file: str,
+    inherited: tuple = (),
+    importers: frozenset[str] = frozenset(),
 ) -> list[tuple]:
-    """The `when:` chain above each literal import of `target`, walking from `task_file`."""
+    """The `when:` chain above each literal import of `target`, walking from `task_file`.
+
+    A file already on the import path contributes nothing, as an unreadable file does.
+    """
+    if task_file in importers:
+        return []
     path = role_dir / "tasks" / task_file
     try:
         tasks = _parse_tasks(path, path.stat().st_mtime_ns)
     except OSError, yaml_fast.UnparsableYaml:
         return []
-    return _imports_in(tasks or [], role_dir, target, inherited)
+    return _imports_in(
+        tasks or [], role_dir, target, inherited, importers | {task_file}
+    )
 
 
-def _imports_in(tasks, role_dir: Path, target: str, inherited: tuple) -> list[tuple]:
+def _imports_in(
+    tasks, role_dir: Path, target: str, inherited: tuple, importers: frozenset[str]
+) -> list[tuple]:
     found: list[tuple] = []
     for task in tasks:
         if not isinstance(task, dict):
@@ -503,9 +535,11 @@ def _imports_in(tasks, role_dir: Path, target: str, inherited: tuple) -> list[tu
             if name == target:
                 found.append(chain)
             else:
-                found.extend(_import_chains(role_dir, target, name, chain))
+                found.extend(_import_chains(role_dir, target, name, chain, importers))
         elif "block" in task:
-            found.extend(_imports_in(task["block"] or [], role_dir, target, chain))
+            found.extend(
+                _imports_in(task["block"] or [], role_dir, target, chain, importers)
+            )
     return found
 
 
