@@ -27,6 +27,9 @@ import yaml
 from lib import yaml_fast
 from lib.git import git
 
+# PyYAML's constructor raises a bare ValueError for a timestamp-shaped scalar (`2026-13-45`).
+YAML_PARSE_ERRORS = (yaml.YAMLError, ValueError)
+
 
 class CannotNarrow(Exception):
     """This change reaches something no narrow tag list covers.

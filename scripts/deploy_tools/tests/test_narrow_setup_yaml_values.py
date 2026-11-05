@@ -124,3 +124,8 @@ def test_the_reachability_walk_refuses_a_task_file_holding_no_real_date(tmp_path
     index = RoleIndex("demo", "HEAD", str(tree.root))
     index.task_text["tasks/alpha.yml"] = NOT_A_DATE
     _assert_refuses(index._reachable_from, "tasks/alpha.yml")
+
+
+def test_runs_the_same_reads_a_recursive_alias_as_not_the_same():
+    recursive = "- command: x\n  vars: &v {a: *v}\n"
+    assert runs_the_same(recursive, recursive) is False

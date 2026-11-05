@@ -25,11 +25,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 import posixpath
 import re
 
-import yaml
 
 from lib import yaml_fast
 from lib.git import git
-from lib.narrow_git import CannotNarrow, mapping_at, show_at
+from lib.narrow_git import YAML_PARSE_ERRORS, CannotNarrow, mapping_at, show_at
 from deploy_tools.narrow_lib.setup_playbook import (
     declared_tags,
     play_role_includes,
@@ -79,7 +78,7 @@ def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> s
                 continue
             try:
                 doc = yaml_fast.safe_load(text)
-            except yaml.YAMLError as exc:
+            except YAML_PARSE_ERRORS as exc:
                 raise CannotNarrow(f"{path} does not parse: {exc}") from exc
             # A mapping here is unreadable, not empty: `declared_tags` walks a list, so a
             # file of some other shape contributes no tags and a collision it alone declares
@@ -250,7 +249,7 @@ class RoleIndex:
         """The facts one task file derives, read off its parsed tasks."""
         try:
             doc = yaml_fast.safe_load(self.task_text[rel])
-        except yaml.YAMLError as exc:
+        except YAML_PARSE_ERRORS as exc:
             raise CannotNarrow(f"{rel} does not parse: {exc}") from exc
         return frozenset(_set_facts(doc if isinstance(doc, list) else []))
 
@@ -280,7 +279,7 @@ class RoleIndex:
             seen.add(rel)
             try:
                 doc = yaml_fast.safe_load(self.task_text[rel])
-            except yaml.YAMLError as exc:
+            except YAML_PARSE_ERRORS as exc:
                 raise CannotNarrow(f"{rel} does not parse: {exc}") from exc
             for name in _static_imports(doc if isinstance(doc, list) else []):
                 todo.append(posixpath.normpath(f"tasks/{name}"))

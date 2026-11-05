@@ -16,10 +16,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 import difflib
 import json
 
-import yaml
 
 from lib import yaml_fast
-from lib.narrow_git import CannotNarrow
+from lib.narrow_git import YAML_PARSE_ERRORS, CannotNarrow, same_value
 
 # Ansible's two tags that do not select a subset. `--tags never` selects exactly the tasks
 # opted out of every ordinary run, and `--tags always` selects the tasks that run whatever is
@@ -197,7 +196,7 @@ def file_tags(text: str) -> frozenset[str] | None:
     """
     try:
         doc = yaml_fast.safe_load(text)
-    except yaml.YAMLError as exc:
+    except YAML_PARSE_ERRORS as exc:
         raise CannotNarrow(f"a task file does not parse: {exc}") from exc
     if not isinstance(doc, list):
         raise CannotNarrow("a task file is not a list of tasks")
@@ -230,13 +229,17 @@ def runs_the_same(before: str, after: str) -> bool:
     reaches no host. Any other task's `name:` still counts, because this repo matches task
     names elsewhere (`stale-checkout-guard.yml`'s rows name the tasks they guard).
 
-    A text that does not parse is never the same, so the caller's own parse refuses it.
+    `same_value` decides, so `retries: 1` and `retries: true` differ, and so does a reordered
+    mapping, whose answer widens to the file's tags rather than running nothing.
+
+    A text that does not parse is never the same, so the caller's own parse refuses it. Nor is
+    one holding a recursive alias, which neither the name walk nor `same_value` can finish.
     """
     try:
         old, new = yaml_fast.safe_load(before), yaml_fast.safe_load(after)
-    except yaml.YAMLError:
+        return same_value(_without_import_names(old), _without_import_names(new))
+    except (*YAML_PARSE_ERRORS, RecursionError):
         return False
-    return _without_import_names(old) == _without_import_names(new)
 
 
 # The spellings of `include_vars`. Like a `set_fact`, the variables it loads outlive the task
@@ -294,7 +297,7 @@ def changed_task_tags(
     """
     try:
         old, new = yaml_fast.safe_load(before), yaml_fast.safe_load(after)
-    except yaml.YAMLError:
+    except YAML_PARSE_ERRORS:
         return None
     if not isinstance(old, list) or not isinstance(new, list):
         return None
