@@ -191,8 +191,9 @@ loki.source.file "authlog" {
 // 26 distinct tags on daniel-server and 64 on daniel-box, so the label stays low-cardinality.
 //
 // THE LINE IS NOT REWRITTEN. stage.regex only fills the extracted map and stage.labels only
-// promotes a key to a label; there is no stage.output or stage.replace here. probe.py's
-// SYSLOG_ALERT_LOGQL parses the raw rsyslog line, so a stage that changed it would blind it.
+// promotes a key to a label; there is no stage.output or stage.replace here. The line filters in
+// files/rules/homelab-logs.yaml and the `event=deploy` and `event=landing` logfmt queries read the
+// raw rsyslog line, so a stage that changed it could blind them.
 // A line the expression does not match passes unlabelled.
 loki.process "host" {
   forward_to = [loki.write.homelab.receiver]
