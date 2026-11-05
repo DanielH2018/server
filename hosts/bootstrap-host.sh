@@ -14,10 +14,11 @@
 #   2  install the keyring once it carries the pinned key and nothing else, then homelab.sources
 #      (--local-build installs the keyring only, because no repository is running yet)
 #   3  create /etc/homelab/age.key when missing, and print its public key
-#   4  the one-time host steps: the Pi's debloat purge; on a cluster node, the k3s binary
+#   4  the one-time host steps: the Pi's debloat purge, its rsyslog and wpa_supplicant masks and
+#      the removal of rsyslog's text logs; on a cluster node, the k3s binary
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them)
-#   6  the Pi only: start homelab-docker-engine.service once
+#   6  the Pi only: stop and disable systemd-resolved, then start homelab-docker-engine.service once
 #   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
 #      the mask on the aide package's dailyaidecheck.timer. A missing database on a host whose
 #      logs show it had one is refused; --rebaseline writes a new one after the operator looks.
@@ -317,6 +318,24 @@ if [ "$host" = daniel-pi ]; then
             systemctl reset-failed "$unit"
         fi
     done
+    # A mask leaves the unit's Alias= and WantedBy= links in place, so the disable comes first.
+    # The mask comes before the stop, so syslog.socket cannot start rsyslog again.
+    for unit in rsyslog.service wpa_supplicant.service; do
+        if [ "$(systemctl is-enabled "$unit" 2> /dev/null)" = enabled ]; then
+            systemctl disable "$unit" || die "cannot disable $unit"
+        fi
+        if [ "$(systemctl is-enabled "$unit" 2> /dev/null)" != masked ]; then
+            systemctl mask "$unit" || die "cannot mask $unit"
+            echo "bootstrap-host: masked $unit"
+        fi
+        if systemctl is-active --quiet "$unit"; then
+            systemctl stop "$unit" || die "cannot stop $unit"
+        fi
+    done
+    # rsyslog ran from first boot, and log2ram would copy these into its RAM-backed /var/log.
+    rm -f "$ROOT"/var/log/syslog* "$ROOT"/var/log/kern.log* "$ROOT"/var/log/auth.log* \
+        "$ROOT"/var/log/daemon.log* "$ROOT"/var/log/user.log* "$ROOT"/var/log/messages* \
+        "$ROOT"/var/log/debug*
 fi
 
 if [ -n "$k3s_mode" ]; then
@@ -476,6 +495,17 @@ stop_after 5
 
 # Step 6: the Pi only. The package ships the engine unit as a manual one, so nothing else starts it.
 if [ "$host" = daniel-pi ]; then
+    # Never before step 5: its apt-get reaches Ubuntu's archive by name, through the stub resolver
+    # that /etc/resolv.conf links to until the package replaces the link with a regular file.
+    [ ! -L "$ROOT/etc/resolv.conf" ] ||
+        die "/etc/resolv.conf is still a symlink after the install, so stopping systemd-resolved would leave this host without DNS"
+    if [ "$(systemctl is-enabled systemd-resolved.service 2> /dev/null)" = enabled ]; then
+        systemctl disable systemd-resolved.service || die "cannot disable systemd-resolved.service"
+        echo "bootstrap-host: disabled systemd-resolved.service"
+    fi
+    if systemctl is-active --quiet systemd-resolved.service; then
+        systemctl stop systemd-resolved.service || die "cannot stop systemd-resolved.service"
+    fi
     if systemctl cat homelab-docker-engine.service > /dev/null 2>&1; then
         systemctl start homelab-docker-engine.service ||
             die "homelab-docker-engine.service failed to start"
@@ -543,5 +573,7 @@ if [ -e "$ROOT$UNIT_DIR/homelab-aide-check.timer" ]; then
         # -y overwrites an aide.db.new that an interrupted run left behind.
         aideinit -y || die "aideinit failed"
         baseline_written aide-baseline
+        # The report is dead RAM under log2ram. aideinit.log stays: first_baseline reads it.
+        rm -f "$ROOT/var/log/aide/aide.log"
     fi
 fi
