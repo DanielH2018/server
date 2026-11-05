@@ -414,7 +414,7 @@ def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_
 
 
 def test_known_deferred_bootstraps_are_satisfied():
-    """Pin the four files repo CLAUDE.md calls out as deferred-import shapes, so a future
+    """Pin four files with deferred-import shapes, so a future
     change to the evaluator that regresses them fails here specifically, not just in the
     aggregate test above."""
     missing, unresolvable = find_bootstrap_gaps()
