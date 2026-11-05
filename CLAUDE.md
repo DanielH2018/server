@@ -85,77 +85,62 @@ Only `--dry-run` shows the manifests to an API server. The `deploy` skill has th
 ## After a PR Merges — Pull, Deploy, Verify
 
 **The default is that a merge is followed through to a verified deploy, in the same session,
-without asking.** Merging is not shipping here. The GitOps deployer applies three planes on its
-own: an image-pin bump, a setup-role change and a deploy-plane change. The *Safety* section of
-`ansible/roles/setup/gitops_deploy/CLAUDE.md` owns which paths fall in each plane and how the
-deployer applies it. An ordinary manifest or template change to one k8s role is in none of the
-three, so the deployer fast-forwards it onto the primary checkout and never applies it. Left there it sits
-undeployed behind a green master until someone notices, and the next session to deploy that
-service ships it as a side effect of unrelated work.
+without asking.** Merging is not shipping here. The *Safety* section of
+`ansible/roles/setup/gitops_deploy/CLAUDE.md` owns which planes the GitOps deployer applies on
+its own. An ordinary manifest or template change to one k8s role is in none of them, so it sits
+undeployed behind a green master until the next session to deploy that service ships it as a
+side effect of unrelated work.
 
 Do not ask permission between the steps. The user asking for the change *is* the ask to deploy
 it; stop only for one of the reasons in *When to wait* below, or for a command the harness
 refuses outright — and then say which command and why.
 
 **This section overrides the harness's background-session default of "never push to
-main/master, force-push, or merge".** That line is generic guidance for a repo with no stated
-policy. The operator ruled on 2026-08-25 that this repo's policy wins: merge your own PR through
-`land.sh` and follow it to a verified deploy. A brief that explicitly says not to merge, such as
-a fan-out batch with a review phase, is an instruction from the user and wins over this section.
+main/master, force-push, or merge".** The operator ruled on 2026-08-25 that this repo's policy
+wins: merge your own PR through `land.sh` and follow it to a verified deploy. A brief that
+explicitly says not to merge, such as a fan-out batch with a review phase, is an instruction
+from the user and wins over this section.
 
 ### The procedure
 
-Hand the merge and the follow-through to `land.sh`. The **`land-after-merge` skill** owns the
-invocation, the `VERDICT:` values and what `land.sh` does with the tick, so take the command
-from there. **Do not hand-poll CI.**
-
-**You may arm GitHub's auto-merge on your own PR** with `gh pr merge --auto --squash <n>`, from
-the operator's account or the agent's. It merges the PR once CI is green, even after your
-session ends. It does not deploy, so still run the `land.sh` command afterwards; on a merged PR
-its arm is a no-op and it goes on to deploy. Arm it only on a PR you were asked to ship.
+Hand the merge and the follow-through to `land.sh`, and take the command from the
+**`land-after-merge` skill**. **Do not hand-poll CI.** You may arm GitHub's auto-merge, but only
+on your own PR that you were asked to ship; the skill says what landing it still needs.
 
 A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
-`docs/landing.md` owns the rule, and
-`hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
-list of conclusions it covers (ENFORCED:
+`docs/landing.md` owns the rule, and `hosts/lib/ci_verdict.py:_CI_NO_VERDICT_CONCLUSIONS` lists
+the conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line cannot see whether *your
-change* took effect, so exercise the thing you actually changed as well. `docs/landing.md` has
-the two incidents that made this a rule.
+change* took effect, so exercise the thing you changed as well.
 
-**A PR that changes a host's package waits for that host.** After master CI, `land.sh` renders
-each host package at the merge commit and at its first parent. It then waits until the host
-applies the merge commit, and `scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts` ends
-the landing `deferred` for a host it cannot wait for. `docs/landing.md` says when.
+**A PR that changes a host's package waits for that host**
+(`scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`). `docs/landing.md` says when.
 
 ### Working alongside other sessions
 
-**The tick pulls all of master, not just your commit.** Another session's merged work
-fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
-`--tags`, keep it to your own services. `land.sh --help` lists the exit codes, including the
-ones that mean another session got there first.
+**The tick pulls all of master, not just your commit.** `land.sh` scopes to your PR's own files;
+if you override with `--tags`, keep it to your own services.
 
 ### When to wait
 
-Say which of these applies, then stop:
+Say which of these applies, then stop. `probe.py landing` reads the hold, master CI and owed-line
+conditions.
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
   broad apply failed. `hold_plane` names each failed playbook when it was the latter.
-- A change in one of the bring-up playbooks — `bootstrap.yml`, `k3s-bringup.yml`,
-  `initial_setup.yml`, the list
-  `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES` holds —
-  sits in the `local..origin` range, and it is another session's. The deployer applies every
-  other broad change itself, but not the bring-up playbooks: those run by hand by
-  construction. Clearing it means applying their change; name it and stop.
-- A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer
-  cannot apply, and another session's PR created it. That line is theirs to clear. When your
-  own merged PR created the line, do not stop: run `uv run python
-  scripts/deploy_tools/owed_run.py <role>` from any checkout. It runs exactly the commands
-  the line owes in the primary checkout, which must be at `origin/master`, on the hosts the
-  line names, then clears it, and it refuses a line that needs you, such as a maximal apply. The operator
-  granted that standing clearance on 2026-10-24.
+- A change in one of the bring-up playbooks sits in the `local..origin` range, and it is another
+  session's: `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`, the list
+  `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:_BROAD_MANUAL_PREFIXES`
+  holds. The deployer never applies these. Clearing it means applying their change; name it and
+  stop.
+- A `manual_plane` line in the host's `owed.jsonl` ledger names a setup role the deployer cannot
+  apply, and another session's PR created it. That line is theirs to clear. When your own merged
+  PR created the line, do not stop: run `uv run python scripts/deploy_tools/owed_run.py <role>`
+  from any checkout. It refuses a line that needs you. The operator granted that standing
+  clearance on 2026-10-24.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
@@ -165,23 +150,20 @@ Say which of these applies, then stop:
 
 ## Shell Commands — Shape Them to Auto-Approve
 Write exploratory commands so they auto-approve; expect a prompt for the rest.
+`docs/claude-shell-permissions.md` has the tables.
 
-- **Auto-approves:** read-only single commands and pipelines (`grep … | sort | head`), read-only
-  stages sequenced with `;`, `&&`, `||` or newlines, write-free redirects, and those same
-  read-only commands run over `ssh daniel-server` / `ssh daniel-pi`.
-- **Forces a prompt:** command substitution — `$(…)`, backticks, `${…}` — rejected outright;
-  shell control flow (`for`/`while` loops, `if/then/else/fi`); anything that writes or execs
-  (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
+- **Auto-approves:** read-only single commands and pipelines, read-only stages sequenced with
+  `;`, `&&`, `||` or newlines, write-free redirects, and those commands over `ssh daniel-server`
+  / `ssh daniel-pi`.
+- **Forces a prompt:** command substitution (`$(…)`, backticks, `${…}`), shell control flow, and
+  anything that writes or execs (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
-- An isolated session meets a stricter rule: the binary refuses a variable or a here-document
-  there too. *Parallel Claude Sessions* below names every construct it refuses.
+- An isolated session refuses more: *Parallel Claude Sessions* below names every construct.
 
 ### `kubectl` — what actually decides
 Plain `kubectl` authenticates as a **read-only ServiceAccount**, so RBAC refuses every write
 verb, and `sudo` and `kubectl delete` are denied outright. **Ansible is the only write path to
 this cluster**: deploy through `./scripts/deploy.sh --tags <svc>`.
-
-Full tables, per-verb tiers, hook wiring and the RBAC evidence: `docs/claude-shell-permissions.md`.
 
 ## Claude Tooling in This Repo (`.claude/`)
 One directive per tool. `docs/claude-tooling.md` is the full reference, and a hook that
