@@ -150,14 +150,14 @@ def template_loader(path: Path) -> tuple[Path, str]:
 CALLER_CONTEXT: dict[str, dict] = {
     "check-timer.service.j2": {
         "check_timer_name": "example",
-        "check_timer_description": "Example Kuma check",
+        "check_timer_description": "Example check",
         "check_timer_exec": "/usr/local/bin/example.sh",
         "check_timer_user": "root",
         "check_timer_restart_sec": "15min",
     },
     "check-timer.timer.j2": {
         "check_timer_name": "example",
-        "check_timer_description": "Example Kuma check",
+        "check_timer_description": "Example check",
         "check_timer_on_calendar": "*-*-* *:23:00",
     },
     # `tasks/alert_unit.yml`. A STUB env dir renders a relative EnvironmentFile= path.

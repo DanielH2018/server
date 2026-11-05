@@ -23,7 +23,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   everything; `homelab-mcp-probe` is LAN-only, matches the single exact `Path(`/health`)`, and
   requires no token — `_BearerAuth` in `files/app.py` exempts that path, and it returns the bare
   string `ok`. It exists so the `blackbox-extra` job's `http_body_ok` probe of
-  `mcp.local/health` can prove the edge ROUTES, matching the body: a Kuma tile once probed `/mcp`
+  `mcp.local/health` can prove the edge ROUTES, matching the body: a probe once tested `/mcp`
   with no bearer and accepted the 404 that matches no router, which is byte-identical to what a
   router-less edge returns for every host, so it read green through the 3.5-hour outage of #1322
   (#1341). Changing that router to a PathPrefix would open more than `/health`; a test asserts it

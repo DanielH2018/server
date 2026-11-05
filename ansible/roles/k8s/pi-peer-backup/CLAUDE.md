@@ -67,8 +67,7 @@ replaced the retired Kopia scope for the Pi.
   ConfigMap below, and the `pods` rules page it. The job also pings an off-premises
   Healthchecks.io check (`HC_PING_URL`, slug `pi-peer-backup`) when one is configured, because a
   cluster outage silences the CronJob and every rule that reads it. See
-  `docs/healthchecks-io-deadman.md`. The Kuma push monitor went at M6 batch B7's Cutover-1a and
-  the push at Cutover-2. The script still writes its verdict to stdout in the host crons'
+  `docs/healthchecks-io-deadman.md`. The script writes its verdict to stdout in the host crons'
   syslog shape (`<ts> <pod> pi-peer-backup: status=… `), and
   `probe.py loki-query '{container="pi-peer-backup"}'` reads it. **What the verdict means:** "the nightly 23:00 run happened," not "some
   run happened recently." The gate run below skips the ping and the export, so a routine

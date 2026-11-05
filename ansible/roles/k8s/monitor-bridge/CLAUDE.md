@@ -2,8 +2,7 @@
 
 A stdlib-only Python loop (`files/cli.py`) that runs every registered check each `INTERVAL`
 (300 s) and serves each verdict as a `homelab_check_success` gauge, so a threshold breach pages
-through the `bridge-exporter.yaml` rules in observability. The bridge pushes nothing to Uptime
-Kuma since M6 batch A6's Cutover-2. The *At a glance* block below has why it carries neither a
+through the `bridge-exporter.yaml` rules in observability. The *At a glance* block below has why it carries neither a
 readiness probe nor auto-deploy.
 
 **`files/check_table.py`'s `CHECKS` declares every check once**: body and gate, from which the
@@ -107,8 +106,7 @@ job, so neither job sees the other's series.
   `check="<row>"`. `homelab_check_rows` counts the enabled rows of `CHECKS`, gate rows included.
   It is not `registry.build_checks`' length, which drops every gate row.
 - **The value is the verdict before suppression.** A row whose gate reads down exports 0 and
-  its body is not called. A body that raises exports 0. The exporter is the only output: the
-  push path to Uptime Kuma was deleted in M6 batch A6's Cutover-2.
+  its body is not called. A body that raises exports 0. The exporter is the only output.
 - **`--once`, `--dry-run` and `--check` serve nothing**, like the deploy-pipeline family.
 - **The `bridge-exporter.yaml` rules page on these series.** A row with no rule never pages,
   and `BridgeCheckStale` compares the exported row count against `homelab_check_rows`.

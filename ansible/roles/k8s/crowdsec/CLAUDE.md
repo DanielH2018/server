@@ -103,7 +103,7 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
   timeout, skips a slot whose previous run is still going, and prints `<UTC time> <pod>
   <tag>: status=<up|down> <summary>` to the container log, flushed per line. It exports the
   remote allowlist, AppSec verify and home allowlist verdicts as gauges on `/metrics` for the
-  `pod-producers` rules, and pushes nothing to Kuma since M6 batch B6b's Cutover-2.
+  `pod-producers` rules.
   Read the jobs with `probe.py loki-query '{container="crowdsec-jobs"}'`. The prefix is
   the host crons' syslog shape.
 - **Only the sidecar holds a Kubernetes token.** The pod does not automount one; a projected
@@ -119,8 +119,7 @@ the sidecar over a `pods/exec` grant on 2026-10-18 (#5655).
 - **The sidecar exports three verdicts on `/metrics`** (M6 B6b, ruled on
   2026-10-23). `jobs_metrics.py` serves `homelab_check_success`,
   `homelab_check_last_run_timestamp_seconds` and `homelab_check_deadline_seconds` per job tag,
-  on the port of the `crowdsec-jobs` item in this role's `metrics` list. The export replaced
-  the Kuma push at M6's Cutover-2. observability's `crowdsec-jobs` scrape job and
+  on the port of the `crowdsec-jobs` item in this role's `metrics` list. observability's `crowdsec-jobs` scrape job and
   the `pod-producers` rules read it, and netpol-baseline's Prometheus grant admits the
   port. autofix-bridge ships the same file in its own ConfigMap (M6 B7), so an edit to
   `jobs_metrics.py` changes two pods.

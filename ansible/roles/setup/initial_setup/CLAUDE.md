@@ -86,7 +86,7 @@ rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read
 **The five scripts of M6's batch B2 write a textfile and push to nothing.** They are
 docs-refresh, the eval sweep, the secret-rotation audit, the setup-drift check and the witness.
 Each calls `write_check_textfile` from `ansible/roles/setup/initial_setup/files/homelab-check-lib.sh`
-with a `DEADLINE_S` equal to the interval its retired Kuma tile kept, and the rules in
+with a `DEADLINE_S` sized to the check's schedule, and the rules in
 `ansible/roles/k8s/observability/files/rules/initial-setup-checks.yaml` read the files and page.
 B2's Cutover-2 removed the pushes and their credentials.
 ENFORCED: `ansible/tests/services/test_initial_setup_check_rule_literals.py` pins each rule's

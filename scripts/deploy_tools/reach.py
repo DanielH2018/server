@@ -24,7 +24,7 @@ to `hosts/lib/host_lib.py`, which `changes` mapped to configarr and janitorr
 (they install a copy) and `tags` mapped to nothing. A landing then deployed neither, and their
 copies stayed stale behind a green master, because the tick only defer-and-alerts a k8s role.
 `tags` reads the same table since #4136. The third was monitor-bridge's `check_table.py`,
-which `tags` maps to uptime-kuma (it `lookup()`s the file) and `changes` does not. That
+which `tags` maps to the role that `lookup()`s the file and `changes` does not. That
 direction stays: the tick defers a k8s change either way, and the landing deploying the reader
 is the wider answer.
 
@@ -149,10 +149,8 @@ class Reach(NamedTuple):
         """The deploy tags the loud paths map to, before any shared-role expansion.
 
         A changed path maps to its role's tag, and also to the tag of every role that
-        `lookup()`s it from another role's tree. uptime-kuma renders a tile per row of
-        monitor-bridge's `files/check_table.py`, so a new check landed as
-        `--tags monitor-bridge` alone would ship the check and leave its tile undeployed
-        (#3781).
+        `lookup()`s it from another role's tree. That role renders what it looks up, so a
+        landing that deployed only the owner would leave the reader's render stale (#3781).
 
         A changed setup-role file also maps to every k8s role that ships a copy of it. Those
         are `K8S_ROLES_IMPORTING_SETUP_FILES`, the table `changes` reads. The table is read

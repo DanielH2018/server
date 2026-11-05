@@ -5,7 +5,7 @@ precedence. Three things in the play differ from those files, and this module su
 
 - `containers_list` is the k8s play's view. `ansible/deploy.yml`'s pre_tasks filter the host's
   list with `filter_by_platform('k8s')` and sort it with `toposort_containers`, and templates
-  read that order (homepage tiles, Kuma monitors, scrape jobs).
+  read that order (homepage tiles, scrape jobs).
 - `hostvars` holds every inventory host. The rendered host's entry is the rendered context
   itself, so `hostvars[k8s_primary_node].containers_list` is the play's view. Every other host
   carries its `hosts.ini` inline variables and its own host_vars, resolved against that host's

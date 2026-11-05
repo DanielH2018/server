@@ -82,8 +82,7 @@ B4) and runs only when `ExecStart` succeeded, so a crash pages twice:
 `OnFailure=renovate-notify-alert.service`, and `RenovateNotifyNotReporting` once the file is
 older than its 36h deadline. **That verdict watches the notifier, not Renovate**, and greens
 whatever Discord did. The `+` prefix runs that one line outside the sandbox, because
-`ProtectSystem=strict` leaves the directory read-only. The Kuma beat that used to follow it went
-with the "Renovate Notifier — Alive" tile in B4's Cutover-1a.
+`ProtectSystem=strict` leaves the directory read-only.
 
 The unit is sandboxed (`ProtectSystem=strict` + `ProtectHome=read-only`), and one override is
 load-bearing: `UV_CACHE_DIR=/tmp/uv-cache`, without which the unit dies with exit 2 before

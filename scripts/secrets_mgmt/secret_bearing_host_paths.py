@@ -4,7 +4,7 @@
 WHY THIS EXISTS. `grep-on-a-script-prints-the-secret-it-embeds` records three occurrences, every
 one ending in a rotation. The leak is an *inspection*, not an execution: a `grep -nE
 "rotate|--commit|sops set|push"` on `/usr/local/bin/secret-rotation-audit.sh` matched the
-wrapper's own export of the Kuma push URL, token included, and printed the token into the
+wrapper's own export of a push URL, token included, and printed the token into the
 terminal and the transcript. M6 batch B2's Cutover-2 removed that line with the audit's push.
 
 WHY A DERIVATION RATHER THAN A LIST. `block-dangerous-bash.sh` guards reads by matching a fixed
@@ -18,8 +18,8 @@ from `ansible/secret_rotation.yml`. The registry is plaintext by design — name
 never values — so this needs no SOPS key and runs anywhere, the same reasoning
 `test_release_bin_groups_have_no_secrets.py` records for reading it.
 
-WHAT IT DOES NOT MEASURE. A script that SOURCES a token from a separate env file (the kuma-push
-pattern) holds no secret itself and is correctly absent; the env file it reads is already covered
+WHAT IT DOES NOT MEASURE. A script that SOURCES a token from a separate env file
+holds no secret itself and is correctly absent; the env file it reads is already covered
 by `block-dangerous-bash.sh`'s own `.env` arm. A secret reaching a host path by any route other
 than a src/dest task — a shell `lineinfile`, a Job writing at runtime — is invisible here. This
 narrows the class; it does not close it.

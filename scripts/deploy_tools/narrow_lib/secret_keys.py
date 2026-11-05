@@ -20,8 +20,8 @@ question of the whole tree, so the two answers cannot drift:
 
   - its skip list: `standalone_secret_keys.json` names about 150 keys and renders none, and
     a hit there would map to `manifests` and so to its 54 callers;
-  - its cross-role `lookup()` readers: uptime-kuma renders every bridge push token out of
-    monitor-bridge's `files/`, so a token rotated there reaches both tags.
+  - its cross-role `lookup()` readers: a role that looks up another role's `files/` renders
+    what they hold, so a token rotated there reaches both tags.
 
 The same keys reach the setup plane through `setup_reader_paths` (#5436), which the GitOps
 tick runs through `secret_setup_readers.py`: a key `setup/claude_code` reads applies that role

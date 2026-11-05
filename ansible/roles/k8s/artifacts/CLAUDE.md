@@ -90,8 +90,7 @@ Consequences worth knowing before debugging a missing artifact:
   a textfile. A peer at `claude_code_artifacts_sync_alert_after_failures` consecutive failures
   or more makes it `down`, and it stays `down` on every later run until the peer recovers.
   A shorter streak records `up` and names the streak in the report. The textfile's deadline
-  lapsing means the timer itself stopped. The script pushes nothing to Kuma since M6 batch
-  B6a's Cutover-2, so it holds no secret.
+  lapsing means the timer itself stopped. The script pushes nothing, so it holds no secret.
 - **There is deliberately no file-age staleness check.** rsync copies the peer's own mtimes, so
   the newest file's age measures how often sessions on the peer write artifacts, not whether
   the sync works. A successful `rsync --delete` leaves the mirror equal to the peer, so an `up`

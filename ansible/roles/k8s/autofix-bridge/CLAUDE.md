@@ -68,8 +68,8 @@ here must satisfy this summary.
    `CLIENT_ERROR_PATTERNS`, was retired 2026-09-18 (#1951) as inert at the pinned *arr
    versions, and **an *arr bump re-opens that**: re-run #1951's verify-by first.
 2. **Host plane** — the two fake-remux crons, doing work the locked-down container cannot
-   (host ffprobe on the media files), each writing a state file `fake-remux-health.sh` pushes
-   to Kuma. Both run as `sys_user`, never root.
+   (host ffprobe on the media files), each writing a state file `fake-remux-health.sh` reads into
+   a textfile for the `other-setup-checks` rules. Both run as `sys_user`, never root.
    - **The scan never deletes or re-searches**: it flags a file whose quality claims a Remux
      but whose video stream is a re-encode, and seeds the ledger. It ffprobes the file on the
      host, under `fake_remux_host_data_root`.
@@ -85,9 +85,6 @@ here must satisfy this summary.
 `CLIENT_ERROR_PATTERNS`, the tunables and the policy file's selection knobs.
 
 ## Notable
-- **No Kuma push** since M6 batch B7's Cutover-2. The Kuma tile that took the per-cycle
-  heartbeat went at Cutover-1a, and the push, its URL setting and the shared push module's
-  staging entry went at Cutover-2.
 - **The cycle's verdict is exported** (M6 batch B7). `files/autofix.py` serves
   `homelab_check_success`, `homelab_check_last_run_timestamp_seconds` and
   `homelab_check_deadline_seconds`, labelled `check="arr-autoblock"`, on

@@ -19,7 +19,7 @@ The gates, in the order the runbook gives them:
      operator stamps `/var/lib/homelab/etcd-token.sha256` at the moment the copy is taken, and
      the daily off-box cron reports DOWN when the live token stops matching it. The stamp is
      root-only by design, so this gate checks that it EXISTS; the match is the cron's verdict
-     and the Kuma tile is where to read it.
+     and `EtcdSnapshotOffboxFailed` is where to read it.
   3. The snapshot you named is one the cluster knows and calls restorable. k3s records every
      local and S3 snapshot as an `ETCDSnapshotFile`, whose `spec.snapshotName` is exactly what
      `--cluster-reset-restore-path` takes and whose `status.readyToUse` says whether it can be

@@ -616,7 +616,7 @@ def role_tags(
             #
             # DECIDED: a shipped file this role renders only through another role's task file
             # refuses here; it is not resolved through that task file's readers (#3322). The
-            # kuma-check templates reach gitops_deploy, render_records and k3s only through
+            # check-timer templates reach gitops_deploy, render_records and k3s only through
             # `common/tasks/check_timer.yml`, so a change to them falls back to the
             # whole-role tag. That costs a longer apply and never misses one. Those templates
             # changed twice in the repo's history, and each routing layer added from
