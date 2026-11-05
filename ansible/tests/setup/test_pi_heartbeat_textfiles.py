@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""The Pi's two heartbeats write a homelab_check_* textfile and push nothing (M6 B5).
+"""The Pi's verdict heartbeats write a homelab_check_* textfile and push nothing (M6 B5).
 
 docs/target-architecture/monitoring/m6-retire-kuma.md, batch B5: pi-sd-health and
 pi-recovery-health each write `<check>.prom` through homelab-check-lib.sh, so the rules in
 `pi-checks.yaml` page for the "Daniel Pi SD Health" and "Daniel Pi Recovery" tiles that Cutover-1a
-deleted. Cutover-2 dropped the Kuma pushes. Each case runs the rendered script through
+deleted. Cutover-2 dropped the Kuma pushes. pi-watchdog-health follows the same contract, and
+test_pi_watchdog_alert.py runs it. Each case here runs the rendered script through
 `_pi_health` against stubs, with the role's check library and `TEXTFILE_DIR` pointed at a temp
 directory.
 
@@ -30,7 +31,11 @@ RULES = K8S_ROLES / "observability" / "files" / "rules" / "pi-checks.yaml"
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 # Alert prefix -> the script, and the `check` label, whose textfile its rules read.
-PRODUCERS = {"PiSdHealth": "pi-sd-health", "PiRecovery": "pi-recovery-health"}
+PRODUCERS = {
+    "PiSdHealth": "pi-sd-health",
+    "PiRecovery": "pi-recovery-health",
+    "PiWatchdog": "pi-watchdog-health",
+}
 # Every container the recovery heartbeat watches, so a run with all of them up is a clean cycle.
 # Both of the Pi's lists, since the recovery heartbeat watches the union (H5.1), plus the
 # sub-proxy the docker-proxy compose file declares.
@@ -145,7 +150,7 @@ def deadlines(tmp_path_factory) -> dict[str, int]:
 
 def test_literal_problems_is_clean_on_the_shipped_rules(deadlines):
     rules = not_reporting_rules(RULES.read_text())
-    # Non-vacuity: both producers are found, and each has its rule.
+    # Non-vacuity: every producer is found, and each has its rule.
     assert set(deadlines) == set(rules) == set(PRODUCERS)
     assert literal_problems(rules, deadlines) == []
 

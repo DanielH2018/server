@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# Pi watchdog daemon heartbeat — shipped by homelab-daniel-pi (hosts/components/pi-heartbeats);
+# edits overwritten.
+#
+# Usage: pi-watchdog-health [-h|--help]
+# Takes no arguments. homelab-pi-watchdog-health.timer runs it every 5 minutes on daniel-pi,
+# through homelab-pi-watchdog-health.service. It reads watchdog.service's state from systemctl,
+# then writes pi-watchdog-health.prom to node_exporter's textfile directory and one line to
+# /var/log/pi-health/health.log. It never starts the daemon. To run it by hand, start the service.
+#
+# wd_keepalive holds /dev/watchdog while the daemon is down, so the board keeps its hardware
+# watchdog and nothing looks wrong. The `max-load-1 = 24` load test is off for that time, and only
+# the unit's state shows it.
+#
+# Prometheus reads the textfile (pi-checks.yaml). PiWatchdogFailed names a daemon that stays
+# stopped, and PiWatchdogNotReporting fires when the verdict goes stale.
+set -uo pipefail
+
+for arg in "$@"; do
+  case "$arg" in
+    -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+  esac
+done
+
+# shellcheck source=/dev/null
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t pi-watchdog-health "homelab-check-lib.sh missing — reinstall homelab-daniel-pi"
+  exit 1
+}
+
+# is-active exits non-zero for every state but active, so its stdout carries the state.
+STATE=$(systemctl is-active watchdog.service 2>/dev/null)
+if [ "$STATE" = "active" ]; then
+  STATUS=up;   MSG="watchdog.service is active"
+else
+  STATUS=down; MSG="watchdog.service is ${STATE:-unreadable}, so the max-load-1 load test is off — run: sudo systemctl start watchdog"
+fi
+
+# DEADLINE_S is 2 x the timer's 300s period + 300s, as M3 derives it; a test pins the rule's
+# literals to it. The directory is root:sys_user 2775, so this unit's user can write it.
+DEADLINE_S=900
+write_check_textfile pi-watchdog-health "$([ "$STATUS" = up ] && echo 1 || echo 0)" "$(date +%s)" "$DEADLINE_S" \
+  || logger -t pi-watchdog-health "textfile write failed (status=${STATUS})"
+
+# Durable record of this cycle in the shape pi-recovery-health.sh.j2 documents. The first down
+# line dates the stop, which the textfile's latest verdict cannot.
+HEALTH_LOG="/var/log/pi-health/health.log"
+mkdir -p "${HEALTH_LOG%/*}" 2>/dev/null || true
+printf '%s %s %s: %s\n' "$(date -Is)" "$(hostname)" pi-watchdog-health "status=${STATUS} ${MSG}" >>"$HEALTH_LOG"

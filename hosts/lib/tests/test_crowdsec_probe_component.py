@@ -21,11 +21,17 @@ from renderer.renderer_lib import host as host_mode
 COMPONENT = REPO / "hosts" / "components" / "crowdsec-probe" / "component.yml"
 UNITS = "/usr/lib/systemd/system"
 SCRIPT = "/usr/lib/homelab/crowdsec-edge-probe"
-# Every unit that declares LogsDirectory=pi-health in the Pi package: the three heartbeats of
-# pi-heartbeats and this component's probe. The census must find all four.
+# Every unit that declares LogsDirectory=pi-health in the Pi package: the four heartbeats of
+# pi-heartbeats and this component's probe. The census must find all five.
 LOGS_DIRECTORY_UNITS = frozenset(
     f"homelab-{name}.service"
-    for name in ("pi-sd-health", "pi-gz-integrity", "pi-recovery", "crowdsec-probe")
+    for name in (
+        "pi-sd-health",
+        "pi-gz-integrity",
+        "pi-recovery",
+        "pi-watchdog-health",
+        "crowdsec-probe",
+    )
 )
 CONTRACT_PARTS = (
     "Autonomous-role contract",

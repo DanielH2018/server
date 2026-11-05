@@ -3,7 +3,8 @@
 `test_alertmanager_routing.py` is at its line cap, so the `pi-checks.yaml` share of its `PAGING`
 outcome lives here, on the same walk of the rendered routing tree. The SD-health pair is critical,
 so it mails as well as posts. The container-recovery pair is a warning, so it posts to Discord
-alone, as the "Daniel Pi Recovery" tile did. A rule that regains `shadow` walks to the blackhole.
+alone, as the "Daniel Pi Recovery" tile did, and so does the watchdog daemon pair. A rule that
+regains `shadow` walks to the blackhole.
 
 Run: uv run pytest ansible/tests/services/test_alertmanager_routing_b5_pi.py
 """
@@ -27,6 +28,8 @@ EXPECTED = {
     "PiSdHealthNotReporting": ["discord", "email"],
     "PiRecoveryFailed": ["discord"],
     "PiRecoveryNotReporting": ["discord"],
+    "PiWatchdogFailed": ["discord"],
+    "PiWatchdogNotReporting": ["discord"],
 }
 
 
@@ -42,7 +45,7 @@ def pi_sets() -> dict[str, dict[str, str]]:
     }
 
 
-def test_the_four_pi_rules_are_the_ones_this_module_expects():
+def test_the_pi_rules_are_the_ones_this_module_expects():
     # Non-vacuity by name: a rule file that lost a rule, or gained one with no expected outcome,
     # fails here instead of walking past the parametrized test below.
     assert set(pi_sets()) == set(EXPECTED)
