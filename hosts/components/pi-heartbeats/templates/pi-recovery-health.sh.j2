@@ -35,11 +35,11 @@ source /usr/lib/homelab/homelab-check-lib.sh || {
   exit 1
 }
 
-{# The watch set is DERIVED, not listed: every entry this host deploys in either of the Pi's two
-    lists (containers_list, which Ansible's Docker play deploys, and compose_services, which the
-    package deploys; a service sits in exactly one), sorted by name, so a move between the
-    lists leaves the script unchanged. Neither key has a default, so a missing one fails the
-    render. The set also holds the sub-proxies the docker-proxy service file
+{# The watch set is DERIVED, not listed: every entry in the Pi's two lists, sorted by name. The
+    package deploys compose_services. containers_list is empty, because
+    scripts/validate/compose_templates.py:undeployed_docker_entries refuses a non-k8s entry.
+    Neither key has a default, so a missing one fails the render. The set also holds the
+    sub-proxies the docker-proxy service file
     (hosts/components/pi-compose/services/docker-proxy) declares beside its list entry
     (docker-proxy-lifecycle always; docker-proxy-codeserver only under has_code_server, the
     same gate the compose template uses). A blanket `docker ps -a --filter status=exited`
