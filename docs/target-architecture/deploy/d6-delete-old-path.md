@@ -2248,8 +2248,7 @@ The steps merged in this order.
       test fails (*D2's ownership readers after D6*).
     - Rewrite the prose that names those symbols: `deploy_cross_role.py`'s module docstring,
       `reach.py`'s docstrings, and the sentence in `ansible/roles/setup/common/CLAUDE.md`
-      that names `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`, with `fact_status.py
-      verify` for its section if the lock records it.
+      that names `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES`.
     - `ansible/tests/setup/test_setup_cross_role_files.py` loses its k8s table.
     - **Test.** In `scripts/deploy_tools/tests/`, a PR whose only path is under
       `ansible/roles/k8s/bento-pdf/templates/` reaches `land-wait` with `bento-pdf` after
