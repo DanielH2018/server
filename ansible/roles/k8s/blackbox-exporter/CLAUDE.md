@@ -1,7 +1,7 @@
 # blackbox-exporter — HTTP probes of the ingress names, for Prometheus to scrape
 
 `prom/blackbox-exporter` on `:9115`, in the `homelab` namespace. It probes a URL when
-Prometheus asks it to on `/probe`. M4's PR 4 (#5625) added it, and `docs/target-architecture/monitoring/m4-blackbox-ingress.md` is the plan. Prometheus
+Prometheus asks it to on `/probe`. `docs/target-architecture/monitoring/m4-blackbox-ingress.md` is the plan. Prometheus
 scrapes it through observability's `blackbox-ingress` job, one target per routed entry, and the
 `ingress-probes` rule group alerts on the result. See repo-root `CLAUDE.md` for shared
 conventions.
