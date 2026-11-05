@@ -6,8 +6,7 @@
 # minute 23 of every hour, and again every 15 minutes while the last run failed. daniel-server's
 # witness stays an Ansible-era timer until that host moves. Each run writes its verdict to
 # $TEXTFILE_DIR/loki-read-route-health.prom for node_exporter's textfile collector (default
-# /var/lib/node-exporter-textfile; a test points it elsewhere). M6 batch B2's Cutover-2 removed
-# its Kuma push.
+# /var/lib/node-exporter-textfile; a test points it elsewhere).
 #
 # WHAT THIS WATCHES (issue #1712). loki-homelab's IngressRoute has exactly one caller —
 # `probe.py loki-query` / `loki-labels`, running as a host process — and nothing watched it. It

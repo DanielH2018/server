@@ -75,11 +75,8 @@ def test_the_package_retires_the_ansible_era_timer_cron_and_files(package):
         if "oki" in str(e)
     }
     assert kept >= {
-        "kuma-check-loki-read-route.timer",
-        "kuma-check-loki-read-route-boot.service",
         "Loki read-route witness",
         "/usr/local/bin/loki-read-route-health.sh",
-        "/etc/homelab/loki-route-kuma-push.env",
     }
 
 

@@ -27,8 +27,8 @@
 #   reconcile stops the timer on the install that drops it. The host's verdict then goes stale
 #   and UpsSecondaryNotReporting fires once its 1500 s deadline passes, which is the intended
 #   signal.
-# - The unit loads no credential since M6 batch B4's Cutover-2 dropped its Kuma push. It keeps
-#   its homelab-secrets.service ordering, because it reads the upsmon.conf output that unit renders.
+# - The unit loads no credential. It keeps its homelab-secrets.service ordering, because it
+#   reads the upsmon.conf output that unit renders.
 role: nut_host
 defaults:
   nut_host_watchdog_packaged: true
@@ -66,6 +66,5 @@ enable:
 legacy:
   - {cron_file: ups-secondary-health}
   - {path: /usr/local/bin/ups-secondary-health.sh}
-  - {path: /etc/nut/kuma-push.env}
   - {path: /etc/udev/rules.d/99-nut-apc.rules}
   - {path: /var/lib/homelab/setup-render-manifest.d/nut-host}

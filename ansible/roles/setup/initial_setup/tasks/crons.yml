@@ -4,18 +4,6 @@
 # (secret rotation, docs refresh, infra map, eval sweep, git repair) are host-package components
 # since H7.36.
 
-- name: Remove the retired Kuma push library and its drift fragment
-  # `always`, because this runs on every host and `--tags optimize_pi` is the Pi's only hand run.
-  # setup-drift-lib.sh reports a fragment whose source left the repo as drift until it goes.
-  tags: [always]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  become: true
-  loop:
-    - /usr/local/lib/kuma-push-lib.sh
-    - /var/lib/homelab/setup-deployed-manifest.d/kuma-push-lib
-
 - name: Deploy the shared host-check library
   # DECIDED: `always`, not `crons` — this is a dependency of tasks in OTHER roles under other
   # tags, so any tag that selects a consumer must also select this. Consumers source it with a
@@ -31,7 +19,7 @@
   become: true
 
 - name: Deploy the shared setup-plane drift arms
-  # `always` for the same reason as the push helper above: it is sourced by scripts rendered
+  # `always` for the same reason as the host-check library above: it is sourced by scripts rendered
   # under other roles' tags (manifest-prune-check.sh under the k3s role's, setup-drift-check.sh
   # under this one's), so any tag selecting a consumer must also select this. Both consumers
   # source it with a `|| exit 1` guard, so a host that misses it fails its cron loudly and drops

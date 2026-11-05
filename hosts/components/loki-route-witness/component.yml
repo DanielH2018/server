@@ -6,10 +6,9 @@
 # one side writes each path.
 #
 # The unit writes loki-read-route-health.prom and exits 1 after a `down` verdict, so
-# Restart=on-failure reruns it every 15 minutes until the route answers (the kuma-check form M6
-# left). homelab-loki-route-witness-boot.service reruns it once at boot while the last verdict
-# was not up (#4495). It pushed "Loki Read Route (daniel-box)" until M6 batch B2's Cutover-2, and
-# it loads no credential.
+# Restart=on-failure reruns it every 15 minutes until the route answers.
+# homelab-loki-route-witness-boot.service reruns it once at boot while the last verdict was not
+# up (#4495). It loads no credential.
 #
 # Autonomous-role contract (the witness reports a verdict every hour with no human in the loop).
 # It changes no state: it reads the route and reports.
@@ -51,13 +50,8 @@ enable:
 # carry the names the role's stamp tasks give them, which differ: the render stamp is
 # `loki-route-witness` and the deployed stamp is `loki-route-health` (#6279).
 legacy:
-  - {unit: kuma-check-loki-read-route.timer}
-  - {unit: kuma-check-loki-read-route.service}
-  - {unit: kuma-check-loki-read-route-boot.service}
   - {cron: "Loki read-route witness", user: "{{ sys_user }}"}
   - {path: /usr/local/bin/loki-read-route-health.sh}
-  - {path: /etc/homelab/loki-route-kuma-push.env}
   - {path: /opt/loki-route-health/loki_route_health.py}
-  - {path: /var/lib/kuma-check/loki-read-route.down}
   - {path: /var/lib/homelab/setup-render-manifest.d/loki-route-witness}
   - {path: /var/lib/homelab/setup-deployed-manifest.d/loki-route-health}

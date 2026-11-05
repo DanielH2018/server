@@ -262,16 +262,12 @@ template carries why it is a host timer at all.
   `hosts/components/claude-code/tmpfiles.d/homelab-artifacts.conf.j2` declares the local tree,
   each peer directory, the star list directory and the textfile directory, and the sync's
   `ExecStartPre=+` runs `systemd-tmpfiles --create` on it.
-- **Neither timer pushes to Kuma, and neither unit loads a credential** (M6 batch B6a's
-  Cutover-2). Each run logs a `status=<up|down>` line under its own syslog tag and writes a check
+- **Each run writes a check file, and neither unit loads a credential.** Each run logs a `status=<up|down>` line under its own syslog tag and writes a check
   file to `/var/lib/node-exporter-textfile/`, `sync-artifacts.prom` or `claude-otel-health.prom`,
   through `write_check_textfile` in `homelab-check-lib.sh`. The `ArtifactsSync*` and `OtlpDoor*`
   rules in observability's `host-checks.yaml` page from those files. Each script renders its
   deadline from its own minute default, so that default must stay `*/N`, and
   `ansible/tests/services/test_b6a_rule_literals.py` pins the rules to it.
-  ENFORCED: `hosts/lib/tests/test_claude_artifacts_node_timers.py::test_neither_producer_pushes_to_kuma`
-  holds both shipped scripts to no Kuma library, `kuma_push` or push URL. B6a's token PR retired
-  their two push tokens.
 
 ## Autonomous-role contract (`sync-artifacts`, a mirror of another host's tree)
 

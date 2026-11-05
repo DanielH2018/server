@@ -12,7 +12,7 @@
 # The request is validated STRUCTURALLY rather than against a pinned argv: the short-option
 # blob (`-logDtpre.iLsfxCIvu` on 2026-09-17) is negotiated between the two rsync versions and
 # moves when the alpine base image bumps, so a literal `command=` would break the nightly as a
-# Kuma DOWN 2.5 days after the next Renovate merge. What is fixed: the verb must be a sender
+# PiPeerBackupFailed page after the next Renovate merge. What is fixed: the verb must be a sender
 # (a receiver would write to the Pi), the only long option allowed is `--timeout=N`
 # (`--remove-source-files`, `--files-from`, `--log-file` and friends are long options), and the
 # source directory is FORCED from this script's argument rather than taken from the client, so

@@ -101,7 +101,7 @@ FAILURE_LOGS_KEPT=5
 # DEFAULTS TO down. Every exit path that is genuinely fine says so explicitly; anything else --
 # a crash, a `set -u` abort, or a path added later that forgets to -- reports down. Failing
 # closed is the whole point: this exists because a real failure read green for hours. The PUSH_
-# prefix on these two names dates from the Kuma push that M6 batch B2's Cutover-2 removed.
+# prefix on these two names is historical: nothing is pushed.
 PUSH_STATUS=down
 PUSH_MSG="docs-refresh exited without setting a status"
 # The longest legitimate gap between two textfile writes. The cron runs at 06:17 and 18:17, so

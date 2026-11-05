@@ -50,10 +50,3 @@
   become: true
   loop: [host_lib.py]
   notify: "{{ host_lib_notify | default([]) }}"
-
-# After the copy: an older host_lib beside this directory's scripts still imports kuma_push.py.
-- name: Remove the retired kuma_push.py from {{ host_lib_dir }}
-  ansible.builtin.file:
-    path: "{{ host_lib_dir }}/kuma_push.py"
-    state: absent
-  become: true

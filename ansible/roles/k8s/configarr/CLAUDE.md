@@ -31,12 +31,11 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 - **No web UI** or Authelia; it targets the cluster sonarr/radarr
 - **One-shot (ephemeral):** a nightly k8s CronJob, plus a gate Job that Flux runs from it in
   `configarr-verify` on every role revision, so a config change syncs immediately (below).
-  No healthcheck / AutoKuma — a batch
+  No healthcheck — a batch
   job, not a service; its health signal is a second CronJob, `configarr-health`
   (`templates/health-cronjob.yaml.j2`), every 10 minutes. It reads the last Job's outcome via
   `configarr_lib/configarr_status.py` through its own ServiceAccount and records the
-  verdict as a log line and on the verdict ConfigMap (below). It pushes nothing to Kuma since
-  M6 batch B6b's Cutover-2. The health reader counts the gate's own Job like any other
+  verdict as a log line and on the verdict ConfigMap (below). The health reader counts the gate's own Job like any other
   finished run, because that run genuinely performs the reconcile — `pi-peer-backup`'s gate
   run does not count toward its dead-man monitor, and that role's CLAUDE.md has the other side
   of the choice.
@@ -69,8 +68,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
   proof of the reader's images and ServiceAccount, which Renovate bumps. The reasoning is at
   `ansible/roles/k8s/configarr/defaults/main.yml:DECIDED: the two gates run unordered`
   (#5617).
-- **The pod holds no Secret.** M6 batch B6b's Cutover-2 removed the `configarr-health`
-  Secret and its `KUMA_PUSH_URL`. The reader's code ships in the `configarr-health` ConfigMap,
+- **The pod holds no Secret.** The reader's code ships in the `configarr-health` ConfigMap,
   beside `host_lib.py`. No secret goes in the ConfigMap (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The reader also exports its verdict** (M6 B6b). It patches `homelab/check-verdict`,
   `homelab/check-last-run` and `homelab/check-message` onto the `configarr-health-verdict`

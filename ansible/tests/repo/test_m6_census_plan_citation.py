@@ -10,6 +10,7 @@ Run: uv run pytest ansible/tests/repo/test_m6_census_plan_citation.py
 
 import re
 
+from _kuma_census_row import PLAN_CITATION
 from _markdown_section import section, steps
 from lib.proc_testing import run
 from lib.repo_paths import REPO
@@ -20,10 +21,6 @@ PLAN_DIR_PREFIX = "docs/target-architecture/monitoring/m6-"
 CENSUS_TREES = ("ansible", "hosts", "scripts", ".claude")
 CENSUS_EXCLUDES = (":!*/tests/*", ":!*/test_*")
 
-# A citation of the plan or of a file beside it: the full path form, then the bare filename.
-_CITATION = re.compile(
-    re.escape(PLAN_DIR_PREFIX) + r"[\w./-]*|" + re.escape(PLAN_NAME), re.I
-)
 _C6_ITEM = re.compile(r"^\d+\. \*\*C-6\b.*?(?=^\d+\. |\Z)", re.M | re.S)
 
 
@@ -48,7 +45,7 @@ def _citing_files() -> list[str]:
 
 def _citation_only(rel: str) -> bool:
     text = (REPO / rel).read_text(errors="replace")
-    return "kuma" not in _CITATION.sub("", text).lower()
+    return "kuma" not in PLAN_CITATION.sub("", text).lower()
 
 
 def test_the_census_rule_names_the_plan_filename_it_strips():

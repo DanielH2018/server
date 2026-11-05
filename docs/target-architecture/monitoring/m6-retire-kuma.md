@@ -134,7 +134,8 @@ push-token secret remains.
       `netpol-probe-job.yaml.j2` reads the entry's port through `entry_port(t.service)`. The
       named-member case C-1 adds to `ansible/tests/k8s/test_netpol_probe_targets.py` holds
       that read instead.
-    - A ratchet census row in `ansible/tests/repo/test_census_rows_text.py` holds every other
+    - A ratchet census row in `ansible/tests/repo/test_census_rows_text.py`, defined in
+      `ansible/tests/repo/_kuma_census_row.py` beside it, holds every other
       mention of `kuma` in those trees to a frozen allowlist. Each allowlist entry names its
       file and its reason. The list only shrinks, and a file outside it that mentions `kuma`
       fails CI.
@@ -148,8 +149,11 @@ push-token secret remains.
       names the identifiers it may still hold:
         - `scripts/secrets_mgmt/git_dates.py`: `RETIRED` names retired keys by design, so it
           holds `kuma_push` inside key names.
-        - `scripts/dev/pytest_shard_weights.json`: a generated record keyed by test node
-          ids, which can name deleted tests.
+        - `scripts/dev/pytest_shard_weights.json` and
+          `scripts/dev/pytest_shard_runner_weights.json`: generated records keyed by test node
+          ids, which can name deleted tests. The docs-refresh cron rewrites both, so the row
+          leaves them out of its selector rather than listing them, because a stale-allow
+          failure would turn master red on the cron's own commit.
         - The census row itself and its red fixture.
         - The `kuma-check-` unit-name prefix, and the `/var/lib/kuma-check/` directory
           of the same units' down markers, wherever a file holds them. ADR 0026 records
@@ -163,7 +167,14 @@ push-token secret remains.
           `kuma_ingress_monitors` registration in `scripts/lib/ansible_jinja_env.py`, and
           the `kuma_ingress_monitors` row in
           `scripts/deploy_tools/narrow_lib/containers.py:FILTER_FIELDS`.
-        - Any file the B-7 and C-6 PRs could not reword, with its reason.
+        - The other output redaction rules, which hold `/api/push/` until #7195 retires them:
+          `ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2`, its
+          `ansible/roles/k8s/loki-homelab/CLAUDE.md` bullet and
+          `scripts/diagnostics/probe_lib/core.py`.
+        - Any file the B-7 and C-6 PRs could not reword, with its reason. At C-6 these are
+          the 170 files of `_PROSE_HOLDERS`, none of which may hold an identifier above. C-6
+          measured 553 lines in 208 files against its budget of about 100, so it reworded the
+          files this plan assigns to it and #7194 owns the rest.
     - Test directories are outside the selector. Many tests use `uptime-kuma` as a sample deploy
       tag, and a test that reads Kuma is deleted with its subject (`.claude/rules/python-layout.md`,
       *A check retires when its subject does*).

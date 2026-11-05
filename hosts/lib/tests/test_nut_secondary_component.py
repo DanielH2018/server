@@ -202,7 +202,6 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         {"path": "/var/lib/node-exporter-textfile/eval-run.prom"},
         {"cron_file": "ups-secondary-health"},
         {"path": "/usr/local/bin/ups-secondary-health.sh"},
-        {"path": "/etc/nut/kuma-push.env"},
         {"path": "/etc/udev/rules.d/99-nut-apc.rules"},
         {"path": "/var/lib/homelab/setup-render-manifest.d/nut-host"},
     ]
