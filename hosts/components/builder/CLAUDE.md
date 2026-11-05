@@ -136,7 +136,10 @@ digest, places each binary under the copy's `root/usr/lib/homelab/bin/`, and run
 A tool that ships as a `.tar.gz` names the file to install, and only that member is read.
 The builder fetches and verifies every pin of every changed tree before the first nfpm run,
 and before it empties `staged/`, so a digest mismatch builds and stages nothing and writes
-`reason="tools"`. A cached file is hashed again on every use. After a build, the cache keeps
+`reason="tools"`. A 5xx, a timeout or a connection error is retried up to
+`hosts/lib/homelab_tool_fetch.py:TOOL_FETCH_ATTEMPTS` requests, because one gateway blip from
+github.com would otherwise fail the run. Any other HTTP status and a digest mismatch fail at once.
+A cached file is hashed again on every use. After a build, the cache keeps
 only the digests the render pins. `out/` and `published/` never hold the binaries, so
 publish-on-change compares the pins.
 

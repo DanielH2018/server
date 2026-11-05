@@ -8,6 +8,7 @@ keyed by URL, and nfpm is a shell stub that records what sat under `root/` when 
 Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_host_package_builder_tools.py
 """
 
+import email.message
 import hashlib
 import io
 import json
@@ -63,6 +64,12 @@ def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def http_error(code: int) -> urllib.error.HTTPError:
+    return urllib.error.HTTPError(
+        "https://example.invalid/x", code, "status text", email.message.Message(), None
+    )
+
+
 class Net(FakeGitHub):
     """`urlopen` for the check-runs API and for the tool downloads."""
 
@@ -74,7 +81,7 @@ class Net(FakeGitHub):
         if request.full_url in self.files:
             return _Response(self.files[request.full_url])
         if "/commits/" not in request.full_url:
-            raise urllib.error.URLError("404")
+            raise http_error(404)
         return super().__call__(request, timeout)
 
 
@@ -255,6 +262,72 @@ def test_a_download_differing_from_its_pin_is_refused_and_not_cached(tmp_path):
         tf.download_tool(pin(b"expected"), cache, fake(b"other"))
     assert caught.value.reason == "tools"
     assert list(cache.iterdir()) == []
+
+
+class scripted:
+    """`urlopen` playing back `outcomes` in order: an exception to raise or a response to serve."""
+
+    def __init__(self, *outcomes):
+        self.outcomes = list(outcomes)
+        self.calls: list[str] = []
+
+    def __call__(self, request, timeout=None):
+        self.calls.append(request.full_url)
+        outcome = self.outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+
+class _DropsAfterFirstChunk(_Response):
+    """A response whose connection resets once `body` has been read."""
+
+    def read(self, *args):
+        return self.body.read(*args) or self._drop()
+
+    def _drop(self):
+        raise ConnectionResetError("connection reset by peer")
+
+
+@pytest.mark.parametrize(
+    "first",
+    [
+        http_error(504),
+        TimeoutError("timed out"),
+        urllib.error.URLError(ConnectionRefusedError("connection refused")),
+        _DropsAfterFirstChunk(b"bin"),
+    ],
+    ids=["504", "timeout", "connection-refused", "reset-mid-body"],
+)
+def test_a_transient_failure_is_retried_and_returns_the_content(tmp_path, first):
+    body = b"binary"
+    opener = scripted(first, _Response(body))
+    delays: list[float] = []
+    path = tf.download_tool(pin(body), tmp_path, opener, sleep=delays.append)
+    assert path.read_bytes() == body
+    assert len(opener.calls) == 2
+    assert delays == [tf.TOOL_RETRY_DELAY_S]
+
+
+def test_a_404_fails_after_one_attempt(tmp_path):
+    opener = scripted(http_error(404), _Response(b"binary"))
+    delays: list[float] = []
+    with pytest.raises(tf.Failure, match="HTTP Error 404"):
+        tf.download_tool(pin(b"binary"), tmp_path, opener, sleep=delays.append)
+    assert len(opener.calls) == 1
+    assert delays == []
+
+
+def test_a_persistent_504_raises_failure_naming_the_url(tmp_path):
+    opener = scripted(*[http_error(504)] * tf.TOOL_FETCH_ATTEMPTS)
+    delays: list[float] = []
+    with pytest.raises(tf.Failure) as caught:
+        tf.download_tool(pin(b"binary"), tmp_path, opener, sleep=delays.append)
+    assert caught.value.reason == "tools"
+    assert "https://example.invalid/x" in str(caught.value)
+    assert len(opener.calls) == tf.TOOL_FETCH_ATTEMPTS
+    assert delays == [tf.TOOL_RETRY_DELAY_S] * (tf.TOOL_FETCH_ATTEMPTS - 1)
+    assert list(tmp_path.iterdir()) == []
 
 
 @pytest.mark.parametrize(

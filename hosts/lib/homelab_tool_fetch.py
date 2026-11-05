@@ -14,6 +14,7 @@ import os
 import re
 import shutil
 import tarfile
+import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
@@ -39,6 +40,10 @@ TOOLS_CACHE = "tools-cache"
 # about 60 MB.
 TOOL_MAX_BYTES = 256 * 1024 * 1024
 TOOL_TIMEOUT_S = 120
+# Requests for one pin, and the wait between them. The first pin to exhaust these ends the run,
+# so a failing fetch stays well inside the builder unit's TimeoutStartSec.
+TOOL_FETCH_ATTEMPTS = 4
+TOOL_RETRY_DELAY_S = 10
 _TOOL_NAME = re.compile(r"[a-z0-9][a-z0-9-]*")
 _SHA256 = re.compile(r"[0-9a-f]{64}")
 # One optional directory segment: uv ships `uv-x86_64-unknown-linux-gnu/uv`.
@@ -53,14 +58,67 @@ def file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _write_download(url: str, partial: Path, opener: Callable[..., Any] | None) -> str:
+    """Write the body of `url` to `partial` and return its sha256."""
+    digest, size = hashlib.sha256(), 0
+    request = urllib.request.Request(url, headers={"User-Agent": "homelab-builder"})
+    with (
+        (opener or urllib.request.urlopen)(request, timeout=TOOL_TIMEOUT_S) as resp,
+        partial.open("wb") as out,
+    ):
+        for chunk in iter(lambda: resp.read(1 << 20), b""):
+            size += len(chunk)
+            if size > TOOL_MAX_BYTES:
+                raise Failure("tools", f"{url} exceeds {TOOL_MAX_BYTES} bytes")
+            digest.update(chunk)
+            out.write(chunk)
+    return digest.hexdigest()
+
+
+def _download_with_retries(
+    url: str,
+    partial: Path,
+    opener: Callable[..., Any] | None,
+    sleep: Callable[[float], None],
+) -> str:
+    """`_write_download`, repeated up to `TOOL_FETCH_ATTEMPTS` times for a transient error.
+
+    A 5xx, a timeout and a connection error are transient. Any other HTTP status fails at once,
+    because a wrong pin never heals. `partial` does not exist after a failure.
+
+    Raises:
+        Failure: reason `tools`, because the download failed or exceeds `TOOL_MAX_BYTES`.
+    """
+    attempt = 1
+    while True:
+        try:
+            return _write_download(url, partial, opener)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            partial.unlink(missing_ok=True)
+            permanent = False
+            if isinstance(exc, urllib.error.HTTPError):
+                exc.close()
+                permanent = exc.code < 500
+            if permanent or attempt == TOOL_FETCH_ATTEMPTS:
+                raise Failure("tools", f"cannot fetch {url}: {exc}") from exc
+        except Failure:
+            partial.unlink(missing_ok=True)
+            raise
+        attempt += 1
+        sleep(TOOL_RETRY_DELAY_S)
+
+
 def download_tool(
-    pin: dict, cache: Path, opener: Callable[..., Any] | None = None
+    pin: dict,
+    cache: Path,
+    opener: Callable[..., Any] | None = None,
+    sleep: Callable[[float], None] = time.sleep,
 ) -> Path:
     """The file `pin` names, verified against its sha256 and cached at `cache/<sha256>`.
 
     A cached file is checked again on every use, so a corrupted or swapped cache entry is
     fetched anew instead of installed. A download whose digest differs from the pin is deleted
-    and never cached.
+    and never cached. A transient download error is retried; a digest mismatch is not.
 
     Raises:
         Failure: reason `tools`, because the pin is malformed, the download failed, it exceeds
@@ -76,30 +134,12 @@ def download_tool(
         return path
     cache.mkdir(parents=True, exist_ok=True)
     partial = cache / f"{want}.part"
-    digest, size = hashlib.sha256(), 0
-    try:
-        request = urllib.request.Request(url, headers={"User-Agent": "homelab-builder"})
-        with (
-            (opener or urllib.request.urlopen)(request, timeout=TOOL_TIMEOUT_S) as resp,
-            partial.open("wb") as out,
-        ):
-            for chunk in iter(lambda: resp.read(1 << 20), b""):
-                size += len(chunk)
-                if size > TOOL_MAX_BYTES:
-                    raise Failure("tools", f"{url} exceeds {TOOL_MAX_BYTES} bytes")
-                digest.update(chunk)
-                out.write(chunk)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        partial.unlink(missing_ok=True)
-        raise Failure("tools", f"cannot fetch {url}: {exc}") from exc
-    except Failure:
-        partial.unlink(missing_ok=True)
-        raise
-    if digest.hexdigest() != want:
+    got = _download_with_retries(url, partial, opener, sleep)
+    if got != want:
         partial.unlink(missing_ok=True)
         raise Failure(
             "tools",
-            f"{url} has sha256 {digest.hexdigest()}, the pin names {want}; nothing built",
+            f"{url} has sha256 {got}, the pin names {want}; nothing built",
         )
     os.replace(partial, path)
     return path
