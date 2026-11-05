@@ -104,6 +104,7 @@ class FakeGitHub:
 
 class _Response:
     def __init__(self, body: bytes):
+        self.headers: dict[str, str] = {}
         self.body = io.BytesIO(body)
 
     def read(self, *args):
