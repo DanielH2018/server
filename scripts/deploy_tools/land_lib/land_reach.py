@@ -432,8 +432,9 @@ def remaining_setup_hosts(
 
     The first half of `remaining_setup_hosts_note`, as data: the GitOps tick records each pair
     in its `owed` ledger (#6510). A changed repo file with a row in
-    `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` puts its role in the answer, because
-    the tick applies that role. A role reached only through a file with no row is not in it,
+    `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` puts its role in the answer when the
+    tick applies that role and the file reaches a host beyond `local_host`. A role the tick
+    cannot apply is not in it, and neither is a role reached only through a file with no row,
     because the tick applies that role nowhere.
 
     `key_readers` are the setup-role files reading a `secrets.yml` or inventory key the range
