@@ -3048,7 +3048,8 @@ progress.
   `COMPONENT_KEYS` refuses a new key, so the census's subject is every component that ships a
   timer, with `allow` naming one that changes no state and why. Components state their
   contract as a `# Autonomous-role contract` comment in `component.yml`, so that counts beside
-  the `CLAUDE.md` heading. `pi-compose` ships no timer and checkout-sync ships in H7.51, so the
+  the `CLAUDE.md` heading. Either form must carry a bullet each for scope, mode, abort valves
+  and evidence, so naming the phrase alone is flagged. `pi-compose` ships no timer and checkout-sync ships in H7.51, so the
   members are docs-refresh, secret-rotation and claude-code until H7.51 adds checkout-sync.
 - *Retired crons.* A census asserts that each absent-arm cron task that H7.2f's census
   emits, the entries of the `docker_install_stale_crons` loop included, appears as a legacy

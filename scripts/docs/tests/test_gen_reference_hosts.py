@@ -6,6 +6,7 @@ inventory, which changes.
 Run: uv run pytest scripts/docs/tests/test_gen_reference_hosts.py
 """
 
+import re
 import textwrap
 
 from docs.reference import hosts as g
@@ -117,3 +118,11 @@ def test_the_page_names_each_hosts_package_and_no_inventory_connection_key(tmp_p
     page = g.render_markdown(rows)
     assert "| Host package | `homelab-daniel-pi` (2 components) |" in page
     assert "ansible_connection" not in page
+
+
+def test_every_live_host_names_its_package_with_a_nonzero_component_count():
+    """Named members: a moved `hosts/` tree or `components` key fails here, not silently."""
+    packages = {r["name"]: r["package"] for r in g.build_rows()}
+    assert set(packages) == {"daniel-box", "daniel-pi", "daniel-server"}
+    for name, package in packages.items():
+        assert re.fullmatch(rf"`homelab-{name}` \([1-9]\d* components\)", package), name

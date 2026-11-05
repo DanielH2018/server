@@ -41,6 +41,8 @@
 # - Authoritative sources: `docker ps` against the real socket, not docker-proxy, so it reports
 #   docker-proxy's own death too. `docker inspect` is read BEFORE the restart, which erases the
 #   exit code, the daemon's Error string and FinishedAt.
+# - Abort valves: a missing homelab-check-lib.sh exits before any `docker start`, and a
+#   container that will not start costs one failed start per cycle.
 # - Required evidence, every cycle: pi-recovery-health.prom in node_exporter's textfile
 #   directory (M6 B5), and a /var/log/pi-health/health.log line naming what died and whether
 #   the restart took.
