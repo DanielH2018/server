@@ -16,7 +16,10 @@ and the project skills from a fresh session. A resumed session already holds `CL
 transcript, except a red batch's, which gets the start-time copy again (below). The land text
 carries the whole `land.sh` command. The reviewer is a fresh session, so the pipeline appends
 the `CLAUDE.md` it read at start to the review prompt (#3825). The reviewer loses the project skills and `.claude/rules/`; it reads files rather
-than following a procedure, and its prompt names the role `CLAUDE.md` files to check.
+than following a procedure, and its prompt names the role `CLAUDE.md` files to check. A held phase
+gets `.claude/rules/` as text (`rules_text`): the reviewer and each resumed phase get the rules
+whose globs match a path in the batch's range, and the implement phase after a red phase gets
+every rule, because its range holds only the red author's tests. Skills stay out of reach.
 
 DECIDED: the implement phase keeps the project source only when no red phase ran before it.
 Without one it starts from the tree `worktree add` checked out, which no agent has written,
@@ -32,15 +35,20 @@ the worktree. The pipeline derives the set at start and ships it beside the held
 `HELD_SECRET_PATHS`, which that guard reads in place of the derivation.
 """
 
+import importlib.util
 import json
 import os
 import shlex
 import shutil
 import subprocess
-from collections.abc import Callable
-from pathlib import Path
+from collections.abc import Callable, Iterable
+from pathlib import Path, PurePosixPath
 
 HOOKS_DIR = Path(".claude") / "hooks"
+RULES_DIR = Path(".claude") / "rules"
+# The hook module whose `rule_globs` parses a rule's `paths:` frontmatter, so a held phase and
+# the harness read the same globs.
+GLOB_PARSER = "_inline_budget.py"
 # Directories under `HOOKS_DIR` no hook runs from. A stale `__pycache__` copied into the
 # snapshot would also outlive the source it was compiled from.
 UNSNAPSHOTTED = frozenset({"tests", "__pycache__"})
@@ -146,6 +154,45 @@ def write_hooks(hooks: dict[str, bytes], root: Path) -> Path:
         path.write_bytes(data)
         path.chmod(0o555 if name.endswith(".sh") else 0o444)
     return root / HOOKS_DIR / "fanout-stop.py"
+
+
+def read_rules(root: Path) -> dict[str, tuple[list[str], str]]:
+    """Every `.claude/rules/*.md` under `root`: file name to its `paths:` globs and its text."""
+    spec = importlib.util.spec_from_file_location(
+        "_held_rule_globs", root / HOOKS_DIR / GLOB_PARSER
+    )
+    assert spec and spec.loader, f"{GLOB_PARSER} is not importable"
+    parser = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(parser)
+    rules = {}
+    for path in sorted((root / RULES_DIR).glob("*.md")):
+        text = path.read_text()
+        rules[path.name] = (parser.rule_globs(text), text)
+    return rules
+
+
+def rules_text(
+    rules: dict[str, tuple[list[str], str]],
+    changed: Iterable[str] | None,
+) -> str:
+    """The prompt section holding the text of each rule that applies, or "" when none does.
+
+    Args:
+        rules: `read_rules`' result.
+        changed: Repo-relative paths. A rule applies when one matches a glob of it, the way
+            `inject-nested-docs.py:docs_for` matches. None applies every rule.
+    """
+    paths = None if changed is None else [PurePosixPath(p) for p in changed if p]
+    chosen = [
+        f"## .claude/rules/{name}\n\n{text}"
+        for name, (globs, text) in rules.items()
+        if paths is None or any(p.full_match(g) for p in paths for g in globs)
+    ]
+    if not chosen:
+        return ""
+    return "\n\n# The repo's .claude/rules/ text for this phase\n\n" + "\n\n".join(
+        chosen
+    )
 
 
 def pointed_settings(settings: str, root: Path) -> dict:

@@ -92,6 +92,8 @@ from fanout_lib.review.held_hooks import (
     labelled,
     pointed_settings,
     read_hooks,
+    read_rules,
+    rules_text,
     with_batch_env,
     write_hooks,
 )
@@ -250,6 +252,10 @@ class Pipeline:
         self.project_claude_md = (
             (SOURCE_ROOT / "CLAUDE.md").read_text() if target.is_server else ""
         )
+        # A held phase loads no `.claude/rules/`, so it gets their text too (G5 PR 0).
+        self.rules = read_rules(SOURCE_ROOT) if target.is_server else {}
+        # The merge base the review starts from; it fixes the range that selects the rules.
+        self.range_base = ""
         self.hook_root = state_dir / f"{batch}-stop-hook"
 
     def _claude(self, name: str, argv: list[str], stdin: str) -> Phase:
@@ -348,7 +354,10 @@ class Pipeline:
         ]  # fmt: skip
 
     def _resume(self) -> list[str]:
-        held = self._implementer(self._held_settings(), self._red_claude_md())
+        held = self._implementer(
+            self._held_settings(),
+            self._red_claude_md() + self._rules(self.red_green),
+        )
         return [*held, "--resume", self.session]
 
     def _reviewer(self) -> list[str]:
@@ -360,6 +369,7 @@ class Pipeline:
                 "\n\n# The repo's CLAUDE.md, as it stood before the implementer ran\n\n"
                 + self.project_claude_md
             )
+        prompt += self._rules()
         return [
             *self._held_settings(),
             "-p", "--model", "opus", "--permission-mode", "auto", *prompt_tool_args(),
@@ -378,7 +388,23 @@ class Pipeline:
         """
         if not self.red_green:
             return self._implementer()
-        return self._implementer(self._held_settings(), self._red_claude_md())
+        return self._implementer(
+            self._held_settings(), self._red_claude_md() + self._rules(True)
+        )
+
+    def _rules(self, every: bool = False) -> str:
+        """The `.claude/rules/` text a held phase gets, matched to the batch's range.
+
+        The range is `range_base` to `HEAD`. It holds the implementer's edits, so it selects
+        the rules for what a phase reviews or fixes. `every` applies every rule: the implement
+        phase after a red phase has a range of only the red author's tests, which would miss
+        the templates or secrets the implementer edits next. A resumed phase passes the same
+        text again, because `--resume` keeps no appended system prompt.
+        """
+        if every or not self.range_base or not self.rules:
+            return rules_text(self.rules, None)
+        diff = self._git("diff", "--name-only", "-z", self.range_base, "HEAD")
+        return rules_text(self.rules, diff.split("\0"))
 
     def _red_claude_md(self) -> str:
         """The start-time `CLAUDE.md` a red batch's implementer session gets as text.
@@ -548,7 +574,7 @@ class Pipeline:
             return report
         self.record.pr = found.url
         self.session = str(impl.report.get("session_id") or "")
-        base = self._git("merge-base", "HEAD", self.target.base)
+        base = self.range_base = self._git("merge-base", "HEAD", self.target.base)
         head = self.record.head = self._git("rev-parse", "HEAD")
 
         passing = self._unproven(base, head, red)

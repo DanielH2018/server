@@ -173,6 +173,7 @@ def test_a_red_batchs_implementer_loads_no_settings_file_the_red_author_could_wr
         gates=_gates(red, green=[""]),
     )
     pipeline.project_claude_md = "CLAUDE.MD AT START"
+    pipeline.rules = {}  # this test is about settings; test_fanout_review_rules.py has rules
     pipeline.run_all()
 
     argv, _, phase = run.claude[1]
