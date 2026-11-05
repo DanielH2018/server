@@ -21,12 +21,11 @@ ssh_config_path: /etc/ssh/sshd_config
 
 # Services this host runs, in dependency order-agnostic form (deploy.yml toposorts them).
 # Start empty and populate as you add services — deploy.yml dies in its first pre_task if
-# this is undefined. See the repo-root CLAUDE.md → "Adding a New Container Service".
+# this is undefined. See the repo-root CLAUDE.md → "Adding a New Service".
 #
-# Each entry may carry `platform: docker|k8s` (default `docker`). It selects which deploy
-# stack owns the service: deploy.yml skips anything marked `k8s`, and the k8s manifests
-# become that service's source of truth instead. Leave it unset for a Compose service, which
-# `daniel-pi` is the only host still running.
+# Give each entry `platform: k8s`, which puts it in deploy.yml's k8s play. An entry without the
+# key reads as `docker`, which nothing deploys: scripts/validate/compose_templates.py refuses
+# it. A Compose service on `daniel-pi` goes in that host's `compose_services`, never here.
 containers_list: []
 
 # Bring-up: revert once the host is established
