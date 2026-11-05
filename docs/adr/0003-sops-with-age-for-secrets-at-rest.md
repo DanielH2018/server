@@ -60,6 +60,13 @@ names.
 **`kubectl apply` leaves stale Secret keys behind.** Removing a key from a manifest does not
 remove it from the live Secret once ownership breaks.
 
+2026-11-05: this consequence holds only for a Secret that `kubectl apply` writes. Flux applies
+all 66 `platform: k8s` entries in `containers_list`, so no deploy applies a Secret that way
+unless a service is handed back to Ansible. Flux's server-side apply removes a key it owns and
+no longer applies. A key that another field manager holds still stays live.
+`.claude/rules/k8s-templates.md`, *Removing a key from a Secret template*, has the behaviour
+under Flux.
+
 **A direct edit to `secrets.yml` is denied by a hook**, because an editor that writes
 plaintext over an encrypted file destroys it silently.
 
