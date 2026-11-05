@@ -9,6 +9,7 @@ CI before it reaches master. Stdlib only, because the builder ships beside it wi
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import re
@@ -93,7 +94,7 @@ def _download_with_retries(
     while True:
         try:
             return _write_download(url, partial, opener)
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        except (OSError, http.client.HTTPException) as exc:
             partial.unlink(missing_ok=True)
             permanent = False
             if isinstance(exc, urllib.error.HTTPError):

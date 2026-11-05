@@ -10,6 +10,7 @@ Run: uv run pytest ansible/roles/setup/homelab_builder/tests/test_host_package_b
 
 import email.message
 import hashlib
+import http.client
 import io
 import json
 import stat
@@ -296,8 +297,9 @@ class _DropsAfterFirstChunk(_Response):
         TimeoutError("timed out"),
         urllib.error.URLError(ConnectionRefusedError("connection refused")),
         _DropsAfterFirstChunk(b"bin"),
+        http.client.BadStatusLine("garbled"),
     ],
-    ids=["504", "timeout", "connection-refused", "reset-mid-body"],
+    ids=["504", "timeout", "connection-refused", "reset-mid-body", "bad-status-line"],
 )
 def test_a_transient_failure_is_retried_and_returns_the_content(tmp_path, first):
     body = b"binary"
