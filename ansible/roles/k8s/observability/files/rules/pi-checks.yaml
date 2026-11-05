@@ -6,7 +6,7 @@
 # docs/target-architecture/monitoring/m3-textfile-timer.md. Plain YAML, never Jinja:
 # prometheus-rules.yaml.j2 carries this file verbatim.
 #
-# M6's BATCH B5 CUTOVER-1B dropped `shadow`: Alertmanager pages these rules in place of the Kuma
+# M6's BATCH B5 CUTOVER-1B dropped `shadow`: Alertmanager pages these rules in place of the
 # tiles that Cutover-1a deleted. Severity follows the tile: "Daniel Pi SD Health" carried
 # tag-severity critical (the rules mail), "Daniel Pi Recovery" carried none (Discord alone).
 # `service` is the host as a literal, because a node is not a workload (M3's open question 3).
@@ -25,7 +25,7 @@
 groups:
   - name: pi-checks
     rules:
-      # Replaces Kuma tile "Daniel Pi SD Health".
+      # Replaced the "Daniel Pi SD Health" tile.
       - alert: PiSdHealthFailed
         expr: homelab_check_success{check="pi-sd-health",origin="daniel-pi"} == 0
         labels:
@@ -56,7 +56,7 @@ groups:
             collector, so nothing confirms the SD card is being watched. Read
             `systemctl status homelab-pi-sd-health.timer` on daniel-pi, then
             /var/lib/node-exporter-textfile/pi-sd-health.prom.
-      # Replaces Kuma tile "Daniel Pi Recovery".
+      # Replaced the "Daniel Pi Recovery" tile.
       - alert: PiRecoveryFailed
         expr: homelab_check_success{check="pi-recovery-health",origin="daniel-pi"} == 0
         labels:

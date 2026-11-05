@@ -30,7 +30,7 @@ autofix_bridge_modules:
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the auto-remediation twin of monitor-bridge — a broken deploy silently stops
-# fixing *arr queue issues with no page of its own (the docker-liveness Kuma monitor is a slower
+# fixing *arr queue issues with no page of its own (AutofixBridgeStale is a slower
 # backstop, not a rollout gate). ALSO renders no readinessProbe on its Deployment (probe-less),
 # which compounds independently of the observability classification.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]

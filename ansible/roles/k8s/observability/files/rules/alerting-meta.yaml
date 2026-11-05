@@ -34,7 +34,7 @@ groups:
       # A rule that loaded can still fail every evaluation. A join that matches many-to-many
       # is the usual cause, and the rule's output then goes stale: workload-service's
       # recording rules stop, and every alert joined to them falls back to service="unmapped".
-      # PrometheusRuleReloadFailed cannot see this, because the reload succeeded. No Kuma tile
+      # PrometheusRuleReloadFailed cannot see this, because the reload succeeded. No other check
       # covers it, so it pages without a shadow label.
       - alert: PrometheusRuleEvaluationFailures
         expr: sum by (rule_group) (increase(prometheus_rule_evaluation_failures_total[10m])) > 0

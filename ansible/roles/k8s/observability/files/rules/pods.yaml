@@ -4,7 +4,7 @@
 # ruling of 2026-10-23 that a pod exports its verdict through a metrics endpoint rather than a
 # textfile or a Pushgateway. pod-producers.yaml holds B6b's, which this file's CronJob half copies.
 #
-# THESE RULES PAGE SINCE B7's CUTOVER-1b. Each one ports the Kuma tile of a producer, and
+# THESE RULES PAGE SINCE B7's CUTOVER-1b. Each one ports the tile of a producer, and
 # Cutover-1a deleted the tile. Cutover-1b dropped the `shadow` label that held the rule back.
 #
 # THREE SOURCES.
@@ -28,7 +28,7 @@
 # bridge-exporter.yaml). The autofix-bridge rules report on the remediation loop itself, so they
 # carry `autofix-bridge`, the deploy tag `probe.py health` gates on.
 #
-# NO `for:` ON A VERDICT RULE. Kuma's tiles have max_retries 0, so one down push pages today, and
+# NO `for:` ON A VERDICT RULE. The retired tiles had max_retries 0, so one down push paged, and
 # a run that fails is a verdict, not a sample. The down, stale and absent rules hold 10m or 5m,
 # because a restart or a rolled kube-state-metrics leaves a gap that is not a fault.
 groups:
@@ -36,8 +36,8 @@ groups:
     rules:
       # AUTOFIX-BRIDGE. The cycle's verdict: the *arr auto-block loop reports down when an *arr
       # was unreachable, a mutation failed, or more than MAX_ACTIONS_PER_CYCLE items were
-      # eligible at once so it acted on none. autofix.py records the verdict before its Kuma
-      # push, and a cycle that raises records 0. A missing series stays quiet here:
+      # eligible at once so it acted on none. autofix.py records the verdict each
+      # cycle, and a cycle that raises records 0. A missing series stays quiet here:
       # AutofixBridgeStale owns a loop that stopped recording.
       - alert: ArrAutoBlockFailing
         expr: homelab_check_success{job="autofix-bridge", check="arr-autoblock"} == 0
@@ -102,7 +102,7 @@ groups:
       # update loop's success is the LogQL rules' (homelab-logs.yaml). `verify: "true"` makes the
       # rule gate `probe.py health cloudflare-ddns`, which a warning alone would not: the gate
       # reads critical alerts and `verify` ones. It overlaps K8sDeploymentZeroAvailable, a
-      # warning keyed by the workload join, and the two page separately, as the Kuma tile and
+      # warning keyed by the workload join, and the two page separately, as the retired tile and
       # that rule did. The absent arms cover a Deployment that is gone, and
       # `unless` leaves a dead kube-state-metrics to ScrapeTargetDown.
       - alert: CloudflareDdnsUnavailable
@@ -130,7 +130,7 @@ groups:
       # PI-PEER-BACKUP. The script patches `homelab/check-verdict` to `up` or `down` after each
       # scheduled run and skips the patch on a deploy-gate run. The series is absent until the
       # first run and keeps its last value after, which is why the NotReporting rule measures the
-      # run clock. A down verdict stays until the next night's run, as the Kuma tile does.
+      # run clock. A down verdict stays until the next night's run, as the retired tile's did.
       - alert: PiPeerBackupFailed
         expr: >-
           kube_configmap_annotations{namespace="homelab", configmap="pi-peer-backup-verdict", annotation_homelab_check_verdict="down"} == 1
@@ -147,8 +147,8 @@ groups:
             `kubectl -n homelab logs` on the newest pi-peer-backup Job.
       # A script that stopped running or stopped exiting 0 (it exits 1 on any down verdict and
       # when its export fails). 259200s is three periods of the daily schedule, so two missed
-      # nights are slow and the third is the first that is not noise. The Kuma tile waits 60
-      # hours, so this rule is the slower of the two, by 12 hours. The second arm is a CronJob
+      # nights are slow and the third is the first that is not noise. The retired tile waited 60
+      # hours, so this rule is slower by 12 hours. The second arm is a CronJob
       # that never succeeded, or one gone. `unless` leaves a dead kube-state-metrics to
       # ScrapeTargetDown.
       - alert: PiPeerBackupNotReporting

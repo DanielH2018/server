@@ -20,7 +20,7 @@
       }
     ]
   },
-  "description": "Which alerts fired, when, and for how long, grouped by the `service` label every rule carries. Every panel reads Prometheus's `ALERTS` series, so the history spans Prometheus's retention (`observability_prometheus_retention`). `Watchdog` is left out because it always fires. Alerts still in `shadow` are counted and marked in the tables. M6 B-5 rebuilt this board on `ALERTS` in place of the Loki reconstruction of Uptime Kuma DOWN pushes.",
+  "description": "Which alerts fired, when, and for how long, grouped by the `service` label every rule carries. Every panel reads Prometheus's `ALERTS` series, so the history spans Prometheus's retention (`observability_prometheus_retention`). `Watchdog` is left out because it always fires. Alerts still in `shadow` are counted and marked in the tables.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
@@ -200,7 +200,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Every alert that fired in the time range, with its firing minutes. A `shadow` value of `true` marks a rule whose M6 batch has not cut over yet: Alertmanager does not page it, and Uptime Kuma still does.",
+      "description": "Every alert that fired in the time range, with its firing minutes. A `shadow` value of `true` marks a rule that has not been promoted yet: Alertmanager does not page it.",
       "fieldConfig": {
         "defaults": {
           "custom": {

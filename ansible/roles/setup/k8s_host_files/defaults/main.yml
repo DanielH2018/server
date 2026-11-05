@@ -1,6 +1,6 @@
 ---
 # Copies of the registry role's variables that its GC script, job manifest and cron read. The
-# registry role keeps the originals because the Kuma tile, the docs fragments and its deploy-time
+# registry role keeps the originals because the docs fragments and its deploy-time
 # mirror restore read them too. test_k8s_host_files_pairs.py holds each copy equal to
 # roles/k8s/registry/defaults/main.yml. They live here rather than in a task's vars because the
 # strict render test and the shell-template gate resolve a template's names from role defaults,

@@ -4,7 +4,7 @@
 # (docs/target-architecture/monitoring/m6-retire-kuma.md, "Phase A") on M2's recipe.
 #
 # THESE RULES PAGE since A1's Cutover-b, and the Pi pressure arms since B8's. They ran with
-# `shadow: "true"` beside the Kuma tiles of the rows they port until then. HostDiskFull and the
+# `shadow: "true"` beside the retired tiles of the rows they port until then. HostDiskFull and the
 # five UPS rules are critical, so Discord and email; the rest are warnings, so Discord alone.
 # PiLoadHigh, PiMemoryLow, PiDiskFull, PiFilesystemReadOnly and PiMetricsMissing are the
 # Prometheus half of `pi_pressure`, and `PiPortDead` in extra-probes.yaml is the other half.

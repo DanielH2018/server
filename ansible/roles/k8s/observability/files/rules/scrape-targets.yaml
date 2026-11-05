@@ -2,7 +2,7 @@
 # Jinja: prometheus-rules.yaml.j2 carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, "A3 and the handoffs it closes".
 #
-# These rules page since M6's batch A3 Cutover-b. Kuma's Scrape Targets and Cluster Scrape Targets
+# These rules page since M6's batch A3 Cutover-b. The Scrape Targets and Cluster Scrape Targets
 # tiles went in Cutover-a1, and monitor-bridge's two checks behind them in Cutover-a2:
 # check_targets_down read `up{origin="daniel-server"}` and check_cluster_targets read the
 # complement, so between them they read every series below with no job exempt, and neither may

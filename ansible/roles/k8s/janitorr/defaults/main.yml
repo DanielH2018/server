@@ -66,7 +66,7 @@ janitorr_k8s_health_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d3
 janitorr_k8s_health_kubectl_image: alpine/k8s:1.37.1@sha256:712dc5385d1c1a3f83b747fa9e40f64d433a97f72ff42f9755ff7dd1f62846e4
 
 # Above the reader's worst case: two 30 s kubectl calls (JANITORR_KUBECTL_TIMEOUT_S) plus
-# the cold pull of both images. The figure kept the margin the Kuma push needed until
+# the cold pull of both images. The figure kept the margin the retired push needed until
 # M6 batch B6b's Cutover-2. No flux_cronjob_gates entry copies this CronJob into a gate Job, so no gate timeout
 # bounds it from above.
 janitorr_k8s_health_deadline_seconds: 420

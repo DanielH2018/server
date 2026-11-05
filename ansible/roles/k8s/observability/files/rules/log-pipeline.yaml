@@ -1,9 +1,9 @@
 # The log and telemetry pipeline's loss, ported from monitor-bridge's shipper_dropped check
-# (Kuma's "Log Shipper Dropped Entries" tile). Plain YAML, never Jinja: prometheus-rules.yaml.j2
+# (the retired "Log Shipper Dropped Entries" tile). Plain YAML, never Jinja: prometheus-rules.yaml.j2
 # carries this file verbatim. The design is
 # docs/target-architecture/monitoring/m6-retire-kuma.md, batch A3.
 #
-# These rules page since M6's batch A3 Cutover-b. Kuma's tile went in Cutover-a1 and the bridge's
+# These rules page since M6's batch A3 Cutover-b. The tile went in Cutover-a1 and the bridge's
 # shipper_dropped check in Cutover-a2, so each check has one pager.
 #
 # The check had four arms and two boot graces. Each arm is a rule below. The graces read
