@@ -251,10 +251,14 @@ class TestStarOnArtifactPage:
         status, body = get(stars, "/a/daniel-box/notes.md")
         assert (status, body) == (200, b"# Notes\n</body>")
 
-    def test_the_script_is_served_as_javascript(self, get, stars):
-        status, body = get(stars, "/api/star.js")
-        assert status == 200
-        assert b'"/api/star?host="' in body
+    def test_the_script_route_serves_the_button_as_javascript(self, serve, stars):
+        conn = serve(stars)
+        conn.request("GET", "/api/star.js")
+        res = conn.getresponse()
+        assert res.status == 200
+        # X-Content-Type-Options: nosniff makes a browser refuse a script of any other type.
+        assert res.getheader("Content-Type") == "text/javascript; charset=utf-8"
+        assert res.read() == srv.STAR_JS.encode()
 
     def test_get_star_reports_the_star_and_that_it_can_change(self, get, root, stars):
         write(root, "daniel-box", "plan.html")
