@@ -96,10 +96,18 @@ def _role_callers(repo):
     `lib.render_guard`, and the call walks every k8s role's `tasks/` and parses each file --
     work only `--stale-only` asks for, not the other `probe.py` subcommands that load
     `releases` through `probe.py`.
+
+    Returns:
+        The graph, or None when `role_callers` refuses it, which it prints on stderr.
     """
     from lib.k8s_roles import role_callers
+    from lib.narrow_git import CannotNarrow
 
-    return role_callers(repo)
+    try:
+        return role_callers(repo)
+    except CannotNarrow as exc:
+        print(f"releases: no caller graph: {exc}", file=_sys.stderr)
+        return None
 
 
 def consumers_for(shared_roles, repo=None, callers=None, renderer="manifests"):
@@ -114,11 +122,14 @@ def consumers_for(shared_roles, repo=None, callers=None, renderer="manifests"):
 
     Returns:
         A mapping a role is ABSENT from when it must stay on every service's path list --
-        the renderer, and any role nothing reaches. `role_paths_for` reads it that way round
+        the renderer, any role nothing reaches, and every role when the caller graph does not
+        load. `role_paths_for` reads it that way round
         so that a missing answer widens rather than narrows.
     """
     if callers is None:
         callers = _role_callers(repo)
+        if callers is None:
+            return {}
     narrowed = {}
     for role in shared_roles:
         if role == renderer:

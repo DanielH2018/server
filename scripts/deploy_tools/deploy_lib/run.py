@@ -187,7 +187,8 @@ def expand_shared_roles(plan: Plan) -> None:
     all see the services that actually deploy. A name no declared role runs is left as typed,
     and the validation refuses it by name. Fails open: a crash here leaves the typed tags,
     which the validation then refuses, so a bug in the expansion never blocks a deploy the
-    validation would have let through.
+    validation would have let through. A task file `role_callers` cannot load takes that path too,
+    so the typed name is refused rather than expanded to too few callers.
 
     A caller Flux applies is left out with a note; a typed one stays for `refuse_flux_owned`.
     An expansion left empty ends with nothing to deploy, because an empty `--tags` is a full run.

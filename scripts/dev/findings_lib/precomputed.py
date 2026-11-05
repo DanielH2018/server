@@ -26,21 +26,25 @@ _sys.path.insert(0, str(_SCRIPTS))
 
 from deploy_tools.land_lib import land_shared  # noqa: E402
 from deploy_tools.land_lib import land_tags  # noqa: E402
+from lib.narrow_git import CannotNarrow  # noqa: E402
 
 REPO = _SCRIPTS.parent
 
 
 def deploy_line(paths: list[str]) -> str:
     """What `land.sh` would make of a PR that touches exactly `paths`."""
-    tags = set(land_tags.derive(paths, len(paths)).tags)
-    for callers in land_shared.shared_caller_tags(paths).values():
-        tags |= callers
+    try:
+        tags = set(land_tags.derive(paths, len(paths)).tags)
+        for callers in land_shared.shared_caller_tags(paths).values():
+            tags |= callers
+        note = land_tags.plane_note(paths)
+    except CannotNarrow as exc:
+        return f"not derived, because {exc}"
     parts = []
     if tags:
         parts.append(f"deploys tag {', '.join(sorted(tags))} (`deploy.sh --tags`)")
     if land_tags.self_applied(paths):
         parts.append("the GitOps tick applies part of it itself")
-    note = land_tags.plane_note(paths)
     if note:
         parts.append(note)
     return "; ".join(parts) if parts else "nothing to deploy expected"

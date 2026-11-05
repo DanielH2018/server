@@ -32,8 +32,6 @@ import tempfile
 from collections.abc import Generator
 from pathlib import Path
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 
 from lib import yaml_fast
@@ -53,6 +51,9 @@ _IMPORT_KEYS = (
 )
 SHIPPED_DIRS = ("templates", "files")
 
+# A YAML date loads as a `date`, which plain `json.dumps` refuses.
+task_text = functools.partial(json.dumps, default=str, skipkeys=True)
+
 
 def task_chains(
     role_dir: Path, keep, task_file: str = "main.yml", inherited: tuple = ()
@@ -69,7 +70,7 @@ def task_chains(
     path = role_dir / "tasks" / task_file
     try:
         tasks = _parse_tasks(path, path.stat().st_mtime_ns)
-    except OSError, yaml.YAMLError:
+    except OSError, yaml_fast.UnparsableYaml:
         return None
     if tasks is None:
         return None
@@ -83,11 +84,30 @@ def _parse_tasks(path: Path, _mtime_ns: int) -> list | None:
     `setup_repo_file_hosts` asks every setup role whether it ships one changed repo file, so
     a PR with several of them walks the same 18 task trees once per file. The cache makes
     that one parse per file on disk rather than one per question; a rewrite changes the
-    mtime and misses. Returns None for a tasks file that parses to something other than a
-    list, which `task_chains` reads the same way as an unreadable one.
+    mtime and misses. Returns what `_task_list` returns, and `task_chains` reads its None the
+    same way as an unreadable file.
     """
-    tasks = yaml_fast.safe_load(path.read_text()) or []
-    return tasks if isinstance(tasks, list) else None
+    return _task_list(path.read_text())
+
+
+def _task_list(text: str) -> list | None:
+    """`text` parsed as a task list, or None when no walk here can read it as one.
+
+    A recursive alias is refused before any walk starts: refused part way through a walk,
+    `keep` would have seen tasks whose chains never arrive, and `_leaf_chains_with_text`
+    pairs the two by position.
+
+    Raises:
+        yaml_fast.UnparsableYaml: the text does not load.
+    """
+    tasks = yaml_fast.parse_yaml(text) or []
+    if not isinstance(tasks, list):
+        return None
+    try:
+        task_text(tasks)
+    except ValueError, RecursionError:
+        return None
+    return tasks
 
 
 def task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
@@ -102,7 +122,7 @@ def task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
     """
     return task_chains(
         role_dir,
-        lambda task, _: basename in json.dumps(task) or _ships_via_loop(task, basename),
+        lambda task, _: basename in task_text(task) or _ships_via_loop(task, basename),
     )
 
 
@@ -138,13 +158,13 @@ def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]
 
 def _ships_repo_path(task: dict, repo_path: str) -> bool:
     """Whether `repo_path` appears in `task` anywhere but its `name:`."""
-    return repo_path in json.dumps({k: v for k, v in task.items() if k != "name"})
+    return repo_path in task_text({k: v for k, v in task.items() if k != "name"})
 
 
 def _ships_via_loop(task: dict, basename: str) -> bool:
     """Whether `task` ships `basename` through a `loop:` of bare names and `{{ item }}`.
 
-    `basename in json.dumps(task)` misses gitops-deploy's systemd-unit shape: `src: "{{
+    `basename in task_text(task)` misses gitops-deploy's systemd-unit shape: `src: "{{
     item }}.j2"` over `loop: [gitops-deploy.service, ...]` never puts the literal string
     `gitops-deploy.timer.j2` (the shipped file's basename, under `templates/`) anywhere in
     the task's own text -- the loop items are the bare unit names, without the `.j2` `src`
@@ -160,7 +180,7 @@ def _ships_via_loop(task: dict, basename: str) -> bool:
     loop = task.get("loop")
     if not isinstance(loop, list) or not all(isinstance(item, str) for item in loop):
         return False
-    text = json.dumps(task)
+    text = task_text(task)
     if basename in loop and "{{ item }}" in text:
         return True
     stem = basename.removesuffix(".j2")
@@ -208,7 +228,7 @@ def _leaf_chains_with_text(role_dir: Path) -> list[tuple[str, tuple]] | None:
     texts: list[str] = []
 
     def keep(task, _task_file) -> bool:
-        texts.append(json.dumps(task))
+        texts.append(task_text(task))
         return True
 
     chains = task_chains(role_dir, keep)
@@ -253,8 +273,8 @@ def var_consumer_chains(role_dir: Path, vars_file: Path) -> list[tuple] | None:
     hides an unconverged host, where wider costs an operator one no-op command.
     """
     try:
-        defined = yaml_fast.safe_load(vars_file.read_text())
-    except OSError, yaml.YAMLError:
+        defined = yaml_fast.parse_yaml(vars_file.read_text())
+    except OSError, yaml_fast.UnparsableYaml:
         return None
     leaves = _leaf_chains_with_text(role_dir)
     if not isinstance(defined, dict) or not defined or leaves is None:
@@ -329,8 +349,8 @@ def handler_notifier_chains(role_dir: Path, handlers_file: Path) -> list[tuple] 
     its own.
     """
     try:
-        defined = yaml_fast.safe_load(handlers_file.read_text())
-    except OSError, yaml.YAMLError:
+        defined = yaml_fast.parse_yaml(handlers_file.read_text())
+    except OSError, yaml_fast.UnparsableYaml:
         return None
     if not isinstance(defined, list) or not defined:
         return None
@@ -369,7 +389,7 @@ def task_file_chains(role_dir: Path, path: str, pr_range: str, repo: Path):
     matched: set[str] = set()
 
     def keep(task, f) -> bool:
-        text = json.dumps(task)
+        text = task_text(task)
         if f == task_file and text in changed:
             matched.add(text)
             return True
@@ -429,11 +449,10 @@ def _removed_task_chains(
     block or import changed, a leaf added or edited, or no import of `task_file` found.
     """
     try:
-        old = yaml_fast.safe_load(old_text) or []
-        new = yaml_fast.safe_load(new_text) or []
-    except yaml.YAMLError:
+        old, new = _task_list(old_text), _task_list(new_text)
+    except yaml_fast.UnparsableYaml:
         return None
-    if not (isinstance(old, list) and isinstance(new, list)):
+    if old is None or new is None:
         return None
     old_leaves, old_frames = _split_leaves(old)
     new_leaves, new_frames = _split_leaves(new)
@@ -455,7 +474,7 @@ def _removed_task_chains(
         chain
         for entry in entries
         for chain in _gates_in(
-            old, role_dir, lambda t, _: json.dumps(t) in removed, task_file, entry
+            old, role_dir, lambda t, _: task_text(t) in removed, task_file, entry
         )
     ]
 
@@ -467,7 +486,7 @@ def _import_chains(
     path = role_dir / "tasks" / task_file
     try:
         tasks = _parse_tasks(path, path.stat().st_mtime_ns)
-    except OSError, yaml.YAMLError:
+    except OSError, yaml_fast.UnparsableYaml:
         return []
     return _imports_in(tasks or [], role_dir, target, inherited)
 
@@ -506,11 +525,10 @@ def changed_task_texts(old_text: str, new_text: str) -> set[str] | None:
     `when:` in its place; or no changed leaf at all.
     """
     try:
-        old = yaml_fast.safe_load(old_text) or []
-        new = yaml_fast.safe_load(new_text) or []
-    except yaml.YAMLError:
+        old, new = _task_list(old_text), _task_list(new_text)
+    except yaml_fast.UnparsableYaml:
         return None
-    if not (isinstance(old, list) and isinstance(new, list)):
+    if old is None or new is None:
         return None
     old_leaves, old_frames = _split_leaves(old)
     new_leaves, new_frames = _split_leaves(new)
@@ -532,7 +550,7 @@ def changed_task_texts(old_text: str, new_text: str) -> set[str] | None:
 
 def _name_and_gate(text: str) -> tuple[str, str]:
     task = json.loads(text)
-    return json.dumps(task.get("name")), json.dumps(task.get("when"))
+    return task_text(task.get("name")), task_text(task.get("when"))
 
 
 def _split_leaves(tasks) -> tuple[list[str], list[str]]:
@@ -548,14 +566,14 @@ def _split_leaves(tasks) -> tuple[list[str], list[str]]:
             continue
         target = next((task[k] for k in _IMPORT_KEYS if k in task), None)
         if isinstance(target, str) and "{{" not in target:
-            frames.append(json.dumps(task, sort_keys=True))
+            frames.append(task_text(task, sort_keys=True))
         elif "block" in task:
-            frames.append(json.dumps({k: v for k, v in task.items() if k != "block"}))
+            frames.append(task_text({k: v for k, v in task.items() if k != "block"}))
             sub_leaves, sub_frames = _split_leaves(task["block"] or [])
             leaves += sub_leaves
             frames += sub_frames
         else:
-            leaves.append(json.dumps(task))
+            leaves.append(task_text(task))
     return leaves, frames
 
 

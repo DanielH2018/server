@@ -40,6 +40,7 @@ from deploy_tools.deploy_lib.owners import flux_owned
 from deploy_tools.narrow_lib.broad import context_for
 from deploy_tools.render_targets import render_record_targets
 from lib.cli_help import ArgumentParser
+from lib.narrow_git import CannotNarrow
 from lib.render_guard import HOSTS_LAND_SH_NEVER_DEPLOYS
 from lib.repo_paths import HOST_VARS, K8S_ROLES
 
@@ -236,7 +237,11 @@ def main(argv: list[str] | None = None) -> int:
         "--repo", default=".", help="the checkout to read (default: the cwd)"
     )
     args = parser.parse_args(argv)
-    ctx = context_for("HEAD", args.repo)
+    try:
+        ctx = context_for("HEAD", args.repo)
+    except CannotNarrow as exc:
+        print(f"shared_role_callers: {exc}", file=_sys.stderr)
+        return 1
     owned = flux_owned(Path(args.repo), "HEAD")
     reached = {
         role: caller_tags(role, ctx.declared, ctx.callers) for role in args.roles

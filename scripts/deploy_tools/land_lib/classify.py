@@ -18,6 +18,7 @@ from deploy_tools.land_lib.land_tags import (
     guard_map_rows,
 )
 from lib.exit_codes import LAND_BAD_ARGS
+from lib.narrow_git import CannotNarrow
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 from renderer.renderer_lib.host_inputs import HOST_INPUTS
 
@@ -40,6 +41,8 @@ def _classified[**P, R](
         return fn(*args, **kwargs)
     except Outcome:
         raise
+    except CannotNarrow as exc:
+        ln.die(f"{label} failed: {exc}", 1)
     except Exception:
         ln.die(f"{label} failed", 1)
 

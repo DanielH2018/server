@@ -552,7 +552,8 @@ def context_for(
     Raises:
         subprocess.CalledProcessError: `ref` carries no host_vars, so `declared` cannot be
             read. A test driving a throwaway repo passes `declared` instead.
-        CannotNarrow: a host_vars file at `ref` does not parse.
+        CannotNarrow: a host_vars file at `ref` does not parse, or `role_callers` refuses a
+            task file.
     """
     cwd = Path(cwd)
     if declared is None:
