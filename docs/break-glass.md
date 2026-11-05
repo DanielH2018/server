@@ -34,8 +34,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
    Source: `docs/k3s-etcd-restore.md` ("Since 2026-08-20…" section).
 
 3. **The etcd snapshot.** Off-box copies land in `s3://<r2_bucket>/etcd-snapshots/`, named
-   `offbox-<node>-<unix-timestamp>.zip`. k3s uploads one at 00:00 and 12:00 and keeps 28
-   (H2.8a), and the off-box cron adds one daily at 02:45 until H2.8b retires it. Local
+   `offbox-<node>-<unix-timestamp>.zip`. k3s uploads one at 00:00 and 12:00 and keeps 28.
+   Local
    copies (daniel-box's own disk, not survivable in a total-loss event) sit at
    `/var/lib/rancher/k3s/server/db/snapshots/`, compressed, named `offbox-*`, taken at 00:00
    and 12:00, 28 retained. Credentials to reach the R2 copy are in

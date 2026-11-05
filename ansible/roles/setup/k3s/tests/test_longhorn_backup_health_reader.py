@@ -23,6 +23,7 @@ from _longhorn_reader_stubs import (
     _green_path_stub_kubectl,
     _reader_env,
     _rfc3339,
+    etcd_snapshots_body,
     _run_reader_against,
     fresh_drill_cm,
     reader_argv,
@@ -210,6 +211,39 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     assert "backup target(s) default r2 available" in proc.stdout
     assert "2 backed-up volume(s) covered across daily+weekly" in proc.stdout
     assert "2 B2 backup(s)/24h (budget 16)" in proc.stdout
+    assert "newest S3 etcd snapshot 1h old" in proc.stdout
+
+
+def test_reader_derives_the_snapshot_bound_from_the_installed_drop_in(tmp_path):
+    """A snapshot 20h old is stale on the 12-hour schedule and fresh on a 24-hour one."""
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    snapshots = etcd_snapshots_body(("s3://b/offbox", NOW - 20 * 3600, True))
+    stale = _run_reader_against(stub, tmp_path, STUB_ETCD_SNAPSHOTS=snapshots)
+    assert stale.stdout.startswith("down\t"), stale.stdout
+    assert "newest S3 etcd snapshot is 20h old (limit 14h" in stale.stdout
+
+    drop_in = tmp_path / "daily.yaml"
+    drop_in.write_text('etcd-s3: true\netcd-snapshot-schedule-cron: "0 0 * * *"\n')
+    fresh = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_ETCD_SNAPSHOTS=snapshots,
+        LONGHORN_ETCD_DROP_IN=str(drop_in),
+    )
+    assert fresh.stdout.startswith("up\t"), fresh.stdout
+
+
+def test_reader_pages_on_a_missing_drop_in_without_listing_snapshots(tmp_path):
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_FAIL_BRANCH="etcd-snapshots",
+        LONGHORN_ETCD_DROP_IN=str(tmp_path / "absent" / "50-homelab.yaml"),
+    )
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "etcd snapshot drop-in missing" in proc.stdout
+    assert "etcd snapshot list" not in proc.stdout
 
 
 def test_reader_pages_when_the_trim_cronjob_is_gone(tmp_path):
@@ -290,6 +324,7 @@ def test_reader_argv_hands_now_to_main(tmp_path):
         ("pod-logs", "recurring-job pod logs fetch failed (rc=124)"),
         ("drill-stamps", "restore-drill stamp ConfigMap fetch failed (rc=124)"),
         ("trim-cronjob", "could not read the trim CronJob"),
+        ("etcd-snapshots", "etcd snapshot list fetch failed (rc=124)"),
     ],
 )
 def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
@@ -321,6 +356,7 @@ def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, na
             "restore-drill stamp ConfigMap fetch returned an unparseable body",
         ),
         ("trim-cronjob", "could not read the trim CronJob"),
+        ("etcd-snapshots", "etcd snapshot list fetch returned an unparseable body"),
     ],
 )
 def test_an_unparseable_json_body_is_flagged_by_name(

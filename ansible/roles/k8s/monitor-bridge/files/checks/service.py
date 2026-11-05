@@ -290,11 +290,13 @@ def check_etcd_restore_drill(
     the recovery chain.
 
     Reads `last-success-list-only` SPECIFICALLY, never `last-success-full`. Only the list-only
-    leg is scheduled — the full drill cannot pass on this host (five structural
+    leg is scheduled on daniel-box — the full drill cannot pass beside a live k3s (five structural
     `k3s server --cluster-reset` failures documented in the drill's header) — so accepting either
     file would report the object-graph restore as proven when nothing here has ever proven it.
     That is the "one tier hiding behind another tier's evidence" shape, and the drill writes the
-    mode into the stamp precisely so a reader cannot make that mistake.
+    mode into the stamp precisely so a reader cannot make that mistake. The full drill passes in
+    the monthly throwaway guest on daniel-server, and `EtcdRestoreDrillFailed` pages on that
+    verdict, not on this check.
 
     Fails closed on all three ways the input can be missing, and they are reported distinctly
     because they need different fixes:

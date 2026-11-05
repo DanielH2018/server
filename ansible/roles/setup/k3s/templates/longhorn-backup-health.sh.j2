@@ -12,7 +12,7 @@
 # Thin on purpose. Everything that decides up-or-down is in longhorn_backup_health.py + its pure
 # core (longhorn_backup_health_logic.py), which are plain files with unit tests; this exists only
 # because the cron's tunables have to be templated in, and a templated file should hold as
-# little logic as possible. Same shape as fake-remux-health.sh and telemetry-health.sh.
+# little logic as possible. Same shape as fake-remux-health.sh.
 #
 # Until this existed at all, the cluster's backup path had no monitor: `grep -ic longhorn` over
 # monitor-bridge's check.py returned 0. On 2026-08-02 the Longhorn backup target went unavailable
@@ -61,15 +61,16 @@
 # actual (newer) setting. Nothing here catches that case; it is a property of which commit is on
 # the host, not something this script can detect from the outside.
 #
-# The reader issues up to 17 kubectl calls (+1 BackupTarget list that carries each target's arm
+# The reader issues up to 18 kubectl calls (+1 BackupTarget list that carries each target's arm
 # state, URL, availability and reason, +1 RecurringJob list that carries the run times, +1 backup
 # list that checks 2 to 5 share, +9 per-tier, +1 r2-set, +1 Job list that check 6 and the trim
 # arm share, +1 restore-drill stamp ConfigMap for checks 7 and 8, +1 RecurringJob pod-log read
-# that checks 9 and 11 share, +1 trim CronJob for checks 9 and 10), each with a 30s timeout, plus
-# the B2 arm's one journalctl read at 10s — a 520s worst case against this script's 600s cron
+# that checks 9 and 11 share, +1 trim CronJob for checks 9 and 10, +1 ETCDSnapshotFile list for
+# check 12), each with a 30s timeout, plus
+# the B2 arm's one journalctl read at 10s — a 550s worst case against this script's 600s cron
 # period. Left as-is: `k3s kubectl` calls against the local API server return in well under a
 # second in practice (the pod-log read took 0.1s on 2026-10-09), and 30s is a timeout for a
-# wedged cluster, not an expected duration. The margin is 80s, so two more kubectl calls fit
+# wedged cluster, not an expected duration. The margin is 50s, so one more kubectl call fits
 # before one needs a shorter deadline or a longer cron period.
 set -uo pipefail
 
@@ -161,6 +162,8 @@ export LONGHORN_B2_DELETIONS_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
 # The file the cron line touches before its job runs. /etc/cron.d is root-only, so the stat
 # above never succeeds as {{ sys_user }}; the stamp says whether the cron fired (#3677).
 export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2-deletion-accounting"
+# Check 12's bound and arm state, which the `homelab-daniel-box` package writes here.
+export LONGHORN_ETCD_DROP_IN="/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 
 # The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line and always exits 0,
 # having already logged the full (unranked) verdict to syslog itself. A nonzero exit or empty
@@ -171,8 +174,8 @@ export LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{{ k3s_cron_fired_stamp_dir }}/b2
 # subprocess of its own — it shells out to `logger` to write the full verdict before
 # printing the ranked one. `logger: socket /dev/log: ...`, or any uv/Python warning, landing on
 # stderr ahead of Python's own stdout flush used to become STATUS once `2>&1` merged the two
-# streams, silently turning an `up` into whatever garbage text preceded it — which Kuma reads as
-# DOWN and pings healthchecks.io `/fail` on a backup plane that was fine. Taking the verdict from
+# streams, silently turning an `up` into whatever garbage text preceded it — which the textfile
+# records as down, and which pings healthchecks.io `/fail` on a backup plane that was fine. Taking the verdict from
 # the LAST LINE of stdout (rather than the whole capture) is a second, independent guard against
 # the same class of contamination: even a stray stdout line ahead of the reader's own print
 # doesn't reach STATUS/MSG. longhorn_backup_health.py additionally redirects its own `logger`
@@ -192,7 +195,7 @@ else
   # The verdict is the last stdout line that OPENS with `up<TAB>` or `down<TAB>`, not simply the
   # last line. A verdict whose message carried a newline (a kubectl error, before the reader
   # flattened each problem's text) left its `(+N more ...)` tail as the last line, and the
-  # tile read "unrecognized status:" with the real cause cut off for 70 hours (#3883). With no
+  # verdict read "unrecognized status:" with the real cause cut off for 70 hours (#3883). With no
   # such line, the last line still decides and is flagged below.
   LAST_LINE="${OUT##*$'\n'}"
   while IFS= read -r line; do
@@ -200,11 +203,11 @@ else
       LAST_LINE="$line"
     fi
   done <<< "$OUT"
-  # STATUS must be Kuma's own vocabulary before anything downstream trusts it: a reader that
+  # STATUS must be `up` or `down` before anything downstream trusts it: a reader that
   # exits 0 with a last stdout line carrying no tab (a stray print, a warning that slipped past
   # the separate-stderr guard above) makes STATUS the whole line, which is neither "up" nor
   # "down" — `[[ "$STATUS" == "up" ]]` reads false and pings a healthchecks.io /fail on a status
-  # string Kuma never defined either. Treat that the same as a reader crash.
+  # string nothing defines. Treat that the same as a reader crash.
   if [[ $RC -ne 0 || -z "$LAST_LINE" ]]; then
     STATUS=down
     MSG="longhorn backup health reader failed: ${ERR:-${OUT:-(no output)}}"

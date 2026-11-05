@@ -145,6 +145,7 @@
     - longhorn_backups.py
     - longhorn_cluster_state.py
     - longhorn_cron_evidence_logic.py
+    - longhorn_etcd_s3_logic.py
     - longhorn_restore_drill_stamps.py
     - longhorn_skipped_volumes_logic.py
   become: true
@@ -220,6 +221,8 @@
         src: scripts/lib/longhorn_lib/longhorn_cluster_state.py
       - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_cron_evidence_logic.py
         src: scripts/lib/longhorn_lib/longhorn_cron_evidence_logic.py
+      - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_etcd_s3_logic.py
+        src: scripts/lib/longhorn_lib/longhorn_etcd_s3_logic.py
       - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_restore_drill_stamps.py
         src: scripts/lib/longhorn_lib/longhorn_restore_drill_stamps.py
       - live: /opt/longhorn-backup-health/longhorn_lib/longhorn_skipped_volumes_logic.py
@@ -550,12 +553,12 @@
     check_timer_cron_name: "Live object drift check"
     check_timer_cron_file: live-drift-check
 
-- name: Deploy the off-box etcd snapshot credentials
+- name: Deploy the etcd restore credentials
   tags: [etcd-snapshot]
   # 0600 root:root, not 0640 root:{{ sys_user }} like the Healthchecks key above: these are the
-  # R2 write credentials for the bucket that also holds every Longhorn backup, and the only
-  # caller is a root cron. Kept out of the script itself because that lands 0755 — the same
-  # reasoning as ping.env, one tier stricter because the blast radius is the backup store.
+  # R2 write credentials for the bucket that also holds every Longhorn backup, and only root reads
+  # them: the restore runbook and the etcd restore drill. k3s's own schedule uploads with the
+  # Secret `longhorn-backup` renders, which a restore cannot use because the API may be gone.
   ansible.builtin.copy:
     content: |
       AWS_ACCESS_KEY_ID={{ r2_access_key_id }}
@@ -569,16 +572,9 @@
   become: true
   no_log: true  # renders the R2 access key and secret
 
-- name: Deploy the off-box etcd snapshot as a versioned release
+- name: Deploy the cluster-token drift check as a versioned release
   tags: [etcd-snapshot]
-  # Root-run: `k3s etcd-snapshot save` talks to the local etcd through the server's own data-dir
-  # and token. Unlike the heartbeats above it cannot use the read-only ServiceAccount at all —
-  # this is a control-plane operation, not a cluster API read.
-  #
-  # Eligible for a release despite the task above carrying `no_log`: that one renders the R2
-  # credentials into a SEPARATE env file, and this script only sources them. What disqualifies a
-  # script is a credential in its own rendered bytes, which retention would then keep five copies
-  # of — not the presence of a secret anywhere in its role.
+  # Root-run: the token file and the operator's stamp are root-only. The check reads no cluster.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
   vars:
     release_bin_group: k3s-etcd-snapshot
@@ -586,15 +582,36 @@
       {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-etcd-snapshot')
           | first).templates }}
 
-- name: Schedule the off-box etcd snapshot
+- name: Schedule the cluster-token drift check
   tags: [etcd-snapshot]
+  # The logger tag keeps the check's name, `etcd-snapshot-offbox`, which the textfile, the
+  # Healthchecks.io slug and the rules read.
   ansible.builtin.cron:
-    name: "Off-box etcd snapshot"
+    name: "etcd token drift"
     minute: "{{ k3s_etcd_s3_cron_minute }}"
     hour: "{{ k3s_etcd_s3_cron_hour }}"
     user: root
-    job: "/usr/local/bin/etcd-snapshot-offbox.sh 2>&1 | logger -t etcd-snapshot-offbox"
+    job: "/usr/local/bin/etcd-token-drift.sh 2>&1 | logger -t etcd-snapshot-offbox"
+    cron_file: etcd-token-drift
+  become: true
+
+# k3s's native schedule uploads the off-box snapshots since H2.8b. Nothing removes a cron file or a
+# script link the role stops declaring, so these two arms retire the host copies. The link runs
+# through `/opt/homelab/current/k3s-etcd-snapshot`, whose new release lacks the script.
+- name: Retire the off-box etcd snapshot cron
+  tags: [etcd-snapshot]
+  ansible.builtin.cron:
+    name: "Off-box etcd snapshot"
     cron_file: etcd-snapshot-offbox
+    user: root
+    state: absent
+  become: true
+
+- name: Retire the off-box etcd snapshot script link
+  tags: [etcd-snapshot]
+  ansible.builtin.file:
+    path: /usr/local/bin/etcd-snapshot-offbox.sh
+    state: absent
   become: true
 
 - name: Schedule the etcd restore drill

@@ -21,9 +21,7 @@ from secrets_mgmt.rotation_tools import load_registry
 
 
 # ── consumer mapping (which redeploys apply a rotated token) ─────────────────
-def test_consumer_tags_status_page_sync_token_is_manual():
-    # No render reads it, so the unattended cron must not rotate it behind a deploy.
-    assert consumer_tags("kuma_status_page_sync_push_token") == ()
+def test_consumer_tags_of_a_token_no_arm_maps_are_empty():
     # `kopia_restore_drill_push_token` is absent from both secrets.yml and secret_rotation.yml,
     # so no arm maps it and it resolves to no consumer.
     assert consumer_tags("kopia_restore_drill_push_token") == ()

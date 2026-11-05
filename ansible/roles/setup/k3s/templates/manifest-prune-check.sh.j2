@@ -20,14 +20,7 @@
 # cluster object running forever after its template entry is gone. This is the exact shape of
 # two live incidents on 2026-08-13: the claude-otel-ingest IngressRoute (observability
 # namespace) is STILL RUNNING right now with no ownerReferences and no mention anywhere in
-# ansible/roles/k8s/observability/templates/ — confirmed live while writing this check — and Kuma
-# monitors 300/301 outlived their static-monitors.yaml.j2 entries at E7.
-#
-# LIMITATION, by design: Kuma monitors are NOT checked here. AutoKuma reconciles those from a
-# mix of live Docker labels and this role's static Secret, and a bash diff against that split
-# source would be unreliable — see the header of static-monitors.yaml.j2 for why "removing an
-# entry here may not reach the cluster" is already a known trap for THAT reconciliation path.
-# The Kuma-monitor drift class needs its own fix, not a bolt-on here.
+# ansible/roles/k8s/observability/templates/ — confirmed live while writing this check.
 #
 # Compares live objects against the STAGED rendered manifests under /etc/rancher/k3s/manifests/,
 # not the .j2 templates: the staged copies are what `kubectl apply` actually acted on and are
@@ -90,7 +83,7 @@ source /usr/local/lib/setup-drift-lib.sh || {
 # Runs as root under cron, whose default PATH (/usr/bin:/bin) omits /usr/local/bin — where
 # the k3s install script puts the binary. Without this, `k3s` resolves to nothing and every
 # `kubectl get` below fails. Until #4604 that failure read as zero objects and the check pushed a
-# permanent false "up"; check_kind now records it in LIST_ERR, so the tile goes red. Same trap as
+# permanent false "up"; check_kind now records it in LIST_ERR, so the check reports down. Same trap as
 # cron-path-omits-usr-local-bin.md; the sibling heartbeats beside this one (disk-health.sh.j2,
 # longhorn-backup-health.sh.j2) don't set this either and should be checked for the same bug.
 export PATH="/usr/local/bin:${PATH}"
@@ -232,7 +225,7 @@ LIST_ERR=""
 # read the label alone would hide exactly the objects this check exists to report.
 #
 # A failed read skips nothing, so every Flux-labelled object is checked as if Ansible owned it,
-# and FLUX_ERR turns the tile red with the cause.
+# and FLUX_ERR reports the check down with the cause.
 declare -A FLUX_KUSTOMIZATIONS=()
 FLUX_ERR=""
 read_flux_kustomizations() {

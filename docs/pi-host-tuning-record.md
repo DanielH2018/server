@@ -101,6 +101,34 @@ dependency-safe: netplan only Suggests OVS. It also purges fwupd — its hourly
 autoheal restart loops while never surviving its own 25 s dbus activation timeout, and Pi
 firmware arrives through apt rather than LVFS.
 
+The debloat step also purges `appstream`. Its conffile `/etc/apt/apt.conf.d/50appstream` makes
+every successful `apt-get update` run `appstreamcli refresh --source=os`, which refreshes a
+catalogue for graphical software centres that nothing on the Pi reads. On 2026-11-05 one refresh
+ran for 3193 s in state D, at load 15.9, with 8 MB free and about 5000 KB/s of swap traffic each
+way. Other apt users queued behind it, and `dockerd` stopped answering `docker ps`.
+
+The hook fires on every path into apt, so the 04:20 and 05:20 UTC apt timers do not bound it:
+
+- `homelab-updater` fetches its own source with a scoped `apt-get update`. The hook ignores that
+  scope and refreshes the whole catalogue. `homelab-updater-poll.timer` starts the updater once
+  per published `homelab-daniel-pi`, so a publish can start a refresh at any hour. The process
+  table read on 2026-11-05 at 01:35 UTC showed `appstreamcli` in `homelab-updater.service`'s
+  cgroup, under the updater's `apt-get update`.
+- `initial_setup`'s *Update and upgrade system packages* task runs the hook through the Ansible
+  apt module.
+
+The purge is dependency-safe. `apt-get -s purge appstream` on the Pi removes that one package,
+because `packagekit` only Recommends it and needs `libappstream5`, which stays. `apt-get
+dist-upgrade` installs a Recommends only when a package newly adds it, and `homelab-updater`
+installs with `--no-install-recommends`, so neither path brings `appstream` back. The purge covers
+the Pi alone, because daniel-box and daniel-server have the memory to run the hook.
+
+The bootstrap step runs only on a rebuild, so a Pi that is already up takes this purge by hand:
+
+```zsh
+ssh -t ubuntu@10.0.0.139 'sudo apt-get purge -y -o DPkg::Lock::Timeout=600 appstream'
+```
+
 Three things are masked rather than purged, so a package update cannot silently re-enable
 them:
 

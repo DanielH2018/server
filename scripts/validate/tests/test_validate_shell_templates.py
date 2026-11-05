@@ -88,7 +88,7 @@ def test_discover_templates_finds_the_known_set():
         "manifest-prune-check.sh.j2",
         "release-staleness-check.sh.j2",
         "loki-read-route-health.sh.j2",
-        "etcd-snapshot-offbox.sh.j2",
+        "etcd-token-drift.sh.j2",
         "github-ruleset-drift.sh.j2",
         "github-interaction-limit.sh.j2",
         "claude-otel-health.sh.j2",

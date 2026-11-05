@@ -37,7 +37,7 @@ SHELL_CHECKS = {
         "release-staleness-check.sh.j2",
         "k3s_release_staleness_cron_minute",
     ),
-    "EtcdSnapshotOffboxNotReporting": ("etcd-snapshot-offbox.sh.j2", None),
+    "EtcdSnapshotOffboxNotReporting": ("etcd-token-drift.sh.j2", None),
     "ManifestPruneCheckNotReporting": ("manifest-prune-check.sh.j2", None),
 }
 LIVE_DRIFT_ALERT = "LiveDriftCheckNotReporting"
@@ -104,7 +104,7 @@ def test_a_cron_that_moves_without_its_rule_is_flagged():
 def test_a_daily_deadline_that_moves_without_its_rules_is_flagged():
     # The three daily rules read the shared default: moving it must show on every one of them.
     moved = rendered_deadline(
-        "etcd-snapshot-offbox.sh.j2", {"k3s_daily_check_deadline_s": 3600}
+        "etcd-token-drift.sh.j2", {"k3s_daily_check_deadline_s": 3600}
     )
     assert moved == 3600
     assert literal_problems(rule_expr("EtcdSnapshotOffboxNotReporting"), moved)

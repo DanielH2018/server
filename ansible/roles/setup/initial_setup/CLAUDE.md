@@ -60,9 +60,10 @@ are in the record page.
   `hosts/components/host-tuning/templates/50-homelab-journald.conf`; the filter is this role's,
   gated `when: has_rsyslog` (false on the Pi). ENFORCED:
   `ansible/tests/setup/test_journald_syslog_forwarding.py::test_raising_the_forwarding_level_requires_the_syslog_filter`.
-- **Handlers live in `handlers/main.yml`**; its header says why the order there matters. The
-  two optimize_pi notifies went with that role's tasks in H7.25. ENFORCED:
-  `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`.
+- **Handlers live in `handlers/main.yml`**, and a `notify:` from any role in the play can reach
+  them. Each handler needs a notifier. ENFORCED:
+  `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_notify_in_initial_setup_resolves_to_a_handler`,
+  `ansible/tests/setup/test_setup_handlers_resolve.py::test_every_handler_in_the_play_has_a_notifier`.
 
 ## No state-changing job remains here
 The weekly reboot, the firmware update, the Docker image prune, the apt autoremove and dpkg

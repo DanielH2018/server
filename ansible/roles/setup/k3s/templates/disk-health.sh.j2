@@ -117,8 +117,8 @@ write_textfile() {
 write_textfile || logger -t disk-health "textfile write to ${TEXTFILE_DIR} failed (status=${STATUS})"
 
 # Off-premises dead-man's switch — see longhorn-backup-health.sh.j2 for the full rationale.
-# Short version: Kuma runs on the cluster this watches, so an outage silences both the push and
-# the monitor. hc-ping.com alerts on the silence instead. Skipped when no key is configured.
+# Short version: Prometheus runs on the cluster this watches, so an outage silences both the
+# textfile's scrape and the rule. hc-ping.com alerts on the silence instead. Skipped when no key is configured.
 # Sourced rather than inlined: this script is 0755 so the {{ sys_user }} cron can execute it,
 # which would make an inlined key readable by every local account. The env file is 0640.
 HC_PING_KEY=""

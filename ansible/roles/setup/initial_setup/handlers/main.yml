@@ -1,10 +1,4 @@
 ---
-# Handlers fire in the order they are DEFINED, not the order tasks notify them, and the roles
-# in initial_setup.yml contribute theirs in role order. `Restart Watchdog` and `Start Watchdog
-# after provisioning` depend on that, so the pair stays in this one file. optimize_pi's
-# watchdog tasks notify across the role boundary; the handlers live here rather than there
-# because a role's handlers inherit its `when:`, and optimize_pi's is gated to one host while
-# this role is unconditional.
 - name: Restart rsyslog
   ansible.builtin.service:
     name: rsyslog
@@ -15,14 +9,7 @@
   become: true
   changed_when: true
 
-# Notified by optimize_pi's watchdog config tasks.
-- name: Restart Watchdog
-  ansible.builtin.service:
-    name: watchdog
-    state: restarted
-
 # Notified by "Stop the hardware watchdog during provisioning (Pi)" in tasks/host-basics.yml.
-# After Restart Watchdog, because a restart already starts it.
 - name: Start Watchdog after provisioning
   ansible.builtin.service:
     name: watchdog
@@ -35,9 +22,9 @@
   ansible.builtin.command: update-initramfs -u
   changed_when: true
 
-# Deliberately no reboot handler. Unlike optimize_pi's "Reboot Pi" — gated to daniel-pi —
-# this fires on the machine running the whole homelab, and rebooting it unattended to
-# apply a transcode tunable is not a trade initial_setup.yml should make on its own.
+# Deliberately no reboot handler. This fires on the machine running the whole homelab, and
+# rebooting it unattended to apply a transcode tunable is not a trade initial_setup.yml should
+# make on its own.
 - name: Warn that a reboot is required for i915 GuC
   ansible.builtin.debug:
     msg: >-

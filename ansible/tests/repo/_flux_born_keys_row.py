@@ -11,7 +11,7 @@ is at the cap for a test module.
 One subject per top-level key of a Flux-born role's `defaults/main.yml`. A key offends when a task,
 handler or template under `ansible/roles/setup/` names it outside a YAML comment. A mirrored pair
 is the way out for a key a host file needs: the host role defines its own twin under another name
-(`k3s_etcd_s3_region` for `k3s_longhorn_r2_region`) and a test holds the two equal.
+and a test holds the two equal.
 """
 
 import re
@@ -112,8 +112,7 @@ FLUX_BORN_KEYS = Census(
         "and leaves the host stale: a stale disarm makes the backup monitor permanently red, a "
         "stale arm leaves a new target unchecked. Make the host reader derive the value from the "
         "live object (the backup-health reader does), or define a mirrored twin in the host "
-        "role under another name and hold the two equal with a test "
-        "(k3s_etcd_s3_region and k3s_longhorn_r2_region)."
+        "role under another name and hold the two equal with a test."
     ),
     files=_subjects,
     offence=host_reads,
@@ -136,7 +135,7 @@ FLUX_BORN_KEYS = Census(
         FluxBornKey(
             "longhorn-backup",
             "k3s_longhorn_r2_region",
-            {_TEMPLATE: '  --etcd-s3-region "{{ k3s_etcd_s3_region }}" \\\n'},
+            {_TEMPLATE: '  --etcd-s3-region "{{ k3s_host_r2_region }}" \\\n'},
         ),
         # A longer key is not a read of the shorter one.
         FluxBornKey(

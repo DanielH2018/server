@@ -344,12 +344,12 @@ def setup_repo_file_hosts(
     THE HOLE THIS CLOSES. `setup_file_hosts` keys on the path sitting under
     `ansible/roles/setup/<role>/`, and `remaining_setup_hosts_note` only ever handed it paths
     with that prefix, so a repo file a role's task copies from the checkout would be invisible to
-    the reach. For example `scripts/deploy_tools/staging_gate_remote.sh` is installed by
-    `hypervisor/tasks/install.yml` as `/usr/local/bin/staging-gate-run` on the one host with
-    `has_hypervisor: true`, while `hypervisor/tasks/teardown.yml` reaches the others. The
+    the reach. For example `scripts/backup/etcd_restore_drill.sh` is installed by
+    `hypervisor/tasks/etcd_drill.yml` as `/usr/local/lib/etcd-restore-drill.sh` on the one host
+    with `has_hypervisor: true`, while `hypervisor/tasks/teardown.yml` reaches the others. The
     union over the role's own files is `{daniel-box, daniel-pi}` from the teardown half alone,
     so a note built from it names daniel-pi and omits **daniel-server** -- the only host the
-    changed script actually runs on.
+    role installs the changed script on.
 
     Evidence only: a role that ships nothing named `path` contributes the empty set, not its
     role-level reach. `task_gates_shipping_repo_path`'s docstring has why -- the inverse
@@ -488,10 +488,10 @@ def _remaining_hosts(
 
     A role reached ONLY through a changed repo file it ships is named too, and named
     differently: `cs.setup_roles` is built from path classification, so a PR whose only loud
-    path is `scripts/deploy_tools/staging_gate_remote.sh` puts no role in the change set at all
-    and would get no line, while daniel-server kept running the old
-    `/usr/local/bin/staging-gate-run`. The tick applied that role on no host, so its
-    remediation includes `local_host`.
+    path is a repo file the role copies from the checkout, with no row in
+    `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`, puts no role in the change set at
+    all and would get no line, while the installing host kept the old copy. The tick applied
+    that role on no host, so its remediation includes `local_host`.
 
     Empty for a role like `gitops_deploy`, which is `when: has_gitops`, true only on
     daniel-box, so a PR touching only a role whose sole reached host is `local_host` stays

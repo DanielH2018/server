@@ -8,8 +8,8 @@ seconds end to end.
 
 A weekly `--list-only` drill on daniel-box (`k3s_etcd_restore_drill_cron`, armed by
 `k3s_etcd_restore_drill_armed`) proves the listing leg. `check_etcd_restore_drill()` in
-monitor-bridge reads its stamp fail-closed onto the `etcd Restore Drill` Kuma tile. The monthly
-drill reports through `EtcdRestoreDrillFailed` and `EtcdRestoreDrillNotReporting`.
+monitor-bridge reads its stamp fail-closed, and `EtcdRestoreDrillFailing` pages on the verdict.
+The monthly drill reports through `EtcdRestoreDrillFailed` and `EtcdRestoreDrillNotReporting`.
 
 No drill exercises the steps after the object graph comes back: the agent rejoin, the Longhorn
 reattach, and the restore onto a replacement host rather than into a scratch data-dir. Those
@@ -109,8 +109,8 @@ you ever rotate it, this line is stale the moment you do** — re-copy first, th
 ### Baseline the drift stamp when you take the copy
 
 Whether the copy still *exists* is not machine-checkable, as above. Whether the LIVE token still
-matches what you copied is a hash comparison, and `etcd-snapshot-offbox.sh` makes it daily: it reports the
-snapshot DOWN when the live token no longer matches the stamp, because a snapshot nobody can
+matches what you copied is a hash comparison, and `etcd-token-drift.sh` makes it daily: it reports
+DOWN when the live token no longer matches the stamp, because a snapshot nobody can
 decrypt is not a backup. Until the stamp exists the arm reports the baseline as missing, which is
 the correct reading — the restore path is unproven until you take the copy.
 
@@ -152,11 +152,10 @@ cron exists to find), and anything created outside the repo.
 - Local, k3s's own schedule: `/var/lib/rancher/k3s/server/db/snapshots/`, 00:00 and 12:00.
   Since H2.8a each one is compressed and named `offbox-*`, and 28 are kept. The flags are the
   `etcd-snapshot-*` keys of `k3s_server_config` in `hosts/components/k3s-server/component.yml`.
-- Off-box, from two writers until H2.8b retires the cron. k3s's own schedule uploads each
-  00:00 and 12:00 snapshot. It reads every S3 value from the `k3s-etcd-snapshot-s3-config`
-  Secret in `kube-system`, which the `longhorn-backup` role renders. The cron this doc began
-  with uploads daily at 02:45. Both write to R2, `s3://<r2_bucket>/etcd-snapshots/`, so the
-  creation time tells them apart. Each is named `offbox-<node>-<unix-timestamp>.zip`. It is
+- Off-box, on R2 at `s3://<r2_bucket>/etcd-snapshots/`. k3s's own schedule uploads each 00:00
+  and 12:00 snapshot. It reads every S3 value from the `k3s-etcd-snapshot-s3-config` Secret in
+  `kube-system`, which the `longhorn-backup` role renders. To disarm the upload, set `etcd-s3:
+  false` in `k3s_server_config`. Each is named `offbox-<node>-<unix-timestamp>.zip`. It is
   compressed, and the extension is literally `.zip`. The name matters: it is what
   `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
 - Credentials for a restore: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered
@@ -166,9 +165,14 @@ cron exists to find), and anything created outside the repo.
 <!-- Generated from etcd-snapshot-retention in the k3s-server component; edit that. -->
 --8<-- "assets/generated/fragments/etcd-offbox-retention.md"
 
+Check 12 of `longhorn-backup-health` watches the upload. It reports DOWN when the newest ready S3
+snapshot is older than the schedule's period plus two hours (14 hours), when none exists, or
+when the drop-in's `etcd-s3` is false, missing or unreadable.
+
 The `EtcdSnapshotOffboxFailed` and `EtcdSnapshotOffboxNotReporting` alert rules (read from the
-cron's node_exporter textfile verdict) plus the `etcd-snapshot-offbox` Healthchecks.io check
-cover the cron. The alert rules page since M6 batch B1's Cutover-1b, which replaced the Kuma tile.
+node_exporter textfile verdict of `etcd-token-drift.sh`, the daily token comparison) plus the
+`etcd-snapshot-offbox` Healthchecks.io check cover that comparison. They keep the name of the
+upload cron that H2.8b retired, so no rule or dead-man changed name.
 The Healthchecks ping is sent from the first run regardless — but it is discarded until the check
 is created by hand in the console, because the slug is sent bare and never with `?create=1`. See
 `healthchecks-io-deadman.md` for its schedule and grace.
@@ -269,7 +273,7 @@ gate 3 needs the API server up.
    drill on daniel-box runs `runbook_gates.py etcd-restore --gate 3` against the snapshot it just
    listed, and treats any non-zero exit — 69 included — as a drill failure (#2420). So a k3s
    change to the `ETCDSnapshotFile` CR, or a loss of the read-only ServiceAccount's access to
-   it, shows up on the **etcd Restore Drill** tile within a week rather than on the day you
+   it, fires `EtcdRestoreDrillFailing` within about a week rather than waiting for the day you
    read this page. The drill cannot run gates 1 and 2: gate 1 reads the stamp that drill
    writes, and gate 2's stamp is taken by hand.
 

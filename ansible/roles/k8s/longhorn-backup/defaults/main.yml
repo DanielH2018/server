@@ -149,12 +149,6 @@ k3s_longhorn_r2_armed: true
 
 # R2's region component is literally "auto" and the account-specific part is the endpoint
 # host. R2 shares no configuration with B2, so the two regions are independent variables.
-#
-# A mirrored pair: `setup/k3s`'s defaults hold the twin `k3s_etcd_s3_region`, which the off-box
-# etcd snapshot script passes as `--etcd-s3-region`. A host file may not read a key this role
-# defines (the `no Flux-born key on the host plane` census row), so the script reads the twin.
-# ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py holds the two equal, so a
-# change to one must change both in the same PR. H2.8b deletes the twin with the upload.
 k3s_longhorn_r2_region: auto
 k3s_longhorn_r2_backup_prefix: longhorn
 

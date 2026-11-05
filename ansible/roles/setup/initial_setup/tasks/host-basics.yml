@@ -3,13 +3,12 @@
 # The Zero 2 W has 512 MB RAM; apt-show-versions' cache build and
 # `upgrade: dist` OOM-kill mid-dpkg without disk-backed swap, corrupting the
 # package DB (the classic "dpkg was interrupted" deploy hang). The thrash can
-# also trip the optimize_pi watchdog (max-load-1=24) into rebooting mid-apt,
-# so we stop the watchdog for the run. This lives here, not in optimize_pi, because optimize_pi
-# runs LAST in initial_setup.yml — too late to protect these apt tasks.
+# also trip the watchdog (`max-load-1 = 24`, hosts/components/pi-tuning/) into rebooting mid-apt,
+# so we stop the watchdog for the run.
 #
 # The stop notifies a handler that starts the daemon again, because handlers run at the end of
-# the play whichever tags were selected. Relying on optimize_pi's own `state: started` task left
-# the watchdog daemon dead after any run that reached `pi-swap` without the `watchdog` tag:
+# the play whichever tags were selected. A `state: started` task behind a `watchdog` tag left
+# the watchdog daemon dead after any run that reached `pi-swap` without that tag:
 # the 2026-09-27 23:28 run stopped it, wd_keepalive took over the device, and the daemon's load
 # test stayed off for four days (#3241).
 - name: Gather service facts
@@ -120,7 +119,7 @@
 - name: Install Raspberry Pi-specific packages
   # openvswitch-switch-dpdk is deliberately absent from this list: it is never
   # configured (no bridges, no netplan stanzas) and mlockall-pins ~14 MB on the
-  # 512 MB board. optimize_pi's debloat task purges it, and listing it here
+  # 512 MB board. Step 4 of hosts/bootstrap-host.sh purges it, and listing it here
   # would reinstall it on every full run.
   tags: [packages]
   ansible.builtin.apt:
@@ -134,8 +133,9 @@
 # apt-show-versions hooks EVERY apt invocation with a full cache rebuild — 10-30 min
 # of swap-thrash on the 512 MB Pi. The Pi
 # gets nothing from it (apticron-style reporting), so it's roomy-hosts-only.
-# The Pi removal runs BEFORE any other package work so a missing base package
-# can't trigger one final hook grind on the way in.
+# The Pi removal runs before the base-package install below, so a missing base package
+# can't trigger one final hook grind on the way in. The dist-upgrade and the Pi-specific
+# install above run first, so a host still carrying it can pay their hook runs.
 - name: Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)
   ansible.builtin.apt:
     name: apt-show-versions

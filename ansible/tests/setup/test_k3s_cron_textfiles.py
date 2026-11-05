@@ -13,6 +13,7 @@ ansible/roles/setup/k3s/tests/test_live_drift_check.py. The deadline literals ar
 render in ansible/tests/services/test_b1_rule_literals.py.
 """
 
+import hashlib
 import re
 
 import pytest
@@ -26,7 +27,7 @@ HC_ENV = "/etc/healthchecks/ping.env"
 UV = "/usr/local/bin/uv"
 SHELL_PRODUCERS = {
     "longhorn-backup-health": "longhorn-backup-health.sh.j2",
-    "etcd-snapshot-offbox": "etcd-snapshot-offbox.sh.j2",
+    "etcd-snapshot-offbox": "etcd-token-drift.sh.j2",
     "manifest-prune-check": "manifest-prune-check.sh.j2",
     "release-staleness-check": "release-staleness-check.sh.j2",
 }
@@ -39,8 +40,19 @@ wan_reachable() {{ [[ "${{WAN_UP:-1}}" == "1" ]]; }}
 """
 
 
-def _run(tmp_path, tag, overrides=None, stubs=None, env=None, uv_body="exit 0\n"):
-    """Run the rendered producer once; return the textfile directory."""
+def _run(
+    tmp_path,
+    tag,
+    overrides=None,
+    stubs=None,
+    env=None,
+    uv_body="exit 0\n",
+    host_paths=None,
+):
+    """Run the rendered producer once; return the textfile directory.
+
+    `host_paths` maps a path the script names to the stand-in the case created.
+    """
     body = render_shell_script(
         "setup", "k3s", SHELL_PRODUCERS[tag], overrides=overrides
     )
@@ -57,6 +69,9 @@ def _run(tmp_path, tag, overrides=None, stubs=None, env=None, uv_body="exit 0\n"
         .replace(HC_ENV, str(hc_env))
         .replace(UV, str(uv))
     )
+    for host_path, stand_in in (host_paths or {}).items():
+        assert host_path in body, f"{SHELL_PRODUCERS[tag]} no longer reads {host_path}"
+        body = body.replace(host_path, str(stand_in))
     script = write_exec(tmp_path / f"{tag}.sh", body)
     bin_dir = fake_bin(
         tmp_path / "bin",
@@ -112,21 +127,58 @@ def test_a_producer_has_no_kuma_push_left(tag):
         assert leftover not in body, f"{SHELL_PRODUCERS[tag]} still names {leftover}"
 
 
-def test_a_down_verdict_is_written_with_the_daily_deadline_and_no_kuma_credentials(
-    tmp_path,
-):
-    # A disarmed etcd snapshot reports down through report(), the one path every verdict takes.
-    # The harness has no Kuma credential file, and the run still writes the verdict.
+def _token_drift(tmp_path, token: str | None, stamp: str | None) -> tuple[str, str]:
+    """Run etcd-token-drift.sh against a stand-in token and stamp; (success, logged text)."""
+    token_file = tmp_path / "token"
+    stamp_file = tmp_path / "etcd-token.sha256"
+    if token is not None:
+        token_file.write_text(token)
+    if stamp is not None:
+        stamp_file.write_text(stamp)
     textfile_dir = _run(
         tmp_path,
         "etcd-snapshot-offbox",
-        overrides={"k3s_etcd_s3_armed": False},
+        host_paths={
+            "/var/lib/rancher/k3s/server/token": token_file,
+            "/var/lib/homelab/etcd-token.sha256": stamp_file,
+        },
     )
     series = _series(textfile_dir, "etcd-snapshot-offbox")
-    assert series['homelab_check_success{check="etcd-snapshot-offbox"}'] == "0"
     assert series['homelab_check_deadline_seconds{check="etcd-snapshot-offbox"}'] == (
         "90000"
     )
+    success = series['homelab_check_success{check="etcd-snapshot-offbox"}']
+    return success, (tmp_path / "logged").read_text()
+
+
+def test_a_matching_token_is_clean(tmp_path):
+    token_hash = hashlib.sha256(b"token").hexdigest()
+    success, logged = _token_drift(tmp_path, "token", token_hash + "\n")
+    assert success == "1"
+    assert "cluster token unchanged since stamped" in logged
+
+
+@pytest.mark.parametrize(
+    ("token", "stamp", "named"),
+    [
+        ("token", "0" * 64, "CLUSTER TOKEN ROTATED"),
+        ("token", None, "cluster-token baseline missing"),
+        (None, "0" * 64, "cluster-token drift UNVERIFIED"),
+        ("token", "\n", "drift UNVERIFIED"),
+    ],
+)
+def test_a_token_fault_is_flagged(tmp_path, token, stamp, named):
+    # The harness has no Kuma credential file, and the run still writes the verdict.
+    success, logged = _token_drift(tmp_path, token, stamp)
+    assert success == "0"
+    assert named in logged
+
+
+def test_the_token_drift_script_takes_no_snapshot_and_reads_no_s3_credential():
+    body = render_shell_script("setup", "k3s", SHELL_PRODUCERS["etcd-snapshot-offbox"])
+    assert "etcd-snapshot save" not in body
+    assert "etcd-s3" not in body
+    assert "AWS_" not in body
 
 
 def test_a_reader_verdict_is_written_and_a_boot_grace_run_writes_nothing(tmp_path):

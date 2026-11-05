@@ -18,6 +18,7 @@ import pytest
 from _helpers import registry_secret_names
 from lib import yaml_fast
 from lib.repo_paths import REPO
+from longhorn_lib import longhorn_etcd_s3_logic as etcd_s3
 from renderer.renderer_lib import host as host_mode
 from renderer.renderer_lib.environment import RenderError
 
@@ -108,6 +109,11 @@ def test_the_drop_in_names_only_the_s3_keys_that_defer_to_the_secret(package):
         "etcd-s3",
         "etcd-s3-config-secret",
     ]
+
+
+def test_check_12_reads_the_drop_in_the_package_renders(package):
+    """Backup health parses this file without YAML, so it must meet the real render."""
+    assert etcd_s3.allowed_age_s(lambda: text(package, CONFIG)) == 14 * 3600
 
 
 def placeholder_leaks(package, names: list[str]) -> list[str]:

@@ -2023,11 +2023,12 @@ here. C-1 waits for the operator's acceptance.
       deleted the narrowing. `narrow_lib/filters.py` refuses any deleted plugin, so this PR
       waits for D6, which deletes the narrowing. Until then the file, its registration and
       that row are on the allowlist.
-5. **C-5, secrets.** **Operator-only:** remove every remaining push token,
+5. **C-5, secrets.** **Operator-only:** remove `kuma_status_page_sync_push_token`,
    `uptime_kuma_username`, `uptime_kuma_password` and `prometheus_kuma_api_key` from
    `secrets.yml`. The same commit deletes their rows from `ansible/secret_rotation.yml`, adds
    them to `RETIRED`, and carries the regenerated fragment. That is the token-PR rule in
-   *Steps*.
+   *Steps*. `render_records_push_token` stays for R4, which removes it after deleting the
+   role that renders it, so exit criterion 2 holds only after R4's secrets commit.
 6. **C-6, the census row.** It holds `kuma` to its allowlist from then on (exit criterion 3).
    Under `hosts/`, the grep below also matches the Kuma push producers and the push plumbing
    that moved into host packages after this plan was written, such as `hosts/lib/kuma_push.py`

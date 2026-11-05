@@ -61,7 +61,7 @@ because a role doc is loaded on every task in this directory whether it is neede
 
 | Looking for | Read |
 |---|---|
-| Auth, HACS, `configuration.yaml` templating, entity naming, the PVC, pod networking | [`docs/platform.md`](docs/platform.md) |
+| Auth, Marketplace, `configuration.yaml` templating, entity naming, the PVC, pod networking | [`docs/platform.md`](docs/platform.md) |
 | Presence, adaptive lighting, the light/fan mediator, the Tap Dial, the lux gate, manual override, bedtime + wake | [`docs/lighting-and-presence.md`](docs/lighting-and-presence.md) |
 | Threshold alerts, `bedroom_notify` routing, away-hold, UPS/CO2/sensor-offline alerts | [`docs/alerts-and-notifications.md`](docs/alerts-and-notifications.md) |
 | Fan control, the YAML dashboard, outdoor AQI + window advisor | [`docs/climate-and-air.md`](docs/climate-and-air.md) |

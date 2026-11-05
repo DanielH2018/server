@@ -63,6 +63,7 @@ RETIRED = frozenset(
         "k3s-longhorn-reap",
         "Longhorn filesystem trim",
         "Longhorn restore drill",
+        "Off-box etcd snapshot",
         "qbittorrent prefs drift check",
     }
 )
