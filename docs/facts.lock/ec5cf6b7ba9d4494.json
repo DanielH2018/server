@@ -1,16 +1,18 @@
 {
-  "checksum": "1e7216c559fe40ab7e36653c777d2ef5be0c833b0c7d532d49b41e0f45a287a6",
+  "checksum": "1fa34829b2039af834b7d82b2f020e2dbb7b1e6b5672ea7f8a3ff7dfd0b3db9b",
   "generated": "by `scripts/dev/fact_status.py verify`. Do not edit: `checksum` is over `key` and `row`.",
   "key": "ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)",
   "row": {
     "atoms": {
       "ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py::test_no_setup_role_schedules_a_reaper": "852f2d6c0e3b2403dcf0d9190f9598efc49245694a70fe4b0249abced8946e6e",
       "docs/k3s-node-plane-crons-and-incidents.md": "47634daf3e04f54df032bcc8938c13bcccfea73558e99d58546e331f90ece53d",
+      "hosts/components/k3s-server/component.yml": "5fb01de80a34abff152ba23889fb025d1b95bf0601cd18625bac7097600850b1",
       "scripts/backup/longhorn_reap.py": "2feda27422b057e12c3a9edbf594b40d6786d7fdc9b4cca65c25cb7875911619",
       "scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim": "1ecf102a8cee957dab399370d1196e678caa64b5e1a70497ddfe0a871854910f",
-      "scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_trim_is_flagged_when_its_cronjob_is_gone": "0eedb96eda3975eadfe2fe57e98b595a1c5e426fc6f8fef129ea5852e4ae5007"
+      "scripts/lib/tests/test_longhorn_backup_health_cron_evidence.py::test_trim_is_flagged_when_its_cronjob_is_gone": "0eedb96eda3975eadfe2fe57e98b595a1c5e426fc6f8fef129ea5852e4ae5007",
+      "scripts/lib/tests/test_longhorn_etcd_s3.py::test_a_snapshot_past_the_bound_is_flagged": "7ff4f24f7ed6ec319df1c5bb60df798e34146c9e0832958fd5fce686a83fbbf4"
     },
     "python": "3.15",
-    "verified_sha": "71b2bcee0"
+    "verified_sha": "7f3ec44c0"
   }
 }

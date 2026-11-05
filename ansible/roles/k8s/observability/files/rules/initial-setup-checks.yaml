@@ -113,7 +113,7 @@ groups:
           description: >-
             No secret-rotation-audit verdict newer than 25 hours reached Prometheus from
             daniel-box's textfile collector, so nothing confirms secret rotation is being
-            audited. Read `systemctl status kuma-check-secret-rotation-audit` on daniel-box,
+            audited. Read `systemctl status homelab-secret-rotation-audit` on daniel-box,
             then /var/lib/node-exporter-textfile/secret-rotation-audit.prom on the host.
       # Kuma tile "Setup Plane Drift (agent hosts)".
       - alert: SetupDriftFailed
@@ -159,7 +159,7 @@ groups:
             loki-read-route-health.sh on daniel-box ran `probe.py loki-labels` through the
             loki-homelab IngressRoute and judged the answer down: the route returned 404 or an
             error, usually because the ClientIP guard rejects this host's source address. Read
-            `systemctl status kuma-check-loki-read-route` on daniel-box and the traefik pod's
+            `systemctl status homelab-loki-route-witness` on daniel-box and the traefik pod's
             placement.
       - alert: LokiReadRouteNotReporting
         expr: |
@@ -177,7 +177,7 @@ groups:
           description: >-
             No loki-read-route-health verdict newer than 2 hours reached Prometheus from
             daniel-box's textfile collector, so nothing confirms the Loki read route is being
-            witnessed. Read `systemctl status kuma-check-loki-read-route` on daniel-box, then
+            witnessed. Read `systemctl status homelab-loki-route-witness` on daniel-box, then
             /var/lib/node-exporter-textfile/loki-read-route-health.prom on the host.
       # Kuma tile "Loki Read Route (daniel-server)".
       - alert: LokiReadRouteFailed

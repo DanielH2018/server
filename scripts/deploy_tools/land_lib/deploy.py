@@ -174,8 +174,8 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
     if not ln.classification.self_applied:
         if ln.classification.remaining_setup:
             # No plane, no tag, and nothing the tick applies -- and still a host owes a hand.
-            # A PR whose only loud path is a repo file a setup role ships out of the checkout
-            # (`scripts/deploy_tools/staging_gate_remote.sh` -> `/usr/local/bin/staging-gate-run`)
+            # A PR whose only loud path is a repo file a setup role ships out of the checkout,
+            # with no row in `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES`,
             # puts no role in the change set, so `self_applied` is False and this arm would
             # end the landing at `nothing-to-deploy` with the remediation computed and never
             # printed.

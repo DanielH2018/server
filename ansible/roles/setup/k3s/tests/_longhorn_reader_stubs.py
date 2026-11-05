@@ -66,6 +66,24 @@ def fresh_drill_cm(**data: str) -> str:
     )
 
 
+def etcd_snapshots_body(*entries: tuple[str, float, bool]) -> str:
+    """`STUB_ETCD_SNAPSHOTS`: one ETCDSnapshotFile per (location, creation epoch, readyToUse)."""
+    return json.dumps(
+        {
+            "items": [
+                {
+                    "spec": {"location": location},
+                    "status": {
+                        "creationTime": _rfc3339(created_s),
+                        "readyToUse": ready,
+                    },
+                }
+                for location, created_s, ready in entries
+            ]
+        }
+    )
+
+
 def trim_cronjob_body(schedule: str = "10 6 * * *", last_s: float = NOW - 3600) -> str:
     """`STUB_TRIM_CRONJOB`: the trim CronJob, last scheduled at `last_s`."""
     return json.dumps(
@@ -177,6 +195,13 @@ def _reader_env(tmp_path, **overrides) -> dict:
     # about either sets the knob to "" (absent) or to its own body.
     env["STUB_DRILL_CM"] = fresh_drill_cm()
     env["STUB_TRIM_CRONJOB"] = trim_cronjob_body()
+    # An S3 snapshot an hour before NOW, under the drop-in the package renders. A test about check
+    # 12 sets the knob to its own list, or LONGHORN_ETCD_DROP_IN to its own file.
+    env["STUB_ETCD_SNAPSHOTS"] = etcd_snapshots_body(
+        ("s3://b/offbox", NOW - 3600, True)
+    )
+    drop_in = tmp_path / "50-homelab.yaml"
+    drop_in.write_text('etcd-s3: true\netcd-snapshot-schedule-cron: "0 */12 * * *"\n')
     env.update(
         {
             "LONGHORN_BACKUP_NAMESPACE": "longhorn-system",
@@ -193,6 +218,7 @@ def _reader_env(tmp_path, **overrides) -> dict:
             # depend on whatever the machine running the suite happens to have logged. A test
             # about check 9 overrides this with /bin/false or a stub that prints lines.
             "LONGHORN_JOURNALCTL": "/bin/true",
+            "LONGHORN_ETCD_DROP_IN": str(drop_in),
             "LONGHORN_JOURNAL_TIMEOUT_S": "10",
             "LONGHORN_CRON_EVIDENCE_WINDOW_HOURS": "26",
             # Check 10's B2 cron, installed an hour before NOW: the reader stats this path, sees it
@@ -297,6 +323,8 @@ if args == __DRILL_CM_ARGS__ and ns == "__DRILL_NAMESPACE__":
     branch, body = "drill-stamps", os.environ.get("STUB_DRILL_CM", "")
 elif args == __TRIM_CRONJOB_ARGS__:
     branch, body = "trim-cronjob", os.environ.get("STUB_TRIM_CRONJOB", "")
+elif args == ["get", "etcdsnapshotfiles.k3s.cattle.io", "-o", "json"]:
+    branch, body = "etcd-snapshots", os.environ.get("STUB_ETCD_SNAPSHOTS", "")
 elif args == ["get", "backuptargets.longhorn.io", "-o", "json"]:
     branch, body = "targets", _targets_body()
 elif args == ["get", "recurringjobs.longhorn.io", "-o", "json"]:
@@ -396,6 +424,8 @@ if args == {DRILL_CM_ARGS!r} and ns == {DRILL_NAMESPACE!r}:
     emit(os.environ.get("STUB_DRILL_CM", ""))
 elif args == {TRIM_CRONJOB_ARGS!r}:
     emit(os.environ.get("STUB_TRIM_CRONJOB", ""))
+elif args == ["get", "etcdsnapshotfiles.k3s.cattle.io", "-o", "json"]:
+    emit(os.environ.get("STUB_ETCD_SNAPSHOTS", ""))
 elif args == ["get", "backuptargets.longhorn.io", "-o", "json"]:
     emit(_targets_body())
 elif args == ["get", "recurringjobs.longhorn.io", "-o", "json"]:

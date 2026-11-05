@@ -154,7 +154,7 @@ _PING_CURL_RE = re.compile(r"curl\b[^\n]*?\$\{?(?:HC_URL|HC_PING_URL|url)\b[^\n]
 PING_SENDERS = frozenset(
     {
         "disk-health.sh.j2",
-        "etcd-snapshot-offbox.sh.j2",
+        "etcd-token-drift.sh.j2",
         "longhorn-backup-health.sh.j2",
         "manifest-prune-check.sh.j2",
         "pull-pi-peers.sh",

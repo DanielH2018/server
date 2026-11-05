@@ -2,8 +2,9 @@
 
 The handlers moved out of the playbook into each role's `handlers/main.yml` (#3288). A notify
 naming no handler fails only on the run where its task changes something, which no syntax check
-sees, so this resolves every notify statically. optimize_pi notifies two handlers that
-initial_setup defines, so the lookup is across the whole play's role list, not per role.
+sees, so this resolves every notify statically. Ansible resolves a notify across the whole play,
+so the lookup covers the play's role list, not one role. The reverse also holds: a handler no task
+notifies never runs, and its comments describe a caller that is gone (#7184).
 
 That same play-wide lookup is why no two roles may define one handler name. Ansible resolves a
 duplicate to the last one loaded into the play, and a role skipped on the host skips that
@@ -18,7 +19,6 @@ from _role_census import role_task_files
 from lib import yaml_fast
 
 PLAYBOOK = ANSIBLE / "initial_setup.yml"
-INITIAL_SETUP_HANDLERS = SETUP_ROLES / "initial_setup" / "handlers" / "main.yml"
 
 
 def play_roles() -> list[str]:
@@ -73,13 +73,30 @@ def unresolved(notifies: dict[str, set[str]], handlers: list[str]) -> list[str]:
     return sorted(name for name in notifies if name not in handlers)
 
 
+def unnotified(
+    owners: dict[str, list[str]], notifies: dict[str, set[str]]
+) -> list[str]:
+    return sorted(name for name in owners if name not in notifies)
+
+
 def test_every_notify_in_initial_setup_resolves_to_a_handler() -> None:
     # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
     roles = play_roles()
     assert unresolved(notified(roles), defined(roles)) == []
 
 
-def test_the_census_finds_the_cross_role_notifies() -> None:
+def test_every_handler_in_the_play_has_a_notifier() -> None:
+    # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
+    roles = play_roles()
+    assert unnotified(handler_owners(roles), notified(roles)) == []
+
+
+def test_a_handler_with_no_notifier_is_flagged() -> None:
+    owners = {"Restart x": ["x"], "Reload y": ["y"]}
+    assert unnotified(owners, {"Reload y": {"y"}}) == ["Restart x"]
+
+
+def test_the_census_finds_the_initial_setup_notifies() -> None:
     """Non-vacuity: initial_setup's notifies of its own handlers are in the census."""
     notifies = notified(play_roles())
     assert "initial_setup" in notifies["Start Watchdog after provisioning"]
@@ -107,11 +124,3 @@ def test_a_handler_name_two_roles_define_is_flagged() -> None:
 def test_the_playbook_defines_no_handlers() -> None:
     (play,) = yaml_fast.safe_load(PLAYBOOK.read_text())
     assert "handlers" not in play, "initial_setup.yml's handlers belong in its roles"
-
-
-def test_watchdog_restart_is_defined_before_the_provisioning_start() -> None:
-    """Handlers fire in definition order, and a restart already starts the daemon."""
-    names = [h["name"] for h in yaml_fast.safe_load(INITIAL_SETUP_HANDLERS.read_text())]
-    assert names.index("Restart Watchdog") < names.index(
-        "Start Watchdog after provisioning"
-    )

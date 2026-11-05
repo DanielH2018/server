@@ -59,6 +59,7 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_LH}/longhorn_backups.py": _K3S,
     f"{_LH}/longhorn_cluster_state.py": _K3S,
     f"{_LH}/longhorn_cron_evidence_logic.py": _K3S,
+    f"{_LH}/longhorn_etcd_s3_logic.py": _K3S,
     f"{_LH}/longhorn_restore_drill_stamps.py": _K3S,
     f"{_LH}/longhorn_skipped_volumes_logic.py": _K3S,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,

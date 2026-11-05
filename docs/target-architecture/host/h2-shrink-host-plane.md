@@ -2,7 +2,7 @@
 
 Status: IN PROGRESS. Merged: H2.1 ([#5335](https://github.com/DanielH2018/server/pull/5335)), H2.2a ([#6079](https://github.com/DanielH2018/server/pull/6079)), H2.2b ([#6085](https://github.com/DanielH2018/server/pull/6085)), H2.2c and H2.3f ([#7008](https://github.com/DanielH2018/server/pull/7008)), H2.3a ([#5349](https://github.com/DanielH2018/server/pull/5349)), H2.3b ([#6083](https://github.com/DanielH2018/server/pull/6083)), H2.3c ([#6086](https://github.com/DanielH2018/server/pull/6086)), H2.3d ([#6105](https://github.com/DanielH2018/server/pull/6105), with the gate fix [#6119](https://github.com/DanielH2018/server/pull/6119)), H2.3e ([#6123](https://github.com/DanielH2018/server/pull/6123)), H2.4b ([#5711](https://github.com/DanielH2018/server/pull/5711)), H2.4c ([#5753](https://github.com/DanielH2018/server/pull/5753)) and H2.7 ([#5387](https://github.com/DanielH2018/server/pull/5387)). H2.5b to H2.5d merged as configarr ([#5576](https://github.com/DanielH2018/server/pull/5576), [#5619](https://github.com/DanielH2018/server/pull/5619)), janitorr ([#5602](https://github.com/DanielH2018/server/pull/5602), [#5706](https://github.com/DanielH2018/server/pull/5706)) and qbittorrent ([#5612](https://github.com/DanielH2018/server/pull/5612), [#5678](https://github.com/DanielH2018/server/pull/5678)) PRs; which PR carries which step is not recorded.
 
-Not merged: H2.8a to H2.8c. H2.4a, H2.5a and H2.6 have no PR in the step list.
+H2.8a merged as [#7043](https://github.com/DanielH2018/server/pull/7043). H2.8b merged as [#7176](https://github.com/DanielH2018/server/pull/7176). Not merged: H2.8c. H2.4a, H2.5a and H2.6 have no PR in the step list.
 
 PR H2.1, the censuses: [#5335](https://github.com/DanielH2018/server/pull/5335). It merged at
 `7d9901058` and deployed nothing. It adds the flux-ownership, retired-cron and reaper-CronJob
@@ -1191,9 +1191,9 @@ Secret's tag.
 - **The token comparison stays on daniel-box.** H2.8b cuts `etcd-snapshot-offbox.sh` down to
   the token comparison and renames it `etcd-token-drift.sh`, under a root cron `etcd token
   drift` at the same 02:45 UTC, from the same `k3s_etcd_s3_cron_*` keys.
-    - It keeps the `Off-box etcd Snapshot` tile and the `etcd-snapshot-offbox` slug, so no
-      Healthchecks.io check changes name or cadence.
-    - The tile's `description` changes in `static-monitors.yaml.j2`.
+    - It keeps the `etcd-snapshot-offbox` check name and slug, so no Healthchecks.io check
+      changes name or cadence. M6 C-1b deleted the Kuma tile this plan first named, so
+      `EtcdSnapshotOffboxFailed`'s annotations carry the description instead.
     - **Operator-only:** edit the Healthchecks.io check's description to match.
     - It stays fail-closed: a missing stamp or an unreadable token reports DOWN.
     - It reads the cluster through nothing and changes no state, so it is no actuator. H2.8b
@@ -2018,7 +2018,7 @@ carries `prune: disabled`.
     - the off-box script's region key in `setup/k3s` defaults, deleted with any equality test
       that holds it;
     - the `setup/k3s` `CLAUDE.md` contract, and `docs/facts.lock` until G2;
-    - the tile description in `static-monitors.yaml.j2`;
+    - the `EtcdSnapshotOffbox*` annotations in `host-checks.yaml`;
     - `docs/healthchecks-io-deadman.md`;
     - `docs/k3s-etcd-restore.md`, which names `etcd-token-drift.sh` as the daily comparison
       and the drop-in's `etcd-s3` as the disarm lever;

@@ -32,7 +32,7 @@ must not break.
   Reconcile's ufw arm relabelled the Ansible-era rule (`optimize_pi: node_exporter`) in place.
 
 ## What stayed behind
-- The debloat purge (Open vSwitch, snapd, fwupd), the rsyslog and `wpa_supplicant` masks,
+- The debloat purge (Open vSwitch, snapd, fwupd, appstream), the rsyslog and `wpa_supplicant` masks,
   `systemd-resolved`'s disable and the one-off cleanups of stale rsyslog, AIDE and audit logs
   are state the live Pi already holds. The bootstrap debloat step carries them for a rebuild.
 - Installing `log2ram` stays a bootstrap step: Azlux's apt source arrives in the same package, so

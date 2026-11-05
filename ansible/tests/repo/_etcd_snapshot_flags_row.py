@@ -117,7 +117,6 @@ ETCD_SNAPSHOT_LONG_FLAGS = Census(
     ),
     must_find=frozenset(
         {
-            "ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2",
             "docs/k3s-etcd-restore.md",
             "scripts/backup/etcd_restore_drill.sh",
             "scripts/deploy_tools/runbook_gates_lib/etcd_restore.py",
