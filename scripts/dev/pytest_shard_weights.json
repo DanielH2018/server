@@ -1306,6 +1306,7 @@
  "scripts/diagnostics/tests/test_probe_releases.py": 0.01,
  "scripts/diagnostics/tests/test_probe_releases_check_mode.py": 0.11,
  "scripts/diagnostics/tests/test_probe_releases_consumers.py": 0.13,
+ "scripts/diagnostics/tests/test_probe_releases_consumers_unloadable_goes_red.py": 0.01,
  "scripts/diagnostics/tests/test_probe_releases_grace.py": 0.12,
  "scripts/diagnostics/tests/test_probe_releases_owned_listing.py": 0.08,
  "scripts/diagnostics/tests/test_probe_releases_render.py": 1.02,
