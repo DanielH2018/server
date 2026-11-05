@@ -116,7 +116,7 @@ touching SOPS:
      the bare `/etc/ssh/sshd_config`. Getting this wrong fails the SSH-hardening tasks in §8
      outright (the `lineinfile`/`blockinfile` tasks have no `create:` fallback).
    - `containers_list: []` to start — populate it once you decide what this host runs (see
-     the repo-root `CLAUDE.md` → "Adding a New Container Service").
+     the repo-root `CLAUDE.md` → "Adding a New Service").
    - Any hardware capability flags a role you plan to deploy expects — e.g. `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
      defaults to `false` in `group_vars/all.yml`).

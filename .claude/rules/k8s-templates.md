@@ -16,3 +16,9 @@ that renders a document with no `kind` — and `is_manifest_template` in
 
 The shared render → apply → queue contract every k8s role includes is
 `ansible/roles/k8s/manifests/CLAUDE.md`.
+
+## Removing a key from a Secret template
+
+Removing a key from a `secret.yaml.j2` does not remove it live through `kubectl apply`, which
+leaves the stale key behind. `ansible/roles/k8s/manifests/tasks/verify_secret_keys.yml` patches
+it out after the apply. `docs/k8s-manifest-cycle-record.md` has why.

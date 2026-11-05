@@ -65,7 +65,8 @@ def consumer_tags(name: str) -> tuple[str, ...]:
 # Planes a role can live on, and what redeploying it actually costs the operator. The
 # distinction is not cosmetic: `deploy.sh` derives its valid tags from `containers_list`, so a
 # setup-plane role HAS no deploy tag and `deploy.sh --tags fake_remux` exits 2 having deployed
-# nothing (CLAUDE.md, Common Commands). That is the trap this census exists to surface.
+# nothing (`scripts/lib/exit_codes.py`, `DEPLOY_TAG_MISS`). That is the trap this census exists
+# to surface.
 _ROLE_PLANES = {
     "k8s": "deploy",
     "containers": "deploy",
