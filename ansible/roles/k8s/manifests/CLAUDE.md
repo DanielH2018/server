@@ -104,7 +104,8 @@ deferred pair below.
   (`scripts/renderer/renderer_lib/restart.py:restart_targets`).
 - **Stale Secret keys are patched out explicitly, because `apply` cannot** — it prunes map keys
   only on objects it has a last-applied baseline for. `verify_secret_keys.yml` reconciles every
-  Secret doc in each file, not only the first, and refuses an entry declaring no Secret.
+  Secret doc in each file, not only the first, and refuses an entry declaring no Secret. A
+  flux-owned role skips it: `.claude/rules/k8s-templates.md` has what removes a key under Flux.
 - **A `--dry-run` applies `--dry-run=server` from a fresh tempfile directory**, pruning nothing.
   Under `manifests_shadow_dir` it applies from the kept shadow directory instead.
 
