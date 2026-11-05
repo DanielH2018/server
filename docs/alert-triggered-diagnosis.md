@@ -12,9 +12,11 @@ Arming any such role is the operator's decision. This page decides nothing on it
 
 ## What was proposed
 
-Nothing starts a Claude session from an event. Sessions start from the phone
-(`claude-rc.service`), the daily Renovate timer, the weekly eval sweep and fan-out launches.
-A page from Alertmanager starts nothing. The proposal was an "outer loop"
+When this note was written, nothing started a Claude session from an event. Sessions started
+from the phone (`claude-rc.service`), the daily Renovate timer, the weekly eval sweep and fan-out
+launches, and a DOWN from Uptime Kuma or monitor-bridge started nothing.
+`docs/claude-agent-user.md`, *Slice 2: the poller*, has what reads alerts on a timer since. The
+proposal was an "outer loop"
 agent (12-factor-agents, factor 11): an alert starts a bounded, read-only session, which posts
 a first diagnosis to Discord before the operator opens a session.
 

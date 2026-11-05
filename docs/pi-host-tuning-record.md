@@ -294,8 +294,8 @@ reboot, and the heartbeat would then report a missing verdict for up to a day.
 
 ## Container-recovery heartbeat
 
-Nothing outside the Pi reads its Docker state, so `PiPortDead` sees a container only through a
-published port. The two that die silently are `autoheal`, which restarts unhealthy
+Nothing outside the Pi reads its Docker state, and `PiPortDead` sees only a container with a
+published port, so a container without one has no liveness monitor outside the Pi. The two that die silently are `autoheal`, which restarts unhealthy
 containers, and `docker-proxy`, the read-only socket Alloy's container-log discovery reads: a
 dead autoheal stops recovering Pi containers, and a dead docker-proxy stops this host's
 container logs reaching Loki while Alloy keeps running with zero targets.

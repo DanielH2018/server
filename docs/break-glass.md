@@ -467,9 +467,10 @@ authenticates by client certificate, which no `oidc-*` flag touches.
 
 For a second person without deep familiarity with the repo:
 
-1. Check the firing alerts first. Discord and email carry each page, and
-   `uv run python scripts/diagnostics/probe.py monitors` or the Alertmanager UI at
-   `alertmanager.local.<domain>` lists what is firing. Most alerts name a specific service or
+1. Check the firing alerts first. Discord carries every page, and email carries the critical
+   ones. `uv run python scripts/diagnostics/probe.py monitors` lists what is firing, and so does
+   the Alertmanager UI at `alertmanager.local.<domain>`, which needs an `admins` login. Most alerts
+   name a specific service or
    subsystem. `docs/reference/services.md` names what each service is and who/what depends
    on it.
 2. If Alertmanager itself is unreachable (its own outage, or a cluster/WAN outage), check
