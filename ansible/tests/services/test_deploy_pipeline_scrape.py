@@ -54,7 +54,13 @@ def test_a_service_on_another_port_is_flagged():
 
 
 def test_the_job_carries_no_origin_label():
-    """No `origin`, so Kuma's Cluster Scrape Targets tile pages a failed scrape, as the
-    DeployPipelineExporterAbsent rule's `up == 1` conjunct assumes (M1 convention 5)."""
+    """No `origin`, so the job's `up` series stays out of `ScrapeTargetsMissing`'s server floor.
+
+    That rule floors `up{origin="daniel-server"}` at 1 and `up{origin!="daniel-server"}` at 3,
+    and a job carrying the first origin would add a series to that count and weaken its floor.
+    The label does not decide whether a failed scrape alerts. `ScrapeTargetDown` selects by
+    `job` and ignores `origin`, as the DeployPipelineExporterAbsent rule's `up == 1` conjunct
+    assumes (M1 convention 5).
+    """
     [static] = scrape_job()["static_configs"]
     assert "origin" not in static.get("labels", {})

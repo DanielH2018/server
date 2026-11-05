@@ -18,7 +18,7 @@ session minting, or its launch config fails here rather than silently degrading 
 **What these assert, precisely.** That the route serves the app's own HTML: ingress →
 Authelia → backend → a page with the expected title at the expected path. That is strictly
 weaker than "the logged-in UI works", because several services carry their OWN login behind
-Authelia — FreshRSS lands on `/i/`, uptime-kuma on `/dashboard`, karakeep on `/signin`. So
+Authelia — FreshRSS lands on `/i/`, karakeep on `/signin`. So
 the expectations below pin the EXACT title rather than a substring of the service name:
 `FreshRSS` alone also matches `Login · FreshRSS`, which is how a broken app scores green.
 

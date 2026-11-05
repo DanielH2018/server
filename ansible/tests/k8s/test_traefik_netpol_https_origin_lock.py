@@ -11,7 +11,7 @@ Four things have to hold, and each drops a different caller if it stops holding:
   - Cloudflare's IPv4 ranges, or the public names go dark.
   - `lan_subnet`, or every `.local.` route dies from a browser on the LAN.
   - `wg_client_subnet`, or a WireGuard client whose traffic is not masqueraded is locked out.
-  - `k3s_pod_cidr`, or the Kuma prober, monitor-bridge and homepage's widgets lose every
+  - `k3s_pod_cidr`, or the blackbox exporter, monitor-bridge and homepage's widgets lose every
     `.local.` name they reach through the VIP.
 The rejecting half renders the policy with each source removed in turn and asserts the reader
 below names the missing one, so a policy that drops a source fails by name rather than by count.

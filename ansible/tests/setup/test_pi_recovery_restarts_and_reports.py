@@ -14,7 +14,7 @@ to intervene pushes DOWN, and only a clean cycle pushes `up`.
 
 Three further properties are tested here. The watch set is every container the host
 deploys: the same failed start reaches glances, wg-easy and docker-proxy-lifecycle, and only
-the last is invisible to Kuma from outside. The DOWN line records `docker inspect`'s exit
+the last is invisible from outside. The DOWN line records `docker inspect`'s exit
 code and error BEFORE the restart erases them: the Pi's journal rotates in a day, so that
 line is the only evidence that survives. And one case covers the daemon rather than a
 container: when dockerd itself is gone every container reads `inspect failed` and the reason

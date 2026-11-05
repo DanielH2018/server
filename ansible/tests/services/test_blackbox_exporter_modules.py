@@ -3,8 +3,8 @@
 
 Authelia answers an SSO-gated name with 302 only when the request's Accept header admits it,
 and with 401 when the request carries none. blackbox_exporter sends no Accept unless a module
-sets one, and Go's net/http adds none. Kuma's ingress tiles draw the 302, so a module that
-lost its `headers` would read every one of the 23 SSO targets as down while Kuma read them up
+sets one, and Go's net/http adds none. The ingress probes count that 302 as up, so a module
+that lost its `headers` would read every one of the 23 SSO targets as down
 (docs/target-architecture/monitoring/m4-blackbox-ingress.md, *The exporter*).
 
 The check is a `..._is_clean` / `..._is_flagged` pair over the same reader, and the real file

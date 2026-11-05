@@ -699,6 +699,7 @@
  "ansible/tests/services/test_scrutiny_influxdb_policy.py": 0.0,
  "ansible/tests/services/test_scrutiny_rollouts.py": 0.01,
  "ansible/tests/services/test_smtp_wiring.py": 0.0,
+ "ansible/tests/services/test_smtp_wiring_docstrings.py": 0.07,
  "ansible/tests/services/test_storage_rule_literals.py": 0.12,
  "ansible/tests/services/test_strangler_bridge.py": 0.04,
  "ansible/tests/services/test_tdarr_prepulls_its_image.py": 0.66,

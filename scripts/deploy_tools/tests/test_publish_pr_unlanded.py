@@ -322,7 +322,7 @@ def test_an_origin_that_never_answers_is_bounded_and_fails_closed():
     """`lib.git.git` has no default timeout and this runs under the git-tree lock.
 
     An unbounded ls-remote against a blackholed origin parks the GitOps deployer, which waits
-    `flock -w 180`. A raise here would also reach Kuma as a flattened Python traceback.
+    `flock -w 180`. A raise here would also reach the calling cron as a flattened Python traceback.
     """
     rec = Recorder(
         {"git ls-remote": subprocess.TimeoutExpired(cmd=["git"], timeout=30.0)}

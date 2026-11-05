@@ -1,8 +1,9 @@
 """The host crons and monitor-bridge must probe the SAME endpoints.
 
 The WAN gate has two halves: monitor-bridge's `wan_reachable` check, which suppresses the four
-bridge checks that reach the internet, and `wan_reachable` in kuma-push-lib.sh, which the four host
-crons consult. They are separate code because they run in separate places — a pod loop and a host
+bridge checks that reach the internet, and `wan_reachable` in homelab-check-lib.sh, which the four
+host crons consult. They are separate code because they run in separate places — a pod loop and a
+host
 cron — and nothing but this guard stops them disagreeing about what "the internet" means.
 
 The disagreement matters in one direction in particular. If the crons probed an endpoint the

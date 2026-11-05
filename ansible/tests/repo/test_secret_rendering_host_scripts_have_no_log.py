@@ -4,7 +4,7 @@
 `scripts/deploy.sh` forwards the operator's flags to ansible-playbook unchanged, so a
 `--check --diff` rehearsal prints every changed script's before/after to stdout, and to any
 log file the run's ANSIBLE_LOG_PATH names (ansible.cfg sets none since #6217). A script that
-interpolates a Kuma push token is therefore a credential in the log the moment someone types
+interpolates a secret is therefore a credential in the log the moment someone types
 `--diff`. `no_log: true` is
 the one setting that keeps the body out of the callback whatever the flags say, and
 `.claude/rules/ansible.md` requires it on any task that handles a secret.

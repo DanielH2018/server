@@ -25,9 +25,9 @@ three `.py` keys over `artifacts_modules`. Those `.py` keys are pinned by
 Two narrowings, both because the source is a template and not YAML:
 
 * Keys nested inside `{% if %}` / `{% for %}` are not checked. `uptime-kuma`'s
-  `static-monitors.yaml.j2` gates three monitors on a token being present, and the validator's
-  stub context leaves those tokens empty — so the keys are correctly absent from the render and
-  a naive check calls it absorption. Losing them costs little: absorption is a whole-file
+  `static-monitors.yaml.j2` gated three monitors on a token being present, and the validator's
+  stub context left those tokens empty — so the keys were correctly absent from the render and
+  a naive check called it absorption. Losing them costs little: absorption is a whole-file
   indentation slip, and every one of those files still has unconditional keys being checked.
 * Counting `<name>: |` block-scalar openers instead was tried first and rejected. It splits on
   the same conditionals, and it misses the plain-string keys that sit next to block scalars in

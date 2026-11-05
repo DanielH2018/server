@@ -1,8 +1,9 @@
-"""Guards on the weekly rkhunter scan's Kuma verdict (#4598).
+"""Guards on the weekly rkhunter scan's textfile verdict (#4598).
 
 The cron used to pipe `rkhunter --check` into `logger`, so the pipeline's status was logger's and
-a scan that failed outright read the same as one that passed. rkhunter-check.sh pushes one Kuma
-tile per host until M6 batch B9's Cutover-2, and holds four properties:
+a scan that failed outright read the same as one that passed. rkhunter-check.sh writes a textfile
+verdict and holds four properties. It pushed to one Kuma tile per host until M6 batch B9's
+Cutover-2, so a test says "pushes DOWN" for a run whose logged status is `down`:
 
 A SCAN THAT DID NOT COMPLETE PUSHES DOWN. rkhunter exits 1 on a warning and on an error alike, so
 the script reads completion from the log this run wrote, and a log left from last week reads as

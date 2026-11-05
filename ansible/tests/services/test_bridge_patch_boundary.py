@@ -4,7 +4,7 @@
 A module that did `from bridge.common import log` holds its own reference in its globals,
 taken at import time, and that reference never sees the patch — the test passes while
 patching nothing. The failure is silent in the direction that matters: a test believing it
-stubbed the Kuma push would really push.
+stubbed a network call would really make it.
 
 The consumers are derived, not listed: every k8s role whose `files/` imports a runtime module
 defined under ANOTHER role's `files/`, plus that other role. That pair is monitor-bridge and

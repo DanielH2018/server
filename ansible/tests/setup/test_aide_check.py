@@ -1,4 +1,4 @@
-"""Guards on the weekly AIDE check's Kuma verdict (#4594).
+"""Guards on the weekly AIDE check's textfile verdict (#4594).
 
 The cron used to pipe `aide --check` into `logger`, so the pipeline's status was logger's and an
 AIDE that checked nothing for weeks read the same as one that passed (#4591). aide-check.sh keeps
