@@ -81,21 +81,25 @@ the pod log of its CronJob since H2.3d, and check 7 reads its stamp instead. Bef
 trim's own comment claimed "a cron mail or a Kuma push notices" a failure: no such push existed,
 and the cron mail lands in `/var/mail/ubuntu`, which held 5,678 unread messages on 2026-09-24.
 
+Each check below reports a `down` verdict. The script writes that verdict to
+`longhorn-backup-health.prom` as `homelab_check_success 0`, and the Prometheus rule
+`LonghornBackupHealthFailed` reads it.
+
 **The trim is Longhorn's `trim` RecurringJob since H2.2c, so its evidence is the cluster's.**
 The `longhorn-backup` role declares the job, and Longhorn runs it from a CronJob of the same name
 in `longhorn-system`. Check 9 reads the newest Job's pod log, from the one
-`kubectl logs -l recurring-job.longhorn.io` read check 11 also uses. It pushes DOWN on a per-volume
-failure line, because longhorn-manager can log a failed volume and still finish the Job as
-succeeded. It also pushes DOWN on a Job whose `Failed` condition is set. Check 10 reads the
-CronJob: an absent or suspended CronJob, or one whose last scheduled run is older than one
-period of its own `spec.schedule` plus 2 hours, pushes DOWN. The period comes from the live
-schedule, so no host key restates it. The native job runs inside longhorn-manager, so a manager
-that is not ready runs no trim at all, and check 10 then sees the missed run.
+`kubectl logs -l recurring-job.longhorn.io` read check 11 also uses. It reports `down` on a
+per-volume failure line, because longhorn-manager can log a failed volume and still finish the
+Job as succeeded. It also reports `down` on a Job whose `Failed` condition is set. Check 10 reads
+the CronJob and reports `down` on an absent or suspended CronJob, or on one whose last scheduled
+run is older than one period of its own `spec.schedule` plus 2 hours. The period comes from the
+live schedule, so no host key restates it. The native job runs inside longhorn-manager, so a
+manager that is not ready runs no trim at all, and check 10 then sees the missed run.
 
-**The B2 accounting is a host cron, so its evidence is the journal.** Check 9 pushes DOWN on an
+**The B2 accounting is a host cron, so its evidence is the journal.** Check 9 reports `down` on an
 `UNPRICED` line from `b2-deletions` anywhere in
 `ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`. Check 10
-pushes DOWN when the window holds no line a completed run writes: its `/etc/cron.d` entry
+reports `down` when the window holds no line a completed run writes: its `/etc/cron.d` entry
 removed, the crontab lost, or the run itself dying part-way. It judges on the summary line
 `probe.py b2-deletions` ends every completed run with (#2545); before that it took any line at
 all, so a run that logged a traceback and exited non-zero read as alive. It stays quiet in the
@@ -121,7 +125,7 @@ them blinds check 9 until the regex follows. The b2 shapes come from `deletions_
 `test_cron_liveness_accepts_the_summary_line_the_probe_writes` holds to the regexes.
 
 The drill stamps `ATTEMPT_DIR` on every run and `SUCCESS_DIR` only after the assertions pass;
-check 7 reads those and pushes DOWN when the drill stops running — a drill that silently stops
+check 7 reads those and reports `down` when the drill stops running — a drill that silently stops
 looks identical to one never scheduled, which is how the hand-run drill of 2026-08-16 went
 unrepeated until the cron existed.
 
@@ -136,14 +140,15 @@ Alertmanager. None of these crons pushes a Kuma tile. The B2 accounting pair
 appends to the local ledger, which is bookkeeping, not state.
 
 `Manifest prune drift check` and `Live object drift check` are kuma-check timers rather than crons
-since 2026-09-19, importing `setup/common`'s `check_timer.yml`. Each script exits 1 after it
-pushes `down`, and the service's `Restart=on-failure` reruns it every 30 min until it exits 0, so
-a red tile clears when the fault does rather than at the next slot. The timers are
+since 2026-09-19, importing `setup/common`'s `check_timer.yml`. Each script writes a failing
+verdict to its textfile and exits non-zero, and the service's `Restart=on-failure` reruns it every
+30 min until it exits 0. The `host-checks` rule that reads the textfile therefore resolves when
+the fault does rather than at the next slot. The timers are
 `Persistent=true`, and both checks carry the boot grace so a catch-up run at boot exits 1 without
 a verdict and the restart carries the real one. A third, `remember log rotation health`, was
 retired on 2026-09-28 with the remember plugin (#2852). `systemctl status kuma-check-<name>` shows
-`auto-restart` while red. Manifest prune's healthchecks.io `/fail` ping repeats on every rerun;
-healthchecks notifies on a status change, so a check already down is not paged again.
+`auto-restart` while the check fails. Manifest prune's healthchecks.io `/fail` ping repeats on
+every rerun; healthchecks notifies on a status change, so a check already down is not paged again.
 
 ## k3s's own output is in `/var/log/k3s.log`, not the journal
 
@@ -192,32 +197,36 @@ When the deployer defers a k8s change it cannot auto-apply (`deploy_alerts.alert
 `cs.k8s` branch), it fast-forwards the tree and pages once per SHA. The ff-merge clears the
 deployer's own `behind_since`, so nothing else says the cluster is still running old manifests.
 `release-staleness-check.sh` runs `probe.py releases --stale-only` every
-`k3s_release_staleness_cron_minute` and pushes the tile down while any service's applied commit
-sits behind `origin/master` under its role paths, or under an inventory key or shared macro its
-render reads (#1993). A merge younger than `k3s_release_staleness_grace_minutes` is named in the
+`k3s_release_staleness_cron_minute`. It writes a failing verdict to
+`release-staleness-check.prom`, which the Prometheus rule `ReleaseStalenessCheckFailed` reads,
+while any service's applied commit sits behind `origin/master` under its role paths, or under an
+inventory key or shared macro its render reads (#1993). A merge younger than `k3s_release_staleness_grace_minutes` is named in the
 `up` message and not counted, so a landing still deploying its own merge does not page. The full
 account, including why it runs as `sys_user` and not root, is the `#947` bullet in
 `ansible/roles/setup/gitops_deploy/CLAUDE.md`.
 
 **The DOWN message carries the stale services' names and a count, not their reasons** (#2013). A
 refused narrowing marks the whole fleet stale, and the per-service reasons then ran to ~7,500
-chars. Kuma puts the message into a Discord embed field capped at 1024 chars and never truncates,
+chars. Kuma put the message into a Discord embed field capped at 1024 chars and never truncated it,
 so Discord rejected the DOWN with HTTP 400 on 2026-09-17 and 2026-09-18 and the page reached
 nobody. `kuma_push` (kuma-push-lib.sh) and the bridge's `net.push` both capped the message at
 900 chars as the class fix, until M6 retired both push paths. The reasons are `probe.py
 releases --stale-only`.
 
-**A changed stale set re-alerts while the tile stays DOWN** (#2378). Kuma notifies on a status
-transition only, so a DOWN whose set grew or shrank reached nobody. The cron keeps the set the
-last DOWN pushed in `/var/lib/homelab/release-staleness/stale-set` (written by `probe.py releases
---names-out`). When the set differs, the cron pushes an `up` that opens `Not a recovery.`, then
-the `down` with the added and cleared names prefixed. A DOWN that is not a verdict (the fetch
-failing, or the probe exiting above 1) keeps the recorded set, or records an empty one so the
-first verdict after it still notifies. An `up` clears it.
+**A changed stale set is logged and sends no new notice** (#2378). Alertmanager repeats a firing
+alert on its own interval, and the alert carries no list, so a DOWN whose set grew or shrank
+reaches nobody. The cron keeps the set the last DOWN recorded in
+`/var/lib/homelab/release-staleness/stale-set` (written by `probe.py releases --names-out`). When
+the set differs, the cron's syslog line opens `Stale set changed:` with the added and cleared
+names, and `probe.py releases --stale-only` prints the current list. Kuma's re-notify on a changed
+set went with its tile in M6 batch B1. That loss is accepted, because D6.17 disarms this check. A
+DOWN that is not a verdict (the fetch failing, or the probe exiting above 1) keeps the recorded
+set, or records an empty one so the first verdict after it can still log the change. A probe run
+that finds nothing stale clears it.
 
 **The SessionStart banner reads the run's verdict from a file** (#6183). Every run that reaches
 a verdict writes `status=<up|down> <probe output>` to `/var/lib/homelab/release-staleness/verdict`,
-0644 so a session running as another user can read it. The text omits the re-alert prefix,
+0644 so a session running as another user can read it. The text omits the `Stale set changed:` prefix,
 which the banner's parser (`.claude/hooks/hooklib/service_lines.py`) would read as an
 unrecognised verdict. The banner ignores a file older than two hours. When the state directory
 exists with no verdict file in it, the banner names the apply that installs the writing cron,
@@ -334,7 +343,7 @@ tag again.
 ## Two smaller traps
 
 **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own PATH; a
-new one that does not dies on `command -v k3s` and, if it pushes its heartbeat before the check,
+new one that does not dies on `command -v k3s` and, if it writes its verdict before the check,
 reads permanently green.
 
 **The drift checks and the prune check are staggered on purpose** (05:15 and 05:45) so two full

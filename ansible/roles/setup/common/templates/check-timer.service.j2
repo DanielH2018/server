@@ -1,18 +1,17 @@
 # {{ check_timer_description }} — managed by Ansible (roles/setup/common/tasks/check_timer.yml);
 # edits overwritten. Rendered from roles/setup/common/templates/check-timer.service.j2.
 #
-# THE CONTRACT IS THE EXIT CODE. The check pushes its verdict to a Kuma push monitor and then
-# exits 1 after `down`, 0 after `up`. Restart=on-failure reruns it every RestartSec until it
-# exits 0, so a tile that went red clears as soon as the fault is fixed rather than at the
-# next scheduled slot. kuma_push itself keeps returning 0 on a dropped push, as its header
-# requires; the exit line sits in the caller, after the push.
+# THE CONTRACT IS THE EXIT CODE. The check writes its verdict to a textfile a Prometheus rule
+# reads, then exits non-zero after `down`, 0 after `up`. Restart=on-failure reruns it every
+# RestartSec until it exits 0, so a failing verdict clears as soon as the fault is fixed rather
+# than at the next scheduled slot.
 [Unit]
 Description={{ check_timer_description }}
 After=network-online.target
 Wants=network-online.target
 # No OnFailure= alert unit, deliberately. A down verdict is a unit failure by this contract,
-# and the *-alert.service units page Discord on a unit that BROKE. The tile already carries
-# the verdict and its message.
+# and the *-alert.service units page Discord on a unit that BROKE. The rule already pages
+# the verdict.
 
 [Service]
 Type=oneshot

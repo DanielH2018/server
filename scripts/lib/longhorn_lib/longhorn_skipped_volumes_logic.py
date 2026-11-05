@@ -63,7 +63,7 @@ def is_backup_job(job: str) -> bool:
 
 
 # DECIDED: only weekly-tier volumes are checked. A daily volume a job skipped gets its next
-# chance the following night, inside check 4's daily limit, so flagging it would hold the tile
+# chance the following night, inside check 4's daily limit, so flagging it would hold the check
 # DOWN for a day after every cold start over a gap that closes on its own. A weekly volume waits
 # seven days for its next run and up to 198 h for check 4 to notice (#3968).
 def check_skipped_weekly_volumes(

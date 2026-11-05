@@ -498,7 +498,7 @@ def build_verdict(
     """Returns (status, msg, push_msg).
 
     `msg` is the full unranked, semicolon-joined problem list (or the green summary) — what the
-    syslog line carries. `push_msg` is what actually goes to Kuma/Healthchecks: on a DOWN
+    syslog line carries. `push_msg` is what actually goes to Healthchecks: on a DOWN
     verdict, the single highest-severity problem plus a count of the rest, so triage isn't glued
     to a long tail (see add()'s rank scale in the shell script).
     """
@@ -528,7 +528,7 @@ def build_verdict(
     # One line per problem, whatever the check put in it. A kubectl error carries its own
     # newlines, and the wrapper reads the verdict off ONE stdout line: an embedded newline left
     # the `(+N more ...)` tail as the last line, which the wrapper rejected as an unrecognized
-    # status, so for 70 hours of a dead k3s API the tile named neither the API nor the check
+    # status, so for 70 hours of a dead k3s API the verdict named neither the API nor the check
     # (#3883).
     problems = [(rank, " ".join(text.split())) for rank, text in problems]
     msg = "; ".join(text for _, text in problems)

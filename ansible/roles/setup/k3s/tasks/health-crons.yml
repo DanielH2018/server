@@ -420,12 +420,12 @@
 - name: Schedule the manifest-prune drift check
   tags: [manifest-prune]
   # A systemd timer (roles/setup/common/tasks/check_timer.yml): a red
-  # verdict reruns every 30 min until it clears rather than sitting on the tile for a day.
+  # verdict reruns every 30 min until it clears rather than sitting on the alert for a day.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
   vars:
     check_timer_state: present
     check_timer_name: manifest-prune
-    check_timer_description: Manifest prune drift check (Kuma push)
+    check_timer_description: Manifest prune drift check (textfile verdict)
     check_timer_exec: /usr/local/bin/manifest-prune-check.sh
     check_timer_user: root
     check_timer_on_calendar: "*-*-* {{ '%02d' | format(k3s_manifest_prune_cron_hour | int) }}:{{ '%02d' | format(k3s_manifest_prune_cron_minute | int) }}:00"
@@ -451,8 +451,8 @@
 
 - name: Create the release-staleness check's state directory
   tags: [release-staleness]
-  # Holds the stale set the last DOWN pushed, so the check can re-alert when that set changes
-  # while the tile stays DOWN, and the run's verdict the SessionStart banner reads (0755, so a
+  # Holds the stale set the last DOWN recorded, so the check can log a change to that set,
+  # and the run's verdict the SessionStart banner reads (0755, so a
   # session's own user can reach it). Owned by the cron's own user, and outside the primary
   # checkout: an untracked file there would park the GitOps deployer.
   ansible.builtin.file:
@@ -536,7 +536,7 @@
   vars:
     check_timer_state: present
     check_timer_name: live-drift
-    check_timer_description: Live object drift check (Kuma push)
+    check_timer_description: Live object drift check (textfile verdict)
     check_timer_exec: >-
       /usr/local/bin/uv run --no-project --no-python-downloads
       --python {{ host_python_version }} /usr/local/bin/live-drift-check.py
