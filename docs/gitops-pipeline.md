@@ -444,9 +444,25 @@ then writes a `manual_plane` line for each role it names, with the other hosts i
 `hosts` key. `clear_manual_plane_applied` never clears a line that carries `hosts`, so the
 tick's own apply of the role leaves it standing. Apply the role on each host as printed, then
 `clear-owed manual_plane <role>`. A later range reaching another host widens the line's `hosts`
-and keeps its stamp. A failed derivation records nothing and logs `setup-reach:`. A changed
-repo file a role ships, such as `scripts/backup/etcd_restore_drill.sh`, takes no broad arm, so
-the tick never asks.
+and keeps its stamp. A failed derivation records nothing and logs `setup-reach:`.
+
+A changed repo file with a row in `deploy_cross_role.SETUP_FILES_SHIPPED_BY_OTHER_ROLES` takes
+the broad arm. It owes this line only when the tick applies the row's role and that role's copy
+of the file reaches another host. Three rows show the three outcomes:
+
+- `scripts/backup/etcd_restore_drill.sh` routes to `hypervisor`. The tick applies `hypervisor`
+  on daniel-box, and `setup_reach_hosts.py` prints `{"hypervisor": ["daniel-server"]}` for the
+  range, so the line names daniel-server. A comment-only edit to the script owes the same hand
+  apply, because `comment_only_broad_changes` reads only `.yml` and `.yaml` paths.
+- `hosts/lib/ci_verdict.py` routes to `gitops_deploy`. The tick applies the role, and its only
+  host is daniel-box, so the file owes no line.
+- `scripts/deploy_tools/prune_releases.py` routes to `k3s`, which the tick cannot apply. The
+  derivation skips the role, and `deploy_defer.record` writes a `manual_plane` line with no
+  `hosts` key.
+
+A shipped file with no row takes no broad arm and writes no line, and `land.sh` alone names its
+hosts. `ansible/tests/setup/test_setup_cross_role_files.py` fails on a literal `src:` copy that
+has no row.
 
 A moved `secrets.yml` or inventory key owes the same lines (#6968). `route_key_readers` makes
 the tick apply each role with a file that reads the key, and `setup_reach_hosts.py` adds those
