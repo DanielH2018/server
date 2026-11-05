@@ -124,6 +124,13 @@ them blinds check 9 until the regex follows. The b2 shapes come from `deletions_
 `deletions_declined_line` in `scripts/diagnostics/probe_lib/b2_ledger.py`, which
 `test_cron_liveness_accepts_the_summary_line_the_probe_writes` holds to the regexes.
 
+**Check 12 watches k3s's own upload, from the host's copy of its config.** It reads the newest
+ready `ETCDSnapshotFile` with an S3 location, and its bound is one period of
+`etcd-snapshot-schedule-cron` plus two hours. The reader takes that key and `etcd-s3` from
+`/etc/rancher/k3s/config.yaml.d/50-homelab.yaml` each run, so a schedule change in the package
+moves the bound with no `setup/k3s` apply. A missing file or key, a false `etcd-s3`, and a file
+`sys_user` cannot read each report DOWN with their own message.
+
 The drill stamps `ATTEMPT_DIR` on every run and `SUCCESS_DIR` only after the assertions pass;
 check 7 reads those and reports `down` when the drill stops running — a drill that silently stops
 looks identical to one never scheduled, which is how the hand-run drill of 2026-08-16 went

@@ -90,10 +90,10 @@ defaults:
   #   etcd-s3-config-    in the Secret `longhorn-backup` renders into kube-system, which k3s
   #   secret             reads at each snapshot, so this file holds no credential. Any other
   #                      `etcd-s3-*` key here makes k3s ignore that Secret. To disarm the
-  #                      upload, set `etcd-s3: false`; until H2.8b retires the off-box cron,
-  #                      also set `k3s_etcd_s3_armed: false` in setup/k3s's defaults.
-  #   etcd-snapshot-name `offbox`, the name the off-box cron, both drills and the restore
-  #                      runbooks match (`offbox-<node>-<ts>`).
+  #                      upload, set `etcd-s3: false`; backup health's check 12 then reports
+  #                      DOWN naming the disarm.
+  #   etcd-snapshot-name `offbox`, the name both drills and the restore runbooks match
+  #                      (`offbox-<node>-<ts>`).
   #   etcd-snapshot-     a local snapshot shrinks from about 85 MB to about 15 MB.
   #   compress
   #   etcd-snapshot-     k3s's default, written down: 00:00 and 12:00, a 12-hour recovery

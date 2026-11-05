@@ -15,7 +15,7 @@
 
 # ── secrets encryption at rest (G1) ─────────────────────────────────────────────────────
 # Off is k3s's default, which leaves every Secret stored in etcd as plaintext — and
-# `etcd-snapshot-offbox.sh` then ships a daily copy of that plaintext to R2, so the
+# k3s's snapshot schedule then ships a copy of that plaintext to R2 every 12 hours, so the
 # credentials SOPS protects on the git side sit unprotected in an object store. This flag
 # makes the apiserver encrypt Secrets on WRITE with a generated AES-CBC key.
 #
@@ -305,7 +305,7 @@ k3s_disk_health_cron_minute: "*/10"
 # Raising this past 599 breaks the arithmetic in docs/healthchecks-io-deadman.md — the guard test
 # in ansible/tests/setup/test_health_cron_boot_grace.py enforces the bound rather than the number.
 #
-# NOT applied to the daily crons (manifest-prune 05:15, etcd-snapshot-offbox 02:45). For them a
+# NOT applied to the daily crons (manifest-prune 05:15, etcd-token-drift 02:45). For them a
 # skipped slot is a skipped DAY, which is a worse trade than the rare boot landing inside their
 # one-minute window; their 1-hour graces already cover a late run.
 k3s_health_cron_boot_grace_s: 420
@@ -324,7 +324,7 @@ k3s_manifest_prune_cron_hour: "5"
 k3s_manifest_prune_cron_minute: "15"
 
 # The longest legitimate gap between two textfile writes of a once-a-day check (manifest-prune,
-# live-drift and etcd-snapshot-offbox): a day plus an hour. The textfile rules carry it as a literal, pinned to this value by
+# live-drift and etcd-token-drift): a day plus an hour. The textfile rules carry it as a literal, pinned to this value by
 # ansible/tests/services/test_b1_rule_literals.py. Move the three schedules and this together.
 k3s_daily_check_deadline_s: 90000
 
@@ -346,43 +346,16 @@ k3s_release_staleness_cron_minute: "*/30"
 # image build alone is 20-30 min, after the CI wait) before the run after next grades it.
 k3s_release_staleness_grace_minutes: 60
 
-# ── Off-box etcd snapshots (templates/etcd-snapshot-offbox.sh.j2) ────────────────────────────
-# k3s already takes scheduled etcd snapshots — 00:00 and 12:00, 5 retained — but they land in
-# ${data-dir}/server/db/snapshots on daniel-box's own disk, which is the one thing a snapshot is
-# supposed to survive. Longhorn covers PVC *data*; nothing covered the cluster's own object
-# store. "Ansible rebuilds it" is not the same guarantee: Ansible reproduces what the repo
-# declares, and the manifest-prune check beside this file exists precisely because live state and
-# declared state drift.
+# ── Cluster-token drift check (templates/etcd-token-drift.sh.j2) ─────────────────────────────
+# k3s's own schedule writes the etcd snapshots and uploads them to R2: the `etcd-s3` and
+# `etcd-snapshot-*` keys of `k3s_server_config` in hosts/components/k3s-server/component.yml. H6's
+# windowed unit applies a change to them with one gated restart. Their folder is R2's
+# `etcd-snapshots`, not the `longhorn` prefix the orphaned-backup reaper walks, and not B2, whose
+# Class-B cap is the scarce axis. Backup health's check 12 reads the upload's freshness.
 #
-# DELIBERATELY A CRON, NOT A SERVER FLAG. `--etcd-s3` and friends can be set on the k3s server,
-# but changing `k3s_server_config` restarts the control plane at the next window — on a
-# cluster with MetalLB ETP-Local VIP pinning, with Pi-hole
-# serving LAN DNS from it. `k3s etcd-snapshot save --etcd-s3 ...` takes the identical flag surface as
-# a one-shot against the running server (verified against `k3s etcd-snapshot save --help`,
-# v1.36.2+k3s1), so the whole feature lands with no restart and no server-arg change.
-#
-# Destination is the R2 bucket the Longhorn secondary target already uses, under its OWN folder.
-# Not B2: snapshot uploads are Class-B transaction volume and B2's cap is the scarce axis. Not
-# the `longhorn` prefix: the orphaned-backup reaper walks that space. (It reconciles Longhorn
-# Backup CRs rather than raw objects, so it could not see an etcd snapshot anyway — the
-# separate folder means that stays true if it ever grows a bucket-level sweep.)
-k3s_etcd_s3_armed: true
-k3s_etcd_s3_folder: etcd-snapshots
-# The region the off-box snapshot script passes as `--etcd-s3-region`. R2's is literally `auto`.
-# The twin of `k3s_longhorn_r2_region` in the `longhorn-backup` role's defaults, which the
-# Longhorn R2 target's URL reads: a host file may not read a key that role defines, so this
-# role keeps its own copy and ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py
-# holds the two equal. H2.8b deletes it with the upload.
-k3s_etcd_s3_region: auto
-# 14 daily snapshots. Larger than k3s's local default of 5 because this is the copy that exists
-# after the box is gone. MEASURED: a snapshot is 7.85-7.87 MB compressed, against the 104 MB
-# the uncompressed local snapshots beside it take — --etcd-snapshot-compress is doing the work. Two
-# weeks therefore costs ~110 MB, which is nothing against R2's 10 GB free tier next to ~8.2 GB
-# of Longhorn data. Retention could go considerably higher on cost grounds; 14 days is the recovery window,
-# not the budget.
-k3s_etcd_s3_retention: 14
-# 02:45 — before the 03:30 nightly Longhorn backup rather than after, so the two never contend
-# for upload bandwidth, and comfortably clear of the 05:15 manifest-prune check.
+# This script compares the live cluster token with the operator's stamp. Its schedule keys keep
+# the names they had when the script also uploaded, so the Healthchecks.io cadence is unchanged.
+# 02:45 — clear of the 05:15 manifest-prune check.
 k3s_etcd_s3_cron_hour: "2"
 k3s_etcd_s3_cron_minute: "45"
 
@@ -620,7 +593,7 @@ k3s_render_stamp_groups:
       - ansible/roles/setup/k3s/templates/release-staleness-check.sh.j2
   - name: k3s-etcd-snapshot         # tags: [etcd-snapshot]
     templates:
-      - ansible/roles/setup/k3s/templates/etcd-snapshot-offbox.sh.j2
+      - ansible/roles/setup/k3s/templates/etcd-token-drift.sh.j2
 
 # Release groups whose artifacts are COPIED verbatim rather than rendered, so they have no
 # `templates` list and cannot live in k3s_render_stamp_groups above (stamp_render.yml renders

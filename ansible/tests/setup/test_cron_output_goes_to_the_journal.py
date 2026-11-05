@@ -39,7 +39,7 @@ JOURNAL_ROUTED = {
     "Longhorn backup health": "longhorn-backup-health",
     "daniel-box disk health": "disk-health",
     "Release staleness drift check": "release-staleness-check",
-    "Off-box etcd snapshot": "etcd-snapshot-offbox",
+    "etcd token drift": "etcd-snapshot-offbox",
     "Registry garbage collection": "registry-gc",
     # The fake-remux workers discarded both streams to /dev/null until #6162, which the
     # every-cron judge below accepts, so naming them here is what holds them to the journal.
@@ -97,7 +97,7 @@ KNOWN_CRONS = frozenset(
     {
         "fake-remux scan",  # setup/fake_remux/tasks/main.yml
         "Longhorn backup health",  # setup/k3s/tasks/health-crons.yml
-        "Off-box etcd snapshot",  # setup/k3s/tasks/health-crons.yml
+        "etcd token drift",  # setup/k3s/tasks/health-crons.yml
     }
 )
 # 13 after the initial_setup crons no host ran were deleted (20 after H2.2c moved the Longhorn

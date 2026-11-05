@@ -94,7 +94,7 @@ def _audit_policy() -> dict:
 def test_secrets_encryption_is_armed():
     assert _server_config().get("secrets-encryption") is True, (
         "k3s_server_config must set secrets-encryption. Without it every Secret is stored "
-        "in etcd as plaintext, and etcd-snapshot-offbox.sh ships a daily copy of that to R2."
+        "in etcd as plaintext, and k3s's snapshot schedule ships a copy of that to R2."
     )
 
 

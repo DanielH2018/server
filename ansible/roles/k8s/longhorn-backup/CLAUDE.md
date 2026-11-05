@@ -40,10 +40,6 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
   ENFORCED:
   `ansible/tests/repo/test_census_rows_roles.py::test_census_row_holds_on_the_tree`, row
   `no-flux-born-key-on-the-host-plane`.
-- **A mirrored pair.** `k3s_longhorn_r2_region` here and `k3s_etcd_s3_region` in `setup/k3s`'s
-  defaults hold the same value. The off-box etcd snapshot script reads the second.
-  ENFORCED:
-  `ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py::test_a_changed_twin_is_flagged`.
 - **The etcd Secret must stay in `kube-system`.** k3s reads `etcd-s3-config-secret` from no
   other namespace, and it reads the Secret at each snapshot, not at start, so a missing one
   costs an upload and never a control-plane boot. Its `etcd-s3-region` reads

@@ -385,4 +385,4 @@ def test_the_real_tree_has_no_uv_interpreter_violation():
             offenders.append(tpl.name)
     assert offenders == [], offenders
     # Non-vacuity: the rule must be examining the root cron it was written for.
-    assert "etcd-snapshot-offbox.sh.j2" in root_crons
+    assert "etcd-token-drift.sh.j2" in root_crons

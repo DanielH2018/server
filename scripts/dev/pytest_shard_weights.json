@@ -770,7 +770,6 @@
  "ansible/tests/setup/test_etcd_restore_drill_cron.py": 0.0,
  "ansible/tests/setup/test_etcd_restore_drill_gate.py": 0.05,
  "ansible/tests/setup/test_etcd_restore_drill_verify.py": 0.04,
- "ansible/tests/setup/test_etcd_s3_region_mirrors_the_r2_region.py": 0.29,
  "ansible/tests/setup/test_eval_run_failure_path.py": 0.14,
  "ansible/tests/setup/test_eval_sweep_cron.py": 0.0,
  "ansible/tests/setup/test_github_interaction_limit.py": 0.08,
