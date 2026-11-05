@@ -37,6 +37,10 @@ from lib.repo_paths import K3S_ROLE
 
 CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 DRILL = Path(ANSIBLE).parent / "scripts" / "backup" / "etcd_restore_drill.sh"
+READER = Path(ANSIBLE) / "roles/k8s/monitor-bridge/files/checks/service.py"
+PAGING_RULES = (
+    Path(ANSIBLE) / "roles/k8s/observability/files/rules/bridge-exporter.yaml"
+)
 CRON_TASK = "Schedule the etcd restore drill"
 
 
@@ -157,8 +161,14 @@ def test_the_scripts_ordering_note_still_matches_reality() -> None:
         "longhorn-backup-health.sh would be reading a second drill's evidence out of the first "
         "drill's watchdog"
     )
+    assert "def check_etcd_restore_drill(" in READER.read_text(), (
+        "the block names this file as the reader's home, and the reader is not in it"
+    )
     assert "EtcdRestoreDrillFailing" in header, (
         "the block must name the alert rule that pages on the reader's verdict"
+    )
+    assert "alert: EtcdRestoreDrillFailing" in PAGING_RULES.read_text(), (
+        "the block names an alert rule that bridge-exporter.yaml does not define"
     )
     for stale in (
         "it is not yet written",
