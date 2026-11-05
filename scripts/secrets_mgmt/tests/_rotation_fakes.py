@@ -3,11 +3,11 @@
 Every fake appends `(name, args, kwargs)` to a shared `calls` list, which is how a test proves
 "the registry was saved after the value was written" without reading source.
 
-THE SUBPROCESS BOUNDARIES KEEP THEIR REAL IMPLEMENTATIONS. `sops_set`, `sops_decrypt` and
-`deploy` are `rotation_tools`' own functions with a recording `run` injected, not lambdas.
-Replacing them wholesale would retire the argv assertions that are the point of two of them —
-the token must reach the process on stdin, never in argv. `process_calls` returns exactly
-what those three handed the runner.
+THE SUBPROCESS BOUNDARIES KEEP THEIR REAL IMPLEMENTATIONS. `sops_set` and `deploy` are
+`rotation_tools`' own functions with a recording `run` injected, not lambdas. Replacing them
+wholesale would retire the argv assertions that are the point of `sops_set` — the token must
+reach the process on stdin, never in argv. `process_calls` returns exactly what those two
+handed the runner.
 """
 
 import datetime as dt
@@ -24,7 +24,6 @@ import yaml
 from secrets_mgmt.cluster_vars_check import Expected, Tree
 from secrets_mgmt.rotation_tools import (
     RotationTools,
-    decrypted_values,
     run_deploy,
     sops_set,
 )
@@ -44,11 +43,8 @@ class Fakes:
     history: list[tuple[str, str, dict[str, str]]] = field(default_factory=list)
     git_error: BaseException | None = None
     run_error: BaseException | None = None
-    # A non-zero rc raises for a caller that passed `check=True`, the way subprocess does —
-    # `decrypted_values` distinguishes "cannot decrypt here" from "decrypted nothing" on
-    # exactly that exception, so a runner that swallowed it would fake away the difference.
+    # A non-zero rc raises for a caller that passed `check=True`, the way subprocess does.
     run_rc: int = 0
-    run_stdout: str = ""
     # Deploy tag to `owner`, as `lib.k8s_roles.tag_owners` maps it. Empty is the live tree's
     # answer until a service moves to Flux.
     owners: dict[str, str] = field(default_factory=dict)
@@ -91,17 +87,13 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         calls.append(("run", (cmd,), kwargs))
         if f.run_error is not None:
             raise f.run_error
-        # `check=True` raises here for the same reason it does in subprocess. Two of the
-        # three callers pass it: `decrypted_values` reads the exception as "this host
-        # cannot decrypt", and `sops_set` reads it as "the rotation must not be recorded".
+        # `check=True` raises here for the same reason it does in subprocess. `sops_set`
+        # passes it and reads the exception as "the rotation must not be recorded".
         # `run_deploy` passes no `check` and reads `.returncode`, so a non-zero rc reaches
-        # it as a return value. A runner that returned the CompletedProcess to all three
-        # would make the two failure paths untestable.
+        # it as a return value.
         if kwargs.get("check") and f.run_rc:
             raise subprocess.CalledProcessError(f.run_rc, cmd)
-        return subprocess.CompletedProcess(
-            cmd, f.run_rc, stdout=f.run_stdout, stderr=""
-        )
+        return subprocess.CompletedProcess(cmd, f.run_rc, stdout="", stderr="")
 
     def load_registry(*_args, **_kwargs) -> dict:
         calls.append(("load_registry", (), {}))
@@ -137,7 +129,6 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         save_registry=save_registry,
         sops_names=sops_names,
         host_file_keys=lambda: f.host_keys,
-        sops_decrypt=partial(decrypted_values, run=run),
         sops_set=partial(sops_set, run=run),
         deploy=partial(run_deploy, run=run),
         owners=lambda: f.owners,

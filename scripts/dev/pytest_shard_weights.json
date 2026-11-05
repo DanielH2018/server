@@ -1499,7 +1499,6 @@
  "scripts/secrets_mgmt/tests/test_secret_rotation.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_rotation_cluster.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secret_rotation_messages.py": 0.0,
- "scripts/secrets_mgmt/tests/test_secret_sops_io.py": 0.0,
  "scripts/secrets_mgmt/tests/test_secrets_lib_layout.py": 2.08,
  "scripts/secrets_mgmt/tests/test_sops_type_proof_fixture.py": 0.12,
  "scripts/tests/test_ansible_lint_hook.py": 0.01,

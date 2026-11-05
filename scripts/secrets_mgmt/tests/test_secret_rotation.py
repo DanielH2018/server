@@ -5,8 +5,7 @@ test_secret_registry.py, test_secret_consumers.py, test_secret_git_dates.py, and
 test_rotation_tools.py for the process boundaries. What is left here is the CLI's own
 behaviour — the audit's summary line and verdict, the unattended pick-up window, the two ways
 `cmd_rotate` can fail partway through a batch (a crash and a hang), and that `rotate` picks
-what is due from the same git-advanced dates `audit` reads. The push-token shape check its
-audit arm calls is tested beside that module, in test_secret_sops_io.py.
+what is due from the same git-advanced dates `audit` reads.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_rotation.py
 """

@@ -36,17 +36,11 @@ This file is the CLI. The logic each subcommand runs on lives in modules that im
 from here. `secrets_lib/` holds the two libraries only this tool and its generated page use:
 `secret_classify` (tier by name) and `secret_registry` (seeding, sync, due dates, drift).
 Beside this file are `consumers` (who holds a copy), `git_dates` (when a ciphertext last
-changed), `sops_io` (push-token shape) and `rotation_tools` (every process boundary,
-injectable).
+changed) and `rotation_tools` (every process boundary, injectable).
 
 Secret NAMES are read straight from the encrypted secrets.yml — SOPS encrypts values but
-leaves keys in plaintext — so `sync`, and every arm of `audit` that `--check` gates on, run
-without an age key and are safe in CI.
-
-`audit` has one arm that DOES decrypt: the push-token shape check, which is the only way to
-see a token Uptime Kuma will refuse. It degrades to "not checked" where there is no age key,
-and it reports through `--verdict` only — never through `--check`, so the CI gate stays
-decrypt-free. `rotate --commit` also needs the key (it shells out to `sops set`).
+leaves keys in plaintext — so `sync` and `audit` run without an age key and are safe in CI.
+`rotate --commit` needs the key (it shells out to `sops set`).
 
 Tiers (and default rotation cadence):
   auto     180d  locally-generated, no external coupling — this tool can rotate it
@@ -88,7 +82,6 @@ from secrets_mgmt.secrets_lib.secret_registry import (
     sync,
 )
 from secrets_mgmt.rotation_tools import RotationTools
-from secrets_mgmt.sops_io import malformed_push_tokens
 
 # A LITERAL, and it must stay one: `scripts/docs/gen_doc_fragments.py` reads this assignment
 # with `ast.literal_eval` (it never imports this module, which would need an age key on the
@@ -191,8 +184,8 @@ def cmd_audit(args, tools: RotationTools) -> int:
     timer whose `Restart=on-failure` reruns it every 30 min until it exits 0
     (roles/setup/common/tasks/check_timer.yml), and its wrapper writes the exit code as
     the textfile verdict SecretRotationAuditFailed reads. Without `--verdict`, overdue secrets
-    and malformed push tokens are reported but never fail this exit code; those are the daily
-    audit's concern, not a CI gate's.
+    are reported but never fail this exit code; those are the daily audit's concern, not a CI
+    gate's.
     """
     reg = tools.load_registry()
     # Registry drift: warn by default (so a forgotten `sync` is visible); --check fails on it.
@@ -215,27 +208,6 @@ def cmd_audit(args, tools: RotationTools) -> int:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
     summary = audit_summary(res, missing, stale)
-    # Push-token shape. This arm decrypts, so it runs only where an age key exists — the daily
-    # cron on daniel-box, and an operator's shell. In CI `decrypted_values` returns None and the
-    # arm reports "not checked", which is why it feeds --verdict and NOT the --check exit
-    # code below: --check is the prek gate over secrets.yml / the registry / this file, and a
-    # decrypt-dependent verdict there would pass in CI and fail on a developer's machine, turning
-    # every future secrets PR red until an unrelated token was fixed.
-    values = tools.sops_decrypt()
-    if values is None:
-        print("  push-token shape: not checked (cannot decrypt here)")
-        malformed = []
-    else:
-        malformed = malformed_push_tokens(values)
-        for name, reason in malformed:
-            print("  MALFORMED %-40s %s" % (name, reason))
-        if not malformed:
-            print("  push-token shape: ok")
-    if malformed:
-        summary += "; %d push token(s) Kuma will reject: %s" % (
-            len(malformed),
-            ", ".join(n for n, _ in malformed),
-        )
     # An externally-detected fault the caller wants folded in. ADDITIVE, deliberately: the
     # caller could short-circuit to its own sticky DOWN instead (the two arms above it in
     # secret-rotation-audit.sh.j2 do exactly that), but those describe a registry that cannot
@@ -249,14 +221,13 @@ def cmd_audit(args, tools: RotationTools) -> int:
     # `stale` too (a registry row for a since-removed secret), so the daily verdict and the CI
     # `--check` gate below agree on registry drift — otherwise a `stale`-only drift fails CI
     # while the daily verdict stays up.
-    ok = n_over == 0 and not missing and not stale and not malformed and not extra_down
+    ok = n_over == 0 and not missing and not stale and not extra_down
     print("audit: verdict=%s %s" % ("up" if ok else "down", summary))
     if getattr(args, "verdict", False) and not ok:
         return 1
     # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
     # NOT on overdue (a time-based runtime state the daily verdict owns — blocking an unrelated
-    # commit on a due-for-rotation secret would be wrong), and NOT on push-token shape (see the
-    # arm above). Read-only (no decrypt), CI-safe.
+    # commit on a due-for-rotation secret would be wrong). Read-only (no decrypt), CI-safe.
     if getattr(args, "check", False) and (missing or stale):
         error(
             "registry out of sync with secrets.yml — run "
