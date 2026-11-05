@@ -251,6 +251,10 @@ under `uv run --no-project`. The journal names the outcome on every tick:
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and what
 each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
 
+- **A play file whose parsed YAML is unchanged maps to no tags.** A comment or layout edit to
+  `ansible/deploy.yml`, or to a file under `ansible/pre_tasks/`, `ansible/tasks/` or
+  `ansible/post_tasks/`, records `narrowed-to-nothing`. Any other edit to a play file refuses,
+  and so does an edit to a play-level file that is not YAML, such as `ansible.cfg`.
 - **A shared template maps to the roles that import it.** A name inside a Jinja `{# #}` comment is
   not an import. `claim-default.yaml.j2` maps to the roles whose `defaults/main.yml` declares
   `k8s_claims`, not to every caller of `k8s/manifests`, and the derivation refuses if

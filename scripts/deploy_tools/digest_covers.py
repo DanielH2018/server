@@ -61,7 +61,7 @@ from lib import yaml_fast
 from lib.ansible_jinja_env import ansible_local_temp
 from lib.cli_help import ArgumentParser
 from lib.git import git
-from lib.narrow_git import CannotNarrow, show_at
+from lib.narrow_git import CannotNarrow, same_parsed_yaml, show_at
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 from deploy_tools import digest_provable
@@ -74,7 +74,6 @@ from deploy_tools.narrow_lib import templates as narrow_templates
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib.deploy_changes import (
-    _BROAD_PLAY_PREFIXES,
     _is_test_only_path,
     role_of,
     services_from_changed_paths,
@@ -172,10 +171,6 @@ def _drop_vars(node, names: set[str]):
     return node
 
 
-def _is_play_file(path: str) -> bool:
-    return path.startswith(_BROAD_PLAY_PREFIXES) and path.endswith((".yml", ".yaml"))
-
-
 # Variables Ansible reads with no file naming them: its magic variables beyond the `ansible_`
 # prefix. `get_reserved_names()` adds the play and task keywords, which a var can shadow.
 _MAGIC_VARS = frozenset(
@@ -219,7 +214,7 @@ def _var_reader(name: str, head: str, repo: Path) -> str | None:
         hit = line.split(":", 1)[1]
         if paths.is_prose(hit) or _is_test_only_path(hit):
             continue
-        if not _is_play_file(hit):
+        if not broad.is_play_file(hit):
             return hit
         text = show_at(head, hit, repo)
         try:
@@ -254,13 +249,12 @@ def _play_reason(path: str, before: str, after: str, head: str, repo: Path):
 def _parsed_same(path: str, before: str, after: str) -> bool:
     """Whether a YAML file Ansible parses has the same value at both ends."""
     at = role_of(path)
-    parsed = _is_play_file(path) or (at is not None and at.subdir in _PARSED_ROLE_DIRS)
-    if not (parsed and path.endswith((".yml", ".yaml"))):
-        return False
-    try:
-        return yaml_fast.safe_load(before) == yaml_fast.safe_load(after)
-    except yaml.YAMLError:
-        return False
+    parsed = broad.is_play_file(path) or (
+        at is not None and at.subdir in _PARSED_ROLE_DIRS
+    )
+    return (
+        parsed and path.endswith((".yml", ".yaml")) and same_parsed_yaml(before, after)
+    )
 
 
 class Classifier:
@@ -329,9 +323,9 @@ class Classifier:
         if before is not None and after is not None:
             if filters.is_plugin(path) and order_only(self.repo, path, base, head):
                 return None
-            if _is_play_file(path):
+            if broad.is_play_file(path):
                 return _play_reason(path, before, after, head, self.repo)
-        elif _is_play_file(path):
+        elif broad.is_play_file(path):
             return f"{path} is added or deleted"
         try:
             return frozenset(broad.broad_path_tags(path, base, self._context(head)))

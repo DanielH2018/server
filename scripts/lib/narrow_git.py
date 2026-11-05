@@ -80,6 +80,19 @@ def mapping_at(text: str, label: str) -> dict:
     return loaded
 
 
+def same_parsed_yaml(before: str, after: str) -> bool:
+    """Whether two YAML texts load to the same value, so only comments or layout moved.
+
+    `repr` rather than `==`, because Python reads `1`, `1.0` and `true` as equal and Ansible
+    does not. A key reordered reads as a change, and text that does not load is never the same.
+    """
+    try:
+        return repr(yaml_fast.safe_load(before)) == repr(yaml_fast.safe_load(after))
+    # A timestamp-shaped scalar such as 2026-13-45 raises ValueError from the constructor.
+    except yaml.YAMLError, ValueError:
+        return False
+
+
 def changed_mapping_keys(before: dict, after: dict, label: str) -> set[str]:
     """The top-level keys whose value differs between two parsed mappings.
 

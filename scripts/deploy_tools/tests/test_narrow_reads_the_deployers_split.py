@@ -17,6 +17,7 @@ from deploy_tools.narrow_lib import broad as narrow_broad
 from _narrow_fixtures import Tree, _refs, build_tree
 
 _EDIT = "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2"
+PLAY = "- hosts: all\n  vars:\n    p: '{{ play_key }}'\n"
 
 
 @pytest.fixture
@@ -36,4 +37,50 @@ def test_a_play_file_under_the_same_prefix_still_refuses(tree: Tree):
     with pytest.raises(
         narrow_broad.CannotNarrow, match=r"ansible/tasks/k8s_batch\.yml"
     ):
+        tree.narrow(*_refs(tree))
+
+
+def test_a_comment_edit_to_a_play_file_is_clean(tree: Tree):
+    tree.write("ansible/tasks/k8s_batch.yml", "- debug: {}\n")
+    tree.commit("the task file")
+    tree.write("ansible/tasks/k8s_batch.yml", "# Why.\n- debug: {}\n")
+    assert tree.narrow(*_refs(tree)) == set()
+
+
+def test_a_comment_edit_beside_a_service_change_narrows_to_that_service(tree: Tree):
+    tree.write("ansible/deploy.yml", PLAY + "# Why.\n")
+    tree.write(_EDIT, "a: c\n")
+    assert tree.narrow(*_refs(tree)) == {"jellyfin"}
+
+
+@pytest.mark.parametrize(
+    ("path", "before", "after"),
+    [
+        pytest.param(
+            "ansible/tasks/k8s_batch.yml",
+            "- shell: |\n    a\n",
+            "- shell: |\n    # Read by the shell.\n    a\n",
+            id="a-comment-shaped-line-in-a-block-scalar",
+        ),
+        pytest.param(
+            "ansible/tasks/k8s_batch.yml",
+            "- debug: {}\n",
+            "# Why.\n- debug: {\n",
+            id="a-file-that-stops-parsing",
+        ),
+        pytest.param(
+            "ansible.cfg",
+            "[defaults]\nforks = 5\n",
+            "# Why.\n[defaults]\nforks = 5\n",
+            id="a-play-prefix-file-that-is-not-yaml",
+        ),
+    ],
+)
+def test_a_play_prefix_edit_that_may_move_content_is_flagged(
+    tree: Tree, path: str, before: str, after: str
+):
+    tree.write(path, before)
+    tree.commit("the file")
+    tree.write(path, after)
+    with pytest.raises(narrow_broad.CannotNarrow, match=path):
         tree.narrow(*_refs(tree))
