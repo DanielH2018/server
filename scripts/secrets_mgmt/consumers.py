@@ -56,9 +56,6 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         return ()
     elif name.startswith("monitor_bridge_"):
         pusher = "monitor-bridge"
-    elif name == "docker_fleet_push_token":
-        # The monitor-bridge role renders the host cron script.
-        pusher = "monitor-bridge"
     else:
         # anything else unrecognised -> manual
         return ()

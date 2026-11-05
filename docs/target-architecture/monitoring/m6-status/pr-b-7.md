@@ -23,8 +23,9 @@ nothing. Each item of *Phase B* item 8, and what changed:
     - `homelab-cicd-reviewer.md` names the secret-rotation audit timer and
       `SecretRotationAuditFailed` in place of the daily Kuma push.
     - `homelab-container-reviewer.md` is unchanged. Its one mention is the
-      `autokuma.yml.j2` macro the Pi compose files inline, which the plan's census allowlist
-      keeps.
+      AutoKuma macro the Pi compose files inline, which the plan's census allowlist keeps.
+      [#7210](https://github.com/DanielH2018/server/issues/7210) later deleted the macro and
+      the mention.
 - **`.claude/hooks/hooklib/service_lines.py`.** Two docstrings change: the release-staleness
   verdict sits beside a textfile metric, and `ReleaseStalenessCheckNotReporting` pages a dead
   cron. The `--kuma` flag the cron passes to `probe.py releases` is a live CLI flag, so it

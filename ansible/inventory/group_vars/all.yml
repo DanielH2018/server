@@ -99,18 +99,6 @@ has_low_memory_board: false
 # Separate from the flag above on purpose: "is a Pi board" and "is memory-constrained" are
 # two facts, and a 4 GB Pi would carry this one alone.
 has_raspi_kernel: false
-# AutoKuma id of the managed notification provider (a static entity defined in the
-# uptime-kuma role); the kuma() macro links every monitor to it via notification_name_list.
-kuma_notification_id: discord
-# Uptime Kuma "docker host" id referenced by AutoKuma docker monitors; the same id on
-# every host so far, so it lives here — override per-host if one ever diverges.
-kuma_docker_host: 1
-# Docker-type monitors are retired fleet-wide: the kuma() macro suppresses its docker branch
-# and the per-container tiles are superseded by the `docker-fleet` push check (uptime-kuma
-# role's host cron). Cluster-side AutoKuma cannot reach the private docker-proxy socket
-# anyway. Flip back to true to restore every docker monitor unchanged — AutoKuma recreates
-# them from the labels, but history does not survive the round-trip.
-kuma_docker_monitors: false
 # Physical LAN subnet, narrow /24 (not the broader RFC1918 range — see traefik's trustedIPs
 # comment for why that distinction matters). Same for every host so far; override per-host
 # if a new host sits on a different LAN.
