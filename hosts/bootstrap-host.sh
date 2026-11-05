@@ -17,7 +17,8 @@
 #   4  the one-time host steps: the Pi's debloat purge, its rsyslog and wpa_supplicant masks and
 #      the removal of rsyslog's text logs; on a cluster node, the k3s binary
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
-#      --create (--local-build builds the three .deb files from the clone, then installs them)
+#      --create (--local-build builds the three .deb files from the clone, then installs them);
+#      on the Pi, then log2ram from the Azlux source its package ships
 #   6  the Pi only: stop and disable systemd-resolved, then start homelab-docker-engine.service once
 #   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
 #      the mask on the aide package's dailyaidecheck.timer. A missing database on a host whose
@@ -112,6 +113,7 @@ SYSTEMD_DIR=/etc/systemd/system
 # The update reads the homelab source alone, and List-Cleanup=0 keeps the other sources' lists,
 # as the updater's own fetch does.
 HOMELAB_APT="-o Dir::Etc::sourcelist=sources.list.d/homelab.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
+AZLUX_APT="-o Dir::Etc::sourcelist=sources.list.d/azlux.sources -o Dir::Etc::sourceparts=- -o APT::Get::List-Cleanup=0"
 
 DEBIAN_FRONTEND=noninteractive
 export DEBIAN_FRONTEND
@@ -491,6 +493,18 @@ else
 fi
 systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"
+# The package ships Azlux's source, so log2ram cannot be one of its Depends. Reconcile starts as
+# the install above ends, holds dpkg's lock briefly and may write /etc/log2ram.conf first. dpkg
+# would stop at a conffile prompt on that file, and upstream's copy already holds the arm's values.
+if [ "$host" = daniel-pi ] &&
+    ! dpkg-query -W -f='${Status}' log2ram 2> /dev/null | grep -q 'install ok installed'; then
+    # shellcheck disable=SC2086
+    apt-get update --error-on=any $AZLUX_APT || die "apt-get update of the Azlux source failed"
+    apt-get install -y -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confnew log2ram ||
+        die "apt-get install log2ram failed"
+    rm -f "$ROOT/etc/log2ram.conf.dpkg-old"
+    echo "bootstrap-host: installed log2ram, which mounts /var/log at the next boot"
+fi
 stop_after 5
 
 # Step 6: the Pi only. The package ships the engine unit as a manual one, so nothing else starts it.

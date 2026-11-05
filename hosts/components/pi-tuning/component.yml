@@ -30,8 +30,9 @@
 #
 # - The package installs zram-tools, watchdog and earlyoom through `depends:`. It cannot depend
 #   on log2ram: Azlux's apt source arrives in the same package (apt-azlux), so a rebuilt Pi
-#   could not resolve the dependency on first install. The log2ram package stays a bootstrap
-#   install (H7.42), and it is installed on the live Pi.
+#   could not resolve the dependency on first install. Step 5 of hosts/bootstrap-host.sh installs
+#   the log2ram package after this one, under --force-confnew, because reconcile may already have
+#   written the four lines below to /etc/log2ram.conf. log2ram mounts at the next boot.
 # - The debloat purge (Open vSwitch, snapd, fwupd, appstream) and rsyslog's and wpa_supplicant's
 #   mask are one-time state. They persist on the live Pi, and step 4 of hosts/bootstrap-host.sh
 #   carries them for a rebuild. Step 4 also removes rsyslog's text logs, and step 7 removes the
