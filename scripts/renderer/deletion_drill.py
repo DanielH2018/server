@@ -115,8 +115,8 @@ def bundle(
 ) -> dict[str, str]:
     """The bundle publishing `tags`, by path: `cluster/<tag>/*`, `flux/<tag>.yaml` and the index.
 
-    Revision 1 strips the markers the red halves need stripped, both in the claims and in
-    `prune-drill-red`'s Kustomization. `extra` adds files to `cluster/prune-drill-keep/`.
+    Revision 1 strips the markers the red halves need stripped from the claims. `extra` adds
+    files to `cluster/prune-drill-keep/`.
     """
     files: dict[str, str] = {}
     for tag in tags:
@@ -134,17 +134,7 @@ def bundle(
             held["kustomization.yaml"] = kustomization_text(held)
         files |= {f"cluster/{tag}/{name}": text for name, text in held.items()}
     files |= flux_files({tag: False for tag in tags}, TIMEOUT)
-    if RED in tags and keep_pvcs:
-        files[f"flux/{RED}.yaml"] = strip_delete_policy(files[f"flux/{RED}.yaml"])
     return files
-
-
-def strip_delete_policy(text: str) -> str:
-    """`text`, a Kustomization stream, with `spec.deletionPolicy` removed from every document."""
-    docs = list(yaml_fast.safe_load_all(text))
-    for doc in docs:
-        doc["spec"].pop("deletionPolicy", None)
-    return yaml.safe_dump_all(docs, sort_keys=False)
 
 
 def rendered_policy(files: Mapping[str, str], tag: str) -> str:

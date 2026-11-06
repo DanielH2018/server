@@ -24,6 +24,7 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
+    TAG_KIND_SUFFIXES,
     Ordering,
     dependency_cycle,
     kustomization_edges,
@@ -243,32 +244,79 @@ def test_a_tags_kinds_follow_it_in_its_file_in_suffix_order():
     assert docs["pihole-snapshot"]["spec"]["path"] == "./cluster/pihole-snapshot"
 
 
-def _orphan_missing(files: dict[str, str]) -> list[str]:
-    """Each Kustomization in the `flux/` files that lacks `deletionPolicy: Orphan`."""
-    return [
-        doc["metadata"]["name"]
+POLICY_TAGS = ["bento-pdf", "flux", "pihole"]
+PIHOLE_KINDS = [f"pihole{suffix}" for suffix in TAG_KIND_SUFFIXES]
+
+
+def _policy_bundle() -> dict[str, str]:
+    """A bundle holding `flux`, `flux-deferred` and every per-tag kind beside the shared kinds."""
+    directories = _every_kind() | {
+        name: {"x.yaml": CONFIGMAP.format(namespace="homelab")}
+        for name in (
+            "flux",
+            "flux-deferred",
+            *(f"pihole{suffix}" for suffix in TAG_KIND_SUFFIXES),
+        )
+    }
+    return bundle_files(directories, {}, POLICY_TAGS, TIMEOUT, DOTENV)
+
+
+def _policies(files: dict[str, str]) -> dict[str, str | None]:
+    """Each Kustomization in the `flux/` files mapped to its `deletionPolicy`."""
+    return {
+        doc["metadata"]["name"]: doc["spec"].get("deletionPolicy")
         for path, text in files.items()
         if path.startswith("flux/") and not path.endswith("kustomization.yaml")
         for doc in yaml_fast.safe_load_all(text)
-        if doc["spec"].get("deletionPolicy") != "Orphan"
+    }
+
+
+def _orphan_missing(files: dict[str, str]) -> list[str]:
+    """Each Kustomization of the kept set that lacks `deletionPolicy: Orphan`."""
+    switched = set(POLICY_TAGS) - {"flux"}
+    return [
+        name
+        for name, policy in _policies(files).items()
+        if name not in switched and policy != "Orphan"
     ]
 
 
-def test_every_kustomization_of_every_kind_sets_deletion_policy_orphan():
-    files = bundle_files(_every_kind(), {}, ["bento-pdf", "pihole"], TIMEOUT, DOTENV)
-    flux = [p for p in files if p.startswith("flux/")]
-    assert {"flux/pihole.yaml", "flux/bento-pdf.yaml", "flux/cluster-vars.yaml"} <= set(
-        flux
-    )
+def _tags_with_a_policy(files: dict[str, str]) -> list[str]:
+    """Each `<tag>` other than `flux` that does not take the default deletion policy."""
+    policies = _policies(files)
+    return [tag for tag in POLICY_TAGS if tag != "flux" and policies[tag] is not None]
+
+
+def test_the_kept_set_is_clean_and_covers_every_shared_kind():
+    files = _policy_bundle()
+    assert {
+        "flux",
+        "flux-deferred",
+        "cluster-vars",
+        *SHARED_KINDS,
+        *PIHOLE_KINDS,
+    } <= set(_policies(files))
     assert _orphan_missing(files) == []
 
 
-def test_a_kustomization_without_deletion_policy_orphan_is_flagged():
-    files = bundle_files(_every_kind(), {}, ["bento-pdf", "pihole"], TIMEOUT, DOTENV)
+def test_a_kept_kustomization_without_deletion_policy_orphan_is_flagged():
+    files = _policy_bundle()
     files["flux/pihole.yaml"] = files["flux/pihole.yaml"].replace(
-        "deletionPolicy: Orphan", "deletionPolicy: Delete", 3
+        "deletionPolicy: Orphan", "deletionPolicy: Delete"
     )
-    assert _orphan_missing(files) == ["pihole", "pihole-deferred", "pihole-snapshot"]
+    assert _orphan_missing(files) == PIHOLE_KINDS
+
+
+def test_every_tag_but_flux_taking_the_default_policy_is_clean():
+    assert _tags_with_a_policy(_policy_bundle()) == []
+
+
+def test_a_tag_that_still_carries_deletion_policy_orphan_is_flagged():
+    files = _policy_bundle()
+    files["flux/bento-pdf.yaml"] = files["flux/bento-pdf.yaml"].replace(
+        "wait: true", "wait: true\n  deletionPolicy: Orphan", 1
+    )
+    assert _tags_with_a_policy(files) == ["bento-pdf"]
 
 
 def test_a_verify_kind_depends_on_its_tags_deferred_kustomization():

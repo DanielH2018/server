@@ -52,11 +52,13 @@ def test_a_namespace_carries_the_marker_in_every_tag():
         assert PRUNE_LABEL in files[f"cluster/{tag}/namespace.yaml"]
 
 
-def test_only_the_red_tag_loses_its_deletion_policy():
+def test_every_fixture_tag_renders_the_default_deletion_policy():
     files = _rev(keep_pvcs=True)
-    assert drill.rendered_policy(files, drill.AS_RENDERED) == "Orphan"
-    assert drill.rendered_policy(files, drill.KEEP) == "Orphan"
-    assert drill.rendered_policy(files, drill.RED) == "default"
+    assert {drill.rendered_policy(files, tag) for tag in drill.TAGS} == {"default"}
+
+
+def test_the_production_root_keeps_deletion_policy_orphan():
+    assert drill.production_root()["spec"]["deletionPolicy"] == "Orphan"
 
 
 def test_the_image_token_is_replaced_in_every_deployment():

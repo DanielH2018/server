@@ -55,7 +55,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   allowlist in `k8s/manifests` never selects the `homelab-mcp-read` ClusterRole and
   ClusterRoleBinding. Flux prunes by its own inventory instead, and that inventory holds both,
   so dropping one from `rbac.yaml.j2` deletes it live at the next promotion.
-  `deletionPolicy: Orphan` applies only when the Kustomization itself is deleted.
+  Deleting the Kustomization deletes them too, because the tag takes the default deletion policy.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
   They stay until R4 deletes them. The `k8s/image-builder` include became promote's `images` job
   (D5.4a2, `scripts/deploy_tools/ci_images.py`) and the GHCR ref (D5.4b): the renderer writes

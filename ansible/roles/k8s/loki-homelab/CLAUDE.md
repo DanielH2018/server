@@ -40,7 +40,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   allowlist in `k8s/manifests` never selects the Alloy ClusterRole and ClusterRoleBinding.
   Flux prunes by its own inventory instead, and that inventory holds both, so dropping one
   from `alloy-daemonset.yaml.j2` deletes it live at the next promotion.
-  `deletionPolicy: Orphan` applies only when the Kustomization itself is deleted.
+  Deleting the Kustomization deletes them too, because the tag takes the default deletion policy.
 
 ## Notable
 - **The renderer's restart checksum rolls each workload when a ConfigMap it mounts changes.**

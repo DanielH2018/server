@@ -111,8 +111,8 @@
     # role applies. Gated because it is a write, and a host with no k8s workloads has no staged
     # manifests to read. It serves only a service that was Ansible-owned on the PR's base:
     # arm 4 of scripts/validate/render_diff_gates.py refuses a flux-owned name in
-    # k8s_retired_services, which retires by two PRs instead (docs/flux-deploy-plane.md,
-    # *Retiring a flux-owned service*).
+    # k8s_retired_services, which retires by removing its entry and role instead
+    # (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
     - name: Tear down retired k8s services
       ansible.builtin.include_tasks: tasks/k8s_retire.yml
       loop: "{{ k8s_retired_services | default([]) }}"

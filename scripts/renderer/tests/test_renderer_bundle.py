@@ -71,7 +71,6 @@ def _expected(name: str) -> dict:
             "timeout": TIMEOUT,
             "prune": True,
             "wait": True,
-            "deletionPolicy": "Orphan",
         },
     }
 
@@ -352,6 +351,7 @@ def test_the_cluster_vars_kustomization_decrypts_with_the_cluster_key():
     """With a substituting tag beside it, `cluster-vars` still gets no `postBuild` or edge."""
     files = _bundle(_tag("bento-pdf", sentinel("email")))
     expected = _expected("cluster-vars")
+    expected["spec"]["deletionPolicy"] = "Orphan"
     expected["spec"]["decryption"] = {
         "provider": "sops",
         "secretRef": {"name": "sops-age"},
