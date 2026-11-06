@@ -277,14 +277,19 @@ def seed_kit(cases, kit: Path) -> Path:
     return cases.tools_cache
 
 
+def stock_pins(cases, script: str, kit: Path, download=_download) -> None:
+    """Put each file the script pins into the kit, reading the job's tools cache first."""
+    downloads = seed_kit(cases, kit)
+    for name, (url, sha256) in kit_pins(script).items():
+        download(url, sha256, kit / name, downloads)
+
+
 def stock_kit(cases, clone: Path, kit: Path) -> Path:
     """The break-glass kit for amd64, as `docs/break-glass.md`, item 8, lists it."""
     shutil.rmtree(kit, ignore_errors=True)
     kit.mkdir(parents=True)
     script = SCRIPT.read_text()
-    downloads = seed_kit(cases, kit)
-    for name, (url, sha256) in kit_pins(script).items():
-        _download(url, sha256, kit / name, downloads)
+    stock_pins(cases, script, kit)
     # The script checks k3s against the kit's own checksum list, so a stand-in that answers
     # `--version` at the pin stands for the 70 MB binary.
     k3s = f'#!/bin/sh\necho "k3s version {script_value(script, "K3S_VERSION")}"\n'
@@ -570,6 +575,13 @@ def plan(work: Path, green: Path) -> list[Planned]:
     return cases
 
 
+def bootstrap_for(cases, item: Planned, clones: dict[str, Path]) -> Bootstrap:
+    """The run `item` plans."""
+    return Bootstrap(
+        cases, item.host, clones[item.clone], item.kit, item.label, item.seed
+    )
+
+
 def run(cases) -> None:
     """Run every bootstrap case, and record each verdict on `cases`."""
     clone = cases.work / "bootstrap-clone"
@@ -587,9 +599,7 @@ def run(cases) -> None:
         print(f"[FAIL] prepare the bootstrap cases: {exc}", file=sys.stderr)
         return
     for item in planned:
-        bootstrap = Bootstrap(
-            cases, item.host, clones[item.clone], item.kit, item.label, item.seed
-        )
+        bootstrap = bootstrap_for(cases, item, clones)
         if item.refusal is not None:
             body = functools.partial(
                 _expect_refused, bootstrap, item.refusal, item.apt_says

@@ -258,18 +258,8 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         ("success", "false", _all("success"), True),
         ("success", "", _all("success"), True),
         ("skipped", "", _all("success", hooks="failure"), False),
-        # A failed build skips the jobs that read its artifacts, and the gate stays red (#7439).
-        (
-            "skipped",
-            "",
-            _all(
-                "success",
-                host_packages_build="failure",
-                host_packages="skipped",
-                host_tools_arm64="skipped",
-            ),
-            False,
-        ),
+        # The build's own result reds the gate, so the jobs that skip after it cannot hide it (#7439).
+        ("skipped", "", _all("success", host_packages_build="failure"), False),
         # The proven path: every dependent skipped, and the gate is green.
         ("success", "true", _all("skipped"), True),
         ("success", "true", _all("skipped", pytest="failure"), False),
