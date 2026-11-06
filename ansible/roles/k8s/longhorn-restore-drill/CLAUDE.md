@@ -94,7 +94,7 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
   live hand run. The sweep deletes no Backup, because the drill creates its Volume in the
   `no-backup` group and a leftover is never backed up. Longhorn's label rule would otherwise put
   the Volume in `default`, and `allow-recurring-job-while-volume-detached` lets the daily tick back
-  up a detached Volume. The class-based tier in *At a glance* does not read this label. ENFORCED:
+  up a detached Volume. The class-based tier in *At a glance* does not read this label (#7391). ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_the_drill_volume_is_created_out_of_the_default_backup_group`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_the_next_run_sweeps_a_leftover_past_the_deadline_and_grace`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_volume_a_live_run_can_hold_is_not_swept`,
