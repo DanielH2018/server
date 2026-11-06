@@ -118,11 +118,10 @@ deferred pair below.
 ## Release records
 
 `release_stamp.yml` writes `/var/lib/homelab/k8s-releases.d/<service>.json` after each real
-apply, one step of history in `<service>.previous.json`; read it with `probe.py releases`. It
+apply, one step of history in `<service>.previous.json`. It
 records the **rendered bytes** and the `host` that produced them rather than the repo sources,
-the `rollouts[]` each workload is owed, and `manifests_digest`/`secret_digest` — the digest
-`probe.py releases --stale-only` prefers over its path rules, against the hourly record
-`ansible/roles/setup/render_records/` writes. Nothing here runs under `k8s_dry_run`.
+the `rollouts[]` each workload is owed, and `manifests_digest`/`secret_digest`. Nothing here runs
+under `k8s_dry_run`.
 
 ## Guards
 

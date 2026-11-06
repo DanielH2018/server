@@ -3,15 +3,13 @@
 
 A helper role has no `containers_list` entry and so no deploy tag of its own. Every reader of
 this graph asks the same question of it: which tags does a change to the helper reach? The
-deployer's `owned_only` split (`deploy_tools/shared_role_callers.py`), the broad narrowing
-(`narrow_lib/broad.py`) and the release-staleness consumers
-(`probe_lib/releases_consumers.py`) all read it. `lib.k8s_roles` re-exports it, where those
+broad narrowing (`narrow_lib/broad.py`) reads it. `lib.k8s_roles` re-exports it, where its
 readers import it from.
 
 A task file that does not load raises `CannotNarrow`, because it can hold the only edge to a
 helper. The broad narrowing refuses, the
-landing dies naming the file, the `--tags` expansion leaves the name for the tag validation to
-refuse, and the staleness consumers keep every shared role fleet-wide.
+landing dies naming the file, and the `--tags` expansion leaves the name for the tag validation
+to refuse.
 
 Split out of `lib.k8s_roles`, which sat at its length cap.
 

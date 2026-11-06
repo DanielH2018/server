@@ -30,6 +30,7 @@ DRIFT_FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"
 CHECK_TIMER_TEMPLATES = (
     "ansible/roles/setup/common/templates/check-timer.service.j2",
     "ansible/roles/setup/common/templates/check-timer.timer.j2",
+    "ansible/roles/setup/common/templates/check-timer-boot.service.j2",
 )
 
 

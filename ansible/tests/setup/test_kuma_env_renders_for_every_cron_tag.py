@@ -71,15 +71,3 @@ def test_no_k3s_template_or_task_reads_or_renders_the_file_any_more():
         in str(task.get("ansible.builtin.template", {}).get("src", ""))
     ]
     assert rendering == [], rendering
-
-
-def test_the_live_drift_credential_file_is_retired_under_its_tag():
-    task = next(
-        t
-        for t in load_tasks(CRONS)
-        if t.get("name") == "Retire the live-drift check Kuma credentials"
-    )
-    removal = task["ansible.builtin.file"]
-    assert removal["state"] == "absent"
-    assert removal["path"].endswith("live-drift-check.env")
-    assert set(task["tags"]) == {"live-drift"}

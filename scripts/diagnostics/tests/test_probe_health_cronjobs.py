@@ -264,24 +264,6 @@ def test_cronjob_health_no_deploy_stamp_checks_the_latest_job_directly():
     assert "since the last deploy" in text
 
 
-def test_deploy_applied_at_reads_the_release_stamp(tmp_path, monkeypatch):
-    from diagnostics.probe_lib import releases, releases_retired
-
-    monkeypatch.setattr(releases, "RELEASE_DIR", tmp_path)
-    # The owner map is fixed here, so the test does not follow which roles the tree hands to Flux.
-    monkeypatch.setattr(
-        releases_retired, "tree_owners", lambda host_vars=None: {"flux-svc": "flux"}
-    )
-    stamp = '{"applied_at": "2026-08-16T09:00:00Z"}'
-    (tmp_path / "ansible-svc.json").write_text(stamp)
-    (tmp_path / "flux-svc.json").write_text(stamp)
-    assert health._deploy_applied_at("ansible-svc") == "2026-08-16T09:00:00Z"
-    # A flux-owned service reads no record, though one is on disk.
-    assert health._deploy_applied_at("flux-svc") is None
-    # No record on disk reads as None too.
-    assert health._deploy_applied_at("never-deployed") is None
-
-
 # A Flux-owned role's gate Job (#5953). The `<role>-verify` Kustomization applies it, so it
 # carries no ownerReferences, only the CronJob's jobTemplate labels and Flux's owner label
 # (scripts/renderer/renderer_lib/cronjob_gate.py:gate_job). longhorn-reconcile's role and

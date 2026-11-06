@@ -444,6 +444,7 @@
       - ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2
       - ansible/roles/setup/common/templates/check-timer.service.j2
       - ansible/roles/setup/common/templates/check-timer.timer.j2
+      - ansible/roles/setup/common/templates/check-timer-boot.service.j2
 
 - name: Remove the setup-plane drift check's files from a host off the list
   tags: [crons, setup_drift]
@@ -577,6 +578,7 @@
       - ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2
       - ansible/roles/setup/common/templates/check-timer.service.j2
       - ansible/roles/setup/common/templates/check-timer.timer.j2
+      - ansible/roles/setup/common/templates/check-timer-boot.service.j2
 
 - name: Record the deployed Loki read-route verdict reader
   tags: [crons, loki_route_witness]

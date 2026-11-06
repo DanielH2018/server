@@ -86,8 +86,6 @@ def test_discover_templates_finds_the_known_set():
         "longhorn-backup-health.sh.j2",
         "longhorn-restore-drill.sh.j2",
         "disk-health.sh.j2",
-        "manifest-prune-check.sh.j2",
-        "release-staleness-check.sh.j2",
         "loki-read-route-health.sh.j2",
         "etcd-token-drift.sh.j2",
         "github-ruleset-drift.sh.j2",

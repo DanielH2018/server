@@ -5,10 +5,9 @@
 Different questions over different trees, and both answer them by reading a file at a git ref,
 parsing it as a YAML mapping, and refusing whenever a rule cannot say.
 
-WHY ONE `CannotNarrow` AND NOT TWO. The two modules already meet — `shared_role_reach` imports
-the setup half and `probe_lib/releases` catches the broad half — so a raise crossing that
-boundary had to match the class the catch site happened to import. One class makes that
-question disappear.
+WHY ONE `CannotNarrow` AND NOT TWO. A raise crossing from one module to a caller of the other
+would have to match the class the catch site happened to import. One class makes that question
+disappear.
 
 Import it as `lib.narrow_git`, never bare. `lib` is reached under exactly that name everywhere
 in this repo, and a module imported under two names is two classes: an `except CannotNarrow`

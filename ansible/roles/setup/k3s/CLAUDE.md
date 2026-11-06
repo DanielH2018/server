@@ -138,23 +138,6 @@ holds that schedule.
   the installer only `agent`, on a host with no binary. A flag change goes live at the agent's
   next start, because daniel-server's package lists no `k3s-restart`.
   `ansible/tests/setup/test_k3s_agent_flags_migration.py` holds the move to the live flags.
-- **The manifest-prune, release-staleness and live-drift checks are disarmed, and their code
-  stays in the tree until D6.18.** `ansible/roles/setup/k3s/tasks/health-crons.yml` holds their
-  absent arms: the two timers, the cron, the release links, the state directories, the stamp
-  fragments and the `.prom` files. Each absent arm carries its family's tag, so the file still
-  narrows to six tags. `setup-drift-check.sh` reads the host-plane stamps on daniel-box, and
-  `SetupDriftFailed` and `SetupDriftNotReporting` page for it. Flux's `prune: true` covers what
-  the prune check's first arm watched.
-- **Both drift checks' code knows an object Flux applies, and neither reads its label alone.** The
-  prune check skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a
-  Kustomization `<n>` exists in `flux-system`. It reads that list once per run, and a failed
-  read skips nothing. The live drift check takes a `kustomize-controller` `Apply` entry as
-  server-side only on an object without `last-applied-configuration`. Flux strips that
-  annotation on every apply, so its presence means Ansible applied the object after a
-  handback. A handed-back object keeps both the label and Flux's `managedFields` entry, which
-  is why each check also reads live state. ENFORCED:
-  `ansible/roles/setup/k3s/tests/test_manifest_prune_check_flux_skip.py::test_a_labelled_object_whose_kustomization_is_gone_is_flagged`,
-  `ansible/roles/setup/k3s/tests/test_live_drift_check.py::test_a_handed_back_flux_object_is_compared`.
 - **No task here writes an object Flux owns, and a new cluster writer is refused.** The
   `k3s-role-cluster-writes-are-counted` census row fails on a task that writes the cluster from
   any file outside `ansible/tests/repo/_k3s_write_verbs_row.py:K3S_WRITE_ALLOW`, which names
