@@ -39,6 +39,11 @@ def _cosign_steps(wf: dict) -> list[dict]:
     ]
 
 
+def _code_lines(step: dict) -> list[str]:
+    lines = (line.strip() for line in str(step.get("run", "")).splitlines())
+    return [line for line in lines if line and not line.startswith("#")]
+
+
 def prune_problems(wf: dict, promote_wf: dict) -> list[str]:
     """Every broken property of the prune workflow, as one line each.
 
@@ -78,16 +83,10 @@ def prune_problems(wf: dict, promote_wf: dict) -> list[str]:
     ):
         found.append("prune: its RETRY_FUNCTIONS differs from promote.yml's")
     for step in _steps(job):
-        code = [
-            line
-            for line in str(step.get("run", "")).splitlines()
-            if not line.lstrip().startswith("#")
-        ]
-        if any("docker login" in line for line in code):
+        if any("docker login" in line for line in _code_lines(step)):
             found.append(f"prune: {step.get('name')}: runs docker login outside retry")
     login = next((s for s in _steps(job) if s.get("name") == LOGIN_STEP), {})
-    script = str(login.get("run", ""))
-    if LOAD_RETRY not in script or "ghcr_login" not in script:
+    if _code_lines(login) != [LOAD_RETRY, "ghcr_login"]:
         found.append(f"prune: {LOGIN_STEP}: does not run ghcr_login after {LOAD_RETRY}")
     return found
 
@@ -152,6 +151,18 @@ def _prune_without_loading_retry(wf):
     _login_step(wf)["run"] = "ghcr_login"
 
 
+def _prune_calling_the_login_without_retry(wf):
+    _login_step(wf)["run"] = f"{LOAD_RETRY}\nghcr_login_once"
+
+
+def _prune_with_the_login_commented_out(wf):
+    _login_step(wf)["run"] = f"{LOAD_RETRY}\n# ghcr_login"
+
+
+def _prune_calling_the_login_before_loading(wf):
+    _login_step(wf)["run"] = f"ghcr_login\n{LOAD_RETRY}"
+
+
 PRUNE_RED = {
     "prune in the promote group": (
         _prune_in_the_promote_group,
@@ -191,6 +202,18 @@ PRUNE_RED = {
     ),
     "prune without loading retry": (
         _prune_without_loading_retry,
+        "prune: Log in to GHCR: does not run ghcr_login",
+    ),
+    "prune calling the login without retry": (
+        _prune_calling_the_login_without_retry,
+        "prune: Log in to GHCR: does not run ghcr_login",
+    ),
+    "prune with the login commented out": (
+        _prune_with_the_login_commented_out,
+        "prune: Log in to GHCR: does not run ghcr_login",
+    ),
+    "prune calling the login before loading": (
+        _prune_calling_the_login_before_loading,
         "prune: Log in to GHCR: does not run ghcr_login",
     ),
 }
