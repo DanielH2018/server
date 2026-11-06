@@ -1006,8 +1006,7 @@ excluded. Each lands in one of four groups.
       `scripts/lib/role_paths.py`, and `reach.py` is deleted. If none exist,
       `land_shared.py` is deleted with `reach.py`, and the PR body quotes the empty grep.
     - `land_lib/classify.py` loses its `deploy_cross_role` arm, which reads the setup
-      routing tables. `land_tags.py` loses its setup-plane imports from `deploy_logic`,
-      and `land_platform.py` loses its `reach` import.
+      routing tables. `land_tags.py` loses its setup-plane imports from `deploy_logic`.
     - `land_lib/landing.py`, `options.py`, `outcome.py` and `tools.py` read
       `gitops_ledger` and `gitops_markers` (receipts, `STATE_DIR`, `HOLD_CLEAR_CMD`,
       `DeployerSnapshot`). Each read is deleted with the arm that used it, or switched to

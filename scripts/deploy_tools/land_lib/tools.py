@@ -7,10 +7,10 @@ WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags, deploy_lib/detach_no
 land_flux's promote_lib.wait are imported from land.py's checkout, so they are the same release as
 it: a PR adding a flag to one and its call site must pass its own landing, though the primary
 checkout holds the previous release. gitops_tick.sh is run from beside land.py for that reason.
-deploy_tags.py and deploy.sh are run as subprocesses with the PRIMARY checkout as cwd,
-because their question IS the primary checkout: `blockers` reads `HEAD..origin/master` and
-`changed` reads `<since>...HEAD`, and deploy.sh renders from its working directory. Moving
-either to this file's checkout would silently re-aim them at the worktree's HEAD. WHAT IS NOT
+deploy_tags.py is run as a subprocess with the PRIMARY checkout as cwd, because its question
+IS the primary checkout: `blockers` reads `HEAD..origin/master` and `changed` reads
+`<since>...HEAD`. Moving it to this file's checkout would silently re-aim it at the worktree's
+HEAD. WHAT IS NOT
 HERE. Five path-list decisions -- `plane_note`, `self_applied`, `remaining_setup_hosts`,
 `derive`, `quiet_paths` -- are NOT on `Tools`. They are pure functions of a file list, so a
 fake of them would leave no pipeline test running the real derivation. They live on the frozen
@@ -48,7 +48,7 @@ from deployer_lib.deploy_locks import TREE_LOCK as LOCK
 from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
 from deploy_tools import await_ci
-from deploy_tools.land_lib import land_platform, land_reach
+from deploy_tools.land_lib import land_reach
 from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import verdict_log
 from deploy_tools.land_lib.key_readers import KeyReader, readable_key_readers
@@ -127,14 +127,13 @@ def stream_stderr(
     """Run `argv`, echo its stderr through line by line, report waits; its exit code.
 
     `cwd` is None to INHERIT this process's working directory, which is not the same as
-    passing any particular path: deploy.sh renders from its working directory and deploy_tags
-    reads ranges relative to it, so re-aiming either is a silent change of which checkout was
-    deployed (this module's own docstring). A caller that does not need a specific cwd must
+    passing any particular path: deploy_tags reads ranges relative to it, so re-aiming it is a
+    silent change of which checkout it reads (this module's own docstring). A caller that does not need a specific cwd must
     pass None rather than a plausible-looking one.
 
     stdout stays this process's own handle and stderr becomes a pipe. Both are BLOCKING file
     handles, which is what Ansible requires; `land.py` clears O_NONBLOCK on the handle this
-    echo writes to, and deploy.sh clears it again for the playbook.
+    echo writes to.
 
     Every line is written out exactly as it arrived, so the landing log reads as it did when
     the child owned the handle. The pipe is read as BYTES and decoded here rather than through
@@ -163,9 +162,8 @@ def run_tick(
 
     `wait=False` passes `--no-wait`: the tick is started and this returns as soon as systemd
     has the request -- or exits `TICK_JOINED` having started none, because a run was already
-    in flight. A landing that deploys its own merge commit (`deploy.sh --at`) needs the
-    primary checkout to converge eventually, not before it deploys, and the tick's own 10-min
-    timer converges it regardless.
+    in flight. A landing that waits on a promotion needs the primary checkout to converge
+    eventually, not first, and the tick's own 10-min timer converges it regardless.
 
     The SCRIPT comes from beside land.py but the working directory is inherited
     either way. Pinning it to `HERE` would have aimed the tick at this checkout's
@@ -175,49 +173,6 @@ def run_tick(
     if observe is None:
         return subprocess.run(argv, check=False).returncode
     return stream_stderr(argv, None, observe)
-
-
-def run_deploy(
-    primary: Path,
-    tags: list[str],
-    target: str | None,
-    observe: Callable[[int, str], None] | None = None,
-    at: str = "",
-) -> int:
-    """Run deploy.sh in the primary checkout; its exit code.
-
-    The tag list is joined HERE and nowhere earlier: `--tags` is an argv element, so this is
-    the one place a landing needs a comma string rather than a list.
-
-    `at` is the commit to render, passed as `--at`. It is what lets a landing deploy its PR's
-    merge commit from a primary checkout the tick has not fast-forwarded onto it yet; empty
-    keeps deploy.sh rendering that checkout's HEAD.
-
-    stdio is inherited unless `observe` is given, for the reason `run_tick` states: Ansible
-    refuses a non-blocking handle, and deploy.sh clears O_NONBLOCK on the handles it is
-    given. Both call sites pass `observe` BY KEYWORD, which keeps the positional tuple a
-    fake records three elements long.
-    """
-    # DECIDED: deploy.sh stays a subprocess; land.sh does not call `deploy_run` in process
-    # (#3664). An import runs THIS checkout's deploy_run, not the primary's, which is the
-    # re-aiming the module docstring rules out. deploy_run also chdirs into the repo, execs
-    # ansible-playbook on the unlocked paths and clears O_NONBLOCK on fds 0-2 -- all
-    # process-wide, so each would land on the landing itself.
-    # DECIDED: no structured result comes back either; the exit code is the result (#3687).
-    # Each field such a result would carry is already known here. The verdict is one of
-    # `lib.exit_codes`' named DEPLOY_* constants, which both sides import from one module.
-    # The tags applied are the `--tags` this function passes: land.sh resolves `--changed`
-    # itself (`deploy.derive_from_diff`) and never hands it to deploy.sh. The resume point is
-    # per host, and `Landing.deployed_hosts` records it. A JSON line would be a second channel
-    # that must agree with the exit code and adds no fact a landing acts on.
-    argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]
-    if at:
-        argv += ["--at", at]
-    if target:
-        argv += ["-e", f"target={target}"]
-    if observe is None:
-        return subprocess.run(argv, cwd=primary, check=False).returncode
-    return stream_stderr(argv, primary, observe)
 
 
 def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -549,12 +504,10 @@ class Tools:
     gh: Callable[..., subprocess.CompletedProcess[str]] = gh
     git: Callable[..., subprocess.CompletedProcess[str]] = git
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
-    newest_green_descendant: Callable[[str], str] = await_ci.newest_green_descendant
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
     # `...`, not the argument list: both take an optional `observe` callback, passed by keyword.
     tick: Callable[..., int] = run_tick
-    deploy: Callable[..., int] = run_deploy
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
         run_deploy_tags
     )
@@ -567,11 +520,6 @@ class Tools:
         gate_snapshot
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
-    # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
-    # commit a fast-path landing deploys. None sends the caller to the subprocess.
-    landing_hosts_at: Callable[[Any, str, Path, Any], dict[str, list[str]] | None] = (
-        land_tags.landing_hosts_at
-    )
     read_state: Callable[[Path, str], str | None] = read_state
     flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
     # The PR's own narrowing, for a landing that never awaits the tick and so has no receipt
@@ -614,8 +562,4 @@ class Classifier:
     # the paths' reach as the tick does (#6968). It reads git, unlike the rest of this class.
     key_readers: Callable[[str, Path], list[KeyReader]] = readable_key_readers
     derive: Derive = land_tags.derive
-    # Which derived tags the PR's own paths prove are a k3s change.
-    k8s_only_tags: Callable[[list[str], set[str] | None], list[str]] = (
-        land_platform.k8s_only_tags
-    )
     quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths

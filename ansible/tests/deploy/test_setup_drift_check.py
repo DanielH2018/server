@@ -359,6 +359,38 @@ def test_every_reader_task_is_gated_on_that_allowlist():
         )
 
 
+def test_a_host_off_the_list_loses_every_file_the_reader_writes():
+    """Each path derives from the arm that writes it, so a renamed file cannot outrun its removal.
+
+    A `.prom` file left behind exports its last run forever, and HostCheckOverdue never clears.
+    """
+    tasks = yaml_fast.safe_load(_CRONS.read_text())
+    script = next(t for t in tasks if t["name"] == "Deploy the setup-plane drift check")
+    stamp = next(
+        t for t in tasks if t["name"] == "Record the rendered setup-drift check"
+    )
+    textfile = _check_body().split("write_check_textfile ", 1)[1].split()[0]
+    written = {
+        script["ansible.builtin.template"]["dest"],
+        f"/var/lib/homelab/setup-render-manifest.d/{stamp['vars']['stamp_render_name']}",
+        f"/var/lib/node-exporter-textfile/{textfile}.prom",
+    }
+    assert written == {
+        "/usr/local/bin/setup-drift-check.sh",
+        "/var/lib/homelab/setup-render-manifest.d/setup-drift-check",
+        "/var/lib/node-exporter-textfile/setup-drift-check.prom",
+    }
+
+    removal = next(
+        t
+        for t in tasks
+        if t.get("when") == "inventory_hostname not in setup_drift_check_hosts"
+    )
+    assert removal["ansible.builtin.file"]["state"] == "absent"
+    assert removal.get("become") is True
+    assert set(removal["loop"]) == written
+
+
 def test_the_check_stamps_its_own_templates():
     """Otherwise the reader is the one rendered script nothing can report stale — the finding,
     rebuilt inside its own fix."""

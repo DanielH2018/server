@@ -22,7 +22,7 @@ APPLIED = receipt({"ansible/initial_setup.yml": ["renovate_agent"]})
 
 def _deployed(landing, fakes=None):
     ln, calls = landing(fakes)
-    ln.merge_sha, ln.resolved_tags = MERGE_SHA, ["sonarr"]
+    ln.merge_sha, ln.flux_tags = MERGE_SHA, ["sonarr"]
     ln.classification = Classification(
         plane=(fakes or Fakes()).plane,
         self_applied=(fakes or Fakes()).self_applied,
@@ -243,13 +243,14 @@ def test_the_gate_renders_the_tree_that_was_deployed(landing):
     assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": Path("/snap")}
 
 
-def test_a_deploy_from_the_primary_gates_the_primary(landing):
-    """CLEAN half: no snapshot, and the probe runs in the primary that deploy.sh rendered.
+def test_a_landing_with_no_promoted_tag_gates_the_primary(landing):
+    """CLEAN half: no snapshot, and the probe runs in the primary the tick fast-forwarded.
 
     Not in land.sh's own checkout, which may predate the merge and so see none of a role
     the PR adds: `check_one` would read `skipped` and the landing `settled` (#5754).
     """
     ln, calls = _deployed(landing)
+    ln.flux_tags = []
     with pytest.raises(Outcome):
         health_verdict.health(ln)
     assert "snapshot" not in [c[0] for c in calls]

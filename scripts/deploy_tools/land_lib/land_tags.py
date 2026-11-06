@@ -8,14 +8,14 @@ session's scope.
 
 WHY A ROLE NAME IS NOT AUTOMATICALLY A TAG. Only a role with a `containers_list` entry has
 one. Eight roles under ansible/roles/k8s/ have no entry because other roles include them by
-literal name, and handing one to `--tags` makes deploy.sh refuse the WHOLE list (exit 2) --
-so the valid services beside it are refused too. Those roles come out of the tags.
+literal name, and a landing ends `deploy-failed` on a tag no k8s entry declares. Those roles
+come out of the tags.
 
 WHY THE COUNT ASSERTION. `gh pr view --json files` paginates at 100. A 137-file PR returns
 100 entries with no error and no marker, so the derived tag list is a silent subset of what
 merged -- and every downstream check reads green over it. When the returned count disagrees
 with the PR's own `changedFiles`, this reports `fallback` and the caller widens to
-`deploy.sh --changed <since>`: wider than the truth is recoverable, narrower is not.
+`deploy_tags.py changed <since>`: wider than the truth is recoverable, narrower is not.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
@@ -38,8 +38,6 @@ from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
 from lib.render_guard import (  # noqa: F401
     containers_entries_in,
-    landing_hosts_for_tags,
-    service_records_at_or_none,
     service_tags_at,
 )
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, REPO
@@ -104,30 +102,6 @@ _K8S_READERS_NOTE = (
     "`homelab-cluster-vars`: regenerate it with `cluster_vars.py write` (operator-only), and "
     "`promote` applies it with the next bundle."
 )
-
-
-def landing_hosts_at(
-    tags, ref: str, cwd: Path, k8s_only=()
-) -> dict[str, list[str]] | None:
-    """`deploy_tags.landing_hosts`, with containers_list read AT `ref` rather than a checkout.
-
-    A landing that deploys its PR's merge commit (`deploy.sh --at`) must route each tag from
-    that commit's inventory: a PR adding a Pi role and its containers_list entry together
-    declares the role on daniel-pi in NO checkout until the tick fast-forwards, so the primary
-    read would route it to no host and the landing would run deploy.sh locally without
-    `-e target=`. Same routing rule and the same staging exclusion as the tree read, through
-    the one definition of each.
-
-    None when the ref cannot be read, for `service_records_at_or_none`'s reason: an empty
-    answer here would route every tag to no host, and the caller falls back to the tree.
-
-    `k8s_only` is `hosts_for_tags`' per-tag platform restriction.
-    `land_lib/deploy.deploy_by_host` is the one caller that fills it.
-    """
-    records = service_records_at_or_none(ref, cwd)
-    if records is None:
-        return None
-    return landing_hosts_for_tags(tags, records, k8s_only)
 
 
 def own_narrow_tags(files, pr_range: str, repo) -> dict[str, frozenset[str]]:

@@ -111,20 +111,13 @@ class Landing:
         self.needs_diff = False
         self.host_candidate = False  # a path is under HOST_INPUTS
         self.host_targets: list[Any] = []  # HostTargets; host_wait imports us
-        # The tags in `resolved_tags` this PR PROVES are a k3s change: every changed path naming
-        # them sits under `ansible/roles/k8s/`. `deploy.deploy_by_host` routes these to a
-        # `platform: k8s` entry alone. A tag this does not cover stays routed to every declaring
-        # host, which is the direction a wrong answer here must fall.
-        self.k8s_only: list[str] = []
         self.flux_tags: list[
             str
         ] = []  # the k8s tags a promotion applies and step 7 gates
         self.suspended_tags: list[str] = []  # suspended at M; the gate skips them
-        self.deployed_hosts: set[str] = set()
-        # The commit the deploy phase rendered, when it rendered one that is not the primary
-        # checkout's HEAD -- `deploy.sh --at <sha>`. Empty means the deploy came from the
-        # primary, which is what the fallback on a stale tree goes back to. The health verdict
-        # reads it to gate from the same tree the deploy rendered.
+        # The merge commit, when step 5 did not await a tick and the primary checkout may not
+        # carry it yet. Empty means the awaited tick fast-forwarded the primary. The health
+        # verdict reads it to gate from a tree holding this PR.
         self.deployed_at = ""
         # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
         # a tick that was still applying. Every later read of the deployer's markers is then
@@ -175,7 +168,7 @@ class Landing:
 
         One property rather than the same `or` at two call sites, because `pipeline._step_tick`
         and `deploy.deploy_phase` have to answer it identically -- one awaiting the tick while
-        the other deploys `--at` is the mixed state neither path is written for.
+        the other kicks it is the mixed state neither path is written for.
         """
         return self.classification.self_applied or bool(
             self.classification.remaining_setup
@@ -475,60 +468,16 @@ class Landing:
         )
         return f"receipt {receipt.origin[:8]}: {planes or 'no plane applied'}"
 
-    def tick_already_deployed(self, sha: str, tags: list[str]) -> bool:
-        """Did the tick's recorded deploy-plane apply already deploy `tags` on THIS host?
-
-        The question step 5 asks before paying a second deploy of a service the tick has
-        just applied: queueing behind the next tick's tree lock for the same render only adds a
-        way to fail.
-
-        True only when every part of the receipt says so: one covers `sha` (`receipt_for`),
-        the primary checkout carries `sha` (`merge_applied`, because the health gate renders
-        from the primary when nothing was deployed `--at`), it applied `ansible/deploy.yml`
-        (a setup-plane apply deploys no service), and that plane's tags cover `tags`: empty
-        means the whole play ran, `narrowed-to-nothing` means no play ran, and a list covers
-        the tags it is a superset of. Those are the semantics `gitops_hold.broad_hold_cleared_by`
-        gives the same tags on the deployer's side; land_lib does not import across that
-        boundary, so they are restated here.
-
-        The tick applies with no `-e target=`, so the receipt speaks only to the host it was
-        written on. The CALLER routes the tags by host and asks this for the local host's.
-
-        DECIDED: this reads the applied tags, which
-        `test_land_settles_whatever_tags_the_tick_applied` says the verdict must not read.
-        That rule governs a read that FAILS a landing: the tags are scoped to the range the
-        tick crossed, not to this PR, so a mismatch there is not evidence the PR went
-        unapplied. Here a mismatch falls through to the deploy the landing ran anyway, so the
-        only cost of reading them is one redundant deploy, and the only cost of NOT reading
-        them is skipping a deploy the tick never ran.
-        """
-        if not tags or not self.merge_applied():
-            return False
-        receipt = self.receipt_for(sha)
-        applied = receipt.applied.get("ansible/deploy.yml") if receipt else None
-        if applied is None:
-            return False
-        if not applied:
-            return True
-        if "narrowed-to-nothing" in applied:
-            return False
-        return set(tags).issubset(applied)
-
 
 def retry_while_locked(
     ln: Landing, busy_rc: int, attempt: Callable[[], int], note: Callable[[int], str]
 ) -> int:
     """Run `attempt` until it stops returning `busy_rc`; the last return code.
 
-    The tick and the deploy phase both ride out the same tree lock with the same accounting,
-    and had the same loop written out twice. Bounded by `opts.lock_retries`, with
-    `opts.lock_backoff` between attempts.
+    Bounded by `opts.lock_retries`, with `opts.lock_backoff` between attempts.
 
     The holder is sampled BEFORE each attempt on purpose: read afterwards, it has usually
-    released and the landing books an empty one. For the deploy phase the
-    sample precedes the WHOLE per-host loop, so contention arising at a later host can name
-    the holder seen before the first one; `note_lock_contention`'s `holder or ...` fallback
-    covers the case where that sample was empty.
+    released and the landing books an empty one.
 
     Args:
       ln: the landing, for its budgets and its lock accounting.

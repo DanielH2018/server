@@ -1,8 +1,7 @@
 """Step 2, pre-flight, and step 3, the master CI wait -- in that order, on purpose.
 
 A _BROAD_MANUAL_PREFIXES change anywhere in the incoming range stops the tick
-fast-forwarding, which guarantees deploy.sh refuses as stale (exit 4) however green CI
-turns out.
+fast-forwarding however green CI turns out.
 """
 
 import sys as _sys
@@ -74,8 +73,7 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
         )
     if rc == CI_UNPROVEN:
         # Exit 1, not 75: 75 is the resume point, and no re-run converges here until the
-        # operator dispatches CI or deploys the tip by hand. `line` names the tip and the
-        # command; a resolved tag list fills in its `<service>`.
+        # operator dispatches CI or promotes the tip. `line` names the tip and the command.
         tags = f" (this PR's tags: {ln.tags_csv})" if ln.tags_csv else ""
         ln.die(
             f"no CI verdict can arrive{where}: {line}{tags} — nothing deployed",

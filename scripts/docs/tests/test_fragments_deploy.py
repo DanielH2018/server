@@ -33,10 +33,10 @@ def test_land_verdicts_renders_the_codes_and_vocabularies_it_is_given():
 
 def test_enum_values_finds_the_verdicts_and_causes_land_prints():
     outcome = REPO / fd.LAND_OUTCOME
-    assert {"settled", "deploy-failed", "tip-outran-retries"} <= set(
+    assert {"settled", "deploy-failed", "unbuilt"} <= set(
         fd.enum_values(outcome, "Verdict")
     )
-    assert {"host-lookup", "tag-miss", "deploy-exit-other"} <= set(
+    assert {"tick-held", "tag-miss", "promote-timeout"} <= set(
         fd.enum_values(outcome, "Cause")
     )
 

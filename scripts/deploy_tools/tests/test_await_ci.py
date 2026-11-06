@@ -412,7 +412,33 @@ def test_wait_keeps_polling_past_a_red_descendant_while_a_later_one_is_in_flight
     """#4649 at merge time: the fix's CI is still running when the red one is found."""
     code, msg = _wait_past_a_red_descendant(later_goes_green_at=600)
     assert code == await_ci.CI_UNPROVEN, msg
-    assert "fix" in msg and "deploy.sh" in msg
+    assert "fix" in msg and "gh workflow run promote.yml" in msg
+    assert "deploy.sh" not in msg, msg
+
+
+def test_a_run_less_tip_names_ci_then_a_promote_dispatch_with_the_full_sha():
+    """#7368: deploy.sh refuses every k8s tag, and promote.yml refuses an abbreviated `sha`."""
+    tip = "a" * 40
+    now = [0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    code, msg = await_ci.wait(
+        "old",
+        await_ci.DROPPED_PUSH_GRACE_S * 2,
+        20,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=lambda _s: [],
+        fetch_suites=lambda _s: [],
+        descendants=lambda _s: [tip],
+        fetch_tip=lambda: tip,
+    )
+    assert code == await_ci.CI_UNPROVEN, msg
+    assert "gh workflow run ci.yml --ref master" in msg, msg
+    assert f"--ref master -f sha={tip}`" in msg, msg
+    assert "deploy.sh" not in msg, msg
 
 
 def test_a_red_descendant_whose_later_one_never_settles_ends_red_saying_why():
@@ -504,59 +530,6 @@ def test_a_tip_with_an_actions_suite_after_a_red_descendant_ends_red_at_the_dead
 
 _PASS = [_run("prek (lint + validate + tests + secrets)", "completed", "success")]
 _FAIL = [_run("prek (lint + validate + tests + secrets)", "completed", "failure")]
-
-
-def _newest_green(rev_list, runs_by_sha):
-    """`newest_green_descendant` over a canned `rev-list` (newest first) and canned CI."""
-    git_calls = []
-
-    def fake_git(*args):
-        git_calls.append(args)
-        return "\n".join(rev_list)
-
-    asked = []
-
-    def fetch(sha):
-        asked.append(sha)
-        return runs_by_sha[sha]
-
-    found = await_ci.newest_green_descendant("merge", fetch=fetch, git_out=fake_git)
-    return found, asked, git_calls
-
-
-def test_newest_green_descendant_takes_the_newest_green_commit_and_stops():
-    found, asked, git_calls = _newest_green(
-        ["tip", "mid", "old"], {"tip": [], "mid": _PASS, "old": _PASS}
-    )
-    assert found == "mid"
-    assert asked == ["tip", "mid"]
-    assert git_calls == [("rev-list", "--first-parent", "merge..origin/master")]
-
-
-def test_newest_green_descendant_offers_the_tip():
-    """`ci_walk_candidates` drops the tip; this caller holds no verdict for it."""
-    found, _, _ = _newest_green(["tip", "old"], {"tip": _PASS, "old": _PASS})
-    assert found == "tip"
-
-
-def test_newest_green_descendant_returns_nothing_when_none_is_green():
-    found, _, _ = _newest_green(["tip", "old"], {"tip": [], "old": []})
-    assert found == ""
-
-
-def test_a_red_commit_ends_the_walk_before_an_older_green_one():
-    """The `ci-unproven` case: a green on the far side of a red says nothing about it."""
-    found, asked, _ = _newest_green(
-        ["tip", "red", "green"], {"tip": [], "red": _FAIL, "green": _PASS}
-    )
-    assert found == ""
-    assert asked == ["tip", "red"]
-
-
-def test_newest_green_descendant_reads_at_most_the_descendant_limit():
-    shas = [f"c{n}" for n in range(await_ci.DESCENDANT_LIMIT + 5)]
-    found, asked, _ = _newest_green(shas, {s: [] for s in shas})
-    assert found == "" and asked == shas[: await_ci.DESCENDANT_LIMIT]
 
 
 # PR #6069's head e9ec9143 at 01:39:50Z on 2026-10-24: its one CI run, from the push made while

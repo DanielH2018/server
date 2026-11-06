@@ -65,8 +65,6 @@ __all__ = [
     "entry_tags",
     "entry_tags_at",
     "host_files",
-    "hosts_for_tags",
-    "landing_hosts_for_tags",
     "load_yaml",
     "make_env",
     "pad_to_source_newlines",
@@ -357,48 +355,6 @@ def service_records_at_or_none(
         return None
 
 
-def hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
-    """``{host: sorted tags}`` for every host whose records declare one of ``tags``.
-
-    ``records`` is a ``(host, platform, tag)`` list: the working tree's
-    (``deploy_tags.service_records``) or a git ref's (``service_records_at``). The routing
-    rule lives once, here, so ``land_tags.landing_hosts_at`` -- records read at a merge
-    commit -- cannot route a tag differently from ``deploy_tags.tags_by_host``.
-    A tag no host declares lands under none.
-
-    ``k8s_only`` names the tags whose change is known to be a k3s one, and they route to a
-    ``platform: k8s`` entry alone. One tag name can select two entries on two platforms --
-    ``wg-easy`` is k8s on daniel-box and Docker on daniel-pi -- and a caller-expanded tag
-    names a k8s role by construction, so routing it to the Pi as well deployed a Compose
-    service the change never touched.
-
-    NARROWING HOST ROUTING IS THE DANGEROUS DIRECTION, which is why this is opt-in per tag
-    rather than derived here. A tag that reaches no host reads ``settled`` while the Pi runs
-    old code, so a caller may only pass a tag it can PROVE is k3s-only. Empty by default: a
-    caller that passes nothing routes to both.
-
-    A named tag that ``records`` declares on NO k8s entry drops out of the restriction rather
-    than out of the routing. The restriction would otherwise leave it under no host at all,
-    so the landing falls through to one local deploy that matches nothing and reads
-    ``settled``. No tag the caller graph produces is Docker-only; this
-    keeps that from becoming a silent failure if a Pi-only role ever takes a k8s role's name.
-    """
-    wanted = set(tags)
-    restricted = {
-        tag
-        for tag in k8s_only
-        if any(t == tag and p == "k8s" for _host, p, t in records)
-    }
-    by_host: dict[str, set[str]] = {}
-    for host, platform, tag in records:
-        if tag not in wanted:
-            continue
-        if tag in restricted and platform != "k8s":
-            continue
-        by_host.setdefault(host, set()).add(tag)
-    return {host: sorted(by_host[host]) for host in sorted(by_host)}
-
-
 # Hosts that DECLARE a tag but that land.sh must not deploy to.
 #
 # DECIDED: land.sh never deploys to daniel-stage, and the entry stays after #2941 retired that
@@ -407,27 +363,10 @@ def hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
 # ran ``deploy.sh -e target=daniel-stage`` from daniel-box after the box's own deploy had
 # succeeded, and the unreachable host turned a good landing into ``deploy-failed``. The host
 # declares no tag now, so the filter is inert against the live inventory — it is kept because
-# what it names is "a host land.sh must not deploy to", the retired guest is still the worked
-# example of one, and it is what gives both reads (``deploy_tags.landing_hosts`` over the
-# working tree and ``land_tags.landing_hosts_at`` over a merge commit) a shared answer. #935
-# is about those two disagreeing. The operator ruled on 2026-09-30 (#2944) that a staging
+# what it names is "a host land.sh must not deploy to", and the retired guest is still the
+# worked example of one. The operator ruled on 2026-09-30 (#2944) that a staging
 # cluster may come back, so the entry stays rather than being re-derived later.
 HOSTS_LAND_SH_NEVER_DEPLOYS = frozenset({"daniel-stage"})
-
-
-def landing_hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
-    """``hosts_for_tags`` minus the hosts land.sh never deploys to.
-
-    Beside ``hosts_for_tags`` rather than in each caller, because the landing routes from two
-    reads -- ``deploy_tags.landing_hosts`` over the working tree and
-    ``land_tags.landing_hosts_at`` over a merge commit -- and the pair dropping a different
-    host is the shape that loses a landing.
-    """
-    return {
-        host: host_tags
-        for host, host_tags in hosts_for_tags(tags, records, k8s_only).items()
-        if host not in HOSTS_LAND_SH_NEVER_DEPLOYS
-    }
 
 
 def service_tags_at(ref: str, cwd: Path) -> set[str]:

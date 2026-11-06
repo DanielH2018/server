@@ -23,7 +23,6 @@ MODULES = frozenset(
         "tick",
         "deploy",
         "promotion",
-        "stale_retarget",
         "health_verdict",
         "pipeline",
         "detach",
@@ -35,7 +34,6 @@ MODULES = frozenset(
         "pr_json",
         "gh_read",
         "land_flux",
-        "land_platform",
         "land_probe",
         "land_reach",
         "key_readers",
@@ -56,7 +54,6 @@ ALLOWED = {
     # The classifier libraries the Tools defaults wrap (#4349 moved them in from beside land.py).
     "tools": {
         "land_flux",
-        "land_platform",
         "land_reach",
         "land_tags",
         "land_tested_base",
@@ -105,15 +102,10 @@ ALLOWED = {
     "deploy": {
         "landing",
         "outcome",
-        "ci",
         "tick",
-        "land_platform",
         "promotion",
-        "stale_retarget",
     },
-    # Step 5's answer to a stale `--at` run: the deploy callable is handed in, not imported.
-    "stale_retarget": {"landing", "outcome"},
-    # The split before deploy.sh and the wait on promotion, a half of step 5 (D2.3).
+    # The split of a landing's tags and the wait on promotion, step 5's work (D2.3).
     "promotion": {"landing", "outcome"},
     # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
     # a run in flight. The kick's states live in tick.py, in one place.
@@ -138,7 +130,6 @@ ALLOWED = {
         "host_published",
         "host_schedule",
     },
-    "land_platform": {"land_tags"},
     # The setup files reading a moved key, which the reach adds to a range's own paths (#6968).
     "land_reach": {"key_readers"},
     "key_readers": set(),

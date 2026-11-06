@@ -204,7 +204,7 @@ def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
     Step 3 waited on the merge commit alone and ended `ci-timeout`, the verdict whose resume
     is a re-run, which entered the same wait on the same SHA. Either it now accepts the green
     descendant and returns, or it ends on a verdict of its own that names the descendant and
-    the hand-deploy command.
+    the promote dispatch.
     """
     (_, tip), ended = _step_3_over_master(landing, tmp_path, monkeypatch, [False, True])
     if ended is None:
@@ -213,17 +213,16 @@ def test_step_3_does_not_time_out_on_a_merge_commit_github_never_ran_ci_for(
     assert ended.verdict != "ci-timeout", detail
     assert ended.rc != 75, detail
     assert tip[:8] in detail, detail
-    assert "deploy.sh" in detail, detail
+    assert "promote.yml" in detail, detail
 
 
-def test_step_3_hand_deploy_names_the_tip_not_an_older_green_commit(
+def test_step_3_promote_dispatch_names_the_tip_not_an_older_green_commit(
     landing, tmp_path, monkeypatch
 ):
     """#4621's second recurrence: the tip has no run either, and only a middle commit is green.
 
-    deploy.sh refuses any tree behind origin/master with DEPLOY_STALE (4), so a hand-deploy
-    command naming the green middle commit cannot run. A verdict of its own has to name the
-    tip. Accepting the green descendant and returning is also a fix.
+    A verdict of its own has to name the tip, whose promotion carries the merge commit.
+    Accepting the green descendant and returning is also a fix.
     """
     (_, middle, tip), ended = _step_3_over_master(
         landing, tmp_path, monkeypatch, [False, True, False]
@@ -233,8 +232,8 @@ def test_step_3_hand_deploy_names_the_tip_not_an_older_green_commit(
     detail = ended.error or ""
     assert ended.verdict != "ci-timeout", detail
     assert tip[:8] in detail, detail
-    assert f"deploy.sh --at {middle[:8]}" not in detail, detail
-    assert "deploy.sh" in detail, detail
+    assert f"-f sha={middle}" not in detail, detail
+    assert "promote.yml" in detail, detail
 
 
 def test_step_3_accepts_the_green_middle_commit_when_the_tip_has_no_run_either(
@@ -281,7 +280,7 @@ def test_step_3_does_not_end_red_for_good_once_a_later_descendant_is_green(
 
     The nearest descendant's red never changes, so every re-run ended `ci-red` while the
     tick fast-forwarded past the merge commit to D2. Either step 3 now converges, or the
-    verdict it ends on names the tip and a hand-deploy route out of this state.
+    verdict it ends on names the tip and a promote dispatch out of this state.
     """
     (_, _, tip), ended = _step_3_over_master(
         landing, tmp_path, monkeypatch, [False, False, True], red=frozenset({1})
@@ -292,7 +291,7 @@ def test_step_3_does_not_end_red_for_good_once_a_later_descendant_is_green(
     assert ended.verdict != "ci-timeout", detail
     assert tip[:8] in detail, detail
     if ended.verdict == "ci-red":
-        assert "deploy.sh" in detail, detail
+        assert "promote.yml" in detail, detail
 
 
 @pytest.mark.parametrize(

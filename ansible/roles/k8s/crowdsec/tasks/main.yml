@@ -1,9 +1,8 @@
 ---
-# Flux owns crowdsec (D5, its own window), so no Ansible run reaches this file. Every task
-# below has a Flux successor: the `crowdsec-home-ips` gate run is a `flux_cronjob_gates` entry
-# in defaults/main.yml, and the ban-and-lift gate is the `crowdsec-verify` Job in
-# templates/verify/. The gate include went with the k8s/cronjob-gate role (#5716). A follow-up
-# PR deletes the wait, `verify.yml` and the tests that read them, because the deletions alone pass the 200 lines D5 allows a flip PR.
+# Flux owns crowdsec (D5, its own window), so no Ansible run reaches this file. The Flux
+# successors: the `crowdsec-home-ips` gate run is a `flux_cronjob_gates` entry in
+# defaults/main.yml, the ban-and-lift gate is the `crowdsec-verify` Job in templates/verify/,
+# and the `crowdsec` Kustomization's `wait` gates the rollout.
 #
 # The agent machines and the two operator allowlists are registered by the lapi-register
 # initContainer (templates/deployment.yaml.j2) before the LAPI serves, not by a task here. The
@@ -30,44 +29,4 @@
     # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on every document, the k8s_claims claim included; the fixed
     # allowlist never names Secret or PersistentVolumeClaim, so config-secret and crowdsec-db
-    # are applied but never pruned. The b1-gate in verify.yml only execs into the pod.
-
-- name: Wait for the crowdsec rollout before talking to the LAPI
-  when: not k8s_no_mutate
-  tags: [deploy]
-  # ONE OF TWO ROLES THAT MUST WAIT INLINE (k8s/registry is the other). k8s/manifests
-  # deliberately does NOT wait — it queues the rollout for k8s/manifests/tasks/drain.yml at the end of the
-  # batch (see that role's header for the 1386s-to-max() rationale). Most roles tolerate that,
-  # because nothing else in them touches the workload they just rolled. This role does: the
-  # b1-gate in verify.yml `exec`s into deploy/crowdsec to reach the LAPI. The batch drain runs
-  # long after it. ansible/tests/deploy/test_inline_rollout_gates.py pins both halves.
-  #
-  # Without this gate a manifest change makes the b1-gate exec into the pod it just restarted.
-  #
-  # `rollout status`, not `wait --for=condition=Available`: this Deployment is single-replica,
-  # so the OLD pod satisfies Available and the wait returns instantly. Returns immediately when
-  # nothing rolled, so the no-change deploy pays nothing. 300s is headroom over a cold image
-  # pull: the worst measured roll was ~3.5 min cold and 73s warm.
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/crowdsec --timeout=300s
-  become: true
-  changed_when: false
-
-- name: Enforcement gate (opt-in via --tags b1-gate)
-  # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real
-  # LAN host, then probes from that host expecting 403. Check mode skips `command`, so the
-  # ban never happens; but the probe carries retries/until, and a skipped task has no stdout
-  # for `until: ... == "403"` to match. It would burn all 8 retries and fail the run on a
-  # task that had correctly changed nothing.
-  #
-  # Skipping is the only honest option: the gate is unprovable in check mode BY CONSTRUCTION,
-  # since you cannot demonstrate a ban is enforced without taking the ban. Making it run
-  # anyway (check_mode: false) would have a dry run ban a host and reach out over ssh, which
-  # is exactly what --check exists to promise it will not do.
-  #
-  # `when` on an import_tasks propagates to every task in the file, so this one line covers
-  # all four. Nothing is lost: the gate carries no persistent state for --check to drift-detect.
-  # k8s_no_mutate rather than ansible_check_mode alone, so a k8s_dry_run skips it too.
-  when: not k8s_no_mutate
-  ansible.builtin.import_tasks: verify.yml
+    # are applied but never pruned.

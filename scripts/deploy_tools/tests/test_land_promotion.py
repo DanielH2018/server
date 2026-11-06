@@ -43,7 +43,6 @@ def _fakes(**kwargs: object) -> Fakes:
 def test_a_pr_whose_only_tag_is_flux_owned_never_reaches_deploy_sh(land_run):
     rc, out, _, calls, logline = land_run([], _fakes())
     assert rc == 0 and "VERDICT: settled" in out
-    assert "deploy" not in _names(calls)
     # The path-derived tag is not handed over: the changed set names it (D6.12).
     assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
     # The gate runs on the changed set's tag, from the merge commit's snapshot.
@@ -64,23 +63,6 @@ def test_a_changed_set_name_flux_does_not_own_is_not_gated(land_run):
     widened = replace(SETTLED_BENTO, tags=("bento-pdf", "flux-bootstrap"))
     _, _, _, calls, _ = land_run([], _fakes(land_wait=[widened]))
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
-
-
-def test_a_pr_with_a_non_k8s_tag_too_deploys_that_tag_alone(land_run):
-    rc, out, _, calls, _ = land_run([], _fakes(derived=(["sonarr", "bento-pdf"], "pr")))
-    assert rc == 0 and "VERDICT: settled" in out
-    assert [c[1][1] for c in calls if c[0] == "deploy"] == [["sonarr"]]
-    assert _names(calls).index("deploy") < _names(calls).index("land_wait")
-    assert [c[1] for c in calls if c[0] == "gate"] == [(["sonarr", "bento-pdf"],)]
-
-
-def test_a_non_k8s_pr_deploys_and_then_waits_on_promotion(land_run):
-    """Every landing whose paths may move the bundle waits on land-wait (D6.12)."""
-    rc, out, _, calls, _ = land_run([], Fakes())
-    assert rc == 0 and "VERDICT: settled" in out
-    assert [c[1][1] for c in calls if c[0] == "deploy"] == [["sonarr"]]
-    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
-    assert _names(calls).index("deploy") < _names(calls).index("land_wait")
 
 
 @pytest.mark.parametrize(
@@ -107,7 +89,6 @@ def test_a_released_tag_waits_but_is_neither_published_nor_gated(land_run):
     fakes = _fakes(owners={MERGE_SHA: {"bento-pdf": "released"}})
     rc, _, _, calls, _ = land_run([], fakes)
     assert rc == 0
-    assert "deploy" not in _names(calls)
     assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
     assert "gate" not in _names(calls)
 
@@ -236,19 +217,6 @@ def test_a_suspended_tag_with_a_host_package_still_waits_for_the_host(land_run):
     assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
 
 
-def test_a_suspended_tag_beside_an_ansible_owned_one_still_gates_that_one(land_run):
-    suspended = WaitResult(
-        "suspended",
-        "promote-suspended",
-        "bento-pdf is suspended",
-        suspended=("bento-pdf",),
-    )
-    fakes = _fakes(derived=(["sonarr", "bento-pdf"], "pr"), land_wait=[suspended])
-    rc, out, _, calls, _ = land_run([], fakes)
-    assert rc == 0 and "VERDICT: settled" in out
-    assert [c[1] for c in calls if c[0] == "gate"] == [(["sonarr"],)]
-
-
 def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):
     settled = WaitResult(
         "settled",
@@ -283,7 +251,7 @@ def test_an_unreadable_k8s_entry_list_deploys_nothing(land_run):
     assert rc == 1 and "VERDICT: refused" in out
     assert "could not read which tags Flux applies" in out
     assert "k8s_tags_at" in _names(calls)
-    assert "deploy" not in _names(calls) and "land_wait" not in _names(calls)
+    assert "land_wait" not in _names(calls)
 
 
 # -- the handback refusal --------------------------------------------------------------------
@@ -398,7 +366,6 @@ def test_a_handback_refused_through_land_sh_never_reaches_deploy_sh(land_run):
     )
     rc, out, _, calls, _ = land_run(["--arm-merge", "--await-merge"], fakes)
     assert rc == 1 and "VERDICT: refused" in out
-    assert "deploy" not in _names(calls)
     assert not [c for c in calls if c[0] == "gh"]
 
 
@@ -449,3 +416,20 @@ def test_a_landers_window_grace_reaches_the_promotion_wait(land_run, monkeypatch
     monkeypatch.setenv("LAND_WINDOW_GRACE", "22200")
     _, _, _, calls, _ = land_run([], _fakes())
     assert [c[1][4] for c in calls if c[0] == "land_wait"] == [22200]
+
+
+def test_a_tag_no_k8s_entry_declares_is_flagged(land_run):
+    """Nothing applies it, so the landing must not read the promotion as covering it."""
+    fakes = Fakes(k8s_tags={MERGE_SHA: {"sonarr"}})
+    rc, out, _, calls, logline = land_run(["--tags", "sonarr,typo"], fakes)
+    assert rc == 1 and "VERDICT: deploy-failed" in out and "typo" in out
+    assert "cause=tag-miss" in logline and "tags=typo" in logline
+    assert not {"land_wait", "gate"} & set(_names(calls))
+
+
+def test_a_tag_a_k8s_entry_declares_is_clean(land_run):
+    fakes = Fakes(k8s_tags={MERGE_SHA: {"sonarr"}})
+    rc, out, _, calls, logline = land_run(["--tags", "sonarr"], fakes)
+    assert rc == 0 and "VERDICT: settled" in out
+    assert "cause=tag-miss" not in logline
+    assert "land_wait" in _names(calls)
