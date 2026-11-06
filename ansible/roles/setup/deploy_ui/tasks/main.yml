@@ -1,6 +1,6 @@
 ---
 # The deploy UI lives on the host that owns the GitOps checkout: it reads the same marker
-# directory the deployer writes and runs land.sh/deploy.sh in the same checkout, as the same
+# directory the deployer writes and runs land.sh in the same checkout, as the same
 # user. has_gitops picks the host, the way it does for gitops_deploy.
 #
 # One task file per subject, each under its own tag, so the GitOps deployer can apply a code

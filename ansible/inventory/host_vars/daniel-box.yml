@@ -267,7 +267,7 @@ containers_list:
       - traefik  # the only caller: every human path runs the Authelia middleware first
   # Route-only: the backend is deploy-ui.service on this host (roles/setup/deploy_ui), reached
   # through a selector-less Service. use_authelia is the whole access control, and the tier is
-  # two_factor because the page starts land.sh/deploy.sh and clears the deployer's hold on a
+  # two_factor because the page starts land.sh and clears the deployer's hold on a
   # stolen password alone.
   - name: deploy-ui
     platform: k8s
