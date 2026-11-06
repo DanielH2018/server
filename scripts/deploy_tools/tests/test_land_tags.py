@@ -282,14 +282,17 @@ def test_a_shared_role_alone_derives_no_tag_and_owes_no_hand():
     assert land_tags.plane_note(files) == ""
 
 
-def test_a_shared_role_no_role_includes_owes_no_hand(tmp_path):
-    """The red half of D6.15's removal: this note asked for a full `ansible/deploy.yml`, which
-    applies nothing since D6.12, for a role with neither an entry nor a caller."""
-    (tmp_path / "k8s" / "nosuchrole").mkdir(parents=True)
-    files = ["ansible/roles/k8s/volume-revert/templates/nothing-calls-this.yaml.j2"]
-    assert "ansible/deploy.yml" not in land_tags.plane_note(files)
-    assert "nosuchrole" not in land_tags.plane_note(
-        ["ansible/roles/k8s/nosuchrole/templates/deployment.yaml.j2"]
+def test_a_role_with_neither_an_entry_nor_a_caller_owes_no_hand():
+    """The note asked for a full `ansible/deploy.yml`, which applies no k8s role since D6.12."""
+    assert (
+        land_tags.plane_note(["ansible/roles/k8s/manifests/templates/nothing.yaml.j2"])
+        == ""
+    )
+    assert (
+        land_tags.plane_note(
+            ["ansible/roles/k8s/not-a-role/templates/deployment.yaml.j2"]
+        )
+        == ""
     )
 
 
