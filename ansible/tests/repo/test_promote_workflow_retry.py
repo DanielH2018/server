@@ -35,12 +35,13 @@ def retry_problems(wf: dict) -> list[str]:
     functions = str((wf.get("env") or {}).get("RETRY_FUNCTIONS", ""))
     if "retry()" not in functions or "docker login" not in functions:
         found.append("the workflow env's RETRY_FUNCTIONS lacks retry or the GHCR login")
-    runs = {
-        (job_name, step.get("name") or step.get("id")): str(step.get("run", ""))
+    # A list, because unnamed steps and steps sharing a name would collide as dict keys.
+    runs = [
+        (job_name, step.get("name") or step.get("id"), str(step.get("run", "")))
         for job_name, job in (wf.get("jobs") or {}).items()
         for step in _steps(job)
-    }
-    for (job_name, step_name), script in runs.items():
+    ]
+    for job_name, step_name, script in runs:
         code = [
             line for line in script.splitlines() if not line.lstrip().startswith("#")
         ]
@@ -50,7 +51,10 @@ def retry_problems(wf: dict) -> list[str]:
         if LOAD_RETRY not in script and RETRY_CALLERS.search("\n".join(code)):
             found.append(f"{job_name}: {step_name}: calls retry without {LOAD_RETRY}")
     for (job_name, step_name), call in RETRIED.items():
-        if call not in runs.get((job_name, step_name), ""):
+        if not any(
+            (job, name) == (job_name, step_name) and call in script
+            for job, name, script in runs
+        ):
             found.append(f"{job_name}: {step_name}: does not run {call}")
     return found
 
@@ -113,5 +117,25 @@ def test_a_call_outside_retry_is_flagged(workflow, case):
     ), f"{case}: the mutation left the step unchanged"
     assert any(
         line.startswith(f"{job}: {step_name}: ") and expected in line
+        for line in retry_problems(broken)
+    ), retry_problems(broken)
+
+
+BARE = "gh variable set PROD_DIGEST --body x"
+
+
+@pytest.mark.parametrize(
+    "added",
+    [
+        [{"run": BARE}, {"uses": "actions/checkout@v4"}],
+        [{"name": "Same", "run": BARE}, {"name": "Same", "run": "true"}],
+    ],
+    ids=["unnamed-step-before-a-uses-step", "step-sharing-a-later-step-s-name"],
+)
+def test_a_bare_call_in_a_step_with_a_colliding_name_is_flagged(workflow, added):
+    broken = copy.deepcopy(workflow)
+    broken["jobs"]["tag"]["steps"] += added
+    assert any(
+        line.startswith("tag: ") and "runs gh variable outside retry" in line
         for line in retry_problems(broken)
     ), retry_problems(broken)
