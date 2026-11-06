@@ -43,11 +43,11 @@ image_builder_timeout: 900
 # The gate below skips a build whose context has not changed, which is correct for every source
 # the context carries — and blind to the one it does not. A base image moves underneath a
 # pinned `FROM alpine:3.24` when Alpine patches a CVE, and nothing this role renders changes,
-# so the gate legitimately reports "no build needed" while the image is stale. Rebuilding on a
-# CVE is therefore an operator decision with no signal in the repo, taken with:
+# so the gate legitimately reports "no build needed" while the image is stale.
 #
-#   ./scripts/deploy.sh --tags n8n -e image_builder_force=true
-#
-# Passing it on a full deploy rebuilds all of them, which is the ~106s this gate exists to
-# avoid — so pass it with --tags unless a base-image bump really is fleet-wide.
+# This flag reaches only an Ansible-owned caller, and every caller is `owner: flux`, so no deploy
+# passes it. promote's `images` job builds those images, and only a moved content tag rebuilds one.
+# A refresh that no pin moves is a hand PR that changes the context
+# (docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*). The flag stays
+# for a caller handed back to Ansible.
 image_builder_force: false

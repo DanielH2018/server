@@ -8,9 +8,9 @@
 # 2.34.6 while upstream shipped 2.35.4.
 #
 # An explicit ref is what Renovate's built-in dockerfile manager reads. It raises a PR (no
-# automerge — the automerge rules match custom.regex managers only), and the merged commit lands
-# under ansible/roles/k8s/**, which gitops_deploy classifies as a k8s-role change and Discord-alerts
-# for an operator to deploy. That is the posture n8n's autodeploy-denylist entry asks for.
+# automerge — the automerge rules match custom.regex managers only), a person merges it, and
+# promote builds and rolls the merged commit. That is the posture n8n's `k8s_autodeploy: false` asks
+# for.
 #
 # CHANNEL + DIGEST, not a version. `:2.35.4` was the first pin, and it had a side effect worth
 # naming: it changed which release train n8n follows. `:latest` is an alias for `:stable`, so every
@@ -35,7 +35,7 @@
 # through nine green checks (issue #1493). That file's header has the registry commands for
 # resolving a digest to its version, and test_renovate_dockerfiles.py fails until the row is
 # appended.
-FROM n8nio/n8n:stable@sha256:9a8d8dcea75667496695d7810d7e1fe018a65efb36cc499d347f3931b3957b5d
+FROM n8nio/n8n:stable@sha256:8602f5dfacbe2c931eeafd010de0e68182310e9f309921e780ab69182e92b3ae
 
 # Switch to the root user to install packages
 USER root
@@ -46,8 +46,8 @@ ENV NPM_CONFIG_PREFIX=/usr/local
 # fuzzball, the one npm package this image adds. PINNED (#2213): a bare `npm install -g
 # fuzzball` took whatever npm served on build day, and nothing recorded which version a running
 # pod carried. The renovate.json regex manager over this line (npm datasource) raises a PR when
-# a new release ships; it merges by hand and is realised by `deploy.sh --tags n8n`,
-# since a built image only moves when something rebuilds it.
+# a new release ships; it merges by hand, and promote's `images` job then builds the moved
+# content tag, since a built image only moves when something rebuilds it.
 RUN npm install -g fuzzball@2.2.6
 
 # Switch back to the non-privileged 'node' user
