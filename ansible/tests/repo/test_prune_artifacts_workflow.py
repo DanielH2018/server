@@ -1,7 +1,8 @@
 """The `prune-artifacts` workflow deletes old artifact versions under promote's own rules.
 
 It holds its master-ref check, its permissions, its own concurrency group, and a cosign
-installer step equal to promote's, so the two pins cannot drift apart. `prune_problems` names
+installer step equal to promote's, so the two pins cannot drift apart. Its GHCR login runs
+through a copy of promote's `RETRY_FUNCTIONS`, held equal the same way. `prune_problems` names
 every broken property; the real file must produce none, and each red fixture breaks one.
 
 Run: uv run pytest ansible/tests/repo/test_prune_artifacts_workflow.py
@@ -21,10 +22,12 @@ from test_promote_workflow import (
     _triggers,
     _uses,
 )
+from test_promote_workflow_retry import LOAD_RETRY
 
 PRUNE_WORKFLOW = REPO / ".github" / "workflows" / "prune-artifacts.yml"
 PRUNE_PERMISSIONS = {"contents": "read", "packages": "write"}
 PRUNE_COMMAND = "promote.py prune"
+LOGIN_STEP = "Log in to GHCR"
 
 
 def _cosign_steps(wf: dict) -> list[dict]:
@@ -69,6 +72,23 @@ def prune_problems(wf: dict, promote_wf: dict) -> list[str]:
     cosign, reference = _cosign_steps(wf), _cosign_steps(promote_wf)
     if len(cosign) != 1 or any(cosign[0] != step for step in reference):
         found.append("prune: its cosign installer step differs from promote.yml's")
+    functions = (wf.get("env") or {}).get("RETRY_FUNCTIONS")
+    if not functions or functions != (promote_wf.get("env") or {}).get(
+        "RETRY_FUNCTIONS"
+    ):
+        found.append("prune: its RETRY_FUNCTIONS differs from promote.yml's")
+    for step in _steps(job):
+        code = [
+            line
+            for line in str(step.get("run", "")).splitlines()
+            if not line.lstrip().startswith("#")
+        ]
+        if any("docker login" in line for line in code):
+            found.append(f"prune: {step.get('name')}: runs docker login outside retry")
+    login = next((s for s in _steps(job) if s.get("name") == LOGIN_STEP), {})
+    script = str(login.get("run", ""))
+    if LOAD_RETRY not in script or "ghcr_login" not in script:
+        found.append(f"prune: {LOGIN_STEP}: does not run ghcr_login after {LOAD_RETRY}")
     return found
 
 
@@ -112,6 +132,26 @@ def _prune_with_a_shallow_checkout(wf):
     _checkouts(wf["jobs"]["prune"])[0]["with"]["fetch-depth"] = 1
 
 
+def _login_step(wf):
+    return next(s for s in wf["jobs"]["prune"]["steps"] if s.get("name") == LOGIN_STEP)
+
+
+def _prune_with_a_drifted_retry_helper(wf):
+    wf["env"]["RETRY_FUNCTIONS"] = wf["env"]["RETRY_FUNCTIONS"].replace("1 2 3", "1 2")
+
+
+def _prune_without_the_retry_helper(wf):
+    del wf["env"]["RETRY_FUNCTIONS"]
+
+
+def _prune_with_a_bare_login(wf):
+    _login_step(wf)["run"] = "docker login ghcr.io --password-stdin"
+
+
+def _prune_without_loading_retry(wf):
+    _login_step(wf)["run"] = "ghcr_login"
+
+
 PRUNE_RED = {
     "prune in the promote group": (
         _prune_in_the_promote_group,
@@ -136,6 +176,22 @@ PRUNE_RED = {
     "prune with a shallow checkout": (
         _prune_with_a_shallow_checkout,
         "prune: does not check out",
+    ),
+    "prune with a drifted retry helper": (
+        _prune_with_a_drifted_retry_helper,
+        "prune: its RETRY_FUNCTIONS differs",
+    ),
+    "prune without the retry helper": (
+        _prune_without_the_retry_helper,
+        "prune: its RETRY_FUNCTIONS differs",
+    ),
+    "prune with a bare login": (
+        _prune_with_a_bare_login,
+        "prune: Log in to GHCR: runs docker login outside retry",
+    ),
+    "prune without loading retry": (
+        _prune_without_loading_retry,
+        "prune: Log in to GHCR: does not run ghcr_login",
     ),
 }
 

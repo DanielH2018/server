@@ -9,7 +9,7 @@ name: prune-artifacts
 # pruned daily*), and the operator's view is docs/flux-deploy-plane.md.
 #
 # ansible/tests/repo/test_prune_artifacts_workflow.py holds this file's guard, permissions and
-# concurrency group, and holds its cosign installer step equal to promote.yml's.
+# concurrency group, and holds its cosign installer step and RETRY_FUNCTIONS equal to promote.yml's.
 
 on:
   schedule:
@@ -17,6 +17,25 @@ on:
   workflow_dispatch:
 
 permissions: {}
+
+env:
+  RETRY_FUNCTIONS: |
+    retry() {
+      local try out status
+      for try in 1 2 3; do
+        if out="$("$@")"; then
+          printf '%s\n' "$out"
+          return 0
+        else
+          status=$?
+        fi
+        echo "::warning::$1 failed on try $try of 3 with exit code $status" >&2
+        [ "$try" = 3 ] || sleep 10
+      done
+      return "$status"
+    }
+    ghcr_login_once() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
+    ghcr_login() { retry ghcr_login_once; }
 
 jobs:
   prune:
@@ -53,7 +72,9 @@ jobs:
         env:
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+        run: |
+          eval "$RETRY_FUNCTIONS"
+          ghcr_login
 
       # GITHUB_TOKEN lists and deletes package versions through the Packages API, and reads
       # each untagged manifest from GHCR.
