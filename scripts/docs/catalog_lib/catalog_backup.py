@@ -414,8 +414,7 @@ def claim_tiers(
                 )
             )
             continue
-        # A shell script's manifest names this claim. The tier lists cannot list it, and
-        # its Volume's group label decides the backup, which `_classify` does not read.
+        # A script's runtime manifest: its Volume label, which `_classify` never reads, decides.
         if "$" in claim.name:
             out.append((claim.name, _RUNTIME_CLAIM_TIER))
             continue
