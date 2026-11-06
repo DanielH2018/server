@@ -83,12 +83,17 @@
     check_timer_cron_name: "GitHub interaction limit"
     check_timer_cron_file: github-interaction-limit
 
-# The tick's metrics file (#5676), so a retired deployer stops reporting its last counts.
-- name: Remove the GitOps tick metrics textfile
+# A file left behind keeps exporting its last run: the tick's counts (#5676), and each GitHub
+# check's deadline, which HostCheckOverdue pages on 25 hours later and never clears (#7354).
+- name: Remove the GitOps tick and GitHub check textfiles
   tags: [gitops-deploy-teardown]
   ansible.builtin.file:
-    path: /var/lib/node-exporter-textfile/gitops_tick.prom
+    path: "/var/lib/node-exporter-textfile/{{ item }}"
     state: absent
+  loop:
+    - gitops_tick.prom
+    - github-ruleset-drift.prom
+    - github-interaction-limit.prom
   become: true
 
 - name: Remove the GitHub drift-check scripts
