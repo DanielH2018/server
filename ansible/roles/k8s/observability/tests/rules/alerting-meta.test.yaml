@@ -49,8 +49,8 @@ tests:
                 renamed it. AlertmanagerNotificationsFailing cannot fire until the series is
                 back.
 
-  # A failed scrape: up reads 0 and the counter series are stale. Kuma's Cluster Scrape
-  # Targets tile pages this condition, so the rule must stay quiet.
+  # A failed scrape: up reads 0 and the counter series are stale. ScrapeTargetDown pages
+  # this condition, so the rule must stay quiet.
   - interval: 1m
     input_series:
       - series: 'up{job="alertmanager", instance="alertmanager:9093"}'

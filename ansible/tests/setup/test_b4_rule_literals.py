@@ -155,7 +155,7 @@ def test_no_b4_rule_is_shadow():
 
     The drills had no `CheckWithoutPager` term, so the batch's five `[2h]` terms bounded their
     window, and those terms left with the same PR. A rule that regains `shadow` pages nobody
-    while no Kuma tile pages in its place.
+    while nothing else pages in its place.
     """
     [group] = yaml_fast.safe_load(RULES.read_text())["groups"]
     assert {r["alert"] for r in group["rules"]} >= {

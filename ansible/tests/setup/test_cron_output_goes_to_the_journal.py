@@ -34,7 +34,7 @@ from _role_census import task_files
 # subject by pattern reads empty the day a file moves, and every job then passes by default.
 # A rename fails `test_every_named_cron_still_exists` below rather than going quiet.
 JOURNAL_ROUTED = {
-    # The Kuma-verdict crons: silent when healthy, but their failure stderr is the evidence.
+    # The verdict crons: silent when healthy, but their failure stderr is the evidence.
     "fake-remux health": "fake-remux-health",
     "Longhorn backup health": "longhorn-backup-health",
     "daniel-box disk health": "disk-health",

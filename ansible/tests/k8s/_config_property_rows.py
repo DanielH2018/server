@@ -262,7 +262,7 @@ CONFIG_PROPERTIES = (
     Property(
         name="speedtest-scraped-at-its-native-endpoint",
         reason=(
-            "monitor-bridge's `speedtest` check pushes a verdict to Kuma: a tile, not a series. "
+            "monitor-bridge's `speedtest` check exports a pass or fail, not the measured speeds. "
             "Only a Prometheus scrape of speedtest-tracker answers whether a slow result is a "
             "one-off or a week-long slide (#996). The app serves `/prometheus` natively, so the "
             "job in observability's prometheus.yaml.j2 is the whole integration, and a wrong "

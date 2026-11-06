@@ -39,7 +39,7 @@ _NO_READINESS = {
         "crowdsec",
         "crowdsec-jobs",
     ): "sidecar running the crowdsec maintenance jobs; a probe would let a job's fault pull the "
-    "LAPI out of its Service, so each job reports through its own Kuma tile instead",
+    "LAPI out of its Service, so each job pages through its own pod-producers rule instead",
     # The exportarr metrics sidecars, same shape as the three above and one degree worse: a
     # readinessProbe here would let an EXPORTER outage pull its *arr out of its own Service,
     # so monitoring would take down the thing it monitors. They keep a livenessProbe, and a
@@ -65,15 +65,15 @@ _NO_READINESS = {
     ("valheim", "valheim"): "startupProbe (grep /proc/net/udp+udp6) already gates the "
     "Service; UDP has no LISTEN state so tcpSocket is impossible anyway, and a connect "
     "probe would log a join attempt every cycle",
-    # ── no Service fronts these; a livenessProbe restarts them and Kuma or Prometheus
-    #    notices if they stop working. Readiness would add rollout gating only.
-    ("autofix-bridge", "autofix-bridge"): "no Service; liveness plus Kuma monitors",
-    ("janitorr", "janitorr"): "no Service; liveness plus Kuma monitors",
+    # ── no Service fronts these; a livenessProbe restarts them and an Alertmanager rule
+    #    pages if they stop working. Readiness would add rollout gating only.
+    ("autofix-bridge", "autofix-bridge"): "no Service; liveness plus AutofixBridgeDown",
+    ("janitorr", "janitorr"): "no Service; liveness plus JanitorrErrorsFound",
     ("karakeep", "time-tagger"): "no Service; liveness probe covers a hung worker",
     (
         "monitor-bridge",
         "monitor-bridge",
-    ): "no Service; it is itself the monitor, and Kuma watches it",
+    ): "no Service; it is itself the monitor, and MonitorBridgeDown watches it",
     (
         "n8n",
         "n8n-runners",
@@ -97,10 +97,16 @@ _NO_READINESS = {
     ): "textfile-writing sidecar, no server to probe; readiness would let a broken mirror "
     "hold the exporter out of the Kustomization's wait, and DockerhubMirrorPullNotReporting "
     "catches a loop that stops writing",
-    # ── periodic workers with no server to probe. A stale Kuma push heartbeat catches
+    # ── periodic workers with no server to probe. A rule on the work they report catches
     #    'running but not doing its job', which readiness cannot see.
-    ("cloudflare-ddns", "cloudflare-ddns"): "Kuma push heartbeat; no server to probe",
-    ("scrutiny", "collector"): "periodic SMART collection; covered by a Kuma monitor",
+    (
+        "cloudflare-ddns",
+        "cloudflare-ddns",
+    ): "CloudflareDdns*UpdateSilent log rules; no server to probe",
+    (
+        "scrutiny",
+        "collector",
+    ): "periodic SMART collection; covered by SmartHealthFailing",
     (
         "dri-device-plugin",
         "generic-device-plugin",
