@@ -21,11 +21,6 @@ def _result(stdout, returncode=0):
     return types.SimpleNamespace(stdout=stdout, stderr="", returncode=returncode)
 
 
-def _answers(*results):
-    calls = iter(results)
-    return lambda *_a, **_k: next(calls)
-
-
 def _raises(exc):
     def boom(*_a, **_k):
         raise exc
