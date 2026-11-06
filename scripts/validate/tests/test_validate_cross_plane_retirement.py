@@ -1,37 +1,22 @@
-"""Step 1 of *Retiring a flux-owned service* in docs/flux-deploy-plane.md, rendered (#5282).
+"""The first PR of *Retiring a flux-owned service* in docs/flux-deploy-plane.md, rendered.
 
-bento-pdf stands in for the retiring service: it is flux-owned, ships one Deployment template,
-and takes its Service and IngressRoute from the shared defaults, as texbrain does. Each test
-renders a copy of HEAD's tree with its templates deleted and the defaults the doc's yaml block
-states, read from the doc itself.
+headlamp stands in for a retiring service with a deferred file. `<tag>-deferred` keeps
+`deletionPolicy: Orphan`, so only its inventory prune deletes its objects, and that needs the
+Kustomization to outlive them.
 
 Run: uv run pytest scripts/validate/tests/test_validate_cross_plane_retirement.py
 """
 
-import re
-import textwrap
 from pathlib import Path
 
 import pytest
 
 from validate import render_diff_gates as gate
 
-# authelia reads `containers_list`, so it moves if the first PR edits the entry.
-ROLES = ("bento-pdf", "authelia")
-ROLE = "ansible/roles/k8s/bento-pdf"
-DOC = gate.REPO / "docs/flux-deploy-plane.md"
-SECTION = "## Retiring a flux-owned service\n"
-
-
-def documented_defaults(text: str) -> str:
-    """The first fenced yaml block of the doc's retirement section, as top-level keys.
-
-    The doc is the oracle: the test renders whatever step 1 tells the PR to add.
-    """
-    section = text.split(SECTION, 1)[1].split("\n## ", 1)[0]
-    match = re.search(r"```yaml\n(.*?)\n *```", section, re.DOTALL)
-    assert match, f"{DOC.name} {SECTION.strip()} holds no yaml block"
-    return textwrap.dedent(match.group(1)) + "\n"
+ROLES = ("headlamp",)
+ROLE = "ansible/roles/k8s/headlamp"
+DEFERRED = "headlamp-deferred"
+TEMPLATE = "rbac-observability.yaml.j2"
 
 
 @pytest.fixture(scope="module")
@@ -41,26 +26,22 @@ def head_snapshot(tmp_path_factory) -> gate.Snapshot:
     return gate.snapshot(tree, ROLES)
 
 
-def retired_step_1(tmp_path: Path, defaults: str) -> gate.Snapshot:
+def test_an_emptied_deferred_template_keeps_the_kustomization(tmp_path, head_snapshot):
     gate.extract("HEAD", tmp_path, ("ansible", "scripts", "hosts"))
-    for template in (tmp_path / ROLE / "templates").iterdir():
-        template.unlink()
-    role_defaults = tmp_path / ROLE / "defaults/main.yml"
-    role_defaults.write_text(role_defaults.read_text() + defaults)
-    return gate.snapshot(tmp_path, ROLES)
+    (tmp_path / ROLE / "templates" / TEMPLATE).write_text("")
+    head = gate.snapshot(tmp_path, ROLES)
+    assert DEFERRED in head.deferred
+    lost = set(head_snapshot.objects["headlamp"]) - set(head.objects["headlamp"])
+    assert lost, "the emptied template rendered an object"
+    assert gate.removal_problems(head_snapshot, head, lost) == []
 
 
-def test_step_1_of_a_flux_owned_retirement_renders_no_object(tmp_path, head_snapshot):
-    head = retired_step_1(tmp_path, documented_defaults(DOC.read_text()))
-    assert head_snapshot.objects["bento-pdf"]
-    assert "bento-pdf" in head.renders
-    assert not head.objects.get("bento-pdf")
-    assert gate.counted(head_snapshot, head) == {"bento-pdf"}
-    assert gate.problems(head_snapshot, head) == []
-    declared = set(head_snapshot.objects["bento-pdf"])
-    assert gate.removal_problems(head_snapshot, head, declared) == []
-
-
-def test_step_1_without_the_defaults_is_refused(tmp_path):
-    with pytest.raises(gate.RenderFailed, match="restart target bento-pdf is no"):
-        retired_step_1(tmp_path, "")
+def test_a_dropped_deferred_template_removes_the_kustomization(
+    tmp_path: Path, head_snapshot
+):
+    gate.extract("HEAD", tmp_path, ("ansible", "scripts", "hosts"))
+    (tmp_path / ROLE / "templates" / TEMPLATE).unlink()
+    defaults = tmp_path / ROLE / "defaults/main.yml"
+    defaults.write_text(defaults.read_text() + "manifests_deferred_files: []\n")
+    assert DEFERRED in head_snapshot.deferred
+    assert DEFERRED not in gate.snapshot(tmp_path, ROLES).deferred

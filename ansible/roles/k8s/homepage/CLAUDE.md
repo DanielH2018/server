@@ -29,8 +29,8 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 - **Flux prunes the cluster-scoped RBAC.** The task's comment says the namespaced prune
   allowlist in `k8s/manifests` never selects the ClusterRole and ClusterRoleBinding. Flux
   prunes by its own inventory instead, and that inventory holds both, so dropping one from
-  `rbac.yaml.j2` deletes it live at the next promotion. `deletionPolicy: Orphan` applies only
-  when the Kustomization itself is deleted.
+  `rbac.yaml.j2` deletes it live at the next promotion. Deleting the Kustomization deletes them
+  too, because the tag takes the default deletion policy.
 - **The config Secret substitutes from `homelab-cluster-vars`.** Every credential the widgets
   use is a `${<key>}` placeholder in the published render. Flux substitutes the values from
   the `homelab-cluster-vars` Secret, which it decrypts from

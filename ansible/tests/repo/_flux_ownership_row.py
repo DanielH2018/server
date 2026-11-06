@@ -181,7 +181,7 @@ K8S_ENTRIES_ARE_FLUX_OWNED = Census(
     reason=(
         "`deploy.sh` refuses every k8s tag and the tick applies no k8s role, so a k8s "
         "`containers_list` entry without `owner: flux` has no writer once `promote` stops "
-        "publishing it, and its objects are orphaned or, under the deletion policy, deleted. "
+        "publishing it, and the default deletion policy then deletes its objects. "
         "A handback is not a rollback since D6.12: fix a bad role forward (D6's *The deletion "
         "policy, and the end of the handback*)."
     ),

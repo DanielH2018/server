@@ -1320,8 +1320,11 @@ The bundle holds:
 - `cluster/<tag>/`, each published tag's manifests and their `kustomization.yaml`, with a
   byte copy of each SOPS manifest its role lists (*SOPS manifests* below).
 - `flux/<tag>.yaml`, the Kustomization `<tag>` in `flux-system`. It applies
-  `./cluster/<tag>` from the `OCIRepository` `homelab` with `prune: true`, `wait: true`,
-  `deletionPolicy: Orphan` and the manifests role's `manifests_rollout_timeout_default`.
+  `./cluster/<tag>` from the `OCIRepository` `homelab` with `prune: true`, `wait: true`, the
+  default deletion policy and the manifests role's `manifests_rollout_timeout_default`.
+  The default policy follows `prune`, so deleting the Kustomization deletes the objects it
+  applied. `flux` and every other Kustomization in the bundle set `deletionPolicy: Orphan`
+  (`docs/target-architecture/contracts.md`, *Deletion policy*).
   A role's `defaults/main.yml` changes two of those fields. `flux_prune: false` renders
   `prune: false`, and `manifests_rollout_timeout` replaces the default `timeout`. Each must
   be a literal, and `scripts/lib/k8s_roles.py:role_fields` refuses a Jinja expression.
@@ -1965,42 +1968,47 @@ render-diff gates therefore refuses a PR that adds a name to `k8s_retired_servic
 whose entry reads `owner: flux` on the PR's base. A flux-owned service retires in this order
 instead:
 
-1. **The first PR empties the service's render.** Flux prunes every object the render drops.
-   The PR carries a `Removes-Object:` line for each one (*Removing an object on purpose*).
-   Deleting the role's templates is not enough on its own. The PR also adds these keys to the
-   role's `defaults/main.yml`, and leaves the `containers_list` entry as it is:
-
-   ```yaml
-   manifests_rollout: ''
-   manifests_exclude_files: [service.yaml, ingressroute.yaml]
-   ```
-
-   The renderer refuses a restart target that names no workload in the render, and
-   `manifests_rollout` defaults to the tag. The empty value clears that target. Any
-   `manifests_extra_rollouts` or `manifests_self_rollouts` entry goes too, and so do the
-   role's `k8s_claims`. The exclude list drops the Service and IngressRoute that the shared
-   defaults render from the entry's `port` and `hostname`. Editing the entry instead would
-   move the render of every role that reads `containers_list`, such as authelia, in the
-   PR that empties this one. The tag's `cluster/<tag>/` directory then holds
-   only a `kustomization.yaml` with `resources: []`.
-   `scripts/validate/tests/test_validate_cross_plane_retirement.py::test_step_1_of_a_flux_owned_retirement_renders_no_object`
-   renders this step on bento-pdf.
-1. **Wait for the prune.** `promote` must move `prod` to a commit that holds the first PR,
-   and the objects must read `NotFound`.
-1. **The second PR removes the `containers_list` entry and the role.** The next bundle omits
-   `flux/<tag>.yaml`, and `deletionPolicy: Orphan` leaves nothing behind, because the first
-   PR's prune already removed the objects. The name never joins `k8s_retired_services`.
-   The Kustomization still exists when this PR merges, and the merge is what makes the root
-   prune it. `land.sh` does not read the Kustomization before the merge.
+1. **If the tag renders `<tag>-deferred`, `<tag>-verify` or `<tag>-precheck`, a first PR empties
+   those templates.** These kinds keep `deletionPolicy: Orphan`, so their objects outlive a
+   Kustomization that leaves the bundle. Overwrite each template with an empty file and keep
+   its name in `manifests_deferred_files`, because the renderer writes a directory, and so a
+   Kustomization, only for a kind that still lists a file. The Kustomization then holds no
+   object, and its inventory prune deletes the old ones. Deleting the template instead removes
+   the Kustomization and leaves its objects behind. The PR carries a `Removes-Object:` line
+   for each object (*Removing an object on purpose*). A `manifests_extra_rollouts` entry that
+   names an emptied workload goes too, because the renderer refuses a restart target with no
+   workload in the render. `promote` must move `prod` to a commit
+   that holds this PR, and the objects must read `NotFound`, before the next step.
+   `scripts/validate/tests/test_validate_cross_plane_retirement.py` renders both forms.
+1. **The retiring PR removes the `containers_list` entry and the role.** It carries a
+   `Removes-Object:` line for each object in `cluster/<tag>/` that has no prune exemption. The
+   next bundle omits `flux/<tag>.yaml`, and the root prunes `<tag>`, whose finalizer deletes
+   those objects. The name never joins `k8s_retired_services`. The Kustomization still exists
+   when this PR merges, and the merge is what makes the root prune it. `land.sh` does not read
+   the Kustomization before the merge.
+1. **Delete what the kept kinds leave behind by hand (operator-only).** The renderer derives
+   `<tag>-snapshot` and `<tag>-prepull` from the role's claims and defaults, so no emptied
+   template reaches them, and `Orphan` keeps their objects when the root prunes them. A
+   `-snapshot` directory holds a ServiceAccount, Roles, RoleBindings, a ClusterRole, a
+   ClusterRoleBinding and a ConfigMap, and a `-prepull` directory holds a ConfigMap, all
+   beside Jobs whose TTL expires them.
 1. **Delete the claim by hand (operator-only).** Prune never deletes a claim labelled
    `kustomize.toolkit.fluxcd.io/prune: disabled`, so the claim and its Longhorn volume
-   outlive both PRs. Once the second PR is on master, and only when the data is no longer
-   wanted, the operator deletes the claim with `kubectl delete pvc -n <namespace> <claim>`.
+   outlive the retirement. Once the retiring PR is on master, and only when the data is no
+   longer wanted, the operator deletes the claim with `kubectl delete pvc -n <namespace> <claim>`.
    The agent's ServiceAccount cannot run that write. A `longhorn`-class claim that the entry
    listed in `no_backup_claims` leaves the no-backup list with the entry. `longhorn-reconcile`
    then moves its volume to the `default` group, and `daily-backup` backs up that volume even
    while it is detached. To keep the volume out of B2, delete the claim after the `<tag>`
    Kustomization reads `NotFound` and before the next `daily-backup` run.
+
+To rename a tag, retire the old tag and add the new one in one PR, which moves the role
+directory. The service is down between the deletion and the re-creation: the old
+Kustomization's finalizer deletes the objects, and the new Kustomization applies the same names
+at its next reconcile. Prune-exempt kinds stay, and the new Kustomization adopts them.
+`flux` is never renamed, because the tag rule refuses a bundle without it. media-volume cannot
+be renamed while it renders `media-data`, because the tag rule also refuses a tag whose render
+holds a PersistentVolume.
 
 ## Retention of old artifact versions
 

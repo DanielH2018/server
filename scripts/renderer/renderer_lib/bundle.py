@@ -90,6 +90,7 @@ KUSTOMIZATION = "kustomization.yaml"
 PATCHES_DIR = "patches"
 DIGESTS = "digests.json"
 FLUX_DIR = "flux"
+FLUX_TAG = "flux"
 CLUSTER_DIR = "cluster"
 FLUX_INDEX = f"{FLUX_DIR}/{KUSTOMIZATION}"
 # The reserved key of `digests.json` for the paths that count for no name (C1).
@@ -204,6 +205,7 @@ def tag_kustomization(
     suspend: bool = False,
     content: str | None = None,
     health_check_exprs: list | None = None,
+    orphan: bool = True,
 ) -> dict:
     """The Kustomization `tag`, as D2's *The per-tag Kustomization* shows it.
 
@@ -225,6 +227,8 @@ def tag_kustomization(
         content: The tag's `own` digest, written as `CONTENT_DIGEST` unless None.
         health_check_exprs: The role's `flux_health_check_exprs`, written as
             `spec.healthCheckExprs` unless empty (C3 *Per-role fields*, H6.1b).
+        orphan: Whether it sets `deletionPolicy: Orphan`, or takes the default policy, which
+            deletes its objects with it when `prune` is true (C3 *Deletion policy*).
     """
     spec: dict = {
         "sourceRef": {"kind": "OCIRepository", "name": ROOT},
@@ -234,10 +238,9 @@ def tag_kustomization(
         "timeout": timeout,
         "prune": prune,
         "wait": True,
-        # Removing a tag from the bundle, as a render bug can, leaves its objects
-        # serving rather than deleting them. D6 decides whether to switch (C3).
-        "deletionPolicy": "Orphan",
     }
+    if orphan:
+        spec["deletionPolicy"] = "Orphan"
     depends = set(edges.kept)
     if substitutes:
         spec["postBuild"] = {
@@ -377,6 +380,7 @@ def flux_files(
                 own.get("suspend", False),
                 (contents or {}).get(name) if name == tag else None,
                 own.get("health_check_exprs") if name == tag else None,
+                orphan=name != tag or tag == FLUX_TAG,
             )
             for name in names
         ]

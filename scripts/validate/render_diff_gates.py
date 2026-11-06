@@ -23,8 +23,8 @@ after D6*).
   deletes. `decide` judges the same drop (`object_loss.py`).
 - **Arm 4, a flux-owned retirement (D5.1f).** A name joins `k8s_retired_services` whose
   entry carries `owner: flux` on the base. The play's teardown deletes the last render
-  Ansible staged, and Flux at the old `prod` re-creates it. Such a service retires by two
-  PRs instead (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
+  Ansible staged, and Flux at the old `prod` re-creates it. Such a service retires by removing
+  its entry and role instead (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
 - **Arm 5, a suspended tag's render (D5.1d).** A tag that `digests.json` marks `suspended` at
   both ends has a different `own` digest, its `cluster/<tag>/` output alone. A suspended tag
   applies nothing until its resume, so the change would sit merged and unapplied. The same
@@ -221,8 +221,8 @@ def removal_problems(
             found.append(
                 f"arm 4: {name} joins k8s_retired_services while its base entry carries "
                 f"owner: flux, so the play's teardown deletes a stale staged render that Flux "
-                f"at the old prod re-creates. Retire it by two PRs: empty its templates, then "
-                f"remove its entry (docs/flux-deploy-plane.md, *Retiring a flux-owned "
+                f"at the old prod re-creates. Retire it by removing its entry and its role "
+                f"(docs/flux-deploy-plane.md, *Retiring a flux-owned "
                 f"service*)."
             )
     return found
