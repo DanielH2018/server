@@ -92,6 +92,30 @@ on:
 
 permissions: {}
 
+# Every `gh` call and GHCR login in a step goes through these, and ansible/tests/repo/
+# test_promote_workflow_retry.py fails one that does not. They live here because `tag`, `settle`,
+# `publish` and `reset-move` check out nothing, so no script or local action can reach them.
+# Each step that calls them opens with `eval "$RETRY_FUNCTIONS"`. `retry` prints only the stdout
+# of the try that succeeded, so a capture never holds a failed try's error body.
+env:
+  RETRY_FUNCTIONS: |
+    retry() {
+      local try out status
+      for try in 1 2 3; do
+        if out="$("$@")"; then
+          printf '%s\n' "$out"
+          return 0
+        else
+          status=$?
+        fi
+        echo "::warning::$1 failed on try $try of 3 with exit code $status" >&2
+        [ "$try" = 3 ] || sleep 10
+      done
+      return "$status"
+    }
+    ghcr_login_once() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
+    ghcr_login() { retry ghcr_login_once; }
+
 jobs:
   render:
     # The same guard opens every job: a successful push run of CI on master in this repository,
@@ -296,7 +320,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          eval "$RETRY_FUNCTIONS"
+          ghcr_login
           python3 scripts/deploy_tools/ci_images.py push out
 
   publish:
@@ -346,11 +371,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          eval "$RETRY_FUNCTIONS"
           if ! printf '%s' "$SHA" | grep -Eqx '[0-9a-f]{40}'; then
             echo "::error::render handed on sha '$SHA', not 40 lowercase hex"
             exit 1
           fi
-          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          ghcr_login
           repo=ghcr.io/danielh2018/homelab-manifests
           digest="$(flux push artifact "oci://$repo:sha-$SHA" \
             --path=out \
@@ -379,11 +405,12 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          eval "$RETRY_FUNCTIONS"
           if ! printf '%s' "$SHA" | grep -Eqx '[0-9a-f]{40}'; then
             echo "::error::render handed on sha '$SHA', not 40 lowercase hex"
             exit 1
           fi
-          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          ghcr_login
           repo=ghcr.io/danielh2018/homelab-manifests
           digest="$(flux push artifact "oci://$repo:verify-drill" \
             --path=out \
@@ -557,7 +584,9 @@ jobs:
         env:
           GH_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ github.token }}
-        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+        run: |
+          eval "$RETRY_FUNCTIONS"
+          ghcr_login
 
       # GITHUB_TOKEN reads the registry, the check-runs, the statuses and the commit-to-PR
       # lookup. GH_TOKEN is PROMOTE_TOKEN, for the `gh variable get DEPLOY_HOLD` inside
@@ -670,12 +699,13 @@ jobs:
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
         run: |
           set -euo pipefail
+          eval "$RETRY_FUNCTIONS"
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           printf '%s' "$DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
             || { echo "::error::decide's digest '$DIGEST' is not sha256:<64 hex>"; exit 1; }
 
-          hold="$(gh variable get DEPLOY_HOLD -R "$GITHUB_REPOSITORY")" \
+          hold="$(retry gh variable get DEPLOY_HOLD -R "$GITHUB_REPOSITORY")" \
             || { echo "::error::DEPLOY_HOLD could not be read, so this run moves nothing"; exit 1; }
           # The value decide read: `none`, or the `failed=` hold the revert rule passed.
           if [ "$hold" != "${HOLD_READ:-none}" ]; then
@@ -705,7 +735,7 @@ jobs:
             exit 0
           fi
 
-          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          ghcr_login
           repo=ghcr.io/danielh2018/homelab-manifests
           if [ "$SEED" = true ]; then
             printf '%s' "$PRIOR_DIGEST" | grep -Eqx 'sha256:[0-9a-f]{64}' \
@@ -736,14 +766,16 @@ jobs:
           flux tag artifact "oci://$repo:sha-$TARGET" --tag prod
           printf 'moved=true\nmoved_at=%s\n' "$moved_at" >> "$GITHUB_OUTPUT"
 
-      # A failed write leaves PROD_DIGEST behind prod, which the deploy-pipeline exporter pages
-      # on from slice D2: the safe direction.
+      # A write that fails every try leaves PROD_DIGEST behind prod, which the deploy-pipeline
+      # exporter pages on from slice D2: the safe direction.
       - name: Record prod's digest
         if: ${{ steps.move.outputs.moved == 'true' }}
         env:
           DIGEST: ${{ needs.promote.outputs.digest }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
-        run: gh variable set PROD_DIGEST --body "$DIGEST" -R "$GITHUB_REPOSITORY"
+        run: |
+          eval "$RETRY_FUNCTIONS"
+          retry gh variable set PROD_DIGEST --body "$DIGEST" -R "$GITHUB_REPOSITORY"
 
   verify:
     needs: [promote, tag]
@@ -869,10 +901,10 @@ jobs:
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
         run: |
           set -uo pipefail
+          eval "$RETRY_FUNCTIONS"
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           repo=ghcr.io/danielh2018/homelab-manifests
-          login() { printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin; }
 
           # A verdict on T counts only while `prod` still names T's digest (D7.1). Once a
           # later run has moved `prod` past T, that run owns the cluster, and this one writes
@@ -924,13 +956,13 @@ jobs:
           echo "owned=true" >> "$GITHUB_OUTPUT"
 
           if [ "$VERDICT" = good ]; then
-            if ! { login && flux tag artifact "oci://$repo:sha-$TARGET" --tag last-good; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag last-good; }; then
               echo "::error::moving last-good to sha-$TARGET failed"
               exit 1
             fi
             echo "last-good moved to sha-$TARGET"
             if [ "$CLEARS_HOLD" = true ]; then
-              gh variable set DEPLOY_HOLD --body none -R "$GITHUB_REPOSITORY" \
+              retry gh variable set DEPLOY_HOLD --body none -R "$GITHUB_REPOSITORY" \
                 || { echo "::error::the revert rule's clear of DEPLOY_HOLD failed"; exit 1; }
               echo "DEPLOY_HOLD cleared by the revert rule"
             fi
@@ -943,13 +975,13 @@ jobs:
             else
               hold="$TARGET stateful=unverified"
             fi
-            if ! gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
+            if ! retry gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
               echo "::error::writing DEPLOY_HOLD='$hold' failed, so prod stays on sha-$TARGET untagged and nothing posts"
               exit 1
             fi
             echo "stateful_hold=$hold" >> "$GITHUB_OUTPUT"
             echo "DEPLOY_HOLD set to '$hold': T changes snapshot role(s) $STATEFUL, so prod stays on sha-$TARGET"
-            if ! { login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
             fi
@@ -959,12 +991,12 @@ jobs:
           if [ -n "$NO_RESET" ]; then
             # `held` marks prod's run as settled, so it is tagged only once the hold is
             # written. With no hold, the next run's in-flight wait ends `current` instead.
-            if ! gh variable set DEPLOY_HOLD --body "$TARGET" -R "$GITHUB_REPOSITORY"; then
+            if ! retry gh variable set DEPLOY_HOLD --body "$TARGET" -R "$GITHUB_REPOSITORY"; then
               echo "::error::writing DEPLOY_HOLD='$TARGET' failed, so prod stays on sha-$TARGET untagged"
               exit 1
             fi
             echo "DEPLOY_HOLD set to '$TARGET': T changes forward-only $NO_RESET, so prod stays on sha-$TARGET"
-            if ! { login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
+            if ! { ghcr_login && flux tag artifact "oci://$repo:sha-$TARGET" --tag held; }; then
               echo "::error::tagging sha-$TARGET held failed, so the next run after a clear waits as in flight"
               exit 1
             fi
@@ -977,7 +1009,7 @@ jobs:
             hold="$TARGET unverified"
           fi
           problems=()
-          if gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
+          if retry gh variable set DEPLOY_HOLD --body "$hold" -R "$GITHUB_REPOSITORY"; then
             echo "DEPLOY_HOLD set to '$hold'"
             # The hold names T alone; a T that superseded a run carries that run's change too.
             [ -z "${SUPERSEDES:-}" ] || echo "::warning::sha-$TARGET superseded the verification of $SUPERSEDES, so the failure may be that commit's change"
@@ -1006,9 +1038,9 @@ jobs:
           # would undo that move.
           elif ! owns_prod; then
             :
-          elif login && flux tag artifact "oci://$repo@$RESET_DIGEST" --tag prod; then
+          elif ghcr_login && flux tag artifact "oci://$repo@$RESET_DIGEST" --tag prod; then
             echo "prod reset to $RESET_DIGEST"
-            gh variable set PROD_DIGEST --body "$RESET_DIGEST" -R "$GITHUB_REPOSITORY" \
+            retry gh variable set PROD_DIGEST --body "$RESET_DIGEST" -R "$GITHUB_REPOSITORY" \
               || problems+=("prod moved to $RESET_DIGEST, and recording PROD_DIGEST failed")
           else
             problems+=("resetting prod to $RESET_DIGEST failed, so prod stays on sha-$TARGET")
@@ -1037,10 +1069,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          eval "$RETRY_FUNCTIONS"
           printf '%s' "$TARGET" | grep -Eqx '[0-9a-f]{40}' \
             || { echo "::error::decide's target '$TARGET' is not 40 lowercase hex"; exit 1; }
           # A command substitution, so set -e stops the step when the read fails.
-          green="$(gh api \
+          green="$(retry gh api \
             "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=master&event=push&status=success&per_page=100" \
             --jq '.workflow_runs[].head_sha')"
           newest="${green%%$'\n'*}"
@@ -1058,7 +1091,9 @@ jobs:
             echo "::warning::$TARGET has no green CI run among master's newest 100, so this run cannot tell whether $newest is newer, and dispatches nothing"
             exit 0
           fi
-          gh workflow run promote.yml -R "$GITHUB_REPOSITORY" --ref master -f sha="$newest"
+          # A retry after a 5xx that did create the dispatch starts a second run for the same
+          # commit, which finds `prod` already moved and moves nothing.
+          retry gh workflow run promote.yml -R "$GITHUB_REPOSITORY" --ref master -f sha="$newest"
           echo "dispatched promote for $newest, master's newest green commit, which is newer than $TARGET"
 
   post:
@@ -1198,6 +1233,7 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          eval "$RETRY_FUNCTIONS"
           for digest in "$PROD" "$LAST_GOOD"; do
             printf '%s' "$digest" | grep -Eqx 'sha256:[0-9a-f]{64}' \
               || { echo "::error::reset-check handed on digest '$digest', not sha256:<64 hex>"; exit 1; }
@@ -1228,16 +1264,18 @@ jobs:
             exit 1
           fi
 
-          printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GH_ACTOR" --password-stdin
+          ghcr_login
           flux tag artifact "oci://ghcr.io/$name@$LAST_GOOD" --tag prod
           echo "prod moved from $PROD to last-good $LAST_GOOD"
           echo "moved=true" >> "$GITHUB_OUTPUT"
 
-      # A failed write leaves PROD_DIGEST ahead of prod, which the deploy-pipeline exporter
-      # pages on, as after `tag`'s move.
+      # A write that fails every try leaves PROD_DIGEST ahead of prod, which the deploy-pipeline
+      # exporter pages on, as after `tag`'s move.
       - name: Record prod's digest
         if: ${{ steps.move.outputs.moved == 'true' }}
         env:
           DIGEST: ${{ needs.reset-check.outputs.last_good }}
           GH_TOKEN: ${{ secrets.PROMOTE_TOKEN }}
-        run: gh variable set PROD_DIGEST --body "$DIGEST" -R "$GITHUB_REPOSITORY"
+        run: |
+          eval "$RETRY_FUNCTIONS"
+          retry gh variable set PROD_DIGEST --body "$DIGEST" -R "$GITHUB_REPOSITORY"
