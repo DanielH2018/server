@@ -188,13 +188,10 @@ def test_an_alert_activated_long_after_prometheus_start_is_not_called_age_unknow
 
 # --- The flux reference ------------------------------------------------------------------
 
-# peanut's release record froze at its last Ansible apply, a month before APPLIED.
-_MONTH_OLD = "2026-09-16T00:00:00Z"
-
 
 def test_a_flux_tag_alert_before_its_kustomization_revision_is_clean():
     fake = FakeProm(flux_first_report=APPLIED)
-    reference = health_alerts.alert_reference("peanut", "flux", _MONTH_OLD, fake.query)
+    reference = health_alerts.alert_reference("peanut", "flux", fake.query)
     assert reference == APPLIED
     fake.series = alert(APPLIED - 60, service="peanut") + START
     gate = health_alerts.gate("peanut", reference, APPLIED, False, fake.tools())
@@ -203,7 +200,7 @@ def test_a_flux_tag_alert_before_its_kustomization_revision_is_clean():
 
 def test_a_flux_tag_alert_after_its_kustomization_revision_is_flagged():
     fake = FakeProm(flux_first_report=APPLIED)
-    reference = health_alerts.alert_reference("peanut", "flux", _MONTH_OLD, fake.query)
+    reference = health_alerts.alert_reference("peanut", "flux", fake.query)
     fake.series = alert(APPLIED + 60, service="peanut") + START
     gate = health_alerts.gate("peanut", reference, APPLIED, False, fake.tools())
     assert gate[0] == 1
@@ -232,9 +229,8 @@ def test_a_flux_reference_without_a_series_is_none():
     assert health_alerts.flux_reference("peanut", fake.query) is None
 
 
-def test_an_ansible_tag_reference_is_its_applied_at():
-    reference = health_alerts.alert_reference(TAG, None, _MONTH_OLD, FakeProm().query)
-    assert reference == health_alerts.epoch(_MONTH_OLD)
+def test_a_tag_flux_does_not_own_has_no_reference():
+    assert health_alerts.alert_reference(TAG, None, FakeProm().query) is None
 
 
 # --- Probes ------------------------------------------------------------------------------
@@ -460,7 +456,7 @@ def test_a_failed_rollout_does_not_read_the_alert_plane(tmp_path, capsys):
 def test_with_no_reference_the_probe_reference_is_now():
     fake = FakeProm(probe(1, APPLIED + 10))
     code, lines = health_alerts.check(
-        TAG, None, None, None, {"name": TAG, "hostname": "www"}, fake.tools()
+        TAG, None, None, {"name": TAG, "hostname": "www"}, fake.tools()
     )
     assert code == 1
     assert any("reported no sample after" in line for line in lines)

@@ -1,8 +1,7 @@
 """`probe.py flux [tag...]` — each Flux Kustomization's Ready, applied commit and suspension.
 
 Sessions read this by hand with `kubectl get kustomization` about ten times a day (#6322),
-because `health <tag>` reads a Kustomization only to gate a CronJob and `releases` shows the
-render commit rather than what Flux applied.
+because `health <tag>` reads a Kustomization only to gate a CronJob.
 
 One kubectl read lists every Kustomization and OCIRepository in `flux-system`. Each row prints:
 

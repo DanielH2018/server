@@ -6,7 +6,7 @@ Re-sliced on 2026-10-17 at the operator's request: 18 steps became 9 PRs. One of
 R4.6, runs only if R4.1 finds the revert runbook without its own entry (*Steps, as PRs*).
 
 Depends on: D6, narrowed per PR on 2026-10-17. R4.1 waits on D6.12 and on D5's tail, R4.5
-also on D6.18, and R4.7 on the whole of D6 (*Steps, as PRs*, *The edge to D6, narrowed*).
+also on D6.18a, and R4.7 on the whole of D6 (*Steps, as PRs*, *The edge to D6, narrowed*).
 
 Related issues: [#4527](https://github.com/DanielH2018/server/issues/4527), which proposes a
 shared `_as_filter` helper for the filter plugins. No symbol of that name exists at
@@ -1035,7 +1035,7 @@ later. The measurements a description quotes are always taken at the PR's own me
 | R4.2 Render metadata moves to role defaults | 2, 3a to 3d | Partly. The readers, and the key moves of roles already flux-owned. Every other role's moves wait for its D5 flip. | R4.1, and its context in the live ruleset |
 | R4.3 The renderer reads no task file | 4, 5 | Yes, rebasing on R4.2 | R4.2 |
 | R4.4 The renderer becomes the reference | 7c, 7d, 7e | Yes. 7e needs no workflow edit, because R4.1 put the verdict in `render_diff_job.py`. | R4.1, and its context in the live ruleset |
-| R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.18 | R4.3, D6.18 |
+| R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.18a | R4.3, D6.18a |
 | R4.6 A standalone revert entry, conditional | 7a | Expected skipped | R4.1's record of the entry point |
 | R4.7 Delete the k8s play and the manifests role | 7b, 8 | Partly. The runbook-resolution test and the glance marker; the deletion after D6 | R4.4, R4.5, R4.6 if it runs, and the whole of D6 |
 | R4.8 Retire the comparison and reimplement the filters | 9, 10 | Yes, rebasing on R4.7 | R4.7, and C1's stub-mode amendment (Open question 9) |
@@ -1054,9 +1054,8 @@ R4 still depends on D6, but only R4.7 waits on the whole slice.
 - **R4.2, R4.3 and R4.4 wait on no D6 PR.** They change how the renderer reads the tree, and
   they touch no code that D6 deletes. D6.13 also edits `scripts/lib/k8s_roles.py`, which
   makes a rebase, not an edge.
-- **R4.5 waits on D6.18, reach and narrowing.** D6.18 (old D6.4) deletes `shared_role_callers.py`, which
-  calls `render_targets.py`. D6.18 (old D6.4) merges after D6.18 (old D6.5b), which deletes `releases_render.py`, a
-  reader of the render records. D6.12 deletes `deploy_release.py`, the other deployer reader,
+- **R4.5 waits on D6.18a.** D6.18a deletes `shared_role_callers.py`, which calls
+  `render_targets.py`, and `releases_render.py`, a reader of the render records. D6.12 deletes `deploy_release.py`, the other deployer reader,
   and edits `deploy_narrow.py`, the last other caller of `render_targets.py`.
 - **R4.7 waits on the whole of D6.** The play's `k8s_retired_services` teardown has no job
   left only once D6.20's deletion policy is live (D6, *The deletion policy*). D6.15 deletes the

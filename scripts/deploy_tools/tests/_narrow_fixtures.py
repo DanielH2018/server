@@ -1,14 +1,12 @@
-"""The throwaway checkout the `narrow_broad` rule tests drive, shared by three suites.
+"""The throwaway checkout the `narrow_broad` rule tests drive, shared by two suites.
 
-`test_deploy_tags_narrow.py` (the rules), `test_deploy_tags_narrow_cmd.py` (the command
-wrapper) and `test_shared_role_reach.py` (the shared-role reach question, which builds its
-own tree from `Tree` rather than from `build_tree`) all need a repo with the shape the rules read -- a `containers_list`, two
+`test_deploy_tags_narrow.py` (the rules) and `test_deploy_tags_narrow_cmd.py` (the command
+wrapper) both need a repo with the shape the rules read -- a `containers_list`, two
 `group_vars` keys with different consumer spreads, a shared macro with one importer, and a
 play-level file -- with every `GIT_*` variable stripped from the git calls that build it.
 Under a prek hook `GIT_DIR`/`GIT_INDEX_FILE` are exported and `cwd` loses, so an unscrubbed
-fixture writes the REAL repository's config. Same split as `_release_fixtures.py` beside
-`test_probe_releases_stale.py`, and imported by bare name for the same reason: pytest puts
-a test's own directory on `sys.path`.
+fixture writes the REAL repository's config. Imported by bare name: pytest puts a test's own
+directory on `sys.path`.
 """
 
 from pathlib import Path

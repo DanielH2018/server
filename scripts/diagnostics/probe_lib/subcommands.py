@@ -50,7 +50,6 @@ from diagnostics.probe_lib.monitors import run_monitors
 from diagnostics.probe_lib.pi_plane import run_pi_containers, run_pi_targets
 from diagnostics.probe_lib.push_rules import run_push_rules
 from diagnostics.probe_lib.readonly_rbac import run_readonly_rbac
-from diagnostics.probe_lib.releases import run_releases
 from diagnostics.probe_lib.shed_set import run_shed_set
 from diagnostics.probe_lib.takeover import run_takeover
 from diagnostics.probe_lib.vip_placement import run_vip_placement
@@ -159,12 +158,6 @@ SUBCOMMANDS = [
     ("arr", "read-only *arr API GET (key from SOPS, fed via stdin)", "arr", run_arr),
     ("ha", "Home Assistant live state (read-only, GET)", "ha", run_ha),
     ("ha-state", "live view of the derived HA state model", "ha", run_ha_state),
-    (
-        "releases",
-        "which commit produced each k8s service's applied manifests",
-        "releases",
-        run_releases,
-    ),
     (
         "landing",
         "what would stop a landing now, the runs in flight and the worktrees with their "

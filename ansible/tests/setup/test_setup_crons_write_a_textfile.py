@@ -148,7 +148,7 @@ def writes_a_textfile(command: str, role: Path, sources: dict[str, Path]) -> boo
 
     The file it runs is the one a task installs at a path the command names, or, for an
     install a loop or a shared include writes, the role file whose name matches the basename
-    of a path in the command (`live_drift_check.py` for `/usr/local/bin/live-drift-check.py`).
+    of a path in the command.
     """
     texts = [_with_imports(command, role)]
     texts += [src.read_text() for dest, src in sources.items() if dest in command]

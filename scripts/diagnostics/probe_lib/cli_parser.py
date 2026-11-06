@@ -441,52 +441,6 @@ def _build_parser():
     )
     hst = sub.add_parser("ha-state", help="live view of the derived state model")
     _flag(hst, "--inventory", "also dump every live entity grouped by domain")
-    rel = sub.add_parser(
-        "releases",
-        help="which commit produced each k8s service's applied manifests",
-    )
-    rel.add_argument(
-        "service",
-        nargs="?",
-        help="show the full record for one service instead of the table",
-    )
-    _flag(rel, "--previous", "read the record kept from before the last deploy")
-    _flag(rel, "--json", "raw records, unformatted")
-    rel.add_argument(
-        "--stale-only",
-        action="store_true",
-        help=(
-            "one line per service whose role paths moved past its applied commit, or with no "
-            "record at all; exit 1 if any (for a cron -- see issue #947)"
-        ),
-    )
-    rel.add_argument(
-        "--kuma",
-        action="store_true",
-        help=(
-            "with --stale-only: the same verdict as ONE line grouped by reason, shaped for a "
-            "Kuma push message (bridge.msgfmt); release-staleness-check.sh pushes this"
-        ),
-    )
-    rel.add_argument(
-        "--grace-minutes",
-        type=int,
-        default=0,
-        metavar="N",
-        help=(
-            "with --stale-only: a service whose newest offending commit reached origin/master "
-            "less than N minutes ago is named but not counted stale, so a merge gets its "
-            "landing's deploy window before the monitor pages (default 0: no grace)"
-        ),
-    )
-    rel.add_argument(
-        "--names-out",
-        metavar="PATH",
-        help=(
-            "with --stale-only: also write the services the verdict counts, sorted, one per "
-            "line, to PATH; release-staleness-check.sh re-alerts when that set changes (#2378)"
-        ),
-    )
     landing = sub.add_parser(
         "landing",
         **_verdict_help(

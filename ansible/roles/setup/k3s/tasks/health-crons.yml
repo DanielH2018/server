@@ -181,7 +181,7 @@
 # roles/setup/common/tasks/release_bin.yml. Each script lands in
 # /opt/homelab/releases/k3s-backup-health/<sha>/ and /usr/local/bin/<name> becomes a symlink
 # through /opt/homelab/current/k3s-backup-health, so a cron's provenance is readable
-# (`probe.py releases` for the k8s plane, `readlink -f` here) and a rollback is one symlink
+# (`readlink -f` here) and a rollback is one symlink
 # swing rather than a git revert plus a redeploy. The crons below are unchanged: they still
 # invoke /usr/local/bin/<name>, and setup-drift-lib.sh's `cmp` reads through the symlink.
 #
@@ -398,103 +398,6 @@
     user: "{{ sys_user }}"
     job: "/usr/local/bin/disk-health.sh 2>&1 | logger -t disk-health"
     cron_file: disk-health
-  become: true
-
-# The three drift checks are disarmed, and their code stays in the tree until the next deletion.
-# Nothing removes a file the role stops declaring, so these arms retire the host copies. Each
-# unit stops before the arm that removes the files it runs, and a .prom file goes with its check:
-# left behind, it reads as an overdue check to HostCheckOverdue. Flux owns what replaces them, and
-# setup-drift-check.sh reads the host-plane stamps that manifest-prune-check also read.
-- name: Disarm the manifest-prune drift check
-  tags: [manifest-prune]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
-  vars:
-    check_timer_state: absent
-    check_timer_name: manifest-prune
-    check_timer_description: Manifest prune drift check (textfile verdict)
-    check_timer_user: root
-    check_timer_on_calendar: "*-*-* {{ '%02d' | format(k3s_manifest_prune_cron_hour | int) }}:{{ '%02d' | format(k3s_manifest_prune_cron_minute | int) }}:00"
-    check_timer_restart_sec: 30min
-    check_timer_cron_name: "Manifest prune drift check"
-    check_timer_cron_file: manifest-prune-check
-
-- name: Retire the manifest-prune drift check's host files
-  tags: [manifest-prune]
-  # Links before the release they point through, so no path dangles.
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/local/bin/manifest-prune-check.sh
-    - /usr/local/bin/manifest-declares.py
-    - /opt/homelab/current/k3s-manifest-prune
-    - /opt/homelab/releases/k3s-manifest-prune
-    - /var/lib/homelab/setup-render-manifest.d/k3s-manifest-prune
-    - /var/lib/homelab/setup-deployed-manifest.d/k3s-manifest-declares
-    - /var/lib/node-exporter-textfile/manifest-prune-check.prom
-  become: true
-
-- name: Disarm the release-staleness drift check
-  tags: [release-staleness]
-  ansible.builtin.cron:
-    name: "Release staleness drift check"
-    user: "{{ sys_user }}"
-    cron_file: release-staleness-check
-    state: absent
-  become: true
-
-- name: Retire the release-staleness drift check's host files
-  tags: [release-staleness]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/local/bin/release-staleness-check.sh
-    - /opt/homelab/current/k3s-release-staleness
-    - /opt/homelab/releases/k3s-release-staleness
-    - /var/lib/homelab/release-staleness
-    - /var/lib/homelab/setup-render-manifest.d/k3s-release-staleness
-    - /var/lib/node-exporter-textfile/release-staleness-check.prom
-  become: true
-
-- name: Disarm the live-object drift check
-  tags: [live-drift]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/check_timer.yml"
-  vars:
-    check_timer_state: absent
-    check_timer_name: live-drift
-    check_timer_description: Live object drift check (textfile verdict)
-    check_timer_user: "{{ sys_user }}"
-    check_timer_environment:
-      - "KUBECONFIG=/home/{{ sys_user }}/.kube/config"
-      - "BOOT_GRACE_S={{ k3s_health_cron_boot_grace_s }}"
-      - "DEADLINE_S={{ k3s_daily_check_deadline_s }}"
-    check_timer_on_calendar: "*-*-* {{ '%02d' | format(k3s_live_drift_cron_hour | int) }}:{{ '%02d' | format(k3s_live_drift_cron_minute | int) }}:00"
-    check_timer_restart_sec: 30min
-    check_timer_cron_name: "Live object drift check"
-    check_timer_cron_file: live-drift-check
-
-# M6 batch B1's Cutover-2 stopped the live-drift check from reading its push token and host, so
-# this retires the host copy of the file that held them.
-- name: Retire the live-drift check Kuma credentials
-  tags: [live-drift]
-  ansible.builtin.file:
-    path: /etc/rancher/k3s/live-drift-check.env
-    state: absent
-  become: true
-
-- name: Retire the live-object drift check's host files
-  tags: [live-drift]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/local/bin/live-drift-check.py
-    - /opt/homelab/current/k3s-live-drift
-    - /opt/homelab/releases/k3s-live-drift
-    - /opt/live-drift-check
-    - /var/lib/homelab/setup-deployed-manifest.d/k3s-live-drift
-    - /var/lib/node-exporter-textfile/live-drift-check.prom
   become: true
 
 - name: Deploy the etcd restore credentials

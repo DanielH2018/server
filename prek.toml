@@ -681,8 +681,8 @@ files = "^((scripts|ansible/roles|\\.claude/hooks|evals)/(.*/)?((test_[^/]*|conf
 # reads prek.toml itself.
 [[repos.hooks]]
 id = "static-ratchet-tests-python"
-name = "Static ratchet tests over the tracked Python (import direction, exit codes, prek files, hazards, probe health)"
-entry = "uv run --frozen pytest -q -n 4 -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py ansible/tests/repo/test_tracked_python_hazards.py scripts/diagnostics/tests/test_probe_health_rolled.py"
+name = "Static ratchet tests over the tracked Python (import direction, exit codes, prek files, hazards)"
+entry = "uv run --frozen pytest -q -n 4 -p no:cacheprovider scripts/tests/test_scripts_import_direction.py scripts/lib/tests/test_exit_codes.py scripts/tests/test_prek_files_cover_entry_imports.py ansible/tests/repo/test_tracked_python_hazards.py"
 language = "system"
 pass_filenames = false
 files = "(\\.py$|^scripts/.*\\.sh$|^(prek\\.toml|pyproject\\.toml|uv\\.lock)$)"

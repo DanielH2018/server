@@ -15,7 +15,6 @@ import pytest
 
 from _deploy_sh_fakes import scrub_process_git_env
 from _narrow_fixtures import DECLARED, Tree, _refs, build_tree
-from deploy_tools import shared_role_callers
 from deploy_tools.land_lib import classify
 from deploy_tools.narrow_lib import broad as narrow_broad
 from lib import k8s_role_callers
@@ -23,12 +22,6 @@ from lib.narrow_git import CannotNarrow
 
 INCLUDE = "- ansible.builtin.include_role:\n    name: k8s/helper\n"
 HELPER_TEMPLATE = "ansible/roles/k8s/helper/templates/thing.yaml.j2"
-
-UNLOADABLE = pytest.mark.parametrize(
-    "broken",
-    ["- [unclosed\n", "- &x {block: [*x]}\n"],
-    ids=["syntax", "recursive-alias"],
-)
 
 
 def _write_callers(root: Path, clean: str, dropped: str, broken: str) -> None:
@@ -59,17 +52,6 @@ def test_the_broad_narrowing_refuses_or_names_the_dropped_caller(tree: Tree):
     except narrow_broad.CannotNarrow:
         return
     assert "radarr" in tags, f"narrowed to {sorted(tags)}, which misses radarr"
-
-
-@UNLOADABLE
-def test_the_owned_only_split_refuses_naming_the_file_with_no_traceback(
-    tree: Tree, capsys, broken
-):
-    _write_callers(tree.root, "sonarr", "radarr", broken)
-    tree.commit("radarr's include does not load")
-    capsys.readouterr()
-    assert shared_role_callers.main(["helper", "--repo", str(tree.root)]) == 1
-    assert "radarr/tasks/helper.yml does not load" in capsys.readouterr().err
 
 
 def test_the_landing_dies_naming_the_task_file_it_refuses():

@@ -309,10 +309,9 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "staleness.py": "gate",
         "detach_notify.py": "gate",
         "smoke_extract.py": "gate",
-        # "scheduled" rather than "gate": release-staleness-check.sh.j2 (a daniel-box cron,
-        # roles/setup/k3s) invokes `probe.py releases --stale-only`, and "scheduled" outranks
-        # "gate" in _PRECEDENCE. probe.py is still a gate too (deploy.sh, hooks) -- the cron
-        # adds a caller, it doesn't drop one.
+        # "scheduled" rather than "gate": the B2 accounting cron (roles/setup/k3s) invokes
+        # `probe.py b2-deletions`, and "scheduled" outranks "gate" in _PRECEDENCE. probe.py is
+        # still a gate too (deploy.sh, hooks) -- the cron adds a caller, it doesn't drop one.
         "probe.py": "scheduled",
         "docs_provenance.py": "library",
         "core.py": "library",

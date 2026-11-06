@@ -168,31 +168,6 @@ equivalent of the cluster checks above, backed by `probe_lib/pi_plane.py`.
   3.65s–19.3s measured on the live Pi (almost all ssh/exec overhead on a Zero 2 W), rather than
   at `core.py`'s 10s HTTP default.
 
-### `releases [<service>] [--previous] [--json]`
-
-Which commit produced the manifests each k8s service is running. `kubectl` reports what is
-running and git reports what is committed; this joins the two. The join matters because
-`deploy.sh` renders from whatever git tree it is invoked in, so the running manifests and master
-can disagree with every repo-side check still green.
-
-The records come from `roles/k8s/manifests/tasks/release_stamp.yml`, which writes one JSON file
-per service under `/var/lib/homelab/k8s-releases.d/` after every apply. Secret manifests are
-listed by name and never hashed.
-
-Two flags carry the finding, and both are normal mid-slice and alarming a week later:
-
-- **`dirty`** — the deploying tree had uncommitted tracked changes, so no commit reproduces
-  those bytes.
-- **`unmerged`** — the commit is not an ancestor of `origin/master`. A service is running code
-  that never landed.
-
-Exit 0 when every record is clean, 1 when any service carries a flag, 2 when no records exist,
-which does not mean the fleet is clean.
-
-`--previous` reads the record kept from before the last deploy. One step of history, not a log:
-the incident question is "what was live before this deploy," and depth beyond that is what git
-is for, since every record names a commit.
-
 ### `health <svc>`
 
 A k8s post-deploy gate. Its argument is a deploy TAG, not a workload name. It gates the
@@ -205,16 +180,6 @@ restarted in the last 180s. An unreadable restart time counts as recent, so it f
 
 Both halves matter — readiness flips a Deployment to Available before a bad liveness probe starts
 killing it, so a rollout check alone reports green on a crashlooping pod.
-
-A third half tells a workload that rolled from one that was merely healthy (issue #1867). The
-service's release record (see `releases`; `release_stamp.yml` writes it before the restart
-tasks run) lists each workload the apply queued a restart of, decided from the same facts the
-restart tasks read. Every such
-workload must carry a `kubectl.kubernetes.io/restartedAt` newer than the record's `applied_at`,
-or the gate fails it as `NOT ROLLED`. The pods that were already running satisfy the first two
-halves, so without this check a deploy that rolled nothing reads `settled`. The
-predicate is the record, not the clock, on purpose: an idempotent re-run queues no restart and
-stays green, and a standalone `probe.py health` with no record keeps the two-half verdict.
 
 After a passing rollout verdict, the gate reads the alert plane (M6 B-1,
 `scripts/diagnostics/probe_lib/health_alerts.py`). The selector is C7's *Health gate* in
