@@ -25,8 +25,15 @@ WITNESS_SHA = hashlib.sha256((REPO / WITNESS).read_bytes()).hexdigest()
 TEMPLATE = "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2"
 TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
 FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/loki-route-witness"
-SHARED_TEMPLATE = "ansible/roles/setup/common/templates/check-timer.service.j2"
-SHARED_TEMPLATE_SHA = hashlib.sha256((REPO / SHARED_TEMPLATE).read_bytes()).hexdigest()
+DRIFT_FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"
+CHECK_TIMER_TEMPLATES = (
+    "ansible/roles/setup/common/templates/check-timer.service.j2",
+    "ansible/roles/setup/common/templates/check-timer.timer.j2",
+)
+
+
+def _sha(path):
+    return hashlib.sha256((REPO / path).read_bytes()).hexdigest()
 
 
 def _reader(row, reads=None):
@@ -120,12 +127,49 @@ def test_a_missing_render_fragment_keeps_the_host_owed():
     assert "daniel-server" in _note([TEMPLATE], _fragment_reader({"status": "absent"}))
 
 
-def test_a_shared_template_also_rendered_under_another_tag_keeps_the_host_owed():
-    """The current loki fragment says nothing of the `setup_drift` render of the same template."""
-    row = {"status": "ok", "text": f"{SHARED_TEMPLATE} {SHARED_TEMPLATE_SHA}\n"}
-    assert "`initial_setup` also reaches daniel-server" in _note(
-        [SHARED_TEMPLATE], _fragment_reader(row)
-    )
+def _holds_check_timer(template, witness_text, drift_text):
+    """Does `initial_setup` read as held on a host with these two render fragments?
+
+    `holds` over the working tree's roles, because `_note` reads the `ansible/` tree at `ref`, and
+    the `gitops_deploy` line a check-timer change also earns would hide an empty note.
+    """
+    files = {
+        FRAGMENT: {"status": "ok", "text": witness_text},
+        DRIFT_FRAGMENT: {"status": "ok", "text": drift_text},
+    }
+    return DeployedCopies(
+        [template],
+        REPO / "ansible/roles/setup",
+        ref="HEAD",
+        repo=REPO,
+        read_host=lambda plan, host: {"stat": {}, "files": files},
+    ).holds("initial_setup", template, "daniel-server")
+
+
+@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
+def test_a_check_timer_template_both_fragments_show_is_held(template):
+    line = f"{template} {_sha(template)}\n"
+    assert _holds_check_timer(template, line, line)
+
+
+@pytest.mark.parametrize(
+    "witness_line, drift_line",
+    [
+        pytest.param("current", "other", id="the-drift-fragment-is-stale"),
+        pytest.param("other", "current", id="the-witness-fragment-is-stale"),
+        pytest.param("current", "", id="the-drift-fragment-predates-the-listing"),
+    ],
+)
+def test_a_check_timer_template_one_fragment_does_not_show_stays_owed(
+    witness_line, drift_line
+):
+    template = CHECK_TIMER_TEMPLATES[0]
+    lines = {
+        "current": f"{template} {_sha(template)}\n",
+        "other": f"{template} {'0' * 64}\n",
+        "": f"{TEMPLATE} {TEMPLATE_SHA}\n",
+    }
+    assert not _holds_check_timer(template, lines[witness_line], lines[drift_line])
 
 
 def _stamp(*tags):
