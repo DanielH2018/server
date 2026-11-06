@@ -113,12 +113,10 @@ STALE_VERDICT_FILE = "/var/lib/homelab/release-staleness/verdict"
 # Past this age a verdict is a dead cron's, not the fleet's: four of its 30-minute periods.
 STALE_VERDICT_MAX_AGE_S = 2 * 60 * 60
 
-# Shown when the state directory exists but the cron has written no verdict into it. A run
-# writes one every 30 minutes, so the line outlives one run only on a host still owing the apply.
+# Shown when the state directory exists with no verdict in it, on a host owing the disarm's apply.
 _NO_VERDICT_LINE = (
-    "  ⚠ release staleness: the cron has written no verdict file yet; if this persists past "
-    "one 30-minute run, apply `uv run ansible-playbook ansible/k3s-bringup.yml "
-    "--tags release-staleness`"
+    "  ⚠ release staleness: the disarmed check left its state directory here; to remove it, "
+    "apply `uv run ansible-playbook ansible/k3s-bringup.yml --tags release-staleness`"
 )
 
 # Services in a stale-release verdict named on the banner line after "e.g.".
@@ -196,13 +194,13 @@ def stale_release_problems(path=STALE_VERDICT_FILE, now=None):
     `bridge.msgfmt`'s three DOWN shapes. Three branches read it: the headline makes it a
     stale verdict, the `exited N:` prefix makes it the check breaking, and anything else is
     a verdict neither this parser nor the producer agrees on — also shown as broken. That
-    last branch cannot be dropped. The cron maps a probe exit of 1 to `status=down` with
+    last branch cannot be dropped. The script mapped a probe exit of 1 to `status=down` with
     the output unmodified, and an uncaught Python exception exits 1 too, so a traceback and
-    a real stale list reach the file under the same status with no `exited N:` prefix
+    a real stale list reached the file under the same status with no `exited N:` prefix
     between them; the text shape is the only thing that tells them apart.
 
     Args:
-        path: the cron's verdict file (a test passes one under `tmp_path`).
+        path: the disarmed check's verdict file (a test passes one under `tmp_path`).
         now: the current epoch seconds (a test passes a fixed value).
     """
     try:
@@ -210,9 +208,8 @@ def stale_release_problems(path=STALE_VERDICT_FILE, now=None):
         with open(path, encoding="utf-8", errors="replace") as f:
             first = f.readline().rstrip("\n")
     except FileNotFoundError:
-        # The k3s role creates the state directory, so a directory with no verdict in it is a
-        # host whose cron predates the verdict file: the role was not re-applied after #6183.
-        # Said aloud, because a silent banner there reads as a fleet with nothing stale.
+        # The k3s role's absent arm removes the state directory, so a directory with no verdict
+        # in it is a host that has not applied the disarm.
         if os.path.isdir(os.path.dirname(path)):
             return [_NO_VERDICT_LINE]
         return []
