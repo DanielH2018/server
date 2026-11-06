@@ -60,6 +60,7 @@ case "$*" in
     manifest=""; prev=""
     for a in "$@"; do [[ "$prev" == -f ]] && manifest="$a"; prev="$a"; done
     [[ -s "$manifest" ]] || return 1
+    cp "$manifest" "$fixtures/applied.yaml"
     [[ "$K3S_STUB_RESTORE" == pass ]] || return 1 ;;
   *"delete "*)
     [[ -z "${K3S_STUB_DELETE_FAILS:-}" || "$*" != *"$K3S_STUB_DELETE_FAILS"* ]] || return 1 ;;

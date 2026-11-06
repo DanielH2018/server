@@ -368,12 +368,19 @@ URL=$($KUBECTL -n longhorn-system get backuptarget "$TARGET" -o jsonpath='{.spec
 # is not a multiple of the block size, so a mismatch strands the restore on exactly the volumes
 # the rotation added. Every candidate size is a 16 MiB multiple today, so nothing is stranded
 # right now; pinning it means that stays true when a volume of an awkward size joins.
+#
+# DECIDED: the Volume carries the no-backup group from creation, and the sweep deletes no Backup.
+# Longhorn puts a Volume with no job label in `default`, so a leftover would be backed up by the
+# daily tick before the next run's sweep. Deleting that Backup would grant this ServiceAccount
+# delete on the real backups the drill restores from.
 cat >"$MANIFEST" <<YAML
 apiVersion: longhorn.io/v1beta2
 kind: Volume
 metadata:
   name: ${DRILL}
   namespace: longhorn-system
+  labels:
+    {{ 'label_prefix' | longhorn_backup_name }}{{ 'no_backup_group' | longhorn_backup_name }}: enabled
 spec:
   frontend: blockdev
   backupTargetName: ${TARGET}
