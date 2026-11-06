@@ -26,10 +26,24 @@ from jinja2.runtime import Context
 from lib.ansible_jinja_env import template_env
 from lib.k8s_yaml import make_lookup
 from lib.render_guard import StrictChainableUndefined, pad_to_source_newlines
+from renderer.renderer_lib.dialect import FILTERS, LOOKUPS, TESTS
 
 
 class RenderError(RuntimeError):
     """A template that failed to render; nothing has been written."""
+
+
+def strict_env(templates: Path) -> jinja2.Environment:
+    """The strict environment over `templates`, then the shared directory, with every filter.
+
+    Host and package modes render host components here. Unlike the render guards' environment,
+    it drops a template's last newline, as ansible-core's `AnsibleEnvironment` does, and
+    `render_file` adds back what the template module adds back. So an `{% include %}` loses
+    its last newline, as it does under Ansible.
+    """
+    env = template_env(templates, undefined_cls=StrictChainableUndefined)
+    env.keep_trailing_newline = False
+    return env
 
 
 def renderer_env(templates: Path, ctx: dict | None = None) -> jinja2.Environment:
@@ -39,12 +53,12 @@ def renderer_env(templates: Path, ctx: dict | None = None) -> jinja2.Environment
     environment, so a filter or test the renderer lacks fails there before a render meets it.
     With `ctx`, the environment's `lookup` reads files and renders templates against it.
 
-    Unlike the render guards' environment, it drops a template's last newline, as
-    ansible-core's `AnsibleEnvironment` does, and `render_file` adds back what the template
-    module adds back. So an `{% include %}` loses its last newline, as it does under Ansible.
+    It holds only the filters and tests in `dialect`, so a template that uses any other fails
+    when it compiles, with Jinja's error naming the construct.
     """
-    env = template_env(templates, undefined_cls=StrictChainableUndefined)
-    env.keep_trailing_newline = False
+    env = strict_env(templates)
+    env.filters = {name: env.filters[name] for name in FILTERS}
+    env.tests = {name: env.tests[name] for name in TESTS}
     if ctx is not None:
         env.globals["lookup"] = _template_lookup(env, ctx)
     return env
@@ -73,6 +87,10 @@ def _template_lookup(env: jinja2.Environment, ctx: dict):
     @pass_context
     def lookup(context: Context, kind: str, *args, **kwargs) -> object:
         kind = kind.removeprefix("ansible.builtin.")
+        if kind not in LOOKUPS:
+            raise jinja2.TemplateRuntimeError(
+                f"lookup {kind!r} is not in the renderer's dialect"
+            )
         if kind != "template":
             return base(context, kind, *args, **kwargs)
         # Not rstripped: ansible-core's lookup pads a render's trailing newlines as the
@@ -113,9 +131,8 @@ def evaluate(env: jinja2.Environment, expression: str, variables: dict) -> objec
     dict stays a dict. Any other value renders to a string.
     """
     inner = expression[2:-2]
-    # Jinja warns on a string literal holding an escape Python does not know, such as a regex
-    # passed to `regex_replace`. Ansible parses it with the same lexer and only prints that
-    # warning.
+    # Jinja warns on a string literal holding an escape Python does not know, such as a regex.
+    # Ansible parses it with the same lexer and only prints that warning.
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore", ".*invalid escape sequence", DeprecationWarning

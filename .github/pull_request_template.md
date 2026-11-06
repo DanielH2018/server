@@ -27,8 +27,9 @@ The `render-diff` job compares this PR's render with its merge base's, and reads
 the start of a line in this body. The line is mandatory when the PR touches
 `ansible/roles/k8s/*/tasks/`, deletes anything under `ansible/roles/k8s/`, or touches
 `scripts/renderer/`, `scripts/lib/k8s_roles.py`, `scripts/lib/ansible_jinja_env.py` or
-`ansible/filter_plugins/`. Without it those PRs fail. Elsewhere it is optional, and it binds
-when present. Write one of these two forms below this comment, on a line of its own:
+`ansible/filter_plugins/`, or moves a `uv.lock` or `pyproject.toml` entry of a renderer
+dependency, such as Jinja2 or MarkupSafe. Without it those PRs fail. Elsewhere it is optional,
+and it binds when present. Write one of these two forms below this comment, on a line of its own:
 
     Render-diff: none
     Render-diff: flux/x.yaml, cluster/x/y.yaml

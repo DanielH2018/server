@@ -52,6 +52,7 @@ from deploy_tools.render_targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.ansible_jinja_env import ansible_bool
+from lib.estate import REPO_INVENTORY, Inventory
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
     MANIFESTS_PRUNE_DEFAULT,
@@ -302,10 +303,14 @@ def _sources(
 
 
 def tag_context(
-    role_dir: Path, tag: str, overrides: dict, host: str = K8S_HOST
+    role_dir: Path,
+    tag: str,
+    overrides: dict,
+    host: str = K8S_HOST,
+    inventory: Inventory = REPO_INVENTORY,
 ) -> dict:
     """`play_context` with `container_item`, the k8s play's loop variable, set to `tag`'s entry."""
-    ctx = play_context(role_dir, overrides, host)
+    ctx = play_context(role_dir, overrides, host, inventory)
     ctx["container_item"] = next(e for e in ctx["containers_list"] if e["name"] == tag)
     return ctx
 
@@ -316,6 +321,7 @@ def role_context(
     host: str = K8S_HOST,
     built: dict[str, str] | None = None,
     roles: Path = K8S_ROLES,
+    inventory: Inventory = REPO_INVENTORY,
 ) -> tuple[dict, dict]:
     """The variables `tag`'s templates render with, and the include vars that decide its files.
 
@@ -326,6 +332,7 @@ def role_context(
         built: The images `tag`'s role builds, each mapped to its content tag. None computes
             them here.
         roles: The role tree `tag`'s role is read from.
+        inventory: Where the inventory files live.
 
     Returns:
         The context, then the resolved `INCLUDE_KEYS` of the role's `k8s/manifests` include.
@@ -335,13 +342,13 @@ def role_context(
     """
     role_dir = roles / tag
     try:
-        ctx = tag_context(role_dir, tag, stubs, host)
+        ctx = tag_context(role_dir, tag, stubs, host, inventory)
         # A role default can read a fact a task sets, as every `*_k8s_image` built here reads
         # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
         # go in as the overrides of a second pass, as `set_fact` outranks every file layer.
         # The stub file's extra vars outrank them in turn.
         facts = derived_facts(role_dir, ctx, built)
-        ctx = tag_context(role_dir, tag, {**facts, **stubs}, host)
+        ctx = tag_context(role_dir, tag, {**facts, **stubs}, host, inventory)
     except (ValueError, jinja2.TemplateError, AnsibleError) as exc:
         raise RenderError(f"{tag}: {exc}") from exc
     try:
@@ -365,6 +372,7 @@ def render_tag(
     host: str = K8S_HOST,
     built: dict[str, str] | None = None,
     roles: Path = K8S_ROLES,
+    inventory: Inventory = REPO_INVENTORY,
 ) -> RenderedTag:
     """Render every file the manifests role writes for `tag`, with a `kustomization.yaml` each.
 
@@ -378,13 +386,14 @@ def render_tag(
         built: The images `tag`'s role builds, each mapped to its content tag, as the
             caller computed them for `DIR/images/tags.json`. None computes them here.
         roles: The role tree `tag`'s role is read from; a test passes a fixture copy.
+        inventory: Where the inventory files live; a test passes a fixture's.
 
     Raises:
         RenderError: A template fails to render, a strict undefined among the causes, or a
             listed basename has no template.
     """
     role_dir = roles / tag
-    ctx, include = role_context(tag, stubs, host, built, roles)
+    ctx, include = role_context(tag, stubs, host, built, roles, inventory)
     entry = ctx["container_item"]
     refusal = sync_suspend_refusal(tag, ansible_bool(ctx.get(SYNC_SUSPEND_KEY, False)))
     if refusal:

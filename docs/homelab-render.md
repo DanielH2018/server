@@ -252,6 +252,19 @@ guard that sets a value the inventory does not hold. A top-level template out of
 lists, such as pihole's macro file, is in neither walk. A guard that reads one names it in its
 own fallback table.
 
+## The Jinja dialect the renderer accepts
+
+[ADR-0028](adr/0028-the-renderer-supports-a-closed-jinja-subset.md) specifies the Jinja subset
+the cluster render accepts: every filter, test and lookup, and the variable semantics.
+`scripts/renderer/renderer_lib/dialect.py` holds the three literal sets. `renderer_env` holds
+only those filters and tests and refuses any other lookup, so a template off the list fails the
+render with an error naming the construct. To add a construct, add it to the literal, the ADR's
+table and a case in `scripts/renderer/tests/_dialect_cases.py`, in one PR.
+
+`scripts/renderer/tests/test_renderer_dialect.py` compares each construct with its literal, and
+holds every template and variable value of the k8s roles to the list. Host and package modes
+render through `strict_env`, which the subset does not bind.
+
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
 `ansible/templates/`. It fails when a filter or test name does not resolve in the environment
 the renderer renders with.
@@ -952,6 +965,14 @@ comment does not count.
 `scripts/lib/ansible_jinja_env.py` or `ansible/filter_plugins/`, or deletes a file under
 `ansible/roles/k8s/`. On any other PR with no line, the job prints the difference and passes,
 because most PRs change render output on purpose.
+
+**A renderer dependency bump needs the line too.** The job reads the closure of
+`scripts/validate/render_diff_job.py:RENDERER_DEPENDENCIES` from `uv.lock`, and compares each
+entry between the merge base and the head, with its `pyproject.toml` requirement. A moved entry
+makes the line mandatory, so Renovate cannot automerge a bump that changes the render. A bump
+of any other package needs no line. A census test,
+`scripts/renderer/tests/test_renderer_dependency_pins.py`, holds the literal to the third-party
+modules the renderer imports.
 
 **Both trees must clear a floor.** `flux/pihole.yaml`, `flux/traefik.yaml` and
 `cluster/pihole-deferred/` must exist, and `flux/` must hold at least `FLUX_FLOOR` files. A PR
