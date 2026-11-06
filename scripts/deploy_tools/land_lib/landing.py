@@ -178,10 +178,8 @@ class Landing:
     # -- ending the landing -------------------------------------------------------------
 
     def warn(self, text: str) -> None:
-        """Report a failure that leaves the verdict alone: a `== ` line now, the verdict's detail later.
-
-        One line, because `handoff._relay` filters by line and `verdict_in` reads only one.
-        """
+        """Report a failure that keeps the verdict: a `== ` line now, the verdict's detail later."""
+        # One line, because `handoff._relay` filters by line and `verdict_in` reads only one.
         line = " ".join(text.split())
         print(f"== {line}", flush=True)
         self.warnings.append(line)

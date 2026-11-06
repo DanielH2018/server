@@ -1,21 +1,18 @@
 """Close an issue a merged PR names in `closingIssuesReferences` when GitHub left it open.
 
-PR #7295 merged with GitHub listing #7291 as a closing reference, and #7291's timeline has no
-`closed` event. The open issue stayed on the backlog, and two orchestrator waves dispatched
-work master already held (#7397). The cause is unknown, so the landing checks the result rather
-than the trigger.
+GitHub listed #7291 as a closing reference of PR #7295 and never closed it, so two orchestrator
+waves dispatched work master already held (#7397). The cause is unknown, so the landing checks
+the result rather than the trigger.
 
-`close_stranded` runs in step 1, straight after the merge commit resolves. A later step can crash,
-or wait for hours while `findings.py next` still offers the issue, and a docs-only PR ends inside
-step 1. It is best-effort: a failed read or close changes neither the verdict token nor the exit
-code, which report the deploy. The failure goes on `Landing.warnings`, which `pipeline.run` appends
-to the `VERDICT:` line's detail. That line is all `cc-wait land` prints once a landing ends, and
-all it takes back from a lander unit, whose `== ` lines the next phase header displaces.
+`close_stranded` runs in step 1: a later step can crash or wait for hours while `findings.py next`
+offers the issue, and a docs-only PR ends there. A failed read or close changes neither the verdict
+token nor the exit code, which report the deploy. It goes on `Landing.warnings`, because the
+`VERDICT:` line is all `cc-wait land` prints once a landing ends, through a lander unit too.
 
 GitHub closes the issues a moment after the merge, so an open reference is read again after
-`GRACE_S` before the landing closes it. An issue reopened after the merge stays open, because
-someone chose that and a landing can be re-run days later. An issue in another repo also stays
-open, because `gh issue close <n>` would close this repo's issue of the same number.
+`GRACE_S`. An issue reopened after the merge stays open, because someone chose that and a landing
+can be re-run days later. An issue in another repo stays open, because `gh issue close <n>` would
+close this repo's issue of the same number.
 """
 
 import sys as _sys
@@ -37,9 +34,7 @@ query($owner: String!, $repo: String!, $pr: Int!) {
       mergedAt
       closingIssuesReferences(first: 50) {
         nodes {
-          number
-          state
-          repository { nameWithOwner }
+          number state repository { nameWithOwner }
           timelineItems(itemTypes: [REOPENED_EVENT], last: 1) {
             nodes { ... on ReopenedEvent { createdAt } }
           }
@@ -54,35 +49,19 @@ _FLATTEN = """.data.repository | {
   repo: .nameWithOwner,
   mergedAt: .pullRequest.mergedAt,
   issues: [.pullRequest.closingIssuesReferences.nodes[] | {
-    number,
-    state,
-    repo: .repository.nameWithOwner,
-    reopenedAt: .timelineItems.nodes[0].createdAt
+    number, state, repo: .repository.nameWithOwner, reopenedAt: .timelineItems.nodes[0].createdAt
   }]
 }"""
 
 
 def _read_refs(ln: Landing) -> JsonObject:
     """The PR's repo and merge time, and each closing reference's state, in `_FLATTEN`'s shape."""
-
-    def call() -> JsonObject:
-        got = ln.tools.gh_json(
-            "api",
-            "graphql",
-            "-f",
-            f"query={_QUERY}",
-            "-F",
-            "owner={owner}",
-            "-F",
-            "repo={repo}",
-            "-F",
-            f"pr={ln.opts.pr}",
-            "--jq",
-            _FLATTEN,
-        )
-        return as_object(got, "gh api graphql closing references")
-
-    return gh_read.read(call, ln.tools.sleep, "gh api graphql closing references")
+    label = "gh api graphql closing references"
+    fields = ("-F", "owner={owner}", "-F", "repo={repo}", "-F", f"pr={ln.opts.pr}")
+    args = ("api", "graphql", "-f", f"query={_QUERY}", *fields, "--jq", _FLATTEN)
+    return gh_read.read(
+        lambda: as_object(ln.tools.gh_json(*args), label), ln.tools.sleep, label
+    )
 
 
 def _stranded(refs: JsonObject) -> list[JsonObject]:
@@ -132,10 +111,7 @@ def close_stranded(ln: Landing) -> None:
 
 
 def _close(ln: Landing, number: str) -> None:
-    """Close issue `number`, retried through a transient failure.
-
-    A retry is safe: `gh issue close` on a closed issue exits 0 and posts no comment.
-    """
+    """Close issue `number`, retried: `gh issue close` on a closed issue exits 0 and posts nothing."""
     comment = (
         f"Fixed by PR #{ln.opts.pr}. GitHub left this issue open after the merge, "
         "so the landing closed it."
