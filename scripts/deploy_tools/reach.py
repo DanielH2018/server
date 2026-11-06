@@ -131,11 +131,11 @@ class Reach(NamedTuple):
     def touched(self, repo: Path | str = REPO) -> set[str]:
         """Every role whose rendered output a loud path could change.
 
-        The `ChangeSet`'s k8s roles, plus each role importing a changed `files/*.py` another
+        The `ChangeSet`'s k8s roles (`flux`), plus each role importing a changed `files/*.py` another
         role owns. Wider than `tags` by design: being behind on an import consumer still
         renders an old file.
         """
-        return self.changes.k8s | shared_module_consumers(self.loud, repo)
+        return self.changes.flux | shared_module_consumers(self.loud, repo)
 
 
 def reach(paths, quiet=()) -> Reach:

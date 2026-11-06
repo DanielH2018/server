@@ -19,7 +19,6 @@ from deployer_lib.deploy_alert_text import (
 )
 from deployer_lib.deploy_remediation import (
     broad_remediation,
-    k8s_remediation,
     manual_plane_remediation,
 )
 
@@ -101,14 +100,6 @@ def test_every_broad_remediation_form_runs_through_the_pinned_env():
     assert f"`{PINNED} ansible/initial_setup.yml --tags <role>`" in forms["placeholder"]
     assert f"`{PINNED} ansible/bootstrap.yml`" in forms["bring-up playbook"]
     assert {name: _bare(text) for name, text in forms.items() if _bare(text)} == {}
-
-
-def test_the_k8s_redeploy_runs_through_the_pinned_env():
-    scoped = k8s_remediation({"sonarr"}, {"sonarr"})
-    full = k8s_remediation({"manifests", "sonarr"}, {"sonarr"})
-    assert f"`{PINNED} ansible/deploy.yml --tags sonarr`" in scoped
-    assert f"`{PINNED} ansible/deploy.yml`" in full
-    assert _bare(scoped) == [] and _bare(full) == []
 
 
 def test_the_deferred_redeploy_alerts_run_through_the_pinned_env():

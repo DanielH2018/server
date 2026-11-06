@@ -36,7 +36,7 @@ def deploy_line(paths: list[str]) -> str:
     cs = reach.reach(paths).changes
     note = land_tags.plane_note(paths)
     parts = []
-    if cs.k8s or cs.broad_deploy:
+    if cs.flux or cs.broad_deploy:
         parts.append(
             "`promote` applies the k8s half and `land.sh` waits on the changed set"
         )

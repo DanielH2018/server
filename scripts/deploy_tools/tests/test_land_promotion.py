@@ -11,10 +11,12 @@ import pytest
 from dataclasses import replace
 
 from _land_fakes import MERGE_SHA, Fakes, receipt
-from deploy_tools.land_lib import promotion
+from deploy_tools.land_lib import land_tags, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE
 from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.promote_lib.wait import WaitResult
+from deploy_tools.reach import reach
+from deployer_lib.deploy_changes import ChangeSet
 
 HEAD = "c" * 40
 BASE = "prbase"  # what the fake `git merge-base` answers
@@ -45,6 +47,21 @@ def test_a_pr_whose_only_tag_is_flux_owned_never_reaches_deploy_sh(land_run):
     assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
     # The gate runs on the changed set's tag, from the merge commit's snapshot.
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
+    assert "tags=bento-pdf" in logline
+
+
+def test_a_bento_pdf_template_pr_reaches_land_wait_through_the_real_mappers(land_run):
+    """A role path derives its own tag, and the mapper's only set for it is `cs.flux`."""
+    path = "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2"
+    assert reach([path]).changes == ChangeSet(flux={"bento-pdf"})
+    derived = land_tags.derive([path], changed_files=1, declared={"bento-pdf"})
+    fakes = _fakes(
+        gh_views={"files,changedFiles": {"files": [{"path": path}], "changedFiles": 1}},
+        derived=(derived.tags, derived.source),
+    )
+    rc, out, _, calls, logline = land_run([], fakes)
+    assert rc == 0 and "VERDICT: settled" in out
+    assert [c[1][0] for c in calls if c[0] == "land_wait"] == [MERGE_SHA]
     assert "tags=bento-pdf" in logline
 
 

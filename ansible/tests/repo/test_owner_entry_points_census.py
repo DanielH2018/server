@@ -6,7 +6,7 @@ says how it skips one. Each skip has its own `_is_clean` / `_is_flagged` pair be
 Those pairs pass vacuously when the entry point is renamed or stops calling the reader, because
 they import the reader, not the entry point (failure class 4). This census names each entry
 point as a member it must find, as `file:symbol`, and follows the calls from it down to one of
-the three ownership readers that `ansible/tests/deploy/test_owner_readers_agree.py` holds
+the two ownership readers that `ansible/tests/deploy/test_owner_readers_agree.py` holds
 equal.
 
 The census runs both ways against the plan: a table row no member names fails, and so does a
@@ -26,8 +26,8 @@ from _helpers import REPO
 # `table_rows` returns the header row's first cell with the others.
 HEADER = "Entry point"
 
-# The three readers of the `owner` flag. Every chain that reads the tree ends at one of them.
-READERS = frozenset({"tag_owners", "ansible_owned", "service_owners"})
+# The two readers of the `owner` flag. Every chain that reads the tree ends at one of them.
+READERS = frozenset({"tag_owners", "ansible_owned"})
 
 
 @dataclass(frozen=True)
@@ -83,12 +83,13 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         Link(
             "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py",
             "plan_tick",
-            "host_vars_owners",
+            "services_from_changed_paths",
         ),
         Link(
-            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py",
-            "host_vars_owners",
-            "service_owners",
+            "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py",
+            "services_from_changed_paths",
+            "flux",
+            call=False,
         ),
     ),
     "`land.sh`": (
@@ -130,6 +131,7 @@ NOT_A_TREE_READER = {
     ),
     "`deploy.sh --changed`": "it leaves out a tag by the platform of its entry",
     "`deploy.sh --list-services`": "it marks a tag by the platform of its entry",
+    "GitOps deployer": "it routes every k8s role path to `cs.flux` with no ownership read",
 }
 
 Source = Callable[[str], str | None]

@@ -357,11 +357,8 @@ class ChangeSet:
     # inventory key, and a lookup that failed.
     key_reader_roles: set[str] = field(default_factory=set)
     key_readers_failed: bool = False
-    # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...). The tick applies none
-    # since D6.12; `reach.py` and `land_lib` read it until D6.3 and D6.4.
-    k8s: set[str] = field(default_factory=set)
-    # k8s tags not Ansible-owned at origin, which `deploy_inventory.route_not_ansible_owned`
-    # moves out of `k8s`: merged and logged, never applied, deferred, alerted on or owed (D2.2).
+    # The k8s roles that changed (ansible/roles/k8s/<role>/...): merged and logged, never
+    # applied, deferred, alerted on or owed, because `promote` and Flux apply them.
     flux: set[str] = field(default_factory=set)
 
 
@@ -376,7 +373,7 @@ def shared_module_consumers(paths, repo_root) -> set[str]:
 
     Derived by reading the imports rather than listing the pair, because a hardcoded pair is
     the same guard-scope mistake one level up: it would go stale the first time a third role
-    imported the module. Returns only the EXTRA roles; the owning role is already in `cs.k8s`.
+    imported the module. Returns only the EXTRA roles; the owning role is already in `cs.flux`.
 
     A module is identified by its dotted path under `files/`, so `files/bridge/common.py` is
     `bridge.common` and is matched in every spelling a consumer can use for it. The first
@@ -504,11 +501,6 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         if p == _SECRETS_FILE:
             cs.secrets = True
             continue
-        # A k8s role holding a copy of a file outside its own tree defer-and-alerts like its
-        # own change would: a setup file it imports, or a file its image embeds (#4840). Here
-        # rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from this
-        # function alone to name the commit of each k8s change (#3111).
-        cs.k8s |= deploy_cross_role.k8s_roles_holding(p)
         # Tested FIRST, and it does not `continue` past the plane flags below: the manual
         # set overlaps _BROAD_SETUP_PREFIXES (the bring-up playbooks sit in both), and the
         # alert still needs to name the right remediation playbook.
@@ -539,8 +531,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # A setup-plane path never gets here: `_BROAD_SETUP_PREFIXES` consumes it above.
         if at is not None and at.plane == "k8s":
             # A k8s role change, which `promote` applies and the tick does not (D6.12).
-            # The whole role dir, because a reader only needs to name the role.
-            cs.k8s.add(at.role)
+            # With no branch here, a k8s path would map to no set at all.
+            cs.flux.add(at.role)
     return cs
 
 

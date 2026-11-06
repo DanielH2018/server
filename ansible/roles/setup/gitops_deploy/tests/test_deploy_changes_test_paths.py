@@ -16,7 +16,7 @@ from deployer_lib.deploy_changes import services_from_changed_paths
 #
 # Every prefix in this module matches on path alone, so a test file would read as whatever
 # plane it happens to sit under. A test under roles/setup/gitops_deploy/ would set broad_manual
-# and park the tick for every session, and one under roles/k8s/<svc>/files/ would set cs.k8s
+# and park the tick for every session, and one under roles/k8s/<svc>/files/ would set cs.flux
 # and defer-alert.
 #
 # The pairs below are clean/flagged per rule: a guard that classifies everything as a test and
@@ -42,7 +42,7 @@ def test_a_test_only_push_is_clean():
     cs = services_from_changed_paths(TEST_ONLY_PATHS)
     assert cs.broad is False
     assert cs.broad_manual is False
-    assert cs.k8s == set()
+    assert cs.flux == set()
     assert cs.secrets is False
 
 
@@ -84,7 +84,7 @@ def test_a_k8s_service_change_is_still_flagged_beside_its_test():
             "ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2",
         ]
     )
-    assert "qbittorrent" in cs.k8s
+    assert "qbittorrent" in cs.flux
 
 
 def test_a_path_merely_containing_test_is_not_exempt():
@@ -96,4 +96,4 @@ def test_a_path_merely_containing_test_is_not_exempt():
         "ansible/roles/setup/gitops_deploy/files/pytest_helper.py",
     ):
         cs = services_from_changed_paths([path])
-        assert cs.broad or cs.k8s, path
+        assert cs.broad or cs.flux, path

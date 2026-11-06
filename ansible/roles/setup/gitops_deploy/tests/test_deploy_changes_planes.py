@@ -42,7 +42,7 @@ def test_requirements_yml_is_broad():
     # ff-merged and left unapplied on the host.
     cs = services_from_changed_paths(["ansible/requirements.yml"])
     assert cs.broad is True
-    assert cs.k8s == set()
+    assert cs.flux == set()
 
 
 # Setup roles are wired into initial_setup.yml, not deploy.yml — a change maps to no container
@@ -55,7 +55,7 @@ def test_setup_role_change_is_broad():
         ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
     )
     assert cs.broad is True
-    assert cs.k8s == set()
+    assert cs.flux == set()
 
 
 def test_bringup_playbooks_are_broad():
@@ -66,7 +66,7 @@ def test_bringup_playbooks_are_broad():
     ):
         cs = services_from_changed_paths([p])
         assert cs.broad is True, p
-        assert cs.k8s == set()
+        assert cs.flux == set()
 
 
 def test_ansible_cfg_is_broad_but_lockfiles_are_not():
@@ -75,7 +75,7 @@ def test_ansible_cfg_is_broad_but_lockfiles_are_not():
     # ff-merge and mis-attribute a later deploy's failure.
     cs = services_from_changed_paths(["ansible.cfg"])
     assert cs.broad is True
-    assert cs.k8s == set()
+    assert cs.flux == set()
     # pyproject.toml / uv.lock churn weekly (lockFileMaintenance) and the broad path never ff-merges,
     # so flagging them broad would park the host and block every downstream image bump behind the stuck
     # lockfile. They map to no service and aren't secrets, so they take the

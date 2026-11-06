@@ -179,8 +179,8 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
 def filter_by_platform(containers_list, platform="docker"):
     """Select containers_list entries targeting a given deploy platform.
 
-    A missing `platform` key means "docker", as it does in `entry_fields` and
-    `deploy_inventory`. `scripts/validate/compose_templates.py` refuses such an entry, so the
+    A missing `platform` key means "docker", as it does in `entry_fields`.
+    `scripts/validate/compose_templates.py` refuses such an entry, so the
     k8s play never drops a service that omitted the key.
     """
     return [c for c in containers_list if c.get("platform", "docker") == platform]

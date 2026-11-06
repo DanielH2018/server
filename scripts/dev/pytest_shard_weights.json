@@ -183,7 +183,6 @@
  "ansible/roles/setup/gitops_deploy/tests/test_deploy_git.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_deploy_git_ci.py": 0.04,
  "ansible/roles/setup/gitops_deploy/tests/test_deploy_health.py": 0.0,
- "ansible/roles/setup/gitops_deploy/tests/test_deploy_inventory.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation.py": 0.0,
  "ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation_agent.py": 0.9,
  "ansible/roles/setup/gitops_deploy/tests/test_deploy_remediation_narrowed.py": 0.04,
