@@ -96,8 +96,20 @@ cleanup() {
   rm -f "$MANIFEST"
 }
 # A signal runs `cleanup` through the exit. Bash killed by an unhandled TERM skips the EXIT trap,
-# and as PID 1 in a pod it ignores the signal altogether. Bash runs a trap only after its
+# and as PID 1 in a pod it ignores the signal altogether. Bash normally runs a trap after its
 # foreground command returns, so the delay is one poll interval or one kubectl call.
+# Bash 5.2.21 has three narrow races where a signal does not end the drill:
+# - INT in `$(...)`'s wait_for, after the child closed the pipe, when it then exits 0.
+#   wait_sigint_handler sets wait_sigint_received, and only a job's cleanup reads that flag. The
+#   child of a substitution has no job, so bash drops the signal and the drill keeps polling. A
+#   second INT ends the drill.
+# - INT just after wait_for installs wait_sigint_handler, before old_sigint_handler is assigned.
+#   The handler cannot restore the old handler and re-sends INT to itself, so bash spins and never
+#   polls again. INT and TERM do nothing. Only KILL ends it, which skips `cleanup` and leaves the
+#   `restore-drill-<pvc>` objects.
+# - INT or TERM pending when xparse_dolparen parses a `$(`. parse_command runs the trap with `)`
+#   still the parser's end token, so the trap fails to parse and the drill keeps polling. A second
+#   signal ends the drill.
 trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
