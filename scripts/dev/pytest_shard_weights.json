@@ -1001,6 +1001,7 @@
  "scripts/deploy_tools/tests/test_land_compose_wait.py": 0.0,
  "scripts/deploy_tools/tests/test_land_deploy.py": 0.0,
  "scripts/deploy_tools/tests/test_land_deploy_arm_retired.py": 2.03,
+ "scripts/deploy_tools/tests/test_land_deployed_copies.py": 3.14,
  "scripts/deploy_tools/tests/test_land_detach.py": 8.47,
  "scripts/deploy_tools/tests/test_land_doc_change_reaches_a_verdict.py": 0.28,
  "scripts/deploy_tools/tests/test_land_every_exit_names_a_verdict.py": 0.04,

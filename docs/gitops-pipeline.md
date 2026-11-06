@@ -398,7 +398,9 @@ unapplied with nothing durable naming it (#6411). After the ff-merge the tick ru
 `scripts/deploy_tools/setup_reach_hosts.py` over the range. That script reads the same
 derivation as `land.sh`'s "also reaches" note (`land_reach.remaining_setup_hosts`). The tick
 then writes a `manual_plane` line for each role it names, with the other hosts in the line's
-`hosts` key. `clear_manual_plane_applied` never clears a line that carries `hosts`, so the
+`hosts` key. The script drops a host that already holds the changed file, as `land.sh` does
+(`docs/landing.md`), so a host that cannot be read inside 10 seconds stays named.
+`clear_manual_plane_applied` never clears a line that carries `hosts`, so the
 tick's own apply of the role leaves it standing. Apply the role on each host as printed, then
 `clear-owed manual_plane <role>`. A later range reaching another host widens the line's `hosts`
 and keeps its stamp. A failed derivation records nothing and logs `setup-reach:`.
