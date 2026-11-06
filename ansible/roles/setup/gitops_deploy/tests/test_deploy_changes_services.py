@@ -163,7 +163,7 @@ def test_a_common_task_file_change_reaches_the_roles_importing_it():
         "renovate_agent",
         "renovate_notify",
     }
-    assert setup_roles_for(path) == consumers
+    assert setup_roles_for(path) == consumers | {"k3s"}
     assert setup_tags_for([path]) == consumers
 
 
