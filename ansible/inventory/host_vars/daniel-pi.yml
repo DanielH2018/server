@@ -69,9 +69,8 @@ container_healthcheck_interval: 60s
 # image ships (its compose block carries timing and no `test:`). Templates fall back
 # to their own values (5-10s, 3) where these are unset. Detection latency worst-case =
 # 5 x (60s interval + 60s timeout)
-# = 10 min, against a 5-min Kuma monitor from outside for wg-easy — the reason a
-# dead process is not the case this trades against: `restart: unless-stopped` covers that at
-# once, the healthcheck only covers a wedged-but-running one.
+# = 10 min. A dead process is not the case this trades against: `restart: unless-stopped`
+# covers that at once, the healthcheck only covers a wedged-but-running one.
 container_healthcheck_timeout: 60s
 container_healthcheck_retries: 5
 # Empty since H5.9: every service moved to compose_services. The key stays, because every reader

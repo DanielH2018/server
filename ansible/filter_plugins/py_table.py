@@ -1,9 +1,9 @@
 """Ansible filter plugin reading a table of constructor calls out of a Python module's source.
 
 monitor-bridge declares every check once, in `roles/k8s/monitor-bridge/files/check_table.py`,
-as a tuple of `PushCheck(...)` calls (#3659). The pod imports that module. Two templates need
-the same rows: the bridge's env-secret and uptime-kuma's static monitors, each rendered on the
-controller, where importing the module would mean importing every check body it names. So
+as a tuple of `PushCheck(...)` calls (#3659). The pod imports that module. The generated
+bridge fragments need the same rows, rendered on the controller, where importing the module
+would mean importing every check body it names. So
 this filter PARSES the source instead of running it:
 
     lookup('file', playbook_dir ~ '/roles/k8s/monitor-bridge/files/check_table.py')
@@ -12,8 +12,7 @@ this filter PARSES the source instead of running it:
 returns one dict per call, holding each keyword argument whose value is a literal. A
 non-literal value (`fn=service.check_n8n`) is left out, because it names code rather than
 data. A positional argument raises, as does a missing table or an element that is not a call:
-either would otherwise drop a row, and a dropped row is a check pushing nowhere or a Kuma tile
-AutoKuma deletes.
+either would otherwise drop a row, and a dropped row is a check no generated fragment names.
 
 No Ansible import at load time, so the tests call the same function the playbook runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
