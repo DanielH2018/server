@@ -38,10 +38,14 @@ from lib.repo_paths import K8S_ROLES
 from artifact_retention import PROD_TAG
 from deploy_tools.object_loss import bundle_documents
 from deploy_tools.promote_lib.prune import READ_ERRORS
-from renderer.renderer_lib.bundle import FLUX_DIR, KUSTOMIZATION, SHARED_KINDS
+from renderer.renderer_lib.bundle import (
+    FLUX_DIR,
+    FLUX_TAG,
+    KUSTOMIZATION,
+    SHARED_KINDS,
+)
 from renderer.renderer_lib.ordering import split_kind
 
-FLUX_TAG = "flux"
 # The trailing slash keeps PersistentVolumeClaim out.
 _PERSISTENT_VOLUME = "PersistentVolume/"
 

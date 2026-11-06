@@ -117,9 +117,8 @@ authority is written here to keep a later edit from widening it.
   rest. `tests/test_longhorn_reconcile.py::test_a_run_reads_and_writes_no_deployment` and
   `tests/test_longhorn_reconcile_render.py::test_the_role_grants_nothing_on_deployments` keep
   this job off them.
-- **A reverted H1.6 orphans the CronJob.** `deletionPolicy: Orphan` leaves it running, and it
-  writes the same labels the restored `setup/k3s` tasks write. The revert PR names the
-  **operator-only** delete.
+- **A reverted H1.6 deletes the CronJob.** The tag takes the default deletion policy, so the
+  CronJob goes with the Kustomization, and the restored `setup/k3s` tasks write the same labels.
 - **The group names are a contract with the RecurringJobs.** A one-byte change in a label drops
   a volume out of its job with nothing failing. `tests/test_longhorn_reconcile.py` types the
   labels out and holds them equal to `ansible/filter_plugins/longhorn_groups.py`.

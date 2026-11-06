@@ -1,6 +1,6 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carries D6.13. No merged PR is recorded for D6.13 to D6.21. D6.18 was split into D6.18a and D6.18b on 2026-11-06 ([#7414](https://github.com/DanielH2018/server/issues/7414)). [#7454](https://github.com/DanielH2018/server/issues/7454) carries D6.18b, and [#7469](https://github.com/DanielH2018/server/issues/7469) the deployer half of old D6.4.
+Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carries D6.13. No merged PR is recorded for D6.13 to D6.21. D6.18 was split into D6.18a and D6.18b on 2026-11-06 ([#7414](https://github.com/DanielH2018/server/issues/7414)). [#7454](https://github.com/DanielH2018/server/issues/7454) carries D6.18b, and [#7469](https://github.com/DanielH2018/server/issues/7469) the deployer half of old D6.4. [#7479](https://github.com/DanielH2018/server/issues/7479) carries D6.20, which waits on the operator's decision.
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
@@ -1042,8 +1042,12 @@ play has no job left, and R4 deletes it with the play.
   Secret in place when the root prunes the `cluster-vars` Kustomization. Under the default
   policy, a `cluster-vars` that left the bundle would delete the Secret, and every
   substituting tag would then fail to build. C3 gives Secrets no prune exemption.
-- **The root `homelab`, `<tag>-snapshot` and `<tag>-verify`.** The last two hold only Jobs,
-  which D5.1a3's TTL census already expires.
+- **The root `homelab` and every other per-tag kind: `<tag>-snapshot`, `<tag>-prepull`,
+  `<tag>-precheck` and `<tag>-verify`.** Their Jobs expire under D5.1a3's TTL census. The same
+  directories also hold ServiceAccounts, Roles, RoleBindings and ConfigMaps, and `-snapshot`
+  holds a ClusterRole and a ClusterRoleBinding, which a retired tag leaves behind.
+  `docs/flux-deploy-plane.md`'s retirement procedure says which of them a first PR removes and
+  which the operator deletes.
 
 **The switched set is defined positively, and the kept set is everything else.** D6.7
 switches the per-tag `<tag>` Kustomizations, one per deploy tag, except `flux`. Every other

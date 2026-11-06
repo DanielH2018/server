@@ -461,9 +461,11 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   role's inputs call for. The census computes this allowlist from the renderer's inputs, never
   from its output, so a renderer bug cannot widen it (D2.6b). A mismatch fails the publish,
   and nothing is pushed.
-- **Deletion policy.** Every Kustomization the bundle publishes sets `deletionPolicy: Orphan`.
-  D6.20 switches the per-tag Kustomizations to the default policy, if the operator approves it
-  (D6 Open question 7).
+- **Deletion policy.** Every per-tag `<tag>` Kustomization except `flux` takes the default
+  policy, which follows `prune`. The kept set sets `deletionPolicy: Orphan`: `flux`, every other
+  per-tag kind (`<tag>-deferred`, `-snapshot`, `-prepull`, `-precheck` and `-verify`), every
+  shared kind and the root `homelab`. The switched set is defined positively, so a later kind
+  keeps `Orphan` without an edit (D6.20, D6 Open question 7).
 - **Ordering.** `dependsOn` is generated, and no slice hand-writes it. Its edges come from
   `ansible/filter_plugins/toposort.py`, or from a renderer rule that the adding slice names,
   such as D3's `cluster-vars` edge and D4's `-deferred` edges.
@@ -833,9 +835,6 @@ No request on the slice index is open.
   (D6 Open question 12). Gate: before D6.19 merges. Without the amendment, D6.19 refuses to
   remove a tag whose render at `prod` holds a PersistentVolume, and the rename procedure
   excludes media-volume.
-- **The deletion policy's kept set** (D6 Open question 7). If D6.20 merges, it switches every
-  `<tag>` except `flux`. `flux`, every `<tag>-deferred` and every shared kind keep `Orphan`.
-  Gate: before D6.20 merges.
 
 ### Requests on C5
 

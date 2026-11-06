@@ -11,8 +11,8 @@ name: Flux deletion drill
 #                    kind's WaitForFirstConsumer class
 #   as-rendered      prune-drill leaves the bundle. Under Orphan its Deployment stays, and
 #                    under the default policy it goes. Its claim and Namespace stay either way.
-#   red-half         prune-drill-red had its claim marker and its deletionPolicy stripped, so
-#                    its claim must be lost. A drill that cannot see a lost claim fails.
+#   red-half         prune-drill-red had its claim marker stripped, so its claim must be lost.
+#                    A drill that cannot see a lost claim fails.
 #   inventory-prune  prune-drill-keep drops both claims: keep-marked survives, and
 #                    keep-unmarked, whose marker was stripped, is lost
 #   break-glass      a bundle signed with a throwaway key reaches Ready through the flux
