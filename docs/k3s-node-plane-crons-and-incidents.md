@@ -198,12 +198,10 @@ daniel-box names them, one per issuer, and healing only the VIP one leaves the p
 errors running — then let the next 10s tick redial. The full sequence, the recovery caveat and the
 measured error chain are in that defaults file's comment above the key.
 
-## The release-staleness check is the durable half of a one-shot Discord page
+## The release-staleness check watches for a merged k8s change that never reached the cluster
 
-When the deployer defers a k8s change it cannot auto-apply (`deploy_alerts.alert_deferred`'s
-`cs.k8s` branch), it fast-forwards the tree and pages once per SHA. The ff-merge clears the
-deployer's own `behind_since`, so nothing else says the cluster is still running old manifests.
-`release-staleness-check.sh` runs `probe.py releases --stale-only` every
+A merged k8s change can sit on `origin/master` while the cluster runs the old manifests.
+`release-staleness-check.sh` watches that gap. It runs `probe.py releases --stale-only` every
 `k3s_release_staleness_cron_minute`. It writes a failing verdict to
 `release-staleness-check.prom`, which the Prometheus rule `ReleaseStalenessCheckFailed` reads,
 while any service's applied commit sits behind `origin/master` under its role paths, or under an
@@ -211,6 +209,13 @@ inventory key or shared macro its render reads (#1993). A merge younger than `k3
 `up` message and not counted, so a landing still deploying its own merge does not page. The
 comment on the check's release task in `ansible/roles/setup/k3s/tasks/health-crons.yml` says why it
 runs as `sys_user` and not root.
+
+**The check judges only a service whose `containers_list` entry carries no `owner`** (#5309). Flux
+applies an owned tag, so no Ansible deploy writes it a newer record, and `--stale-only` drops that
+record. On 2026-11-06 all 66 service tags carried `owner`, so the check judged no service.
+`PromotionStalled` in `ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml` watches the
+same gap on the Flux path: a green master commit that prod has lacked for more than 2 hours. D6.17
+disarms this check.
 
 **The DOWN message carries the stale services' names and a count, not their reasons** (#2013). A
 refused narrowing marks the whole fleet stale, and the per-service reasons then ran to ~7,500
