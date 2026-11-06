@@ -68,7 +68,7 @@ EXEMPT = {
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",
 }
 # Non-vacuity: each scan must find its member, or an empty scan would pass.
-CRON_MEMBER = "Release staleness drift check"
+CRON_MEMBER = "Longhorn backup health"
 CRONJOB_MEMBER = "configarr"
 RECURRING_MEMBER = "daily-backup"
 

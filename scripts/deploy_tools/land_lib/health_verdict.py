@@ -95,11 +95,12 @@ def applied_wording(ln: Landing) -> str:
     """What the landing applied, for the verdict lines: services, hosts, or both.
 
     A hosts-only landing, one with host targets and no service tag, never reads "services
-    deployed", whatever else the tick applied for it.
+    deployed", whatever else the tick applied for it. Neither does a landing whose every tag
+    is suspended and which has no host target.
     """
     services = bool(promotion.gated_tags(ln))
     if not ln.host_targets:
-        return "services deployed"
+        return "services deployed" if services else "no service deployed"
     return "services deployed and hosts applied" if services else "hosts applied"
 
 

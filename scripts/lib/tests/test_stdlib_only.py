@@ -51,8 +51,6 @@ MUST_INCLUDE = frozenset(
         "ansible/roles/setup/fake_remux/files/mkv_attachment_repair.py",
         "ansible/roles/setup/fake_remux/files/state_push.py",
         "ansible/roles/k8s/manifests/files/secret_hmac.py",
-        # Run by path through its shebang until #4489, so the census missed it.
-        "ansible/roles/setup/k3s/files/manifest_declares.py",
         "scripts/deploy_tools/prune_releases.py",
         # Reached only through render_records' insert of the deployer's install directory.
         "ansible/roles/setup/render_records/files/render_records.py",
@@ -384,7 +382,6 @@ def test_an_installed_insert_and_its_env_override_point_at_the_stage():
     assert _install("/opt/gitops-deploy") in dirs
     overrides = role_installs.staged_overrides()
     assert overrides["DEPLOYER_DIR"] == str(_install("/opt/gitops-deploy"))
-    assert overrides["HOST_LIB_DIR"] == str(_install("/opt/live-drift-check"))
 
 
 GITOPS_UNIT = (
@@ -487,3 +484,9 @@ def test_a_no_project_command_with_a_script_path_is_read_is_clean():
 def test_a_no_project_command_with_no_readable_script_is_flagged(text):
     with pytest.raises(ValueError, match=r"runs no \.py path"):
         role_installs._scripts_run(text, GITOPS_UNIT)
+
+
+def test_every_unrendered_template_is_still_in_the_tree():
+    # A template deleted without its row leaves a skip that nothing exercises.
+    assert role_installs.UNRENDERED_TEMPLATES
+    assert all(path.is_file() for path in role_installs.UNRENDERED_TEMPLATES)

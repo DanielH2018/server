@@ -43,6 +43,8 @@ EXPECTED = {
         "SecretRotationAuditNotReporting/daniel-box": DISCORD,
         "SetupDriftFailed/daniel-server": DISCORD,
         "SetupDriftNotReporting/daniel-server": DISCORD,
+        "SetupDriftFailed/daniel-box": DISCORD,
+        "SetupDriftNotReporting/daniel-box": DISCORD,
         "LokiReadRouteFailed/daniel-box": DISCORD,
         "LokiReadRouteNotReporting/daniel-box": DISCORD,
         "LokiReadRouteFailed/daniel-server": DISCORD,

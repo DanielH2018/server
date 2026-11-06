@@ -40,10 +40,16 @@ longhorn_restore_drill_deadline_seconds: 3600
 # cronjob-finished-jobs-age-out). Older runs' output is in Loki.
 longhorn_restore_drill_job_ttl_seconds: 172800
 # What the kubelet allows between SIGTERM at the deadline and SIGKILL. It covers one 10-second
-# poll and the four `--ignore-not-found` deletes in `cleanup`, each of which waits for its object
-# to go. The script's TERM trap runs `cleanup` through the exit, so a Job killed at the deadline
-# leaves no `restore-drill-<pvc>` Volume, PV, PVC or probe pod behind.
+# poll and the four `--ignore-not-found` deletes in `cleanup`, each of which waits up to
+# `longhorn_restore_drill_delete_timeout_seconds` for its object to go. The script's TERM trap runs `cleanup` through the exit, so a Job killed at the deadline
+# leaves no `restore-drill-<pvc>` Volume, PV, PVC or probe pod behind. The exception is a TERM
+# pending while bash parses a `$(`, which runs no trap, and no grace value changes that. The next
+# run sweeps a Volume older than this grace plus the deadline above.
 longhorn_restore_drill_grace_seconds: 300
+# How long one delete waits for its object to go. Four of them and a poll must fit in the grace
+# period above, and test_longhorn_restore_drill_deadline.py holds that. A timed-out delete has
+# still asked the API server to delete the object.
+longhorn_restore_drill_delete_timeout_seconds: 60
 # A run missed by more than an hour is not made up: the next night's rotation picks another
 # volume, and the attempt stamps are what the rotation reads.
 longhorn_restore_drill_starting_deadline_seconds: 3600

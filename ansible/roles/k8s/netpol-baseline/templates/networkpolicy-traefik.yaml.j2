@@ -49,10 +49,8 @@ spec:
     # :8000 stays open to every source. It is the http->https redirect entrypoint
     # (static-config.yaml.j2, entryPoint.to: ":443") -- every client that arrives on plain HTTP
     # hits that redirect before reaching :8443 -- and all four netpol probe control legs dial
-    # traefik:80 to prove the probe itself has a network. (uptime-kuma's monitors do NOT depend
-    # on :80: they're https:// and so traverse :8443, or for the Pi services dial daniel-pi
-    # directly, bypassing traefik.) Nothing on :8000 reaches a backend, so an origin-direct
-    # client gets a redirect to a port the next rule fences.
+    # traefik:80 to prove the probe itself has a network. Nothing on :8000 reaches a backend, so
+    # an origin-direct client gets a redirect to a port the next rule fences.
     - ports:
         - port: 8000
           protocol: TCP
@@ -82,8 +80,8 @@ spec:
     # The pod CIDR here is the WHOLE /16 on purpose, which docs/networkpolicy-default-deny.md
     # ("Correction carried into this design") forbids for the baseline. There a /16 readmits
     # every pod to a fenced workload and cancels the default-deny. Here every pod is a legitimate
-    # caller: traefik is the ingress, and an in-cluster caller of a `.local.` route (the Kuma
-    # prober, monitor-bridge, homepage's widgets) reaches the VIP as its own 10.42.x.y address.
+    # caller: traefik is the ingress, and an in-cluster caller of a `.local.` route
+    # (monitor-bridge, homepage's widgets) reaches the VIP as its own 10.42.x.y address.
     # This port admitted every pod before this rule existed, so in-cluster reachability is
     # unchanged and the rule is a strict narrowing. Both cni0 gateways and both flannel.1
     # addresses sit inside the /16, so host-originated callers (the three host crons that dial

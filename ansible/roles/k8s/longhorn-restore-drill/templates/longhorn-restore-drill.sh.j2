@@ -88,16 +88,37 @@ fail() { echo "longhorn-restore-drill: FAIL: $*"; echo "restore drill FAILED: $*
 cleanup() {
   # Guarded: the candidate query runs before a volume is chosen, so an early failure reaches this
   # trap with DRILL empty — and `delete pod restore-drill--probe` is a confusing no-op at best.
-  [[ -n "$DRILL" ]] || { rm -f "$MANIFEST"; return; }
-  $KUBECTL -n "$PVC_NS" delete pod "${DRILL}-probe" --ignore-not-found --now >/dev/null 2>&1
-  $KUBECTL -n "$PVC_NS" delete pvc "$DRILL" --ignore-not-found >/dev/null 2>&1
-  $KUBECTL delete pv "$DRILL" --ignore-not-found >/dev/null 2>&1
-  $KUBECTL -n longhorn-system delete volume "$DRILL" --ignore-not-found >/dev/null 2>&1
+  [[ -z "$DRILL" ]] || teardown "$PVC_NS" "$DRILL"
   rm -f "$MANIFEST"
 }
+# Args: the claim's namespace, then the drill name. Returns non-zero if any delete failed. The
+# Volume goes only after the others, because the next run's sweep finds a leftover by its Volume.
+# A delete with no --timeout waits forever on a pod stuck Terminating on a lost node.
+teardown() {
+  local PVC_NS="$1" DRILL="$2" failed=0
+  local wait_s="--timeout={{ longhorn_restore_drill_delete_timeout_seconds }}s"
+  $KUBECTL -n "$PVC_NS" delete pod "${DRILL}-probe" --ignore-not-found --now "$wait_s" >/dev/null 2>&1 || failed=1
+  $KUBECTL -n "$PVC_NS" delete pvc "$DRILL" --ignore-not-found "$wait_s" >/dev/null 2>&1 || failed=1
+  $KUBECTL delete pv "$DRILL" --ignore-not-found "$wait_s" >/dev/null 2>&1 || failed=1
+  (( failed == 0 )) || return 1
+  $KUBECTL -n longhorn-system delete volume "$DRILL" --ignore-not-found "$wait_s" >/dev/null 2>&1
+}
 # A signal runs `cleanup` through the exit. Bash killed by an unhandled TERM skips the EXIT trap,
-# and as PID 1 in a pod it ignores the signal altogether. Bash runs a trap only after its
+# and as PID 1 in a pod it ignores the signal altogether. Bash normally runs a trap after its
 # foreground command returns, so the delay is one poll interval or one kubectl call.
+# Bash 5.2.21 has three narrow races where a signal does not end the drill:
+# - INT in `$(...)`'s wait_for, after the child closed the pipe, when it then exits 0.
+#   wait_sigint_handler sets wait_sigint_received, and only a job's cleanup reads that flag. The
+#   child of a substitution has no job, so bash drops the signal and the drill keeps polling. A
+#   second INT ends the drill.
+# - INT just after wait_for installs wait_sigint_handler, before old_sigint_handler is assigned.
+#   The handler cannot restore the old handler and re-sends INT to itself, so bash spins and never
+#   polls again. INT and TERM do nothing. Only KILL ends it, which skips `cleanup` and leaves the
+#   `restore-drill-<pvc>` objects.
+# - INT or TERM pending when xparse_dolparen parses a `$(`. parse_command runs the trap with `)`
+#   still the parser's end token, so the trap fails to parse and the drill keeps polling. A second
+#   signal ends the drill. The kubelet sends one, so its SIGKILL skips `cleanup`, and the next run's
+#   sweep below removes the objects.
 trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
@@ -129,6 +150,22 @@ stamp_set() {
 }
 
 load_stamps
+
+# A run SIGKILLed before its `cleanup` leaves its objects, and the next drill of that PVC would
+# apply over them. Before the Volume list below, so a leftover is never a candidate. The age is the
+# Job's deadline plus its grace period: a younger Volume can belong to a live hand run.
+LEFTOVER_BEFORE=$(( $(date +%s) - {{ longhorn_restore_drill_deadline_seconds + longhorn_restore_drill_grace_seconds }} ))
+LEFTOVERS=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
+  | jq -r --argjson before "$LEFTOVER_BEFORE" '
+      .items[]
+      | select(.metadata.name | startswith("restore-drill-"))
+      | select((.metadata.creationTimestamp | fromdateiso8601) < $before)
+      | .metadata.name')
+while IFS= read -r leftover; do
+  [[ -n "$leftover" ]] || continue
+  teardown "$FALLBACK_NS" "$leftover" || fail "cannot remove the leftover ${leftover}"
+  echo "longhorn-restore-drill: SWEPT: ${leftover}, left by a run killed before its cleanup"
+done <<<"$LEFTOVERS"
 
 # Everything below is resolved from the cluster, never hardcoded. The hand-run one-shot this
 # replaces pinned the backup ID, the volume name and the size as literals — all three of which
@@ -331,12 +368,19 @@ URL=$($KUBECTL -n longhorn-system get backuptarget "$TARGET" -o jsonpath='{.spec
 # is not a multiple of the block size, so a mismatch strands the restore on exactly the volumes
 # the rotation added. Every candidate size is a 16 MiB multiple today, so nothing is stranded
 # right now; pinning it means that stays true when a volume of an awkward size joins.
+#
+# DECIDED: the Volume carries the no-backup group from creation, and the sweep deletes no Backup.
+# Longhorn puts a Volume with no job label in `default`, so a leftover would be backed up by the
+# daily tick before the next run's sweep. Deleting that Backup would grant this ServiceAccount
+# delete on the real backups the drill restores from.
 cat >"$MANIFEST" <<YAML
 apiVersion: longhorn.io/v1beta2
 kind: Volume
 metadata:
   name: ${DRILL}
   namespace: longhorn-system
+  labels:
+    {{ 'label_prefix' | longhorn_backup_name }}{{ 'no_backup_group' | longhorn_backup_name }}: enabled
 spec:
   frontend: blockdev
   backupTargetName: ${TARGET}

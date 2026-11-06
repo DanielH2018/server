@@ -254,8 +254,6 @@ def gate(
         return GateResult(False, ["ansible-playbook exited non-zero -- see the log."])
     lines = []
     unhealthy = unreadable = False
-    if not tags:
-        lines.append("no --tags given -- health not gated, ansible exit code only.")
     for tag in tags:
         state, detail = check_one(tag, tools=tools, cwd=cwd)
         if state == "skipped":
@@ -358,6 +356,9 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
         tags, ns.status == 0, tools=tools, cwd=Path(ns.cwd) if ns.cwd else None
     )
     settled, lines = result.settled, result.lines
+    # Here, not in `gate`: an empty list from land.sh means a landing with nothing to gate.
+    if not tags and ns.status == 0:
+        lines = ["no --tags given -- health not gated, ansible exit code only."]
     # deploy.sh's own code, not ansible's: the playbook exited 0 having matched no host, and
     # the wrapper read that off the PLAY RECAP. Said in those words, because
     # "exited non-zero -- see the log" sends the reader to a log whose ansible run looks clean.

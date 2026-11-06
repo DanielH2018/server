@@ -1,8 +1,10 @@
 # deploy_ui — the host half of deploy.local
 
 `deploy-ui.service` on the GitOps host (`has_gitops`), `User={{ sys_user }}`, cwd the primary
-checkout. It serves the page and API `roles/k8s/deploy-ui` routes to, and runs `land.sh`,
-`deploy.sh`, `probe.py releases` and `gh` exactly as the operator would from a terminal.
+checkout. It serves the page and API `roles/k8s/deploy-ui` routes to, and runs `land.sh` and
+`gh` exactly as the operator would from a terminal. It starts no deploy: `deploy.sh` refuses
+every service tag with exit 5, because Flux applies them. The page stays as the one browser
+view of landings in progress (operator ruling, 2026-11-06).
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -42,7 +44,7 @@ Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Auth
 
 The panel reads the per-service locks, not the tree lock alone. `deploy.sh` holds
 the git-tree lock for the snapshot only (ADR-0017), so a page that read that
-one lock said `free` for nearly all of a deploy, and its own deploy button queued on
+one lock said `free` for nearly all of a deploy, and a deploy queued on
 `server-deploy-<tag>.lock` with nothing on the page saying so (#1844).
 
 Two sources, because neither alone says who holds what. One merged-stream `fuser` call over
@@ -61,8 +63,7 @@ pattern also matches `deploy_cli.py`: the `deploy.sh` shim execs `uv run … dep
 which stays the family root while its python child takes the locks and runs the playbook
 (`docs/archive/deploy-sh-python-port.md`), so no process names `deploy.sh`. A `--detach` run's
 forked child is reparented to 1 and is its own root, still matching `deploy_cli.py`. A holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
-than nothing. `deploy.sh --list-services`, which the daemon itself runs on every deploy
-POST, is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can
+than nothing. `deploy.sh --list-services` is a read, so it is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can
 read; every deployer here runs as `{{ sys_user }}`, the daemon's own user.
 
 Only a `land` row is cancellable. SIGTERM to a deploy mid-play leaves whatever applied
@@ -74,8 +75,8 @@ lock's path in as `DEPLOY_UI_TREE_LOCK`, rendered from `server_git_tree_lock`, a
 
 ## Writes
 
-Each write spawns the command detached, logs to `~/.local/state/deploy-ui/`, and emits one
-logfmt line via `logger -t deploy-ui`. Land and deploy refuse under `hold_sha`.
+Land spawns `land.sh` detached and logs to `~/.local/state/deploy-ui/`. Land, cancel and hold
+clear each emit one logfmt line via `logger -t deploy-ui`. Land refuses under `hold_sha`.
 `gitops_hold.Hold.clear` clears it, with its `owed` ledger `hold_plane` lines, against a
 typed SHA (#3658).
 
@@ -83,14 +84,7 @@ The `hold_plane` class holds one ledger line per failed apply, and Clear drops a
 unapplied. The state panel lists the entries one per line, the confirm prompt names them, and
 the reply repeats them — after the Clear nothing records those planes at all (#2453).
 
-`/api/deploy` takes one SERVICE tag. `deploy.sh --list-services` also prints the block tags
-(`config`, `deploy`, `cron`) and Ansible's `always`, each of which selects every container
-role at once, so `writes.NON_SERVICE_TAGS` subtracts them from the allowlist and the guard
-refuses one with a 409. A test asserts that literal equals `BLOCK_TAGS | RESERVED_TAGS` in
-`scripts/deploy_tools/deploy_lib/tags.py`, because the daemon runs outside the repo venv and
-cannot import it.
-
-Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two writes in
+Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two landings in
 one second used to name the same file, and the second open truncated a log the first process
 still held.
 
@@ -101,8 +95,8 @@ The daemon writes one logfmt line per request to its unit journal (#2864):
 Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
 string is dropped, so a log path never reaches the journal.
 
-The page polls four panels and the log tail every 10 seconds, so an open tab writes about
-25 lines a minute. Those polls show a tab was open, not that anyone used it. Count page
+The page polls three panels every 10 seconds, plus the log tail once a landing has started,
+so an open tab writes about 18 to 24 lines a minute. Those polls show a tab was open, not that anyone used it. Count page
 loads and writes instead:
 
 ```bash
@@ -118,6 +112,6 @@ The line is unit-tested.
 
 ## Deploy
 
-`uv run ansible-playbook ansible/initial_setup.yml --tags deploy_ui` (a setup-plane role;
-`deploy.sh` does not carry it). Verify: `curl -s http://10.0.0.215:8790/api/state` from the
-box.
+The GitOps tick applies this setup-plane role when a merge changes it, and `deploy.sh` does
+not carry it. To apply it by hand, run `uv run ansible-playbook ansible/initial_setup.yml
+--tags deploy_ui`. To verify, run `curl -s http://10.0.0.215:8790/api/state` from the box.

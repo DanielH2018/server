@@ -179,22 +179,22 @@ def test_fakes_defaults_are_fresh_per_instance():
 
 
 def test_an_in_flock_wait_is_booked_without_the_contention_backoff(landing):
-    """A wrapper that WAITED and then acquired adds only the seconds it reported.
+    """A wrapper that WAITED and then joined adds only the seconds it reported.
 
     `note_lock_contention` adds `lock_backoff` on top, because there the attempt failed and
-    the landing is about to sleep. Here it did not: the deploy ran.
+    the landing is about to sleep. Here it did not.
     """
     ln, calls = landing()
-    ln.note_in_flock_wait(412, "pid 8: ansible-playbook")
+    ln.note_in_flock_wait(412)
     assert ln.ledger.lock_waited == 412
-    assert ln.ledger.lock_holder == "pid 8: ansible-playbook"
+    assert ln.ledger.lock_holder == ""
     assert "lock_holder" not in [c[0] for c in calls]
 
 
-def test_an_in_flock_wait_never_overwrites_a_holder_already_named(landing):
+def test_an_in_flock_wait_adds_to_contention_and_keeps_its_holder(landing):
     ln, _ = landing()
     ln.note_lock_contention(60)
-    ln.note_in_flock_wait(9, "somebody else")
+    ln.note_in_flock_wait(9)
     assert ln.ledger.lock_waited == 69
     assert ln.ledger.lock_holder == "42 flock deploy"
 

@@ -11,7 +11,7 @@ import dataclasses
 import json
 
 from _review_fakes import BRANCH, _finding, _pipeline, _report
-from fanout_lib.branch_pr import own_pr, parse_branch_prs
+from fanout_lib.branch_pr import own_pr, parse_branch_prs, parse_merged_before
 from fanout_lib.manifest import Batch
 from fanout_lib.status import parse_status, with_own_pr
 
@@ -158,6 +158,31 @@ def test_status_reads_a_foreign_only_text_as_needs_input_never_done():
     )
     unread = with_own_pr(parsed, B.branch, lambda *_: None, "o/r")
     assert unread.state == "needs-input"
+
+
+def test_status_reads_a_citation_of_a_pr_merged_before_the_launch_as_no_pr():
+    """The relaunched batch for #7291 opened nothing and cited its branch's merged #7295 (#7402)."""
+    parsed = _status(f"Already fixed by {FOREIGN}.")
+    cited = with_own_pr(
+        parsed, B.branch, lambda *_: [FOREIGN], "o/r", lambda: [FOREIGN]
+    )
+    assert (cited.state, cited.pr_url) == ("no-pr", "")
+    # A merge after the launch is this batch's own landing, which stays its PR.
+    own = with_own_pr(parsed, B.branch, lambda *_: [FOREIGN], "o/r", lambda: [])
+    assert (own.state, own.pr_url) == ("done", FOREIGN)
+
+
+def test_parse_merged_before_keeps_only_merges_older_than_the_launch():
+    rows = [
+        {"url": "old", "mergedAt": "2026-11-05T18:56:29Z"},
+        {"url": "new", "mergedAt": "2026-11-06T11:00:00Z"},
+        {"url": "open", "mergedAt": None},
+    ]
+    launch = "2026-11-06T10:05:15.123456+00:00"
+    assert parse_merged_before(json.dumps(rows), launch) == ["old"]
+    # An unreadable launch time or list sets nothing aside.
+    assert parse_merged_before(json.dumps(rows), "t") == []
+    assert parse_merged_before("not json", launch) == []
 
 
 def test_status_does_not_ask_the_forge_for_a_batch_without_a_pr_url():

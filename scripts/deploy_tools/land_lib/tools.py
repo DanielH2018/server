@@ -15,6 +15,7 @@ HERE. Five path-list decisions -- `plane_note`, `self_applied`, `remaining_setup
 `derive`, `quiet_paths` -- are NOT on `Tools`. They are pure functions of a file list, so a
 fake of them would leave no pipeline test running the real derivation. They live on the frozen
 `Classifier` the Landing holds beside `Tools`, so a test takes the real ones and fake boundaries.
+`remaining_setup_hosts` also reads a host through the `read_host` boundary it is handed.
 """
 
 import contextlib
@@ -53,6 +54,7 @@ from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import verdict_log
 from deploy_tools.land_lib.key_readers import KeyReader, readable_key_readers
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
+from diagnostics.probe_lib.host_reader import read_host
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
@@ -70,16 +72,11 @@ GATE_TMP_ROOT = "/tmp"
 GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
 
 
-# The two wrapper lines that report a wait ending in an ACQUIRE or a JOIN -- the waits
-# `retry_while_locked` structurally cannot see, because it books only an attempt that exits
-# 75 and both of these exit 0. deploy.sh waits inside `flock -w`; gitops_tick.sh watches a
-# tick another actor already started. `gitops_tick.sh: waited <M>s` (a tick this landing
-# started) is absent: those seconds are the tick's own work, and the path that makes them
-# long ends at exit 3, which `retry_while_locked` books. The deploy patterns also take the
-# pre-#4478 `deploy:`, as PRIMARY can predate this file; `run_tick` runs the tick beside it.
-_ACQUIRED = re.compile(
-    r"deploy(?:\.sh)?: lock acquired after (\d+)s(?: \(holder was: (.*)\))?\s*$"
-)
+# The wrapper line that reports a wait ending in a JOIN -- a wait `retry_while_locked`
+# structurally cannot see, because it books only an attempt that exits 75 and this one exits 0.
+# `gitops_tick.sh: waited <M>s` (a tick this landing started) is absent: those seconds are the
+# tick's own work, and the path that makes them long ends at exit 3, which `retry_while_locked`
+# books.
 # `[^;]*` rather than `\d+` for the in-flight seconds: that number is NOT booked, and
 # gitops_tick.sh renders `already s in flight` when its /proc/uptime read comes back empty,
 # which `\d+` would refuse, silently restoring `lock=0` -- the failure this parser exists to
@@ -87,42 +84,23 @@ _ACQUIRED = re.compile(
 _JOINED = re.compile(
     r"gitops_tick\.sh: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
 )
-# deploy.sh holds the tree lock only for its snapshot, then queues on one lock per service
-# (ADR-0017), so most of a landing's wait arrives on THIS line. It names no holder: nothing
-# samples `fuser` for a service lock, and the holder is by construction another deploy of the
-# same service. A run can print several, taken in sequence, and `note_in_flock_wait` sums them.
-_SERVICE_ACQUIRED = re.compile(
-    r"deploy(?:\.sh)?: service lock \S+ acquired after (\d+)s\s*$"
-)
-# `annotation_line` writes the holder as `holder="..."`, so an unstripped quote splits one
-# Loki row into fields the board reads as something else. `lock_holder` sanitises its own
-# return the same way; this is the choke point for the wrapper-reported source.
-HOLDER_MAX = 200
 
 
-def in_flock_wait(line: str) -> tuple[int, str] | None:
-    """The seconds and holder a wrapper's own wait line reports, or None for any other line.
-
-    Three lines qualify: the tree lock's acquire, a per-service lock's acquire, and a landing
-    that joined a tick already in flight. A deploy prints the tree line at most once and a
-    service line per lock it queued on, and the caller sums them all into `lock`.
+def in_flock_wait(line: str) -> int | None:
+    """The seconds a landing waited on a tick it joined, or None for any other line.
 
     The joined-tick line carries two numbers and only the second is booked: the first is how
     long the tick had run BEFORE this landing arrived, which is time that elapsed outside the
     landing. Booking it would push `lock` above `tick`, and `lock` is a sub-part of `tick`
     and `deploy` rather than a fifth phase.
     """
-    if m := _ACQUIRED.search(line):
-        return int(m[1]), (m[2] or "").replace('"', "")[:HOLDER_MAX]
-    if m := _SERVICE_ACQUIRED.search(line):
-        return int(m[1]), ""
     if m := _JOINED.search(line):
-        return int(m[1]), ""
+        return int(m[1])
     return None
 
 
 def stream_stderr(
-    argv: list[str], cwd: Path | None, observe: Callable[[int, str], None] | None
+    argv: list[str], cwd: Path | None, observe: Callable[[int], None] | None
 ) -> int:
     """Run `argv`, echo its stderr through line by line, report waits; its exit code.
 
@@ -146,18 +124,16 @@ def stream_stderr(
             line = chunk.decode("utf-8", "replace")
             sys.stderr.write(line)
             sys.stderr.flush()
-            if observe and (wait := in_flock_wait(line)):
-                observe(*wait)
+            if observe and (waited := in_flock_wait(line)) is not None:
+                observe(waited)
     return proc.returncode
 
 
-def run_tick(
-    observe: Callable[[int, str], None] | None = None, wait: bool = True
-) -> int:
+def run_tick(observe: Callable[[int], None] | None = None, wait: bool = True) -> int:
     """Run gitops_tick.sh from beside land.py; its exit code.
 
-    `observe` is given the seconds and holder of a wait the wrapper reports on its own
-    stderr. Without one the child simply inherits stdio: the pipe is the more fragile
+    `observe` is given the seconds of a wait the wrapper reports on its own stderr.
+    Without one the child simply inherits stdio: the pipe is the more fragile
     arrangement, so it is taken only when a caller is booking what it reads.
 
     `wait=False` passes `--no-wait`: the tick is started and this returns as soon as systemd
@@ -481,6 +457,7 @@ class RemainingSetupHosts(Protocol):
         ref: str = "",
         repo: Path = ...,
         key_readers: Sequence[KeyReader] = (),
+        read_host: Callable[[dict, str], dict] | None = None,
     ) -> str: ...
 
 
@@ -506,6 +483,8 @@ class Tools:
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
+    # What a host holds, which `remaining_setup_hosts` reads only for a host it would name.
+    read_host: Callable[[dict, str], dict] = read_host
     # `...`, not the argument list: both take an optional `observe` callback, passed by keyword.
     tick: Callable[..., int] = run_tick
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
@@ -551,7 +530,9 @@ class Classifier:
 
     Every one is a function of a changed-file list and nothing else: no subprocess, no
     network, no clock. Keeping them here is what lets a pipeline test drive the REAL
-    derivation over a fixed path list while every boundary in `Tools` stays fake.
+    derivation over a fixed path list while every boundary in `Tools` stays fake. The two
+    exceptions are `key_readers`, which reads git, and `remaining_setup_hosts`, which reads
+    a host through the `Tools.read_host` a caller hands it.
     """
 
     plane_note: PlaneNote = land_tags.plane_note

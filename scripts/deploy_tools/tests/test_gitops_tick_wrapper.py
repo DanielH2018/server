@@ -130,7 +130,7 @@ def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited
     assert booked is not None, (
         f"land.py no longer parses gitops_tick.sh's line: {line!r}"
     )
-    assert booked[0] >= 1
+    assert booked >= 1
 
 
 # `systemctl show` answers `activating` forever: a run in flight that does not end while the
@@ -238,7 +238,9 @@ def test_a_joined_run_that_ends_cleanly_is_followed_by_a_fresh_run(tmp_path):
     assert "started and graded instead" in proc.stdout
     stderr = proc.stderr.splitlines()
     joined = next((x for x in stderr if "gitops_tick.sh: joined a tick" in x), "")
-    assert tools.in_flock_wait(joined), "the joined line the landing books must survive"
+    assert tools.in_flock_wait(joined) is not None, (
+        "the joined line the landing books must survive"
+    )
     assert any("started a fresh run" in x for x in stderr), stderr
 
 

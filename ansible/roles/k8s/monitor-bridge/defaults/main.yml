@@ -105,7 +105,6 @@ monitor_bridge_healthchecks_expected:
   # observability_alertmanager_watchdog_repeat_seconds, not by a cron. Its 600s period plus
   # 1200s grace hold the weekly reboot's gap.
   - {slug: alertmanager-watchdog, kind: simple, timeout: 600, grace: 1200}
-  - {slug: manifest-prune-check, kind: cron, schedule: "15 5 * * *", tz: UTC, grace: 7200}
   - {slug: etcd-snapshot-offbox, kind: cron, schedule: "45 2 * * *", tz: UTC, grace: 3600}
   - {slug: pi-peer-backup, kind: cron, schedule: "0 23 * * *", tz: "{{ tz }}", grace: 7200}
   # Two hours covers registry-gc.sh's worst case of two mirror phases, about 6000s.

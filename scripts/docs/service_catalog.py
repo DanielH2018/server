@@ -42,7 +42,8 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     its own `kind: PersistentVolumeClaim` — the claim is provisioned elsewhere and only
     referenced by `claimName:` in a pod's volumes list; this script also scans for that
     reference, but a claim referenced with neither form (e.g. hardcoded past a
-    yet-undiscovered third pattern) would still read as "no PVC (stateless)".
+    yet-undiscovered third pattern) would still read as "no PVC (stateless)". A claim named
+    by a shell variable (`${DRILL}`, in a script's own manifest) reads as no declared tier.
   - owner. An entry that carries `owner` (`lib.k8s_roles.tag_owners`) is not Ansible's to
     deploy, so its Auto-deploy cell names what applies it: Flux through
     `promote`, or nothing while it is mid-handback. `deploy.sh` refuses its tag with exit 5.

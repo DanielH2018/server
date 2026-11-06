@@ -69,9 +69,8 @@ def test_the_tick_lets_the_landing_book_a_wait_it_reports_itself(landing):
     ln, calls = landing()
     tick.run_tick(ln)
     observe = next(c[2]["observe"] for c in calls if c[0] == "tick")
-    observe(47, "pid 8: gitops-deploy")
+    observe(47)
     assert ln.ledger.lock_waited == 47
-    assert ln.ledger.lock_holder == "pid 8: gitops-deploy"
 
 
 def test_a_kick_does_not_wait_for_the_tick(landing, capsys):

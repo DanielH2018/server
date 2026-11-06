@@ -398,7 +398,9 @@ unapplied with nothing durable naming it (#6411). After the ff-merge the tick ru
 `scripts/deploy_tools/setup_reach_hosts.py` over the range. That script reads the same
 derivation as `land.sh`'s "also reaches" note (`land_reach.remaining_setup_hosts`). The tick
 then writes a `manual_plane` line for each role it names, with the other hosts in the line's
-`hosts` key. `clear_manual_plane_applied` never clears a line that carries `hosts`, so the
+`hosts` key. The script drops a host that already holds the changed file, as `land.sh` does
+(`docs/landing.md`), so a host that cannot be read inside 10 seconds stays named.
+`clear_manual_plane_applied` never clears a line that carries `hosts`, so the
 tick's own apply of the role leaves it standing. Apply the role on each host as printed, then
 `clear-owed manual_plane <role>`. A later range reaching another host widens the line's `hosts`
 and keeps its stamp. A failed derivation records nothing and logs `setup-reach:`.
@@ -561,11 +563,17 @@ To run a tick without waiting for the timer, on `daniel-box`:
 It runs the identical code path the timer runs. **There is no dry-run mode** — this deploys.
 
 `--no-wait` starts the tick and returns at once, without watching it or printing its journal.
-That is what a landing uses: `land.sh` deploys the merge commit of its own pull request
-(`deploy.sh --at <sha>`), so it needs the tick only to converge the primary checkout, which
-the timer does within ten minutes whether the request landed or not. It kicks it after the
-deploy, not before — this unit holds the git-tree lock for its whole run, so a tick started
-first is one `deploy.sh` then waits out to cut its snapshot.
+That is what a landing uses: `promote` applies the merge commit of the landing's pull request,
+so `land.sh` needs the tick only to converge the primary checkout, which the timer does within
+ten minutes whether the request landed or not. It kicks the tick before it waits on the
+promotion, so the checkout converges during that wait.
+
+To apply a green master commit that no promotion followed, dispatch `promote` with the commit's
+full 40-hex SHA. `promote` refuses a commit without green CI:
+
+```bash
+gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
+```
 
 ## Gating on CI correctly
 
@@ -844,8 +852,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   one back and deferred every other k8s change.** `git log -p -- docs/gitops-pipeline.md` has that
   arm's rules and accepted trade-offs.
 
-  - **The release-staleness check watches for a merged k8s change that never reached the cluster,
-    and it judges only a service whose `containers_list` entry carries no `owner`** (#5309). A
+  - **The release-staleness check watched for a merged k8s change that never reached the cluster,
+    and it judged only a service whose `containers_list` entry carries no `owner`** (#5309). A
     daniel-box cron owned by `sys_user`, not root
     (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
     `k3s_release_staleness_cron_minute`), runs
@@ -855,13 +863,12 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     no Ansible deploy writes it a newer record. On 2026-11-06 all 66 service tags carried `owner`,
     so the check judged no service. `PromotionStalled` and `FluxNotReady` watch the same gap on
     the Flux path, and `docs/k3s-node-plane-crons-and-incidents.md` has the check's account.
-    D6.17 disarms it. For a tag with no `owner`, these rules hold:
+    D6.17 disarmed it, and D6.18 deletes its code. For a tag with no `owner`, these rules held:
     - The check compares the service's release record (the applied commit that
       `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
       `origin/master` under that service's own role AND the shared roles that supply bytes to
       every service's manifests (`probe_lib/releases.py`'s `manifest_affecting_shared_roles()`).
-      It writes the `release-staleness-check` textfile verdict, which `ReleaseStalenessCheckFailed`
-      pages, and the verdict is down when any such service is stale or has no record.
+      It writes the `release-staleness-check` textfile verdict, and the verdict is down when any such service is stale or has no record.
     - A record whose service no `containers_list` entry declares is dropped first
       (`releases_retired.py`), because a retired role's record outlives the role and the commit
       that deleted it would read as drift no deploy tag can clear.
@@ -1161,23 +1168,29 @@ new path on and what `broad_remediation()` says for that plane.
 derivation is in `git log -p -- docs/gitops-pipeline.md`, and what stays below is the broad arm's.
 
 **The broad arm is the one worst case inside a unit activation.** It is forward-only: 180 s of
-flock wait plus `BROAD_DEPLOY_TIMEOUT_S` (1800 s), or 1980 s, against `TimeoutStartSec=70min`
-(4200 s) in `gitops-deploy.service.j2`. The ceiling keeps its headroom rather than shrinking,
-because the tree-lock waiters and the lander deadlines were derived from the same budgets.
+flock wait plus `BROAD_DEPLOY_TIMEOUT_S` (1800 s), or 1980 s, against `TimeoutStartSec=40min`
+(2400 s) in `gitops-deploy.service.j2`. The 420 s between them is for the tick's work outside
+the budget: its git calls carry no timeout. No lander deadline reads this ceiling, because
+`test_lander_deadlines_cover_the_soak.py` gives the tick no fixed budget.
 
-**This unit can hold the tree lock for 1800 s**, which is longer than the 10-minute tick
-interval. A concurrent `./scripts/deploy.sh` waits `LOCK_WAIT=3840`, not the unit's own `-w 180`,
-so it outlasts the hold and then deploys. It returns exit 75 only if the lock stays busy past
-3840 s. An operator who sees exit 75 should check whether `gitops-deploy` is mid-apply before
+**This unit can hold the tree lock for up to 2400 s**, because only `TimeoutStartSec` ends a tick
+whose git calls hang. A concurrent `./scripts/deploy.sh` waits `LOCK_WAIT=2400`, not the unit's
+own `-w 180`, so it outlasts any single tick and then deploys. It returns exit 75 only if the lock
+stays busy past 2400 s, which also happens behind a docs-refresh run whose four `timeout` calls
+all fire (2700 s) or when a second holder takes the lock first, because flock does not queue
+fairly. An operator who sees exit 75 should check whether `gitops-deploy` is mid-apply before
 assuming the lock is stuck.
 
 **Four waiters on the tree lock are pinned as a census.** `deploy.sh`, secret-rotate, docs-refresh
-and eval-run each wait 3840 s, and `_LOCK_WAITERS` and `_worst_lock_hold()` in
-`tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's worst hold. A
+and eval-run each wait 2400 s, and `_LOCK_WAITERS` and `_longest_tick_hold()` in
+`tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's ceiling. The
+census models the deployer alone. docs-refresh's longest path stays outside it because a run
+measures 7-11 minutes, its 06:17 start sits 2 h 43 min before secret-rotate's one weekly slot, and
+`deploy.sh` can retry after exit 75. A
 per-consumer test covers only the consumers someone wrote one for, so the census plus
 `test_the_lock_waiter_census_is_non_vacuous` makes a new waiter fail instead of passing silently.
-A raise that pushes `gitops_deploy_broad_timeout_s` past a waiter's wait fails those tests rather
-than shortening an operator's wait.
+A raise that pushes `TimeoutStartSec` past a waiter's wait fails those tests rather than shortening
+an operator's wait.
 
 **The overrun does not produce a second run, and it does not alert.** `OnUnitActiveSec` is
 measured from when the timer last started the unit, not from when it finished. A `Type=oneshot`
@@ -1289,10 +1302,10 @@ rollback budget stacks on top.
 - The unit's worst case is the flock wait plus that budget, which
   `test_the_deployers_hold_survives_max_flock_contention` holds inside `TimeoutStartSec` in
   `gitops-deploy.service.j2`.
-- A raise past the four waiters' 3840 s moves them too, in the same change, because
-  `test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold` fails otherwise.
+- A raise of `TimeoutStartSec` past the four waiters' 2400 s moves them too, in the same change,
+  because `test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold` fails otherwise.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
-  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s, and
+  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 2400 s, and
   `deploy_locks.locked_budget` spends the phase's own budget on a service-lock wait. An overrun
   never produces a second concurrent run, because the timer coalesces the new start into the
   activation in flight.

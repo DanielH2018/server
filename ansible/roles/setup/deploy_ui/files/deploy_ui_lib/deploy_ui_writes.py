@@ -1,6 +1,6 @@
 """Guards and writes for the deploy UI. A guard returns None to allow, else the refusal text.
 
-The refusals mirror the repo CLAUDE.md *When to wait* list: nothing lands or deploys under a
+The refusals mirror the repo CLAUDE.md *When to wait* list: nothing lands under a
 `hold_sha`, and the hold is cleared HERE, by an operator who typed the SHA, never bypassed.
 `clear_hold` hands the clear to `gitops_hold.Hold`, the deployer's own owner of the rule that
 `hold_sha` goes only together with its `owed` ledger `hold_plane` lines (#3658).
@@ -27,25 +27,6 @@ LOCK_WAIT_S = 5.0
 
 REQUIRED_HEADER = "X-Deploy-UI"
 
-# `deploy.sh --list-services` prints the block tags and Ansible's reserved `always` alongside
-# the service names, because all of them are valid `--tags` values from a terminal. None of
-# them is valid HERE: `--tags config` runs the config half of every container role, so
-# accepting one turns a single-service button into a fleet-wide deploy (GitHub issue #1596).
-# The page only ever posts a service name from the stale panel; this is what stops a
-# hand-made POST doing more.
-#
-# A literal, because the daemon runs under `uv run --no-project` outside the repo venv and
-# imports nothing from `scripts/`. It mirrors `BLOCK_TAGS | RESERVED_TAGS` in
-# `scripts/deploy_tools/deploy_tags.py`, and the tests — which pytest CAN import both from —
-# assert the two sets are equal, so a new block tag there fails here rather than silently
-# re-opening the hole.
-NON_SERVICE_TAGS = frozenset({"config", "deploy", "cron", "always"})
-
-
-def service_tags(listed: set[str]) -> set[str]:
-    """The deployable service tags among `deploy.sh --list-services` output."""
-    return set(listed) - NON_SERVICE_TAGS
-
 
 def write_allowed(headers: Mapping[str, str]) -> str | None:
     """Refuse a write request missing the CSRF-style header or a JSON body."""
@@ -65,22 +46,6 @@ def guard_land(pr: str, inflight: list[Run], hold_sha: str) -> str | None:
     """Refuse a duplicate landing for the same PR, or any landing while a hold is set."""
     if any(l.pr == pr for l in inflight):
         return f"a landing for PR {pr} is already running"
-    return _hold_refusal(hold_sha)
-
-
-def guard_deploy(tag: str, deployable: set[str], hold_sha: str) -> str | None:
-    """Refuse a tag naming no single service, or any deploy while a hold is set.
-
-    `deployable` is `deploy.sh --list-services` with `NON_SERVICE_TAGS` removed, so a block
-    tag is refused here while that command still lists it. The message says so rather than
-    sending the operator at a command whose output contradicts the refusal.
-    """
-    if tag not in deployable:
-        return (
-            f"{tag} is not a deployable service tag. `deploy.sh --list-services` also lists "
-            f"the block tags ({', '.join(sorted(NON_SERVICE_TAGS))}); this UI deploys one "
-            f"service at a time and refuses those."
-        )
     return _hold_refusal(hold_sha)
 
 

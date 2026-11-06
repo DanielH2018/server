@@ -30,7 +30,7 @@ class FakeRun:
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
 
-# A landing, a page-spawned deploy (deploy.sh and the playbook it runs, holding its two
+# A landing, a terminal deploy (deploy.sh and the playbook it runs, holding its two
 # service locks), and a second deploy of the same service queued on that lock.
 PS = """\
  4321     1   125 /x/python3 scripts/deploy_tools/land.py --pr 1543 --since 72c1a41
@@ -49,22 +49,8 @@ FUSER = """\
 TABLE: dict[tuple[str, ...], tuple[str, int | str]] = {
     ("ps", "-eo", "pid=,ppid=,etimes=,args="): (PS, 0),
     ("fuser",): (FUSER, 0),
-    (
-        "uv",
-        "run",
-        "python",
-        "scripts/diagnostics/probe.py",
-        "releases",
-        "--stale-only",
-    ): ("n8n: changed\n", 1),
     ("gh", "pr", "list"): (
         '[{"number":1550,"title":"T","headRefName":"b","isDraft":false,"statusCheckRollup":[]}]',
-        0,
-    ),
-    # Shaped like the real output: `--list-services` prints the block tags and `always`
-    # alongside the service names, which is the whole reason `_deployable_tags` subtracts.
-    ("./scripts/deploy.sh", "--list-services"): (
-        "always\nconfig\ncron\ndeploy\nhomepage\nn8n\n",
         0,
     ),
 }
@@ -137,6 +123,34 @@ def body(resp):
 def test_index_serves_the_page(app):
     status, html = app.get("/")
     assert status == 200 and "<title>Deploy queue</title>" in html
+
+
+def test_page_offers_land_and_no_deploy_control_is_clean(app):
+    _, html = app.get("/")
+    assert "/api/land" in html and "/api/cancel" in html and "/api/hold/clear" in html
+    assert "/api/deploy" not in html and ">deploy<" not in html
+
+
+def test_page_has_no_stale_release_panel_is_flagged(app):
+    _, html = app.get("/")
+    assert "/api/stale" not in html and 'id="stale"' not in html
+
+
+def test_deploy_route_is_gone_and_spawns_nothing_is_flagged(app, monkeypatch, tmp_path):
+    spawned = []
+    monkeypatch.setattr(
+        deploy_ui.writes,
+        "spawn_logged",
+        lambda argv, cwd, log_dir, action: spawned.append(argv) or tmp_path / "d.log",
+    )
+    monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
+    status, _ = app.post("/api/deploy", HDRS, json.dumps({"tag": "n8n"}))
+    assert status == 404 and spawned == []
+
+
+def test_stale_route_is_gone_and_runs_nothing_is_flagged(app):
+    status, _ = app.get("/api/stale")
+    assert status == 404 and not any(c[0] == "uv" for c in app.run.calls)
 
 
 def test_inflight_lists_landing_deploy_and_queued_deploy_is_clean(app):
@@ -221,18 +235,6 @@ def test_inflight_degrades_when_ps_fails_is_flagged(tmp_path, state_dir):
     assert b["unavailable"].startswith("ps")
 
 
-def test_stale_rows_is_clean(app):
-    assert body(app.get("/api/stale"))["stale"] == [
-        {"service": "n8n", "reason": "changed"}
-    ]
-
-
-def test_stale_is_cached_is_clean(app):
-    app.get("/api/stale")
-    app.get("/api/stale")
-    assert sum(1 for c in app.run.calls if c[:1] == ["uv"]) == 1
-
-
 def test_state_reads_markers_is_clean(app, state_dir):
     (state_dir / "hold_sha").write_text("deadbeef")
     assert body(app.get("/api/state"))["hold_sha"] == "deadbeef"
@@ -312,40 +314,6 @@ def test_land_duplicate_is_refused_is_flagged(app):
     assert status == 409 and "1543" in text
 
 
-def test_deployable_tags_drops_the_listed_block_tags(app):
-    assert app._deployable_tags() == {"homepage", "n8n"}
-
-
-def test_deploy_block_tag_is_flagged(app):
-    """A tag `--list-services` prints must still not start a fleet-wide deploy.
-
-    `config` selects the config half of every container role, so this arriving as a 202 is
-    the defect: the page's only deploy button posts one service name from the stale panel.
-    """
-    status, text = app.post("/api/deploy", HDRS, json.dumps({"tag": "config"}))
-    assert status == 409 and "config" in text
-
-
-def test_deploy_unknown_tag_is_flagged(app):
-    status, text = app.post("/api/deploy", HDRS, json.dumps({"tag": "nope"}))
-    assert status == 409 and "nope" in text
-
-
-def test_deploy_known_tag_spawns_deploy_sh_is_clean(app, monkeypatch, tmp_path):
-    spawned = {}
-    monkeypatch.setattr(
-        deploy_ui.writes,
-        "spawn_logged",
-        lambda argv, cwd, log_dir, action: (
-            spawned.setdefault("argv", argv) and tmp_path / "d.log"
-        ),
-    )
-    monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
-    status, _ = app.post("/api/deploy", HDRS, json.dumps({"tag": "n8n"}))
-    assert status == 202
-    assert spawned["argv"] == ["./scripts/deploy.sh", "--tags", "n8n"]
-
-
 def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
     """`hold_sha` and every held plane go, and the reply names each plane that went.
 
@@ -412,25 +380,6 @@ def test_land_non_hex_since_is_flagged(app):
         "/api/land", HDRS, json.dumps({"pr": "1550", "since": "HEAD~1"})
     )
     assert status == 400 and "hex" in text
-
-
-def test_stale_rc1_with_no_rows_is_unavailable_is_flagged(tmp_path, state_dir):
-    """probe.py exits 1 when it crashes too, and an empty panel reads as 'nothing pending'."""
-    t = dict(TABLE)
-    t[
-        (
-            "uv",
-            "run",
-            "python",
-            "scripts/diagnostics/probe.py",
-            "releases",
-            "--stale-only",
-        )
-    ] = ("", 1)
-    cfg = _bare_config(tmp_path, state_dir)
-    b = body(deploy_ui.App(cfg, run=FakeRun(t)).get("/api/stale"))
-    assert "stale" not in b
-    assert b["unavailable"].startswith("probe.py releases exited 1")
 
 
 def test_read_raising_an_unexpected_error_is_unavailable_is_flagged(

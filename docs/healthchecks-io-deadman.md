@@ -16,7 +16,6 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `longhorn-backup-health` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | target unavailable, backups stale/missing/errored, the daily count exceeds the B2 budget, or k3s's newest S3 etcd snapshot is stale, missing or disarmed |
 | `daniel-box-disk-health` | `roles/setup/k3s/templates/disk-health.sh.j2` | `/` over the headroom threshold, or `df` fails |
 | `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-token-drift.sh.j2` | the cluster token changed since the off-box copy was stamped, or the token or its stamp cannot be read |
-| `manifest-prune-check` | `roles/setup/k3s/templates/manifest-prune-check.sh.j2` | any of its three arms: live routing or workload objects absent from the staged manifests; a `copy:`-deployed artifact differing byte-for-byte from the repo; or a `template:`-rendered setup script whose source checksum no longer matches the render manifest this host wrote. A read that failed pings `/fail` too: a `kubectl get` for any checked kind, the read of Flux's Kustomizations in `flux-system`, or the declared-set read of the staged manifests |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `roles/setup/k8s_host_files/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
@@ -102,17 +101,9 @@ The script now calls `boot_grace_active` and exits 0 while the host's uptime is 
 The guard **fails open**: an unreadable `/proc/uptime` runs the check, because a guard that
 cannot read the clock must not silence the dead-man indefinitely.
 
-It covers the `*/10` crons and, since 2026-09-19, `manifest-prune-check`. For a daily cron a
-skipped slot is a skipped day, which is a worse trade than the rare boot landing inside its
-one-minute window — and their graces of an hour or more already tolerate a late run. `manifest-prune-check`
-is the exception because it is no longer a cron: it runs from a `kuma-check-manifest-prune`
-systemd timer with `Persistent=true`, so a slot missed inside an outage runs at boot, exactly
-when the cluster is least ready to be judged. Its boot-grace arm exits 1 without a ping, and
-the service's `Restart=on-failure` reruns it 30 minutes later with the real verdict. The
-2-hour grace covers that 30-minute delay; `ansible/tests/setup/test_health_cron_boot_grace.py`
-lists it under `DAILY_TIMER_SCRIPTS` and keeps the arm in place. The rerun on a red verdict
-sends `/fail` again each time, which healthchecks.io collapses into one alert, and the first
-`/success` after the fix clears it within 30 minutes rather than at the next day's slot.
+It covers the `*/10` crons. For a daily cron a skipped slot is a skipped day, which is a worse
+trade than the rare boot landing inside its one-minute window, and their graces of an hour or
+more already tolerate a late run.
 
 What it does not cover: Alertmanager accepting an alert while failing to *deliver* it.
 `AlertmanagerNotificationsFailing` and `DiscordDeliveryFailing` watch the Discord leg from inside
@@ -152,7 +143,6 @@ internal infrastructure, and some send no body at all:
 | `longhorn-backup-health` | full message | Names namespaces/PVCs, and the backup-target condition can carry the B2 bucket. **Kept deliberately** — this is the one whose detail makes a 3 AM page actionable. Drop the `--data-raw` argument to send status only. |
 | `daniel-box-disk-health` | full message | A disk percentage. Nothing to withhold. |
 | `etcd-snapshot-offbox` | none | Status only. Its failure message names the token's hash prefix and the stamp's path, so nothing about it goes off-site. The detail is in the journal, under `etcd-snapshot-offbox`. |
-| `manifest-prune-check` | generic | Its message names live IngressRoute/Middleware objects — internal service and hostname fragments. |
 | `pi-peer-backup` | generic | An rsync failure echoes `PI_SRC`, which carries the Pi's LAN IP and ssh user. |
 | `registry-gc` | full message | A revision and blob count, or a failure naming the cluster namespace and the `ghcr-mirror` Deployment. Low value to an outsider and it is what makes the failure actionable. |
 | `alertmanager-watchdog` | `{"status": "firing"}` | The receiver's `payload` carries the alert's status alone, so no label, annotation or URL goes off-site. |
@@ -172,7 +162,7 @@ The `{{ sys_user }}`-run scripts are `0755` (their crons must execute them), so 
 in them is readable by every local account on daniel-box. The ping key spoofs every check in the
 project, so it lives in
 `/etc/healthchecks/ping.env` at `0640 root:{{ sys_user }}` and is sourced at runtime. That
-covers every caller: `manifest-prune-check` and `registry-gc` run as root, the other two as
+covers every caller: `etcd-token-drift` and `registry-gc` run as root, the other two as
 `{{ sys_user }}`. Same shape as `/etc/renovate-notify/config.env`.
 
 (`registry-gc.sh` is `0700 root:root` — a root-only cron, so it never needed the `0755` the
@@ -265,7 +255,6 @@ cron or a grace, change the variable, this table and the list in the same PR.
 The `/10`-minute checks report within ten minutes of the deploy. To force the daily ones:
 
 ```bash
-sudo /usr/local/bin/manifest-prune-check.sh
 sudo /usr/local/bin/etcd-token-drift.sh   # compares the token with its stamp, changes nothing
 sudo k3s kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup
 sudo /usr/local/bin/registry-gc.sh   # scales the ghcr-mirror down for the duration — see below

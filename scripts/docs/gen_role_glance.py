@@ -31,7 +31,7 @@ roles:
   claim by name with its Longhorn backup tier beside it (the catalogue's `backup_tier`
   column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
   tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
-  lists, never typed). For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
+  lists, never typed, and a claim named by a shell variable has none). For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
   **Applied by** line replaces the deploy tag: it names Flux and `promote`, or the handback,
   and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the

@@ -30,7 +30,7 @@ repo's first Traefik→host route. Two facts follow:
 - **The EndpointSlice address is baked in at render time.** The renderer writes
   `k8s_node_client_ip` into the bundle, so a change to that variable reaches the cluster only
   with the next promotion that publishes this tag.
-- **A bad route change exposes a page that starts deploys and clears the deployer's hold.**
+- **A bad route change exposes a page that starts landings and clears the deployer's hold.**
   Under Ansible a route change reached the cluster only through a hand deploy. Under Flux
   every merged change applies on the next promotion, so review is the gate.
   `k8s_autodeploy: false` stays in `defaults/main.yml` with its reason, but it gates nothing

@@ -1,12 +1,11 @@
-"""The five B1 NotReporting rules carry the deadline their producer renders, as a literal.
+"""The two B1 NotReporting rules carry the deadline their producer renders, as a literal.
 
 `files/rules/host-checks.yaml` is plain YAML, so each `<Check>NotReporting` rule names its
 deadline twice: the `>` threshold of the stale-file arm and the `[Ns]` window of the
-absent_over_time arm. M6's batch B1 gives that pair to the five k3s crons. A cron moved to a
-slower cadence without its rule would page on every healthy gap, and one moved faster would leave
-the rule slower than the check (M1 convention 1). The two `*/N` crons render DEADLINE_S from their
-cron minute. The three daily checks take `k3s_daily_check_deadline_s`, which the live-drift unit
-passes as its `DEADLINE_S` environment variable. The disk-health pin is
+absent_over_time arm. M6's batch B1 gives that pair to the k3s crons. A cron moved to a slower
+cadence without its rule would page on every healthy gap, and one moved faster would leave the
+rule slower than the check (M1 convention 1). The `*/N` cron renders DEADLINE_S from its cron
+minute. The daily check takes `k3s_daily_check_deadline_s`. The disk-health pin is
 test_disk_health_rule_literals.py.
 
 Run: uv run pytest ansible/tests/services/test_b1_rule_literals.py
@@ -18,11 +17,8 @@ import pytest
 from _helpers import K8S_ROLES
 from _shell_render import render_shell_script
 from lib import yaml_fast
-from lib.estate import role_defaults
-from lib.repo_paths import K3S_ROLE
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
-K3S = role_defaults(K3S_ROLE)
 # A bare `>` comparison: `>=` and `==` are not the stale-file arm.
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
@@ -33,14 +29,8 @@ SHELL_CHECKS = {
         "longhorn-backup-health.sh.j2",
         "k3s_longhorn_backup_health_cron_minute",
     ),
-    "ReleaseStalenessCheckNotReporting": (
-        "release-staleness-check.sh.j2",
-        "k3s_release_staleness_cron_minute",
-    ),
     "EtcdSnapshotOffboxNotReporting": ("etcd-token-drift.sh.j2", None),
-    "ManifestPruneCheckNotReporting": ("manifest-prune-check.sh.j2", None),
 }
-LIVE_DRIFT_ALERT = "LiveDriftCheckNotReporting"
 
 
 def rule_expr(alert: str, rules: str | None = None) -> str:
@@ -78,16 +68,6 @@ def test_a_shell_producers_rule_literals_equal_its_rendered_deadline_is_clean(al
     assert literal_problems(rule_expr(alert), rendered_deadline(template)) == []
 
 
-def test_the_live_drift_rule_literals_equal_the_deadline_its_unit_passes_is_clean():
-    # live_drift_check.py is a plain file, so its deadline is the unit's DEADLINE_S variable.
-    tasks = (K3S_ROLE / "tasks" / "health-crons.yml").read_text()
-    assert '"DEADLINE_S={{ k3s_daily_check_deadline_s }}"' in tasks
-    assert (
-        literal_problems(rule_expr(LIVE_DRIFT_ALERT), K3S["k3s_daily_check_deadline_s"])
-        == []
-    )
-
-
 def test_a_cron_that_moves_without_its_rule_is_flagged():
     # */30 renders 3900s for the heartbeat that is */10 and 1500s today, so the rule is red.
     moved = rendered_deadline(
@@ -102,7 +82,7 @@ def test_a_cron_that_moves_without_its_rule_is_flagged():
 
 
 def test_a_daily_deadline_that_moves_without_its_rules_is_flagged():
-    # The three daily rules read the shared default: moving it must show on every one of them.
+    # The daily rule reads the shared default: moving it must show on the rule.
     moved = rendered_deadline(
         "etcd-token-drift.sh.j2", {"k3s_daily_check_deadline_s": 3600}
     )

@@ -108,6 +108,7 @@ class Landing:
         # The plane note rendered again with the narrow tags the deployer recorded for this
         # PR's range, by `classify.narrow_plane`; None until then, or when nothing narrowed.
         self.narrowed_plane: str | None = None
+        self.warnings: list[str] = []  # `warn` fills it; `pipeline.run` reports it
         self.needs_diff = False
         self.host_candidate = False  # a path is under HOST_INPUTS
         self.host_targets: list[Any] = []  # HostTargets; host_wait imports us
@@ -176,6 +177,13 @@ class Landing:
 
     # -- ending the landing -------------------------------------------------------------
 
+    def warn(self, text: str) -> None:
+        """Report a failure that keeps the verdict: a `== ` line now, the verdict's detail later."""
+        # One line, because `handoff._relay` filters by line and `verdict_in` reads only one.
+        line = " ".join(text.split())
+        print(f"== {line}", flush=True)
+        self.warnings.append(line)
+
     def die(self, msg: str, rc: int, verdict: str | None = None) -> NoReturn:
         """Stop with `land: <msg>` on stderr, and a VERDICT line on stdout.
 
@@ -239,16 +247,13 @@ class Landing:
         if self.ledger.lock_holder:
             say(f"lock held by {self.ledger.lock_holder}")
 
-    def note_in_flock_wait(self, seconds: int, holder: str) -> None:
-        """Book a wait a wrapper rode out INSIDE its own flock, and name the holder once.
+    def note_in_flock_wait(self, seconds: int) -> None:
+        """Book a wait a wrapper rode out INSIDE its own flock.
 
         Separate from `note_lock_contention` because the attempt succeeded: there is no
-        backoff to add, and `lock_holder` was read by the wrapper rather than by this
-        process. `tools.in_flock_wait` has already capped and de-quoted the holder.
+        backoff to add, and the wrapper's line names no holder.
         """
         self.ledger.lock_waited += seconds
-        if not self.ledger.lock_holder:
-            self.ledger.lock_holder = holder
 
     def state(self, name: str) -> str | None:
         """The deployer's `<name>` marker; "" when absent, None when it could not be read."""

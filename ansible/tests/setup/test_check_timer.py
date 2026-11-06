@@ -47,8 +47,6 @@ TASKS = COMMON / "tasks" / "check_timer.yml"
 KNOWN_CHECKS = frozenset(
     {
         "loki-read-route",
-        "manifest-prune",
-        "live-drift",
         "setup-drift",
         "github-ruleset-drift",
         "github-interaction-limit",
@@ -357,8 +355,9 @@ def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
             )
         checked += 1
     # Lower it only for a deliberate retirement. H7.36 moved the secret-rotation audit to a
-    # component (COMPONENT_CHECKS), which took the floor from 6 to 5.
-    assert checked >= 5, (
+    # component (COMPONENT_CHECKS), which took the floor from 6 to 5. D6.17 disarmed
+    # manifest-prune-check, which took it to 4.
+    assert checked >= 4, (
         f"only {checked} shell producers checked; the census has shrunk"
     )
 

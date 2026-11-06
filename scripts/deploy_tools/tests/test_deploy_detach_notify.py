@@ -333,10 +333,21 @@ def test_gate_skipped_tag_does_not_fail_the_verdict():
     assert any("skipped" in line for line in lines)
 
 
-def test_gate_degrades_gracefully_with_no_tags():
-    ok, lines, _ = notify_mod.gate([], ansible_ok=True)
-    assert ok is True
-    assert any("no --tags given" in line for line in lines)
+def test_gate_settles_an_empty_tag_list_with_no_reason():
+    """land.sh passes an empty list after a suspended wait, where no flag was missing (#7380)."""
+    assert notify_mod.gate([], ansible_ok=True) == (True, [], False)
+
+
+def test_detach_with_no_tags_names_the_missing_flag(capsys):
+    assert notify_mod.main(["--status", "0", "--log", "/l", "--no-post"]) == 0
+    assert "no --tags given" in capsys.readouterr().out
+
+
+def test_failed_detach_with_no_tags_names_only_the_failure(capsys):
+    assert notify_mod.main(["--status", "2", "--log", "/l", "--no-post"]) == 1
+    out = capsys.readouterr().out
+    assert "exited non-zero" in out
+    assert "no --tags given" not in out
 
 
 def test_notify_skips_silently_without_webhook_config(monkeypatch, capsys):

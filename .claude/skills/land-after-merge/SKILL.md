@@ -134,8 +134,9 @@ promotion, and clearing it is **operator-only**: stop and name the hold. Cause
 report the services the printed `kubectl` command names, and stop. A
 `nothing-to-deploy` whose detail says a tag "is suspended" means Flux applies nothing for that
 tag until a PR removes its `flux_suspend`; the suspend PR itself ends this way. The same wait on a
-PR that also owes a plane or a setup role's other hosts ends `needs-manual-apply`, and one that
-changes a host package goes on to the host wait. A PR that removes
+PR that also owes a plane or a setup role's other hosts ends `needs-manual-apply`, one that
+changes a host package goes on to the host wait, and the tick's state grades one the tick applies
+part of. A PR that removes
 `owner` is refused before the merge while the tag's Kustomization still exists; the handback
 order is in [docs/flux-deploy-plane.md](../../../docs/flux-deploy-plane.md).
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,

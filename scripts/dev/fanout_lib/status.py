@@ -6,6 +6,7 @@ import subprocess
 from collections.abc import Callable, Iterable, Sequence
 import dataclasses
 from dataclasses import dataclass
+from functools import partial
 
 # Reach the sibling package and `lib` (scripts/): a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -254,37 +255,54 @@ def with_own_pr(
     branch: str,
     branch_prs: Callable[[str, str], list[str] | None],
     repo: str,
+    earlier_prs: Callable[[], list[str]] = list,
 ) -> BatchStatus:
     """`s` with the PR GitHub holds for `branch`, in place of the first URL its text names.
 
     `parse_status` reads `pr_url` as the first PR URL in the final text, so a body that links
     another PR before its own reads as that PR (#6551). A `done` or `no-verdict` batch whose
     text names a PR the branch does not have becomes `needs-input` naming both, never `done`;
-    a `needs-input` or `failed` one loses the foreign url. Only a batch with a url asks the
-    forge, and a `landed` one holds the forge's own merged url already.
+    a `needs-input` or `failed` one loses the foreign url. Such a batch whose text names only
+    PRs from `earlier_prs`, which merged before this launch, opened nothing and becomes `no-pr`
+    (#7402). Only a batch with a url asks the forge, and a `landed` one holds the forge's own
+    merged url already.
     """
     if not s.pr_url or s.state == "landed":
         return s
-    found = own_pr(s.final_text, branch, branch_prs(branch, repo))
+    prs = branch_prs(branch, repo)
+    earlier = earlier_prs() if prs else []
+    found = own_pr(
+        s.final_text, branch, prs and [u for u in prs if u not in earlier], earlier
+    )
     if found.url:
         return dataclasses.replace(s, pr_url=found.url)
     if s.state in ("done", NO_VERDICT):
+        if not found.problem:
+            return dataclasses.replace(s, state=NO_PR, pr_url="")
         text = f"needs input: {found.problem}. {s.final_text}"
         return dataclasses.replace(s, state=NEEDS_INPUT, pr_url="", final_text=text)
     return dataclasses.replace(s, pr_url="")
 
 
 def reconciled(
-    s: BatchStatus, branch: str, merged_pr: Callable[[str, str], str], repo: str
+    s: BatchStatus,
+    branch: str,
+    merged_pr: Callable[[str, str], str],
+    repo: str,
+    earlier_prs: Callable[[], list[str]] = list,
 ) -> BatchStatus:
     """`s`, read as `landed` with its merged PR's url when it is a `no-report` GitHub merged.
 
-    Only a `no-report` batch asks the forge, so every other state costs no network call.
+    Only a `no-report` batch asks the forge, so every other state costs no network call. A PR
+    from `earlier_prs`, which merged before this launch, belongs to an earlier launch of the
+    same branch name and leaves the batch `no-report` (#7407).
     """
     if s.state != NO_REPORT:
         return s
     url = merged_pr(branch, repo)
-    return dataclasses.replace(s, state="landed", pr_url=url) if url else s
+    if not url or url in earlier_prs():
+        return s
+    return dataclasses.replace(s, state="landed", pr_url=url)
 
 
 def status_line(
@@ -423,8 +441,9 @@ def collect(
         by_id = {b.batch: b for b in mine}
         for st in parse_status(mine, proc.stdout):
             b = by_id[st.batch]
-            st = reconciled(st, b.branch, tools.merged_pr, b.repo)
-            st = with_own_pr(st, b.branch, tools.branch_prs, b.repo)
+            earlier = partial(tools.earlier_prs, b.branch, b.repo, b.launched_at)
+            st = reconciled(st, b.branch, tools.merged_pr, b.repo, earlier)
+            st = with_own_pr(st, b.branch, tools.branch_prs, b.repo, earlier)
             # Already reconciled, so `status_line` must not ask the forge a second time.
             line, tier = status_line(
                 st, host, b.branch, lambda *_: "", one_line, b.repo

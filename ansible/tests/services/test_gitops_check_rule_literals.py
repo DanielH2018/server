@@ -150,12 +150,12 @@ def tick_stale_expr(text: str) -> str:
 
 
 def test_the_tick_staleness_deadline_outlasts_the_longest_tick_gap():
-    assert shipped_longest_gap() == 4800  # 70min + 10min: non-vacuity for both reads
-    assert tick_stale_problems(tick_stale_expr(RULES.read_text()), 4800) == []
+    assert shipped_longest_gap() == 3000  # 40min + 10min: non-vacuity for both reads
+    assert tick_stale_problems(tick_stale_expr(RULES.read_text()), 3000) == []
 
 
 def test_a_tick_staleness_deadline_under_the_gap_is_flagged():
-    expr = tick_stale_expr(RULES.read_text().replace("5400", "4500"))
+    expr = tick_stale_expr(RULES.read_text().replace("5400", "2700"))
     assert tick_stale_problems(expr, shipped_longest_gap()) == [
-        "GitOpsTickStale's 4500s does not outlast a 4800s gap"
+        "GitOpsTickStale's 2700s does not outlast a 3000s gap"
     ]

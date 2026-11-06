@@ -17,9 +17,6 @@
 # for, and it would also admit every other device on the LAN, which is most of what an attacker
 # on the LAN would already have.
 #
-# Kuma's "k3s Terraria (game port)" monitor dials the node IP on 7777 rather than a Service name;
-# the open rule covers it, so no peer is needed for the tile.
-#
 # 7777 is the containerPort AND the Service port — verified 2026-08-20, they match.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy

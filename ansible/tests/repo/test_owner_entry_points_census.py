@@ -157,13 +157,6 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         Link("scripts/docs/gen_role_glance.py", "stale_k8s_docs", "tag_owners"),
         Link("scripts/docs/service_catalog.py", "build_rows", "tag_owners"),
     ),
-    "`deploy_ui`": (
-        Link(
-            "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
-            None,
-            '"./scripts/deploy.sh", "--tags"',
-        ),
-    ),
 }
 
 # The rows whose chain ends somewhere other than a tree reader, each with the reason.
@@ -182,7 +175,6 @@ NOT_A_TREE_READER = {
         "a host check: `is_server_side_applied` already leaves Flux's objects out, and "
         "`last-applied-configuration` is what marks one that a handback returned to Ansible"
     ),
-    "`deploy_ui`": "it runs `deploy.sh --tags`, whose refusal reads the entry's platform",
 }
 
 Source = Callable[[str], str | None]
@@ -278,7 +270,7 @@ def _source_with(rel: str, text: str) -> Source:
 
 
 def test_every_entry_point_in_the_owner_table_reads_ownership_is_clean():
-    assert len(table_rows(_plan())) >= 17
+    assert len(table_rows(_plan())) >= 16
     assert census_problems(_plan()) == []
 
 
@@ -315,7 +307,9 @@ def test_a_playbook_loop_that_drops_the_filter_is_flagged():
 
 def test_a_plan_row_no_member_names_is_flagged():
     plan = _plan().replace(
-        "| `deploy_ui` |", "| `new_entry.py` | Skips T.\n| `deploy_ui` |", 1
+        "| `live_drift_check.py` |",
+        "| `new_entry.py` | Skips T.\n| `live_drift_check.py` |",
+        1,
     )
     assert census_problems(plan) == [
         f"{PLAN}'s owner table has the row `new_entry.py`, which no member of "

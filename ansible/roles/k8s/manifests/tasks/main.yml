@@ -751,8 +751,7 @@
   # (#3115) fired on rendered bytes alone. A YAML-comment edit to crowdsec-agent.yml.j2 then
   # restarted authelia. A Secret's real change is the `secret` trigger's job, which reads
   # `manifests_secret_render`. That holds because every template declaring `kind: Secret`
-  # renders through `manifests_secret_files`; uptime-kuma lists static-monitors.yaml there by
-  # hand for that reason.
+  # renders through `manifests_secret_files`.
   changed_when: >-
     not (k8s_dry_run | bool)
     and (manifests_apply.stdout

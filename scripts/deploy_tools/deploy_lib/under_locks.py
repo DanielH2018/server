@@ -59,13 +59,11 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_locks
 
-# Covers gitops-deploy's worst-case hold, not its TimeoutStartSec. That hold was 3780s while
-# the tick deployed and rolled back k8s roles; since D6.12 it is one broad apply,
-# BROAD_DEPLOY_TIMEOUT_S 1800, and the wait stays until a later PR shrinks the unit's budget. It tracks the unit's timeout: a budget below the worst-case hold makes a deploy
-# queued behind a pathological gitops run give up having deployed nothing while that run is still
-# legitimately working. Pinned to the same role defaults the deployer reads by
-# test_deploy_lock_wait_budget.py. It is also the budget each per-service lock waits.
-LOCK_WAIT = 3840
+# gitops-deploy's TimeoutStartSec, the only bound on its hold because the tick's git calls carry no
+# timeout. A wait below it makes a deploy queued behind a pathological gitops run give up having
+# deployed nothing while that run is still legitimately working. Pinned to the unit by
+# test_gitops_deploy_timeout_budgets.py. It is also the budget each per-service lock waits.
+LOCK_WAIT = 2400
 # The snapshot this run is using, told apart from a dead one by an advisory lock inside it.
 OWNER_LOCK = ".deploy-owner.lock"
 SNAPSHOT_ROOT_DEFAULT = "/tmp/homelab-deploy-snapshots"
@@ -493,8 +491,7 @@ def take_service_locks(
         except OSError as exc:
             say_lock_unavailable(run.lock_dir, exc)
             raise Refused(DEPLOY_LOCK_UNAVAILABLE) from None
-        # Silent at 0s, for the reason the tree lock's line is. land.py books these seconds
-        # into the landing's `lock=` field (land_lib/tools.py:in_flock_wait).
+        # Silent at 0s, for the reason the tree lock's line is.
         waited = int(time.monotonic() - started)
         if waited > 0:
             say(f"deploy.sh: service lock {lock.name} acquired after {waited}s")

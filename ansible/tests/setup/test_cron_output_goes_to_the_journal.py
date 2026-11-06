@@ -38,7 +38,6 @@ JOURNAL_ROUTED = {
     "fake-remux health": "fake-remux-health",
     "Longhorn backup health": "longhorn-backup-health",
     "daniel-box disk health": "disk-health",
-    "Release staleness drift check": "release-staleness-check",
     "etcd token drift": "etcd-snapshot-offbox",
     "Registry garbage collection": "registry-gc",
     # The fake-remux workers discarded both streams to /dev/null until #6162, which the
@@ -100,10 +99,11 @@ KNOWN_CRONS = frozenset(
         "etcd token drift",  # setup/k3s/tasks/health-crons.yml
     }
 )
-# 13 after the initial_setup crons no host ran were deleted (20 after H2.2c moved the Longhorn
+# 12 after D6.17 disarmed the release-staleness cron (13 after the initial_setup crons no host
+# ran were deleted, 20 after H2.2c moved the Longhorn
 # trim to a RecurringJob, 21 after H7.40 moved the artifacts node's two crons into package
 # timers, 23 before that, and 29 before H7.36).
-_CENSUS_FLOOR = 13
+_CENSUS_FLOOR = 12
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 

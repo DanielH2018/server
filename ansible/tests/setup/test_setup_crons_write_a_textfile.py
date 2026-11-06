@@ -192,12 +192,11 @@ def test_every_exemption_names_a_member_that_still_writes_none():
 
 
 def test_census_resolves_each_route_a_writer_takes():
-    """Non-vacuity: a script cron, a renamed install, a Python kuma timer and a template timer."""
+    """Non-vacuity: a script cron, a renamed install and a template timer."""
     found = census()
     writers = {
         "k3s: cron `Longhorn backup health`",
         "fake_remux: cron `fake-remux health`",
-        "k3s: timer `kuma-check-live-drift`",
         "renovate_agent: timer `renovate-agent`",
     }
     assert {key for key in writers if found.get(key)} == writers
