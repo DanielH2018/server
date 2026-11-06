@@ -373,8 +373,8 @@ the role's includes:
   of its own, with its `when:`. Ansible does not read the list, so a bare include builds
   nothing it can name, and `image_builder_sites` raises on a role that sets both.
 - **`test_no_role_keeps_render_metadata_on_its_include_is_clean`** in
-  `scripts/renderer/tests/test_renderer_task_inputs.py` fails on any such key, so H2 exempts
-  the role there.
+  `scripts/renderer/tests/test_renderer_task_inputs.py` asserts that no role has such a key,
+  and it has no allowlist. H2 narrows that census to leave the role out.
 
 `manifests_prune` is why the order matters. `k8s/manifests` sets it to `true` in its own
 defaults, and a role's own defaults outrank its caller's defaults, so a caller's
