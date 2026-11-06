@@ -772,10 +772,10 @@ weekly_reboot_timezone: UTC
 # and for a heartbeat window that was already half-spent when the shutdown landed.
 weekly_reboot_mute_lead_minutes: 5
 # How long after the reboot itself the mute stays open. Measured: daniel-server
-# was down 07:35 to 07:48:25, its workloads were Ready again at ~07:51, and a Service recorded
-# ~16 minutes with no endpoint at all. 40 minutes is that recovery plus room for a slow boot
-# (07:38 and 07:41 on the two preceding Sundays) and for a 1200s check window that opened
-# just before the last missed run.
+# was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
+# recorded ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
+# for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,
+# whose 1200s window meant a tile could flip DOWN up to 20 minutes after the last missed push.
 # With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
 # 08:15 at the committed schedule. observability's alertmanager-secret.yaml.j2 does that sum;
 # nothing here repeats it.

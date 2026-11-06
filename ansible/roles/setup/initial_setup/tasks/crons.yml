@@ -343,10 +343,9 @@
 - name: Retire the TLS cert-expiry watch
   tags: [crons, cert-expiry]
   # Reaps the retired TLS cert-expiry watcher. Traefik serves ONE certificate -- a wildcard
-  # whose SANs cover `*.<domain>`, `*.local.<domain>` and the apex -- and monitor-bridge's
-  # `check_cert` reads that leaf out of `traefik_tls_certs_not_after` every 5 minutes, and
-  # bridge-exporter.yaml pages on the verdict. `probe.py cert <host>` keeps the per-host
-  # served-chain view for an operator.
+  # whose SANs cover `*.<domain>`, `*.local.<domain>` and the apex -- and observability's
+  # edge.yaml pages on that leaf's `traefik_tls_certs_not_after`. `probe.py cert <host>` keeps
+  # the per-host served-chain view for an operator.
   #
   # Deleting the installing tasks alone would leave the crontab entry and the credentials file
   # on daniel-box forever, so this task removes them. It runs on every host rather than behind
