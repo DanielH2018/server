@@ -2,3 +2,4 @@
 - name: Deploy littlelink to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
+# Red proof for R4.2. This PR is closed unmerged.
