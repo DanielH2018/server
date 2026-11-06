@@ -1111,6 +1111,7 @@
  "scripts/deploy_tools/tests/test_shared_role_callers.py": 0.05,
  "scripts/deploy_tools/tests/test_shared_role_reach.py": 0.5,
  "scripts/deploy_tools/tests/test_shared_role_smoke_caller.py": 0.37,
+ "scripts/deploy_tools/tests/test_tag_rule.py": 0.94,
  "scripts/deploy_tools/tests/test_verify_handoff.py": 0.0,
  "scripts/deploy_tools/tests/test_verify_promotion.py": 0.0,
  "scripts/deploy_tools/tests/test_verify_promotion_controller_rollout.py": 0.0,
