@@ -8,8 +8,8 @@ waiting on the tree lock -- part of `tick`, not a fifth phase.
 `landing.retry_while_locked`, backoff included. A wait a wrapper rode out INSIDE its own
 flock and then reported on its stderr is booked by `landing.note_in_flock_wait`:
 gitops_tick.sh watching a tick another actor started. That exits 0, so without the report the
-seconds would land in `tick` and every row would read `lock=0`. The two sources cannot double-count: a wrapper reports only a wait that
-ended in an acquire or a join, never one that ended in contention.
+seconds would land in `tick` and every row would read `lock=0`. The two sources cannot double-count: the wrapper reports only a wait that
+ended in a join, never one that ended in contention.
 
 `kick` is what became of the tick a fast-path landing kicks in step 5: `started`
 (a tick of its own, which converges the primary while the gate runs), `rearmed` (the first

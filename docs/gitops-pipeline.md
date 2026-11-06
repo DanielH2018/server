@@ -561,11 +561,17 @@ To run a tick without waiting for the timer, on `daniel-box`:
 It runs the identical code path the timer runs. **There is no dry-run mode** — this deploys.
 
 `--no-wait` starts the tick and returns at once, without watching it or printing its journal.
-That is what a landing uses: `land.sh` deploys the merge commit of its own pull request
-(`deploy.sh --at <sha>`), so it needs the tick only to converge the primary checkout, which
-the timer does within ten minutes whether the request landed or not. It kicks it after the
-deploy, not before — this unit holds the git-tree lock for its whole run, so a tick started
-first is one `deploy.sh` then waits out to cut its snapshot.
+That is what a landing uses: `promote` applies the merge commit of the landing's pull request,
+so `land.sh` needs the tick only to converge the primary checkout, which the timer does within
+ten minutes whether the request landed or not. It kicks the tick before it waits on the
+promotion, so the checkout converges during that wait.
+
+To apply a green master commit that no promotion followed, dispatch `promote` with the commit's
+full 40-hex SHA. `promote` refuses a commit without green CI:
+
+```bash
+gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
+```
 
 ## Gating on CI correctly
 

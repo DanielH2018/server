@@ -23,8 +23,7 @@ from deploy_tools.land_lib.outcome import Cause, Verdict, say
 def kick_tick(ln: Landing) -> None:
     """Start a tick and return without watching it; never ends the landing.
 
-    For a landing that deploys its PR's merge commit itself (`deploy.sh --at`). Nothing it
-    does next needs the primary checkout to be at that commit, so the tick is started only so
+    For a landing whose merge commit `promote` applies. Nothing it does next needs the primary checkout to be at that commit, so the tick is started only so
     the checkout converges for whoever reads it later. What became of the request is booked
     as `ledger.kick`, because the board is the only place the answer outlives the log.
 

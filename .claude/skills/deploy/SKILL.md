@@ -10,8 +10,8 @@ If the user provided a service name as an argument, use it directly. Otherwise a
 
 **A deploy that follows a merge is not this skill's.** When the deploy is the follow-through
 on a PR (`CLAUDE.md` → *After a PR Merges — Pull, Deploy, Verify*), use the `land-after-merge`
-skill: `land.sh` merges, waits for master CI, deploys the merge commit with `deploy.sh --at`,
-and gates the health. Do not deploy a merge by hand from `/home/ubuntu/server`.
+skill: `land.sh` merges, waits for master CI, waits on the `promote` run that applies the
+merge commit, and gates the health. Do not deploy a merge by hand from `/home/ubuntu/server`.
 
 **First, determine the platform** — the verification step differs and the Docker one is dead
 on the cluster nodes:
@@ -124,8 +124,7 @@ snapshot, the tag check or the staleness check.
 ./scripts/deploy.sh --tags "<service-name>"
 
 # Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
-# staleness gate and the tag check are asked about <sha> too. This is how land.sh deploys a
-# PR's merge commit without waiting for the tick to fast-forward the primary checkout.
+# staleness gate and the tag check are asked about <sha> too. A k8s tag still refuses with exit 5.
 # Any committish this checkout's object store resolves; --at with --changed is a bad command line.
 ./scripts/deploy.sh --tags "<service-name>" --at <sha>
 
@@ -182,6 +181,13 @@ not in this skill: a copy here drifted once already (#2853).
 lands through `promote` once it merges; drop the tag to deploy the rest. `--changed` leaves such
 a tag out and names it, and a shared role's name is a tag miss. `--list-services` marks each k8s
 tag on stderr.
+
+To apply a green master commit that no promotion followed, dispatch `promote` with the commit's
+full 40-hex SHA. `promote` refuses a commit without green CI:
+
+```bash
+gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
+```
 
 ## What `--tags`, `--at` and `--detach` change
 

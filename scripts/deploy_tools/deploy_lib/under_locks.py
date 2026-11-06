@@ -491,8 +491,7 @@ def take_service_locks(
         except OSError as exc:
             say_lock_unavailable(run.lock_dir, exc)
             raise Refused(DEPLOY_LOCK_UNAVAILABLE) from None
-        # Silent at 0s, for the reason the tree lock's line is. land.py books these seconds
-        # into the landing's `lock=` field (land_lib/tools.py:in_flock_wait).
+        # Silent at 0s, for the reason the tree lock's line is.
         waited = int(time.monotonic() - started)
         if waited > 0:
             say(f"deploy.sh: service lock {lock.name} acquired after {waited}s")

@@ -239,16 +239,13 @@ class Landing:
         if self.ledger.lock_holder:
             say(f"lock held by {self.ledger.lock_holder}")
 
-    def note_in_flock_wait(self, seconds: int, holder: str) -> None:
-        """Book a wait a wrapper rode out INSIDE its own flock, and name the holder once.
+    def note_in_flock_wait(self, seconds: int) -> None:
+        """Book a wait a wrapper rode out INSIDE its own flock.
 
         Separate from `note_lock_contention` because the attempt succeeded: there is no
-        backoff to add, and `lock_holder` was read by the wrapper rather than by this
-        process. `tools.in_flock_wait` has already capped and de-quoted the holder.
+        backoff to add, and the wrapper's line names no holder.
         """
         self.ledger.lock_waited += seconds
-        if not self.ledger.lock_holder:
-            self.ledger.lock_holder = holder
 
     def state(self, name: str) -> str | None:
         """The deployer's `<name>` marker; "" when absent, None when it could not be read."""

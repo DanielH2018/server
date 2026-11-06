@@ -50,12 +50,18 @@ def test_step_3_names_the_sha_and_omits_the_on_clause_for_a_timeout(landing):
     ln, _ = landing(Fakes(await_ci=[(1, "x")]))
     with pytest.raises(Outcome) as red:
         ci.wait_master_ci(ln, "abc123")
-    assert red.value.error == "master CI is RED on abc123 — nothing deployed"
+    assert (
+        red.value.error
+        == "master CI is RED on abc123 — land.sh deployed nothing itself"
+    )
 
     ln, _ = landing(Fakes(await_ci=[(75, "x")]), ci_timeout=900)
     with pytest.raises(Outcome) as timeout:
         ci.wait_master_ci(ln, "abc123")
-    assert timeout.value.error == "no CI verdict inside 900s — nothing deployed"
+    assert (
+        timeout.value.error
+        == "no CI verdict inside 900s — land.sh deployed nothing itself"
+    )
 
 
 def test_a_labelled_wait_names_what_it_waited_on(landing):
@@ -65,7 +71,7 @@ def test_a_labelled_wait_names_what_it_waited_on(landing):
         ci.wait_master_ci(ln, "def456", "the tip def456")
     assert (
         exc.value.error
-        == "no CI verdict on the tip def456 inside 900s — nothing deployed"
+        == "no CI verdict on the tip def456 inside 900s — land.sh deployed nothing itself"
     )
 
 
@@ -76,7 +82,7 @@ def test_a_labelled_red_names_that_the_tick_cannot_cross_it(landing):
     with pytest.raises(Outcome) as exc:
         ci.wait_master_ci(ln, "def456", "the tip def456")
     assert exc.value.error == (
-        "master CI is RED on the tip def456 — the tick cannot cross it; nothing deployed"
+        "master CI is RED on the tip def456 — the tick cannot cross it; land.sh deployed nothing itself"
     )
 
 
@@ -86,14 +92,17 @@ def test_an_unrecognized_await_ci_exit_names_what_it_waited_on(landing):
     ln, _ = landing(Fakes(await_ci=[(3, "x")]))
     with pytest.raises(Outcome) as unlabelled:
         ci.wait_master_ci(ln, "abc123")
-    assert unlabelled.value.error == "await_ci failed (exit 3) — nothing deployed"
+    assert (
+        unlabelled.value.error
+        == "await_ci failed (exit 3) — land.sh deployed nothing itself"
+    )
 
     ln, _ = landing(Fakes(await_ci=[(3, "x")]))
     with pytest.raises(Outcome) as labelled:
         ci.wait_master_ci(ln, "def456", "the tip def456")
     assert (
         labelled.value.error
-        == "await_ci failed on the tip def456 (exit 3) — nothing deployed"
+        == "await_ci failed on the tip def456 (exit 3) — land.sh deployed nothing itself"
     )
 
 
@@ -311,5 +320,5 @@ def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(
     assert (exc.value.rc, exc.value.verdict) == (1, "ci-unproven")
     assert exc.value.error == (
         f"no CI verdict can arrive{where}: {line} (this PR's tags: grafana,loki) "
-        "— nothing deployed"
+        "— land.sh deployed nothing itself"
     )

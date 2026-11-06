@@ -111,7 +111,7 @@ def take_tree_lock_now() -> int:
         locked.say_lock_unavailable(path, exc)
         raise locked.Refused(DEPLOY_LOCK_UNAVAILABLE) from None
     # Always 0s by construction: a non-blocking flock takes the lock at once or refuses. Printed
-    # anyway, so the log shape does not depend on the mode and land.py books the same field.
+    # anyway, so the log shape does not depend on the mode.
     locked.say("deploy.sh: lock acquired after 0s")
     return fd
 
