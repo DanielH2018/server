@@ -372,7 +372,9 @@ A failed reconcile makes a host's updater write `/var/lib/homelab-updater/hold`,
 `HostReconcileFailed` pages 15 minutes later. Each lever runs as root on the held host, from a
 LAN session:
 
-1. Read `journalctl -u homelab-updater -u homelab-reconcile` and fix the cause.
+1. Read `journalctl -u homelab-updater -u homelab-reconcile` and fix the cause. Reconcile logs
+   `<action> starts` and `<action> took <N>s` around every command it calls. A run its start
+   timeout killed ends on the `starts` line of the action it was in.
 1. When the installed package is fine and the failure was transient, rerun reconcile. The
    command clears the hold only if reconcile passes:
 
