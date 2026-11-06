@@ -1,9 +1,7 @@
 """The render record and the release record compute one digest, through one file.
 
-`probe.py releases --stale-only` is meant to compare a release record's `manifests_digest`
-against a render record's. That comparison is only sound while both digests come from the same
-code: a copied expression drifts one edit at a time, and each drift reads as a stale service
-nobody can clear. So `release_stamp.yml` and `render_record.yml` both include
+A release record's `manifests_digest` compares with a render record's only while both digests
+come from the same code: a copied expression drifts one edit at a time. So `release_stamp.yml` and `render_record.yml` both include
 `release_digest.yml`, and neither hashes anything itself.
 
 The render record's own dict must not share a name with the mode flag. The render cron passes
@@ -53,7 +51,7 @@ def test_a_task_file_with_its_own_digest_is_flagged():
 
 
 def test_the_digest_stats_the_ordinary_manifests_and_the_claims_only():
-    """The claims are in the digest, so a size or class change reads stale; secrets are not."""
+    """The claims are in the digest, so a size or class change moves it; secrets are not."""
     stat = task_named(
         load_tasks(TASKS / DIGEST_FILE), "Checksum the rendered manifests"
     )

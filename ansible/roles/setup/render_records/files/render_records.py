@@ -2,14 +2,15 @@
 """Render-record producer — managed by Ansible (render_records role); edits overwritten.
 
 Writes `/var/lib/homelab/k8s-renders.d/<service>.json` for every renderable k8s service, once
-an hour, so `probe.py releases --stale-only` can compare a fresh render's digest against the
-release record's instead of guessing from the paths a merge touched (#2574, #2586, #2587).
+an hour, so a reader can compare a fresh render's digest against the release record's instead
+of guessing from the paths a merge touched (#2574, #2586, #2587). D6.18a deleted that reader,
+so no code reads the records, and R4 deletes this role.
 
 ONE RUN:
 
   1. Pick the newest commit on `origin/master` whose CI is green. The ref is the primary
-     checkout's `origin/master`, the one the GitOps deployer fetches every tick and the one the
-     staleness reader resolves. This script never fetches: a second fetcher on the same refs
+     checkout's `origin/master`, the one the GitOps deployer fetches every tick. This script
+     never fetches: a second fetcher on the same refs
      would contend with the deployer's for the ref locks. The green rule is the deployer's own
      (`deploy_toolbox.fetch_ci_verdict`, `deploy_git.ci_walk_candidates`), imported from
      /opt/gitops-deploy rather than copied, so the two cannot disagree about "green".

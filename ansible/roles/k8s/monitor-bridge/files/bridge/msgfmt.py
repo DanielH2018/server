@@ -15,10 +15,9 @@ The headline stands alone in the first 60 chars, because Kuma's cell and the Dis
 both truncate from the right. Groups are ordered largest first. Over `limit`, the names
 shown per group shrink from five to one — every reason and every count survives that — and
 only when one name per reason still does not fit is the line cut from the right with a
-`…(+N chars)` marker, which does lose trailing reasons. `probe.py releases --stale-only --kuma` renders through this module too
-(a `sys.path` bootstrap onto this role's `files/`), so the cron and the pod agree on the shape.
+`…(+N chars)` marker, which does lose trailing reasons.
 
-Pure: no I/O, no bridge imports, so `probe.py` can load it without the pod's config.
+Pure: no I/O, no bridge imports.
 """
 
 from collections.abc import Mapping

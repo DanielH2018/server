@@ -5,7 +5,7 @@ An Ansible setup role records what it installed in two fragments, through
 and `ansible/roles/setup/common/tasks/stamp_deployed.yml`
 (`setup-deployed-manifest.d/<stamp_deployed_name>`). The two names can differ. When a component
 takes a task over, its `legacy:` list must name each fragment as the task stamped it: a fragment
-left behind names a file reconcile removed, and the manifest-prune check reads it as missing
+left behind names a file reconcile removed, and setup-drift-check.sh reads it as missing
 every run. loki-route-witness listed its render name for both and left
 `setup-deployed-manifest.d/loki-route-health` on daniel-box.
 

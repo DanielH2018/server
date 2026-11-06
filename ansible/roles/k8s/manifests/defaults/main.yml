@@ -15,20 +15,20 @@ manifests_service: "{{ ansible_parent_role_names | reject('equalto', 'k8s/manife
 # (setup-deployed-manifest.d, setup-render-manifest.d) because it answers the same class of
 # question for the k8s plane. World-readable, unlike the 0700 render dir it describes: the
 # record holds file names, checksums and a commit id, and a reader that needs root is a reader
-# nobody runs. `probe.py releases` is that reader.
+# nobody runs. No code reads the record since D6.18a deleted its one reader.
 manifests_release_dir: /var/lib/homelab/k8s-releases.d
 
 # The host-local HMAC key both records' `secret_digest` is keyed with. root, 0600,
 # created on first use by files/secret_hmac.py and never copied, printed or committed. Outside
-# k8s-releases.d, whose records are 0644. Deleting it re-keys every future digest, so each
-# service with secret manifests reads stale until its next deploy writes a fresh release record.
+# k8s-releases.d, whose records are 0644. Deleting it re-keys every future digest, so a digest
+# written before the deletion never matches one written after it.
 manifests_secret_digest_key: /var/lib/homelab/k8s-secret-digest.key
 
 # Render-only mode. Under `k8s_dry_run`, render_record.yml digests the throwaway
 # render the same way release_stamp.yml digests an applied one and writes it here, so
-# `probe.py releases --stale-only` can compare what is applied against what the tree would
-# render. Off by default: a hand-run `--dry-run` is normally a branch, and a render record
-# names a tree the staleness reader must be able to trust. The render cron passes it with -e.
+# a reader can compare what is applied against what the tree would render. No code makes that
+# comparison since D6.18a. Off by default: a hand-run `--dry-run` is normally a branch, and a
+# render record must name a tree a reader can trust. The render cron passes it with -e.
 # A separate directory, never k8s-releases.d, because a render is not a release.
 manifests_render_record: false
 manifests_render_record_dir: /var/lib/homelab/k8s-renders.d

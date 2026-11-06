@@ -1,9 +1,9 @@
 ---
 # Record the digest a render of THIS tree produces for one service, without applying it.
 #
-# THE PROBLEM. `probe.py releases --stale-only` decides whether a service's applied manifests
-# lag origin/master from the paths a merge touched. A path is a proxy: five narrowings exist
-# because a path moved while the rendered bytes did not. The release record already carries
+# WHY IT EXISTS. The paths a merge touched are a proxy for whether a service's applied
+# manifests lag origin/master, and a path can move while the rendered bytes do not. D6.18a
+# deleted the reader this record served, so no code reads it. The release record carries
 # `manifests_digest` for the bytes an apply wrote. Comparing it against the digest of a fresh
 # render answers the real question, and only a play can produce that render faithfully: the
 # offline harness stubs SOPS values and renders a placeholder domain, so it reproduced the

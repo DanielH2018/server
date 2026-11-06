@@ -315,8 +315,8 @@ one-redeploy convergence `secret_digest` had.
 `manifests_rollout` and every `manifests_extra_rollouts` entry — with `restart: true` where this
 apply queued one (a changed render, a changed secret render, or a rebuilt image, and not a
 workload the apply created or one the apply itself rolled —
-`manifests_rolled_by_apply`). `probe.py health` reads it and fails a `restart: true` workload
-whose `restartedAt` is not newer than `applied_at` (#1867). The stamp is included before the
+`manifests_rolled_by_apply`). A `restart: true` workload owes a `restartedAt` newer than
+`applied_at` (#1867), and no code reads that since D6.18a. The stamp is included before the
 restart tasks for that comparison to hold, and after the rebuilt-image fact so both read one
 answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the order.
 

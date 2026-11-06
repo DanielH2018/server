@@ -25,8 +25,8 @@ flux_namespace: flux-system
 # `restart_on: []` on every entry is required. Without it the shared default `[config, secret,
 # image]` applies, so any changed render whose apply leaves a controller's pod template alone
 # (a NetworkPolicy edit, or a changed Secret render) records `restart: true` for all three.
-# No task here restarts a controller, so `probe.py health flux` would then fail each as NOT
-# ROLLED. No signal applies: no controller reads a Secret or a ConfigMap through env, envFrom or
+# No task here restarts a controller, so the record would owe each one a restart nothing
+# issues. No signal applies: no controller reads a Secret or a ConfigMap through env, envFrom or
 # a subPath, notification-controller reads its Provider's Secret through the API on each event,
 # and a pod-template change rolls the controller through the apply itself.
 flux_controllers:
@@ -140,8 +140,8 @@ manifests_deferred_dir_name: flux-sync  # noqa var-naming[no-role-prefix]
 # another namespace. Skip its wait, and tasks/main.yml waits instead.
 manifests_rollout: ''  # noqa var-naming[no-role-prefix]
 
-# ...but tell the release record which workloads this role owns, so `probe.py health flux`
-# reads them, and so the shared role fingerprints their pod templates in flux-system.
+# ...but tell the release record which workloads this role owns, so the shared role
+# fingerprints their pod templates in flux-system.
 # restart_on: [] on each entry keeps the record from expecting a restart nothing issues
 # (`flux_controllers` has why).
 manifests_self_rollouts: >-  # noqa var-naming[no-role-prefix]
