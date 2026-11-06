@@ -709,7 +709,7 @@
         "ansible/roles/k8s/zigbee2mqtt/defaults/main.yml",
         "ansible/roles/setup/k8s_host_files/defaults/main.yml"
       ],
-      "groupName": "k8s image {{depName}} (manual — k8s_autodeploy: false, so the tick applies nothing; land.sh deploys it)",
+      "groupName": "k8s image {{depName}} (manual — k8s_autodeploy: false, so a person merges it through land.sh)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
@@ -731,7 +731,7 @@
         "ansible/roles/k8s/terraria/templates/Dockerfile*.j2",
         "ansible/roles/k8s/valheim/templates/Dockerfile*.j2"
       ],
-      "groupName": "k8s base image {{depName}} (manual — k8s_autodeploy: false, so the tick applies nothing; land.sh rebuilds and deploys it)",
+      "groupName": "k8s base image {{depName}} (manual — k8s_autodeploy: false, so a person merges it through land.sh; promote rebuilds it)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
@@ -1158,7 +1158,7 @@
       "matchDatasources": [
         "npm"
       ],
-      "groupName": "n8n fuzzball (manual — built image, rebuild with deploy.sh --tags n8n; k8s_autodeploy: false)",
+      "groupName": "n8n fuzzball (manual — built image; promote rebuilds it after merge; k8s_autodeploy: false)",
       "rebaseWhen": "conflicted",
       "schedule": [
         "before 6am on monday"
