@@ -1,7 +1,7 @@
 ---
 id: "0028"
 title: The cluster render supports a closed Jinja subset
-status: Proposed
+status: Accepted
 date: 2026-11-06
 governs:
   - "scripts/renderer/renderer_lib/dialect.py#a closed list, read by the refusal and the census"
@@ -11,7 +11,7 @@ governs:
 
 ## Status
 
-Proposed. The operator approves it, which sets the status to Accepted.
+Accepted.
 
 ## Context
 
