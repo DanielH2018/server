@@ -20,9 +20,8 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 (`group_vars/all.yml`):
 
 1. It reads the primary checkout's `origin/master` and never fetches. The GitOps deployer
-   fetches that ref every tick, and the staleness reader resolves the same ref, so a record's
-   `commit` can match what the reader compares against. A second fetcher would contend with the
-   deployer's for the ref locks.
+   fetches that ref every tick. A second fetcher would contend with the deployer's for the ref
+   locks.
 2. It picks the newest commit there whose CI is green, with the deployer's own rule:
    `deploy_toolbox.fetch_ci_verdict` and `ci_verdict.ci_walk_candidates`, imported from
    `/opt/gitops-deploy` rather than copied. The CI settings come from the deployer's
@@ -37,7 +36,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
    a refused tag would stop the whole run.
 5. It runs `deploy.sh --dry-run --skip-staleness-check -e manifests_render_record=true` over
    that list. The staleness gate is skipped because the chosen commit may sit below the tip;
-   the record names its own commit, which is what the reader compares.
+   the record names its own commit.
 6. It reads every record back and logs the verdict.
 
 ## Autonomous-role contract (it runs a playbook hourly with no human in the loop)
@@ -56,8 +55,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
   units, the worktree and the role's directories; true and a re-run restores them. To move the
   producer, apply false on the old host before changing `render_records_host`: the playbook
   entry is gated on that var, so a host that stops matching it is never visited again. The
-  records already written stay. The reader still reads each as a render behind origin/master,
-  which answers only for the path hits its own `commit` already holds.
+  records already written stay.
 - **Authoritative sources:** the records themselves. The tile goes green only when every
   listed service has a record whose `commit` is the chosen SHA, `tree_dirty` is false, `host`
   is this host and `rendered_at` falls inside this run. Ansible's exit code is reported in the
