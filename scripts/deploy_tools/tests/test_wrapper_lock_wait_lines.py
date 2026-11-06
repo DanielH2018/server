@@ -1,17 +1,14 @@
 #!/usr/bin/env python3
-"""The wait lines `deploy.sh` prints, and that land.py books them.
+"""The wait lines `deploy.sh` prints for an operator reading its log.
 
-`land_lib/landing.py:retry_while_locked` books a wait only when an attempt EXITS 75. Both wrappers can wait a long time
-and exit 0 instead -- deploy.sh inside `flock -w LOCK_WAIT`, gitops_tick.sh watching a tick another actor started
-(`test_gitops_tick_wrapper.py`) -- so without these lines every ledger row would read `lock=0` while the tree lock was
-busy. These are the lines that close that gap, asserted together with the parser that reads them: a wording change on
-either side that the other does not follow is exactly the drift this file catches.
+deploy.sh can wait a long time inside `flock -w` and exit 0, so without these lines a slow start
+would read as a slow playbook. `test_land_tools.py` holds the line a landing books, which is
+`gitops_tick.sh`'s.
 
 No test here touches the real git-tree lock, the real systemd units, or the host's
 syslog. A foreground deploy takes real flock(2) locks on tmp_path files, contended by a
 real flock(2) holder in this process, in both the foreground and `--detach`. `fuser`,
-`ps`, `uv`, `logger`, `systemctl` and `journalctl` are stubbed on PATH. The only live reads are
-gitops_tick.sh's own `/var/lib/gitops-deploy` markers.
+`ps`, `uv` and `logger` are stubbed on PATH.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py
 """
@@ -19,6 +16,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py
 import contextlib
 import fcntl
 import os
+import re
 import subprocess
 import threading
 import time
@@ -32,7 +30,6 @@ from _deploy_sh_fakes import (
     stub_bin,
 )
 from lib import exit_codes as ec
-from deploy_tools.land_lib import tools
 
 from deployer_lib.deploy_locks import TREE_LOCK
 from lib.repo_paths import REPO as _REPO
@@ -40,7 +37,6 @@ from lib.repo_paths import REPO as _REPO
 _TREE_LOCK_NAME = PurePath(TREE_LOCK).name
 
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
-_TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
 
 
 def _deploy_repo_env(tmp_path: Path, bin_dir: Path) -> tuple[Path, dict[str, str]]:
@@ -111,6 +107,13 @@ def _run_deploy(tmp_path: Path, **env_extra: str) -> subprocess.CompletedProcess
         timeout=120,
         check=False,
     )
+
+
+def _waited_seconds(line: str) -> int:
+    """The seconds a deploy.sh acquire line reports; a line without them fails the test."""
+    m = re.search(r"acquired after (\d+)s", line)
+    assert m, line
+    return int(m[1])
 
 
 def _is_blocked_on(inode: int) -> bool:
@@ -192,20 +195,18 @@ def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_pat
     assert line, result.stderr
     assert "(holder was: pid 4242" in line
     assert "ansible-playbook ansible/deploy.yml --tags sonarr" in line
-    booked = tools.in_flock_wait(line)
-    assert booked is not None, f"land.py no longer parses deploy.sh's line: {line!r}"
-    assert booked[0] >= 1
+    assert _waited_seconds(line) >= 1
     assert (tmp_path / "self-fds").read_text().strip() == "0", (
         "deploy.sh held the lock file when it sampled the holder, so real `fuser` would "
-        "have reported deploy.sh itself and the landing would name itself as its blocker"
+        "have reported deploy.sh itself and the line would name it as its own blocker"
     )
 
 
 def test_an_uncontended_acquire_says_nothing(tmp_path):
-    """CLEAN half: a line on every deploy would make `lock=0` rows unreadable as evidence.
+    """CLEAN half: a line on every deploy would say nothing about a wait.
 
     A lock taken at once reports no wait whatever the clock says: `flock -n`
-    succeeding is 0s by construction, so a slow fork cannot book a phantom `lock=1`.
+    succeeding is 0s by construction, so a slow fork cannot report a phantom wait.
     """
     result = _run_deploy(tmp_path)
     assert result.returncode == 0, result.stderr
@@ -214,10 +215,10 @@ def test_an_uncontended_acquire_says_nothing(tmp_path):
 
 
 def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
-    """FLAGGED half: most of what a landing waits for is THIS lock, not the tree lock.
+    """FLAGGED half: most of what a deploy waits for is THIS lock, not the tree lock.
 
-    Without this line a landing behind another deploy of the same service books `lock=0` and
-    charges the wait to `deploy` — the same gap the tree-lock line closed for the tree lock.
+    Without this line a deploy behind another deploy of the same service reads as a slow
+    playbook, the same gap the tree-lock line closed for the tree lock.
     """
     with _held(
         tmp_path / "locks" / "server-deploy-uptime-kuma.lock",
@@ -229,26 +230,9 @@ def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
     line = next((x for x in result.stderr.splitlines() if "service lock" in x), "")
     assert line, result.stderr
     assert "service lock uptime-kuma acquired after" in line
-    booked = tools.in_flock_wait(line)
-    assert booked is not None, f"land.py no longer parses deploy.sh's line: {line!r}"
-    assert booked[0] >= 1
-    # The tree lock was free, so nothing may be booked against it.
+    assert _waited_seconds(line) >= 1
+    # The tree lock was free, so no wait may be reported against it.
     assert ": lock acquired after" not in result.stderr
-
-
-def test_the_service_lock_refusal_is_not_booked_as_a_wait():
-    """CLEAN half for the parser itself: only an ACQUIRE reports time this landing waited.
-
-    The refusal line names ${LOCK_WAIT} seconds. A pattern loose enough to match it would book
-    the whole budget onto a landing that deployed nothing, which is the opposite of what
-    `lock=` means.
-    """
-    refusal = "deploy.sh: error: a service lock under /var/lock stayed busy for 3000s -- nothing"
-    assert tools.in_flock_wait(refusal) is None
-    assert (
-        tools.in_flock_wait("deploy.sh: service lock sonarr acquired after 4s ok")
-        is None
-    )
 
 
 def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
@@ -286,8 +270,8 @@ def test_any_other_flock_failure_is_not_reported_as_contention(tmp_path):
 def test_a_flock_failure_that_is_not_contention_exits_its_own_code(tmp_path):
     """FLAGGED half: it must not fall through to 20.
 
-    20 promises "a task failed AFTER applying; some changes are live", which land.py prints
-    verbatim — for a run that never started ansible. 76 says what happened instead.
+    20 promises "a task failed AFTER applying; some changes are live", for a run that never
+    started ansible. 76 says what happened instead.
     """
     result = _run_deploy(
         tmp_path, HOMELAB_DEPLOY_TREE_LOCK=_unopenable_tree_lock(tmp_path)

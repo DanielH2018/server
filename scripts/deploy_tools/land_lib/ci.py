@@ -39,7 +39,7 @@ def preflight(ln: Landing) -> None:
             1,
             f"PR #{ln.opts.pr} — an incoming change needs a hand; see above",
         )
-    ln.die(f"pre-flight failed (exit {rc}) — nothing deployed", 1)
+    ln.die(f"pre-flight failed (exit {rc}) — land.sh deployed nothing itself", 1)
 
 
 def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
@@ -55,31 +55,31 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
         return
     where = f" on {label}" if label else ""
     if rc == CI_RED:
-        # bash said "on $MERGE_SHA — nothing deployed" for step 3's own wait, and "on the
-        # tip $TIP_SHA — the tick cannot cross it; nothing deployed" for the stale retry --
-        # a caller passing `label` is always the latter, which the tick genuinely cannot
-        # cross once it names an origin tip that never went green.
+        # A caller passing `label` names an origin tip that never went green, which the tick
+        # cannot cross.
         cannot_cross = " — the tick cannot cross it;" if label else " —"
         ln.die(
-            f"master CI is RED on {label or sha}{cannot_cross} nothing deployed",
+            f"master CI is RED on {label or sha}{cannot_cross} land.sh deployed nothing itself",
             1,
             Verdict.CI_RED,
         )
     if rc == CI_PENDING:
         ln.die(
-            f"no CI verdict{where} inside {ln.opts.ci_timeout}s — nothing deployed",
+            f"no CI verdict{where} inside {ln.opts.ci_timeout}s — land.sh deployed nothing itself",
             75,
             Verdict.CI_TIMEOUT,
         )
     if rc == CI_UNPROVEN:
         # Exit 1, not 75: 75 is the resume point, and no re-run converges here until the
         # operator dispatches CI or promotes the tip. `line` names the tip and the command.
+        # An earlier promotion can already have carried the merge, so the message claims
+        # only what this landing did.
         tags = f" (this PR's tags: {ln.tags_csv})" if ln.tags_csv else ""
         ln.die(
-            f"no CI verdict can arrive{where}: {line}{tags} — nothing deployed",
+            f"no CI verdict can arrive{where}: {line}{tags} — land.sh deployed nothing itself",
             1,
             Verdict.CI_UNPROVEN,
         )
     if rc == CI_DISARMED:
-        ln.die(disarmed(where, "nothing deployed"), 1)
-    ln.die(f"await_ci failed{where} (exit {rc}) — nothing deployed", 1)
+        ln.die(disarmed(where, "land.sh deployed nothing itself"), 1)
+    ln.die(f"await_ci failed{where} (exit {rc}) — land.sh deployed nothing itself", 1)

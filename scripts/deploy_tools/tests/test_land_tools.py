@@ -127,22 +127,11 @@ def test_lock_holder_is_empty_when_nobody_holds_the_lock(monkeypatch):
     assert tools.lock_holder() == ""
 
 
-# -- the in-flock waits the wrappers report on their own stderr -------------------------
+# -- the in-flock wait gitops_tick.sh reports on its own stderr --------------------------
 #
-# `retry_while_locked` books a wait only when an attempt EXITS 75. deploy.sh waits inside
-# `flock -w` and returns 0, and gitops_tick.sh joins a tick already in flight and returns 0,
-# so both waits were invisible to the ledger. Each rule below has both halves: a line that
-# books and a line that does not.
-
-
-def test_the_deploy_acquire_line_books_its_seconds_and_its_holder():
-    assert tools.in_flock_wait(
-        "deploy: lock acquired after 412s (holder was: pid 8 (etimes, command): 9 ansible)\n"
-    ) == (412, "pid 8 (etimes, command): 9 ansible")
-
-
-def test_an_uncontended_acquire_line_books_no_holder():
-    assert tools.in_flock_wait("deploy: lock acquired after 0s\n") == (0, "")
+# `retry_while_locked` books a wait only when an attempt EXITS 75. gitops_tick.sh joins a tick
+# already in flight and returns 0, so that wait reaches the ledger only through this line. Each
+# rule below has both halves: a line that books and a line that does not.
 
 
 def test_the_joined_tick_line_books_the_wait_and_not_the_run_before_it():
@@ -151,26 +140,24 @@ def test_the_joined_tick_line_books_the_wait_and_not_the_run_before_it():
     Booking `N` would push `lock` above `tick`, breaking the sub-part invariant the ledger
     docstring states.
     """
-    assert tools.in_flock_wait(
-        "gitops_tick.sh: joined a tick already 300s in flight; waited 47s for it\n"
-    ) == (47, "")
+    assert (
+        tools.in_flock_wait(
+            "gitops_tick.sh: joined a tick already 300s in flight; waited 47s for it\n"
+        )
+        == 47
+    )
 
 
 @pytest.mark.parametrize(
-    "line,booked",
+    "line",
     [
-        ("deploy.sh: lock acquired after 5s\n", (5, "")),
-        ("deploy.sh: service lock sonarr acquired after 4s\n", (4, "")),
-        ("deploy: service lock sonarr acquired after 4s\n", (4, "")),
+        "deploy.sh: lock acquired after 5s (holder was: pid 8)\n",
+        "deploy.sh: service lock sonarr acquired after 4s\n",
     ],
 )
-def test_a_deploy_wait_line_books_under_its_script_name_and_its_pre_4478_name(
-    line, booked
-):
-    """The deploy runs from PRIMARY, which can predate this parser, so both names book.
-
-    The old tree-lock form is pinned by the tests above."""
-    assert tools.in_flock_wait(line) == booked
+def test_a_deploy_sh_lock_line_books_nothing(line):
+    """land.sh runs no `deploy.sh`, so a line like this reaches it from nothing it waited on."""
+    assert tools.in_flock_wait(line) is None
 
 
 def test_a_self_started_tick_wait_line_books_nothing():
@@ -184,20 +171,6 @@ def test_a_self_started_tick_wait_line_books_nothing():
 
 def test_an_ordinary_stderr_line_books_nothing():
     assert tools.in_flock_wait("TASK [k8s/sonarr : render manifests] ****\n") is None
-
-
-def test_a_quote_in_the_holder_cannot_break_the_logfmt_field():
-    """`annotation_line` wraps the holder in `holder="..."`, so a quote splits the row."""
-    booked = tools.in_flock_wait(
-        'deploy: lock acquired after 9s (holder was: sh -c "x")\n'
-    )
-    assert booked == (9, "sh -c x")
-
-
-def test_a_long_holder_is_capped_the_way_lock_holder_caps_its_own():
-    line = f"deploy: lock acquired after 1s (holder was: {'a' * 500})\n"
-    booked = tools.in_flock_wait(line)
-    assert booked is not None and len(booked[1]) == tools.HOLDER_MAX
 
 
 def test_every_stderr_line_is_echoed_through_unchanged(tmp_path, capsys):
@@ -217,17 +190,18 @@ def test_every_stderr_line_is_echoed_through_unchanged(tmp_path, capsys):
 
 
 def test_a_watched_stderr_line_reaches_the_observer(tmp_path, capsys):
-    booked: list[tuple[int, str]] = []
+    booked: list[int] = []
     tools.stream_stderr(
         [
             "sh",
             "-c",
-            "printf 'TASK [x]\\ndeploy: lock acquired after 5s\\n' >&2",
+            "printf 'TASK [x]\\n"
+            "gitops_tick.sh: joined a tick already 3s in flight; waited 5s for it\\n' >&2",
         ],
         tmp_path,
-        lambda s, h: booked.append((s, h)),
+        booked.append,
     )
-    assert booked == [(5, "")]
+    assert booked == [5]
     assert "TASK [x]" in capsys.readouterr().err
 
 
@@ -238,9 +212,12 @@ def test_a_joined_line_books_its_wait_even_when_the_in_flight_seconds_are_missin
     the read comes back empty. A parser that required it to be a number stopped matching and
     silently restored `lock=0`.
     """
-    assert tools.in_flock_wait(
-        "gitops_tick.sh: joined a tick already s in flight; waited 47s for it\n"
-    ) == (47, "")
+    assert (
+        tools.in_flock_wait(
+            "gitops_tick.sh: joined a tick already s in flight; waited 47s for it\n"
+        )
+        == 47
+    )
 
 
 def test_a_kicked_tick_passes_no_wait(monkeypatch):
