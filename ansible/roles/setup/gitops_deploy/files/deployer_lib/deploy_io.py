@@ -89,8 +89,8 @@ def run(
             a bounded tail of what the killed process had printed, which on an
             `ansible-playbook` run names the task that was still running.
     """
-    # timeout defaults to None so the long deploy/git calls are unbounded as before;
-    # only the k8s deploy/rollback calls pass one.
+    # timeout defaults to None, so a git call is unbounded; the setup applies and the
+    # routing subprocesses pass one.
     if timeout is None:
         r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=None)
     else:
@@ -98,14 +98,13 @@ def run(
         # than exec'ing into it). `subprocess.run(timeout=)` DOES return on time even so — its
         # internal communicate() raises on the wall-clock deadline, not on pipe EOF — but on
         # timeout it kills only the direct child (uv). The grandchild (ansible-playbook) is
-        # left running, unkilled, an orphan mutating the cluster with nothing left watching it.
+        # left running, unkilled, an orphan mutating the host with nothing left watching it.
         # Verified empirically: a plain subprocess.run(timeout=) returns promptly, and the
-        # grandchild is still alive at that moment. That is how K8S_ROLLBACK_TIMEOUT_S stopped
-        # being an actual bound on the underlying work: gitops_deploy.py moves on (to a second
-        # rollback attempt, or exits and lets the next tick start a fresh run) while the timed-
-        # out ansible-playbook keeps applying manifests in the background — the real stop
-        # becomes whatever kills that orphan, normally nothing, or systemd's TimeoutStartSec
-        # SIGTERM against the WRAPPING unit, which can land mid-rollback.
+        # grandchild is still alive at that moment. That is how a phase timeout stops being a
+        # bound on the underlying work: gitops_deploy.py moves on while the timed-out
+        # ansible-playbook keeps applying in the background — the real stop becomes whatever
+        # kills that orphan, normally nothing, or systemd's TimeoutStartSec SIGTERM against the
+        # WRAPPING unit, which can land mid-apply.
         #
         # start_new_session puts the direct child in a NEW process group (its pgid equals its
         # own pid), which every process it forks inherits unless one of them calls setsid
