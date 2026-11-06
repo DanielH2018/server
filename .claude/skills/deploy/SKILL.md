@@ -123,10 +123,6 @@ snapshot, the tag check or the staleness check.
 # Deploy a specific service
 ./scripts/deploy.sh --tags "<service-name>"
 
-# To apply a k8s change from a green master commit that no promotion followed, dispatch
-# promote with the commit's full 40-hex SHA. promote refuses a commit without green CI.
-gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
-
 # Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
 # staleness gate and the tag check are asked about <sha> too. A k8s tag still refuses with exit 5.
 # Any committish this checkout's object store resolves; --at with --changed is a bad command line.
@@ -185,6 +181,13 @@ not in this skill: a copy here drifted once already (#2853).
 lands through `promote` once it merges; drop the tag to deploy the rest. `--changed` leaves such
 a tag out and names it, and a shared role's name is a tag miss. `--list-services` marks each k8s
 tag on stderr.
+
+To apply a green master commit that no promotion followed, dispatch `promote` with the commit's
+full 40-hex SHA. `promote` refuses a commit without green CI:
+
+```bash
+gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
+```
 
 ## What `--tags`, `--at` and `--detach` change
 

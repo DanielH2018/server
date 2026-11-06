@@ -191,7 +191,7 @@ def test_an_in_flock_wait_is_booked_without_the_contention_backoff(landing):
     assert "lock_holder" not in [c[0] for c in calls]
 
 
-def test_an_in_flock_wait_never_overwrites_a_holder_already_named(landing):
+def test_an_in_flock_wait_adds_to_contention_and_keeps_its_holder(landing):
     ln, _ = landing()
     ln.note_lock_contention(60)
     ln.note_in_flock_wait(9)
