@@ -54,6 +54,13 @@ def under_root(path: Path) -> Path:
     return ROOT / path.relative_to("/")
 
 
+def _log_timing(message: str) -> None:
+    try:
+        log(message)
+    except OSError:
+        pass  # A closed stderr must not change what a command did or reports.
+
+
 def timed(action: str, call: Callable[[], T]) -> T:
     """Return `call()`, logging `action` before it starts and how long it took after it returns.
 
@@ -61,22 +68,23 @@ def timed(action: str, call: Callable[[], T]) -> T:
     names the action a timed-out run was in. Both lines carry no level, which stores them at the
     SyslogLevel=notice homelab-reconcile.service sets.
     """
-    log(f"{action} starts")
+    _log_timing(f"{action} starts")
     started = time.monotonic()
     result = call()
-    log(f"{action} took {time.monotonic() - started:.1f}s")
+    _log_timing(f"{action} took {time.monotonic() - started:.1f}s")
     return result
 
 
 def run(*argv: str, stdin: str | None = None) -> subprocess.CompletedProcess:
     """Run a command to completion and time it in the journal; never put a secret in `argv`."""
-    try:
-        return timed(
-            " ".join(argv),
-            lambda: subprocess.run(argv, input=stdin, capture_output=True, text=True),
-        )
-    except OSError as exc:
-        return subprocess.CompletedProcess(argv, 127, "", str(exc))
+
+    def call() -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(argv, input=stdin, capture_output=True, text=True)
+        except OSError as exc:
+            return subprocess.CompletedProcess(argv, 127, "", str(exc))
+
+    return timed(" ".join(argv), call)
 
 
 def systemctl(*args: str) -> subprocess.CompletedProcess:

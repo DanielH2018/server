@@ -8,6 +8,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_reconcile_timing.py
 """
 
 import fcntl
+import json
 import os
 import re
 import shlex
@@ -231,3 +232,45 @@ def test_a_timing_line_is_at_a_priority_this_hosts_journal_stores(node, tmp_path
     for line in lines:
         prefix = PRIORITY.match(line)
         assert prefix is None or int(prefix[1]) <= NOTICE, line
+
+
+def test_a_killed_runs_last_line_names_the_action_it_was_in(node, tmp_path):
+    settled_with_units(node, SLOW_UNIT)
+    change(node, SLOW_UNIT)
+    entered = tmp_path / "entered"
+    slowed(
+        node,
+        "systemctl",
+        f"restart {SLOW_UNIT}",
+        f"touch {shlex.quote(str(entered))}; sleep 3; exit 1",
+    )
+    process = node.start()
+    deadline = time.monotonic() + 30
+    while not entered.exists():
+        assert process.poll() is None, process.communicate()
+        assert time.monotonic() < deadline, "reconcile never reached the restart"
+        time.sleep(0.01)
+
+    process.send_signal(signal.SIGTERM)
+    _, stderr = process.communicate(timeout=60)
+
+    last = stderr.splitlines()[-1]
+    assert f"systemctl restart {SLOW_UNIT}" in last
+    assert not seconds_on(last)
+
+
+def test_a_closed_stderr_does_not_change_what_the_commands_report(node):
+    settled_with_units(node, SLOW_UNIT)
+    # A run that crashes writes no record, so the settling run's verdict must not stand in for it.
+    node.applied_path.write_text(json.dumps({**node.applied(), "result": {}}))
+    argv, env = node.command()
+    reader, writer = os.pipe()
+    os.close(reader)
+    try:
+        subprocess.run(
+            argv, env=env, stdout=subprocess.DEVNULL, stderr=writer, timeout=60
+        )
+    finally:
+        os.close(writer)
+
+    assert node.applied()["result"].get("ok") is True
