@@ -88,12 +88,17 @@ fail() { echo "longhorn-restore-drill: FAIL: $*"; echo "restore drill FAILED: $*
 cleanup() {
   # Guarded: the candidate query runs before a volume is chosen, so an early failure reaches this
   # trap with DRILL empty — and `delete pod restore-drill--probe` is a confusing no-op at best.
-  [[ -n "$DRILL" ]] || { rm -f "$MANIFEST"; return; }
+  [[ -z "$DRILL" ]] || teardown "$PVC_NS" "$DRILL"
+  rm -f "$MANIFEST"
+}
+# Args: the claim's namespace, then the drill name. Returns the Volume delete's status, and the
+# Volume goes last, so a Volume still listed means the teardown has not finished.
+teardown() {
+  local PVC_NS="$1" DRILL="$2"
   $KUBECTL -n "$PVC_NS" delete pod "${DRILL}-probe" --ignore-not-found --now >/dev/null 2>&1
   $KUBECTL -n "$PVC_NS" delete pvc "$DRILL" --ignore-not-found >/dev/null 2>&1
   $KUBECTL delete pv "$DRILL" --ignore-not-found >/dev/null 2>&1
   $KUBECTL -n longhorn-system delete volume "$DRILL" --ignore-not-found >/dev/null 2>&1
-  rm -f "$MANIFEST"
 }
 # A signal runs `cleanup` through the exit. Bash killed by an unhandled TERM skips the EXIT trap,
 # and as PID 1 in a pod it ignores the signal altogether. Bash normally runs a trap after its
@@ -109,7 +114,8 @@ cleanup() {
 #   `restore-drill-<pvc>` objects.
 # - INT or TERM pending when xparse_dolparen parses a `$(`. parse_command runs the trap with `)`
 #   still the parser's end token, so the trap fails to parse and the drill keeps polling. A second
-#   signal ends the drill.
+#   signal ends the drill. The kubelet sends one, so its SIGKILL skips `cleanup`, and the next run's
+#   sweep below removes the objects.
 trap cleanup EXIT
 trap 'exit 143' TERM
 trap 'exit 130' INT
@@ -141,6 +147,22 @@ stamp_set() {
 }
 
 load_stamps
+
+# A run SIGKILLed before its `cleanup` leaves its objects, and the next drill of that PVC would
+# apply over them. Before the Volume list below, so a leftover is never a candidate. The age is the
+# Job's deadline plus its grace period: a younger Volume can belong to a live hand run.
+LEFTOVER_BEFORE=$(( $(date +%s) - {{ longhorn_restore_drill_deadline_seconds + longhorn_restore_drill_grace_seconds }} ))
+LEFTOVERS=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
+  | jq -r --argjson before "$LEFTOVER_BEFORE" '
+      .items[]
+      | select(.metadata.name | startswith("restore-drill-"))
+      | select((.metadata.creationTimestamp | fromdateiso8601) < $before)
+      | .metadata.name')
+while IFS= read -r leftover; do
+  [[ -n "$leftover" ]] || continue
+  teardown "$FALLBACK_NS" "$leftover" || fail "cannot remove the leftover ${leftover}"
+  echo "longhorn-restore-drill: SWEPT: ${leftover}, left by a run killed before its cleanup"
+done <<<"$LEFTOVERS"
 
 # Everything below is resolved from the cluster, never hardcoded. The hand-run one-shot this
 # replaces pinned the backup ID, the volume name and the size as literals — all three of which

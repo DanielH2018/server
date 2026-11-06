@@ -17,7 +17,12 @@ from pathlib import Path
 
 import pytest
 
-from _restore_drill import harness, image_leg_available, launch_in_image
+from _restore_drill import (
+    add_drill_volume,
+    harness,
+    image_leg_available,
+    launch_in_image,
+)
 
 # Run by .github/workflows/image-leg.yml with `-m image`; the pytest shards deselect it.
 pytestmark = pytest.mark.image
@@ -45,6 +50,16 @@ def test_a_passing_drill_completes_under_the_pinned_image(
     assert proc.returncode == 0, proc.stderr
     assert f"longhorn-restore-drill: PASS: {A} restored" in proc.stdout, proc.stdout
     assert run.epoch(f"success.{A}") > 0
+
+
+def test_the_sweep_parses_a_creation_timestamp_under_the_pinned_image(
+    tmp_path: Path, docker_available: None
+) -> None:
+    run = harness(tmp_path, [A])
+    add_drill_volume(run, "restore-drill-b-config", 1_700_000_000)
+    proc = launch_in_image(run, restore="pass")
+    assert proc.returncode == 0, proc.stderr
+    assert "SWEPT: restore-drill-b-config" in proc.stdout, proc.stdout
 
 
 def test_a_suffixed_mktemp_template_passes_on_the_host_and_fails_under_the_image(
