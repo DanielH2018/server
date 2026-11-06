@@ -9,6 +9,8 @@ Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_signal_tim
 
 import gc
 import importlib
+import os
+import re
 import signal
 import subprocess
 import warnings
@@ -17,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
+
+from _restore_drill import render
 
 _REAL_POPEN = subprocess.Popen
 
@@ -103,3 +107,36 @@ def test_a_timeout_in_the_signal_test_leaves_no_warning_for_a_neighbour(
         if issubclass(w.category, ResourceWarning) and str(pid) in str(w.message)
     ]
     assert not leaked, leaked
+
+
+def test_a_signal_the_drill_loses_is_sent_again_and_still_runs_cleanup(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The signal test itself asserts the exit status and the `delete volume` call."""
+    real_killpg = os.killpg
+    sent: list[int] = []
+    waits: list[float] = []
+
+    def lose_the_first_signal(pgid: int, sig: int) -> None:
+        sent.append(sig)
+        if len(sent) > 1:
+            real_killpg(pgid, sig)
+
+    class ShortFirstWaitPopen(_REAL_POPEN):
+        def wait(self, timeout: float | None = None) -> int:
+            if timeout is None:
+                return super().wait()
+            waits.append(timeout)
+            return super().wait(1 if len(waits) == 1 else timeout)
+
+    monkeypatch.setattr(os, "killpg", lose_the_first_signal)
+    monkeypatch.setattr(subprocess, "Popen", ShortFirstWaitPopen)
+    signal_test = importlib.import_module(
+        "test_longhorn_restore_drill_state"
+    ).test_a_signal_during_the_restore_wait_runs_cleanup_through_the_exit
+
+    signal_test(tmp_path, signal.SIGINT, 130)
+
+    assert sent == [signal.SIGINT, signal.SIGINT]
+    poll_seconds = int(re.findall(r"^ *sleep (\d+)$", render(), re.MULTILINE)[0])
+    assert waits[0] > poll_seconds, "a resend this early could land inside cleanup"

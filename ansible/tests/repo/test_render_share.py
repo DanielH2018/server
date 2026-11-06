@@ -52,7 +52,13 @@ def _run_pair(tmp_path: Path, env_extra: dict[str, str]) -> int:
     env.update(TMPDIR=str(tmp_path), **env_extra)
     argv = [sys.executable, "-I", str(script), str(TESTS), str(counter)]
     children = [subprocess.Popen(argv, env=env) for _ in range(2)]
-    assert [child.wait(timeout=60) for child in children] == [0, 0]
+    try:
+        assert [child.wait(timeout=60) for child in children] == [0, 0]
+    finally:
+        # An unreaped Popen warns from its deallocator, which fails whichever test runs then.
+        for child in children:
+            child.kill()
+            child.wait()
     return _computed(counter)
 
 
