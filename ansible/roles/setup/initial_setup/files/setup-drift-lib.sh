@@ -11,8 +11,7 @@
 # permanent drift. The comparison therefore happens one level up, on the source, against a
 # sha256 the rendering run stamped (roles/setup/common/tasks/stamp_render.yml).
 #
-# setup-drift-check.sh is the one live caller. The disarmed manifest-prune-check.sh.j2 still
-# sources this file until D6.18 deletes it. Same /usr/local/lib home as homelab-check-lib.sh.
+# setup-drift-check.sh is the one caller. Same /usr/local/lib home as homelab-check-lib.sh.
 #
 # Callers set REPO_DIR and then call setup_drift_scan. It sets four globals rather than printing:
 #   DRIFTED  comma-joined arm-2 offenders, empty when clean

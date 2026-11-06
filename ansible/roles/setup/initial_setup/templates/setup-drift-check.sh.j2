@@ -15,14 +15,12 @@
 # `initial_setup.yml`; nothing converges it, so a host can run an old render of a script or an
 # old copy of deployed code indefinitely. Every host that renders setup templates needs a reader
 # of that drift, and setup_drift_check_hosts names those hosts. On 2026-08-29 the only reader,
-# manifest-prune-check.sh, ran on k3s_server_hosts alone, while daniel-server renders the entire
+# a check since deleted, ran on k3s_server_hosts alone, while daniel-server renders the entire
 # UPS shutdown chain (roles/nut_host: upsmon.conf, nut.conf, the secondary watchdog). That day
 # daniel-server had no /var/lib/homelab/setup-render-manifest.d at all, and its
 # /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28.
 #
-# The two drift arms are NOT reimplemented here — they are sourced from setup-drift-lib.sh, the
-# same library manifest-prune-check.sh sources. Two copies of a drift check are free to drift
-# from each other, which is the fault the check exists to report.
+# The two drift arms live in setup-drift-lib.sh, which this script sources.
 #
 # WHAT IT DELIBERATELY DOES NOT DO: the orphaned-cluster-object arm. That reads
 # /etc/rancher/k3s/manifests and needs the control plane's staged manifest set; on an agent node
@@ -30,9 +28,8 @@
 # that structurally cannot fire is worse than no arm, because it reads as coverage.
 #
 # Runs as root: the deployed-code arm compares live artifacts under /usr/local, some of which are
-# not world-readable, and the render arm reads fragments written 0644 root:root. Same trade-off
-# as manifest-prune-check.sh — root buys the file reads and nothing else; this script makes no
-# cluster or network call.
+# not world-readable, and the render arm reads fragments written 0644 root:root. Root buys the
+# file reads and nothing else; this script makes no cluster or network call.
 set -uo pipefail
 
 for arg in "$@"; do

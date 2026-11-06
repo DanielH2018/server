@@ -18,7 +18,7 @@ worktree rules, what the Discord digest measures, and the exit codes behind the 
   the session. *The lander* below says why it is separate.
 
 The role names each module twice — once in the "Install agent Python files" copy loop, once in
-`stamp_deployed_pairs` for manifest-prune-check.sh's stale-script arm. Neither list is derived
+`stamp_deployed_pairs` for setup-drift-check.sh's deployed-code arm. Neither list is derived
 from the directory, so a module in `files/` and in neither list is one the host never receives.
 ENFORCED:
 `ansible/tests/setup/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed_and_stamped`.

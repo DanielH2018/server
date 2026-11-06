@@ -134,7 +134,7 @@
     host_lib_owner: "{{ sys_user }}"
     host_lib_notify: [Run gitops-deploy once]
 
-# manifest-prune-check.sh's deployed-code arm reads these pairs from the role's declaration,
+# setup-drift-check.sh's deployed-code arm reads these pairs from the role's declaration,
 # which is what lets the sibling roles declare theirs.
 - name: Record the deployed gitops-deploy code
   tags: [gitops-deploy-code]

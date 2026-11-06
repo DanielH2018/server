@@ -41,7 +41,7 @@
 # exactly that mistake.
 #
 # Runs as root because /etc/nut/upsmon.conf is 0640 root:nut. Same trade-off as
-# manifest-prune-check.sh: root buys the file read, nothing more. The consequence worth knowing
+# setup-drift-check.sh: root buys the file read, nothing more. The consequence worth knowing
 # is that an agent session cannot trigger a beat to verify this one by hand.
 set -uo pipefail
 

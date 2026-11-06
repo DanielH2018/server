@@ -3,9 +3,9 @@
 #
 # WHY A FRAGMENT PER GROUP, not one manifest for the host. A single manifest written by one task
 # that loops EVERY declared template and checksums the repo source of each, unconditionally and
-# before any `template:` task runs, makes a tag-scoped run — `--tags manifest-prune`, the
-# natural command for redeploying the drift check itself — restamp all eight k3s scripts while
-# rendering one, making HAVE == WANT trivially true for the seven it never touched. A fragment
+# before any `template:` task runs, makes a tag-scoped run — `--tags setup_drift`, the natural
+# command for redeploying the drift check itself — restamp every declared template while
+# rendering one, making HAVE == WANT trivially true for the rest it never touched. A fragment
 # is written only by a run that carries its group's
 # tags, so a partial run leaves the other groups' fragments alone, and they stay stale — which is
 # the truth the check exists to report.
@@ -18,7 +18,7 @@
 #
 # PER-HOST BY CONSTRUCTION. A fragment exists only where its role ran. The homelab-daniel-pi
 # package ships pi-sd-health.sh and pi-recovery-health.sh to daniel-pi, which runs no
-# manifest-prune-check, so those produce no fragment here rather than being stamped as covered
+# setup-drift-check, so those produce no fragment here rather than being stamped as covered
 # by a host that never renders them. That is why this is not a glob over the whole tree.
 #
 # Callers pass:
@@ -42,7 +42,7 @@
     group: root
     # `rstrip=False` is load-bearing. Ansible's
     # file lookup strips a trailing newline by default, so `lookup('file', x) | hash('sha256')`
-    # hashes the file MINUS its final byte — while manifest-prune-check.sh compares against
+    # hashes the file MINUS its final byte — while setup-drift-lib.sh compares against
     # `sha256sum x`, which does not. Measured here: the same template hashes 206d21e3… stripped
     # and aea704c2… whole, and `head -c -1 file | sha256sum` reproduces the stripped value
     # exactly. Every entry would therefore read stale.
