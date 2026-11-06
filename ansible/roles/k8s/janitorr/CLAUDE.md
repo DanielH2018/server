@@ -105,8 +105,7 @@ probe link through jellyfin's mount layout; its docstring maps each proof. Its p
 fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
 
 `tasks/main.yml` keeps the `janitorr_dry_run` fact, because the renderer evaluates it from
-there (`scripts/renderer/renderer_lib/task_inputs.py`), and the `k8s/manifests` include the
-renderer reads `manifests_*` vars from.
+there (`scripts/renderer/renderer_lib/task_inputs.py`), and the `k8s/manifests` include.
 
 ## Retention rungs
 

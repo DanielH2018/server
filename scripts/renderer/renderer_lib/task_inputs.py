@@ -1,6 +1,7 @@
 """The values Ansible computes in role tasks that the renderer must supply itself.
 
-`include_vars` reads the `vars:` a role passes to its `k8s/manifests` include.
+`include_vars` reads a role's render metadata from its `defaults/main.yml`, and any `vars:` left
+on its `k8s/manifests` include. `image_builder_sites` reads its builds the same way.
 
 `derived_facts` computes the values a role task derives from the tree, `TASK_COMPUTED`, by
 evaluating the task's own expression read out of its tasks file: each image's content tag by
@@ -34,6 +35,24 @@ from renderer.renderer_lib.environment import evaluate, renderer_env
 IMAGE_BUILDER = K8S_ROLES / "image-builder"
 CONTENT_TAG = "image_builder_content_tag"
 BUILT_IMAGE_TAGS = "k8s_built_image_tags"
+# The role default listing the images a role builds, one mapping of `image_builder_*` vars per
+# build, with an optional `when`.
+IMAGE_BUILDS = "image_builder_builds"
+# The render metadata `include_vars` reads from a role's defaults.
+RENDER_KEYS = frozenset(
+    {
+        "manifests_deferred_dir_name",
+        "manifests_deferred_files",
+        "manifests_exclude_files",
+        "manifests_extra_rollouts",
+        "manifests_files",
+        "manifests_outside_secrets",
+        "manifests_prune",
+        "manifests_rollout",
+        "manifests_secret_files",
+        "manifests_self_rollouts",
+    }
+)
 # The `data` the content tag's expression hashes, read the way that expression reads it.
 _CONTEXT_DATA = (
     "{{ (lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data'] }}"
@@ -76,6 +95,17 @@ def _parsed_text(text: str) -> object:
     return yaml_fast.safe_load(text)
 
 
+def _defaults(role_dir: Path) -> dict:
+    """`role_dir`'s `defaults/main.yml`, unresolved, or {} when it has none."""
+    path = role_dir / "defaults" / "main.yml"
+    return cast(dict, _parsed(path)) or {} if path.is_file() else {}
+
+
+def render_defaults(role_dir: Path) -> dict:
+    """The `RENDER_KEYS` that `role_dir`'s `defaults/main.yml` sets, unresolved."""
+    return {k: v for k, v in _defaults(role_dir).items() if k in RENDER_KEYS}
+
+
 def _tasks(nodes: list) -> list[dict]:
     """Every task in a tasks file, the ones inside `block`, `rescue` and `always` included."""
     found = []
@@ -89,14 +119,15 @@ def _tasks(nodes: list) -> list[dict]:
 
 
 def include_vars(role_dir: Path) -> dict:
-    """The `manifests_*` vars `role_dir`'s tasks pass to the `k8s/manifests` include that renders.
+    """`role_dir`'s `RENDER_KEYS` defaults, and the `manifests_*` vars of the include that renders.
 
-    That is the include with no `tasks_from`, or `tasks_from: main`. Another entry point, such
-    as configarr's `drain.yml`, renders nothing. The values are
-    read as written, so a Jinja value is still a string for the caller to resolve.
+    That include has no `tasks_from`, or `tasks_from: main`. Another entry point, such as
+    configarr's `drain.yml`, renders nothing. The values are read as written, so a Jinja value
+    is still a string for the caller to resolve.
 
     Raises:
-        ValueError: The role's tasks hold no such include, or more than one.
+        ValueError: The role's tasks hold no such include or more than one, or a key is set in
+            both the defaults and the include.
     """
     found = []
     for path in sorted((role_dir / "tasks").glob("*.yml")):
@@ -118,38 +149,72 @@ def include_vars(role_dir: Path) -> dict:
         raise ValueError(
             f"{role_dir.name} includes k8s/manifests to render {len(found)} times, not once"
         )
-    return found[0]
+    declared = render_defaults(role_dir)
+    both = declared.keys() & found[0].keys()
+    if both:
+        raise ValueError(
+            f"{role_dir.name} sets {sorted(both)} in both defaults/main.yml and its "
+            "k8s/manifests include"
+        )
+    return {**declared, **found[0]}
 
 
 @dataclass(frozen=True)
 class BuildSite:
-    """One `include_role` of `k8s/image-builder`, as its role's tasks file writes it.
+    """One image a role builds, as its `image_builder_builds` or a tasks file writes it.
 
     Attributes:
-        vars: The include's `vars:`, unresolved, so a value or a key may still hold Jinja.
-        when: The include's `when:` conditions, empty for an unconditional include.
+        vars: The build's `image_builder_*` vars, unresolved, so a value or a key may still
+            hold Jinja.
+        when: The build's `when:` conditions, empty for an unconditional build.
     """
 
     vars: dict
     when: tuple[str, ...] = ()
 
 
+def _conditions(when: object) -> tuple[str, ...]:
+    """A `when:` value as the tuple of conditions it holds."""
+    if not when:
+        return ()
+    return (when,) if isinstance(when, str) else tuple(cast(list, when))
+
+
 def image_builder_sites(role_dir: Path) -> list[BuildSite]:
-    """Every `k8s/image-builder` include in `role_dir`'s tasks files, in file order."""
+    """`role_dir`'s builds: its `image_builder_builds`, then its image-builder includes' vars.
+
+    An include with no `vars:` names no image. It stays in the tasks file as the edge
+    `lib.k8s_role_callers` reads, so a role with `image_builder_builds` may hold one.
+
+    Raises:
+        ValueError: The role sets `image_builder_builds` and also passes vars to an include.
+    """
+    builds = [
+        BuildSite(
+            {k: v for k, v in build.items() if k != "when"},
+            _conditions(build.get("when")),
+        )
+        for build in _defaults(role_dir).get(IMAGE_BUILDS) or []
+    ]
     sites = []
     for path in sorted((role_dir / "tasks").glob("*.yml")):
         for task in _tasks(cast(list, _parsed(path))):
             for module in _INCLUDE_MODULES:
                 args = task.get(module)
                 if isinstance(args, dict) and args.get("name") == "k8s/image-builder":
-                    when = task.get("when") or ()
                     sites.append(
                         BuildSite(
-                            dict(task.get("vars") or {}),
-                            (when,) if isinstance(when, str) else tuple(when),
+                            dict(task.get("vars") or {}), _conditions(task.get("when"))
                         )
                     )
-    return sites
+    if not builds:
+        return sites
+    if any(site.vars for site in sites):
+        raise ValueError(
+            f"{role_dir.name} sets {IMAGE_BUILDS} and also passes vars to a "
+            "k8s/image-builder include"
+        )
+    return builds
 
 
 def set_fact_task(path: Path, fact: str) -> tuple[str, dict]:

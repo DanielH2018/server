@@ -14,7 +14,8 @@ Run: uv run pytest ansible/tests/services/test_scrutiny_rollouts.py
 """
 
 from _helpers import ANSIBLE
-from _release_expectation import extra_restarts, include_role_vars, queued_extras
+from _release_expectation import extra_restarts, queued_extras
+from renderer.renderer_lib.task_inputs import include_vars
 
 SCRUTINY = ANSIBLE / "roles/k8s/scrutiny"
 EXPECTED = {"scrutiny-influxdb": "deploy", "scrutiny-collector": "daemonset"}
@@ -34,7 +35,7 @@ _BUMP = dict(
 def _extras() -> list[dict]:
     return [
         {"kind": "deploy", "image": entry["name"], **entry}
-        for entry in include_role_vars(SCRUTINY)["manifests_extra_rollouts"]
+        for entry in include_vars(SCRUTINY)["manifests_extra_rollouts"]
     ]
 
 

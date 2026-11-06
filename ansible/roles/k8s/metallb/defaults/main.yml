@@ -51,3 +51,5 @@ flux_forward_only: true  # noqa var-naming[no-role-prefix]
 # merge here is not a routine bump.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "platform — MetalLB announces every LoadBalancer VIP; a bad apply or a CRD downgrade takes the edge and DNS offline together, and host probes stay green through that outage"  # noqa var-naming[no-role-prefix]
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

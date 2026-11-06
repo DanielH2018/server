@@ -36,7 +36,7 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
 - **`clusterIP` is `coredns_cluster_ip`**, the address the cluster already holds, because the
   field is immutable. `ansible/tests/staging/test_staging_egress_fence.py` holds it inside
   `k3s_service_cidr`.
-- **A Corefile edit never rolls the pod.** `tasks/main.yml` passes `manifests_rollout: ''`, so
+- **A Corefile edit never rolls the pod.** `defaults/main.yml` sets `manifests_rollout: ''`, so
   the renderer stamps no restart annotation on the pod template. The `reload` plugin re-reads
   the file.
 - **The tag renders `prune: false` and is forward-only** (`flux_prune: false`,

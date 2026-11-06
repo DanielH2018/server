@@ -13,6 +13,7 @@ leaves the live IngressRoute serving unless the role arms `manifests_prune`, sin
 from _helpers import ANSIBLE
 from lib import yaml_fast
 from lib.render_context import render_context
+from renderer.renderer_lib.task_inputs import include_vars
 
 
 from validate.k8s_manifests import (
@@ -52,14 +53,8 @@ def test_the_route_renders_when_navidrome_has_a_pod():
         assert route["spec"]["routes"], "an IngressRoute with no routes matches nothing"
 
 
-def _deploy_vars() -> dict:
-    tasks = yaml_fast.safe_load((ROLE / "tasks" / "main.yml").read_text())
-    (deploy,) = [t for t in tasks if "ansible.builtin.include_role" in t]
-    return deploy["vars"]
-
-
 def _manifests_files(replicas: int) -> list[str]:
-    expr = _deploy_vars()["manifests_files"]
+    expr = include_vars(ROLE)["manifests_files"]
     env = make_env([])
     return yaml_fast.safe_load(
         env.from_string(expr).render(navidrome_k8s_replicas=replicas).replace("'", '"')
@@ -80,4 +75,6 @@ def test_the_role_arms_the_prune_that_deletes_the_parked_route():
     defaults = yaml_fast.safe_load(
         (ANSIBLE / "roles/k8s/manifests/defaults/main.yml").read_text()
     )
-    assert _deploy_vars().get("manifests_prune", defaults["manifests_prune"]) is True
+    assert (
+        include_vars(ROLE).get("manifests_prune", defaults["manifests_prune"]) is True
+    )

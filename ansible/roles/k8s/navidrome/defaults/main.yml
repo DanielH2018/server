@@ -54,3 +54,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ navidrome_k8s_claim }}"
     storage_class: "{{ navidrome_k8s_storage_class }}"
     size: "{{ navidrome_k8s_size }}"
+
+# The route is listed only while the workload has pods (see templates/ingressroute.yaml.j2).
+# Parking the workload drops the name, and the prune deletes the live IngressRoute.
+manifests_files: >-  # noqa var-naming[no-role-prefix]
+  {{ ['deployment.yaml', 'service.yaml']
+     + (['ingressroute.yaml'] if navidrome_k8s_replicas | int > 0 else []) }}

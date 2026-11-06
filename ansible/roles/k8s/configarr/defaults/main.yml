@@ -93,3 +93,7 @@ configarr_k8s_cpu_limit: "500m"
 configarr_k8s_mem_limit: 256Mi
 configarr_k8s_cpu_request: "50m"
 configarr_k8s_mem_request: 16Mi
+
+# No Deployment to wait on. The manifests role treats '' as "skip the rollout entirely",
+# which is the whole reason that option exists.
+manifests_rollout: ""  # noqa var-naming[no-role-prefix]

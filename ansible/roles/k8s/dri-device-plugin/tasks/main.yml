@@ -12,7 +12,7 @@
 # privilege in one small auditable DaemonSet instead of spreading it across long-running media
 # services. Consumers stay unprivileged and just request the resource.
 # Flux owns this role, so no Flux path runs the include below; it stays for a handback
-# (docs/flux-deploy-plane.md) and because the renderer reads the `manifests_*` vars from it. The
+# (docs/flux-deploy-plane.md). The
 # rollout wait and the `devic.es/dri` readback this file ran after it are gone with the flip. The
 # soak's verify is M2's `K8sExtendedResourceMissing` rule (`verify="true"`,
 # ansible/roles/k8s/observability/files/rules/k8s-workloads.yaml): it fires when no node reports
@@ -23,4 +23,3 @@
   vars:
     # The DaemonSet lives in kube-system, so the armed apply and its prune run there.
     manifests_prune_namespace: kube-system
-    manifests_rollout: ''

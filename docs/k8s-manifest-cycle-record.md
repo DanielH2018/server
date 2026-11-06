@@ -55,7 +55,7 @@ Until 2026-10-10, 53 of the 57 including roles listed `manifests_files` and
 `manifests_secret_files` by hand. The lists restated two things the tree already said: which
 manifest templates the role ships, and whether its `containers_list` entry earns the shared
 Service and route. The "Resolve the manifest file lists" task now derives both for a role that
-passes neither:
+sets neither:
 
 - **The secret files** are the role's own top-level `templates/*.yaml.j2` whose basename says
   `secret` (`secret.yaml`, `config-secret.yaml`, `secret-exportarr.yaml`). Every secret template
@@ -68,15 +68,15 @@ passes neither:
   - a one-off `*-job.yaml` (the registry's self-test and GC Jobs, the netpol probes), which the
     role stages in a reserved directory and applies itself;
   - the role's `manifests_deferred_files`;
-  - whatever its include names in `manifests_exclude_files`.
+  - whatever its defaults name in `manifests_exclude_files`.
 
-Six roles carry an exclusion, and each names its reason at the include. `pihole` excludes its
+Six roles carry an exclusion, and each names its reason in its defaults. `pihole` excludes its
 macro-only `pihole-deployment.yaml`. `gpu-exporter`, `longhorn-ui`, `observability` and
 `scrutiny` exclude the shared Service their `port` would earn. `livesync` excludes the shared
 route its `hostname` would earn.
 
-A role still passes its own list where the list depends on role vars: authelia, navidrome and
-traefik build theirs with Jinja. A passed list wins whole, and the derivation does not touch it.
+A role still sets its own list where the list depends on role vars: authelia, navidrome and
+traefik build theirs with Jinja. A list it sets wins whole, and the derivation does not touch it.
 
 The derived lists are stored as `manifests_files_resolved` and `manifests_secret_files_resolved`,
 and every task in the role reads those names. They are never stored as `manifests_files` itself.
@@ -127,7 +127,7 @@ dashboard ConfigMaps out for the same reason and carries an explicit `state: abs
 copies it left behind.
 
 **`manifests_prune` (#1076, #3388) removes the live object too, armed by default since #3662.**
-A role opts out with `manifests_prune: false` on the `include_role` call. An armed role's apply
+A role opts out with `manifests_prune: false` in its defaults. An armed role's apply
 gains `--prune -l
 homelab/role=<service>`, one `--prune-allowlist=<kind>` per entry of the fixed
 `manifests_prune_allowlist`, and `-n <manifests_prune_namespace>`. That namespace is
@@ -331,7 +331,7 @@ writes no release record, and an amended one would name a release that does not 
 A role that sets `manifests_rollout: ''` and restarts its workloads through a private task after
 this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?,
 namespace?}]`), and the record carries them with the same `restart` decision (#1902).
-observability passes `observability_stabilise_workloads` with `namespace:
+observability's defaults list `observability_stabilise_workloads` with `namespace:
 k8s_observability_namespace` on each entry; pihole names both instances with `image: pihole`,
 since `roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name. The
 entry reaches `rollouts[]` and the pod-template fingerprints (#1994, so the private restart can

@@ -8,11 +8,7 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_rollout: gpu-exporter
     # `daemonset` literally: the assert in k8s/manifests refuses kubectl's `ds`/`DaemonSet`
     # aliases, because the stabilise gate would then read a Deployment's jsonpath off this and
     # pass on 0 == 0.
     manifests_rollout_kind: daemonset
-    # No Service, though the entry carries a `port`: the `gpu` scrape job discovers each pod, and
-    # a ClusterIP over the two pods would flip one series between two GPUs (CLAUDE.md).
-    manifests_exclude_files: [service.yaml]

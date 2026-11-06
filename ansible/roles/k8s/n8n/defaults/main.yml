@@ -83,3 +83,20 @@ flux_prepull_timeout: 3600s  # noqa var-naming[no-role-prefix]
 # The runners' readiness gate (see deployment-runners.yaml.j2). alpine because busybox `nc -z`
 # is all it needs and the image is already the fleet's small-utility choice.
 n8n_k8s_wait_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+
+image_builder_builds:  # noqa var-naming[no-role-prefix]
+  - image_builder_name: n8n
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile.j2"
+  - image_builder_name: n8n-runners
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile-runners.j2"
+    # The one file either Dockerfile COPYs. The key must be the exact path the COPY names,
+    # since the ConfigMap mount puts each key at the context root under that name.
+    image_builder_context:
+      "{{ playbook_dir }}/roles/k8s/n8n/templates/config/n8n-task-runners.json.j2": n8n-task-runners.json
+
+# deployment-runners.yaml is a second Deployment running a second built image. Without this
+# nothing rolls it: the rebuilt-image trigger keys on manifests_service (`n8n`) while
+# image-builder records `n8n-runners`, and the rollout targets one name regardless.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: n8n-runners
+    image: n8n-runners

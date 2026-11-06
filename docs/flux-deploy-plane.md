@@ -1463,7 +1463,7 @@ flux-owned tag, and Kubernetes rolls the pod when the value moves.
 `scripts/renderer/renderer_lib/restart.py` holds the rule.
 
 - **The targets** are the workloads the shared `k8s/manifests` role restarts on a render
-  change, read from the role's include of `k8s/manifests`. They are the `manifests_rollout`
+  change, read from the role's defaults. They are the `manifests_rollout`
   workload when it is non-empty, and each `manifests_extra_rollouts` entry whose
   `restart_on` names `config` or `secret`. An entry with `restart_on: []`, such as Scrutiny's
   InfluxDB, is one Ansible waits on and never restarts, so it gets no annotation.
@@ -1505,7 +1505,7 @@ Two tests keep the annotation honest:
   nothing. peanut is its named member.
 - **The self-rollouts census**, in
   `scripts/renderer/tests/test_renderer_self_rollout_restart.py`, renders every role that
-  passes `manifests_self_rollouts` as flux-owned. It fails on an entry whose pod template
+  sets `manifests_self_rollouts` as flux-owned. It fails on an entry whose pod template
   names a ConfigMap or Secret and carries no `checksum/restart`. pihole and observability
   are its named members, and pihole-2 with its annotation removed is its red fixture. flux's
   controllers read neither kind, so they pass unstamped.
@@ -1644,8 +1644,7 @@ change under `_unclassified` counts as every name changed. D6's *What a footprin
 computes its allowlist from the inventory, `SHARED_KINDS` and the published tags' roles,
 never from the render, so a renderer bug cannot widen it. Each per-tag kind has its input:
 
-- `-deferred` when the role passes a non-empty `manifests_deferred_files` to its
-  `k8s/manifests` include;
+- `-deferred` when the role's defaults set a non-empty `manifests_deferred_files`;
 - `-snapshot` when the role's defaults declare a non-empty `k8s_autodeploy_snapshot_pvcs`;
 - `-verify` when the role ships `templates/verify/*.yaml.j2` (`verifying_tags`, which reads the
   same `verify_files` the renderer reads), or opts a CronJob into a gate Job with

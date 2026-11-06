@@ -25,8 +25,8 @@ steps, and this page describes each piece once its PR has merged.
   target of daniel-box.
 - `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see in
   the deploy play, and `renderer_lib/cluster.py` renders each tag and writes its directories.
-- `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads the `manifests_*` vars
-  each role passes to its `k8s/manifests` include.
+- `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads each role's render
+  metadata from its `defaults/main.yml` (*Where render metadata lives*).
 - `scripts/renderer/renderer_lib/task_inputs.py:derived_facts` computes the values role tasks
   compute from the tree (*Task-computed values*).
 - `ansible/roles/k8s/manifests/defaults/main.yml:manifests_shadow_dir` keeps the Ansible
@@ -219,7 +219,7 @@ The renderer writes the files the Ansible manifests role writes for a tag, by th
 its render tasks in `ansible/roles/k8s/manifests/tasks/main.yml`:
 
 - **The file lists.** `scripts/lib/k8s_roles.py:resolved_manifest_files` derives them from
-  the role's templates and its `containers_list` entry. A role whose include passes
+  the role's templates and its `containers_list` entry. A role whose defaults set
   `manifests_files` or `manifests_secret_files` gets that list instead, resolved against the
   play-time context. navidrome's list, for one, names `ingressroute.yaml` only while it has
   replicas.
@@ -230,14 +230,25 @@ its render tasks in `ansible/roles/k8s/manifests/tasks/main.yml`:
   `claim-<name>.yaml`, with the entry as `manifests_claim`.
 - **The labelling wrapper.** A role that arms `manifests_prune`, the default, renders its
   files, its secret files and its claims through `role-labelled.yaml.j2`. The wrapper stamps
-  `homelab/role: <tag>` on every document. authelia and nut opt out at their includes.
+  `homelab/role: <tag>` on every document. authelia and nut opt out in their defaults.
 - **The deferred files.** `manifests_deferred_files` render from the role's own templates,
   unlabelled, into `DIR/cluster/<tag>-deferred/`. Ansible stages them in a subdirectory
   named by `manifests_deferred_dir_name`. pihole, headlamp and netpol-baseline defer files.
 
-`include_vars` reads the include whose `tasks_from` is absent or `main`, and refuses a role
-with none or with two. It keeps the `manifests_*` keys, and the renderer resolves only the
-five it reads: the two file lists, the deferred pair and `manifests_prune`.
+### Where render metadata lives
+
+A role sets the keys of `scripts/renderer/renderer_lib/task_inputs.py:RENDER_KEYS` in its
+`defaults/main.yml`, and `image_builder_builds` lists the images it builds. Each key in
+defaults carries `# noqa var-naming[no-role-prefix]`. `include_vars` and
+`scripts/lib/k8s_roles.py:resolved_manifest_files` read defaults first and `tasks/` second,
+and each raises on a key both set. A `manifests_*` key outside `RENDER_KEYS`, such as
+`manifests_rollout_kind`, is read only by the Ansible path and stays on the include.
+
+`include_vars` also reads the include whose `tasks_from` is absent or `main`, and refuses a
+role with none or with two. The renderer resolves only the five keys it renders with: the
+two file lists, the deferred pair and `manifests_prune`. The others stay strings until a
+reader such as `restart.py` resolves them. Role defaults still enter the template context,
+so a template must not name one of these keys for any other purpose.
 
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
 `ansible/templates/`. It fails when a filter or test name does not resolve in the environment
@@ -250,11 +261,11 @@ Some values a template or a role default reads are set by a role task, not by a 
 task's expression out of its tasks file and evaluates it in the environment the
 templates render in, so the renderer never restates one:
 
-- **Content tags.** Each `include_role` of `k8s/image-builder` gets its tag from the
+- **Content tags.** Each `image_builder_builds` entry gets its tag from the
   expression of the image-builder task `Compute the content tag`. The tag hashes
   `context-configmap.yaml.j2`'s rendered `data`. The build's variables are image-builder's
-  defaults under the calling role's context, with the `vars:` of the include over both and
-  `playbook_dir` resolving to `ansible/`. An include whose `when:` is false adds no tag, as
+  defaults under the calling role's context, with the entry's vars over both and
+  `playbook_dir` resolving to `ansible/`. An entry whose `when:` is false adds no tag, as
   valheim's does without mods. The tags form `k8s_built_image_tags`, which every role reads
   as `{}` when it builds nothing, as `ansible/deploy.yml` resets it.
 - **Script checksums.** monitor-bridge and autofix-bridge hash their staged modules with
@@ -334,7 +345,7 @@ fails the render instead of being left out. The set's last member was `home-assi
 `from_json` parse of `google_assistant_service_account` raised on a sentinel until R2's PR 5
 moved that key into a Secret of its own.
 
-A `<tag>-deferred` directory is a different thing: it holds the files a role passes as
+A `<tag>-deferred` directory is a different thing: it holds the files a role lists as
 `manifests_deferred_files`.
 
 ### The five secret rules

@@ -47,7 +47,7 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   `host-record=` lines answer for to the router. ENFORCED by
   `ansible/tests/services/test_pihole_lan_reverse_forwarding.py`.
 - **pihole-exporter reads `pihole_password` from this role's `pihole-env` Secret.** Its
-  include declares the Secret under `manifests_outside_secrets`, so a rotation moves the
+  `defaults/main.yml` declares the Secret under `manifests_outside_secrets`, so a rotation moves the
   exporter's restart checksum annotation and Flux rolls it with this role's pods (#5416). Renaming
   `pihole-env`, or moving the password to another key, needs the same edit in that
   declaration; `ansible/roles/k8s/pihole-exporter/CLAUDE.md` names the test that refuses a
@@ -65,7 +65,7 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   revert of the flag leaves two writers on the objects, and the handback restores `roll_one.yml`,
   `apply_instance_2.yml` and the gravity tasks from the commit before the flip.
 - **Where the tasks went.** `tasks/main.yml` holds the include of `k8s/manifests` alone, and no
-  Flux path runs it. The include keeps `manifests_self_rollouts` because the renderer reads it to
+  Flux path runs it. `defaults/main.yml` keeps `manifests_self_rollouts` because the renderer reads it to
   stamp the restart annotation on both instances.
 - **The gravity reconcile is `templates/verify/gravity.yaml.j2`, a mutation Job.** It runs
   `files/pihole_gravity.py` against each FTL's v6 REST API, through the `pihole` and

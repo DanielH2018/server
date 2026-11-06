@@ -3,7 +3,3 @@
 - name: Deploy livesync to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # No IngressRoute, though the entry carries a `hostname`: traefik's file-provider gate
-    # (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2) routes it.
-    manifests_exclude_files: [ingressroute.yaml]

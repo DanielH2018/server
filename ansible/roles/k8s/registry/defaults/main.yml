@@ -148,3 +148,13 @@ registry_k8s_netpol_cni_gateway: "{{ k3s_cni0_gateways[0] }}"
 # 10.42.0.0 and denied, with the selftest job the only caller that says so (#1725). ENFORCED by
 # ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py.
 registry_k8s_netpol_agent_flannel: 10.42.1.0/32
+
+# The ghcr.io mirror (templates/ghcr-mirror.yaml.j2). `restart_on: []`, because it reads no
+# ConfigMap or Secret: an unrelated edit to this role would otherwise restart it and drop
+# every pull in flight.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: ghcr-mirror
+    restart_on: []
+  # The docker.io mirror (templates/dockerhub-mirror.yaml.j2), for the same reason.
+  - name: dockerhub-mirror
+    restart_on: []

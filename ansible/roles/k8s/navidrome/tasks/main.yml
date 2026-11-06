@@ -6,9 +6,3 @@
 - name: Deploy navidrome to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The route is listed only while the workload has pods (see templates/ingressroute.yaml.j2).
-    # Parking the workload drops the name, and the prune deletes the live IngressRoute.
-    manifests_files: >-
-      {{ ['deployment.yaml', 'service.yaml']
-         + (['ingressroute.yaml'] if navidrome_k8s_replicas | int > 0 else []) }}

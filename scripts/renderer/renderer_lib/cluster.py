@@ -9,8 +9,8 @@ The manifests role's file rules, as "Render manifests", "Render secret manifests
 volume claims" and "Render deferred manifests" in `ansible/roles/k8s/manifests/tasks/main.yml`
 apply them:
 
-- The file lists come from `resolved_manifest_files`, or from the include's own
-  `manifests_files` and `manifests_secret_files` where it passes them.
+- The file lists come from `resolved_manifest_files`, or from the role's own
+  `manifests_files` and `manifests_secret_files` where it sets them.
 - A basename the role ships no template for renders from the shared default in
   `ansible/templates/`, `service.yaml` and `ingressroute.yaml`.
 - Each `k8s_claims` entry renders `claim-default.yaml.j2` to `claim-<name>.yaml`.
@@ -110,7 +110,7 @@ NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
 # `cluster/<tag>/` (H1 *Vendored upstream manifests*): upstream manifests byte for byte, and
 # Kustomize patches. H1.1d's `health_vendored.py` reads the same two.
 VENDORED_DIRS = ("upstream", PATCHES_DIR)
-# The include vars that decide what the manifests role renders and where.
+# The render keys that decide what the manifests role renders and where.
 INCLUDE_KEYS = frozenset(
     {
         "manifests_files",
