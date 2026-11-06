@@ -265,12 +265,12 @@ def _with_import_vars(gate: object, import_vars: object) -> object:
 
 def _as_expression(value: object) -> str:
     """A var's value as a Python expression, or `_UNREADABLE_VAR` if part of it is Jinja text."""
-    if not isinstance(value, str):
-        return repr(value)
-    whole = re.fullmatch(r"\s*{{(.*)}}\s*", value, re.DOTALL)
-    if whole and "{{" not in whole[1]:
-        return whole[1].strip()
-    return _UNREADABLE_VAR if "{{" in value or "{%" in value else repr(value)
+    if isinstance(value, str):
+        whole = re.fullmatch(r"\s*{{(.*)}}\s*", value, re.DOTALL)
+        if whole and "{{" not in whole[1]:
+            return whole[1].strip()
+    text = task_text(value)
+    return _UNREADABLE_VAR if "{{" in text or "{%" in text else repr(value)
 
 
 def _ships_repo_path(task: dict, repo_path: str) -> bool:

@@ -252,6 +252,7 @@ def test_a_check_timer_task_file_change_keeps_the_teardown_hosts():
         pytest.param("{{ state_var }}", frozenset(), id="group-var"),
         pytest.param("{{ other | default('x') }}", _ALL, id="filter-stays-wide"),
         pytest.param("{{ '{{' }}-{{ state_var }}", _ALL, id="partial-jinja-stays-wide"),
+        pytest.param(["{{ state_var }}"], _ALL, id="jinja-in-a-list-stays-wide"),
     ],
 )
 def test_an_owner_render_is_read_with_the_imports_vars(tmp_path, state, hosts):
