@@ -647,7 +647,8 @@ PR 4 carries `Render-diff: none`.
 **The service set stops reading tasks.** PR 5 moves `render_targets()` into
 `renderer_lib/targets.py`, and repoints R1's importers at it: the renderer, the
 determinism modules and `shadow_diff.py compare`. A service renders when its role has a
-manifest template or a shared default its entry earns.
+manifest template, a shared default its entry earns or a vendored manifest, the arm that admits
+traefik-crds.
 `scripts/deploy_tools/render_targets.py` stays as it is until PR 6, for two reasons.
 `render_records.py` still calls it, and the facts-locked section
 `render_records/CLAUDE.md#How one run works` cites it as a path atom, so deleting it in

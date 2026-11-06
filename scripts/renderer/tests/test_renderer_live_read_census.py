@@ -53,12 +53,10 @@ def test_the_task_walk_enters_every_file_the_play_reaches():
 
 def test_the_census_finds_its_named_members():
     found = real_census()
-    # A task sets it, a template reads it, and the renderer derives it.
-    assert "janitorr_dry_run" in found.set_by_tasks.keys() & found.derived
-    assert "janitorr_dry_run" in found.reached
-    # Templates reach it only through role defaults, which proves the definition walk.
+    # A task sets it, and the renderer derives it. Templates reach it only through role
+    # defaults, which proves the definition walk.
+    assert "k8s_built_image_tags" in found.set_by_tasks.keys() & found.derived
     readers = found.reached["k8s_built_image_tags"]
-    assert "k8s_built_image_tags" in found.set_by_tasks
     assert readers and all("/defaults/" in reader for reader in readers)
     # The `vars` lookup source. The bridge's push tokens were the other until M6 batch A6's
     # Cutover-2; the fixture census below pins the dynamic-lookup mechanism on its own.

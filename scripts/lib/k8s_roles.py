@@ -54,6 +54,8 @@ __all__ = [
     "resolved_manifest_files",
     "role_dirs",
     "OWNER_VALUES",
+    "RENDER_KEYS",
+    "refuse_moved_keys_in_tasks",
     "tag_owners",
 ]
 
@@ -413,7 +415,7 @@ _MANIFEST_FILE_KEY = re.compile(
 _MANIFEST_BASENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml\b")
 _YAML_COMMENT = re.compile(r"(^|\s)#.*$")
 
-# The derivation `k8s/manifests` applies to a role that passes no `manifests_files` (#3662).
+# The derivation `k8s/manifests` applies to a role that sets no `manifests_files` (#3662).
 # ansible/roles/k8s/manifests/tasks/main.yml ("Resolve the manifest file lists") is the deploy's
 # copy, and ansible/tests/k8s/test_derived_manifest_files.py holds the two in step.
 #
@@ -430,28 +432,68 @@ SECRET_MANIFEST_NAME = re.compile(r"(^|-)secret[-.]")
 SHARED_DEFAULT_TRIGGERS = {"service.yaml": "port", "ingressroute.yaml": "hostname"}
 
 
-def _named_files(role, roles_dir: Path) -> dict[str, set[str]]:
-    """For each file-list key a role sets, the basenames in its value.
+# The render metadata a role sets in its defaults/main.yml, and the keys of the image builds it
+# sets there. A key the renderer starts reading joins this set, and so joins the refusal.
+RENDER_KEYS = frozenset(
+    {
+        "manifests_deferred_dir_name",
+        "manifests_deferred_files",
+        "manifests_exclude_files",
+        "manifests_extra_rollouts",
+        "manifests_files",
+        "manifests_outside_secrets",
+        "manifests_prune",
+        "manifests_rollout",
+        "manifests_secret_files",
+        "manifests_self_rollouts",
+    }
+)
+# `role_fields` reads the timeout from defaults alone, so one set in `tasks/` renders 600s (#5464).
+_MOVED_KEYS = RENDER_KEYS | {
+    "image_builder_builds",
+    "image_builder_name",
+    "manifests_rollout_timeout",
+}
+_MOVED_KEY_LINE = re.compile(
+    rf"^\s*(?:-\s+)?({'|'.join(sorted(_MOVED_KEYS))}):", re.MULTILINE
+)
 
-    The role's defaults/main.yml comes first and its tasks/main.yml second.
+
+def refuse_moved_keys_in_tasks(role_dir: Path) -> None:
+    """Raise when `role_dir`'s `tasks/` still sets a key the renderer reads from defaults.
+
+    The renderer takes no value from `tasks/`, so such a key would silently stop rendering.
+    This refusal is the one read of a task file on the render path. A `manifests_*` key only
+    Ansible reads is outside the set and passes.
 
     Raises:
-        ValueError: Both files set one key.
+        ValueError: A file under `tasks/` sets a key of the set.
     """
-    declared = _file_list_keys(roles_dir / role / "defaults" / "main.yml")
-    passed = _file_list_keys(roles_dir / role / "tasks" / "main.yml")
-    both = declared.keys() & passed.keys()
-    if both:
-        raise ValueError(
-            f"{role} sets {sorted(both)} in both defaults/main.yml and tasks/main.yml"
-        )
-    return {**declared, **passed}
+    for path in sorted((role_dir / "tasks").glob("*.yml")):
+        found = sorted(set(_MOVED_KEY_LINE.findall(path.read_text())))
+        if found:
+            raise ValueError(
+                f"{role_dir.name} sets {found} in tasks/{path.name}, and the renderer reads "
+                "them from defaults/main.yml"
+            )
+
+
+def _named_files(role, roles_dir: Path) -> dict[str, set[str]]:
+    """For each file-list key a role's defaults/main.yml sets, the basenames in its value.
+
+    Raises:
+        ValueError: The role has no defaults/main.yml, or its `tasks/` sets a moved key.
+    """
+    role_dir = roles_dir / role
+    refuse_moved_keys_in_tasks(role_dir)
+    defaults = role_dir / "defaults" / "main.yml"
+    if not defaults.is_file():
+        raise ValueError(f"{role} has no defaults/main.yml")
+    return _file_list_keys(defaults)
 
 
 def _file_list_keys(path: Path) -> dict[str, set[str]]:
-    """For each file-list key `path` sets, the basenames in its value. {} for no such file."""
-    if not path.is_file():
-        return {}
+    """For each file-list key `path` sets, the basenames in its value."""
     lines = path.read_text().splitlines()
     named: dict[str, set[str]] = {}
     for i, line in enumerate(lines):

@@ -35,7 +35,12 @@ import pytest
 from lib.k8s_roles import declared_manifest_files
 from renderer.renderer_lib.task_inputs import render_defaults
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
-from _role_census import manifests_service_of, task_files, task_files_by_role
+from _role_census import (
+    manifests_service_of,
+    task_files,
+    task_files_by_role,
+    write_fixture_role,
+)
 from _shell_render import rendered_shell_text
 
 MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
@@ -216,22 +221,15 @@ _PRUNED_ROLE = """---
 """
 
 
-def _write_role(root: Path, name: str, text: str) -> Path:
-    tasks_file = root / name / "tasks" / "main.yml"
-    tasks_file.parent.mkdir(parents=True)
-    tasks_file.write_text(text)
-    return root
-
-
 def test_probe_staged_in_a_sibling_directory_is_clean(tmp_path):
-    root = _write_role(
+    root = write_fixture_role(
         tmp_path, "widget", _PRUNED_ROLE.format(root=MANIFEST_ROOT, dir="widget-probe")
     )
     assert files_in_pruned_dirs(root) == {}
 
 
 def test_probe_staged_in_the_pruned_directory_is_flagged(tmp_path):
-    root = _write_role(
+    root = write_fixture_role(
         tmp_path, "widget", _PRUNED_ROLE.format(root=MANIFEST_ROOT, dir="widget")
     )
     assert files_in_pruned_dirs(root) == {"widget": ["widget/probe-job.yaml"]}
@@ -241,7 +239,7 @@ def test_a_listed_manifest_in_its_own_directory_is_clean(tmp_path):
     text = _PRUNED_ROLE.format(root=MANIFEST_ROOT, dir="widget").replace(
         "probe-job.yaml", "service.yaml"
     )
-    assert files_in_pruned_dirs(_write_role(tmp_path, "widget", text)) == {}
+    assert files_in_pruned_dirs(write_fixture_role(tmp_path, "widget", text)) == {}
 
 
 def test_a_removal_task_in_the_pruned_directory_is_clean(tmp_path):
@@ -260,7 +258,7 @@ def test_a_removal_task_in_the_pruned_directory_is_clean(tmp_path):
     path: {root}/widget/dashboard.yaml
     state: absent
 """.format(root=MANIFEST_ROOT)
-    assert files_in_pruned_dirs(_write_role(tmp_path, "widget", text)) == {}
+    assert files_in_pruned_dirs(write_fixture_role(tmp_path, "widget", text)) == {}
 
 
 def test_the_pre_fix_n8n_probe_is_flagged(tmp_path):
@@ -284,7 +282,7 @@ def test_the_pre_fix_n8n_probe_is_flagged(tmp_path):
   ansible.builtin.command:
     cmd: "k3s kubectl apply -f {root}/n8n/netpol-probe-job.yaml"
 """.format(root=MANIFEST_ROOT)
-    assert files_in_pruned_dirs(_write_role(tmp_path, "n8n", text)) == {
+    assert files_in_pruned_dirs(write_fixture_role(tmp_path, "n8n", text)) == {
         "n8n": ["n8n/netpol-probe-job.yaml"]
     }
 
@@ -326,7 +324,7 @@ def test_the_pre_fix_registry_jobs_are_flagged(tmp_path):
     src: gc-job.yaml.j2
     dest: {root}/registry/gc-job.yaml
 """.format(root=MANIFEST_ROOT)
-    assert files_in_pruned_dirs(_write_role(tmp_path, "registry", text)) == {
+    assert files_in_pruned_dirs(write_fixture_role(tmp_path, "registry", text)) == {
         "registry": [
             "registry/gc-job.yaml",
             "registry/netpol-probe-job.yaml",
@@ -373,7 +371,7 @@ def test_no_role_stages_a_file_in_a_pruned_manifest_directory():
 
 
 def test_an_ordinary_service_name_is_clean(tmp_path):
-    root = _write_role(
+    root = write_fixture_role(
         tmp_path, "widget", _PRUNED_ROLE.format(root=MANIFEST_ROOT, dir="widget-probe")
     )
     assert reserved_name_claims(root) == {}
@@ -383,7 +381,7 @@ def test_a_service_named_for_a_reserved_suffix_is_flagged(tmp_path):
     text = _PRUNED_ROLE.format(root=MANIFEST_ROOT, dir="gadget-claims-probe").replace(
         "manifests_service: widget", "manifests_service: gadget-claims"
     )
-    assert set(reserved_name_claims(_write_role(tmp_path, "gadget", text))) == {
+    assert set(reserved_name_claims(write_fixture_role(tmp_path, "gadget", text))) == {
         "gadget-claims"
     }
 
@@ -392,7 +390,7 @@ def test_a_service_named_for_a_reserved_prefix_is_flagged(tmp_path):
     text = _PRUNED_ROLE.format(root=MANIFEST_ROOT, dir="build-thing-probe").replace(
         "manifests_service: widget", "manifests_service: build-thing"
     )
-    assert set(reserved_name_claims(_write_role(tmp_path, "builder", text))) == {
+    assert set(reserved_name_claims(write_fixture_role(tmp_path, "builder", text))) == {
         "build-thing"
     }
 
@@ -414,8 +412,8 @@ def test_a_service_claiming_another_roles_staging_directory_is_flagged(tmp_path)
     manifests_files:
       - deployment.yaml
 """
-    root = _write_role(tmp_path, "gadget", prober)
-    _write_role(root, "scratch", claimer)
+    root = write_fixture_role(tmp_path, "gadget", prober)
+    write_fixture_role(root, "scratch", claimer)
     assert set(reserved_name_claims(root)) == {"gadget-scratch"}
 
 

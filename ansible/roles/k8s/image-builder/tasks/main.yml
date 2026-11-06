@@ -60,8 +60,8 @@
 # a stable, unambiguous encoding — a plain join could not tell two contexts apart whose files
 # happen to contain the separator.
 #
-# ansible/tests/deploy/test_image_builder_content_tag.py evaluates this expression through
-# Ansible's own templar against real files on disk.
+# ansible/tests/_image_builder_tag.py holds this expression as the literal that
+# scripts/renderer/renderer_lib/derived.py:content_tag is compared with.
 - name: Compute the content tag for {{ image_builder_name }}
   # `always`, not `config` or `deploy`. Both slices read this fact — the render below is `config`,
   # the registry reads and the build are `deploy` — and tagging it with both is the shape

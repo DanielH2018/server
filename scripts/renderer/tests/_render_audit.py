@@ -27,7 +27,7 @@ import os
 import sys
 from pathlib import Path
 
-from deploy_tools.render_targets import render_targets
+from renderer.renderer_lib.targets import render_targets
 from lib.ansible_inventory import K8S_HOST
 from lib.proc_testing import run
 from lib.repo_paths import REPO, SCRIPTS

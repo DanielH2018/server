@@ -22,7 +22,7 @@ read it when you change one.
 ```
 
 The caller sets its render metadata in its own `defaults/main.yml`, as the keys of
-`scripts/renderer/renderer_lib/task_inputs.py:RENDER_KEYS`, each with `# noqa
+`scripts/lib/k8s_roles.py:RENDER_KEYS`, each with `# noqa
 var-naming[no-role-prefix]`: `manifests_rollout` (default `manifests_service`; `''` skips the
 wait) and those below. Every one is optional. No flux-owned role runs this include, and a
 role handed back to Ansible moves them onto its `vars:`, where this role's own defaults

@@ -186,11 +186,11 @@ def test_every_template_of_a_jinja_list_role_is_listed_is_clean():
 
 def test_a_template_an_explicit_list_leaves_out_is_flagged(tmp_path):
     _widget(tmp_path, "deployment.yaml.j2", "orphan-secret.yaml.j2")
-    tasks = tmp_path / "roles" / "k8s" / "widget" / "tasks" / "main.yml"
-    tasks.write_text(
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_files: \"{{ ['deployment.yaml'] }}\"\n"
-        "    manifests_secret_files: '{{ [] }}'\n"
+    defaults = tmp_path / "roles" / "k8s" / "widget" / "defaults" / "main.yml"
+    defaults.write_text(
+        "---\n"
+        "manifests_files: \"{{ ['deployment.yaml'] }}\"\n"
+        "manifests_secret_files: '{{ [] }}'\n"
     )
     assert unlisted_templates("widget", tmp_path / "roles" / "k8s") == {
         "orphan-secret.yaml"
@@ -201,7 +201,7 @@ def _widget(tmp_path: Path, *templates: str) -> Path:
     """A playbook dir holding one role, `widget`, that ships `templates`."""
     tpl_dir = tmp_path / "roles" / "k8s" / "widget" / "templates"
     tpl_dir.mkdir(parents=True)
-    (tmp_path / "roles" / "k8s" / "widget" / "tasks").mkdir()
+    (tmp_path / "roles" / "k8s" / "widget" / "defaults").mkdir()
     for name in templates:
         (tpl_dir / name).write_text("---\n")
     return tmp_path
@@ -210,9 +210,9 @@ def _widget(tmp_path: Path, *templates: str) -> Path:
 def _both(tmp_path, include_vars, entry):
     """The two copies' answers for `widget`, each as sorted lists."""
     ansible = ansible_resolve("widget", include_vars, entry, tmp_path)
-    tasks = tmp_path / "roles" / "k8s" / "widget" / "tasks" / "main.yml"
-    body = "".join(f"    {k}: {v!r}\n" for k, v in include_vars.items())
-    tasks.write_text(f"---\n- name: Deploy widget\n  vars:\n{body}")
+    defaults = tmp_path / "roles" / "k8s" / "widget" / "defaults" / "main.yml"
+    body = "".join(f"{k}: {v!r}\n" for k, v in include_vars.items())
+    defaults.write_text(f"---\n{body}")
     python = resolved_manifest_files("widget", tmp_path / "roles" / "k8s", entry)
     return (
         (sorted(ansible[0]), sorted(ansible[1])),

@@ -1,9 +1,8 @@
-"""`task_inputs.derived_facts` computes what the role tasks compute, by their own expressions.
+"""`task_inputs` reads a role's defaults, and each content tag equals the one Ansible computes.
 
-Each derived value is held equal to ansible-core's `Templar` evaluating the same task
-expression with the same variables, through the helper
-`ansible/tests/deploy/test_image_builder_content_tag.py` uses. Every check renders against the
-real tree and a fresh stub file.
+Each content tag is held equal to ansible-core's `Templar` evaluating image-builder's expression
+with the same variables, through the helper `ansible/tests/deploy/test_image_builder_content_tag.py`
+uses. A check on the real tree renders it with a fresh stub file.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_task_inputs.py
 """
@@ -13,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from _image_builder_tag import templar_content_tag, templar_value
-from lib import yaml_fast
+from _image_builder_tag import templar_content_tag
+from lib.k8s_roles import refuse_moved_keys_in_tasks, role_dirs
 from lib.repo_paths import K8S_ROLES
 from renderer import shadow_diff
-from renderer.renderer_lib import cluster, task_inputs
+from renderer.renderer_lib import cluster, derived, task_inputs
 from renderer.renderer_lib.context import load_stubs
 
 # `sha-` and 12 hex digits, the shape registry-gc.sh's prune keys on.
@@ -25,12 +24,8 @@ TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 
 SITES = [
     (role.name, index)
-    for role in sorted(K8S_ROLES.iterdir())
+    for role in role_dirs()
     for index, _ in enumerate(task_inputs.image_builder_sites(role))
-]
-
-CHECKED_FACTS = [
-    (role, fact) for role, steps in task_inputs.SET_FACTS.items() for _, fact in steps
 ]
 
 
@@ -55,7 +50,7 @@ def test_the_site_census_finds_all_ten_builds():
 def test_the_content_tag_equals_the_one_templar_computes(role, index, stubs):
     site = task_inputs.image_builder_sites(K8S_ROLES / role)[index]
     variables = task_inputs.site_variables(site, _ctx(role, stubs))
-    tag = task_inputs.content_tag(variables)
+    tag = derived.content_tag(task_inputs.context_data(variables))
     assert TAG_RE.match(tag), tag
     assert tag == templar_content_tag(variables)
 
@@ -70,8 +65,12 @@ def test_dropping_a_context_file_changes_the_tag(stubs):
         site.when,
     )
     ctx = _ctx("homelab-mcp", stubs)
-    before = task_inputs.content_tag(task_inputs.site_variables(site, ctx))
-    after = task_inputs.content_tag(task_inputs.site_variables(dropped, ctx))
+    before = derived.content_tag(
+        task_inputs.context_data(task_inputs.site_variables(site, ctx))
+    )
+    after = derived.content_tag(
+        task_inputs.context_data(task_inputs.site_variables(dropped, ctx))
+    )
     assert TAG_RE.match(before) and TAG_RE.match(after)
     assert before != after
 
@@ -83,35 +82,23 @@ def test_a_consumer_names_its_derived_tag(stubs):
     assert f"/nut:{tags['nut']}" in rendered.files["deployment.yaml"]
 
 
-@pytest.mark.parametrize(("role", "fact"), CHECKED_FACTS)
-def test_a_set_fact_equals_the_value_templar_computes(role, fact, stubs):
-    role_dir = K8S_ROLES / role
-    ctx = _ctx(role, stubs)
-    facts = task_inputs.derived_facts(role_dir, ctx)
-    tasks_file = next(f for f, name in task_inputs.SET_FACTS[role] if name == fact)
-    expression, _ = task_inputs.set_fact_task(role_dir / "tasks" / tasks_file, fact)
-    variables = {
-        **ctx,
-        **{k: v for k, v in facts.items() if k != fact},
-        "playbook_dir": str(K8S_ROLES.parents[1]),
-        "role_path": str(role_dir),
-    }
-    assert facts[fact] == templar_value(expression, variables, role_dir)
-
-
-def _builder_role(tmp_path, defaults: str = "", tasks_vars: str = "") -> Path:
+def _role(tmp_path, defaults: str | None = "---\n", tasks: str | None = None) -> Path:
     role = tmp_path / "role"
-    (role / "tasks").mkdir(parents=True)
-    (role / "defaults").mkdir()
-    (role / "defaults" / "main.yml").write_text(defaults or "---\n")
-    include = "- ansible.builtin.include_role:\n    name: k8s/image-builder\n"
-    (role / "tasks" / "main.yml").write_text(include + tasks_vars)
+    role.mkdir()
+    if defaults is not None:
+        (role / "defaults").mkdir()
+        (role / "defaults" / "main.yml").write_text(defaults)
+    if tasks is not None:
+        (role / "tasks").mkdir()
+        (role / "tasks" / "main.yml").write_text(tasks)
     return role
 
 
+BARE_INCLUDE = "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
+
+
 def test_builds_in_defaults_are_read_in_order_with_their_when(tmp_path):
-    """The include left in tasks names no image, so it adds no site."""
-    role = _builder_role(
+    role = _role(
         tmp_path,
         "image_builder_builds:\n"
         "  - image_builder_name: first\n"
@@ -124,79 +111,59 @@ def test_builds_in_defaults_are_read_in_order_with_their_when(tmp_path):
     ]
 
 
-def test_builds_in_defaults_and_vars_on_the_include_are_flagged(tmp_path):
-    role = _builder_role(
-        tmp_path,
-        "image_builder_builds:\n  - image_builder_name: first\n",
-        "  vars:\n    image_builder_name: second\n",
-    )
-    with pytest.raises(ValueError, match="image_builder_builds and also"):
+def test_include_vars_reads_only_the_render_keys_from_defaults(tmp_path):
+    role = _role(tmp_path, "manifests_rollout: demo\nmanifests_rollout_timeout: 900s\n")
+    assert task_inputs.include_vars(role) == {"manifests_rollout": "demo"}
+
+
+def test_a_role_with_no_tasks_directory_reads_its_defaults(tmp_path):
+    role = _role(tmp_path, "manifests_rollout: demo\n")
+    assert task_inputs.include_vars(role) == {"manifests_rollout": "demo"}
+    assert task_inputs.image_builder_sites(role) == []
+
+
+def test_a_role_with_no_defaults_file_raises(tmp_path):
+    role = _role(tmp_path, None, BARE_INCLUDE)
+    with pytest.raises(ValueError, match=r"has no defaults/main\.yml"):
+        task_inputs.include_vars(role)
+    with pytest.raises(ValueError, match=r"has no defaults/main\.yml"):
         task_inputs.image_builder_sites(role)
 
 
-def _manifests_role(tmp_path, defaults: str, tasks_vars: str = "") -> Path:
-    role = tmp_path / "role"
-    (role / "tasks").mkdir(parents=True)
-    (role / "defaults").mkdir()
-    (role / "defaults" / "main.yml").write_text(defaults)
-    include = "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
-    (role / "tasks" / "main.yml").write_text(include + tasks_vars)
-    return role
+@pytest.mark.parametrize(
+    "key",
+    [
+        "manifests_deferred_files: [a.yaml]",
+        "image_builder_name: demo",
+        "manifests_rollout_timeout: 900s",
+    ],
+)
+def test_a_moved_key_in_tasks_raises(tmp_path, key):
+    role = _role(tmp_path, tasks=BARE_INCLUDE + f"  vars:\n    {key}\n")
+    moved = key.split(":")[0]
+    with pytest.raises(ValueError, match=rf"{moved}.*tasks/main\.yml"):
+        task_inputs.include_vars(role)
+    with pytest.raises(ValueError, match=rf"{moved}.*tasks/main\.yml"):
+        task_inputs.image_builder_sites(role)
 
 
-def test_include_vars_reads_only_the_render_keys_from_defaults(tmp_path):
-    role = _manifests_role(
-        tmp_path,
-        "manifests_rollout: demo\nmanifests_rollout_timeout: 900s\nother: 1\n",
-        "  vars:\n    manifests_rollout_kind: daemonset\n",
-    )
-    assert task_inputs.include_vars(role) == {
-        "manifests_rollout": "demo",
-        "manifests_rollout_kind": "daemonset",
-    }
-
-
-def test_a_render_key_in_defaults_and_on_the_include_is_flagged(tmp_path):
-    role = _manifests_role(
+def test_an_ansible_only_key_in_tasks_passes(tmp_path):
+    """A comment naming a moved key passes too, as coredns's tasks file has one."""
+    role = _role(
         tmp_path,
         "manifests_rollout: demo\n",
-        "  vars:\n    manifests_rollout: other\n",
+        "# `manifests_rollout: ''` names no restart target\n"
+        + BARE_INCLUDE
+        + "  vars:\n    manifests_rollout_kind: daemonset\n",
     )
-    with pytest.raises(ValueError, match=r"manifests_rollout.*in both"):
-        task_inputs.include_vars(role)
+    assert task_inputs.include_vars(role) == {"manifests_rollout": "demo"}
 
 
-def _render_keys_on_includes(roles: Path) -> dict[str, set[str]]:
-    """Each role whose tasks pass a `RENDER_KEYS` key or an `image_builder_*` var, with the keys."""
-    found: dict[str, set[str]] = {}
-    for path in sorted(roles.glob("*/tasks/*.yml")):
-        for task in task_inputs._tasks(yaml_fast.safe_load(path.read_text()) or []):
-            keys = {
-                key
-                for key in task.get("vars") or {}
-                if key in task_inputs.RENDER_KEYS or key.startswith("image_builder_")
-            }
-            if keys and any(
-                isinstance(task.get(module), dict)
-                and task[module].get("name") in {"k8s/manifests", "k8s/image-builder"}
-                for module in task_inputs._INCLUDE_MODULES
-            ):
-                found.setdefault(path.parts[-3], set()).update(keys)
-    return found
-
-
-def test_no_role_keeps_render_metadata_on_its_include_is_clean():
-    assert _render_keys_on_includes(K8S_ROLES) == {}
-    walked = set(K8S_ROLES.glob("*/tasks/*.yml"))
-    assert {
-        K8S_ROLES / "pihole/tasks/main.yml",
-        K8S_ROLES / "n8n/tasks/main.yml",
-    } <= walked
+def test_no_role_keeps_a_moved_key_in_its_tasks_is_clean():
+    roles = role_dirs()
+    assert {K8S_ROLES / "pihole", K8S_ROLES / "n8n"} <= set(roles)
+    for role in roles:
+        refuse_moved_keys_in_tasks(role)
     pihole = task_inputs.include_vars(K8S_ROLES / "pihole")
     assert pihole["manifests_deferred_files"] == ["deployment-2.yaml"]
     assert pihole["manifests_deferred_dir_name"] == "pihole-instance-2"
-
-
-def test_render_metadata_on_an_include_is_flagged(tmp_path):
-    _manifests_role(tmp_path, "---\n", "  vars:\n    manifests_rollout: demo\n")
-    assert _render_keys_on_includes(tmp_path) == {"role": {"manifests_rollout"}}

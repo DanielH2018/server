@@ -28,6 +28,8 @@ def test_claims_line_carries_each_claims_tier_and_moves_with_the_tier_lists(tmp_
     entry = {"name": "svc", "platform": "k8s"}
     role = roles / "svc"
     (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text("---\n")
     (role / "tasks").mkdir()
     # The three declaration shapes: inline PVC, a volume-claim include, a `claimName:`
     # reference to a claim another role declares off Longhorn.
@@ -46,6 +48,8 @@ def test_claims_line_carries_each_claims_tier_and_moves_with_the_tier_lists(tmp_
         "    volume_claim_storage_class: longhorn\n"
     )
     (roles / "media-volume" / "templates").mkdir(parents=True)
+    (roles / "media-volume" / "defaults").mkdir()
+    (roles / "media-volume" / "defaults" / "main.yml").write_text("---\n")
     (roles / "media-volume" / "templates" / "pvc.yaml.j2").write_text(
         "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: media-data\n"
         "spec:\n  storageClassName: media-local\n"
@@ -86,6 +90,8 @@ def test_claims_line_reads_a_group_vars_override_of_a_tier_list(tmp_path):
     roles = tmp_path / "roles"
     role = roles / "svc"
     (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text("---\n")
     (role / "templates" / "pvc.yaml.j2").write_text(
         "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: svc-config\n"
         "spec:\n  storageClassName: longhorn\n"
@@ -115,6 +121,8 @@ def test_stale_k8s_docs_derives_the_r2_set_from_the_injected_containers_list(tmp
     roles = tmp_path / "roles"
     role = roles / "svc"
     (role / "templates").mkdir(parents=True)
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text("---\n")
     (role / "templates" / "pvc.yaml.j2").write_text(
         "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata:\n  name: svc-config\n"
         "spec:\n  storageClassName: longhorn\n"

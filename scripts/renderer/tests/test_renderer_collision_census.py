@@ -16,7 +16,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_collision_census.py
 from collections import defaultdict
 from collections.abc import Mapping
 
-from deploy_tools.render_targets import render_targets
+from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.exit_codes import RENDER_OK

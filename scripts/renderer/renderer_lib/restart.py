@@ -146,7 +146,7 @@ def self_rollouts(tag: str, context: Mapping, roles: Path = K8S_ROLES) -> list[s
     value = include_vars(roles / tag).get(SELF_KEY)
     if isinstance(value, str):
         # observability builds its list with `combine`, an Ansible filter `resolve_vars`
-        # lacks, so the value is evaluated as `derived_facts` evaluates a task expression.
+        # lacks, so the value is evaluated in the template environment.
         env = renderer_env(roles / tag / "templates")
         try:
             value = evaluate(env, value.strip(), dict(context))
@@ -159,13 +159,13 @@ def outside_secrets(tag: str, roles: Path = K8S_ROLES) -> dict[str, frozenset[st
     """Each Secret another role renders that `tag`'s pods read, mapped to the keys it holds.
 
     The map is `tag`'s `manifests_outside_secrets`, `{name, keys}` per Secret, where `keys`
-    are `ansible/vars/secrets.yml` key names. It is empty for a tag with no tasks directory,
+    are `ansible/vars/secrets.yml` key names. It is empty for a tag with no role directory,
     such as a test's fixture tag.
 
     Raises:
         RenderError: An entry has no name, or its `keys` is not a non-empty list of names.
     """
-    if not (roles / tag / "tasks").is_dir():
+    if not (roles / tag).is_dir():
         return {}
     values = {OUTSIDE_KEY: include_vars(roles / tag).get(OUTSIDE_KEY)}
     found = {}

@@ -1,6 +1,7 @@
 """The promote workflow's `images` job computes image-builder's content tag and pushes each once.
 
-The tag half compares `ci_images.content_tag` with image-builder's own expression, evaluated
+The tag half compares `ci_images.content_tag` and `derived.content_tag`, the renderer's copy of
+the rule, with image-builder's own expression, evaluated
 by ansible-core's `Templar` (`_image_builder_tag`, the oracle of
 `ansible/tests/deploy/test_image_builder_content_tag.py`), and then with every context a real
 render writes. The push half drives `ci_images.push` with a fake registry and a fake build.
@@ -19,7 +20,7 @@ from deploy_tools import ci_images
 from deploy_tools.ci_images import Answer, Refused
 from lib.exit_codes import RENDER_OK
 from renderer import homelab_render
-from renderer.renderer_lib import images
+from renderer.renderer_lib import derived, images
 
 DIGEST = "sha256:" + "ab" * 32
 SERVED = Answer(200, DIGEST)
@@ -81,7 +82,9 @@ def test_the_tag_matches_image_builders_expression(tmp_path):
     assert list(data) != sorted(data), (
         "the fixture no longer exercises dictsort's case folding"
     )
-    assert ci_images.content_tag(data) == templar_content_tag(variables)
+    tag = templar_content_tag(variables)
+    assert ci_images.content_tag(data) == tag
+    assert derived.content_tag(data) == tag
 
 
 def test_every_rendered_context_is_planned_under_its_tags_json_tag(out):

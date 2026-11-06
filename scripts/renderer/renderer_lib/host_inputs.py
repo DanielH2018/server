@@ -43,7 +43,6 @@ HOST_INPUTS = (
     # render's working directory, and `homelab_render.py` imports the other two at load, for
     # cluster mode.
     "ansible.cfg",
-    "scripts/deploy_tools/render_targets.py",
     "scripts/secrets_mgmt/cluster_vars_check.py",
     # `host_lib.py` and `longhorn_lib/longhorn_backups.py`, which the filter
     # plugins and `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since
