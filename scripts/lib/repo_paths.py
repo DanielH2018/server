@@ -91,9 +91,8 @@ K3S_DEFAULTS = K3S_ROLE / "defaults" / "main.yml"
 # Flux-owned `system-upgrade` role's defaults since H6.1b, so a pin change routes to that tag.
 # `K3S_DEFAULTS` keeps every other key, which did not move.
 SYSTEM_UPGRADE_DEFAULTS = K8S_ROLES / "system-upgrade" / "defaults" / "main.yml"
-# The k3s role's own Python, which the host crons run: `longhorn_backup_health.py`,
-# `live_drift_check.py` and `manifest_declares.py`. `longhorn_lib/`, which the first imports,
-# lives in `scripts/lib/` since H7.2e.
+# The k3s role's own Python, which the host crons run: `longhorn_backup_health.py`.
+# `longhorn_lib/`, which it imports, lives in `scripts/lib/` since H7.2e.
 K3S_FILES = K3S_ROLE / "files"
 # The suite's shared guard modules (`_ratchet.py`, `_helpers.py`), for a script that reuses one.
 ANSIBLE_TESTS = ANSIBLE / "tests"

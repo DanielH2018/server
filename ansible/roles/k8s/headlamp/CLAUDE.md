@@ -94,7 +94,7 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
 
 ## Notable
 - Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
-  include of `k8s/manifests` alone, which the renderer reads for the role's vars. To give the
+  include of `k8s/manifests` alone. To give the
   role back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
   revert of the flag leaves two writers on the objects.
 - Ships a **negative** self-test: the `headlamp-verify` Job in `templates/verify/` must FAIL to

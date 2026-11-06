@@ -25,7 +25,7 @@ secret, no volume. See repo-root `CLAUDE.md` for shared conventions.
   Kustomization's `wait` replaces the rollout wait.
   `k8s_autodeploy` no longer gates an apply, because the deployer skips the tag. It still
   decides whether Renovate automerges the image bump.
-- **The render honours the task's `manifests_exclude_files`,** so the bundle holds no
+- **The render honours the role's `manifests_exclude_files`,** so the bundle holds no
   Service, as the Ansible apply did.
 
 ## The two nodes have different GPUs, and #1446 named the wrong one

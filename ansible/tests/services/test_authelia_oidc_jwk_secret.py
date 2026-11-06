@@ -34,7 +34,6 @@ def _tasks() -> dict[str, tuple[int, dict]]:
 
 def _lists(lever: bool) -> tuple[list[str], list[str]]:
     """`(manifests_files, manifests_secret_files)` as the include passes them, at `lever`."""
-    _i, include = _tasks()[INCLUDE_TASK]
     defaults = load_defaults(ROLE_DIR)
     variables = {
         name: defaults[name]
@@ -45,7 +44,7 @@ def _lists(lever: bool) -> tuple[list[str], list[str]]:
     } | {LEVER: lever}
     templar = Templar(loader=DataLoader(), variables=variables)
     files, secret = (
-        list(templar.template(trust_as_template(include["vars"][key])))
+        list(templar.template(trust_as_template(defaults[key])))
         for key in ("manifests_files", "manifests_secret_files")
     )
     return files, secret

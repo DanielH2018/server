@@ -230,3 +230,17 @@ netpol_baseline_probe_active: >-
                   + (['observability'] if netpol_baseline_obs_enforced | bool else [])
                   + ['flux-system'])
      | list }}
+
+manifests_rollout: ""  # noqa var-naming[no-role-prefix]
+
+# The observability namespace's baseline and its three caller policies, which the armed
+# apply's `-n homelab` refuses (#3575). The renderer writes them to
+# `cluster/netpol-baseline-deferred/`, which Flux applies after every other tag's
+# Kustomization.
+manifests_deferred_files:  # noqa var-naming[no-role-prefix]
+  - networkpolicy-observability.yaml
+  - networkpolicy-prometheus.yaml
+  - networkpolicy-loki.yaml
+  - networkpolicy-alertmanager.yaml
+
+manifests_deferred_dir_name: netpol-baseline-observability  # noqa var-naming[no-role-prefix]

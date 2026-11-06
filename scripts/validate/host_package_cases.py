@@ -59,7 +59,7 @@ reconcile component and maintainer scripts.
 Usage:
     uv run python scripts/validate/host_package_cases.py --image homelab-host-test:24.04 \\
         --python 3.12 --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \\
-        --work "$RUNNER_TEMP/cases"
+        --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
 
 Exit codes: 0 every case passed; 1 a case failed, each `[FAIL]` line on stderr naming it and why,
 or a container never booted; 64 a usage error.
@@ -131,6 +131,7 @@ class Cases:
         self.image = args.image
         self.python = args.python
         self.work = args.work.resolve()
+        self.tools_cache = args.tools_cache.resolve() if args.tools_cache else None
         self.box = box_address(args.render / "head")
         self.failed: list[str] = []
         self.debs: dict[str, Path] = {}
@@ -556,6 +557,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--work", type=Path, required=True, help="a scratch directory for the cases"
+    )
+    parser.add_argument(
+        "--tools-cache", type=Path, help="the build job's verified pin downloads"
     )
     try:
         cases = Cases(parser.parse_args(argv))

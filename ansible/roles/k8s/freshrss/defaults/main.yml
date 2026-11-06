@@ -44,3 +44,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ freshrss_k8s_claim }}"
     storage_class: "{{ freshrss_k8s_storage_class }}"
     size: "{{ freshrss_k8s_size }}"
+
+# The feed cache is nginx, and nginx rereads conf.d only on start or SIGHUP. Its config
+# arrives as a ConfigMap this role renders, so kubelet updates the file on disk and nothing
+# tells nginx: an edited cache config applies, reports changed, and never takes effect.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: freshrss-feed-cache

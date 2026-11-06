@@ -33,6 +33,7 @@ from pathlib import Path
 
 import pytest
 from lib.k8s_roles import declared_manifest_files
+from renderer.renderer_lib.task_inputs import render_defaults
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
 from _role_census import manifests_service_of, task_files, task_files_by_role
 from _shell_render import rendered_shell_text
@@ -80,7 +81,7 @@ def pruned_dirs(roles_dir: Path) -> dict[str, tuple[str, ...]]:
             service = manifests_service_of(task, role_dir.name)
             if not service or "{{" in service:
                 continue
-            task_vars = task.get("vars") or {}
+            task_vars = {**render_defaults(role_dir), **(task.get("vars") or {})}
             listed: list[str] = []
             for key in ("manifests_files", "manifests_secret_files"):
                 value = task_vars.get(key, [])

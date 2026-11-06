@@ -10,7 +10,8 @@ refactors moved no rendered byte (docs/homelab-render.md, *The render-diff gate*
 - `compare` compares two such trees, reads the `Render-diff:` line from `$PR_BODY` and prints
   every problem. `Render-diff: none` allows no difference, and a list of paths must equal the
   differing files. Without the line the job prints the difference and passes, unless the PR
-  touches a hazard path. Both trees must also clear a floor, so two empty renders cannot pass.
+  touches a hazard path or moves a renderer dependency's pin. Both trees must also clear a
+  floor, so two empty renders cannot pass.
 
 Exit codes: 0 clean; 1 refused, or a render failed so the job could not judge.
 
@@ -24,6 +25,7 @@ import os
 import re
 import subprocess
 import sys
+import tomllib
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -34,7 +36,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser
-from lib.git import git_stdout
+from lib.git import git, git_stdout
 
 # The `flux/` files of the render at #7365's base: 66 tags, three shared kinds and the index.
 # A PR that retires a tag lowers this in its own diff and lists the tag's flux file.
@@ -56,6 +58,10 @@ _HAZARD_PREFIXES = (
     "scripts/lib/ansible_jinja_env.py",
     "ansible/filter_plugins/",
 )
+# The packages the renderer imports, by their uv.lock names. A census test holds this to the
+# renderer's imports, and the job reads each one's locked dependencies from here.
+RENDERER_DEPENDENCIES = frozenset({"ansible-core", "jinja2", "pyyaml"})
+_REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9._-]+")
 _ROLE_TASKS = re.compile(r"^ansible/roles/k8s/[^/]+/tasks/")
 _K8S_ROLES = "ansible/roles/k8s/"
 
@@ -89,6 +95,60 @@ def hazard_paths(changes: Iterable[tuple[str, str]]) -> list[str]:
         if path.startswith(_HAZARD_PREFIXES)
         or _ROLE_TASKS.match(path)
         or (status == "D" and path.startswith(_K8S_ROLES))
+    ]
+
+
+def _normalized(name: str) -> str:
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _locked(lock: str) -> dict[str, dict]:
+    return {_normalized(p["name"]): p for p in tomllib.loads(lock).get("package", [])}
+
+
+def dependency_closure(lock: str) -> set[str]:
+    """`RENDERER_DEPENDENCIES` and everything they depend on, as `lock` resolves them."""
+    packages = _locked(lock)
+    closure: set[str] = set()
+    pending = list(RENDERER_DEPENDENCIES)
+    while pending:
+        name = _normalized(pending.pop())
+        if name not in closure:
+            closure.add(name)
+            package = packages.get(name, {})
+            pending += [d["name"] for d in package.get("dependencies", [])]
+    return closure
+
+
+def _requirements(pyproject: str) -> dict[str, str]:
+    """Each requirement of the project and its dependency groups, by package name."""
+    doc = tomllib.loads(pyproject)
+    lists = [doc.get("project", {}).get("dependencies", [])]
+    lists += doc.get("dependency-groups", {}).values()
+    requirements = {}
+    for items in lists:
+        for item in items:
+            match = _REQUIREMENT_NAME.match(item) if isinstance(item, str) else None
+            if match:
+                requirements[_normalized(match.group())] = item
+    return requirements
+
+
+def pin_hazards(
+    base_lock: str, head_lock: str, base_project: str = "", head_project: str = ""
+) -> list[str]:
+    """Each renderer dependency whose `uv.lock` or `pyproject.toml` entry moved, as a path.
+
+    The closure is the union of both sides, so a package a bump adds or drops counts.
+    """
+    closure = dependency_closure(base_lock) | dependency_closure(head_lock)
+    base, head = _locked(base_lock), _locked(head_lock)
+    wanted = _requirements(base_project), _requirements(head_project)
+    return [
+        f"uv.lock or pyproject.toml entry for {name}"
+        for name in sorted(closure)
+        if base.get(name) != head.get(name)
+        or wanted[0].get(name) != wanted[1].get(name)
     ]
 
 
@@ -175,8 +235,9 @@ def judge(
     changes: Iterable[tuple[str, str]],
     body: str,
     floor: int = FLUX_FLOOR,
+    pins: Iterable[str] = (),
 ) -> Verdict:
-    """Judge two rendered trees against the PR's changed paths and body."""
+    """Judge two rendered trees against the PR's changed paths, its pin moves and its body."""
     moved = differing(base, head)
     problems = floor_problems(base, "base", floor)
     try:
@@ -189,7 +250,7 @@ def judge(
     problems += floor_problems(head, "head", floor - len(listed))
     if paths is not None:
         return Verdict(problems + _line_problems(paths, base, head, moved), moved)
-    hazards = hazard_paths(changes)
+    hazards = [*hazard_paths(changes), *pins]
     if hazards:
         problems.append(
             f"this PR touches {len(hazards)} hazard paths, the first {hazards[0]}, and its "
@@ -243,9 +304,20 @@ def changed_paths(merge_base: str, head: str) -> list[tuple[str, str]]:
     ]
 
 
+def _file_at(revision: str, path: str) -> str:
+    """`path`'s text at `revision`, empty when that commit holds no such file."""
+    return git("show", f"{revision}:{path}", check=False).stdout
+
+
 def compare(base: Path, head: Path, merge_base: str, head_sha: str, body: str) -> int:
     """Print the verdict on two rendered trees and return the job's exit code."""
-    verdict = judge(base, head, changed_paths(merge_base, head_sha), body)
+    pins = pin_hazards(
+        _file_at(merge_base, "uv.lock"),
+        _file_at(head_sha, "uv.lock"),
+        _file_at(merge_base, "pyproject.toml"),
+        _file_at(head_sha, "pyproject.toml"),
+    )
+    verdict = judge(base, head, changed_paths(merge_base, head_sha), body, pins=pins)
     print(f"render-diff: {len(verdict.differences)} files differ")
     for rel in sorted(verdict.differences):
         print(f"  {rel}")

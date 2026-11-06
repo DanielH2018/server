@@ -17,15 +17,21 @@ read it when you change one.
 - name: Deploy <service>
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:                                   # every one optional; a bare include is the norm
-    manifests_rollout: <deployment name>  # default manifests_service; '' skips the wait
+  vars:                                   # optional; a bare include is the norm
     manifests_rollout_kind: deploy        # or 'daemonset'; default 'deploy'
 ```
 
+The caller sets its render metadata in its own `defaults/main.yml`, as the keys of
+`scripts/renderer/renderer_lib/task_inputs.py:RENDER_KEYS`, each with `# noqa
+var-naming[no-role-prefix]`: `manifests_rollout` (default `manifests_service`; `''` skips the
+wait) and those below. Every one is optional. No flux-owned role runs this include, and a
+role handed back to Ansible moves them onto its `vars:`, where this role's own defaults
+cannot outrank them.
+
 **The file lists are derived** (#3662): every top-level `templates/*.yaml.j2` but a
 `*-job.yaml`, plus the shared default (below) an entry's `port` or `hostname` earns. A name
-saying `secret` renders 0600 under `no_log`. `manifests_exclude_files` drops one, reason at the
-include; a passed list wins whole.
+saying `secret` renders 0600 under `no_log`. `manifests_exclude_files` drops one, reason beside
+it; a list the role sets wins whole.
 
 Optional and empty by default: `manifests_extra_rollouts` (`{name, image?, restart_on?}` per
 extra Deployment to wait on and roll), `manifests_self_rollouts` (`{name, kind, image?,
@@ -78,7 +84,7 @@ deferred pair below.
   `tags: [always]`: a gitops-deploy run filters `[deploy]` out, which left the drain waiting
   on nothing behind a `failed=0` recap.
 - **Dropping a manifest from the file list leaves the live object serving** only where a
-  role passes `manifests_prune: false`. An armed role renders through
+  role sets `manifests_prune: false`. An armed role renders through
   `ansible/templates/role-labelled.yaml.j2`, which labels every document, since the `-l`
   selector also filters the apply. Pruned kinds:
   `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`. It applies in
@@ -112,11 +118,10 @@ deferred pair below.
 ## Release records
 
 `release_stamp.yml` writes `/var/lib/homelab/k8s-releases.d/<service>.json` after each real
-apply, one step of history in `<service>.previous.json`; read it with `probe.py releases`. It
+apply, one step of history in `<service>.previous.json`. It
 records the **rendered bytes** and the `host` that produced them rather than the repo sources,
-the `rollouts[]` each workload is owed, and `manifests_digest`/`secret_digest` — the digest
-`probe.py releases --stale-only` prefers over its path rules, against the hourly record
-`ansible/roles/setup/render_records/` writes. Nothing here runs under `k8s_dry_run`.
+the `rollouts[]` each workload is owed, and `manifests_digest`/`secret_digest`. Nothing here runs
+under `k8s_dry_run`.
 
 ## Guards
 

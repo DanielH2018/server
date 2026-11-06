@@ -82,7 +82,9 @@ ALLOWED_UNPREFIXED = frozenset({"media"})
 # The templates the render skips that declare a `volumes:` or `volumeMounts:` block. Each is
 # checked from its source. image-builder's context ConfigMap is
 # skipped too, but declares no volume, so it is not a member.
-SOURCE_FALLBACK_WITH_VOLUMES = frozenset({"image-builder/build-job.yaml.j2"})
+SOURCE_FALLBACK_WITH_VOLUMES = frozenset(
+    {"image-builder/build-job.yaml.j2", "pihole/pihole-deployment.yaml.j2"}
+)
 
 
 def source_fallback() -> dict[str, str]:

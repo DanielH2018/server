@@ -1,8 +1,7 @@
 """Guards for the live prune.
 
 `kubectl apply -f <dir>/` only adds/updates; it never removes a live object whose entry was
-dropped from a role's `manifests_files`. `manifest-prune-check.sh` pages about that after the
-fact. This is the in-place fix: `k8s/manifests` passes `--prune -l homelab/role=<service>
+dropped from a role's `manifests_files`. This is the in-place fix: `k8s/manifests` passes `--prune -l homelab/role=<service>
 --prune-allowlist=<kinds> -n <namespace>` to the apply for a role that arms `manifests_prune`
 (see the DECIDED comment in `ansible/roles/k8s/manifests/defaults/main.yml`).
 
@@ -20,8 +19,6 @@ landing in the fixed allowlist.
 Run: uv run pytest ansible/tests/deploy/test_manifests_prune.py
 """
 
-import sys
-
 import pytest
 from _role_census import role_dirs
 from _helpers import (
@@ -33,15 +30,13 @@ from _helpers import (
     task_named,
     walk_tasks,
 )
-from lib.repo_paths import ALL_VARS, K3S_FILES
+from lib.repo_paths import ALL_VARS
+from renderer.renderer_lib.task_inputs import render_defaults
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files, manifest_template, tag_owners
 from role_label import ROLE_LABEL, homelab_role_label
 
-sys.path.insert(0, str(K3S_FILES))
-
-from manifest_declares import declared_in
 
 _MANIFESTS_TASKS = ROLES / "k8s" / "manifests" / "tasks" / "main.yml"
 _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
@@ -49,7 +44,7 @@ _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 # Kinds that must never be pruned by this mechanism — see the module docstring.
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
 # The roles that include k8s/manifests without arming its prune, each by operator decision
-# recorded as a DECIDED marker at its include (#3388). Every other caller is armed.
+# recorded as a DECIDED marker in its defaults (#3388). Every other caller is armed.
 _UNARMED_ROLES = frozenset({"authelia", "nut"})
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
 _RENDER_TASKS = (
@@ -181,7 +176,7 @@ def test_the_forbidden_kind_check_actually_fires() -> None:
 
 
 def _manifests_includes() -> dict[str, list[dict]]:
-    """The `vars:` of each role's render include, `k8s/manifests` without `tasks_from`, by role."""
+    """Each role's render defaults and `k8s/manifests` include vars, without `tasks_from`, by role."""
     found: dict[str, list[dict]] = {}
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
@@ -190,7 +185,9 @@ def _manifests_includes() -> dict[str, list[dict]]:
         for task in walk_tasks(load_tasks(main)):
             include = task.get("ansible.builtin.include_role") or {}
             if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
-                found.setdefault(role.name, []).append(task.get("vars") or {})
+                found.setdefault(role.name, []).append(
+                    {**render_defaults(role), **(task.get("vars") or {})}
+                )
     return found
 
 
@@ -231,7 +228,7 @@ def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
     assert callers - _ARMED_ROLES == _UNARMED_ROLES, (
         f"unarmed callers {sorted(callers - _ARMED_ROLES)} differ from the decided exclusions "
         f"{sorted(_UNARMED_ROLES)}. A caller is armed unless it passes `manifests_prune: false`; "
-        "excluding one needs an operator decision and a DECIDED marker at its include."
+        "excluding one needs an operator decision and a DECIDED marker in its defaults."
     )
 
 
@@ -358,39 +355,57 @@ def _without_role_label(doc: dict) -> dict:
     return {**doc, "metadata": metadata}
 
 
-def test_every_armed_render_is_labelled_and_otherwise_unchanged() -> None:
-    """The armed roles' real renders, passed through the filter the wrapper calls.
+def test_every_armed_render_carries_the_label() -> None:
+    """The selector filters the apply, so an unlabelled document would stop being applied.
 
-    Every document gains the label and nothing else: a Deployment's selector and pod-template
-    labels, a quoted string and a multi-line value all read back as rendered, and the host's
-    stdlib reader declares the same objects from the new bytes. bazarr's claim
-    is the named member: the selector filters the apply, so an unlabelled claim would stop
-    being applied.
+    bazarr's claim and littlelink's shared Service are the named members.
     """
+    armed = _armed_roles()
     seen = set()
     for role, name, text in rendered_texts():
-        if role not in _ARMED_ROLES:
-            continue
-        before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
-        # A macro-only template (pihole's pihole-deployment.yaml.j2) renders empty and is
-        # never staged; the deploy renders only the files the role names.
-        if not before and name.removesuffix(".j2") not in declared_manifest_files(role):
+        deferred = armed.get(role, {}).get("manifests_deferred_files") or []
+        if role not in armed or name.removesuffix(".j2") in deferred:
             continue
         seen.add((role, name))
+        for doc in yaml_fast.safe_load_all(text):
+            if doc:
+                assert doc["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"
+    assert {
+        ("bazarr", "claim-default.yaml.j2"),
+        ("littlelink", "service-default.yaml.j2"),
+    } <= seen
+
+
+def test_the_filter_adds_the_label_and_nothing_else() -> None:
+    """The armed roles' real unlabelled renders, passed through the filter the wrapper calls.
+
+    Each document gains the label and nothing else: a Deployment's selector and pod-template
+    labels, a quoted string and a multi-line value all read back as rendered, and the host's
+    stdlib reader declares the same objects from the new bytes. A claim renders per entry, so
+    it is out of this walk, and `test_every_armed_render_carries_the_label` holds it.
+    """
+    armed = _armed_roles()
+    seen = set()
+    for role, name, _ in rendered_texts():
+        deferred = armed.get(role, {}).get("manifests_deferred_files") or []
+        if (
+            role not in armed
+            or name == "claim-default.yaml.j2"
+            or name.removesuffix(".j2") in deferred
+        ):
+            continue
+        seen.add((role, name))
+        text = render_role_template(role, name)
+        before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
         labelled = homelab_role_label(text, role)
         after = list(yaml_fast.safe_load_all(labelled))
-        # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
-        assert declared_in(labelled) == declared_in(text), f"{role}/{name}"
         assert len(after) == len(before), f"{role}/{name} gained or lost a document"
         for old, new in zip(before, after, strict=True):
             assert new["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"
             assert _without_role_label(new) == old, (
                 f"{role}/{name} changed beyond the label"
             )
-    assert {
-        ("bazarr", "claim-default.yaml.j2"),
-        ("littlelink", "service-default.yaml.j2"),
-    } <= seen
+    assert ("littlelink", "service-default.yaml.j2") in seen
 
 
 def _staged_templates(role: str) -> set[str]:
@@ -495,6 +510,6 @@ def load_yaml_namespace() -> str:
 def test_manifests_prune_defaults_on() -> None:
     """The operator flipped the default on 2026-10-09 (#3662); an exclusion is an explicit false."""
     assert _defaults()["manifests_prune"] is True, (
-        "manifests_prune must default true. A role that must not prune passes "
-        "`manifests_prune: false` at its include, behind a DECIDED marker."
+        "manifests_prune must default true. A role that must not prune sets "
+        "`manifests_prune: false` in its defaults, behind a DECIDED marker."
     )

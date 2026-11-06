@@ -33,11 +33,6 @@ _ROLE_RUN = re.compile(
     r"((?:\{\{[^}]*\}\}|[^\s\"'{}])+\.py)\b"
 )
 _JINJA = re.compile(r"\{\{\s*([\w|. ]+?)\s*\}\}")
-# Templates still in the tree that no task renders, so no host installs what they run. D6.18
-# deletes each one; a listed file that is gone fails test_stdlib_only.py.
-UNRENDERED_TEMPLATES = frozenset(
-    {ROLES / "setup" / "k3s" / "templates" / "manifest-prune-check.sh.j2"}
-)
 
 
 def _role_of(path: Path) -> Path:
@@ -226,7 +221,6 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
             path.suffix not in {".yml", ".yaml", ".j2"}
             or "tests" in path.relative_to(ROLES).parts
             or not path.is_file()
-            or path in UNRENDERED_TEMPLATES
         ):
             continue
         found += [

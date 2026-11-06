@@ -23,8 +23,7 @@ the published `manifests_deferred_dir` and gating on the published `manifests_de
 `pihole` is the one caller: its two Pi-hole Deployments must not change pod template in the same
 `kubectl apply` request, because that Recreate-cycles both LAN resolvers at once (#2884). Before
 #2899 pihole rendered instance 2 itself, which put those bytes outside `manifests_digest` — so a
-change to `deployment-2.yaml.j2` moved no digest and `probe.py releases --stale-only` could
-neither clear pihole's path hit by a match nor catch it by a mismatch, for half the workload. The
+change to `deployment-2.yaml.j2` moved no digest, for half the workload. The
 directory name is reserved the way `<service>-netpol` is, by
 `ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py`.
 
@@ -55,7 +54,7 @@ Until 2026-10-10, 53 of the 57 including roles listed `manifests_files` and
 `manifests_secret_files` by hand. The lists restated two things the tree already said: which
 manifest templates the role ships, and whether its `containers_list` entry earns the shared
 Service and route. The "Resolve the manifest file lists" task now derives both for a role that
-passes neither:
+sets neither:
 
 - **The secret files** are the role's own top-level `templates/*.yaml.j2` whose basename says
   `secret` (`secret.yaml`, `config-secret.yaml`, `secret-exportarr.yaml`). Every secret template
@@ -68,15 +67,15 @@ passes neither:
   - a one-off `*-job.yaml` (the registry's self-test and GC Jobs, the netpol probes), which the
     role stages in a reserved directory and applies itself;
   - the role's `manifests_deferred_files`;
-  - whatever its include names in `manifests_exclude_files`.
+  - whatever its defaults name in `manifests_exclude_files`.
 
-Six roles carry an exclusion, and each names its reason at the include. `pihole` excludes its
+Six roles carry an exclusion, and each names its reason in its defaults. `pihole` excludes its
 macro-only `pihole-deployment.yaml`. `gpu-exporter`, `longhorn-ui`, `observability` and
 `scrutiny` exclude the shared Service their `port` would earn. `livesync` excludes the shared
 route its `hostname` would earn.
 
-A role still passes its own list where the list depends on role vars: authelia, navidrome and
-traefik build theirs with Jinja. A passed list wins whole, and the derivation does not touch it.
+A role still sets its own list where the list depends on role vars: authelia, navidrome and
+traefik build theirs with Jinja. A list it sets wins whole, and the derivation does not touch it.
 
 The derived lists are stored as `manifests_files_resolved` and `manifests_secret_files_resolved`,
 and every task in the role reads those names. They are never stored as `manifests_files` itself.
@@ -127,7 +126,7 @@ dashboard ConfigMaps out for the same reason and carries an explicit `state: abs
 copies it left behind.
 
 **`manifests_prune` (#1076, #3388) removes the live object too, armed by default since #3662.**
-A role opts out with `manifests_prune: false` on the `include_role` call. An armed role's apply
+A role opts out with `manifests_prune: false` in its defaults. An armed role's apply
 gains `--prune -l
 homelab/role=<service>`, one `--prune-allowlist=<kind>` per entry of the fixed
 `manifests_prune_allowlist`, and `-n <manifests_prune_namespace>`. That namespace is
@@ -295,8 +294,7 @@ cluster writes on `k8s_no_mutate`, so no role needs a dry run refused on its beh
 ## The release record, field by field
 
 `release_stamp.yml` writes `/var/lib/homelab/k8s-releases.d/<service>.json` after each real
-apply, keeping exactly one step of history in `<service>.previous.json`. Read it with
-`uv run python scripts/diagnostics/probe.py releases`.
+apply, keeping exactly one step of history in `<service>.previous.json`.
 
 It records the **rendered bytes**, not the repo sources — a twelve-factor release is build plus
 config, and on this plane the config is the per-host Ansible variables that only exist after
@@ -331,7 +329,7 @@ writes no release record, and an amended one would name a release that does not 
 A role that sets `manifests_rollout: ''` and restarts its workloads through a private task after
 this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?,
 namespace?}]`), and the record carries them with the same `restart` decision (#1902).
-observability passes `observability_stabilise_workloads` with `namespace:
+observability's defaults list `observability_stabilise_workloads` with `namespace:
 k8s_observability_namespace` on each entry; pihole names both instances with `image: pihole`,
 since `roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name. The
 entry reaches `rollouts[]` and the pod-template fingerprints (#1994, so the private restart can
@@ -371,13 +369,9 @@ result, a fact, and anything that later prints either. That left a digest match 
 carries the decision at the task that computes it. Deleting the key re-keys every future digest:
 each service with secret manifests then reads stale until its next deploy.
 
-### The digest is the staleness verdict, and the path rules are its fallback
+### What reproduces `manifests_digest`
 
 **`manifests_digest` identifies the applied bytes, and a render-mode dry run reproduces it.**
-That matters because `probe.py releases --stale-only` decides staleness from paths and diffs, and
-each of its five narrowings exists because a path moved while the rendered bytes did not.
-Comparing the recorded digest against a fresh render answers all five at once, which is what
-issue #2505 asks for.
 
 The offline harness cannot supply that render. Measured on 2026-09-25 against the 57 live
 records, `scripts/validate/k8s_manifests.py` reproduced every recorded file checksum for 9
@@ -396,49 +390,6 @@ deploy reads. Both records take both digests from
 On 2026-09-25 a fleet render on daniel-box reproduced the recorded digest for all 45 services a
 dry run can reach, in 5m38s. A rendered one-line change to one template moved the digest, so the
 comparison can go red.
-
-`scripts/diagnostics/probe_lib/releases_render.py:digest_verdict` has three branches (#3046): the
-digests agree and every path hit is dropped, they disagree and the service is stale for that
-reason whether or not a path moved, or the record proves nothing and the path verdict stands.
-Until #3046 only the first branch existed, so a service the path narrowing read clean could drift
-unseen.
-
-A record proves nothing unless its tree was clean and its `host` is the release record's. Its
-`commit` R must also be origin/master or an ancestor of it (#4881). A record behind the tip
-answers only for the path hits R already holds: a matching digest drops those, every hit in
-R..origin/master keeps the path verdict, and a mismatch at R proves nothing about the tip, so
-the path verdict stands rather than a drifted one. A hit under a shared role the digest does not
-cover (a volume-claim change) is kept wherever it falls. The reader dates each kept hit by the
-oldest commit R does not answer for: a digested hit from its oldest commit in R..origin/master,
-an uncovered hit from its oldest commit since the release record's applied commit. The service
-takes the oldest of those dates. Grace is thus "a merge younger than N minutes" once R clears the
-older hits, and the window's length is unchanged. A `commit` that is not a full lowercase SHA
-proves nothing. The producer renders hourly and master merges
-more often than that, so until #4881 the reader refused nearly every record. On 2026-10-13 one
-comment-only edit to `release_stamp.yml` kept 30 services reading stale for ten hours.
-
-A mismatch at R keeps the service stale, but the path reason can name a hit that moved no
-bytes (#5903). homelab-mcp read `changed since applied: .../release_stamp.yml`, a comment-only
-edit, while a build-context file no path rule read had moved its image tag. So when no hit
-could have moved the bytes, the reader reports the drift as unexplained instead. A hit could
-not have moved them when its change since the applied commit is comment-only both at R and
-at the tip, so an edit at R that the tip reverts still counts as the cause:
-Ansible-read YAML whose content lines are equal, or a template whose edit is Jinja comments
-only. A hit under a shared role the digest does not cover always counts. The claim also needs
-the applied commit to be R or an ancestor of it, because a render older than the apply
-mismatches for a range no hit names.
-
-A digest also says nothing about secret manifests: a rendered line added to uptime-kuma's
-`static-monitors.yaml.j2`, a secret manifest, left its digest unchanged. So a
-verdict needs `secret_manifests` empty on both records, which held for 25 of 58 on that date
-(#2586), or the same names on both and `secret_digest` present on both (#2574) — a `secret_digest`
-that is present and DIFFERENT is drift, and one that is absent keeps the path verdict, so services
-with secret manifests stop reading stale one redeploy at a time.
-
-Two verdicts a mismatch does not override. A service inside the reader's grace window keeps
-waiting, because the window exists for a landing's own deploy still being in flight and a digest
-cannot tell that from drift. And `commit unknown to this checkout` is a doubt about provenance,
-which no digest speaks to.
 
 `ansible/roles/k8s/manifests/tasks/release_stamp.yml:DECIDED: this digest names the bytes`
 carries the same conclusion at the line that writes the digest.
@@ -486,8 +437,3 @@ deploy`, which skips the queueing task, leaves the drain a no-op rather than an 
 restart-count snapshot and the desired-count read select on `changed`, and those two build
 `k8s_stabilise_watch` for `ansible/post_tasks/k8s_stabilise_gate.yml`, which reads nothing else.
 So the flag decides the soak alone — never the wait.
-
-An edit to `drain.yml` changes how a deploy runs, never what it applies. `probe.py releases`
-therefore exempts this one file from the release-staleness census
-(`scripts/diagnostics/probe_lib/releases.py:_is_real_change`); the rest of `tasks/` is the render
-and still counts.

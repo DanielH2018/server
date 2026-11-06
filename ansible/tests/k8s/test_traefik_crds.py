@@ -124,8 +124,8 @@ def test_a_task_that_fetches_a_url_is_flagged(tmp_path):
     tasks = crds / "tasks" / "main.yml"
     tasks.write_text(
         tasks.read_text().replace(
-            "manifests_files: []",
-            "manifests_files: []\n    src: https://raw.githubusercontent.com/traefik/x.yml",
+            "name: k8s/manifests",
+            "name: k8s/manifests\n    src: https://raw.githubusercontent.com/traefik/x.yml",
         )
     )
     assert crd_pin_problems(crds, traefik) == [

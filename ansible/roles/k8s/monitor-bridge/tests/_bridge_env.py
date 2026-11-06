@@ -7,24 +7,28 @@ rather than from an empty dict. It is the same render a deploy of daniel-box mak
 (`_k8s_render.render_pod_env`), with two changes so a test cannot reach a real service by
 accident:
 
-- A SOPS secret is undefined in a render and comes out as `STUB`. Each one is blanked, which is
-  the value that disables the check reading it — the convention every check follows.
+- A SOPS secret renders as its stub from `stub_vars`. Each one is blanked, which is the value
+  that disables the check reading it — the convention every check follows.
 - Nothing else is touched, so a threshold a test reads is the deployed threshold.
 """
 
 import functools
 
 from _k8s_render import render_pod_env
+from renderer.shadow_diff import stub_vars
 
-UNDEFINED = "STUB"
+
+def blank_stubs(env: dict) -> dict[str, str]:
+    """`env` as strings, with every value that is a secret's stub blanked."""
+    stubs = {value for value in stub_vars().values() if isinstance(value, str)}
+    return {
+        key: "" if str(value) in stubs else str(value) for key, value in env.items()
+    }
 
 
 @functools.cache
 def _rendered() -> tuple[tuple[str, str], ...]:
-    return tuple(
-        (key, "" if str(value) == UNDEFINED else str(value))
-        for key, value in render_pod_env("monitor-bridge").items()
-    )
+    return tuple(blank_stubs(render_pod_env("monitor-bridge")).items())
 
 
 def bridge_env(**overrides: str) -> dict[str, str]:

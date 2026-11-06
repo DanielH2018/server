@@ -6,7 +6,7 @@ Re-sliced on 2026-10-17 at the operator's request: 18 steps became 9 PRs. One of
 R4.6, runs only if R4.1 finds the revert runbook without its own entry (*Steps, as PRs*).
 
 Depends on: D6, narrowed per PR on 2026-10-17. R4.1 waits on D6.12 and on D5's tail, R4.5
-also on D6.18, and R4.7 on the whole of D6 (*Steps, as PRs*, *The edge to D6, narrowed*).
+also on D6.18a, and R4.7 on the whole of D6 (*Steps, as PRs*, *The edge to D6, narrowed*).
 
 Related issues: [#4527](https://github.com/DanielH2018/server/issues/4527), which proposes a
 shared `_as_filter` helper for the filter plugins. No symbol of that name exists at
@@ -978,12 +978,11 @@ root is withheld, not suspended*).
   scripts/docs/gen_role_glance.py                  (marker names no tasks)
   ansible/tests/_k8s_render.py                     (renders through the renderer; - deploy_play)
   scripts/validate/render_diff_job.py              (PR 1 adds it, PR 11 removes it)
-  .github/workflows/render-diff.yml                (PR 1 adds it, PR 7e adds the pin hazard,
-                                                   PR 11 deletes it)
+  .github/workflows/render-diff.yml                (PR 1 adds it, PR 11 deletes it)
   .github/pull_request_template.md                 (PR 1 adds Render-diff:, PR 11 removes it)
   ansible/roles/setup/gitops_deploy/defaults/main.yml  (render-diff context: PR 1 +, PR 11 -)
   docs/break-glass.md                              (the laptop scenario's step 3, PR 8)
-+ docs/adr/<next free>-the-renderer-supports-a-closed-jinja-subset.md   (PR 7d)
++ docs/adr/0028-the-renderer-supports-a-closed-jinja-subset.md   (PR 7d)
   scripts/renderer/tests/                          (+ dialect spec tests and census, PR 7d)
 ```
 
@@ -1035,8 +1034,8 @@ later. The measurements a description quotes are always taken at the PR's own me
 | R4.1 The gate, the inventory and the precondition | 1 | Yes, except the workflow's runs. The agent's token has no `workflow` scope, so the operator pushes `render-diff.yml` before the five red-proof runs. The renderer already takes its commit as `--revision`. The inventory waits for the merge base. | D5's tail, D6.12, and C1 naming the commit input (Open question 10) |
 | R4.2 Render metadata moves to role defaults | 2, 3a to 3d | Partly. The readers, and the key moves of roles already flux-owned. Every other role's moves wait for its D5 flip. | R4.1, and its context in the live ruleset |
 | R4.3 The renderer reads no task file | 4, 5 | Yes, rebasing on R4.2 | R4.2 |
-| R4.4 The renderer becomes the reference | 7c, 7d, 7e | Yes. The operator pushes 7e's workflow edit. | R4.1, and its context in the live ruleset |
-| R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.18 | R4.3, D6.18 |
+| R4.4 The renderer becomes the reference | 7c, 7d, 7e | Yes. 7e needs no workflow edit, because R4.1 put the verdict in `render_diff_job.py`. | R4.1, and its context in the live ruleset |
+| R4.5 Delete render_records | 6 | Partly. The role's deletion; its reader list after D6.18a | R4.3, D6.18a |
 | R4.6 A standalone revert entry, conditional | 7a | Expected skipped | R4.1's record of the entry point |
 | R4.7 Delete the k8s play and the manifests role | 7b, 8 | Partly. The runbook-resolution test and the glance marker; the deletion after D6 | R4.4, R4.5, R4.6 if it runs, and the whole of D6 |
 | R4.8 Retire the comparison and reimplement the filters | 9, 10 | Yes, rebasing on R4.7 | R4.7, and C1's stub-mode amendment (Open question 9) |
@@ -1055,9 +1054,8 @@ R4 still depends on D6, but only R4.7 waits on the whole slice.
 - **R4.2, R4.3 and R4.4 wait on no D6 PR.** They change how the renderer reads the tree, and
   they touch no code that D6 deletes. D6.13 also edits `scripts/lib/k8s_roles.py`, which
   makes a rebase, not an edge.
-- **R4.5 waits on D6.18, reach and narrowing.** D6.18 (old D6.4) deletes `shared_role_callers.py`, which
-  calls `render_targets.py`. D6.18 (old D6.4) merges after D6.18 (old D6.5b), which deletes `releases_render.py`, a
-  reader of the render records. D6.12 deletes `deploy_release.py`, the other deployer reader,
+- **R4.5 waits on D6.18a.** D6.18a deletes `shared_role_callers.py`, which calls
+  `render_targets.py`, and `releases_render.py`, a reader of the render records. D6.12 deletes `deploy_release.py`, the other deployer reader,
   and edits `deploy_narrow.py`, the last other caller of `render_targets.py`.
 - **R4.7 waits on the whole of D6.** The play's `k8s_retired_services` teardown has no job
   left only once D6.20's deletion policy is live (D6, *The deletion policy*). D6.15 deletes the
@@ -1136,15 +1134,14 @@ Two costs follow from the narrowing:
     - **Merges before R4.7.** Old PR 7d's precedence fixtures are checked against an
       `ansible-playbook` render, which R4.7 deletes. Old PR 7c moves every kept reader off
       `deploy_play`.
-    - **Operator-only.** Approving the dialect ADR. Pushing the workflow change of old
-      PR 7e.
+    - **Operator-only.** Approving the dialect ADR. Old PR 7e's workflow change fell away:
+      `render_diff_job.py` reads the closure from `uv.lock` at both SHAs.
     - **Verification.** `Render-diff: none`. The description quotes the `deploy_play` grep,
       the two equal outputs of each spec literal, and the dependency-pin fixtures.
     - **Rollback.** A revert restores `deploy_play` and the play-reading tests, which pass
       only while the play exists, so R4.7 reverts first.
-    - **Why old PR 7e does not join R4.1.** It edits the same workflow, and joining would
-      save one push. It would also start the dependency-pin hazard at R4.1 rather than at
-      old PR 7e, which is a design change, so it stays here.
+    - **Why old PR 7e does not join R4.1.** Joining would start the dependency-pin hazard at
+      R4.1 rather than at old PR 7e, which is a design change, so it stays here.
 1. **R4.5: delete render_records** (old PR 6, deletion PR).
     - **Why alone.** It parks the tick (`broad_manual`) and owes the operator's
       `gitops_deploy` apply. The role, its `initial_setup.yml` entry and its `_CHECK_TIMER`
@@ -1441,8 +1438,9 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
           stay for PR 8, because their subject is the play.
         - Every other test PR 1 assigned here is retargeted the same way.
         - Each manifests-role default that PR 1 found the renderer reads moves into
-          `renderer_lib` as a named constant, with its source line quoted. A utility role's
-          renderer inputs stay where they are, because PR 8 keeps those roles.
+          `scripts/lib/k8s_roles.py` as a named constant, with its source line quoted, beside
+          `SHARED_MANIFEST_DEFAULTS`. A utility role's renderer inputs stay where they are,
+          because PR 8 keeps those roles.
 
       `Render-diff: none`. The description quotes `grep -rln deploy_play ansible/tests
       scripts --include='*.py'`, which prints no kept test.
@@ -1453,7 +1451,7 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
       **operator-only**. `Render-diff: none`.
     - **PR 7e: the renderer's dependency pins join the hazard list** (about 60 lines). It
       adds the closure read, its census test and the template's wording (*The render-diff
-      gate*). The operator pushes the workflow change, as for PR 1. `Render-diff: none`.
+      gate*). `Render-diff: none`.
 8. **Delete the k8s play and the manifests role** (deletion PR).
     - Delete the play, the batch and retire task files, the two post_tasks, and every
       `tasks/` directory under `ansible/roles/k8s/` outside the runbook allowlist. Delete

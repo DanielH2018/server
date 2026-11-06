@@ -51,7 +51,6 @@ class Link:
 OWNERS = "scripts/deploy_tools/deploy_lib/owners.py"
 RUN = "scripts/deploy_tools/deploy_lib/run.py"
 RENDER_TARGETS = "scripts/deploy_tools/render_targets.py"
-RETIRED = "scripts/diagnostics/probe_lib/releases_retired.py"
 ROTATION_TOOLS = "scripts/secrets_mgmt/rotation_tools.py"
 
 K8S_TAGS = (
@@ -59,7 +58,6 @@ K8S_TAGS = (
     Link(OWNERS, "declared_k8s_tags", "k8s_tags"),
 )
 RECORD_TARGETS = Link(RENDER_TARGETS, "render_record_targets", "tag_owners")
-TREE_OWNERS = Link(RETIRED, "tree_owners", "tag_owners")
 
 # Each first cell of the plan's owner table, as written there, to the chain from the entry
 # point down to the reader it asks.
@@ -103,14 +101,6 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         Link("scripts/deploy_tools/land_lib/land_flux.py", "owners_at", "flux_owned"),
         Link(OWNERS, "flux_owned", "tag_owners"),
     ),
-    "`smoke_caller`": (
-        Link(
-            "scripts/deploy_tools/shared_role_callers.py",
-            "smoke_caller",
-            "render_record_targets",
-        ),
-        RECORD_TARGETS,
-    ),
     "`render_targets.py` CLI": (
         Link(RENDER_TARGETS, "main", "render_record_targets"),
         RECORD_TARGETS,
@@ -123,34 +113,7 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
     ),
     "`probe.py health T`": (
         Link(
-            "scripts/diagnostics/probe_lib/health.py", "_release_record", "tree_owners"
-        ),
-        TREE_OWNERS,
-    ),
-    "`probe.py releases --stale-only`": (
-        Link("scripts/diagnostics/probe_lib/releases.py", "run_releases", "drop_owned"),
-        Link(RETIRED, "drop_owned", "tree_owners"),
-        TREE_OWNERS,
-    ),
-    "`probe.py releases` (plain listing)": (
-        Link(
-            "scripts/diagnostics/probe_lib/releases.py", "run_releases", "tree_owners"
-        ),
-        TREE_OWNERS,
-    ),
-    "`manifest-prune-check.sh`": (
-        Link(
-            "ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2",
-            None,
-            "read_flux_kustomizations",
-        ),
-    ),
-    "`live_drift_check.py`": (
-        Link(
-            "ansible/roles/setup/k3s/files/live_drift_check.py",
-            "is_server_side_applied",
-            "LAST_APPLIED",
-            call=False,
+            "scripts/diagnostics/probe_lib/health.py", "_with_alert_plane", "tag_owners"
         ),
     ),
     "`gen_role_glance.py`, `service_catalog.py`": (
@@ -167,14 +130,6 @@ NOT_A_TREE_READER = {
     ),
     "`deploy.sh --changed`": "it leaves out a tag by the platform of its entry",
     "`deploy.sh --list-services`": "it marks a tag by the platform of its entry",
-    "`manifest-prune-check.sh`": (
-        "a host check: it skips an object only while its Kustomization exists live, read "
-        "with the read-only kubeconfig, because a label alone outlives a handback"
-    ),
-    "`live_drift_check.py`": (
-        "a host check: `is_server_side_applied` already leaves Flux's objects out, and "
-        "`last-applied-configuration` is what marks one that a handback returned to Ansible"
-    ),
 }
 
 Source = Callable[[str], str | None]
@@ -270,7 +225,7 @@ def _source_with(rel: str, text: str) -> Source:
 
 
 def test_every_entry_point_in_the_owner_table_reads_ownership_is_clean():
-    assert len(table_rows(_plan())) >= 16
+    assert len(table_rows(_plan())) >= 11
     assert census_problems(_plan()) == []
 
 
@@ -282,14 +237,14 @@ def test_a_renamed_entry_point_is_flagged():
 
 
 def test_an_entry_point_that_stops_reading_ownership_is_flagged():
-    rel = "scripts/deploy_tools/shared_role_callers.py"
+    rel = "scripts/diagnostics/probe_lib/health.py"
     text = (
         (REPO / rel)
         .read_text()
-        .replace("for name in render_record_targets(", "for name in render_targets(")
+        .replace("tag_owners().get(role), _render", "{}.get(role), _render")
     )
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
-        f"`smoke_caller`: {rel}:smoke_caller no longer calls `render_record_targets`"
+        f"`probe.py health T`: {rel}:_with_alert_plane no longer calls `tag_owners`"
     ]
 
 
@@ -307,8 +262,8 @@ def test_a_playbook_loop_that_drops_the_filter_is_flagged():
 
 def test_a_plan_row_no_member_names_is_flagged():
     plan = _plan().replace(
-        "| `live_drift_check.py` |",
-        "| `new_entry.py` | Skips T.\n| `live_drift_check.py` |",
+        "| `render_targets.py` CLI |",
+        "| `new_entry.py` | Skips T.\n| `render_targets.py` CLI |",
         1,
     )
     assert census_problems(plan) == [

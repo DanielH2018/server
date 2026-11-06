@@ -4,50 +4,41 @@ Several guards can only be written against rendered manifests: a PVC's name and 
 securityContext are both Jinja expressions in the template, so a text scan sees `{{ ... }}` and
 silently matches nothing — which reads as "no findings" rather than "no coverage".
 
-Rendering goes through validate.k8s_manifests' own machinery rather than a second stub set, so
-what a test considers a manifest cannot drift from what that validator does.
+Each manifest text is `render_tag`'s, stub mode, with its strict undefined and its file rules.
+So a guard reads what the renderer writes for a tag, the `homelab/role` label included, before
+the passes that stamp restarts and swap in placeholders.
 """
 
 import contextlib
+import functools
+
+import jinja2
 
 from lib import yaml_fast
 from _role_census import role_dirs
 from lib.render_context import render_context
-from validate.k8s_manifests import (
-    ANSIBLE,
-    K8S_ROLES,
-    SHARED_TPL,
-    SKIP_ROLES,
-    claim_contexts,
-    CLAIM_TEMPLATE,
-    k8s_entries,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    shared_default_templates,
-)
+from renderer.renderer_lib.bundle import KUSTOMIZATION
+from renderer.renderer_lib.cluster import play_context, render_tag, role_context
+from renderer.renderer_lib.environment import RenderError, render_file, renderer_env
+from renderer.shadow_diff import stub_vars
+from validate.k8s_manifests import K8S_ROLES, SKIP_ROLES, k8s_entries
 
 
-def _role_env(role_dir, ctx: dict):
-    env = make_env([role_dir / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    return env
+def _stubs(overrides: dict | None) -> dict:
+    """Every secret's stub with `overrides` on top: the extra vars a stub render takes."""
+    return {**stub_vars(), **(overrides or {})}
 
 
 def _render_texts(overrides: dict | None = None, *, only: frozenset[str] | None = None):
-    """(role, template name, rendered TEXT) for every manifest template the validator renders.
+    """(role, template name, rendered TEXT) for every manifest `render_tag` writes for a role.
 
     `overrides` go on top of each role's context, for a guard that sets a value the inventory
-    does not hold, and `only` keeps the named roles. Raises on a render failure rather than
-    skipping it — a template that stopped rendering would otherwise quietly drop out of every
-    guard built on this.
+    does not hold, and `only` keeps the named roles. A shared default or a claim carries its
+    source template's name. A template out of the role's file lists is not here, and a guard
+    reads one with `render_role_template`. Raises `RenderError` on a render failure rather
+    than skipping it — a template that stopped rendering would otherwise quietly drop out of
+    every guard built on this.
     """
-    # The context the validator renders with. `render_context` lays the overrides in before
-    # anything resolves and on top again after: an inventory value or role default aliasing an
-    # overridden secret (`x: "{{ some_secret }}"`) would otherwise resolve to the secret's STUB
-    # before the override is ever laid on.
     entries = k8s_entries()
 
     for role_dir in role_dirs():
@@ -56,34 +47,11 @@ def _render_texts(overrides: dict | None = None, *, only: frozenset[str] | None 
             continue
         if only is not None and role not in only:
             continue
-        ctx = render_context(
-            role_dir,
-            overrides={"container_item": entries[role], **(overrides or {})},
-            strict=True,
-        )
-        env = _role_env(role_dir, ctx)
-
-        # The shared defaults come with the role's own templates: `k8s/manifests` renders a
-        # manifest from `ansible/templates/` for a basename the role names and ships no
-        # template for (`service.yaml` for 25 roles). Leaving them out would drop 25
-        # Services out of every guard built on this, silently.
-        own = sorted(role_dir.glob("templates/*.j2"))
-        for tpl in own + shared_default_templates(role):
-            if tpl.name.endswith(".sh.j2") or tpl.name.startswith("Dockerfile"):
-                continue
-            rendered, err = render_or_error(env, tpl.name, ctx)
-            if rendered is None:
-                raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
-            yield role, tpl.name, rendered
-        # `k8s_claims` renders one shared template per entry, so it is reached by the role's
-        # declared data rather than by any template it ships.
-        for claim_ctx in claim_contexts(ctx):
-            rendered, err = render_or_error(env, CLAIM_TEMPLATE.name, claim_ctx)
-            if rendered is None:
-                raise AssertionError(
-                    f"{role}/{CLAIM_TEMPLATE.name} failed to render: {err}"
-                )
-            yield role, CLAIM_TEMPLATE.name, rendered
+        tag = render_tag(role, _stubs(overrides))
+        for files in (tag.files, tag.deferred):
+            for name, text in sorted(files.items()):
+                if name != KUSTOMIZATION:
+                    yield role, tag.sources[name], text
 
 
 def _render_all():
@@ -105,7 +73,7 @@ _TEXTS: list[tuple[str, str, str]] = []
 def rendered_docs():
     """The rendered manifests, rendering the tree at most once per process.
 
-    A full render costs ~1.9s, so each call site paying it separately would add tens of
+    A full render costs ~8s, so each call site paying it separately would add tens of
     seconds to the suite. The render is a pure function of the
     repo tree, which no test writes to, so one result serves the whole session.
     `ansible/tests/conftest.py` builds it through `prebuild()` when collection finishes, so
@@ -127,9 +95,8 @@ def rendered_texts():
     """(role, template name, rendered TEXT) for every manifest template.
 
     The docs above are what a manifest means; this is what it looks like. A reader that parses
-    YAML by position — manifest_declares.py, which runs stdlib-only on the host — has to be
-    tested against the bytes, because re-serialising a parsed doc normalises exactly the
-    formatting such a reader could trip over.
+    YAML by position has to be tested against the bytes, because re-serialising a parsed doc
+    normalises exactly the formatting such a reader could trip over.
     """
     rendered_docs()
     return iter(tuple(_TEXTS))
@@ -187,38 +154,46 @@ def render_role_template(
     `k8s/image-builder` renders here too, with the variables its caller hands over passed as
     `overrides`.
 
-    The context is `lib.render_context`'s, the one `_render_all` and the validator render
-    with. Role defaults go under the inventory, which is Ansible's own precedence. It matters
-    here because daniel-stage overrides `traefik_k8s_manage_crowdsec` on purpose, so a staging
-    render with defaults on top would render the value the deploy never uses. `overrides` go
-    in before anything resolves, so a default derived from an overridden flag (traefik's
-    `k8s_claims` from `traefik_k8s_manage_acme`) follows the flag.
+    The context is `role_context`'s, the one `render_tag` renders with. Role defaults go under
+    the inventory, which is Ansible's own precedence. It matters here because daniel-stage
+    overrides `traefik_k8s_manage_crowdsec` on purpose, so a staging render with defaults on
+    top would render the value the deploy never uses. `overrides` go in before anything
+    resolves, so a default derived from an overridden flag (traefik's `k8s_claims` from
+    `traefik_k8s_manage_acme`) follows the flag. A name no layer supplies fails the render, so
+    a guard passes every variable a caller role hands over.
     """
-    # A default rather than a raise: `k8s/image-builder` is included by caller roles and is not
-    # a `containers_list` entry at all, so the lookup finds nothing for it and the bare `next()`
-    # raised `StopIteration` before the render ever started. The key is LEFT OUT in that case
-    # rather than set to None, so a template reading `container_item.name` renders `STUB` the way
-    # every other undefined does here instead of raising an AttributeError.
-    entry = next(
-        (c for c in host_context(host)["containers_list"] if c["name"] == role), None
+    ctx = (
+        _inventory_context(role, host)
+        if not overrides
+        else _template_context(role, overrides, host)
     )
-    ctx = render_context(
-        K8S_ROLES / role,
-        host=host,
-        overrides={
-            **({"container_item": entry} if entry is not None else {}),
-            **(overrides or {}),
-        },
-        strict=True,
-    )
-    env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, template, ctx)
-    assert rendered is not None, (
-        f"{role}/{template} failed to render for {host} with {overrides}: {err}"
-    )
-    return rendered
+    env = renderer_env(K8S_ROLES / role / "templates", ctx)
+    try:
+        return render_file(env, template, ctx)
+    except jinja2.TemplateError as exc:
+        raise AssertionError(
+            f"{role}/{template} failed to render for {host} with {overrides}: "
+            f"{type(exc).__name__}: {exc}"
+        ) from exc
+
+
+@functools.cache
+def _entry_names(host: str) -> frozenset[str]:
+    return frozenset(c["name"] for c in host_context(host)["containers_list"])
+
+
+@functools.cache
+def _inventory_context(role: str, host: str) -> dict:
+    """`_template_context` at inventory values, once per process: a context costs about 100ms."""
+    return _template_context(role, None, host)
+
+
+def _template_context(role: str, overrides: dict | None, host: str) -> dict:
+    """The context one role's template renders with, for a role in no `containers_list` too."""
+    stubs = _stubs(overrides)
+    if role in _entry_names(host):
+        return role_context(role, stubs, host)[0]
+    return {**play_context(K8S_ROLES / role, stubs, host), "manifests_service": role}
 
 
 def render_pod_env(
@@ -284,23 +259,21 @@ _BUILD_TEXTS: tuple[tuple[str, str, str], ...] | None = None
 
 
 def _render_build_files(overrides: dict | None = None):
-    # Overrides before resolution and on top again after, for the reason `_render_texts` gives.
     entries = k8s_entries()
     for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue
-        ctx = render_context(
-            role_dir,
-            overrides={"container_item": entries[role], **(overrides or {})},
-            strict=True,
-        )
-        env = _role_env(role_dir, ctx)
-        for tpl in sorted(role_dir.glob(f"templates/{BUILD_TEMPLATE_GLOB}")):
-            rendered, err = render_or_error(env, tpl.name, ctx)
-            if rendered is None:
-                raise AssertionError(f"{role}/{tpl.name} failed to render: {err}")
-            yield role, tpl.name, rendered
+        templates = sorted(role_dir.glob(f"templates/{BUILD_TEMPLATE_GLOB}"))
+        if not templates:
+            continue
+        ctx = role_context(role, _stubs(overrides))[0]
+        env = renderer_env(role_dir / "templates", ctx)
+        for tpl in templates:
+            try:
+                yield role, tpl.name, render_file(env, tpl.name, ctx)
+            except jinja2.TemplateError as exc:
+                raise RenderError(f"{role}/{tpl.name}: {exc}") from exc
 
 
 def rendered_build_texts() -> tuple[tuple[str, str, str], ...]:
@@ -368,6 +341,7 @@ IMAGE_BUILDER_CALLER_VARS = {
     "image_builder_context_dir": "/tmp/example-context",
     "image_builder_tag": "abc1234",
     "image_builder_dockerfile": "Dockerfile",
+    "image_builder_content_tag": "sha-abc1234",
 }
 
 
@@ -376,22 +350,6 @@ def rendered_build_job_text() -> str:
     return render_role_template(
         "image-builder", "build-job.yaml.j2", IMAGE_BUILDER_CALLER_VARS
     )
-
-
-K8S_PLAY_NAME = "Deploy k8s workloads"
-
-
-def deploy_play() -> dict:
-    """deploy.yml's k8s play, selected by its exact name.
-
-    deploy.yml opens with the inert Docker play, so the k8s play is not the first. An
-    exact name rather than a substring, so a second play with `k8s` in its name cannot be
-    picked up in its place.
-    """
-    for play in yaml_fast.safe_load((ANSIBLE / "deploy.yml").read_text()) or []:
-        if play.get("name") == K8S_PLAY_NAME:
-            return play
-    raise AssertionError(f"deploy.yml no longer has a play named {K8S_PLAY_NAME!r}")
 
 
 def pod_template(doc: dict) -> dict:

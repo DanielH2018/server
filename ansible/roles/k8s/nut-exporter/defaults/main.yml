@@ -47,3 +47,5 @@ nut_exporter_k8s_cpu_limit: "200m"
 nut_exporter_k8s_mem_limit: 64Mi
 nut_exporter_k8s_cpu_request: "10m"
 nut_exporter_k8s_mem_request: 16Mi
+
+manifests_rollout: nut-exporter  # noqa var-naming[no-role-prefix]

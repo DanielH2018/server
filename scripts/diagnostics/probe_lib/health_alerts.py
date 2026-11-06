@@ -9,9 +9,9 @@ change to `gated_selectors` is a contract change, not a local tweak.
 Two halves, each judged against a reference time:
 
   - Alerts. A firing alert in the gated set fails the gate only when it became active
-    (`ALERTS_FOR_STATE`) after the tag's reference time: `applied_at` for an Ansible-owned
-    tag, the time its Kustomization first reported its current revision for an `owner: flux`
-    tag. With no reference time every gated alert fails. Older alerts, and firing alerts
+    (`ALERTS_FOR_STATE`) after the tag's reference time: the time its Kustomization first
+    reported its current revision for an `owner: flux` tag. With no reference time every gated
+    alert fails. Older alerts, and firing alerts
     outside the gated set, print as notes.
   - Probes. The newest `probe_success{service="<tag>"}` sample of each target must postdate
     the rollout, and read 1. A tag whose entry renders no ingress route skips this half, and
@@ -344,28 +344,22 @@ def has_ingress_route(entry):
     return bool(ingress_probe_targets([entry]))
 
 
-def alert_reference(tag, owner, applied_at, query):
+def alert_reference(tag, owner, query):
     """The time after which a firing alert of `tag` counts against this deploy (C7).
 
-    `applied_at` (the release record's stamp) for an Ansible-owned tag. For an `owner: flux`
-    tag the release record froze at the last Ansible apply, so the reference is when its
-    Kustomization first reported its current revision. None when neither is readable, and
-    then every gated alert fails.
+    When an `owner: flux` tag's Kustomization first reported its current revision. None when
+    that is unreadable or `tag` is not flux-owned, and then every gated alert fails.
     """
-    if owner == "flux":
-        return flux_reference(tag, query)
-    if owner is not None:
-        return None
-    return epoch(applied_at)
+    return flux_reference(tag, query) if owner == "flux" else None
 
 
-def check(tag, owner, applied_at, ready_at, entry, tools=DEFAULT_PROM):
+def check(tag, owner, ready_at, entry, tools=DEFAULT_PROM):
     """`gate` for `tag`, with both reference times derived from its ownership and rollout.
 
     The probe reference is the later of the alert reference and the newest pod Ready
     transition: a sample before it may be the old pod's 1 or a mid-rollout 0.
     """
-    reference = alert_reference(tag, owner, applied_at, tools.query)
+    reference = alert_reference(tag, owner, tools.query)
     rolled = [t for t in (reference, ready_at) if t is not None]
     probe_reference = max(rolled) if rolled else tools.clock()
     return gate(tag, reference, probe_reference, has_ingress_route(entry), tools)

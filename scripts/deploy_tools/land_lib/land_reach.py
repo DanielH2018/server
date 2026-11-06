@@ -49,7 +49,7 @@ from deployer_lib.deploy_logic import (
 from gitops_markers import PLAYBOOK_CMD
 
 import narrow_setup
-from deploy_tools.setup_lib.deployed_copies import DeployedCopies
+from deploy_tools.setup_lib.deployed_copies import DeployedCopies, _may_render
 from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.narrow_lib.setup_index import RoleIndex
 from reach import reach
@@ -69,6 +69,7 @@ from deploy_tools.setup_lib.setup_role_chains import (
     task_chains,
     task_file_chains,
     task_gates_naming,
+    task_gates_shipping_owner_file,
     task_gates_shipping_repo_path,
     task_text,
     tree_at,
@@ -300,36 +301,18 @@ def setup_shipped_file_hosts(
     daniel-box (#3976).
 
     The evidence is the role's tasks that name the file, or that import a task file of the
-    owner naming it: the alert template reaches a host only through `alert_unit.yml`. No such
-    task keeps the role-level reach.
+    owner naming or rendering it: the alert template reaches a host only through
+    `alert_unit.yml`. For a template, an import counts only on the hosts where the owner's
+    render runs under the import's `vars:` (`task_gates_shipping_owner_file`). No such task keeps
+    the role-level reach.
     """
     role_hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir, roles_dir)
     if not role_hosts:
         return frozenset()
-    names = _shipping_names(path, roles_dir)
-    chains = task_chains(
-        roles_dir / role,
-        lambda task, _: any(name in task_text(task) for name in names),
-    )
+    chains = task_gates_shipping_owner_file(role, path, roles_dir, _may_render)
     if not chains:
         return role_hosts
     return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir, roles_dir / role)
-
-
-def _shipping_names(path: str, roles_dir: Path) -> set[str]:
-    """`path`'s basename, and each owner task file that names it, by basename."""
-    basename = Path(path).name
-    names = {basename}
-    parts = Path(path).parts
-    if len(parts) < 5 or parts[:3] != ("ansible", "roles", "setup"):
-        return names
-    for task_file in sorted((roles_dir / parts[3] / "tasks").glob("*.yml")):
-        try:
-            if basename in task_file.read_text():
-                names.add(task_file.name)
-        except OSError:
-            continue
-    return names
 
 
 def setup_repo_file_hosts(

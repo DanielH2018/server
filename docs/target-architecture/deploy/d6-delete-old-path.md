@@ -1,6 +1,6 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carries D6.13. No merged PR is recorded for D6.13 to D6.21.
+Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carries D6.13. No merged PR is recorded for D6.13 to D6.21. D6.18 was split into D6.18a and D6.18b on 2026-11-06 ([#7414](https://github.com/DanielH2018/server/issues/7414)).
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
@@ -385,8 +385,7 @@ reader that D6 does not delete.
       daniel-box joins the list.
 - **The other k8s checks.** `live_drift_check.py` 468, `release-staleness-check.sh.j2` 200,
   and `ansible/roles/setup/k3s/files/manifest_declares.py` 142. The last is copy-deployed
-  beside manifest-prune-check and tested by `ansible/tests/k8s/test_manifest_declares.py`
-  (175).
+  beside manifest-prune-check, with a test module of 175 lines.
 - **The release-staleness cron runs code from the primary checkout.** The script sets
   `REPO_DIR=/home/{{ sys_user }}/server` and runs `scripts/diagnostics/probe.py releases
   --stale-only --kuma` there, every 30 minutes. The tick fast-forwards that checkout. So a
@@ -1440,13 +1439,14 @@ dropped D6.10, so 11 of them carry code.
 | D6.15 | D6.3 | Yes | D6.12 |
 | D6.16 | D6.5a | Yes | D6.12, *live*; M6's B2 |
 | D6.17 | D6.5 | Partly: the rules half waits for M6's B1 and B2 | D6.16, *live*; M6's B1 |
-| D6.18 | D6.5b, D6.4 | Yes | D6.17, *live*; D6.15 |
+| D6.18a | D6.5b, part of D6.4 | Yes | D6.17, *live*; D6.15 |
+| D6.18b | The rest of D6.4 | No: it moves `land_lib/key_readers.py`'s imports first | D6.18a |
 | D6.19 | D6.7b | Yes | D6.12; D6.15; the C3 prune-exemption row or line |
 | D6.20 | D6.7 | Yes, except the handback count | D6.11, D6.15 and D6.19; C3's kept-set line; the operator's decision |
 | D6.21 | D6.8a, D6.8b | A draft | every other D6 PR; G5, if it has started; the operator's ADR approval |
 
 The PRs merge in this order. D6.10 has no PR, and D6.11 merges whenever its own edges allow. After
-D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15 to D6.20.
+D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18b, and D6.15 to D6.20.
 
 1. **D6.10 — Dropped: no third deploy-marker query** (old D6.1b, no PR).
     - **Why dropped.** D5.3b3 added `observability_flux_deploy_annotation_expr`, the
@@ -1584,7 +1584,7 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **After merge:** `deploy.sh --tags bento-pdf` exits 5 and names `promote`, and the first
       settled landing of a flux-owned tag writes a `source=promote` line.
     - **Rollback:** *Rollback*'s D6.3 bullet. Its revert also allows a handback again. Once
-      D6.18 has merged, revert D6.18 first.
+      D6.18b has merged, revert D6.18b first.
     - **Exit criterion:** exit 1's `deploy.sh`, `land.sh` and census halves, and part of
       exit 4 (the exit-3 bullet of *When to wait*).
     - **As built ([#7339](https://github.com/DanielH2018/server/issues/7339)).** H5.12 emptied
@@ -1613,8 +1613,8 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
       after reverting D6.17.
     - **Exit criterion:** exit 2's setup-drift reading for daniel-box.
 8. **D6.17 — Disarm the drift checks** (old D6.5, about 200 lines).
-    - **Why apart from D6.18.** The release-staleness cron runs `probe.py releases` from the
-      primary checkout. This PR's hand apply removes the cron, and only then may D6.18
+    - **Why apart from D6.18a.** The release-staleness cron runs `probe.py releases` from the
+      primary checkout. This PR's hand apply removes the cron, and only then may D6.18a
       delete `releases.py`.
     - **Written ahead: partly.** The absent tasks and the tag edits in
       `tasks/health-crons.yml` can be written ahead. The rules half deletes M6's B1 rules for
@@ -1631,36 +1631,54 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
       its 2-hour grace passes the 05:15 slot.
     - **After merge:** the box's setup-drift check still reads 1, and the box's new rule arm
       does not fire.
-    - **Rollback:** *Rollback*'s D6.5 bullet. While D6.18 is unmerged, this PR reverts alone.
+    - **Rollback:** *Rollback*'s D6.5 bullet. While D6.18a is unmerged, this PR reverts alone.
     - **Exit criterion:** exit 2's setup-drift half, through the box's rule arm.
-9. **D6.18 — Delete the drift checks' code, the `releases` family, and reach and
-   narrowing** (old D6.5b and D6.4, about 4,200 lines removed).
-    - **Why together.** `releases.py` imports `narrow_lib/broad.py`, so old D6.4 had to merge
-      after old D6.5b. In one PR the two files go in one commit, and the edge disappears.
-      Neither step waits on a live result of the other. Almost all of the diff deletes whole
-      files, and the import grep checks those.
-    - **Written ahead: yes.** Every file it deletes is in the tree.
-    - **Waits on:** D6.17, *live*: its hand apply and its clear. Also D6.15, merged, which
-      removed `k8s_remediation`'s last two callers and the `shared_role_callers` import.
+9. **D6.18a — Delete the drift checks' code and the `releases` family** (old D6.5b, plus
+   `shared_role_callers.py` and `shared_role_reach.py` from old D6.4).
+    - **Why split.** D6.18 could not run whole. `land_lib/key_readers.py` imports
+      `narrow_lib/broad.py`, and `land_lib/tools.py`, `land_lib/land_tags_cli.py`,
+      `land_lib/land_reach.py` and `setup_reach_hosts.py` import `key_readers`, so `land.py`
+      reaches it at import time. The deployer runs `secret_setup_readers.py`, which also
+      imports it. So this PR leaves `narrow_lib/broad.py`, `narrow_lib/containers.py`,
+      `reach.py` and what they import to D6.18b.
+    - **Paths the steps name that the tree no longer holds.** `land_lib/land_rerolls.py`,
+      `digest_provable.py` and `live-drift-check.env.j2` were gone at this PR's base.
+    - **What it deletes.** Everything old D6.5b lists, with `format_role_health`'s restart
+      half, `health_rollout.py:unrolled_reason` and the `applied_at` reference in
+      `health_alerts.py`, because `release_expected_restarts` was their one source and no
+      other reader of a release record remains. Also `shared_role_callers.py` and
+      `shared_role_reach.py`, which nothing outside their own tests imports at that base.
+    - **Waits on:** D6.17, *live*: its hand apply and its clear. Also D6.15, merged.
     - **Before merge:** `probe.py gitops-state` shows no k3s `manual_plane` line, and
       `narrow_setup.py k3s` exits 1 with `cannot narrow k3s`. The body quotes the import
-      grep, D6.12's and D6.15's landing tests, the routing test's red run, `land.py --help`
-      and `deploy_tags.py changed origin/master`.
+      grep, D6.12's and D6.15's landing tests, and `land.py --help`.
     - **Operator gates:** old D6.5b's whole-role procedure, all of it
       **operator-attended**. The session stops and hands the line to the operator if the
       fast-forwarded range holds another commit. Otherwise it applies the tags that
       `tasks/health-crons.yml` declares at the head, checks the state D6.17's apply made, and
-      clears the line bare. It never runs `--tags k3s`. If the self-applied deployer half
-      crashes, the operator re-applies the deployer by hand.
+      clears the line bare. It never runs `--tags k3s`.
+    - **Rollback:** to restore the drift units, revert this PR before D6.17. The revert lands
+      a whole-role line, which the session clears by old D6.5b's procedure.
+    - **Exit criterion:** exit 5's deletion list for these files, and the edit to failure
+      class 5's row.
+10. **D6.18b — Delete the rest of reach and narrowing** (the rest of old D6.4).
+    - **Written ahead: no.** It first moves the symbols `land_lib/key_readers.py` and
+      `secret_setup_readers.py` read out of `narrow_lib/broad.py`, then deletes
+      `narrow_lib/broad.py`, `narrow_lib/containers.py`, `reach.py`'s k8s readings, and what
+      old D6.4 lists.
+    - **Waits on:** D6.18a, merged. Also D6.15, merged, which removed `k8s_remediation`'s
+      last two callers.
+    - **Before merge:** the body quotes the import grep, D6.12's and D6.15's landing tests,
+      the routing test's red run, `land.py --help` and `deploy_tags.py changed origin/master`.
+    - **Operator gates:** its changes to the deployer's files apply through the tick. If the
+      self-applied deployer half crashes, the operator re-applies the deployer by hand.
     - **After merge:** exit 1's and exit 5's greps print 0. The first settled landing of a
       direct role PR, and of a broad PR, each write a marker with a non-empty `services=`
       list.
     - **Rollback:** revert this PR before D6.15, because a revert of D6.15 imports what this
-      PR deletes. To restore the drift units, revert this PR before D6.17. The revert lands a
-      whole-role line, which the session clears by old D6.5b's procedure.
-    - **Exit criterion:** exit 1's grep, exit 5's deletion list, and the edit to failure
-      class 5's row.
-10. **D6.19 — The guards the default policy needs** (old D6.7b, about 200 lines).
+      PR deletes.
+    - **Exit criterion:** exit 1's grep, and the rest of exit 5's deletion list.
+11. **D6.19 — The guards the default policy needs** (old D6.7b, about 200 lines).
     - **Why apart from D6.20.** The operator decides whether D6.20 merges. These guards are
       harmless under `Orphan`, so they land either way, and they are live before any
       deletion can happen.
@@ -1675,7 +1693,7 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
       instead. The body quotes the line.
     - **Rollback:** *Rollback*'s D6.7b bullet. Revert D6.20 first.
     - **Exit criterion:** exit 6's bound on `promote.py` covers its tag rule.
-11. **D6.20 — The deletion policy** (old D6.7, about 100 lines).
+12. **D6.20 — The deletion policy** (old D6.7, about 100 lines).
     - **Why alone.** It is the one switch a revert cannot undo: a tag removed while it is
       live loses its objects for good.
     - **Written ahead: yes.** The PR body's count of handbacks, retirements and renames from
@@ -1691,7 +1709,7 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Rollback:** *Rollback*'s D6.7 bullet. A revert restores `Orphan` and brings back no
       object already deleted.
     - **Exit criterion:** none of the six. It ends the handback and the two-step retirement.
-12. **D6.21 — The root docs, the archive and the ADR** (old D6.8a and D6.8b, about 550
+13. **D6.21 — The root docs, the archive and the ADR** (old D6.8a and D6.8b, about 550
     lines, most of them moved).
     - **Why together.** Both describe the finished path, for exits 3 and 4. R4 waits on all
       of D6, so the ADR approval that also gates the docs rewrite delays nothing downstream.
@@ -2908,7 +2926,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
    After D6 it serves the host plane only, and D2's open question 4 asked whether it should
    clear `DEPLOY_HOLD`. The operator ruled on 2026-11-06 that the deploy button goes
    ([#7413](https://github.com/DanielH2018/server/issues/7413)), because every service tag
-   `deploy.sh` could take exits 5. The stale-release panel goes with it, because D6.18 deletes
+   `deploy.sh` could take exits 5. The stale-release panel goes with it, because D6.18a deletes
    `probe.py releases`. The operator wants a live view of landings in progress, and the page's
    in-flight panel is the only one in a browser. So the daemon, its route and its firewall rule
    stay through D6, with the in-flight panel, the land and cancel controls and the hold clear.

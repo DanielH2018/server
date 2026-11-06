@@ -9,8 +9,9 @@ registers, one append per loop target, exactly as the play accumulates it. `extr
 and `queued_extras` render the shared extra restart and the extra queue the same way.
 """
 
-from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, walk_tasks
+from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named
 from lib.repo_paths import ALL_VARS
+from renderer.renderer_lib.task_inputs import include_vars
 
 MANIFESTS_TASKS = ANSIBLE / "roles/k8s/manifests/tasks"
 STAMP = load_tasks(MANIFESTS_TASKS / "release_stamp.yml")
@@ -109,22 +110,13 @@ def queued_extras(extras: list[dict], **over) -> list[dict]:
     return queued
 
 
-def include_role_vars(role_dir):
-    """The `vars:` a role hands to `include_role: k8s/manifests`."""
-    for task in walk_tasks(load_tasks(role_dir / "tasks/main.yml")):
-        include = task.get("ansible.builtin.include_role") or task.get("include_role")
-        if isinstance(include, dict) and include.get("name") == "k8s/manifests":
-            return task["vars"]
-    raise AssertionError(f"{role_dir.name} does not include k8s/manifests")
-
-
 OBSERVABILITY_NAMESPACE = load_yaml(ALL_VARS)["k8s_observability_namespace"]
 
 
 def observability_self_rollouts():
     """The declaration as the play sees it: a template over the role's defaults and the
     group var naming the namespace its workloads live in."""
-    declared = include_role_vars(OBSERVABILITY)["manifests_self_rollouts"]
+    declared = include_vars(OBSERVABILITY)["manifests_self_rollouts"]
     defaults = load_yaml(OBSERVABILITY / "defaults/main.yml")
     return render_expr(
         declared, k8s_observability_namespace=OBSERVABILITY_NAMESPACE, **defaults

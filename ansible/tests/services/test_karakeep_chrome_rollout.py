@@ -18,10 +18,10 @@ Run: uv run pytest ansible/tests/services/test_karakeep_chrome_rollout.py
 from _helpers import ANSIBLE
 from _release_expectation import (
     extra_restarts,
-    include_role_vars,
     queued_extras,
     rollouts,
 )
+from renderer.renderer_lib.task_inputs import include_vars
 
 KARAKEEP = ANSIBLE / "roles/k8s/karakeep"
 CHROME = "karakeep-chrome"
@@ -37,7 +37,7 @@ _UNRELATED_EDIT = dict(
 def _extras() -> list[dict]:
     return [
         {"kind": "deploy", "image": entry["name"], **entry}
-        for entry in include_role_vars(KARAKEEP)["manifests_extra_rollouts"]
+        for entry in include_vars(KARAKEEP)["manifests_extra_rollouts"]
     ]
 
 

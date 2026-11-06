@@ -109,7 +109,14 @@ def test_the_datasource_uid_matches_the_provisioned_one():
         for role, name, text in rendered_texts()
         if (role, name) == ("observability", _GRAFANA)
     )
-    block = grafana.split("- name: loki-homelab", 1)
+    # The datasources are a string value of a ConfigMap, which the render may hold on one
+    # escaped line.
+    block = "\n".join(
+        str(value)
+        for doc in yaml_fast.safe_load_all(grafana)
+        if doc
+        for value in doc.get("data", {}).values()
+    ).split("- name: loki-homelab", 1)
     assert len(block) == 2, (
         "grafana.yaml.j2 no longer provisions a `loki-homelab` datasource"
     )

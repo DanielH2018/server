@@ -6,7 +6,7 @@ tails its game pod's console out of loki-homelab, folds it into SQLite (the sour
 and exposes Prometheus metrics on :9420. Both import `files/stats_lib.py`, the skeleton they
 share. See repo-root `CLAUDE.md`.
 
-Until #2813 this was three roles: `terraria-stats`, `valheim-stats` and `game-stats-lib`. Every
+**HISTORY — until #2813 this was three roles:** `terraria-stats`, `valheim-stats` and `game-stats-lib`. Every
 cluster object kept its name, so the scrape jobs, the netpol-baseline Loki policy and the
 claims are unchanged.
 
@@ -28,15 +28,15 @@ claims are unchanged.
   an RWO claim, so a roll stops the old pod before the new one starts and the exporter's
   metrics gap for that interval, as they did under Ansible. `k8s_autodeploy: false` gates no
   apply. It stops Renovate automerging the image bump.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`
-  with its `manifests_rollout` and `manifests_extra_rollouts`, and no Flux path runs it. It
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It
   stays for the handback. The Kustomization's `wait` replaces the rollout wait, and the
   restart checksum the renderer stamps on each Deployment replaces the shared restart.
 
 - **Must sort AFTER `loki-homelab`**: `depends_on: [loki-homelab]` on the `containers_list`
   entry, pinned by
   `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
-- **One `k8s/manifests` include for both games.** `manifests_service: game-stats` names
+- **One `k8s/manifests` include for both games.** `defaults/main.yml` names
   `terraria-stats` as the rollout and `valheim-stats` in `manifests_extra_rollouts`; a second
   include under the same service would prune the first one's staged files. A render change to
   either game therefore restarts both pods.

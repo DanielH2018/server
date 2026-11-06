@@ -7,13 +7,3 @@
 - name: Deploy loki-homelab to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The Alloy ClusterRole and ClusterRoleBinding are cluster-scoped, so the namespaced prune
-    # allowlist in k8s/manifests never selects them; dropping one still leaves it live.
-    manifests_rollout: loki-homelab
-    # manifests_rollout names the loki-homelab DEPLOYMENT; the Alloy shipper reads the same
-    # ConfigMap and is a DaemonSet, so it is rolled as an extra. The shared role skips the
-    # restart on the run that created it, and queues it for the batch drain like any other.
-    manifests_extra_rollouts:
-      - name: alloy
-        kind: daemonset

@@ -75,7 +75,7 @@ def _rendered_by_role() -> dict[str, dict[str, str]]:
     return by_role
 
 
-# The four kinds of `*.j2` `_k8s_render._render_texts` does not render, each with why. A
+# The five kinds of `*.j2` `_k8s_render._render_texts` does not render, each with why. A
 # template of any other shape that falls back is the drift this file's fallback test catches:
 # it means a manifest template dropped out of the render and the census silently went back to
 # scanning `{{ ... }}`.
@@ -96,6 +96,10 @@ SOURCE_FALLBACK_REASONS = {
         "a `*.sh.j2` script, which the shell-template gate renders and a ConfigMap template "
         "embeds, so it holds no pod annotation"
     ),
+    "unlisted": (
+        "a top-level template out of the role's file lists, which `render_tag` does not write: "
+        "pihole's macro file, or navidrome's route while it is parked"
+    ),
 }
 
 # One template per category the derivation must still find there, so a category whose detection
@@ -105,6 +109,7 @@ SOURCE_FALLBACK_MEMBERS = {
     "code-server/templates/Dockerfile.j2": "build",
     "homepage/templates/config/services.yaml.j2": "nested",
     "longhorn-restore-drill/templates/longhorn-restore-drill.sh.j2": "shell",
+    "pihole/templates/pihole-deployment.yaml.j2": "unlisted",
 }
 
 
@@ -114,6 +119,12 @@ SOURCE_FALLBACK_MEMBERS = {
 CENSUS_MEMBERS = {
     "observability": "config",
 }
+
+
+# Named rather than derived, so a manifest template that drops out of the render still fails.
+_UNLISTED = frozenset(
+    {"pihole/pihole-deployment.yaml.j2", "navidrome/ingressroute.yaml.j2"}
+)
 
 
 def _fallback_category(role: Path, path: Path) -> str | None:
@@ -129,7 +140,7 @@ def _fallback_category(role: Path, path: Path) -> str | None:
         return "shell"
     if path.parent != role / "templates":
         return "nested"
-    return None
+    return "unlisted" if f"{role.name}/{path.name}" in _UNLISTED else None
 
 
 def _source_fallbacks() -> dict[str, str | None]:
@@ -245,7 +256,7 @@ def test_the_render_carries_the_macro_built_annotation():
 
 
 def test_every_source_fallback_is_a_template_no_render_covers():
-    """The source half of the census reads only the four kinds of template `_render_texts` skips.
+    """The source half of the census reads only the five kinds of template `_render_texts` skips.
 
     A manifest template of any other shape reading as a fallback means it dropped out of the
     render, and the census went back to scanning its Jinja — where `checksum/{{ name }}`

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-11-05 18:17 UTC
-generated_sha: 588588c710
+generated_at: 2026-11-06 18:17 UTC
+generated_sha: bb59748cd0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,43 +17,41 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#5126](https://github.com/DanielH2018/server/issues/5126) | high | gap | security | The DanielClaudeBot account reads as nonexistent on GitHub, so agent PRs are invisible and cannot land | 2026-10-15 | 0 | - | - |
-| [#7091](https://github.com/DanielH2018/server/issues/7091) | high | gap | cicd | DEPLOY_HOLD on 64d8b24e from the soak race stops every promotion, including #7087 (deploy-failed) | 2026-11-04 | 0 | - | ✓ |
-| [#7103](https://github.com/DanielH2018/server/issues/7103) | high | gap | backup-observability | Confirm the off-box etcd snapshot uploads and EtcdSnapshotOffboxFailed clears after #7100's apply | 2026-11-04 | 0 | - | ✓ |
-| [#7138](https://github.com/DanielH2018/server/issues/7138) | high | gap | cicd | Remove the stray empty file a fan-out batch left in the primary checkout's .github/workflows | 2026-11-04 | 0 | - | ✓ |
-| [#4188](https://github.com/DanielH2018/server/issues/4188) | medium | gap | container | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands | 2026-10-10 | 1 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#6635](https://github.com/DanielH2018/server/issues/6635) | medium | improvement | cicd | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live | 2026-10-30 | 0 | - | ✓ |
-| [#7094](https://github.com/DanielH2018/server/issues/7094) | medium | gap | cicd | The soak race fix from #7093 is not live until DEPLOY_HOLD on 64d8b24e clears (deploy-failed) | 2026-11-04 | 0 | - | ✓ |
-| [#7293](https://github.com/DanielH2018/server/issues/7293) | medium | gap | cicd | Treat every YAML parse failure in the narrowing as unparsable through one helper | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#3865](https://github.com/DanielH2018/server/issues/3865) | low | gap | cicd | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | 2026-10-09 | 0 | - | ✓ |
+| [#7414](https://github.com/DanielH2018/server/issues/7414) | medium | improvement | cicd | Delete the drift checks' code and the releases family | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7435](https://github.com/DanielH2018/server/issues/7435) | medium | gap | cicd | R4.7 deletes the manifests role whole while the renderer reads four of its files | 2026-11-06 | 0 | - | ✓ |
+| [#7454](https://github.com/DanielH2018/server/issues/7454) | medium | improvement | cicd | Move the setup plane's readers out of narrow_lib/broad.py and delete the rest of reach and narrowing | 2026-11-06 | 0 | - | ✓ |
+| [#7455](https://github.com/DanielH2018/server/issues/7455) | medium | improvement | cicd | Stop the renderer reading any role task file | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
 | [#4435](https://github.com/DanielH2018/server/issues/4435) | low | improvement | cicd | Decide whether to move scripts/ into an installable homelab package | 2026-10-11 | 0 | - | ✓ |
 | [#6292](https://github.com/DanielH2018/server/issues/6292) | low | improvement | container | Retire sonarr-air-date-guard once Sonarr v5 stable ships its air-date Release Profile rule | 2026-10-25 | 0 | - | ✓ |
-| [#6434](https://github.com/DanielH2018/server/issues/6434) | low | improvement | cicd | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply | 2026-10-28 | 0 | - | - |
-| [#6435](https://github.com/DanielH2018/server/issues/6435) | low | gap | docs | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template | 2026-10-28 | 0 | - | - |
-| [#6436](https://github.com/DanielH2018/server/issues/6436) | low | gap | docs | PR template header still says the GitOps deployer applies image pins and the deploy plane | 2026-10-28 | 0 | - | - |
 | [#6643](https://github.com/DanielH2018/server/issues/6643) | low | improvement | security | Retire daniel-server's user-home age key once no Ansible apply runs there | 2026-10-30 | 0 | - | ✓ |
-| [#6697](https://github.com/DanielH2018/server/issues/6697) | low | improvement | backup-observability | Drop longhorn_robustness.py from monitor-bridge's shipped modules | 2026-10-31 | 0 | - | - |
 | [#6762](https://github.com/DanielH2018/server/issues/6762) | low | improvement | cicd | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings | 2026-10-31 | 0 | - | ✓ |
 | [#6763](https://github.com/DanielH2018/server/issues/6763) | low | improvement | cicd | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands | 2026-10-31 | 0 | - | ✓ |
 | [#6769](https://github.com/DanielH2018/server/issues/6769) | low | improvement | cicd | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week | 2026-10-31 | 0 | - | ✓ |
-| [#6821](https://github.com/DanielH2018/server/issues/6821) | low | gap | docs | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 | 2026-11-01 | 0 | - | ✓ |
-| [#6882](https://github.com/DanielH2018/server/issues/6882) | low | gap | docs | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 | 2026-11-01 | 0 | - | ✓ |
-| [#7056](https://github.com/DanielH2018/server/issues/7056) | low | gap | docs | Hand-written docs pages still describe Kuma as the pager after M6 B-7 | 2026-11-03 | 0 | - | ✓ |
 | [#7106](https://github.com/DanielH2018/server/issues/7106) | low | gap | docs | The runbook's stopped-k3s snapshot listing has not run literally against R2 | 2026-11-04 | 0 | - | ✓ |
-| [#7124](https://github.com/DanielH2018/server/issues/7124) | low | improvement | docs | Reword the daniel-box.yml comments that still describe retired Kuma machinery | 2026-11-04 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#7161](https://github.com/DanielH2018/server/issues/7161) | low | gap | docs | Apply the k3s role on daniel-box for PR 7152's needs-manual-apply landing | 2026-11-05 | 0 | - | ✓ |
 | [#7175](https://github.com/DanielH2018/server/issues/7175) | low | gap | backup-observability | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects | 2026-11-05 | 0 | - | ✓ |
-| [#7178](https://github.com/DanielH2018/server/issues/7178) | low | gap | cicd | M6 exit criterion 2 waits for R4 to retire render_records_push_token | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#7183](https://github.com/DanielH2018/server/issues/7183) | low | gap | docs | Apply the k3s role on daniel-box for PR 7180's needs-manual-apply landing | 2026-11-05 | 0 | - | ✓ |
-| [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7178](https://github.com/DanielH2018/server/issues/7178) | low | gap | cicd | M6 exit criterion 2 waits for R4 to retire render_records_push_token | 2026-11-05 | 0 | - | ✓ |
+| [#7194](https://github.com/DanielH2018/server/issues/7194) | low | improvement | docs | Reword the Kuma history that M6's census row holds on its allowlist | 2026-11-05 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
 | [#7195](https://github.com/DanielH2018/server/issues/7195) | low | improvement | security | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token | 2026-11-05 | 0 | - | ✓ |
 | [#7220](https://github.com/DanielH2018/server/issues/7220) | low | improvement | docs | Delete the lock-retired lint rule once no branch predates the G2 flip | 2026-11-05 | 0 | - | ✓ |
 | [#7232](https://github.com/DanielH2018/server/issues/7232) | low | improvement | docs | Read the G3 freshness measurement and bring the operator the decision | 2026-11-05 | 0 | - | ✓ |
-| [#7238](https://github.com/DanielH2018/server/issues/7238) | low | gap | security | Decide whether the remote allowlist fixture address in git history matters — *no vetted remediation* | 2026-11-05 | 0 | - | ✓ |
-| [#7247](https://github.com/DanielH2018/server/issues/7247) | low | improvement | docs | README and a deploy.yml comment describe a Docker play that has no entries to run | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#7284](https://github.com/DanielH2018/server/issues/7284) | low | gap | cicd | A recursive YAML alias in a task file escapes the narrowing's walks as a RecursionError | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#7287](https://github.com/DanielH2018/server/issues/7287) | low | improvement | docs | stats_lib.py cites the root CLAUDE.md for the sys.path rule it no longer describes | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#7289](https://github.com/DanielH2018/server/issues/7289) | low | gap | cicd | Bound each request of bootstrap-host's fetch so a stalled download reaches the retry | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
-| [#7291](https://github.com/DanielH2018/server/issues/7291) | low | improvement | docs | loki_route_health.py cites the root CLAUDE.md for a failure class it does not name | 2026-11-05 | 0 | worktree-d5-orchestrator-wave16 | ✓ |
+| [#7320](https://github.com/DanielH2018/server/issues/7320) | low | improvement | docs | Test comments and role tests still describe Kuma as live | 2026-11-05 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7323](https://github.com/DanielH2018/server/issues/7323) | low | improvement | docs | Rewrite the k3s role comments that name the deleted alert_deferred | 2026-11-05 | 0 | - | ✓ |
+| [#7411](https://github.com/DanielH2018/server/issues/7411) | low | gap | cicd | A stamp in a file main.yml imports can also run from a tasks_from play under tags the render walk cannot read | 2026-11-06 | 0 | - | ✓ |
+| [#7415](https://github.com/DanielH2018/server/issues/7415) | low | gap | backup-observability | Run the UPS forced-shutdown drill on 2026-11-10 | 2026-11-06 | 0 | - | ✓ |
+| [#7416](https://github.com/DanielH2018/server/issues/7416) | low | improvement | cicd | A check-timer template change names gitops_deploy on hosts whose teardown renders nothing from it | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7417](https://github.com/DanielH2018/server/issues/7417) | low | improvement | cicd | No render group lists check-timer-boot.service.j2, so a change to it always names initial_setup | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7419](https://github.com/DanielH2018/server/issues/7419) | low | gap | docs | Decide whether H7 keeps the deploy UI's in-flight panel now the daemon no longer starts deploy.sh | 2026-11-06 | 0 | - | ✓ |
+| [#7422](https://github.com/DanielH2018/server/issues/7422) | low | improvement | docs | Rewrite the setup-role comments that still name the disarmed drift checks | 2026-11-06 | 0 | - | ✓ |
+| [#7425](https://github.com/DanielH2018/server/issues/7425) | low | improvement | docs | Align R4's case 5 wording and the render-diff docstring with the proof runs | 2026-11-06 | 0 | - | ✓ |
+| [#7432](https://github.com/DanielH2018/server/issues/7432) | low | gap | cicd | A landing from daniel-server names gitops_deploy on daniel-box for a check-timer change after any apply | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7436](https://github.com/DanielH2018/server/issues/7436) | low | gap | docs | Write the Flux handback procedure the role docs cite, with the render-metadata step | 2026-11-06 | 0 | worktree-d5-orchestrator-wave17 | ✓ |
+| [#7441](https://github.com/DanielH2018/server/issues/7441) | low | addition | cicd | Add a CI failure survey tool that reads every attempt | 2026-11-06 | 0 | worktree-ci-failures-orchestrator | ✓ |
+| [#7443](https://github.com/DanielH2018/server/issues/7443) | low | gap | cicd | The renderer's inventory reader keeps the quotes of a hosts.ini inline value | 2026-11-06 | 0 | - | ✓ |
+| [#7445](https://github.com/DanielH2018/server/issues/7445) | low | improvement | cicd | Feed the guard drop candidates from the CI failure survey | 2026-11-06 | 0 | - | ✓ |
+| [#7449](https://github.com/DanielH2018/server/issues/7449) | low | improvement | cicd | Cache the homelab-tools pins on the host packages build job | 2026-11-06 | 0 | - | ✓ |
+| [#7452](https://github.com/DanielH2018/server/issues/7452) | low | improvement | cicd | A landing from daniel-server names render_records on daniel-box for a check-timer change after any apply | 2026-11-06 | 0 | - | ✓ |
+| [#7457](https://github.com/DanielH2018/server/issues/7457) | low | gap | docs | Remove the handback procedure and its citations when R4 deletes the Ansible path | 2026-11-06 | 0 | - | ✓ |
+| [#7459](https://github.com/DanielH2018/server/issues/7459) | low | improvement | docs | Rewrite the comments that still name probe.py releases and NOT ROLLED | 2026-11-06 | 0 | - | ✓ |
 
 ## Deferred, by date
 
@@ -62,18 +60,12 @@ Open findings carrying a `not-before:` label, soonest first. `findings.py next` 
 | Not before | State | # | Finding |
 |---|---|---|---|
 | 2026-11-07 | withheld | [#6769](https://github.com/DanielH2018/server/issues/6769) | Judge the per-batch fan-out MemoryHigh against the 2026-10-29 baseline after a week |
-| 2026-11-08 | withheld | [#6697](https://github.com/DanielH2018/server/issues/6697) | Drop longhorn_robustness.py from monitor-bridge's shipped modules |
+| 2026-11-07 | withheld | [#7425](https://github.com/DanielH2018/server/issues/7425) | Align R4's case 5 wording and the render-diff docstring with the proof runs |
+| 2026-11-07 | withheld | [#7454](https://github.com/DanielH2018/server/issues/7454) | Move the setup plane's readers out of narrow_lib/broad.py and delete the rest of reach and narrowing |
 | 2026-11-08 | withheld | [#6762](https://github.com/DanielH2018/server/issues/6762) | Cap one fan-out batch's CPU on daniel-server if its bursts slow its siblings |
 | 2026-11-08 | withheld | [#6763](https://github.com/DanielH2018/server/issues/6763) | Re-read the fan-out live-batch caps after per-batch MemoryHigh lands |
-| 2026-11-09 | withheld | [#6821](https://github.com/DanielH2018/server/issues/6821) | Comments still name probe.py kuma-drift and a Loki-reading probe.py alerts after M6 B-2 |
-| 2026-11-09 | withheld | [#6882](https://github.com/DanielH2018/server/issues/6882) | setup/k3s comments still describe a Loki-reading probe.py alerts, and probe monitors keeps its Kuma arm until C-1 |
-| 2026-11-10 | withheld | [#3865](https://github.com/DanielH2018/server/issues/3865) | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap |
-| 2026-11-13 | withheld | [#6434](https://github.com/DanielH2018/server/issues/6434) | Shrink the gitops-deploy unit's 70min budget and LOCK_WAIT now the tick holds the lock for one broad apply |
-| 2026-11-13 | withheld | [#6436](https://github.com/DanielH2018/server/issues/6436) | PR template header still says the GitOps deployer applies image pins and the deploy plane |
-| 2026-11-13 | withheld | [#6635](https://github.com/DanielH2018/server/issues/6635) | Land D6.12: delete the GitOps tick's k8s arms once M6's C-2b is live |
-| 2026-11-14 | withheld | [#6435](https://github.com/DanielH2018/server/issues/6435) | Rename the cross_plane_order.py comments left in ansible/deploy.yml and janitorr's verify template |
-| 2026-11-16 | withheld | [#7056](https://github.com/DanielH2018/server/issues/7056) | Hand-written docs pages still describe Kuma as the pager after M6 B-7 |
-| 2026-11-19 | withheld | [#4188](https://github.com/DanielH2018/server/issues/4188) | Home Assistant was down 28 minutes when the tick deployed 2026.10.0, and its hold still stands |
+| 2026-11-10 | withheld | [#7415](https://github.com/DanielH2018/server/issues/7415) | Run the UPS forced-shutdown drill on 2026-11-10 |
+| 2026-11-20 | withheld | [#7178](https://github.com/DanielH2018/server/issues/7178) | M6 exit criterion 2 waits for R4 to retire render_records_push_token |
 | 2026-11-20 | withheld | [#7195](https://github.com/DanielH2018/server/issues/7195) | Retire the Alloy and probe.py push-URL redaction once R4 retires the last push token |
 | 2026-11-21 | withheld | [#7175](https://github.com/DanielH2018/server/issues/7175) | H2.8c: read whether native etcd retention prunes the retired cron's S3 objects |
 | 2026-12-05 | withheld | [#7232](https://github.com/DanielH2018/server/issues/7232) | Read the G3 freshness measurement and bring the operator the decision |
@@ -145,6 +137,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#3753](https://github.com/DanielH2018/server/issues/3753) | accepted | Decide how values shared between this repo and the chezmoi dotfiles stay equal | Operator decision 2026-10-09: keep the duplication. The server repo owns observability_otlp_port (4317), because the collector serves it; claude_code_rc_pytest_workers and chezmoi's PYTEST_XDIST_AUTO_NUM_WORKERS are raised together, and each side's comment names the other. A cross-repo check cannot run in CI, and a host drift check is more machinery than two rarely-changed values justify. |
 | [#3758](https://github.com/DanielH2018/server/issues/3758) | accepted | Decide whether release_bin_groups stays in scripts/lib with one production importer | Kept: shared resolver between the validator and the ansible/tests guards; see #3667 |
 | [#3829](https://github.com/DanielH2018/server/issues/3829) | refuted | daniel-pi's uv tooling lags the host-basics pins by several releases | daniel-pi is not in dev_tooling_hosts (ansible/inventory/group_vars/all.yml:398, daniel-box and daniel-server only), and host-basics.yml gates the uv install and every uv-tool install on that list. The Pi's old uv tooling is deliberately unmanaged, not drift. |
+| [#3865](https://github.com/DanielH2018/server/issues/3865) | accepted | Red/green batches: a process the red author starts outside the pipeline's process tree survives the reap | No red author process survived a reap across at least 100 closed red-green issues and 497 batch records. A per-phase scope would not contain one, and the operator ruled on 2026-11-05 not to build the separate red-phase user. |
 | [#4280](https://github.com/DanielH2018/server/issues/4280) | accepted | Widen the red-green label once fanout_review_stats.py shows the red phase catches defects | Measured 2026-10-29 with fanout.py stats over both hosts' review records (2026-10-09 to 2026-10-29): 115 red batches; the red phase is about 32% of a red batch's spend; of 111 first green-gate results only 1 was unmet, the red phase's one real catch; 284 of 756 fix hunks (38%) went unnoticed by the red tests. The data does not support widening the red-green label. Whether to retire the red phase is a separate operator decision. |
 | [#5660](https://github.com/DanielH2018/server/issues/5660) | accepted | D5 own windows could end at the flip's flux/soak verdict instead of a fixed hour | Obsolete: D5 completed 2026-10-23; no later slice uses own windows |
 | [#5944](https://github.com/DanielH2018/server/issues/5944) | accepted | Host uv pin takes the 7-day version soak when a pypi advisory names uv | One occurrence, hand-fixed in minutes; automation weakens the soak or forces a manual step |
@@ -196,6 +189,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#3944](https://github.com/DanielH2018/server/issues/3944) | accepted | Fan-out PRs that change the landing policy's imports merge without operator approval when run as ubuntu | Operator ruling 2026-10-10: a fan-out launched as ubuntu runs on the operator's own authority, so its PRs need no separate approval to change land.py's import set. The import-set approval applies only to PRs from the claude agent user. |
 | [#3973](https://github.com/DanielH2018/server/issues/3973) | accepted | Derive Authelia's OIDC client list from an oidc: block on each consuming service's containers_list entry | Operator decision 2026-10-10: no third OIDC client is planned for a while. With two clients, the existing agreement tests already catch drift, so a derived client list does not justify itself yet. |
 | [#6371](https://github.com/DanielH2018/server/issues/6371) | accepted | Retire the three Loki push tokens a week after the M5 cutover | The three Loki tokens were retired by dd0375fe0 on 2026-10-29. The remaining clause, deleting PENDING_RETIREMENT with the last retirement, moves to B6c's token PR (#6926, m6-status/b6c.md step 5), because B6c's Cutover-1a (#6963) put registry_gc_push_token into the set. |
+| [#7238](https://github.com/DanielH2018/server/issues/7238) | accepted | Decide whether the remote allowlist fixture address in git history matters | The operator ruled on 2026-11-05 that the value staying in git history is fine. |
 
 ### home-assistant
 

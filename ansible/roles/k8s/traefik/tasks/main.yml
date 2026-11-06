@@ -10,20 +10,3 @@
 - name: Deploy Traefik to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # rbac.yaml holds the cluster-scoped role and one Role and RoleBinding per watched
-    # namespace, in ONE file so a single apply moves both halves (see its header).
-    # The ACME Secret is concatenated rather than listed, because dropping its name is the only
-    # way traefik_k8s_manage_acme reaches it — the manifest has no template branch to gate. The
-    # ACME claim is `k8s_claims` in defaults/main.yml, gated on the same flag there.
-    manifests_files: >-
-      {{ ['rbac.yaml', 'rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml',
-          'deployment.yaml', 'service.yaml', 'metrics-service.yaml',
-          'dashboard-ingressroute.yaml']
-         + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
-         + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
-    manifests_secret_files: >-
-      {{ ['origin-pull-secret.yaml']
-         + (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
-         + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
-         + (['livesync-gate-secret.yaml'] if traefik_k8s_manage_livesync_gate | bool else []) }}

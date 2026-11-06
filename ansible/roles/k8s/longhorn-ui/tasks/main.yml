@@ -12,6 +12,3 @@
     # The route and its middlewares live in longhorn-system, so the armed apply and its prune
     # run there.
     manifests_prune_namespace: "{{ k8s_longhorn_namespace }}"
-    manifests_rollout: ''
-    # The entry's `port` is the upstream longhorn-frontend Service's, which setup/k3s installs.
-    manifests_exclude_files: [service.yaml]

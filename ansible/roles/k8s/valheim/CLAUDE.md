@@ -53,7 +53,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   operator runs after a hand rotation. The renderer stamps a restart checksum on the
   Deployment, so a changed value rolls the pod.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay for the handback. The mods build
+  `k8s/manifests`, and no Flux path runs either. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The mods build
   became the `images` job (D5.4), which pushes `ghcr.io/danielh2018/valheim:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/valheim`; the renderer rewrites the `mods`
   initContainer's ref to the GHCR one with `imagePullPolicy: IfNotPresent`

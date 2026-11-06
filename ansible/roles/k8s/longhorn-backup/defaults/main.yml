@@ -159,3 +159,5 @@ k3s_longhorn_r2_backup_prefix: longhorn
 # conservatism rather than necessity — but it is the right default to start from, and the
 # only cost is UI staleness between nightlies. Raise deliberately.
 k3s_longhorn_r2_poll_interval: 0
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

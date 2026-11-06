@@ -210,15 +210,19 @@ def test_the_probe_is_absent_without_crowdsec() -> None:
 
 
 def test_the_route_ships_only_where_the_probe_does() -> None:
-    """The route is gated in tasks/main.yml rather than in the template, the same way the ACME
-    manifests are, so tasks/main.yml is where its pairing with the probe is stated."""
-    tasks = (K8S_ROLES / _ROLE / "tasks" / "main.yml").read_text()
+    """The route is gated in `manifests_files` rather than in the template, the same way the ACME
+    manifests are, so defaults/main.yml is where its pairing with the probe is stated."""
+    defaults = (K8S_ROLES / _ROLE / "defaults" / "main.yml").read_text()
     line = next(
-        (ln for ln in tasks.splitlines() if "edge-selfcheck-ingressroute.yaml" in ln),
+        (
+            ln
+            for ln in defaults.splitlines()
+            if "edge-selfcheck-ingressroute.yaml" in ln and "#" not in ln
+        ),
         None,
     )
     assert line, (
-        "tasks/main.yml no longer ships edge-selfcheck-ingressroute.yaml at all"
+        "defaults/main.yml no longer ships edge-selfcheck-ingressroute.yaml at all"
     )
     assert "traefik_k8s_manage_crowdsec" in line, (
         f"the self-check route is not gated on traefik_k8s_manage_crowdsec: {line.strip()!r}"

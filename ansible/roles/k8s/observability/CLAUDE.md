@@ -11,7 +11,7 @@ and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another hos
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
 Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
-include of `k8s/manifests` alone, which the renderer reads for the role's vars. To give the role
+include of `k8s/manifests` alone. To give the role
 back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
 the flag leaves two writers on the objects.
 
@@ -84,8 +84,8 @@ This role sets `manifests_rollout: ''`, and each workload carries its own trigge
 ConfigMap edit rolls its own pod: the template hashes the ConfigMap body into that pod template
 as `checksum/config` (`ansible/templates/checksum-annotation.yml.j2`). A Secret edit rolls
 through the renderer's restart annotation, which hashes the Secrets a pod template
-names without putting their bytes in the annotation. The role passes its workloads to the
-include as `manifests_self_rollouts`, from
+names without putting their bytes in the annotation. The role's defaults list its workloads as
+`manifests_self_rollouts`, from
 `ansible/roles/k8s/observability/defaults/main.yml:observability_stabilise_workloads`. Each
 Secret reader names the rendered files its pod reads in `restart_secrets`:
 `scrape-credentials-secret.yaml` for prometheus, `grafana-secret.yaml` for grafana and

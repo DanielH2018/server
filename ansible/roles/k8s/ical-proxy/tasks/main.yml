@@ -2,18 +2,7 @@
 - name: Build the ical-proxy image
   ansible.builtin.include_role:
     name: k8s/image-builder
-  vars:
-    image_builder_name: ical-proxy
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/ical-proxy/templates/Dockerfile.j2"
-    # The one file the Dockerfile COPYs, at the exact context path the COPY names
-    # (flat — ConfigMap keys cannot contain '/').
-    # The source is ical_proxy.py rather than app.py so it cannot shadow homelab-mcp's app.py
-    # in a shared pytest session; the image still runs it as app.py.
-    image_builder_context:
-      "{{ playbook_dir }}/roles/k8s/ical-proxy/files/ical_proxy.py": app.py
 
 - name: Deploy ical-proxy to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_rollout: ical-proxy

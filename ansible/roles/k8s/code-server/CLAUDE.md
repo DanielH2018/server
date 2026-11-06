@@ -47,7 +47,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   Deployment keeps the default rollout budget and the editor is down only for the container
   start.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay for the handback. The defaults name
+  `k8s/manifests`, and no Flux path runs either. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The defaults name
   `<k8s_registry_pull_host>/code-server`; the renderer rewrites both refs to the GHCR one with
   `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
   snapshot Job replaces k8s/volume-snapshot's pre-apply snapshot, and the Kustomization's

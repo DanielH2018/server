@@ -22,13 +22,23 @@ def test_a_key_no_manager_captures_is_not_a_pin():
 
 
 def test_the_real_config_names_the_built_in_managers_pins():
-    """#4158: no custom manager reads these files; the built-in github-actions manager bumps
-    image-smoke's `uses:` refs, and the ansible manager the n8n deploy task's `image:`."""
+    """#4158: no custom manager reads this file; the built-in github-actions manager bumps
+    image-smoke's `uses:` refs."""
     keys = pinned_keys(REPO, ".github/workflows/image-smoke.yml")
     assert "jobs" in keys
     assert "on" not in keys
-    # The third root item of a list-rooted tasks file, "Deploy n8n to the cluster".
-    assert "2" in pinned_keys(REPO, "ansible/roles/k8s/n8n/tasks/main.yml")
+
+
+def test_the_built_in_ansible_manager_pins_an_image_in_a_tasks_file(tmp_path):
+    """No tracked tasks file holds an `image:` line, so a fixture proves the selection."""
+    tasks = tmp_path / "ansible" / "roles" / "demo" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- name: First\n  debug:\n- name: Second\n  vars:\n    image: demo:1\n"
+    )
+    (tmp_path / "renovate.json").write_text("{}")
+    rel = "ansible/roles/demo/tasks/main.yml"
+    assert pinned_keys(tmp_path, rel) == frozenset({"1"})
 
 
 def test_a_disabled_built_in_manager_pins_nothing(tmp_path):

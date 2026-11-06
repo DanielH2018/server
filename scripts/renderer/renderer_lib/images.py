@@ -9,7 +9,7 @@ because a consumer reads only the images its own role builds (`role_tags`). A fu
 names every builder, so it writes all ten. A `--role` render writes the named builders'
 contexts alone, and no `DIR/images/` when it names none; `--all-images` renders all ten
 whatever it names, as the publish job's `images` job needs (#5374). Each renders with its role's play context and
-the include's `image_builder_*` vars (`task_inputs.image_contexts`). The consumer pass reads the
+its `image_builder_builds` entry's vars (`task_inputs.image_contexts`). The consumer pass reads the
 same `ImageContext` tags (`render_tag`'s `built`), so a consumer's ref and `tags.json` come from
 one computation. `ref_mismatches` holds them equal, and `paths_into_images` holds that no
 Kustomization reaches `DIR/images/`.
@@ -79,7 +79,7 @@ class BuiltImage:
 
 
 def builder_roles(roles: Path = K8S_ROLES) -> list[str]:
-    """The sorted roles whose tasks include `k8s/image-builder`."""
+    """The sorted roles that build an image."""
     return sorted(
         role.name
         for role in roles.iterdir()

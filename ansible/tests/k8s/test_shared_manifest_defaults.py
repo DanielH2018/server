@@ -28,7 +28,12 @@ from collections import defaultdict
 import pytest
 
 from lib import yaml_fast
-from lib.k8s_roles import SHARED_MANIFEST_DEFAULTS, shared_default_templates
+from lib.k8s_roles import (
+    MANIFESTS_PRUNE_DEFAULT,
+    ROLLOUT_TIMEOUT_DEFAULT,
+    SHARED_MANIFEST_DEFAULTS,
+    shared_default_templates,
+)
 from _helpers import ANSIBLE
 from _k8s_render import render_role_template
 from _role_census import role_dirs
@@ -118,6 +123,13 @@ def test_the_two_maps_name_the_same_shared_templates():
         "every offline render harness follows the second, so a mismatch drops manifests out of "
         "the validator's corpus without failing anything."
     )
+
+
+def test_the_renderer_constants_equal_the_role_defaults_they_mirror():
+    """The play reads the role's defaults and the renderer reads its constants; R4.7 ends the pair."""
+    defaults = _manifests_defaults()
+    assert defaults["manifests_prune"] is MANIFESTS_PRUNE_DEFAULT
+    assert defaults["manifests_rollout_timeout_default"] == ROLLOUT_TIMEOUT_DEFAULT
 
 
 def test_every_shared_default_template_exists():

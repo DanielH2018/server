@@ -1011,10 +1011,10 @@ publishes a second host package.
 ### CI (builds, never signs)
 
 The host-package checks are two jobs in `.github/workflows/ci.yml`, not a workflow of their
-own. `host_packages_build` does steps 1 to 3 and step 6. It hands the render, the debs and nfpm
-to the `host_packages` matrix, which does steps 4 and 5 on each release. The split lets the
-`host_tools_arm64` job start once the build is done, instead of after the cases (#6151). The
-`prek` gate lists both jobs in `needs` and reads each `needs.<job>.result` in its step, so the
+own. `host_packages_build` does steps 1 to 3 and step 6. It hands the render, the debs, nfpm and
+the verified tools cache to the `host_packages` matrix, which does steps 4 and 5 on each release.
+The split lets the `host_tools_arm64` job start once the build is done, instead of after the
+cases (#6151). Both consumers skip when the build did not succeed. The `prek` gate lists both jobs in `needs` and reads each `needs.<job>.result` in its step, so the
 required context covers them. The jobs inherit `ci.yml`'s SHA-keyed concurrency group on push.
 They need no secrets, and they do these steps:
 

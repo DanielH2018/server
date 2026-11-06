@@ -58,11 +58,11 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   so dropping one from `rbac.yaml.j2` deletes it live at the next promotion.
   `deletionPolicy: Orphan` applies only when the Kustomization itself is deleted.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay for the handback. The `k8s/image-builder` include became promote's `images` job
+  They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The `k8s/image-builder` include became promote's `images` job
   (D5.4a2, `scripts/deploy_tools/ci_images.py`) and the GHCR ref (D5.4b): the renderer writes
   the build context to `DIR/images/homelab-mcp/` and its content tag to `DIR/images/tags.json`,
-  and the Deployment's ref reads the same tag. The `k8s/manifests` include's
-  `manifests_rollout: homelab-mcp` named the Deployment for the stabilisation gate and the
+  and the Deployment's ref reads the same tag. The role's
+  `manifests_rollout: homelab-mcp` names the Deployment for the stabilisation gate and the
   shared restart. The Kustomization's `wait` replaces the gate, and the restart checksum the
   renderer stamps replaces the restart. `k8s_autodeploy: true` no longer gates an apply,
   because the deployer skips the tag.
@@ -78,8 +78,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   `scripts/diagnostics/tests/test_obs_api.py` imports it with `scripts/` off the path. The file
   is part of the build context, so a merged edit to it alone moves homelab-mcp's content tag,
   and the next promotion builds the image and rolls the pod. After a handback, the deployer's
-  `K8S_BUILD_CONTEXT_FILES` table maps an edit to it to homelab-mcp's tag, and `probe.py
-  releases` names it as the cause of homelab-mcp's drift (#4840).
+  `K8S_BUILD_CONTEXT_FILES` table maps an edit to it to homelab-mcp's tag (#4840).
 - The Dockerfile path is built from `playbook_dir`, not `role_path`: that render happens
   **inside** `k8s/image-builder`, where `role_path` resolves to the wrong role (bit the first
   deploy, 2026-08-13). It matters again only after a handback.

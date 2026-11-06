@@ -67,8 +67,8 @@ _INERT_LABEL = (
 )
 _K3S_COMMENT = "A setup/k3s comment that names Kuma as a check's reader (#7147, #6882)."
 _LIVE_NAME = (
-    "A live name or matcher, such as `etcd_drill_full_kuma_interval_s`, `probe.py releases "
-    "--kuma` or the webhook labelled Kuma: renaming it touches its readers (#7194)."
+    "A live name or matcher, such as `etcd_drill_full_kuma_interval_s` or the "
+    "webhook labelled Kuma: renaming it touches its readers (#7194)."
 )
 _R4_DELETES = "The render_records role, which R4 deletes (#7178)."
 _SHIPPED_COMMENT = (
@@ -100,11 +100,6 @@ _PROSE_HOLDERS = {
             "ansible/roles/setup/hypervisor/CLAUDE.md",
             "ansible/roles/setup/hypervisor/defaults/main.yml",
             "ansible/roles/setup/hypervisor/templates/etcd-restore-drill-vm.sh.j2",
-            "ansible/roles/setup/k3s/templates/release-staleness-check.sh.j2",
-            "scripts/diagnostics/probe_lib/cli_parser.py",
-            "scripts/diagnostics/probe_lib/releases.py",
-            "scripts/diagnostics/probe_lib/releases_format.py",
-            "scripts/diagnostics/probe_lib/releases_render.py",
         ),
         _LIVE_NAME,
     ),

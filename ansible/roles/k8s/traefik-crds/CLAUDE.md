@@ -15,7 +15,7 @@ reaches the CRDs through its edge to `traefik`.
 - **The only content is `files/upstream/kubernetes-crd-definition-v1.yml`**, upstream's file
   byte for byte, pinned by `traefik_crds_k8s_version` and the `traefik_crds_vendored_manifests`
   item in `defaults/main.yml`. `scripts/dev/vendor_manifest.py` checks the pin and refreshes
-  the copy. The renderer attaches the file to the tag's bundle verbatim, and the include sets
+  the copy. The renderer attaches the file to the tag's bundle verbatim, and `defaults/main.yml` sets
   `manifests_files: []`, so the render holds the kustomization and the vendored file alone. No
   render may fetch a URL (D5, C1).
 - **A minor traefik image bump needs a refresh of the copy.**

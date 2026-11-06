@@ -41,3 +41,9 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ terraria_k8s_claim }}"
     storage_class: "{{ terraria_k8s_storage_class }}"
     size: "{{ terraria_k8s_size }}"
+
+image_builder_builds:  # noqa var-naming[no-role-prefix]
+  - image_builder_name: terraria
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/terraria/templates/Dockerfile.j2"
+
+manifests_rollout: terraria  # noqa var-naming[no-role-prefix]

@@ -34,8 +34,8 @@ and contract unchanged.
   decrypts from `ansible/vars/cluster-vars.sops.env`. The Kustomization depends on
   `cluster-vars`, so a rotated value is live before autofix-bridge reconciles, and the restart
   checksum rolls the pod. A rotation reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`
-  with `manifests_rollout: autofix-bridge`, and no Flux path runs it. It stays for the
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the
   handback. The Kustomization's `wait` replaces the rollout wait, and the restart checksum
   replaces the shared restart.
 

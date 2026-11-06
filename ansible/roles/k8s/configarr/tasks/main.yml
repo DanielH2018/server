@@ -14,10 +14,6 @@
 - name: Deploy configarr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # No Deployment to wait on. The manifests role treats '' as "skip the rollout entirely",
-    # which is the whole reason that option exists.
-    manifests_rollout: ""
     # The prune k8s/manifests arms by default (its manifests_prune DECIDED comment). The
     # render stamps homelab/role on the CronJob and the Secret; the fixed allowlist never names
     # Secret, so config-secret is applied but never pruned.

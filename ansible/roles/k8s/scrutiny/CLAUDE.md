@@ -41,7 +41,7 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
   annotation, not in `dependsOn`.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. `manifests_rollout: scrutiny-web` named
+  and no Flux path runs it. It stays for the handback. The default `manifests_rollout: scrutiny-web` names
   the web Deployment for the stabilisation gate and the shared restart. The Kustomization's
   `wait` replaces the gate, and the restart checksum the renderer stamps on `scrutiny-web` replaces the
   restart. The two `manifests_extra_rollouts` entries declare `restart_on: []`, and the

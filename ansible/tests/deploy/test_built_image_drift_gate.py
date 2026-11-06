@@ -23,7 +23,7 @@ failure. Hence a test rather than a comment.
 import re
 
 from _helpers import ANSIBLE, jinja_env, load_tasks
-from _k8s_render import deploy_play
+from _k8s_play import deploy_play
 
 _ANSIBLE = ANSIBLE
 _GATE = _ANSIBLE / "post_tasks" / "k8s_image_drift_gate.yml"

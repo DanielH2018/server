@@ -142,3 +142,17 @@ flux_verify_after:  # noqa var-naming[no-role-prefix]
 # Three CronJob periods: the sidecar's home allowlist pushes down once the ConfigMap's lookup
 # time is older, so a dead discovery pages.
 crowdsec_k8s_home_ips_stale_after_seconds: "{{ crowdsec_k8s_home_ips_period_minutes * 60 * 3 }}"
+
+# The node agents read AGENT_PASSWORD from this role's Secret through `secretKeyRef`
+# (node-agent-daemonset.yaml.j2), and env is resolved once at pod start. The shared
+# config-change restart rolls only `manifests_rollout` — deploy/crowdsec — so without this
+# line a rotated crowdsec_k8s_agent_password lands in Secret crowdsec-env while every
+# DaemonSet pod keeps logging in with the old value, behind a green deploy.
+#
+# ACCEPTED COST: that restart is gated on the render changing, not on the SECRET changing,
+# so any crowdsec manifest edit rolls both node agents while the engine Deployment is
+# itself rolling. Per-node auth.log parsing is blank for that window; the wait-for-lapi
+# init container absorbs up to 120s of it, and the LAPI keeps its own decisions.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: crowdsec-node-agent
+    kind: daemonset

@@ -1099,8 +1099,8 @@ jobs:
   # the merge base on every run, with no path filter, because a group_vars edit can change a
   # render. When no rendered tree differs, its build and lint steps skip and it ends green.
   # Otherwise it builds both renders with the pinned nfpm, lints them, and hands the build on:
-  # the arm64 homelab-tools .deb to `host_tools_arm64`, and the render, the debs and nfpm to
-  # `host_packages`. Each `host_packages` matrix leg builds the test image for its Ubuntu release
+  # the arm64 homelab-tools .deb to `host_tools_arm64`, and the render, the debs, nfpm and the
+  # verified homelab-tools downloads to `host_packages`. Each `host_packages` matrix leg builds the test image for its Ubuntu release
   # and runs the updater cases in it (steps 4 and 5).
   #
   # The build is a job of its own so that `host_tools_arm64` waits for the build alone (#6151).
@@ -1362,13 +1362,14 @@ jobs:
           grep -qF "postinst:2: 'rm -rf /etc/foo'" "$RUNNER_TEMP/red.log"
 
       # The `host_packages` legs read the render and the debs, and build their fixture packages
-      # with the same nfpm. One tarball carries all three, because an artifact's zip does not
-      # keep a file's mode and the render ships executable maintainer scripts.
-      - name: Hand the render, the debs and nfpm to the cases legs
+      # with the same nfpm. The bootstrap cases seed from the tools cache, so each pin is
+      # downloaded once per run, here. One tarball carries all four, because an artifact's zip
+      # does not keep a file's mode and the render ships executable maintainer scripts.
+      - name: Hand the render, the debs, nfpm and the tools cache to the cases legs
         if: >-
           github.event_name == 'workflow_dispatch' || steps.render.outputs.changed == 'true'
           || steps.render.outputs.cases == 'true'
-        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm
+        run: tar -cf "$RUNNER_TEMP/host-packages-build.tar" -C "$RUNNER_TEMP" render debs bin/nfpm tools-cache
 
       - name: Upload the hand-off for the cases legs
         if: >-
@@ -1384,9 +1385,13 @@ jobs:
   # Steps 4 and 5 of the host packages, one leg per release. The header above
   # `host_packages_build` says what each job does. Every step but the checkout and the setup
   # skips when that job built nothing, and the leg ends green.
+  #
+  # `cancelled()` in the proof arm removes GitHub's implicit `success()`, so the condition names
+  # the build's result. Without it a failed build runs each leg into `Artifact not found`.
+  # The `prek` gate needs the build too, so it stays red.
   host_packages:
     needs: [prove, host_packages_build]
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-26.04
     # The image build fetches from snapshot.ubuntu.com, which answers 5xx often enough that
     # apt's retries can take minutes. Each leg boots a container per case, and four of the
@@ -1422,7 +1427,7 @@ jobs:
 
       # The tarball unpacks to the paths the build job wrote, so the cases read `$RUNNER_TEMP/render`
       # and `$RUNNER_TEMP/debs` as they did when both halves were one job.
-      - name: Unpack the render, the debs and nfpm
+      - name: Unpack the render, the debs, nfpm and the tools cache
         if: >-
           github.event_name == 'workflow_dispatch' || needs.host_packages_build.outputs.changed == 'true'
           || needs.host_packages_build.outputs.cases == 'true'
@@ -1487,7 +1492,7 @@ jobs:
           fi
           uv run python scripts/validate/host_package_cases.py --image "homelab-host-test:$RELEASE" \
             --python "$PYTHON" --render "$RUNNER_TEMP/render" --debs "$RUNNER_TEMP/debs" \
-            --work "$RUNNER_TEMP/cases"
+            --work "$RUNNER_TEMP/cases" --tools-cache "$RUNNER_TEMP/tools-cache"
 
   # Target slice H3.11, the `arm64` half of homelab-tools (docs/target-architecture/host/
   # h3-pi-pilot.md, *`homelab-tools`* and *Open questions* 9). The `host_packages_build` job builds
@@ -1502,10 +1507,11 @@ jobs:
   # It waits for `host_packages_build` alone, not for the cases legs (#6151).
   #
   # When `host_packages_build` built no homelab-tools, because no render changed, there is no
-  # artifact and the job ends green with a notice.
+  # artifact and the job ends green with a notice. When the build failed the job skips, because
+  # that notice would not be true.
   host_tools_arm64:
     needs: [prove, host_packages_build]
-    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true }}
+    if: ${{ (needs.prove.result == 'cancelled' || needs.prove.result == 'failure' || (!cancelled() && needs.prove.outputs.proven != 'true')) && github.event.pull_request.draft != true && needs.host_packages_build.result == 'success' }}
     runs-on: ubuntu-24.04-arm
     # Builds host_packages' test image from the same mirror. Measured 2026-11-04 with the mirror
     # slow: this job's build reached 29min 05s and host_packages' 33min 45s (#7128).

@@ -32,7 +32,7 @@ from lib.repo_paths import REPO, ROLES
 # INTERACTIVELY, where the shell's own PATH already has it — under cron it fails "command not
 # found", or worse: bare `kubectl` alone (without `k3s kubectl`) silently reports an EMPTY
 # cluster rather than erroring, which reads as "the cluster has nothing" instead of "PATH is
-# wrong". manifest-prune-check.sh.j2 carries the fix.
+# wrong". registry-gc.sh.j2 carries the fix.
 #
 # Only a script that's an ACTUAL cron `job:` target is in scope — this must not flag an
 # operator-invoked script that uses the same bare `k3s kubectl` and is deliberately UNSCHEDULED
