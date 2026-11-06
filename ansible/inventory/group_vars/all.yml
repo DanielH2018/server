@@ -519,7 +519,7 @@ k3s_etcd_expose_metrics: false
 # READINESS alone satisfies, so a container killed by a failing LIVENESS probe reports a
 # clean deploy and then crashloops. Must exceed a probe's initialDelaySeconds +
 # failureThreshold x periodSeconds; the slowest in the repo is ~35s. Paid ONCE per play.
-k8s_rollout_stabilise_seconds: 120
+k8s_rollout_stabilise_seconds: 60
 
 # How many k8s roles deploy.yml applies before draining their rollouts (tasks/k8s_batch.yml).
 # THIS IS A CONCURRENCY LIMIT ON ROLLOUTS, NOT ON WATCHING THEM. Roles carry no inline
