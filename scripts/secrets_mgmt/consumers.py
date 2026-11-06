@@ -37,9 +37,9 @@ from deployer_lib.deploy_cross_role import k8s_lookup_map
 # HERE, with its host pair, not to the test.
 CROSS_HOST_PUSH_TOKENS = frozenset(
     {
-        # daniel-box timer (setup/render_records, renders /etc/render-records/config.env). The
-        # pushing role runs only from initial_setup.yml and has no deploy tag, so no
-        # `--deploy --tags` reaches it.
+        # No role pushes with it any more. It leaves with the key, in the sops commit R4's
+        # *render_records* section lists, because the census fails on an auto-tier token
+        # with no consumer.
         "render_records_push_token",
     }
 )

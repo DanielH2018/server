@@ -248,12 +248,6 @@ def _eval(
         case ast.Call(func=ast.Attribute(attr="dirname"), args=[arg]):
             value = _as_path(_eval(arg, path, env))
             return None if value is None else value.parent
-        case ast.Call(
-            func=ast.Attribute(value=ast.Attribute(attr="environ"), attr="get"),
-            args=[_, default],
-        ):
-            # `os.environ.get("DEPLOYER_DIR", "/opt/gitops-deploy")`: the host runs the default.
-            return _eval(default, path, env)
         case ast.Call(func=ast.Attribute(attr="abspath" | "realpath"), args=[arg]):
             return _as_path(_eval(arg, path, env))
         case ast.Call(func=ast.Attribute(value=inner, attr="resolve")):
@@ -584,7 +578,6 @@ def runtime_import(path: Path, dirs: list[Path]) -> tuple[bool, str]:
     env = {
         k: v for k, v in os.environ.items() if k not in {"VIRTUAL_ENV", "PYTHONPATH"}
     }
-    env |= role_installs.staged_overrides()
     env["PYTHONPATH"] = os.pathsep.join(str(d) for d in dirs)
     done = subprocess.run(
         [sys.executable, "-S", "-P", "-c", code, str(path)],

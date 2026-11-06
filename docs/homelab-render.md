@@ -847,15 +847,16 @@ The shadow pair is **operator-only**. Its Ansible half decrypts SOPS and escalat
 `become`, so it runs on daniel-box as `ubuntu`, from a clean worktree of the operator's
 checkout at a merged master SHA X. Both halves then read the same commit. `deploy.sh
 --dry-run` renders the working tree, which must be clean. Ansible refuses non-blocking stdio,
-so the dry run redirects all three streams.
+so the dry run redirects all three streams. `deploy.sh` exits 5 on a Flux-owned tag, and every
+k8s entry on daniel-box carries `owner`, so the Ansible half has no tag to run until a role
+is handed back.
 
 ```bash
 # Operator-only: as ubuntu, in a clean worktree of the operator's checkout at master SHA X.
 mkdir -p /var/tmp/homelab-shadow/X
 uv run python scripts/renderer/shadow_diff.py stubs \
   --out /var/tmp/homelab-shadow/X/stubs.yml
-uv run python scripts/deploy_tools/render_targets.py daniel-box
-# Pass the comma list the line above printed as <tags>.
+# <tags> is a comma list of the k8s tags Ansible still owns.
 ./scripts/deploy.sh --dry-run --skip-staleness-check --tags "<tags>" \
   -e @/var/tmp/homelab-shadow/X/stubs.yml \
   -e manifests_shadow_dir=/var/tmp/homelab-shadow/X/ansible \

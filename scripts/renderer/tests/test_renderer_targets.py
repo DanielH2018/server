@@ -1,4 +1,4 @@
-"""`targets.render_targets` reads no task file, and lists what the task-reading predicate lists.
+"""`targets.render_targets` lists what a role has to render, and holds its named members.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_targets.py
 """
@@ -7,10 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from deploy_tools.render_targets import includes_manifests
 from lib.ansible_inventory import K8S_HOST
-from lib.repo_paths import HOST_VARS, K8S_ROLES
-from lib.render_guard import containers_entries, entry_platform
 from renderer.renderer_lib.targets import render_targets, renders
 
 # traefik-crds is the member only a vendored manifest admits.
@@ -30,33 +27,10 @@ def _file(roles: Path, rel: str) -> None:
     path.write_text("---\n")
 
 
-def _old_set(host_vars: Path, roles: Path) -> set[str]:
-    return {
-        entry["name"]
-        for entry in containers_entries(host_vars / "box.yml")
-        if entry_platform(entry) == "k8s" and includes_manifests(roles / entry["name"])
-    }
-
-
-def test_the_old_and_new_predicates_agree_on_the_tree():
-    """A role with no `tasks/` renders, and the old predicate cannot see it."""
-    old = {
-        entry["name"]
-        for entry in containers_entries(HOST_VARS / f"{K8S_HOST}.yml")
-        if entry_platform(entry) == "k8s"
-        and includes_manifests(K8S_ROLES / entry["name"])
-    }
-    new = {
-        tag for tag in render_targets(K8S_HOST) if (K8S_ROLES / tag / "tasks").is_dir()
-    }
-    assert new == old
-
-
-def test_a_role_with_nothing_to_render_is_left_out_of_both(tmp_path):
+def test_a_role_with_nothing_to_render_is_left_out(tmp_path):
     host_vars, roles = _tree(tmp_path, "  - name: empty\n    platform: k8s\n")
     _file(roles, "empty/defaults/main.yml")
     assert render_targets("box", host_vars, roles) == []
-    assert _old_set(host_vars, roles) == set()
 
 
 @pytest.mark.parametrize(

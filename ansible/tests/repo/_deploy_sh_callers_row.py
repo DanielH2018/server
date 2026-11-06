@@ -1,10 +1,10 @@
-"""The census row that every tracked caller of `deploy.sh` is in D2's entry-point table.
+"""The census row that every tracked caller of `deploy.sh` says why no Flux tag reaches it.
 
 Target slice D2's PR D2.1b (docs/target-architecture/deploy/d2-first-leaf.md, *Risks*, *An
 entry point outside the census*). `deploy.sh` refuses a whole `--tags` list with exit 5 when
 one tag is applied by Flux, so each caller has to say what it does with such a tag. The row
 sits in its own module because `test_census_rows_text.py`, which imports it into `ROWS`, is
-near the cap for a test module.
+near the cap for a test module. `table_rows` reads D2's entry-point table for the owner census.
 
 `secret_rotation.py --deploy` has a row in that table but no entry here.
 `rotation_tools.run_deploy` runs `ansible-playbook ansible/deploy.yml` itself, never the
@@ -34,13 +34,6 @@ _NOT_TESTS = (":(exclude)*/tests/*", ":(exclude)ansible/tests/*")
 PLAN = "docs/target-architecture/deploy/d2-first-leaf.md"
 TABLE_HEADING = "### What each entry point does with a tag that is not Ansible-owned"
 
-# Each caller, mapped to the first cell of its row in `PLAN`'s entry-point table, as written
-# there. The row says what the caller does with a flux-owned tag, which `deploy.sh` refuses
-# with exit 5 for the whole list. `unlisted_rows` holds each cell to the table.
-DEPLOY_SH_ENTRY_POINTS = {
-    # It runs deploy.sh over the list that row's CLI prints.
-    "ansible/roles/setup/render_records/files/render_records.py": "`render_targets.py` CLI",
-}
 DEPLOY_SH_EXEMPT = {
     "ansible/bring-up.sh": (
         "runs a full deploy with no --tags, so no tag reaches the refusal; the play's "
@@ -64,16 +57,6 @@ def table_rows(text: str) -> set[str]:
     }
 
 
-def unlisted_rows(entry_points: dict[str, str], text: str) -> list[str]:
-    """Each caller whose mapped cell is no row of the table in `text`."""
-    rows = table_rows(text)
-    return [
-        f"{rel} maps to {cell}, which is no row of {PLAN}'s entry-point table"
-        for rel, cell in sorted(entry_points.items())
-        if cell not in rows
-    ]
-
-
 def _deploy_sh_candidates() -> list[str]:
     return tracked("*.py", *_SHELL_FILES, *_KEY_FILES, *_NOT_TESTS)
 
@@ -90,20 +73,17 @@ def _deploy_sh_runs(subject: Subject) -> int:
 
 
 def _unlisted_deploy_sh_caller(subject: Subject) -> list[str]:
-    if not _deploy_sh_runs(subject) or subject.rel in DEPLOY_SH_ENTRY_POINTS:
+    if not _deploy_sh_runs(subject):
         return []
-    return ["runs deploy.sh and is in no row of D2's entry-point table"]
+    return ["runs deploy.sh and is not exempted with a reason no tag reaches it"]
 
 
 DEPLOY_SH_CALLERS = Census(
     name="deploy-sh-callers-are-in-the-entry-point-table",
     reason=(
         "`deploy.sh` refuses a whole --tags list with exit 5 when one tag is applied by "
-        "Flux, so a caller nobody listed fails outright the day a tag it passes moves to "
-        "Flux, and nobody decided what it should do instead. Add the caller to "
-        "the entry-point table in docs/target-architecture/deploy/d2-first-leaf.md, say "
-        "there what it does with such a tag, and map it in `DEPLOY_SH_ENTRY_POINTS`; or "
-        "exempt it in `DEPLOY_SH_EXEMPT` with the reason no tag reaches it."
+        "Flux, so a caller nobody listed fails outright on any tag Flux applies. Exempt "
+        "it in `DEPLOY_SH_EXEMPT` with the reason no tag reaches it."
     ),
     files=_deploy_sh_candidates,
     offence=_unlisted_deploy_sh_caller,
@@ -125,16 +105,12 @@ DEPLOY_SH_CALLERS = Census(
     ),
     green=(
         Subject(
-            "ansible/roles/setup/render_records/files/render_records.py",
-            'argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]\n',
-        ),
-        Subject(
             "scripts/hint.py",
             "print('redeploy with `./scripts/deploy.sh --tags %s`' % tag)\n",
         ),
         Subject("scripts/hint.sh", '  echo "then run ./scripts/deploy.sh"\n'),
     ),
-    min_matches=len(DEPLOY_SH_ENTRY_POINTS) + len(DEPLOY_SH_EXEMPT),
-    must_find=frozenset(DEPLOY_SH_ENTRY_POINTS) | frozenset(DEPLOY_SH_EXEMPT),
+    min_matches=len(DEPLOY_SH_EXEMPT),
+    must_find=frozenset(DEPLOY_SH_EXEMPT),
     allow=DEPLOY_SH_EXEMPT,
 )

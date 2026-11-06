@@ -710,27 +710,6 @@ optimize_pi_host: daniel-pi
 # against group_vars + host_vars only, and a name it cannot resolve reads as "every host", which
 # is an over-broad verdict.
 ops_cron_host: daniel-box
-# The one host that writes k8s render records (roles/setup/render_records). It must be
-# the host whose primary checkout the GitOps deployer fetches.
-render_records_host: daniel-box
-# The role's defaults pin the producer absent whatever this says (`render_records_state` in
-# roles/setup/render_records/defaults/main.yml, D5's disarm PR), so true here arms nothing: since
-# D5 step 29 every k8s service is flux-owned and the producer would have no service to render.
-# R4 deletes the role. False still runs the role's absent arm on render_records_host, which
-# stops the timer and removes the units, the worktree and the role's directories. To move the
-# producer, apply false on the old host first, then change render_records_host.
-#
-# Re-arming, by restoring the derivation from this key, presupposes that every host write in a
-# role this renders is guarded on `not k8s_dry_run | bool`; without that guard an hourly dry run
-# would install that tree's host scripts, crons and node-staged modules ahead of their landing.
-render_records_enabled: true
-# The producer runs hourly at this minute. The interval below covers the same cadence.
-render_records_minute: 17
-# The render-records push monitor's interval. One hourly period, plus the ~8-minute render
-# (8m16s for 58 services), plus one 40-minute restart of a run that deferred on a
-# pending CI walk, rounded up. A shorter one flaps on an ordinary deferral; a longer one leaves
-# a stopped producer unread for longer than the records it last wrote stay useful.
-render_records_push_interval_s: 7200
 # ── weekly reboot ──────────────────────────────────────────────────────────────────────────
 # When every host in the play restarts itself. The host-maintenance component renders
 # `homelab-reboot.timer` from it (hosts/components/host-maintenance/units/), observability
