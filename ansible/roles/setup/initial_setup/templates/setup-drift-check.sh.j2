@@ -14,12 +14,11 @@
 # WHAT THIS EXISTS FOR (2026-08-29 review M-10). The setup plane is deployed only by a manual
 # `initial_setup.yml`; nothing converges it, so a host can run an old render of a script or an
 # old copy of deployed code indefinitely. Every host that renders setup templates needs a reader
-# of that drift, and this script is that reader. manifest-prune-check.sh reads the same drift on
-# k3s_server_hosts only, while daniel-server renders the entire UPS shutdown chain
-# (roles/nut_host: upsmon.conf, nut.conf, the secondary watchdog). Live on 2026-08-29:
+# of that drift, and setup_drift_check_hosts names those hosts. On 2026-08-29 the only reader,
+# manifest-prune-check.sh, ran on k3s_server_hosts alone, while daniel-server renders the entire
+# UPS shutdown chain (roles/nut_host: upsmon.conf, nut.conf, the secondary watchdog). That day
 # daniel-server had no /var/lib/homelab/setup-render-manifest.d at all, and its
-# /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28. daniel-box runs
-# this reader too, so it keeps a detector when its manifest-prune-check is removed.
+# /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28.
 #
 # The two drift arms are NOT reimplemented here — they are sourced from setup-drift-lib.sh, the
 # same library manifest-prune-check.sh sources. Two copies of a drift check are free to drift
