@@ -29,7 +29,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
@@ -50,6 +50,7 @@ _IMPORT_KEYS = (
     "include_tasks",
 )
 SHIPPED_DIRS = ("templates", "files")
+_UNREADABLE_VAR = "import_var_holding_jinja_text"
 
 # A YAML date loads as a `date`, which plain `json.dumps` refuses.
 task_text = functools.partial(json.dumps, default=str, skipkeys=True)
@@ -166,7 +167,7 @@ def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]
 
 
 def task_gates_shipping_owner_file(
-    role: str, path: str, roles_dir: Path, may_render
+    role: str, path: str, roles_dir: Path, may_render: Callable[[dict, str], bool]
 ) -> list[tuple] | None:
     """Every `when:` chain on a task of `role` that names `path`, a file another role owns.
 
@@ -220,7 +221,9 @@ def _owner_file_names(path: str, roles_dir: Path) -> set[str]:
     return names
 
 
-def _owner_renders(path: str, roles_dir: Path, may_render) -> dict[str, list[tuple]]:
+def _owner_renders(
+    path: str, roles_dir: Path, may_render: Callable[[dict, str], bool]
+) -> dict[str, list[tuple]]:
     """Each task file of `path`'s owner that may render it -> the chain on each such render.
 
     Empty for a path outside a role's `templates/`. `check_timer.yml` names its pair as
@@ -245,8 +248,8 @@ def _owner_renders(path: str, roles_dir: Path, may_render) -> dict[str, list[tup
 def _with_import_vars(gate: object, import_vars: object) -> object:
     """`gate` with each import var it reads replaced by that var's value, for `eval`.
 
-    A var this cannot express keeps its name, which resolves to nothing, so the gate reads as
-    unknown and the host stays reached.
+    A var this cannot express becomes a name no vars file defines, so the gate reads as unknown
+    and the host stays reached.
     """
     if isinstance(gate, list):
         return [_with_import_vars(g, import_vars) for g in gate]
@@ -255,19 +258,19 @@ def _with_import_vars(gate: object, import_vars: object) -> object:
     values = {k: _as_expression(v) for k, v in import_vars.items()}
     return re.sub(
         r"\b\w+\b",
-        lambda m: f"({values[m[0]]})" if values.get(m[0]) else m[0],
+        lambda m: f"({values[m[0]]})" if m[0] in values else m[0],
         gate,
     )
 
 
-def _as_expression(value: object) -> str | None:
-    """A var's value as a Python expression, or None when part of it is Jinja text."""
+def _as_expression(value: object) -> str:
+    """A var's value as a Python expression, or `_UNREADABLE_VAR` if part of it is Jinja text."""
     if not isinstance(value, str):
         return repr(value)
     whole = re.fullmatch(r"\s*{{(.*)}}\s*", value, re.DOTALL)
     if whole and "{{" not in whole[1]:
         return whole[1].strip()
-    return None if "{{" in value or "{%" in value else repr(value)
+    return _UNREADABLE_VAR if "{{" in value or "{%" in value else repr(value)
 
 
 def _ships_repo_path(task: dict, repo_path: str) -> bool:

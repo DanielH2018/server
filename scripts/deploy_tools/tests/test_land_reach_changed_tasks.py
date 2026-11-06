@@ -256,7 +256,10 @@ def test_a_check_timer_task_file_change_keeps_the_teardown_hosts():
 )
 def test_an_owner_render_is_read_with_the_imports_vars(tmp_path, state, hosts):
     (tmp_path / "initial_setup.yml").write_text("- hosts: x\n  roles: [demo]\n")
-    (tmp_path / "all.yml").write_text("on_list: [daniel-server]\nstate_var: absent\n")
+    # A group var of the gate's own name: an import var read as unknown must not fall back to it.
+    (tmp_path / "all.yml").write_text(
+        "on_list: [daniel-server]\nstate_var: absent\nshared_state: absent\n"
+    )
     (tmp_path / "host_vars").mkdir()
     for path, tasks in (
         (
