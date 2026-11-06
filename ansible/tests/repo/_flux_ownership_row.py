@@ -196,25 +196,30 @@ K8S_ENTRIES_ARE_FLUX_OWNED = Census(
 
 
 class ReachSubject(Subject):
-    """One directory under `roles/k8s/`, and whether an entry or another role reaches it."""
+    """One directory under `roles/k8s/`, with the entry names and caller map it is judged by.
 
-    def __init__(self, role: str, reached: bool):
+    The subject carries those inputs, not a verdict, so a fixture exercises `_unreached`'s own
+    reachability logic.
+    """
+
+    def __init__(self, role: str, named: set[str], callers: dict[str, set[str]]):
         super().__init__(_K8S + role, text="")
-        self.reached = reached
+        self.role = role
+        self.named = named
+        self.callers = callers
 
 
 def _reach_subjects() -> list[ReachSubject]:
     entries = k8s_entries()
     named = set(entries) | {e["role"] for e in entries.values() if e.get("role")}
     callers = role_callers()
-    return [
-        ReachSubject(d.name, d.name in named or bool(callers.get(d.name)))
-        for d in role_dirs()
-    ]
+    return [ReachSubject(d.name, named, callers) for d in role_dirs()]
 
 
 def _unreached(subject: Subject) -> list[str]:
-    if isinstance(subject, ReachSubject) and subject.reached:
+    if isinstance(subject, ReachSubject) and (
+        subject.role in subject.named or subject.callers.get(subject.role)
+    ):
         return []
     return ["no containers_list entry names it and no role includes it"]
 
@@ -228,8 +233,12 @@ K8S_ROLES_ARE_REACHABLE = Census(
     ),
     files=_reach_subjects,
     offence=_unreached,
-    red=(ReachSubject("newsvc", False),),
-    green=(ReachSubject("newsvc", True),),
+    # Red: another entry and another role's caller exist, but nothing reaches `newsvc`.
+    red=(ReachSubject("newsvc", {"sonarr"}, {"manifests": {"sonarr"}}),),
+    green=(
+        ReachSubject("newsvc", {"newsvc"}, {}),
+        ReachSubject("newsvc", set(), {"newsvc": {"sonarr"}}),
+    ),
     # 66 entries and 6 shared roles when the row landed.
     min_matches=72,
     must_find=frozenset({_K8S + "bento-pdf", _K8S + "manifests"}),
