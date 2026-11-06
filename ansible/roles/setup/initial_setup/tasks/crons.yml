@@ -19,11 +19,9 @@
   become: true
 
 - name: Deploy the shared setup-plane drift arms
-  # `always` for the same reason as the host-check library above: it is sourced by scripts rendered
-  # under other roles' tags (manifest-prune-check.sh under the k3s role's, setup-drift-check.sh
-  # under this one's), so any tag selecting a consumer must also select this. Both consumers
-  # source it with a `|| exit 1` guard, so a host that misses it fails its cron loudly and drops
-  # the heartbeat rather than reporting a green with two arms silently absent.
+  # `always` so that any tag selecting its one consumer, setup-drift-check.sh, also selects this.
+  # The consumer sources it with a `|| exit 1` guard, so a host that misses it fails its cron
+  # loudly and drops the heartbeat rather than reporting a green with two arms silently absent.
   tags: [always]
   ansible.builtin.copy:
     src: setup-drift-lib.sh
@@ -450,7 +448,7 @@
   tags: [crons, setup_drift]
   # The way out. A .prom file left behind keeps exporting its last run, so HostCheckOverdue fires
   # about 25 hours later and never clears, and a fragment left behind can read as a stale render
-  # to manifest-prune-check.
+  # if the host rejoins the list.
   when: inventory_hostname not in setup_drift_check_hosts
   ansible.builtin.file:
     path: "{{ item }}"
