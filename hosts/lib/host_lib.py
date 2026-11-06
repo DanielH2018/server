@@ -2,7 +2,7 @@
 """Shared I/O-shell helpers for the host-run scripts.
 
 Used by gitops_deploy.py, renovate_notify.py, janitorr_health.py, configarr_health.py,
-longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py,
+longhorn_backup_health_logic.py, longhorn_reap_lib/logic.py, live_drift_check.py,
 the triage poller and runner, deploy_ui.py, the fake-remux scripts and secret rotation's
 rotation_tools.py. Each runs via
 ``uv run --no-project --python <pin>`` (host_python_version in
