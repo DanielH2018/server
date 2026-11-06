@@ -19,8 +19,9 @@ whose root Kustomization is empty, so this deployer and Ansible still deploy eve
 [The Flux deploy plane](flux-deploy-plane.md) has what it runs and what it reports.
 
 Each k8s role declares its own `k8s_autodeploy` stance
-(`ansible/roles/k8s/<role>/defaults/main.yml`); `ansible/filter_plugins/k8s_autodeploy.py`
-collects the ones declaring `false` into the denylist above.
+(`ansible/roles/k8s/<role>/defaults/main.yml`), which says whether Renovate may automerge an
+image bump. `scripts/lib/k8s_roles.py` collects the ones declaring `false` into the denylist that
+`renovate.json`'s no-automerge rule and the Renovate lander read.
 
 <!-- Generated from k8s_autodeploy_counts.py, which reads every role's own declaration; edit
      the role's defaults/main.yml, not this table. -->
@@ -736,12 +737,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       ran. The pre-apply Longhorn snapshot IS taken, because `k8s/manifests` takes it on every
       apply of a claim-declaring service, so a hand revert stays available.
   - **The deploy plane is narrowed before it is applied**, by `deploy_narrow.plan`; *A deploy-plane
-    change is narrowed before it is applied* above has the three outcomes. **The narrowed list is
-    not filtered through `K8S_AUTODEPLOY_DENYLIST`.** The denylist gates promotion into the k8s
-    auto-deploy machinery (snapshot, rollback), and the broad plane has none of it, running the
-    plain playbook forward-only the way an operator's `deploy.sh` does. The `# DECIDED:` on
-    `deploy_narrow.denylisted_in` is the long form, and the journal names the denied tags a
-    narrowed apply includes. The `# DECIDED:` at the fallback in `deploy_narrow.py` says why doubt
+    change is narrowed before it is applied* above has the three outcomes. The `# DECIDED:` at the fallback in `deploy_narrow.py` says why doubt
     defers the plane rather than running the whole play (#4333).
   - The narrowing reads the k8s role-caller graph from the WORKING TREE, which is still on `local`
     at that point. A range that adds a caller of a shared role reads one caller short, and a shared
@@ -908,85 +904,9 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   eligibility, **diff-shape first, identity second**. Gating on the service name alone would be
   unsafe, because `role_of` matches the WHOLE role directory and a name-only allowlist would
   auto-deploy ConfigMap, `tasks/` and template pushes, none of which carry Renovate's soak. A
-  service qualifies only when the feature is enabled, it is not in
-  `gitops_deploy_k8s_autodeploy_denylist`, the pilot scope (if set) names it, the only path the
+  service qualified only when it was not on the denylist, the only path the
   push touched under its role is `defaults/main.yml`, and every changed line in that file assigns
   an `*_image:` var. Everything else stays in `ChangeSet.k8s` and defers.
-
-    `filter_plugins/k8s_autodeploy.py` derives the denylist from each role's own
-    `k8s_autodeploy` declaration in `roles/k8s/<name>/defaults/main.yml`, where the reason sits
-    beside the role it describes. The filter fails closed: a role that declares nothing raises at
-    template time, because absence from the denylist means auto-deployable. To stop a role
-    auto-deploying, set `k8s_autodeploy: false` in its defaults. No central list exists.
-
-    **That edit alone does not reach the host.** It lands under `roles/k8s/<role>/`, so the
-    deployer routes it to `ChangeSet.k8s`, and its defer-and-alert names a `deploy.yml --tags
-    <svc>` run. `deploy.yml` runs no setup role, so it never re-renders
-    `/etc/gitops-deploy/config.env`, and the host's denylist stays the old one. Run
-    `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` to push the change.
-    This is the silent-no-op class that `broad_remediation()`'s docstring warns about.
-
-    **Adding a NEW role that declares `k8s_autodeploy: false` is the same edit site with the same
-    consequence.** A stale denylist disarms image-pin auto-deploy for EVERY service, because the
-    disarm compares the whole set (`game-stats-lib` left the host disarmed for six hours). The
-    `new-k8s-service` skill carries the re-render as a step.
-
-    The trigger for the re-render is asymmetric with what the denylist reads. The denylist
-    derives from every role under `roles/k8s/`, while the only changed-path match that re-renders
-    `config.env` is `_BROAD_SETUP_PREFIXES` (`ansible/roles/setup/`). A change to the derived
-    denylist therefore matches no prefix that re-renders it.
-
-    `deploy_phases.reconcile_denylist` closes that gap without touching the prefix sets. It
-    states the invariant locally: `config.env` must agree with the declarations at the
-    checkout's own HEAD. When it does not, the reconcile runs `initial_setup.yml --tags
-    gitops_deploy` itself. The render reads the working tree, so it can only produce HEAD's list,
-    and the heal lands on the tick AFTER the ff-merge, which is normally an idle one. Six
-    properties matter before changing it:
-
-    - **It gates on the FILE-level enable flag**, not the one the fail-closed disarm leaves
-      behind. `gitops_deploy.py` flips `K8S_AUTODEPLOY_ENABLED` to False when the rendered
-      denylist is empty, so a `config.env` that lost its denylist line would disarm the reconcile
-      whose re-render is the repair. `Config` carries both values off one `config.env` key, the
-      parsed one as `k8s_autodeploy_enabled_in_file` and the post-disarm one as
-      `k8s_autodeploy_enabled`. The file says off: skip. The file says on with no denylist:
-      re-render. The file says on with a denylist: compare.
-      `_promote_k8s_auto_deploys` still reads the post-disarm value, so the damaged state heals
-      without promoting anything.
-    - **It passes `gitops_deploy_kick_after_change=false`.** Rendering `config.env` notifies this
-      role's `Run gitops-deploy once` handler, whose `systemctl start` blocks on the activation
-      the render runs under, so the heal would self-deadlock until its timeout. ENFORCED by
-      `ansible/tests/deploy/test_denylist_render_suppresses_the_kick.py`.
-    - **`denylist_rendered_sha` guards it once per checkout SHA.** That bounds the cost (the
-      per-role `git show` reads are skipped on idle ticks) and the retry (a mismatch a re-render
-      cannot fix renders once, not every ten minutes). The marker is written BEFORE the run, so a
-      SIGTERM mid-play cannot loop it.
-    - **A render ENDS that tick.** The in-memory config still holds the list the render just
-      disproved. Every arm of this unit is also non-stacking by construction (the unit template
-      sizes `TimeoutStartSec` as `max(broad, k8s + rollback)`), so a render that ran on to a k8s
-      deploy would be the first arm to add its budget to a sibling's and could be SIGTERMed
-      mid-rollback. The next tick reads the fresh config.
-    - **A dirty tree is never rendered from**, because the filter reads the working tree and would
-      bake a list nobody pushed.
-    - **A failed render writes no `hold_sha`.** It rewrites only this deployer's own
-      `config.env`, so a failure leaves the old file, which the tick already tolerates with
-      auto-deploy disarmed by the origin comparison below. Parking every unrelated deploy behind a
-      config render would be a larger outage than the one it heals.
-
-    **The origin-side comparison stays the fail-safe** for the window where origin is ahead of the
-    checkout. Each tick, `k8s_declarations_at(origin)` reads every role's `defaults/main.yml` at the
-    SHA the tick already pinned, and `declared_denylist()` parses it with a stdlib regex, because
-    the unit runs under `uv run --no-project` and cannot import `yaml` or the filter plugin. If the
-    result disagrees with `K8S_AUTODEPLOY_DENYLIST`, or cannot be read, k8s auto-deploy is disarmed
-    for that tick. The disarm is stateless and self-clears when the config is re-rendered, and only
-    the page is throttled (the `stale_denylist` slot). Both mismatch directions usually mean config
-    is behind origin, so the page leads with the re-render.
-
-    The regex is biased toward denied: unanimity is required across every match, an absent or
-    unparseable declaration counts as denied, and a shared role skips the check. A parsing bug
-    therefore produces a spurious disarm rather than a permitted deploy. The one gap is a file that
-    is invalid YAML overall, which the regex can read a value out of and the filter would raise on.
-    `ansible/tests/deploy/test_denylist_parsers_agree.py` runs the filter against the live tree and
-    fails on that shape, and `REQUIRE_CI` refuses to promote a red tip.
   - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
     `roles/k8s/manifests/tasks/drain.yml` runs `rollout status --timeout`, and
     `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
@@ -1062,14 +982,6 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     mounts the same RWO claim, and whether that mount succeeds, hangs or fails against a
     maintenance-mode attachment is untested. Treat a stuck maintenance-mode attach as blocking the
     service's next deploy until cleared by hand.
-  - **The pilot list is empty, so the denylist alone decides.** An empty
-    `gitops_deploy_k8s_autodeploy_pilot` admits every non-denylisted service rather than none.
-    That is the opposite of the empty-denylist guard, which disarms the feature. The
-    `ansible/tests/test_k8s_autodeploy_*.py` family enforces the three role shapes that must never
-    be eligible: a rendered Deployment whose name is not in the gated set (a role gating a second
-    Deployment by name via `manifests_extra_rollouts` is fine; a name that cannot be resolved
-    statically counts as ungated), `manifests_rollout: ''`, and a gated Deployment with no
-    `readinessProbe`.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`.** Without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
 
@@ -1374,29 +1286,6 @@ alert, `deploy_cli.py tags` and `land_tags.py` all prescribe the working sequenc
 `deploy.yml` run, while a plain ff-merge clears the divergence and every repo-side check reads
 green. `broad_remediation()`'s docstring says that naming `deploy.yml` there is a silent no-op
 that leaves the change unapplied.
-
-The remediation the deployer prescribes is decided by the path you edited, not by what the edit
-affects. The k8s auto-deploy denylist derives from each role's `k8s_autodeploy` declaration
-instead of a CSV in this role's defaults. The value and the rendered `config.env` line are the
-same, and the edit site differs:
-
-| edit site | routes to | alert names | re-renders config.env? |
-|---|---|---|---|
-| `roles/setup/gitops_deploy/defaults/main.yml` (old CSV) | `_BROAD_SETUP_PREFIXES` | `initial_setup.yml --tags <role>` | yes |
-| `roles/k8s/<role>/defaults/main.yml` (declaration) | `ChangeSet.k8s` | `deploy.yml --tags <svc>` | **no** |
-
-So denying a role from auto-deploy leaves it auto-deployable on the host, and the alert names
-the command that cannot fix it. That is the worst direction for a failure, because it hits a
-safety-tightening edit. Before moving any value that lands in a host config file, check which
-plane `role_of` puts its new path on and what `broad_remediation()` says for that plane.
-
-**A set difference says what diverged, never why.** The stale-denylist alert does not infer its
-remediation from the direction of the difference. `removed` (in config, not denied at origin) has
-two causes with the identical signature and opposite meanings: an operator who rendered locally
-before pushing, and a role promoted off the denylist at origin. On a pull-based host origin is the
-source of truth, so the re-render leads in both directions and the push case is a secondary check.
-The direction logic lives in `deploy_phases._promote_k8s_auto_deploys`, which
-`tests/test_gitops_deploy_phases.py` covers.
 
 `test_gitops_deploy_subprocess.py` pins `deploy_k8s()`'s argv. `test_gitops_deploy_main_branches.py`
 runs the failed-rollout branch against the scripted checkout and reads the rollback argv back. The

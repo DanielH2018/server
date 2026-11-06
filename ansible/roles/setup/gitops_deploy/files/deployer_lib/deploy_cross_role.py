@@ -138,9 +138,7 @@ K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {
 # applies or records each as it would its own change: `gitops_deploy` through
 # `initial_setup.yml`, and `k3s` as a `manual_plane` line, since only `k3s-bringup.yml` runs it.
 # `ansible/tests/setup/test_setup_cross_role_reads.py` holds it to the tree.
-SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {
-    "ansible/filter_plugins/k8s_autodeploy.py": frozenset({"gitops_deploy"}),
-}
+SETUP_ROLES_CALLING_FILTER_PLUGINS: dict[str, frozenset[str]] = {}
 
 
 # This module, by its repo path, and the names of the tables above.

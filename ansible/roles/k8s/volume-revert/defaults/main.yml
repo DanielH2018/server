@@ -16,10 +16,10 @@ volume_revert_poll_interval: 2
 # happens.
 volume_revert_api_timeout: 30
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # This role deploys no workload of its own: it reverts another role's volume during a failed
 # deploy's rollback, renders no manifest for `rollout status` to gate, and pins no `_image:` var
-# for Renovate to bump. Declared rather than added to the filter plugin's SHARED_ROLES, because
+# for Renovate to bump. Declared rather than added to `lib.k8s_roles.SHARED_ROLES`, because
 # it carries a defaults/main.yml — the same choice longhorn-api and
 # volume-snapshot make for the same reason.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]

@@ -1,9 +1,8 @@
-"""Unit tests for the filter that derives the auto-deploy denylist from role declarations.
+"""The derivation of the `k8s_autodeploy` denylist from each role's declaration.
 
-The filter is the live safety boundary: whatever it returns becomes
-K8S_AUTODEPLOY_DENYLIST, and a role absent from that list is auto-deployable. So every
-test here that asserts a raise is asserting that a broken repo state fails the deploy
-instead of silently widening what may be deployed unattended.
+renovate.json's no-automerge rule and the Renovate lander read this list, and a role absent
+from it is eligible for automerge. So every test here that asserts a raise is asserting that a
+broken repo state refuses a landing instead of widening what lands unattended.
 """
 
 import os
@@ -11,14 +10,8 @@ from pathlib import Path
 
 import pytest
 from lib import yaml_fast
-from ansible.errors import AnsibleFilterError
-
-from k8s_autodeploy import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
-from _helpers import REPO as _REPO
-from _setup_render import render_setup_texts
-
-
-_ANSIBLE = _REPO / "ansible"
+from lib.k8s_roles import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
+from lib.repo_paths import ANSIBLE as _ANSIBLE
 
 
 def _role(tmp_path: Path, name: str, body: str | None) -> Path:
@@ -68,7 +61,7 @@ def test_a_directory_holding_only_pycache_is_not_a_role(tmp_path: Path) -> None:
 
     The fast-forward that retires a role removes its tracked files; a `__pycache__/` left by
     a pytest run in the primary checkout keeps the directory itself alive. Reading that shell
-    as a role would raise, which fails the deployer's `Write deployer config` task.
+    as a role would raise, which refuses every Renovate landing.
     """
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
@@ -83,7 +76,7 @@ def test_a_directory_holding_a_real_file_is_still_a_role(tmp_path: Path) -> None
     """The other half of the pair: only an all-debris directory is skipped.
 
     A role that carries any tracked file still has to declare a stance, so the skip above
-    cannot quietly widen what may auto-deploy.
+    cannot widen what may land unattended.
     """
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
@@ -92,9 +85,7 @@ def test_a_directory_holding_a_real_file_is_still_a_role(tmp_path: Path) -> None
     pycache.mkdir(parents=True)
     (pycache / "check.cpython-312.pyc").write_bytes(b"\x00")
     (undeclared / "files" / "check.py").write_text("x = 1\n")
-    with pytest.raises(
-        AnsibleFilterError, match=r"half-retired.*has no defaults/main\.yml"
-    ):
+    with pytest.raises(ValueError, match=r"half-retired.*has no defaults/main\.yml"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -102,9 +93,7 @@ def test_a_role_with_no_defaults_file_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "undeclared", None)
-    with pytest.raises(
-        AnsibleFilterError, match=r"undeclared.*has no defaults/main\.yml"
-    ):
+    with pytest.raises(ValueError, match=r"undeclared.*has no defaults/main\.yml"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -112,7 +101,7 @@ def test_a_role_not_declaring_the_key_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "silent", "some_other_var: 1\n")
-    with pytest.raises(AnsibleFilterError, match=r"silent.*does not set"):
+    with pytest.raises(ValueError, match=r"silent.*does not set"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -121,7 +110,7 @@ def test_a_non_dict_yaml_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "listy", "- one\n- two\n")
-    with pytest.raises(AnsibleFilterError, match=r"listy.*does not set"):
+    with pytest.raises(ValueError, match=r"listy.*does not set"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -129,7 +118,7 @@ def test_a_non_boolean_declaration_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "stringly", 'k8s_autodeploy: "false"\nk8s_autodeploy_reason: "x"\n')
-    with pytest.raises(AnsibleFilterError, match=r"stringly.*not a boolean"):
+    with pytest.raises(ValueError, match=r"stringly.*not a boolean"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -137,7 +126,7 @@ def test_a_declaration_without_a_reason_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "unreasoned", "k8s_autodeploy: false\n")
-    with pytest.raises(AnsibleFilterError, match=r"unreasoned.*but no"):
+    with pytest.raises(ValueError, match=r"unreasoned.*but no"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -147,7 +136,7 @@ def test_a_whitespace_only_reason_raises(tmp_path: Path) -> None:
     _role(
         tmp_path, "blankreason", 'k8s_autodeploy: false\nk8s_autodeploy_reason: "   "\n'
     )
-    with pytest.raises(AnsibleFilterError, match=r"blankreason.*but no"):
+    with pytest.raises(ValueError, match=r"blankreason.*but no"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -155,7 +144,7 @@ def test_unparseable_yaml_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     _role(tmp_path, "broken", "k8s_autodeploy: false\n  bad: [indent\n")
-    with pytest.raises(AnsibleFilterError, match=r"cannot read.*broken"):
+    with pytest.raises(ValueError, match=r"cannot read.*broken"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -164,7 +153,7 @@ def test_non_utf8_bytes_raise(tmp_path: Path) -> None:
     _role(tmp_path, "denied", _OK)
     role = _role(tmp_path, "badbytes", _OK)
     (role / "defaults" / "main.yml").write_bytes(b"k8s_autodeploy: false\n\xff\xfe\n")
-    with pytest.raises(AnsibleFilterError, match=r"cannot read.*badbytes"):
+    with pytest.raises(ValueError, match=r"cannot read.*badbytes"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -176,7 +165,7 @@ def test_permission_denied_raises(tmp_path: Path) -> None:
     defaults_file = role / "defaults" / "main.yml"
     defaults_file.chmod(0o000)
     try:
-        with pytest.raises(AnsibleFilterError, match=r"cannot read.*locked"):
+        with pytest.raises(ValueError, match=r"cannot read.*locked"):
             k8s_autodeploy_denylist(str(tmp_path))
     finally:
         defaults_file.chmod(0o644)
@@ -187,7 +176,7 @@ def test_a_dangling_symlink_raises(tmp_path: Path) -> None:
     _role(tmp_path, "denied", _OK)
     roles_dir = tmp_path / "roles" / "k8s"
     (roles_dir / "ghost").symlink_to(roles_dir / "nonexistent-target")
-    with pytest.raises(AnsibleFilterError, match=r"ghost.*not a directory.*symlink"):
+    with pytest.raises(ValueError, match=r"ghost.*not a directory.*symlink"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -210,12 +199,12 @@ def test_a_stray_pycache_directory_is_skipped(tmp_path: Path) -> None:
 def test_an_empty_result_raises(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "allowed", _OK_TRUE)
-    with pytest.raises(AnsibleFilterError, match="derived an EMPTY denylist"):
+    with pytest.raises(ValueError, match="derived an EMPTY denylist"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
 def test_a_missing_roles_directory_raises(tmp_path: Path) -> None:
-    with pytest.raises(AnsibleFilterError, match="no such directory"):
+    with pytest.raises(ValueError, match="no such directory"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -224,9 +213,7 @@ def test_a_shared_role_that_does_not_exist_raises(tmp_path: Path) -> None:
     nothing."""
     (tmp_path / "roles" / "k8s").mkdir(parents=True)
     _role(tmp_path, "denied", _OK)
-    with pytest.raises(
-        AnsibleFilterError, match=r"SHARED_ROLES member.*is not a directory"
-    ):
+    with pytest.raises(ValueError, match=r"SHARED_ROLES member.*is not a directory"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -237,7 +224,7 @@ def test_a_shared_role_pinning_an_image_key_raises(tmp_path: Path) -> None:
             "widget_image: alpine:3.24\n" if name == next(iter(SHARED_ROLES)) else None
         )
         _role(tmp_path, name, body)
-    with pytest.raises(AnsibleFilterError, match=r"SHARED_ROLES member.*pins"):
+    with pytest.raises(ValueError, match=r"SHARED_ROLES member.*pins"):
         k8s_autodeploy_denylist(str(tmp_path))
 
 
@@ -325,24 +312,3 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
     # the measured count — enough to catch an accidental bulk flip without needing an edit for
     # every single-role promotion.
     assert len(denied) >= 34
-
-
-def test_the_template_still_consumes_the_derived_variable() -> None:
-    """The filter is only a safety boundary if the rendered config still reads it.
-
-    The derived list goes in as an override: the setup render leaves this default raw, since its
-    filter plugin does not resolve there, and `| join(',')` over that raw string would render
-    its characters comma-joined without an error.
-    """
-    derived = k8s_autodeploy_denylist(str(_ANSIBLE))
-    assert derived, (
-        "the derived denylist is empty, so the check below would prove nothing"
-    )
-    rendered = next(
-        text
-        for role, name, text in render_setup_texts(
-            {"gitops_deploy_k8s_autodeploy_denylist": derived}
-        )
-        if (role, name) == ("gitops_deploy", "config.env.j2")
-    )
-    assert f"K8S_AUTODEPLOY_DENYLIST={','.join(derived)}" in rendered.splitlines()

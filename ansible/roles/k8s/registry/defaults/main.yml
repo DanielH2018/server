@@ -2,7 +2,7 @@
 # Filesystem storage driver (REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY, see deployment.yaml.j2).
 registry_k8s_image: registry:3.1.2@sha256:d4032d4cc323c1731c707931ecada07a53076eac38e3b61ae57533f170f2c6c3
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Dependency edges: this deployer models no intra-tick ordering, and registry is the
 # image-supply path for n8n, n8n-runners, homelab-mcp, ical-proxy, nut, pi-peer-backup and
 # code-server (homelab-mcp pulls with imagePullPolicy: Always — an outage here reaches it even

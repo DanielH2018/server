@@ -5,7 +5,7 @@ The agent's session runs as its own Unix user on a repo-scoped GitHub token that
 repository contents, so it cannot merge. It asks for a landing by starting
 `renovate-agent-land@<n>.service`, which polkit lets that user start and which runs this as the
 operator's user. Every input here is read from GitHub with the operator's token or from the
-deployer's own rendered config. Nothing comes from a file the session can write.
+operator's primary checkout. Nothing comes from a file the session can write.
 
 A PR is landed only when all of these hold:
 
@@ -14,7 +14,7 @@ A PR is landed only when all of these hold:
   A token with pull-request write can retarget a base, so the base is checked too.
 - It is open.
 - Its branch carries no `k8s_autodeploy-false` slug, and no changed path sits under a k8s role
-  the deployer's denylist names. The title is never read, because the session can edit it.
+  the denylist names. The title is never read, because the session can edit it.
 - It changes nothing under `ansible/inventory/`. A pin there, such as `crowdsec_k8s_image` in
   `group_vars/all.yml`, reaches every role that reads it, denylisted ones included, and no path
   check can see which those are. An interactive session lands that class.
@@ -27,9 +27,10 @@ written where the session can read it. Stdlib only, like the rest of the agent.
 Usage: land_renovate_pr.py <pr-number>
 
 Started as `renovate-agent-land@<pr-number>.service`, never by hand. Reads the PR with
-`gh`, the deployer's config at /etc/gitops-deploy/config.env, and the environment
-RENOVATE_AGENT_REPO (default DanielH2018/server) and RENOVATE_AGENT_REPO_DIR (default
-/home/ubuntu/server). Writes the outcome to /var/lib/renovate-agent-land/<pr-number>.verdict.
+`gh`, the denylist from `scripts/dev/k8s_autodeploy_counts.py --denylist` in the checkout, and
+the environment RENOVATE_AGENT_REPO (default DanielH2018/server) and RENOVATE_AGENT_REPO_DIR
+(default /home/ubuntu/server). Writes the outcome to
+/var/lib/renovate-agent-land/<pr-number>.verdict.
 Exit codes: land.sh's own on a landing, 64 for an argument that is not a PR number, 3 for a
 refusal.
 """
@@ -43,13 +44,21 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from agent_toolbox import TOOLS, AgentTools, log
-from host_lib import atomic_write, parse_env_file
+from host_lib import atomic_write
 
 AUTHOR = "app/renovate"
 BASE = "master"
 BRANCH_PREFIX = "renovate/"
 DENIED_SLUG = "k8s_autodeploy-false"
-DEPLOYER_CONFIG = "/etc/gitops-deploy/config.env"
+# `--frozen`: a rewritten uv.lock would dirty the primary checkout, which parks the deployer.
+DENYLIST_ARGV = (
+    "uv",
+    "run",
+    "--frozen",
+    "python",
+    "scripts/dev/k8s_autodeploy_counts.py",
+    "--denylist",
+)
 RESULTS_DIR = "/var/lib/renovate-agent-land"
 # gh returns at most 100 changed files, so a PR at the cap may hide a denied path past it.
 FILE_CAP = 100
@@ -68,6 +77,7 @@ USAGE_ERROR = 64
 _PR_NUMBER = re.compile(r"[1-9][0-9]{0,6}")
 _K8S_ROLE = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _VERDICT = re.compile(r"^VERDICT: .*$", re.MULTILINE)
+_ROLE_LIST = re.compile(r"[a-z0-9_-]+(?:,[a-z0-9_-]+)*")
 
 
 def pr_number(arg: str) -> int | None:
@@ -75,14 +85,16 @@ def pr_number(arg: str) -> int | None:
     return int(arg) if _PR_NUMBER.fullmatch(arg) else None
 
 
-def denied_roles(deployer_env: dict[str, str]) -> frozenset[str] | None:
-    """The k8s roles the deployer's rendered denylist names, or None when it names none.
+def denied_roles(output: str) -> frozenset[str] | None:
+    """The k8s roles `DENYLIST_ARGV` printed, or None when its output holds no list.
 
-    An empty list does not mean "nothing is denied". The deployer disarms auto-deploy on an
-    empty denylist for that reason, so this refuses rather than landing past it.
+    An empty list does not mean "nothing is denied", so a caller refuses rather than landing
+    past it. `AgentTools.run` joins stderr after stdout, and `uv run` writes there, so the
+    list is the first line and nothing else counts: a line of uv's read as role names would
+    drop a denied role.
     """
-    listed = deployer_env.get("K8S_AUTODEPLOY_DENYLIST", "").split(",")
-    return frozenset(role for role in listed if role) or None
+    first = output.split("\n", 1)[0]
+    return frozenset(first.split(",")) if _ROLE_LIST.fullmatch(first) else None
 
 
 def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
@@ -117,7 +129,7 @@ def refusals(pr: dict, denied: frozenset[str]) -> list[str]:
         match = _K8S_ROLE.match(path)
         if match and match.group(1) in denied:
             reasons.append(
-                f"{path} is in {match.group(1)}, which the deployer denylists"
+                f"{path} is in {match.group(1)}, which declares k8s_autodeploy: false"
             )
     return reasons
 
@@ -131,7 +143,6 @@ def verdict_line(output: str) -> str:
 def main(
     argv: list[str],
     tools: AgentTools = TOOLS,
-    deployer_config: str = DEPLOYER_CONFIG,
     results_dir: str = RESULTS_DIR,
 ) -> int:
     """Check PR `argv[1]`, land it if every check passes, and record the outcome.
@@ -159,12 +170,12 @@ def main(
         atomic_write(result, f"REFUSED: {reason}\n")
         return 3
 
-    try:
-        denied = denied_roles(parse_env_file(deployer_config))
-    except OSError as e:
-        return refuse(f"cannot read the deployer's denylist ({e})")
+    rc, out = tools.run(list(DENYLIST_ARGV), cwd=repo_dir)
+    if rc != 0:
+        return refuse(f"k8s_autodeploy_counts.py --denylist exited {rc}")
+    denied = denied_roles(out)
     if denied is None:
-        return refuse("the deployer's denylist is empty")
+        return refuse("k8s_autodeploy_counts.py --denylist printed no list")
     rc, out = tools.run(
         ["gh", "pr", "view", str(number), "--repo", repo, "--json", PR_FIELDS]
     )

@@ -101,6 +101,10 @@ def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
     assert defaults["widget_k8s_uid"] == 101
     assert defaults["widget_k8s_image"] == "ghcr.io/example/widget:1.0.0"
     assert defaults["k8s_autodeploy"] is True
+    text = scaffold.defaults_main(
+        args.name, args.image, args.autodeploy, args.autodeploy_reason, args.uid
+    )
+    assert "Renovate stance" in text and "gitops_deploy" not in text
 
     text = scaffold.deployment_template(args.name, args.strategy, args.priority_class)
     doc = next(

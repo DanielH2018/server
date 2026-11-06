@@ -105,28 +105,6 @@ gitops_deploy_interaction_limit_expiry: six_months
 gitops_deploy_interaction_limit_cron_hour: "6"
 gitops_deploy_interaction_limit_cron_minute: "50"
 
-# k8s auto-deploy — design: docs/gitops-pipeline.md
-#
-# The tick deploys no k8s role since D6.12. The three keys below stay until D6.2a, because the
-# deployer still re-renders the denylist line of config.env that the Renovate lander reads.
-gitops_deploy_k8s_autodeploy_enabled: false
-
-# While non-empty, ONLY these services are eligible — the slice-1 pilot scope.
-gitops_deploy_k8s_autodeploy_pilot: []
-
-# Roles that must never be auto-deployed, derived from each role's own declaration:
-# roles/k8s/<name>/defaults/main.yml sets `k8s_autodeploy` plus a `k8s_autodeploy_reason`
-# giving the mechanism.
-#
-# The filter fails closed: a role that declares nothing, declares a non-boolean, or cannot
-# be parsed raises rather than dropping out of this list. Absence from the denylist means
-# auto-deployable.
-#
-# An empty denylist still disarms the feature in gitops_deploy.py rather than allowing
-# everything — but the filter refuses to render an empty one, so that guard is a backstop
-# rather than a live path.
-gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylist }}"
-
 # Bounds ONE broad-plane apply: `initial_setup.yml --tags <role>` for a setup-plane change.
 # That arm is FORWARD-ONLY, so this is the only bound between a wedged playbook and systemd's
 # TimeoutStartSec SIGTERM — and a SIGTERM lands with no hold written and no alert sent, leaving
@@ -139,11 +117,3 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 # NOT fund a rollback re-run on top, and the arm stays forward-only — the DECIDED marker in
 # deploy_remediation.py carries why.
 gitops_deploy_broad_timeout_s: 1800
-
-# ── self-render kick ──────────────────────────────────────────────────────────────────────────
-# Whether applying this role kicks an immediate `systemctl start gitops-deploy.service`. True for
-# every ordinary apply: it is what makes activation fully IaC on a first install. The deployer's
-# own denylist reconcile passes false, because that apply runs INSIDE the unit the kick would
-# start and the handler would block on the activation already in flight — see
-# `deploy_io.render_gitops_config`.
-gitops_deploy_kick_after_change: true

@@ -11,7 +11,7 @@
 # on every merge to main, and Renovate opens the digest bump.
 texbrain_k8s_image: ghcr.io/danielh2018/texbrain:latest@sha256:c97188d8b271fab5ab611c91bcfa18ba7b4e91f4fac5a484b1821d3f21f75f76
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless: RollingUpdate Deployment, no PVC, readinessProbe on the only Deployment, and
 # the image is digest-pinned rather than a mutable tag.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]

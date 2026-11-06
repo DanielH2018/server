@@ -10,7 +10,7 @@
 # promote workflow's `images` job pushes it to GHCR, and the renderer points this ref there.
 terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_tags.get('terraria', 'latest') }}"
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Two independent reasons: (1) probe-less — the Deployment renders no readinessProbe, so
 # `rollout status` would return the moment the pod reports Running; (2) migrating state —
 # strategy is Recreate and the worlds/config PVC comes from k8s_claims below (hardcoded

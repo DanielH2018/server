@@ -1,7 +1,7 @@
 ---
 zigbee2mqtt_k8s_image: ghcr.io/koenkk/zigbee2mqtt:2.14.3@sha256:fb4a6b0f6868ad1cd6a9996479802b2420e599c3463b62bbff8c8cd9a908f43a
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # DENIED — state coupling, not missing recovery. Deploy mechanics alone would allow it:
 # Recreate + RWO PVC, protected by the zigbee2mqtt-snapshot Job and an operator revert.
 # The volume's state is coupled to something the snapshot cannot capture: the

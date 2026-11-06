@@ -12,9 +12,9 @@ A bare textual check for the string `parents[1]` cannot tell a real bootstrap fr
 this is the *textual-guard-checks-break-on-indirection* class recorded in this repo's own memory.
 Two real modules prove it:
 
-  - `scripts/dev/k8s_autodeploy_counts.py` needs `ansible/filter_plugins` (for
-    `from k8s_autodeploy import ...`) and bootstraps with `parents[2]`, not `parents[1]` -- a
-    `parents[1]` substring check would wrongly flag this file as missing its bootstrap.
+  - `scripts/lib/ansible_jinja_env.py` needs `ansible/filter_plugins` and bootstraps through
+    `FILTER_PLUGINS`, not `parents[1]` -- a `parents[1]` substring check would wrongly flag
+    this file as missing its bootstrap.
   - `scripts/deploy_tools/deploy_tags.py` needs `ansible/roles/setup/gitops_deploy/files`
     (for `from deploy_logic import ...`) via `DEPLOY_LOGIC_DIR`, a module-level constant built
     from `REPO`, which is itself imported from `lib.render_guard` -- so the path arithmetic
@@ -121,7 +121,7 @@ def build_import_index() -> dict[str, set[Path]]:
 
 
 def _resolve_module_file(dotted: str, index: dict[str, set[Path]]) -> Path | None:
-    """The `.py` file a dotted absolute import name (`lib.render_guard`, `k8s_autodeploy`)
+    """The `.py` file a dotted absolute import name (`lib.render_guard`, `toposort`)
     resolves to, given the same directories `sys.path` would need."""
     parts = dotted.split(".")
     dirs = index.get(parts[0])
@@ -399,7 +399,7 @@ def test_the_import_index_is_not_empty():
     index = build_import_index()
     assert "lib" in index and (SCRIPTS in index["lib"]), index.get("lib")
     assert "docs_provenance" in index, index
-    assert "k8s_autodeploy" in index, index
+    assert "toposort" in index, index
 
 
 def test_a_fixture_module_under_tests_is_pytest_only_and_a_library_beside_it_is_not():

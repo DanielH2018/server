@@ -2,11 +2,11 @@
 """Renovate automerges a k8s image bump only for a role the deployer may auto-deploy.
 
 renovate.json automerges minor/patch and digest image bumps under
-`ansible/roles/k8s/**`; the GitOps deployer applies such a bump unattended only for a role
-outside the denylist that `ansible/filter_plugins/k8s_autodeploy.py` derives from each role's
-`k8s_autodeploy` flag. If the two boundaries disagree, Renovate merges a denied role's bump
-unattended, the tick fast-forwards it and applies nothing, and `Release Staleness Drift` pages a
-person for the hand deploy.
+`ansible/roles/k8s/**`, and `promote` applies what merges. A role on the denylist that
+`lib.k8s_roles.k8s_autodeploy_denylist` derives from each role's `k8s_autodeploy` flag must not
+take that path. If the two boundaries disagree, Renovate merges a denied role's bump unattended.
+`k8s_autodeploy_counts.py --denylist` prints the same list for the lander, and the agreement
+tests below hold the two readers to one derivation.
 
 One `automerge: false` rule whose `matchFileNames` is the denylist spelled as paths.
 That list is typed into renovate.json, so this guard is what stops it drifting from the flags:
@@ -45,6 +45,7 @@ from lib import yaml_fast
 
 from _autodeploy import _denylist
 from _helpers import ALL_VARS, REPO
+from dev import k8s_autodeploy_counts
 from _role_census import role_dirs
 
 _RENOVATE = REPO / "renovate.json"
@@ -248,6 +249,45 @@ def test_the_denylist_this_guard_reads_is_not_vacuous() -> None:
     denied = _denylist()
     assert len(denied) >= _DENYLIST_FLOOR, sorted(denied)
     assert _LOAD_BEARING <= denied, sorted(_LOAD_BEARING - denied)
+
+
+def test_the_landers_denylist_output_is_the_list_this_rule_reads(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert k8s_autodeploy_counts.main(["--denylist"]) == 0
+    assert set(capsys.readouterr().out.strip().split(",")) == _denylist()
+
+
+def _fixture_role(ansible: Path, name: str, stance: str) -> None:
+    (ansible / "roles" / "k8s" / name / "defaults").mkdir(parents=True)
+    (ansible / "roles" / "k8s" / name / "defaults" / "main.yml").write_text(
+        f'k8s_autodeploy: {stance}\nk8s_autodeploy_reason: "because"\n'
+    )
+
+
+def test_the_landers_denylist_output_names_a_role_whose_stance_flips(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    (tmp_path / "roles" / "k8s" / "manifests").mkdir(parents=True)
+    _fixture_role(tmp_path, "denied", "false")
+    _fixture_role(tmp_path, "flips", "true")
+    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 0
+    assert capsys.readouterr().out == "denied\n"
+
+    (tmp_path / "roles" / "k8s" / "flips" / "defaults" / "main.yml").write_text(
+        'k8s_autodeploy: false\nk8s_autodeploy_reason: "because"\n'
+    )
+    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 0
+    assert capsys.readouterr().out == "denied,flips\n"
+
+
+def test_the_landers_denylist_output_is_empty_when_the_derivation_raises(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 1
+    assert capsys.readouterr().out == ""
 
 
 def test_the_manual_rule_matches_exactly_the_denied_roles() -> None:

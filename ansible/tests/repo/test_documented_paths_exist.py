@@ -298,8 +298,8 @@ def test_node_resolution_accepts_a_context_relative_citation():
         REPO / "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_phases.py"
     )
     assert node_resolves(
-        "test_deploy_k8s_declarations.py",
-        "test_declared_denylist_collects_roles_declaring_false",
+        "test_deploy_config.py",
+        "test_the_config_is_frozen",
         source,
     )
 
@@ -315,11 +315,11 @@ def test_node_resolution_rejects_a_renamed_test_and_a_renamed_file():
     )
     assert not node_resolves(
         "test_deploy_logic.py",
-        "test_declared_denylist_collects_roles_declaring_false",
+        "test_the_config_is_frozen",
         source,
     )
     assert not node_resolves(
-        "test_deploy_k8s_declarations.py", "test_no_such_test_anywhere", source
+        "test_deploy_config.py", "test_no_such_test_anywhere", source
     )
 
 

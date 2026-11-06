@@ -76,7 +76,7 @@ monitor_bridge_modules:
   - verdicts/storage.py
   - verdicts/notify.py
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Observability: this IS the alert pipeline — every threshold check in the fleet pushes through
 # it, so a broken deploy cannot page about being broken. ALSO renders no readinessProbe on its
 # Deployment (probe-less), which compounds even if this were ever removed from the "observability"

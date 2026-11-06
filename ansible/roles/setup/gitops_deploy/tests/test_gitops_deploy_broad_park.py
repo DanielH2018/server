@@ -337,10 +337,13 @@ def test_a_filter_plugin_a_bring_up_role_calls_records_that_role(
 
 
 def test_a_filter_plugin_an_initial_setup_role_calls_applies_that_role(
-    gitops_deploy, tick, state
+    gitops_deploy, tick, state, monkeypatch
 ):
-    """`gitops_deploy` renders `k8s_autodeploy_denylist`, and the tick can apply it itself."""
-    tick.paths = ["ansible/filter_plugins/k8s_autodeploy.py"]
+    """No setup role calls a filter plugin in the tree, so this test sets the table row."""
+    plugin = "ansible/filter_plugins/longhorn_groups.py"
+    table = deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS
+    monkeypatch.setitem(table, plugin, frozenset({"gitops_deploy"}))
+    tick.paths = [plugin]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert [p[-3:] for p in tick.playbooks] == [APPLY_GITOPS_DEPLOY]
     assert state.manual_plane_pending() == []

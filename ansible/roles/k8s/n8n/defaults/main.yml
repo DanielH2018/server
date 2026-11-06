@@ -14,7 +14,7 @@
 n8n_k8s_image: "{{ k8s_registry_pull_host }}/n8n:{{ k8s_built_image_tags.get('n8n', 'latest') }}"
 n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:{{ k8s_built_image_tags.get('n8n-runners', 'latest') }}"
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Two independent reasons: (1) probe-less — the n8n-runners sub-deployment (which executes
 # every workflow's actual code) renders no readinessProbe, so `rollout status` would return on
 # Running and prove nothing for it; (2) migrating state — strategy is Recreate and n8n-data (the
