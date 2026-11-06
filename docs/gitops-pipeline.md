@@ -1161,19 +1161,21 @@ new path on and what `broad_remediation()` says for that plane.
 derivation is in `git log -p -- docs/gitops-pipeline.md`, and what stays below is the broad arm's.
 
 **The broad arm is the one worst case inside a unit activation.** It is forward-only: 180 s of
-flock wait plus `BROAD_DEPLOY_TIMEOUT_S` (1800 s), or 1980 s, against `TimeoutStartSec=70min`
-(4200 s) in `gitops-deploy.service.j2`. The ceiling keeps its headroom rather than shrinking,
-because the tree-lock waiters and the lander deadlines were derived from the same budgets.
+flock wait plus `BROAD_DEPLOY_TIMEOUT_S` (1800 s), or 1980 s, against `TimeoutStartSec=40min`
+(2400 s) in `gitops-deploy.service.j2`. The 420 s between them is for the tick's work outside
+the budget: its git calls carry no timeout. No lander deadline reads this ceiling, because
+`test_lander_deadlines_cover_the_soak.py` gives the tick no fixed budget.
 
 **This unit can hold the tree lock for 1800 s**, which is longer than the 10-minute tick
-interval. A concurrent `./scripts/deploy.sh` waits `LOCK_WAIT=3840`, not the unit's own `-w 180`,
+interval. A concurrent `./scripts/deploy.sh` waits `LOCK_WAIT=1980`, not the unit's own `-w 180`,
 so it outlasts the hold and then deploys. It returns exit 75 only if the lock stays busy past
-3840 s. An operator who sees exit 75 should check whether `gitops-deploy` is mid-apply before
+1980 s. An operator who sees exit 75 should check whether `gitops-deploy` is mid-apply before
 assuming the lock is stuck.
 
 **Four waiters on the tree lock are pinned as a census.** `deploy.sh`, secret-rotate, docs-refresh
-and eval-run each wait 3840 s, and `_LOCK_WAITERS` and `_worst_lock_hold()` in
-`tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's worst hold. A
+and eval-run each wait 1980 s, and `_LOCK_WAITERS` and `_worst_lock_hold()` in
+`tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's worst hold
+and at or below the unit's flock wait plus that hold. A
 per-consumer test covers only the consumers someone wrote one for, so the census plus
 `test_the_lock_waiter_census_is_non_vacuous` makes a new waiter fail instead of passing silently.
 A raise that pushes `gitops_deploy_broad_timeout_s` past a waiter's wait fails those tests rather
@@ -1289,10 +1291,10 @@ rollback budget stacks on top.
 - The unit's worst case is the flock wait plus that budget, which
   `test_the_deployers_hold_survives_max_flock_contention` holds inside `TimeoutStartSec` in
   `gitops-deploy.service.j2`.
-- A raise past the four waiters' 3840 s moves them too, in the same change, because
+- A raise past the four waiters' 1980 s moves them too, in the same change, because
   `test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold` fails otherwise.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
-  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s, and
+  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 1980 s, and
   `deploy_locks.locked_budget` spends the phase's own budget on a service-lock wait. An overrun
   never produces a second concurrent run, because the timer coalesces the new start into the
   activation in flight.

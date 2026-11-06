@@ -59,13 +59,12 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_locks
 
-# Covers gitops-deploy's worst-case hold, not its TimeoutStartSec. That hold was 3780s while
-# the tick deployed and rolled back k8s roles; since D6.12 it is one broad apply,
-# BROAD_DEPLOY_TIMEOUT_S 1800, and the wait stays until a later PR shrinks the unit's budget. It tracks the unit's timeout: a budget below the worst-case hold makes a deploy
-# queued behind a pathological gitops run give up having deployed nothing while that run is still
-# legitimately working. Pinned to the same role defaults the deployer reads by
-# test_deploy_lock_wait_budget.py. It is also the budget each per-service lock waits.
-LOCK_WAIT = 3840
+# gitops-deploy's worst-case hold, BROAD_DEPLOY_TIMEOUT_S 1800, plus 180s for that tick's work
+# outside the budget. A budget below the hold makes a deploy queued behind a pathological gitops
+# run give up having deployed nothing while that run is still legitimately working. Pinned to the
+# same role defaults the deployer reads by test_deploy_lock_wait_budget.py and
+# test_gitops_deploy_timeout_budgets.py. It is also the budget each per-service lock waits.
+LOCK_WAIT = 1980
 # The snapshot this run is using, told apart from a dead one by an advisory lock inside it.
 OWNER_LOCK = ".deploy-owner.lock"
 SNAPSHOT_ROOT_DEFAULT = "/tmp/homelab-deploy-snapshots"
