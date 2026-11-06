@@ -105,7 +105,7 @@ SYSTEM='^/(usr|bin|sbin|lib|lib32|lib64|libx32|boot)(/|$)'
 # ansible/tests/setup/test_aide_check_role_written.py derives the roles' destinations from the
 # tasks and fails when one is missing here, so a role that installs a new unit under
 # /etc/systemd/system must add it to this list.
-ROLE_WRITTEN='^/etc/systemd/system/(coredns-host\.service|deploy-ui\.service|gitops-deploy(-alert)?\.service|gitops-deploy\.timer|renovate-(agent|notify)(-alert)?\.service|renovate-(agent|notify)\.timer|renovate-agent-land@\.service|worktree-holders\.socket|worktree-holders@\.service|kuma-check-(github-interaction-limit|github-ruleset-drift|live-drift|loki-read-route|manifest-prune|render-records|setup-drift)(-boot\.service|\.service|\.timer)|k3s(-agent)?\.service(\.env)?|k3s(-agent)?\.service\.d/10-log-to-file\.conf|snap-[a-z0-9-]+-[0-9]+\.mount)$'
+ROLE_WRITTEN='^/etc/systemd/system/(coredns-host\.service|deploy-ui\.service|gitops-deploy(-alert)?\.service|gitops-deploy\.timer|renovate-(agent|notify)(-alert)?\.service|renovate-(agent|notify)\.timer|renovate-agent-land@\.service|worktree-holders\.socket|worktree-holders@\.service|kuma-check-(github-interaction-limit|github-ruleset-drift|loki-read-route|render-records|setup-drift)(-boot\.service|\.service|\.timer)|k3s(-agent)?\.service(\.env)?|k3s(-agent)?\.service\.d/10-log-to-file\.conf|snap-[a-z0-9-]+-[0-9]+\.mount)$'
 # DECIDED: /usr/local/bin pages on a name a package also installs, not on every unpackaged entry
 # the way /usr/local/sbin does. Root's PATH reaches /usr/local/bin before /usr/bin, so a twin of a
 # packaged command replaces it for root. A list of the legitimate names would have to cover

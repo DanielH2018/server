@@ -173,6 +173,8 @@ def test_a_unit_no_role_installs_is_not_listed() -> None:
         "/etc/systemd/system/gitops-deploy.service.d/override.conf",
         "/etc/apt/sources.list.d/extra.list",
         "/usr/local/sbin/helper",
+        "/etc/systemd/system/kuma-check-live-drift.timer",
+        "/etc/systemd/system/kuma-check-manifest-prune-boot.service",
     ):
         assert unlisted({path}, pattern) == [path]
 

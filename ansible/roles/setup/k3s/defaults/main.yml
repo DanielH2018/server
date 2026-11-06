@@ -305,43 +305,27 @@ k3s_disk_health_cron_minute: "*/10"
 # Raising this past 599 breaks the arithmetic in docs/healthchecks-io-deadman.md — the guard test
 # in ansible/tests/setup/test_health_cron_boot_grace.py enforces the bound rather than the number.
 #
-# NOT applied to the daily crons (manifest-prune 05:15, etcd-token-drift 02:45). For them a
-# skipped slot is a skipped DAY, which is a worse trade than the rare boot landing inside their
-# one-minute window; their 1-hour graces already cover a late run.
+# NOT applied to the daily etcd-token-drift cron (02:45). For it a skipped slot is a skipped DAY,
+# which is a worse trade than the rare boot landing inside its one-minute window; its 1-hour
+# grace already covers a late run.
 k3s_health_cron_boot_grace_s: 420
 
-# Manifest-prune drift check (templates/manifest-prune-check.sh.j2). Daily, not */10 like the
-# heartbeats above: staged-manifest drift only changes on a deploy, so there is nothing new to
-# find between two deploys in the same day. 05:15 — after the 03:30 nightly Longhorn backup
-# (k3s_longhorn_backup_cron) and its 04:30 Sunday sibling have both finished, ahead of the
-# day's first deploy.
-# Live-object drift check: 05:45, half an hour after the manifest-prune check at 05:15, so a
-# morning with both firing does not put two full kubectl sweeps on the API server at once.
+# Schedules of the disarmed live-drift and manifest-prune checks. Only the absent arms in
+# tasks/health-crons.yml read them, and D6.18 deletes them with the arms.
 k3s_live_drift_cron_hour: "5"
 k3s_live_drift_cron_minute: "45"
 
 k3s_manifest_prune_cron_hour: "5"
 k3s_manifest_prune_cron_minute: "15"
 
-# The longest legitimate gap between two textfile writes of a once-a-day check (manifest-prune,
-# live-drift and etcd-token-drift): a day plus an hour. The textfile rules carry it as a literal, pinned to this value by
-# ansible/tests/services/test_b1_rule_literals.py. Move the three schedules and this together.
+# The longest legitimate gap between two textfile writes of the once-a-day etcd-token-drift check:
+# a day plus an hour. The textfile rule carries it as a literal, pinned to this value by
+# ansible/tests/services/test_b1_rule_literals.py. Move the schedule and this together.
 k3s_daily_check_deadline_s: 90000
 
-# Release-staleness drift check (templates/release-staleness-check.sh.j2). This is
-# the durable signal for a k8s role change that merged and never reached the cluster: nothing
-# else watches the gap between "merged" and "applied". docs/k3s-node-plane-crons-and-incidents.md
-# has the account.
-#
-# Every 30 minutes, not daily like manifest-prune above: the deployer ticks every 10 minutes, so
-# a deferred change can land at any point in the day, and a daily window would leave it unwatched
-# for up to 24h. 30 minutes catches it within three gitops ticks.
+# Inputs of the disarmed release-staleness check. Only templates/release-staleness-check.sh.j2
+# reads them, no task renders it, and D6.18 deletes all three.
 k3s_release_staleness_cron_minute: "*/30"
-# A merge younger than this is named in the push message but not counted stale. Grading drift
-# from the moment a commit reaches origin/master pages for a merge whose own landing is
-# mid-deploy. Two cron periods, per the schedule rule for
-# grace periods: a merge landing right after a run gets a full deploy window (a code-server
-# image build alone is 20-30 min, after the CI wait) before the run after next grades it.
 k3s_release_staleness_grace_minutes: 60
 
 # ── Cluster-token drift check (templates/etcd-token-drift.sh.j2) ─────────────────────────────
@@ -554,13 +538,13 @@ k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
 # take effect at the agent's next start. tasks/agent.yml passes the installer a bare `agent`.
 
 # The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
-# into /var/lib/homelab/setup-render-manifest.d/ so manifest-prune-check.sh can tell whether this
-# host has run initial_setup.yml since they last changed.
+# into /var/lib/homelab/setup-render-manifest.d/ so setup-drift-check.sh can tell whether this
+# host has run the role since they last changed.
 #
 # GROUPED BY TAG FAMILY, and the grouping is the correctness property, not organisation. Each
-# group is stamped by a task carrying that family's tags, so `--tags manifest-prune` restamps
-# only manifest-prune-check.sh. A single flat list stamped by one untagged loop over all eight
-# would declare all eight current while a tag-scoped run rendered one, and the seven it never
+# group is stamped by a task carrying that family's tags, so `--tags disk-health` restamps
+# only disk-health.sh. A single flat list stamped by one untagged loop over all of them
+# would declare them all current while a tag-scoped run rendered one, and the rest it never
 # touched would read as fresh forever. Keep each group's membership identical to the tags on the
 # `template:` task that renders it; ansible/tests/deploy/test_setup_render_manifest.py asserts that.
 #
@@ -583,6 +567,8 @@ k3s_render_stamp_groups:
   - name: k3s-disk-health           # tags: [disk-health]
     templates:
       - ansible/roles/setup/k3s/templates/disk-health.sh.j2
+  # The manifest-prune and release-staleness groups are disarmed. No task stamps or releases
+  # them, the absent arms in tasks/health-crons.yml remove what they left, and D6.18 deletes both.
   - name: k3s-manifest-prune        # tags: [manifest-prune]
     templates:
       - ansible/roles/setup/k3s/templates/manifest-prune-check.sh.j2
@@ -598,14 +584,12 @@ k3s_render_stamp_groups:
 # what it is given). Separate list, same structure: the release resolver in
 # scripts/lib/release_bin_groups.py matches any list of dicts carrying `name`, and reads
 # `templates` and `files` alike, so both checks see this group without an edit.
+# Both groups are disarmed, like the two named above, and D6.18 deletes them.
 k3s_release_file_groups:
   - name: k3s-live-drift            # tags: [live-drift]
     files:
       - src: ansible/roles/setup/k3s/files/live_drift_check.py
         name: live-drift-check.py
-  # Shares the k3s-manifest-prune release with the rendered script that calls it, so the two
-  # version together: a reader that drifted from its caller is exactly the fault this check
-  # exists to report. Stdlib-only — the cron runs it directly, with no uv and no PyYAML.
   - name: k3s-manifest-prune        # tags: [manifest-prune]
     files:
       - src: ansible/roles/setup/k3s/files/manifest_declares.py

@@ -3,8 +3,8 @@
 An internet outage had no gate before this, so every check that reaches the internet paged on
 its own. On 2026-09-18 from 05:05 one WAN outage turned 11 tiles red inside 90 minutes —
 b2_reachable, r2_usage, discord, kuma_notify_failures (since deleted), crowdsec-home-allowlist,
-cloudflare-ip-drift, github-ruleset-drift, release-staleness-check, docs-refresh,
-the since-deleted Swallowed Push Verdicts and gitops_alive (#2784). This gate turns that into
+cloudflare-ip-drift, github-ruleset-drift, release-staleness-check (since disarmed),
+docs-refresh, the since-deleted Swallowed Push Verdicts and gitops_alive (#2784). This gate turns that into
 one page.
 
 BY HOSTNAME, against two independent providers — never an anycast IP. That 2026-09-18 outage

@@ -36,7 +36,7 @@ traefik_k8s_uid: 65532
 # DECIDED: these are one-way for a cluster that has already deployed with them on. Dropping a
 # name from manifests_files deletes the STAGED file (manifests/tasks/main.yml:148) but never
 # the live object — see kubectl-apply-leaves-orphaned-objects. Flipping either to false on
-# prod therefore needs a hand `kubectl delete`, which the manifest-prune-check cron flags.
+# prod therefore needs a hand `kubectl delete`.
 # Nothing does that today; the flags exist so a new cluster can come up without the subsystem,
 # not so prod can shed it.
 # Namespaces this cluster's Traefik watches. rbac.yaml.j2 renders one namespaced Role per
