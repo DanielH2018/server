@@ -23,8 +23,10 @@ A deliberately narrower host set filters ``inventory_hosts()`` rather than repla
 where they are.
 """
 
+import ast
 import shlex
 import sys
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -116,6 +118,29 @@ class Host:
         return self.settings.get("ansible_connection", "ssh")
 
 
+def _refuse_a_value_ansible_evaluates(
+    path: Path, host: str, key: str, value: str
+) -> None:
+    """Raise when Ansible's ini parser would read `value` as something other than itself.
+
+    Ansible runs ``ast.literal_eval`` on each value after ``shlex``, and keeps the string only
+    when that raises. A value it accepts never comes back equal: it is a non-string, or a string
+    without its quotes. Quoting the value in ``hosts.ini`` does not help, because ``shlex``
+    removes those quotes first.
+    """
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", SyntaxWarning)
+            evaluated = ast.literal_eval(value)
+    except ValueError, SyntaxError:
+        return
+    raise ValueError(
+        f"{path}: host {host}: {key}={value} is the {type(evaluated).__name__} "
+        f"{evaluated!r} to Ansible and the string {value!r} to this reader; "
+        "set it in the host's host_vars file instead"
+    )
+
+
 def inventory_hosts(path: Path = HOSTS_INI) -> list[Host]:
     """Every host ``hosts.ini`` declares, in file order, one entry per name.
 
@@ -128,7 +153,8 @@ def inventory_hosts(path: Path = HOSTS_INI) -> list[Host]:
     does, so a value loses one level of quotes and a quoted value may hold a space or a ``#``.
 
     Raises:
-        ValueError: A host line has an unbalanced quote. The message names the host.
+        ValueError: A host line has an unbalanced quote, or a value Ansible would evaluate to
+            something other than the string this reader keeps. The message names the host.
     """
     if not path.is_file():
         return []
@@ -158,6 +184,7 @@ def inventory_hosts(path: Path = HOSTS_INI) -> list[Host]:
         for pair in pairs:
             if "=" in pair:
                 key, value = pair.split("=", 1)
+                _refuse_a_value_ansible_evaluates(path, name, key, value)
                 settings[name][key] = value
     return [Host(n, tuple(groups[n]), settings[n]) for n in order]
 

@@ -144,6 +144,10 @@ Ansible behaviour.
 - An include var does not reach a template. The renderer takes no value from a role's `tasks/`.
   Ansible's does.
 - `lookup('pipe')` runs nothing. It accepts one command, and Ansible runs any command.
+- A `hosts.ini` inline value that `ast.literal_eval` accepts, such as `ansible_port=22` or
+  `x='"b"'`, fails the read and the error names the host. Ansible reads the int `22` and the
+  string `b`. `Host.settings` holds only strings, so such a value goes in the host's `host_vars`
+  file.
 
 ## Consequences
 
