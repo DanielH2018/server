@@ -18,7 +18,7 @@ and what a PR range changed in it, for those gates; this one evaluates the chain
 """
 
 import contextlib
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 import sys
 from pathlib import Path
 
@@ -49,6 +49,7 @@ from deployer_lib.deploy_logic import (
 from gitops_markers import PLAYBOOK_CMD
 
 import narrow_setup
+from deploy_tools.land_lib.deployed_copies import DeployedCopies
 from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.narrow_lib.setup_index import RoleIndex
 from reach import reach
@@ -406,15 +407,20 @@ def remaining_setup_hosts_note(
     ref: str = "",
     repo: Path = REPO,
     key_readers: Sequence[KeyReader] = (),
+    read_host: Callable[[dict, str], dict] | None = None,
 ) -> str:
     """`_remaining_note` over `ref`'s `ansible/` tree, or `repo`'s checkout without one.
 
     `ref` is the merge commit: the checkout can predate it (`setup_role_chains.tree_at`), and
     a ref git cannot archive falls back to `repo`'s checkout and says so on stderr.
-    `key_readers` are as `remaining_setup_hosts` takes them.
+    `key_readers` are as `remaining_setup_hosts` takes them. Given `read_host` and `ref`, a
+    host already holding a changed file's merge-commit bytes is owed nothing for that file
+    (`deployed_copies`).
     """
     return _remaining_note(
-        *_remaining_at(files, local_host, quiet, pr_range, ref, repo, key_readers),
+        *_remaining_at(
+            files, local_host, quiet, pr_range, ref, repo, key_readers, read_host
+        ),
         local_host,
     )
 
@@ -452,16 +458,31 @@ def _remaining_at(
     ref: str,
     repo: Path,
     key_readers: Sequence[KeyReader] = (),
+    read_host: Callable[[dict, str], dict] | None = None,
 ) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
     """`_remaining_hosts` over `ref`'s `ansible/` tree, or `repo`'s checkout without one."""
     paths = (_INITIAL_SETUP_YML, ALL_VARS, HOST_VARS, _SETUP_ROLES_DIR)
     with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
         at = [(root or repo) / p.relative_to(REPO) for p in paths]
+        copies = (
+            DeployedCopies(files, at[3], ref, repo, read_host)
+            if read_host and ref
+            else None
+        )
         # Which roles the tick applied is a question about the same tree, and about the tick's
         # host (`has_gitops`), not the host this landing runs on.
         with setup_routing.routed_by(root or repo):
             remaining, unapplied = _remaining_hosts(
-                files, local_host, quiet, at[0], at[1], at[2], at[3], pr_range, repo
+                files,
+                local_host,
+                quiet,
+                at[0],
+                at[1],
+                at[2],
+                at[3],
+                pr_range,
+                repo,
+                copies,
             )
             for role, hosts in _key_reader_hosts(key_readers, local_host, *at).items():
                 remaining[role] = remaining.get(role, frozenset()) | hosts
@@ -478,6 +499,7 @@ def _remaining_hosts(
     roles_dir: Path = _SETUP_ROLES_DIR,
     pr_range: str = "",
     repo: Path = REPO,
+    copies: DeployedCopies | None = None,
 ) -> tuple[dict[str, frozenset[str]], dict[str, frozenset[str]]]:
     """What a self-applied setup-role change still needs beyond `local_host`.
 
@@ -504,7 +526,16 @@ def _remaining_hosts(
 
     `pr_range` is the PR's own `<old>..<new>`, which `setup_file_hosts` reads to narrow a
     changed `tasks/` file to its changed tasks; "" keeps the whole file's reach.
+
+    `copies` drops a host from one file's reach once it holds that file, so a sibling file
+    the host still lacks keeps it owed. None reads no host.
     """
+
+    def owed(role: str, path: str, hosts: frozenset[str]) -> frozenset[str]:
+        if copies is None:
+            return hosts
+        return frozenset(h for h in hosts if not copies.holds(role, path, h))
+
     loud = reach(files, quiet)
     cs = loud.changes
     remaining: dict[str, frozenset[str]] = {}
@@ -536,32 +567,47 @@ def _remaining_hosts(
         own = role_files[role] or ([] if shipped[role] else [""])
         hosts = frozenset().union(
             *(
-                setup_file_hosts(
+                owed(
                     role,
                     p,
-                    playbook,
-                    all_vars,
-                    host_vars_dir,
-                    roles_dir,
-                    pr_range,
-                    repo,
+                    setup_file_hosts(
+                        role,
+                        p,
+                        playbook,
+                        all_vars,
+                        host_vars_dir,
+                        roles_dir,
+                        pr_range,
+                        repo,
+                    )
+                    - {local_host},
                 )
                 for p in own
             ),
             *(
-                setup_shipped_file_hosts(
-                    role, p, playbook, all_vars, host_vars_dir, roles_dir
+                owed(
+                    role,
+                    p,
+                    setup_shipped_file_hosts(
+                        role, p, playbook, all_vars, host_vars_dir, roles_dir
+                    )
+                    - {local_host},
                 )
                 for p in shipped[role]
                 if not _reads_no_changed_key(role, p, pr_range, repo)
             ),
             *(
-                setup_repo_file_hosts(
-                    role, p, playbook, all_vars, host_vars_dir, roles_dir
+                owed(
+                    role,
+                    p,
+                    setup_repo_file_hosts(
+                        role, p, playbook, all_vars, host_vars_dir, roles_dir
+                    )
+                    - {local_host},
                 )
                 for p in repo_files
             ),
-        ) - {local_host}
+        )
         if hosts:
             remaining[role] = hosts
     # A role NO path in this PR sits under, which nonetheless ships one of the changed repo
@@ -571,8 +617,12 @@ def _remaining_hosts(
     for role in _repo_file_only_roles(cs.setup_roles, roles_dir) if repo_files else []:
         hosts = frozenset().union(
             *(
-                setup_repo_file_hosts(
-                    role, p, playbook, all_vars, host_vars_dir, roles_dir
+                owed(
+                    role,
+                    p,
+                    setup_repo_file_hosts(
+                        role, p, playbook, all_vars, host_vars_dir, roles_dir
+                    ),
                 )
                 for p in repo_files
             ),

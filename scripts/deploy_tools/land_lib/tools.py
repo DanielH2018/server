@@ -53,6 +53,7 @@ from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import verdict_log
 from deploy_tools.land_lib.key_readers import KeyReader, readable_key_readers
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
+from diagnostics.probe_lib.host_reader import read_host
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
@@ -455,6 +456,7 @@ class RemainingSetupHosts(Protocol):
         ref: str = "",
         repo: Path = ...,
         key_readers: Sequence[KeyReader] = (),
+        read_host: Callable[[dict, str], dict] | None = None,
     ) -> str: ...
 
 
@@ -480,6 +482,8 @@ class Tools:
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
+    # What a host holds, which `remaining_setup_hosts` reads only for a host it would name.
+    read_host: Callable[[dict, str], dict] = read_host
     # `...`, not the argument list: both take an optional `observe` callback, passed by keyword.
     tick: Callable[..., int] = run_tick
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (

@@ -671,6 +671,13 @@ Three things sit in that position:
   unfinished was tried and reverted for exactly that PR (`plane_note`'s docstring in
   `land_tags.py`).
 
+  **The line reads the host before it names it.** A host another apply already reached
+  owes nothing. For a changed file `stamp_deployed.yml` records as a `{live, src}` pair,
+  `land_lib/deployed_copies.py` compares the live copy with the merge commit's bytes, and drops
+  the host from that file's reach when they match (#7398). Any other file stays owed: a template,
+  a task file, a moved key, a pair whose `live` is not a literal path. A host that cannot be read
+  also stays owed. To clear the line after a hand apply, re-run `land.sh`.
+
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
 `scripts/deploy_tools/owed_run.py <role>` runs the printed apply commands and the clear in one
