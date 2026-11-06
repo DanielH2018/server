@@ -18,7 +18,7 @@ from _dialect_tree import TREE_LITERAL, write_tree
 from lib import yaml_fast
 from lib.render_guard import SHARED_TPL
 from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_ROLES, REPO
-from renderer.renderer_lib.cluster import RenderError, render_tag
+from renderer.renderer_lib.cluster import INCLUDE_KEYS, RenderError, render_tag
 from renderer.renderer_lib.dialect import (
     FILTERS,
     LOOKUPS,
@@ -28,6 +28,7 @@ from renderer.renderer_lib.dialect import (
     off_the_list,
 )
 from renderer.renderer_lib.environment import render_file, renderer_env
+from renderer.renderer_lib.task_inputs import include_vars
 
 ADR = REPO / "docs" / "adr" / "0028-the-renderer-supports-a-closed-jinja-subset.md"
 
@@ -102,6 +103,21 @@ def test_a_test_passed_by_name_counts_as_a_use():
     assert Construct("test", "odd") in constructs("{{ x | selectattr('a', 'odd') }}")
 
 
+def test_a_filter_passed_by_name_to_map_counts_as_a_use():
+    assert off_the_list("{{ x | map('wordcount') | list }}") == {
+        Construct("filter", "wordcount")
+    }
+    assert off_the_list("{{ x | map('upper') | list }}") == set()
+    assert off_the_list("{{ x | map(attribute='a') | list }}") == set()
+
+
+def test_a_construct_named_at_render_time_passed_by_name_is_off_the_list():
+    assert off_the_list("{{ x | map(f) | list }}") == {Construct("filter", "<dynamic>")}
+    assert off_the_list("{{ x | reject(t) | list }}") == {
+        Construct("test", "<dynamic>")
+    }
+
+
 def test_a_lookup_named_at_render_time_is_off_the_list():
     assert off_the_list("{{ lookup(kind, 'x') }}") == {Construct("lookup", "<dynamic>")}
 
@@ -152,6 +168,44 @@ def test_every_variable_value_stays_on_the_list():
         if (off := off_the_list(value))
     }
     assert offenders == {}
+
+
+def _include_value_problems(roles: Path) -> dict[str, set[Construct]]:
+    """Each role whose `k8s/manifests` include hands the render a value off the list."""
+    problems = {}
+    for role in sorted(p for p in roles.iterdir() if (p / "tasks").is_dir()):
+        try:
+            include = include_vars(role)
+        except ValueError:
+            continue  # It renders nothing through this include, and `render_tag` refuses it.
+        read = {k: v for k, v in include.items() if k in INCLUDE_KEYS}
+        off = {c for value in _jinja_values(read) for c in off_the_list(value)}
+        if off:
+            problems[role.name] = off
+    return problems
+
+
+def test_every_include_value_the_render_resolves_stays_on_the_list():
+    assert any(
+        k in INCLUDE_KEYS and _jinja_values(v)
+        for k, v in include_vars(K8S_ROLES / "navidrome").items()
+    ), "the census no longer reaches navidrome's templated file list"
+    assert _include_value_problems(K8S_ROLES) == {}
+
+
+def test_an_off_the_list_include_value_is_flagged(tmp_path):
+    tasks = tmp_path / "widget" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(
+        "- name: Render\n"
+        "  ansible.builtin.include_role:\n"
+        "    name: k8s/manifests\n"
+        "  vars:\n"
+        '    manifests_files: "{{ x | wordcount }}"\n'
+    )
+    assert _include_value_problems(tmp_path) == {
+        "widget": {Construct("filter", "wordcount")}
+    }
 
 
 def _adr_table(heading: str) -> set[str]:

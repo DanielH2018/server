@@ -262,7 +262,8 @@ render with an error naming the construct. To add a construct, add it to the lit
 table and a case in `scripts/renderer/tests/_dialect_cases.py`, in one PR.
 
 `scripts/renderer/tests/test_renderer_dialect.py` compares each construct with its literal, and
-holds every template and variable value of the k8s roles to the list. Host and package modes
+holds every template, variable value and `k8s/manifests` include value of the k8s roles to the
+list. Host and package modes
 render through `strict_env`, which the subset does not bind.
 
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and

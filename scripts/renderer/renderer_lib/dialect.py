@@ -76,6 +76,7 @@ LOOKUPS = frozenset({"file", "pipe", "template", "vars"})
 
 # Each filter that takes a test's name, and the position of that name among its arguments.
 _TEST_ARGUMENT = {"select": 0, "reject": 0, "selectattr": 1, "rejectattr": 1}
+_DYNAMIC = "<dynamic>"
 _ANSIBLE_PREFIX = "ansible.builtin."
 
 
@@ -84,7 +85,7 @@ class Construct(NamedTuple):
 
     Attributes:
         kind: `filter`, `test` or `lookup`.
-        name: The construct's name. A lookup's kind that is no literal reads `<dynamic>`.
+        name: The construct's name. One named by anything but a literal reads `<dynamic>`.
     """
 
     kind: str
@@ -97,11 +98,17 @@ def _lookup_kind(call: nodes.Call) -> str | None:
     kind = call.args[0] if call.args else None
     if isinstance(kind, nodes.Const):
         return str(kind.value).removeprefix(_ANSIBLE_PREFIX)
-    return "<dynamic>"
+    return _DYNAMIC
+
+
+def _named(argument: nodes.Expr) -> str:
+    return str(argument.value) if isinstance(argument, nodes.Const) else _DYNAMIC
 
 
 def constructs(source: str) -> set[Construct]:
-    """Every filter, test and lookup `source` names, a test passed by name to `reject` included.
+    """Every filter, test and lookup `source` names, one passed by name to another included.
+
+    `map('upper')` names the filter `upper`, and `reject('search', ':')` names the test `search`.
 
     Raises:
         jinja2.TemplateSyntaxError: `source` does not parse.
@@ -122,9 +129,9 @@ def constructs(source: str) -> set[Construct]:
             found.add(Construct("filter", node.name))
             position = _TEST_ARGUMENT.get(node.name)
             if position is not None and len(node.args) > position:
-                named = node.args[position]
-                if isinstance(named, nodes.Const):
-                    found.add(Construct("test", str(named.value)))
+                found.add(Construct("test", _named(node.args[position])))
+            if node.name == "map" and node.args:
+                found.add(Construct("filter", _named(node.args[0])))
     return found
 
 
