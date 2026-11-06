@@ -92,7 +92,8 @@ rerun on failure: the setup-plane drift reader (`setup_drift`) and the Loki read
 (`loki_route_witness`).
 The reader runs on each host in `setup_drift_check_hosts`, and only daniel-server's verdict pages.
 A change to that list routes to no setup role, so it takes a hand `--tags setup_drift` apply on
-the host it adds or drops.
+the host it adds or drops. A dropped host also needs the files that apply leaves deleted by hand:
+`docs/host-baseline-record.md`'s setup-drift section names them.
 
 **The five scripts of M6's batch B2 write a textfile and push to nothing.** They are
 docs-refresh, the eval sweep, the secret-rotation audit, the setup-drift check and the witness.
