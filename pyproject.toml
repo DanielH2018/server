@@ -323,7 +323,7 @@ python-version = "3.15"
 # This repo has no `__init__.py` files and no installed package: a script reaches a sibling
 # directory through the `sys.path` bootstrap `.claude/rules/python-layout.md` describes, and a
 # test reaches its role's `files/` the same way. ty resolves imports from search paths alone, so without this list
-# it reports 189 unresolved-import diagnostics for first-party modules that resolve fine at
+# it reports 189 import-not-found diagnostics for first-party modules that resolve fine at
 # runtime. The list is the union of pytest's `pythonpath` above, `.claude/hooks`, and the `files/`
 # sibling of every `testpaths` entry — the same three sources the bootstrap draws on.
 # ENFORCED: ansible/tests/repo/test_ty_config_covers_the_repo.py fails if a pythonpath entry
@@ -473,7 +473,7 @@ include = [
   "ansible/roles/k8s/karakeep/files/karakeep-time-tagger.py",
 ]
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
+import-not-found = "ignore"
 
 [[tool.ty.overrides]]
 # The vendored karakeep script is byte-pinned (ruff's per-file-ignores above has why), so a fix
@@ -505,7 +505,7 @@ include = [
   ".claude/hooks/tests/test_claude_guard_import.py",
 ]
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
+import-not-found = "ignore"
 
 [[tool.ty.overrides]]
 # `claude_worktree` is the same kind of import as `claude_guard` above: the dotfiles repo
@@ -521,4 +521,4 @@ include = [
   "scripts/lib/tests/test_claude_worktree_import.py",
 ]
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
+import-not-found = "ignore"
