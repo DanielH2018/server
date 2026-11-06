@@ -126,10 +126,24 @@ def test_a_lost_cluster_scoped_object(world, monkeypatch, capsys, message, verdi
     )
 
 
-def test_a_handback_that_drops_the_whole_kustomization_is_promoted(
+def test_a_dropped_kustomization_with_no_trailer_is_refused(world, monkeypatch, capsys):
+    """Removing the entry is the handback's shape, and the default policy deletes its objects."""
+    target = _promote_from(world, {"bento-pdf": WITH_ROUTE}, {}, "Hand bento-pdf back")
+    result = world.decide(monkeypatch, capsys)
+    assert result.outputs["verdict"] == "current"
+    assert f"skip {target}: it loses Deployment/homelab/bento-pdf" in result.stderr
+
+
+def test_a_dropped_kustomization_with_one_trailer_per_object_is_promoted(
     world, monkeypatch, capsys
 ):
-    target = _promote_from(world, {"bento-pdf": WITH_ROUTE}, {}, "Hand bento-pdf back")
+    lines = "\n".join(
+        f"Removes-Object: {ident}"
+        for ident in bundle_objects(_files({"bento-pdf": WITH_ROUTE}))
+    )
+    target = _promote_from(
+        world, {"bento-pdf": WITH_ROUTE}, {}, f"Retire bento-pdf\n\n{lines}"
+    )
     result = world.decide(monkeypatch, capsys)
     assert (result.outputs["verdict"], result.outputs["target"]) == (
         "promote",

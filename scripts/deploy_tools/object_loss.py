@@ -8,8 +8,9 @@ compares the objects, as `<kind>/<namespace>/<name>`, in candidate T's `cluster/
     Removes-Object: <kind>/<namespace>/<name>
 
 in the message of some commit in (`prod`, T] (`lib/removes_object.py` holds the grammar). A
-cluster-scoped object leaves the namespace empty, as in `ClusterRole//<name>`. An object whose whole Kustomization leaves T's bundle, as
-at a handback, is exempt. A rename is not a removal: an object whose name, with the
+cluster-scoped object leaves the namespace empty, as in `ClusterRole//<name>`. An object whose
+whole Kustomization leaves T's bundle counts like any other, because the default deletion policy
+deletes it. A rename is not a removal: an object whose name, with the
 renderer's trailing `-<digest8>` removed, still renders in T passes, as the soak Job and its
 ConfigMap do on every revision. Nor is an object labelled or annotated
 `kustomize.toolkit.fluxcd.io/prune: disabled`, which Flux's prune leaves in place (D5.1f,
@@ -33,7 +34,6 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 from lib import yaml_fast
 
-from deploy_tools.promote_lib import verify_promotion as verify
 from deploy_tools.promote_lib.prune import ReadError
 from renderer.renderer_lib.bundle import CLUSTER_DIR
 
@@ -106,30 +106,21 @@ def undeclared_losses(
 ) -> list[str]:
     """The objects `prod`'s bundle holds and `target`'s lacks, that no line declares.
 
-    An object whose Kustomization is absent from `target`'s `flux/` is exempt: a handback
-    removes the whole Kustomization, and its `deletionPolicy: Orphan` prunes nothing. The
-    exemption holds only while C3's Orphan policy does, and D6.7's switch away from Orphan
-    must remove it. An object `prune_disabled` in `prod` is exempt, as prune never deletes
-    it, and so is one whose `stem` still renders in `target`.
+    An object `prune_disabled` in `prod` is exempt, as prune never deletes it, and so is one
+    whose `stem` still renders in `target`.
 
     Raises:
         ReadError: a manifest in either bundle does not parse.
     """
-    try:
-        kustomizations = verify.flux_kustomizations(target)
-    except yaml.YAMLError as err:
-        raise ReadError(f"a flux/ file of T's bundle does not parse: {err}") from err
-    kept = {str((doc.get("metadata") or {}).get("name")) for doc in kustomizations}
     held = bundle_objects(target)
     renamed = {stem(ident) for ident in held}
     return sorted(
         {
             ident
-            for ident, owner, doc in bundle_documents(prod)
+            for ident, _, doc in bundle_documents(prod)
             if ident not in held
             and stem(ident) not in renamed
             and not prune_disabled(doc)
-            and owner in kept
             and ident not in declared
         }
     )

@@ -8,7 +8,7 @@ H1.1a's `flux_prune: false` in its defaults, which `role_fields` reads and the b
 always under prune (`bundle.flux_files`, operator ruling of 2026-10-22). The census reads the
 same lever for every render target, Ansible-owned ones included, because a flip carries the
 render as it stands. `traefik-crds` and `flux` are the named members the live render must
-find. This is D6.19's CRD guard landing early, without D6's exception for `flux`. The plan is
+find. This is D6.19's CRD guard, without D6's exception for `flux`. The plan is
 docs/target-architecture/deploy/d5-bulk-move.md, step 26's traefik bullet and step 29.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_crd_census.py

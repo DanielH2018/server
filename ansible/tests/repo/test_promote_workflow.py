@@ -65,7 +65,7 @@ RESET_GUARDS = (
 )
 RESET_SKIP = "!inputs.reset_to_last_good"
 PERMISSIONS = {
-    "render": {"contents": "read", "checks": "read"},
+    "render": {"contents": "read", "checks": "read", "packages": "read"},
     "images": {"contents": "read", "packages": "write"},
     "publish": {"packages": "write", "id-token": "write"},
     "promote": {

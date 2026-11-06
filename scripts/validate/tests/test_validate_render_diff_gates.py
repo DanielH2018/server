@@ -196,9 +196,69 @@ def test_a_dropped_prune_disabled_claim_is_clean():
     assert removal(BENTO | {claim}, BENTO, unpruned={claim}) == []
 
 
-def test_the_revert_of_a_flip_is_clean():
-    """A handback drops the tag's whole Flux render, which Orphan deletes nothing of."""
-    assert removal(BENTO, set(), head_flux=()) == []
+def test_a_handback_that_drops_the_whole_render_is_flagged():
+    """The default deletion policy deletes what leaves with the tag."""
+    assert len(removal(BENTO, set(), head_flux=())) == len(BENTO)
+
+
+def _retirement(declared):
+    """bento-pdf gone from the head's entries and render, against a base that holds it."""
+    base = gate.Snapshot(
+        renders={}, owners={"bento-pdf": "flux"}, deps={}, objects={"bento-pdf": BENTO}
+    )
+    head = gate.Snapshot(renders={}, owners={}, deps={})
+    return gate.removal_problems(base, head, declared)
+
+
+def test_a_whole_tag_removal_without_trailers_is_flagged():
+    assert len(_retirement(())) == len(BENTO)
+
+
+def test_a_whole_tag_removal_with_one_trailer_per_object_is_clean():
+    assert _retirement(BENTO) == []
+
+
+def test_a_verify_directorys_dropped_object_is_flagged():
+    """`decide` counts every per-tag kind, so the PR gate has to as well."""
+    job = "kind: Job\nmetadata:\n  name: bento-pdf-probe\n  namespace: homelab\n"
+    objects, _ = gate._objects({"bento-pdf-verify": {"job.yaml": job}})
+    (line,) = removal(objects["bento-pdf"], set())
+    assert "no longer renders Job/homelab/bento-pdf-probe" in line
+
+
+# Arm 6, the tag rule against the base render (`deploy_tools/tag_rule.py`).
+def _tag_rule(head_tags, role_names, base_objects=None):
+    base = gate.Snapshot(
+        renders={},
+        owners={},
+        deps={},
+        objects=base_objects or {},
+        tags={"flux", "bento-pdf"},
+    )
+    head = gate.Snapshot(
+        renders={}, owners={}, deps={}, tags=head_tags, role_names=role_names
+    )
+    return gate.tag_problems(base, head)
+
+
+def test_a_tag_dropped_while_its_role_stays_is_flagged():
+    (line,) = _tag_rule({"flux"}, {"flux", "bento-pdf"})
+    assert line.startswith("arm 6: bento-pdf leaves the bundle while")
+
+
+def test_a_tag_dropped_with_its_role_is_clean():
+    assert _tag_rule({"flux"}, {"flux"}) == []
+
+
+def test_a_tag_whose_base_render_holds_a_volume_dropped_with_its_role_is_flagged():
+    objects = {"bento-pdf": {"PersistentVolume//media-data"}}
+    (line,) = _tag_rule({"flux"}, {"flux"}, objects)
+    assert "holds a PersistentVolume" in line
+
+
+def test_flux_missing_at_the_head_is_flagged():
+    (line,) = _tag_rule({"bento-pdf"}, {"bento-pdf"})
+    assert line.startswith("arm 6: flux is not in the render")
 
 
 def test_a_flux_owned_tag_that_renders_nothing_is_flagged():
@@ -369,12 +429,14 @@ def test_gate_reads_the_trailers_from_the_prs_commits(tmp_path, messages, expect
             owners={"bento-pdf": "flux"},
             deps={},
             objects={"bento-pdf": BENTO},
+            tags={"flux"},
         ),
         "head": gate.Snapshot(
             renders={},
             owners={"bento-pdf": "flux"},
             deps={},
             objects={"bento-pdf": BENTO - {NETPOL}},
+            tags={"flux"},
         ),
     }
     render = lambda sha, dest, repo: snaps[dest.name]
