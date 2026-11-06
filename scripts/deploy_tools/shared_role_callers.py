@@ -5,17 +5,10 @@ THE PROBLEM. A shared role — `manifests`, `image-builder`, `arr-notification` 
 `containers_list` entry, so a `--tags` run cannot select it and no release record names it.
 Two readers need the tags that DO run it.
 
-WHO CALLS IT. `deploy_run` reads `expand_shared_tags` to turn `deploy.sh --tags
-volume-snapshot` into a deploy of every caller, and `land_tags` reads `caller_tags` to deploy a
-shared role's callers instead of reporting `needs-manual-apply`. `main` prints one JSON
-object with two keys: `callers` maps each role to its sorted `caller_tags`, and `owned_only`
-lists the roles that some tag runs but only `owner`-setting tags run (#5052). The deployer
-ran it as a subprocess to discharge a shared role's `k8s_unapplied` line until D6.12 deleted
-that discharge; no caller reads the CLI since, and D6.4 deletes the module.
-
-THE READERS DIFFER, and `smoke_caller` is why. A hand-typed `deploy.sh --tags manifests` deploys every caller too, which the operator ruled on
-in #2717. The landing narrows a deploy-run-only change to ONE caller, and the `# DECIDED:` at
-`smoke_caller` holds that ruling.
+NO PRODUCTION CALLER. D6.15 removed `deploy.sh`'s and the landing's calls, and D6.12 the
+deployer's. D6.18 deletes the module. `main` prints one JSON object with two keys: `callers`
+maps each role to its sorted `caller_tags`, and `owned_only` lists the roles that some tag runs
+but only `owner`-setting tags run (#5052).
 
 Usage: shared_role_callers.py [--repo PATH] ROLE [ROLE ...]
 """
@@ -108,7 +101,7 @@ SMOKE_TESTABLE_SHARED_ROLES = frozenset({"manifests"})
 #
 # WHY THE COST KEY IS A PROXY AND STAYS ONE (#3149). Hosts, then rendered templates, counts
 # objects, and rollout wait usually dominates a k8s deploy. It does not dominate this one. The
-# narrowing fires only for a `tasks/`/`handlers/`-only change (`land_shared.deploy_run_only`),
+# narrowing fires only for a `tasks/`/`handlers/`-only change,
 # which renders no new bytes, so the central rollout-restart has nothing to fire on — #3117's
 # smoke-shaped change restarted 0 of 60 workloads. What is left is the shared play overhead,
 # identical for every tag, plus one apply and one wait per rendered object, each already

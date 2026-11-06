@@ -1,20 +1,11 @@
 #!/usr/bin/env python3
 """Print what `land.sh` derives from a PR's file list -- tags, plane note, or self-applied flag.
 
-WHY THIS IS NOT `land_tags.main`. The landing (`classify.classify`) expands shared-role callers
-and renders the plane note over `plane_paths`: the PR's paths minus every shared-role path that
-`shared_role_reach.paths_a_hand_must_apply` finds comment-only or deploy-time only. A CLI that
-expanded over the raw file list printed nine caller tags for a one-comment edit to
-`image-builder/tasks/main.yml`, for which the landing deploys nothing (#4945). The CLI must
-therefore read `shared_role_reach`, and `shared_role_reach` imports `land_tags`, so the entry
-point sits here, above both. `scripts/tests/test_scripts_import_direction.py` refuses the
-cycle that the other placement makes.
+WHY THIS IS NOT `land_tags.main`. The remaining-setup-hosts note comes from `land_reach`, which
+imports `land_tags`, so the entry point sits above both.
+`scripts/tests/test_scripts_import_direction.py` refuses the cycle that the other placement makes.
 
-Each argument goes to the reader `classify` gives it: `derive`, `own_narrow_tags`,
-`self_applied` and the remaining-setup-hosts note read the raw paths; the caller expansion,
-the guard-map narrowing and the plane note read `plane_paths`.
-
-Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_cli.py
+Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 """
 
 import sys as _sys
@@ -27,26 +18,11 @@ import json
 import sys
 from pathlib import Path
 
-import shared_role_reach
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib.key_readers import readable_key_readers
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 from lib.cli_help import ArgumentParser
-from lib.git import git
 from lib.repo_paths import REPO
-
-
-def hand_paths(paths: list[str], range_: str, repo: Path) -> list[str]:
-    """`paths` minus the shared-role paths no hand applies, or `paths` on any failure.
-
-    `classify` reads the declared tags at the merge commit; this CLI has none, so `None`
-    makes `shared_role_reach` read the checkout's. A raise keeps every path, the way
-    `classify._classified` does, so the CLI still exits 0 with the wider answer.
-    """
-    try:
-        return shared_role_reach.paths_a_hand_must_apply(paths, range_, repo, None)
-    except Exception:
-        return paths
 
 
 def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
@@ -85,8 +61,7 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
         dest="range_",
         default="",
         help=(
-            "`<old>..<new>` — read the diff to drop broad paths whose change is comments "
-            "only, and shared-role paths no rendered manifest reads"
+            "`<old>..<new>` — read the diff to drop broad paths whose change is comments only"
         ),
     )
     ns = parser.parse_args(argv)
@@ -95,8 +70,7 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
     quiet = land_tags.quiet_paths(paths, ns.range_)
     if ns.plane:
         narrow = land_tags.own_narrow_tags(paths, ns.range_, repo)
-        plane_paths = hand_paths(paths, ns.range_, repo)
-        print(land_tags.plane_note(plane_paths, quiet=quiet, narrow_tags=narrow))
+        print(land_tags.plane_note(paths, quiet=quiet, narrow_tags=narrow))
         return 0
     if ns.self_applied:
         print("yes" if land_tags.self_applied(paths, quiet=quiet) else "")
@@ -119,16 +93,6 @@ def main(argv: list[str] | None = None, repo: Path = REPO) -> int:
         payload.get("changedFiles", -1),
         quiet=quiet,
     )
-    # The callers of what `--plane` stopped naming, as `classify` adds them.
-    if source == land_tags.DeriveSource.PR:
-        plane_paths = hand_paths(paths, ns.range_, repo)
-        reached = land_tags.shared_caller_tags(plane_paths)
-        rows = land_tags.guard_map_rows(
-            plane_paths, ns.range_, lambda *a: git(*a, cwd=repo, check=False)
-        )
-        if rows is not None and "manifests" in reached:
-            reached["manifests"] &= rows
-        tags = sorted(set(tags).union(*reached.values()))
     print(f"{source} {','.join(tags)}")
     return 0
 

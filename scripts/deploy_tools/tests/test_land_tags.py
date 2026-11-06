@@ -260,13 +260,11 @@ def test_pr_617_derives_its_services_and_not_the_shared_roles():
     assert {"sonarr", "jellyfin", "traefik", "n8n"} <= set(tags)
 
 
-def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plane():
-    """Dropped from the tags, the shared roles deploy through their callers instead.
+def test_pr_617_reports_only_the_setup_plane():
+    """Dropped from the tags, the shared roles are `promote`'s to apply.
 
-    Dropped from the report with no callers to deploy would be the setup-plane silence again.
+    Dropped from the report along with the setup plane would be the silence again.
     """
-    reached = land_tags.shared_caller_tags(_PR_617_FILES)
-    assert "jellyfin" in reached["manifests"]
     note = land_tags.plane_note(_PR_617_FILES)
     assert "manifests" not in note and "ansible/deploy.yml" not in note
     # `k3s-bringup.yml`, NOT `initial_setup.yml`. The k3s role appears only in the bring-up
@@ -277,15 +275,22 @@ def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plan
     )
 
 
-def test_a_shared_role_alone_derives_no_tag_of_its_own_and_reaches_its_callers(
-    flux_handed_back,
-):
+def test_a_shared_role_alone_derives_no_tag_and_owes_no_hand():
     files = ["ansible/roles/k8s/manifests/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")
-    # One caller since #3124; `test_shared_role_smoke_caller.py` owns the narrowing itself.
-    reached = land_tags.shared_caller_tags(files, host_vars=flux_handed_back)
-    assert len(reached["manifests"]) == 1
+    assert land_tags.plane_note(files) == ""
+
+
+def test_a_shared_role_no_role_includes_owes_no_hand(tmp_path):
+    """The red half of D6.15's removal: this note asked for a full `ansible/deploy.yml`, which
+    applies nothing since D6.12, for a role with neither an entry nor a caller."""
+    (tmp_path / "k8s" / "nosuchrole").mkdir(parents=True)
+    files = ["ansible/roles/k8s/volume-revert/templates/nothing-calls-this.yaml.j2"]
+    assert "ansible/deploy.yml" not in land_tags.plane_note(files)
+    assert "nosuchrole" not in land_tags.plane_note(
+        ["ansible/roles/k8s/nosuchrole/templates/deployment.yaml.j2"]
+    )
 
 
 def test_an_ordinary_service_role_is_neither_dropped_nor_reported():

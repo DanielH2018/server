@@ -1,26 +1,13 @@
 #!/usr/bin/env python3
-"""The shared-role expansion a landing makes, and the #3124 narrowing.
+"""Which changed role directories have no `containers_list` entry, and the mappers that say so.
 
 A shared k8s role — `manifests`, `image-builder`, `arr-notification` — has no `containers_list`
-entry, so `--tags` cannot select it. `deploy.yml` runs it under the tag of every role that
-includes it, so the landing deploys all of those instead of reporting the role to a hand
-(#2704, #1397).
+entry, so `--tags` cannot select it. `land_tags` re-exports every name below.
 
-ONE EXCEPTION. For a change confined to `roles/k8s/manifests/tasks/` that expansion was 57 tags
-and about 20 minutes, and it moved no live object: PR #3117 changed the condition the config
-rollout-restart reads, ended `VERDICT: settled`, and 0 of 60 release records showed a restart.
-The root `CLAUDE.md` *When to wait* already says a `tasks/`-only change is skipped
-deliberately, and the expansion was overriding that. Such a landing now deploys ONE
-representative caller as a smoke test, and `shared_role_callers.smoke_caller` carries the
-`# DECIDED:` holding the operator's ruling and the gap it accepts.
+WHY IT IS NOT IN `land_tags`. `scripts/tests/test_scripts_import_direction.py` refuses a cycle,
+so this reads the mappers from `reach`, which sits below both, rather than from `land_tags`.
 
-WHY IT IS NOT IN `land_tags`. The expansion and its one exception read alone: they need
-`reach`'s path mappers and `shared_role_callers`, and nothing private to `land_tags`.
-`scripts/tests/test_scripts_import_direction.py` refuses a cycle, so this reads the mappers from
-`reach`, which sits below both, rather than from `land_tags`. `land_tags` re-exports every
-name below, so each existing reader keeps reading it there.
-
-Run: uv run pytest scripts/deploy_tools/tests/test_shared_role_smoke_caller.py
+Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_shared_mapper_agreement.py
 """
 
 import sys as _sys
@@ -29,12 +16,8 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
-import json
-
 from deploy_tools.deploy_lib import tags as deploy_tags
-from lib.k8s_roles import role_callers
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, HOST_VARS, ROLES
-from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, caller_tags, smoke_caller
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, ROLES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
@@ -52,16 +35,6 @@ def declared_tags() -> set[str]:
     return deploy_tags.service_tags()
 
 
-# Subdirectories of a shared role whose content decides how a deploy RUNS rather than what it
-# applies. `shared_role_reach._DEPLOY_TIME_SUBDIRS` asks the same question one level finer, over
-# the diff; this is the path rule, so it answers with no range to read.
-#
-# `meta/` is deliberately absent, where that set carries it: a dependency change alters which
-# OTHER roles run for every caller, and one caller cannot smoke-test that. `handlers/` is in,
-# because a handler of this role runs inside this role for whichever caller triggers it.
-_DEPLOY_RUN_SUBDIRS = frozenset({"tasks", "handlers"})
-
-
 def shared_roles(
     files,
     declared: set[str] | None = None,
@@ -72,8 +45,7 @@ def shared_roles(
 
     These are the shared k3s plane — `manifests` is the apply-and-roll path every workload
     includes, `volume-snapshot` and `volume-revert` are storage paths several include. Naming one
-    in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
-    tags and reported as work a human still owes.
+    in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2).
 
     A role's own `tests/` does not put it here at all — `is_role_test_path`.
 
@@ -100,188 +72,3 @@ def shared_roles(
         if (roles_root / at.plane / role).is_dir() and not gone_at_merge:
             roles.add(role)
     return sorted(roles - declared)
-
-
-def shared_caller_tags(
-    files,
-    declared: set[str] | None = None,
-    roles_root: _Path | None = None,
-    host_vars: _Path = HOST_VARS,
-    role_dirs: frozenset[str] | None = None,
-) -> dict[str, set[str]]:
-    """For each shared role `files` changes, the tags of the roles that run it.
-
-    A helper role has no tag of its own, but `deploy.yml` runs it under the tag of every role
-    whose tasks include it, so deploying all of its callers applies it. All of them,
-    not one: a caller deployed alone re-applies the helper for that caller only.
-    Transitive, so `longhorn-api` reaches the services behind `volume-snapshot`.
-
-    `narrowed` is the one exception, and the module docstring has its argument.
-
-    The landing deploys these tags, and `land_tags.plane_note` drops every role this gives a
-    non-empty set. An empty set is a role nothing deploys, which stays in the note.
-    `host_vars` is the inventory `smoke_caller` reads; a test passes a fixture copy.
-
-    Raises:
-        CannotNarrow: a shared role changed and `role_callers` refuses a task file.
-    """
-    declared = declared_tags() if declared is None else declared
-    roles = shared_roles(files, declared, roles_root, role_dirs)
-    # Only when a shared role changed: `role_callers` refuses on any unloadable task file.
-    callers = role_callers() if roles else {}
-    return {
-        r: narrowed(r, caller_tags(r, declared, callers), files, host_vars)
-        for r in roles
-    }
-
-
-def deploy_run_only(role: str, files) -> bool:
-    """Whether every changed path that puts `role` in `shared_roles` is deploy-run logic.
-
-    The same path selection `shared_roles` makes — `role_for` drops a `.md` and
-    `is_role_test_path` drops the role's own `tests/`, so PR #3117's `manifests/CLAUDE.md` and
-    its `ansible/tests/` files decide nothing here. What is left must all sit in
-    `_DEPLOY_RUN_SUBDIRS`. A `templates/` or `files/` path is bytes a deploy applies, and a
-    `defaults/` key can render into a manifest, so either keeps the full fan-out.
-
-    THE SPLIT WITH `shared_role_reach.deploy_time_only` (#3150). Both ask whether a shared-role
-    change moves a rendered manifest, for different callers. That one decides whether a hand
-    owes a full `ansible/deploy.yml` at all. This one decides whether the landing's caller
-    deploy can shrink to one smoke caller. That one is the finer rule: it reads the diff over a
-    range, per changed key. This one is a path rule over the file list alone, so it answers
-    with no range and cannot fail on a git read. `meta/` is the one disagreement, and it is
-    deliberate. That rule can find a comment-only `meta/` edit quiet, but here any `meta/`
-    path keeps the full fan-out: a dependency change alters which other roles run for every
-    caller, and one caller cannot smoke-test that. A rule about WHICH BYTES
-    a change moves goes there; a rule about how many callers prove a change runs goes here.
-    `tests/test_shared_role_smoke_caller.py` holds this set inside that one's.
-
-    Args:
-        role: the shared role's directory name.
-        files: the PR's changed paths, the whole list.
-
-    Returns:
-        False for a role with no deciding path at all, which keeps every caller.
-    """
-    subdirs = set()
-    for path in files:
-        if role_for(path) != role or is_role_test_path(path):
-            continue
-        at = role_of(path)
-        subdirs.add(at.subdir if at else "")
-    return bool(subdirs) and subdirs <= _DEPLOY_RUN_SUBDIRS
-
-
-def narrowed(
-    role: str, tags: set[str], files, host_vars: _Path = HOST_VARS
-) -> set[str]:
-    """`tags`, or the one smoke caller where the narrowing applies. NEVER empty.
-
-    Empty is not a valid answer: `land_tags.plane_note` reads an empty caller set as a role
-    nothing deploys and asks a hand for a full `ansible/deploy.yml`. A `smoke_caller` that
-    resolves to None therefore keeps every caller.
-
-    Args:
-        role: the shared role's directory name.
-        tags: its caller tags, as `shared_role_callers.caller_tags` derives them.
-        files: the PR's changed paths, the whole list.
-        host_vars: the `inventory/host_vars/` directory `smoke_caller` reads.
-    """
-    if role not in SMOKE_TESTABLE_SHARED_ROLES or len(tags) < 2:
-        return tags
-    if not deploy_run_only(role, files):
-        return tags
-    one = smoke_caller(tags, host_vars)
-    return {one} if one else tags
-
-
-def narrowed_roles(
-    files, declared: set[str] | None = None, host_vars: _Path = HOST_VARS
-) -> frozenset[str]:
-    """The shared roles `shared_caller_tags` narrowed to one smoke caller.
-
-    What `land_lib.classify` says to the operator is read off this. A line claiming that every
-    service running the role was deployed is the failure mode the narrowing introduces, and it
-    cannot be derived from the tag count alone — a role with one caller is not narrowed.
-    """
-    declared = declared_tags() if declared is None else declared
-    roles = shared_roles(files, declared)
-    callers = role_callers() if roles else {}
-    out = set()
-    for role in roles:
-        tags = caller_tags(role, declared, callers)
-        if tags and narrowed(role, tags, files, host_vars) != tags:
-            out.add(role)
-    return frozenset(out)
-
-
-# The standalone-value guard's map (#4932). `manifests/tasks/main.yml` reads only the row keyed
-# by `manifests_service`, so a row that changed can change no other caller's deploy.
-# `narrow_lib/guard_map.py` holds the same path, and `test_land_shared_guard_map.py` holds the
-# two equal. The deployer's copy went with `deploy_k8s_owed.py` in D6.12.
-GUARD_MAP = "ansible/roles/k8s/manifests/files/standalone_secret_keys.json"
-
-
-def _guard_rows_at(ref: str, git) -> dict | None:
-    """The guard map at `ref` as a dict of rows, or None when it is absent or does not parse."""
-    r = git("show", f"{ref}:{GUARD_MAP}")
-    if r.returncode != 0:
-        return None
-    try:
-        rows = json.loads(r.stdout)
-    except ValueError:
-        return None
-    return rows if isinstance(rows, dict) else None
-
-
-def guard_map_rows(files, pr_range: str, git) -> frozenset[str] | None:
-    """The tags whose guard-map row differs over `pr_range`, or None to keep every caller.
-
-    `shared_caller_tags` fans a `manifests` change out to every role that includes it, about
-    57 tags. A change to `GUARD_MAP` alone reaches only the callers whose row moved, because
-    the guard task reads `.get(manifests_service, [])` and nothing else. The landing
-    intersects the `manifests` callers with this set. An empty set is a valid answer here:
-    a reserialised map, or a row removed for a retired role, deploys no caller.
-
-    None, which keeps the full fan-out, when:
-      - `GUARD_MAP` is not in `files`, or another non-test `manifests` path is;
-      - `pr_range` is not `<old>..<new>`, or its diff does not name `GUARD_MAP`, the
-        narrower-range hazard `land_tags.quiet_paths` describes;
-      - either side is absent, unreadable, not JSON or not an object.
-
-    Not a `Classifier`, because it reads git, and never passed to `plane_note`: an empty set
-    there would read as a role a hand must apply.
-
-    The callers left undeployed owe the deployer nothing. The tick's `k8s_unapplied` line for
-    `manifests` asked the same question per caller until D6.12 deleted its discharge
-    (#5106). A caller whose row did not move carries the change from its release record, its
-    matching render, or the matching render the line stored before the producer overwrote it
-    (#5122), provided no other `manifests` change lands between that commit and the line's. The line then drops once the callers deployed here carry it, and does not wait for
-    the untouched callers' render to reach the map change.
-
-    Args:
-        files: the PR's changed paths, the list the landing's caller expansion reads.
-        pr_range: `<old>..<new>` bounding this PR's own change.
-        git: runs `git <args>` in the checkout holding both ends of the range and returns
-          the `CompletedProcess` without raising, as `Landing.git` does.
-    """
-    files = list(files)
-    if GUARD_MAP not in files:
-        return None
-    if any(
-        role_for(p) == "manifests" and not is_role_test_path(p) and p != GUARD_MAP
-        for p in files
-    ):
-        return None
-    old, sep, new = pr_range.partition("..")
-    if not (sep and old and new):
-        return None
-    diff = git("diff", "--name-only", f"{old}..{new}")
-    if diff.returncode != 0 or GUARD_MAP not in diff.stdout.splitlines():
-        return None
-    before, after = _guard_rows_at(old, git), _guard_rows_at(new, git)
-    if before is None or after is None:
-        return None
-    return frozenset(
-        k for k in before.keys() | after.keys() if before.get(k) != after.get(k)
-    )

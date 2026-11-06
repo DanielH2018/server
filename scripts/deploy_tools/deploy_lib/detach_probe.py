@@ -16,9 +16,8 @@ deploy. The match is exact on the label, so `sonarr` never picks up a `sonarr-ex
 `deploy.sh --detach` creates the log before it returns, so a wait chained after it never reads
 an earlier deploy of the same tags.
 
-The tags the deploy ran are the typed `--tags` value, except in three cases that need `--log`:
-`--changed` derives them, `deploy_run.expand_shared_roles` replaces a shared role with its
-callers, and `Run.label` cuts a long list short.
+The tags the deploy ran are the typed `--tags` value, except in two cases that need `--log`:
+`--changed` derives them, and `Run.label` cuts a long list short.
 
 THE EXIT CODE IS THE AUTHORITY. The detached child records the notifier's exit code beside the
 log (`deploy_detach.child`): 0 when the health gate settled, 1 when the playbook or the gate

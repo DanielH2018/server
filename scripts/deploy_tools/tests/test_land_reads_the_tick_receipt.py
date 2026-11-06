@@ -121,7 +121,6 @@ def _landing(
     is_ancestor_rc: int = 0,
     plane_note=None,
     ancestry=None,
-    role_dirs_at=None,
 ):
     f = Fakes(
         gh_views={"files,changedFiles": _RBAC_PR},
@@ -129,7 +128,6 @@ def _landing(
         state={RECEIPTS: receipts},
         is_ancestor_rc=is_ancestor_rc,
         is_ancestor_of=ancestry or {"e" * 40: 1},
-        role_dirs_at=role_dirs_at,
     )
     classifier = dataclasses.replace(
         build_classifier(f), plane_note=plane_note or land_tags.plane_note
@@ -195,13 +193,11 @@ def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
     """
     calls_made = []
 
-    def plane_note(
-        paths, declared=None, *, quiet=False, narrow_tags=None, role_dirs=None
-    ):
+    def plane_note(paths, *, quiet=False, narrow_tags=None):
         calls_made.append(narrow_tags)
         if narrow_tags:
             raise RuntimeError("the re-render blew up")
-        return land_tags.plane_note(paths, declared, quiet=quiet)
+        return land_tags.plane_note(paths, quiet=quiet)
 
     _rc, out, _err, _calls, _ = _landing(
         land_run, _receipt({"k3s": ["kubeconfig"]}), plane_note=plane_note
@@ -214,26 +210,21 @@ def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
 
 
 def test_the_narrowed_render_reads_step_1s_inputs_and_only_adds_the_tags(land_run):
-    """Both renders take their paths, declared tags, quiet paths and role directories from the
-    one frozen `Classification`, so the only argument that differs is the narrowing (#3665)."""
+    """Both renders take their paths and quiet paths from the one frozen `Classification`,
+    so the only argument that differs is the narrowing (#3665)."""
     seen = []
 
-    def plane_note(paths, declared=None, *, quiet=(), narrow_tags=None, role_dirs=None):
-        seen.append((list(paths), declared, set(quiet), role_dirs, narrow_tags))
-        return land_tags.plane_note(
-            paths, declared, quiet=quiet, narrow_tags=narrow_tags, role_dirs=role_dirs
-        )
+    def plane_note(paths, *, quiet=(), narrow_tags=None):
+        seen.append((list(paths), set(quiet), narrow_tags))
+        return land_tags.plane_note(paths, quiet=quiet, narrow_tags=narrow_tags)
 
-    role_dirs = frozenset({"setup/k3s"})
     _rc, out, _err, _calls, _ = _landing(
         land_run,
         _receipt({"k3s": ["kubeconfig"]}),
         plane_note=plane_note,
-        role_dirs_at=role_dirs,
     )
-    assert [s[4] for s in seen] == [None, {"k3s": frozenset({"kubeconfig"})}]
-    assert seen[0][:4] == seen[1][:4]
-    assert seen[1][3] == role_dirs
+    assert [s[2] for s in seen] == [None, {"k3s": frozenset({"kubeconfig"})}]
+    assert seen[0][:2] == seen[1][:2]
     assert "ansible/k3s-bringup.yml --tags kubeconfig" in out
 
 

@@ -72,8 +72,6 @@ class Classification:
         quiet: the broad paths whose diff carries no content change.
         declared: the tags declared at the merge commit; None when that read failed, and
             every reader then falls back to its own tree.
-        plane_paths: `pr_paths` less what a shared role changed that moves no rendered
-            manifest. Both renders of the plane note read it.
         plane: what a hand must apply, as step 1 renders it with whole-role tags; "" for
             nothing. `Landing.plane` is the note to print.
         self_applied: whether the tick applies part of this PR itself.
@@ -85,8 +83,6 @@ class Classification:
     pr_range: str = ""
     quiet: frozenset[str] = frozenset()
     declared: frozenset[str] | None = None
-    role_dirs: frozenset[str] | None = None
-    plane_paths: tuple[str, ...] = ()
     plane: str = ""
     self_applied: bool = False
     self_applied_command: str = ""
@@ -116,16 +112,14 @@ class Landing:
         self.needs_diff = False
         self.host_candidate = False  # a path is under HOST_INPUTS
         self.host_targets: list[Any] = []  # HostTargets; host_wait imports us
-        # The tags in `resolved_tags` this PR PROVES are a k3s change, from two provenances:
-        # `shared_caller_tags` reached them by walking the k8s role-caller graph, or
-        # every changed path naming them sits under `ansible/roles/k8s/`.
-        # `deploy.deploy_by_host` routes these to a `platform: k8s` entry alone, because a tag
-        # name can select a Docker entry too (`wg-easy` on daniel-pi) and that service's change
-        # is not in this PR. A tag neither provenance covers -- one whose paths span both
-        # role trees, say -- stays routed to every declaring host, which is the direction a
-        # wrong answer here must fall.
+        # The tags in `resolved_tags` this PR PROVES are a k3s change: every changed path naming
+        # them sits under `ansible/roles/k8s/`. `deploy.deploy_by_host` routes these to a
+        # `platform: k8s` entry alone. A tag this does not cover stays routed to every declaring
+        # host, which is the direction a wrong answer here must fall.
         self.k8s_only: list[str] = []
-        self.owned_tags: dict[str, str] = {}  # tag -> owner (`promotion.split_owned`)
+        self.flux_tags: list[
+            str
+        ] = []  # the k8s tags a promotion applies and step 7 gates
         self.suspended_tags: list[str] = []  # suspended at M; the gate skips them
         self.deployed_hosts: set[str] = set()
         # The commit the deploy phase rendered, when it rendered one that is not the primary
@@ -133,12 +127,6 @@ class Landing:
         # primary, which is what the fallback on a stale tree goes back to. The health verdict
         # reads it to gate from the same tree the deploy rendered.
         self.deployed_at = ""
-        # Wall-clock seconds when step 5 finished, or None before it has. A release record
-        # stamped after this was written by a LATER deploy of the same service, which is how
-        # the health verdict tells a re-rolled workload from a broken one (#3812).
-        self.deploy_ended_at: float | None = None
-        # The tags `health_verdict` re-gated after a later deploy re-rolled them, comma-joined.
-        self.regated = ""
         # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
         # a tick that was still applying. Every later read of the deployer's markers is then
         # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run

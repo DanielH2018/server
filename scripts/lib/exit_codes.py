@@ -315,8 +315,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "DEPLOY_BROAD",
             "the change is broad (shared templates, inventory, the setup plane) and maps to no "
             "single service, so NOTHING was deployed.",
-            "--changed refuses it by design; apply the plane by hand. `deploy_tags.py narrow "
-            "<old> <new>` prints, read-only, the services the tick would map the range to.",
+            "--changed refuses it by design. `promote` and Flux apply the cluster half, and "
+            "the refusal names any setup or bring-up command a hand owes.",
             verdict="broad",
         ),
         _c(
@@ -333,8 +333,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             DEPLOY_FLUX_OWNED,
             "DEPLOY_FLUX_OWNED",
             "the tag is applied by Flux through `promote`, so NOTHING was deployed.",
-            "Its containers_list entry carries `owner`, so no Ansible path may apply it. Merge "
-            "the change and let `promote` publish it; drop the tag to deploy the rest.",
+            "Its containers_list entry is `platform: k8s`, so no Ansible path may apply it. "
+            "Merge the change and let `promote` publish it; drop the tag to deploy the rest.",
             verdict="flux-owned",
         ),
         _c(

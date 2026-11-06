@@ -1,4 +1,4 @@
-"""The flux-ownership census row of target slice H2.1: no flux-owned role keeps a host install.
+"""The flux-ownership census rows: every k8s entry is flux-owned, and none keeps a host install.
 
 Flux applies a flux-owned role's manifests and runs none of its tasks. A role that installed a
 cron, a script or a host-lib copy and is then flipped leaves that install running with no
@@ -159,4 +159,35 @@ FLUX_OWNERSHIP = Census(
     # 58 k8s entries when the row landed (2026-10-16): the row reads every one of them.
     min_matches=len(k8s_entries()),
     must_find=frozenset(_K8S + role for role in H2_ROLES),
+)
+
+
+def _entry_subjects() -> list[RoleSubject]:
+    return [
+        RoleSubject(name, entry.get("owner"))
+        for name, entry in sorted(k8s_entries().items())
+    ]
+
+
+def _not_flux_owned(subject: Subject) -> list[str]:
+    owner = subject.owner if isinstance(subject, RoleSubject) else None
+    return [] if owner == "flux" else [f"owner is {owner!r}, not flux"]
+
+
+K8S_ENTRIES_ARE_FLUX_OWNED = Census(
+    name="every-k8s-entry-is-flux-owned",
+    reason=(
+        "`deploy.sh` refuses every k8s tag and the tick applies no k8s role, so a k8s "
+        "`containers_list` entry without `owner: flux` has no writer once `promote` stops "
+        "publishing it, and its objects are orphaned or, under the deletion policy, deleted. "
+        "A handback is not a rollback since D6.12: fix a bad role forward (D6's *The deletion "
+        "policy, and the end of the handback*)."
+    ),
+    files=_entry_subjects,
+    offence=_not_flux_owned,
+    red=(RoleSubject("sonarr", None), RoleSubject("sonarr", "released")),
+    green=(RoleSubject("sonarr", "flux"),),
+    # The count D5 ended with. A selector that stops matching fails here, not on nothing.
+    min_matches=66,
+    must_find=frozenset({_K8S + "bento-pdf", _K8S + "flux"}),
 )

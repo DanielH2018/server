@@ -1,135 +1,14 @@
 #!/usr/bin/env python3
-"""A deploy-run-only change to `manifests` deploys ONE caller, not 57 (#3124).
+"""`smoke_caller` picks the cheapest render target of a shared role's callers (#3124).
 
-WHAT WENT WRONG. PR #3117 changed `roles/k8s/manifests/tasks/` alone -- the condition the
-config rollout-restart reads. `land_tags.shared_caller_tags` fanned that out to 57 tags and
-about 20 minutes, ended `DEPLOY-VERDICT: deployed` then `VERDICT: settled`, and 0 of 60 release
-records showed a restart. The operator ruled on 2026-10-01 that such a landing deploys one
-representative caller as a smoke test.
-
-WHY THE PICK IS NOT PINNED BY NAME. `smoke_caller` chooses the cheapest render target from the
-tree, so adding one template to today's winner moves the answer. The live-tree tests here
-assert the SHAPE -- one tag, a real caller, the same tag twice -- and the cost rule itself is
-asserted against a synthetic tree, where the costs are the fixture.
+WHY THE PICK IS NOT PINNED BY NAME. `smoke_caller` chooses from the tree, so adding one template
+to today's winner moves the answer, and the cost rule is asserted against a synthetic tree, where
+the costs are the fixture.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_shared_role_smoke_caller.py
 """
 
-from deploy_tools.land_lib import land_shared
-from deploy_tools.land_lib import land_tags
-import shared_role_callers
-import shared_role_reach
-from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, smoke_caller
-
-# PR #3117's real five-path file list, read from `gh pr view 3117 --json files` on 2026-10-01.
-# The CLAUDE.md and the two `ansible/tests/` paths decide nothing: `role_for` drops a `.md` and
-# neither test path sits under the role, so `tasks/` is the whole of what this PR changed there.
-_PR_3117_FILES = [
-    "ansible/roles/k8s/manifests/CLAUDE.md",
-    "ansible/roles/k8s/manifests/tasks/main.yml",
-    "ansible/roles/k8s/manifests/tasks/release_stamp.yml",
-    "ansible/tests/_release_expectation.py",
-    "ansible/tests/k8s/test_release_stamp_rollout_expectation.py",
-]
-
-_TEMPLATE = "ansible/roles/k8s/manifests/templates/ingressroute.yml.j2"
-
-
-def _every_caller(role: str) -> set[str]:
-    """The unnarrowed caller walk, which the narrowing must stay a subset of."""
-    return land_shared.caller_tags(
-        role, land_shared.declared_tags(), land_shared.role_callers()
-    )
-
-
-def test_pr_3117_deploys_one_caller_rather_than_the_fleet(flux_handed_back):
-    """The issue's Verify-by, on the measured file list."""
-    every = _every_caller("manifests")
-    assert len(every) > 40, "the caller walk itself still reaches the fleet"
-    reached = land_tags.shared_caller_tags(_PR_3117_FILES, host_vars=flux_handed_back)[
-        "manifests"
-    ]
-    assert len(reached) == 1 and reached <= every
-    # Still nothing owed to a hand: a non-empty caller set is what keeps the role out of the
-    # note, and a narrowing to the empty set would have put it back in.
-    assert land_tags.plane_note(_PR_3117_FILES) == ""
-
-
-def test_the_operator_line_knows_which_role_was_narrowed(flux_handed_back):
-    """`classify` reads `smoke_narrowed_roles` so its line cannot claim the fleet.
-
-    Not derivable from the tag count: `arr-notification` has two callers and is not narrowed,
-    while a role with one caller would read as narrowed on a count alone.
-    """
-    hv = flux_handed_back
-    assert land_shared.narrowed_roles(_PR_3117_FILES, host_vars=hv) == frozenset(
-        {"manifests"}
-    )
-    assert (
-        land_shared.narrowed_roles([*_PR_3117_FILES, _TEMPLATE], host_vars=hv)
-        == frozenset()
-    )
-    assert (
-        land_shared.narrowed_roles(
-            ["ansible/roles/k8s/arr-notification/tasks/main.yml"], host_vars=hv
-        )
-        == frozenset()
-    )
-
-
-def test_the_same_pick_twice_over_one_tree(flux_handed_back):
-    """A landing that re-derives its tags must not deploy a second service."""
-    hv = flux_handed_back
-    first = land_tags.shared_caller_tags(_PR_3117_FILES, host_vars=hv)["manifests"]
-    assert len(first) == 1
-    assert (
-        first == land_tags.shared_caller_tags(_PR_3117_FILES, host_vars=hv)["manifests"]
-    )
-
-
-def test_a_template_beside_the_tasks_keeps_every_caller(flux_handed_back):
-    """The reject half by path: `templates/` is bytes a deploy applies to each caller."""
-    files = [*_PR_3117_FILES, _TEMPLATE]
-    assert land_shared.deploy_run_only("manifests", files) is False
-    assert land_tags.shared_caller_tags(files, host_vars=flux_handed_back)[
-        "manifests"
-    ] == _every_caller("manifests")
-
-
-def test_a_per_caller_helper_keeps_every_caller():
-    """The reject half by role: `arr-notification` acts on each caller separately (#1397).
-
-    `tasks/`-only and a shared role, so only `SMOKE_TESTABLE_SHARED_ROLES` separates it from
-    the accepted case above.
-    """
-    files = ["ansible/roles/k8s/arr-notification/tasks/main.yml"]
-    assert land_shared.deploy_run_only("arr-notification", files) is True
-    assert "arr-notification" not in SMOKE_TESTABLE_SHARED_ROLES
-    reached = land_tags.shared_caller_tags(files)["arr-notification"]
-    assert reached == _every_caller("arr-notification")
-    assert len(reached) > 1
-
-
-def test_the_smoke_path_rule_is_the_reach_rule_minus_meta():
-    """Two modules classify the same subdirectories, so neither can widen alone (#3150).
-
-    `shared_role_reach.deploy_time_only` is the finer, diff-reading rule and carries `meta/`;
-    `land_shared.deploy_run_only` is the range-free path rule and deliberately leaves it out.
-    Both docstrings name the split, and this holds them to it.
-    """
-    reach = shared_role_reach._DEPLOY_TIME_SUBDIRS
-    assert "meta" in reach
-    assert land_shared._DEPLOY_RUN_SUBDIRS == reach - {"meta"}
-
-
-def test_a_hand_typed_tags_run_still_expands_to_every_caller():
-    """The asymmetry #2717 decided: `deploy.sh --tags manifests` is the operator asking."""
-    declared = land_shared.declared_tags()
-    tags, replaced, _ = shared_role_callers.expand_shared_tags(
-        ["manifests"], declared, land_shared.role_callers()
-    )
-    assert set(tags) == _every_caller("manifests")
-    assert len(replaced["manifests"]) > 1
+from shared_role_callers import smoke_caller
 
 
 def _tree(tmp_path, entries, templates, owners=None):
@@ -189,17 +68,9 @@ def test_a_caller_that_renders_nothing_is_no_candidate(tmp_path):
     assert smoke_caller({"plain"}, host_vars, roles) is None
 
 
-def test_no_candidate_keeps_every_caller(tmp_path):
-    """The RED proof for the empty answer.
-
-    `plane_note` reads an empty caller set as a role nothing deploys and asks a hand for a full
-    `ansible/deploy.yml`, so `None` must widen back to the whole set rather than narrow to it.
-    """
+def test_no_candidate_is_none(tmp_path):
     host_vars, roles = _tree(tmp_path, {"box": []}, {})
     assert smoke_caller({"sonarr", "radarr"}, host_vars, roles) is None
-    assert land_shared.narrowed("manifests", {"sonarr"}, _PR_3117_FILES) == {
-        "sonarr"
-    }, "a single caller is already as narrow as it goes"
 
 
 def _bento_tree(tmp_path, owners=None):

@@ -15,7 +15,7 @@ from _helpers import walk_tasks
 from _deploy_mechanics_row import DEPLOY_MECHANICS
 from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
-from _flux_ownership_row import FLUX_OWNERSHIP
+from _flux_ownership_row import FLUX_OWNERSHIP, K8S_ENTRIES_ARE_FLUX_OWNED
 from _host_script_row import HOST_SCRIPT_WRITES
 from _host_write_rows import HOST_WRITES
 from _k3s_write_verbs_row import K3S_WRITE_VERBS
@@ -413,6 +413,7 @@ ROWS = (
     OUT_OF_RENDER,
     K3S_WRITE_VERBS,
     FLUX_OWNERSHIP,
+    K8S_ENTRIES_ARE_FLUX_OWNED,
     FLUX_BORN_KEYS,
     DRILL_KEYS,
     RETIRED_CRON_ARMS,

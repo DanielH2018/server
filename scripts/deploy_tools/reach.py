@@ -96,15 +96,10 @@ def is_role_test_path(path: str) -> bool:
     stages those: the `no-role-ships-a-test-file` row of
     `ansible/tests/repo/test_census_rows_roles.py` holds that tree-wide.
 
-    `tasks/` is NOT dropped, for three reasons. A role
-    with no `containers_list` entry and no caller has no path to being applied at all, and a
-    tasks-only PR adding one must still be reported
-    (`tests/test_land_classify.py:110`). A helper's tasks apply live state to each
+    `tasks/` is NOT dropped, for two reasons. A helper's tasks apply live state to each
     caller separately — arr-notification's seed a Discord Connect notification into the *arr's
-    own database — so deploying one caller is not the change applied
-    (`tests/test_land_tags_caller_coverage.py:76`). And `_supplies_manifest_bytes`
-    puts `image-builder` in the reported set by name:
-    the role ships `templates/build-job.yaml.j2`.
+    own database. And `_supplies_manifest_bytes` puts `image-builder` in the reported set by
+    name: the role ships `templates/build-job.yaml.j2`.
 
     Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
     this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's

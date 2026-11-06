@@ -5,10 +5,10 @@ exploration. `docs/gitops-pipeline.md` was re-read 22 times, mostly to work out 
 a change deploys, and 22 full-suite runs took up to 188s. Both answers follow from the paths an
 issue cites, and both have a tool that already gives them.
 
-- The deploy plane comes from `land.sh`'s own classifier: `land_tags.derive`, `plane_note` and
-  `self_applied`, plus `land_shared.shared_caller_tags`. None of them needs git or the network;
-  they read the checkout this module runs from. A second derivation here would drift from the
-  one the landing applies.
+- The deploy plane comes from `land.sh`'s own classifier: `reach`, `plane_note` and
+  `self_applied`. None of them needs git or the network; they read the checkout this module runs
+  from. A second derivation here would drift from the one the landing applies. For a k8s path
+  this reads no artifact, so it says who applies the change rather than which tags move.
 - The tests come from the `tests/` sibling rule in `.claude/rules/python-layout.md`, checked
   against the files that exist.
 
@@ -24,25 +24,21 @@ from pathlib import Path as _Path
 _SCRIPTS = _Path(__file__).resolve().parents[2]
 _sys.path.insert(0, str(_SCRIPTS))
 
-from deploy_tools.land_lib import land_shared  # noqa: E402
 from deploy_tools.land_lib import land_tags  # noqa: E402
-from lib.narrow_git import CannotNarrow  # noqa: E402
+import reach  # noqa: E402
 
 REPO = _SCRIPTS.parent
 
 
 def deploy_line(paths: list[str]) -> str:
     """What `land.sh` would make of a PR that touches exactly `paths`."""
-    try:
-        tags = set(land_tags.derive(paths, len(paths)).tags)
-        for callers in land_shared.shared_caller_tags(paths).values():
-            tags |= callers
-        note = land_tags.plane_note(paths)
-    except CannotNarrow as exc:
-        return f"not derived, because {exc}"
+    cs = reach.reach(paths).changes
+    note = land_tags.plane_note(paths)
     parts = []
-    if tags:
-        parts.append(f"deploys tag {', '.join(sorted(tags))} (`deploy.sh --tags`)")
+    if cs.k8s or cs.broad_deploy:
+        parts.append(
+            "`promote` applies the k8s half and `land.sh` waits on the changed set"
+        )
     if land_tags.self_applied(paths):
         parts.append("the GitOps tick applies part of it itself")
     if note:

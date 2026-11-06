@@ -17,9 +17,7 @@ So the walk only descends where nothing is inherited: into an `include_*` withou
 whose target must then tag every task itself. `k8s/manifests/tasks/drain.yml` is the live instance, and
 its CLAUDE.md records why its `tags: [always]` are load-bearing.
 
-A shared role inside a workload role is covered by this model, but its tag is the caller's:
-`deploy.sh --tags <shared role>` selects it by expanding to its callers
-(`scripts/deploy_tools/tests/test_deploy_expands_shared_roles.py`).
+A shared role inside a workload role is covered by this model, but its tag is the caller's.
 
 Run: uv run pytest ansible/tests/deploy/test_every_playbook_task_is_tag_selectable.py
 """

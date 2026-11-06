@@ -16,8 +16,8 @@ ahead, so being ahead must never mask being behind.
 WHICH BEHIND-NESS REFUSES. A tree behind on a role this deploy does not render cannot revert
 that role's live config: the refusal is about what the tags render, not about the commit
 count. `--tags` therefore narrows the question to the paths in HEAD..<ref> that reach one of
-those tags, a broad plane, the SOPS secrets file, or a shared k8s role every k8s deploy runs
-— `refusing_paths` carries each rule and why it is not about the tags. With no tags, with a
+those tags, a broad plane or the SOPS secrets file — `refusing_paths` carries each rule and
+why it is not about the tags. With no tags, with a
 tag that names a BLOCK of tasks rather than a service (`config`, `deploy`, `cron`, `always`),
 or with host_vars unreadable, the deploy is unscoped and any tail refuses. The narrowing
 matters because the GitOps deployer fast-forwards to the newest GREEN commit in its range
@@ -154,7 +154,7 @@ def unscoped_reason(tags: set[str], declared: set[str] | None) -> str:
 
 
 def refusing_paths(
-    paths: list[str], tags: set[str], repo: str, declared: set[str]
+    paths: list[str], tags: set[str], repo: str
 ) -> list[tuple[str, str]]:
     """The incoming paths this deploy must not be behind on, each with the reason, in order.
 
@@ -163,7 +163,7 @@ def refusing_paths(
     are unions over the path list. `cs.broad` covers the manual planes too (a bring-up
     playbook sets both), so no separate check is needed for those.
 
-    Three of the four rules refuse on something OTHER than the requested tags, because the
+    Two of the three rules refuse on something OTHER than the requested tags, because the
     narrowing is only sound where a path's reach can be named:
 
     - A broad plane renders for every role the play selects, so no tag set bounds it.
@@ -172,18 +172,10 @@ def refusing_paths(
       any service from a tree behind a rotation commit renders the old credential and pushes
       it live — the reversion this guard exists to refuse, arriving through a field the
       narrowing does not consult.
-    - An `ansible/roles/k8s/<role>` with no `containers_list` entry is a SHARED role,
-      included by literal name from other roles rather than selected by a tag — which is the
-      derivation this rule uses, rather than a list that would go stale as roles are added.
-      Every k8s deploy runs `k8s/manifests`, so being behind on one is being behind on
-      whatever this deploy renders, whichever service it names.
-
     Args:
         paths: the incoming paths, as `git diff --name-only HEAD..<ref>` gives them.
         tags: the service tags this deploy targets.
         repo: the checkout to read shared-module callers from.
-        declared: every tag naming a `containers_list` entry, which is how a shared k8s role
-            is told from a service one.
     """
     from reach import reach
 
@@ -196,12 +188,6 @@ def refusing_paths(
             continue
         if cs.secrets:
             flagged.append((path, "a SOPS value every template can render"))
-            continue
-        shared = sorted(cs.k8s - declared)
-        if shared:
-            flagged.append(
-                (path, f"the shared k8s role {shared[0]}, which every k8s deploy runs")
-            )
             continue
         hit = sorted(one.touched(repo) & tags)
         if hit:
@@ -325,7 +311,7 @@ def main(argv: list[str] | None = None) -> int:
     # nothing could classify is not a range shown to touch nothing this deploy renders.
     if paths is not None:
         assert declared is not None  # unscoped_reason refuses the None case above.
-        flagged = refusing_paths(paths, tags, args.repo, declared)
+        flagged = refusing_paths(paths, tags, args.repo)
         if not flagged:
             # Not silent: the tree IS behind, and an operator reading a deploy log has to be
             # able to tell this from a tree that was current.

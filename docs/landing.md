@@ -346,33 +346,29 @@ minute later. `--tags` does not opt out: the derivation is skipped, the classifi
 A change **no** tick can apply — the `plane` a hand must run, which `needs-manual-apply` names —
 does not push a landing off the fast path. Nothing about awaiting a tick would settle it.
 
-**A Pi role deploys on the Pi.** `land.sh` runs one `deploy.sh` per host that declares a derived
-tag, read from `deploy_tags.py hosts`, and adds `-e target=daniel-pi` for the Pi's. The health
-verdict probes a tag only the Pi declares with `--docker` alone. Until 2026-09-03 both halves
-ran against the local node: PR #928 printed `settled` with the CLUSTER Alloy DaemonSet's 2/2
-ready while the Pi ran the old container, because the play matched no service on daniel-box and
-the gate guessed a same-named cluster workload (issue #929).
+**`land.sh` hands `deploy.sh` no k8s tag.** No host declares a Docker entry since H5, so no
+derived tag reaches `deploy.sh` today. The per-host loop stays until H7 and adds
+`-e target=<host>` for a tag only another host declares. A change to a host's package waits for
+that host instead (`scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`).
 
 **It scopes the deploy to the PR's own file list rather than a SHA range**, so another session's
 merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
 `--changed <since>` when the count disagrees — the only reason `--since` exists. That fallback
 refuses a range wholesale as soon as one path is broad. Since D6.12 such a range derives no tag
-and waits on the promotion, whose changed set names the k8s tags; a Pi Compose role it reaches
-is a `deploy.sh -e target=daniel-pi` by hand. `--tags` overrides the scope entirely.
+and waits on the promotion, whose changed set names the k8s tags; a Pi Compose service it
+reaches ships in the `homelab-daniel-pi` package. `--tags` overrides the scope entirely.
 
 ### Every landing waits on promotion
 
-**A tag whose `containers_list` entry sets `owner` never reaches `deploy.sh`.** Step 5 reads
-ownership at the merge commit (`land_lib/promotion.py:split_owned`) and takes every such tag out
-of the list before `deploy_by_host` sees it. `deploy.sh` runs only for the Ansible-owned tags
-that remain, which are the Pi's Compose tags.
+**A k8s tag never reaches `deploy.sh`.** Step 5 reads the k8s entries at the merge commit
+(`land_lib/promotion.py:split_k8s`) and takes every such tag out of the list before
+`deploy_by_host` sees it.
 
-**The changed set names the k8s tags, not the PR's paths (D6.12).** A path-derived tag Flux
-applies is dropped (`land_lib/promotion.py:drop_path_derived`), unless `--tags` named it. Every
-PR with a path other than a document or a test waits on the promotion
-(`land_lib/promotion.py:moves_the_bundle`), and land-wait's changed set, joined with any
-`--tags`, names the `owner: flux` tags the gate grades and the annotation names. A shared
-template, an inventory edit or a `manifests` change therefore gates exactly the tags whose
+**The changed set names the k8s tags, not the PR's paths.** `split_k8s` drops a path-derived
+k8s tag and keeps one `--tags` named. Every PR with a path other than a document or a test waits
+on the promotion (`land_lib/promotion.py:moves_the_bundle`), and land-wait's changed set, joined
+with any `--tags`, names the `owner: flux` tags the gate grades and the annotation names. A
+shared template, an inventory edit or a `manifests` change therefore gates exactly the tags whose
 render moved. A PR that moves no bundle file waits on `homelab` alone and gates nothing. The
 gate renders the merge commit from a snapshot, and `land.sh` kicks the tick to converge the
 primary checkout. A `cluster-vars` change moves the footprint of every substituting tag, so
@@ -619,25 +615,11 @@ A gate that could not read is not a failed gate. `probe.py health` exits 75
 (`PROBE_UNREADABLE`) when it cannot reach the store it reads, such as Traefik answering `no
 available server` while Prometheus rolls. The workload was not graded, healthy or not. When no
 other tag reads unhealthy, the landing ends `deferred`, exit 75, and prints
-`outcome.UNREADABLE_GATE_NOTE`. It skips the later-deploy re-gate below, because a gate that
-read nothing saw no pods roll under it. No tick gates health, so `cc-wait land` reports this
+`outcome.UNREADABLE_GATE_NOTE`. No tick gates health, so `cc-wait land` reports this
 deferral as `gave-up`: re-run `land.sh` to grade the deploy. PR #5533's landing read
 `unhealthy` this way on 2026-10-18 while its pod was `1/1 Running` (#5543). `land.sh` does not
 retry the gate itself. The store's roll takes about 30s, and a re-run of `land.sh` is the
 resume point that already exists.
-
-A failed gate is asked once more whether a later deploy re-rolled the workload. The landing's
-deploy releases the service lock before the gate runs, so another landing or a tick can deploy
-the same service under the gate's one sample. A `Recreate` workload then reads `0/1 ready`
-mid-roll (#3812). `land.sh` counts a tag as re-rolled on one of two signals, and neither counts
-on its own (#4514). A held service lock (or `all`) counts only when one of the tag's workloads
-changed `metadata.generation` while the lock was held. A release record stamped after step 5
-ended counts only when it queued a restart or names manifests that differ from the record
-before it. A deploy that rolled nothing leaves the failed gate standing. On a re-roll, `land.sh`
-waits for that deploy to finish and gates again. The verdict line then reads `re-gated after a later deploy of <tags>`, and a change
-that is still broken fails the second gate as well. A healthy second gate settles only when the
-commit in that deploy's release record contains the merge commit. The tick's rollback
-redeploys an older pin, and its healthy pods say nothing about this change.
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the 180s
 restart window. It cannot see whether *your change* took effect: an Authelia 302 fires in the
@@ -677,39 +659,11 @@ and the verdict then prints one line per half. PR #2568 carried exactly that pai
 #2569 the plane's line suppressed the other: daniel-server and daniel-pi kept the old
 `kuma-push-lib.sh`, since deleted by #7109, behind a printed remediation that named neither.
 
-Four things sit in that position:
+Three things sit in that position:
 
 - **A setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`; `common`
   is include-only, so the note names each consumer's playbook and tag), or a bring-up playbook.
   The tick applies every other setup role itself, and `deploy.yml` is a `containers_list` loop.
-- **A shared k8s role that no declared role runs** has no tag at all and still needs a full
-  `ansible/deploy.yml`. Every other shared k8s role is deployed rather than reported (#2704):
-  `manifests`, `volume-snapshot`, `image-builder`, `arr-notification` and the
-  rest have no `containers_list` entry, but `deploy.yml` runs each under the tag of every role
-  that includes it, so the landing adds the tags of every caller, followed through callers that
-  are themselves shared. A `tasks/` change to `volume-snapshot` reaches about 58
-  services. A shared-role change reaching no rendered manifest fans out to nothing.
-  `deploy.sh --tags <shared role>` performs the same expansion by hand, for every caller, even
-  where the landing narrows (#2717). A role directory the merge commit no longer holds is
-  deleted, not shared, so it is neither deployed nor reported. The landing reads that from
-  the merge commit with `git ls-tree`, because a checkout can predate the merge or keep a
-  deleted role's ignored `__pycache__/` (#7108).
-  **`manifests` is the one exception, and only for a change confined to `tasks/` or
-  `handlers/`** (#3124). That role acts through the bytes it renders, so such a change moves no
-  live object: the landing deploys ONE caller as a smoke test — the cheapest render target, as
-  `shared_role_callers.smoke_caller` derives it — and the other 56 take the new task logic on
-  their own next deploy. PR #3117 was the measured case: 57 tags, about 20 minutes, and 0 of 60
-  release records showed the restart it was changing. The `# DECIDED:` at `smoke_caller` holds
-  the ruling and the gap it accepts, and `deploy_k8s_owed.discharge_k8s_unapplied` still reads
-  every caller, because its question is whether the change is applied rather than whether it
-  runs.
-  **A change confined to `manifests`' standalone-guard map deploys only the rows that
-  moved** (#4932). The guard task reads one row of `files/standalone_secret_keys.json`,
-  the row for its own service. `land_shared.guard_map_rows` therefore diffs the map over
-  the PR's range, and the landing deploys only the callers whose row differs. It keeps
-  every caller when the map is added or removed, or fails to parse on either side. It also
-  keeps every caller when the range does not cover the map, or when another `manifests`
-  path changed beside it.
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
   `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a

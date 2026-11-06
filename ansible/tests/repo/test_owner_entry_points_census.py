@@ -54,9 +54,9 @@ RENDER_TARGETS = "scripts/deploy_tools/render_targets.py"
 RETIRED = "scripts/diagnostics/probe_lib/releases_retired.py"
 ROTATION_TOOLS = "scripts/secrets_mgmt/rotation_tools.py"
 
-FLUX_OWNED = (
-    Link(OWNERS, "read_owners", "flux_owned"),
-    Link(OWNERS, "flux_owned", "tag_owners"),
+K8S_TAGS = (
+    Link(OWNERS, "read_k8s_tags", "declared_k8s_tags"),
+    Link(OWNERS, "declared_k8s_tags", "k8s_tags"),
 )
 RECORD_TARGETS = Link(RENDER_TARGETS, "render_record_targets", "tag_owners")
 TREE_OWNERS = Link(RETIRED, "tree_owners", "tag_owners")
@@ -68,19 +68,18 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         Link("ansible/deploy.yml", None, "containers_list | ansible_owned"),
     ),
     "`deploy.sh --tags T`": (
-        Link(RUN, "_gated_run", "refuse_flux_owned"),
-        Link(OWNERS, "refuse_flux_owned", "read_owners"),
-        *FLUX_OWNED,
+        Link(RUN, "_gated_run", "refuse_k8s_tags"),
+        Link(OWNERS, "refuse_k8s_tags", "read_k8s_tags"),
+        *K8S_TAGS,
     ),
-    "`deploy.sh --changed`": (Link(RUN, "run_changed", "read_owners"), *FLUX_OWNED),
-    "`deploy.sh --tags manifests`": (
-        Link(RUN, "expand_shared_roles", "read_owners"),
-        *FLUX_OWNED,
+    "`deploy.sh --changed`": (
+        Link(RUN, "run_changed", "changed"),
+        Link("scripts/deploy_tools/deploy_lib/tags.py", "changed", "service_records"),
     ),
     "`deploy.sh --list-services`": (
-        Link(RUN, "_gated_run", "mark_owners"),
-        Link(RUN, "_gated_run", "read_owners"),
-        *FLUX_OWNED,
+        Link(RUN, "_gated_run", "mark_k8s_tags"),
+        Link(RUN, "_gated_run", "read_k8s_tags"),
+        *K8S_TAGS,
     ),
     "GitOps deployer": (
         Link(
@@ -95,15 +94,12 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         ),
     ),
     "`land.sh`": (
-        Link("scripts/deploy_tools/land_lib/deploy.py", "deploy_phase", "split_owned"),
         Link(
             "scripts/deploy_tools/land_lib/promotion.py",
-            "split_owned",
-            "owners_at_merge",
+            "wait_on_promotion",
+            "_flux_owned",
         ),
-        Link(
-            "scripts/deploy_tools/land_lib/promotion.py", "owners_at_merge", "owners_at"
-        ),
+        Link("scripts/deploy_tools/land_lib/promotion.py", "_flux_owned", "owners_at"),
         Link("scripts/deploy_tools/land_lib/land_flux.py", "owners_at", "flux_owned"),
         Link(OWNERS, "flux_owned", "tag_owners"),
     ),
@@ -172,6 +168,12 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
 
 # The rows whose chain ends somewhere other than a tree reader, each with the reason.
 NOT_A_TREE_READER = {
+    "`deploy.sh --tags T`": (
+        "it refuses by `platform: k8s`, and the `every-k8s-entry-is-flux-owned` census row "
+        "holds `owner` on each such entry"
+    ),
+    "`deploy.sh --changed`": "it leaves out a tag by the platform of its entry",
+    "`deploy.sh --list-services`": "it marks a tag by the platform of its entry",
     "`manifest-prune-check.sh`": (
         "a host check: it skips an object only while its Kustomization exists live, read "
         "with the read-only kubeconfig, because a label alone outlives a handback"
@@ -180,7 +182,7 @@ NOT_A_TREE_READER = {
         "a host check: `is_server_side_applied` already leaves Flux's objects out, and "
         "`last-applied-configuration` is what marks one that a handback returned to Ansible"
     ),
-    "`deploy_ui`": "it runs `deploy.sh --tags`, whose refusal reads `tag_owners`",
+    "`deploy_ui`": "it runs `deploy.sh --tags`, whose refusal reads the entry's platform",
 }
 
 Source = Callable[[str], str | None]
@@ -323,9 +325,9 @@ def test_a_plan_row_no_member_names_is_flagged():
 
 def test_a_chain_that_stops_short_of_a_reader_is_flagged():
     short = dict(ENTRY_POINTS)
-    short["`deploy.sh --changed`"] = (Link(RUN, "run_changed", "read_owners"),)
+    short["`land.sh`"] = short["`land.sh`"][:1]
     assert census_problems(_plan(), short) == [
-        "`deploy.sh --changed`: the chain ends at `read_owners`, which is none of "
+        "`land.sh`: the chain ends at `_flux_owned`, which is none of "
         f"{sorted(READERS)}"
     ]
 

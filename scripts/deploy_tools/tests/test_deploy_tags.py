@@ -157,23 +157,6 @@ def test_describe_does_not_change_lists_own_shape(capsys):
     assert list_out != describe_out
 
 
-def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):
-    # Both names must be live containers_list entries: `changed` splits shared roles out of
-    # the tag list against real inventory, so a retired service would read as shared.
-    monkeypatch.setattr(
-        deploy_tags,
-        "_git_diff_paths",
-        lambda ref, cwd=None: [
-            "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2",
-            "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2",
-        ],
-    )
-    assert deploy_tags.main(["changed"]) == 0
-    captured = capsys.readouterr()
-    assert captured.out.strip() == "jellyfin,wg-easy"
-    assert "jellyfin, wg-easy" in captured.err
-
-
 def test_split_shared_roles_separates_an_undeclared_role(host_vars):
     deployable, shared = deploy_tags.split_shared_roles(
         {"sonarr", "jellyfin", "manifests"}, host_vars
@@ -195,10 +178,8 @@ def test_split_shared_roles_calls_nothing_shared_when_all_are_declared(host_vars
     assert shared == []
 
 
-def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
-    """Emitting `manifests` as a tag makes deploy.sh refuse the whole list (exit 2), so the valid
-    service beside it never deploys.
-    """
+def test_changed_derives_no_tag_for_a_k8s_role_or_a_shared_one(capsys, monkeypatch):
+    """`promote` applies both, and `deploy.sh` would refuse either tag."""
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
@@ -209,26 +190,22 @@ def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
     )
     assert deploy_tags.main(["changed"]) == 0
     captured = capsys.readouterr()
-    assert captured.out.strip() == "jellyfin"
-    assert "manifests" in captured.err
-    assert "`uv run ansible-playbook ansible/deploy.yml" in captured.err
+    assert captured.out == ""
+    assert "left out `jellyfin` is applied by Flux" in captured.err
+    assert "ansible/deploy.yml" not in captured.err
 
 
-def test_changed_refuses_when_only_shared_roles_changed(capsys, monkeypatch):
-    """Exit 3, not 0.
-
-    An empty tag list returned as success makes deploy.sh exit 0 having deployed nothing, which is
-    the same false green in a different place.
-    """
+def test_changed_on_a_shared_role_alone_exits_0_with_no_tag(capsys, monkeypatch):
+    """`derive_changed_tags` reports an empty list as nothing to deploy, so no false green."""
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
         lambda ref, cwd=None: ["ansible/roles/k8s/manifests/tasks/main.yml"],
     )
-    assert deploy_tags.main(["changed"]) == 3
+    assert deploy_tags.main(["changed"]) == 0
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "manifests" in captured.err
+    assert "no deployable service changed" in captured.err
 
 
 def test_changed_refuses_a_broad_change(capsys, monkeypatch):
@@ -243,7 +220,10 @@ def test_changed_refuses_a_broad_change(capsys, monkeypatch):
     # a caller might mistake for one.
     assert captured.out == ""
     assert "deploy.sh: error: --changed: refusing" in captured.err
-    assert "`uv run ansible-playbook ansible/deploy.yml" in captured.err
+    assert "`promote` and Flux apply the cluster half" in captured.err
+    assert "homelab-daniel-pi" in captured.err
+    assert "ansible/deploy.yml" not in captured.err
+    assert "target=daniel-pi" not in captured.err
 
 
 def test_changed_reports_no_files_differ(capsys, monkeypatch):

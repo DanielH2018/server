@@ -220,8 +220,8 @@ of those roles writes `hold_sha` for the whole list.
 A PR that adds or removes a k8s entry therefore runs two checks before it merges, and quotes
 both in its body:
 
-1. `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD` names the
-   tags the landing applies. For an added or removed entry, `flux` is among them.
+1. The PR names the tags the landing applies. For an added or removed entry, `flux` is among
+   them.
 2. `uv run python scripts/diagnostics/probe.py releases --stale-only` and
    `uv run python scripts/diagnostics/probe.py releases` must name none of those tags as
    stale, `unmerged` or `dirty`. Read the service names, not the exit code. A named service
