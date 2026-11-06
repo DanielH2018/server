@@ -3,7 +3,7 @@
 
 Runs on daniel-box as deploy-ui.service, User=ubuntu, cwd the primary checkout, under
 `uv run --no-project` on the host interpreter — so stdlib only, and every repo tool is a
-subprocess (`probe.py releases`, `land.sh`, `deploy.sh`, `gh`). The daemon does NO
+subprocess (`land.sh`, `gh`). The daemon does NO
 authentication: ufw admits its port from the cluster only, and Authelia `two_factor` gates
 the IngressRoute in front of it. Both are named in this role's CLAUDE.md.
 
@@ -49,7 +49,6 @@ from host_lib import logfmt
 # DEPLOY_UI_TREE_LOCK, so the one definition stays in group_vars (#3276).
 SERVICE_LOCK_GLOB = "server-deploy-*.lock"
 PAGE = Path(__file__).with_name("deploy_ui.html")
-STALE_CACHE_S = 60
 
 
 @dataclass(frozen=True)
@@ -93,26 +92,25 @@ class App:
 
     def __init__(self, config: Config, run=subprocess.run) -> None:
         self.cfg, self.run = config, run
-        # One lock per cache, so a concurrent miss on one collapses to a single fetch
-        # without the 120s `probe.py releases` blocking a /api/prs request behind it.
-        self._stale_lock = threading.Lock()
+        # A concurrent cache miss collapses to a single `gh` fetch.
         self._prs_lock = threading.Lock()
         self._prs_cache: tuple[float, list] | None = None
-        self._stale_cache: tuple[float, list] | None = None
 
     # ---- subprocess edge ----
-    def _capture(self, argv: list[str], timeout: int, merge_stderr: bool = False):
-        """Run argv in the repo and return the CompletedProcess, whatever its exit code.
+    def _out(
+        self, argv: list[str], timeout: int, ok_rcs=(0,), merge_stderr: bool = False
+    ) -> str:
+        """Run argv in the repo and return its stdout.
 
         `merge_stderr` folds stderr into stdout in write order, for a command whose two
         streams only mean something together (fuser names the file on one and its holders
         on the other).
 
         Raises:
-            Unavailable: the command could not be run or timed out.
+            Unavailable: the command could not be run, timed out, or exited outside `ok_rcs`.
         """
         try:
-            return self.run(
+            r = self.run(
                 argv,
                 cwd=self.cfg.repo,
                 stdout=subprocess.PIPE,
@@ -123,11 +121,6 @@ class App:
             )
         except (OSError, subprocess.SubprocessError) as exc:
             raise Unavailable(f"{argv[0]}: {exc}") from exc
-
-    def _out(
-        self, argv: list[str], timeout: int, ok_rcs=(0,), merge_stderr: bool = False
-    ) -> str:
-        r = self._capture(argv, timeout, merge_stderr)
         if r.returncode not in ok_rcs:
             raise Unavailable(
                 f"{argv[0]} exited {r.returncode}: {(r.stderr or '').strip()[:200]}"
@@ -176,34 +169,6 @@ class App:
             for r in reads.runs(reads.parse_ps(ps), opened, locks)
         ]
         return {"runs": runs, "locks_watched": [os.path.basename(p) for p in paths]}
-
-    def stale(self) -> dict:
-        with self._stale_lock:
-            if self._stale_cache is not None:
-                at, cached = self._stale_cache
-                if time.monotonic() - at < STALE_CACHE_S:
-                    return {"stale": cached, "cached": True}
-            r = self._capture(
-                [
-                    "uv",
-                    "run",
-                    "python",
-                    "scripts/diagnostics/probe.py",
-                    "releases",
-                    "--stale-only",
-                ],
-                120,
-            )
-            rows = reads.parse_stale(r.stdout)
-            # probe.py exits 1 both when it lists stale services and when it fails with
-            # nothing on stdout. Exit 0 is the only state that means "read it, none stale";
-            # rc 1 with no rows parsed is a failed read, and must not cache as an empty list.
-            if r.returncode != 0 and not rows:
-                raise Unavailable(
-                    f"probe.py releases exited {r.returncode}: {r.stderr.strip()[:200]}"
-                )
-            self._stale_cache = (time.monotonic(), rows)
-            return {"stale": rows, "cached": False}
 
     def state(self) -> dict:
         try:
@@ -258,16 +223,6 @@ class App:
         return data.decode("utf-8", errors="replace")
 
     # ---- writes ----
-    def _deployable_tags(self) -> set[str]:
-        """The service tags `/api/deploy` accepts — the listed tags minus the block tags.
-
-        `--list-services` prints `config`, `deploy`, `cron` and `always` too; see
-        `writes.NON_SERVICE_TAGS` for why none of them may reach this API.
-        """
-        return writes.service_tags(
-            set(self._out(["./scripts/deploy.sh", "--list-services"], 60).split())
-        )
-
     def land(self, body: dict) -> tuple[int, str]:
         pr, since = str(body.get("pr", "")), str(body.get("since", ""))
         if not pr.isdigit():
@@ -294,22 +249,6 @@ class App:
             "land",
         )
         writes.audit(f"action=land pr={pr} since={since} log={log}")
-        return 202, json.dumps({"log": str(log)})
-
-    def deploy(self, body: dict) -> tuple[int, str]:
-        tag = str(body.get("tag", ""))
-        refusal = writes.guard_deploy(
-            tag, self._deployable_tags(), self.state()["hold_sha"]
-        )
-        if refusal:
-            return 409, refusal
-        log = writes.spawn_logged(
-            ["./scripts/deploy.sh", "--tags", tag],
-            self.cfg.repo,
-            self.cfg.log_dir,
-            "deploy",
-        )
-        writes.audit(f"action=deploy tag={tag} log={log}")
         return 202, json.dumps({"log": str(log)})
 
     def cancel(self, body: dict) -> tuple[int, str]:
@@ -346,13 +285,11 @@ class App:
     # ---- routing ----
     READS: ClassVar[dict[str, str]] = {
         "/api/inflight": "inflight",
-        "/api/stale": "stale",
         "/api/state": "state",
         "/api/prs": "prs",
     }
     WRITES: ClassVar[dict[str, str]] = {
         "/api/land": "land",
-        "/api/deploy": "deploy",
         "/api/cancel": "cancel",
         "/api/hold/clear": "hold_clear",
     }

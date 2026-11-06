@@ -15,7 +15,6 @@ pre{background:var(--mantle);border:1px solid var(--surface1);padding:10px;max-h
 </style></head><body><main>
 <h1>Deploy queue</h1><div id="msg"></div>
 <h2>Locks, landings and deploys in flight</h2><div id="inflight"></div>
-<h2>Merged but undeployed</h2><div id="stale"></div>
 <h2>Deployer state</h2><div id="state"></div>
 <h2>Open pull requests</h2><div id="prs"></div>
 <h2>Log</h2><pre id="log" class="mute">no action yet</pre>
@@ -31,8 +30,6 @@ function inflight(b){const held=b.runs.filter(r=>r.locks.length);
   let s=`<p>Locks: ${!b.locks_watched.length?'<span class="unavail">no lock files found</span>':held.length?held.map(r=>`<code>${esc(r.locks.join(' '))}</code> pid ${r.pid}, ${r.elapsed_s}s`).join('; '):`<span class="clear">free</span> <span class="mute">(${b.locks_watched.length} watched)</span>`}</p>`;
   if(!b.runs.length)return s+'<p class="mute">nothing in flight</p>';
   return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>command</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?'#'+esc(r.pr):esc(r.tag)}</td><td>${r.pid}</td><td>${r.elapsed_s}s</td><td>${esc(r.locks.join(' '))}${r.waiting_on.length?`<span class="mute">waiting on ${esc(r.waiting_on.join(' '))}</span>`:''}</td><td><code>${esc(r.args)}</code><br><span class="mute">${esc(r.log)}</span></td><td>${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
-function stale(b){if(!b.stale.length)return '<p class="clear">every release is current</p>';
-  return '<table><tr><th>service</th><th>why</th><th></th></tr>'+b.stale.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.reason)}</td><td><button onclick="post('/api/deploy',{tag:'${esc(r.service)}'})">deploy</button></td></tr>`).join('')+'</table>';}
 // A Clear drops every hold_plane entry at once, and each entry is a plane nobody has applied.
 // The prompt names them, because after the Clear nothing records them at all.
 let holdWarn='Type the held SHA to clear it';
@@ -46,6 +43,6 @@ function state(b){const row=(k,v,extra='')=>`<tr><td>${k}</td><td>${v?`<code>${e
 function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
   return '<table><tr><th>#</th><th>title</th><th>CI</th><th></th></tr>'+b.prs.map(p=>`<tr><td>${p.number}</td><td>${esc(p.title)}${p.draft?' <span class="mute">draft</span>':''}<br><span class="mute">${esc(p.branch)}</span></td><td>${p.ci}</td><td><button onclick="{const s=prompt('--since SHA (master before the merge)');if(s)post('/api/land',{pr:'${p.number}',since:s})}">land</button></td></tr>`).join('')+'</table>';}
 async function tail(){if(!logPath)return;const r=await fetch('/api/log?path='+encodeURIComponent(logPath));document.getElementById('log').textContent=await r.text();}
-function refresh(){panel('inflight','/api/inflight',inflight);panel('stale','/api/stale',stale);panel('state','/api/state',state);panel('prs','/api/prs',prs);tail();}
+function refresh(){panel('inflight','/api/inflight',inflight);panel('state','/api/state',state);panel('prs','/api/prs',prs);tail();}
 refresh();setInterval(refresh,10000);
 </script></main></body></html>

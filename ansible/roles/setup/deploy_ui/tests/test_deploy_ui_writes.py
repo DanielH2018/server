@@ -50,45 +50,6 @@ def test_guard_land_under_hold_is_flagged():
     assert "hold" in refused(w.guard_land("1550", [], "deadbeef"))
 
 
-def test_guard_deploy_known_tag_is_clean():
-    assert w.guard_deploy("homepage", {"homepage", "n8n"}, "") is None
-
-
-def test_guard_deploy_unknown_tag_is_flagged():
-    assert "homepage2" in refused(w.guard_deploy("homepage2", {"homepage"}, ""))
-
-
-def test_service_tags_keeps_a_service_name_is_clean():
-    assert w.service_tags({"homepage", "n8n", "config"}) == {"homepage", "n8n"}
-
-
-def test_service_tags_drops_every_block_tag_is_flagged():
-    """The rejecting half: a listing of block tags alone leaves nothing deployable."""
-    assert w.service_tags(set(w.NON_SERVICE_TAGS)) == set()
-
-
-def test_non_service_tags_matches_deploy_tags_own_block_set():
-    """The oracle for the literal in `deploy_ui_writes`.
-
-    The daemon runs outside the repo venv and cannot import `deploy_tags`, so the set is
-    copied. pytest CAN import both, which is what keeps the copy honest: a new block tag in
-    `deploy_tags` fails here rather than silently becoming acceptable to `/api/deploy`.
-    """
-    from deploy_tools.deploy_lib import tags as deploy_tags
-
-    assert w.NON_SERVICE_TAGS == deploy_tags.BLOCK_TAGS | deploy_tags.RESERVED_TAGS
-
-
-def test_guard_deploy_block_tag_is_flagged():
-    """A block tag `deploy.sh --list-services` prints is still refused by this API."""
-    refusal = refused(w.guard_deploy("config", {"homepage"}, ""))
-    assert "config" in refusal and "block tags" in refusal
-
-
-def test_guard_deploy_under_hold_is_flagged():
-    assert "hold" in refused(w.guard_deploy("homepage", {"homepage"}, "deadbeef"))
-
-
 def test_guard_cancel_listed_pid_is_clean():
     assert w.guard_cancel(4321, {4321}) is None
 
@@ -188,9 +149,9 @@ def test_spawn_logged_never_takes_a_name_already_on_disk(tmp_path):
     """
     logs = tmp_path / "logs"
     logs.mkdir()
-    victim = logs / f"deploy-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.log"
+    victim = logs / f"land-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}.log"
     victim.write_text("output of the first process\n")
-    log = w.spawn_logged(["sh", "-c", "sleep 5"], tmp_path, logs, "deploy")
+    log = w.spawn_logged(["sh", "-c", "sleep 5"], tmp_path, logs, "land")
     try:
         assert log != victim
         assert victim.read_text() == "output of the first process\n"

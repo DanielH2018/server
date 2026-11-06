@@ -114,8 +114,8 @@ def mark_k8s_tags(tags: Iterable[str]) -> None:
     """Name each of `tags` on stderr, for `--list-services`.
 
     stderr rather than beside the tag in `deploy_tags.py list`, because that stdout is a
-    contract: the locked half locks one service per line of it, and `deploy_ui` splits it on
-    whitespace into the tags its API accepts. A mark there would join both lists as a tag.
+    contract: the locked half locks one service per line of it. A mark there would read as a
+    tag.
     """
     for tag in sorted(tags):
         print(f"{PROG}: {k8s_note(tag)}; --tags {tag} exits 5.", file=sys.stderr)
