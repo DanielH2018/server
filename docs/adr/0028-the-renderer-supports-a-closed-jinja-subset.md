@@ -143,8 +143,6 @@ Ansible behaviour.
   fails the render.
 - An include var does not reach a template. The renderer takes no value from a role's `tasks/`.
   Ansible's does.
-- A `hosts.ini` inline value keeps its quotes. Ansible's parser strips them. `hosts.ini` quotes no
-  value.
 - `lookup('pipe')` runs nothing. It accepts one command, and Ansible runs any command.
 
 ## Consequences

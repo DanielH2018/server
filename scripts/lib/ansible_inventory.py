@@ -5,7 +5,7 @@ rule for which ``containers_list`` entries count, but importing ``render_guard``
 ``jinja2`` and a ``yaml`` import. So eight readers wrote their own filter, and they disagreed
 about an entry with an empty ``name`` or none at all (#3357). ``hosts.ini`` was parsed twice
 with different rules for an inline comment, and its host names were copied by hand into two
-tuples. This module imports only ``pathlib`` and ``repo_paths``, the same reason
+tuples. This module imports only the standard library and ``repo_paths``, the same reason
 ``repo_paths`` was split out of ``render_guard``.
 
 ``containers_entries_in`` takes an already-parsed mapping, so the caller keeps its own YAML
@@ -23,6 +23,7 @@ A deliberately narrower host set filters ``inventory_hosts()`` rather than repla
 where they are.
 """
 
+import shlex
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -123,7 +124,11 @@ def inventory_hosts(path: Path = HOSTS_INI) -> list[Host]:
     anywhere starts a comment, and so does a ``;`` at the start of a line, as Ansible's ini
     parser reads them. A ``[group:vars]`` or ``[group:children]`` section holds no host
     lines, so it is skipped. A host listed under two groups is one ``Host`` carrying both.
-    A missing file reads as no hosts.
+    A missing file reads as no hosts. A host line splits as ``shlex`` splits it, as Ansible's
+    does, so a value loses one level of quotes and a quoted value may hold a space or a ``#``.
+
+    Raises:
+        ValueError: A host line has an unbalanced quote. The message names the host.
     """
     if not path.is_file():
         return []
@@ -140,7 +145,10 @@ def inventory_hosts(path: Path = HOSTS_INI) -> list[Host]:
             continue
         if section is not None and ":" in section:
             continue
-        name, *pairs = line.split()
+        try:
+            name, *pairs = shlex.split(raw, comments=True)
+        except ValueError as exc:
+            raise ValueError(f"{path}: host {line.split()[0]}: {exc}") from exc
         if name not in settings:
             order.append(name)
             groups[name] = []

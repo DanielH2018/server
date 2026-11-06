@@ -64,6 +64,28 @@ def test_a_host_in_two_groups_is_one_host_and_a_vars_section_is_not_a_host(tmp_p
     assert "ansible_python_interpreter=/usr/bin/python3" not in hosts
 
 
+def test_a_quoted_inline_value_reads_as_ansible_reads_it(tmp_path):
+    ini = tmp_path / "hosts.ini"
+    ini.write_text(
+        "[all]\n"
+        """h1 ansible_host="{{server_ip}}" ansible_user='ubuntu'  # a comment's quote\n"""
+        """h2 note="a b#c" ansible_user=ubuntu\n"""
+    )
+    hosts = {h.name: h for h in inventory_hosts(ini)}
+    assert hosts["h1"].settings == {
+        "ansible_host": "{{server_ip}}",
+        "ansible_user": "ubuntu",
+    }
+    assert hosts["h2"].settings == {"note": "a b#c", "ansible_user": "ubuntu"}
+
+
+def test_an_unbalanced_quote_fails_naming_the_host(tmp_path):
+    ini = tmp_path / "hosts.ini"
+    ini.write_text('[all]\nh1 ansible_user=ubuntu\nh2 ansible_host="10.9.9.9\n')
+    with pytest.raises(ValueError, match="host h2: No closing quotation"):
+        inventory_hosts(ini)
+
+
 def test_the_real_inventory_declares_the_three_hosts():
     """Non-vacuity against ground truth: the derived tuples elsewhere read this list."""
     assert set(host_names()) >= {"daniel-box", "daniel-server", "daniel-pi"}
