@@ -1,6 +1,6 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30; [#6635](https://github.com/DanielH2018/server/issues/6635) carries its second attempt. No merged PR is recorded for D6.13 to D6.21.
+Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). No merged PR is recorded for D6.13 to D6.21.
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that

@@ -212,6 +212,12 @@ while daniel-server renders the entire UPS shutdown chain. Confirmed live 2026-0
 daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
 `/etc/nut/upsmon.conf` was dated Aug 17 against a template changed on 2026-08-28 (review M-10).
 
+**daniel-box runs both readers.** They read the same stamp directories through the same library.
+The box needs this reader armed because the drift checks' disarm removes manifest-prune-check, and
+the box must keep one detector across that removal. Until then the redundancy is harmless:
+`SetupDriftFailed` and `SetupDriftNotReporting` name `origin="daniel-server"` alone, so the box's
+verdict pages nothing, and manifest-prune-check's rules page the box's stale renders.
+
 - **The two arms are not reimplemented** — both readers source `files/setup-drift-lib.sh`,
   copied to `/usr/local/lib` like `homelab-check-lib.sh`. Two copies of a drift check are free to
   drift from each other, which is the fault a drift check reports.
