@@ -16,15 +16,3 @@
 - name: Deploy the namespace ingress baseline
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_rollout: ""
-    # The observability namespace's baseline and its three caller policies, which the armed
-    # apply's `-n homelab` refuses (#3575). The renderer writes them to
-    # `cluster/netpol-baseline-deferred/`, which Flux applies after every other tag's
-    # Kustomization.
-    manifests_deferred_files:
-      - networkpolicy-observability.yaml
-      - networkpolicy-prometheus.yaml
-      - networkpolicy-loki.yaml
-      - networkpolicy-alertmanager.yaml
-    manifests_deferred_dir_name: netpol-baseline-observability

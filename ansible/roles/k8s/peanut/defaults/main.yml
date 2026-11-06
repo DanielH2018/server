@@ -19,3 +19,5 @@ peanut_k8s_cpu_request: "50m"
 peanut_k8s_mem_request: 32Mi
 # upsd's port on the in-cluster `nut` Service.
 peanut_k8s_nut_port: 3493
+
+manifests_rollout: peanut  # noqa var-naming[no-role-prefix]

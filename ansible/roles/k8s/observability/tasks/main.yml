@@ -14,14 +14,3 @@
     # Every namespaced document lives in k8s_observability_namespace, so the armed apply and its
     # prune run there.
     manifests_prune_namespace: "{{ k8s_observability_namespace }}"
-    # The entry's `port` is Grafana's, whose Service grafana.yaml renders itself.
-    manifests_exclude_files: [service.yaml]
-    # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has several,
-    # in a different namespace.
-    manifests_rollout: ''
-    # The workloads the renderer's restart annotation targets. `namespace` is load-bearing:
-    # the fingerprints default to k8s_namespace, and these workloads live in
-    # k8s_observability_namespace.
-    manifests_self_rollouts: >-
-      {{ observability_stabilise_workloads
-         | map('combine', {'namespace': k8s_observability_namespace}) | list }}

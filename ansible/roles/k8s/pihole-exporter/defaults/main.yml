@@ -29,3 +29,13 @@ pihole_exporter_k8s_cpu_limit: "200m"
 pihole_exporter_k8s_mem_limit: 64Mi
 pihole_exporter_k8s_cpu_request: "10m"
 pihole_exporter_k8s_mem_request: 16Mi
+
+manifests_rollout: pihole-exporter  # noqa var-naming[no-role-prefix]
+
+# The pod reads PIHOLE_PASSWORD from the pihole role's `pihole-env` Secret. The renderer
+# hashes each listed key's `.source` digest into `checksum/restart`, so a rotation of
+# pihole_password rolls this pod under Flux, and `secret_rotation.py consumers` lists
+# this role for that key (#5416).
+manifests_outside_secrets:  # noqa var-naming[no-role-prefix]
+  - name: pihole-env
+    keys: [pihole_password]

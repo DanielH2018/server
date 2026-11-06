@@ -119,3 +119,5 @@ monitor_bridge_healthchecks_expected:
   - {slug: daniel-pi-docker-prune, kind: cron, schedule: "30 6 * * *", tz: UTC, grace: 3600}
   - {slug: daniel-box-worktree-sweep, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
   - {slug: daniel-server-worktree-sweep, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
+
+manifests_rollout: monitor-bridge  # noqa var-naming[no-role-prefix]
