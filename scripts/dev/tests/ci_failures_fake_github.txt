@@ -1,0 +1,211 @@
+import json, re, subprocess, sys
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import parse_qsl, urlsplit
+
+SEARCH_CAP = 1000
+WORLD = json.loads(Path(__file__).with_name("world.json").read_text())
+RUNS = {r["id"]: r for r in WORLD}
+
+
+def die(message):
+    sys.stderr.write(message + "\n")
+    sys.exit(1)
+
+
+def run_object(run, number=None):
+    number = number or len(run["attempts"])
+    if not 1 <= number <= len(run["attempts"]):
+        die("gh: Not Found (HTTP 404)")
+    attempt = run["attempts"][number - 1]
+    return {
+        "id": run["id"], "name": run["name"], "display_title": run["name"],
+        "path": ".github/workflows/ci.yml", "event": run["event"],
+        "head_branch": run["head_branch"], "head_sha": "0" * 40, "status": "completed",
+        "conclusion": attempt["conclusion"], "run_attempt": number, "run_number": 1,
+        "created_at": run["created_at"], "run_started_at": run["created_at"],
+        "updated_at": run["created_at"],
+        "html_url": "https://github.com/DanielH2018/server/actions/runs/%d" % run["id"],
+    }
+
+
+def job_object(run, number, job):
+    return {
+        "id": job["id"], "run_id": run["id"], "run_attempt": number, "name": job["name"],
+        "workflow_name": run["name"], "head_branch": run["head_branch"],
+        "head_sha": "0" * 40, "status": "completed", "conclusion": job["conclusion"],
+        "started_at": run["created_at"], "completed_at": run["created_at"],
+        "html_url": "https://github.com/DanielH2018/server/actions/runs/%d" % run["id"],
+        "steps": [
+            {
+                "name": step["name"], "number": step["number"], "status": "completed",
+                "conclusion": step["conclusion"], "started_at": run["created_at"],
+                "completed_at": run["created_at"],
+            }
+            for step in job["steps"]
+        ],
+    }
+
+
+def bound(text, upper):
+    text = text.replace("Z", "+00:00")
+    moment = datetime.fromisoformat(text)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    if upper and len(text) == 10:
+        moment += timedelta(days=1)
+    return moment
+
+
+def in_created(run, spec):
+    created = bound(run["created_at"], False)
+    if ".." in spec:
+        low, high = spec.split("..")
+        return (low == "*" or created >= bound(low, False)) and (
+            high == "*" or created < bound(high, True) or created == bound(high, False)
+        )
+    for operator, test in ((">=", created.__ge__), ("<=", created.__le__), (">", created.__gt__), ("<", created.__lt__)):
+        if spec.startswith(operator):
+            return test(bound(spec[len(operator):], operator.startswith("<") and "=" in operator))
+    return bound(spec, False) <= created < bound(spec, True)
+
+
+def search(query):
+    found = sorted(WORLD, key=lambda r: r["created_at"], reverse=True)
+    if "created" in query:
+        found = [r for r in found if in_created(r, query["created"])]
+    if "branch" in query:
+        found = [r for r in found if r["head_branch"] == query["branch"]]
+    if "event" in query:
+        found = [r for r in found if r["event"] == query["event"]]
+    # The status filter reads a run's latest attempt, as the real endpoint's does.
+    if "status" in query and query["status"] not in ("completed",):
+        found = [r for r in found if r["attempts"][-1]["conclusion"] == query["status"]]
+    return len(found), [run_object(r) for r in found[:SEARCH_CAP]]
+
+
+def paged(key, total, items, query, paginate):
+    size = int(query.get("per_page", 30))
+    start = (int(query.get("page", 1)) - 1) * size
+    if not paginate:
+        return [{"total_count": total, key: items[start:start + size]}]
+    return [
+        {"total_count": total, key: items[i:i + size]}
+        for i in range(start, max(len(items), 1), size)
+    ]
+
+
+def job_log(job):
+    return "\n".join(line for step in job["steps"] for line in step["lines"]) + "\n"
+
+
+def find_job(job_id):
+    for run in WORLD:
+        for attempt in run["attempts"]:
+            for job in attempt["jobs"]:
+                if job["id"] == job_id:
+                    return job
+    die("gh: Not Found (HTTP 404)")
+
+
+def api(tool, argv):
+    path, query, paginate, slurp, jq = None, {}, False, False, None
+    args = iter(argv)
+    for arg in args:
+        if arg == "--paginate":
+            paginate = True
+        elif arg == "--slurp":
+            slurp = True
+        elif arg in ("--jq", "-q"):
+            jq = next(args)
+        elif arg in ("-f", "-F", "--field", "--raw-field"):
+            key, _, value = next(args).partition("=")
+            query[key] = value
+        elif arg in ("-X", "--method", "-H", "--header", "--hostname", "--cache", "--out"):
+            next(args)
+        elif path is None:
+            path = arg
+    parts = urlsplit(path)
+    query.update(parse_qsl(parts.query))
+    tail = re.sub(r"^/?repos/[^/]+/[^/]+/actions/", "", parts.path)
+
+    match = re.fullmatch(r"jobs/(\d+)/logs", tail)
+    if match:
+        if tool == "ghread":
+            die("ghread: the response contains terminal escape sequences")
+        sys.stdout.write(job_log(find_job(int(match[1]))))
+        return
+
+    if tail == "runs":
+        total, items = search(query)
+        pages = paged("workflow_runs", total, items, query, paginate)
+    elif match := re.fullmatch(r"runs/(\d+)(?:/attempts/(\d+))?", tail):
+        run = RUNS.get(int(match[1])) or die("gh: Not Found (HTTP 404)")
+        pages = [run_object(run, int(match[2]) if match[2] else None)]
+    elif match := re.fullmatch(r"runs/(\d+)(?:/attempts/(\d+))?/jobs", tail):
+        run = RUNS.get(int(match[1])) or die("gh: Not Found (HTTP 404)")
+        latest = len(run["attempts"])
+        if match[2]:
+            numbers = [int(match[2])]
+        else:
+            numbers = range(1, latest + 1) if query.get("filter") == "all" else [latest]
+        items = [
+            job_object(run, n, job) for n in numbers for job in run["attempts"][n - 1]["jobs"]
+        ]
+        pages = paged("jobs", len(items), items, query, paginate)
+    else:
+        die("fake gh: no such endpoint: " + path)
+
+    documents = [pages] if slurp else pages
+    for document in documents:
+        text = json.dumps(document)
+        if jq is not None:
+            text = subprocess.run(
+                ["jq", "-c", "-r", jq], input=text, text=True, capture_output=True, check=True
+            ).stdout
+        sys.stdout.write(text if not text or text.endswith("\n") else text + "\n")
+
+
+def run_log(argv):
+    run_id = next(int(a) for a in argv if a.isdigit())
+    run = RUNS.get(run_id) or die("gh: run not found")
+    number = len(run["attempts"])
+    if "--attempt" in argv:
+        number = int(argv[argv.index("--attempt") + 1])
+    failed_only = "--log-failed" in argv or "--failed" in argv
+    # A --job read ignores which attempt the job id came from, so it reads the latest attempt.
+    text = []
+    for job in run["attempts"][number - 1]["jobs"]:
+        for step in job["steps"]:
+            if failed_only and step["conclusion"] != "failure":
+                continue
+            text += ["%s\t%s\t%s" % (job["name"], step["name"], line) for line in step["lines"]]
+    output = "\n".join(text) + "\n"
+    if "--out" in argv:
+        Path(argv[argv.index("--out") + 1]).write_text(output)
+    else:
+        sys.stdout.write(output)
+
+
+def main():
+    tool, argv = Path(sys.argv[0]).name, sys.argv[1:]
+    if argv[:1] == ["api"]:
+        api(tool, argv[1:])
+    elif argv[:2] == ["run", "logs"] or (argv[:2] == ["run", "view"] and {"--log", "--log-failed"} & set(argv)):
+        run_log(argv[2:])
+    elif argv[:2] == ["run", "view"] and "--json" in argv:
+        run = RUNS.get(int(argv[2])) or die("gh: run not found")
+        number = int(argv[argv.index("--attempt") + 1]) if "--attempt" in argv else len(run["attempts"])
+        document = run_object(run, number)
+        document["jobs"] = [job_object(run, number, j) for j in run["attempts"][number - 1]["jobs"]]
+        sys.stdout.write(json.dumps(document) + "\n")
+    elif argv[:2] == ["repo", "view"]:
+        if "-q" in argv or "--jq" in argv:
+            sys.stdout.write("DanielH2018/server\n")
+        else:
+            sys.stdout.write(json.dumps({"nameWithOwner": "DanielH2018/server"}) + "\n")
+    else:
+        die("fake gh: unsupported command: " + " ".join(argv))
+
+
+main()
