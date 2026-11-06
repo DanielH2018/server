@@ -65,7 +65,8 @@ ConfigMap. The one-time import of `/var/lib/longhorn-restore-drill` left with th
 CronJob (H2.3d), because a pod cannot see the directory. A ConfigMap that does not exist fails the
 run with `stamp ConfigMap absent`, and a failed patch fails it before the restore starts. The
 script traps TERM and INT to run its cleanup through the exit, so the kubelet's SIGTERM at the
-Job's deadline removes the Volume, PV, PVC and probe pod of the restore. Its `mktemp` template
+Job's deadline removes the Volume, PV, PVC and probe pod of the restore. A run that a SIGKILL ends
+first leaves those objects, and the next run sweeps them. Its `mktemp` template
 ends in `XXXXXX` because busybox's `mktemp` rejects a suffix, and `alpine/k8s` ships busybox. The key table
 is in `docs/longhorn-disaster-recovery.md`.
 

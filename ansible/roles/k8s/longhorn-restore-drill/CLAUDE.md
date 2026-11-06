@@ -50,7 +50,9 @@ newest backup of ONE volume into a NEW volume, mounts it in a throwaway pod, che
 real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
 
 - **Scope.** It creates and deletes the Volume, PV, PVC and probe pod named
-  `restore-drill-<pvc>`, and patches the stamp ConfigMap. It never touches the live volume.
+  `restore-drill-<pvc>`, and patches the stamp ConfigMap. It never touches the live volume. It
+  also deletes those objects for any `restore-drill-` Volume older than the Job's deadline plus
+  its grace period, whichever PVC that Volume restored.
   `templates/rbac.yaml.j2` grants exactly the calls the script makes.
   `ansible/tests/k8s/test_rbac_against_script_drill.py::test_the_drill_role_grants_every_call_its_script_makes`
   holds that, and
@@ -79,9 +81,20 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
   `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py::test_the_schedule_gate_marker_names_exactly_the_ungated_roles`.
 - **Abort valves.** The Job's `activeDeadlineSeconds` is the restore timeout plus the probe pod's
   300-second bound plus a 600-second margin. The kubelet's SIGTERM at the deadline runs the
-  script's `cleanup` through its TERM trap, within the 300-second grace period. A TERM pending
-  while bash parses a `$(` runs no trap, so SIGKILL skips `cleanup` (#7383). ENFORCED:
+  script's `cleanup` through its TERM trap, within the 300-second grace period. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_deadline_clears_the_restore_timeout_plus_the_probe_bound`.
+- **The next run sweeps what a SIGKILL leaves.** A TERM pending while bash parses a `$(` runs no
+  trap, so SIGKILL skips `cleanup`. Bash offers no setting that closes this race, and an OOM kill
+  or a lost node skips `cleanup` the same way. The next run tears down each older leftover before
+  it reads the candidates, and logs a `SWEPT:` line. A delete that fails or outlasts
+  `longhorn_restore_drill_delete_timeout_seconds` fails the run and keeps the Volume, which is how
+  the next run finds the leftover again. A stuck leftover, such as a pod Terminating on a lost node,
+  therefore blocks every nightly drill and the stamps it refreshes, with a `FAIL:` line each night,
+  until check 7 reports `last-success` as stale. A younger Volume stays, because it can belong to a
+  live hand run. ENFORCED:
+  `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_the_next_run_sweeps_a_leftover_past_the_deadline_and_grace`,
+  `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_volume_a_live_run_can_hold_is_not_swept`,
+  `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_leftover_that_cannot_be_removed_fails_the_run_before_any_restore`.
 - **Required evidence.** The pod log, with each verdict line prefixed `longhorn-restore-drill:`.
   Read it with `probe.py loki-query '{container="longhorn-restore-drill"}'`. Backup health's check
   7 reads the stamp ConfigMap's `last-success`, and check 8 reads the per-volume keys, so a drill

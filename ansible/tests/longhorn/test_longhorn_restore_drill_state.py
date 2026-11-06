@@ -3,8 +3,9 @@
 
 These tests RUN the rendered script through the shared harness in `_restore_drill.py`, whose fake
 API keeps the ConfigMap across runs. They cover the NotFound arm, the stamp-before-restore
-ordering, the TERM and INT traps, and a `mktemp` template that BusyBox accepts. The image leg in
-`test_longhorn_restore_drill_image.py` runs the last of those under the pinned runner image.
+ordering, the TERM and INT traps, the sweep of a killed run's leftovers, and a `mktemp` template
+that BusyBox accepts. The image leg in `test_longhorn_restore_drill_image.py` runs the last of
+those under the pinned runner image.
 
 Run: uv run pytest ansible/tests/longhorn/test_longhorn_restore_drill_state.py
 """
@@ -17,7 +18,8 @@ from pathlib import Path
 
 import pytest
 
-from _restore_drill import harness
+from _helpers import load_yaml
+from _restore_drill import DRILL_DEFAULTS, add_drill_volume, harness
 
 A = "a-config"
 B = "b-config"
@@ -103,6 +105,86 @@ def test_a_signal_during_the_restore_wait_runs_cleanup_through_the_exit(
             os.killpg(proc.pid, signal.SIGKILL)
             proc.wait()
     assert any(f"delete volume restore-drill-{A}" in c for c in run.calls), run.calls
+
+
+# The drill's `date +%s`, fixed so a Volume's age is exact.
+_FROZEN_CLOCK = {"BASH_FUNC_date%%": f"() {{ printf '%s' {_OLD}; }}"}
+
+
+def _deadline_and_grace() -> int:
+    defaults = load_yaml(DRILL_DEFAULTS)
+    return (
+        defaults["longhorn_restore_drill_deadline_seconds"]
+        + defaults["longhorn_restore_drill_grace_seconds"]
+    )
+
+
+def test_the_next_run_sweeps_a_leftover_past_the_deadline_and_grace(
+    tmp_path: Path,
+) -> None:
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    run = harness(tmp_path, [A])
+    add_drill_volume(run, f"restore-drill-{B}", _OLD - _deadline_and_grace() - 1)
+
+    proc = run(env=_FROZEN_CLOCK)
+
+    assert f"SWEPT: restore-drill-{B}" in proc.stdout
+    deletes = [c for c in run.calls if f"restore-drill-{B}" in c]
+    assert [c.split("delete ")[1].split()[0] for c in deletes] == [
+        "pod",
+        "pvc",
+        "pv",
+        "volume",
+    ]
+    assert run.calls.index(deletes[-1]) < next(
+        i for i, c in enumerate(run.calls) if "apply -f" in c
+    )
+
+
+def test_a_volume_a_live_run_can_hold_is_not_swept(tmp_path: Path) -> None:
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    run = harness(tmp_path, [A])
+    add_drill_volume(run, f"restore-drill-{B}", _OLD - _deadline_and_grace())
+
+    proc = run(env=_FROZEN_CLOCK)
+
+    assert "SWEPT" not in proc.stdout
+    assert not any(f"restore-drill-{B}" in c for c in run.calls), run.calls
+
+
+@pytest.mark.parametrize("kind", ["pod", "pvc", "pv", "volume"])
+def test_a_leftover_that_cannot_be_removed_fails_the_run_before_any_restore(
+    tmp_path: Path, kind: str
+) -> None:
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    run = harness(tmp_path, [A])
+    add_drill_volume(run, f"restore-drill-{B}", _OLD - _deadline_and_grace() - 1)
+
+    proc = run(
+        env={
+            **_FROZEN_CLOCK,
+            "K3S_STUB_DELETE_FAILS": f"delete {kind} restore-drill-{B}",
+        }
+    )
+
+    assert proc.returncode == 1
+    assert f"cannot remove the leftover restore-drill-{B}" in proc.stderr
+    assert "SWEPT" not in proc.stdout
+    assert not any("apply -f" in c for c in run.calls), run.calls
+    if kind != "volume":
+        assert not any(f"delete volume restore-drill-{B}" in c for c in run.calls)
+
+
+def test_every_teardown_delete_is_bounded(tmp_path: Path) -> None:
+    run = harness(tmp_path, [A])
+    add_drill_volume(run, f"restore-drill-{B}", _OLD - _deadline_and_grace() - 1)
+
+    run(env=_FROZEN_CLOCK)
+
+    timeout = load_yaml(DRILL_DEFAULTS)["longhorn_restore_drill_delete_timeout_seconds"]
+    deletes = [c for c in run.calls if " delete " in f" {c}"]
+    assert len(deletes) == 8, "the sweep's four deletes and `cleanup`'s four"
+    assert all(f"--timeout={timeout}s" in c for c in deletes), deletes
 
 
 # BusyBox hands the template to mkstemp, which requires it to end in XXXXXX; GNU mktemp does not.

@@ -18,7 +18,8 @@ prints it, and `patch configmap` merges the patch's `data` into it, so state per
 the way the cluster's does. A harness built with `cm=False` has no such file, which the stub
 reports as NotFound (`--ignore-not-found`: rc 0, empty output). `K3S_STUB_GET_CM=fail` fails
 the read, and `K3S_STUB_PATCH_FAILS=<text>` fails any patch whose call contains the text.
-`K3S_STUB_PHASE` sets the probe pod's phase (default `Succeeded`).
+`K3S_STUB_DELETE_FAILS=<text>` fails any delete whose call contains the text. `K3S_STUB_PHASE` sets
+the probe pod's phase (default `Succeeded`).
 """
 
 import json
@@ -27,6 +28,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from _helpers import load_yaml
 from lib.proc_testing import run as launch
@@ -59,6 +61,8 @@ case "$*" in
     for a in "$@"; do [[ "$prev" == -f ]] && manifest="$a"; prev="$a"; done
     [[ -s "$manifest" ]] || return 1
     [[ "$K3S_STUB_RESTORE" == pass ]] || return 1 ;;
+  *"delete "*)
+    [[ -z "${K3S_STUB_DELETE_FAILS:-}" || "$*" != *"$K3S_STUB_DELETE_FAILS"* ]] || return 1 ;;
   *"get volume restore-drill-"*) printf '%s' "${K3S_STUB_VOLSTATE:-detached false}" ;;
   *"get pod "*) printf '%s' "${K3S_STUB_PHASE:-Succeeded}" ;;
   *"logs "*) printf '%s\n' "${K3S_STUB_PROBE:-files=3 bytes=4096}" ;;
@@ -241,6 +245,23 @@ def harness(
     script.write_text(render())
 
     return Harness(script, fixtures)
+
+
+def add_drill_volume(run: Harness, name: str, created_epoch: int) -> None:
+    """Add a drill Volume created at this epoch, as a run that never reached its cleanup leaves."""
+    path = run.fixtures / "volumes.json"
+    volumes = json.loads(path.read_text())
+    created = datetime.fromtimestamp(created_epoch, UTC)
+    volumes["items"].append(
+        {
+            "metadata": {
+                "name": name,
+                "creationTimestamp": created.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            },
+            "spec": {"size": "16777216"},
+        }
+    )
+    path.write_text(json.dumps(volumes))
 
 
 def selected(run: Harness, proc: subprocess.CompletedProcess) -> str:
