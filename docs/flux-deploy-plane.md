@@ -1990,13 +1990,12 @@ instead:
 
 1. **The first PR empties the service's render.** Flux prunes every object the render drops.
    The PR carries a `Removes-Object:` line for each one (*Removing an object on purpose*).
-   Deleting the role's templates is not enough on its own. The PR also edits the role's
-   `k8s/manifests` include, and leaves the `containers_list` entry as it is:
+   Deleting the role's templates is not enough on its own. The PR also adds these keys to the
+   role's `defaults/main.yml`, and leaves the `containers_list` entry as it is:
 
    ```yaml
-     vars:
-       manifests_rollout: ''
-       manifests_exclude_files: [service.yaml, ingressroute.yaml]
+   manifests_rollout: ''
+   manifests_exclude_files: [service.yaml, ingressroute.yaml]
    ```
 
    The renderer refuses a restart target that names no workload in the render, and
