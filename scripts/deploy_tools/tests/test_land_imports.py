@@ -19,6 +19,7 @@ MODULES = frozenset(
         "pace",
         "policy",
         "classify",
+        "closing_refs",
         "ci",
         "tick",
         "deploy",
@@ -97,6 +98,7 @@ ALLOWED = {
     "pin_reads": set(),
     "policy": {"landing", "outcome", "pr_json", "gh_read"},
     "classify": {"landing", "outcome", "land_tags", "promotion"},
+    "closing_refs": {"gh_read", "landing", "outcome"},
     "ci": {"landing", "outcome"},
     "tick": {"landing", "outcome"},
     "deploy": {
@@ -149,6 +151,7 @@ ALLOWED = {
         "outcome",
         "merge",
         "classify",
+        "closing_refs",
         "ci",
         "tick",
         "deploy",
