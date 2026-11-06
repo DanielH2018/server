@@ -177,7 +177,7 @@ def test_a_range_over_the_file_page_with_a_template_settles_on_the_changed_set(
         changed_rc=DEPLOY_BROAD,
     )
     assert "VERDICT: settled" in out, out
-    assert "needs-manual-apply" not in out
+    assert "needs-manual-apply" not in out and "target=daniel-pi" not in out
     assert rc == 0
     assert [c[1] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
     assert _gated(calls) == [["bento-pdf"]]
