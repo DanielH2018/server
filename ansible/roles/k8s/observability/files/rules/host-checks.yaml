@@ -22,7 +22,7 @@ groups:
             failed. Longhorn stops scheduling replicas on the node at 75%.
             homelab_disk_root_used_ratio{check="disk-health"} holds the share it read, and the
             `disk-health` syslog tag holds the run's message.
-      # SHADOW UNTIL M3's PR 5, as above. Kuma's tile pages a silent cron today.
+      # PAGING SINCE M3's PR 5. This rule pages a silent cron.
       #
       # The first arm catches a file that stopped being refreshed: node_exporter keeps serving
       # its last timestamp. The second catches a file that is gone, or a series that never
@@ -470,8 +470,8 @@ groups:
       # The weekly host-maintenance crons (#6179): apt autoremove and the dpkg purge on every
       # host, the firmware update on daniel-box, the one host with fwupd. Each runs through
       # initial_setup's files/host-maintenance.sh, which writes the check's textfile with
-      # success 0 when the job's command failed. No Kuma tile or Healthchecks.io check watches
-      # these crons, so every rule here pages, and none is shadow: a shadow NotReporting source
+      # success 0 when the job's command failed. No Healthchecks.io check watches these crons,
+      # so every rule here pages, and none is shadow: a shadow NotReporting source
       # would still inhibit HostCheckOverdue and leave a stopped cron paging nobody.
       #
       # The absent arm differs from DiskHealthNotReporting's. A bare absent_over_time fires for a
@@ -911,8 +911,8 @@ groups:
       # The claude_code timers (#6165). Each service writes its file from an ExecStartPost=, which
       # systemd runs only after a clean ExecStart=, so the file only ever says success 1 and these
       # rules have no Failed twin: OnFailure= pages a crash at once, and NotReporting catches a
-      # timer that stopped firing, which pages nothing else. Not shadow, because no Kuma tile
-      # watches these timers. One rule per host whose host_vars arm the timer. Setting the
+      # timer that stopped firing, which pages nothing else. Not shadow, because no other
+      # check watches these timers. One rule per host whose host_vars arm the timer. Setting the
       # timer's flag false stops it, and the rule then fires on purpose: delete the rule in the
       # same PR. Each deadline is the one the service renders through
       # hosts/components/claude-code/templates/timer-textfile.j2, and
@@ -1170,7 +1170,7 @@ groups:
           runbook_url: https://docs.local.daniel-hunter.com/host-packages/
       # The Pi's Compose project (H5). compose-run writes homelab_compose_up_result each time
       # homelab-reconcile starts homelab-compose.service, and a failed `up --wait` writes 0. The
-      # Pi's recovery heartbeat pages the same 0 through its Kuma tile, so this rule is SHADOW
+      # Pi's recovery heartbeat pages the same 0 through PiRecoveryFailed, so this rule is SHADOW
       # until that arm retires (h5-pi-compose.md, open question 5, "M1"). ComposeUpStale below
       # is its stale-time twin.
       - alert: ComposeUpFailed

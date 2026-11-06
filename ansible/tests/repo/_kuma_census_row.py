@@ -166,7 +166,6 @@ _PROSE_HOLDERS = {
             "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-terraria.yaml.j2",
             "ansible/roles/k8s/netpol-baseline/templates/networkpolicy-traefik.yaml.j2",
             "ansible/roles/k8s/observability/files/rules/host-checks.yaml",
-            "ansible/roles/k8s/observability/templates/alertmanager-secret.yaml.j2",
             "ansible/roles/k8s/observability/templates/prometheus.yaml.j2",
             "ansible/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh",
             "ansible/roles/k8s/pi-peer-backup/templates/secret.yaml.j2",

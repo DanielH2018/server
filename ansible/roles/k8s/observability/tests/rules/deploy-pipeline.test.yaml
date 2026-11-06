@@ -41,7 +41,8 @@ tests:
         exp_alerts: []
 
   # A scrape that works but lacks one gauge, as when the PROD_DIGEST read fails: the second
-  # arm fires. The same gap while the scrape fails stays quiet, because Kuma's tile pages that.
+  # arm fires. The same gap while the scrape fails stays quiet, because ScrapeTargetDown pages
+  # that.
   - interval: 1m
     input_series:
       - series: 'up{job="deploy-pipeline", instance="monitor-bridge.homelab.svc:9180"}'

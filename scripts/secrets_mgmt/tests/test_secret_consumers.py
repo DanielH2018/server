@@ -60,7 +60,7 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
 
 # DECIDED: no test here asserts a cross-host token is not badly overdue. One did, and on
 # 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no
-# code change. Overdue is runtime state: the daily Secret Rotation Kuma push goes DOWN for any
+# code change. Overdue is runtime state: SecretRotationAuditFailed pages the daily audit for any
 # overdue token, cross-host ones included, and `cmd_audit --check` deliberately ignores it.
 # `test_no_test_file_reads_the_live_clock` refuses the bare `today()` call it was built on.
 

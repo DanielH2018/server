@@ -281,7 +281,7 @@ tests:
         alertname: MonitorBridgeDown
         exp_alerts: []
 
-  # The missing-row case, which replaces the Kuma push-silence tile for failure-classes row 3.
+  # The missing-row case, which replaced the Kuma push-silence tile for failure-classes row 3.
   # Three rows are expected and only two export a verdict, with every timestamp fresh. The
   # count arm fires after the hold.
   - interval: 1m

@@ -102,7 +102,7 @@ def test_discord_unreachable_rides_grace(cfg, state):
 def test_discord_unreachable_redacts_the_webhook_url(cfg, state):
     # The reported vector: a webhook URL configured with no scheme. urllib raises
     # `ValueError: unknown url type: '<the whole URL>'`, and that URL is the channel's bearer
-    # credential — it must not reach the Kuma msg (which check.py also logs).
+    # credential — it must not reach the check's msg (which check.py logs).
     url = "discord.com/api/webhooks/1/s3cr3t-token"
     _, msg = _discord_cycle(
         cfg,
@@ -155,8 +155,8 @@ def test_discord_verifies_all_configured_webhooks(cfg):
 
 def test_discord_gitops_webhook_failure_pages(cfg):
     # A revoked GitOps/Renovate webhook (delivers rollback + Renovate digests, whose "alive"
-    # marker greens regardless of delivery — no Kuma backstop) pages, naming it, even though
-    # Kuma's own webhook is fine.
+    # marker greens regardless of delivery — no other alert covers it) pages, naming it, even
+    # though the webhook labelled "Kuma" is fine.
     cfg = replace(
         cfg,
         DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma",
@@ -179,8 +179,8 @@ def test_discord_gitops_webhook_failure_pages(cfg):
 
 
 def test_discord_crowdsec_webhook_failure_pages(cfg):
-    # A revoked CrowdSec webhook (the one with no Kuma backstop) pages, naming it — even though
-    # Kuma's own webhook is fine.
+    # A revoked CrowdSec webhook (no other alert covers it) pages, naming it — even though
+    # the webhook labelled "Kuma" is fine.
     cfg = replace(cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma")
     cfg = replace(
         cfg, DISCORD_CROWDSEC_WEBHOOK_URL="https://discord.com/api/webhooks/2/crowdsec"
@@ -199,8 +199,8 @@ def test_discord_crowdsec_webhook_failure_pages(cfg):
 
 
 def test_discord_healthchecks_webhook_failure_pages(cfg):
-    # A revoked healthchecks.io app webhook (its own check-down alerts, no Kuma backstop) pages,
-    # naming it — even though Kuma's own webhook is fine.
+    # A revoked healthchecks.io app webhook (its own check-down alerts, no other alert covers
+    # it) pages, naming it — even though the webhook labelled "Kuma" is fine.
     cfg = replace(cfg, DISCORD_WEBHOOK_URL="https://discord.com/api/webhooks/1/kuma")
     cfg = replace(
         cfg, DISCORD_HEALTHCHECKS_WEBHOOK_URL="https://discord.com/api/webhooks/5/hc"
@@ -297,8 +297,8 @@ def test_endpoint_label_keeps_host_and_port():
 def test_endpoint_label_omits_the_path():
     """The Discord webhook probe goes through _get_json and its token lives in the PATH.
 
-    Including the path would publish that token into the Kuma message and therefore into
-    the very Discord channel it authenticates.
+    Including the path would publish that token into the check's message and therefore into
+    the pod log.
     """
     url = "https://discord.com/api/webhooks/123456789/s3cr3t-token-value"
     label = bridge.parsing.endpoint_label(url)
@@ -337,7 +337,7 @@ def test_describe_fetch_failure_collapses_whitespace_and_truncates():
     msg = bridge.parsing.describe_fetch_failure(
         "http://h:1/p", "HTTP 500", "a\n\n  b" + "c" * 500
     )
-    assert "a b" in msg  # newlines collapsed — Kuma messages are single-line
+    assert "a b" in msg  # newlines collapsed — check messages are single-line
     assert len(msg) < 260
 
 

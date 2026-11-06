@@ -295,8 +295,8 @@ tests:
                 error, and compare the Flux CRD versions with
                 observability_ksm_flux_resource_state.
 
-  # The same missing series with kube-state-metrics' scrape failing. Kuma's Cluster Scrape
-  # Targets tile pages that up == 0, so the absent() arm stays quiet (M1 convention 5).
+  # The same missing series with kube-state-metrics' scrape failing. ScrapeTargetDown pages
+  # that up == 0, so the absent() arm stays quiet (M1 convention 5).
   - interval: 1m
     input_series:
       - series: 'up{job="kube-state-metrics", instance="kube-state-metrics:8080"}'

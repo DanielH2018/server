@@ -255,7 +255,7 @@ def test_stale_release_problems_names_the_apply_when_the_cron_predates_the_file(
 
 
 def test_stale_release_problems_is_silent_on_a_dead_crons_last_verdict(tmp_path):
-    # The Kuma tile pages for the dead cron itself; its last DOWN must not sit on the banner.
+    # ReleaseStalenessCheckNotReporting pages the dead cron; its last DOWN stays off the banner.
     path = _verdict_file(tmp_path, _ONE_SERVICE)
     written = path.stat().st_mtime
     fresh = written + service_lines.STALE_VERDICT_MAX_AGE_S - 60

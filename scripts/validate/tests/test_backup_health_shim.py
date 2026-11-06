@@ -285,7 +285,7 @@ def test_backup_health_reader_failure_is_logged_through_the_stub(
     _assert_pings_carry_only_the_fixture_key(curl_calls)
 
 
-# ── STATUS must be Kuma's own "up"/"down" vocabulary ─────────────────────────────────────────
+# ── STATUS must be the reader's "up"/"down" vocabulary ───────────────────────────────────────
 
 
 def test_backup_health_a_recognized_down_status_reaches_the_textfile_unchanged(
