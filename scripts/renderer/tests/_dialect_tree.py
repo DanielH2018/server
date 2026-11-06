@@ -25,7 +25,6 @@ _ROLE_DEFAULTS = """\
 only_default: from-defaults
 group_over_default: from-defaults
 host_over_group: from-defaults
-manifests_deferred_dir_name: from-defaults
 derived: "derived-{{ host_over_group }}"
 """
 _GROUP_VARS = """\
