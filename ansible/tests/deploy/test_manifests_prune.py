@@ -379,35 +379,38 @@ def test_every_armed_render_carries_the_label() -> None:
     } <= seen
 
 
-@pytest.mark.parametrize(
-    ("role", "name"),
-    [
-        ("observability", "grafana.yaml.j2"),
-        ("home-assistant", "configmap.yaml.j2"),
-        ("littlelink", "service-default.yaml.j2"),
-        ("sonarr", "deployment.yaml.j2"),
-    ],
-)
-def test_the_filter_adds_the_label_and_nothing_else(role: str, name: str) -> None:
-    """Real unlabelled renders, passed through the filter the wrapper calls.
+def test_the_filter_adds_the_label_and_nothing_else() -> None:
+    """The armed roles' real unlabelled renders, passed through the filter the wrapper calls.
 
     Each document gains the label and nothing else: a Deployment's selector and pod-template
     labels, a quoted string and a multi-line value all read back as rendered, and the host's
-    stdlib reader declares the same objects from the new bytes.
+    stdlib reader declares the same objects from the new bytes. A claim renders per entry, so
+    it is out of this walk, and `test_every_armed_render_carries_the_label` holds it.
     """
-    text = render_role_template(role, name)
-    before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
-    assert before, f"{role}/{name} renders no document"
-    labelled = homelab_role_label(text, role)
-    after = list(yaml_fast.safe_load_all(labelled))
-    # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
-    assert declared_in(labelled) == declared_in(text), f"{role}/{name}"
-    assert len(after) == len(before), f"{role}/{name} gained or lost a document"
-    for old, new in zip(before, after, strict=True):
-        assert new["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"
-        assert _without_role_label(new) == old, (
-            f"{role}/{name} changed beyond the label"
-        )
+    armed = _armed_roles()
+    seen = set()
+    for role, name, _ in rendered_texts():
+        deferred = armed.get(role, {}).get("manifests_deferred_files") or []
+        if (
+            role not in armed
+            or name == "claim-default.yaml.j2"
+            or name.removesuffix(".j2") in deferred
+        ):
+            continue
+        seen.add((role, name))
+        text = render_role_template(role, name)
+        before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
+        labelled = homelab_role_label(text, role)
+        after = list(yaml_fast.safe_load_all(labelled))
+        # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
+        assert declared_in(labelled) == declared_in(text), f"{role}/{name}"
+        assert len(after) == len(before), f"{role}/{name} gained or lost a document"
+        for old, new in zip(before, after, strict=True):
+            assert new["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"
+            assert _without_role_label(new) == old, (
+                f"{role}/{name} changed beyond the label"
+            )
+    assert ("littlelink", "service-default.yaml.j2") in seen
 
 
 def _staged_templates(role: str) -> set[str]:
