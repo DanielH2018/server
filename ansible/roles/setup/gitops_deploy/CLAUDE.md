@@ -120,5 +120,5 @@ why a hand `rm` of `hold_sha` is not one.
 ## Traps
 
 Four live in `docs/gitops-pipeline.md`: the failed-run error string, the tree-lock self-deadlock,
-the config source that changes an alert's remediation, and the two timeout budgets. Read them
+the config source that changes an alert's remediation, and the timeout budget. Read them
 before editing an alert or raising a cap.

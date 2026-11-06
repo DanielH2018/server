@@ -42,10 +42,9 @@ conventions.
   the rollout gate, and the restart checksum the renderer stamps on the Deployment replaces
   the shared restart. `tasks/main.yml` holds one task, the include of `k8s/manifests`, and no
   Flux path runs it. It stays for the handback.
-- **Auto-deploy is denylisted** (`k8s_autodeploy: false`) because this role is the ingress
-  pager. `/-/healthy` proves the process answers, not that a module still probes correctly.
-  Renovate therefore does not automerge an image bump, and the PR is reviewed and merged by
-  hand. `promote` applies it after the merge.
+- **Renovate does not automerge its image bumps** (`k8s_autodeploy: false`), because this role
+  is the ingress pager. `/-/healthy` proves the process answers, not that a module still probes correctly.
+  The PR is reviewed and merged by hand, and `promote` applies it after the merge.
 - **`netpol-baseline: enforced`, with no route.** Its only caller is the `prometheus` pod,
   which the baseline admits. The probes are egress, which the baseline does not fence. The
   targets of the `blackbox-extra` job (M6 batch B8) are ingress to the probed pods, so
@@ -57,4 +56,4 @@ conventions.
   edit, a comment included, moves the restart checksum and rolls the pod. Check one with
   `blackbox_exporter --config.check --config.file=files/blackbox.yml`.
 - Manifests: `templates/`. The Service renders from `ansible/templates/service-default.yaml.j2`, off the containers_list entry. No IngressRoute: callers reach it in-cluster by Service name.
-- Image pin, auto-deploy stance, resources and uid: `defaults/main.yml`.
+- Image pin, automerge stance, resources and uid: `defaults/main.yml`.

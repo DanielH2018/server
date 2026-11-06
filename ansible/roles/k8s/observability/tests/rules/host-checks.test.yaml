@@ -420,10 +420,11 @@ tests:
             exp_annotations:
               summary: A k8s service runs an older release than origin/master.
               description: >-
-                release-staleness-check.sh on daniel-box found a service whose role paths changed on
-                origin/master after its last applied commit. `uv run python
-                scripts/diagnostics/probe.py releases --stale-only` prints each reason, and
-                `./scripts/deploy.sh --tags <svc>` redeploys the service.
+                release-staleness-check.sh on daniel-box found a service with no `owner` whose role
+                paths changed on origin/master after its last applied commit. `uv run python
+                scripts/diagnostics/probe.py releases --stale-only` prints each reason. To redeploy
+                the service, run `./scripts/deploy.sh --tags <svc>`. The check judges no Flux-owned
+                tag, so PromotionStalled and FluxNotReady watch those.
       - eval_time: 4m
         alertname: ReleaseStalenessCheckNotReporting
         exp_alerts: []
