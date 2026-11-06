@@ -15,6 +15,7 @@ HERE. Five path-list decisions -- `plane_note`, `self_applied`, `remaining_setup
 `derive`, `quiet_paths` -- are NOT on `Tools`. They are pure functions of a file list, so a
 fake of them would leave no pipeline test running the real derivation. They live on the frozen
 `Classifier` the Landing holds beside `Tools`, so a test takes the real ones and fake boundaries.
+`remaining_setup_hosts` also reads a host through the `read_host` boundary it is handed.
 """
 
 import contextlib
@@ -529,7 +530,9 @@ class Classifier:
 
     Every one is a function of a changed-file list and nothing else: no subprocess, no
     network, no clock. Keeping them here is what lets a pipeline test drive the REAL
-    derivation over a fixed path list while every boundary in `Tools` stays fake.
+    derivation over a fixed path list while every boundary in `Tools` stays fake. The two
+    exceptions are `key_readers`, which reads git, and `remaining_setup_hosts`, which reads
+    a host through the `Tools.read_host` a caller hands it.
     """
 
     plane_note: PlaneNote = land_tags.plane_note
