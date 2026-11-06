@@ -285,16 +285,24 @@ def with_own_pr(
 
 
 def reconciled(
-    s: BatchStatus, branch: str, merged_pr: Callable[[str, str], str], repo: str
+    s: BatchStatus,
+    branch: str,
+    merged_pr: Callable[[str, str], str],
+    repo: str,
+    earlier_prs: Callable[[], list[str]] = list,
 ) -> BatchStatus:
     """`s`, read as `landed` with its merged PR's url when it is a `no-report` GitHub merged.
 
-    Only a `no-report` batch asks the forge, so every other state costs no network call.
+    Only a `no-report` batch asks the forge, so every other state costs no network call. A PR
+    from `earlier_prs`, which merged before this launch, belongs to an earlier launch of the
+    same branch name and leaves the batch `no-report` (#7407).
     """
     if s.state != NO_REPORT:
         return s
     url = merged_pr(branch, repo)
-    return dataclasses.replace(s, state="landed", pr_url=url) if url else s
+    if not url or url in earlier_prs():
+        return s
+    return dataclasses.replace(s, state="landed", pr_url=url)
 
 
 def status_line(
@@ -433,14 +441,9 @@ def collect(
         by_id = {b.batch: b for b in mine}
         for st in parse_status(mine, proc.stdout):
             b = by_id[st.batch]
-            st = reconciled(st, b.branch, tools.merged_pr, b.repo)
-            st = with_own_pr(
-                st,
-                b.branch,
-                tools.branch_prs,
-                b.repo,
-                partial(tools.earlier_prs, b.branch, b.repo, b.launched_at),
-            )
+            earlier = partial(tools.earlier_prs, b.branch, b.repo, b.launched_at)
+            st = reconciled(st, b.branch, tools.merged_pr, b.repo, earlier)
+            st = with_own_pr(st, b.branch, tools.branch_prs, b.repo, earlier)
             # Already reconciled, so `status_line` must not ask the forge a second time.
             line, tier = status_line(
                 st, host, b.branch, lambda *_: "", one_line, b.repo
