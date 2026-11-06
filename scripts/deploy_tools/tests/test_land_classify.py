@@ -167,7 +167,12 @@ def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
     # the host the tick ran on, read from the boundary rather than hardcoded
     assert call[1] == ("daniel-box",)
     # the merge commit's tree in the primary checkout, not this checkout's own (#4080)
-    assert call[2] == {"ref": MERGE_SHA, "repo": PRIMARY, "key_readers": []}
+    assert call[2] == {
+        "ref": MERGE_SHA,
+        "repo": PRIMARY,
+        "key_readers": [],
+        "read_host": ln.tools.read_host,
+    }
 
 
 def test_classify_hands_the_key_readers_to_the_note(landing):

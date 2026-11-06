@@ -7,7 +7,7 @@
   imports for every connection it opens.
 
   No secret goes in here, and the sidecar takes none from a Secret: M6 batch B6b's Cutover-2
-  removed its Kuma push URLs and the crowdsec-jobs Secret that held them.
+  removed its push URLs and the crowdsec-jobs Secret that held them.
   ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py renders this file with every
   secrets.yml key bound to a sentinel and fails on any sentinel it finds.
 

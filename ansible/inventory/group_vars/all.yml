@@ -192,7 +192,7 @@ dns_k8s_vip: 10.0.0.243
 dns_k8s_cluster_ip: 10.43.252.187
 # Jellyfin's dedicated LAN LoadBalancer VIP — a second path distinct from the Traefik
 # ingress VIP. Global for the same cross-role reason: roles/k8s/jellyfin's service-lan
-# claims it, and roles/k8s/uptime-kuma's VIP port tile probes it.
+# claims it, and observability's prometheus.yaml.j2 probes it.
 jellyfin_k8s_lan_ip: 10.0.0.241
 # The terraria server's replica count. Global because two roles render it and neither owns
 # the other: roles/k8s/terraria's Deployment IS the server, and roles/k8s/game-stats'
@@ -220,7 +220,7 @@ jellyfin_k8s_lan_ip: 10.0.0.241
 # which is gated on it because a job whose target has no pod pages the scrape-target check.
 #
 # To bring it back, see the restore checklist on issue #822. Setting this to 1 is the first of
-# two steps and the port monitor is deliberately NOT the second — do not restore the Kuma tile
+# two steps and the port monitor is deliberately NOT the second — do not restore a port probe
 # until the image is past 1.4.5.7.
 terraria_k8s_replicas: 0
 # Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
@@ -356,7 +356,7 @@ loki_streams:
     job: syslog
     machine: daniel-pi
 
-# Hosts that witness the Loki read route, one Kuma monitor each. That route's only
+# Hosts that witness the Loki read route, one check timer each. That route's only
 # caller is `probe.py loki-labels` / `loki-query` running as a HOST process, and its guard is a
 # ClientIP set of node-owned addresses — so a pod cannot witness it, and a single host cannot
 # either: which address a host arrives as depends on where the traefik pod sits, so the route
@@ -600,7 +600,7 @@ k8s_tls_cert_resolver: cloudflare
 k8s_bridge_client_ip: "{{ hostvars['daniel-server'].server_ip }}"
 # daniel-pi's address as the cluster sees it, derived from the Pi's one literal (#3719).
 # `hostvars` holds every host in hosts.ini whatever the play targets, so the k8s play on
-# daniel-box resolves it; uptime-kuma, pihole and monitor-bridge index it the same way. The
+# daniel-box resolves it; pihole and monitor-bridge index it the same way. The
 # manifest-render harness lays down each host's `server_ip` as `hostvars` for this
 # (scripts/lib/render_context.py).
 #
@@ -682,7 +682,7 @@ ups_host: daniel-server
 # apc-ups@127.0.0.1` every 3s while modulating a 16-core burn on daniel-box (daniel-server
 # idle) moved ups.load by ~5 points ≈ 45 W, three transitions phase-locked to the burn across
 # two cycles. Without a secondary upsmon there, daniel-server powers off cleanly while daniel-box
-# — etcd, Longhorn's primary replicas, Kuma, Prometheus, Traefik, LAN DNS — is hard-cut at
+# — etcd, Longhorn's primary replicas, Prometheus, Traefik, LAN DNS — is hard-cut at
 # battery end. daniel-box is armed in host_vars/daniel-box.yml, where the reasoning sits.
 #
 # DEFAULT FALSE ON PURPOSE, and it stays false here. A secondary upsmon's entire job is to power
@@ -736,8 +736,7 @@ render_records_host: daniel-box
 # role this renders is guarded on `not k8s_dry_run | bool`; without that guard an hourly dry run
 # would install that tree's host scripts, crons and node-staged modules ahead of their landing.
 render_records_enabled: true
-# The producer runs hourly at this minute. Here rather than in the role's defaults because the
-# uptime-kuma role derives the monitor's interval from the same cadence below.
+# The producer runs hourly at this minute. The interval below covers the same cadence.
 render_records_minute: 17
 # The render-records push monitor's interval. One hourly period, plus the ~8-minute render
 # (8m16s for 58 services), plus one 40-minute restart of a run that deferred on a
@@ -745,10 +744,8 @@ render_records_minute: 17
 # a stopped producer unread for longer than the records it last wrote stay useful.
 render_records_push_interval_s: 7200
 # ── weekly reboot ──────────────────────────────────────────────────────────────────────────
-# When every host in the play restarts itself. THREE roles read this: initial_setup installs the
-# `Weekly system restart` cron from it (roles/setup/initial_setup/tasks/crons.yml), uptime-kuma
-# derives the Kuma maintenance window that keeps the restart from paging Discord
-# (roles/k8s/uptime-kuma/templates/maintenance-sync-configmap.yaml.j2), and observability
+# When every host in the play restarts itself. The host-maintenance component renders
+# `homelab-reboot.timer` from it (hosts/components/host-maintenance/units/), observability
 # derives Alertmanager's `weekly-reboot` mute from the same values
 # (roles/k8s/observability/templates/alertmanager-secret.yaml.j2), and promote.py derives its
 # no-promotion window and promote.yml's `schedule:` cron (scripts/deploy_tools/promote_lib/
@@ -769,19 +766,19 @@ weekly_reboot_shutdown_delay_minutes: 5
 # or six hours, so a maintenance window derived from these values in `tz` would open at an
 # arbitrary Sunday midday and page straight through the reboot.
 weekly_reboot_timezone: UTC
-# How long before the reboot cron fires the mute opens, in both Kuma and Alertmanager. The hosts
+# How long before the reboot fires Alertmanager's mute opens. The hosts
 # do not go down until `shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}`, so this is not
 # the time to the outage — it is slack for a monitor that flips in the seconds around the cron,
 # and for a heartbeat window that was already half-spent when the shutdown landed.
 weekly_reboot_mute_lead_minutes: 5
 # How long after the reboot itself the mute stays open. Measured: daniel-server
 # was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
-# records ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
+# recorded ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
 # for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,
-# whose 1200s window means a tile can flip DOWN up to 20 minutes after the last missed push.
+# whose 1200s window meant a tile could flip DOWN up to 20 minutes after the last missed push.
 # With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
-# 08:15 at the committed schedule. uptime-kuma's render_maintenance.py and observability's
-# alertmanager-secret.yaml.j2 each do that sum; nothing here repeats it.
+# 08:15 at the committed schedule. observability's alertmanager-secret.yaml.j2 does that sum;
+# nothing here repeats it.
 weekly_reboot_mute_recovery_minutes: 40
 # Whether this host runs its own gitops_deploy pull-based auto-deployer. FALSE by default:
 # daniel-box is the one deployer, and a host nobody has thought about yet gets the teardown arm
@@ -844,9 +841,8 @@ has_repo_checkout: true
 # gateway and matches its netmask.
 staging_net_cidr: "192.168.140.0/24"
 # The full etcd restore drill, run monthly in a throwaway guest on the hypervisor host (the
-# mechanism is the hypervisor_etcd_drill_* block in roles/setup/hypervisor). Here
-# rather than in that role because two roles read them: the hypervisor role installs the cron,
-# and k8s/uptime-kuma sizes the push tile's deadline from the same cadence.
+# mechanism is the hypervisor_etcd_drill_* block in roles/setup/hypervisor). That role installs
+# the cron and renders the deadline as the drill's DEADLINE_S.
 #
 # Monthly, 1st, 11:20 UTC. The value of a restore drill is in the last time it PASSED, so it
 # runs as often as it is cheap — one ~8 MB snapshot download from R2 and ~5 minutes of a 2-vCPU

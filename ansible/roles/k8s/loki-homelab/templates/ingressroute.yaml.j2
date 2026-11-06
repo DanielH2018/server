@@ -32,7 +32,7 @@
    — and everything arriving through this route carries Traefik's identity, not the sender's.
 
    The two callers that used this route:
-     - the Kuma "Loki" tile probed /ready, and is why the pod CIDR was admitted at all. It moved
+     - a "Loki" uptime tile probed /ready, and is why the pod CIDR was admitted at all. It moved
        to ClusterIP, where a podSelector could gate it, and M6 retired it. Everything else in-cluster — promtail, monitor-bridge,
        homelab-mcp, terraria/valheim-stats, Grafana, Prometheus — already used ClusterIP and is
        untouched.

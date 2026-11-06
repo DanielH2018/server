@@ -151,8 +151,8 @@ def metrics_port(containers_list, job):
 def entry_port(containers_list, name):
     """The `port` of the `containers_list` entry named `name`.
 
-    For a hand-written scrape job whose target is the workload's own UI port, such as Kuma's
-    `:3001` and Home Assistant's `:8123`. Raises rather than returning nothing, so a renamed
+    For a hand-written scrape job whose target is the workload's own UI port, such as
+    Home Assistant's `:8123`. Raises rather than returning nothing, so a renamed
     entry fails the render instead of rendering a target with no port.
 
     Raises ValueError when no entry is named `name`, or when that entry has no `port`.

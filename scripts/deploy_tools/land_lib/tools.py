@@ -15,6 +15,7 @@ HERE. Five path-list decisions -- `plane_note`, `self_applied`, `remaining_setup
 `derive`, `quiet_paths` -- are NOT on `Tools`. They are pure functions of a file list, so a
 fake of them would leave no pipeline test running the real derivation. They live on the frozen
 `Classifier` the Landing holds beside `Tools`, so a test takes the real ones and fake boundaries.
+`remaining_setup_hosts` also reads a host through the `read_host` boundary it is handed.
 """
 
 import contextlib
@@ -53,6 +54,7 @@ from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import verdict_log
 from deploy_tools.land_lib.key_readers import KeyReader, readable_key_readers
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
+from diagnostics.probe_lib.host_reader import read_host
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
@@ -455,6 +457,7 @@ class RemainingSetupHosts(Protocol):
         ref: str = "",
         repo: Path = ...,
         key_readers: Sequence[KeyReader] = (),
+        read_host: Callable[[dict, str], dict] | None = None,
     ) -> str: ...
 
 
@@ -480,6 +483,8 @@ class Tools:
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
+    # What a host holds, which `remaining_setup_hosts` reads only for a host it would name.
+    read_host: Callable[[dict, str], dict] = read_host
     # `...`, not the argument list: both take an optional `observe` callback, passed by keyword.
     tick: Callable[..., int] = run_tick
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
@@ -525,7 +530,9 @@ class Classifier:
 
     Every one is a function of a changed-file list and nothing else: no subprocess, no
     network, no clock. Keeping them here is what lets a pipeline test drive the REAL
-    derivation over a fixed path list while every boundary in `Tools` stays fake.
+    derivation over a fixed path list while every boundary in `Tools` stays fake. The two
+    exceptions are `key_readers`, which reads git, and `remaining_setup_hosts`, which reads
+    a host through the `Tools.read_host` a caller hands it.
     """
 
     plane_note: PlaneNote = land_tags.plane_note
