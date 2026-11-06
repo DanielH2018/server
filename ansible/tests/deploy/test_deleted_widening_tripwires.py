@@ -211,7 +211,8 @@ def test_the_tasks_file_census_is_not_empty():
 # the derivation sees no recording caller.
 
 
-# Every containers_list source in the inventory. The shape check is deliberately wider than k8s, so a docker entry growing the shape is still seen.
+# Every containers_list source in the inventory. The shape check is deliberately wider than k8s,
+# so a docker entry growing the shape is still seen.
 def containers_list_sources(repo: Path = REPO) -> list[Path]:
     inventory = Path(repo) / "ansible" / "inventory"
     return sorted(inventory.glob("host_vars/*.yml")) + sorted(
