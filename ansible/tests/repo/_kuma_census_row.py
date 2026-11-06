@@ -93,7 +93,6 @@ _PROSE_HOLDERS = {
     ),
     **dict.fromkeys(
         (
-            ".claude/hooks/hooklib/service_lines.py",
             "ansible/inventory/group_vars/all.yml",
             "ansible/roles/k8s/monitor-bridge/files/checks/notify.py",
             "ansible/roles/k8s/observability/files/rules/bridge-exporter.yaml",
