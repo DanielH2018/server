@@ -42,7 +42,7 @@ _SHIPPED = (
 # narrows, the narrowing lost its evidence.
 _UNGATED = "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 # A real PR's file list for `deploy_ui`, verbatim but for the two libraries #4417 moved into
-# `deploy_ui_lib/`.
+# `deploy_ui_lib/` and a narrowing module since deleted.
 _PR_1901_PATHS = [
     "ansible/roles/setup/deploy_ui/CLAUDE.md",
     "ansible/roles/setup/deploy_ui/files/deploy_ui.html",

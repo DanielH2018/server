@@ -1675,12 +1675,14 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18b, and D6.1
       `k8s_remediation` and `service_owners`.
     - **Waits on:** D6.18a, merged. Also D6.15, merged, which removed `k8s_remediation`'s
       last two callers.
-    - **Before merge:** the body quotes the import grep, `land.py --help` and
-      `secret_setup_readers.py --help`.
+    - **Before merge:** the body quotes the import grep, D6.12's and D6.15's landing tests,
+      `land.py --help`, `secret_setup_readers.py --help` and `deploy_tags.py changed
+      origin/master`.
     - **Operator gates:** none. The PR touches the deployer's comments only, and they apply
       through the tick.
-    - **After merge:** #7469's PR holds exit 1's and exit 5's greps at 0, and the two landings
-      that write a marker with a non-empty `services=` list.
+    - **After merge:** the first settled landing of a direct role PR, and of a broad PR, each
+      write a marker with a non-empty `services=` list. #7469's PR holds exit 1's and exit 5's
+      greps at 0.
     - **Rollback:** revert this PR before D6.15, because a revert of D6.15 imports what this
       PR deletes.
     - **Exit criterion:** the import grep over `narrow_lib/broad.py`, and exit 5's deletion
