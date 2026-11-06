@@ -1,9 +1,10 @@
 """The owed-host note reads a stamped file's record on a host before naming it (#7398).
 
 The note and the task walk are the real ones, over this checkout's roles. Only the host read is
-fake. Each test also pins `daniel-server` in the note it expects to stay, so an empty note
-cannot pass one that expects the host to stay owed. The tests that build a `demo` role check
-which render shapes the walk counts, on shapes this checkout's roles do not hold.
+fake. Each test of the note also pins `daniel-server` in the note it expects to stay, so an empty
+note cannot pass one that expects the host to stay owed. The tests that build a `demo` role check
+which render shapes the walk counts, on shapes this checkout's roles do not hold. The check-timer
+tests ask `holds` directly, over this checkout's roles.
 """
 
 import hashlib
@@ -131,7 +132,7 @@ def _holds_check_timer(template, witness_text, drift_text):
     """Does `initial_setup` read as held on a host with these two render fragments?
 
     `holds` over the working tree's roles, because `_note` reads the `ansible/` tree at `ref`, and
-    the `gitops_deploy` line a check-timer change also earns would hide an empty note.
+    the `gitops_deploy` line a check-timer change also earns keeps the note non-empty.
     """
     files = {
         FRAGMENT: {"status": "ok", "text": witness_text},
