@@ -172,7 +172,7 @@ shapes:
 
 From the tree the tick just fetched, through the subprocess the deployer already uses for
 YAML. The deployer runs under `uv run --no-project` and cannot import `yaml` (see
-`deploy_narrow.py`'s docstring), so `narrow_setup.py` and `narrow_lib/broad.py` already parse the
+`deploy_narrow.py`'s docstring), so `narrow_setup.py` and `narrow_lib/role_reads.py` already parse the
 fetched tree from `scripts/deploy_tools/`. A `setup_roles:` list in the inventory is read the
 same way, and the tick that routes a newly added role sees that role. A copy rendered by the
 `gitops_deploy` role would be one apply behind, which is the staleness #4265 names. A committed,

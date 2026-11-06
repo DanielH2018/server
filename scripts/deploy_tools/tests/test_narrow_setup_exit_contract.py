@@ -40,7 +40,7 @@ def _declared():
 def test_a_range_needing_nothing_does_not_exit_with_the_broad_code(tree):
     tree.write(f"{ROLE}/CLAUDE.md", "# Demo\n")
     rc = _main(tree, PLAYBOOK)
-    assert rc != DEPLOY_BROAD, "3 means 'cannot narrow' to narrow_cmd"
+    assert rc != DEPLOY_BROAD, "3 means 'cannot narrow'"
     assert rc in _declared()
     assert rc == deploy_narrow.NARROW_SETUP_NOTHING_EXIT
 

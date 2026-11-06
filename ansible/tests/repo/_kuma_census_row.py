@@ -48,7 +48,6 @@ _REDACTION = "`/api/push/` is an output redaction rule, not a Kuma read (#7195).
 
 _IDENTIFIER_HOLDERS = {
     "ansible/filter_plugins/kuma_monitors.py": _C4B,
-    "scripts/deploy_tools/narrow_lib/containers.py": _C4B,
     "scripts/lib/ansible_jinja_env.py": _C4B,
     "ansible/roles/k8s/loki-homelab/CLAUDE.md": _REDACTION,
     "ansible/roles/k8s/loki-homelab/templates/config/config.alloy.j2": _REDACTION,

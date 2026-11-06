@@ -135,9 +135,7 @@ three edges are derived automatically —
 
 If the new entry needs an ordering constraint no template carries — crowdsec before traefik,
 sonarr and radarr before configarr, dri-device-plugin before jellyfin and tdarr — declare it
-with `depends_on: [<name>]` on the entry rather than moving it in the list. No template may
-read `depends_on`: a deploy narrowing leaves it out of an entry edit
-(`DEPLOY_MECHANICS_FIELDS` in `scripts/deploy_tools/narrow_lib/containers.py`).
+with `depends_on: [<name>]` on the entry rather than moving it in the list.
 
 `use_authelia: true` needs `auth_tier: one_factor | two_factor` beside it — the Authelia
 policy for the service's LAN name, which the authelia role renders into its access_control

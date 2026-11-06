@@ -252,8 +252,7 @@ def entry_tags(entry: dict) -> list[str]:
     ``deploy.yml:116`` -- ``container_item.tags | default([container_item.name])``. Mirror that
     precedence exactly, or an entry that overrides its tags is validated against a name that no
     longer selects it. One definition, because ``deploy_tags.service_tags`` reads the working
-    tree, ``service_tags_at`` below reads a git ref, and ``narrow_broad`` reads an entry out of
-    a diff.
+    tree, and ``service_tags_at`` below reads a git ref.
     """
     return list(entry.get("tags") or [entry["name"]])
 

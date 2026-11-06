@@ -639,9 +639,9 @@ names the readers D2 Open question 10 gives a bare entry.
   alone, because `entry_change_tags` gives a removed entry no tag of its own.
 
 A list measured later can differ when a template starts or stops reading a field. The
-quoted output is the expectation the stop rule binds, and the D2.1c render census
-(`ansible/tests/k8s/test_flux_born_entry_reader_census.py`) holds that it covers every
-render an added Flux-born entry moves.
+quoted output is the expectation the stop rule binds, and the D2.1c render census, until
+D6.18b deleted it with the narrowing, held that it covers every render an added Flux-born
+entry moves.
 
 Before the PR is opened, and again right before `land.sh`, the session runs four steps:
 

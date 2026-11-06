@@ -26,29 +26,19 @@ def test_a_loud_bring_up_playbook_is_reported_as_manual():
     assert reach([_SERVICE, _BRINGUP]).manual == [_BRINGUP]
 
 
-def test_changes_and_tags_both_expand_a_copied_file():
-    """A landing deploys the k8s roles shipping a copy, as `deploy.sh --changed` does (#4136)."""
+def test_changes_expands_a_copied_file_and_tags_does_not():
+    """The landing gates the promotion's changed set, so a path names only its own role."""
     r = reach([_COPIED])
-    declared = {"configarr", "janitorr"}
     assert {"configarr", "janitorr"} <= r.changes.k8s
-    assert r.tags(declared) == {"configarr", "janitorr"}
-    assert r.tags({"configarr"}) == {"configarr"}
     assert {"configarr", "janitorr"} <= r.touched()
+    assert r.tags({"configarr", "janitorr"}) == set()
 
 
-def test_tags_adds_a_lookup_reader_and_changes_does_not():
+def test_tags_names_a_looked_up_files_own_role_and_not_its_readers():
     r = reach([_LOOKED_UP])
-    declared = {"crowdsec", "authelia", "traefik"}
-    assert r.tags(declared) == {"crowdsec", "authelia", "traefik"}
-    assert {"authelia", "traefik"}.isdisjoint(r.changes.k8s)
-    assert {"authelia", "traefik"} <= r.touched()
-
-
-def test_a_build_context_file_outside_every_role_tags_the_role_embedding_it():
-    """An `obs_api.py`-only landing deploys homelab-mcp, whose image embeds it (#4840)."""
-    r = reach(["scripts/diagnostics/probe_lib/obs_api.py"])
-    assert r.tags({"homelab-mcp", "sonarr"}) == {"homelab-mcp"}
-    assert "homelab-mcp" in r.touched()
+    assert r.tags({"crowdsec", "authelia", "traefik"}) == {"crowdsec"}
+    assert "crowdsec" in r.touched()
+    assert {"authelia", "traefik"}.isdisjoint(r.touched())
 
 
 def test_tags_keeps_only_declared_roles_and_drops_role_tests():
@@ -63,10 +53,3 @@ def test_tags_keeps_only_declared_roles_and_drops_role_tests():
 
 def test_tag_for_rejects_a_path_outside_the_role_trees():
     assert tag_for("ansible/inventory/host_vars/daniel-box.yml", {"daniel-box"}) is None
-
-
-def test_deploy_plane_is_the_deployers_split_not_a_prefix_match():
-    """A test file under a deploy-plane prefix reaches no host, as the tick reads it."""
-    play = "ansible/tasks/k8s_batch.yml"
-    r = reach([_SERVICE, play, "ansible/tasks/tests/test_k8s_batch.py", _BRINGUP])
-    assert r.deploy_plane == [play]

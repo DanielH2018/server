@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """One setup role's task files, templates and vars, read at a single git ref.
 
-`lib.narrow_git` holds the three primitives this module shares with `narrow_broad` — the
+`lib.narrow_git` holds the three primitives this module shares with `role_reads` — the
 `CannotNarrow` refusal, `show_at` and the YAML mapping parse (#2419).
 
 `narrow_setup` asks the questions — which tags does this changed path reach, and does the

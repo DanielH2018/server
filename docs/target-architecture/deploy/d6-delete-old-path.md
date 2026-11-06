@@ -1,6 +1,6 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carries D6.13. No merged PR is recorded for D6.13 to D6.21. D6.18 was split into D6.18a and D6.18b on 2026-11-06 ([#7414](https://github.com/DanielH2018/server/issues/7414)).
+Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carries D6.13. No merged PR is recorded for D6.13 to D6.21. D6.18 was split into D6.18a and D6.18b on 2026-11-06 ([#7414](https://github.com/DanielH2018/server/issues/7414)). [#7454](https://github.com/DanielH2018/server/issues/7454) carries D6.18b, and [#7469](https://github.com/DanielH2018/server/issues/7469) the deployer half of old D6.4.
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
@@ -1440,7 +1440,7 @@ dropped D6.10, so 11 of them carry code.
 | D6.16 | D6.5a | Yes | D6.12, *live*; M6's B2 |
 | D6.17 | D6.5 | Partly: the rules half waits for M6's B1 and B2 | D6.16, *live*; M6's B1 |
 | D6.18a | D6.5b, part of D6.4 | Yes | D6.17, *live*; D6.15 |
-| D6.18b | The rest of D6.4 | No: it moves `land_lib/key_readers.py`'s imports first | D6.18a |
+| D6.18b | Part of the rest of D6.4; #7469 carries the deployer half | No: it moves `land_lib/key_readers.py`'s imports first | D6.18a |
 | D6.19 | D6.7b | Yes | D6.12; D6.15; the C3 prune-exemption row or line |
 | D6.20 | D6.7 | Yes, except the handback count | D6.11, D6.15 and D6.19; C3's kept-set line; the operator's decision |
 | D6.21 | D6.8a, D6.8b | A draft | every other D6 PR; G5, if it has started; the operator's ADR approval |
@@ -1661,23 +1661,30 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18b, and D6.1
       a whole-role line, which the session clears by old D6.5b's procedure.
     - **Exit criterion:** exit 5's deletion list for these files, and the edit to failure
       class 5's row.
-10. **D6.18b — Delete the rest of reach and narrowing** (the rest of old D6.4).
-    - **Written ahead: no.** It first moves the symbols `land_lib/key_readers.py` and
-      `secret_setup_readers.py` read out of `narrow_lib/broad.py`, then deletes
-      `narrow_lib/broad.py`, `narrow_lib/containers.py`, `reach.py`'s k8s readings, and what
-      old D6.4 lists.
+10. **D6.18b — Delete the rest of reach and narrowing** (part of the rest of old D6.4).
+    - **Written ahead: no.** It moves the symbols `land_lib/key_readers.py` and
+      `secret_setup_readers.py` read out of `narrow_lib/broad.py` into
+      `narrow_lib/role_reads.py`, which stays until H7: `Context`, `grep`, `sort_hits`,
+      `template_importers`, `role_tags` and `context_for`, with the constants and helpers
+      they need. It then deletes `narrow_lib/broad.py`, `narrow_lib/containers.py`,
+      `narrow_lib/guard_map.py` and `reach.py`'s two cross-role reads. `land_lib/land_reach.py`
+      and `narrow_setup.py` stay until H7.
+    - **Why apart from the deployer half.** Old D6.4's deployer half applies through the tick,
+      and [#7469](https://github.com/DanielH2018/server/issues/7469) carries it: the `cs.flux`
+      route and its routing test, `ChangeSet.k8s`, the k8s symbols of `deploy_cross_role.py`,
+      `k8s_remediation` and `service_owners`.
     - **Waits on:** D6.18a, merged. Also D6.15, merged, which removed `k8s_remediation`'s
       last two callers.
-    - **Before merge:** the body quotes the import grep, D6.12's and D6.15's landing tests,
-      the routing test's red run, `land.py --help` and `deploy_tags.py changed origin/master`.
-    - **Operator gates:** its changes to the deployer's files apply through the tick. If the
-      self-applied deployer half crashes, the operator re-applies the deployer by hand.
-    - **After merge:** exit 1's and exit 5's greps print 0. The first settled landing of a
-      direct role PR, and of a broad PR, each write a marker with a non-empty `services=`
-      list.
+    - **Before merge:** the body quotes the import grep, `land.py --help` and
+      `secret_setup_readers.py --help`.
+    - **Operator gates:** none. The PR touches the deployer's comments only, and they apply
+      through the tick.
+    - **After merge:** #7469's PR holds exit 1's and exit 5's greps at 0, and the two landings
+      that write a marker with a non-empty `services=` list.
     - **Rollback:** revert this PR before D6.15, because a revert of D6.15 imports what this
       PR deletes.
-    - **Exit criterion:** exit 1's grep, and the rest of exit 5's deletion list.
+    - **Exit criterion:** the import grep over `narrow_lib/broad.py`, and exit 5's deletion
+      list for the three modules.
 11. **D6.19 — The guards the default policy needs** (old D6.7b, about 200 lines).
     - **Why apart from D6.20.** The operator decides whether D6.20 merges. These guards are
       harmless under `Orphan`, so they land either way, and they are live before any

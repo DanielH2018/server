@@ -1,6 +1,6 @@
 """No inventory block scalar carries a continuation line that starts with `#`.
 
-`narrow_broad._defines_only` decides whether an inventory change only defines new keys by
+`role_reads._defines_only` decides whether an inventory change only defines new keys by
 skipping every whole-line comment. That rule is wrong for one shape: inside a block scalar
 (`key: |` or `key: >`) a continuation line that starts with `#` is CONTENT Ansible reads,
 not a comment. A key consumed only on such a line would be skipped in the unsafe direction:
@@ -127,6 +127,6 @@ def test_no_inventory_block_scalar_has_a_hash_continuation(rel):
     hits = comment_shaped_continuations(inventory_files()[rel])
     assert not hits, (
         f"ansible/inventory/{rel} lines {hits}: a block-scalar line starting with `#` is "
-        "content, and narrow_broad._defines_only skips it as a comment. Move the text "
+        "content, and role_reads._defines_only skips it as a comment. Move the text "
         "out of the block scalar, or teach _defines_only to parse."
     )

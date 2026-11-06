@@ -83,11 +83,7 @@ def changed_keys(old_ref: str, new_ref: str, cwd) -> set[str]:
 
 
 class Rules(NamedTuple):
-    """`broad`'s own rule functions, passed in because `broad` imports this module.
-
-    An import back the other way, even one deferred into a function, is an import cycle
-    `scripts/tests/test_scripts_import_direction.py` refuses.
-    """
+    """The `role_reads` functions a caller passes to the key walks."""
 
     grep: Callable
     sort_hits: Callable
@@ -98,7 +94,7 @@ class Rules(NamedTuple):
 def key_tags(key: str, ctx, lookups: dict[str, set[str]], rules: Rules) -> set[str]:
     """The deploy tags whose render reads the secret `key` at `ctx.ref`.
 
-    `ctx` is `broad.Context`. `lookups` is `k8s_lookup_map`'s answer: a file another k8s role
+    `ctx` is `role_reads.Context`. `lookups` is `k8s_lookup_map`'s answer: a file another k8s role
     `lookup()`s, relative to `ansible/`, to the roles reading it.
     """
     hits = [
@@ -205,7 +201,7 @@ def setup_readers_of(keys: set[str], ctx, pathspecs: list[str]) -> SetupReaders:
 
     Args:
         keys: the moved keys.
-        ctx: `broad.Context` at the new ref.
+        ctx: `role_reads.Context` at the new ref.
         pathspecs: the `git grep` pathspecs a setup-role reader is looked for in.
 
     Raises:

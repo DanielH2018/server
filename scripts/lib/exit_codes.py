@@ -153,8 +153,8 @@ UNLANDED_PR_RED = 4
 # -- scripts/deploy_tools/narrow_setup.py -----------------------------------------------
 # Which `--tags` value a setup-role range needs. 0 prints the tags; 1 is a refusal, after which
 # the caller keeps the whole-role tag. `NARROW_SETUP_NOTHING` says the role needs no tag at all,
-# printed beside `narrowed-to-nothing` on stdout. It is 5, not 3, because `narrow_cmd` exits
-# `DEPLOY_BROAD` (3) for the opposite answer, "cannot narrow" (#4453), and not 2, because
+# printed beside `narrowed-to-nothing` on stdout. It is 5, not 3, because `DEPLOY_BROAD` (3) is the
+# opposite answer, "cannot narrow" (#4453), and not 2, because
 # argparse exits 2 on a bad command line. The deployer's copy of the value is
 # `deployer_lib/deploy_narrow.py:NARROW_SETUP_NOTHING_EXIT`, which cannot import this module.
 NARROW_SETUP_NARROWED = OK

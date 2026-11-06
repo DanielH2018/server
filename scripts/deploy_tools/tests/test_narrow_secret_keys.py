@@ -1,4 +1,4 @@
-"""A `secrets.yml` change narrows to the readers of the keys it moved (#5409).
+"""A `secrets.yml` change reaches the readers of the keys it moved (#5409).
 
 The fixture is `_narrow_fixtures.build_tree` plus a SOPS-shaped `secrets.yml`: two keys a k8s
 role reads, one only a setup role reads, and one only the manifests role's guard map names.
@@ -12,11 +12,10 @@ import pytest
 
 import narrow_setup
 import secret_setup_readers
-from deploy_tools.narrow_lib import broad as narrow_broad
 from deployer_lib.deploy_setup_roles import SECRET_READERS_REFUSED_EXIT
 from lib.exit_codes import DEPLOY_BROAD, FAILED
 
-from _narrow_fixtures import GROUP_VARS, Tree, _refs, build_tree
+from _narrow_fixtures import Tree, _refs, build_tree
 
 SECRETS = "ansible/vars/secrets.yml"
 BASE_SECRETS = """\
@@ -66,59 +65,6 @@ def tree(tmp_path) -> Tree:
     return t
 
 
-def test_a_new_key_only_a_setup_role_reads_beside_an_inventory_change_narrows(
-    tree: Tree,
-):
-    """#5405's shape: a new key for a setup role plus an inventory edit.
-
-    Until #5409 any `secrets.yml` change refused, and the deployer deferred every k8s service
-    to `k8s_unapplied`. The key reaches no deploy tag, so only the inventory edit's readers
-    remain.
-    """
-    tree.write(SECRETS, _with(BASE_SECRETS, "new_setup_token", "eee"))
-    tree.write(
-        "ansible/inventory/group_vars/all.yml",
-        GROUP_VARS.replace("10.0.0.0/24", "10.2.0.0/24"),
-    )
-    assert tree.narrow(*_refs(tree)) == {"sonarr", "radarr"}
-
-
-def test_a_rotated_key_narrows_to_its_reader_alone(tree: Tree):
-    """bazarr's key keeps its ciphertext, so bazarr is not redeployed for jellyfin's."""
-    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
-    assert tree.narrow(*_refs(tree)) == {"jellyfin"}
-
-
-def test_a_key_only_the_manifests_guard_map_names_narrows_to_nothing(tree: Tree):
-    """The guard map renders no key. Counted, it maps to `manifests`, which no tag applies."""
-    tree.write(SECRETS, _with(BASE_SECRETS, "guard_only_key", "yyy"))
-    assert tree.narrow(*_refs(tree)) == set()
-
-
-def test_a_key_another_role_renders_through_lookup_reaches_both(tree: Tree):
-    """uptime-kuma's shape: it renders a push token out of monitor-bridge's `files/`."""
-    tree.write(
-        "ansible/roles/k8s/sonarr/files/table.py",
-        "TOKEN = '{{ jellyfin_api_key }}'\n",
-    )
-    tree.write(
-        "ansible/roles/k8s/radarr/templates/tiles.yaml.j2",
-        "{{ lookup('template', playbook_dir + '/roles/k8s/sonarr/files/table.py') }}\n",
-    )
-    tree.commit("a cross-role lookup")
-    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
-    assert tree.narrow(*_refs(tree)) == {"jellyfin", "sonarr", "radarr"}
-
-
-def test_a_key_the_play_reads_is_flagged(tree: Tree):
-    """A play-level reader runs under every tag, so no tag list covers the rotation."""
-    tree.write("ansible/deploy.yml", PLAY + "    k: '{{ bazarr_api_key }}'\n")
-    tree.commit("the play reads a secret")
-    tree.write(SECRETS, _with(BASE_SECRETS, "bazarr_api_key", "xxx"))
-    with pytest.raises(narrow_broad.CannotNarrow, match="bazarr_api_key"):
-        tree.narrow(*_refs(tree))
-
-
 # ── the setup plane's half (#5436) ────────────────────────────────────────────────────────────
 SETUP_PLAY = """\
 - name: Apply claude_code
@@ -165,7 +111,7 @@ def test_a_key_the_play_reads_refuses_the_setup_answer(tree: Tree, capsys):
     assert _setup_readers(tree, capsys) == (DEPLOY_BROAD, {})
 
 
-# ── the deploy plane's half for a range `narrow` never sees (#5577) ──────────────────────────
+# ── the deploy plane's half (#5577) ──────────────────────────
 
 
 def _deploy_tags(tree: Tree, capsys) -> tuple[int, str]:
@@ -195,7 +141,7 @@ def test_deploy_tags_refuses_a_key_the_play_reads_naming_nothing(tree: Tree, cap
 
 
 def test_deploy_tags_refuses_most_of_the_fleet_naming_it(tree: Tree, capsys):
-    """`narrow`'s coverage ceiling: four of the six declared services read the key."""
+    """The coverage ceiling: four of the six declared services read the key."""
     for role in ("sonarr", "radarr", "lidarr"):
         tree.write(
             f"ansible/roles/k8s/{role}/templates/token.yaml.j2",

@@ -13,7 +13,7 @@ import pytest
 import narrow_setup
 import secret_setup_readers
 from deploy_tools.land_lib.key_readers import KeyReader, key_readers
-from deploy_tools.narrow_lib import broad, inventory_keys
+from deploy_tools.narrow_lib import inventory_keys, role_reads
 
 from _narrow_fixtures import Tree, _refs
 from _setup_role_fixtures import BETA, ROLE, build, narrow
@@ -158,7 +158,7 @@ def test_a_host_vars_key_is_scoped_to_its_host(tree):
         BASE_VARS.replace('"3.14.6"', '"{{ server_pin }}"'),
     )
     old, new = _refs(tree)
-    ctx = broad.Context(tree.root, new, set(), {}, lambda _m: None)
+    ctx = role_reads.Context(tree.root, new, set(), {}, lambda _m: None)
     found = inventory_keys.setup_reader_paths_by_host(old, ctx)
     assert {h: sorted(r.paths) for h, r in found.items()} == {
         "": [f"{ROLE}/templates/alpha.conf.j2"],
