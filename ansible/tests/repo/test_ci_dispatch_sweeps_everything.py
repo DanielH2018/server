@@ -81,6 +81,9 @@ _CANCEL_ARM = (
 # The draft arm of every job's condition. A dispatch carries no pull request, so the field is
 # unset and the comparison is true there.
 _DRAFT_ARM = "github.event.pull_request.draft != true"
+# The build arm of the jobs that read the build's artifacts. The build runs on a dispatch, so the
+# arm holds unless the build itself failed, and that failure already reds the sweep.
+_BUILD_ARM = "needs.host_packages_build.result == 'success'"
 
 _EVENT_TERM = re.compile(r"github\.event_name\s*(==|!=)\s*'([a-z_]+)'")
 
@@ -137,6 +140,7 @@ def _job_runs_on_dispatch(condition: str | None) -> bool:
         condition.replace(_CANCEL_ARM, "true")
         .replace(_PROOF_ARM, "true")
         .replace(_DRAFT_ARM, "true")
+        .replace(_BUILD_ARM, "true")
         .replace("!cancelled()", "true")
     )
     return truthy(condition, "workflow_dispatch")

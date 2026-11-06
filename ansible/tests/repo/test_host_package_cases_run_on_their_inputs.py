@@ -438,6 +438,18 @@ def test_the_arm64_job_and_the_cases_legs_wait_for_the_build_alone() -> None:
         )
 
 
+def test_the_hand_off_carries_the_cache_the_build_fetched_to_the_cases() -> None:
+    """#7437: a pin the build fetched is not requested again by a cases leg."""
+    jobs = yaml_fast.safe_load(CI_WORKFLOW.read_text())["jobs"]
+    build = "\n".join(str(step.get("run", "")) for step in jobs[BUILD_JOB]["steps"])
+    cases = "\n".join(str(step.get("run", "")) for step in jobs[JOB]["steps"])
+    assert '--cache "$RUNNER_TEMP/tools-cache"' in build
+    assert re.search(
+        r'host-packages-build\.tar" -C "\$RUNNER_TEMP" .*\btools-cache\b', build
+    )
+    assert '--tools-cache "$RUNNER_TEMP/tools-cache"' in cases
+
+
 @pytest.mark.parametrize("subcommand", ["job-changed", "fixture-changed"])
 def test_a_crashing_verdict_fails_the_render_step(
     clone: Path, tmp_path: Path, subcommand: str

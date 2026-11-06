@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-11-05 06:17 UTC
-generated_sha: f0e5cf0cfe
+generated_at: 2026-11-06 18:17 UTC
+generated_sha: bb59748cd0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -54,7 +54,7 @@ generated_sha: f0e5cf0cfe
 | longhorn | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | longhorn-backup | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | longhorn-reconcile | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
-| longhorn-restore-drill | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> B2 (default group) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
+| longhorn-restore-drill | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no declared tier (runtime claim named by a shell variable) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | longhorn-ui | k8s | <span class="fqdn" data-host="longhorn.local">longhorn.local.&lt;domain&gt;</span> (LAN only) | Authelia two_factor | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | media-volume | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | not Longhorn (media-local) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |
 | metallb | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | n/a: applied by Flux, through `promote` (`owner: flux`); `deploy.sh` refuses its tag with exit 5 |

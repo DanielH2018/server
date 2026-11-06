@@ -5,7 +5,7 @@
 # wrote it. The step numbers are H7's.
 #
 # Usage, as root, with homelab-archive-keyring.gpg beside this script:
-#   ./bootstrap-host.sh <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--rebaseline]
+#   ./bootstrap-host.sh <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--tools-seed <dir>] [--rebaseline]
 #   ./bootstrap-host.sh --help        print this header and exit
 #
 # Steps, in order. Each is idempotent, and --until <step> stops after one so a runbook can
@@ -31,6 +31,8 @@
 # origin/master's first-parent chain with a green CI verdict (hosts/lib/bootstrap_anchor.py).
 # --offline <kit-dir> reads every fetch from the break-glass kit (docs/break-glass.md, item 8),
 # checks each file against the pin the download path checks, and makes neither GitHub read.
+# --tools-seed <dir> reads each pinned file <dir>/<sha256> holds instead of downloading it, and
+# downloads the rest. Each file is still checked against its pin. CI's bootstrap cases pass it.
 #
 # daniel-server joins the cluster as an agent, so the operator passes K3S_URL and K3S_TOKEN in
 # the environment (sudo --preserve-env). The script never prints or traces the token.
@@ -141,7 +143,7 @@ die() {
 }
 
 usage() {
-    echo "usage: $0 <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--rebaseline]" >&2
+    echo "usage: $0 <hostname> [--until <step>] [--local-build <clone>] [--offline <kit-dir>] [--tools-seed <dir>] [--rebaseline]" >&2
     exit 64
 }
 
@@ -150,6 +152,7 @@ host=""
 until_step=7
 clone=""
 kit=""
+tools_seed=""
 rebaseline=no
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -166,6 +169,11 @@ while [ $# -gt 0 ]; do
         --offline)
             [ $# -ge 2 ] || usage
             kit=$2
+            shift 2
+            ;;
+        --tools-seed)
+            [ $# -ge 2 ] || usage
+            tools_seed=$2
             shift 2
             ;;
         --rebaseline)
@@ -211,6 +219,9 @@ if [ -n "$clone" ]; then
 fi
 if [ -n "$kit" ]; then
     [ -d "$kit" ] || die "--offline: $kit is not a directory"
+fi
+if [ -n "$tools_seed" ]; then
+    [ -d "$tools_seed" ] || die "--tools-seed: $tools_seed is not a directory"
 fi
 
 # Step 1 is the hostname check above; --until 1 stops here.
@@ -311,12 +322,14 @@ retry() {
     done
 }
 
-# fetch <url> <sha256> <dest>: download, or copy from the kit, then check the pin.
+# fetch <url> <sha256> <dest>: download, or copy from the kit or the seed, then check the pin.
 fetch() {
     name=${1##*/}
     if [ -n "$kit" ]; then
         [ -f "$kit/$name" ] || die "the offline kit has no $name"
         cp "$kit/$name" "$3"
+    elif [ -n "$tools_seed" ] && [ -f "$tools_seed/$2" ]; then
+        cp "$tools_seed/$2" "$3"
     else
         retry "the fetch of $name" curl -fsSL --retry 3 --max-time "$FETCH_MAX_TIME" -o "$3" "$1" || die "cannot fetch $1"
     fi
@@ -438,6 +451,9 @@ else
     CLEAN="$CLEAN $work"
     mkdir -p "$work/bin" "$work/tree" "$work/debs" "$work/uv-cache" "$work/tools-cache"
     command -v git > /dev/null || die "--local-build needs git"
+    if [ -n "$tools_seed" ]; then
+        cp -R "$tools_seed/." "$work/tools-cache/"
+    fi
 
     for tool in nfpm uv; do
         fetch "$(pin_url "$tool")" "$(pin "$tool" "$arch" sha256)" "$work/$tool.tgz"
