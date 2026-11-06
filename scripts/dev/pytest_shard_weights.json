@@ -1116,7 +1116,7 @@
  "scripts/deploy_tools/tests/test_verify_promotion_storage_rollout.py": 0.0,
  "scripts/deploy_tools/tests/test_verify_promotion_superseded.py": 0.0,
  "scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py": 6.1,
- "scripts/dev/tests/test_ci_failures.py": 6.54,
+ "scripts/dev/tests/test_ci_failures.py": 10.61,
  "scripts/dev/tests/test_facts_cli.py": 0.4,
  "scripts/dev/tests/test_fanout_abandon.py": 2.91,
  "scripts/dev/tests/test_fanout_autoland.py": 0.24,

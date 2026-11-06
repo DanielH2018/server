@@ -81,7 +81,9 @@ def runs_between(start: datetime, end: datetime) -> list[dict[str, Any]]:
     if pages[0]["total_count"] < SEARCH_CAP:
         return [run for page in pages for run in page["workflow_runs"]]
     if end - start <= ONE_SECOND:
-        warn(f"{_stamp(start)} holds over {SEARCH_CAP} runs; some are missing")
+        warn(
+            f"{_stamp(start)} reaches the {SEARCH_CAP}-run search cap; runs may be missing"
+        )
         return [run for page in pages for run in page["workflow_runs"]]
     middle = (start + (end - start) / 2).replace(microsecond=0)
     return runs_between(start, middle) + runs_between(middle + ONE_SECOND, end)
