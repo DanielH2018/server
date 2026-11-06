@@ -7,11 +7,6 @@ fleet-coverage ceiling. Measured on the H2.5b branch: one `netpol_from` edit in 
 one configarr row printed `cannot narrow (58 of 61 services ...)`, where the range reached
 only `configarr`, `netpol-baseline` and that role.
 
-`land_shared.guard_map_rows` asks the same question for a landing, and the deployer's owed
-line asked it per caller until D6.12 deleted that discharge (#5106). This leaf cannot import
-the landing's copy: `land_shared` reaches `narrow_lib.broad` through `deploy_lib.tags`, so the
-edge would close a cycle. `test_land_shared_guard_map.py` holds the two paths equal.
-
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_guard_map.py
 """
 

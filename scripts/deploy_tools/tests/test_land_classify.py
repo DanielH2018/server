@@ -14,7 +14,7 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deployer_lib.deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
-from deploy_tools.land_lib import classify, tools
+from deploy_tools.land_lib import classify
 from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
@@ -70,18 +70,8 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
     )
 
 
-def test_classify_joins_no_shared_role_caller(landing):
-    """Every caller is flux-owned, so the promotion's changed set names it (D6.12)."""
-    ln, _ = landing(
-        Fakes(derived=([], "pr"), shared_callers={"helper": {"sonarr", "radarr"}})
-    )
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.tags_csv == ""
-
-
-def test_classify_leaves_the_tags_alone_when_no_shared_role_changed(landing):
-    ln, _ = landing(Fakes(derived=(["sonarr", "radarr"], "pr"), shared_callers={}))
+def test_classify_leaves_the_tags_alone_when_no_path_proves_a_platform(landing):
+    ln, _ = landing(Fakes(derived=(["sonarr", "radarr"], "pr")))
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.tags_csv == "sonarr,radarr"
@@ -144,16 +134,19 @@ def test_a_role_this_pr_registers_is_deployed_rather_than_reported_unregistered(
     assert ln.resolved_tags == ["pihole-exporter"]
 
 
-def test_a_role_the_merge_commit_does_not_declare_is_still_reported(landing):
-    """The must-fire half: a role nobody registered still owes a hand, and derives no tag."""
+def test_a_role_the_merge_commit_does_not_declare_owes_no_hand(landing):
+    """It has no tag and no caller, and no hand can apply it, so the note names nothing.
+
+    The `every-k8s-role-has-an-entry-or-a-caller` census row refuses such a role before merge.
+    """
     ln, _ = landing(
         Fakes(gh_views={"files,changedFiles": _NEW_ROLE_PR}, declared_at=set())
     )
     _real_derivation(ln)
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert "pihole-exporter" in ln.plane
     assert ln.resolved_tags == []
+    assert ln.plane == ""
 
 
 def test_an_unreadable_merge_commit_says_so_and_falls_back_to_this_checkout(
@@ -180,94 +173,6 @@ def _role_pr(role: str) -> dict:
         "files": [{"path": f"ansible/roles/k8s/{role}/tasks/main.yml"}],
         "changedFiles": 1,
     }
-
-
-def _landed_role_without_an_entry(landing, role_dirs: frozenset[str]):
-    """A landing of a change to `ical-proxy`, a role with no callers, minus its entry."""
-    assert (REPO / "ansible/roles/k8s/ical-proxy").is_dir()
-    ln, _ = landing(
-        Fakes(
-            gh_views={"files,changedFiles": _role_pr("ical-proxy")},
-            declared_at=land_tags.declared_tags() - {"ical-proxy"},
-            role_dirs_at=role_dirs,
-        )
-    )
-    return ln
-
-
-def test_a_role_the_merge_commit_deleted_is_not_reported_as_shared(landing):
-    """PR #7101: this checkout still held the role, so it read as a shared role and the
-    landing ended `needs-manual-apply` with a full-deploy remedy for nothing."""
-    ln = _landed_role_without_an_entry(landing, frozenset({"k8s/manifests"}))
-    _real_derivation(ln)
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.plane == ""
-
-
-def test_a_callerless_role_both_trees_hold_is_still_reported(landing):
-    """The must-fire half: the same PR, with the role still at the merge commit."""
-    ln = _landed_role_without_an_entry(
-        landing, frozenset({"k8s/manifests", "k8s/ical-proxy"})
-    )
-    _real_derivation(ln)
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert "ical-proxy" in ln.plane
-    assert "ansible/deploy.yml" in ln.plane
-
-
-def test_a_new_helper_arriving_with_its_caller_is_not_reported(landing):
-    """Only the merge commit holds the helper and the include of it, and a checkout that
-    predates the merge has no caller to find. `bar-svc`'s tag deploys it, so nothing is owed."""
-    assert not (REPO / "ansible/roles/k8s/new-helper").exists()
-    ln, _ = landing(
-        Fakes(
-            gh_views={
-                "files,changedFiles": {
-                    "files": [
-                        {"path": "ansible/roles/k8s/new-helper/tasks/main.yml"},
-                        {"path": "ansible/roles/k8s/bar-svc/tasks/main.yml"},
-                    ],
-                    "changedFiles": 2,
-                }
-            },
-            declared_at=land_tags.declared_tags() | {"bar-svc"},
-            role_dirs_at=frozenset({"k8s/manifests", "k8s/new-helper", "k8s/bar-svc"}),
-        )
-    )
-    _real_derivation(ln)
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.plane == ""
-    assert ln.resolved_tags == ["bar-svc"]
-
-
-def test_a_deleted_role_does_not_deploy_the_callers_this_checkout_still_has(landing):
-    """The deploy half asks the merge commit as well, or the landing fans out to about 60
-    services for a role that no longer exists."""
-    ln, _ = landing(
-        Fakes(
-            gh_views={"files,changedFiles": _role_pr("volume-snapshot")},
-            declared_at=land_tags.declared_tags(),
-            role_dirs_at=frozenset({"k8s/manifests"}),
-        )
-    )
-    _real_derivation(ln)
-    ln.classifier = dataclasses.replace(
-        ln.classifier, shared_caller_tags=land_tags.shared_caller_tags
-    )
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.plane == ""
-    assert ln.resolved_tags == []
-
-
-def test_role_dirs_at_lists_the_role_trees_and_is_none_when_unreadable():
-    dirs = tools.role_dirs_at("HEAD", REPO)
-    assert dirs is not None
-    assert {"k8s/manifests", "setup/gitops_deploy"} <= dirs
-    assert tools.role_dirs_at("no-such-ref", REPO) is None
 
 
 def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):

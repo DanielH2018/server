@@ -46,15 +46,15 @@ def derive_from_diff(ln: Landing) -> None:
     verification matters most.
 
     A range `changed` refuses as broad derives no tag here. Its k8s half is the promotion's,
-    and land-wait's changed set names the tags this landing gates (D6.12). The deployer's
-    `narrow` scoped such a range to k8s tags until then; Flux applies every one of them.
+    and land-wait's changed set names the tags this landing gates. `changed` prints what its
+    Pi and setup halves owe on stderr, beside the verdict.
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
     r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])
     if r.returncode == DEPLOY_BROAD:
         say(
             "`changed` refused the range as broad; the promotion's changed set names its k8s "
-            "tags, and a Pi Compose role it reaches is a `deploy.sh -e target=daniel-pi` by hand"
+            "tags, and the host wait covers a change to a host's package"
         )
         ln.resolved_tags = []
         return
@@ -246,9 +246,8 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
 
     `k8s_only` routes to a `platform: k8s` entry only, through both reads. `wg-easy` is declared
     on daniel-box as k8s and on daniel-pi as Docker, so without it a change to either deploys both
-    -- one extra ssh deploy of a service the change never touched. A tag the k8s caller graph
-    reached names a k3s role, and so does one whose every changed path sits under
-    `ansible/roles/k8s/`; `classify` records the union of the two.
+    -- one extra ssh deploy of a service the change never touched. A tag whose every changed
+    path sits under `ansible/roles/k8s/` names a k3s role; `classify` records those.
     """
     o, t = ln.opts, ln.tools
     by_host = (
@@ -400,22 +399,19 @@ def deploy_outcome(ln: Landing, rc: int) -> None:
 def deploy_phase(ln: Landing) -> None:
     """Step 5, end to end: derive, split, deploy, wait on promotion, stamp the ledger.
 
-    The split comes before any deploy.sh (`promotion.split_owned`): a tag Flux applies leaves
-    `resolved_tags`, and deploy.sh runs only when an Ansible-owned tag remains, which is a Pi
-    Compose tag. A path-derived tag Flux applies is then dropped (`promotion.drop_path_derived`),
-    because every landing whose PR may move the bundle waits on the promotion, and land-wait's
-    changed set names the tags the gate reads (D6.12). A PR that moves no bundle file, or
-    whose changed set names no tag, ends in `no_tag_outcome` when deploy.sh had nothing either.
-    A plane it also carries, such as the rotation note for `secrets.yml`, is reported by the
-    health step after a settled wait, and by `wait_on_promotion` when the wait ends the landing.
+    The split comes before any deploy.sh (`promotion.split_k8s`): a k8s tag leaves
+    `resolved_tags`, and deploy.sh runs only when a non-k8s tag remains. Every landing whose PR
+    may move the bundle then waits on the promotion, and land-wait's changed set names the tags
+    the gate reads. A PR that moves no bundle file, or whose changed set names no tag, ends in
+    `no_tag_outcome` when deploy.sh had nothing either. A plane it also carries, such as the
+    rotation note for `secrets.yml`, is reported by the health step after a settled wait, and by
+    `wait_on_promotion` when the wait ends the landing.
     """
-    t = ln.tools
     if ln.needs_diff:
         derive_from_diff(ln)
-    promotion.split_owned(ln)
-    promotion.drop_path_derived(ln)
+    promotion.split_k8s(ln)
     waits = (
-        bool(ln.owned_tags)
+        bool(ln.flux_tags)
         or ln.needs_diff
         or promotion.moves_the_bundle(ln.classification.pr_paths)
     )
@@ -423,7 +419,7 @@ def deploy_phase(ln: Landing) -> None:
         if ln.host_targets and not ln.plane:
             return  # nothing for deploy.sh: the tick took the empty change set, then the host wait
         no_tag_outcome(ln)
-    ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
+    ln.ledger.tags_label = ",".join(ln.resolved_tags + ln.flux_tags)
     if ln.resolved_tags:
         _deploy_resolved(ln)
     elif not ln.tick_is_the_apply:
@@ -431,15 +427,11 @@ def deploy_phase(ln: Landing) -> None:
         # after `deploy.sh --at`, and the tick is kicked to converge the primary checkout.
         ln.deployed_at = ln.merge_sha
         tick.kick_tick(ln)
-    # Stamped before the promotion wait: the re-gate reads a later deploy of these tags as one
-    # that started after deploy.sh returned, and the wait can last 67 minutes, or longer while
-    # an earlier commit's verification is in flight (`wait.py:IN_FLIGHT_WAIT_S`).
-    ln.deploy_ended_at = t.wall_clock()
     if waits:
         promotion.wait_on_promotion(ln)
     # Step 5's own time on the board, the promotion wait included.
-    ln.ledger.t_deploy = t.clock()
-    if not ln.resolved_tags and not ln.owned_tags:
+    ln.ledger.t_deploy = ln.tools.clock()
+    if not ln.resolved_tags and not ln.flux_tags:
         if ln.host_targets and not ln.plane:
             return
         no_tag_outcome(ln)

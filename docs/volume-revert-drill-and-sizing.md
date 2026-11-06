@@ -78,17 +78,13 @@ engine's error — so a 200 there means the engine performed the revert, where a
 only means a map delete was accepted. The same handler is where the frontend-enabled 500 comes from, and
 where the server refuses a snapshot it sees as `Removed`.
 
-## `gitops-deploy`'s rollback passes a fixed 8-character slice
+## `gitops-deploy`'s rollback passed a fixed 8-character slice
 
-The role's rule is that `volume_revert_sha` is `k8s/volume-snapshot`'s own string, used verbatim.
-`gitops_deploy.py` passes `restore_sha=origin[:8]` — a fixed 8-character slice of the FULL 40-char
-SHA, not `git rev-parse --short=8`'s own (possibly longer) output. The two agree whenever 8
-characters is already unambiguous, which is the overwhelmingly common case, and diverge only on an
-8-hex-character collision in the repo's history — negligibly likely, and safe when it happens: the
-prefix this role builds then fails to match, and "no snapshot matches this deploy" fires before
-anything moves, the same fail-closed outcome as every other unmatched prefix. See
-`docs/gitops-pipeline.md`'s *Trap: moving a config source* section for the full reconciliation; it
-was not changed, because the failure mode it falls into is already correct.
+**HISTORY — D6.12 deleted the tick's rollback, the one caller that passed a slice.** The role's
+rule is that `volume_revert_sha` is `k8s/volume-snapshot`'s own string, used verbatim.
+`gitops_deploy.py` passed `restore_sha=origin[:8]`, a fixed 8-character slice of the FULL 40-char
+SHA, not `git rev-parse --short=8`'s own (possibly longer) output. A collision made the prefix
+fail to match, and "no snapshot matches this deploy" fired before anything moved.
 
 ## Measured cycle time (task-6 drill, 2026-08-21)
 
@@ -135,8 +131,8 @@ regardless of that flag, precisely because the snapshot and revert protect a MAN
 a manual deploy is the only kind either service gets.
 
 Task 4's manifests-level rehearsal (Phase 4 of the task-6 drill) is the number this sizing uses,
-because it is the path production actually takes: a rollback redeploy pays the snapshot wait AND
-the full revert cycle, not the revert alone. That run measured the detach wait after the revert at
+because a rollback redeploy paid the snapshot wait AND the full revert cycle, not the revert
+alone. That run measured the detach wait after the revert at
 **40.80s** (worst observed state wait) and every API call under **0.41s**. Set, with the headroom
 each keeps:
 
@@ -150,8 +146,9 @@ case is much smaller: the drill's own two-claim-shaped numbers (one claim's 47s 
 manifests-level cycle) put a real two-claim revert closer to **150s**, not 720s — the 720s figure
 is a ceiling sized for a stalled Longhorn API, not the expected run.
 
-`gitops_deploy_k8s_rollback_timeout_s` (`K8S_ROLLBACK_TIMEOUT_S`) stays at **900s**, its own budget
-rather than sharing the forward deploy's. That covers the 720s worst-case revert with 180s left for
+**HISTORY — D6.12 deleted the tick's rollback and the budget below.**
+`gitops_deploy_k8s_rollback_timeout_s` (`K8S_ROLLBACK_TIMEOUT_S`) stayed at **900s** when this was
+sized, its own budget rather than sharing the forward deploy's. That covered the 720s worst-case revert with 180s left for
 the rest of the SAME playbook run — the pre-revert snapshot wait and the post-apply rollout — at
 their REALISTIC cost (the drill measured 38s or so combined for one claim), not at their own
 ceiling. **720s is reached by every wait and call succeeding right at its own ceiling, or by the
@@ -161,11 +158,10 @@ revert-phase failure can never both consume their own worst case in one run.** T
 narrower than a compounding-failure scenario: a two-claim service's snapshot phase, succeeding but
 slowly, can still cost up to 240s (`volume_snapshot_timeout` x 2 claims) ADDITIVE to a
 slow-but-successful 720s revert on one continuous timeline where nothing fails — and that combined
-slow-success total is not proven to fit in the 180s left. That is an accepted residual risk (a slow
-full success getting cut short), not a proven-safe one — see `docs/gitops-pipeline.md`'s *The
-rollback timeout, derived* section. The unit's `TimeoutStartSec` was raised from 25 minutes to 35
-minutes to fit `K8S_DEPLOY_TIMEOUT_S` (900s, the forward attempt) plus `K8S_ROLLBACK_TIMEOUT_S`
-(900s) plus the flock wait.
+slow-success total is not proven to fit in the 180s left. That was an accepted residual risk (a slow
+full success getting cut short), not a proven-safe one. The unit's `TimeoutStartSec` was raised from
+25 minutes to 35 minutes to fit `K8S_DEPLOY_TIMEOUT_S` (900s, the forward attempt) plus
+`K8S_ROLLBACK_TIMEOUT_S` (900s) plus the flock wait.
 
 ## Things measured rather than assumed
 

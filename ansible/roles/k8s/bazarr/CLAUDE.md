@@ -44,7 +44,7 @@ shared conventions.
 
 ## Notable
 - `-lsNN` linuxserver tagging hides a breaking bump as a routine patch bump — the reason the
-  auto-deploy reasoning in `defaults/main.yml` calls this out explicitly even after
+  `k8s_autodeploy_reason` in `defaults/main.yml` calls this out explicitly even after
   promotion.
 - `templates/networkpolicy-bazarr.yaml.j2` admits monitor-bridge to bazarr's API port on top
   of the netpol-baseline default set (traefik, prometheus, the two cni0 gateways) — without

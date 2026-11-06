@@ -1,4 +1,4 @@
-"""A tag Flux applies lands through `promote`: the split before deploy.sh, the wait, the handback.
+"""A k8s tag lands through `promote`: the split before deploy.sh, the wait, the handback.
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. Every
 boundary is a fake from `_land_fakes.py`; `promote.land_wait` itself is tested in
@@ -13,7 +13,7 @@ import pytest
 from dataclasses import replace
 
 from _land_fakes import MERGE_SHA, Fakes
-from deploy_tools.land_lib import deploy, land_flux, merge, promotion
+from deploy_tools.land_lib import land_flux, merge, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
 from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.promote_lib.wait import WaitResult
@@ -66,7 +66,7 @@ def test_a_changed_set_name_flux_does_not_own_is_not_gated(land_run):
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
 
 
-def test_a_pr_with_an_ansible_owned_tag_too_deploys_that_tag_alone(land_run):
+def test_a_pr_with_a_non_k8s_tag_too_deploys_that_tag_alone(land_run):
     rc, out, _, calls, _ = land_run([], _fakes(derived=(["sonarr", "bento-pdf"], "pr")))
     assert rc == 0 and "VERDICT: settled" in out
     assert [c[1][1] for c in calls if c[0] == "deploy"] == [["sonarr"]]
@@ -74,7 +74,7 @@ def test_a_pr_with_an_ansible_owned_tag_too_deploys_that_tag_alone(land_run):
     assert [c[1] for c in calls if c[0] == "gate"] == [(["sonarr", "bento-pdf"],)]
 
 
-def test_an_ansible_owned_pr_deploys_and_then_waits_on_promotion(land_run):
+def test_a_non_k8s_pr_deploys_and_then_waits_on_promotion(land_run):
     """Every landing whose paths may move the bundle waits on land-wait (D6.12)."""
     rc, out, _, calls, _ = land_run([], Fakes())
     assert rc == 0 and "VERDICT: settled" in out
@@ -221,10 +221,12 @@ def test_an_unreadable_ownership_map_after_the_wait_gates_every_changed_name(lan
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
 
 
-def test_an_unreadable_ownership_map_deploys_nothing(land_run):
-    fakes = _fakes(owners={MERGE_SHA: ValueError("owner 'flx' is not one of ...")})
+def test_an_unreadable_k8s_entry_list_deploys_nothing(land_run):
+    fakes = _fakes(k8s_tags={MERGE_SHA: ValueError("host_vars does not parse")})
     rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 1 and "VERDICT: refused" in out
+    assert "could not read which tags Flux applies" in out
+    assert "k8s_tags_at" in _names(calls)
     assert "deploy" not in _names(calls) and "land_wait" not in _names(calls)
 
 
@@ -342,21 +344,6 @@ def test_a_handback_refused_through_land_sh_never_reaches_deploy_sh(land_run):
     assert rc == 1 and "VERDICT: refused" in out
     assert "deploy" not in _names(calls)
     assert not [c for c in calls if c[0] == "gh"]
-
-
-def test_the_deploy_end_is_stamped_before_the_promotion_wait(landing):
-    """The re-gate reads a deploy started after this stamp as a later one, so a stamp taken
-    after a 24-minute wait would hide another session's redeploy of the Ansible-owned tag."""
-    ln, calls = landing(_fakes(derived=(["sonarr", "bento-pdf"], "pr")))
-    ln.classification = replace(
-        ln.classification, pr_paths=("ansible/roles/k8s/sonarr/defaults/main.yml",)
-    )
-    ln.merge_sha = MERGE_SHA
-    ln.resolved_tags = ["sonarr", "bento-pdf"]
-    ln.tools.wall_clock = lambda: calls.append(("wall_clock", (), {})) or 5.0
-    deploy.deploy_phase(ln)
-    names = _names(calls)
-    assert names.index("deploy") < names.index("wall_clock") < names.index("land_wait")
 
 
 # -- the Kustomization read ------------------------------------------------------------------

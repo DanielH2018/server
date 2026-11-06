@@ -9,9 +9,7 @@ that tree-wide), so no deploy can
 apply it. Same class as the `.md` rule.
 
 WHAT THIS KEEPS, and why the reject halves below are `tasks/` cases. Dropping a shared role's
-`tasks/` as well is wrong for three reasons: a tasks-only PR adding an unregistered role must
-still be reported (`test_land_classify.py:110`); a helper's tasks apply live state per caller,
-so one caller deployed is not the change applied (`test_land_tags_caller_coverage.py:76`); and
+`tasks/` as well is wrong for two reasons: a helper's tasks apply live state per caller, and
 `_supplies_manifest_bytes` names `image-builder/templates/build-job.yaml.j2` as a byte supplier,
 which puts that role's own example in the REPORTED set.
 
@@ -59,7 +57,6 @@ def test_a_role_test_file_is_clean():
     assert land_tags.is_role_test_path(_ROLE_TESTS) is True
     assert land_tags.shared_roles([_ROLE_TESTS]) == []
     assert land_tags.plane_note([_ROLE_TESTS]) == ""
-    assert land_tags.shared_caller_tags([_ROLE_TESTS]) == {}
 
 
 def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
@@ -76,13 +73,9 @@ def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
 
 
 def test_a_role_task_file_is_flagged():
-    """The reject half: tasks/ still owes a deploy, which is a deploy of both callers rather
-    than a hand."""
+    """The reject half: tasks/ is the role's code, not its suite."""
     assert land_tags.is_role_test_path(_ROLE_TASKS) is False
     assert land_tags.shared_roles([_ROLE_TASKS]) == ["arr-notification"]
-    assert land_tags.shared_caller_tags([_ROLE_TASKS]) == {
-        "arr-notification": {"radarr", "sonarr"}
-    }
 
 
 def test_a_shared_build_role_task_file_is_flagged():
@@ -112,8 +105,7 @@ def test_a_role_shipped_file_is_flagged():
 
 def test_a_test_file_beside_a_real_change_does_not_excuse_it():
     """One quiet tests/ edit must not take the code change it covers with it."""
-    reached = land_tags.shared_caller_tags([_ROLE_TESTS, _ROLE_FILES])
-    assert reached == {"arr-notification": {"radarr", "sonarr"}}
+    assert land_tags.shared_roles([_ROLE_TESTS, _ROLE_FILES]) == ["arr-notification"]
 
 
 def _verdict(landing, files: list[str]) -> Outcome:
@@ -135,11 +127,6 @@ def _verdict(landing, files: list[str]) -> Outcome:
 def test_a_role_test_change_ends_nothing_to_deploy(landing):
     outcome = _verdict(landing, [_ROLE_TESTS])
     assert (outcome.verdict, outcome.rc) == ("nothing-to-deploy", 0)
-
-
-def test_a_role_task_change_owes_no_hand_because_its_callers_deploy():
-    """The tag path decides it: the landing deploys sonarr and radarr."""
-    assert land_tags.plane_note([_ROLE_TASKS]) == ""
 
 
 # The declared-role half. A DECLARED role's tests/ must not derive that role's deploy tag,

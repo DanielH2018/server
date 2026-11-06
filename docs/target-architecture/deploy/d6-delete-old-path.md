@@ -1585,6 +1585,11 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
       D6.18 has merged, revert D6.18 first.
     - **Exit criterion:** exit 1's `deploy.sh`, `land.sh` and census halves, and part of
       exit 4 (the exit-3 bullet of *When to wait*).
+    - **As built ([#7339](https://github.com/DanielH2018/server/issues/7339)).** H5.12 emptied
+      the Pi's `containers_list`, so no path derives a Pi tag and `changed` prints no tag at
+      all. Its broad line names `promote` and the `homelab-daniel-pi` package rather than
+      `deploy.sh -e target=daniel-pi`, which deploys nothing since H5.12. `deploy_by_host` stays
+      as the Pi arm this plan keeps until H7, though no tag reaches it.
 7. **D6.16 — Arm the setup-drift reader on daniel-box** (old D6.5a, about 40 lines).
     - **Why apart from D6.17.** D6.17's `NotReporting` arm for the box fires unless the box
       has already written a sample, and the timer runs once a day. So this PR deploys, and

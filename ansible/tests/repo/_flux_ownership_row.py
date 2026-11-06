@@ -1,4 +1,5 @@
-"""The flux-ownership census row of target slice H2.1: no flux-owned role keeps a host install.
+"""The flux-ownership census rows: every k8s entry is flux-owned, none keeps a host install, and
+every k8s role is reachable from an entry.
 
 Flux applies a flux-owned role's manifests and runs none of its tasks. A role that installed a
 cron, a script or a host-lib copy and is then flipped leaves that install running with no
@@ -16,10 +17,11 @@ every host write, absent arms included. This row counts only what a host keeps r
 """
 
 from _helpers import walk_tasks
+from _role_census import role_dirs
 from _host_write_rows import _destination
 from _row_table import Subject, Census, tracked
 from lib import yaml_fast
-from lib.k8s_roles import k8s_entries
+from lib.k8s_roles import k8s_entries, role_callers
 
 _K8S = "ansible/roles/k8s/"
 
@@ -159,4 +161,85 @@ FLUX_OWNERSHIP = Census(
     # 58 k8s entries when the row landed (2026-10-16): the row reads every one of them.
     min_matches=len(k8s_entries()),
     must_find=frozenset(_K8S + role for role in H2_ROLES),
+)
+
+
+def _entry_subjects() -> list[RoleSubject]:
+    return [
+        RoleSubject(name, entry.get("owner"))
+        for name, entry in sorted(k8s_entries().items())
+    ]
+
+
+def _not_flux_owned(subject: Subject) -> list[str]:
+    owner = subject.owner if isinstance(subject, RoleSubject) else None
+    return [] if owner == "flux" else [f"owner is {owner!r}, not flux"]
+
+
+K8S_ENTRIES_ARE_FLUX_OWNED = Census(
+    name="every-k8s-entry-is-flux-owned",
+    reason=(
+        "`deploy.sh` refuses every k8s tag and the tick applies no k8s role, so a k8s "
+        "`containers_list` entry without `owner: flux` has no writer once `promote` stops "
+        "publishing it, and its objects are orphaned or, under the deletion policy, deleted. "
+        "A handback is not a rollback since D6.12: fix a bad role forward (D6's *The deletion "
+        "policy, and the end of the handback*)."
+    ),
+    files=_entry_subjects,
+    offence=_not_flux_owned,
+    red=(RoleSubject("sonarr", None), RoleSubject("sonarr", "released")),
+    green=(RoleSubject("sonarr", "flux"),),
+    # The count D5 ended with. A selector that stops matching fails here, not on nothing.
+    min_matches=66,
+    must_find=frozenset({_K8S + "bento-pdf", _K8S + "flux"}),
+)
+
+
+class ReachSubject(Subject):
+    """One directory under `roles/k8s/`, with the entry names and caller map it is judged by.
+
+    The subject carries those inputs, not a verdict, so a fixture exercises `_unreached`'s own
+    reachability logic.
+    """
+
+    def __init__(self, role: str, named: set[str], callers: dict[str, set[str]]):
+        super().__init__(_K8S + role, text="")
+        self.role = role
+        self.named = named
+        self.callers = callers
+
+
+def _reach_subjects() -> list[ReachSubject]:
+    entries = k8s_entries()
+    named = set(entries) | {e["role"] for e in entries.values() if e.get("role")}
+    callers = role_callers()
+    return [ReachSubject(d.name, named, callers) for d in role_dirs()]
+
+
+def _unreached(subject: Subject) -> list[str]:
+    if isinstance(subject, ReachSubject) and (
+        subject.role in subject.named or subject.callers.get(subject.role)
+    ):
+        return []
+    return ["no containers_list entry names it and no role includes it"]
+
+
+K8S_ROLES_ARE_REACHABLE = Census(
+    name="every-k8s-role-has-an-entry-or-a-caller",
+    reason=(
+        "`promote` renders a role through its `containers_list` entry or through a role that "
+        "includes it. A role with neither renders nothing, and its landing has no tag and no "
+        "note to name it, so the change reads as landed. Add the entry, or delete the role."
+    ),
+    files=_reach_subjects,
+    offence=_unreached,
+    # Red: another entry and another role's caller exist, but nothing reaches `newsvc`.
+    red=(ReachSubject("newsvc", {"sonarr"}, {"manifests": {"sonarr"}}),),
+    green=(
+        ReachSubject("newsvc", {"newsvc"}, {}),
+        ReachSubject("newsvc", set(), {"newsvc": {"sonarr"}}),
+    ),
+    # 66 entries and 6 shared roles when the row landed.
+    min_matches=72,
+    must_find=frozenset({_K8S + "bento-pdf", _K8S + "manifests"}),
 )

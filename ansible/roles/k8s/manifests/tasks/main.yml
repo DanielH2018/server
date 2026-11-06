@@ -616,8 +616,8 @@
 # risks the recovery point itself — but a Longhorn outage during THIS snapshot is this design's
 # one remaining failure mode.
 #
-# `k8s_restore_snapshot_sha` is set only by gitops-deploy's rollback redeploy, as an extra-var,
-# and it carries the FAILED commit's SHA — not this tree's. At this point the tree has already
+# No caller sets `k8s_restore_snapshot_sha` since D6.12 deleted the tick's rollback redeploy.
+# It was an extra-var carrying the FAILED commit's SHA — not this tree's. At this point the tree has already
 # been reset to the last good commit, so the role's own `git rev-parse` cannot derive it.
 #
 # The claim list, by contrast, comes from the CURRENT (rolled-back-to) tree's role defaults —
