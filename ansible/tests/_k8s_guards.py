@@ -58,8 +58,8 @@ def _text_chunks(text: str, strip_trailing_comments: bool = False) -> list[str]:
     return chunks
 
 
-# Whole-identifier, not a bare substring: janitorr's unrelated `janitorr_k8s_dry_run`
-# contains the literal text "k8s_dry_run" inside a longer variable
+# Whole-identifier, not a bare substring: janitorr's unrelated `janitorr_dry_run: "{{
+# janitorr_k8s_dry_run }}"` contains the literal text "k8s_dry_run" inside a longer variable
 # name, which a substring check reads as a guard that isn't there. `\b` anchors this to the
 # real fact names, which are underscore-joined identifiers with no boundary in the middle of
 # `janitorr_k8s_dry_run` for `\b` to land on.
