@@ -8,8 +8,8 @@ This reads the deployer's state directory and prints, without ticking:
 - `hold_sha` with the planes its `hold_plane` lines wait on, and `gitops_markers.HOLD_CLEAR_CMD`.
 - `behind_since`, `diverged_sha` and `contention_since`. Only the last has an operator clear;
   the tick rewrites the other two itself.
-- Every other `owed` ledger class: `manual_plane`, `k8s_deferred`, `k8s_unapplied`, each line
-  with the apply or deploy that discharges it and the `clear-owed` command to run after.
+- The `owed` ledger's `manual_plane` class, each line with the apply that discharges it and
+  the `clear-owed` command to run after.
 
 Every parser and every command string is the deployer's own, imported from its `files/`, so
 this view cannot word a marker or a clear differently from the surfaces that page on it.
@@ -47,12 +47,9 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # The deployer's own modules, so each format and each clear command is its own.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from gitops_ledger import (
-    OWED_K8S_DEFERRED,
-    OWED_K8S_UNAPPLIED,
     OWED_MANUAL_PLANE,
     held_planes,
     manual_plane_entries,
-    parse_owed,
 )
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
@@ -63,8 +60,6 @@ from gitops_markers import (
     agent_pin_cmds,
     by_hand,
     STATE_DIR,
-    k8s_deferred_deploy_cmd,
-    k8s_unapplied_remedy,
     maximal_apply_warning,
     owed_clear_cmd,
     parse_behind,
@@ -77,7 +72,7 @@ SET, ABSENT, UNREADABLE = "set", "absent", "unreadable"
 
 # The owed classes printed one line per entry. The `hold_plane` class is printed under the
 # hold, since its lines clear only together with `hold_sha`.
-OWED_LISTED = (OWED_MANUAL_PLANE, OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED)
+OWED_LISTED = (OWED_MANUAL_PLANE,)
 
 
 def read_marker(state_dir: Path, name: str) -> tuple[str, str | None]:
@@ -141,21 +136,6 @@ def _owed_rows(owed: str | None, now: float) -> dict[str, list[dict]]:
                 "clear": owed_clear_cmd(OWED_MANUAL_PLANE, e.role, selected),
             }
         )
-    for cls in (OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED):
-        for e in sorted(parse_owed(owed, cls), key=lambda e: e.at):
-            rows[cls].append(
-                {
-                    "subject": e.subject,
-                    "origin": e.origin,
-                    "age_s": int(now - e.at),
-                    "do": (
-                        k8s_unapplied_remedy(e.subject)
-                        if cls == OWED_K8S_UNAPPLIED
-                        else k8s_deferred_deploy_cmd([e.subject])
-                    ),
-                    "clear": owed_clear_cmd(cls, e.subject),
-                }
-            )
     return rows
 
 

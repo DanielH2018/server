@@ -9,7 +9,7 @@ deployer's `owned_only` split (`deploy_tools/shared_role_callers.py`), the broad
 readers import it from.
 
 A task file that does not load raises `CannotNarrow`, because it can hold the only edge to a
-helper. The broad narrowing defers the plane, the deployer keeps its `k8s_unapplied` lines, the
+helper. The broad narrowing refuses, the
 landing dies naming the file, the `--tags` expansion leaves the name for the tag validation to
 refuse, and the staleness consumers keep every shared role fleet-wide.
 

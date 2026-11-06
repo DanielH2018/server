@@ -41,7 +41,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # so an import here would have to be satisfiable in a monitor-bridge pod.
     "gitops_markers": set(),
     # The JSON-lines markers (the owed-work ledger and the tick receipt). Reads
-    # `gitops_markers` for the `K8sDeferredEntry` tuple and nothing else.
+    # `gitops_markers` for `NO_PLAYBOOK` and the `ManualPlaneEntry` tuple.
     "gitops_ledger": {"gitops_markers"},
     # The hold and the rule that clears it (#3658). The deploy UI installs it beside the two
     # modules above, so it may import nothing else.

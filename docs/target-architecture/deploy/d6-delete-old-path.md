@@ -1,6 +1,6 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30; [#6635](https://github.com/DanielH2018/server/issues/6635) carries its second attempt. No merged PR is recorded for D6.13 to D6.21.
+Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). No merged PR is recorded for D6.13 to D6.21.
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
@@ -374,8 +374,9 @@ reader that D6 does not delete.
 - **Only daniel-server runs the setup-drift reader.**
     - `group_vars/all.yml:setup_drift_check_hosts` lists daniel-server alone. Its comment says
       manifest-prune-check "exists on daniel-box alone".
-    - `ansible/tests/deploy/test_setup_drift_check.py::test_the_reader_is_armed_where_no_manifest_prune_check_runs`
-      asserts that no k3s server host is in the list.
+    - `test_the_reader_is_armed_where_no_manifest_prune_check_runs` in
+      `ansible/tests/deploy/test_setup_drift_check.py` asserts that no k3s server host is in
+      the list. D6.16 renames it `test_every_host_that_renders_setup_templates_is_armed`.
     - The Kuma tile is "Setup Plane Drift (agent hosts)", with one token,
       `setup_drift_push_token`.
     - After manifest-prune-check goes, nothing reads daniel-box's setup-plane stamps unless
@@ -2572,7 +2573,12 @@ The deletions have red proofs of their own:
   the key and a test, so the tick applies nothing. The timer's state variable
   (`check_timer_state`) follows the list, so the box loses the
   timer once the session runs the same operator-attended `--tags setup_drift` apply as the
-  forward PR.
+  forward PR. That apply leaves three files, because their tasks carry a `when:` and no absent
+  arm. So the operator then runs
+  `sudo rm -f /var/lib/node-exporter-textfile/setup-drift-check.prom /usr/local/bin/setup-drift-check.sh /var/lib/homelab/setup-render-manifest.d/setup-drift-check`
+  on the box. A `.prom` file left behind keeps exporting its last run, and `HostCheckOverdue`
+  fires about 25 hours later and never clears. The fragment left behind can read as a stale
+  render in manifest-prune-check.
 - **D6.5 and D6.5b.** D6.5 removed host units, B1's six rules and the `.prom` files. To
   restore them, revert D6.5b first,
   then D6.5. The revert of D6.5b restores files that no task names at its head, so it lands

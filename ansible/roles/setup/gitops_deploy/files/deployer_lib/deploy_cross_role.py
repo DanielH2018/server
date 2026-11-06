@@ -123,8 +123,8 @@ K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
 # A file outside `ansible/roles/k8s/` that a k8s role's `image_builder_context_files` embeds in
 # its image, mapped to those roles (#4840). image-builder hashes the build context into the
 # content tag the Deployment names, so an edit here moves the role's applied bytes. The path
-# sits under no role, so without this row it mapped to no deploy tag and wrote no
-# `k8s_unapplied` line, and `probe.py releases` blamed whichever unrelated path also moved.
+# sits under no role, so without this row it mapped to no deploy tag, and
+# `probe.py releases` blamed whichever unrelated path also moved.
 # A Flux-owned role still lands here first; `deploy_inventory.route_not_ansible_owned` then
 # moves it to `cs.flux`. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
 K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {

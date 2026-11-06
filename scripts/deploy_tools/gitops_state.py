@@ -5,8 +5,7 @@ To apply a `manual_plane` line and clear it in one checked step, run `owed_run.p
 beside this file instead (#6881).
 
 Three subcommands. `clear-owed <class> <subject>` drops one line of `/var/lib/gitops-deploy/owed.jsonl`, the deployer's owed-work
-ledger, for any class an operator may clear: `manual_plane`, `k8s_deferred` or `k8s_unapplied` (#3544). `hold_plane` is not one of
-them, because a hold clears only once an apply covers each plane it lists. Every surface prints this command through
+ledger, for the one class an operator may clear: `manual_plane` (#3544). `hold_plane` is not one, because a hold clears only once an apply covers each plane it lists. Every surface prints this command through
 `gitops_markers.owed_clear_cmd` (#3547).
 
 `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the marker the deployer writes while
@@ -29,21 +28,8 @@ once the oldest pending role is six hours old, and `land.sh` prints the same cle
 **The apply comes first, this second.** Clearing a role nobody applied silences the only durable signal that it is unapplied, which
 is the state the marker exists to make visible. So every `clear-owed` run writes one journal line, `logger -t gitops-state`,
 naming the subject, the line it dropped and who ran it: `journalctl -t gitops-state` is where a clear with no apply behind it leaves
-its trace, since the marker's own truncation records nothing. Every class journals as `event=clear-<class>`, with `-` for `_`, so
-a `manual_plane` clear reads `event=clear-manual-plane`. `clear-contention` writes no such line on purpose: it silences no page,
+its trace, since the marker's own truncation records nothing. The line reads `event=clear-manual-plane`. `clear-contention` writes no such line on purpose: it silences no page,
 and the tick rewrites that marker itself on its next undeferred run.
-
-`clear-owed k8s_deferred <service>` is the same shape one plane over. The `k8s_deferred` class (#3392) holds one line per promoted
-image bump a BROAD tick fast-forwarded and then deferred for lack of budget: the range is merged, so no later tick's
-`local..origin` carries the bump and the defer-and-alert post names it exactly once. monitor-bridge pages once the oldest line is
-six hours old. The deployer clears a line itself on any tick that deploys the service; this command is for the
-`./scripts/deploy.sh` an operator ran, which the deployer cannot see. The apply comes first here too.
-
-`clear-owed k8s_unapplied <service>` drops the entry of the class for the k8s changes this deployer never applies (#3392) — a
-hand-edited role, or one of the forty denylisted ones. NOTHING PAGES ON THAT CLASS, and every tick and every successful `deploy.sh`
-discharges an entry whose service has since been deployed (#4087), so this command is needed for two cases only: a reverted change,
-and a shared role one of whose callers nothing can prove applied — no tag runs it, or a caller writes no release record
-(`scripts/deploy_tools/shared_role_callers.py:main` names them, less any whose entry sets `owner`).
 
 This is not a path the deployer takes. Its own reverse is
 `DeployerState.clear_manual_plane_applied`, which fires when a tick applies the role's real
@@ -63,7 +49,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_gitops_state.py
 import argparse
 import contextlib
 import fcntl
-import functools
 import getpass
 import os
 import subprocess
@@ -91,7 +76,7 @@ from deployer_lib.deploy_changes import setup_role_tag
 from deployer_lib.deploy_locks import TREE_LOCK, take
 from deployer_lib.deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
 from gitops_hold import HOLD_PLANE_SEP, Hold
-from gitops_ledger import OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE
+from gitops_ledger import OWED_MANUAL_PLANE
 from gitops_markers import MARKERS, maximal_apply_warning, owed_clear_cmd
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
@@ -207,7 +192,6 @@ def journal_clear(
     dropped: ManualPlaneEntry | None,
     remaining: frozenset[str] = frozenset(),
     run: Callable[..., object] = subprocess.run,
-    event: str = "clear-manual-plane",
 ) -> None:
     """Write the one line that says an operator cleared `role`, who, and from where.
 
@@ -220,11 +204,9 @@ def journal_clear(
 
     Args:
       run: what executes `logger`; `subprocess.run` outside a test.
-      event: which clear this was, `journal_event(cls)`. `clear_k8s_owed` passes its class's,
-        so `journalctl -t gitops-state` distinguishes the classes an operator can clear.
     """
     fields = [
-        f"event={event}",
+        "event=clear-manual-plane",
         f"role={role}",
         f"cleared={'true' if dropped else 'false'}",
         f"user={operator()}",
@@ -247,15 +229,6 @@ def journal_clear(
         )
     except OSError, subprocess.SubprocessError:
         pass
-
-
-def journal_event(cls: str) -> str:
-    """The journal `event=` value for a clear of ledger class `cls`: `clear-k8s-deferred`.
-
-    The name the retired per-class verbs carried, kept so a `journalctl -t gitops-state` query
-    written against older clears still matches.
-    """
-    return "clear-" + cls.replace("_", "-")
 
 
 def clear_manual_plane(
@@ -331,63 +304,11 @@ def clear_manual_plane(
     return 0
 
 
-def clear_k8s_owed(
-    state: DeployerState,
-    cls: str,
-    service: str,
-    lock_path: str | None = None,
-    lock_wait_s: float | None = None,
-    journal: Journal | None = None,
-) -> int:
-    """Drop `service`'s `cls` line from the `owed` ledger. Exit 0 whether or not there was one.
-
-    **The deploy comes first, this second**, for the reason `clear_manual_plane` states: the
-    marker is the only durable signal that a change a tick merged is still unapplied, and
-    clearing it without deploying silences that. `k8s_deferred` is cleared by the deployer
-    whenever a tick deploys the service, and `k8s_unapplied` discharges itself off the release
-    record — so this command is for what neither can see: a hand deploy the record did not
-    capture, or a change that was reverted rather than applied.
-
-    Args:
-      lock_path: the tree lock to serialise the rewrite against. None reads `TREE_LOCK`.
-      lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
-      cls: which ledger class to clear — `k8s_deferred`, the one monitor-bridge pages on, or
-        `k8s_unapplied`, which nothing pages on. The two carry identical clear semantics, so
-        they share this function rather than a copy of it.
-      journal: what records the clear, called with the service, the line it dropped and an
-        empty remaining set. None means `journal_clear` under `journal_event(cls)`.
-    """
-    try:
-        with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
-            dropped = next(
-                (e for e in state.owed_pending(cls) if e.service == service), None
-            )
-            cleared = bool(state.clear_owed(cls, {service}))
-    except (LockBusy, LockUnavailable, PermissionError) as refused:
-        return _refused(refused, state.path("owed"))
-    default_journal = functools.partial(journal_clear, event=journal_event(cls))
-    (default_journal if journal is None else journal)(
-        service,
-        # A k8s entry names no playbook, and the journal only needs the SHA the clear was
-        # owed against. `ManualPlaneEntry` is what `journal_clear` reads, so the
-        # deferred entry is rendered into one rather than given a second formatter.
-        ManualPlaneEntry(dropped.origin, "ansible/deploy.yml", service, dropped.at)
-        if cleared and dropped
-        else None,
-        frozenset(),
-    )
-    if not cleared:
-        print(f"{service} is not pending in {state.path('owed')} — nothing to clear")
-        return 0
-    print(f"cleared {service} from {state.path('owed')}")
-    return 0
-
-
 # The ledger classes `clear-owed` accepts. Written out rather than derived from
 # `gitops_ledger.OWED_CLASSES`, so a class added there is refused here until someone decides an
 # operator may clear it by hand: `hold_plane` may not, since a hold clears only once an apply
 # covers each plane it lists.
-CLEARABLE_CLASSES = (OWED_MANUAL_PLANE, OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED)
+CLEARABLE_CLASSES = (OWED_MANUAL_PLANE,)
 
 
 def clear_owed(
@@ -401,17 +322,11 @@ def clear_owed(
 ) -> int:
     """Drop `subject`'s `cls` line from the `owed` ledger: the one discharge path (#3544).
 
-    `manual_plane` keeps its own clear, because its line carries tags a narrowed apply drops
-    one at a time; the two k8s classes share `clear_k8s_owed`. `applied` is only meaningful
-    for `manual_plane`, and `main` refuses it for any other class.
+    `applied` names the tags a narrowed apply covered; empty means the whole role.
     """
     if cls not in CLEARABLE_CLASSES:
         raise ValueError(f"{cls!r} is not a class an operator may clear")
-    if cls == OWED_MANUAL_PLANE:
-        return clear_manual_plane(
-            state, subject, lock_path, lock_wait_s, journal, applied
-        )
-    return clear_k8s_owed(state, cls, subject, lock_path, lock_wait_s, journal)
+    return clear_manual_plane(state, subject, lock_path, lock_wait_s, journal, applied)
 
 
 def clear_contention(
@@ -582,10 +497,6 @@ def main(
         # and not to this dispatch — which would otherwise run the clear with its arguments.
         parser.error(f"no handler for {args.command}")
     raw_applied = getattr(args, "applied", None)
-    if raw_applied is not None and cls != OWED_MANUAL_PLANE:
-        # Only a manual_plane line carries tags. Ignoring the flag would let an operator
-        # believe a narrowed clear happened when the whole line went.
-        parser.error(f"--applied applies to manual_plane only, not {cls}")
     applied = frozenset(t.strip() for t in (raw_applied or "").split(",") if t.strip())
     if raw_applied is not None and not applied:
         # `--applied ""` is what `--applied "$TAGS"` sends with TAGS unset, and an empty set

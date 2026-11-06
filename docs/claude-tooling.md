@@ -322,8 +322,7 @@ trim.
 
 `gitops-state` prints every marker the GitOps deployer keeps, without ticking (#3931). It reads
 `last_run`, `hold_sha` with its `hold_plane` lines, `behind_since`, `diverged_sha`,
-`contention_since`, and the `owed` ledger's `manual_plane`, `k8s_deferred` and `k8s_unapplied`
-lines. Each set marker carries what discharges it and the command that clears it after. The
+`contention_since`, and the `owed` ledger's `manual_plane` lines. Each set marker carries what discharges it and the command that clears it after. The
 hold's command is `gitops_state.py clear-hold <sha>` with the held SHA filled in.
 `hold_plane` lines with no `hold_sha` print as orphaned, with `clear-hold --orphaned`.
 `gitops_tick.sh` prints this same view after every tick.
