@@ -33,7 +33,7 @@ def _state(tmp_path, **markers: str):
 
 
 def test_every_set_marker_is_printed_with_its_way_out(tmp_path):
-    """CLEAN half: the two #3931 names, contention and k8s_deferred, plus the hold's clear."""
+    """CLEAN half: the two #3931 names, contention and manual_plane, plus the hold's clear."""
     _state(
         tmp_path,
         last_run=f"{NOW - 30}\n",
@@ -42,8 +42,7 @@ def test_every_set_marker_is_printed_with_its_way_out(tmp_path):
         owed="\n".join(
             [
                 _owed("hold_plane", "ansible/deploy.yml sonarr"),
-                _owed("k8s_deferred", "radarr"),
-                _owed("k8s_unapplied", "homepage"),
+                _owed("manual_plane", "radarr"),
             ]
         ),
     )
@@ -54,23 +53,7 @@ def test_every_set_marker_is_printed_with_its_way_out(tmp_path):
     assert "12 tick(s) deferred on service lock `sonarr`" in out
     assert view.CONTENTION_CLEAR_CMD in out
     assert "radarr  (origin 2d25ced3, 60 min ago)" in out
-    assert "gitops_state.py clear-owed k8s_deferred radarr" in out
-    assert "gitops_state.py clear-owed k8s_unapplied homepage" in out
-
-
-def test_a_shared_role_unapplied_line_names_no_bare_fleet_redeploy(tmp_path):
-    """#4373, the land.sh summary: `manifests` gets the render-proof wording, `homepage` its
-    own deploy command."""
-    _state(
-        tmp_path,
-        owed="\n".join(
-            [_owed("k8s_unapplied", "manifests"), _owed("k8s_unapplied", "homepage")]
-        ),
-    )
-    out = view.format_text(view.collect(tmp_path, NOW))
-    assert 'do:   ./scripts/deploy.sh --tags "homepage"' in out
-    assert 'do:   ./scripts/deploy.sh --tags "manifests"' not in out
-    assert "do:   nothing to deploy: `manifests` is a shared role" in out
+    assert "gitops_state.py clear-owed manual_plane radarr" in out
 
 
 def test_hold_plane_lines_with_no_hold_sha_are_shown_as_orphaned(tmp_path):
@@ -87,8 +70,9 @@ def test_absent_markers_read_as_none_and_exit_zero(tmp_path, capsys):
     """An empty state directory is a deployer with nothing to say, which reads cleanly."""
     assert view.run_gitops_state(SimpleNamespace(json=False), tmp_path, NOW) == 0
     out = capsys.readouterr().out
-    for line in ("hold_sha:     none", "contention:   none", "k8s_deferred:  none"):
+    for line in ("hold_sha:     none", "contention:   none", "manual_plane:  none"):
         assert line in out
+    assert "k8s_" not in out
 
 
 def test_an_unreadable_marker_is_named_unreadable_not_none(tmp_path, capsys):
@@ -139,7 +123,7 @@ def test_no_state_directory_exits_unreadable_and_says_where_it_lives(tmp_path, c
 
 def test_reading_writes_nothing(tmp_path):
     """The view must not tick: the directory is byte-identical after a read."""
-    _state(tmp_path, hold=SHA, owed=_owed("k8s_deferred", "radarr"))
+    _state(tmp_path, hold=SHA, owed=_owed("manual_plane", "radarr"))
     before = {
         p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in tmp_path.iterdir()
     }

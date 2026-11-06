@@ -25,18 +25,6 @@ The second is the ``owed`` ledger's ``manual_plane`` class, one line per setup r
 fast-forwarded past and cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
 nothing while the change sits merged and unapplied — only the banner names it.
 
-``k8s_deferred`` is the same shape for the k8s plane: one line per promoted image bump a BROAD
-tick merged and then could not apply, because the broad arm returns before the k8s arm runs. It
-too leaves ``behind_since`` empty. The banner names it so that a session opening on
-daniel-box — the reader who can clear it with one deploy — is told. It is a class of the
-``owed`` ledger (#3392).
-
-``k8s_unapplied`` is that same shape again for the k8s changes this deployer never applies at
-all: a hand-edited role, or one of the forty denylisted ones. Nothing pages on it, by
-construction — that is what lets the class have a durable record at all — so this
-banner and the deployer's journal are its only readers. It is a class of the ``owed``
-JSON-lines ledger rather than a line-format marker (#3392).
-
 The directory and the line parsers come from ``gitops_markers``, the deployer's own module in
 ``ansible/roles/setup/gitops_deploy/files/``, and every marker is read through
 ``gitops_hold.read_field`` beside it (#3972), so this module and monitor-bridge read
@@ -69,11 +57,7 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
     PLAYBOOK_CMD,
-    RENDER_PROOF_SHARED_ROLES,
-    SHARED_K8S_ROLES,
     STATE_DIR,
-    k8s_deferred_deploy_cmd,
-    k8s_unapplied_remedy,
     parse_contention,
     agent_join_cmds,
     agent_pin_cmds,
@@ -84,14 +68,8 @@ from gitops_markers import (
     on_hosts,
 )
 from gitops_ledger import (
-    OWED_K8S_DEFERRED,
-    OWED_K8S_UNAPPLIED,
     OWED_MANUAL_PLANE,
-    k8s_deferred_entries,
-    k8s_unapplied_entries,
     manual_plane_entries,
-    owed_line,
-    parse_owed,
 )
 
 # The deployer's marker directory on the host that runs the tick (daniel-box). Mode 0750 owned
@@ -341,109 +319,6 @@ def contention_lines(marker, now):
         f"/var/lock/server-deploy-{lock}.lock has outlived any legitimate deploy; find it "
         f"(fuser), end it, then `{CONTENTION_CLEAR_CMD}`"
     ]
-
-
-def k8s_deferred_lines(marker, now):
-    """One banner line per promoted image bump the deployer merged but did not apply, or [].
-
-    The BROAD arm returns before the k8s arm, so a tick that fast-forwards a broad change
-    alongside a promoted image bump merges the bump and never deploys it. Nothing chose that
-    deferral and nothing reports it again: the defer-and-alert post fires once, and no later
-    tick's range carries the bump a second time. `k8s_deferred` is the durable record, and the
-    way out is one `deploy.sh` of the named service.
-
-    # DECIDED: not age-gated, for the reason `manual_plane_lines` is not. monitor-bridge DOES
-    # gate this marker (`checks/gitops.py`, 7h), and the asymmetry is deliberate rather than
-    # drift: the bridge PAGES, so it needs a threshold that a tick which applies the bump on
-    # its next pass clears. A banner line is a passive notice to a reader who is already
-    # reading, and a bump merged ten minutes ago is exactly the one this session can still
-    # clear cheaply.
-
-    Ungated also means this says nothing about the tick that is about to apply the bump itself.
-    That is the same trade `manual_plane_lines` takes and the cost is one line on one banner.
-    """
-    lines = []
-    for entry in k8s_deferred_entries(marker):
-        lines.append(
-            f"  ✗ the GitOps deployer merged an image bump for `{entry.service}` "
-            f"{_age_phrase(now - entry.at)} ago and deferred the deploy — "
-            f"`{k8s_deferred_deploy_cmd([entry.service])}`, then "
-            f"`{owed_clear_cmd(OWED_K8S_DEFERRED, entry.service)}`"
-        )
-    return lines
-
-
-def k8s_unapplied_lines(marker, now):
-    """One banner line per k8s role change the deployer merged and will never apply, or [].
-
-    The other half of the k8s defer-and-alert channel (#2570). A hand-edited or denylisted
-    role is fast-forwarded and dropped: the Discord post fires once per SHA, no later tick's
-    range carries the change, and `Release Staleness Drift` is already DOWN for any stale
-    record anywhere in the fleet, so a new deferral adds nothing a reader can see on that
-    tile. This banner is where the change gets named.
-
-    # DECIDED: no age gate here, and no monitor behind it either — unlike `k8s_deferred_lines`
-    # above, which is ungated on the banner while monitor-bridge pages on the same marker at
-    # 7h. Forty of the fifty-four k8s roles are denylisted, so a page on this class would be
-    # red as normal operation, which is the measured ground #2471 ruled the marker out on. A
-    # banner line costs a reader one glance and the marker discharges itself off the release
-    # record, so the set stays the changes nobody has deployed.
-
-    A shared role's line names no bare `deploy.sh --tags <role>`, which would redeploy every
-    caller; `gitops_markers.k8s_unapplied_remedy` words it (#4373).
-    """
-    lines = []
-    for entry in sorted(parse_owed(marker, OWED_K8S_UNAPPLIED), key=lambda e: e.at):
-        remedy = k8s_unapplied_remedy(entry.subject)
-        # A shared role's line also takes the hand clear when no caller can be proven to
-        # carry the change, so the clause names that case beside the revert. For a
-        # render-provable role that is only after a render has reached the change (#5118).
-        when = "if it was reverted"
-        if entry.subject in RENDER_PROOF_SHARED_ROLES:
-            when = "if a render after the change still proves no caller, or it was reverted"
-        elif entry.subject in SHARED_K8S_ROLES:
-            when = "if no caller can be proven or it was reverted"
-        else:
-            remedy = f"`{remedy}`"
-        lines.append(
-            f"  ✗ the GitOps deployer merged a k8s change for `{entry.subject}` "
-            f"{_age_phrase(now - entry.at)} ago and never applies this role — "
-            f"{remedy}; or "
-            f"`{owed_clear_cmd(OWED_K8S_UNAPPLIED, entry.subject)}` {when}"
-        )
-    return lines
-
-
-def read_k8s_unapplied_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's pending `k8s_unapplied` changes as `owed` ledger lines, or None when unread.
-
-    The class lives in the `owed` ledger (#3392). Absent and unreadable collapse to the same
-    answer, for the reason the readers above give.
-    """
-    owed = _owed(state_dir)
-    if owed is None:
-        return None
-    return "\n".join(
-        owed_line(OWED_K8S_UNAPPLIED, e.service, e.origin, e.at)
-        for e in k8s_unapplied_entries(owed)
-    )
-
-
-def read_k8s_deferred_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
-    """The host's deferred image bumps as `owed` ledger lines, or None when none.
-
-    One line per service, through `gitops_ledger.k8s_deferred_entries`, so this banner and
-    monitor-bridge's page agree. Absent and unreadable collapse to the same answer for the
-    reason the readers above give: every caller here only asks "is a bump merged and
-    unapplied?", and for a marker nobody can read the answer is no.
-    """
-    entries = k8s_deferred_entries(_owed(state_dir))
-    return (
-        "\n".join(
-            owed_line(OWED_K8S_DEFERRED, e.service, e.origin, e.at) for e in entries
-        )
-        or None
-    )
 
 
 def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:

@@ -103,16 +103,6 @@ def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
     stop: a held host means an earlier SHA failed its health gate, so landing anything on top
     of it is the state the hold exists to prevent.
     """
-    # DECIDED: `k8s_deferred` is NOT a second gate here (#2522). The marker names ONE service
-    # whose merged image bump is still unapplied, and this function returns one run/skip for
-    # the whole session — there is no per-PR verdict for it to reach. A bump deferred on
-    # sonarr cannot withhold a session that is about to review radarr and traefik, and
-    # withholding the whole session on it would park the backlog on an unrelated service.
-    # Nothing downstream of `decide` is per-service either: `render_digest` reports the
-    # measured PR delta. So the signal has no decision surface, and the surfaces that do read
-    # it — the SessionStart banner, monitor-bridge's GitOps Status, the deploy UI's state
-    # panel — already name it to the operator who can act. `gitops_markers` is the deployer's own
-    # module installed beside this file, so it carries the parser whether this reads it or not.
     if hold_sha.strip():
         held = hold_sha.strip()
         plane = f" (broad apply: {hold_plane.strip()})" if hold_plane.strip() else ""

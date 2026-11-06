@@ -510,7 +510,7 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # A k8s role holding a copy of a file outside its own tree defer-and-alerts like its
         # own change would: a setup file it imports, or a file its image embeds (#4840). Here
         # rather than in `plan_tick`, because `k8s_change_commits` reads `.k8s` from this
-        # function alone to name the commit each `k8s_unapplied` line records (#3111).
+        # function alone to name the commit of each k8s change (#3111).
         cs.k8s |= deploy_cross_role.k8s_roles_holding(p)
         # Tested FIRST, and it does not `continue` past the plane flags below: the manual
         # set overlaps _BROAD_SETUP_PREFIXES (the bring-up playbooks sit in both), and the

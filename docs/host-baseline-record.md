@@ -199,7 +199,19 @@ rendered it?
 It runs from `kuma-check-setup-drift.timer` since 2026-09-19. It imports the `common` role's
 `check_timer.yml`, exits 1 after a down verdict, and reruns every 30 min under
 `Restart=on-failure` until it exits 0. The import's `check_timer_state` follows the host gate, so
-a host dropped from the list loses the timer and the cron it replaced. The daily secret-rotation
+a host dropped from the list loses the timer and the cron it replaced. It keeps three files, whose
+tasks have no absent arm (#7346). So after the apply, run this on that host:
+
+```bash
+sudo rm -f /var/lib/node-exporter-textfile/setup-drift-check.prom \
+  /usr/local/bin/setup-drift-check.sh \
+  /var/lib/homelab/setup-render-manifest.d/setup-drift-check
+```
+
+A `.prom` file left behind keeps exporting its last run, and `HostCheckOverdue` fires about 25
+hours later and never clears.
+
+The daily secret-rotation
 audit used the same form until H7.36 moved it to `homelab-secret-rotation-audit.timer` in the
 `secret-rotation` component of `homelab-daniel-box`, which keeps the exit-code contract as plain
 units. Its `secret_rotation.py audit --verdict` returns 1 when the audit reads `down`.
@@ -211,6 +223,12 @@ questions plus an orphaned-cluster-object arm, but it is installed by
 while daniel-server renders the entire UPS shutdown chain. Confirmed live 2026-08-29:
 daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
 `/etc/nut/upsmon.conf` was dated Aug 17 against a template changed on 2026-08-28 (review M-10).
+
+**daniel-box runs both readers.** They read the same stamp directories through the same library.
+The box needs this reader armed because the drift checks' disarm removes manifest-prune-check, and
+the box must keep one detector across that removal. Until then the redundancy is harmless:
+`SetupDriftFailed` and `SetupDriftNotReporting` name `origin="daniel-server"` alone, so the box's
+verdict pages nothing, and manifest-prune-check's rules page the box's stale renders.
 
 - **The two arms are not reimplemented** — both readers source `files/setup-drift-lib.sh`,
   copied to `/usr/local/lib` like `homelab-check-lib.sh`. Two copies of a drift check are free to

@@ -205,72 +205,6 @@ CONTENTION_CLEAR_CMD = (
 HOLD_CLEAR_CMD = "uv run python scripts/deploy_tools/gitops_state.py clear-hold"
 
 
-def k8s_deferred_deploy_cmd(services) -> str:
-    """The deploy an operator runs to apply the deferred bumps in `services`.
-
-    `./scripts/deploy.sh` rather than a bare `ansible-playbook`: the wrapper takes the service
-    lock the tick takes, and a budget deferral means the tick ran out of wall clock, not that
-    the pin is bad.
-    """
-    return './scripts/deploy.sh --tags "%s"' % ",".join(sorted(services))
-
-
-# The k8s roles with no `containers_list` entry: other roles include them, so `deploy.sh
-# --tags <role>` expands to every service that runs one (`deploy_run.expand_shared_roles`),
-# which is a fleet-wide redeploy for most of them. A literal because the SessionStart banner
-# imports this module with no YAML parser and no inventory; `test_gitops_markers.py` derives
-# the set from the role tree and `containers_list` and fails when the two disagree.
-SHARED_K8S_ROLES = frozenset(
-    {
-        "arr-notification",
-        "image-builder",
-        "longhorn-api",
-        "manifests",
-        "volume-revert",
-        "volume-snapshot",
-    }
-)
-
-# The shared roles whose `k8s_unapplied` line discharged on a caller's render digest with no
-# deploy at all. The discharge went with `deploy_k8s_owed.py` in D6.12, and the line is
-# cleared by hand now, but the printers keep this remedy text until D6.6 deletes the class.
-RENDER_PROOF_SHARED_ROLES = frozenset({"manifests"})
-
-
-def k8s_unapplied_remedy(subject: str) -> str:
-    """What discharges `subject`'s `k8s_unapplied` line, for a surface that prints the remedy.
-
-    An ordinary service gets its `deploy.sh --tags` command. A shared role does not get that
-    command bare, because it expands to every caller (#4373): PR #4343 changed only
-    `manifests/tasks/main.yml` and the printed remedy would have redeployed about 57 services
-    for about 20 minutes to apply nothing. A render-provable role waits for the tick's render
-    proof and names the full redeploy only as the explicit alternative. Every other shared
-    role discharges only once each caller has deployed, so the expansion IS its remedy, and
-    the text says what it costs. The `clear-owed` command stays the caller's to print beside
-    this, as every surface already does.
-
-    Returns:
-        The bare deploy command for an ordinary service, so a surface can print it as a
-        command. A sentence with each command in backticks for a shared role.
-    """
-    cmd = k8s_deferred_deploy_cmd([subject])
-    if subject in RENDER_PROOF_SHARED_ROLES:
-        return (
-            f"nothing to deploy: `{subject}` is a shared role, and a later tick discharges "
-            f"this line once each caller's render matches what it applied. The hourly "
-            f"render producer reaches a change only once its CI is green, so clear the "
-            f"line by hand only once a render at or after it still fails to prove a "
-            f"caller: the journal's `k8s_unapplied: {subject} waits` line names them. The "
-            f"alternative, `{cmd}`, redeploys every service that runs the role"
-        )
-    if subject in SHARED_K8S_ROLES:
-        return (
-            f"`{cmd}`, which redeploys every service that runs the shared role "
-            f"`{subject}`: the line drops only once each of them has deployed the change"
-        )
-    return cmd
-
-
 def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
     """The `clear-owed` command for `subject`'s `cls` line, printed beside what discharges it.
 
@@ -280,15 +214,11 @@ def owed_clear_cmd(cls: str, subject: str, tags=()) -> str:
     form would then drop a tag nobody applied (#2349). So a narrowed apply prints `--applied
     <those tags>`, and the clear keeps whatever the row has gained since.
 
-    A `k8s_unapplied` line needs a hand clear even though the marker discharges itself off the
-    release record: a role whose change was reverted rather than deployed never gets a record
-    naming it, and a line nobody can drop is a banner entry forever.
-
     Args:
-        cls: the ledger class — `manual_plane`, `k8s_deferred` or `k8s_unapplied`. A string,
-            not `gitops_ledger`'s constant, because `gitops_ledger` imports this module.
-        subject: the setup role under the `--tags` value that selects it, or the k8s service.
-            A generic remediation passes the placeholder `<role>` or `<service>`.
+        cls: the ledger class. A string, not `gitops_ledger`'s constant, because
+            `gitops_ledger` imports this module.
+        subject: the setup role under the `--tags` value that selects it. A generic
+            remediation passes the placeholder `<role>`.
         tags: the tags the apply command names, `manual_plane` only. Empty, or just the role
             tag, is a whole-role apply and gets the bare form.
     """
@@ -494,22 +424,6 @@ class ManualPlaneEntry(NamedTuple):
     def apply_hosts(self) -> tuple[str, ...]:
         """The hosts the apply command runs against; () means the operator's own."""
         return self.hosts or ((self.host,) if self.host else ())
-
-
-class K8sDeferredEntry(NamedTuple):
-    """One pending k8s entry of the `owed` ledger: a `k8s_deferred` or `k8s_unapplied` line.
-
-    Attributes:
-        origin: the origin SHA whose range carried the bump. The tick merged it, so this is
-            the commit an operator's deploy applies.
-        service: the k8s service, under the `--tags` value that selects it.
-        at: when the deployer first deferred it, in `time.time()` terms. Never refreshed for
-            a service already listed, for the reason `ManualPlaneEntry.at` gives.
-    """
-
-    origin: str
-    service: str
-    at: float
 
 
 class ContentionEntry(NamedTuple):

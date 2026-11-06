@@ -3,9 +3,7 @@
 `deploy_under_locks.run` calls `run_playbook` once it holds the service locks and has a
 snapshot, and `deploy_detach.deploy_and_gate` does the same for a `--detach` run. After a
 successful playbook, each records the deploy with `annotate`, which leaves the Grafana
-annotation. The `k8s_unapplied` discharge that also ran here (#4087) went in D6.12 with
-`deploy_k8s_owed.py`: no tick writes that class any more, and `deploy.sh` refuses every k8s
-tag, so no deploy here carries a line.
+annotation.
 """
 
 import contextlib

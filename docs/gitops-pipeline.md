@@ -63,8 +63,8 @@ log at `warning`, so `-p warning` lists both, but not every one does. Every othe
 prefix, which journald strips (#4446).
 
 Every deployer `log()` line opens with one lowercase subject token and a colon: the phase or marker the
-line is about, such as `ci:`, `hold:`, `narrow:`, `denylist:`, `manual_plane:` or
-`k8s_unapplied:`. To list every line about one subject, run `journalctl -u gitops-deploy | grep
+line is about, such as `ci:`, `hold:`, `narrow:`, `denylist:` or
+`manual_plane:`. To list every line about one subject, run `journalctl -u gitops-deploy | grep
 'manual_plane: '`. A relayed child-process line gets the subject of the call that ran it.
 `ansible/roles/setup/gitops_deploy/tests/test_deployer_log_subjects.py` holds every `log()` call
 to that shape (#4507).
@@ -283,16 +283,7 @@ applies, defers, alerts on or owes such a tag. D2's plan has the design:
 - **A changed path of such a role goes to `cs.flux`**, beside `cs.k8s`.
   `deploy_inventory.route_not_ansible_owned` moves the tag out of `cs.k8s`.
 - **The journal names the tag.** `plan_tick` logs `flux: <tag>: owned by <owner>` with the
-  paths the range changed. A `k8s_unapplied` or `k8s_deferred` line an older tick wrote stays
-  until the operator's `gitops_state.py clear-owed`; no tick writes or discharges either class
-  since D6.12, and D6.6 deletes them.
-- **HISTORY — a shared role's `k8s_unapplied` line did not wait on such a caller** (#4986).
-  `scripts/deploy_tools/shared_role_callers.py:main` leaves it out of the caller set
-  `discharge_k8s_unapplied` reads. Such a caller gets no release record and no render record,
-  so waiting on it would keep the line forever. A shared role whose every caller sets `owner`
-  is listed under `owned_only` in the same output, and its line drops at once (#5052). A role
-  no tag runs is never listed there, so its line still waits for a hand.
-
+  paths the range changed.
 - **An added or removed such entry reaches only the readers it can move.**
   `narrow_lib/containers.py:changed_fields` records it by the fields it carries other than
   `name` and `owner`. The narrowing applies the readers of those fields, plus every reader of
@@ -736,12 +727,6 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       wait would raise `ServiceLockBusy` and reset the tree under planes that applied. So it
       defers with no hold and no reset: the bump joins `ChangeSet.k8s` and the defer-and-alert
       post names it. That post fires **once**, and the tick has already merged the bump.
-      The budget deferral is also written to **`k8s_deferred`**, which `gitops_status` pages on at
-      six hours, because `Release Staleness Drift` is DOWN for any stale record in the fleet and so
-      cannot signal one more. The hand-edited and denylisted classes go to **`k8s_unapplied`**,
-      which `gitops_status` never opens, because most k8s roles are denylisted and paging on them
-      would hold Status red as normal operation. *The `k8s_deferred` and `k8s_unapplied` markers,
-      in full* has the discharge and clear rules.
     - **A failure writes `hold_sha` and adds `ansible/deploy.yml <bumps>` to `hold_plane`**, the
       run that failed, beside any plane already held. Without a recorded plane, the next unrelated
       service deploy would clear the hold through `clear_service_hold` and turn Status green over
@@ -855,8 +840,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   (`deploy_logic.ChangeSet.secrets`). When a broad tick carries `secrets.yml` beside a
   deploy-plane path, the narrowing maps each key whose ciphertext changed to the roles that
   read it (`scripts/deploy_tools/narrow_lib/secret_keys.py`, #5409). A key that only a setup
-  role reads reaches no deploy tag, so it no longer defers the whole k8s plane to
-  `k8s_unapplied`.
+  role reads reaches no deploy tag.
 - **A setup role reading a changed secret is applied as a setup-plane change** (#5436), on any
   tick, with or without a deploy-plane path. `deploy_defer.route_key_readers` runs
   `scripts/deploy_tools/secret_setup_readers.py`, which greps `roles/setup/` at origin for each
@@ -909,10 +893,9 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
   which asks `secret_keys.reached` the same question for the secrets half alone and keeps the
   fleet-coverage ceiling. When it names a reader, the range goes to `handle_broad`, which
   applies `deploy.yml --tags <readers>` after any setup plan, less each Flux-owned tag. A
-  refusal at the ceiling names its readers, and they are deferred to `k8s_unapplied`. A
+  refusal at the ceiling names its readers. A
   refusal that names none, a timeout or a crash merges and pages as before: a park on a
-  failure that repeats would hold every landing, and an unnamed deferral would owe the whole
-  fleet for one key. A range that also carries a k8s role change or a promoted image bump
+  failure that repeats would hold every landing. A range that also carries a k8s role change or a promoted image bump
   routes nothing and pages as before: the secret plan applies each reader's whole render, so
   it would ship a hand-edited template past defer-and-alert, and `cs.broad` would move the
   bump off `handle_k8s`'s snapshot and rollback.
@@ -976,8 +959,7 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
       `ansible/templates/` since the record, `releases.py` asks `narrow_lib/broad.py:broad_path_tags`,
       the per-path rule the tick narrows a broad range with, which services the change reaches. A
       path the rules refuse marks every service sharing that record stale, which is the set a
-      full deploy re-stamps. The tick defers such a range rather than running that deploy
-      (#4333), so the stale flag and the `k8s_unapplied` lines name the same services.
+      full deploy re-stamps.
     - The flag needs no clearing rule, because the next real apply of that service rewrites its
       record.
   - **Accepted, not fixed: the batch-abort blast radius is this branch's most likely bad day.**
@@ -1051,11 +1033,10 @@ those tags (a failed bump on a broad tick writes one) and leaves any other broad
     plan that moved them there, and `land.sh` waits for the Pi to apply a merge that changes
     its package.
 
-### The `k8s_deferred` and `k8s_unapplied` markers, in full
+### The `owed` ledger
 
-Both hold one entry per service for a k8s change a broad tick merged and did not deploy. Both
-are classes of the `owed` ledger, `/var/lib/gitops-deploy/owed.jsonl`: one JSON object per line
-carrying `class`, `subject`, `origin` and `at`.
+The `owed` ledger, `/var/lib/gitops-deploy/owed.jsonl`, holds one JSON object per line carrying
+`class`, `subject`, `origin` and `at`.
 
 **The ledger exists because the line markers break on a new field.** Each line parser accepts an
 exact field count and skips anything else, and the monitor-bridge, `deploy_ui` and
@@ -1064,17 +1045,14 @@ appended therefore read as no pending work in a reader that had not redeployed.
 `gitops_ledger.parse_owed` ignores keys it does not know, and every writer carries them through a
 rewrite.
 
-**Four classes live in the ledger**: `k8s_unapplied`, `manual_plane`, `k8s_deferred` and
-`hold_plane`. The line-marker predecessors of the last three are gone, and `tasks/install.yml`
-reaps their basenames. Every reader goes through one function per class:
+**Two classes live in the ledger**: `manual_plane` and `hold_plane`. Their line-marker
+predecessors are gone, and `tasks/install.yml` reaps their basenames, along with that of the
+retired `k8s_deferred` marker. A line of a class no reader asks for is inert. Every reader goes
+through one function per class:
 
 - `gitops_ledger.manual_plane_entries` returns the `manual_plane` lines, which carry `playbook`
   and `tags` beside the common keys. A line missing `playbook` or carrying malformed `tags` still
   pages, for the whole role. monitor-bridge carries a generated copy of the module.
-- `gitops_ledger.k8s_deferred_entries` returns the `k8s_deferred` lines. monitor-bridge, the
-  SessionStart banner and the `deploy_ui` panel read it, and `deploy_ui` installs
-  `gitops_ledger.py` beside its `gitops_markers.py` for this. Two lines naming one service read
-  as one bump, dated and attributed from the older line.
 - `gitops_ledger.held_planes` returns each `hold_plane` subject once, oldest first. Its readers are
   monitor-bridge's Status check, the `deploy_ui` panel, `renovate_agent`'s skip reason,
   `runbook_gates_lib/k3s_upgrade.held_sha` and the scheduled-jobs page. Each reaches it through
@@ -1089,135 +1067,6 @@ reaps their basenames. Every reader goes through one function per class:
   one playbook stay two entries. `DeployerState.hold_failed_apply`, `clear_broad_hold` and
   `clear_service_hold` record and drop the class. The `deploy_ui` Clear drops the class's lines
   under the git-tree lock, so a cleared hold cannot replay them into the next one.
-
-**`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
-deferral goes here (#2449). The deferral post names it once and the range is merged, so no
-later tick's `local..origin` carries the bump. `ReleaseStalenessCheckFailed` reads the unapplied
-pin, but that alert fires for any stale record in the fleet, so a new deferral adds
-nothing to an alert already firing. `gitops_status` therefore pages on the line's own age, at
-the six hours `manual_plane` uses.
-
-**`k8s_unapplied` records the hand-edited and denylisted classes** (#2570). Most k8s roles are
-denylisted, so paging on those would hold Status red as normal operation. `gitops_status` never opens this file; the SessionStart banner and the journal
-read it, so it is a durable record that does not page.
-
-**A second change to a service already in `k8s_unapplied` moves its line to the newer SHA**,
-keeping the first-seen stamp (#2644). The line is discharged by comparing its origin to a
-release record, so a line left at the oldest origin would drop as soon as any deploy descended
-from the FIRST change, with the second still unapplied. `k8s_deferred` keeps its oldest origin
-instead, because a tick clears that marker by deploying the service, and `unrecord` can reset
-the tree under it.
-
-**A torn line naming a service is repaired in place, on both.** The parser skips a line it cannot
-read, so a writer trusting only the parsed entries would append a second line beside the torn one,
-and every clear and discharge would leave that one standing. The repair happens at the next
-record or clear naming that service. A torn line for a service nothing touches again stands until
-`gitops_state.py clear-owed k8s_unapplied <svc>`, and a line naming no service is carried
-untouched.
-
-**Who writes, who discharges, who clears.**
-
-- `deploy_alerts.alert_deferred` writes the lines. It covers every exit that leaves the range
-  merged. The contention arm resets and returns before reaching any of them, so `unrecord` owns
-  no reverse for it.
-- A role whose directory is gone at origin gets no line. `deploy_phases.plan_tick` drops it from
-  `cs.k8s` after a `git ls-tree` at origin, because no play can run a deleted role and a role with
-  no callers has no tag whose deploy could discharge it. `land_shared.shared_roles` applies the
-  same rule on the landing side. An empty or unreadable listing drops nothing. A line an earlier
-  tick wrote before a later range deleted its role is dropped by
-  `deploy_k8s_owed.drop_deleted_k8s_unapplied`, which `reconcile` runs right after the discharge.
-- Every tick DISCHARGES a `k8s_unapplied` line whose service has since been deployed
-  (`deploy_k8s_owed.discharge_k8s_unapplied`), from the service's release record and one `git
-  merge-base --is-ancestor`. That drops the line for an operator's own `deploy.sh`, which the
-  deployer cannot see. A record that is absent or carries no date KEEPS the line. A shared role
-  (`manifests`, `image-builder`) has no record of its own, so its line drops when every tag that
-  runs it carries the change, as `scripts/deploy_tools/shared_role_callers.py:caller_tags`
-  derives them. A caller whose entry sets `owner` is not waited on, and a role only such
-  callers run drops at once (#5052).
-- Two more callers run the same discharge, so a deployed change does not wait ten minutes for the
-  next tick. A successful `deploy.sh` runs it last
-  (`deploy_lib/playbook.py:discharge_owed_k8s`), and a `--detach` run runs it before its health
-  gate (`deploy_lib/detach_run.py:deploy_and_gate`). It waits 5 s for the tree lock and otherwise
-  leaves the line to the next tick. The tick that records a line
-  also drops it at once when the service's own release record already carries it
-  (`deploy_k8s_owed.alert_and_record_deferred`), because a fast-path landing deploys at its merge
-  commit before the tick it kicks records the change. That check reads only the own record, since
-  the shared-role and render proofs each start a subprocess.
-- A caller carries the change when its release record descends from the line's commit. For
-  `manifests`, a caller also carries it when a render at a commit descending from the line's
-  matches its applied digests (`deploy_release.render_proof`). The render need only hold the
-  change. The producer starts at :17 past each hour, renders the newest green commit, and takes
-  about ten minutes, so the answer comes 10 to 70 minutes after a merge whose CI is green by the
-  next :17. A line kept in that window is not a failed proof. On 2026-10-15 a session cleared
-  #5096's line by hand at 15:09; the 14:17 render had picked the line's parent, and the next one
-  started at 15:17 (#5118). Every other shared role
-  acts outside the digest, and `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` carries the `# DECIDED:`
-  that says how each one does.
-- A `manifests` caller also carries a change to the standalone guard map alone when its own row
-  did not move (#5106). The guard task reads only the caller's row of
-  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`. Take B as the caller's
-  release record, the commit of its matching render, or the render base the line stored. When B
-  precedes the line's origin, the
-  caller carries the change if `B..origin` changes no other applied `manifests` path and leaves
-  that caller's row equal (`deploy_k8s_owed._guard_row_carries`). An earlier role change that a
-  render already proved for the caller therefore does not hold the line. A map-only line waits
-  on the callers whose row moved, which are the tags `land_shared.guard_map_rows` deploys. It
-  waits on an untouched caller only when no proof of that caller has passed the last other
-  `manifests` change.
-- The producer keeps one render record per caller and overwrites it every hour, so a render
-  that proved a caller would last only until the next one (#5122). Each tick therefore stores
-  every caller's matching render on the `manifests` line as `[render commit, release commit]`,
-  under the ledger key `render_bases` (`deploy_render_bases`). A stored render stays a base only
-  while the caller's release record still names that release commit, because any later apply,
-  a rollback included, can change the live bytes the render vouched for. The bases go when the
-  line goes.
-- While the `manifests` line is kept, each tick logs `k8s_unapplied: manifests waits at <sha>`,
-  naming every caller that holds it under one of three reasons, read from the commit of the
-  caller's newest render whether or not that render matches. "Its newest render predates the
-  change" means the line waits on the producer, and only then does the line add "waiting on the
-  hourly render producer". "A render at or after the change does not match what it applied"
-  means the caller needs a deploy, or has no release record; that is the case the hand clear
-  is for. "It has no render record" means the producer does not render that caller.
-- A service's OWN line takes the same render proof when its role acts only through the bytes the
-  digest covers. `scripts/deploy_tools/digest_provable.py` derives that per role, fail-closed:
-  every task is a `k8s/manifests` include, a pure fact or check module, or an include of a task
-  file that meets the same rule, and the role has no handlers or meta dependencies. A comment-only
-  template edit to such a role then discharges within about an hour with no deploy.
-- Any other role takes the render proof per range (#4781). That covers an own role that
-  includes `image-builder`, writes a host file or calls an API, and every shared role but
-  `manifests`. A matching render at C vouches for the bytes, and the role's release record at R
-  says when its other effects last ran. `scripts/deploy_tools/digest_covers.py` judges `R..C`
-  for each such tag, fail-closed. Every path that could have written the line must be prose, a
-  comment-only edit Ansible discards, or an `assert`/`fail`/`debug` added to a play file with
-  no variable Ansible itself reads. A `toposort.py` change also passes when the play's sort
-  chain, run with the plugin at each end on C's data, returns the same entries in any order
-  and leaves its input unchanged (#4842). So does an inventory or template path the
-  deploy-plane narrowing maps to other tags. The range starts at the record, not the
-  line's origin, because a second change moves the origin past the first. Its test module holds
-  the case table: #4753's asserts, #4836's ordering change and #4818's comment discharge, and a
-  changed task, a play variable a role reads and `filter_by_platform` keep the line.
-- A line can still outlive its change when a tag's render differs from its applied bytes for
-  another reason. That tag needs a deploy anyway, and its own line or `probe.py releases` names
-  it. Deploying that tag discharges the line.
-- Each line is written at the newest commit in the tick's range whose own diff reaches its
-  service (`deploy_phases.k8s_change_commits`), not at the tick's tip. A landing deploys its PR's
-  commit, so a line at a later, unrelated tip could never discharge by ancestry.
-- Any tick that deploys the service clears its `k8s_deferred` line
-  (`deploy_k8s_owed.clear_applied_k8s_deferred`, called from both k8s deploy paths and from the
-  plane-covered set). An operator's own `deploy.sh` clears it with
-  `gitops_state.py clear-owed k8s_deferred <svc>`.
-- `gitops_state.py clear-owed k8s_unapplied <svc>` is the hand clear for `k8s_unapplied`. It is
-  needed for a change that was reverted rather than applied, or for a shared role with a caller
-  nothing can prove applied: no tag runs the role, or a caller writes no release record. A line
-  the render proof cannot discharge is not one of those: deploy the service, or the tag holding
-  a shared line, and the discharge drops it.
-- The banner, the journal and `probe.py gitops-state` print one remedy per line, from
-  `gitops_markers.k8s_unapplied_remedy`. A shared role never gets a bare `deploy.sh --tags
-  <role>`, because that command redeploys every service that runs the role (#4373). For
-  `manifests` the remedy is to wait for the render proof, and to run `clear-owed` only once a
-  render at or after the change still fails to prove a caller. The full redeploy is named only
-  as the alternative.
-
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history
 
@@ -1435,8 +1284,8 @@ alert, `deploy_cli.py tags` and `land_tags.py` all prescribe the working sequenc
 `/etc/gitops-deploy/config.env` is rendered only by `initial_setup.yml --tags gitops_deploy`.
 `deploy.yml` runs no setup role, so a change that must reach that file is unapplied by a
 `deploy.yml` run, while a plain ff-merge clears the divergence and every repo-side check reads
-green. `broad_remediation()`'s docstring names this: *"naming deploy.yml there is a silent no-op
-that leaves the change unapplied"*.
+green. `broad_remediation()`'s docstring says that naming `deploy.yml` there is a silent no-op
+that leaves the change unapplied.
 
 `test_gitops_deploy_subprocess.py` pins `deploy_k8s()`'s argv. `test_gitops_deploy_main_branches.py`
 runs the failed-rollout branch against the scripted checkout and reads the rollback argv back. The
@@ -1604,7 +1453,6 @@ and two same-named PEP 420 portions merge into one package.
 | transport leaves | `gitops_markers`, `gitops_hold`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table, its parsers and line rewrites, the hold's owner and its clear rule, the config file, the state directory with every marker's reader and writer, and the text a failed run's alert quotes |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
-| the k8s changes owed | `deploy_k8s_owed`, `deploy_render_bases` | the one reader and writer of the `k8s_deferred` and `k8s_unapplied` ledger classes: record, discharge, the tick-start `reconcile` (#3669), and the drop of a Flux-owned service's lines (D2.2); `deploy_render_bases` holds the pure text transforms for a `manifests` line's stored render bases and the line naming the callers it waits on (#5118, #5122) |
 | the tick | `gitops_deploy` | the config constants, `tick_config()`, `main()` and `entrypoint()` |
 
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,

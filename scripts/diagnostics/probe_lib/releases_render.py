@@ -101,8 +101,7 @@ RENDER_DIR = Path("/var/lib/homelab/k8s-renders.d")
 PATH_HIT_PREFIX = "changed since applied: "
 
 # The shared roles whose whole effect is bytes `manifests_digest` covers, so a matching digest
-# proves their change applied. Mirrors `gitops_markers.RENDER_PROOF_SHARED_ROLES`, the
-# deployer's copy since D6.12 deleted `deploy_k8s_owed.py`; a test pins the two equal.
+# proves their change applied.
 DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
 
 _K8S_ROLES = "ansible/roles/k8s/"
