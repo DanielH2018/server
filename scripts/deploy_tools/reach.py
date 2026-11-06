@@ -112,7 +112,7 @@ class Reach(NamedTuple):
 
     Attributes:
       changes: the deployer's own `ChangeSet` over the loud paths. `.setup_roles`,
-        `.broad_deploy`, `.secrets` and `.k8s` are what the callers read off it.
+        `.broad_deploy`, `.secrets` and `.flux` are what the callers read off it.
       manual: the loud paths under `_BROAD_MANUAL_PREFIXES`. These are the bring-up
         playbooks, which run by hand by construction and park the tick outright.
       loud: the path list with the quiet paths removed, in input order.
