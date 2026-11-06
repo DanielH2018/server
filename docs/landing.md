@@ -544,10 +544,18 @@ exits 2: the check cannot judge it. There is no bypass.
 
 ## Reading a `deploy-failed`
 
-`land.sh` runs no deploy, so no `deploy-failed` means a change went live partly. The cause beside
-it says which stop this was: `tag-miss` (a tag no k8s entry declares at the merge commit),
-`tick-held` or `tick-failed` (the tick's own apply), `promote-held` (`DEPLOY_HOLD` holds the
-promotion) or `soak-failed` (R's `flux/soak` read `failure`).
+**`deploy-failed` does not say what went live.** `land.sh` runs no deploy itself, and `promote`
+and Flux apply master whatever a landing's verdict was. The cause beside it says which stop this
+was, and each one leaves a different state:
+
+- `tag-miss`: no k8s entry declares a tag named on `--tags` at the merge commit, so nothing applies
+  that tag. `promote` and Flux still apply the rest of the merge, so a tag named beside it can be
+  live. To gate the rest, re-run with the tag corrected.
+- `tick-failed` or `tick-held`: the tick's setup play failed. It may have applied tasks before the
+  failure, so read the deployer's journal before you re-run anything.
+- `promote-held`: `DEPLOY_HOLD` holds the promotion, so this merge is not applied.
+- `soak-failed`: Flux applied revision R and R's `flux/soak` then read `failure`, so the change is
+  live and `promote`'s verify holds it.
 
 ## The health gate
 

@@ -2,9 +2,9 @@
 | Exit | Name | Meaning |
 |---|---|---|
 | 0 | `LAND_SETTLED` | deployed and settled, or there was nothing to deploy. |
-| 1 | `LAND_FAILED` | CI red or unproven, blocked by a change needing a hand, the deploy failed, the health gate failed, or the PR was closed without merging, conflicts with master, or its own CI is red. |
+| 1 | `LAND_FAILED` | CI red or unproven, a change needing a hand, a tag no k8s entry declares, a failed tick or promotion, a failed health gate, or a PR closed, conflicting or with red CI. |
 | 64 | `LAND_BAD_ARGS` | the command line is wrong. |
-| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, the deploy lock stayed busy, the tick was skipped for lock contention every time, master outran one tick-and-deploy cycle, the tick has not yet crossed origin, or no host package containing the merge is published. |
+| 75 | `LAND_GAVE_UP` | gave up waiting — a budget elapsed, the tick was skipped for lock contention every time, the tick has not yet crossed origin, no promotion covered the merge in time, or no host package containing the merge is published. |
 
 The `VERDICT:` line ends with one of 17 words: `settled`, `unhealthy`, `deploy-failed`, `nothing-to-deploy`, `blocked`, `needs-manual-apply`, `deferred`, `merge-conflict`, `pr-ci-red`, `merge-timeout`, `ci-red`, `ci-timeout`, `ci-unproven`, `lock-busy`, `refused`, `handoff-timeout`, `unbuilt`.
 

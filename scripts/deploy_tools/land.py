@@ -74,12 +74,12 @@ exits 0 when it posted and 1 when it refused. `land_lib/pin_gate.py` has the rul
 Exit codes:
   0   deployed and settled, or there was nothing to deploy
   1   CI red or unproven, blocked by a change needing a hand, a tag matching no k8s entry, a
-      failed tick, the health gate failed, or the PR was closed unmerged, conflicts with
-      master, or its own CI is red
+      failed tick, a held or failed promotion, the health gate failed, or the PR was closed
+      unmerged, conflicts with master, or its own CI is red
   64  bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, the tick was skipped for lock
-      contention every time, the tick has not yet crossed origin, or the builder has not
-      published a host package that contains the merge
+      contention every time, the tick has not yet crossed origin, no promotion covered the
+      merge in time, or the builder has not published a host package that contains the merge
 
 Verdicts printed on stdout: settled | unhealthy | deploy-failed | nothing-to-deploy |
 blocked | needs-manual-apply | deferred | merge-conflict | pr-ci-red | merge-timeout |
