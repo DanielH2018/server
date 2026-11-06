@@ -40,3 +40,14 @@ loki_homelab_cpu_limit: "1"
 loki_homelab_mem_limit: 1024Mi
 loki_homelab_cpu_request: "100m"
 loki_homelab_mem_request: 256Mi
+
+# The Alloy ClusterRole and ClusterRoleBinding are cluster-scoped, so the namespaced prune
+# allowlist in k8s/manifests never selects them; dropping one still leaves it live.
+manifests_rollout: loki-homelab  # noqa var-naming[no-role-prefix]
+
+# manifests_rollout names the loki-homelab DEPLOYMENT; the Alloy shipper reads the same
+# ConfigMap and is a DaemonSet, so it is rolled as an extra. The shared role skips the
+# restart on the run that created it, and queues it for the batch drain like any other.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: alloy
+    kind: daemonset

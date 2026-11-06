@@ -140,3 +140,5 @@ k3s_longhorn_restore_drill_timeout_s: 2700
 # drill never contends with a backup in flight. Also clear of the 05:15 manifest-prune window,
 # which would otherwise see the drill's transient restore-drill-* objects.
 k3s_longhorn_restore_drill_cron: "10 4 * * *"
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

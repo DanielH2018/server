@@ -2,9 +2,3 @@
 - name: Deploy freshrss to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The feed cache is nginx, and nginx rereads conf.d only on start or SIGHUP. Its config
-    # arrives as a ConfigMap this role renders, so kubelet updates the file on disk and nothing
-    # tells nginx: an edited cache config applies, reports changed, and never takes effect.
-    manifests_extra_rollouts:
-      - name: freshrss-feed-cache

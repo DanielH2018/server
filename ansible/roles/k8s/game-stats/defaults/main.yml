@@ -32,3 +32,8 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ game_stats_valheim_claim }}"
     storage_class: "{{ game_stats_valheim_storage_class }}"
     size: "{{ game_stats_valheim_pvc_size }}"
+
+manifests_rollout: terraria-stats  # noqa var-naming[no-role-prefix]
+
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: valheim-stats

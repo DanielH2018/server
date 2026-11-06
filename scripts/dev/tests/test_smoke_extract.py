@@ -90,6 +90,12 @@ def test_k8s_default_jinja_templated_image_is_skipped():
     assert extract_changed_images(diff) == []
 
 
+def test_a_rollout_entry_naming_a_built_image_is_not_a_ref():
+    """n8n's `manifests_extra_rollouts` entry in its defaults names no pullable image."""
+    diff = "+  - name: n8n-runners\n+    image: n8n-runners\n"
+    assert extract_changed_images(diff) == []
+
+
 def test_k8s_default_image_var_emits_a_digest_pinned_ref():
     diff = (
         "+karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release"

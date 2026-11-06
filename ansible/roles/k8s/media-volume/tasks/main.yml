@@ -9,9 +9,6 @@
 - name: Declare the media volume to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # No Deployment in this role — it is storage, not a workload.
-    manifests_rollout: ""
     # Armed for the label, not for a deletion it can make: the StorageClass and PV are
     # cluster-scoped and the claim is a PersistentVolumeClaim, so no document here is a kind in
     # manifests_prune_allowlist. The prune would start covering a kind this role adds later.

@@ -6,18 +6,6 @@
 - name: Deploy prowlarr and flaresolverr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # No `manifests_rollout_timeout` here: defaults/main.yml sets it, where the renderer reads
-    # it for Flux's `timeout` and k8s/manifests reads it for the rollout wait. An include var
-    # of that name would override the default and loop through `prowlarr_k8s_rollout_timeout`.
-    # The drain gives the flaresolverr entry below the same budget.
-    # flaresolverr rolls under maxUnavailable: 0 rather than Recreate, so a rollout that
-    # never goes Ready leaves the OLD pod serving indefinitely — the failure is invisible
-    # unless something actually runs `rollout status` on it. manifests_rollout above only
-    # watches the Deployment named `prowlarr`; without this entry flaresolverr is never
-    # queued into k8s_pending_rollouts and the batch drain never checks it.
-    manifests_extra_rollouts:
-      - name: flaresolverr
 
 # flaresolverr runs on an emptyDir: its /config is a browser profile cache it rebuilds on first
 # use. Its old `prowlarr-flaresolverr-config` claim was deleted by a "Retire the flaresolverr

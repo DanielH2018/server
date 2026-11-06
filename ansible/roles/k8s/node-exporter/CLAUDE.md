@@ -24,8 +24,8 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
   Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
   flag leaves two writers on the objects.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its two vars, `manifests_rollout:
-  node-exporter` and `manifests_rollout_kind: daemonset`, named the DaemonSet for the
+  and no Flux path runs it. It stays for the handback. Its `manifests_rollout:
+  node-exporter` default and its include's `manifests_rollout_kind: daemonset` name the DaemonSet for the
   stabilisation gate. The Kustomization's `wait` replaces that gate: it reads the DaemonSet
   ready only when every scheduled pod is ready, so a node that goes NotReady mid-apply still
   fails the wait. `k8s_autodeploy` no longer gates an apply, because the deployer skips the

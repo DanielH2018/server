@@ -28,7 +28,8 @@ from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
 from _helpers import render_expr as _render
 from _k8s_render import deploy_play
-from _role_census import manifests_service_of, task_files_by_role
+from _role_census import manifests_service_of, role_dirs, task_files_by_role
+from renderer.renderer_lib.task_inputs import image_builder_sites, render_defaults
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -296,7 +297,7 @@ def _walk(tasks) -> list[dict]:
 
 
 def _role_includes(role_name: str) -> list[dict]:
-    """The `vars` of every include of `role_name` across roles/k8s/*/tasks/*.yml.
+    """Each include of `role_name` in roles/k8s/*/tasks/*.yml: its role's render defaults and vars.
 
     A `k8s/manifests` include gets its `manifests_service` filled in from the role directory
     when it omits one, as the role's own default does (#4053).
@@ -306,7 +307,7 @@ def _role_includes(role_name: str) -> list[dict]:
         for task in _walk(_tasks(path)):
             inc = task.get("ansible.builtin.include_role")
             if isinstance(inc, dict) and inc.get("name") == role_name:
-                task_vars = dict(task.get("vars") or {})
+                task_vars = {**render_defaults(role_dir), **(task.get("vars") or {})}
                 service = manifests_service_of(task, role_dir.name)
                 if service is not None:
                     task_vars["manifests_service"] = service
@@ -329,9 +330,10 @@ def test_every_built_image_reaches_a_running_pod() -> None:
     form of that finding: it fails until every built image is either rolled or opted out.
     """
     built = {
-        str(v["image_builder_name"])
-        for v in _role_includes("k8s/image-builder")
-        if "image_builder_name" in v
+        str(site.vars["image_builder_name"])
+        for role in role_dirs(_REPO / "ansible/roles/k8s")
+        for site in image_builder_sites(role)
+        if "image_builder_name" in site.vars
     }
     assert built, "no image_builder_name found — the collector stopped matching"
 

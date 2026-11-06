@@ -41,3 +41,5 @@ wg_easy_k8s_cpu_limit: 500m
 wg_easy_k8s_mem_limit: 256Mi
 wg_easy_k8s_cpu_request: 50m
 wg_easy_k8s_mem_request: 32Mi
+
+manifests_rollout: wg-easy  # noqa var-naming[no-role-prefix]

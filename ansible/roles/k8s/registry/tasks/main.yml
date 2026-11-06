@@ -18,13 +18,3 @@
 - name: Deploy the image registry to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The ghcr.io mirror (templates/ghcr-mirror.yaml.j2). `restart_on: []`, because it reads no
-    # ConfigMap or Secret: an unrelated edit to this role would otherwise restart it and drop
-    # every pull in flight.
-    manifests_extra_rollouts:
-      - name: ghcr-mirror
-        restart_on: []
-      # The docker.io mirror (templates/dockerhub-mirror.yaml.j2), for the same reason.
-      - name: dockerhub-mirror
-        restart_on: []

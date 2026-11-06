@@ -21,7 +21,7 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
 - **Flux applies it, not Ansible** (Wave D). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `tasks/main.yml`
-  holds the include of `k8s/manifests` alone, which the renderer reads for `manifests_*`. To give
+  holds the include of `k8s/manifests` alone. To give
   the role back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
   revert of the flag leaves two writers on the objects.
 - **The verify is an alert, not a Job.** The soak reads `K8sExtendedResourceMissing`

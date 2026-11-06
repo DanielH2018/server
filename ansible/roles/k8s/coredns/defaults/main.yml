@@ -61,3 +61,5 @@ flux_forward_only: true  # noqa var-naming[no-role-prefix]
 # merge here is not a routine bump.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "platform — cluster DNS for every pod and for Flux's own controllers; a bad Corefile or a pod that fails to start stops name resolution, and Flux resolves GHCR through the DNS it owns"  # noqa var-naming[no-role-prefix]
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

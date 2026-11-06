@@ -18,6 +18,7 @@ import re
 from functools import cache
 
 from _row_table import Census, Subject, tracked
+from renderer.renderer_lib.task_inputs import RENDER_KEYS
 
 _K8S = "ansible/roles/k8s/"
 # The six Flux-born roles of H1 (*Six Flux-born tags*). A role not yet in the tree is skipped, so
@@ -34,8 +35,9 @@ FLUX_BORN = (
 # alike. A setup template that names `k8s_autodeploy` (the release-staleness check, the Renovate
 # prompt) reads the convention across all roles, not a value one Flux-born role governs.
 # DECIDED: exempt by name, because the census exists for the keys whose value a flip changes, and
-# a flip of these changes a stance and no host-visible state.
-CONVENTION_KEYS = frozenset({"k8s_autodeploy", "k8s_autodeploy_reason"})
+# a flip of these changes a stance and no host-visible state. A role's render metadata is the
+# same convention: it decides what the renderer writes, and no host file reads its value.
+CONVENTION_KEYS = frozenset({"k8s_autodeploy", "k8s_autodeploy_reason"}) | RENDER_KEYS
 _KEY = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*):", re.MULTILINE)
 _HOST_FILES = (
     "ansible/roles/setup/*/tasks/*",

@@ -9,3 +9,8 @@
 # platform-class exposure risk even though nothing here is a workload to roll back.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "renders no Deployment — route-only (IngressRoute + middlewares) in front of the Longhorn UI, which has no auth of its own; a bad route change risks exposing the storage control plane"  # noqa var-naming[no-role-prefix]
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+
+# The entry's `port` is the upstream longhorn-frontend Service's, which setup/k3s installs.
+manifests_exclude_files: [service.yaml]  # noqa var-naming[no-role-prefix]

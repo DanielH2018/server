@@ -105,3 +105,5 @@ flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
   longhorn-reconcile:
     kind: mutation
     rerun_safe: ansible/roles/k8s/longhorn-reconcile/tests/test_longhorn_reconcile.py::test_a_second_run_changes_nothing
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

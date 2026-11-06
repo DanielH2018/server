@@ -2,14 +2,9 @@
 - name: Build the terraria image
   ansible.builtin.include_role:
     name: k8s/image-builder
-  vars:
-    image_builder_name: terraria
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/terraria/templates/Dockerfile.j2"
 
 # The claim is `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387).
 - name: Deploy terraria to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_rollout: terraria

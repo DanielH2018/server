@@ -34,6 +34,8 @@ __all__ = [
 # Longhorn tier lists: `longhorn-reconcile`'s defaults derive them from `containers_list`
 # (H1.7a). ansible-core's `basename` and `dirname`: k3s's `k3s_host_coredns_tarball` is a
 # `dirname`, and it rendered as STUB, with a warning, on every `probe.py applied k3s` (#6475).
+# ansible-core's `combine`: flux's and observability's `manifests_self_rollouts` add each
+# workload's namespace with it.
 #
 # DECIDED: lazy, not registered with `register_ansible_filters` at the top of this module. The
 # heavy tier imports ansible-core, and this module stays light for `probe.py monitors` (the
@@ -45,6 +47,7 @@ _DEFAULTS_PLUGIN_FILTERS = (
     "longhorn_nobackup_claims",
     "basename",
     "dirname",
+    "combine",
 )
 
 # The heavy-tier tests a role's DEFAULTS call, wrapped the same lazy way. netpol-baseline's

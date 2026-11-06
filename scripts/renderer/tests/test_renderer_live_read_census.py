@@ -76,6 +76,15 @@ def test_the_template_set_holds_the_build_context_and_not_the_build_job():
     assert builder / "build-job.yaml.j2" not in templates
 
 
+def test_the_template_set_reaches_what_a_role_builds_from_its_defaults():
+    found = real_census()
+    n8n = K8S_ROLES / "n8n" / "templates"
+    assert n8n / "Dockerfile.j2" in found.templates
+    assert n8n / "config" / "n8n-task-runners.json.j2" in found.templates
+    # Only code-server's Dockerfile reaches it, so it proves the census reads a build template.
+    assert "code_server_k8s_node_version" in found.reached
+
+
 def _census(
     tmp_path: Path,
     templates: dict[str, str],

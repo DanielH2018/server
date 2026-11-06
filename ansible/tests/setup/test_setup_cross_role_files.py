@@ -37,7 +37,7 @@ and the deployer defer-and-alerts them rather than re-applying them.
 
 A file outside `ansible/roles/k8s/` that a k8s role's image embeds is a third table,
 `K8S_BUILD_CONTEXT_FILES` (#4840). The scan reads each `image_builder_context_files` and
-`image_builder_context` key in a k8s role's tasks, resolves `{{ playbook_dir }}` to `ansible`,
+`image_builder_context` key in a k8s role's tasks and defaults, resolves `{{ playbook_dir }}` to `ansible`,
 and keeps a source outside the role itself.
 
 The setup roles calling a filter plugin's filters, `SETUP_ROLES_CALLING_FILTER_PLUGINS`, and
@@ -116,7 +116,7 @@ _CONTEXT_VARS = ("image_builder_context", "image_builder_context_files")
 
 
 def _context_sources(node):
-    """Every key of an `image_builder_context*` mapping anywhere inside parsed task YAML."""
+    """Every key of an `image_builder_context*` mapping anywhere inside parsed role YAML."""
     if isinstance(node, dict):
         for key, value in node.items():
             if key in _CONTEXT_VARS and isinstance(value, dict):
@@ -142,7 +142,9 @@ def build_context_files(task_docs: dict[str, object]) -> dict[str, frozenset[str
 def _k8s_task_docs() -> dict[str, object]:
     return {
         role_dir.name: [
-            yaml_fast.safe_load(p.read_text()) for p in role_task_files(role_dir)
+            yaml_fast.safe_load(p.read_text())
+            for p in (*role_task_files(role_dir), role_dir / "defaults" / "main.yml")
+            if p.is_file()
         ]
         for role_dir in role_dirs(ROLES / "k8s")
     }

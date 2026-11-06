@@ -66,3 +66,14 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # k8s/cronjob-gate include at the flip.
 flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
   pi-peer-backup: {kind: verify}
+
+image_builder_builds:  # noqa var-naming[no-role-prefix]
+  - image_builder_name: pi-peer-backup
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/pi-peer-backup/templates/Dockerfile.j2"
+    # Embedded verbatim (lookup('file')) — a shell script Jinja must not touch.
+    image_builder_context_files:
+      "{{ playbook_dir }}/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh": pull-pi-peers.sh
+
+# A CronJob — nothing to wait on at deploy; the first scheduled (or manually
+# triggered) run is the proof.
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

@@ -14,8 +14,8 @@ while reporting success.
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
   privileged pod). Runs as uid 1000 with no added capabilities.
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n`, `code-server`,
-  `nut`, `homelab-mcp`, `valheim`, `karakeep` — each `include_role`s this with its own
-  `image_builder_*` vars.
+  `nut`, `homelab-mcp`, `valheim`, `karakeep` — each `include_role`s this and lists its builds'
+  `image_builder_*` vars in its own `image_builder_builds` default.
 - **Renovate does not automerge its bumps** (`k8s_autodeploy: false`). It renders a Job and a
   ConfigMap, no Deployment, and it builds the images every other role above consumes, so a bad
   build here is upstream of all of them.
@@ -93,4 +93,6 @@ while reporting success.
   `templates/context-configmap.yaml.j2`.
 - Not deployed standalone, and no caller reaches it: every caller is `owner: flux`. promote's
   `images` job builds their images, and `deploy.sh` refuses their tags with exit 5. A caller
-  handed back to Ansible would reach this role through its own deploy tag.
+  handed back to Ansible would reach this role through its own deploy tag, and that
+  handback moves each `image_builder_builds` entry back onto a `vars:` include, with its
+  `when:`. Ansible does not read the list, so a bare include builds nothing it can name.

@@ -38,3 +38,7 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ livesync_k8s_claim }}"
     storage_class: "{{ livesync_k8s_storage_class }}"
     size: "{{ livesync_k8s_size }}"
+
+# No IngressRoute, though the entry carries a `hostname`: traefik's file-provider gate
+# (roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2) routes it.
+manifests_exclude_files: [ingressroute.yaml]  # noqa var-naming[no-role-prefix]

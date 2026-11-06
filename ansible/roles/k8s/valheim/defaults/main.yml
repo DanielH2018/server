@@ -207,3 +207,13 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ valheim_k8s_server_claim }}"
     storage_class: "{{ valheim_k8s_server_storage_class }}"
     size: "{{ valheim_k8s_server_size }}"
+
+image_builder_builds:  # noqa var-naming[no-role-prefix]
+  - image_builder_name: valheim
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/valheim/templates/Dockerfile.j2"
+    # Skipped when no mod is enabled: the Dockerfile would produce an image holding no DLLs and
+    # the initContainer's `cp /mods/*.dll` would fail on the unmatched glob. The deployment
+    # template drops the initContainer under the same condition.
+    when: valheim_k8s_mods | length > 0
+
+manifests_rollout: valheim  # noqa var-naming[no-role-prefix]
