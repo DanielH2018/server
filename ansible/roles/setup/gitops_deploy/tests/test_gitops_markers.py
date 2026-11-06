@@ -13,7 +13,6 @@ from lib.repo_paths import HOSTS_INI
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     LOCAL_CONNECTION_HOSTS,
-    SHARED_K8S_ROLES,
     ContentionEntry,
     on_hosts,
     owed_clear_cmd,
@@ -57,8 +56,8 @@ def test_a_garbled_contention_marker_reads_as_no_streak(text):
 
 # ── the clear commands every surface prints ───────────────────────────────────────────────
 def test_the_clear_commands_name_the_gitops_state_subcommands():
-    assert owed_clear_cmd("k8s_deferred", "sonarr").endswith(
-        "gitops_state.py clear-owed k8s_deferred sonarr"
+    assert owed_clear_cmd("manual_plane", "k3s").endswith(
+        "gitops_state.py clear-owed manual_plane k3s"
     )
     assert CONTENTION_CLEAR_CMD.endswith("clear-contention")
 
@@ -69,17 +68,7 @@ def test_an_owed_clear_names_applied_tags_only_where_the_cli_takes_them():
         "clear-owed manual_plane k3s --applied kubeconfig"
     )
     with pytest.raises(ValueError, match="manual_plane only"):
-        owed_clear_cmd("k8s_unapplied", "authelia", {"authelia"})
-
-
-# ── the shared k8s roles ──────────────────────────────────────────────────────────────────
-def test_the_shared_k8s_roles_are_the_roles_with_no_containers_list_entry():
-    """The literal the banner reads, against the derivation it stands in for (#4373)."""
-    from lib.k8s_roles import k8s_entries, role_dirs
-
-    derived = {p.name for p in role_dirs()} - set(k8s_entries())
-    assert "manifests" in derived
-    assert SHARED_K8S_ROLES == derived
+        owed_clear_cmd("hold_plane", "k3s", {"k3s"})
 
 
 _APPLY = "uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor"

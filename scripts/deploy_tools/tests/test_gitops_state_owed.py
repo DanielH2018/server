@@ -1,4 +1,4 @@
-"""The owed-ledger clears beyond `manual_plane`: the two k8s classes and `clear-owed`.
+"""The `clear-owed` verb: which classes it takes, and the command every surface prints.
 
 `clear-owed <class> <subject>` is the one verb (#3544); the per-class verbs it replaced were
 retired in #3550. The `manual_plane` clear's own
@@ -39,80 +39,22 @@ COMMON = json.dumps(
 )
 
 
-# ── k8s_deferred: the same shape one plane over ───────────────────────────────────
-
-
-_LINE = '{{"at": {}, "class": "k8s_deferred", "origin": "{}", "subject": "{}"}}'
-SONARR = _LINE.format(1000, "abc123def4567890", "sonarr")
-RADARR = _LINE.format(2000, "def456abc7890123", "radarr")
-
-
-@pytest.fixture
-def deferred(tmp_path: Path) -> Path:
-    (tmp_path / "owed.jsonl").write_text(f"{SONARR}\n{RADARR}\n")
-    return tmp_path / "owed.jsonl"
-
-
-def test_clearing_one_deferred_bump_leaves_the_other(deferred, run, capsys, journal):
-    assert run(deferred.parent, "clear-owed", "k8s_deferred", "sonarr") == 0
-    assert deferred.read_text().splitlines() == [RADARR]
-    assert "sonarr" in capsys.readouterr().out
-    service, dropped, _ = journal[0]
-    assert (service, dropped.origin) == ("sonarr", "abc123def4567890")
-    assert run(deferred.parent, "clear-owed", "k8s_deferred", "radarr") == 0
-    assert not deferred.exists(), "clearing the last bump removes the ledger"
-
-
-def test_clearing_a_bump_that_is_not_deferred_exits_zero_and_says_so(
-    deferred, run, capsys, journal
-):
-    """The rejecting half: a command that cleared everything reads the same from here."""
-    assert run(deferred.parent, "clear-owed", "k8s_deferred", "jellyfin") == 0
-    assert deferred.read_text().splitlines() == [SONARR, RADARR]
-    assert "not pending" in capsys.readouterr().out
-    assert journal[0][1] is None, "nothing was dropped, so the line says so"
-
-
-# ── k8s_unapplied: the class nothing pages on ──────────────────────────────────────
-
-AUTHELIA = _LINE.replace("k8s_deferred", "k8s_unapplied").format(
-    1000, "a" * 40, "authelia"
-)
-
-
-def test_clearing_an_unapplied_role_leaves_the_deferred_class_alone(
-    tmp_path, run, capsys, journal
-):
-    """Two classes of one ledger (#3392): a clear aimed at one leaves the other's line."""
-    (tmp_path / "owed.jsonl").write_text(f"{AUTHELIA}\n{SONARR}\n")
-    assert run(tmp_path, "clear-owed", "k8s_unapplied", "authelia") == 0
-    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [SONARR]
-    assert "authelia" in capsys.readouterr().out
-
-
-def test_clearing_an_unapplied_role_that_is_not_pending_exits_zero_and_says_so(
-    tmp_path, run, capsys, journal
-):
-    """The rejecting half, and the reason it matters here: the ordinary way out of this
-    class is the tick's own discharge, so a hand clear usually finds nothing."""
-    (tmp_path / "owed.jsonl").write_text(f"{AUTHELIA}\n")
-    assert run(tmp_path, "clear-owed", "k8s_unapplied", "jellyfin") == 0
-    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [AUTHELIA]
-    assert "not pending" in capsys.readouterr().out
-    assert journal[0][1] is None, "nothing was dropped, so the line says so"
-
-
 # ── clear-owed: one verb for every class an operator may clear (#3544) ──────────────
 
 
-@pytest.mark.parametrize("cls", gitops_state.CLEARABLE_CLASSES)
-def test_the_retired_per_class_verbs_are_refused(deferred, run, capsys, cls):
+@pytest.fixture
+def owed(tmp_path: Path) -> Path:
+    (tmp_path / "owed.jsonl").write_text(f"{K3S}\n{COMMON}\n")
+    return tmp_path / "owed.jsonl"
+
+
+def test_the_retired_per_class_verb_is_refused(owed, run, capsys):
     """Every printer names `clear-owed` (#3547), so the per-class verbs are gone (#3550)."""
-    before = deferred.read_text()
+    before = owed.read_text()
     with pytest.raises(SystemExit):
-        run(deferred.parent, gitops_state.journal_event(cls), "sonarr")
+        run(owed.parent, "clear-manual-plane", "k3s")
     assert "invalid choice" in capsys.readouterr().err
-    assert deferred.read_text() == before
+    assert owed.read_text() == before
 
 
 @pytest.mark.parametrize(
@@ -126,30 +68,29 @@ def test_the_retired_per_class_verbs_are_refused(deferred, run, capsys, cls):
             (_k3s("kubeconfig"), COMMON),
             [COMMON],
         ),
-        ("k8s_deferred", "sonarr", (), (SONARR, RADARR), [RADARR]),
-        ("k8s_unapplied", "authelia", (), (AUTHELIA, SONARR), [SONARR]),
     ],
 )
 def test_the_printed_clear_command_runs_and_drops_its_line(
     tmp_path, run, cls, subject, tags, ledger, kept
 ):
     """Every surface prints `owed_clear_cmd`, so its argv must be one this parser accepts (#3547)."""
-    owed = tmp_path / "owed.jsonl"
-    owed.write_text("\n".join(ledger) + "\n")
+    path = tmp_path / "owed.jsonl"
+    path.write_text("\n".join(ledger) + "\n")
     printed = owed_clear_cmd(cls, subject, tags)
     words = printed.split()
     argv = words[words.index("scripts/deploy_tools/gitops_state.py") + 1 :]
     assert run(tmp_path, *argv) == 0
-    assert owed.read_text().splitlines() == kept
+    assert path.read_text().splitlines() == kept
 
 
-def test_clear_owed_refuses_hold_plane_and_changes_nothing(deferred, run, capsys):
-    """A hold clears only once an apply covers each plane, so no hand verb reaches it."""
-    before = deferred.read_text()
+@pytest.mark.parametrize("cls", [OWED_HOLD_PLANE, "k8s_deferred", "k8s_unapplied"])
+def test_clear_owed_refuses_any_other_class_and_changes_nothing(owed, run, capsys, cls):
+    """A hold clears only once an apply covers each plane, and no tick writes a k8s class."""
+    before = owed.read_text()
     with pytest.raises(SystemExit):
-        run(deferred.parent, "clear-owed", OWED_HOLD_PLANE, "ansible/deploy.yml")
+        run(owed.parent, "clear-owed", cls, "ansible/deploy.yml")
     assert "invalid choice" in capsys.readouterr().err
-    assert deferred.read_text() == before
+    assert owed.read_text() == before
 
 
 def test_every_ledger_class_but_hold_plane_is_clearable():
@@ -157,26 +98,8 @@ def test_every_ledger_class_but_hold_plane_is_clearable():
     assert set(gitops_state.CLEARABLE_CLASSES) == OWED_CLASSES - {OWED_HOLD_PLANE}
 
 
-def test_applied_is_refused_for_a_k8s_class(deferred, run, capsys):
-    """Only a manual_plane line carries tags; ignoring the flag would hide a whole-line clear."""
-    before = deferred.read_text()
-    with pytest.raises(SystemExit):
-        run(deferred.parent, "clear-owed", "k8s_deferred", "sonarr", "--applied", "x")
-    assert "manual_plane only" in capsys.readouterr().err
-    assert deferred.read_text() == before
-
-
 def test_clear_owed_takes_applied_for_manual_plane(tmp_path, run):
     (tmp_path / "owed.jsonl").write_text(_k3s("k3s-a", "k3s-b") + "\n")
     assert run(tmp_path, "clear-owed", "manual_plane", "k3s", "--applied", "k3s-a") == 0
     pending = gitops_state.DeployerState(str(tmp_path)).manual_plane_tags_pending()
     assert pending == {"k3s": frozenset({"k3s-b"})}
-
-
-def test_the_journal_event_keeps_each_retired_verb_name():
-    """`journalctl -t gitops-state` queries written against the retired verbs still match."""
-    assert {gitops_state.journal_event(c) for c in gitops_state.CLEARABLE_CLASSES} == {
-        "clear-manual-plane",
-        "clear-k8s-deferred",
-        "clear-k8s-unapplied",
-    }

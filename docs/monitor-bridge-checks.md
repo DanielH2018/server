@@ -140,15 +140,7 @@ checks each gate suppresses.
   deployer's longest apply budget, `gitops_deploy_broad_timeout_s`), naming the lock. The tick
   clears the marker on its next run that is not deferred, and `gitops_state.py clear-contention`
   clears it by hand.
-  The last arm is **`k8s_deferred`** (#2449): a promoted image bump that a broad tick
-  fast-forwarded and then deferred, because the shared budget left less than
-  `K8S_DEPLOY_TIMEOUT_S`. The range is merged, so `behind_since` is empty and no later tick's range
-  carries the bump, and the defer-and-alert post names it once and then nothing does. This arm
-  pages once the oldest line is older than the same six hours, naming the
-  `./scripts/deploy.sh --tags <svc>` that applies it and the
-  `gitops_state.py clear-owed k8s_deferred <svc>` that follows. Any tick that deploys the service
-  clears the line itself. The arm reads the `owed` ledger's `k8s_deferred` class (#3392). Pure
-  `gitops_status()` and its parsers are unit-tested, and an unparseable marker reads as not-behind
+  Pure `gitops_status()` and its parsers are unit-tested, and an unparseable marker reads as not-behind
   rather than paging forever on garbage.)
 - **`host_packages`** (`host_packages`, reads the host-package builder's two textfile series
   through daniel-box's node exporter, the `node` job. It is a row of its own, because

@@ -13,17 +13,12 @@ import pytest
 
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
-    k8s_deferred_lines,
-    k8s_unapplied_lines,
     manual_plane_lines,
     park_age,
     park_note,
     read_behind_marker,
-    read_k8s_deferred_marker,
-    read_k8s_unapplied_marker,
     read_manual_plane_marker,
 )
-from gitops_ledger import OWED_K8S_UNAPPLIED, owed_line, parse_owed
 from gitops_markers import MARKERS
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
@@ -135,65 +130,6 @@ def test_a_pi_only_role_is_applied_with_its_target(tmp_path):
 def test_an_absent_ledger_reads_as_nothing_pending(tmp_path):
     assert read_manual_plane_marker(str(tmp_path / "nope")) is None
     assert manual_plane_lines(None, 4000) == []
-
-
-def test_k8s_unapplied_is_read_from_the_owed_ledger(tmp_path):
-    sha = "a" * 40
-    (tmp_path / MARKERS["owed"]).write_text(
-        owed_line(OWED_K8S_UNAPPLIED, "authelia", sha, 1000) + "\n"
-    )
-    entries = parse_owed(read_k8s_unapplied_marker(str(tmp_path)), OWED_K8S_UNAPPLIED)
-    assert [(e.subject, e.at) for e in entries] == [("authelia", 1000.0)]
-
-
-def test_k8s_unapplied_with_no_ledger_reads_as_nothing_pending(tmp_path):
-    assert read_k8s_unapplied_marker(str(tmp_path)) is None
-
-
-def test_a_shared_role_unapplied_line_names_no_bare_fleet_redeploy():
-    """#4373: a bare `deploy.sh --tags "manifests"` redeploys every caller, while an ordinary
-    service keeps its own deploy command."""
-    marker = "\n".join(
-        owed_line(OWED_K8S_UNAPPLIED, subject, "a" * 40, at)
-        for subject, at in (("manifests", 1000), ("authelia", 2000))
-    )
-    shared, ordinary = k8s_unapplied_lines(marker, 4000)
-    assert '`./scripts/deploy.sh --tags "manifests"`;' not in shared
-    assert "nothing to deploy: `manifests` is a shared role" in shared
-    assert shared.endswith(
-        "clear-owed k8s_unapplied manifests` if a render after the change still proves no "
-        "caller, or it was reverted"
-    )
-    assert '`./scripts/deploy.sh --tags "authelia"`;' in ordinary
-    assert ordinary.endswith("clear-owed k8s_unapplied authelia` if it was reverted")
-
-
-def test_a_k8s_deferred_ledger_line_with_an_unknown_key_reaches_the_banner(tmp_path):
-    """The Verify-by of #3392 for the banner's `k8s_deferred` lines."""
-    line = {
-        "class": "k8s_deferred",
-        "subject": "sonarr",
-        "origin": "f" * 40,
-        "at": 500,
-        "added_by_a_newer_writer": 1,
-    }
-    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
-    lines = k8s_deferred_lines(read_k8s_deferred_marker(str(tmp_path)), 4000)
-    assert len(lines) == 1, lines
-    assert "image bump for `sonarr` 58 min ago" in lines[0]
-
-
-def test_k8s_deferred_on_two_lines_is_one_line_from_the_older(tmp_path):
-    older = owed_line("k8s_deferred", "sonarr", "f" * 40, 500)
-    newer = owed_line("k8s_deferred", "sonarr", "a" * 40, 3000)
-    (tmp_path / MARKERS["owed"]).write_text(f"{newer}\n{older}\n")
-    lines = k8s_deferred_lines(read_k8s_deferred_marker(str(tmp_path)), 4000)
-    assert len(lines) == 1, lines
-    assert "58 min ago" in lines[0]
-
-
-def test_k8s_deferred_with_no_ledger_reads_as_nothing_pending(tmp_path):
-    assert read_k8s_deferred_marker(str(tmp_path)) is None
 
 
 def test_the_playbook_prefix_is_defined_only_in_gitops_markers():

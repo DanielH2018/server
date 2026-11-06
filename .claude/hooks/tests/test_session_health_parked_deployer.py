@@ -42,8 +42,6 @@ def _problems(porcelain="", marker=None, now=0.0):
         # here. `test_session_health_manual_plane.py` owns that line.
         read_manual=lambda: None,
         read_contention=lambda: None,
-        read_k8s_deferred=lambda: None,
-        read_k8s_unapplied=lambda: None,
     )
 
 
@@ -118,8 +116,6 @@ def test_a_failed_read_degrades_to_silence_rather_than_raising():
         now=0.0,
         read_manual=lambda: None,
         read_contention=lambda: None,
-        read_k8s_deferred=lambda: None,
-        read_k8s_unapplied=lambda: None,
     )
     assert lines == []
 
@@ -135,8 +131,6 @@ def test_a_dirty_line_survives_a_failing_marker_read():
         now=0.0,
         read_manual=lambda: None,
         read_contention=lambda: None,
-        read_k8s_deferred=lambda: None,
-        read_k8s_unapplied=lambda: None,
     )
     assert len(lines) == 1
     assert "is dirty" in lines[0]

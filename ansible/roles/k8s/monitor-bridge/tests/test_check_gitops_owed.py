@@ -1,4 +1,4 @@
-"""GitOps Deploy — Status reads the `manual_plane`, `k8s_deferred` and `hold_plane` classes of `owed`.
+"""GitOps Deploy — Status reads the `manual_plane` and `hold_plane` classes of `owed`.
 
 The ledger replaces the line markers under #3392.
 
@@ -60,49 +60,18 @@ def test_a_ledger_line_missing_its_class_keys_still_pages_for_the_whole_role(cfg
     assert msg.endswith("clear-owed manual_plane k3s`")
 
 
-def test_other_classes_in_the_ledger_page_nothing(cfg):
-    """`k8s_unapplied` shares the file and pages on nothing, by construction (#2570)."""
-    owed = json.dumps(
-        {"class": "k8s_unapplied", "subject": "sonarr", "origin": "abc", "at": 1000}
-    )
+@pytest.mark.parametrize("cls", ["k8s_deferred", "k8s_unapplied", "a_class_from_later"])
+def test_other_classes_in_the_ledger_page_nothing(cfg, cls):
+    """A line past the age gate pages only under a class this check reads."""
+    owed = json.dumps({"class": cls, "subject": "sonarr", "origin": "abc", "at": 1000})
     ok, _ = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
     assert ok
-
-
-def test_a_k8s_deferred_ledger_line_with_an_unknown_key_pages(cfg):
-    """The Verify-by of #3392 for `k8s_deferred`: a key a newer writer added still pages."""
-    owed = json.dumps(
-        {
-            "class": "k8s_deferred",
-            "subject": "sonarr",
-            "origin": "abc123def4567890",
-            "at": 1000,
-            "added_by_a_newer_writer": 1,
-        }
-    )
-    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
-    assert not ok
-    assert msg.startswith("sonarr merged but not deployed for 7h")
-    assert msg.endswith("clear-owed k8s_deferred sonarr`")
-
-
-def test_a_k8s_deferred_bump_on_two_lines_dates_from_the_older(cfg):
-    """A service two ledger lines both hold is one bump, aged from its first."""
-    owed = "\n".join(
-        json.dumps(
-            {"class": "k8s_deferred", "subject": "sonarr", "origin": sha, "at": at}
-        )
-        for sha, at in (("a" * 40, _LATE - 600), ("b" * 40, 1000))
-    )
-    ok, msg = checks.gitops.gitops_status(cfg, None, now=_LATE, owed=owed)
-    assert not ok
-    assert msg.startswith("sonarr merged but not deployed for 7h")
 
 
 def test_check_gitops_status_reads_the_ledger_off_the_mount(tmp_path, cfg):
     """A torn byte on another line drops that line only, not the whole check (#2371)."""
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
-    torn = b'{"class": "k8s_unapplied", "subject": "son\xffarr"}'
+    torn = b'{"class": "manual_plane", "subject": "son\xffarr"}'
     line = _owed(subject="k3s", at=1, playbook="ansible/k3s-bringup.yml", tags=[])
     (tmp_path / "owed.jsonl").write_bytes(torn + b"\n" + line.encode())
     ok, msg = checks.gitops.check_gitops_status(cfg, FakeSources())

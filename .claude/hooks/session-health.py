@@ -125,11 +125,7 @@ try:
         read_behind_marker,
         read_contention_marker,
         contention_lines,
-        k8s_deferred_lines,
-        k8s_unapplied_lines,
         manual_plane_lines,
-        read_k8s_deferred_marker,
-        read_k8s_unapplied_marker,
         read_manual_plane_marker,
     )
 
@@ -154,10 +150,6 @@ except ImportError as exc:
     read_manual_plane_marker = _park_unavailable
     contention_lines = _park_unavailable
     read_contention_marker = _park_unavailable
-    k8s_deferred_lines = _park_unavailable
-    read_k8s_deferred_marker = _park_unavailable
-    k8s_unapplied_lines = _park_unavailable
-    read_k8s_unapplied_marker = _park_unavailable
 
 __all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
@@ -246,8 +238,6 @@ def parked_deployer_problems(
     now=None,
     read_manual=None,
     read_contention=None,
-    read_k8s_deferred=None,
-    read_k8s_unapplied=None,
 ):
     """The primary-checkout and deployer-park banner lines, as one list.
 
@@ -292,16 +282,6 @@ def parked_deployer_problems(
         def read_contention():
             return read_contention_marker(GITOPS_STATE_DIR)
 
-    if read_k8s_deferred is None:
-
-        def read_k8s_deferred():
-            return read_k8s_deferred_marker(GITOPS_STATE_DIR)
-
-    if read_k8s_unapplied is None:
-
-        def read_k8s_unapplied():
-            return read_k8s_unapplied_marker(GITOPS_STATE_DIR)
-
     # Deferred like the `lib.git` import above, and for the same reason the rest of this file
     # defers: nothing at module scope may be able to stop the banner. The one module-scope
     # import this file does keep — `lib.deployer_park` — is wrapped up there and reported here.
@@ -334,14 +314,6 @@ def parked_deployer_problems(
         # before it, the same way the park read does.
         lines += manual_plane_lines(read_manual(), clock)
         lines += contention_lines(read_contention(), clock)
-        # Last, after every other deferral: a deferred image bump is the cheapest of them to
-        # clear and the least urgent. One deploy of the named service does it, and this banner
-        # reaches the session that can run it — `land.sh` printed the command to whoever merged
-        # the bump, and nothing printed it again.
-        lines += k8s_deferred_lines(read_k8s_deferred(), clock)
-        # Last of all, because it is the only one nothing pages on: a k8s role this deployer
-        # never applies is owed to a hand indefinitely, and the banner is where that is said.
-        lines += k8s_unapplied_lines(read_k8s_unapplied(), clock)
     except Exception:
         return lines
     return lines

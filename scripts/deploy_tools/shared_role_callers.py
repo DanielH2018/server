@@ -71,8 +71,7 @@ def caller_tags(
 
 
 # The shared roles whose whole effect on a caller is the manifests it renders, so one caller
-# can smoke-test a change to how it renders them. `gitops_markers.RENDER_PROOF_SHARED_ROLES`
-# drew the same line for the same reason until D6.12 deleted the discharge that read it.
+# can smoke-test a change to how it renders them.
 #
 # Every other shared role acts per caller and needs all of them: `arr-notification` writes
 # each *arr's own database over its API, and `image-builder` ships a build job per caller. Deploying one of those is not the

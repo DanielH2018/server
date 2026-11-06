@@ -216,50 +216,6 @@ def test_read_state_lists_a_hold_plane_line_with_an_unknown_key_is_clean(state_d
     ]
 
 
-def test_read_state_lists_a_deferred_bump_with_its_deploy_then_clear_is_clean(
-    state_dir,
-):
-    """A merged, unapplied image bump is the one park the page could not name."""
-    owed = "\n".join(
-        json.dumps({"class": "k8s_deferred", "subject": s, "origin": sha, "at": at})
-        for s, sha, at in (("sonarr", "a" * 40, 2000), ("radarr", "b" * 40, 1000))
-    )
-    (state_dir / "owed.jsonl").write_text(owed)
-    rows = reads.k8s_deferred_rows(owed)
-    assert [r["service"] for r in rows] == ["radarr", "sonarr"]
-    assert rows[0]["origin"] == "b" * 8
-    assert rows[0]["deploy"] == './scripts/deploy.sh --tags "radarr"'
-    assert "clear-owed k8s_deferred radarr" in rows[0]["clear"]
-    assert reads.read_state(state_dir)["k8s_deferred_entries"] == rows
-
-
-def test_read_state_with_no_deferred_bump_lists_no_entry_is_flagged(state_dir):
-    assert reads.read_state(state_dir)["k8s_deferred_entries"] == []
-
-
-def test_read_state_lists_a_ledger_only_deferred_bump_is_clean(state_dir):
-    """The Verify-by of #3392: a `k8s_deferred` ledger line with an unknown key is a row."""
-    line = {
-        "class": "k8s_deferred",
-        "subject": "sonarr",
-        "origin": "a" * 40,
-        "at": 1000,
-        "added_by_a_newer_writer": 1,
-    }
-    torn = b'{"class": "k8s_deferred", "subject": "rad\xffarr"}'
-    (state_dir / "owed.jsonl").write_bytes(torn + b"\n" + json.dumps(line).encode())
-    st = reads.read_state(state_dir)
-    rows = st["k8s_deferred_entries"]
-    assert isinstance(rows, list)
-    assert [r["service"] for r in rows] == ["sonarr"]
-    assert "owed.jsonl" not in st
-
-
-def test_k8s_deferred_rows_skips_a_garbled_line_is_flagged():
-    """A torn line names no service, so a row built from one could not be cleared."""
-    assert reads.k8s_deferred_rows("garbage\ndeadbeef sonarr not-a-time") == []
-
-
 def test_parse_stale_lines_is_clean():
     text = "homepage: roles/k8s/homepage changed in 5aab47af\nn8n: no release record"
     assert reads.parse_stale(text) == [

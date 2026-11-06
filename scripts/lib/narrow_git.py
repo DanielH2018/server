@@ -32,8 +32,8 @@ from lib.git import git
 class CannotNarrow(Exception):
     """This change reaches something no narrow tag list covers.
 
-    Both callers act on it by widening: the deploy plane defers every service it may reach
-    to `k8s_unapplied` (#4333), and the setup plane prints the whole-role tag. Neither is
+    Both callers act on it by widening: the deploy plane's census marks every service it may
+    reach stale, and the setup plane prints the whole-role tag. Neither is
     wrong, only coarse, so any doubt raises this rather than guessing a narrower answer.
 
     Attributes:

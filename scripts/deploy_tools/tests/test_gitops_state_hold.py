@@ -30,14 +30,12 @@ def _owed(cls: str, subject: str) -> str:
 
 SETUP_PLANE = _owed("hold_plane", "ansible/initial_setup.yml gitops_deploy")
 DEPLOY_PLANE = _owed("hold_plane", "ansible/deploy.yml sonarr")
-DEFERRED = _owed("k8s_deferred", "radarr")
+MANUAL = _owed("manual_plane", "k3s")
 
 
 def _held(state_dir: Path, sha: str = SHA) -> None:
     (state_dir / "hold_sha").write_text(sha + "\n")
-    (state_dir / "owed.jsonl").write_text(
-        f"{SETUP_PLANE}\n{DEFERRED}\n{DEPLOY_PLANE}\n"
-    )
+    (state_dir / "owed.jsonl").write_text(f"{SETUP_PLANE}\n{MANUAL}\n{DEPLOY_PLANE}\n")
 
 
 def test_clear_hold_drops_hold_sha_with_every_hold_plane_line(
@@ -47,7 +45,7 @@ def test_clear_hold_drops_hold_sha_with_every_hold_plane_line(
     _held(tmp_path)
     assert run(tmp_path, "clear-hold", SHA) == 0
     assert not (tmp_path / "hold_sha").exists()
-    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [DEFERRED]
+    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [MANUAL]
     out = capsys.readouterr().out
     assert "ansible/initial_setup.yml gitops_deploy" in out
     assert "ansible/deploy.yml sonarr" in out
@@ -111,7 +109,7 @@ def test_orphaned_drops_hold_plane_lines_left_with_no_hold_sha(
     _held(tmp_path)
     (tmp_path / "hold_sha").unlink()
     assert run(tmp_path, "clear-hold", "--orphaned") == 0
-    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [DEFERRED]
+    assert (tmp_path / "owed.jsonl").read_text().splitlines() == [MANUAL]
     assert "orphaned" in capsys.readouterr().out
     assert journal == [
         ("-", ["ansible/initial_setup.yml gitops_deploy", "ansible/deploy.yml sonarr"])
