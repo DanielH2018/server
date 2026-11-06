@@ -18,11 +18,9 @@ import pytest
 from _row_table import tracked
 from deployer_lib.deploy_setup_roles import SECRET_READERS_SCRIPT
 from lib.git import git
-from lib.git_testing import git_out, scrubbed_env
+from lib.git_testing import commit, git_out, init_repo, scrubbed_env
 from lib.proc_testing import run
 from lib.repo_paths import REPO
-
-from _narrow_fixtures import Tree, build_tree
 
 BROAD = "broad"
 CONTAINERS = "containers"
@@ -55,6 +53,16 @@ K8S_READINGS = frozenset({"k8s_lookup_readers", "k8s_roles_holding"})
 
 SECRETS = "ansible/vars/secrets.yml"
 SETUP_READER = "ansible/roles/setup/claude_code/templates/env.j2"
+# Three services, so one reader stays under the most-of-the-fleet refusal.
+HOST_VARS = """\
+containers_list:
+  - name: jellyfin
+    platform: k8s
+  - name: sonarr
+    platform: k8s
+  - name: radarr
+    platform: k8s
+"""
 BASE_SECRETS = """\
 jellyfin_api_key: ENC[AES256_GCM,data:aaa]
 setup_only_token: ENC[AES256_GCM,data:ccc]
@@ -130,23 +138,34 @@ def _modules_holding_the_moved_symbols() -> list[str]:
 
 
 @pytest.fixture
-def secrets_tree(tmp_path) -> Tree:
+def secrets_tree(tmp_path) -> Path:
     """A checkout with a secret a setup role reads and a secret one k8s role reads."""
-    tree = build_tree(tmp_path)
-    tree.write(SECRETS, BASE_SECRETS)
-    tree.write(
+    root = tmp_path / "repo"
+    init_repo(root)
+    _write(root, "ansible/inventory/host_vars/daniel-box.yml", HOST_VARS)
+    _write(root, "ansible/inventory/hosts.ini", "[all]\ndaniel-box\n")
+    _write(root, "ansible/deploy.yml", "- hosts: all\n")
+    _write(root, SECRETS, BASE_SECRETS)
+    _write(
+        root,
         "ansible/roles/k8s/jellyfin/templates/secret.yaml.j2",
         "key: {{ jellyfin_api_key }}\n",
     )
-    tree.write(SETUP_READER, "T={{ setup_only_token }}\n")
-    tree.commit("secrets")
-    return tree
+    _write(root, SETUP_READER, "T={{ setup_only_token }}\n")
+    commit(root, "secrets")
+    return root
 
 
-def _rotate(tree: Tree, secrets: str) -> tuple[str, str]:
-    old = git_out(tree.root, "rev-parse", "HEAD")
-    tree.write(SECRETS, secrets)
-    return old, tree.commit("rotate")
+def _write(root: Path, rel: str, text: str) -> None:
+    path = root / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def _rotate(root: Path, secrets: str) -> tuple[str, str]:
+    old = git_out(root, "rev-parse", "HEAD")
+    _write(root, SECRETS, secrets)
+    return old, commit(root, "rotate")
 
 
 def test_land_help_exits_zero_without_the_gone_modules():
@@ -212,16 +231,20 @@ def test_the_plans_d6_18b_item_names_the_module_holding_the_moved_symbols():
     modules = _modules_holding_the_moved_symbols()
     assert modules, "no narrow_lib module holds the moved symbols"
     plan = (REPO / PLAN).read_text(encoding="utf-8")
-    item = re.search(r"\*\*D6\.18b\b.*?(?=^\d+\. \*\*D6\.)", plan, re.S | re.M)
-    assert item is not None
-    assert PurePosixPath(modules[0]).name in item.group()
+    items = re.search(
+        r"\*\*D6\.18a\b.*?\*\*D6\.18b\b.*?(?=^\d+\. \*\*D6\.)", plan, re.S | re.M
+    )
+    assert items is not None
+    stem = PurePosixPath(modules[0]).stem
+    spellings = (f"{stem}.py", f"narrow_lib/{stem}", f"narrow_lib.{stem}")
+    assert any(spelling in items.group() for spelling in spellings)
 
 
 def test_the_secret_readers_script_names_the_setup_reader_of_a_moved_key(secrets_tree):
     """The deployer's subprocess: its stdout is the contract the tick parses."""
     old, new = _rotate(secrets_tree, ROTATED_SETUP_TOKEN)
     done = _run_script_without_gone_modules(
-        SECRET_READERS_SCRIPT, old, new, "--repo", str(secrets_tree.root)
+        SECRET_READERS_SCRIPT, old, new, "--repo", str(secrets_tree)
     )
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout) == {
@@ -239,7 +262,7 @@ def test_the_secret_readers_script_names_the_deploy_tag_of_a_moved_key(secrets_t
         old,
         new,
         "--repo",
-        str(secrets_tree.root),
+        str(secrets_tree),
     )
     assert done.returncode == 0, done.stderr
     assert done.stdout.strip() == "jellyfin"
@@ -255,7 +278,7 @@ def test_a_setup_plane_landing_reads_the_key_readers_of_a_range(secrets_tree):
         "found = readable_key_readers(sys.argv[1], Path(sys.argv[2]))\n"
         "print(json.dumps([reader.path for reader in found]))\n"
     )
-    done = _run_without_gone_modules(code, f"{old}..{new}", str(secrets_tree.root))
+    done = _run_without_gone_modules(code, f"{old}..{new}", str(secrets_tree))
     assert done.returncode == 0, done.stderr
     assert json.loads(done.stdout) == [SETUP_READER]
 
