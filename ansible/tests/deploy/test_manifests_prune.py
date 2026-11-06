@@ -34,6 +34,7 @@ from _helpers import (
     walk_tasks,
 )
 from lib.repo_paths import ALL_VARS, K3S_FILES
+from renderer.renderer_lib.task_inputs import render_defaults
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files, manifest_template, tag_owners
@@ -181,7 +182,7 @@ def test_the_forbidden_kind_check_actually_fires() -> None:
 
 
 def _manifests_includes() -> dict[str, list[dict]]:
-    """The `vars:` of each role's render include, `k8s/manifests` without `tasks_from`, by role."""
+    """Each role's render defaults and `k8s/manifests` include vars, without `tasks_from`, by role."""
     found: dict[str, list[dict]] = {}
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
@@ -190,7 +191,9 @@ def _manifests_includes() -> dict[str, list[dict]]:
         for task in walk_tasks(load_tasks(main)):
             include = task.get("ansible.builtin.include_role") or {}
             if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
-                found.setdefault(role.name, []).append(task.get("vars") or {})
+                found.setdefault(role.name, []).append(
+                    {**render_defaults(role), **(task.get("vars") or {})}
+                )
     return found
 
 

@@ -342,17 +342,14 @@ def tag_templates(
 
 
 def _deferred(role: Path) -> set[str]:
-    """The `manifests_deferred_files` basenames `role`'s tasks pass to its manifests include."""
-    names: set[str] = set()
-    for path in sorted((role / "tasks").glob("*.yml")):
-        for task in _tasks(yaml_fast.safe_load(path.read_text())):
-            for value in _values(
-                (task.get("vars") or {}).get("manifests_deferred_files") or []
-            ):
-                names |= {
-                    n for n in value.replace(",", " ").split() if n.endswith(".yaml")
-                }
-    return names
+    """The `manifests_deferred_files` basenames in `role`'s defaults and manifests include."""
+    declared = include_vars(role).get("manifests_deferred_files") or []
+    return {
+        n
+        for value in _values(declared)
+        for n in value.replace(",", " ").split()
+        if n.endswith(".yaml")
+    }
 
 
 def census(

@@ -49,6 +49,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from lib.k8s_roles import resolved_manifest_files
+from renderer.renderer_lib.task_inputs import render_defaults
 from lib.render_context import render_context
 from _helpers import K8S_ROLES, render_expr
 from _helpers import command_of, walk_tasks
@@ -74,7 +75,7 @@ _KNOWN_UNCOVERED: set[tuple[str, str]] = set()
 
 
 def _include_vars(role_tasks: Path) -> list[dict]:
-    """The `vars:` of every `include_role: k8s/manifests` in a role's task file.
+    """The role's render defaults and `vars:` for each `include_role: k8s/manifests` in its tasks.
 
     `manifests_service` is filled in from the role directory when the include omits it, as
     the role's own default does (#4053).
@@ -86,7 +87,13 @@ def _include_vars(role_tasks: Path) -> list[dict]:
             continue
         service = manifests_service_of(task, role)
         if service is not None:
-            out.append({**(task.get("vars") or {}), "manifests_service": service})
+            out.append(
+                {
+                    **render_defaults(role_tasks.parent.parent),
+                    **(task.get("vars") or {}),
+                    "manifests_service": service,
+                }
+            )
     return out
 
 

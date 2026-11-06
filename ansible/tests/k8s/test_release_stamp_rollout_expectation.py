@@ -376,7 +376,7 @@ def test_roles_that_roll_nothing_still_exist_in_the_tree():
     the expectation for them -- the tests below this one."""
     opted_out = {
         p.parent.parent.name
-        for p in (ANSIBLE / "roles/k8s").glob("*/tasks/main.yml")
+        for p in (ANSIBLE / "roles/k8s").glob("*/defaults/main.yml")
         if re.search(r"manifests_rollout:\s*(''|\"\")", p.read_text())
     }
     assert {"cloudflare-ddns", "observability"} <= opted_out, opted_out

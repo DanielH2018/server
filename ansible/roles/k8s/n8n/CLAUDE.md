@@ -74,7 +74,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   router. `/webhook-test/` is intentionally NOT exposed (dev-only).
 - Update both images by merging a change to their build inputs, not through Watchtower. The
   runners image `COPY`s exactly one file, `n8n-task-runners.json.j2`, staged via
-  `image_builder_context`; the context key must match the `COPY` path exactly.
+  the `image_builder_context` of its `image_builder_builds` entry; the context key must match the `COPY` path exactly.
 - **The one npm package both images add, `fuzzball`, is pinned by exact version** (#2213,
   #5391). One renovate.json regex manager reads both pins over the npm datasource and opens a
   manual PR in its own `n8n fuzzball` group; a merged bump moves both content tags, and

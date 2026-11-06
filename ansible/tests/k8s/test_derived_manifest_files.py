@@ -30,6 +30,7 @@ from lib.k8s_roles import (
     role_dirs,
 )
 from lib import yaml_fast
+from renderer.renderer_lib.task_inputs import render_defaults
 from _helpers import ANSIBLE, load_tasks
 from _role_census import role_task_files
 from _k8s_render import rendered_texts
@@ -98,14 +99,14 @@ def ansible_resolve(
 
 
 def _include_vars(role: Path) -> dict | None:
-    """The vars `role`'s tasks/main.yml passes to its render include, or None if it has none."""
+    """`role`'s render defaults and its render include's vars, or None if it has no include."""
     tasks = role / "tasks" / "main.yml"
     if not tasks.is_file():
         return None
     for task in load_tasks(tasks):
         include = task.get("ansible.builtin.include_role") or {}
         if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
-            return task.get("vars") or {}
+            return {**render_defaults(role), **(task.get("vars") or {})}
     return None
 
 

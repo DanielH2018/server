@@ -50,8 +50,8 @@ the pin is physical and never unwinds.
   tag, and the next promotion builds the image and rolls the pod.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
   They stay for the handback. The `k8s/image-builder` include became promote's `images` job
-  (D5.4a2) and the GHCR ref (D5.4b). The `k8s/manifests` include's `manifests_rollout: nut`
-  named the Deployment for the stabilisation gate and the shared restart. The Kustomization's
+  (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout: nut`
+  names the Deployment for the stabilisation gate and the shared restart. The Kustomization's
   `wait` replaces the gate, and the restart checksum the renderer stamps replaces the restart.
   Its `manifests_prune: false` still keeps the `homelab/role` label off nut's objects in the
   render. Flux's own `prune: true` tracks them by the Kustomization's inventory instead, so it

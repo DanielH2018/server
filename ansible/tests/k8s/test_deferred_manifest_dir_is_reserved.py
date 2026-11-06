@@ -20,6 +20,7 @@ Run: uv run pytest ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py
 from pathlib import Path
 
 import pytest
+from renderer.renderer_lib.task_inputs import render_defaults
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
 from _role_census import task_files
 from test_no_role_stages_files_in_a_pruned_manifest_dir import (
@@ -45,8 +46,11 @@ def deferred_dirs(roles_dir: Path) -> dict[str, str]:
         for task in walk_tasks(load_tasks(tasks_file)):
             if _included_role(task) != MANIFESTS_ROLE:
                 continue
+            role_dir = tasks_file.parent.parent
             name = str(
-                (task.get("vars") or {}).get("manifests_deferred_dir_name", "")
+                {**render_defaults(role_dir), **(task.get("vars") or {})}.get(
+                    "manifests_deferred_dir_name", ""
+                )
             ).strip()
             if name and "{{" not in name:
                 found[name] = tasks_file.parent.parent.name
