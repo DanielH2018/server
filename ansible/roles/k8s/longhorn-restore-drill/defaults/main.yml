@@ -42,7 +42,8 @@ longhorn_restore_drill_job_ttl_seconds: 172800
 # What the kubelet allows between SIGTERM at the deadline and SIGKILL. It covers one 10-second
 # poll and the four `--ignore-not-found` deletes in `cleanup`, each of which waits for its object
 # to go. The script's TERM trap runs `cleanup` through the exit, so a Job killed at the deadline
-# leaves no `restore-drill-<pvc>` Volume, PV, PVC or probe pod behind.
+# leaves no `restore-drill-<pvc>` Volume, PV, PVC or probe pod behind. The exception is a TERM
+# pending while bash parses a `$(`, which runs no trap (#7383). No grace value changes that.
 longhorn_restore_drill_grace_seconds: 300
 # A run missed by more than an hour is not made up: the next night's rotation picks another
 # volume, and the attempt stamps are what the rotation reads.
