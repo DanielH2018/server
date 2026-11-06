@@ -13,6 +13,7 @@ import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from _probe_health_fixtures import current_checkout
 from diagnostics.probe_lib import health, health_alerts
 from diagnostics.probe_lib.health_cronjob import (
     FluxRevision,
@@ -187,6 +188,7 @@ def test_run_health_routes_the_drill_through_the_schedule_gate(capsys):
         served="prod",
         tools=_tools(kustomization),
         prom=_QUIET,
+        stale_reason=current_checkout,
     )
     out = capsys.readouterr().out
     assert code == 1, out
