@@ -163,7 +163,7 @@ def test_a_common_task_file_change_reaches_the_roles_importing_it():
         "renovate_agent",
         "renovate_notify",
     }
-    assert setup_roles_for(path) == consumers | {"k3s"}
+    assert setup_roles_for(path) == consumers
     assert setup_tags_for([path]) == consumers
 
 
@@ -187,7 +187,7 @@ def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file
     does not print the resolv.conf remediation for it."""
     path = "ansible/roles/setup/common/templates/check-timer.timer.j2"
     consumers = {"gitops_deploy", "initial_setup", "render_records"}
-    assert setup_roles_for(path) == consumers | {"k3s"}
+    assert setup_roles_for(path) == consumers
     assert setup_tags_for([path]) == consumers
 
 
