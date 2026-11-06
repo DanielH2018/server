@@ -62,7 +62,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   verifies both fences after every apply; Flux runs it in the `n8n-verify` Kustomization once
   `n8n` reads Ready. `n8n_runner_auth_token` is the second layer, not the only one.
   `job.yaml.j2` carries the Job's caller census.
-- **Config in:** `defaults/main.yml` — images, sizing, claims and the auto-deploy stance. The
+- **Config in:** `defaults/main.yml` — images, sizing, claims and the automerge stance. The
   `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml` selects the role, and
   carries deploy metadata only.
 

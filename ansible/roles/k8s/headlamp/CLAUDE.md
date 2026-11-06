@@ -13,8 +13,8 @@ groups it doesn't cover. See repo-root `CLAUDE.md`.
 - **Claims:** none (no PVC)
 <!-- /generated_from -->
 
-- **Eligible for auto-deploy because** it is a stateless RollingUpdate Deployment with a
-  readinessProbe and a digest-pinned image.
+- **Renovate may automerge its image bumps** (`k8s_autodeploy: true`), because it is a stateless
+  RollingUpdate Deployment with a readinessProbe and a digest-pinned image.
 - **RBAC:** `templates/rbac.yaml.j2` grants the built-in `view` ClusterRole plus
   `headlamp_k8s_crd_api_groups` (`traefik.io`, `metallb.io`, `longhorn.io`, `helm.cattle.io`,
   `k3s.cattle.io`). The only CRD groups `view` covers on its own are Flux's six, which the

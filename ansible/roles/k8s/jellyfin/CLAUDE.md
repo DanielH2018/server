@@ -44,9 +44,9 @@ the Trakt and SSO-Auth decisions, and why the snapshot cap is the number it is.
   literal, so moving the VIP is an edit to that rule too.
 
 ## Notable
-- `k8s_autodeploy: true` despite `Recreate` + RWO storage — the pre-apply Longhorn snapshot
-  `k8s/volume-snapshot` takes on `jellyfin-config` (restorable by `k8s/volume-revert`) is what makes
-  that safe. `media-data` is mounted but **not** covered by that revert.
+- `k8s_autodeploy: true` lets Renovate automerge an image bump despite `Recreate` + RWO storage —
+  the pre-apply Longhorn snapshot `k8s/volume-snapshot` takes on `jellyfin-config` (restorable by
+  `k8s/volume-revert`) is what makes that safe. `media-data` is mounted but **not** covered by that revert.
 - **The `jellyfin-prepull` Kustomization pulls the images before the `Recreate`**, so the old pod
   serves through a 340 MB pull from GHCR (`flux_prepull_timeout` in `defaults/main.yml`, #5855).
   The pull Job copies the pod's placement, so the pod names its node with a required affinity
@@ -120,5 +120,5 @@ behind a PVC that is itself capped.
   together (#1560). That is why the cap is deliberately loose rather than tuned to usage; the docs
   page has the headroom measurement.
 - **The pre-apply snapshot stays armed.** `k8s_autodeploy: true` is justified *by* that snapshot in
-  `k8s_autodeploy_reason`, so disarming it means turning auto-deploy off for the fleet's only GPU
-  workload — a much larger trade than bounding backend growth.
+  `k8s_autodeploy_reason`, so disarming it means turning Renovate's automerge off for the fleet's
+  only GPU workload — a much larger trade than bounding backend growth.

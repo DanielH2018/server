@@ -21,17 +21,13 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 - **GitOps:** `ansible/roles/setup/gitops_deploy/` installs a 10-min systemd timer that fetches
   origin/master, waits for a green CI verdict on the tip, maps each changed path to a service or a
   plane, ff-merges, and applies what it may. Pure decision logic is in
-  `files/deployer_lib/deploy_logic.py` (unit-tested in `tests/test_deploy_*.py`). A setup-plane
-  change applies as `initial_setup.yml` and a deploy-plane change (shared templates / inventory /
-  common / deploy.yml) as `deploy.yml`; only the bring-up playbooks park for a manual run.
-  **A k8s role auto-deploys only for an image-pin bump** to a service its own `k8s_autodeploy`
-  declaration leaves eligible; every other k8s role change defers and alerts, which is
-  deliberate. A failed k8s deploy fails the play's rollout gate, and the deployer then writes
-  `hold_sha` and redeploys the prior pin. So an automerged image PR for an eligible
-  Ansible-owned role is deployed by a later tick, within `gitops_deploy_k8s_autodeploy_max_per_tick`,
-  and health-gated; it does not sit undeployed on master. A flux-owned role (`owner` set on its
-  `containers_list` entry) is applied by Flux instead, and a denylisted role's PR opens as
-  `manual —` rather than automerging.
+  `files/deployer_lib/deploy_logic.py` (unit-tested in `tests/test_deploy_*.py`). The tick applies
+  the host plane only: a setup-plane change applies as `initial_setup.yml`, a failed apply writes
+  `hold_sha` and leaves the tree fast-forwarded, and the bring-up playbooks park for a manual run.
+  **`promote` and Flux apply every k8s change**, an image-pin bump and a deploy-plane path (shared
+  templates / inventory / deploy.yml) included, and `land.sh` waits on that promotion. So an
+  automerged image PR does not sit undeployed on master. `k8s_autodeploy` says only whether
+  Renovate may automerge an image bump: a denylisted role's PR opens as `manual —`.
 - **Updates:** Renovate (`renovate.json`) manages version-pinned images + custom regex managers
   (compose tags, prek.toml, galaxy collections, the CI prek pin, and the k8s-defaults manager for
   every `*_image:` var in `ansible/roles/k8s/*/defaults/main.yml`). **Watchtower is retired** —
@@ -46,7 +42,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   plane" packageRule automerges `digest`/`pinDigest` updates with a 3-day `minimumReleaseAge` and
   `minimumReleaseAgeBehaviour: timestamp-optional`. A digest with no release timestamp (GHCR, any
   channel tag) therefore raises at once instead of stalling. The services whose regression is
-  expensive are kept off auto-deploy, which keeps their digest PRs manual
+  expensive declare `k8s_autodeploy: false`, which keeps their digest PRs manual
   (`ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py` holds that fence
   and its `DECIDED:` marker). A `:latest@sha256:` pin is therefore not unpinned, floating or
   untracked. Re-pinning it to a version tag is not a required fix; many channel tags have no
@@ -66,7 +62,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
    run the audit before claiming a gap. Many apparent gaps are already handled.
 2. Localize: CI coverage (untested critical logic, a missing hook), Renovate manager coverage (an
    updatable image/pin not tracked → ages silently), watchtower update-policy correctness, GitOps
-   robustness + failure handling (rollback, dirty-tree, broad-change defer), secret-registry
+   robustness + failure handling (hold, dirty-tree, bring-up park), secret-registry
    completeness vs the live secret names, Ansible idempotency/lint, notification reliability.
 3. Report each with the source `file:line` + a concrete fix.
 4. A finding that rests on config you could not read (a regex, a packageRule, a file outside
