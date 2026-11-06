@@ -269,10 +269,8 @@ def comment_only_k8s_defaults(paths, old_ref: str, new_ref: str, show) -> set[st
     """The k8s role `defaults/` files whose change between two refs is comments only (#4460).
 
     A caller drops the paths returned here before classifying, as it drops
-    `comment_only_broad_changes`'s. It moved here from `deploy_k8s.py` when D6.12 deleted that
-    module, because three kept readers ask it: `deploy_phases.plan_tick`,
-    `deploy_lib/tags.py:comment_only` and the release-staleness census
-    (`probe_lib/releases_diff.py:drop_comment_only_defaults`).
+    `comment_only_broad_changes`'s. Its readers are `deploy_phases.plan_tick` and
+    `deploy_lib/tags.py:comment_only`.
 
     Kept apart from `comment_only_broad_changes` rather than widening
     `_COMMENT_ONLY_PREFIXES`: land.sh's plane note and the `blockers` verdict read that one,
