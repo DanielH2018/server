@@ -11,19 +11,14 @@
 # permanent drift. The comparison therefore happens one level up, on the source, against a
 # sha256 the rendering run stamped (roles/setup/common/tasks/stamp_render.yml).
 #
-# WHY A SOURCED LIBRARY rather than two copies of these loops. manifest-prune-check.sh runs only
-# on k3s server nodes (health-crons.yml is imported by the k3s role, which k3s-bringup.yml
-# asserts onto k3s_server_hosts), so daniel-server — which renders the whole UPS shutdown chain —
-# had no reader at all. A second implementation there would be free to drift from this one, and
-# the fault these arms exist to catch is precisely two copies of a thing disagreeing. Same
-# reasoning, and the same /usr/local/lib home, as homelab-check-lib.sh.
+# setup-drift-check.sh is the one live caller. The disarmed manifest-prune-check.sh.j2 still
+# sources this file until D6.18 deletes it. Same /usr/local/lib home as homelab-check-lib.sh.
 #
 # Callers set REPO_DIR and then call setup_drift_scan. It sets four globals rather than printing:
 #   DRIFTED  comma-joined arm-2 offenders, empty when clean
 #   STALE    comma-joined arm-3 offenders, empty when clean
 #   DEPLOYED_NOTE / MANIFEST_NOTE  an "unarmed" note per arm, empty when the arm has entries
-# The caller owns the message wording and the push, because the two callers word them
-# differently and one of them has a third arm of its own.
+# The caller owns the message wording and the verdict.
 
 DEPLOYED_MANIFEST_DIR=${DEPLOYED_MANIFEST_DIR:-/var/lib/homelab/setup-deployed-manifest.d}
 RENDER_MANIFEST_DIR=${RENDER_MANIFEST_DIR:-/var/lib/homelab/setup-render-manifest.d}

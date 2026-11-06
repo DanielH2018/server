@@ -102,4 +102,6 @@ Derived from the paths the issues cite, by the tools that decide them; a change 
 other paths deploys and tests by those too.
 - Deploy, as `land.sh` classifies these paths: {deploy_line(paths)}.
 - Tests covering the cited modules: {run}.
+- Repo-wide guards, which those tests do not reach: run
+  `uv run python scripts/dev/repo_guards.py` once before `gh pr create`.
 """
