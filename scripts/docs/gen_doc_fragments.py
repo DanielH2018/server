@@ -163,7 +163,6 @@ def _autodeploy_coverage() -> tuple[str, list[str]]:
     eligible, denied, not_declaring = autodeploy_stances()
     return render_autodeploy_coverage(eligible, denied, not_declaring), [
         "scripts/dev/k8s_autodeploy_counts.py",
-        "scripts/lib/k8s_roles.py",
     ]
 
 
