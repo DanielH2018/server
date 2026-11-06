@@ -132,7 +132,7 @@ if str(FILTER_PLUGINS) not in _sys.path:
 from secret_stubs import homelab_stub_keys, homelab_unstubbed_keys
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
-# The cluster file that `cluster_vars.py write` keeps. The bundle's copy keeps its basename.
+# The cluster file `cluster_vars.py write` keeps. The bundle's copy keeps its basename.
 CLUSTER_FILE = ANSIBLE / "vars" / CLUSTER_VARS_FILE
 # Each cluster key's ciphertext digest, which `checksum/restart` hashes in place of a value.
 SOURCE_FILE = ANSIBLE / "vars" / "cluster-vars.source"
