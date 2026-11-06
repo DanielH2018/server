@@ -325,6 +325,27 @@ def test_backup_tier_claimname_reference_finds_the_class_in_the_declaring_role(
     assert row.backup_tier == "not Longhorn (media-local)"
 
 
+def test_backup_tier_claim_named_by_a_shell_variable_has_no_declared_tier(tmp_path):
+    # A class that alone reads as the default group must not give a runtime claim that tier.
+    paths = make_repo(tmp_path)
+    assert _jellyfin_tier(paths, _pvc_block("${DRILL}", "longhorn-static")) == (
+        "no declared tier (runtime claim named by a shell variable)"
+    )
+
+
+def test_the_restore_drill_reports_its_claim_with_no_declared_tier():
+    """Named member, against the real tree: the shell script's PVC manifest is what the
+    scanner must keep finding, so a pattern that stopped matching fails here by name."""
+    pairs = claim_tiers(
+        K8S_ROLES / "longhorn-restore-drill",
+        k8s_namespace="homelab",
+        tiers=LonghornTiers(),
+    )
+    assert pairs == [
+        ("${DRILL}", "no declared tier (runtime claim named by a shell variable)")
+    ]
+
+
 def test_claim_tiers_pairs_every_claim_with_its_tier_in_mount_order(tmp_path):
     """The per-claim form `gen_role_glance.py` prints: one pair per claim, references
     first, an unresolvable name kept as written, and no de-duplication of equal tiers."""
