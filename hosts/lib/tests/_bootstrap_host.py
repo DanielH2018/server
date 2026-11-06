@@ -57,7 +57,7 @@ esac
 K3S_BINARY = "#!/bin/sh\necho 'k3s version v1.37.1+k3s1'\n"
 # `uv run ... render --out DIR` writes the three packages at the paths the renderer uses, with
 # homelab-tools under its architecture; the anchor call exits ANCHOR_EXIT; the first
-# VENV_FAILURES `python --version` calls fail.
+# VENV_FAILURES `python --version` calls fail; `fetch-tools` lists its cache in tools-cache.listing.
 UV_STUB = """#!/bin/sh
 echo "$PWD: $*" >> "$HOMELAB_ROOT/uv.calls"
 case "$*" in
@@ -69,6 +69,9 @@ case "$*" in
         for dir in packages/homelab-tools/amd64 packages/homelab-updater hosts/daniel-box; do
             mkdir -p "$out/$dir"; : > "$out/$dir/nfpm.yaml"
         done ;;
+    *" fetch-tools "*)
+        for arg; do [ "$prev" = --cache ] && cache=$arg; prev=$arg; done
+        ls "$cache" > "$HOMELAB_ROOT/tools-cache.listing" ;;
 esac
 """
 NFPM_STUB = """#!/bin/sh

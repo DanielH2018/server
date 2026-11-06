@@ -6,9 +6,9 @@ These cases run it as root in the test image, booted with systemd as PID 1 and n
 host, so apt resolves the packages' real `Depends`, the real k3s installer writes its unit, and
 systemd loads that unit:
 
-  * `--local-build` on a container named after each host the script knows. It fetches nfpm, uv,
-    uv's packages and, on a cluster node, k3s from the network, then builds the three packages
-    from a scratch clone of the checkout.
+  * `--local-build` on a container named after each host the script knows. `--tools-seed` gives
+    it the pins the kit's tools-cache holds, and it fetches uv's packages and, on a cluster node,
+    k3s from the network, then builds the three packages from a scratch clone of the checkout.
   * `--local-build --offline <kit>` on daniel-box, in a container with no network at all, which
     is stricter than the spec's unresolvable GitHub and GHCR hostnames. The kit is stocked on the
     runner from the script's own pins. Its output says the clone is unchecked.
@@ -80,6 +80,7 @@ fi
 exec /usr/bin/apt-get "$@"
 """
 COPY = "/root/bootstrap"
+TOOLS_SEED = "/srv/tools-seed"
 # A join address and token for the agent, which the installer writes and nothing contacts.
 AGENT_ENV = "K3S_URL=https://192.0.2.10:6443 K3S_TOKEN=bootstrap-case-token"
 UNITS = {"daniel-box": "k3s.service", "daniel-server": "k3s-agent.service"}
@@ -264,13 +265,26 @@ def install_apt_shim(c: Container) -> None:
     c.ok("chmod 0755 /usr/local/sbin/apt-get")
 
 
+def seed_kit(cases, kit: Path) -> Path:
+    """Copy the job's tools cache into the kit, and return where the kit's downloads cache.
+
+    A pin the build job fetched then costs no request. Each use checks the file against its pin
+    again, so a bad entry is fetched anew rather than installed.
+    """
+    if cases.tools_cache is None:
+        return cases.work / "bootstrap-kit-downloads"
+    shutil.copytree(cases.tools_cache, kit / "tools-cache")
+    return cases.tools_cache
+
+
 def stock_kit(cases, clone: Path, kit: Path) -> Path:
     """The break-glass kit for amd64, as `docs/break-glass.md`, item 8, lists it."""
     shutil.rmtree(kit, ignore_errors=True)
     kit.mkdir(parents=True)
     script = SCRIPT.read_text()
+    downloads = seed_kit(cases, kit)
     for name, (url, sha256) in kit_pins(script).items():
-        _download(url, sha256, kit / name, cases.work / "bootstrap-kit-downloads")
+        _download(url, sha256, kit / name, downloads)
     # The script checks k3s against the kit's own checksum list, so a stand-in that answers
     # `--version` at the pin stands for the 70 MB binary.
     k3s = f'#!/bin/sh\necho "k3s version {script_value(script, "K3S_VERSION")}"\n'
@@ -328,14 +342,25 @@ def stock_kit(cases, clone: Path, kit: Path) -> Path:
 class Bootstrap:
     """One run of the script in a fresh container named after its host."""
 
-    def __init__(self, cases, host: str, clone: Path, kit: Path | None, label: str):
+    def __init__(
+        self,
+        cases,
+        host: str,
+        clone: Path,
+        kit: Path | None,
+        label: str,
+        seed: Path | None = None,
+    ):
         mounts = (f"{clone}:/srv/clone:ro",)
+        if seed is not None:
+            mounts += (f"{seed}:{TOOLS_SEED}:ro",)
         if kit is not None:
             # Every kit at its own path: a red kit links into the green one, and uv-python's
             # interpreter links name absolute paths.
             kits = kit.parent
             mounts += (f"{kits}:{kits}",)
         self.cases, self.host, self.clone, self.kit = cases, host, clone, kit
+        self.seed = seed
         self.container = Container(
             cases.image,
             f"homelab-host-test-bootstrap-{label}",
@@ -360,6 +385,8 @@ class Bootstrap:
         flags = "--local-build /srv/clone"
         if self.kit is not None:
             flags += f" --offline {self.kit}"
+        if self.seed is not None:
+            flags += f" --tools-seed {TOOLS_SEED}"
         return c.sh(f"{env} sh {COPY}/bootstrap-host.sh {self.host} {flags}", 1800)
 
     def unit_problems(self) -> list[str]:
@@ -467,6 +494,7 @@ class Planned(NamedTuple):
         clone: Which scratch clone the run builds: "green", or "red-depends" for `red_clone`'s.
         apt_says: What apt must print when a red run's refusal is apt's; None when the
             refusal comes before any install.
+        seed: The directory `--tools-seed` reads, or None for an offline run, which has the kit.
     """
 
     name: str
@@ -477,6 +505,7 @@ class Planned(NamedTuple):
     refusal: str | None
     clone: str = "green"
     apt_says: str | None = None
+    seed: Path | None = None
 
 
 def plan(work: Path, green: Path) -> list[Planned]:
@@ -490,6 +519,7 @@ def plan(work: Path, green: Path) -> list[Planned]:
             None,
             ANCHOR_ACCEPTS,
             None,
+            seed=green / "tools-cache",
         )
         for host in script_value(script, "HOSTS").split()
     ]
@@ -558,7 +588,7 @@ def run(cases) -> None:
         return
     for item in planned:
         bootstrap = Bootstrap(
-            cases, item.host, clones[item.clone], item.kit, item.label
+            cases, item.host, clones[item.clone], item.kit, item.label, item.seed
         )
         if item.refusal is not None:
             body = functools.partial(

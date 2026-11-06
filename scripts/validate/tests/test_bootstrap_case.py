@@ -14,6 +14,7 @@ import subprocess
 import time
 import urllib.error
 from pathlib import Path
+from types import SimpleNamespace
 from typing import ClassVar
 
 import pytest
@@ -66,6 +67,8 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     assert {"daniel-box", "daniel-server", "daniel-pi"} <= set(online)
     assert online == case.script_value(SCRIPT, "HOSTS").split()
     assert all(p.marker == case.ANCHOR_ACCEPTS for p in planned if p.kit is None)
+    assert all(p.seed == green / "tools-cache" for p in planned if p.kit is None)
+    assert all(p.seed is None for p in planned if p.kit is not None)
     offline = [(p, p.kit) for p in planned if p.kit is not None]
     assert [(kit.name, p.refusal is None) for p, kit in offline] == [
         ("green", True),
@@ -208,6 +211,30 @@ def test_a_boot_that_reads_offline_before_systemd_starts_waits_for_it(
     Container("img", "c", tmp_path).boot("3.12")
 
 
+def test_an_online_run_mounts_its_seed_and_names_it_to_the_script(
+    monkeypatch, tmp_path
+):
+    commands = []
+
+    def fake_sh(self, command, timeout=None):
+        commands.append(command)
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(Container, "boot", lambda self, python: None)
+    monkeypatch.setattr(Container, "ok", lambda self, command: "")
+    monkeypatch.setattr(Container, "sh", fake_sh)
+    cases = SimpleNamespace(image="img", work=tmp_path, python="3.12")
+    seed = tmp_path / "seed"
+
+    run = case.Bootstrap(cases, "daniel-box", tmp_path, None, "box", seed)
+    run.run()
+
+    assert f"{seed}:{case.TOOLS_SEED}:ro" in run.container.mounts
+    assert commands[-1].endswith(
+        f"--local-build /srv/clone --tools-seed {case.TOOLS_SEED}"
+    )
+
+
 def test_the_host_packages_job_runs_the_bootstrap_cases():
     assert "bootstrap_case.run(cases)" in Path(host_package_cases.__file__).read_text()
 
@@ -324,6 +351,38 @@ def test_a_kit_download_retries_a_504_and_lands_at_its_name(tmp_path):
         sleep=lambda _: None,
     )
     assert dest.read_bytes() == body
+
+
+def test_a_kit_seeded_from_the_job_s_cache_reads_a_pin_with_no_request(tmp_path):
+    body = b"binary"
+    digest = hashlib.sha256(body).hexdigest()
+    seed = tmp_path / "seed"
+    seed.mkdir()
+    (seed / digest).write_bytes(body)
+    kit = tmp_path / "kit"
+    kit.mkdir()
+    cases = SimpleNamespace(tools_cache=seed, work=tmp_path / "work")
+
+    def refuse_a_request(request, timeout=None):
+        raise AssertionError(f"requested {request.full_url}")
+
+    dest = kit / "nfpm.tar.gz"
+    case._download(
+        "https://example.invalid/nfpm.tar.gz",
+        digest,
+        dest,
+        case.seed_kit(cases, kit),
+        refuse_a_request,
+    )
+    assert dest.read_bytes() == body
+    assert (kit / "tools-cache" / digest).read_bytes() == body
+
+
+def test_a_kit_with_no_job_cache_downloads_into_its_own_directory(tmp_path):
+    cases = SimpleNamespace(tools_cache=None, work=tmp_path / "work")
+
+    assert case.seed_kit(cases, tmp_path) == tmp_path / "work/bootstrap-kit-downloads"
+    assert not (tmp_path / "tools-cache").exists()
 
 
 def test_a_kit_download_differing_from_its_pin_is_flagged(tmp_path):
