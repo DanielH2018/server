@@ -49,7 +49,6 @@ DEPLOY_PLANE_RULES = frozenset(
         "_filter_tags",
     }
 )
-K8S_READINGS = frozenset({"k8s_lookup_readers", "k8s_roles_holding"})
 
 SECRETS = "ansible/vars/secrets.yml"
 SETUP_READER = "ansible/roles/setup/claude_code/templates/env.j2"
@@ -211,16 +210,6 @@ def test_no_module_keeps_a_deploy_plane_rule():
         if (found := _top_level_defs(rel) & DEPLOY_PLANE_RULES)
     }
     assert kept == {}
-
-
-def test_reach_holds_no_k8s_reading():
-    tree = ast.parse((REPO / REACH).read_text(encoding="utf-8"))
-    names = {
-        getattr(node, "attr", None) or getattr(node, "id", None)
-        for node in ast.walk(tree)
-    }
-    assert "services_from_changed_paths" in names
-    assert not names & K8S_READINGS
 
 
 def test_a_narrow_lib_module_that_stays_holds_the_moved_symbols():

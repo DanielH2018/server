@@ -25,8 +25,7 @@ to the importers of `alert_unit.yml` the same way. The release pruner `scripts/d
 `tasks/release_bin.yml` copies from the checkout, routes to that file's importer, `k3s` (#6411). No k8s role imports
 `install_host_lib.yml` or `stamp_deployed.yml` since H2.5c. A change to `host_lib.py`
 moves the render of `configarr` and `janitorr`, whose health CronJobs stage the file into their
-ConfigMaps (`K8S_ROLES_IMPORTING_SETUP_FILES` in `deploy_cross_role`, #3320), and `promote` applies
-it; the tick applies no k8s role since D6.12. `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
+ConfigMaps, and `promote` applies it; the tick applies no k8s role since D6.12. `resolv.conf.j2` still records `common`, for the reason its `DECIDED:` marker in
 `deploy_cross_role` gives. For that, `land.sh` names each consumer's playbook and tag, then the
 `gitops_state.py clear-owed manual_plane common` that clears the deployer's marker.
 

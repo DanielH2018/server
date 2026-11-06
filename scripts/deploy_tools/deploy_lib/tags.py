@@ -453,8 +453,8 @@ def changed(
         )
 
     records = service_records(cwd / HOST_VARS.relative_to(REPO))
-    tags = sorted(set(cs.k8s) & {r.tag for r in records if r.platform != "k8s"})
-    for tag in sorted(set(cs.k8s) & {r.tag for r in records if r.platform == "k8s"}):
+    tags = sorted(cs.flux & {r.tag for r in records if r.platform != "k8s"})
+    for tag in sorted(cs.flux & {r.tag for r in records if r.platform == "k8s"}):
         print(f"{PROG}: --changed: left out {k8s_note(tag)}.", file=sys.stderr)
     if not tags:
         print(

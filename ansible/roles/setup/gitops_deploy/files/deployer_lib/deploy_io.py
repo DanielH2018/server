@@ -53,7 +53,6 @@ from deployer_lib.deploy_failtext import (  # noqa: F401 — re-exported for `de
     tail,
     timeout_detail,
 )
-from deployer_lib.deploy_inventory import service_owners
 from deployer_lib.deploy_locks import locked_budget
 from deployer_lib.deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
 
@@ -222,39 +221,6 @@ def host_vars_text(repo: str, hostname: str) -> str | None:
         # Both callers read None as "no host_vars", which is a gate's answer, so say why (#6161).
         log(f"host_vars: cannot read {path}, read as absent: {exc}", level=WARNING)
         return None
-
-
-def host_vars_owners(
-    config: Config, ref: str, *, run: Callable[..., str]
-) -> tuple[str, dict[str, str]]:
-    """This host's host_vars text in the checkout, and `service_owners` of the file at `ref`.
-
-    The text is `""` when the checkout's file cannot be read. The owners are read at `ref`,
-    the commit being applied, with `git show` rather than from the checkout, because
-    `plan_tick` runs before the ff-merge and the range that sets `owner` on an entry must
-    already skip that entry's tag.
-
-    Raises:
-        ValueError: from `service_owners`, for an `owner` value outside its two.
-    """
-    checkout = host_vars_text(config.repo, config.hostname) or ""
-    path = f"ansible/inventory/host_vars/{config.hostname}.yml"
-    try:
-        text = run(["git", "show", f"{ref}:{path}"], cwd=config.repo)
-    except Exception as exc:
-        # DECIDED: an unreadable file at `ref` falls back to the checkout, not to "every tag
-        # is Ansible-owned". The checkout is the last commit a tick applied, so it carries
-        # every `owner` an earlier range merged, and a tag Flux already applies stays
-        # dropped. Only an `owner` added in this very range is missed, and that tag then
-        # takes the Ansible path for one tick, as every tag did before D2.2. An empty mapping
-        # would instead hand every Flux-owned tag back to Ansible.
-        log(
-            f"owners: could not read {path} at {ref[:8]} ({exc}) — reading ownership "
-            "from the checkout",
-            level=WARNING,
-        )
-        text = checkout
-    return checkout, service_owners(text)
 
 
 # ── deploying ─────────────────────────────────────────────────────────────────────────────────

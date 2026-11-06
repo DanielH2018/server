@@ -52,8 +52,7 @@ to the file, and `claude_code` reads one of its keys.
 
 ANY DOUBT IS A REFUSAL, and the caller falls back to the role tag. A tag that matches nothing
 makes Ansible exit 0 having applied nothing — the silent-success failure
-`deploy_changes.setup_tags_for` and `deploy_remediation.k8s_remediation` both already guard
-against — so a derivation that is not certain must widen rather than narrow. A task file with
+`deploy_changes.setup_tags_for` already guards against — so a derivation that is not certain must widen rather than narrow. A task file with
 no `tags:` of its own is the sharpest case: its tasks inherit from wherever it is imported,
 so a hit there says nothing about which tag selects it. A tag must also be REACHABLE in the
 playbook the remediation prints: the role has to sit in that playbook's `roles:`, and the task

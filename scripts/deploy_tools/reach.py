@@ -112,7 +112,7 @@ class Reach(NamedTuple):
 
     Attributes:
       changes: the deployer's own `ChangeSet` over the loud paths. `.setup_roles`,
-        `.broad_deploy`, `.secrets` and `.k8s` are what the callers read off it.
+        `.broad_deploy`, `.secrets` and `.flux` are what the callers read off it.
       manual: the loud paths under `_BROAD_MANUAL_PREFIXES`. These are the bring-up
         playbooks, which run by hand by construction and park the tick outright.
       loud: the path list with the quiet paths removed, in input order.
@@ -131,11 +131,11 @@ class Reach(NamedTuple):
     def touched(self, repo: Path | str = REPO) -> set[str]:
         """Every role whose rendered output a loud path could change.
 
-        The `ChangeSet`'s k8s roles, plus each role importing a changed `files/*.py` another
+        The `ChangeSet`'s k8s roles (`flux`), plus each role importing a changed `files/*.py` another
         role owns. Wider than `tags` by design: being behind on an import consumer still
         renders an old file.
         """
-        return self.changes.k8s | shared_module_consumers(self.loud, repo)
+        return self.changes.flux | shared_module_consumers(self.loud, repo)
 
 
 def reach(paths, quiet=()) -> Reach:

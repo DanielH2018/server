@@ -11,7 +11,6 @@ Each takes the tick's `tools`, `state` and `config` — the `deploy_config.Confi
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
 
-from deployer_lib import deploy_inventory
 from deployer_lib import deploy_io
 from deployer_lib import deploy_cross_role
 from deployer_lib import deploy_defer
@@ -242,15 +241,13 @@ def plan_tick(
         tools, config, target.origin, services_from_changed_paths(paths), paths
     )
     deploy_defer.route_key_readers(tools, config, target, cs)
-    _, owners = deploy_io.host_vars_owners(config, target.origin, run=tools.run)
-    deploy_inventory.route_not_ansible_owned(cs, owners)
     for tag in sorted(cs.flux):
         reached = [p for p in paths if p.startswith(f"ansible/roles/k8s/{tag}/")]
         log(
-            f"flux: {tag}: owned by {owners[tag]} at {target.origin[:8]} — fast-forwarding "
-            f"{', '.join(sorted(reached))}; promote applies it, so this tick does not (D2.2)"
+            f"flux: {tag}: fast-forwarding {', '.join(sorted(reached))}; "
+            "promote applies it, so this tick does not"
         )
-    return TickPlan(cs=cs, paths=paths, owners=owners)
+    return TickPlan(cs=cs, paths=paths)
 
 
 def _adopt_incoming_cross_role_tables(

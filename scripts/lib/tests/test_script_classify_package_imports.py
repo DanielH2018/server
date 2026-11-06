@@ -114,8 +114,8 @@ def test_a_guardless_module_a_role_ships_is_a_library(tmp_path):
 
 
 def test_a_guardless_module_a_roles_python_table_names_is_a_library(tmp_path):
-    """The deployer keys `K8S_BUILD_CONTEXT_FILES` by `obs_api.py`'s path (#4840), which the
-    argv reading of a `.py` file takes for a run."""
+    """The deployer keys `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` by module paths, which the argv
+    reading of a `.py` file takes for a run."""
     repo, scripts = _package(tmp_path, '"""Summary."""\n')
     _shipped_by_a_role(repo, '"""Summary."""\nVALUE = 1\n')
     lib = repo / "ansible" / "roles" / "setup" / "svc" / "files" / "pkg"

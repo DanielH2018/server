@@ -25,12 +25,9 @@ from deployer_lib.deploy_changes import (
 from deployer_lib.deploy_remediation import (
     broad_budget_ok,
     broad_remediation,
-    k8s_remediation,
     manual_plane_remediation,
     maximal_tag_warning,
 )
-
-_K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
 
 
 def test_broad_remediation_deploy_only_names_deploy_yml():
@@ -138,63 +135,6 @@ def test_broad_remediation_names_the_branch_it_is_given():
     assert "origin/master" in broad_remediation(False, True)
 
 
-def _prescribed_tags(msg: str) -> set[str]:
-    """Every tag the remediation message actually tells an operator to pass to --tags."""
-    out: set[str] = set()
-    for chunk in msg.split("--tags ")[1:]:
-        out.update(t for t in chunk.split("`")[0].strip().split(",") if t)
-    return out
-
-
-def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
-    """The alert must not name `--tags <role>` for a role with no containers_list entry.
-
-    deploy.yml includes k8s roles per containers_list entry with tags: [<entry name>], so a tag
-    matching no entry selects nothing and Ansible EXITS 0 — the operator runs the prescribed
-    command, sees green, and the change is never applied. Those roles are the shared plane
-    (manifests is the apply+rollout path for every workload; volume-revert is the auto-deploy
-    rollback path).
-
-    Cross-checked against scripts/deploy_tools/deploy_tags.known_tags(), the same source ./scripts/deploy.sh
-    validates against, so the alert and the wrapper cannot drift apart.
-    """
-
-    from deploy_tools.deploy_lib import tags as deploy_tags
-
-    declared = deploy_tags.known_tags()
-    roles = {p.name for p in _K8S_ROLES_DIR.iterdir() if p.is_dir()}
-    shared = roles - declared
-    assert shared, (
-        "expected some roles/k8s/ dirs to have no deploy tag; if this is now empty the "
-        "remediation split is dead code and can be removed"
-    )
-
-    # An all-shared set must prescribe a full deploy and prescribe no tags at all. Asserting on
-    # PRESCRIBED tags rather than the literal string "--tags", which also appears in the message's
-    # own explanation of why a tag-scoped redeploy would not work.
-    msg = k8s_remediation(shared, declared)
-    assert _prescribed_tags(msg) == set(), (
-        "k8s_remediation prescribed a --tags redeploy for roles with no containers_list "
-        "entry: %s" % sorted(shared)
-    )
-    assert "`uv run ansible-playbook ansible/deploy.yml`" in msg
-
-    # A declared role still gets the cheap scoped form.
-    one = sorted(roles & declared)[:1]
-    if one:
-        scoped = k8s_remediation(set(one), declared)
-        assert "--tags %s" % one[0] in scoped
-
-    # Every tag the mixed form prescribes must itself be deployable, and the shared roles must
-    # still get the full-deploy instruction alongside.
-    mixed = k8s_remediation(shared | set(one), declared)
-    assert _prescribed_tags(mixed) <= declared, (
-        "the mixed form prescribed undeployable tags: %s"
-        % sorted(_prescribed_tags(mixed) - declared)
-    )
-    assert "`uv run ansible-playbook ansible/deploy.yml`" in mixed
-
-
 def test_a_shared_module_edit_names_every_consumer_role():
     """`role_of` maps a path to the role whose directory holds it, which is right for a
     manifest and wrong for a shared library. bridge/common.py lives under monitor-bridge and
@@ -207,28 +147,7 @@ def test_a_shared_module_edit_names_every_consumer_role():
         "the deployer cannot see that autofix-bridge imports bridge.common, so a shared "
         "edit ff-merges leaving its ConfigMap stale: %s" % sorted(consumers)
     )
-    assert "monitor-bridge" not in consumers, "the owning role is already in cs.k8s"
-
-    declared = {"monitor-bridge", "autofix-bridge"}
-    assert (
-        _prescribed_tags(k8s_remediation({"monitor-bridge"}, declared, consumers))
-        == declared
-    )
-
-
-def test_a_consumer_this_host_does_not_declare_is_not_escalated():
-    """Intersect with `declared` BEFORE the union.
-
-    A consumer absent from this host's containers_list has no deploy tag here, so folding it in raw
-    would land it in `shared` and escalate a scoped `--tags` into "run a full deploy" -- for a role
-    this host does not deploy at all.
-    """
-    declared = {"monitor-bridge"}
-    msg = k8s_remediation({"monitor-bridge"}, declared, {"autofix-bridge"})
-    assert _prescribed_tags(msg) == {"monitor-bridge"}
-    assert "`uv run ansible-playbook ansible/deploy.yml`" not in msg, (
-        "an undeclared consumer escalated the instruction to a full deploy: %s" % msg
-    )
+    assert "monitor-bridge" not in consumers, "the owning role is already in cs.flux"
 
 
 def _k8s_tree(tmp_path, files):
@@ -394,7 +313,7 @@ def test_every_narrower_tag_the_warning_names_exists_in_the_role():
     """The warning points at real tags, or it sends an operator after a no-op.
 
     `--tags <nothing>` makes Ansible exit 0 having run no task, which is the silent-success
-    failure `setup_tags_for` and `k8s_remediation` both exist to avoid. The tag list is a
+    failure `setup_tags_for` exists to avoid. The tag list is a
     module constant rather than prose this test re-parses, so a tag renamed in `tasks/`
     breaks this and a reworded warning does not.
     """

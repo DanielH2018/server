@@ -62,11 +62,9 @@ CORPUS = (
 def _shared_roles(path: str) -> set[str]:
     """The role(s) the deployer's shared mapper attributes one path to.
 
-    `k8s` is the one service-bearing field left: the tick applies no k8s role, and `flux`
-    only moves names out of it after `services_from_changed_paths` returns.
+    `flux` is the one service-bearing field left: the tick applies no k8s role.
     """
-    cs = services_from_changed_paths([path])
-    return set(cs.k8s)
+    return services_from_changed_paths([path]).flux
 
 
 def test_the_two_mappers_name_the_same_role_for_every_corpus_path():

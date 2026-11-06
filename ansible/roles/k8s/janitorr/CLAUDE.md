@@ -105,8 +105,8 @@ probe link through jellyfin's mount layout; its docstring maps each proof. Its p
 fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
 
 `tasks/main.yml` holds the `k8s/manifests` include, which no Flux path runs.
-`defaults/main.yml` sets `janitorr_dry_run` from `janitorr_k8s_dry_run`, and
-`templates/config/application.yml.j2` reads it.
+`templates/config/application.yml.j2` and `templates/verify/job.yaml.j2` both read
+`janitorr_k8s_dry_run` from `defaults/main.yml`.
 
 ## Retention rungs
 

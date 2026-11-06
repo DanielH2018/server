@@ -202,7 +202,7 @@ def test_plan_tick_maps_a_template_push_to_its_k8s_role(
 ):
     tick.paths = ["ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"]
     plan = deploy_phases.plan_tick(tick.tools, state, settings, _target(gitops_deploy))
-    assert plan.cs.k8s == {"sonarr"}
+    assert plan.cs.flux == {"sonarr"}
     assert plan.paths == tick.paths
 
 
@@ -246,8 +246,6 @@ def test_plan_tick_routes_a_new_shared_file_with_the_tables_its_own_range_adds(
     if origin_copy:
         tick.files = {
             f"{ORIGIN}:{installed_tables.CROSS_ROLE_FILE}": (
-                "K8S_BUILD_CONTEXT_FILES = {}\n"
-                "K8S_ROLES_IMPORTING_SETUP_FILES = {}\n"
                 "SETUP_FILES_ROUTED_TO_OWNER = {}\n"
                 f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{{new_file!r}: frozenset({{'claude_code'}})}}\n"
                 "SETUP_ROLES_CALLING_FILTER_PLUGINS = {}\n"
@@ -270,8 +268,6 @@ def test_tables_in_runs_nothing_the_copy_calls(installed_tables, tmp_path):
     """land.sh reads the merge commit's copy before master CI passes, so it must not run it."""
     marker = tmp_path / "ran"
     source = (
-        "K8S_BUILD_CONTEXT_FILES = {}\n"
-        "K8S_ROLES_IMPORTING_SETUP_FILES = {}\n"
         "SETUP_FILES_ROUTED_TO_OWNER = {}\n"
         f"SETUP_FILES_SHIPPED_BY_OTHER_ROLES = {{open({str(marker)!r}, 'w').name: 1}}\n"
         "SETUP_ROLES_CALLING_FILTER_PLUGINS = {}\n"

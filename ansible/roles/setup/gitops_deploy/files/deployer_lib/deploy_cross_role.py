@@ -7,9 +7,9 @@ role calling a changed filter plugin's filters. They are static because every ca
 paths alone, and `ansible/tests/setup/test_setup_cross_role_files.py` holds each one to the
 tree.
 
-The k8s plane needs one table, `K8S_BUILD_CONTEXT_FILES`, for a file outside `ansible/roles/k8s/`
-that a role's image embeds. Every other k8s reader is derived: `k8s_lookup_readers` reads the
-templates and tasks that name another role's file in a `lookup()`.
+The k8s plane needs no table, because the renderer reads every file a role's render holds.
+`k8s_lookup_map` reads the templates and tasks that name another role's file in a `lookup()`,
+for the secret census.
 
 A module of its own, not part of `deploy_changes`, because the tick and `land.sh` parse
 another commit's copy of THIS file by path (`tables_in`, `CROSS_ROLE_FILE`). Nothing else may
@@ -108,30 +108,6 @@ SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/resolv.conf.j2": frozenset({"k3s"}),
 }
 
-# The k8s roles that import a setup file by path, so a change to it defer-and-alerts each one
-# (#3320). The deployer never applies a k8s role for a change that is not an image-pin bump, so
-# naming them in `cs.k8s` is what keeps their copy of `host_lib.py` from going stale unseen.
-# `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
-# No k8s role copies host_lib.py onto a host since H2.5c: configarr's and janitorr's health
-# readers stage host_lib.py into their CronJobs' ConfigMaps, so no k8s role
-# imports install_host_lib.yml or stamp_deployed.yml any more.
-K8S_ROLES_IMPORTING_SETUP_FILES: dict[str, frozenset[str]] = {
-    "hosts/lib/host_lib.py": frozenset({"configarr", "janitorr"}),
-}
-
-
-# A file outside `ansible/roles/k8s/` that a k8s role's `image_builder_context_files` embeds in
-# its image, mapped to those roles (#4840). image-builder hashes the build context into the
-# content tag the Deployment names, so an edit here moves the role's applied bytes. The path
-# sits under no role, so without this row it mapped to no deploy tag, and
-# `probe.py releases` blamed whichever unrelated path also moved.
-# A Flux-owned role still lands here first; `deploy_inventory.route_not_ansible_owned` then
-# moves it to `cs.flux`. `ansible/tests/setup/test_setup_cross_role_files.py` holds it to the tree.
-K8S_BUILD_CONTEXT_FILES: dict[str, frozenset[str]] = {
-    "scripts/diagnostics/probe_lib/obs_api.py": frozenset({"homelab-mcp"}),
-}
-
-
 # A filter plugin mapped to the setup roles whose rendered state calls one of its filters
 # (#3874). `ansible/deploy.yml` runs no setup role, so no deploy-plane apply, narrowed or
 # whole, re-renders these. `setup_roles_for` returns them, and the tick
@@ -146,8 +122,6 @@ CROSS_ROLE_FILE = (
     "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py"
 )
 TABLE_NAMES = (
-    "K8S_BUILD_CONTEXT_FILES",
-    "K8S_ROLES_IMPORTING_SETUP_FILES",
     "SETUP_FILES_ROUTED_TO_OWNER",
     "SETUP_FILES_SHIPPED_BY_OTHER_ROLES",
     "SETUP_ROLES_CALLING_FILTER_PLUGINS",
@@ -259,18 +233,6 @@ def current_tables() -> dict[str, object]:
     return {name: globals()[name] for name in TABLE_NAMES}
 
 
-def k8s_roles_holding(path: str) -> frozenset[str]:
-    """The k8s roles holding a copy of `path` from outside their own tree.
-
-    That is a setup file one imports (`K8S_ROLES_IMPORTING_SETUP_FILES`) or a file its image
-    embeds (`K8S_BUILD_CONTEXT_FILES`). Read from this module's globals, so a copy
-    `use_tables` adopted answers.
-    """
-    return globals()["K8S_ROLES_IMPORTING_SETUP_FILES"].get(
-        path, frozenset()
-    ) | globals()["K8S_BUILD_CONTEXT_FILES"].get(path, frozenset())
-
-
 def setup_roles_outside_the_tree(path: str) -> set[str]:
     """The setup roles a file outside `roles/setup/` re-applies.
 
@@ -322,9 +284,9 @@ _K8S_LOOKUP_RE = re.compile(
 def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
     """Every k8s file another role `lookup()`s, from `roles/`, mapped to the roles reading it.
 
-    A role reading its own file is left out. `k8s_lookup_readers` asks this of a change, and
-    `scripts/secrets_mgmt/consumers.py` asks it of the whole tree, so a secret a reader renders
-    out of another role's file credits that reader too.
+    A role reading its own file is left out. `scripts/secrets_mgmt/consumers.py` asks this of
+    the whole tree, so a secret a reader renders out of another role's file credits that
+    reader too.
     """
     k8s = Path(repo_root) / "ansible" / "roles" / "k8s"
     found: dict[str, set[str]] = {}
@@ -340,29 +302,3 @@ def k8s_lookup_map(repo_root) -> dict[str, set[str]]:
                 if target.split("/")[2] != role.name:
                     found.setdefault(target, set()).add(role.name)
     return found
-
-
-def k8s_lookup_readers(paths, repo_root) -> set[str]:
-    """k8s roles whose templates or tasks `lookup()` a changed file owned by a DIFFERENT role.
-
-    A k8s role's change deploys that role, which is wrong for a file another role renders
-    too. Authelia and traefik embed crowdsec's allowlist files, so a change there must reach
-    the readers as well as the owner. (uptime-kuma read monitor-bridge's `files/check_table.py`
-    until M6 batch A6's Cutover-2 removed its push tiles, #3781.) Derived by reading the
-    lookups rather than listing the pairs, so a new reader is found the day it is written.
-    The `import` form of the same question is `deploy_changes.shared_module_consumers`.
-
-    Args:
-        paths: The changed repo paths.
-        repo_root: The checkout whose role trees are read.
-
-    Returns:
-        Only the EXTRA roles; a reader that is also the file's owner is left out.
-    """
-    changed = {
-        p.removeprefix("ansible/") for p in paths if p.startswith("ansible/roles/k8s/")
-    }
-    if not changed:
-        return set()
-    lookups = k8s_lookup_map(repo_root)
-    return {reader for target in changed for reader in lookups.get(target, ())}
