@@ -11,6 +11,8 @@ nothing about what they hold. A host another apply already reached still read as
   renders that run whenever it is written, so the line counts only when every task in the role
   that may render the template does (#7406).
 
+Both are read per host: a stamp or a render whose `when:` skips a host asks nothing of it.
+
 Everything else stays owed: an unstamped file, a task file, a key, a pair whose `live` is not a
 literal path, a template with a render no fragment proves, a role whose imports this walk cannot
 follow, a host that cannot be read. The note is then what it was without this read, which costs
@@ -24,14 +26,17 @@ import sys
 from collections.abc import Callable, Iterable
 from functools import cached_property
 from pathlib import Path
+from typing import NamedTuple
 
 import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
+from deploy_tools.setup_lib.setup_gates import _eval_when
 from diagnostics.probe_lib import core
 from lib import yaml_fast
 from lib.git import git_process
+from lib.repo_paths import ALL_VARS, HOST_VARS
 
 GIT_TIMEOUT_S = 30
 # `stamp_render.yml`'s directory on a host.
@@ -87,17 +92,46 @@ def _parsed_tasks(path: Path) -> list:
     return tasks if isinstance(tasks, list) else []
 
 
+class _Walked(NamedTuple):
+    """One task as the walk reaches it: its effective tags and each `when:` above and on it."""
+
+    task: dict
+    tags: frozenset[str]
+    gates: tuple
+
+
+class _Stamp(NamedTuple):
+    """One stamp task's record. `tags` is None when the walk cannot know the full tags."""
+
+    record: str
+    tags: frozenset[str] | None
+    gates: tuple
+
+
+class _Render(NamedTuple):
+    tags: frozenset[str]
+    gates: tuple
+
+
+class _Evidence(NamedTuple):
+    """What a role's tasks say about one changed file."""
+
+    stamps: list[_Stamp]
+    renders: list[_Render]
+
+
 def _flatten(
     tasks: object,
     inherited: frozenset[str],
     role_dir: Path,
     on_walk: tuple[Path, ...],
     seen: set[Path],
-) -> Iterable[tuple[dict, frozenset[str]]]:
-    """Each task with its effective tags, through blocks and static imports.
+    gates: tuple = (),
+) -> Iterable[_Walked]:
+    """Each task with its effective tags and gates, through blocks and static imports.
 
-    An import's tags reach the imported tasks, so one task file imported twice yields its tasks
-    twice, once per import site.
+    An import's tags and gates reach the imported tasks, so one task file imported twice yields
+    its tasks twice, once per import site.
     """
     if not isinstance(tasks, list):
         return
@@ -108,20 +142,19 @@ def _flatten(
         tags = inherited | frozenset(
             str(t) for t in ([own] if isinstance(own, str) else own)
         )
-        yield task, tags
+        chain = (*gates, task["when"]) if "when" in task else gates
+        yield _Walked(task, tags, chain)
         for section in ("block", "rescue", "always"):
-            yield from _flatten(task.get(section), tags, role_dir, on_walk, seen)
+            yield from _flatten(task.get(section), tags, role_dir, on_walk, seen, chain)
         target = _imported_file(task, role_dir)
         if target and target not in on_walk:
             seen.add(target)
             yield from _flatten(
-                _parsed_tasks(target), tags, role_dir, (*on_walk, target), seen
+                _parsed_tasks(target), tags, role_dir, (*on_walk, target), seen, chain
             )
 
 
-def _role_tasks(
-    role_dir: Path,
-) -> tuple[list[tuple[dict, frozenset[str]]], list[tuple[dict, frozenset[str]]]]:
+def _role_tasks(role_dir: Path) -> tuple[list[_Walked], list[_Walked]]:
     """A role's tasks: those `tasks/main.yml` reaches, then those in any other file.
 
     The second list's tags are a lower bound, because a file `main.yml` does not reach runs
@@ -135,7 +168,7 @@ def _role_tasks(
         if main.is_file()
         else []
     )
-    others: list[tuple[dict, frozenset[str]]] = []
+    others: list[_Walked] = []
     for path in sorted(role_dir.glob("tasks/**/*.yml")):
         path = path.resolve()
         if path not in seen:
@@ -193,20 +226,15 @@ def _src_names(src: str, item: object, template: str) -> bool:
     return re.fullmatch(pattern, template.rsplit("/", 1)[-1]) is not None
 
 
-def _every_render_stamped(
-    template: str,
-    stamp_tags: Iterable[frozenset[str]],
-    tasks: list[tuple[dict, frozenset[str]]],
-) -> bool:
-    """Does writing some fragment listing `template` run each task that may render it?
+def _every_render_stamped(renders: list[_Render], fragments: list[_Stamp]) -> bool:
+    """Does writing some fragment on this host run each task that may render there?
 
     A stamp task whose tags are a subset of a render task's cannot run under `--tags` without
     that render. Any other pair can, which leaves the fragment current and the render stale.
     """
-    renders = [tags for task, tags in tasks if _may_render(task, template)]
-    groups = list(stamp_tags)
+    groups = [stamp.tags for stamp in fragments if stamp.tags is not None]
     return bool(renders) and all(
-        any(group <= tags for group in groups) for tags in renders
+        any(group <= render.tags for group in groups) for render in renders
     )
 
 
@@ -233,6 +261,8 @@ class DeployedCopies:
       ref: the merge commit, whose bytes a live copy has to match.
       repo: a checkout whose git store holds `ref`.
       read_host: `host_reader.read_host`.
+      all_vars: the `group_vars/all.yml` a stamp's or a render's `when:` reads.
+      host_vars_dir: the `host_vars/` directory that overrides it.
     """
 
     def __init__(
@@ -242,44 +272,63 @@ class DeployedCopies:
         ref: str,
         repo: Path,
         read_host: Callable[[dict, str], dict],
+        all_vars: Path = ALL_VARS,
+        host_vars_dir: Path = HOST_VARS,
     ) -> None:
         self._files = frozenset(files)
         self._roles_dir = roles_dir
         self._ref = ref
         self._repo = repo
         self._read_host = read_host
+        self._all_vars = all_vars
+        self._host_vars_dir = host_vars_dir
         self._docs: dict[str, dict] = {}
 
     @cached_property
-    def _records(self) -> dict[tuple[str, str], list[str]]:
-        """`(role, src)` -> each record of that changed file the role stamps on a host."""
-        found: dict[tuple[str, str], list[str]] = {}
+    def _evidence(self) -> dict[tuple[str, str], _Evidence]:
+        """`(role, src)` -> how the role stamps and renders a changed file it stamps."""
+        found: dict[tuple[str, str], _Evidence] = {}
         for role_dir in self._roles_dir.iterdir():
             try:
                 from_main, others = _role_tasks(role_dir)
             except _CannotWalk:
                 continue
-            fragment_tags: dict[str, list[frozenset[str]]] = {}
+            walked = from_main + others
             for tasks, tags_known in ((from_main, True), (others, False)):
-                for task, tags in tasks:
+                for task, tags, gates in tasks:
                     for src, record in _stamps_of(task):
                         if src not in self._files:
                             continue
-                        found.setdefault((role_dir.name, src), []).append(record)
-                        if record.startswith(RENDER_MANIFEST_DIR):
-                            # A stamp whose full tags are unknown proves no render.
-                            proving = [tags] if tags_known else []
-                            fragment_tags.setdefault(src, []).extend(proving)
-            for src, stamps in fragment_tags.items():
-                if not _every_render_stamped(src, stamps, from_main + others):
-                    del found[role_dir.name, src]
+                        evidence = found.setdefault(
+                            (role_dir.name, src),
+                            _Evidence(
+                                [],
+                                [
+                                    _Render(w.tags, w.gates)
+                                    for w in walked
+                                    if _may_render(w.task, src)
+                                ],
+                            ),
+                        )
+                        # A stamp whose full tags are unknown proves no render.
+                        evidence.stamps.append(
+                            _Stamp(record, tags if tags_known else None, gates)
+                        )
         return found
+
+    def _runs_on(self, role: str, gates: tuple, host: str) -> bool:
+        """Do these gates pass on `host`? A gate this read cannot evaluate passes."""
+        defaults = self._roles_dir / role / "defaults" / "main.yml"
+        return all(
+            _eval_when(gate, host, self._all_vars, self._host_vars_dir, defaults)
+            for gate in gates
+        )
 
     @cached_property
     def _shas(self) -> dict[str, str]:
         """Each stamped changed file's SHA-256 at `ref`; a file `ref` lacks has no entry."""
         shas = {}
-        for src in {src for _, src in self._records}:
+        for src in {src for _, src in self._evidence}:
             # `cat-file`, because a textconv or a newline translation would change the hash.
             blob = git_process("cat-file", "blob", f"{self._ref}:{src}", cwd=self._repo)
             try:
@@ -295,10 +344,10 @@ class DeployedCopies:
     def _doc_on(self, host: str) -> dict:
         if host not in self._docs:
             shas_by_record = {
-                record: self._shas[src]
-                for (_, src), records in self._records.items()
-                for record in records
-                if src in self._shas and "{{" not in record
+                stamp.record: self._shas[src]
+                for (_, src), evidence in self._evidence.items()
+                for stamp in evidence.stamps
+                if src in self._shas and "{{" not in stamp.record
             }
             fragments = {r for r in shas_by_record if r.startswith(RENDER_MANIFEST_DIR)}
             asks = {r: h for r, h in shas_by_record.items() if r not in fragments}
@@ -317,11 +366,20 @@ class DeployedCopies:
     def holds(self, role: str, path: str, host: str) -> bool:
         """Does every record `role` stamps of `path` on `host` show the merge commit's bytes?
 
-        False for a file with no stamp, and for one whose record is missing or unread.
+        A stamp or a render whose `when:` skips `host` writes nothing there, so it asks nothing
+        of the host. False for a file with no stamp on `host`, for one whose record is missing
+        or unread, and for a render on `host` that no fragment written there proves.
         """
-        records = self._records.get((role, path))
+        evidence = self._evidence.get((role, path))
         sha = self._shas.get(path)
-        if not records or not sha:
+        if not evidence or not sha:
+            return False
+        stamps = [s for s in evidence.stamps if self._runs_on(role, s.gates, host)]
+        if not stamps:
+            return False
+        fragments = [s for s in stamps if s.record.startswith(RENDER_MANIFEST_DIR)]
+        renders = [r for r in evidence.renders if self._runs_on(role, r.gates, host)]
+        if fragments and not _every_render_stamped(renders, fragments):
             return False
         doc = self._doc_on(host)
-        return all(_record_shows(doc, record, path, sha) for record in records)
+        return all(_record_shows(doc, stamp.record, path, sha) for stamp in stamps)

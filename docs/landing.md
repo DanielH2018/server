@@ -688,7 +688,9 @@ Three things sit in that position:
   under a tag whose group does not list it therefore stays owed. A template several groups list
   counts only when every fragment shows the merge commit's hash, as `check-timer.service.j2`
   does for `initial_setup`: the `loki_route_witness` and `setup_drift` tags each render it, and
-  each tag's group lists it. Any other file stays owed: an unstamped file, a task file, a moved
+  each tag's group lists it. A stamp or a render whose `when:` skips a host asks nothing of that
+  host, so daniel-box, whose witness is packaged, holds the template on its `setup-drift-check`
+  fragment alone. Any other file stays owed: an unstamped file, a task file, a moved
   key, a pair whose `live` is not a literal path. A host that cannot be read also stays owed. To
   clear the line after a hand apply, re-run `land.sh`.
 
