@@ -27,14 +27,20 @@ RESET = "sha256:" + "e" * 64
 # The move step's outputs: `moved`, and the UTC time stamped just before the move.
 MOVED = r"moved=true\nmoved_at=\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ\n"
 
-# Each fake logs `<tool> <argv>` and fails when its argv contains FAKE_<TOOL>_FAIL. `gh api`
-# prints FAKE_GREEN, the head SHAs of CI's green push runs on master, newest first.
+# Each fake logs `<tool> <argv>` and fails when its argv contains FAKE_<TOOL>_FAIL, for only the
+# first FAKE_<TOOL>_FAIL_TIMES such calls when that is set, printing an error body to stdout as
+# `gh api` does. `gh api` prints FAKE_GREEN, the head SHAs of CI's green push runs on master,
+# newest first. `docker` appends its stdin to `$CALLS.stdin`.
 _FAKE = """#!/usr/bin/env bash
-[ "{tool}" = docker ] && cat > /dev/null
+[ "{tool}" = docker ] && cat >> "$CALLS.stdin"
 echo "{tool} $*" >> "$CALLS"
 if [ -n "${{FAKE_{upper}_FAIL:-}}" ] && [[ "$*" == *"$FAKE_{upper}_FAIL"* ]]; then
-  echo "fake {tool}: forced failure" >&2
-  exit 1
+  if [ -z "${{FAKE_{upper}_FAIL_TIMES:-}}" ] \\
+    || [ "$(grep -cF -- "$FAKE_{upper}_FAIL" "$CALLS")" -le "$FAKE_{upper}_FAIL_TIMES" ]; then
+    echo "fake {tool}: error body"
+    echo "fake {tool}: forced failure" >&2
+    exit 1
+  fi
 fi
 if [ "{tool}" = gh ] && [ "$1" = api ]; then printf '%s\\n' "${{FAKE_GREEN:-}}"; fi
 if [ "{tool}" = gh ] && [ "$1 $2" = "variable get" ]; then printf '%s\\n' "${{FAKE_HOLD-none}}"; fi
@@ -97,6 +103,7 @@ def _run(tmp_path, script: str, **env: str):
         gh=_fake("gh"),
         docker=_fake("docker"),
         curl=FAKE_CURL,
+        sleep="exit 0\n",
     )
     base = {
         "CALLS": str(calls),
@@ -107,6 +114,9 @@ def _run(tmp_path, script: str, **env: str):
         "GH_TOKEN": "promote-token",
         "RUNNER_TEMP": str(tmp_path),
         "PATH": "/usr/bin:/bin",
+        "RETRY_FUNCTIONS": yaml_fast.safe_load(WORKFLOW.read_text(encoding="utf-8"))[
+            "env"
+        ]["RETRY_FUNCTIONS"],
     }
     result = proc_run(["bash", "-c", script], env={**base, **env}, stub_bin=stub)
     lines = [line for line in calls.read_text().splitlines() if line]
@@ -168,7 +178,7 @@ def test_a_hold_write_that_fails_still_resets_and_exits_non_zero_naming_both(
 ):
     result, calls = _settle(tmp_path, jobs, FAKE_GH_FAIL="DEPLOY_HOLD")
     assert result.returncode != 0
-    assert calls == [HOLD, RESET_PROD, RECORD]
+    assert calls == [HOLD, HOLD, HOLD, RESET_PROD, RECORD]
     assert "writing DEPLOY_HOLD" in result.stdout
     assert f"prod reset to {RESET}" in result.stdout
 
@@ -185,7 +195,7 @@ def test_a_reset_that_fails_after_the_hold_exits_non_zero_with_the_hold_in_place
 def test_a_prod_digest_write_that_fails_exits_non_zero_after_the_reset(tmp_path, jobs):
     result, calls = _settle(tmp_path, jobs, FAKE_GH_FAIL="PROD_DIGEST")
     assert result.returncode != 0
-    assert calls == [HOLD, RESET_PROD, RECORD]
+    assert calls == [HOLD, RESET_PROD, RECORD, RECORD, RECORD]
     assert "recording PROD_DIGEST failed" in result.stdout
 
 
@@ -238,7 +248,9 @@ def test_a_failed_hold_write_tags_nothing_and_exits_non_zero(tmp_path, jobs):
         tmp_path, jobs, NO_RESET="longhorn", FAKE_GH_FAIL="DEPLOY_HOLD"
     )
     assert result.returncode != 0
-    assert calls == [f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server"]
+    assert (
+        calls == [f"gh variable set DEPLOY_HOLD --body {T} -R DanielH2018/server"] * 3
+    )
 
 
 def test_a_failed_held_tag_exits_non_zero_with_the_hold_in_place(tmp_path, jobs):
@@ -319,7 +331,7 @@ def test_a_failed_stateful_hold_write_tags_nothing_and_leaves_no_post(tmp_path, 
         tmp_path, jobs, STATEFUL="sonarr", FAKE_GH_FAIL="DEPLOY_HOLD"
     )
     assert result.returncode != 0
-    assert calls == [_stateful_hold("stateful=bento-pdf")]
+    assert calls == [_stateful_hold("stateful=bento-pdf")] * 3
     assert "stateful_hold=" not in _outputs(tmp_path)
 
 
@@ -499,7 +511,8 @@ def test_the_promotion_records_prod_digest_after_the_move_and_fails_on_a_failed_
     )
     script = _step(jobs["tag"], "Record prod's digest")["run"]
     result, calls = _run(tmp_path, script, DIGEST=DIGEST, FAKE_GH_FAIL="PROD_DIGEST")
-    assert calls == [
-        f"gh variable set PROD_DIGEST --body {DIGEST} -R DanielH2018/server"
-    ]
+    assert (
+        calls
+        == [f"gh variable set PROD_DIGEST --body {DIGEST} -R DanielH2018/server"] * 3
+    )
     assert result.returncode != 0

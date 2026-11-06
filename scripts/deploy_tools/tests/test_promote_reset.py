@@ -205,6 +205,9 @@ def _move(tmp_path, script: str, live: str):
         "GITHUB_OUTPUT": str(tmp_path / "github_output"),
         "RUNNER_TEMP": str(tmp_path),
         "PATH": "/usr/bin:/bin",
+        "RETRY_FUNCTIONS": yaml_fast.safe_load(WORKFLOW.read_text(encoding="utf-8"))[
+            "env"
+        ]["RETRY_FUNCTIONS"],
     }
     result = proc_run(["bash", "-c", script], env=env, stub_bin=stub)
     moves = [line for line in calls.read_text().splitlines() if line.startswith("flux")]
