@@ -441,3 +441,35 @@ def test_gate_reads_the_trailers_from_the_prs_commits(tmp_path, messages, expect
     }
     render = lambda sha, dest, repo: snaps[dest.name]
     assert gate.gate(base, "HEAD", repo=tmp_path, render=render) == expected
+
+
+@pytest.mark.parametrize(
+    "head_tags, expected",
+    [({"flux"}, gate.REFUSED), ({"flux", "bento-pdf"}, gate.CLEAN)],
+    ids=["dropped", "kept"],
+)
+def test_gate_runs_arm_6(tmp_path, capsys, head_tags, expected):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "commit", "-q", "--allow-empty", "-m", "Base")
+    snaps = {
+        "base": gate.Snapshot(
+            renders={}, owners={}, deps={}, tags={"flux", "bento-pdf"}
+        ),
+        "head": gate.Snapshot(
+            renders={},
+            owners={},
+            deps={},
+            tags=head_tags,
+            role_names={"flux", "bento-pdf"},
+        ),
+    }
+    render = lambda sha, dest, repo: snaps[dest.name]
+    assert gate.gate("HEAD", "HEAD", repo=tmp_path, render=render) == expected
+    assert ("arm 6: bento-pdf leaves" in capsys.readouterr().err) == (
+        expected == gate.REFUSED
+    )
+
+
+def test_a_real_render_gives_arm_6_its_tags_and_role_names(head_snapshot):
+    assert set(ROLES) <= set(head_snapshot.tags)
+    assert {"flux", "bento-pdf", "media-volume"} <= set(head_snapshot.role_names)

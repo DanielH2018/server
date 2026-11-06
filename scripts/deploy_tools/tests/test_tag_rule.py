@@ -92,13 +92,18 @@ def test_flux_missing_at_the_head_is_flagged_whatever_its_directory(
 
 
 def test_a_refused_drop_stays_refused_on_an_unrelated_commit_while_prod_is_unmoved(
-    world, tmp_path, roles
+    world, tmp_path, roles, capsys
 ):
-    prod = _cluster("flux", "bento-pdf")
+    """The refused commit is published and already lacks the tag, so only `prod` still holds it."""
+    refused = world.commit("Drop bento-pdf's entry")
+    world.publish(refused, files=_encoded(_cluster("flux")))
+    manifests = world.transport.manifests
+    manifests[f"sha-{refused}"] = manifests[digest_of(refused)]
+    world.commit("An unrelated commit")
     head = _cluster("flux")
-    assert _judge(world, tmp_path, roles, prod, head) == FAILED
     head["flux"]["unrelated.yaml"] = DEPLOYMENT.format(name="unrelated")
-    assert _judge(world, tmp_path, roles, prod, head) == FAILED
+    assert _judge(world, tmp_path, roles, _cluster("flux", "bento-pdf"), head) == FAILED
+    assert "tag rule: bento-pdf leaves the bundle" in capsys.readouterr().err
 
 
 def test_a_failed_pull_of_prod_fails_the_publish(world, tmp_path, roles, capsys):
