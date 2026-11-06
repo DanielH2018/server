@@ -359,11 +359,12 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
 
 ### The ownership flag and its three readers
 
-`owner` on an entry takes one of two values:
-
-- `flux`: Flux applies the tag. The renderer publishes it, and every Ansible path skips it.
-- `released`: the first PR of a handback (*Rollback*). The renderer leaves the tag out of the
-  bundle, and every Ansible path still skips it.
+`owner` on an entry takes one value, `flux`: Flux applies the tag. The renderer publishes it,
+and every Ansible path skips it. Every reader raises on `released`, the second value this plan
+gave the first PR of a handback, because the operator ruled on 2026-11-06 that services do not
+move back from Flux to Ansible (`docs/flux-deploy-plane.md`, *A Flux-owned service stays
+Flux-owned*). The later mentions of `released` and the handback in this plan record what D2
+shipped.
 
 An entry without `owner` is Ansible-owned. So there are two predicates, and no reader mixes
 them:
@@ -384,7 +385,7 @@ Three readers answer both predicates:
   deployer runs under `uv run --no-project`.
 
 A census test in `ansible/tests/deploy/` asserts that the three agree on both predicates,
-on the live inventory and on a fixture with one `flux` entry and one `released` entry. Each
+on the live inventory and on a fixture with two `flux` entries and one without `owner`. Each
 reader fails on any other value, and the census holds a fixture for that.
 
 `owner` is a deploy-mechanics field. D2.1a names the set in `narrow_lib/containers.py` as
