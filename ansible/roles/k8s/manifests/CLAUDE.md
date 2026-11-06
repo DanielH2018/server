@@ -24,7 +24,7 @@ read it when you change one.
 The caller sets its render metadata in its own `defaults/main.yml`, as the keys of
 `scripts/renderer/renderer_lib/task_inputs.py:RENDER_KEYS`, each with `# noqa
 var-naming[no-role-prefix]`: `manifests_rollout` (default `manifests_service`; `''` skips the
-wait) and those below. Every one is optional. No flux-owned role runs this include, and a
+wait) and those below. Every one is optional. No flux-owned role runs this include.
 
 **The file lists are derived** (#3662): every top-level `templates/*.yaml.j2` but a
 `*-job.yaml`, plus the shared default (below) an entry's `port` or `hostname` earns. A name

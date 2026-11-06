@@ -11,7 +11,8 @@ and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another hos
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
 Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
-include of `k8s/manifests` alone. To give the role
+include of `k8s/manifests` alone.
+
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
 It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the
 `otel-collector` DaemonSet and no other grant.
