@@ -241,7 +241,7 @@ dates are UTC:
 |---|---|---|
 | authelia | done (#5691) | flipped 2026-10-21 in its own window (#5813) |
 | blackbox-exporter | none needed | flipped 2026-10-21, Wave A's last PR (#5807) |
-| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | flipped 2026-10-21 in its own window (#5814); a follow-up PR (#7370, #7371) deleted the wait and `tasks/verify.yml` |
+| crowdsec | done: H2.4b (#5711, #5739), H2.4c and the inert verify with its Pi channel (#5753), verify's fence peers (#5762), LAPI initContainer and arm move (#5765) | flipped 2026-10-21 in its own window (#5814); the follow-up for #7371 deleted the wait and `tasks/verify.yml` |
 | dri-device-plugin | done (#5529) | flipped 2026-10-22 (#5832) |
 | headlamp | done (#5681) | flipped 2026-10-21 (#5822) |
 | home-assistant | none needed | flipped 2026-10-21 in its own window (#5812) |
