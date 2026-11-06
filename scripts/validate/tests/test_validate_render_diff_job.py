@@ -158,6 +158,8 @@ def test_a_removed_deferred_directory_fails_the_floor(base, tmp_path):
         ("text\r\nRender-diff: none\r\nmore", frozenset()),
         ("Render-diff: a.yaml, b.yaml", frozenset({"a.yaml", "b.yaml"})),
         ("Render-diff: a.yaml b.yaml", frozenset({"a.yaml", "b.yaml"})),
+        ("Render-diff: `a.yaml`, b.yaml,", frozenset({"a.yaml", "b.yaml"})),
+        ("Render-diff: `none`", frozenset()),
         ("Render-diff: none\nRender-diff: none", frozenset()),
         ("no line", None),
         ("```bash\nRender-diff: none\n```", None),

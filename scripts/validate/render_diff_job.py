@@ -74,10 +74,10 @@ def declared(body: str) -> frozenset[str] | None:
         return None
     if len(lines) > 1:
         raise ValueError(f"the PR body holds {len(lines)} different Render-diff: lines")
-    value = lines.pop()
-    if not value:
+    names = frozenset(filter(None, re.split(r"[,\s`]+", lines.pop())))
+    if not names:
         raise ValueError("the Render-diff: line names nothing")
-    return frozenset() if value == "none" else frozenset(re.split(r"[,\s]+", value))
+    return frozenset() if names == {"none"} else names
 
 
 def hazard_paths(changes: Iterable[tuple[str, str]]) -> list[str]:
