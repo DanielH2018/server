@@ -175,6 +175,7 @@ def test_a_unit_no_role_installs_is_not_listed() -> None:
         "/usr/local/sbin/helper",
         "/etc/systemd/system/kuma-check-live-drift.timer",
         "/etc/systemd/system/kuma-check-manifest-prune-boot.service",
+        "/etc/systemd/system/kuma-check-render-records.timer",
     ):
         assert unlisted({path}, pattern) == [path]
 
