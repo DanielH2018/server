@@ -282,40 +282,15 @@ other final message is a progress report: a Stop hook sends you back to work, an
 """
 
 
-# The repo-wide guards that a new file trips and no test beside the change reaches (#5077):
-# every file the `static-ratchet-tests` prek hook and its `static-ratchet-tests-*` siblings run
-# (#5481), the script-basename and reference-page checks under scripts/docs/tests, and the
-# exit-code census. The set without the siblings' files ran in 54s on daniel-box under
-# `-n auto`. The whole suite costs about five times that and still misses CI's weight
-# step, which is a workflow step and not a test, so the brief names that repair on its own.
-REPO_GUARDS = (
-    "ansible/tests/repo",
-    "scripts/docs/tests",
-    "scripts/tests/test_census_rows_test_modules.py",
-    "scripts/tests/test_census_rows_test_renders.py",
-    "scripts/lib/tests/test_exit_codes.py",
-    "scripts/tests/test_scripts_import_direction.py",
-    "scripts/tests/test_prek_files_cover_entry_imports.py",
-    "scripts/diagnostics/tests/test_probe_health_rolled.py",
-    "ansible/tests/setup/test_lander_deadlines_cover_the_soak.py",
-    "ansible/tests/k8s/test_checksum_annotations_documented.py",
-    "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py",
-    "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py",
-    "evals/tests/test_eval_cases.py",
-    "ansible/tests/setup/test_k8s_host_files_pairs.py",
-    "ansible/tests/deploy/test_landing_annotations.py",
-    "ansible/tests/deploy/test_gitops_deploy_imports.py",
-    "scripts/validate/tests/test_validate_alert_rules.py::test_the_tree_rules_meet_every_convention_is_clean",
-    "scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set",
-)
-
-REPO_GUARD_STEP = f"""## Before you open the PR
+# `scripts/dev/repo_guards.py` holds the list. The whole suite still misses CI's weight step,
+# which is a workflow step and not a test, so the brief names that repair on its own.
+REPO_GUARD_STEP = """## Before you open the PR
 The tests beside your change do not reach the guards that read the whole tree: the module
 length ratchet, the census and exit-code tests, and the script-basename check. A new file is
 what trips them, and each red in CI costs a full round trip. To catch them first, run this once
-after your last commit and before `gh pr create`. It takes about a minute:
+after your last commit and before `gh pr create`. It takes one to two minutes:
 ```bash
-uv run pytest -q -n auto {" ".join(REPO_GUARDS)}
+uv run python scripts/dev/repo_guards.py
 ```
 Fix a red guard. Never skip or deselect it. Do not run the whole suite: a hook refuses a
 pytest run that names no path or more than 300 test modules in a batch, because CI runs the

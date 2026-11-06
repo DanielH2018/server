@@ -90,8 +90,7 @@ DENY_REASON = (
     "the PR, and the review pipeline resumes you with each failing check if it goes red. A "
     "local full run held 2.3 GiB for about six minutes, which is what limits how many batches "
     "a host fits. Name the tests beside your change by path (`uv run pytest <test files or "
-    "tests/ directory>`), then run the guard set the brief's 'Before you open the PR' step "
-    "names."
+    "tests/ directory>`), then run the guard set: `uv run python scripts/dev/repo_guards.py`."
 )
 
 
