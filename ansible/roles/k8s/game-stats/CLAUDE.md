@@ -6,7 +6,7 @@ tails its game pod's console out of loki-homelab, folds it into SQLite (the sour
 and exposes Prometheus metrics on :9420. Both import `files/stats_lib.py`, the skeleton they
 share. See repo-root `CLAUDE.md`.
 
-Until #2813 this was three roles: `terraria-stats`, `valheim-stats` and `game-stats-lib`. Every
+**HISTORY — until #2813 this was three roles:** `terraria-stats`, `valheim-stats` and `game-stats-lib`. Every
 cluster object kept its name, so the scrape jobs, the netpol-baseline Loki policy and the
 claims are unchanged.
 

@@ -248,8 +248,8 @@ a shadow, and Ansible stays the only writer to the cluster.
   `observability`, `pi-peer-backup`, `qbittorrent`, `registry` and `traefik` install scripts,
   timers or files outside `/etc/rancher/k3s/manifests/`.
 - **A fleet dry run costs about six minutes.** The cycle record measured 5m38s for 45
-  services on 2026-09-25 (`docs/k8s-manifest-cycle-record.md`, *The digest is the staleness
-  verdict*).
+  services on 2026-09-25 (`docs/k8s-manifest-cycle-record.md`, *What reproduces
+  `manifests_digest`*).
 - **The CI floor.** `.github/workflows/ci.yml` runs job `pytest` on six shards. Its comment
   calls the job "the pole of every run" and puts the heaviest single module at 17.8s, the
   floor no shard can go below. That number is stale. `scripts/dev/pytest_shard_weights.json`

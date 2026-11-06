@@ -1,6 +1,6 @@
 """#5744: a flip PR's health gate reads tag ownership from the commit that landed.
 
-`probe.py health` reads `owner` from the checkout it runs in (`releases_retired.tree_owners`),
+`probe.py health` reads `owner` from the checkout it runs in (`lib.k8s_roles.tag_owners`),
 and only a tree carrying the flip knows Flux applies the tag. Run from a tree before the
 flip, it grades `traefik` against Ansible's frozen release record (NOT ROLLED) and looks
 `traefik-crds` up by name, which the Pi's `docker inspect` answers with "no such object".

@@ -200,14 +200,6 @@ def test_timer_units_finds_the_initial_setup_roles_named_timers():
     } <= units, sorted(units)
 
 
-def test_timer_units_skips_the_k3s_roles_disarmed_timers():
-    units = {unit for unit, _ in f.timer_units(K3S_ROLE)}
-    assert not units & {
-        "kuma-check-manifest-prune.timer",
-        "kuma-check-live-drift.timer",
-    }, sorted(units)
-
-
 def test_setup_glance_lines_names_every_source_when_a_role_has_none(tmp_path):
     role = tmp_path / "widget"
     _write(role / "tasks" / "main.yml", "- name: Nothing\n  ansible.builtin.debug:\n")

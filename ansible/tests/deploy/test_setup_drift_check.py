@@ -1,8 +1,7 @@
 """The setup-plane drift reader on every host that renders setup templates.
 
-THE GAP: manifest-prune-check.sh is installed by roles/setup/k3s/tasks/health-crons.yml, imported
-only from that role's main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts. So it exists
-on daniel-box and nowhere else — while daniel-server renders the whole UPS shutdown chain.
+THE GAP: daniel-server renders the whole UPS shutdown chain, and a stale render there needs a
+reader on that host, not only on the k3s server.
 
 WHY THE TESTS ARE SHAPED AS THEY ARE: adding the stamp to roles/setup/nut_host alone would
 launder the finding, because it writes a fragment on a host with no reader. So every arm here is EXECUTED against a real fixture rather than asserted from the script's text —
@@ -410,8 +409,8 @@ def test_the_library_is_stamped_as_deployed_code():
 
 
 def test_the_reader_does_not_claim_the_orphan_arm():
-    """manifest-prune-check's first arm needs /etc/rancher/k3s/manifests and the control plane's
-    staged set; an agent node has neither. An arm that structurally cannot fire is worse than no
+    """An orphan arm needs /etc/rancher/k3s/manifests and the control plane's staged set; an
+    agent node has neither. An arm that structurally cannot fire is worse than no
     arm, because it reads as coverage."""
     text = _check_body()
     assert "/etc/rancher/k3s/manifests" not in text

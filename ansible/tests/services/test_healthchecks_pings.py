@@ -115,8 +115,8 @@ def _ping_files() -> list[Path]:
 def _sending_files() -> list[Path]:
     """The subset that actually curls the ping, rather than only templating the URL.
 
-    Backslash continuations are folded first, so a curl whose URL sits on the next line —
-    manifest-prune-check.sh.j2 — is still read as a sender.
+    Backslash continuations are folded first, so a curl whose URL sits on the next line is still
+    read as a sender.
     """
     return [
         path
@@ -157,7 +157,6 @@ PING_SENDERS = frozenset(
         "disk-health.sh.j2",
         "etcd-token-drift.sh.j2",
         "longhorn-backup-health.sh.j2",
-        "manifest-prune-check.sh.j2",
         "pull-pi-peers.sh",
         "registry-gc.sh.j2",
     }

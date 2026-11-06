@@ -127,9 +127,8 @@ def rendered_texts():
     """(role, template name, rendered TEXT) for every manifest template.
 
     The docs above are what a manifest means; this is what it looks like. A reader that parses
-    YAML by position — manifest_declares.py, which runs stdlib-only on the host — has to be
-    tested against the bytes, because re-serialising a parsed doc normalises exactly the
-    formatting such a reader could trip over.
+    YAML by position has to be tested against the bytes, because re-serialising a parsed doc
+    normalises exactly the formatting such a reader could trip over.
     """
     rendered_docs()
     return iter(tuple(_TEXTS))

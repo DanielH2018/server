@@ -120,8 +120,7 @@ ALLOWED = {
     "handoff": {"options", "outcome"},
     # The tag derivation and what it reads. None of them knows what a landing is.
     "land_tags": {"land_shared"},
-    # The CLI over the tag derivation. It reads `shared_role_reach` from outside land_lib,
-    # which imports `land_tags`, so it sits above both (#4945).
+    # The CLI over the tag derivation, which sits above what it reads (#4945).
     "land_tags_cli": {"land_tags", "land_reach", "key_readers"},
     # H3.9a: the wait on the hosts a merge reaches. It takes `gate_snapshot` from `tools`.
     "host_wait": {

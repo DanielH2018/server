@@ -161,7 +161,6 @@ def test_no_endpoints_at_all_disables_the_gate(tmp_path):
 # a call silently dropped is the regression this names, and the 2026-09-18 WAN outage paged each
 # of them beside the WAN alert.
 WAN_GATED_CRONS = [
-    ("setup", "k3s", "release-staleness-check.sh.j2"),
     ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),
     ("components", "docs-refresh", "docs-refresh.sh.j2"),
 ]

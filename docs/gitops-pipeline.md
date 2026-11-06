@@ -209,8 +209,7 @@ the cluster through `promote`. The same test holds that table to the k8s roles' 
 A k8s role's image can embed a file from outside every role, as homelab-mcp's embeds
 `scripts/diagnostics/probe_lib/obs_api.py`. An edit to it moves the image's content tag, so
 `K8S_BUILD_CONTEXT_FILES` puts the embedding role in `ChangeSet.k8s` the same way (#4840).
-`probe.py releases` reads the same table, so it names the file as the cause of that role's
-drift. The same test holds it to each role's `image_builder_context_files` and
+The same test holds it to each role's `image_builder_context_files` and
 `image_builder_context` keys.
 
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's own
@@ -236,7 +235,7 @@ apply held the plane as `ansible/deploy.yml <tags>`. A `narrow-shadow:` line com
 service's applied digest with a render record.
 
 D6.15 removed the `narrow` subcommand. The rules it applied, and what each one refused, are in
-`scripts/deploy_tools/narrow_lib/broad.py` until D6.18 deletes it.
+`scripts/deploy_tools/narrow_lib/broad.py` until D6.18b deletes it.
 
 - **A play file whose parsed YAML is unchanged maps to no tags.** A comment or layout edit to
   `ansible/deploy.yml`, or to a file under `ansible/pre_tasks/`, `ansible/tasks/` or
@@ -851,37 +850,6 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   **HISTORY — until D6.12 the tick deployed an eligible image-pin bump itself, rolled a failed
   one back and deferred every other k8s change.** `git log -p -- docs/gitops-pipeline.md` has that
   arm's rules and accepted trade-offs.
-
-  - **The release-staleness check watched for a merged k8s change that never reached the cluster,
-    and it judged only a service whose `containers_list` entry carries no `owner`** (#5309). A
-    daniel-box cron owned by `sys_user`, not root
-    (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
-    `k3s_release_staleness_cron_minute`), runs
-    `uv run python scripts/diagnostics/probe.py releases --stale-only`. It runs `git` and `uv`
-    against the primary checkout, and a root run would leave root-owned objects there.
-    `--stale-only` drops a record whose entry carries `owner`, because Flux applies that tag and
-    no Ansible deploy writes it a newer record. On 2026-11-06 all 66 service tags carried `owner`,
-    so the check judged no service. `PromotionStalled` and `FluxNotReady` watch the same gap on
-    the Flux path, and `docs/k3s-node-plane-crons-and-incidents.md` has the check's account.
-    D6.17 disarmed it, and D6.18 deletes its code. For a tag with no `owner`, these rules held:
-    - The check compares the service's release record (the applied commit that
-      `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
-      `origin/master` under that service's own role AND the shared roles that supply bytes to
-      every service's manifests (`probe_lib/releases.py`'s `manifest_affecting_shared_roles()`).
-      It writes the `release-staleness-check` textfile verdict, and the verdict is down when any such service is stale or has no record.
-    - A record whose service no `containers_list` entry declares is dropped first
-      (`releases_retired.py`), because a retired role's record outlives the role and the commit
-      that deleted it would read as drift no deploy tag can clear.
-    - The entry-less roles holding only `tasks/` and `defaults/` (`volume-snapshot`,
-      `volume-revert`, `longhorn-api`) are OUT of the shared set. They change how a
-      deploy runs, never what it applies, so no stamp goes stale. Sweeping them in would mark every
-      service stale for a change that renders no manifest.
-    - The deploy plane is in the census too. For each changed path under `ansible/inventory/` or
-      `ansible/templates/` since the record, `releases.py` asks `narrow_lib/broad.py:broad_path_tags`
-      which services the change reaches. A path the rules refuse marks every service sharing that
-      record stale, which is the set a full deploy re-stamps.
-    - The flag needs no clearing rule, because the next real apply of that service rewrites its
-      record.
 
 - **A k8s role's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`, `meta/`)**
   join `cs.k8s` with the rest of the role, and the tick fast-forwards past them. `*.md`
