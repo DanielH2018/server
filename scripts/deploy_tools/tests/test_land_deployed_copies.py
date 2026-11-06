@@ -2,12 +2,16 @@
 
 The note and the task walk are the real ones, over this checkout's roles. Only the host read is
 fake. Each test also pins `daniel-server` in the note it expects to stay, so an empty note
-cannot pass one that expects the host to stay owed.
+cannot pass one that expects the host to stay owed. The tests that build a `demo` role check
+which render shapes the walk counts, on shapes this checkout's roles do not hold.
 """
 
 import hashlib
 
+import pytest
+
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
+from deploy_tools.setup_lib.deployed_copies import DeployedCopies
 from diagnostics.probe_lib import core
 from lib.repo_paths import REPO
 
@@ -21,6 +25,8 @@ WITNESS_SHA = hashlib.sha256((REPO / WITNESS).read_bytes()).hexdigest()
 TEMPLATE = "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2"
 TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
 FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/loki-route-witness"
+SHARED_TEMPLATE = "ansible/roles/setup/common/templates/check-timer.service.j2"
+SHARED_TEMPLATE_SHA = hashlib.sha256((REPO / SHARED_TEMPLATE).read_bytes()).hexdigest()
 
 
 def _reader(row, reads=None):
@@ -112,3 +118,76 @@ def test_a_template_rendered_from_another_source_keeps_the_host_owed():
 
 def test_a_missing_render_fragment_keeps_the_host_owed():
     assert "daniel-server" in _note([TEMPLATE], _fragment_reader({"status": "absent"}))
+
+
+def test_a_shared_template_also_rendered_under_another_tag_keeps_the_host_owed():
+    """The current loki fragment says nothing of the `setup_drift` render of the same template."""
+    row = {"status": "ok", "text": f"{SHARED_TEMPLATE} {SHARED_TEMPLATE_SHA}\n"}
+    assert "`initial_setup` also reaches daniel-server" in _note(
+        [SHARED_TEMPLATE], _fragment_reader(row)
+    )
+
+
+def _stamp(*tags):
+    return f"""
+- name: Stamp
+  tags: {list(tags)}
+  ansible.builtin.import_tasks: stamp.yml
+  vars:
+    stamp_render_name: demo
+    stamp_render_templates: [{TEMPLATE}]
+"""
+
+
+def _render(*tags, src="loki-read-route-health.sh.j2"):
+    return f"""
+- name: Render
+  tags: {list(tags)}
+  ansible.builtin.template:
+    src: "{src}"
+    dest: /tmp/demo
+"""
+
+
+def _demo_role_holds(tmp_path, tasks):
+    """Does a host with a current `demo` fragment hold `TEMPLATE`, for a role with these tasks?"""
+    (tmp_path / "demo" / "tasks").mkdir(parents=True)
+    (tmp_path / "demo" / "tasks" / "stamp.yml").write_text("[]\n")
+    (tmp_path / "demo" / "tasks" / "main.yml").write_text(tasks)
+    row = {"status": "ok", "text": f"{TEMPLATE} {TEMPLATE_SHA}\n"}
+    fragment = "/var/lib/homelab/setup-render-manifest.d/demo"
+    return DeployedCopies(
+        [TEMPLATE],
+        tmp_path,
+        ref="HEAD",
+        repo=REPO,
+        read_host=lambda plan, host: {"stat": {}, "files": {fragment: row}},
+    ).holds("demo", TEMPLATE, "daniel-server")
+
+
+def test_a_render_every_stamp_run_reaches_lets_the_fragment_count(tmp_path):
+    assert _demo_role_holds(tmp_path, _render("a", "b") + _stamp("a"))
+
+
+def test_a_render_the_stamps_narrower_tag_skips_keeps_it_owed(tmp_path):
+    assert not _demo_role_holds(tmp_path, _render("a") + _stamp("a", "b"))
+
+
+def test_a_template_no_task_renders_keeps_it_owed(tmp_path):
+    assert not _demo_role_holds(tmp_path, _stamp("a"))
+
+
+def test_a_templated_src_over_a_variable_loop_counts_as_a_render(tmp_path):
+    render = _render("other", src="{{ item }}.j2") + '  loop: "{{ names }}"\n'
+    assert not _demo_role_holds(tmp_path, _render("a") + render + _stamp("a"))
+
+
+@pytest.mark.parametrize(
+    "pull",
+    [
+        '- ansible.builtin.import_tasks: "{{ somewhere }}/x.yml"\n',
+        "- ansible.builtin.include_tasks: stamp.yml\n",
+    ],
+)
+def test_tasks_this_walk_cannot_follow_keep_the_role_owed(tmp_path, pull):
+    assert not _demo_role_holds(tmp_path, _render("a") + pull + _stamp("a"))
