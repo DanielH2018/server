@@ -1626,7 +1626,9 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **Operator gates:** after the tick, the session runs the six-tag `k3s-bringup.yml`
       apply that `probe.py gitops-state` prints, **operator-attended**. It then runs
       `gitops_state.py clear-owed manual_plane k3s --applied <tags>`, which must print
-      `cleared k3s`.
+      `cleared k3s`. The operator deletes the `manifest-prune-check` check in the
+      Healthchecks.io console after the apply, because it otherwise alerts on the silence once
+      its 2-hour grace passes the 05:15 slot.
     - **After merge:** the box's setup-drift check still reads 1, and the box's new rule arm
       does not fire.
     - **Rollback:** *Rollback*'s D6.5 bullet. While D6.18 is unmerged, this PR reverts alone.
@@ -2807,7 +2809,13 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       `## At a glance` block);
     - `docs/k3s-node-plane-crons-and-incidents.md`, for the units it removes;
     - observability's `files/rules/host-checks.yaml` and `tests/rules/host-checks.test.yaml`,
-      for daniel-box's arm in B2's setup-drift rules;
+      for B1's six rules;
+    - observability's `files/rules/initial-setup-checks.yaml` and
+      `tests/rules/initial-setup-checks.test.yaml`, for daniel-box's arm in B2's setup-drift
+      rules;
+    - `monitor_bridge_healthchecks_expected`, the deadman fragments and
+      `docs/healthchecks-io-deadman.md`, for the `manifest-prune-check` slug that the disarmed
+      timer stops pinging;
     - `scripts/secrets_mgmt/` tests for `CROSS_HOST_PUSH_TOKENS`, `ansible/secret_rotation.yml`
       and D3's cluster file.
 - **D6.5b:**

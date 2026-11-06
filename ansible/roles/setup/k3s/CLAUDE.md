@@ -43,16 +43,13 @@ come from `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_pin_c
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`;
   `k3s-bringup.yml --tags "node-address"`
-- **Crons (7):**
+- **Crons (6):**
   - `Longhorn backup health` — `*/10 * * * *`
   - `B2 deletion accounting` — `10 7 * * *`
   - `B2 backup budget listing` — `20 7 * * *`
   - `daniel-box disk health` — `*/10 * * * *`
-  - `Release staleness drift check` — `*/30 * * * *`
   - `etcd token drift` — `45 2 * * *`
   - `etcd restore drill` — `20 10 * * 1`
-- **Timers (2):** `kuma-check-manifest-prune.timer` (`OnCalendar=*-*-* 05:15:00`),
-  `kuma-check-live-drift.timer` (`OnCalendar=*-*-* 05:45:00`)
 <!-- /generated_from -->
 
 ## Layout
@@ -111,8 +108,7 @@ holds that schedule.
 
 ## Notable
 
-- **Three traps live here**: the cron PATH omits `/usr/local/bin` where k3s lives, the drift and
-  prune checks are staggered (05:15 and 05:45) so two kubectl sweeps never land at once, and
+- **Two traps live here**: the cron PATH omits `/usr/local/bin` where k3s lives, and
   k3s's own output goes to `/var/log/k3s.log` (not the journal) where the apiserver's OIDC
   authenticator can wedge silently with every probe still green.
   `docs/k3s-node-plane-crons-and-incidents.md` has the detail and the incident evidence for each;
@@ -142,7 +138,14 @@ holds that schedule.
   the installer only `agent`, on a host with no binary. A flag change goes live at the agent's
   next start, because daniel-server's package lists no `k3s-restart`.
   `ansible/tests/setup/test_k3s_agent_flags_migration.py` holds the move to the live flags.
-- **Both drift checks know an object Flux applies, and neither reads its label alone.** The
+- **The manifest-prune, release-staleness and live-drift checks are disarmed, and their code
+  stays in the tree until D6.18.** `ansible/roles/setup/k3s/tasks/health-crons.yml` holds their
+  absent arms: the two timers, the cron, the release links, the state directories, the stamp
+  fragments and the `.prom` files. Each absent arm carries its family's tag, so the file still
+  narrows to six tags. `setup-drift-check.sh` reads the host-plane stamps on daniel-box, and
+  `SetupDriftFailed` and `SetupDriftNotReporting` page for it. Flux's `prune: true` covers what
+  the prune check's first arm watched.
+- **Both drift checks' code knows an object Flux applies, and neither reads its label alone.** The
   prune check skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a
   Kustomization `<n>` exists in `flux-system`. It reads that list once per run, and a failed
   read skips nothing. The live drift check takes a `kustomize-controller` `Apply` entry as
@@ -159,13 +162,12 @@ holds that schedule.
   The stale-checkout guard that H1 ran beside it was retired in #5957 once H1.7b had removed its
   last row. A checkout older than H1.7b still carries its own guard, so this tree's empty copy
   protected nothing. To revive it, take it from #5316 in git history.
-- **The five heartbeat checks write a textfile verdict and push nothing (M6 batch B1).** Longhorn
-  backup health, the cluster-token drift check, the manifest-prune and release-staleness checks, and
-  the live-drift check each write the three homelab_check_* series to node_exporter's textfile
-  directory. Rules in observability's host-checks.yaml page the files through Alertmanager. No
-  check reads a push credential or pushes: the tasks that rendered the two
+- **The two heartbeat checks write a textfile verdict and push nothing (M6 batch B1).** Longhorn
+  backup health and the cluster-token drift check each write the three homelab_check_* series to
+  node_exporter's textfile directory. Rules in observability's host-checks.yaml page the files through
+  Alertmanager. No check reads a push credential or pushes: the tasks that rendered the two
   credential files now remove them, and a skipped boot-grace run writes nothing. The deadline of a
-  */N cron derives from its minute variable, and the three daily checks share
+  */N cron derives from its minute variable, and the daily check reads
   k3s_daily_check_deadline_s. A change to a schedule moves its deadline, and the rule's literal
   follows it (the pin is ansible/tests/services/test_b1_rule_literals.py). The no-push guard is
   ansible/tests/setup/test_k3s_cron_textfiles.py.

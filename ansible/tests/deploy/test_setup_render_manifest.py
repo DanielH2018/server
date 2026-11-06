@@ -57,10 +57,11 @@ _NOT_STANDALONE_SCRIPTS: set[str] = set()
 _GROUP_TAGS = {
     "k3s-backup-health": "backup-health",
     "k3s-disk-health": "disk-health",
-    "k3s-manifest-prune": "manifest-prune",
-    "k3s-release-staleness": "release-staleness",
     "k3s-etcd-snapshot": "etcd-snapshot",
 }
+# Groups whose checks are disarmed: the defaults still list them for the code that stays, and no
+# task stamps them, because a stamp would call a removed script current.
+_DISARMED_GROUPS = frozenset({"k3s-manifest-prune", "k3s-release-staleness"})
 
 
 def _groups() -> list[dict]:
@@ -144,13 +145,14 @@ def test_each_stamp_task_carries_exactly_its_groups_tag_family():
             f"Broader tags restamp templates this run did not render; narrower tags leave the "
             f"group unstamped by the run that did."
         )
+    assert not _DISARMED_GROUPS & by_group.keys()
 
 
 def test_every_group_has_a_declared_tag_family():
     """Guards the mapping above against a new group being added with no tag expectation, which
     would let it into the defaults without any of the checks in this file applying to it."""
     declared = {group["name"] for group in _groups()}
-    unmapped = declared - set(_GROUP_TAGS)
+    unmapped = declared - set(_GROUP_TAGS) - _DISARMED_GROUPS
     assert not unmapped, (
         f"k3s_render_stamp_groups has {sorted(unmapped)} with no entry in _GROUP_TAGS. Add the "
         f"tag family it is rendered under, so the stamp/tag agreement is actually asserted."

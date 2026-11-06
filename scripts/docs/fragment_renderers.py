@@ -210,11 +210,6 @@ def deadman_crons(
             "`k3s_etcd_s3_cron_hour` / `_minute`",
         ),
         (
-            "manifest-prune-check",
-            f"{k3s['k3s_manifest_prune_cron_minute']} {k3s['k3s_manifest_prune_cron_hour']} * * *",
-            "`k3s_manifest_prune_cron_hour` / `_minute`",
-        ),
-        (
             "pi-peer-backup",
             str(pi_peer["pi_peer_backup_k8s_schedule"]),
             "`pi_peer_backup_k8s_schedule` (a k8s CronJob, not a host cron)",

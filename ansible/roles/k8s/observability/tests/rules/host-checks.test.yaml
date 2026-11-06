@@ -252,60 +252,6 @@ tests:
       - eval_time: 26h
         alertname: EtcdSnapshotOffboxFailed
         exp_alerts: []
-      - eval_time: 26h
-        alertname: ManifestPruneCheckNotReporting
-        exp_alerts:
-          - exp_labels:
-              check: manifest-prune-check
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: daniel-box's manifest-prune-check has stopped reporting.
-              description: >-
-                No manifest-prune-check verdict newer than 25 hours reached Prometheus from
-                daniel-box's textfile collector, so nothing is watching deployed-artifact drift.
-                Read the `kuma-check-manifest-prune` timer and the `manifest-prune-check` syslog
-                tag, then /var/lib/node-exporter-textfile/manifest-prune-check.prom on the host.
-      - eval_time: 26h
-        alertname: ManifestPruneCheckFailed
-        exp_alerts: []
-      - eval_time: 26h
-        alertname: ReleaseStalenessCheckNotReporting
-        exp_alerts:
-          - exp_labels:
-              check: release-staleness-check
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: daniel-box's release-staleness-check has stopped reporting.
-              description: >-
-                No release-staleness-check verdict newer than 65 minutes reached Prometheus from
-                daniel-box's textfile collector, so nothing is watching release staleness. Read the
-                `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
-                then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
-      - eval_time: 26h
-        alertname: ReleaseStalenessCheckFailed
-        exp_alerts: []
-      - eval_time: 26h
-        alertname: LiveDriftCheckNotReporting
-        exp_alerts:
-          - exp_labels:
-              check: live-drift-check
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: daniel-box's live-drift-check has stopped reporting.
-              description: >-
-                No live-drift-check verdict newer than 25 hours reached Prometheus from daniel-box's
-                textfile collector, so nothing is watching live-object drift. Read the
-                `kuma-check-live-drift` timer and the `live-drift-check` syslog tag, then
-                /var/lib/node-exporter-textfile/live-drift-check.prom on the host.
-      - eval_time: 26h
-        alertname: LiveDriftCheckFailed
-        exp_alerts: []
 
   # M6 batch B1. Every check turns red from minute 3 while its file stays fresh. Each Failed
   # rule fires at once and no NotReporting rule does.
@@ -318,18 +264,6 @@ tests:
       - series: 'homelab_check_success{check="etcd-snapshot-offbox", instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x2 0x5'
       - series: 'homelab_check_last_run_timestamp_seconds{check="etcd-snapshot-offbox", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0+60x7'
-      - series: 'homelab_check_success{check="manifest-prune-check", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x2 0x5'
-      - series: 'homelab_check_last_run_timestamp_seconds{check="manifest-prune-check", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0+60x7'
-      - series: 'homelab_check_success{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x2 0x5'
-      - series: 'homelab_check_last_run_timestamp_seconds{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0+60x7'
-      - series: 'homelab_check_success{check="live-drift-check", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '1x2 0x5'
-      - series: 'homelab_check_last_run_timestamp_seconds{check="live-drift-check", instance="daniel-box", job="node", origin="daniel-box"}'
         values: '0+60x7'
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x7'
@@ -381,86 +315,13 @@ tests:
       - eval_time: 4m
         alertname: EtcdSnapshotOffboxNotReporting
         exp_alerts: []
-      - eval_time: 2m
-        alertname: ManifestPruneCheckFailed
-        exp_alerts: []
-      - eval_time: 4m
-        alertname: ManifestPruneCheckFailed
-        exp_alerts:
-          - exp_labels:
-              check: manifest-prune-check
-              instance: daniel-box
-              job: node
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: daniel-box has deployed-artifact drift.
-              description: >-
-                manifest-prune-check.sh on daniel-box found a live cluster object that no staged
-                manifest declares, a deployed setup file that differs from the repo, or a rendered
-                script that is older than its template. `journalctl -t manifest-prune-check` names
-                the arm and the object.
-      - eval_time: 4m
-        alertname: ManifestPruneCheckNotReporting
-        exp_alerts: []
-      - eval_time: 2m
-        alertname: ReleaseStalenessCheckFailed
-        exp_alerts: []
-      - eval_time: 4m
-        alertname: ReleaseStalenessCheckFailed
-        exp_alerts:
-          - exp_labels:
-              check: release-staleness-check
-              instance: daniel-box
-              job: node
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: A k8s service runs an older release than origin/master.
-              description: >-
-                release-staleness-check.sh on daniel-box found a service with no `owner` whose role
-                paths changed on origin/master after its last applied commit. `uv run python
-                scripts/diagnostics/probe.py releases --stale-only` prints each reason. To redeploy
-                the service, run `./scripts/deploy.sh --tags <svc>`. The check judges no Flux-owned
-                tag, so PromotionStalled and FluxNotReady watch those.
-      - eval_time: 4m
-        alertname: ReleaseStalenessCheckNotReporting
-        exp_alerts: []
-      - eval_time: 2m
-        alertname: LiveDriftCheckFailed
-        exp_alerts: []
-      - eval_time: 4m
-        alertname: LiveDriftCheckFailed
-        exp_alerts:
-          - exp_labels:
-              check: live-drift-check
-              instance: daniel-box
-              job: node
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: A live cluster object differs from its last-applied manifest.
-              description: >-
-                live_drift_check.py on daniel-box found an object that was patched, edited or scaled
-                by hand after Ansible applied it, or could not read the cluster. `journalctl -t
-                live-drift-check` names the object. Redeploy the owning role.
-      - eval_time: 4m
-        alertname: LiveDriftCheckNotReporting
-        exp_alerts: []
 
-  # M6 batch B1. The files stop being refreshed: node_exporter keeps serving the timestamp
+  # M6 batch B1. The file stops being refreshed: node_exporter keeps serving the timestamp
   # written at 0. The first arm fires once the timestamp is more than the deadline old, so
-  # longhorn-backup-health (1500s) fires between minutes 25 and 26 and
-  # release-staleness-check (3900s) between minutes 65 and 66. The two quiet checks use the
-  # same labels, so a rule that read another check's deadline would show here.
+  # longhorn-backup-health (1500s) fires between minutes 25 and 26.
   - interval: 1m
     input_series:
       - series: 'homelab_check_last_run_timestamp_seconds{check="longhorn-backup-health", instance="daniel-box", job="node", origin="daniel-box"}'
-        values: '0x70'
-      - series: 'homelab_check_last_run_timestamp_seconds{check="release-staleness-check", instance="daniel-box", job="node", origin="daniel-box"}'
         values: '0x70'
       - series: 'up{instance="daniel-box", job="node", origin="daniel-box"}'
         values: '1x70'
@@ -485,29 +346,9 @@ tests:
                 daniel-box's textfile collector, so nothing is watching the Longhorn backup plane.
                 Read the `Longhorn backup health` cron and the `longhorn-backup-health` syslog tag,
                 then /var/lib/node-exporter-textfile/longhorn-backup-health.prom on the host.
-      - eval_time: 64m
-        alertname: ReleaseStalenessCheckNotReporting
-        exp_alerts: []
-      - eval_time: 66m
-        alertname: ReleaseStalenessCheckNotReporting
-        exp_alerts:
-          - exp_labels:
-              check: release-staleness-check
-              instance: daniel-box
-              job: node
-              origin: daniel-box
-              severity: warning
-              service: daniel-box
-            exp_annotations:
-              summary: daniel-box's release-staleness-check has stopped reporting.
-              description: >-
-                No release-staleness-check verdict newer than 65 minutes reached Prometheus from
-                daniel-box's textfile collector, so nothing is watching release staleness. Read the
-                `Release staleness drift check` cron and the `release-staleness-check` syslog tag,
-                then /var/lib/node-exporter-textfile/release-staleness-check.prom on the host.
 
   # M6 batch B1. The exporter is down from minute 0 and every file is gone, so the bridge's
-  # `targets` check pages the dead exporter and the `unless` clause keeps all five
+  # `targets` check pages the dead exporter and the `unless` clause keeps both
   # NotReporting rules quiet past the point the zero-series case fires them.
   - interval: 10m
     input_series:
@@ -519,15 +360,6 @@ tests:
         exp_alerts: []
       - eval_time: 26h
         alertname: EtcdSnapshotOffboxNotReporting
-        exp_alerts: []
-      - eval_time: 26h
-        alertname: ManifestPruneCheckNotReporting
-        exp_alerts: []
-      - eval_time: 26h
-        alertname: ReleaseStalenessCheckNotReporting
-        exp_alerts: []
-      - eval_time: 26h
-        alertname: LiveDriftCheckNotReporting
         exp_alerts: []
 
   # A short gap: one, then two failed scrapes mark the series stale between fresh timestamps,

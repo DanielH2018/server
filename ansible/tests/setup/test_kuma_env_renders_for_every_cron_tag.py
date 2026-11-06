@@ -27,9 +27,7 @@ FORMER_READER_TAGS = frozenset(
     {
         "backup-health",
         "disk-health",
-        "manifest-prune",
         "etcd-snapshot",
-        "release-staleness",
     }
 )
 

@@ -144,8 +144,7 @@ Snapshots taken **before** 2026-08-20 predate the change and restore without any
 
 Redeploying from Ansible is the other recovery path and is usually the better one — it rebuilds
 from the repo, which is the source of truth. The snapshot matters for what Ansible does *not*
-reproduce: objects that exist live but are not declared (the class the `manifest-prune-check`
-cron exists to find), and anything created outside the repo.
+reproduce: objects that exist live but are not declared, and anything created outside the repo.
 
 ## Where the snapshots are
 
@@ -376,11 +375,10 @@ If it does not rejoin, re-run the documented join:
    [Bootstrapping Flux on a rebuilt cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster) in `docs/flux-deploy-plane.md`, and when
    a sync object is broken, take *Recovering Flux by hand* there. No Ansible path deploys a
    workload on the cluster.
-5. Run `sudo /usr/local/bin/manifest-prune-check.sh` — a restore can resurrect objects that were
-   deliberately retired between the snapshot and now, which is exactly what it detects. The
-   staged manifest dirs it diffs against are mode 0700, so a non-`sudo` run now fails fast
-   (`exit 64`, "must run as root") rather than doing anything useful — it needs root to see the
-   real manifest set at all.
+5. Check for resurrected objects. A restore can bring back objects that were deliberately
+   retired between the snapshot and now. Flux's `prune: true` removes one that the restored
+   Kustomization inventory names once the bundle stops declaring it. An object that no inventory
+   names stays, so read `kubectl get ingressroute,deployment -A` for a retired name.
 
 Last, unmask the two timers once steps 1 to 4 pass, and start them so the next window and the next
 update run on schedule:
