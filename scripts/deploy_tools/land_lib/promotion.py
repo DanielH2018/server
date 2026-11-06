@@ -17,7 +17,7 @@ landing's words:
 | settled | the landing goes on to the health gate | -- | -- |
 | deploy-failed | `deploy-failed` | `promote-held`, or `soak-failed` for R's `flux/soak` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
-| suspended | `nothing-to-deploy`, or the next steps when a host package changed | -- | 0 |
+| suspended | `nothing-to-deploy`, or the next steps when a host package changed or the tick applies part of the PR | -- | 0 |
 | suspended, with a plane or other hosts owed | `needs-manual-apply` | -- | 1 |
 
 `gave-up` keeps the closed verdict set: it prints `deferred` beside `PROMOTE_TIMEOUT_NOTE`, and
@@ -193,17 +193,18 @@ def wait_on_promotion(ln: Landing) -> None:
     print(f"  {result.detail}")
     # DECIDED: `suspended`, every published tag suspended, ends the landing as
     # `nothing-to-deploy`, exit 0, unless a host package changed, which the host wait still
-    # waits on, or a plane or another host is owed a hand, which ends `needs-manual-apply` as in
+    # waits on, the tick applies part of the PR, whose state `no_tag_outcome` and the health step
+    # grade, or a plane or another host is owed a hand, which ends `needs-manual-apply` as in
     # `no_tag_outcome`. The suspend PR itself owes none of these and ends at exit 0, so a failure
     # verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume
     # point, and a re-run waits on the same suspended tag again. A change that raced the gate onto
     # a suspended tag never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
     if result.verdict == "suspended":
         owes_a_hand = ln.plane or ln.classification.remaining_setup
-        if ln.host_targets and not owes_a_hand:
+        if (ln.host_targets or ln.classification.self_applied) and not owes_a_hand:
             return
-        _print_what_else_it_owes(ln)
         if owes_a_hand:
+            _print_what_else_it_owes(ln)
             ln.finish(
                 Verdict.NEEDS_MANUAL_APPLY,
                 1,

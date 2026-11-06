@@ -405,7 +405,10 @@ Instead it reads the cluster every 30 seconds:
   the PR is `suspended` in the merge commit's `digests.json`, so Flux applies nothing for
   them until a PR removes their `flux_suspend`. The wait ends at the first poll that reads
   that file and a `none` `DEPLOY_HOLD`, rather than polling to `gave-up`. A hold still ends
-  it `deploy-failed`. When only some of the PR's Flux tags are suspended, the wait leaves
+  it `deploy-failed`. When the tick applies part of the PR, the tick's state decides the
+  verdict: a hold ends it `deploy-failed`, cause `tick-held`, a tick behind origin ends it
+  `deferred`, a recorded apply ends it `settled`, and an unreadable state or no recorded apply
+  ends it `needs-manual-apply`. When only some of the PR's Flux tags are suspended, the wait leaves
   the suspended ones out and settles on the rest, and the gate leaves them out too. The
   suspend PR itself ends this way, before any promotion applies it: the suspend takes hold only once `last-good`
   carries it, so check that `probe.py landing` shows `last-good` at or past the merge commit.
