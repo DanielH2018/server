@@ -1171,12 +1171,12 @@ so it outlasts the hold and then deploys. It returns exit 75 only if the lock st
 assuming the lock is stuck.
 
 **Four waiters on the tree lock are pinned as a census.** `deploy.sh`, secret-rotate, docs-refresh
-and eval-run each wait 3840 s, derived from the same phase timeouts by `_LOCK_WAITERS` and
-`_worst_lock_hold()` in `tests/test_gitops_deploy_timeout_budgets.py`. A per-consumer test covers
-only the consumers someone wrote one for, so the census plus
+and eval-run each wait 3840 s, and `_LOCK_WAITERS` and `_worst_lock_hold()` in
+`tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's worst hold. A
+per-consumer test covers only the consumers someone wrote one for, so the census plus
 `test_the_lock_waiter_census_is_non_vacuous` makes a new waiter fail instead of passing silently.
-Raising `gitops_deploy_broad_timeout_s` fails those tests rather than shortening an operator's
-wait.
+A raise that pushes `gitops_deploy_broad_timeout_s` past a waiter's wait fails those tests rather
+than shortening an operator's wait.
 
 **The overrun does not produce a second run, and it does not alert.** `OnUnitActiveSec` is
 measured from when the timer last started the unit, not from when it finished. A `Type=oneshot`
@@ -1220,8 +1220,8 @@ readers parse it through `gitops_markers.parse_contention`.
 `exclusive_all=True`, because a setup-plane apply reconfigures the host every workload runs on.
 
 **Waiting for a service lock spends the phase's own budget.** A separate wait budget would add
-itself to every term in `_worst_lock_hold()`, and the four jobs that size their tree-lock waits
-from that sum would start giving up and paging for ordinary contention.
+itself to `_worst_lock_hold()`, and the four jobs that wait on the tree lock would start giving
+up and paging for ordinary contention.
 `deploy_locks.locked_budget` shares one deadline between the wait and the playbook. The cost is
 that a phase queued for most of its budget can have its playbook SIGTERMed early, which reads as
 a failed apply and writes a hold.
@@ -1288,7 +1288,8 @@ rollback budget stacks on top.
 - The unit's worst case is the flock wait plus that budget, which
   `test_the_deployers_hold_survives_max_flock_contention` holds inside `TimeoutStartSec` in
   `gitops-deploy.service.j2`.
-- The budget cannot be raised alone: it moves the four waiters below with it, in the same change.
+- A raise past the four waiters' 3840 s moves them too, in the same change, because
+  `test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold` fails otherwise.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
   `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s, and
   `deploy_locks.locked_budget` spends the phase's own budget on a service-lock wait. An overrun
