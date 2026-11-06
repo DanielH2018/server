@@ -17,6 +17,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import functools
+import os
 import re
 from collections.abc import Collection, Iterable
 from pathlib import Path
@@ -28,7 +29,7 @@ from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_role_callers import role_callers
-from lib.repo_paths import FILTER_PLUGINS, K8S_ROLES, SHARED_TPL
+from lib.repo_paths import K8S_ROLES, SHARED_TPL
 
 __all__ = [
     "CALLER_RENDERED_ROLES",
@@ -36,10 +37,12 @@ __all__ = [
     "K8S_ROLES",
     "NO_MANIFEST_ROLES",
     "SHARED_MANIFEST_DEFAULTS",
+    "SHARED_ROLES",
     "SKIP_ROLES",
     "claim_contexts",
     "is_leftover_dir",
     "is_manifest_template",
+    "k8s_autodeploy_denylist",
     "manifest_template",
     "shared_default_templates",
     "k8s_entries",
@@ -60,32 +63,160 @@ def is_leftover_dir(path: Path | str) -> bool:
     `__pycache__/` left by a pytest run keeps `roles/<plane>/<role>/` on disk. A walker that
     read that shell as a role would render it, census it or credit it.
 
-    The rule itself lives in `ansible/filter_plugins/k8s_autodeploy.py`, because it gates the
-    deployer's config write and a filter plugin cannot import from `scripts/` at deploy time.
-    Its docstring has why an empty directory is NOT debris. The import is deferred because
-    that module imports `ansible.errors`, about 35 ms that a reader which never walks a role
-    tree should not pay.
-    """
-    if str(FILTER_PLUGINS) not in _sys.path:
-        _sys.path.insert(0, str(FILTER_PLUGINS))
-    from k8s_autodeploy import is_leftover_dir as rule
+    The predicate is "nothing real is left", not "it looks like a role" (no `tasks/`, no
+    `defaults/`). A shape test would skip a genuine role that carries neither directory, and
+    `k8s_autodeploy_denylist` would then leave it off the list. A real role always holds at
+    least one non-`.pyc` file.
 
-    return rule(str(path))
+    An EMPTY directory is not debris. git removes a directory the moment its last tracked file
+    goes, so one exists only because a person or a script made it, which is worth failing on.
+    """
+    found_debris = False
+    for dirpath, dirnames, filenames in os.walk(path):
+        if os.path.basename(dirpath) == "__pycache__":
+            dirnames[:] = []
+            found_debris = found_debris or bool(filenames)
+            continue
+        for name in filenames:
+            if not name.endswith(".pyc"):
+                return False
+            found_debris = True
+    return found_debris
 
 
 def role_dirs(roles_dir: Path = K8S_ROLES, exclude: Collection[str] = ()) -> list[Path]:
     """Every real role directory under `roles_dir`, sorted, minus the names in `exclude`.
 
     A retired role's debris is always dropped (`is_leftover_dir`). `exclude` is how a reader
-    states the roles it skips on purpose: the validator passes `SKIP_ROLES`, the auto-deploy
-    count passes the filter plugin's `SHARED_ROLES`. `roles_dir` may be any plane's tree, so
-    the setup-role readers walk through here too.
+    states the roles it skips on purpose: the validator passes `SKIP_ROLES`, the stance count
+    passes `SHARED_ROLES`. `roles_dir` may be any plane's tree, so the setup-role readers walk
+    through here too.
     """
     return sorted(
         d
         for d in roles_dir.iterdir()
         if d.is_dir() and d.name not in exclude and not is_leftover_dir(d)
     )
+
+
+# Roles under roles/k8s/ that deploy no service of their own: other roles include them. They
+# carry no defaults/main.yml and declare no stance. Every other role must declare one.
+#
+# No role named here may pin an `_image:` var, because a pin makes a role Renovate-visible and
+# so a candidate for automerge.
+SHARED_ROLES = frozenset({"manifests"})
+
+
+def _check_shared_roles(roles_dir: Path) -> None:
+    """Raise when a `SHARED_ROLES` member is missing from `roles_dir` or pins an image.
+
+    A misspelt member excludes nothing, and iterating the directory never notices a name that
+    is not there. Only defaults/main.yml is read, because Renovate's manager reads image pins
+    from there.
+    """
+    for member in sorted(SHARED_ROLES):
+        if not (roles_dir / member).is_dir():
+            raise ValueError(
+                f"k8s_autodeploy_denylist: SHARED_ROLES member '{member}' is not a "
+                f"directory under {roles_dir}. Fix the name in SHARED_ROLES or remove the "
+                f"entry."
+            )
+        defaults = roles_dir / member / "defaults" / "main.yml"
+        if not defaults.is_file():
+            continue
+        try:
+            data = yaml_fast.safe_load(defaults.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+            raise ValueError(
+                f"k8s_autodeploy_denylist: cannot read SHARED_ROLES member '{member}' "
+                f"defaults ({defaults}): {exc}"
+            ) from exc
+        if isinstance(data, dict):
+            image_keys = [key for key in data if str(key).endswith("_image")]
+            if image_keys:
+                raise ValueError(
+                    f"k8s_autodeploy_denylist: SHARED_ROLES member '{member}' pins "
+                    f"{image_keys} in {defaults}. Remove it from SHARED_ROLES and let it "
+                    f"declare k8s_autodeploy like any other role."
+                )
+
+
+def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
+    """The k8s roles declaring `k8s_autodeploy: false`, sorted.
+
+    Renovate may automerge an image bump only for a role this list leaves out, and the lander
+    (`land_renovate_pr.py`) refuses a PR under a role it names. A role absent from the list is
+    therefore eligible, so anything this cannot read with certainty raises rather than drop out.
+
+    Args:
+        ansible_dir: the directory holding `roles/k8s/`.
+
+    Raises:
+        ValueError: a role declares no boolean stance or no reason, its defaults cannot be
+            read, an entry is not a directory, `SHARED_ROLES` is wrong, or the list is empty.
+    """
+    roles_dir = Path(ansible_dir) / "roles" / "k8s"
+    if not roles_dir.is_dir():
+        raise ValueError(f"k8s_autodeploy_denylist: no such directory: {roles_dir}")
+
+    _check_shared_roles(roles_dir)
+
+    denied = []
+    for entry in sorted(roles_dir.iterdir()):
+        role = entry.name
+        if role.startswith(".") or role == "__pycache__":
+            continue
+        if not entry.is_dir():
+            raise ValueError(
+                f"k8s_autodeploy_denylist: '{entry}' is not a directory. Every entry under "
+                f"roles/k8s/ must be a real role directory declaring `k8s_autodeploy`; a "
+                f"dangling symlink is one likely cause."
+            )
+        if is_leftover_dir(entry) or role in SHARED_ROLES:
+            continue
+
+        path = entry / "defaults" / "main.yml"
+        if not path.is_file():
+            raise ValueError(
+                f"k8s_autodeploy_denylist: role '{role}' has no defaults/main.yml and so "
+                f"declares no `k8s_autodeploy` stance. Add one (copy the shape from a "
+                f"sibling role), or add the role to SHARED_ROLES if it deploys no service "
+                f"of its own."
+            )
+        try:
+            data = yaml_fast.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+            raise ValueError(
+                f"k8s_autodeploy_denylist: cannot read '{role}' defaults ({path}): {exc}"
+            ) from exc
+
+        if not isinstance(data, dict) or "k8s_autodeploy" not in data:
+            raise ValueError(
+                f"k8s_autodeploy_denylist: role '{role}' does not set `k8s_autodeploy` in "
+                f"{path}. Every role under roles/k8s/ must declare whether Renovate may "
+                f"automerge its image bumps."
+            )
+        value = data["k8s_autodeploy"]
+        if not isinstance(value, bool):
+            raise ValueError(
+                f"k8s_autodeploy_denylist: role '{role}' sets `k8s_autodeploy: {value!r}`, "
+                f"which is not a boolean. Use true or false."
+            )
+        reason = data.get("k8s_autodeploy_reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(
+                f"k8s_autodeploy_denylist: role '{role}' sets `k8s_autodeploy` but no "
+                f"`k8s_autodeploy_reason`. A bare boolean cannot be audited."
+            )
+        if value is False:
+            denied.append(role)
+
+    if not denied:
+        raise ValueError(
+            f"k8s_autodeploy_denylist: derived an EMPTY denylist from {roles_dir}, which "
+            "means the derivation is broken."
+        )
+    return denied
 
 
 # Helper roles, included by service roles rather than deployed on their own. They have no

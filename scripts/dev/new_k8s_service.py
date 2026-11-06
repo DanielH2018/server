@@ -15,8 +15,8 @@ is the one manifest the role ships. Three small files sit beside the template:
   `manifests_service` to the role's name (#4053), and reads `manifests_rollout |
   default(manifests_service)` wherever it needs the workload to wait on.
 * `defaults/main.yml` holds what has no other home: the image pin Renovate's k8s-defaults
-  manager bumps, the `k8s_autodeploy` stance `ansible/filter_plugins/k8s_autodeploy.py`
-  raises without, the resources, and the pinned uid.
+  manager bumps, the `k8s_autodeploy` stance `lib.k8s_roles.k8s_autodeploy_denylist` raises
+  without, the resources, and the pinned uid.
 * `CLAUDE.md` carries the `## At a glance` markers. `scripts/docs/gen_role_glance.py`, which
   this script runs last, writes the tag, image, route, claims and stance between them, so the
   rest of the doc holds only what the generator cannot derive.
@@ -113,9 +113,8 @@ def defaults_main(
 # with no update signal at all.
 {prefix}_k8s_image: {image}
 
-# Auto-deploy stance — read by gitops_deploy through
-# `ansible/filter_plugins/k8s_autodeploy.py`, which raises at template time on a role that
-# declares neither. The reason is what makes the stance reviewable, so replace the text below
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
+# `lib.k8s_roles.k8s_autodeploy_denylist` raises on a role that declares neither. The reason is what makes the stance reviewable, so replace the text below
 # with the property that actually decides it.
 k8s_autodeploy: {stance}  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "{reason}"  # noqa var-naming[no-role-prefix]
@@ -185,7 +184,7 @@ def role_doc(name: str, route: bool) -> str:
 
     The markers have to be present and empty: `gen_role_glance.py` writes between them and
     leaves everything else alone, so a doc without them is never filled. The block states the
-    deploy tag, image, route, claims and auto-deploy stance, so the prose below it states
+    deploy tag, image, route and claims, so the prose below it states
     none of them. It keeps the one fact the block omits: the Service and the route render
     from shared templates rather than from this role.
     """
@@ -210,7 +209,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Manifests: `templates/`. {shared}
-- Image pin, auto-deploy stance, resources and uid: `defaults/main.yml`.
+- Image pin, Renovate stance, resources and uid: `defaults/main.yml`.
 """
 
 
@@ -389,7 +388,7 @@ def next_steps(args, role: Path) -> str:
         if args.route
         else ""
     )
-    # observability is denylisted from auto-deploy, so nothing else loads the route's
+    # observability is on the denylist, so a merge of it is a person's, and nothing else loads the route's
     # blackbox target, and until then `probe.py health` skips the probe half (#5346).
     probe_step = (
         f"Once {args.name} is live, deploy `observability` "
@@ -418,7 +417,7 @@ def next_steps(args, role: Path) -> str:
         f"  ROLES_WITH_A_DEFAULT_SERVICE in "
         f"ansible/tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
         f"takes the shared default Service{route_census}.\n"
-        f"The regen-doc-fragments prek hook rewrites the auto-deploy coverage fragment on "
+        f"The regen-doc-fragments prek hook rewrites the Renovate stance fragment on "
         f"your commit and fails once: stage what it wrote and commit again."
     )
 

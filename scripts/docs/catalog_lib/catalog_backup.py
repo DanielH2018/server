@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Longhorn backup tier and GitOps auto-deploy eligibility for one ``containers_list`` entry.
+"""Longhorn backup tier and what applies one ``containers_list`` entry.
 
-Both facts are read from a k8s role's own files — its PVC claims and their StorageClass for
-the tier, its ``k8s_autodeploy`` default for eligibility — and both report a reason rather
-than a guess when the role does not say. The FIELD NOTES in the generator's own docstring
+The tier is read from a k8s role's own files — its PVC claims and their StorageClass — and
+reports a reason rather than a guess when the role does not say. The FIELD NOTES in the generator's own docstring
 record which cases those are and why.
 """
 
@@ -30,7 +29,6 @@ __all__ = [
     "ClaimDecl",
     "LonghornTiers",
     "autodeploy_eligibility",
-    "autodeploy_stance",
     "backup_tier",
     "claim_index",
     "claim_names",
@@ -470,29 +468,10 @@ def backup_tier(
     return "; ".join(seen)
 
 
-# Auto-deploy eligibility (k8s only — daniel-pi sets has_gitops: false)
-
-
-def autodeploy_stance(role_dir: Path) -> tuple[bool | None, str]:
-    """A k8s role's `k8s_autodeploy` declaration as `(stance, reason)`.
-
-    `stance` is True (eligible), False (denylisted) or None (undeclared). `reason` is the
-    role's own `k8s_autodeploy_reason` for a denylisted role, stripped, and "" otherwise.
-    """
-    defaults = role_defaults(role_dir)
-    if "k8s_autodeploy" not in defaults:
-        return None, ""
-    if defaults["k8s_autodeploy"] is True:
-        return True, ""
-    reason = defaults.get("k8s_autodeploy_reason")
-    return False, reason.strip() if isinstance(reason, str) else ""
-
-
 def owner_stance(owner: str, tags: str = "") -> str:
     """What applies a k8s service whose `containers_list` entry carries `owner`, as one clause.
 
-    The glance and the catalogue print it in place of the deploy tag and the auto-deploy
-    stance, because no Ansible path deploys such a tag. The plan is
+    The glance and the catalogue print it in place of the deploy tag, because no Ansible path deploys such a tag. The plan is
     docs/target-architecture/deploy/d2-first-leaf.md, *What each entry point does with a tag
     that is not Ansible-owned*.
 
@@ -521,21 +500,18 @@ def autodeploy_eligibility(
     entry: dict[str, Any],
     platform: str,
     host_data: dict[str, Any],
-    k8s_roles: Path = K8S_ROLES,
     owner: str | None = None,
 ) -> str:
-    """Derive `entry`'s GitOps auto-deploy eligibility from its role's `k8s_autodeploy` default.
+    """Say what applies `entry`'s changes, for the catalogue's last column.
 
     Args:
         entry: The service's `containers_list` entry.
-        platform: "k8s" or "docker" — only "k8s" has a GitOps auto-deploy path.
+        platform: "k8s" or "docker" — only "k8s" has a GitOps path.
         host_data: The host's parsed `host_vars`, read for `has_gitops` off k8s.
-        k8s_roles: Root directory of the k8s roles.
-        owner: The entry's `owner`, as `entry_owner` reads it; None for an Ansible-owned one.
+        owner: The entry's `owner`, as `entry_owner` reads it; None for an entry without one.
 
     Returns:
-        "eligible", "denylisted (<reason>)", or an `UNKNOWN`/"n/a" explanation. An entry
-        with an `owner` is "n/a: applied by" its `owner_stance`.
+        "n/a: applied by" the entry's `owner_stance`, or an `UNKNOWN`/"n/a" explanation.
     """
     if owner is not None:
         return f"n/a: applied by {owner_stance(owner)}"
@@ -543,9 +519,4 @@ def autodeploy_eligibility(
         if host_data.get("has_gitops") is False:
             return "n/a (host has no GitOps auto-deploy path)"
         return UNKNOWN + " (docker host's has_gitops not declared)"
-    stance, reason = autodeploy_stance(k8s_roles / entry["name"])
-    if stance is None:
-        return UNKNOWN + " (role declares no k8s_autodeploy stance)"
-    if stance:
-        return "eligible"
-    return f"denylisted ({reason or 'no reason given'})"
+    return UNKNOWN + " (k8s entry carries no owner)"

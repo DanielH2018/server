@@ -86,15 +86,10 @@ MARKERS: dict[str, str] = {
     #
     # ONE KEYED FILE RATHER THAN SEVEN `<channel>_alerted_sha` FILES (#3047), and nothing
     # outside the deployer reads it. `dirty_alerted` below is keyed by DATE rather than SHA,
-    # and `denylist_rendered` gates a git read rather than a page, so neither is a slot.
+    # so it is not a slot.
     # `deploy_state.DeployerState.alerted_sha` reads it and `record_alerted` writes it; the one-shot migration that
     # folded a host's seven old files in was deleted once daniel-box had ticked past it (#3075).
     "alerted": "alerted_shas",
-    # The checkout SHA the denylist reconcile last ran against — the once-per-SHA guard on
-    # `deploy_phases.reconcile_denylist`. It bounds BOTH directions: the git read is skipped
-    # entirely while the checkout has not moved, and a mismatch a re-render cannot fix (a
-    # config rendered from an unpushed tree) re-renders once per SHA rather than every tick.
-    "denylist_rendered": "denylist_rendered_sha",
     # The last dirty-alert slot (`YYYY-MM-DD:am|pm`) paged for a dirty working tree. The tick
     # runs every 30 min, so without this an open edit session would re-alert all day; one
     # alert per slot — a morning slot at/after DIRTY_ALERT_MORNING_HOUR (08:00 CT) and an

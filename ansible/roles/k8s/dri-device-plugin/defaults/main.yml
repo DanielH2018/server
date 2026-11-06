@@ -13,7 +13,7 @@
 # (test_every_k8s_role_image_is_renovate_tracked) refuses.
 dri_device_plugin_k8s_image: ghcr.io/squat/generic-device-plugin:latest@sha256:8dc84958301f054bf72d9753a7a2c9af3d6642a9844b34d1171b3f2cdb4a15f6
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Under Flux the gate is the K8sExtendedResourceMissing verify alert the soak reads, not a
 # rollout wait. Even a probe would not close this: a readiness probe on /health would
 # prove only the HTTP listener, not that the plugin registered its gRPC socket with the kubelet

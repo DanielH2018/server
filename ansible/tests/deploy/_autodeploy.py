@@ -1,4 +1,4 @@
-"""How gitops_deploy decides a k8s role may auto-deploy, derived from the role sources.
+"""What makes a k8s role eligible for Renovate's automerge, derived from the role sources.
 
 The logic is what the guards agree on. A change here moves every one of them at once. The
 tree-wide guards and the synthetic-role unit tests must read a role the same way, or the unit
@@ -20,7 +20,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
-from k8s_autodeploy import is_leftover_dir, k8s_autodeploy_denylist
+from lib.k8s_roles import is_leftover_dir, k8s_autodeploy_denylist
 from _helpers import REPO
 from _k8s_render import rendered_texts
 
@@ -43,12 +43,7 @@ _GATING_SHARED_ROLES = {"image-builder"}
 
 
 def _denylist() -> set[str]:
-    """The denylist as the deployer will render it — derived, not parsed.
-
-    Reading `gitops_deploy_k8s_autodeploy_denylist` out of the deployer's defaults would
-    now yield the Jinja expression as a *string*, and `set()` over a string iterates its
-    characters — a denylist of single letters that silently protects nothing.
-    """
+    """The denylist as `k8s_autodeploy_counts.py --denylist` prints it."""
     return set(k8s_autodeploy_denylist(str(_REPO / "ansible")))
 
 

@@ -4,7 +4,7 @@
 freshrss_k8s_image: lscr.io/linuxserver/freshrss:latest@sha256:8b18490112cafc5f6e113ceeb4fe2228fb267a9700aa57ee8392da636c596a88
 freshrss_k8s_cache_image: nginx:alpine@sha256:b2f80f8f88146b0772fdcc7d92cea621aa8c2889fa8d07ed61d4884fcea53e09
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Migrating state — strategy is Recreate and the config volume is ReadWriteOnce. This role
 # tracks :latest by digest, so it rides whatever image lands after Renovate's digest soak with
 # no version-scheme signal at all —

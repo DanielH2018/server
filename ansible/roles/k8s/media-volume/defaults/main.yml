@@ -46,6 +46,6 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
     size: "{{ media_volume_size }}"
     access_modes: [ReadWriteMany]
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "a StorageClass, a PV and a claim that re-apply unchanged, and a verify Job in media-volume-verify that Flux runs to completion whenever the PV or StorageClass render changes; no image pin of its own"  # noqa var-naming[no-role-prefix]

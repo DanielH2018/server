@@ -806,7 +806,7 @@ apply is the resume.
 
 `flux_suspend: true` in a flux-owned role's `defaults/main.yml` stops all reconciliation of
 that role. `k8s_autodeploy: false` is a different lever: it stops Renovate merging the
-role and, while Ansible owns it, the deployer auto-deploying its image bumps. The plan is
+role's image bumps. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, *The stop lever (D5.1b)*. A merged change
 to a suspended role applies nothing until the resume, so the suspend is a temporary stop, and
 three checks hold it there (D5.1d):

@@ -168,9 +168,7 @@ def _deploy_tags():
 # Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, image-builder and
 # the rest render or gate the applied bytes for EVERY k8s service, not just their own. Read at
 # call time rather than pinned as a frozenset here: split_shared_roles derives it from the tree
-# rather than repeating the SHARED_K8S_ROLES list gitops_deploy/files/deployer_lib/deploy_phases.py already
-# maintains, so the two can't drift the way ansible/filter_plugins/k8s_autodeploy.py's own copy
-# is pinned to stay in step with (test_denylist_parsers_agree.py).
+# rather than repeating a list of the shared roles.
 def shared_k8s_roles(k8s_roles_dir=None, host_vars=None):
     """The k8s role directories no service's own role_paths would otherwise cover.
 
@@ -228,9 +226,8 @@ def manifest_affecting_shared_roles(k8s_roles_dir=None, host_vars=None):
     """`shared_k8s_roles()` narrowed to the roles that can make a stamp stale.
 
     Kept separate from `shared_k8s_roles()` rather than filtering in place: that census answers
-    "which derived names are not deploy tags", the question `split_shared_roles` exists for and
-    `test_denylist_parsers_agree.py` polices against `deploy_phases.py`'s own list. Narrowing it
-    would change that comparison's meaning as a side effect of fixing this one.
+    "which derived names are not deploy tags", the question `split_shared_roles` exists for.
+    Narrowing it would change that answer as a side effect of fixing this one.
     """
     k8s_roles_dir = k8s_roles_dir or (REPO_ROOT / "ansible/roles/k8s")
     return frozenset(

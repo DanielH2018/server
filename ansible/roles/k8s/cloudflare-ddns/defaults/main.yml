@@ -3,7 +3,7 @@
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest@sha256:345b41895a8846d74c62d30bd27e61101a754f8ab8da10c68115823883803afb
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "unprobeable, not merely probe-less — favonia/cloudflare-ddns is a scratch image running an outbound update loop with no HTTP server, no listener and no shell, so no httpGet, tcpSocket or exec readinessProbe can exist. Under Flux the Kustomization's wait reads each Deployment Ready as soon as its container starts, which proves the pod runs and nothing about whether an update loop succeeds; the Kuma push heartbeats are the only liveness signal."  # noqa var-naming[no-role-prefix]
 # Blast-radius caps, per container.

@@ -3,7 +3,7 @@
 # templates/Dockerfile.j2; the app source and its tests live in files/ here too.
 ical_proxy_k8s_image: "{{ k8s_registry_pull_host }}/ical-proxy:{{ k8s_built_image_tags.get('ical-proxy', 'latest') }}"  # a hand edit to THIS line is the only diff that can promote this role — see k8s_autodeploy_reason
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless RollingUpdate Deployment, no PVC, readinessProbe. Internal-only (no public route),
 # image is in-cluster-built via image-builder, not an upstream tag Renovate bumps blind.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]

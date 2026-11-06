@@ -1,5 +1,5 @@
 ---
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Declared false because this role renders no manifest and starts no workload: it is a shared
 # include the *arr roles call after their own deploy, so there is nothing here for `rollout
 # status` to gate. It is also not a containers_list entry, so a promoted bump would match no

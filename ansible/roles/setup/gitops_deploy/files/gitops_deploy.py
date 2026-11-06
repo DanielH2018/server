@@ -101,28 +101,6 @@ REPO = CONFIG.repo
 BRANCH = CONFIG.branch
 HOSTNAME = CONFIG.hostname
 
-# ── the k8s auto-deploy denylist ──────────────────────────────────────────────────────────────
-# The tick deploys no k8s role since D6.12. These three stay until D6.2a, because
-# `deploy_phases.reconcile_denylist` still re-renders the denylist line that
-# `land_renovate_pr.py:denied_roles` reads.
-K8S_AUTODEPLOY_ENABLED = CONFIG.k8s_autodeploy_enabled
-# The same key, kept as the file asked for it — the fail-closed disarm below mutates only
-# K8S_AUTODEPLOY_ENABLED. `deploy_phases.reconcile_denylist` gates on this one so that the
-# damaged state the disarm produces stays healable; the DECIDED marker at that gate is the long
-# form. No new config.env key: both read K8S_AUTODEPLOY_ENABLED.
-K8S_AUTODEPLOY_ENABLED_IN_FILE = CONFIG.k8s_autodeploy_enabled_in_file
-K8S_AUTODEPLOY_DENYLIST = CONFIG.k8s_autodeploy_denylist
-if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
-    # Fail closed. An absent or empty denylist means "nothing is eligible", never "everything
-    # is" — a truncated or half-rendered config.env must not silently widen the list.
-    # K8S_AUTODEPLOY_ENABLED_IN_FILE above is deliberately NOT flipped: it is what makes this
-    # state distinguishable from a host that legitimately has the feature off, and therefore
-    # what lets `deploy_phases.reconcile_denylist` re-render the file whose damage caused it.
-    log(
-        "denylist: K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy",
-        level=WARNING,
-    )
-    K8S_AUTODEPLOY_ENABLED = False
 # Bounds ONE broad-plane apply (initial_setup.yml --tags <role>, or a narrowed deploy.yml; a
 # refused narrowing defers rather than starting the whole play inside it, #4333).
 # Bounded because that arm is forward-only: without a timeout a wedged run spends the unit's
@@ -154,17 +132,9 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    TWO of the seven kwargs below are load-bearing, and five are not. The two:
-
-      - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
-        which is a decision this module makes and `load_config` cannot.
-      - `k8s_autodeploy_enabled_in_file` is the value BEFORE it — the pair is what tells a host
-        that has the feature off from one whose denylist line was lost, which is the difference
-        `deploy_phases.reconcile_denylist` gates on.
-
-    The other five, `repo` among them, equal CONFIG's fields and are passed anyway, so that
-    this snapshot, not CONFIG, stays the one object a phase reads. A test does not patch these
-    constants: it builds its config with `dataclasses.replace(tick_config(), ...)`.
+    The kwargs equal CONFIG's fields and are passed anyway, so that this snapshot, not CONFIG,
+    stays the one object a phase reads. A test does not patch these constants: it builds its
+    config with `dataclasses.replace(tick_config(), ...)`.
 
     Called from the `__main__` guard, never at import.
     """
@@ -173,9 +143,6 @@ def tick_config() -> Config:
         repo=REPO,
         branch=BRANCH,
         hostname=HOSTNAME,
-        k8s_autodeploy_enabled=K8S_AUTODEPLOY_ENABLED,
-        k8s_autodeploy_enabled_in_file=K8S_AUTODEPLOY_ENABLED_IN_FILE,
-        k8s_autodeploy_denylist=K8S_AUTODEPLOY_DENYLIST,
         broad_deploy_timeout_s=BROAD_DEPLOY_TIMEOUT_S,
     )
 
@@ -232,18 +199,6 @@ def main(tools: DeployTools, config: Config, state: deploy_state.DeployerState) 
     if target.action == "dirty":
         tools.note_outcome("dirty")
         return deploy_handlers.handle_dirty(tools, state, config, target)
-    # Before any branch that could return: a stale denylist is healed on an IDLE tick, which is
-    # what the tick after an ff-merge is, and that is the tick whose checkout already carries the
-    # role that made the config stale. Deliberately after the dirty branch — the render derives
-    # the denylist from the working tree, so rendering from a tree an operator is mid-edit in
-    # would bake a list nobody pushed.
-    if deploy_phases.reconcile_denylist(tools, state, config, target.local):
-        # A render ENDS the tick. Every arm of this unit is non-stacking by construction — the
-        # unit template sizes TimeoutStartSec for one broad apply, not a sum — so a render that
-        # ran on to a broad apply would add its budget to another's and could be SIGTERMed
-        # mid-apply. The next tick is ten minutes away and reads the fresh config.
-        tools.note_outcome("nothing")
-        return 0
     if target.action == "noop":
         tools.note_outcome("nothing")
         return 0

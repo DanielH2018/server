@@ -1,5 +1,5 @@
 ---
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Route-only role (see tasks/main.yml): it renders no Deployment of its own, only the
 # IngressRoute + middlewares for the Longhorn UI that ships with the upstream manifest
 # roles/setup/k3s applies. There is no workload of ours

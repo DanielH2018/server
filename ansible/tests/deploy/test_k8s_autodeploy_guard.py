@@ -1,4 +1,4 @@
-"""Guards on which k8s roles gitops_deploy may auto-deploy.
+"""Guards on which k8s roles Renovate may automerge an image bump for.
 
 `roles/k8s/manifests` waits on the primary rollout —
 `{{ manifests_rollout_kind | default('deploy') }}/{{ manifests_rollout | default(manifests_service) }}` — plus every

@@ -5,7 +5,7 @@
 # Manual update: `docker pull ghcr.io/schaka/janitorr:jvm-stable`, take the new digest.
 janitorr_k8s_image: ghcr.io/schaka/janitorr:jvm-stable@sha256:eecb604b6307f4ba5674bec7e3fc142d7212361571a1a9dc1f39e0fd069a4434
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Probe-less: the Deployment renders no readinessProbe, so `rollout status` would return the
 # moment the pod reports Running and prove nothing. Sharper here than most of this class —
 # janitorr is the one role in the fleet that deletes real media, so a wedged deploy that isn't

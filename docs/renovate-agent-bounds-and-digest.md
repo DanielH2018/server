@@ -32,9 +32,11 @@ and do nothing else with privilege. The session then reads
 `/var/lib/renovate-agent-land/<n>.verdict`.
 
 The lander re-reads the PR from GitHub with the operator's token and lands it only when every
-check in its module docstring passes. The denied roles come from the deployer's rendered
-`K8S_AUTODEPLOY_DENYLIST`, so the lander adds no parser of its own. It never reads the PR title,
-because the session can edit a title. ENFORCED:
+check in its module docstring passes. The denied roles come from
+`uv run python scripts/dev/k8s_autodeploy_counts.py --denylist`, run in
+`RENOVATE_AGENT_REPO_DIR`, the checkout from which it runs `land.sh`, so `renovate.json`'s rule
+and the lander read one derivation. A non-zero exit, a timeout or output holding no list refuses
+the landing. It never reads the PR title, because the session can edit a title. ENFORCED:
 `ansible/roles/setup/renovate_agent/tests/test_land_renovate_pr.py`, which also holds the polkit
 rule's unit-name pattern to the PR numbers the script accepts.
 

@@ -3,7 +3,7 @@
 # imagePullPolicy Always + build-on-deploy refreshes the base image).
 homelab_mcp_k8s_image: "{{ k8s_registry_pull_host }}/homelab-mcp:{{ k8s_built_image_tags.get('homelab-mcp', 'latest') }}"
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless RollingUpdate Deployment, no PVC, readinessProbe. The image tag is a mutable
 # :latest built in-cluster (imagePullPolicy: Always), not an upstream tag Renovate can bump
 # blind — every rebuild is this repo's own image-builder run, not a vendor's release.

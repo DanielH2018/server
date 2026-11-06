@@ -4,7 +4,7 @@
 # build and no image to maintain.
 artifacts_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless Deployment, RollingUpdate, no PVC, HTTP readinessProbe, and the base image tag
 # above is a real version, not a mutable :latest or an -lsNN scheme that hides a breaking bump.
 # Deliberately unprefixed: one constant key name every role uses, so the completeness guard

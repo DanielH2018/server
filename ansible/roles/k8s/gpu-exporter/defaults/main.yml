@@ -4,7 +4,7 @@
 # base image to track. Renovate's k8s-defaults manager bumps it by digest.
 gpu_exporter_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # TRUE, for pihole-exporter's reason: this pod is read-only, holds no path any workload
 # depends on, and drives dashboards alone. Losing it to a bad bump costs a GPU graph, and
 # transcoding — which is what it measures — keeps working regardless.

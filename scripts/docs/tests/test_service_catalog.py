@@ -114,32 +114,6 @@ def test_docker_route_is_lan_direct(tmp_path):
     assert row.route == "LAN-direct (no Traefik route)"
 
 
-def test_autodeploy_eligible_true(tmp_path):
-    paths = make_repo(tmp_path)
-    write(
-        paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
-        "k8s_autodeploy: true\nk8s_autodeploy_reason: image-pinned, low blast radius\n",
-    )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
-    assert row.autodeploy == "eligible"
-
-
-def test_autodeploy_denylisted_with_reason(tmp_path):
-    paths = make_repo(tmp_path)
-    write(
-        paths["k8s_roles"] / "jellyfin" / "defaults" / "main.yml",
-        "k8s_autodeploy: false\nk8s_autodeploy_reason: shared media volume coupling\n",
-    )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
-    assert row.autodeploy == "denylisted (shared media volume coupling)"
-
-
-def test_autodeploy_unknown_when_role_declares_nothing(tmp_path):
-    paths = make_repo(tmp_path)
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
-    assert row.autodeploy.startswith("unknown")
-
-
 def test_autodeploy_docker_is_na_when_host_has_no_gitops(tmp_path):
     paths = make_repo(tmp_path)
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
@@ -162,8 +136,8 @@ def _jellyfin_with_owner(tmp_path, owner_line):
     return next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
 
 
-def test_autodeploy_of_an_ansible_owned_entry_is_clean(tmp_path):
-    assert _jellyfin_with_owner(tmp_path, "").autodeploy == "eligible"
+def test_a_k8s_entry_with_no_owner_reports_unknown(tmp_path):
+    assert _jellyfin_with_owner(tmp_path, "").autodeploy.startswith("unknown")
 
 
 def test_autodeploy_of_a_flux_owned_entry_is_flagged(tmp_path):
