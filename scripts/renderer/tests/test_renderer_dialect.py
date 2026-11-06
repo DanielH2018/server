@@ -16,6 +16,7 @@ from _dialect_cases import CASES, FIXTURES
 from _dialect_tree import TREE_LITERAL, write_tree
 
 from lib import yaml_fast
+from lib.k8s_roles import role_dirs
 from lib.render_guard import SHARED_TPL
 from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_ROLES, REPO
 from renderer.renderer_lib.cluster import INCLUDE_KEYS, RenderError, render_tag
@@ -181,13 +182,10 @@ def _resolved_include_values(role: Path) -> dict:
 
 
 def _include_value_problems(roles: Path) -> dict[str, set[Construct]]:
-    """Each role whose `k8s/manifests` include hands the render a value off the list."""
+    """Each role whose render metadata hands the render a value off the list."""
     problems = {}
-    for role in sorted(p for p in roles.iterdir() if (p / "tasks").is_dir()):
-        try:
-            read = _resolved_include_values(role)
-        except ValueError:
-            continue  # It renders nothing through this include, and `render_tag` refuses it.
+    for role in role_dirs(roles):
+        read = _resolved_include_values(role)
         off = {c for value in _jinja_values(read) for c in off_the_list(value)}
         if off:
             problems[role.name] = off
@@ -210,15 +208,9 @@ def test_every_include_value_the_render_resolves_stays_on_the_list():
     "key", ["manifests_files", "manifests_rollout", "manifests_extra_rollouts"]
 )
 def test_an_off_the_list_include_value_is_flagged(tmp_path, key):
-    tasks = tmp_path / "widget" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "main.yml").write_text(
-        "- name: Render\n"
-        "  ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        f'    {key}: "{{{{ x | wordcount }}}}"\n'
-    )
+    defaults = tmp_path / "widget" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text(f'{key}: "{{{{ x | wordcount }}}}"\n')
     assert _include_value_problems(tmp_path) == {
         "widget": {Construct("filter", "wordcount")}
     }

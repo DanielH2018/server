@@ -119,8 +119,9 @@ The layers, weakest first:
 1. Role defaults.
 1. `group_vars/all.yml`.
 1. The host's `host_vars` file.
-1. The role's `k8s/manifests` include vars, for the five keys `cluster.py:INCLUDE_KEYS` names. No
-   other include var reaches a template.
+1. The role's render metadata in its `defaults/main.yml`, for the five keys
+   `cluster.py:INCLUDE_KEYS` names. Ansible gives these keys this rank as `k8s/manifests` include
+   vars.
 1. The stub file's or placeholder mode's values, as `-e @FILE` extra vars do.
 
 A value resolves after the layers merge, so a default that names a variable reads the winning
@@ -140,7 +141,8 @@ Ansible behaviour.
 
 - `hostvars[<another host>]` holds no `group_vars` key. Ansible's holds them, and reading one
   fails the render.
-- An include var outside `INCLUDE_KEYS` does not reach a template. Ansible's does.
+- An include var does not reach a template. The renderer takes no value from a role's `tasks/`.
+  Ansible's does.
 - A `hosts.ini` inline value keeps its quotes. Ansible's parser strips them. `hosts.ini` quotes no
   value.
 - `lookup('pipe')` runs nothing. It accepts one command, and Ansible runs any command.
@@ -150,17 +152,15 @@ Ansible behaviour.
 A template that needs a new filter costs a PR with three edits: the literal, this table and a spec
 case. That cost is the intended one, because R4.8 has to reimplement each ansible-core entry.
 
-The refusal binds `renderer_env`, which the cluster render and its task-computed values use.
+The refusal binds `renderer_env`, which the cluster render and its build contexts use.
 `strict_env`, which host and package modes render through, has every registered filter, and
 `resolve_vars` resolves variable values in its own environment, so the render refuses none of
-them. The census covers them instead: role defaults, inventory values, and the values of each
-role's `k8s/manifests` include for the keys `cluster.py:INCLUDE_KEYS` and `restart.py:TARGET_KEYS`
-name. H3 owns the host templates' subset.
+them. The census covers them instead: role defaults and inventory values, each role's render
+metadata for the keys `cluster.py:INCLUDE_KEYS` and `restart.py:TARGET_KEYS` name among them. H3 owns the host templates' subset.
 
-The list holds filters no template names, because the expressions in role tasks and defaults use
-them: `combine` and `map` for observability's rollouts, and `reject` and the Longhorn claim filters
-in defaults. R4.3 moves the task expressions into `renderer_lib`, and a later PR may drop what
-nothing then reads.
+The list holds filters no template names, because the expressions in role defaults use them:
+`combine` and `map` for observability's rollouts, and `reject` and the Longhorn claim filters. A
+later PR may drop what nothing reads.
 
 The removed filters are those the tree stopped using before this record, such as `to_uuid`, and
 `register_ansible_filters` still registers them for the render guards. R4.8 reimplements only what

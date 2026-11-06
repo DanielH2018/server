@@ -143,17 +143,6 @@ def _entry(args) -> dict:
     )[0]
 
 
-def test_the_tasks_are_the_bare_include(args):
-    """`k8s/manifests` derives the lists, the service and the rollout; no var restates them."""
-    tasks = yaml_fast.safe_load(scaffold.tasks_main(args.name))
-    assert tasks == [
-        {
-            "name": "Deploy widget to the cluster",
-            "ansible.builtin.include_role": {"name": "k8s/manifests"},
-        }
-    ]
-
-
 def test_the_doc_leaves_the_glance_facts_to_the_generator(args):
     """The block owns the tag, image, route and stance; the prose names the shared sources."""
     doc = scaffold.role_doc(args.name, route=True)
@@ -280,13 +269,12 @@ def test_authelia_without_a_route_is_refused(capsys):
 
 
 def test_the_generated_role_ships_no_service_or_route_template(args, tmp_path):
-    """Four files, and neither a Service nor an IngressRoute."""
+    """Three files: no `tasks/`, and neither a Service nor an IngressRoute."""
     written = {
         p.relative_to(tmp_path / "widget").as_posix()
         for p in scaffold.write_role(args, tmp_path)
     }
     assert written == {
-        "tasks/main.yml",
         "defaults/main.yml",
         "templates/deployment.yaml.j2",
         "CLAUDE.md",

@@ -294,11 +294,15 @@ def test_the_shape_this_guard_protects_actually_exists():
 
 
 def _write_role(
-    root: Path, name: str, *, tasks: str, templates: dict[str, str]
+    root: Path, name: str, *, tasks: str, templates: dict[str, str], defaults: str = ""
 ) -> Path:
     role = root / name
     (role / "tasks").mkdir(parents=True)
     (role / "tasks/main.yml").write_text(tasks)
+    (role / "defaults").mkdir()
+    (role / "defaults/main.yml").write_text(
+        "---\nmanifests_secret_files:\n  - secret.yaml\n" + defaults
+    )
     (role / "templates").mkdir()
     for filename, body in templates.items():
         (role / "templates" / filename).write_text(body)
@@ -311,9 +315,7 @@ _TASKS = """---
     name: k8s/manifests
   vars:
     manifests_service: {name}
-    manifests_secret_files:
-      - secret.yaml
-{extras}"""
+"""
 
 _DAEMONSET = """---
 apiVersion: apps/v1
@@ -360,7 +362,7 @@ def test_a_second_workload_reading_the_secret_by_env_is_flagged(tmp_path):
     role = _write_role(
         tmp_path,
         "widget",
-        tasks=_TASKS.format(name="widget", extras=""),
+        tasks=_TASKS.format(name="widget"),
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
@@ -368,15 +370,12 @@ def test_a_second_workload_reading_the_secret_by_env_is_flagged(tmp_path):
 
 def test_a_second_workload_named_in_extra_rollouts_is_clean(tmp_path):
     """The accept half: naming it in manifests_extra_rollouts is what clears the finding."""
-    extras = (
-        "    manifests_extra_rollouts:\n"
-        "      - name: widget-agent\n"
-        "        kind: daemonset\n"
-    )
+    extras = "manifests_extra_rollouts:\n  - name: widget-agent\n    kind: daemonset\n"
     role = _write_role(
         tmp_path,
         "widget",
-        tasks=_TASKS.format(name="widget", extras=extras),
+        tasks=_TASKS.format(name="widget"),
+        defaults=extras,
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == []
@@ -385,13 +384,14 @@ def test_a_second_workload_named_in_extra_rollouts_is_clean(tmp_path):
 def test_a_second_workload_named_by_an_extra_rollouts_expression_is_clean(tmp_path):
     """A Jinja-built list, as authelia passes, resolves rather than being indexed as text."""
     extras = (
-        "    manifests_extra_rollouts: >-\n"
-        "      {{ [{'name': 'widget-agent', 'kind': 'daemonset'}] if true else [] }}\n"
+        "manifests_extra_rollouts: >-\n"
+        "  {{ [{'name': 'widget-agent', 'kind': 'daemonset'}] if true else [] }}\n"
     )
     role = _write_role(
         tmp_path,
         "widget",
-        tasks=_TASKS.format(name="widget", extras=extras),
+        tasks=_TASKS.format(name="widget"),
+        defaults=extras,
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == []
@@ -402,7 +402,7 @@ def test_a_second_workload_mounting_the_secret_as_a_volume_is_clean(tmp_path):
     role = _write_role(
         tmp_path,
         "widget",
-        tasks=_TASKS.format(name="widget", extras=""),
+        tasks=_TASKS.format(name="widget"),
         templates={"daemonset.yaml.j2": _MOUNTED_DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == []
@@ -413,7 +413,7 @@ def test_a_role_restarting_its_workloads_privately_is_clean(tmp_path):
     role = _write_role(
         tmp_path,
         "widget",
-        tasks=_TASKS.format(name="widget", extras="")
+        tasks=_TASKS.format(name="widget")
         + "\n- name: Roll it\n  ansible.builtin.command: kubectl rollout restart ds/widget-agent\n",
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
@@ -426,7 +426,7 @@ def test_a_role_saying_rollout_restart_only_in_a_comment_is_still_flagged(tmp_pa
         tmp_path,
         "widget",
         tasks="# A deploy here must not trigger a rollout restart that changes nothing.\n"
-        + _TASKS.format(name="widget", extras=""),
+        + _TASKS.format(name="widget"),
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
@@ -437,8 +437,7 @@ def test_a_role_naming_rollout_restart_outside_a_command_is_still_flagged(tmp_pa
     role = _write_role(
         tmp_path,
         "widget",
-        tasks=_TASKS.format(name="widget", extras="")
-        + "\n- name: Skip the rollout restart\n"
+        tasks=_TASKS.format(name="widget") + "\n- name: Skip the rollout restart\n"
         "  ansible.builtin.debug:\n"
         "    msg: no rollout restart is needed here\n",
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},

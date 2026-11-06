@@ -1,13 +1,12 @@
-"""The values Ansible computes in role tasks that the renderer must supply itself.
+"""The render metadata and image builds a role's `defaults/main.yml` gives the renderer.
 
-`include_vars` reads a role's render metadata from its `defaults/main.yml`, and any `vars:` left
-on its `k8s/manifests` include. `image_builder_sites` reads its builds the same way.
+`include_vars` reads a role's render metadata, and `image_builder_sites` reads its builds. No
+value comes from a role's `tasks/`. A role whose `tasks/` still sets a key of that metadata is
+refused (`lib.k8s_roles.refuse_moved_keys_in_tasks`) rather than rendered without it.
 
-`derived_facts` computes the values a role task derives from the tree, `TASK_COMPUTED`, by
-evaluating the task's own expression read out of its tasks file: each image's content tag by
-image-builder's expression, the script checksums and `janitorr_dry_run`.
-`playbook_dir` and `role_path` resolve as Ansible resolves them, so a lookup reads the same
-file a deploy reads.
+`derived_facts` computes the one value a template reads that no file states,
+`k8s_built_image_tags`, with each tag by `derived.content_tag`.
+`playbook_dir` resolves as Ansible resolves it, so a lookup reads the same file a deploy reads.
 
 No value a template reads comes from live state, so the renderer pins no fact. Target slice
 R3 removed the last live reads, and R3's live-read census in `scripts/renderer/tests/` holds
@@ -28,57 +27,20 @@ from typing import cast
 import jinja2
 
 from lib import yaml_fast
+from lib.k8s_roles import RENDER_KEYS, refuse_moved_keys_in_tasks
 from lib.repo_paths import ANSIBLE, K8S_ROLES
+from renderer.renderer_lib.derived import content_tag
 from renderer.renderer_lib.environment import evaluate, renderer_env
 
 
 IMAGE_BUILDER = K8S_ROLES / "image-builder"
-CONTENT_TAG = "image_builder_content_tag"
 BUILT_IMAGE_TAGS = "k8s_built_image_tags"
 # The role default listing the images a role builds, one mapping of `image_builder_*` vars per
 # build, with an optional `when`.
 IMAGE_BUILDS = "image_builder_builds"
-# The render metadata `include_vars` reads from a role's defaults.
-RENDER_KEYS = frozenset(
-    {
-        "manifests_deferred_dir_name",
-        "manifests_deferred_files",
-        "manifests_exclude_files",
-        "manifests_extra_rollouts",
-        "manifests_files",
-        "manifests_outside_secrets",
-        "manifests_prune",
-        "manifests_rollout",
-        "manifests_secret_files",
-        "manifests_self_rollouts",
-    }
-)
-# The `data` the content tag's expression hashes, read the way that expression reads it.
+# The `data` the content tag hashes.
 _CONTEXT_DATA = (
     "{{ (lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data'] }}"
-)
-
-# Each role's `set_fact` values that `derived_facts` evaluates, in the order the role's tasks
-# set them, as the tasks file and the fact.
-SET_FACTS = {
-    "janitorr": (("main.yml", "janitorr_dry_run"),),
-}
-
-# The values a role task computes that a template or a role default reads. A test holds this
-# set equal to a word grep of the k8s templates and defaults for every `set_fact` name.
-TASK_COMPUTED = frozenset(
-    {
-        BUILT_IMAGE_TAGS,
-        "janitorr_dry_run",
-    }
-)
-
-# The modules that include a role, by every name ansible-core accepts.
-_INCLUDE_MODULES = (
-    "include_role",
-    "import_role",
-    "ansible.builtin.include_role",
-    "ansible.builtin.import_role",
 )
 
 
@@ -88,17 +50,23 @@ def _parsed(path: Path) -> object:
 
 
 # Keyed on the text rather than the path, as `render_guard._parsed_mapping` is, so an edit
-# between two renders reaches the second one. A render reads the same tasks files once per
-# role and again per build, and parsing them again was most of the module's YAML (#5900).
+# between two renders reaches the second one. A render reads a role's defaults more than once
+# (#5900).
 @functools.lru_cache(maxsize=512)
 def _parsed_text(text: str) -> object:
     return yaml_fast.safe_load(text)
 
 
 def _defaults(role_dir: Path) -> dict:
-    """`role_dir`'s `defaults/main.yml`, unresolved, or {} when it has none."""
+    """`role_dir`'s `defaults/main.yml`, unresolved.
+
+    Raises:
+        ValueError: The role has no such file.
+    """
     path = role_dir / "defaults" / "main.yml"
-    return cast(dict, _parsed(path)) or {} if path.is_file() else {}
+    if not path.is_file():
+        raise ValueError(f"{role_dir.name} has no defaults/main.yml")
+    return cast(dict, _parsed(path)) or {}
 
 
 def render_defaults(role_dir: Path) -> dict:
@@ -106,62 +74,22 @@ def render_defaults(role_dir: Path) -> dict:
     return {k: v for k, v in _defaults(role_dir).items() if k in RENDER_KEYS}
 
 
-def _tasks(nodes: list) -> list[dict]:
-    """Every task in a tasks file, the ones inside `block`, `rescue` and `always` included."""
-    found = []
-    for task in nodes or []:
-        if not isinstance(task, dict):
-            continue
-        found.append(task)
-        for key in ("block", "rescue", "always"):
-            found.extend(_tasks(task.get(key)))
-    return found
-
-
 def include_vars(role_dir: Path) -> dict:
-    """`role_dir`'s `RENDER_KEYS` defaults, and the `manifests_*` vars of the include that renders.
+    """`role_dir`'s render metadata, as `render_defaults` reads it.
 
-    That include has no `tasks_from`, or `tasks_from: main`. Another entry point, such as
-    configarr's `drain.yml`, renders nothing. The values are read as written, so a Jinja value
-    is still a string for the caller to resolve.
+    The values are read as written, so a Jinja value is still a string for the caller to
+    resolve.
 
     Raises:
-        ValueError: The role's tasks hold no such include or more than one, or a key is set in
-            both the defaults and the include.
+        ValueError: The role has no `defaults/main.yml`, or its `tasks/` sets a moved key.
     """
-    found = []
-    for path in sorted((role_dir / "tasks").glob("*.yml")):
-        for task in _tasks(cast(list, _parsed(path))):
-            for module in _INCLUDE_MODULES:
-                args = task.get(module)
-                if not isinstance(args, dict) or args.get("name") != "k8s/manifests":
-                    continue
-                if Path(args.get("tasks_from") or "main").stem != "main":
-                    continue
-                found.append(
-                    {
-                        k: v
-                        for k, v in (task.get("vars") or {}).items()
-                        if k.startswith("manifests_")
-                    }
-                )
-    if len(found) != 1:
-        raise ValueError(
-            f"{role_dir.name} includes k8s/manifests to render {len(found)} times, not once"
-        )
-    declared = render_defaults(role_dir)
-    both = declared.keys() & found[0].keys()
-    if both:
-        raise ValueError(
-            f"{role_dir.name} sets {sorted(both)} in both defaults/main.yml and its "
-            "k8s/manifests include"
-        )
-    return {**declared, **found[0]}
+    refuse_moved_keys_in_tasks(role_dir)
+    return render_defaults(role_dir)
 
 
 @dataclass(frozen=True)
 class BuildSite:
-    """One image a role builds, as its `image_builder_builds` or a tasks file writes it.
+    """One image a role builds, as its `image_builder_builds` writes it.
 
     Attributes:
         vars: The build's `image_builder_*` vars, unresolved, so a value or a key may still
@@ -181,59 +109,19 @@ def _conditions(when: object) -> tuple[str, ...]:
 
 
 def image_builder_sites(role_dir: Path) -> list[BuildSite]:
-    """`role_dir`'s builds: its `image_builder_builds`, then its image-builder includes' vars.
-
-    An include with no `vars:` names no image. It stays in the tasks file as the edge
-    `lib.k8s_role_callers` reads, so a role with `image_builder_builds` may hold one.
+    """`role_dir`'s builds, as its `image_builder_builds` lists them.
 
     Raises:
-        ValueError: The role sets `image_builder_builds` and also passes vars to an include.
+        ValueError: The role has no `defaults/main.yml`, or its `tasks/` sets a moved key.
     """
-    builds = [
+    refuse_moved_keys_in_tasks(role_dir)
+    return [
         BuildSite(
             {k: v for k, v in build.items() if k != "when"},
             _conditions(build.get("when")),
         )
         for build in _defaults(role_dir).get(IMAGE_BUILDS) or []
     ]
-    sites = []
-    for path in sorted((role_dir / "tasks").glob("*.yml")):
-        for task in _tasks(cast(list, _parsed(path))):
-            for module in _INCLUDE_MODULES:
-                args = task.get(module)
-                if isinstance(args, dict) and args.get("name") == "k8s/image-builder":
-                    sites.append(
-                        BuildSite(
-                            dict(task.get("vars") or {}), _conditions(task.get("when"))
-                        )
-                    )
-    if not builds:
-        return sites
-    if any(site.vars for site in sites):
-        raise ValueError(
-            f"{role_dir.name} sets {IMAGE_BUILDS} and also passes vars to a "
-            "k8s/image-builder include"
-        )
-    return builds
-
-
-def set_fact_task(path: Path, fact: str) -> tuple[str, dict]:
-    """The value the one `set_fact` task in `path` that sets `fact` assigns, with its `vars:`.
-
-    The value is the task's text verbatim, so the renderer evaluates the role's own
-    expression rather than a restatement of it.
-
-    Raises:
-        ValueError: No task in `path` sets `fact`, or more than one does.
-    """
-    found = [
-        (task["ansible.builtin.set_fact"][fact], dict(task.get("vars") or {}))
-        for task in _tasks(cast(list, _parsed(path)))
-        if fact in (task.get("ansible.builtin.set_fact") or {})
-    ]
-    if len(found) != 1:
-        raise ValueError(f"{len(found)} set_fact tasks in {path} set {fact}, not one")
-    return found[0]
 
 
 def _template(env: jinja2.Environment, value: object, variables: dict) -> object:
@@ -250,11 +138,6 @@ def _template(env: jinja2.Environment, value: object, variables: dict) -> object
     return value
 
 
-def _template_vars(env: jinja2.Environment, task_vars: dict, variables: dict) -> dict:
-    """`_template` over a task's `vars:` mapping, which stays a mapping."""
-    return cast(dict, _template(env, task_vars, variables))
-
-
 def site_variables(site: BuildSite, ctx: dict) -> dict:
     """The variables image-builder's tasks see for `site` in a role whose context is `ctx`.
 
@@ -264,18 +147,17 @@ def site_variables(site: BuildSite, ctx: dict) -> dict:
     defaults = cast(dict, _parsed(IMAGE_BUILDER / "defaults" / "main.yml"))
     variables = {**defaults, **ctx, "playbook_dir": str(ANSIBLE)}
     env = renderer_env(IMAGE_BUILDER / "templates", variables)
-    return {**variables, **_template_vars(env, site.vars, variables)}
+    return {**variables, **cast(dict, _template(env, site.vars, variables))}
 
 
-def content_tag(variables: dict) -> str:
-    """`image_builder_content_tag` for one build, by image-builder's own expression.
+def context_data(variables: dict) -> dict:
+    """The `data` of image-builder's context ConfigMap for a build with `variables`.
 
     Args:
         variables: The build's variables, as `site_variables` returns them.
     """
-    expression, _ = set_fact_task(IMAGE_BUILDER / "tasks" / "main.yml", CONTENT_TAG)
     env = renderer_env(IMAGE_BUILDER / "templates", variables)
-    return str(evaluate(env, expression, variables))
+    return cast(dict, evaluate(env, _CONTEXT_DATA, variables))
 
 
 @dataclass(frozen=True)
@@ -286,7 +168,7 @@ class ImageContext:
         data: The `data` of image-builder's context ConfigMap, each file name mapped to its
             text, parsed as the content tag's expression parses it. It holds every byte the
             build reads.
-        tag: `image_builder_content_tag`, by `content_tag`.
+        tag: `derived.content_tag` over `data`.
     """
 
     data: dict[str, str]
@@ -296,9 +178,8 @@ class ImageContext:
 def image_contexts(role_dir: Path, ctx: dict) -> dict[str, ImageContext]:
     """Each image `role_dir` builds, mapped to its context and content tag.
 
-    A build whose `when:` is false is left out, as Ansible skips it. The context renders
-    `context-configmap.yaml.j2` through the lookup and `from_yaml` the content tag's expression applies,
-    so a file written from `data` hashes to `tag`.
+    A build whose `when:` is false is left out, as Ansible skips it. A file written from
+    `data` hashes to `tag`.
     """
     built = {}
     for site in image_builder_sites(role_dir):
@@ -306,10 +187,10 @@ def image_contexts(role_dir: Path, ctx: dict) -> dict[str, ImageContext]:
         env = renderer_env(IMAGE_BUILDER / "templates", variables)
         if not all(env.compile_expression(cond)(**variables) for cond in site.when):
             continue
-        data = evaluate(env, _CONTEXT_DATA, variables)
+        data = context_data(variables)
         built[variables["image_builder_name"]] = ImageContext(
-            {str(k): str(v) for k, v in cast(dict, data).items()},
-            content_tag(variables),
+            {str(k): str(v) for k, v in data.items()},
+            content_tag(data),
         )
     return built
 
@@ -327,11 +208,9 @@ def built_image_tags(role_dir: Path, ctx: dict) -> dict[str, str]:
 def derived_facts(
     role_dir: Path, ctx: dict, built: dict[str, str] | None = None
 ) -> dict:
-    """The values `role_dir`'s tasks compute that its templates and defaults read.
+    """The values `role_dir`'s templates and defaults read that no file states.
 
-    That is `k8s_built_image_tags` for every role, and the `SET_FACTS` values of the roles
-    that set one, each by its own task's expression with `playbook_dir` and `role_path` as
-    Ansible sets them.
+    That is `k8s_built_image_tags`, for every role.
 
     Args:
         role_dir: The role directory, `ansible/roles/k8s/<tag>`.
@@ -341,21 +220,10 @@ def derived_facts(
             None computes it here.
 
     Raises:
-        ValueError: A `SET_FACTS` entry names a fact its tasks file does not set once.
-        jinja2.TemplateError: An expression will not evaluate.
+        jinja2.TemplateError: A build's context will not render.
     """
-    if built is None:
-        built = built_image_tags(role_dir, ctx)
-    facts: dict = {BUILT_IMAGE_TAGS: dict(built)}
-    for tasks_file, fact in SET_FACTS.get(role_dir.name, ()):
-        expression, task_vars = set_fact_task(role_dir / "tasks" / tasks_file, fact)
-        variables = {
-            **ctx,
-            **facts,
-            "playbook_dir": str(ANSIBLE),
-            "role_path": str(role_dir),
-        }
-        env = renderer_env(role_dir / "templates", variables)
-        variables.update(_template_vars(env, task_vars, variables))
-        facts[fact] = evaluate(env, expression, variables)
-    return facts
+    return {
+        BUILT_IMAGE_TAGS: dict(
+            built if built is not None else built_image_tags(role_dir, ctx)
+        )
+    }

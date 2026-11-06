@@ -64,7 +64,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import yaml
 
-from deploy_tools.render_targets import render_targets
+from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.cli_help import ArgumentParser

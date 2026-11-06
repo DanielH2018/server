@@ -55,6 +55,8 @@ def make_repo(tmp_path):
         """,
     )
     k8s_roles = tmp_path / "roles_k8s"
+    for role in ("jellyfin", "authelia"):
+        write(k8s_roles / role / "defaults" / "main.yml", "---\n")
     return {
         "host_vars": host_vars,
         "all_vars": all_vars,

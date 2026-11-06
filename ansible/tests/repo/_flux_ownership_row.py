@@ -158,8 +158,8 @@ FLUX_OWNERSHIP = Census(
             "  delegate_to: daniel-box\n",
         ),
     ),
-    # 58 k8s entries when the row landed (2026-10-16): the row reads every one of them.
-    min_matches=len(k8s_entries()),
+    # The count when a scaffolded role stopped having a task file (R4.3). Such a role is no member.
+    min_matches=66,
     must_find=frozenset(_K8S + role for role in H2_ROLES),
 )
 

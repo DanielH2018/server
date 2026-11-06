@@ -44,6 +44,8 @@ def test_auth_tier_true_false_and_missing(tmp_path):
             platform: k8s
         """,
     )
+    for role in ("shell", "mystery"):
+        write(paths["k8s_roles"] / role / "defaults" / "main.yml", "---\n")
     rows = service_catalog.build_rows(**paths)
     by_name = {r.name: r for r in rows}
     assert by_name["authelia"].auth_tier == "Authelia"

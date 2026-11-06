@@ -104,8 +104,9 @@ probe link through jellyfin's mount layout; its docstring maps each proof. Its p
 `tests/test_verify_janitorr.py` renders the Job through the Job census, checks that both
 fences admit the Job's pod, and holds the Job's mounts to janitorr's and jellyfin's.
 
-`tasks/main.yml` keeps the `janitorr_dry_run` fact, because the renderer evaluates it from
-there (`scripts/renderer/renderer_lib/task_inputs.py`), and the `k8s/manifests` include.
+`tasks/main.yml` holds the `k8s/manifests` include, which no Flux path runs.
+`defaults/main.yml` sets `janitorr_dry_run` from `janitorr_k8s_dry_run`, and
+`templates/config/application.yml.j2` reads it.
 
 ## Retention rungs
 

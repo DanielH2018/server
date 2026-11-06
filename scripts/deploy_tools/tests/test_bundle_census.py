@@ -255,12 +255,9 @@ def test_the_deferring_tags_are_the_roles_that_pass_manifests_deferred_files():
 
 
 def test_a_deferred_files_value_that_is_not_a_literal_list_is_a_problem(tmp_path):
-    tasks = tmp_path / "x" / "tasks"
-    tasks.mkdir(parents=True)
-    (tasks / "main.yml").write_text(
-        "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
-        '  vars:\n    manifests_deferred_files: "{{ files }}"\n'
-    )
+    defaults = tmp_path / "x" / "defaults"
+    defaults.mkdir(parents=True)
+    (defaults / "main.yml").write_text('manifests_deferred_files: "{{ files }}"\n')
     found, problems = bundle_census.deferring_tags(["x"], tmp_path)
     assert found == frozenset()
     assert problems == [

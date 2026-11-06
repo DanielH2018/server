@@ -635,8 +635,9 @@ file and into a function in `renderer_lib`:
 - `kuma_declarations`, with uptime-kuma's two asserts on it as checks that raise during the
   render.
 
-`janitorr_dry_run` is only a rename, so the janitorr template reads `janitorr_k8s_dry_run`
-directly instead.
+`janitorr_dry_run` is only a rename, so it becomes a role default that reads
+`janitorr_k8s_dry_run`. The template keeps the name, because the `janitorr-verify` Job's name
+hashes the template's source, and an edit there would rerun that Job.
 
 `test_image_builder_content_tag.py` is retargeted at the new function. While ansible-core is
 installed, it still evaluates the old expression, held in the test as a literal, through
@@ -647,7 +648,8 @@ PR 4 carries `Render-diff: none`.
 **The service set stops reading tasks.** PR 5 moves `render_targets()` into
 `renderer_lib/targets.py`, and repoints R1's importers at it: the renderer, the
 determinism modules and `shadow_diff.py compare`. A service renders when its role has a
-manifest template or a shared default its entry earns.
+manifest template, a shared default its entry earns or a vendored manifest, the arm that admits
+traefik-crds.
 `scripts/deploy_tools/render_targets.py` stays as it is until PR 6, for two reasons.
 `render_records.py` still calls it, and the facts-locked section
 `render_records/CLAUDE.md#How one run works` cites it as a path atom, so deleting it in

@@ -146,13 +146,9 @@ def test_a_config_map_its_reader_reloads_in_place_moves_nothing():
     assert _reader_value("{}", "a: 1") != _reader_value("{}", "a: 2")
 
 
-INCLUDE = """- name: Deploy fixture
-  ansible.builtin.include_role:
-    name: k8s/manifests
-  vars:
-    manifests_rollout: ""
-    manifests_extra_rollouts: >-
-      {{ [{'name': 'fixture-redis', 'restart_on': ['secret']}] if redis | bool else [] }}
+EXPRESSION = """manifests_rollout: ""
+manifests_extra_rollouts: >-
+  {{ [{'name': 'fixture-redis', 'restart_on': ['secret']}] if redis | bool else [] }}
 """
 
 
@@ -164,30 +160,26 @@ def test_an_extra_rollouts_list_built_by_an_expression_resolves(
     tmp_path, redis, targets
 ):
     """authelia builds its list inline, which renders as text before it is a list."""
-    (tmp_path / "fixture" / "tasks").mkdir(parents=True)
-    (tmp_path / "fixture" / "tasks" / "main.yml").write_text(INCLUDE)
+    (tmp_path / "fixture" / "defaults").mkdir(parents=True)
+    (tmp_path / "fixture" / "defaults" / "main.yml").write_text(EXPRESSION)
     assert restart_targets("fixture", {"redis": redis}, roles=tmp_path) == targets
 
 
-EXTRA = """- name: Deploy fixture
-  ansible.builtin.include_role:
-    name: k8s/manifests
-  vars:
-    manifests_extra_rollouts:
-      - name: waited
-        restart_on: []
-      - name: image-only
-        restart_on: [image]
-      - name: secret-only
-        restart_on: [secret]
-      - name: default
+EXTRA = """manifests_extra_rollouts:
+  - name: waited
+    restart_on: []
+  - name: image-only
+    restart_on: [image]
+  - name: secret-only
+    restart_on: [secret]
+  - name: default
 """
 
 
 def test_restart_on_decides_which_entries_are_targets_and_what_they_admit(tmp_path):
     """Ansible waits on a `restart_on: []` entry and never restarts it (scrutiny's influxdb)."""
-    (tmp_path / "fixture" / "tasks").mkdir(parents=True)
-    (tmp_path / "fixture" / "tasks" / "main.yml").write_text(EXTRA)
+    (tmp_path / "fixture" / "defaults").mkdir(parents=True)
+    (tmp_path / "fixture" / "defaults" / "main.yml").write_text(EXTRA)
     assert restart_targets("fixture", {}, roles=tmp_path) == {
         "default": ALL,
         "fixture": ALL,

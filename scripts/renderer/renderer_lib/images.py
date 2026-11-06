@@ -44,6 +44,7 @@ from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib.bundle import CLUSTER_DIR, FLUX_DIR, KUSTOMIZATION
 from renderer.renderer_lib.cluster import RenderedTag, RenderRefused, tag_context
 from renderer.renderer_lib.environment import RenderError
+from lib.k8s_roles import role_dirs
 from renderer.renderer_lib.task_inputs import image_builder_sites, image_contexts
 
 IMAGES_DIR = "images"
@@ -80,11 +81,7 @@ class BuiltImage:
 
 def builder_roles(roles: Path = K8S_ROLES) -> list[str]:
     """The sorted roles that build an image."""
-    return sorted(
-        role.name
-        for role in roles.iterdir()
-        if role.is_dir() and image_builder_sites(role)
-    )
+    return sorted(role.name for role in role_dirs(roles) if image_builder_sites(role))
 
 
 def render_images(

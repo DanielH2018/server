@@ -9,6 +9,8 @@ from docs.catalog_lib import route_facts as rf
 def _role(tmp_path, name, body=None):
     templates = tmp_path / name / "templates"
     templates.mkdir(parents=True)
+    (tmp_path / name / "defaults").mkdir()
+    (tmp_path / name / "defaults" / "main.yml").write_text("---\n")
     if body is not None:
         (templates / "ingressroute.yaml.j2").write_text(body)
     return tmp_path / name
@@ -21,7 +23,10 @@ def _group_vars(tmp_path, text):
 
 
 def test_a_role_with_no_templates_directory_declares_no_route(tmp_path):
-    assert rf.ingressroute_templates(tmp_path / "absent") == []
+    role = tmp_path / "bare"
+    (role / "defaults").mkdir(parents=True)
+    (role / "defaults" / "main.yml").write_text("---\n")
+    assert rf.ingressroute_templates(role) == []
 
 
 def test_a_role_with_no_ingressroute_template_declares_no_route(tmp_path):
