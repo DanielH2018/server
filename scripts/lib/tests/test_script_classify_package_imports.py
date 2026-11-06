@@ -124,6 +124,36 @@ def test_a_guardless_module_a_roles_python_table_names_is_a_library(tmp_path):
     assert sc.classify(repo, scripts)["leaf.py"][0] == "library"
 
 
+def _gate_naming_leaf(tmp_path, statement: str):
+    """A CI-run `sibling.py` that imports `leaf.py` and carries `statement` naming it."""
+    repo, scripts = _package(tmp_path, "")
+    (scripts / "dev" / "pkg" / "sibling.py").write_text(
+        f'"""Summary."""\nfrom .leaf import VALUE\n{statement}\n'
+        'if __name__ == "__main__":\n    print(VALUE)\n'
+    )
+    workflows = repo / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    (workflows / "ci.yml").write_text(
+        "jobs:\n  x:\n    steps:\n      - run: uv run python scripts/dev/pkg/sibling.py\n"
+    )
+    return sc.classify(repo, scripts)["leaf.py"][0]
+
+
+def test_a_path_in_a_prefixes_tuple_is_not_an_invocation(tmp_path):
+    """`render_diff_job.py` lists the libraries whose diffs it gates; listing is not running."""
+    assert (
+        _gate_naming_leaf(tmp_path, '_HAZARD_PREFIXES = ("scripts/dev/pkg/leaf.py",)')
+        == "library"
+    )
+
+
+def test_the_same_path_in_an_argv_list_is_still_an_invocation(tmp_path):
+    assert (
+        _gate_naming_leaf(tmp_path, 'ARGV = ["python", "scripts/dev/pkg/leaf.py"]')
+        == "gate"
+    )
+
+
 def test_a_guarded_script_a_role_names_is_a_deploy_gate(tmp_path):
     """The reject half: a script with a `__main__` guard named by a role's tasks runs there."""
     repo, scripts = _package(tmp_path, '"""Summary."""\n')
