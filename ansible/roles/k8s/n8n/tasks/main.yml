@@ -12,20 +12,10 @@
 - name: Build the n8n image
   ansible.builtin.include_role:
     name: k8s/image-builder
-  vars:
-    image_builder_name: n8n
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile.j2"
 
 - name: Build the n8n task-runners image
   ansible.builtin.include_role:
     name: k8s/image-builder
-  vars:
-    image_builder_name: n8n-runners
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile-runners.j2"
-    # The one file either Dockerfile COPYs. The key must be the exact path the COPY names,
-    # since the ConfigMap mount puts each key at the context root under that name.
-    image_builder_context:
-      "{{ playbook_dir }}/roles/k8s/n8n/templates/config/n8n-task-runners.json.j2": n8n-task-runners.json
 
 # Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387). n8n itself is the only writer of either; the runners hold no
@@ -33,10 +23,3 @@
 - name: Deploy n8n to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # deployment-runners.yaml is a second Deployment running a second built image. Without this
-    # nothing rolls it: the rebuilt-image trigger keys on manifests_service (`n8n`) while
-    # image-builder records `n8n-runners`, and the rollout targets one name regardless.
-    manifests_extra_rollouts:
-      - name: n8n-runners
-        image: n8n-runners

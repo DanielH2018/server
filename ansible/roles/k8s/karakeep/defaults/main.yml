@@ -164,3 +164,44 @@ flux_cronjob_gates:  # noqa var-naming[no-role-prefix]
   karakeep-archive-pruner:
     kind: mutation
     rerun_safe: ansible/roles/k8s/karakeep/tests/test_archive_pruner.py::test_a_second_run_changes_nothing
+
+image_builder_builds:  # noqa var-naming[no-role-prefix]
+  - image_builder_name: karakeep
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/karakeep/templates/Dockerfile.j2"
+
+# The drain gives every extra rollout below the budget of `manifests_rollout_timeout`.
+# meilisearch reads MEILI_MASTER_KEY from this role's Secret as an ENV var, which is only
+# injected at container start. Without this, rotating that key rolls `karakeep` with the new
+# value while `karakeep-meilisearch` keeps serving the old one — the app and its search
+# backend end up on different keys and the deploy reports green.
+#
+# time-tagger also reads a Secret value through env: KARAKEEP_PYTHON_API_KEY, via
+# `secretKeyRef` in deployment-time-tagger.yaml.j2. Its script IS a plain (non-subPath)
+# ConfigMap mount, so kubelet syncs a changed script and the `while true; sleep 900` loop
+# re-execs it without a restart — but that mechanism only covers the script file, not the
+# env var, which resolves once at pod start same as crowdsec's node agents. Without
+# this line a rotated KARAKEEP_PYTHON_API_KEY lands in the Secret while the tagger keeps
+# calling the API with the old key.
+#
+# chrome is listed so the batch drain WAITS on it, never so it restarts (#4564). Its one
+# input that moves is `karakeep_k8s_chrome_image`, which Renovate bumps every few weeks: a
+# bump changes chrome's pod template, so the apply rolls it, and before this entry nothing
+# waited on that roll and the landing read `VERDICT: settled` mid-pull. `restart_on: []`
+# keeps the shared extra restart off it. chrome mounts no role-rendered config, reads no
+# Secret and runs no built image, so all three signals would only restart it on an
+# unrelated karakeep edit and drop any crawl in flight.
+#
+# ACCEPTED COST: the restart is gated on the render changing, not on the SECRET changing, so
+# any karakeep manifest edit also rolls time-tagger, and this extra rollout is queued for
+# the batch drain like any other, so the deploy waits on it. Unlike crowdsec's node agents,
+# that wait should be cheap: time-tagger has no readinessProbe
+# (deployment-time-tagger.yaml.j2, and karakeep_autodeploy_reason cites this as
+# "probe-less"), so a pod counts Ready as soon as its main container starts, which needs only
+# the wait-for-karakeep initContainer's TCP probe of the karakeep Service to succeed — and
+# the batch already waits on karakeep's own primary rollout in parallel, so that Service is
+# normally ready before or around the same time.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: karakeep-meilisearch
+  - name: karakeep-time-tagger
+  - name: karakeep-chrome
+    restart_on: []

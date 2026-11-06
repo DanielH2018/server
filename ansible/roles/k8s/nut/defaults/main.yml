@@ -51,3 +51,21 @@ nut_k8s_mem_request: 16Mi
 # Order of operations when arming a further host: raise this FIRST, run the console-attended
 # `upsmon -c fsd` drill there, and only then set nut_host_secondary_armed for it.
 nut_onbatt_shutdown_delay: 300
+
+image_builder_builds:  # noqa var-naming[no-role-prefix]
+  - image_builder_name: nut
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/nut/templates/Dockerfile.j2"
+    # Embedded verbatim (lookup('file')) — shell scripts Jinja must not touch.
+    image_builder_context_files:
+      "{{ playbook_dir }}/roles/k8s/nut/files/entrypoint.sh": entrypoint.sh
+      "{{ playbook_dir }}/roles/k8s/nut/files/upssched-cmd": upssched-cmd
+
+# DECIDED: nut stays off `manifests_prune` (#3388, operator decision 2026-10-05). Arming it
+# adds the role label to this Deployment and restarts the UPS monitor once, which leaves
+# about a minute without power-cut shutdown coverage. #3388 counts nut as deliberately
+# excluded. The prune is armed by default since #3662, so this line is the opt-out.
+# The renderer reads the line and leaves the role label off nut's objects; Flux's own prune
+# tracks them by its inventory, not by that label.
+manifests_prune: false  # noqa var-naming[no-role-prefix]
+
+manifests_rollout: nut  # noqa var-naming[no-role-prefix]

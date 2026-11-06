@@ -37,7 +37,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   `networkpolicy-observability`, `-prometheus`, `-loki` and `-alertmanager` render into
   `netpol-baseline-observability/`, which the renderer emits as `netpol-baseline-deferred`.
   A new template rendering outside `k8s_namespace` must join `manifests_deferred_files` in
-  `tasks/main.yml`, and `ansible/tests/deploy/test_manifests_prune.py` fails when one is
+  `defaults/main.yml`, and `ansible/tests/deploy/test_manifests_prune.py` fails when one is
   missing.
 
 ## Notable
@@ -71,7 +71,7 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
   give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
   revert of the flag leaves two writers on the objects. `tasks/main.yml` holds one task, the
-  include of `k8s/manifests` with the deferred file list, which the renderer reads.
+  include of `k8s/manifests`, and `defaults/main.yml` holds the deferred file list.
 - **`templates/verify/` is the probe's Flux form.** The Job runs
   `files/netpol_baseline_verify.py` twice. Its `gate` initContainer reads the targets'
   EndpointSlices through the API server and runs the `exempt` check, and its main container

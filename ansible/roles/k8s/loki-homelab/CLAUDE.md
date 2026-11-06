@@ -30,8 +30,8 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   Deployment is `Recreate`, so a change that rolls it takes log queries, pushes and the ruler
   down briefly.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its `manifests_rollout: loki-homelab`
-  and the `alloy` entry in `manifests_extra_rollouts` named the two workloads for the
+  and no Flux path runs it. It stays for the handback. Its default `manifests_rollout: loki-homelab`
+  and the `alloy` entry in `manifests_extra_rollouts` name the two workloads for the
   stabilisation gate and the shared restart. The Kustomization's `wait` replaces the gate, and
   the restart checksum the renderer stamps replaces the restart. `k8s_autodeploy: false` no longer
   gates an apply, because the deployer skips the tag. It still stops Renovate automerging the

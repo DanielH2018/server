@@ -42,7 +42,7 @@ directory, so the library mount is an `emptyDir`.
 - **`ND_ENABLEEXTERNALSERVICES` is `"false"`**, which is load-bearing for the network posture:
   it disables both the GitHub release check and the metadata agents, so the pod opens no
   outbound connection at all — that's what puts it in `netpol-baseline`'s `BORN_FENCED_ROLES`.
-- **The route is gated on the replica count.** `tasks/main.yml` lists `ingressroute.yaml` in
+- **The route is gated on the replica count.** `defaults/main.yml` lists `ingressroute.yaml` in
   `manifests_files` only while `navidrome_k8s_replicas` is above 0. Traefik re-reads every
   IngressRoute on each config refresh and logs `no servers found for homelab/navidrome`
   whenever the EndpointSlice behind one is empty — every ~20s, forever, burying every other

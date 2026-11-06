@@ -69,7 +69,7 @@ to rotate it. That cross-role read is why the `containers_list` entry declares
 
 **A `pihole_password` rotation rolls this pod through Flux.** A Secret change alone does not
 roll a Deployment, and the restart checksum the renderer stamps hashes only the Secrets a tag
-renders itself. `pihole-env` is the pihole role's, so the include in `tasks/main.yml` declares
+renders itself. `pihole-env` is the pihole role's, so `defaults/main.yml` declares
 it under `manifests_outside_secrets` with its one key, `pihole_password`. The renderer hashes
 that key's `cluster-vars.source` digest into this Deployment's restart checksum annotation
 (`scripts/renderer/renderer_lib/restart.py:outside_secrets`). The rotation commit moves the

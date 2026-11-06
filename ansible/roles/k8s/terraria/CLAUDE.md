@@ -42,7 +42,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   The restore checklist on #822 has the rest. The comment above the value in `group_vars`
   still names `--tags terraria`, which `deploy.sh` refuses with exit 5.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay for the handback. The build became
+  `k8s/manifests`, and no Flux path runs either. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The build became
   the `images` job (D5.4), which pushes `ghcr.io/danielh2018/terraria:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR
   one with `imagePullPolicy: IfNotPresent`

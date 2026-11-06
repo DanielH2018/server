@@ -29,13 +29,10 @@ def _sets_empty_rollout(role: Path) -> bool:
     `_rollout_gate_offender` and the Deployment gate below would read a commented empty rollout
     as "sets no `manifests_rollout` at all" rather than "sets it to nothing."
     """
-    tasks = role / "tasks/main.yml"
-    if not tasks.is_file():
-        return False
     return bool(
         re.search(
             r"""manifests_rollout:\s*(""|'')\s*(?:#.*)?$""",
-            tasks.read_text(),
+            _render_metadata_text(role),
             re.MULTILINE,
         )
     )
@@ -97,6 +94,12 @@ def _rollout_gate_offender(role: Path) -> bool:
     return any(not name or name not in gated for _, name in batch)
 
 
+def _render_metadata_text(role: Path) -> str:
+    """`role`'s defaults/main.yml and tasks/main.yml, the two files a render key can sit in."""
+    files = (role / "defaults/main.yml", role / "tasks/main.yml")
+    return "\n".join(path.read_text() for path in files if path.is_file())
+
+
 _EXTRA_ROLLOUTS_BLOCK = re.compile(
     r"^[ \t]*manifests_extra_rollouts:[ \t]*(?:#.*)?\n"
     r"(?P<indent>[ \t]*)-[ \t]*name:.*\n?"
@@ -108,7 +111,7 @@ _EXTRA_ROLLOUTS_BLOCK = re.compile(
 def _extra_rollouts(role: Path) -> set[str]:
     """Deployment names the role gates via `manifests_extra_rollouts`.
 
-    Parsed with a regex rather than yaml.safe_load: tasks/main.yml is Jinja-templated, and a
+    Parsed with a regex rather than yaml.safe_load: the value may be Jinja-templated, and a
     role is free to build the list from a variable. A name this cannot see reads as ungated,
     which fails the guard — the safe direction.
 
@@ -119,10 +122,7 @@ def _extra_rollouts(role: Path) -> set[str]:
     which is where a sibling var such as `manifests_rollout_timeout:` sits. Its own list is
     never credited.
     """
-    tasks = role / "tasks/main.yml"
-    if not tasks.is_file():
-        return set()
-    block = _EXTRA_ROLLOUTS_BLOCK.search(tasks.read_text())
+    block = _EXTRA_ROLLOUTS_BLOCK.search(_render_metadata_text(role))
     if not block:
         return set()
     item = re.escape(block.group("indent"))
@@ -147,10 +147,7 @@ def _primary_rollout_name(role: Path) -> str:
     end-of-line right after the closing quote, would fall through to `manifests_service` and
     return the real service name.
     """
-    tasks = role / "tasks/main.yml"
-    if not tasks.is_file():
-        return ""
-    text = tasks.read_text()
+    text = _render_metadata_text(role)
     rollout = re.search(
         r"""^\s*manifests_rollout:\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*(?:#.*)?$""",
         text,

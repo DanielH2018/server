@@ -17,7 +17,3 @@
 - name: Deploy terraria-stats and valheim-stats to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_rollout: terraria-stats
-    manifests_extra_rollouts:
-      - name: valheim-stats

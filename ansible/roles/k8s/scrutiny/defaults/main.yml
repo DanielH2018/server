@@ -40,3 +40,29 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # Collector cadence, pinned because monitor-bridge's SMART Data Freshness window (26 h)
 # must not depend on the image's default.
 scrutiny_k8s_collector_cron: "0 0 * * *"
+
+manifests_rollout: scrutiny-web  # noqa var-naming[no-role-prefix]
+
+# The other two workloads, listed so the batch drain WAITS on their rollouts, never so this
+# role restarts them (#4564). A Renovate digest bump of `scrutiny_k8s_influxdb_image` or
+# `scrutiny_k8s_collector_image` rolls the workload through the apply, and before these
+# entries nothing waited on that roll. Neither needs a restart: the collector mounts its
+# ConfigMap as a directory, which kubelet syncs and each cron run re-reads, and InfluxDB
+# reads its credentials file only at first-run setup. A restart on every scrutiny manifest
+# change would take InfluxDB, a Recreate Deployment, down for nothing.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: scrutiny-influxdb
+    restart_on: []
+  - name: scrutiny-collector
+    kind: daemonset
+    restart_on: []
+
+# networkpolicy-influxdb.yaml renders from THIS role rather than netpol-baseline on purpose.
+# scrutiny-web panics rather than retries when InfluxDB is unreachable, so the policy
+# admitting it is part of this workload rather than part of the fleet baseline. Shipped one
+# role away, `--tags scrutiny` would stage a web pod whose `wait-for-influxdb` gate could
+# only time out. The file carries the reasoning.
+#
+# The Services live in influxdb.yaml and web.yaml, so the entry's `port` must not also
+# earn the shared default Service.
+manifests_exclude_files: [service.yaml]  # noqa var-naming[no-role-prefix]

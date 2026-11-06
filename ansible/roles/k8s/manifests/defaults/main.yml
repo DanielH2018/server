@@ -45,14 +45,14 @@ manifests_shadow_dir: ''
 # dropped from the role's file list leaves its live object running — the "Prune staged manifests
 # dropped from the file lists" task only deletes the STAGED FILE, never the live object.
 #
-# DECIDED: armed by default, and a role opts out with `manifests_prune: false` at its include.
+# DECIDED: armed by default, and a role opts out with `manifests_prune: false` in its defaults.
 # The operator flipped the default on 2026-10-09 (#3662), after #3388 had armed every caller
 # by hand on 2026-10-04. A role arming the prune renders through
 # ansible/templates/role-labelled.yaml.j2, which stamps `homelab/role: <service>` onto every
 # document, so no template needs a hand edit. An orphan whose staged file was deleted before its
 # role was armed never receives the label and needs one kubectl delete by hand. The prune cannot
 # see such an orphan, so arming a role that still has one is safe. Two roles opt out, each by an
-# operator decision recorded as a DECIDED marker at its include: authelia (its redis lever drops three manifests whose live objects must
+# operator decision recorded as a DECIDED marker in its defaults: authelia (its redis lever drops three manifests whose live objects must
 # survive the drop) and nut (arming restarts the UPS monitor).
 # ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES holds that rule. A deferred render
 # (pihole's instance 2, headlamp's observability RBAC, netpol-baseline's observability policies)
@@ -146,7 +146,7 @@ manifests_restart_triggers_default: [config, secret, image]
 # The render task resolves the source per file, so the fallback costs nothing for a role that
 # ships its own template. The basename still has to be in the role's resolved file list, which
 # is what the prune and the digest both read: the derivation adds `service.yaml` for an entry
-# carrying a `port` and `ingressroute.yaml` for one carrying a `hostname`, unless the include
+# carrying a `port` and `ingressroute.yaml` for one carrying a `hostname`, unless the role
 # excludes it ("Resolve the manifest file lists" in tasks/main.yml).
 #
 # `scripts/lib/k8s_roles.py:SHARED_MANIFEST_DEFAULTS` mirrors this map so the offline render

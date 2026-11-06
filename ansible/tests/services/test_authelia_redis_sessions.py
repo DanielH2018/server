@@ -22,14 +22,14 @@ real rendered manifests behind a non-vacuity assertion:
 
 import pytest
 from _helpers import REPO, render_expr
-from _role_census import manifests_service_of
 from _k8s_render import rendered_docs
 from lib import yaml_fast
+from renderer.renderer_lib.task_inputs import include_vars
 
 REDIS_PORT = 6379
 REDIS_SERVICE = "authelia-redis"
 
-AUTHELIA_TASKS = REPO / "ansible/roles/k8s/authelia/tasks/main.yml"
+AUTHELIA_ROLE = REPO / "ansible/roles/k8s/authelia"
 
 
 # --- the rules, as predicates -------------------------------------------------------
@@ -159,15 +159,7 @@ def test_the_rendered_redis_ports_agree(redis_ports):
 
 
 def test_the_role_does_not_roll_redis_with_the_portal():
-    tasks = yaml_fast.safe_load(AUTHELIA_TASKS.read_text())
-    deploys = [
-        task for task in tasks if manifests_service_of(task, "authelia") == "authelia"
-    ]
-    assert len(deploys) == 1, (
-        f"expected exactly one task deploying the authelia manifests, found {len(deploys)} — "
-        f"this guard reads that task's vars and would pass vacuously over none"
-    )
-    declared = (deploys[0].get("vars") or {}).get("manifests_extra_rollouts", [])
+    declared = include_vars(AUTHELIA_ROLE)["manifests_extra_rollouts"]
     for lever in (True, False):
         extra = render_expr(declared, authelia_k8s_redis_sessions=lever)
         assert the_session_store_is_not_rolled_with_the_portal(extra), (
@@ -181,11 +173,7 @@ def test_the_drain_waits_on_redis_only_while_the_lever_deploys_it():
     """A redis image bump rolls it through the apply, and only a queued entry makes the deploy
     wait on that roll (#4564). With the lever off a cluster may have no redis Deployment, and
     `rollout status` on a missing one fails the drain."""
-    tasks = yaml_fast.safe_load(AUTHELIA_TASKS.read_text())
-    (deploy,) = [
-        task for task in tasks if manifests_service_of(task, "authelia") == "authelia"
-    ]
-    declared = deploy["vars"]["manifests_extra_rollouts"]
+    declared = include_vars(AUTHELIA_ROLE)["manifests_extra_rollouts"]
     waited = render_expr(declared, authelia_k8s_redis_sessions=True)
     assert [e["name"] for e in waited] == [REDIS_SERVICE], waited
     assert render_expr(declared, authelia_k8s_redis_sessions=False) == []
@@ -272,14 +260,7 @@ def test_the_redis_policy_is_staged_by_the_deploy_task():
     A template present in the role but absent from this list is staged by nothing, which is
     the same outage with the file in the right place.
     """
-    tasks = yaml_fast.safe_load(AUTHELIA_TASKS.read_text())
-    deploys = [
-        task for task in tasks if manifests_service_of(task, "authelia") == "authelia"
-    ]
-    assert len(deploys) == 1, (
-        f"expected exactly one task deploying the authelia manifests, found {len(deploys)}"
-    )
-    files = str((deploys[0].get("vars") or {}).get("manifests_files"))
+    files = str(include_vars(AUTHELIA_ROLE)["manifests_files"])
     assert REDIS_POLICY_FILE in files, (
         f"{REDIS_POLICY_FILE} must be named in the authelia role's manifests_files; got "
         f"{files!r}. Only the names in that list are staged and applied"

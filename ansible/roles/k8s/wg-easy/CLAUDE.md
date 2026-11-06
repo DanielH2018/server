@@ -37,8 +37,8 @@ LAN-only **Docker** wg-easy, on an older version with a different auth model.
   up, and this is the sole remote-access path, so a roll that fails starts the recovery from the
   LAN: read the takeover census in the flip PR, then revert the flip. The operator must not be
   connected through wg-easy when it rolls.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`
-  with `manifests_rollout: wg-easy`, and no Flux path runs it. It stays for the handback. The
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the handback. The
   Kustomization's `wait` replaces the rollout wait. The orphaned `wg-easy-env` Secret that the
   task's comment names is still deleted by hand, because no prune reaches a Secret.
 

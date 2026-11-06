@@ -143,3 +143,12 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ prowlarr_k8s_claim }}"
     storage_class: "{{ prowlarr_k8s_storage_class }}"
     size: "{{ prowlarr_k8s_size }}"
+
+# The drain gives the flaresolverr entry below the budget of `manifests_rollout_timeout`.
+# flaresolverr rolls under maxUnavailable: 0 rather than Recreate, so a rollout that
+# never goes Ready leaves the OLD pod serving indefinitely — the failure is invisible
+# unless something actually runs `rollout status` on it. manifests_rollout above only
+# watches the Deployment named `prowlarr`; without this entry flaresolverr is never
+# queued into k8s_pending_rollouts and the batch drain never checks it.
+manifests_extra_rollouts:  # noqa var-naming[no-role-prefix]
+  - name: flaresolverr

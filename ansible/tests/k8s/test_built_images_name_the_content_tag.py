@@ -23,9 +23,10 @@ Run: uv run pytest ansible/tests/k8s/test_built_images_name_the_content_tag.py
 import re
 
 from _helpers import ANSIBLE
-from _role_census import role_dirs, role_task_files
+from _role_census import role_dirs
 from _k8s_render import pod_spec, rendered_docs
 from lib.render_guard import BASE_CONTEXT, BUILT_IMAGE_TAG_STUBS
+from renderer.renderer_lib.task_inputs import image_builder_sites
 
 _POD_KINDS = frozenset({"Deployment", "StatefulSet", "DaemonSet", "Job", "CronJob"})
 
@@ -37,7 +38,6 @@ _BUILT_PREFIX = "localhost:"
 # (ansible/tests/deploy/test_image_builder_content_tag.py pins it at the producer).
 _CONTENT_TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 
-_NAME_DECL_RE = re.compile(r"^\s*image_builder_name:\s*(\S+)\s*$", re.MULTILINE)
 
 # The fleet this guard has to see. A census that finds its subjects by pattern returns an empty
 # set the moment those files move, and an `all()` over nothing passes — so the members are named.
@@ -58,14 +58,12 @@ KNOWN_BUILT_IMAGES = frozenset(
 
 
 def built_image_names() -> set[str]:
-    """Every image name a k8s role hands k8s/image-builder, read from the callers' tasks."""
-    found: set[str] = set()
-    for role in role_dirs(ANSIBLE / "roles" / "k8s"):
-        if role.name == "image-builder":
-            continue
-        for tasks in role_task_files(role):
-            found.update(_NAME_DECL_RE.findall(tasks.read_text()))
-    return found
+    """Every image name a k8s role hands k8s/image-builder."""
+    return {
+        str(site.vars["image_builder_name"])
+        for role in role_dirs(ANSIBLE / "roles" / "k8s")
+        for site in image_builder_sites(role)
+    }
 
 
 def built_image_refs(docs) -> list[tuple[str, str, str]]:
@@ -117,7 +115,7 @@ def test_the_render_context_seeds_every_built_image():
     seeded = set(BUILT_IMAGE_TAG_STUBS)
     declared = built_image_names()
     assert declared >= KNOWN_BUILT_IMAGES, (
-        "a role stopped declaring image_builder_name, or its tasks moved — the census this "
+        "a role stopped declaring image_builder_name, or its builds moved — the census this "
         f"guard runs on lost: {sorted(KNOWN_BUILT_IMAGES - declared)}"
     )
     assert seeded == declared, (

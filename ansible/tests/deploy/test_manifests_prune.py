@@ -34,6 +34,7 @@ from _helpers import (
     walk_tasks,
 )
 from lib.repo_paths import ALL_VARS, K3S_FILES
+from renderer.renderer_lib.task_inputs import render_defaults
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files, manifest_template, tag_owners
@@ -49,7 +50,7 @@ _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 # Kinds that must never be pruned by this mechanism — see the module docstring.
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
 # The roles that include k8s/manifests without arming its prune, each by operator decision
-# recorded as a DECIDED marker at its include (#3388). Every other caller is armed.
+# recorded as a DECIDED marker in its defaults (#3388). Every other caller is armed.
 _UNARMED_ROLES = frozenset({"authelia", "nut"})
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
 _RENDER_TASKS = (
@@ -181,7 +182,7 @@ def test_the_forbidden_kind_check_actually_fires() -> None:
 
 
 def _manifests_includes() -> dict[str, list[dict]]:
-    """The `vars:` of each role's render include, `k8s/manifests` without `tasks_from`, by role."""
+    """Each role's render defaults and `k8s/manifests` include vars, without `tasks_from`, by role."""
     found: dict[str, list[dict]] = {}
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
@@ -190,7 +191,9 @@ def _manifests_includes() -> dict[str, list[dict]]:
         for task in walk_tasks(load_tasks(main)):
             include = task.get("ansible.builtin.include_role") or {}
             if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
-                found.setdefault(role.name, []).append(task.get("vars") or {})
+                found.setdefault(role.name, []).append(
+                    {**render_defaults(role), **(task.get("vars") or {})}
+                )
     return found
 
 
@@ -231,7 +234,7 @@ def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
     assert callers - _ARMED_ROLES == _UNARMED_ROLES, (
         f"unarmed callers {sorted(callers - _ARMED_ROLES)} differ from the decided exclusions "
         f"{sorted(_UNARMED_ROLES)}. A caller is armed unless it passes `manifests_prune: false`; "
-        "excluding one needs an operator decision and a DECIDED marker at its include."
+        "excluding one needs an operator decision and a DECIDED marker in its defaults."
     )
 
 
@@ -515,6 +518,6 @@ def load_yaml_namespace() -> str:
 def test_manifests_prune_defaults_on() -> None:
     """The operator flipped the default on 2026-10-09 (#3662); an exclusion is an explicit false."""
     assert _defaults()["manifests_prune"] is True, (
-        "manifests_prune must default true. A role that must not prune passes "
-        "`manifests_prune: false` at its include, behind a DECIDED marker."
+        "manifests_prune must default true. A role that must not prune sets "
+        "`manifests_prune: false` in its defaults, behind a DECIDED marker."
     )

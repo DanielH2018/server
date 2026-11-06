@@ -31,7 +31,8 @@ from ansible.errors import AnsibleFilterError
 from _helpers import ALL_VARS, ROLES, load_defaults, render_expr
 from lib import yaml_fast
 from _k8s_render import rendered_docs
-from _release_expectation import include_role_vars, rollouts
+from _release_expectation import rollouts
+from renderer.renderer_lib.task_inputs import include_vars
 from flux_components import FilterModule
 from test_volume_names_descriptive import volume_names
 
@@ -197,7 +198,7 @@ def test_all_namespace_peers_is_flagged_on_the_unfiltered_install():
 
 def _declared_self_rollouts(entries: list[dict]) -> list[dict]:
     """The include's `manifests_self_rollouts`, rendered over the role's defaults."""
-    declared = include_role_vars(FLUX)["manifests_self_rollouts"]
+    declared = include_vars(FLUX)["manifests_self_rollouts"]
     return render_expr(declared, **{**load_defaults(FLUX), "flux_controllers": entries})
 
 

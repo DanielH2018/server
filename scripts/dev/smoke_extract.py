@@ -4,7 +4,8 @@
 Used by the image-smoke workflow: a Renovate bump changes the literal
 `image: name:tag` line in a docker-compose.yml.j2, or a `<var>_image: repo:tag[@sha256:...]`
 line in a k8s role's defaults/main.yml — the workflow checks just the new ref, from
-whichever shape.
+whichever shape. A bare `image: name` is no ref: a role's `manifests_extra_rollouts` entry names
+the image it built that way.
 
 EVERY matched ref is emitted. The workflow's fatal checks do not execute the image, so nothing
 here needs an exception list.
@@ -21,8 +22,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import answer_help
 
-# Added line (starts with a single '+', not '+++'), an `image:` key, capture the ref.
-_IMAGE_RE = re.compile(r'^\+(?!\+\+)\s*image:\s*["\']?(?P<ref>[^\s"\']+)["\']?\s*$')
+# Added line (starts with a single '+', not '+++'), an `image:` key, capture a ref with a tag
+# or digest.
+_IMAGE_RE = re.compile(
+    r'^\+(?!\+\+)\s*image:\s*["\']?(?P<ref>[^\s"\':]+:[^\s"\']+)["\']?\s*$'
+)
 
 # Same, for a k8s role default's `<var>_image: repo:tag[@sha256:...]` — optionally quoted,
 # optionally trailing a YAML comment. A Jinja-templated value (registry-built images like

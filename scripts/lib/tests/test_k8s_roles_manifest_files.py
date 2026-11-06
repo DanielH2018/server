@@ -13,6 +13,8 @@ expression.
 Run: uv run pytest scripts/lib/tests/test_k8s_roles_manifest_files.py
 """
 
+import pytest
+
 from lib.k8s_roles import (
     declared_manifest_files,
     manifest_template,
@@ -191,3 +193,33 @@ def test_manifest_template_resolves_nothing_for_a_basename_the_role_never_names(
     )
     assert manifest_template("widget", "ingressroute.yaml", tmp_path) is None
     assert manifest_template("widget", "configmap.yaml", tmp_path) is None
+
+
+def test_a_folded_list_in_defaults_is_read(tmp_path):
+    role = _role(tmp_path, "widget", "---\n- name: Deploy widget\n")
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text(
+        "---\n"
+        "manifests_files: >-  # noqa var-naming[no-role-prefix]\n"
+        "  {{ ['deployment.yaml'] + (['route.yaml'] if lever | bool else []) }}\n"
+        "\n"
+        "manifests_secret_files:  # noqa var-naming[no-role-prefix]\n"
+        "  - secret.yaml\n"
+        "other: unrelated.yaml\n"
+    )
+    assert resolved_manifest_files("widget", tmp_path) == (
+        {"deployment.yaml", "route.yaml"},
+        {"secret.yaml"},
+    )
+
+
+def test_a_file_list_set_in_defaults_and_tasks_is_flagged(tmp_path):
+    role = _role(
+        tmp_path,
+        "widget",
+        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [a.yaml]\n",
+    )
+    (role / "defaults").mkdir()
+    (role / "defaults" / "main.yml").write_text("---\nmanifests_files: [b.yaml]\n")
+    with pytest.raises(ValueError, match=r"manifests_files.*in both"):
+        resolved_manifest_files("widget", tmp_path)

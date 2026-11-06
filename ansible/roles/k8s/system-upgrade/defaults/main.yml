@@ -127,3 +127,5 @@ flux_health_check_exprs:  # noqa var-naming[no-role-prefix]
 # merge here is not a routine bump.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "platform — a merged change to a Plan upgrades the k3s binary on every node it selects; the Plans select no node until H6.3c, and the gates, deadlines and forward-only hold are the protection"  # noqa var-naming[no-role-prefix]
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

@@ -43,8 +43,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   `homelab-cluster-vars`.** Their values are `${<key>}` placeholders in the published
   render, and Flux substitutes the values from the `homelab-cluster-vars` Secret. A rotation
   reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`
-  with `manifests_rollout: home-assistant`, and no Flux path runs it. It stays for the
+- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
+  and no Flux path runs it. It stays for the
   handback. Its pre-apply snapshot through `k8s/volume-snapshot` became the
   `home-assistant-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
 - **Port 8123, no Authelia**, so the companion app works unchanged. MQTT goes via the

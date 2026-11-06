@@ -11,8 +11,8 @@ Target slice R3's exit check 3 (`docs/target-architecture/render/r3-remove-live-
   `derived_names` computes them for the real tree.
 - **Reached:** the names read by the templates the render reads, then, until nothing is
   added, the names each definition of a reached name reads. A definition is a role's
-  `defaults/` or `vars/` value, an inventory value, an `include_role` `vars:` value or a
-  `set_fact` value. A derived name stops the walk.
+  `defaults/` or `vars/` value, an inventory value, an `include_role` `vars:` value, a build
+  in a role's `image_builder_builds` or a `set_fact` value. A derived name stops the walk.
 
 `_live_read_jinja.py` reads each template and definition: its names, and its lookups, of
 which it accepts four plugins in fixed shapes. Each name a `vars` lookup source yields joins
@@ -43,7 +43,12 @@ from lib.render_guard import SHARED_TPL
 from lib.repo_paths import ANSIBLE, K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib.cluster import LABEL_WRAPPER, tag_context
-from renderer.renderer_lib.task_inputs import derived_facts, include_vars
+from renderer.renderer_lib.task_inputs import (
+    derived_facts,
+    image_builder_sites,
+    include_vars,
+    render_defaults,
+)
 from toposort import filter_by_platform
 
 K8S_PLAY = "Deploy k8s workloads"
@@ -52,7 +57,7 @@ IMAGE_BUILDER = "k8s/image-builder"
 # The image-builder template the build context renders from. Its sibling `build-job.yaml.j2`
 # is a one-off Job image-builder's own task applies, so the render never reads it.
 CONTEXT_TEMPLATE = "context-configmap.yaml.j2"
-# The image-builder include vars that name a template the build context renders.
+# The image-builder vars that name a template the build context renders.
 CONTEXT_VARS = ("image_builder_dockerfile", "image_builder_context")
 
 SET_FACT = frozenset({"set_fact", "ansible.builtin.set_fact"})
@@ -257,7 +262,26 @@ def walk_play(tree: Tree, tags: list[str]) -> _Walk:
     walk = _Walk()
     for section in ("pre_tasks", "tasks", "post_tasks"):
         _walk_tasks(tree, deploy, plays[0].get(section) or [], tags, walk)
+    _read_builds(tree, walk)
     return walk
+
+
+def _read_builds(tree: Tree, walk: _Walk) -> None:
+    """Replace each image-builder include's vars with the builds the renderer reads for its role.
+
+    A role's include is bare once its builds sit in `image_builder_builds`, so the vars on the
+    include name no Dockerfile or context template.
+    """
+    builder = tree.roles / IMAGE_BUILDER
+    sites = walk.include_vars.get(builder)
+    if sites is None:
+        return
+    callers = sorted({caller for caller, _ in sites if caller is not None})
+    walk.include_vars[builder] = [
+        (caller, site.vars)
+        for caller in callers
+        for site in image_builder_sites(caller)
+    ]
 
 
 def _values(value: object) -> Iterator[str]:
@@ -342,17 +366,19 @@ def tag_templates(
 
 
 def _deferred(role: Path) -> set[str]:
-    """The `manifests_deferred_files` basenames `role`'s tasks pass to its manifests include."""
-    names: set[str] = set()
+    """The `manifests_deferred_files` basenames in `role`'s defaults and manifests include."""
+    declared = [render_defaults(role).get("manifests_deferred_files") or []]
     for path in sorted((role / "tasks").glob("*.yml")):
         for task in _tasks(yaml_fast.safe_load(path.read_text())):
-            for value in _values(
+            declared.append(
                 (task.get("vars") or {}).get("manifests_deferred_files") or []
-            ):
-                names |= {
-                    n for n in value.replace(",", " ").split() if n.endswith(".yaml")
-                }
-    return names
+            )
+    return {
+        n
+        for value in _values(declared)
+        for n in value.replace(",", " ").split()
+        if n.endswith(".yaml")
+    }
 
 
 def census(

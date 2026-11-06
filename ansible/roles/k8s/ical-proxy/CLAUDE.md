@@ -43,9 +43,9 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   keys are `assisted`-tier in `ansible/secret_rotation.yml`. The rotation rolls the pod through
   the restart checksum.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay for the handback. The `k8s/image-builder` include became promote's `images` job
-  (D5.4a2) and the GHCR ref (D5.4b). The `k8s/manifests` include's `manifests_rollout:
-  ical-proxy` named the Deployment for the stabilisation gate and the shared restart. The
+  They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The `k8s/image-builder` include became promote's `images` job
+  (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout:
+  ical-proxy` names the Deployment for the stabilisation gate and the shared restart. The
   Kustomization's `wait` replaces the gate, and the restart checksum the renderer stamps
   replaces the restart. `k8s_autodeploy: true` no longer gates an apply, because the deployer
   skips the tag.

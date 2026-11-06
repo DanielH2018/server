@@ -47,7 +47,7 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
   and no Flux path runs it. It stays for the handback. Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `livesync-snapshot` Job, and the Kustomization's `wait`
-  replaces the rollout wait. The renderer reads the include's `manifests_exclude_files:
+  replaces the rollout wait. The renderer reads the role's `manifests_exclude_files:
   [ingressroute.yaml]`, so the published render holds no IngressRoute, and traefik's
   file-provider gate stays the only router for the livesync names.
 

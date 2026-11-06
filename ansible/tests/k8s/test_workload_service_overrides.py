@@ -23,6 +23,7 @@ from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files
 from lib.repo_paths import K8S_ROLES
 from lib.k8s_roles import MANIFESTS_PRUNE_DEFAULT
+from renderer.renderer_lib.task_inputs import render_defaults
 from role_label import ROLE_LABEL
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "workload-service.yaml"
@@ -71,10 +72,8 @@ def _armed_roles() -> set[str]:
             include = task.get("ansible.builtin.include_role") or {}
             if include.get("name") != "k8s/manifests" or "tasks_from" in include:
                 continue
-            prune = (task.get("vars") or {}).get(
-                "manifests_prune", MANIFESTS_PRUNE_DEFAULT
-            )
-            if prune is True:
+            task_vars = {**render_defaults(role), **(task.get("vars") or {})}
+            if task_vars.get("manifests_prune", MANIFESTS_PRUNE_DEFAULT) is True:
                 armed.add(role.name)
     return armed
 

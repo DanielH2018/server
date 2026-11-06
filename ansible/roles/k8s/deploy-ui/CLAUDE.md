@@ -24,8 +24,8 @@ repo's first Traefik→host route. Two facts follow:
   give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
   revert of the flag leaves two writers on the objects.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. `manifests_rollout: ''` has nothing to
-  replace: there is no workload to roll, so the Kustomization's `wait` checks only that the
+  and no Flux path runs it. It stays for the handback. Its `manifests_rollout: ''` default has nothing
+  to replace: there is no workload to roll, so the Kustomization's `wait` checks only that the
   Service, EndpointSlice and IngressRoute applied.
 - **The EndpointSlice address is baked in at render time.** The renderer writes
   `k8s_node_client_ip` into the bundle, so a change to that variable reaches the cluster only

@@ -1,6 +1,6 @@
 ---
 # Flux owns headlamp (D5, Wave D), so no Ansible run reaches this file. It stays for the
-# handback (docs/flux-deploy-plane.md), and the renderer reads the include's vars. The tasks it
+# handback (docs/flux-deploy-plane.md), and the renderer reads the role's defaults. The tasks it
 # held before the flip moved:
 # - the observability-namespace RBAC apply: `rbac-observability.yaml` renders into
 #   `headlamp-deferred`, whose Kustomization `dependsOn` observability;
@@ -9,10 +9,3 @@
 - name: Deploy headlamp to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
-    # armed apply's `-n homelab` refuses (#3575). The renderer emits them as the deferred
-    # document `headlamp-deferred`.
-    manifests_deferred_files:
-      - rbac-observability.yaml
-    manifests_deferred_dir_name: headlamp-observability

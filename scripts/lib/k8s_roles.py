@@ -404,10 +404,9 @@ SHARED_MANIFEST_DEFAULTS = {
     "ingressroute.yaml": "ingressroute-default.yaml.j2",
 }
 
-# The keys a caller may set on its include, and the basenames inside whichever value shape it
-# wrote. Read textually rather than by loading the tasks file: a role's tasks/main.yml is
-# Jinja-bearing YAML, and authelia and traefik build their lists with a folded `>-` expression
-# that no plain YAML load resolves to a list at all.
+# The file-list keys a role sets, and the basenames inside whichever value shape it wrote. Read
+# textually rather than by loading the file: authelia and traefik build their lists with a folded
+# `>-` expression that no plain YAML load resolves to a list at all.
 _MANIFEST_FILE_KEY = re.compile(
     r"^(?P<indent>\s*)(?P<key>manifests_(?:secret_|exclude_|deferred_)?files):(?P<rest>.*)$"
 )
@@ -432,11 +431,28 @@ SHARED_DEFAULT_TRIGGERS = {"service.yaml": "port", "ingressroute.yaml": "hostnam
 
 
 def _named_files(role, roles_dir: Path) -> dict[str, set[str]]:
-    """For each file-list key a role's tasks/main.yml sets, the basenames in its value."""
-    tasks = roles_dir / role / "tasks" / "main.yml"
-    if not tasks.is_file():
+    """For each file-list key a role sets, the basenames in its value.
+
+    The role's defaults/main.yml comes first and its tasks/main.yml second.
+
+    Raises:
+        ValueError: Both files set one key.
+    """
+    declared = _file_list_keys(roles_dir / role / "defaults" / "main.yml")
+    passed = _file_list_keys(roles_dir / role / "tasks" / "main.yml")
+    both = declared.keys() & passed.keys()
+    if both:
+        raise ValueError(
+            f"{role} sets {sorted(both)} in both defaults/main.yml and tasks/main.yml"
+        )
+    return {**declared, **passed}
+
+
+def _file_list_keys(path: Path) -> dict[str, set[str]]:
+    """For each file-list key `path` sets, the basenames in its value. {} for no such file."""
+    if not path.is_file():
         return {}
-    lines = tasks.read_text().splitlines()
+    lines = path.read_text().splitlines()
     named: dict[str, set[str]] = {}
     for i, line in enumerate(lines):
         match = _MANIFEST_FILE_KEY.match(line)
@@ -475,7 +491,7 @@ def resolved_manifest_files(
 ) -> tuple[set[str], set[str]]:
     """`(manifests_files, manifests_secret_files)` as `k8s/manifests` resolves them for `role`.
 
-    A list the role's include passes wins. Otherwise the list is derived:
+    A list the role sets wins. Otherwise the list is derived:
 
     - its secret files are its own manifest templates whose name says `secret`;
     - its files are the rest of its own manifest templates, minus any one-off `-job.yaml`, its
