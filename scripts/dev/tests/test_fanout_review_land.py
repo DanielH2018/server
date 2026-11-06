@@ -10,6 +10,9 @@ import json
 
 from _review_fakes import PR, _pipeline, _report
 
+EARLIER = "https://github.com/DanielH2018/server/pull/7295"
+EARLIER_ROW = {"url": EARLIER, "number": 7295, "state": "MERGED"}
+
 
 def _clean_review():
     return [
@@ -17,6 +20,30 @@ def _clean_review():
         _report(structured={"summary": "", "findings": []}),
         _report(f"Applied it. {PR}"),
     ]
+
+
+def test_a_no_pr_batch_citing_its_branchs_merged_pr_starts_no_landing(tmp_path):
+    """A relaunch reuses the branch name, so the earlier launch's merged PR is on it (#7402)."""
+    pipeline, run = _pipeline(tmp_path, [_report(f"Already fixed by {EARLIER}.")])
+    run.branch_prs = [EARLIER_ROW]
+    final = pipeline.run_all()
+    assert run.lands == []
+    assert [phase for _, _, phase in run.claude] == ["implement"]
+    assert final["result"] == f"Already fixed by {EARLIER}."
+    (record,) = (tmp_path / "state").glob("1345-*.json")
+    assert json.loads(record.read_text())["outcome"] == "no-pr"
+
+
+def test_a_batchs_own_pr_lands_though_its_text_cites_an_earlier_merged_one_first(
+    tmp_path,
+):
+    reports = _clean_review()
+    reports[0] = _report(f"{EARLIER} missed a case, so I opened {PR}")
+    pipeline, run = _pipeline(tmp_path, reports)
+    run.branch_prs = [EARLIER_ROW, {"url": PR, "number": 4000, "state": "OPEN"}]
+    pipeline.run_all()
+    (argv, *_) = run.lands
+    assert argv[argv.index("--pr") + 1] == "4000"
 
 
 def test_a_settled_landing_ends_the_batch_without_resuming_the_implementer(tmp_path):

@@ -23,7 +23,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib import signing
-from fanout_lib.branch_pr import branch_pr_argv, parse_branch_prs
+from fanout_lib.branch_pr import (
+    branch_pr_argv,
+    parse_branch_prs,
+    parse_merged_before,
+)
 from fanout_lib.brief import WORKED_BY, Comment, Issue
 from fanout_lib.placement import READ_COMMAND, HostReading, parse_reading
 from fanout_lib.manifest import Batch
@@ -342,6 +346,15 @@ def branch_pr_urls(branch: str, repo: str = SERVER) -> list[str] | None:
     return parse_branch_prs(out.stdout) if out.returncode == 0 else None
 
 
+def earlier_pr_urls(branch: str, repo: str, launched_at: str) -> list[str]:
+    """The PR urls of `branch` in `repo` that merged before `launched_at`; [] when unreadable."""
+    try:
+        out = gh(*branch_pr_argv(branch, repo)[1:], check=False, timeout=GH_TIMEOUT_S)
+    except subprocess.TimeoutExpired:
+        return []
+    return parse_merged_before(out.stdout, launched_at) if out.returncode == 0 else []
+
+
 def comment_issue(number: int, body: str, repo: str = SERVER) -> bool:
     """Post `body` as a comment on issue `number` in `repo`; False when `gh` failed."""
     try:
@@ -395,6 +408,7 @@ class Tools:
         signing_keys: the signing keys GitHub verifies for the account.
         merged_pr: the URL of a merged PR for a branch in a repo, or "".
         branch_prs: every PR url for a branch in a repo, newest first, or None when unreadable.
+        earlier_prs: the PR urls of a branch in a repo that merged before a launch time.
         findings: run `findings.py` with an argv, for the claim `launch` takes itself.
         default_ref: read a checkout's remote default branch, for `target.resolve`.
         head_branch: read the orchestrator's own branch, which holds this repo's claims.
@@ -408,6 +422,7 @@ class Tools:
     signing_keys: Callable[[], frozenset[str]] = signing.registered_signing_keys
     merged_pr: Callable[[str, str], str] = merged_pr_url
     branch_prs: Callable[[str, str], list[str] | None] = branch_pr_urls
+    earlier_prs: Callable[[str, str, str], list[str]] = earlier_pr_urls
     findings: Callable[[list[str]], subprocess.CompletedProcess] = run_findings
     default_ref: Callable[[str], str | None] = default_ref
     head_branch: Callable[[], str] = head_branch
