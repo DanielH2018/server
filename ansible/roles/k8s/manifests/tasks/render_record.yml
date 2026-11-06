@@ -56,8 +56,8 @@
       host: "{{ inventory_hostname }}"
       manifests: "{{ manifests_release_files }}"
       manifests_digest: "{{ manifests_release_digest }}"
-      # A matching `manifests_digest` says nothing about these files: a line added to
-      # uptime-kuma's `static-monitors.yaml.j2`, which is one, leaves it identical.
+      # A matching `manifests_digest` says nothing about these files: a line added to one
+      # leaves it identical.
       # `secret_digest` is what moves for them, so a reader may treat a match as
       # "not stale" only where this list is empty on both sides or both `secret_digest`s match.
       secret_manifests: "{{ manifests_secret_files_resolved | sort }}"

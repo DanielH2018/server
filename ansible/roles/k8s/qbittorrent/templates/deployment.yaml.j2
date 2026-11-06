@@ -151,8 +151,8 @@ spec:
             periodSeconds: 10
           livenessProbe:
             # Never present, never deliberately removed (no comment on this container ever
-            # explained its absence) — a k3s-migration oversight, not a decision. Kuma already
-            # pages on this via monitor-bridge's replicas_unavailable check, so this probe closes
+            # explained its absence) — a k3s-migration oversight, not a decision. Alertmanager
+            # already pages on a replicas_unavailable rule, so this probe closes
             # a self-healing gap, not an alerting one: nothing restarted a wedged WebUI in the
             # Docker/autoheal era's absence.
             #
