@@ -1,8 +1,7 @@
-"""Evaluate a role task's templated value through ansible-core's own `Templar`.
+"""Evaluate a templated value through ansible-core's own `Templar`.
 
-`test_image_builder_content_tag.py` evaluates k8s/image-builder's content-tag expression this
-way, and `homelab-render`'s tests compare the renderer's derived values with the same
-evaluation. Both read the expression out of the role rather than restating it.
+`CONTENT_TAG_EXPRESSION` is k8s/image-builder's content-tag rule as Ansible evaluates it, and the
+oracle `derived.content_tag` and `ci_images.content_tag` are held equal to.
 """
 
 import functools
@@ -13,23 +12,16 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.plugins.loader import init_plugin_loader
 from ansible.template import Templar, trust_as_template
 
-from _helpers import ANSIBLE, load_tasks
+from _helpers import ANSIBLE
 
 IMAGE_BUILDER = ANSIBLE / "roles" / "k8s" / "image-builder"
-CONTENT_TAG = "image_builder_content_tag"
-
-
-def set_fact_expression(tasks: Path, fact: str) -> str:
-    """The template the one `set_fact` in `tasks` that sets `fact` assigns, verbatim.
-
-    Raises:
-        LookupError: No `set_fact` in `tasks` sets `fact`.
-    """
-    for task in load_tasks(tasks):
-        facts = task.get("ansible.builtin.set_fact") or {}
-        if fact in facts:
-            return facts[fact]
-    raise LookupError(f"no set_fact assigns {fact} in {tasks}")
+CONTEXT_DATA_EXPRESSION = (
+    "{{ (lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data'] }}"
+)
+CONTENT_TAG_EXPRESSION = (
+    "sha-{{ ((lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data']\n"
+    "        | dictsort | to_json | hash('sha256'))[:12] }}"
+)
 
 
 @functools.cache
@@ -64,5 +56,4 @@ def templar_content_tag(variables: dict, role: Path = IMAGE_BUILDER) -> str:
 
     Point `role` at a copy of image-builder to vary its templates.
     """
-    expression = set_fact_expression(role / "tasks" / "main.yml", CONTENT_TAG)
-    return str(templar_value(expression, variables, role)).strip()
+    return str(templar_value(CONTENT_TAG_EXPRESSION, variables, role)).strip()

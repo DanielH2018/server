@@ -11,7 +11,8 @@ The population is derived, not listed: a role is in scope when `templates/` hold
 file `is_manifest_template` accepts, the same predicate the manifest validator renders by, so a
 role with only Dockerfiles drops out on the shape of its templates rather than by name. The `CALLER_RENDERED_ROLES` are exempt: `image-builder` renders
 for a CALLING role, inside its deploy, and applies what it renders itself — a release record
-of its own would be the caller's under another name.
+of its own would be the caller's under another name. A role with no `tasks/` is out of scope:
+no Ansible path runs it, and Flux applies what the renderer renders.
 
 Run: uv run pytest ansible/tests/k8s/test_manifest_roles_include_the_shared_render.py
 """
@@ -59,7 +60,9 @@ def test_every_manifest_rendering_role_includes_the_shared_render():
     in_scope = {
         p.name
         for p in role_dirs()
-        if p.name not in CALLER_RENDERED_ROLES and renders_manifests(p)
+        if p.name not in CALLER_RENDERED_ROLES
+        and renders_manifests(p)
+        and (p / "tasks").is_dir()
     }
     assert KNOWN_MANIFEST_ROLES <= in_scope
     missing = sorted(

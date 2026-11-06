@@ -27,8 +27,9 @@ steps, and this page describes each piece once its PR has merged.
   the deploy play, and `renderer_lib/cluster.py` renders each tag and writes its directories.
 - `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads each role's render
   metadata from its `defaults/main.yml` (*Where render metadata lives*).
-- `scripts/renderer/renderer_lib/task_inputs.py:derived_facts` computes the values role tasks
-  compute from the tree (*Task-computed values*).
+- `scripts/renderer/renderer_lib/derived.py:content_tag` computes each built image's tag
+  (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
+  tags a host renders.
 - `ansible/roles/k8s/manifests/defaults/main.yml:manifests_shadow_dir` keeps the Ansible
   render of a stubbed dry run (*Keep the Ansible render of a stubbed dry run*).
 - `scripts/renderer/shadow_diff.py compare`, `stubcheck` and `digest` compare the two halves
@@ -97,7 +98,9 @@ uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \
 
 `--role TAG` renders only the tags it names, and it repeats. Without it, `cluster` renders
 every k8s render target of daniel-box, the list
-`scripts/deploy_tools/render_targets.py` prints.
+`scripts/renderer/renderer_lib/targets.py:render_targets` returns. A service renders when its
+role has a top-level manifest template, a shared default its entry's `port` or `hostname` earns,
+or a vendored manifest.
 
 Each tag becomes `DIR/cluster/<tag>/`. The directory holds the rendered manifests and a
 `kustomization.yaml` whose `resources` list them in lexical order, the order
@@ -203,7 +206,7 @@ A role's templates render with the variables they see in the k8s play on daniel-
 The render is strict. A name that no layer supplies stops the render with an error naming it.
 The render guards under `scripts/validate/` print `STUB` instead, and lay stub values such as
 `k8s_built_image_tags` under every layer. The renderer does neither: it derives
-`k8s_built_image_tags` and the other task-computed values (*Task-computed values*). An undefined attribute
+`k8s_built_image_tags` (*Derived values*). An undefined attribute
 still takes its `| default(...)`, as it does under Ansible.
 
 The same rule holds one level down. A variable whose value names an undefined variable, such
@@ -237,15 +240,22 @@ its render tasks in `ansible/roles/k8s/manifests/tasks/main.yml`:
 
 ### Where render metadata lives
 
-A role sets the keys of `scripts/renderer/renderer_lib/task_inputs.py:RENDER_KEYS` in its
+A role sets the keys of `scripts/lib/k8s_roles.py:RENDER_KEYS` in its
 `defaults/main.yml`, and `image_builder_builds` lists the images it builds. Each key in
-defaults carries `# noqa var-naming[no-role-prefix]`. `include_vars` and
-`scripts/lib/k8s_roles.py:resolved_manifest_files` read defaults first and `tasks/` second,
-and each raises on a key both set. A `manifests_*` key outside `RENDER_KEYS`, such as
+defaults carries `# noqa var-naming[no-role-prefix]`. `include_vars`, `image_builder_sites` and
+`scripts/lib/k8s_roles.py:resolved_manifest_files` read `defaults/main.yml` only, and each raises
+on a role without that file. A `manifests_*` key outside `RENDER_KEYS`, such as
 `manifests_rollout_kind`, is read only by the Ansible path and stays on the include.
 
-`include_vars` also reads the include whose `tasks_from` is absent or `main`, and refuses a
-role with none or with two. The renderer resolves only the five keys it renders with: the
+The render takes no value from a role's `tasks/`, so it renders the same bytes with those
+directories gone, and `scripts/renderer/tests/test_renderer_reads_no_task_file.py` holds that.
+Its one read there is `scripts/lib/k8s_roles.py:refuse_moved_keys_in_tasks`. That function parses
+the files and raises on a `RENDER_KEYS` key, `image_builder_builds`, `manifests_rollout_timeout`
+or an `image_builder_*` var on a `k8s/image-builder` include, because the renderer would otherwise
+drop the value without a word. A role whose entry is not `owner: flux` is exempt, because Flux
+applies nothing of its render.
+
+The renderer resolves only the five keys it renders with: the
 two file lists, the deferred pair and `manifests_prune`. The others stay strings until a
 reader such as `restart.py` resolves them. Role defaults still enter the template context,
 so a template must not name one of these keys for any other purpose.
@@ -281,32 +291,28 @@ A template census in `scripts/renderer/tests/` parses every template of the k8s 
 `ansible/templates/`. It fails when a filter or test name does not resolve in the environment
 the renderer renders with.
 
-### Task-computed values
+### Derived values
 
-Some values a template or a role default reads are set by a role task, not by a file.
-`scripts/renderer/renderer_lib/task_inputs.py:derived_facts` computes them. It reads each
-task's expression out of its tasks file and evaluates it in the environment the
-templates render in, so the renderer never restates one:
+One value a template or a role default reads is stated by no file. `k8s_built_image_tags`, which
+`scripts/renderer/renderer_lib/task_inputs.py:derived_facts` returns, maps each built image to
+its content tag:
 
-- **Content tags.** Each `image_builder_builds` entry gets its tag from the
-  expression of the image-builder task `Compute the content tag`. The tag hashes
-  `context-configmap.yaml.j2`'s rendered `data`. The build's variables are image-builder's
-  defaults under the calling role's context, with the entry's vars over both and
-  `playbook_dir` resolving to `ansible/`. An entry whose `when:` is false adds no tag, as
-  valheim's does without mods. The tags form `k8s_built_image_tags`, which every role reads
-  as `{}` when it builds nothing, as `ansible/deploy.yml` resets it.
-- **Script checksums.** monitor-bridge and autofix-bridge hash their staged modules with
-  `lookup('file', ..., rstrip=False) | hash('sha1')`. game-stats embeds its scripts in
-  rendered ConfigMaps instead (#5444), so it computes no checksum in a task.
-- **`janitorr_dry_run`**, which janitorr's task copies from `janitorr_k8s_dry_run`.
+- `scripts/renderer/renderer_lib/derived.py:content_tag` computes the tag: `sha-` and the first
+  12 hex digits of `sha256` over `context-configmap.yaml.j2`'s rendered `data`, each key mapped
+  to its text, sorted case-insensitively and encoded by `json.dumps`.
+  `scripts/deploy_tools/ci_images.py:content_tag` holds a second copy, because the job that holds
+  `packages: write` imports no renderer code.
+- Each `image_builder_builds` entry's variables are image-builder's defaults under the calling
+  role's context, with the entry's vars over both and `playbook_dir` resolving to `ansible/`.
+- An entry whose `when:` is false adds no tag, as valheim's does without mods. Every role reads
+  the map as `{}` when it builds nothing, as `ansible/deploy.yml` resets it.
 
-`SET_FACTS` in the same module lists the roles and facts besides the content tags. A role
-default that reads one of these values, such as `nut_k8s_image`, resolves in a second pass of
-the context with the values as overrides, the precedence `set_fact` has over every file
-layer.
+A role default that reads the map, such as `nut_k8s_image`, resolves in a second pass of the
+context with the map as an override, the precedence `set_fact` has over every file layer.
 
-Tests in `scripts/renderer/tests/` hold each derived value equal to the value
-ansible-core's `Templar` computes from the same expression and variables.
+Tests hold each content tag equal to the value ansible-core's `Templar` computes from
+image-builder's expression with the same variables, which `ansible/tests/_image_builder_tag.py`
+holds as a literal.
 
 `lookup('template')` keeps the render's trailing newlines, as ansible-core's lookup does. The
 content tag hashes those bytes, so a lookup that stripped them gave every build a tag Ansible

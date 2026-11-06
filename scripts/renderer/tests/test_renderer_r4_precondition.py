@@ -14,7 +14,6 @@ import pytest
 from lib import yaml_fast
 from lib.k8s_roles import k8s_entries
 from lib.repo_paths import K8S_ROLES
-from renderer.renderer_lib.task_inputs import SET_FACTS
 
 MEMBER_FLOOR = {"pihole", "traefik", "flux"}
 RUNBOOK_ALLOWLIST = (
@@ -36,8 +35,6 @@ _IMPORT_MODULES = {
     "ansible.builtin.import_tasks",
     "ansible.builtin.include_tasks",
 }
-_SET_FACT_MODULES = {"set_fact", "ansible.builtin.set_fact"}
-# `when` is a renderer input: task_inputs.image_builder_sites reads it for valheim's build.
 _INCLUDE_KEYS = {"name", "vars", "when", "tags"}
 _BLOCK_KEYS = ("block", "rescue", "always")
 
@@ -64,8 +61,7 @@ def _leaf_tasks(nodes: list | None):
             yield task
 
 
-def _permitted(task: dict, tasks_dir: Path, path: Path, facts: dict) -> bool:
-    role = tasks_dir.parent.name
+def _permitted(task: dict, tasks_dir: Path) -> bool:
     included = _module(task, _INCLUDE_MODULES)
     if included is not None:
         return (
@@ -83,16 +79,10 @@ def _permitted(task: dict, tasks_dir: Path, path: Path, facts: dict) -> bool:
             and (tasks_dir / file).resolve().is_relative_to(tasks_dir.resolve())
             and (tasks_dir / file).is_file()
         )
-    set_fact = _module(task, _SET_FACT_MODULES)
-    if isinstance(set_fact, dict):
-        allowed = {(file, fact) for file, fact in facts.get(role, ())}
-        return all((path.name, fact) in allowed for fact in set_fact)
     return False
 
 
-def grammar_problems(
-    entries: dict[str, dict], roles: Path, facts: dict = SET_FACTS
-) -> list[str]:
+def grammar_problems(entries: dict[str, dict], roles: Path) -> list[str]:
     """Each task of a domain role that the grammar refuses, as `role/file: task name`.
 
     `flux` is the one named exemption, and only while it is flux-owned: no path runs a
@@ -105,7 +95,7 @@ def grammar_problems(
         tasks_dir = roles / tag / "tasks"
         for path in sorted(p for p in tasks_dir.rglob("*") if p.is_file()):
             for task in _leaf_tasks(yaml_fast.safe_load(path.read_text())):
-                if not _permitted(task, tasks_dir, path, facts):
+                if not _permitted(task, tasks_dir):
                     problems.append(f"{tag}/{path.name}: {task.get('name')}")
     return problems
 
@@ -235,18 +225,15 @@ def test_a_flux_entry_without_the_ownership_flag_fails_on_flux(tmp_path):
     ]
 
 
-def test_an_imported_sibling_holding_only_a_permitted_set_fact_passes(tmp_path):
-    _write(
-        tmp_path, "demo/tasks/main.yml", "- ansible.builtin.import_tasks: facts.yml\n"
-    )
+def test_a_set_fact_task_fails(tmp_path):
     _write(
         tmp_path,
-        "demo/tasks/facts.yml",
+        "demo/tasks/main.yml",
         "- name: Set the fact\n  ansible.builtin.set_fact:\n    demo_fact: true\n",
     )
-    facts = {"demo": (("facts.yml", "demo_fact"),)}
-    assert grammar_problems({"demo": OWNED}, tmp_path, facts) == []
-    assert grammar_problems({"demo": OWNED}, tmp_path, {}) != []
+    assert grammar_problems({"demo": OWNED}, tmp_path) == [
+        "demo/main.yml: Set the fact"
+    ]
 
 
 @pytest.mark.parametrize(

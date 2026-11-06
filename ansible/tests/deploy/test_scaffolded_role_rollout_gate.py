@@ -19,7 +19,7 @@ def _scaffolded_widget(tmp_path: Path) -> Path:
 
 
 def test_a_scaffolded_role_gates_the_deployment_it_ships(tmp_path: Path) -> None:
-    """The scaffolder's bare include waits on the one Deployment it writes (#4298).
+    """The scaffolded role waits on the one Deployment it writes (#4298).
 
     With no `manifests_rollout`, the gate's target is the role's name, so the scaffolded
     Deployment must carry that name.

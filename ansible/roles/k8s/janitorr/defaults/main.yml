@@ -24,6 +24,9 @@ k8s_autodeploy_reason: "probe-less — no readinessProbe on the Deployment; also
 #
 # Set back to "true" to make janitorr inert again; verify.yml asserts the live file matches.
 janitorr_k8s_dry_run: "false"
+# The name templates/config/application.yml.j2 reads. Renaming it there moves the
+# `janitorr-verify` Job's name, which hashes that template's source.
+janitorr_dry_run: "{{ janitorr_k8s_dry_run }}"
 
 # The WHOLE tree at /data, no subPath — the *arr side of the D4 contract, not the jellyfin side.
 # It is load-bearing here rather than incidental: janitorr writes symlinks whose TARGETS are

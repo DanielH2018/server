@@ -138,8 +138,8 @@ def _primary_rollout_name(role: Path) -> str:
     `roles/k8s/manifests/tasks/main.yml`. `manifests_service` defaults to the role directory's
     name (#4053), a caller that overrides it writes a literal string, and every
     `manifests_rollout` override is likewise a literal (checked repo-wide), so a regex match is
-    safe here. A role that never calls k8s/manifests resolves to '', which matches no real
-    Deployment name.
+    safe here. A role whose `tasks/` never calls k8s/manifests resolves to '', which matches no
+    real Deployment name. A role with no `tasks/` renders under its own name.
 
     Tolerates a trailing comment after the value, as `_sets_empty_rollout` does. Without it,
     `manifests_rollout: ''  # nothing to roll` would disagree between the two matchers reading
@@ -160,7 +160,8 @@ def _primary_rollout_name(role: Path) -> str:
         return service.group(1)
     return (
         role.name
-        if re.search(r"^\s*name:\s*k8s/manifests\s*$", text, re.MULTILINE)
+        if not (role / "tasks").is_dir()
+        or re.search(r"^\s*name:\s*k8s/manifests\s*$", text, re.MULTILINE)
         else ""
     )
 

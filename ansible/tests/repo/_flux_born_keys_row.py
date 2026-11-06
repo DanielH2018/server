@@ -18,7 +18,7 @@ import re
 from functools import cache
 
 from _row_table import Census, Subject, tracked
-from renderer.renderer_lib.task_inputs import RENDER_KEYS
+from lib.k8s_roles import RENDER_KEYS
 
 _K8S = "ansible/roles/k8s/"
 # The six Flux-born roles of H1 (*Six Flux-born tags*). A role not yet in the tree is skipped, so

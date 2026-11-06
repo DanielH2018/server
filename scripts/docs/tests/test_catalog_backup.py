@@ -233,6 +233,7 @@ def test_backup_tier_derives_the_r2_set_from_the_injected_containers_list(tmp_pa
     # from the repo's. Neither `lab/svc-config` nor the `lab` namespace exists in the repo.
     paths = make_repo(tmp_path)
     write(paths["all_vars"], "k8s_namespace: lab\n")
+    write(paths["k8s_roles"] / "svc" / "defaults" / "main.yml", "---\n")
     write(
         paths["k3s_defaults"],
         """\
