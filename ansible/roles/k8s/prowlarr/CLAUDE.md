@@ -24,9 +24,8 @@ rendering attacker-supplied pages in a headless browser.
 - **Flux applies it, not Ansible** (#5594, a Wave D PR with monitor-bridge). Its
   `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
   deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
-  verifies the next bundle. To give it back to Ansible, follow the two-PR handback in
-  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
-  authelia and traefik stay Ansible-owned, so the Kustomization records them in its
+  verifies the next bundle. authelia and traefik stay Ansible-owned, so the Kustomization records
+  them in its
   `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
 - **The `prowlarr-snapshot` Job snapshots `prowlarr-config` before each revision applies**
   (`k8s_autodeploy_snapshot_pvcs: [prowlarr-config]`). The prowlarr Kustomization depends on
@@ -35,7 +34,7 @@ rendering attacker-supplied pages in a headless browser.
   operator follows the revert runbook in `docs/volume-snapshot-drills.md`.
   `k8s_autodeploy: true` still lets Renovate automerge the image bump.
 - **Where the tasks went.** `tasks/main.yml` holds the `k8s/manifests` include, which no Flux
-  path runs; it stays for the handback. The Kustomization's `wait` replaces the rollout wait
+  path runs; it stays until R4 deletes it. The Kustomization's `wait` replaces the rollout wait
   for both Deployments. The flaresolverr isolation probe became the `prowlarr-verify` Job,
   and its five tasks and `netpol-probe-job.yaml.j2` were deleted.
 

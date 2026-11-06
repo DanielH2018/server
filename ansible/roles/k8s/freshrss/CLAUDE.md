@@ -20,9 +20,8 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
-  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. Both dependencies, authelia and traefik, stay
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
+  authelia and traefik, stay
   Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
   annotation, not in `dependsOn`. The FreshRSS Deployment is `Recreate`, so a change that
   rolls it takes the service down briefly. The feed cache is a one-replica `RollingUpdate`.
@@ -35,7 +34,7 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
   `docs/volume-snapshot-drills.md`. `k8s_autodeploy: true` still lets Renovate automerge the
   digest bump.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its pre-apply snapshot through
+  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `freshrss-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait. The `freshrss-feed-cache` entry in `manifests_extra_rollouts`
   rolled nginx after a cache-config edit, because nginx rereads `conf.d` only on start. The

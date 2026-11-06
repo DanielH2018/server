@@ -36,12 +36,11 @@ conventions.
   last.
 - **Flux applies it, not Ansible** (D5, Wave A's last PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. The Kustomization's `wait` replaces
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
+  Kustomization's `wait` replaces
   the rollout gate, and the restart checksum the renderer stamps on the Deployment replaces
   the shared restart. `tasks/main.yml` holds one task, the include of `k8s/manifests`, and no
-  Flux path runs it. It stays for the handback.
+  Flux path runs it. It stays until R4 deletes it.
 - **Renovate does not automerge its image bumps** (`k8s_autodeploy: false`), because this role
   is the ingress pager. `/-/healthy` proves the process answers, not that a module still probes correctly.
   The PR is reviewed and merged by hand, and `promote` applies it after the merge.

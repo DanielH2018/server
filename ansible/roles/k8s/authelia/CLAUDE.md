@@ -126,9 +126,8 @@ the container in `templates/deployment.yaml.j2`. ENFORCED:
 - **Flux applies authelia, not Ansible** (D5, authelia's own window). Its `containers_list`
   entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and
   a merged change reaches the cluster when `promote` publishes and verifies the next bundle.
-  `tasks/main.yml` holds the include of `k8s/manifests` alone, and no Flux path runs it. To give
-  authelia back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. A rotation lands without `--tags`, as
+  `tasks/main.yml` holds the include of `k8s/manifests` alone, and no Flux path runs it. A rotation
+  lands without `--tags`, as
   step 4 of *Authelia user passwords* in `docs/secret-rotation.md` describes.
 - **The hashing block must render the nested form with `variant: argon2id`** — the legacy flat form
   multiplied `memory` by 1024 and passed validation silently (#1621). ENFORCED:

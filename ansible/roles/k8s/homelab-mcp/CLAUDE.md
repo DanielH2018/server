@@ -15,7 +15,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 
 - **Flux's render pulls `ghcr.io/danielh2018/homelab-mcp:<content tag>`**, with
   `imagePullPolicy: IfNotPresent` (D5.4b), and the *Image* line above names that repository.
-  The role's defaults still name the in-cluster registry, for the handback. promote's `images`
+  The role's defaults still name the in-cluster registry. promote's `images`
   job builds the image from `templates/Dockerfile.j2` and the files below.
 - **No IngressRoute** — routed through the k8s edge's file-provider gate Secret (`roles/k8s/traefik/templates/livesync-gate-secret.yaml.j2`)
   instead, so its bearer token stays out of CRD objects the readonly kubeconfig can list.
@@ -36,9 +36,8 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. The Kustomization has no Ansible-owned
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
+  Kustomization has no Ansible-owned
   dependency to record, because the role renders no route.
 - **The token Secret substitutes from `homelab-cluster-vars`.** `homelab_mcp_token` and
   `claude_ha_token` are `${<key>}` placeholders in the published render. Flux substitutes the
@@ -58,7 +57,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   so dropping one from `rbac.yaml.j2` deletes it live at the next promotion.
   `deletionPolicy: Orphan` applies only when the Kustomization itself is deleted.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The `k8s/image-builder` include became promote's `images` job
+  They stay until R4 deletes them. The `k8s/image-builder` include became promote's `images` job
   (D5.4a2, `scripts/deploy_tools/ci_images.py`) and the GHCR ref (D5.4b): the renderer writes
   the build context to `DIR/images/homelab-mcp/` and its content tag to `DIR/images/tags.json`,
   and the Deployment's ref reads the same tag. The role's
@@ -77,11 +76,10 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   flat at `/app/obs_api.py`, so it stays stdlib-only with no first-party import;
   `scripts/diagnostics/tests/test_obs_api.py` imports it with `scripts/` off the path. The file
   is part of the build context, so a merged edit to it alone moves homelab-mcp's content tag,
-  and the next promotion builds the image and rolls the pod. After a handback, the deployer's
-  `K8S_BUILD_CONTEXT_FILES` table maps an edit to it to homelab-mcp's tag (#4840).
+  and the next promotion builds the image and rolls the pod.
 - The Dockerfile path is built from `playbook_dir`, not `role_path`: that render happens
   **inside** `k8s/image-builder`, where `role_path` resolves to the wrong role (bit the first
-  deploy, 2026-08-13). It matters again only after a handback.
+  deploy, 2026-08-13). No Flux path runs that render.
 
 ## Editing
 - App: `files/app.py`, `files/safe_reads.py` (tests in `tests/`), the shared

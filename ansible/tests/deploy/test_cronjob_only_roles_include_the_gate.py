@@ -5,8 +5,7 @@ flux-owned role names each CronJob in `flux_cronjob_gates`, and the renderer cop
 gate Job in `<tag>-verify` that Flux runs once per role revision. A CronJob-only role without
 that entry ships an image nobody has run. This test catches the missing entry before the
 revision lands, the same way `test_k8s_autodeploy_batch_gates.py` catches a missing wait for a
-plain Job. The `k8s/cronjob-gate` role that gated an Ansible-owned role was retired (#5716);
-`docs/flux-deploy-plane.md` says what a handback restores.
+plain Job. The `k8s/cronjob-gate` role that gated an Ansible-owned role was retired (#5716).
 
 Run: uv run pytest ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py
 """
@@ -80,8 +79,7 @@ def test_every_cronjob_only_role_is_gated_at_deploy_time():
         missing = declared - gated
         assert not missing, (
             f"{role} declares CronJob(s) {sorted(missing)} with no flux_cronjob_gates entry "
-            "(a flux-owned role) and no job/<name> wait in tasks/main.yml; an Ansible-owned "
-            "role needs the handback steps in docs/flux-deploy-plane.md. A CronJob a gate "
+            "and no job/<name> wait in tasks/main.yml. A CronJob a gate "
             "Job cannot copy goes in UNGATED_BY_DESIGN and carries `homelab/gate: schedule`"
         )
 

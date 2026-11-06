@@ -886,10 +886,9 @@ removes `owner`:
     - D6.5b: `probe_lib/health.py`'s skip, with the release-record branch, and
       `probe_lib/releases.py`'s skip, with the module.
 - **`tag_owners` readers that stay until H1.9:** `secret_rotation.py --deploy`,
-  `gen_role_glance.py`, `service_catalog.py`, D6.3's census row and `land_lib/handback.py`'s
-  refusal. The census refuses the handback in CI first, so the merge-time refusal
-  is a second guard for the same commit. It reads one Kustomization only for a PR that makes
-  a tag Ansible-owned, and H1.9 deletes it with `owner`.
+  `gen_role_glance.py`, `service_catalog.py` and D6.3's census row. `land_lib/handback.py`'s
+  refusal was a second guard behind that census, and the 2026-11-06 ruling deleted it
+  (*The deletion policy, and the end of the handback*).
 - **The glance blocks keep D2's Flux line.** D6.2b does not put the Renovate stance back.
   The role's `defaults/main.yml` comment beside `k8s_autodeploy` states it, D6.2b rewords
   that comment, and `renovate.json`'s derived rule is its reader. A second statement in 57
@@ -993,6 +992,11 @@ daniel-box to `setup_drift_check_hosts` before D6.5 disarms manifest-prune-check
   redundancy "the safe direction".
 
 ### The deletion policy, and the end of the handback
+
+**The operator ruled on 2026-11-06 that services do not move back from Flux to Ansible.** A
+flux-owned service stays flux-owned or retires through `docs/flux-deploy-plane.md`, *Retiring a
+flux-owned service*. The ruling removes the handback as an option as well as a rollback, so
+`land_lib/handback.py`'s refusal went with it in the PR that recorded the ruling, ahead of H1.9.
 
 D2's open question 3 asked D6 to choose the deletion policy from its own count of handbacks
 and retirements. D2 to D5 run the per-tag Kustomizations with `deletionPolicy: Orphan`.
@@ -2074,8 +2078,8 @@ The steps merged in this order.
       ended in `needs-manual-apply` with "deploy it by hand", and from this PR on
       `deploy.sh` refuses every k8s tag, so nobody could follow that instruction.
     - Delete D2's `tag_owners` split in `land_lib/deploy.py` with the k8s deploy arm, because
-      every k8s tag waits on promotion. `land_lib/handback.py`'s refusal stays until
-      H1.9 (*D2's ownership readers after D6*).
+      every k8s tag waits on promotion. `land_lib/handback.py`'s refusal stayed until the
+      2026-11-06 ruling (*D2's ownership readers after D6*).
     - Keep `land_reach.py` and its note in `land_tags.py`.
     - Add the census row: every k8s `containers_list` entry carries `owner: flux`. It goes in
       the census tables under `ansible/tests/repo/`, with a red and a green fixture. It finds

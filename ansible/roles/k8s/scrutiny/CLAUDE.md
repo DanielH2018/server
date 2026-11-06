@@ -35,13 +35,13 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
-  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. Both dependencies, authelia and traefik, stay
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
+  authelia and traefik, stay
   Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
   annotation, not in `dependsOn`.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. The default `manifests_rollout: scrutiny-web` names
+  and no Flux path runs it. It stays until R4 deletes it. The default `manifests_rollout:
+  scrutiny-web` names
   the web Deployment for the stabilisation gate and the shared restart. The Kustomization's
   `wait` replaces the gate, and the restart checksum the renderer stamps on `scrutiny-web` replaces the
   restart. The two `manifests_extra_rollouts` entries declare `restart_on: []`, and the

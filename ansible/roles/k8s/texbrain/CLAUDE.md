@@ -19,10 +19,7 @@ the File System Access API. See repo-root `CLAUDE.md` for shared conventions.
 - **Flux applies it, not Ansible** (D4.5). Its `containers_list` entry carries `owner: flux`,
   so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged change reaches
   the cluster when `promote` publishes and verifies the next bundle. Its digest-bump PRs
-  therefore draw no `land-wait` and no `probe.py health` run. To give it back to Ansible,
-  follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the flag
-  leaves two writers on the objects.
-
+  therefore draw no `land-wait` and no `probe.py health` run.
 ## The image comes from a fork, and why
 
 [`DanielH2018/texbrain`](https://github.com/DanielH2018/texbrain) forks

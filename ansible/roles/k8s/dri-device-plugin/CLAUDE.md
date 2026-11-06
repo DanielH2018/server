@@ -21,9 +21,7 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
 - **Flux applies it, not Ansible** (Wave D). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `tasks/main.yml`
-  holds the include of `k8s/manifests` alone. To give
-  the role back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects.
+  holds the include of `k8s/manifests` alone.
 - **The verify is an alert, not a Job.** The soak reads `K8sExtendedResourceMissing`
   (`verify="true"` in `ansible/roles/k8s/observability/files/rules/k8s-workloads.yaml`), which
   fires when no node reports allocatable `devic.es/dri` above 0. It replaces the rollout wait and
@@ -66,12 +64,6 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
   `SYSTEM_UPGRADE_JOB_TTL_SECONDS_AFTER_FINISH` of 900 ages its Plan Jobs out. The sweep stays
   in this role rather than a role of its own because it runs the same script; a second role
   would add a `containers_list` entry and an image pin for one more predicate.
-- **A handback to Ansible must defer the reaper's documents first.** The role's Ansible path
-  arms its prune with `manifests_prune_namespace: kube-system`, and an armed apply refuses a
-  document in another namespace. The reapers' objects sit in `homelab`, `kube-system`
-  and `longhorn-system`, so a handback lists `admission-reaper-cronjob.yaml` and
-  `admission-reaper-rbac.yaml` in `manifests_deferred_files`, as netpol-baseline does. Flux applies a role's documents in the
-  namespaces they name, so the Flux render needs neither.
 
 ## Editing
 - Manifests: `templates/daemonset.yaml.j2`, and the reaper's

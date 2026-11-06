@@ -20,11 +20,10 @@ repo's first Traefik→host route. Two facts follow:
 
 - **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects.
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its `manifests_rollout: ''` default has nothing
+  and no Flux path runs it. It stays until R4 deletes it. Its `manifests_rollout: ''` default has
+  nothing
   to replace: there is no workload to roll, so the Kustomization's `wait` checks only that the
   Service, EndpointSlice and IngressRoute applied.
 - **The EndpointSlice address is baked in at render time.** The renderer writes

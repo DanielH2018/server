@@ -19,9 +19,7 @@ dashboard and the dashboard findings.
 
 - **Flux applies it, not Ansible** (D5, crowdsec's own window). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged
-  change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
-  back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
-  the flag leaves two writers on the objects.
+  change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
   that needs its credential.
 - **`use_authelia: false`** — bouncers authenticate with their own API keys, and `crowdsec-db`
@@ -203,8 +201,8 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 - **A failed Job holds the revision.** The old gate reported a non-zero exit from the home-ips
   run and continued. Under Flux any non-zero exit fails `crowdsec-verify`, and the soak does
   not pass.
-- **`tasks/main.yml` holds only the `k8s/manifests` include.** No run reaches it, because Flux
-  owns the role, and a handback restores the Ansible wait and gate from git history.
+- **`tasks/main.yml` holds only the `k8s/manifests` include.** No run reaches it, because Flux owns
+  the role.
 
 ## Traps
 

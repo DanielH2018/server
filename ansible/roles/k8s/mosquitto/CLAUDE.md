@@ -15,13 +15,12 @@ web UI, no route — infra role.
 - **Flux applies it, not Ansible** (D5.20, a Wave D PR with sonarr and radarr). Its
   `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
   deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
-  verifies the next bundle. To give it back to Ansible, follow the two-PR handback in
-  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
-  zigbee2mqtt is Flux-owned too and depends on it. The Deployment is `Recreate`, so a change
+  verifies the next bundle. zigbee2mqtt is Flux-owned too and depends on it. The Deployment is
+  `Recreate`, so a change
   that rolls it drops every MQTT client briefly. `mosquitto-data` is on `longhorn-nobackup`,
   and the role declares no snapshot claim, so the tag renders no `-snapshot` Job.
 - **Where the tasks went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its two asserts each have a successor.
+  and no Flux path runs it. It stays until R4 deletes it. Its two asserts each have a successor.
   The colon refusal moved into `cluster_vars.py write` (below). The LAN-address assert became
   observability's `MosquittoLanAddressNotPinned` rule, which the soak reads. The
   Kustomization's `wait` replaces the rollout wait.

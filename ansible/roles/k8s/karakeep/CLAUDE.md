@@ -18,18 +18,16 @@ loop to auto-tag bookmarks.
 
 - **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
-  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
-  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
+  still stops Renovate's
   automerge of a pin bump.
 - **Four Kustomizations.** `karakeep-snapshot` snapshots `karakeep-data` before `karakeep`
   applies, so the stateful hold (D5.2b1) covers every revision that moves it.
   `karakeep-prepull` pulls all four Deployments' images onto their node beside it, and
   `karakeep` depends on both (#5778). `karakeep` waits up to its 1200s
   `manifests_rollout_timeout`. `karakeep-verify` then runs the archive
-  pruner's gate (below). `tasks/main.yml` keeps the image-builder and manifests includes for
-  a handback, which moves `image_builder_builds` back onto the build include
-  (`ansible/roles/k8s/image-builder/CLAUDE.md`), and no Flux path runs them.
+  pruner's gate (below). `tasks/main.yml` keeps the image-builder and manifests includes until R4
+  deletes them, and no Flux path runs them.
 - **The Authelia bypass:** `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
   browser extension and mobile app can't pass 2FA, and they speak tRPC, not the REST API).
   `/api/auth/*` (next-auth's password login) stays behind Authelia on both names: the bypass

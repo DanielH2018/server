@@ -60,10 +60,7 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 
 - **Flux applies pihole, not Ansible** (D5, pihole's own window). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`. A plain
-  revert of the flag leaves two writers on the objects, and the handback restores `roll_one.yml`,
-  `apply_instance_2.yml` and the gravity tasks from the commit before the flip.
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Where the tasks went.** `tasks/main.yml` holds the include of `k8s/manifests` alone, and no
   Flux path runs it. `defaults/main.yml` keeps `manifests_self_rollouts` because the renderer reads it to
   stamp the restart annotation on both instances.

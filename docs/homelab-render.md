@@ -252,8 +252,8 @@ directories gone, and `scripts/renderer/tests/test_renderer_reads_no_task_file.p
 Its one read there is `scripts/lib/k8s_roles.py:refuse_moved_keys_in_tasks`. That function parses
 the files and raises on a `RENDER_KEYS` key, `image_builder_builds`, `manifests_rollout_timeout`
 or an `image_builder_*` var on a `k8s/image-builder` include, because the renderer would otherwise
-drop the value without a word. A role whose entry is not `owner: flux` is exempt, because a
-role handed back to Ansible needs these keys on its include and Flux applies nothing of its render.
+drop the value without a word. A role whose entry is not `owner: flux` is exempt, because Flux
+applies nothing of its render.
 
 The renderer resolves only the five keys it renders with: the
 two file lists, the deferred pair and `manifests_prune`. The others stay strings until a
@@ -763,7 +763,7 @@ can refuse a stub value, so the census credits only the `homelab_secret_stubs` g
 sonarr's API reads, and its two asserts on the reads' registers, passed on that guard until
 sonarr's Flux flip deleted them. The census no longer runs over the real tree (#5886): every task
 it selected sat in a flux-owned role or in arr-notification's `tasks/`, which nothing includes.
-Its fixture pairs stay, for a role handed back to Ansible with such a task.
+Its fixture pairs stay, so the census can still go red.
 
 The same module checks that a task which fails on a stub value, as uptime-kuma's push-token
 format check did, carries the `homelab_secret_stubs` guard itself. That check predates the

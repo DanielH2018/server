@@ -14,11 +14,9 @@ and the middlewares it references, nothing else.
 
 - **Flux applies it, not Ansible** (D5.6, the second Wave A PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects.
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its three vars map onto the render:
+  and no Flux path runs it. It stays until R4 deletes it. Its three vars map onto the render:
     - `manifests_prune_namespace` is gone from the apply. Every object carries
       `namespace: longhorn-system` in its template, and kustomize-controller applies them
       there; its `cluster-reconciler-flux-system` binding grants `cluster-admin`

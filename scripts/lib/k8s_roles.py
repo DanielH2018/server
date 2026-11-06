@@ -485,8 +485,7 @@ def refuse_moved_keys_in_tasks(role_dir: Path, entry: dict | None = None) -> Non
     The renderer takes no value from `tasks/`, so such a key would silently stop rendering.
     This refusal is the one read of a task file on the render path. A `manifests_*` key only
     Ansible reads is outside the set and passes. So does a role whose `containers_list` entry
-    is not flux-owned: Flux applies nothing of its render, and a handback to Ansible has to
-    put these keys on the include.
+    is not flux-owned: Flux applies nothing of its render, so the keys belong on its include.
 
     Args:
         role_dir: The role directory.

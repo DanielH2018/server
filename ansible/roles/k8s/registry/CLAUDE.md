@@ -211,8 +211,8 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   The setup role keeps copies of the GC's variables in its `defaults/main.yml`, and
   `ansible/tests/setup/test_k8s_host_files_pairs.py` holds them equal to this role's.
 - **Flux owns registry (D5, Wave D).** `promote` applies it, and no Ansible run reaches
-  `tasks/main.yml`, which keeps only the `k8s/manifests` include for the handback
-  (`docs/flux-deploy-plane.md`). The self-tests and the netpol probe are the `registry-verify`
+  `tasks/main.yml`, which keeps only the `k8s/manifests` include until R4 deletes it. The self-tests
+  and the netpol probe are the `registry-verify`
   Jobs in `templates/verify/`, which the renderer emits once the `registry` Kustomization
   reads Ready. `files/registry_verify.py` runs one check per Job:
   - `push` writes a fixed image through the distribution API, then seeds the pull Jobs'

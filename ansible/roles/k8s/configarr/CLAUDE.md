@@ -23,9 +23,7 @@ x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 
 - **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
-  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
-  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects.
+  reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
   stages `files/configarr_lib/configarr_status.py` into a ConfigMap. Edit the config HERE.
 - **No web UI** or Authelia; it targets the cluster sonarr/radarr

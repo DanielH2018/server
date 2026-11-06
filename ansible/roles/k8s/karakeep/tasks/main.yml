@@ -1,6 +1,6 @@
 ---
-# Flux owns this role, so no Flux path runs either include below; they stay for a handback
-# (docs/flux-deploy-plane.md). promote's `images` job builds the image, the renderer's restart
+# Flux owns this role, so no Flux path runs either include below; they stay until R4 deletes them.
+# promote's `images` job builds the image, the renderer's restart
 # checksum rolls the extra Deployments, and its gate Job in `karakeep-verify` replaced the
 # k8s/cronjob-gate run of the archive pruner this file held.
 #

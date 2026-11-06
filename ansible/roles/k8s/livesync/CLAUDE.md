@@ -20,9 +20,8 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - **Depends on:** traefik
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. traefik stays Ansible-owned, so the
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
+  stays Ansible-owned, so the
   Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
   The Deployment is `Recreate`, so a change that rolls it takes sync down briefly.
 - **`k8s_autodeploy: false` still stops Renovate automerging the image bump.** The deployer
@@ -45,7 +44,7 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
   runs after it rotates an `auto`-tier key. The renderer stamps a restart checksum on the
   Deployment, so a changed value or a `local.ini` edit rolls the pod.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its pre-apply snapshot through
+  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `livesync-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait. The renderer reads the role's `manifests_exclude_files:
   [ingressroute.yaml]`, so the published render holds no IngressRoute, and traefik's

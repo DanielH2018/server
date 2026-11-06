@@ -14,16 +14,15 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 
 - **Flux's render pulls `ghcr.io/danielh2018/ical-proxy:<content tag>`**, with
   `imagePullPolicy: IfNotPresent` (D5.4b), and the *Image* line above names that repository.
-  The role's defaults still name the in-cluster registry, for the handback. The image is built
+  The role's defaults still name the in-cluster registry. The image is built
   from `templates/Dockerfile.j2`, with the Flask app in `files/ical_proxy.py`, shipped into the
   image as `app.py`.
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. traefik stays Ansible-owned, so the
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
+  stays Ansible-owned, so the
   Kustomization records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`.
   The Deployment is `RollingUpdate` with one replica. The default surge starts the new pod
   before the old one stops, so a roll keeps one pod serving.
@@ -43,7 +42,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   keys are `assisted`-tier in `ansible/secret_rotation.yml`. The rotation rolls the pod through
   the restart checksum.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The `k8s/image-builder` include became promote's `images` job
+  They stay until R4 deletes them. The `k8s/image-builder` include became promote's `images` job
   (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout:
   ical-proxy` names the Deployment for the stabilisation gate and the shared restart. The
   Kustomization's `wait` replaces the gate, and the restart checksum the renderer stamps

@@ -27,12 +27,11 @@ Traefik or gate sits in a probe's path.
 
 **Flux applies it, not Ansible** (#5594, a Wave D PR with prowlarr). Its `containers_list`
 entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-merged change reaches the cluster when `promote` publishes and verifies the next bundle. To give
-it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
-the flag leaves two writers on the objects. Its Secrets substitute from `homelab-cluster-vars`,
-so a new credential reaches the pod only after `cluster_vars.py write` (operator-only).
-`tasks/main.yml` holds only the `k8s/manifests` include, which no Flux path runs; it stays for
-the handback, and the Kustomization's `wait` replaces the rollout wait.
+merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
+Secrets substitute from `homelab-cluster-vars`, so a new credential reaches the pod only after
+`cluster_vars.py write` (operator-only). `tasks/main.yml` holds only the `k8s/manifests` include,
+which no Flux path runs; it stays until R4 deletes it, and the Kustomization's `wait` replaces the
+rollout wait.
 
 ## Gates and hysteresis
 

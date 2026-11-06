@@ -24,10 +24,7 @@ read it when you change one.
 The caller sets its render metadata in its own `defaults/main.yml`, as the keys of
 `scripts/lib/k8s_roles.py:RENDER_KEYS`, each with `# noqa
 var-naming[no-role-prefix]`: `manifests_rollout` (default `manifests_service`; `''` skips the
-wait) and those below. Every one is optional. No flux-owned role runs this include, and a
-role handed back to Ansible moves them onto its `vars:`, where this role's own defaults
-cannot outrank them. `scripts/lib/k8s_roles.py:refuse_moved_keys_in_tasks` fails the render on
-such a key only while the role's entry reads `owner: flux`, so the entry changes in the same PR.
+wait) and those below. Every one is optional. No flux-owned role runs this include.
 
 **The file lists are derived** (#3662): every top-level `templates/*.yaml.j2` but a
 `*-job.yaml`, plus the shared default (below) an entry's `port` or `hostname` earns. A name

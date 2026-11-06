@@ -20,11 +20,9 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
-  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects.
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its `manifests_rollout:
+  and no Flux path runs it. It stays until R4 deletes it. Its `manifests_rollout:
   node-exporter` default and its include's `manifests_rollout_kind: daemonset` name the DaemonSet for the
   stabilisation gate. The Kustomization's `wait` replaces that gate: it reads the DaemonSet
   ready only when every scheduled pod is ready, so a node that goes NotReady mid-apply still
