@@ -101,10 +101,10 @@ def run(
         # left running, unkilled, an orphan mutating the host with nothing left watching it.
         # Verified empirically: a plain subprocess.run(timeout=) returns promptly, and the
         # grandchild is still alive at that moment. That is how a phase timeout stops being a
-        # bound on the underlying work: gitops_deploy.py exits and lets the next tick start a
-        # fresh run while the timed-out ansible-playbook keeps applying in the background — the
-        # real stop becomes whatever kills that orphan, normally nothing, or systemd's
-        # TimeoutStartSec SIGTERM against the WRAPPING unit, which can land mid-apply.
+        # bound on the underlying work: gitops_deploy.py moves on while the timed-out
+        # ansible-playbook keeps applying in the background — the real stop becomes whatever
+        # kills that orphan, normally nothing, or systemd's TimeoutStartSec SIGTERM against the
+        # WRAPPING unit, which can land mid-apply.
         #
         # start_new_session puts the direct child in a NEW process group (its pgid equals its
         # own pid), which every process it forks inherits unless one of them calls setsid
