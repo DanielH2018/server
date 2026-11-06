@@ -187,3 +187,21 @@ traefik_k8s_logrotate_mem_request: 16Mi
 # cap above even through a traffic spike that fills the live file between checks.
 traefik_k8s_access_log_rotate_mb: 100
 traefik_k8s_access_log_keep: 2
+
+# rbac.yaml holds the cluster-scoped role and one Role and RoleBinding per watched
+# namespace, in ONE file so a single apply moves both halves (see its header).
+# The ACME Secret is concatenated rather than listed, because dropping its name is the only
+# way traefik_k8s_manage_acme reaches it — the manifest has no template branch to gate. The
+# ACME claim is `k8s_claims` in this file, gated on the same flag.
+manifests_files: >-  # noqa var-naming[no-role-prefix]
+  {{ ['rbac.yaml', 'rbac-binding.yaml', 'static-config.yaml', 'dynamic.yaml',
+      'deployment.yaml', 'service.yaml', 'metrics-service.yaml',
+      'dashboard-ingressroute.yaml']
+     + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
+     + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
+
+manifests_secret_files: >-  # noqa var-naming[no-role-prefix]
+  {{ ['origin-pull-secret.yaml']
+     + (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])
+     + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
+     + (['livesync-gate-secret.yaml'] if traefik_k8s_manage_livesync_gate | bool else []) }}
