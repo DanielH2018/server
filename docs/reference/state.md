@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-11-05 18:17 UTC
-generated_sha: 588588c710
+generated_at: 2026-11-06 18:17 UTC
+generated_sha: bb59748cd0
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 588588c710
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-11-05T18:09:10+0000 | 8m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-11-03T12:16:33+0000 | 2d6h | 1d | late | session completed |
-| renovate-notify | 2026-11-05T13:01:12+0000 | 5h16m | 1d | ok | notified |
-| docs-refresh | 2026-11-05T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| secret-rotate | 2026-11-05T16:32:51+0000 | 1h44m | 7d | ok | last touched by: Replace the Renovate agent's GitHub token after its 401 |
-| longhorn-restore-drill | 2026-11-05T04:10:49+0000 | 14h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-11-02T10:20:02+0000 | 3d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1793587502.zip) |
+| gitops-deploy | 2026-11-06T18:12:54+0000 | 4m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-11-03T12:16:33+0000 | 3d6h | 1d | late | session completed |
+| renovate-notify | 2026-11-06T13:00:08+0000 | 5h17m | 1d | ok | notified |
+| docs-refresh | 2026-11-06T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| secret-rotate | 2026-11-05T16:32:51+0000 | 1d1h | 7d | ok | last touched by: Replace the Renovate agent's GitHub token after its 401 |
+| longhorn-restore-drill | 2026-11-06T04:10:49+0000 | 14h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-11-02T10:20:02+0000 | 4d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1793587502.zip) |
