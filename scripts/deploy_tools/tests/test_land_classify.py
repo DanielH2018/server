@@ -134,8 +134,11 @@ def test_a_role_this_pr_registers_is_deployed_rather_than_reported_unregistered(
     assert ln.resolved_tags == ["pihole-exporter"]
 
 
-def test_a_role_the_merge_commit_does_not_declare_derives_no_tag(landing):
-    """The must-fire half: a role nobody registered has no tag, and `promote` renders it never."""
+def test_a_role_the_merge_commit_does_not_declare_owes_no_hand(landing):
+    """It has no tag and no caller, and no hand can apply it, so the note names nothing.
+
+    The `every-k8s-role-has-an-entry-or-a-caller` census row refuses such a role before merge.
+    """
     ln, _ = landing(
         Fakes(gh_views={"files,changedFiles": _NEW_ROLE_PR}, declared_at=set())
     )
@@ -143,6 +146,7 @@ def test_a_role_the_merge_commit_does_not_declare_derives_no_tag(landing):
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.resolved_tags == []
+    assert ln.plane == ""
 
 
 def test_an_unreadable_merge_commit_says_so_and_falls_back_to_this_checkout(

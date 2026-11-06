@@ -129,11 +129,6 @@ def test_a_role_test_change_ends_nothing_to_deploy(landing):
     assert (outcome.verdict, outcome.rc) == ("nothing-to-deploy", 0)
 
 
-def test_a_role_task_change_owes_no_hand():
-    """`promote` applies whatever the change moves, and the changed set names those tags."""
-    assert land_tags.plane_note([_ROLE_TASKS]) == ""
-
-
 # The declared-role half. A DECLARED role's tests/ must not derive that role's deploy tag,
 # or a pytest-only PR to monitor-bridge deploys monitor-bridge.
 _DECLARED_TESTS = "ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py"

@@ -16,10 +16,11 @@ from _deploy_sh_fakes import make_snapshot_repo, run_front_half
 from deploy_tools.deploy_lib import run as deploy_run
 from deploy_tools.deploy_lib import tags as deploy_tags
 from deploy_tools.deploy_lib.flags import NothingToDeploy
-from lib.exit_codes import DEPLOY_FLUX_OWNED
+from lib.exit_codes import DEPLOY_FLUX_OWNED, DEPLOY_TAG_MISS
 from lib.git_testing import git
 
-HOST_FILE = "ansible/inventory/host_vars/daniel-box.yml"
+HOST_FILE_DIR = "ansible/inventory/host_vars"
+HOST_FILE = f"{HOST_FILE_DIR}/daniel-box.yml"
 
 _INCLUDE_HELPER = (
     "- name: Run the helper\n  ansible.builtin.include_role:\n    name: k8s/helper\n"
@@ -90,12 +91,14 @@ def test_neither_the_tag_bypass_nor_a_dry_run_skips_the_refusal_is_flagged(
 def test_at_reads_the_k8s_entries_at_the_commit_it_deploys_is_flagged(
     tmp_path, monkeypatch
 ):
-    """An `--at` commit declares the k8s entry before the checkout has it."""
-    repo = _repo(tmp_path)
+    """An `--at` commit declares the k8s entry, with no `owner`, before the checkout has it."""
+    repo = make_snapshot_repo(tmp_path / "repo")
+    host = repo / HOST_FILE
+    before = host.read_text()
+    host.write_text(before + "  - { name: bento, platform: k8s }\n")
     git(repo, "commit", "-qam", "declare bento", "--no-gpg-sign")
     sha = git(repo, "rev-parse", "HEAD").stdout.strip()
     git(repo, "reset", "-q", "--hard", "HEAD~1")
-    host = repo / HOST_FILE
     host.write_text(host.read_text() + "  - { name: bento, platform: docker }\n")
 
     assert run_front_half(monkeypatch, repo, ["--tags", "bento"])[0] is None
@@ -191,7 +194,13 @@ def test_a_typed_shared_role_reaches_the_tag_validation_as_typed_is_flagged(
 ):
     """Nothing expands it to its callers, so `validate` refuses the name with exit 2."""
     repo = _repo(tmp_path, helper_callers=("alpha", "beta"))
-    _, calls = run_front_half(monkeypatch, repo, ["--tags", "helper", "--check"])
+    refusal = deploy_tags.validate(["helper"], host_vars=repo / HOST_FILE_DIR)
+    assert refusal == DEPLOY_TAG_MISS
+    code, calls = run_front_half(
+        monkeypatch, repo, ["--tags", "helper"], validate=refusal
+    )
+    assert code == DEPLOY_TAG_MISS
+    assert _deployed(calls) == []
     assert [call[1] for call in calls if call[0] == "validate"] == [("helper",)]
 
 

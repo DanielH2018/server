@@ -275,7 +275,7 @@ def test_pr_617_reports_only_the_setup_plane():
     )
 
 
-def test_a_shared_role_alone_derives_no_tag_and_owes_no_hand():
+def test_a_shared_role_with_callers_derives_no_tag_of_its_own():
     files = ["ansible/roles/k8s/manifests/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")

@@ -85,8 +85,3 @@ def _verdict(landing, files: list[str]) -> Outcome:
 def test_a_doc_only_change_to_a_tagless_role_ends_nothing_to_deploy(landing):
     outcome = _verdict(landing, [_DOC])
     assert (outcome.verdict, outcome.rc) == ("nothing-to-deploy", 0)
-
-
-def test_a_task_change_to_the_same_role_owes_no_hand():
-    """`promote` applies whatever the change moves, and the changed set names those tags."""
-    assert land_tags.plane_note([_TASKS]) == ""

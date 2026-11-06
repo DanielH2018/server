@@ -225,6 +225,8 @@ def test_an_unreadable_k8s_entry_list_deploys_nothing(land_run):
     fakes = _fakes(k8s_tags={MERGE_SHA: ValueError("host_vars does not parse")})
     rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 1 and "VERDICT: refused" in out
+    assert "could not read which tags Flux applies" in out
+    assert "k8s_tags_at" in _names(calls)
     assert "deploy" not in _names(calls) and "land_wait" not in _names(calls)
 
 
