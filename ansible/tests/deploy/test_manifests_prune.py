@@ -181,8 +181,14 @@ def test_the_forbidden_kind_check_actually_fires() -> None:
     ]
 
 
+def _caller_vars(defaults: dict, include_vars: dict, owned: bool) -> dict:
+    """The manifests vars a caller sets. An Ansible-owned role's defaults lose to k8s/manifests'."""
+    return {**(defaults if owned else {}), **include_vars}
+
+
 def _manifests_includes() -> dict[str, list[dict]]:
-    """Each role's render defaults and `k8s/manifests` include vars, without `tasks_from`, by role."""
+    """Each role's `_caller_vars` per `k8s/manifests` include, without `tasks_from`, by role."""
+    owners = tag_owners()
     found: dict[str, list[dict]] = {}
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
@@ -192,7 +198,11 @@ def _manifests_includes() -> dict[str, list[dict]]:
             include = task.get("ansible.builtin.include_role") or {}
             if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
                 found.setdefault(role.name, []).append(
-                    {**render_defaults(role), **(task.get("vars") or {})}
+                    _caller_vars(
+                        render_defaults(role),
+                        task.get("vars") or {},
+                        owned=role.name in owners,
+                    )
                 )
     return found
 
@@ -236,6 +246,13 @@ def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
         f"{sorted(_UNARMED_ROLES)}. A caller is armed unless it passes `manifests_prune: false`; "
         "excluding one needs an operator decision and a DECIDED marker in its defaults."
     )
+
+
+def test_an_opt_out_in_defaults_counts_only_while_a_tag_has_an_owner() -> None:
+    opt_out = {"manifests_prune": False}
+    assert _caller_vars(opt_out, {}, owned=True) == opt_out
+    assert _caller_vars(opt_out, {}, owned=False) == {}
+    assert _caller_vars({}, opt_out, owned=False) == opt_out
 
 
 @pytest.mark.parametrize("name", _RENDER_TASKS)

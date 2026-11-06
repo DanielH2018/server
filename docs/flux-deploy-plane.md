@@ -348,7 +348,8 @@ Ansible path skips it. Handing it back to Ansible is the two-PR handback, in thi
 later return of a service to Ansible follows the same order. A retirement takes two PRs as
 well, in the order *Retiring a flux-owned service* states.
 
-1. **PR H1 sets `owner: released`.** Every Ansible path still skips the service. The next
+1. **PR H1 sets `owner: released` and changes the tests listed below.** Every Ansible path
+   still skips the service. The next
    bundle omits `flux/<tag>.yaml`, so the root Kustomization prunes the `<tag>` Kustomization,
    and `deletionPolicy: Orphan` leaves its objects serving. That bundle reaches the cluster only
    when `promote` moves `prod`, which needs `DEPLOY_HOLD` to read `none`. A hold is the likeliest
@@ -375,6 +376,22 @@ the role's includes:
 - **`test_no_role_keeps_render_metadata_on_its_include_is_clean`** in
   `scripts/renderer/tests/test_renderer_task_inputs.py` asserts that no role has such a key,
   and it has no allowlist. H2 narrows that census to leave the role out.
+
+**H1 and H2 each fail tests that assume every service is flux-owned.** A trial of both PRs on
+nut's entry found these, and neither PR's CI goes green until it changes them:
+
+- **`test_every_k8s_service_is_flux_owned_on_the_tree`** in
+  `scripts/renderer/tests/test_renderer_r4_precondition.py` fails at H1 and at H2, because
+  `owner_problems` flags any owner but `flux`. H1 narrows it to leave the service out, and H2
+  keeps that. This test is R4's precondition, so R4 stops until the service is flux-owned again.
+- **`test_the_floor_never_exceeds_what_the_tree_publishes`** in
+  `scripts/validate/tests/test_validate_render_diff_job.py` fails at H1, because the bundle
+  loses `flux/<tag>.yaml`. H1 lowers `scripts/validate/render_diff_job.py:FLUX_FLOOR` and lists
+  that file on its `Render-diff:` line, as a retirement does.
+- **`test_every_caller_arms_the_prune_but_the_decided_exclusions`** in
+  `ansible/tests/deploy/test_manifests_prune.py` fails an H2 that leaves `manifests_prune: false`
+  in authelia's or nut's defaults. For a tag with no `owner`, it reads only the `vars:` on the
+  include. No PR changes this test; moving the key turns it green.
 
 `manifests_prune` is why the order matters. `k8s/manifests` sets it to `true` in its own
 defaults, and a role's own defaults outrank its caller's defaults, so a caller's
