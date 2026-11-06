@@ -545,7 +545,7 @@
   # from manifests_files keeps re-applying its objects on every deploy — the retirement
   # renders green while a deleted live object resurrects from its stale staged file. Deleting the file here makes dropping a name
   # from the list the complete staging-side retirement; the already-live object still needs
-  # one kubectl delete, which the manifest-prune-check cron flags.
+  # one kubectl delete.
   #
   # Skipped under dry-run: the render dir is a fresh tempfile, so there is nothing stale in it
   # to prune and `manifests_staged` was never registered.

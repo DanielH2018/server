@@ -106,8 +106,8 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
     return bad
 
 
-# Where `release-staleness-check.sh` writes its run's verdict, in the state directory the k3s
-# role creates 0755 for the cron's user.
+# Where `release-staleness-check.sh` wrote its run's verdict. That check is disarmed, and the k3s
+# role's absent arm removes the state directory.
 STALE_VERDICT_FILE = "/var/lib/homelab/release-staleness/verdict"
 
 # Past this age a verdict is a dead cron's, not the fleet's: four of its 30-minute periods.
@@ -143,7 +143,7 @@ _PARENTHESISED = re.compile(r"\(([^)]*)\)")
 # an underscore, so `lan_subnet` is rejected where `home-assistant` is kept.
 _SERVICE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 
-# What `release-staleness-check.sh` prepends when probe.py exits neither 0 nor 1.
+# What `release-staleness-check.sh` prepended when probe.py exited neither 0 nor 1.
 _PROBE_FAILED_PREFIX = "probe.py releases --stale-only exited "
 
 
@@ -183,13 +183,10 @@ def stale_verdict_names(verdict):
 def stale_release_problems(path=STALE_VERDICT_FILE, now=None):
     """One line naming the services `Release Staleness Drift` last found stale, or nothing.
 
-    `release-staleness-check.sh` (roles/setup/k3s) writes its run's verdict, `status=<up|down>
-    <verdict>`, to `path` every `k3s_release_staleness_cron_minute`, beside the textfile metric
-    that pages. Reading the release records here instead would re-run the git derivation the cron
-    just paid for, and the banner must not. A file older than `STALE_VERDICT_MAX_AGE_S` keeps a
-    dead cron's last verdict off the banner — `ReleaseStalenessCheckNotReporting` pages for the
-    dead cron itself. A
-    host that never runs the cron (an agent node, a laptop) has no such file and stays silent.
+    `release-staleness-check.sh` (roles/setup/k3s) wrote its run's verdict, `status=<up|down>
+    <verdict>`, to `path`. That check is disarmed, so no cron writes the file, and a host whose
+    k3s role has applied the disarm has no state directory and stays silent. A file older than
+    `STALE_VERDICT_MAX_AGE_S` stays off the banner too. Nothing pages for the missing cron.
 
     The file, not the journal (#6183): it is a stat and a read with no subprocess, and it holds
     the probe's output alone. The journal line after a re-alert opens `Stale set changed:`,

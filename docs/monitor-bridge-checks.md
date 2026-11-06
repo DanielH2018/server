@@ -373,9 +373,9 @@ checks each gate suppresses.
   `b2_reachable` is the tile's PEER rather than a member: it is itself a gate, and
   a row names at most one gate, and a gate row has none of its own. Two tiles
   for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
-  **The HOST crons are covered by a separate half** (#2793). `release-staleness-check`,
+  **The HOST crons are covered by a separate half** (#2793).
   `docs-refresh` and `github-ruleset-drift` run on the host and write their own textfile verdicts, so this
-  gate structurally cannot suppress them. `crowdsec-home-allowlist` was a fourth until H2.4c moved
+  gate structurally cannot suppress them. `crowdsec-home-allowlist` was a third until H2.4c moved
   it into the cluster. Its `crowdsec-home-ips` CronJob, on daniel-box's host network, probes
   the same endpoints in `home_ips_discover.py` and marks a failed lookup `WAN unreachable`.
   The CrowdSec sidecar's job reports that as an `up` skip. Each host cron consults `wan_reachable`
