@@ -79,6 +79,7 @@ _SHARED_IMPORT_RE = re.compile(
 _KWARG_RE = re.compile(
     rf"(?P<param>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>{_MACRO_ARG})"
 )
+_RUNTIME_CLAIM_TIER = "no declared tier (runtime claim named by a shell variable)"
 
 
 @dataclass(frozen=True)
@@ -380,7 +381,8 @@ def claim_tiers(
     then `claim_classes` for a claim another role declares — and classifies
     `namespace/claim` as `_classify` describes. A claim whose name the role's own defaults
     cannot resolve is returned as the expression written, with an "unknown" tier saying so.
-    Every claim is classified under `k8s_namespace`: the one role whose claims live elsewhere
+    A claim named by a shell variable (`${DRILL}`) is returned as written with no declared
+    tier, whatever its StorageClass. Every claim is classified under `k8s_namespace`: the one role whose claims live elsewhere
     (observability, in the observability namespace) is on `longhorn-nobackup` by class, so the
     namespace never reaches a list lookup for it.
 
@@ -411,6 +413,11 @@ def claim_tiers(
                     + f" (PVC present, claim name not statically resolvable: {claim.name})",
                 )
             )
+            continue
+        # A shell script's manifest names this claim. The tier lists cannot list it, and
+        # its Volume's group label decides the backup, which `_classify` does not read.
+        if "$" in claim.name:
+            out.append((claim.name, _RUNTIME_CLAIM_TIER))
             continue
         if claim.storage_class is None:
             claim = ClaimDecl(claim.name, claim_classes.get(claim.name), True)
