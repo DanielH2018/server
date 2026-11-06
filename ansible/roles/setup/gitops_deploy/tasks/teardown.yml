@@ -95,6 +95,7 @@
     - /var/lib/node-exporter-textfile/github-ruleset-drift.prom
     - /var/lib/node-exporter-textfile/github-interaction-limit.prom
     - /var/lib/homelab/setup-render-manifest.d/gitops-deploy
+    - /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks
     - /var/lib/homelab/setup-deployed-manifest.d/gitops-deploy
   become: true
 

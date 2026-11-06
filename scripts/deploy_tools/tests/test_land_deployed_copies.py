@@ -27,6 +27,9 @@ TEMPLATE = "ansible/roles/setup/initial_setup/templates/loki-read-route-health.s
 TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
 FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/loki-route-witness"
 DRIFT_FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"
+GITHUB_CHECKS_FRAGMENT = (
+    "/var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks"
+)
 CHECK_TIMER_TEMPLATES = (
     "ansible/roles/setup/common/templates/check-timer.service.j2",
     "ansible/roles/setup/common/templates/check-timer.timer.j2",
@@ -131,9 +134,8 @@ def test_a_missing_render_fragment_keeps_the_host_owed():
 def _holds_check_timer(template, witness_text, drift_text, host="daniel-server"):
     """Does `initial_setup` read as held on a host with these two render fragments?
 
-    `holds` over the working tree's roles, because `_note` reads the `ansible/` tree at `ref`, and
-    the `gitops_deploy` line a check-timer change also earns keeps the note non-empty. A text of
-    None is a fragment the host does not have.
+    `holds` over the working tree's roles, because `_note` reads the `ansible/` tree at `ref`. A
+    text of None is a fragment the host does not have.
     """
     files = {
         path: {"status": "ok", "text": text} if text else {"status": "absent"}
@@ -184,6 +186,59 @@ def test_a_check_timer_template_one_fragment_does_not_show_stays_owed(
         "": f"{TEMPLATE} {TEMPLATE_SHA}\n",
     }
     assert not _holds_check_timer(template, lines[witness_line], lines[drift_line])
+
+
+def _gitops_deploy_holds(template, fragment_text):
+    """Does `gitops_deploy` read as held on daniel-box with this GitHub-checks fragment?"""
+    return DeployedCopies(
+        [template],
+        REPO / "ansible/roles/setup",
+        ref="HEAD",
+        repo=REPO,
+        read_host=lambda plan, host: {
+            "stat": {},
+            "files": {GITHUB_CHECKS_FRAGMENT: {"status": "ok", "text": fragment_text}},
+        },
+    ).holds("gitops_deploy", template, "daniel-box")
+
+
+@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
+def test_a_check_timer_template_the_github_checks_fragment_shows_is_held(template):
+    assert _gitops_deploy_holds(template, f"{template} {_sha(template)}\n")
+
+
+@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
+def test_a_check_timer_template_on_a_stale_github_checks_fragment_stays_owed(template):
+    assert not _gitops_deploy_holds(template, f"{template} {'0' * 64}\n")
+
+
+def test_a_landing_from_daniel_server_names_no_host_after_an_apply_on_daniel_box():
+    template = CHECK_TIMER_TEMPLATES[0]
+    line = f"{template} {_sha(template)}\n"
+    rows = {
+        path: {"status": "ok", "text": line}
+        for path in (FRAGMENT, DRIFT_FRAGMENT, GITHUB_CHECKS_FRAGMENT)
+    }
+    note = remaining_setup_hosts_note(
+        [template],
+        "daniel-server",
+        ref="HEAD",
+        repo=REPO,
+        read_host=lambda plan, host: {"stat": {}, "files": rows},
+    )
+    assert "gitops_deploy" not in note
+
+
+def test_a_landing_from_daniel_server_names_daniel_box_before_an_apply_there():
+    template = CHECK_TIMER_TEMPLATES[0]
+    note = remaining_setup_hosts_note(
+        [template],
+        "daniel-server",
+        ref="HEAD",
+        repo=REPO,
+        read_host=lambda plan, host: {"stat": {}, "files": {}},
+    )
+    assert "`gitops_deploy` also reaches daniel-box" in note
 
 
 ON_BOX_ONLY = "inventory_hostname == 'daniel-box'"

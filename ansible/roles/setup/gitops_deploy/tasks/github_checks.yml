@@ -66,3 +66,18 @@
     check_timer_restart_sec: 30min
     check_timer_cron_name: "GitHub interaction limit"
     check_timer_cron_file: github-interaction-limit
+
+# Render provenance, as `service.yml` keeps for the units. Its own fragment, because the land
+# note counts a fragment only when its stamp's tags are a subset of each render's tags, and the
+# `gitops-deploy` fragment's tag is not on these renders. Last, so a failed run claims nothing.
+- name: Stamp the rendered GitHub checks
+  tags: [cron, gitops-deploy-github-checks]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: gitops-deploy-github-checks
+    stamp_render_templates:
+      - ansible/roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2
+      - ansible/roles/setup/gitops_deploy/templates/github-interaction-limit.sh.j2
+      - ansible/roles/setup/common/templates/check-timer.service.j2
+      - ansible/roles/setup/common/templates/check-timer.timer.j2
+      - ansible/roles/setup/common/templates/check-timer-boot.service.j2
