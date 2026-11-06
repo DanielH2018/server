@@ -149,10 +149,14 @@ def _render(*tags, src="loki-read-route-health.sh.j2"):
 """
 
 
-def _demo_role_holds(tmp_path, tasks):
-    """Does a host with a current `demo` fragment hold `TEMPLATE`, for a role with these tasks?"""
+def _demo_role_holds(tmp_path, tasks, entry="[]\n"):
+    """Does a host with a current `demo` fragment hold `TEMPLATE`, for a role with these tasks?
+
+    `entry` is the text of a task file `main.yml` does not reach.
+    """
     (tmp_path / "demo" / "tasks").mkdir(parents=True)
     (tmp_path / "demo" / "tasks" / "stamp.yml").write_text("[]\n")
+    (tmp_path / "demo" / "tasks" / "entry.yml").write_text(entry)
     (tmp_path / "demo" / "tasks" / "main.yml").write_text(tasks)
     row = {"status": "ok", "text": f"{TEMPLATE} {TEMPLATE_SHA}\n"}
     fragment = "/var/lib/homelab/setup-render-manifest.d/demo"
@@ -171,6 +175,11 @@ def test_a_render_every_stamp_run_reaches_lets_the_fragment_count(tmp_path):
 
 def test_a_render_the_stamps_narrower_tag_skips_keeps_it_owed(tmp_path):
     assert not _demo_role_holds(tmp_path, _render("a") + _stamp("a", "b"))
+
+
+def test_a_stamp_main_does_not_reach_proves_no_render(tmp_path):
+    """A `tasks_from` play can run the untagged stamp under a tag that skips the render."""
+    assert not _demo_role_holds(tmp_path, _render("a"), entry=_stamp())
 
 
 def test_a_template_no_task_renders_keeps_it_owed(tmp_path):

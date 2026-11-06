@@ -119,22 +119,31 @@ def _flatten(
             )
 
 
-def _role_tasks(role_dir: Path) -> list[tuple[dict, frozenset[str]]]:
-    """Every task of a role, `tasks/main.yml`'s walk first so an import's tags are counted.
+def _role_tasks(
+    role_dir: Path,
+) -> tuple[list[tuple[dict, frozenset[str]]], list[tuple[dict, frozenset[str]]]]:
+    """A role's tasks: those `tasks/main.yml` reaches, then those in any other file.
 
-    A file `main.yml` does not reach, such as one a play runs with `tasks_from`, is walked on its
-    own tags.
+    The second list's tags are a lower bound, because a file `main.yml` does not reach runs
+    under tags this walk cannot read, such as a `tasks_from` play's.
     """
     role_dir = role_dir.resolve()
-    files = sorted(role_dir.glob("tasks/**/*.yml"), key=lambda p: p.name != "main.yml")
-    found: list[tuple[dict, frozenset[str]]] = []
-    seen: set[Path] = set()
-    for path in files:
+    main = role_dir / "tasks" / "main.yml"
+    seen = {main}
+    from_main = (
+        list(_flatten(_parsed_tasks(main), frozenset(), role_dir, (main,), seen))
+        if main.is_file()
+        else []
+    )
+    others: list[tuple[dict, frozenset[str]]] = []
+    for path in sorted(role_dir.glob("tasks/**/*.yml")):
         path = path.resolve()
         if path not in seen:
             seen.add(path)
-            found += _flatten(_parsed_tasks(path), frozenset(), role_dir, (path,), seen)
-    return found
+            others += _flatten(
+                _parsed_tasks(path), frozenset(), role_dir, (path,), seen
+            )
+    return from_main, others
 
 
 def _stamps_of(task: dict) -> Iterable[tuple[str, str]]:
@@ -247,19 +256,22 @@ class DeployedCopies:
         found: dict[tuple[str, str], list[str]] = {}
         for role_dir in self._roles_dir.iterdir():
             try:
-                tasks = _role_tasks(role_dir)
+                from_main, others = _role_tasks(role_dir)
             except _CannotWalk:
                 continue
             fragment_tags: dict[str, list[frozenset[str]]] = {}
-            for task, tags in tasks:
-                for src, record in _stamps_of(task):
-                    if src not in self._files:
-                        continue
-                    found.setdefault((role_dir.name, src), []).append(record)
-                    if record.startswith(RENDER_MANIFEST_DIR):
-                        fragment_tags.setdefault(src, []).append(tags)
+            for tasks, tags_known in ((from_main, True), (others, False)):
+                for task, tags in tasks:
+                    for src, record in _stamps_of(task):
+                        if src not in self._files:
+                            continue
+                        found.setdefault((role_dir.name, src), []).append(record)
+                        if record.startswith(RENDER_MANIFEST_DIR):
+                            # A stamp whose full tags are unknown proves no render.
+                            proving = [tags] if tags_known else []
+                            fragment_tags.setdefault(src, []).extend(proving)
             for src, stamps in fragment_tags.items():
-                if not _every_render_stamped(src, stamps, tasks):
+                if not _every_render_stamped(src, stamps, from_main + others):
                     del found[role_dir.name, src]
         return found
 
