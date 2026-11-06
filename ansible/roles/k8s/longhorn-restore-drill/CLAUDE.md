@@ -13,7 +13,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 - **Images:** `alpine/k8s` (`longhorn_restore_drill_runner_image`), `busybox`
   (`k3s_longhorn_restore_drill_image`)
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
-- **Claim:** `${DRILL}` (daily -> B2 (default group))
+- **Claim:** `${DRILL}` (no declared tier (runtime claim named by a shell variable))
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible.** Its `containers_list` entry carries `owner: flux` and
@@ -91,7 +91,12 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
   the next run finds the leftover again. A stuck leftover, such as a pod Terminating on a lost node,
   therefore blocks every nightly drill and the stamps it refreshes, with a `FAIL:` line each night,
   until check 7 reports `last-success` as stale. A younger Volume stays, because it can belong to a
-  live hand run. ENFORCED:
+  live hand run. The sweep deletes no Backup, because the drill creates its Volume in the
+  `no-backup` group and a leftover is never backed up. Longhorn's label rule would otherwise put
+  the Volume in `default`, and `allow-recurring-job-while-volume-detached` lets the daily tick back
+  up a detached Volume. The tier classifier reads no Volume label, so *At a glance* reports this
+  claim with no declared tier. ENFORCED:
+  `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_the_drill_volume_is_created_out_of_the_default_backup_group`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_the_next_run_sweeps_a_leftover_past_the_deadline_and_grace`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_volume_a_live_run_can_hold_is_not_swept`,
   `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_leftover_that_cannot_be_removed_fails_the_run_before_any_restore`.

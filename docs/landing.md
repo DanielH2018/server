@@ -181,6 +181,14 @@ The refusal prints the offending line: `gh pr edit <n> --body-file` with the ref
 body another session wrote, since the fan-out agent opens the PR and a daniel-box session lands
 it.
 
+**The landing closes a closing reference GitHub left open.** PR #7295 merged with #7291 in
+`closingIssuesReferences`, GitHub never closed #7291, and the backlog dispatched it twice more
+(issue #7397). In step 1, `land_lib/closing_refs.py` reads each reference's state, waits 15
+seconds for GitHub to catch up, and closes any issue still open. It leaves an issue reopened
+after the merge and an issue in another repo open. A failed read or close keeps the verdict token
+and the exit code, and its message and remedy end the `VERDICT:` line's detail. `cc-wait land`
+prints that line, through a lander unit too. A PR merged without `land.sh` gets no such check.
+
 **Open the PR with `--fill` and a body file — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is
 refused whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the check
@@ -670,6 +678,18 @@ Three things sit in that position:
   reaching just the tick's own host still reads `settled` — reporting every self-applied role as
   unfinished was tried and reverted for exactly that PR (`plane_note`'s docstring in
   `land_tags.py`).
+
+  **The line reads the host before it names it.** A host another apply already reached
+  owes nothing. `setup_lib/deployed_copies.py` drops the host from a changed file's reach when the
+  host's own record shows the merge commit's bytes (#7398). For a `stamp_deployed.yml` pair that
+  record is the live copy. For a `stamp_render.yml` template it is the line in the host's render
+  fragment. That line counts only when writing the fragment also runs every task in the role that
+  may render the template, which the tasks' tags decide (#7406). A shared template also rendered
+  under another tag therefore stays owed, as `check-timer.service.j2` does for `initial_setup`:
+  the `setup-drift` units render under `setup_drift`, and only the `loki_route_witness` group
+  lists the template. Any other file stays owed: an unstamped file, a task file, a moved key, a
+  pair whose `live` is not a literal path. A host that cannot be read also stays owed. To clear
+  the line after a hand apply, re-run `land.sh`.
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.

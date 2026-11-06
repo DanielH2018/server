@@ -13,7 +13,7 @@
 #
 # The host name must match a real router: a request matching none 404s without consulting the
 # bouncer, and `--resolve` keeps the SNI and the Host header equal. jellyfin's hostname matches
-# from any client address, as tasks/verify.yml in roles/k8s/crowdsec already relies on.
+# from any client address.
 #
 # The file is `*.status`, not `*.log`, so the Pi's Alloy does not ship it to Loki as a syslog
 # stream: one line a minute is evidence for a counter, not a log. Its lines carry no `status=`

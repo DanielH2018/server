@@ -29,6 +29,7 @@ from deploy_tools.land_lib.pin_reads import PinReads
 from validate.cluster_pins import Pin
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
+from diagnostics.probe_lib import core
 from gitops_markers import MARKERS
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
@@ -168,6 +169,8 @@ class Fakes:
     # changed since the PR's merge base. Empty is a PR already up to date with master, and an
     # exception is raised in place of an answer.
     compare: list[list[str] | Exception] = field(default_factory=lambda: [[]])
+    # What `closing_refs`' GraphQL read answers, one entry per call.
+    closing_refs: list[dict | Exception] = field(default_factory=lambda: [{}])
     # What the master `ci.yml` runs listing answers, one entry per call, as `pace.py` reads it:
     # `{status, created_at}` per run. Empty is a master with no CI backlog, and an exception is
     # raised in place of an answer.
@@ -231,7 +234,14 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     record = calls if calls is not None else []
 
     def remaining_setup_hosts(
-        paths, local_host, quiet=(), pr_range="", ref="", repo=None, key_readers=()
+        paths,
+        local_host,
+        quiet=(),
+        pr_range="",
+        ref="",
+        repo=None,
+        key_readers=(),
+        read_host=None,
     ):
         # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
         # ref and repo are recorded: without them the note reads this checkout's own tree,
@@ -240,7 +250,12 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
             (
                 "remaining_setup_hosts",
                 (local_host,),
-                {"ref": ref, "repo": repo, "key_readers": list(key_readers)},
+                {
+                    "ref": ref,
+                    "repo": repo,
+                    "key_readers": list(key_readers),
+                    "read_host": read_host,
+                },
             )
         )
         return f.remaining_setup
@@ -256,6 +271,11 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         ),
         quiet_paths=lambda paths, range_: set(),
     )
+
+
+def _no_host_read(plan, host):
+    """A pipeline test with the real classifier reaches no host, so every copy stays owed."""
+    raise core.Unreadable(f"this test reads no host, and {host} was asked")
 
 
 def build_tools(f: Fakes) -> tuple[Tools, list]:
@@ -277,8 +297,14 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     view_seq = {k: _seq(v, calls, f"gh:{k}") for k, v in views.items()}
     compare_seq = _seq(f.compare, calls, "gh:compare")
     runs_seq = _seq(f.master_runs, calls, "gh:master-runs")
+    closing_refs_seq = _seq(f.closing_refs, calls, "gh:closing-refs")
 
     def gh_json(*args, **kwargs):
+        if args[:2] == ("api", "graphql"):
+            answer = closing_refs_seq(*args, **kwargs)
+            if isinstance(answer, Exception):
+                raise answer
+            return answer
         if args[:2] == ("api", "repos/{owner}/{repo}"):
             calls.append(("gh:repo", args, kwargs))
             return f.repo
@@ -452,6 +478,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         **host_fakes(f, calls),
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,
+        read_host=_no_host_read,
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=lambda s: calls.append(("sleep", (s,), {})),
         clock=clock,

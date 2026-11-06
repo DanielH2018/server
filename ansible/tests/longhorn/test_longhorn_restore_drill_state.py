@@ -20,6 +20,7 @@ import pytest
 
 from _helpers import load_yaml
 from _restore_drill import DRILL_DEFAULTS, add_drill_volume, harness
+from lib import yaml_fast
 
 A = "a-config"
 B = "b-config"
@@ -139,6 +140,21 @@ def test_the_next_run_sweeps_a_leftover_past_the_deadline_and_grace(
     assert run.calls.index(deletes[-1]) < next(
         i for i, c in enumerate(run.calls) if "apply -f" in c
     )
+
+
+def test_the_drill_volume_is_created_out_of_the_default_backup_group(
+    tmp_path: Path,
+) -> None:
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
+    run = harness(tmp_path, [A])
+
+    run(env=_FROZEN_CLOCK)
+
+    docs = yaml_fast.safe_load_all((run.fixtures / "applied.yaml").read_text())
+    drill_volume = next(d for d in docs if d["kind"] == "Volume")
+    assert drill_volume["metadata"]["labels"] == {
+        "recurring-job-group.longhorn.io/no-backup": "enabled"
+    }
 
 
 def test_a_volume_a_live_run_can_hold_is_not_swept(tmp_path: Path) -> None:

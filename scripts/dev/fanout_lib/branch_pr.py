@@ -13,12 +13,21 @@ A closed PR that never merged is no batch's own. `fanout.py place abandon` leave
 branch and its closed PR behind, a relaunch reuses the branch name, and the closed PR's old CI
 then read as the new batch's (#6442). `parse_branch_prs` drops such PRs and lists an open PR
 before a merged one.
+
+A branch match alone does not make a merged PR the batch's own. `launch` names the branch from
+the batch id, so a relaunch of an issue whose PR merged reuses the name. The relaunched batch for
+#7291 opened nothing and cited #7295, its branch's merged PR from the day before, and the pipeline
+landed #7295 again (#7402). `own_pr` reads a citation of such a PR as no claim at all: the batch is
+`no-pr`, not in conflict. The pipeline resolves its PR before anything has merged it, so it counts
+only open PRs as its own. `status` runs after the landing too, so it sets aside only the PRs that
+merged before the batch's `launched_at`.
 """
 
 import json
 import re
 import subprocess
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -41,17 +50,17 @@ def branch_pr_argv(branch: str, repo: str) -> list[str]:
         "--state",
         "all",
         "--json",
-        "url,number,state",
+        "url,number,state,mergedAt",
         "--limit",
         BRANCH_PR_LIMIT,
     ]
 
 
-def parse_branch_prs(stdout: str) -> list[str] | None:
+def parse_branch_prs(stdout: str, only: str = "") -> list[str] | None:
     """The branch's open then merged PR urls, newest first in each; None if unreadable.
 
     A closed PR that never merged is dropped (#6442). A row with no `state` reads as open,
-    which `gh pr list --json state` never omits.
+    which `gh pr list --json state` never omits. `only` keeps one state, `OPEN` or `MERGED`.
     """
     try:
         data = json.loads(stdout)
@@ -61,7 +70,10 @@ def parse_branch_prs(stdout: str) -> list[str] | None:
         return None
     try:
         rows = [
-            row for row in data if str(row.get("state", "OPEN")).upper() != "CLOSED"
+            row
+            for row in data
+            if str(row.get("state", "OPEN")).upper() != "CLOSED"
+            and only in ("", str(row.get("state", "OPEN")).upper())
         ]
         rows.sort(
             key=lambda row: (
@@ -72,6 +84,20 @@ def parse_branch_prs(stdout: str) -> list[str] | None:
         return [str(row["url"]) for row in rows]
     except KeyError, TypeError, ValueError, AttributeError:
         return None
+
+
+def parse_merged_before(stdout: str, launched_at: str) -> list[str]:
+    """The urls of the branch's PRs that merged before `launched_at`; [] if either is unreadable."""
+    try:
+        launched = datetime.fromisoformat(launched_at)
+        return [
+            str(row["url"])
+            for row in json.loads(stdout)
+            if row.get("mergedAt")
+            and datetime.fromisoformat(row["mergedAt"]) < launched
+        ]
+    except KeyError, TypeError, ValueError, AttributeError:
+        return []
 
 
 @dataclass(frozen=True)
@@ -88,29 +114,41 @@ class OwnPr:
     problem: str = ""
 
 
-def own_pr(text: str, branch: str, branch_prs: Sequence[str] | None) -> OwnPr:
+def own_pr(
+    text: str,
+    branch: str,
+    branch_prs: Sequence[str] | None,
+    earlier: Sequence[str] = (),
+) -> OwnPr:
     """Resolve the batch's PR from `text` against the PRs GitHub holds for `branch`.
 
     Args:
         text: the implementer's final text.
         branch: the batch's branch, named in the problem.
-        branch_prs: the branch's open then merged PR urls, newest first. None when GitHub could not be asked.
+        branch_prs: the branch's open then merged PR urls from this launch, newest first. None
+            when GitHub could not be asked.
+        earlier: the branch's merged PR urls from an earlier launch of the same batch id.
 
     Returns:
         The branch's PR when it has one: the one the text names when it names one of them, else
-        the newest. An empty `OwnPr` when the text names no PR at all, which the caller reads as
-        `no-pr`. A `problem` when the text names PRs and the branch has none.
+        the newest. An empty `OwnPr` when the text names no PR, or only `earlier` ones, which
+        the caller reads as `no-pr`. A `problem` when the text names any other PR and the
+        branch has none.
     """
     named = list(dict.fromkeys(PR_URL.findall(text)))
     if not named:
         return OwnPr()
     if branch_prs:
         return OwnPr(url=next((u for u in named if u in branch_prs), branch_prs[0]))
-    why = (
-        f"GitHub could not be asked for branch {branch}'s PR"
-        if branch_prs is None
-        else f"branch {branch} has no open or merged PR on GitHub"
-    )
+    named = [u for u in named if u not in earlier]
+    if not named:
+        return OwnPr()
+    if branch_prs is None:
+        why = f"GitHub could not be asked for branch {branch}'s PR"
+    elif earlier:
+        why = f"branch {branch} holds only {', '.join(earlier)}, from an earlier launch"
+    else:
+        why = f"branch {branch} has no open or merged PR on GitHub"
     return OwnPr(problem=f"the final text names {', '.join(named)}, but {why}")
 
 
@@ -129,10 +167,13 @@ def worktree_own_pr(
     head = run(["git", "-C", str(worktree), "symbolic-ref", "--short", "HEAD"], None)
     branch = head.stdout.strip()
     prs = None
+    earlier: Sequence[str] = ()
     if branch:
         proc = run(branch_pr_argv(branch, repo), None)
-        prs = parse_branch_prs(proc.stdout) if proc.returncode == 0 else None
-    return own_pr(text, branch or "(no branch)", prs)
+        if proc.returncode == 0:
+            prs = parse_branch_prs(proc.stdout, "OPEN")
+            earlier = parse_branch_prs(proc.stdout, "MERGED") or ()
+    return own_pr(text, branch or "(no branch)", prs, earlier)
 
 
 def needs_input_report(problem: str) -> dict:

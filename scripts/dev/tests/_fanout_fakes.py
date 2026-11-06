@@ -159,6 +159,7 @@ def fake_tools(
         signing_keys=keys,
         merged_pr=merged_pr,
         branch_prs=branch_pr_urls,
+        earlier_prs=lambda *_: [],
         findings=findings,
         default_ref=default_ref,
         head_branch=head_branch,
