@@ -76,3 +76,4 @@ def test_show_brief_prints_only_the_block(capsys):
     out = capsys.readouterr().out
     assert out.startswith("## Precomputed from the cited paths")
     assert "`promote` applies the k8s half" in out
+    assert "`uv run python scripts/dev/repo_guards.py`" in out

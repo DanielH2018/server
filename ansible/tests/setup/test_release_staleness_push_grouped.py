@@ -4,7 +4,7 @@ A refused narrowing marks the whole fleet stale, and the per-service reasons the
 ~7,500 chars. The grouping is `bridge.msgfmt`'s and is tested beside it; this proves the cron asks
 for that shape and records what it gets, unedited. The real template is rendered and run under
 bash with the check library, `git` and `uv` stubbed; the assertion is on the run's `status=` log
-line, which Loki keeps, and on the verdict file the SessionStart banner reads.
+line, which Loki keeps, and on the verdict file.
 
 It also holds the changed-set note: when the counted stale set changes while the check is DOWN,
 the log line carries a `Stale set changed:` prefix, and the cron records the new set for the next
@@ -160,8 +160,6 @@ def test_the_first_verdict_after_a_broken_check_is_flagged_as_a_change(tmp_path)
 
 
 def test_the_verdict_file_holds_the_probe_line_without_the_realert_prefix(tmp_path):
-    # The SessionStart banner reads this file (#6183) and matches the probe's headline at the
-    # start of the line, which the journal's `Stale set changed:` prefix would hide.
     _run(tmp_path, GROUPED, 1, names=["authelia", "bazarr"], prev=["artifacts"])
     assert _verdict(tmp_path) == f"status=down {GROUPED}\n"
     assert (tmp_path / "state" / "verdict").stat().st_mode & 0o777 == 0o644

@@ -47,8 +47,8 @@ def test_banner_lists_problems_and_triage():
     assert "triage" in out  # always points the reader at the probe commands
 
 
-# The scrape-target and stale-release sections moved to hooklib/service_lines.py — their tests
-# are in the sibling test_hooklib_service_lines.py, driven through that module's seams.
+# The scrape-target section moved to hooklib/service_lines.py — its tests are in the sibling
+# test_hooklib_service_lines.py, driven through that module's seams.
 
 
 # `master_moved_problems` is tested in the sibling test_session_health_master_moved.py --
@@ -83,7 +83,6 @@ def _run_main(
         _mod.main,
         read_payload=lambda: payload,
         target_problems=lambda: targets or [],
-        stale_release_problems=lambda: [],
         master_moved_problems=lambda: master_moved or [],
         parked_deployer_problems=lambda: parked or [],
         other_live_sessions=lambda cwd: sessions or [],
@@ -373,8 +372,6 @@ def test_the_hook_can_import_the_worktree_library_when_run_as_a_subprocess(
             f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
             f"recorded calls:\n{recorded}"
         )
-    # stale_release_problems() reads the cron's verdict file and spawns nothing (#6183).
-    assert "journalctl" not in recorded, recorded
 
 
 def test_a_broken_import_is_reported_rather_than_read_as_no_sessions(monkeypatch):
