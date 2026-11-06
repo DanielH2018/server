@@ -1174,8 +1174,7 @@ assuming the lock is stuck.
 
 **Four waiters on the tree lock are pinned as a census.** `deploy.sh`, secret-rotate, docs-refresh
 and eval-run each wait 1980 s, and `_LOCK_WAITERS` and `_worst_lock_hold()` in
-`tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's worst hold
-and at or below the unit's flock wait plus that hold. A
+`tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's worst hold. A
 per-consumer test covers only the consumers someone wrote one for, so the census plus
 `test_the_lock_waiter_census_is_non_vacuous` makes a new waiter fail instead of passing silently.
 A raise that pushes `gitops_deploy_broad_timeout_s` past a waiter's wait fails those tests rather

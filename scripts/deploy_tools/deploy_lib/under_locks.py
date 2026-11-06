@@ -59,11 +59,11 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_locks
 
-# gitops-deploy's worst-case hold, BROAD_DEPLOY_TIMEOUT_S 1800, plus 180s for that tick's work
-# outside the budget. A budget below the hold makes a deploy queued behind a pathological gitops
-# run give up having deployed nothing while that run is still legitimately working. Pinned to the
-# same role defaults the deployer reads by test_deploy_lock_wait_budget.py and
-# test_gitops_deploy_timeout_budgets.py. It is also the budget each per-service lock waits.
+# gitops-deploy's budgeted hold, BROAD_DEPLOY_TIMEOUT_S 1800, plus 180s of the 420s that unit's
+# TimeoutStartSec allows for work outside the budget. A wait below the hold makes a deploy queued
+# behind a pathological gitops run give up having deployed nothing while that run is still
+# legitimately working. Pinned to the same role defaults the deployer reads by
+# test_deploy_lock_wait_budget.py. It is also the budget each per-service lock waits.
 LOCK_WAIT = 1980
 # The snapshot this run is using, told apart from a dead one by an advisory lock inside it.
 OWNER_LOCK = ".deploy-owner.lock"

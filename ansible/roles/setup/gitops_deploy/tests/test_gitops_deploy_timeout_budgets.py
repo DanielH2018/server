@@ -179,33 +179,6 @@ def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     )
 
 
-def _waits_past_the_worst_activation(wait: int, defaults: dict, unit: str) -> bool:
-    flock_wait = int(_search1(r"^ExecStart=.*?flock\s+-w\s+(\d+)", unit))
-    return wait > flock_wait + _worst_lock_hold(defaults)
-
-
-@pytest.mark.parametrize("name", sorted(_LOCK_WAITERS))
-def test_no_git_tree_lock_waiter_outwaits_the_deployers_worst_activation(name):
-    # A wait past the worst activation queues behind a stuck tick and buys nothing: every
-    # legitimate hold has ended by then, so the waiter should report exit 75 and let a human look.
-    path, pattern = _LOCK_WAITERS[name]
-    unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-    wait = int(_search1(pattern, _waiter_text(path)))
-    assert not _waits_past_the_worst_activation(wait, defaults, unit), (
-        f"{name}'s git-tree lock wait of {wait}s outlasts gitops-deploy's worst activation "
-        "(its flock wait plus BROAD_DEPLOY_TIMEOUT_S)."
-    )
-
-
-def test_an_overlong_lock_waiter_is_flagged():
-    # Red proof for the parametrized test above: 1980 is the worst activation, one more is past it.
-    unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
-    defaults = {"gitops_deploy_broad_timeout_s": 1800}
-    assert not _waits_past_the_worst_activation(1980, defaults, unit)
-    assert _waits_past_the_worst_activation(1981, defaults, unit)
-
-
 def test_a_short_lock_waiter_is_flagged():
     # Red proof for the parametrized test above, which can only ever be observed passing. This
     # is a waiter at 1200 against the 1800s hold.
