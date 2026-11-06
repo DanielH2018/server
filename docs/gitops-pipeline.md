@@ -195,7 +195,7 @@ with the reason.
   rather than the resolv.conf remediation `common` would print.
 - A `common/templates/` file a common task file renders inherits that task file's importers. The
   kuma-check pair routes to the roles importing `check_timer.yml`. `narrow_setup` finds no
-  reader of the template in `gitops_deploy`, `render_records` or `k3s`, so those apply or are
+  reader of the template in `gitops_deploy` or `k3s`, so those apply or are
   recorded under their whole-role tag.
 - `resolv.conf.j2` is the exception (`SETUP_FILES_ROUTED_TO_OWNER`). `k3s` renders it and is a hand
   apply, since it runs from `k3s-bringup.yml`, so the file routes `common` to `manual_plane`, whose

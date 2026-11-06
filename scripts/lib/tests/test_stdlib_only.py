@@ -52,8 +52,6 @@ MUST_INCLUDE = frozenset(
         "ansible/roles/setup/fake_remux/files/state_push.py",
         "ansible/roles/k8s/manifests/files/secret_hmac.py",
         "scripts/deploy_tools/prune_releases.py",
-        # Reached only through render_records' insert of the deployer's install directory.
-        "ansible/roles/setup/render_records/files/render_records.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_toolbox.py",
     }
 )
@@ -372,16 +370,6 @@ def test_a_staged_copy_is_checked_against_its_own_install_only():
     staged = _install("/opt/renovate-notify") / "host_lib.py"
     dirs = dict(checker.members())[staged]
     assert dirs == [_install("/opt/renovate-notify")]
-
-
-def test_an_installed_insert_and_its_env_override_point_at_the_stage():
-    checker = _checker()
-    dirs = dict(checker.members())[
-        _install("/opt/render-records") / "render_records.py"
-    ]
-    assert _install("/opt/gitops-deploy") in dirs
-    overrides = role_installs.staged_overrides()
-    assert overrides["DEPLOYER_DIR"] == str(_install("/opt/gitops-deploy"))
 
 
 GITOPS_UNIT = (

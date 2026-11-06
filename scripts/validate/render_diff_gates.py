@@ -67,12 +67,12 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from deploy_tools.changed_set import suspended_changed
 from deploy_tools.object_loss import bundle_documents, prune_disabled, stem
-from deploy_tools.render_targets import render_targets
 from deploy_tools import tag_rule
 from deploy_tools.promote_lib.prune import ReadError
 from lib import removes_object, yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.ansible_inventory import K8S_HOST
+from renderer.renderer_lib.targets import render_targets
 from lib.git import git, git_env, git_stdout
 from lib.k8s_roles import role_dirs
 from lib.repo_paths import FILTER_PLUGINS, GITOPS_DEPLOY_FILES, REPO

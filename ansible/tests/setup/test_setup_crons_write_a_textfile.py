@@ -56,10 +56,6 @@ EXEMPT: dict[str, str] = {
         "runs the drill with --list-only, a read-only listing of the snapshots; the full "
         "drill is the hypervisor role's cron"
     ),
-    "render_records: timer `kuma-check-render-records`": (
-        "render_records_state is pinned absent until R4 deletes the role, so the timer is "
-        "never installed"
-    ),
 }
 
 

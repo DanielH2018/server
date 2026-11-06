@@ -50,14 +50,12 @@ class Link:
 
 OWNERS = "scripts/deploy_tools/deploy_lib/owners.py"
 RUN = "scripts/deploy_tools/deploy_lib/run.py"
-RENDER_TARGETS = "scripts/deploy_tools/render_targets.py"
 ROTATION_TOOLS = "scripts/secrets_mgmt/rotation_tools.py"
 
 K8S_TAGS = (
     Link(OWNERS, "read_k8s_tags", "declared_k8s_tags"),
     Link(OWNERS, "declared_k8s_tags", "k8s_tags"),
 )
-RECORD_TARGETS = Link(RENDER_TARGETS, "render_record_targets", "tag_owners")
 
 # Each first cell of the plan's owner table, as written there, to the chain from the entry
 # point down to the reader it asks.
@@ -100,10 +98,6 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         Link("scripts/deploy_tools/land_lib/promotion.py", "_flux_owned", "owners_at"),
         Link("scripts/deploy_tools/land_lib/land_flux.py", "owners_at", "flux_owned"),
         Link(OWNERS, "flux_owned", "tag_owners"),
-    ),
-    "`render_targets.py` CLI": (
-        Link(RENDER_TARGETS, "main", "render_record_targets"),
-        RECORD_TARGETS,
     ),
     # `cmd_rotate` calls `tools.owners()`, a field of `RotationTools` whose default is `tree_owners`.
     "`secret_rotation.py --deploy`": (
@@ -225,14 +219,15 @@ def _source_with(rel: str, text: str) -> Source:
 
 
 def test_every_entry_point_in_the_owner_table_reads_ownership_is_clean():
-    assert len(table_rows(_plan())) >= 11
+    assert len(table_rows(_plan())) >= 10
     assert census_problems(_plan()) == []
 
 
 def test_a_renamed_entry_point_is_flagged():
-    text = (REPO / RENDER_TARGETS).read_text().replace("def main(", "def cli_main(")
-    assert census_problems(_plan(), source=_source_with(RENDER_TARGETS, text)) == [
-        f"`render_targets.py` CLI: {RENDER_TARGETS} defines no `main`"
+    rel = "scripts/secrets_mgmt/secret_rotation.py"
+    text = (REPO / rel).read_text().replace("def cmd_rotate(", "def rotate(")
+    assert census_problems(_plan(), source=_source_with(rel, text)) == [
+        f"`secret_rotation.py --deploy`: {rel} defines no `cmd_rotate`"
     ]
 
 
@@ -262,8 +257,8 @@ def test_a_playbook_loop_that_drops_the_filter_is_flagged():
 
 def test_a_plan_row_no_member_names_is_flagged():
     plan = _plan().replace(
-        "| `render_targets.py` CLI |",
-        "| `new_entry.py` | Skips T.\n| `render_targets.py` CLI |",
+        "| `secret_rotation.py --deploy` |",
+        "| `new_entry.py` | Skips T.\n| `secret_rotation.py --deploy` |",
         1,
     )
     assert census_problems(plan) == [
