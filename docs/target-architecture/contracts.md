@@ -97,14 +97,20 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   tooling beside it, such as R1's `shadow_diff.py`, renders nothing itself and is not a second
   renderer.
 - **Modes:**
-  - `homelab-render cluster --out DIR [--role TAG ...] [--secret-stubs FILE]`. Without
+  - `homelab-render cluster --out DIR [--role TAG ...] [--secret-stubs FILE]
+    [--revision SHA]`. Without
     `--secret-stubs`, the render is in placeholder mode (R2). With it, the render is in stub
     mode. R1's shadow comparison reads stub mode, and so do R2's `roundtrip`, from R2's PR 1,
     and R1's determinism module. Those two keep reading it after R4's PR 9 deletes the
     comparison (R2, R4). Before R2 lands, `cluster` without `--secret-stubs` exits 2.
   - `homelab-render cluster --out DIR --shared-only`, from D3.3a. It writes the shared kinds
     and the root, and no tag, for a publish with no flux-owned tag. With `--all-images` it
-    also writes every image context (#5593).
+    also writes every image context (#5593). It takes `--revision` too.
+  - **The commit input** is `--revision SHA`, a 40-hex commit, and the `soak` kind's Job
+    judges that commit. Without the flag the renderer reads `HOMELAB_RENDER_REVISION`, then
+    the checkout's `git rev-parse HEAD`. The publish job passes no flag, because its
+    checkout's `HEAD` is the commit it publishes, R. The `render-diff` job passes the PR
+    head's SHA to both renders (R4 Open question 10).
   - `homelab-render host --host NAME --out DIR`
   - `homelab-render package --name PKG --out DIR`, for the shared packages of C5 (H3).
 - **Only placeholder mode publishes.** The publish job runs `cluster` without
@@ -781,10 +787,6 @@ No request on the slice index is open.
 
 ### Requests on C1
 
-- **The commit input** (R4 Open question 10). *Modes* names `homelab-render cluster --commit
-  SHA`. The publish job passes the commit it publishes, and the render-diff job passes the PR
-  head's SHA to both renders. Gate: before R4's PR 1 merges. D6.12 no longer renders twice
-  once C1's footprint replaces `--moved-tags`, so D6 Open question 13 is withdrawn.
 - **Host-mode placeholders** (H4 Open question 6, with H3's *Host mode renders no secret*).
   Host mode renders a secret reference as `${<key>}` in two kinds of file, a component's
   declared outputs and its compose files, and escapes those files by the cluster-mode rule.
@@ -1318,6 +1320,14 @@ Applied to this page:
 - **`service="unmapped"`** (M2 Open question 5). C7 *Rule labels* records `unmapped` as a
   value outside the deploy-tag rule and names `WorkloadServiceUnmapped`, which pages with
   `service="observability"` alongside it. This clears the gate before M2's PR 4b merges.
+
+### Applied requests (2026-11-06)
+
+- **The commit input** (R4 Open question 10). C1 *Modes* names `--revision SHA`, the flag
+  the renderer already takes, rather than the `--commit` the request proposed. The publish
+  job relies on the flag's `HEAD` default. This clears the gate before R4's PR 1 merges.
+  D6.12 no longer renders twice once C1's footprint replaces `--moved-tags`, so D6 Open
+  question 13 stays withdrawn.
 
 ### Applied requests (2026-10-24)
 
