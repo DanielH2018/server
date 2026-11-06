@@ -2,11 +2,10 @@
 
 A complaint opens `deploy.sh: error:` or `deploy.sh: warning:`, the shape `lib.cli_help`
 gives every script, so one grep finds what the deploy refused or doubted (#4478). A status
-line, such as a lock wait the landing books, opens `deploy.sh:` with no severity word.
+line, such as a lock wait, opens `deploy.sh:` with no severity word.
 
 `PROG` is a literal rather than `cli_help.prog()`: `deploy.sh` execs `deploy_cli.py`, so the
-derived name is the file the operator never typed, and the landing's regexes need a fixed
-string to match.
+derived name is the file the operator never typed.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_messages.py
 """
