@@ -97,6 +97,7 @@ permissions: {}
 # `publish` and `reset-move` check out nothing, so no script or local action can reach them.
 # Each step that calls them opens with `eval "$RETRY_FUNCTIONS"`. `retry` prints only the stdout
 # of the try that succeeded, so a capture never holds a failed try's error body.
+# prune-artifacts.yml carries a copy, and test_prune_artifacts_workflow.py holds the two equal.
 env:
   RETRY_FUNCTIONS: |
     retry() {

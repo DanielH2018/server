@@ -261,6 +261,64 @@ def test_main_passes_the_same_rename_once_the_body_carries_the_line(
     assert job.main(compare_args(tmp_path, renamed_out_of_a_role)) == 0
 
 
+def _lock(jinja: str = "3.1.6", tool: str = "1.0") -> str:
+    return (
+        f'[[package]]\nname = "jinja2"\nversion = "{jinja}"\n\n'
+        f'[[package]]\nname = "pytest-tool"\nversion = "{tool}"\n'
+    )
+
+
+def _project(requirement: str = "jinja2>=3") -> str:
+    return f'[dependency-groups]\ndev = ["{requirement}"]\n'
+
+
+@pytest.fixture
+def pinned(tmp_path, monkeypatch):
+    """Commits a base and a head of a scratch repo's two pin files, and names the two SHAs."""
+    scrub_process_git_env(monkeypatch)
+    repo = init_repo(tmp_path / "repo")
+    monkeypatch.chdir(repo)
+
+    def commits(head_lock: str, head_project: str = _project()) -> tuple[str, str]:
+        base = commit(
+            repo, "base", **{"uv.lock": _lock(), "pyproject.toml": _project()}
+        )
+        return base, commit(
+            repo, "head", **{"uv.lock": head_lock, "pyproject.toml": head_project}
+        )
+
+    return commits
+
+
+def test_main_refuses_a_jinja2_bump_with_no_line(tmp_path, monkeypatch, capsys, pinned):
+    monkeypatch.setenv("PR_BODY", "no line here")
+    assert job.main(compare_args(tmp_path, pinned(_lock(jinja="3.1.7")))) == 1
+    assert "entry for jinja2" in capsys.readouterr().out
+
+
+def test_main_passes_a_jinja2_bump_once_the_body_carries_the_line(
+    tmp_path, monkeypatch, pinned
+):
+    monkeypatch.setenv("PR_BODY", "Render-diff: none")
+    assert job.main(compare_args(tmp_path, pinned(_lock(jinja="3.1.7")))) == 0
+
+
+def test_main_refuses_a_requirement_edit_with_no_line(
+    tmp_path, monkeypatch, capsys, pinned
+):
+    monkeypatch.setenv("PR_BODY", "no line here")
+    shas = pinned(_lock(), _project("jinja2>=4"))
+    assert job.main(compare_args(tmp_path, shas)) == 1
+    assert "entry for jinja2" in capsys.readouterr().out
+
+
+def test_main_passes_an_unrelated_dependency_bump_with_no_line(
+    tmp_path, monkeypatch, pinned
+):
+    monkeypatch.setenv("PR_BODY", "no line here")
+    assert job.main(compare_args(tmp_path, pinned(_lock(tool="2.0")))) == 0
+
+
 FAKE_UV = """\
 #!/bin/sh
 echo "$@" >> "$FAKE_UV_LOG"

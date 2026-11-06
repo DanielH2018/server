@@ -35,7 +35,7 @@ from lib.ansible_jinja_env import make_ansible_env
 
 import toposort
 from _helpers import ALL_VARS, ANSIBLE, HOST_VARS
-from _k8s_render import deploy_play
+from _k8s_play import deploy_play
 from renderer.renderer_lib.bundle import FLUX_INDEX, SHARED_KINDS, bundle_files
 from renderer.renderer_lib.namespace import HOMELAB_NAMESPACE
 

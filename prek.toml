@@ -723,7 +723,7 @@ name = "Documented checksum annotations exist in the manifests"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/k8s/test_checksum_annotations_documented.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|k8s/test_checksum_annotations_documented)\\.py|scripts/(lib|renderer|validate)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(ansible/roles/k8s/.*|CLAUDE\\.md|ansible/(templates|filter_plugins)/.*|ansible/tests/(_[^/]+|k8s/test_checksum_annotations_documented)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Every tracked `.sh` and rendered `*.sh.j2` answers `--help`. The test module renders the
 # templates through scripts/lib, scripts/validate and the filter plugins, which it reaches
@@ -748,7 +748,7 @@ name = "Renovate rules carry the autodeploy denylist marker"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
 language = "system"
 pass_filenames = false
-files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(lib|validate)/.*\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(deploy_tools|lib|renderer|validate)/.*\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
 # CLAUDE.md quotes, the k8s_host_files pairs, the Landings board, the deployer's import

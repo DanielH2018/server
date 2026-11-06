@@ -26,6 +26,7 @@ from _compose_render import (
 from _helpers import ROLES, load_defaults
 from _k8s_render import (
     BUILD_ROLES,
+    IMAGE_BUILDER_CALLER_VARS,
     rendered_build_text,
     rendered_build_texts,
     # Aliased: `_compose_render` exports a `render_role_template` of its own, for the Pi.
@@ -147,7 +148,9 @@ def test_an_included_role_with_no_census_entry_renders() -> None:
     """
     job = yaml_fast.safe_load(
         render_k8s_template(
-            "image-builder", "build-job.yaml.j2", {"image_builder_name": "freshrss"}
+            "image-builder",
+            "build-job.yaml.j2",
+            {**IMAGE_BUILDER_CALLER_VARS, "image_builder_name": "freshrss"},
         )
     )
     assert job["kind"] == "Job"

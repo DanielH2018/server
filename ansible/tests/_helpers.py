@@ -19,6 +19,8 @@ from typing import Iterator
 from lib import yaml_fast
 from lib.proc_testing import fake_bin, path_with, run
 
+from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
+
 # `lib.repo_paths` owns the anchors. The `X as X` names are re-exports for the guards that
 # import them from here; redefining one in a guard is what #3912 removed.
 from lib.repo_paths import (
@@ -26,7 +28,7 @@ from lib.repo_paths import (
     ANSIBLE,
     HOST_VARS as HOST_VARS,
     INVENTORY as INVENTORY,
-    K8S_ROLES,
+    K8S_ROLES as K8S_ROLES,
     REPO,
     ROLES,
 )
@@ -110,24 +112,20 @@ _SECONDS = re.compile(r"^(\d+)s$")
 _ROLE_VAR = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
 
 
-# The shared default is READ from `k8s/manifests`'s own defaults rather than pinned here. A pinned
-# copy would agree with the role only by coincidence, and the day the role's default moved it
+# The shared default is READ from the renderer's constant rather than pinned here. A pinned
+# copy would agree with the renderer only by coincidence, and the day the constant moved it
 # would size every unoverridden role wrongly with every guard green.
 def _manifests_rollout_default_s() -> int:
-    """`manifests_rollout_timeout_default` from `roles/k8s/manifests/defaults/main.yml`.
+    """`ROLLOUT_TIMEOUT_DEFAULT`, the budget of a role with no timeout of its own, in seconds.
 
-    RAISES when that default is gone or is not spelled `<n>s`: a reader that fell back to a
-    literal of its own would re-create the drift this function exists to remove.
+    RAISES when it is not spelled `<n>s`: a reader that fell back to a literal of its own would
+    re-create the drift this function exists to remove.
     """
-    declared = load_defaults(K8S_ROLES / "manifests").get(
-        "manifests_rollout_timeout_default"
-    )
-    seconds = _SECONDS.match(str(declared).strip())
+    seconds = _SECONDS.match(ROLLOUT_TIMEOUT_DEFAULT.strip())
     if not seconds:
         raise AssertionError(
-            "roles/k8s/manifests/defaults/main.yml must declare "
-            f"manifests_rollout_timeout_default as `<n>s`; read {declared!r}. Every guard that "
-            "sizes a role's rollout budget reads it from there."
+            f"ROLLOUT_TIMEOUT_DEFAULT must read `<n>s`; read {ROLLOUT_TIMEOUT_DEFAULT!r}. Every "
+            "guard that sizes a role's rollout budget reads it from there."
         )
     return int(seconds.group(1))
 

@@ -22,7 +22,7 @@ from lib.ansible_jinja_env import SHARED_TPL
 from lib.estate import role_defaults
 from lib.repo_paths import ANSIBLE
 from renderer.renderer_lib.cluster import RenderRefused
-from renderer.renderer_lib.environment import renderer_env
+from renderer.renderer_lib.environment import strict_env
 
 # Each file a `shared` entry may name, by its repo path. The file stays single at its Ansible
 # path, because a role still installs it there: initial_setup installs homelab-check-lib.sh on
@@ -120,7 +120,7 @@ def template_source(
 
 def confined_env(directory: Path) -> jinja2.Environment:
     """The renderer's strict environment over `directory`, with its loader confined to it."""
-    env = renderer_env(directory)
+    env = strict_env(directory)
     env.loader = ConfinedLoader(cast(jinja2.BaseLoader, env.loader), directory)
     return env
 
