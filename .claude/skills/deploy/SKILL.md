@@ -123,11 +123,6 @@ snapshot, the tag check or the staleness check.
 # Deploy a specific service
 ./scripts/deploy.sh --tags "<service-name>"
 
-# Apply a change to a shared k8s role (manifests, volume-snapshot, image-builder, ...).
-# It has no containers_list entry, so deploy.sh replaces the name with every service
-# that includes it and prints the list. manifests and volume-snapshot reach ~58 services.
-./scripts/deploy.sh --tags "<shared-role>"
-
 # Deploy a commit that is not this checkout's HEAD: the snapshot is cut from <sha>, and the
 # staleness gate and the tag check are asked about <sha> too. This is how land.sh deploys a
 # PR's merge commit without waiting for the tick to fast-forward the primary checkout.
@@ -182,11 +177,11 @@ on those rather than on the number. What the codes mean as a group is
 and a fact an operator needs at a failed run belongs in `CONTRACTS` in `scripts/lib/exit_codes.py`,
 not in this skill: a copy here drifted once already (#2853).
 
-**A tag Flux applies is never yours to deploy.** When its `containers_list` entry carries
-`owner`, `deploy.sh --tags` refuses the whole list with exit 5, and no flag bypasses that. Its
-change lands through `promote` once it merges; drop the tag to deploy the rest. `--changed` and
-a shared role's expansion leave such a tag out and name it. `--list-services` marks each one on
-stderr.
+**A k8s tag is never yours to deploy.** When its `containers_list` entry is `platform: k8s`,
+`deploy.sh --tags` refuses the whole list with exit 5, and no flag bypasses that. Its change
+lands through `promote` once it merges; drop the tag to deploy the rest. `--changed` leaves such
+a tag out and names it, and a shared role's name is a tag miss. `--list-services` marks each k8s
+tag on stderr.
 
 ## What `--tags`, `--at` and `--detach` change
 
@@ -227,6 +222,5 @@ A returned `--detach` is not a verified deploy. To wait for its health gate, cha
 `died` (exit 1) otherwise; the detail is the notifier's verdict line. It waits at most 570s.
 Exit 75 means the deploy is still running: re-run only the `cc-wait` command, never
 `deploy.sh`. `--detach` also prints the exact wait command with `--log`. Use that printed
-command for a `--changed` deploy, a shared role's tag (`deploy.sh` expands it to its callers)
-or a long tag list, because the bare form finds the log by the tags typed. The probe is
+command for a `--changed` deploy or a long tag list, because the bare form finds the log by the tags typed. The probe is
 `scripts/deploy_tools/deploy_lib/detach_probe.py`.

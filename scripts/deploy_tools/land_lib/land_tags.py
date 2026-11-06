@@ -9,8 +9,7 @@ session's scope.
 WHY A ROLE NAME IS NOT AUTOMATICALLY A TAG. Only a role with a `containers_list` entry has
 one. Eight roles under ansible/roles/k8s/ have no entry because other roles include them by
 literal name, and handing one to `--tags` makes deploy.sh refuse the WHOLE list (exit 2) --
-so the valid services beside it are refused too. Those roles come out of the tags, and
-`shared_caller_tags` puts the tags of every role that runs them back in.
+so the valid services beside it are refused too. Those roles come out of the tags.
 
 WHY THE COUNT ASSERTION. `gh pr view --json files` paginates at 100. A 137-file PR returns
 100 entries with no error and no marker, so the derived tag list is a silent subset of what
@@ -51,7 +50,6 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 sys.path.insert(0, str(HOST_LIB_FILES))
 from deployer_lib.deploy_logic import (
     broad_remediation,
-    k8s_remediation,
     setup_role_playbook,
     manual_plane_clear_for,
     setup_role_tag,
@@ -67,15 +65,13 @@ import narrow_setup
 import reach
 
 # Re-exported, not defined here: the path-to-role mappers live in `reach` and the shared-role
-# expansion built on them in `land_shared`. Every reader keeps its old name, and
+# reader built on them in `land_shared`. Every reader keeps its old name, and
 # `test_land_tags_shared_mapper_agreement.py` keeps pinning `land_tags.role_for`.
 from deploy_tools.land_lib.land_shared import (  # noqa: F401  (`role_of` has an out-of-module reader)
     declared_tags,
-    guard_map_rows,
     is_role_test_path,
     role_for,
     role_of,
-    shared_caller_tags,
     shared_roles,
 )
 
@@ -125,9 +121,8 @@ def landing_hosts_at(
     None when the ref cannot be read, for `service_records_at_or_none`'s reason: an empty
     answer here would route every tag to no host, and the caller falls back to the tree.
 
-    `k8s_only` is `hosts_for_tags`' per-tag platform restriction, and the landing passes its
-    caller-expanded tags. `land_lib/deploy.deploy_by_host` is the one caller that
-    fills it.
+    `k8s_only` is `hosts_for_tags`' per-tag platform restriction.
+    `land_lib/deploy.deploy_by_host` is the one caller that fills it.
     """
     records = service_records_at_or_none(ref, cwd)
     if records is None:
@@ -183,11 +178,8 @@ def _needs_nothing(role: str, narrow_tags: dict[str, frozenset[str]] | None) -> 
 
 def plane_note(
     files,
-    declared: set[str] | None = None,
     quiet=(),
     narrow_tags: dict[str, frozenset[str]] | None = None,
-    roles_root=None,
-    role_dirs: frozenset[str] | None = None,
 ) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
@@ -200,12 +192,7 @@ def plane_note(
     where the deploy genuinely succeeds and half the change is still unapplied -- the harder
     version of the same silence, because the verdict reads `settled`.
 
-    A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing.
-    The landing deploys its callers instead (`shared_caller_tags`), so only a shared
-    role that no declared role runs is still named here. `shared_role_reach` drops the paths
-    of one whose change reaches no rendered manifest before either reads them.
-
-    A rotated secret is the third shape, and the one with no path to match at all. A secret's
+    A rotated secret is the second shape, and the one with no path to match at all. A secret's
     value lives in no role's template, so `ansible/vars/secrets.yml` derives zero tags however
     many roles consume it: every consumer keeps rendering the old value, and the landing
     would report `nothing-to-deploy`.
@@ -219,36 +206,14 @@ def plane_note(
     `narrow_tags` is role tag -> the tags that role's change needs. A role mapped to an
     empty set needs none over this range (`own_narrow_tags`), so the note leaves it out,
     clear command included: `deploy_defer.record` writes no `manual_plane` line for it.
-
-    `roles_root` is the role tree `land_shared.shared_roles` checks for a deleted role, for a
-    test that needs one present; `None` reads the repo's own. `role_dirs` is the role
-    directories at the merge commit, which `shared_roles` reads in place of `roles_root`.
     """
     files = list(files)
     quiet = set(quiet)
-    declared = declared_tags() if declared is None else declared
     notes = []
-    # DECIDED: fan a shared role out to its callers, reversing the "report, do not fan out"
-    # this held until #2704. The operator asked for every piece of the deploy to be
-    # selectable, and a report left PR #2701 for the next full deploy. A change to
-    # `manifests` or `volume-snapshot` therefore deploys ~58 services — about a full deploy,
-    # unmeasured as a tag list. A change reaching no rendered manifest never gets here:
-    # `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the
-    # report, because an unattended tick parking a range is a different cost.
-    expanded = shared_caller_tags(files, declared, roles_root, role_dirs=role_dirs)
-    shared = [
-        r
-        for r in shared_roles(files, declared, roles_root, role_dirs)
-        if not expanded[r]
-    ]
-    if shared:
-        # Passing ONLY the shared half. k8s_remediation appends a scoped `--tags` line for
-        # any deployable role it is given, and land.sh has already deployed those itself.
-        notes.append(k8s_remediation(set(shared), declared))
     cs = reach.reach(files).changes
     # Only the broad changes the deployer will NOT apply itself are owed to a human. The tick
-    # fast-forwards and applies a deploy-plane change as a full deploy.yml and a setup-plane
-    # change as `initial_setup.yml --tags <role>`, including the deployer's own role.
+    # fast-forwards and applies a setup-plane change as `initial_setup.yml --tags <role>`,
+    # including the deployer's own role, and `promote` applies a deploy-plane change.
     # What is left for a hand: the bring-up playbooks
     # (`_BROAD_MANUAL_PREFIXES`, which park the tick outright), and a setup role that
     # initial_setup.yml does not include (k3s lives in k3s-bringup.yml, common in no playbook)
@@ -451,7 +416,7 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
         return docs
 
 
-# The CLI moved to `land_tags_cli.py`, above `shared_role_reach` (#4945). Run directly, this
+# The CLI lives in `land_tags_cli.py`, above `land_reach`. Run directly, this
 # module refuses rather than printing nothing, because an empty answer reads as "no tags".
 _MOVED = (
     "land_tags.py is a library. Its CLI is "

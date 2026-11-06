@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Which changed SHARED k8s roles move no rendered manifest, so no hand has to apply them.
 
+NO PRODUCTION CALLER. D6.15 removed the landing's call, and D6.18 deletes the module.
+
 THE PROBLEM. A shared role — `manifests`, `volume-snapshot`, `volume-revert` — has no
 `containers_list` entry, so no `--tags` value applies it and `land_tags.plane_note` reports it
 as work a human still owes: a full `ansible/deploy.yml`, about 20 minutes. That is the right
@@ -185,16 +187,6 @@ def _tasks_read_only_these_keys(
 def deploy_time_only(role: str, files, pr_range: str, repo) -> bool:
     """Whether every changed path under shared role `role` moves no rendered manifest.
 
-    THE SPLIT WITH `land_shared.deploy_run_only` (#3150). That function asks a neighbouring
-    question: whether the landing's caller deploy can shrink to one smoke caller. This one is
-    the finer rule. It reads the diff per changed key and needs `pr_range`, where that one is a
-    path rule over the file list alone. Its subdirectories are this module's
-    `_DEPLOY_TIME_SUBDIRS` minus `meta/`. Here a `meta/` edit can still be quiet, under the
-    same diff test as `tasks/`. There any `meta/` path keeps every caller, because a
-    dependency change alters which roles run for every caller and one caller cannot
-    smoke-test that. A rule about WHICH BYTES a change moves goes here; a rule about how many
-    callers prove a change runs goes there.
-
     Args:
         role: the shared role's directory name, as `land_tags.shared_roles` returns it.
         files: the PR's changed paths, the whole list.
@@ -267,13 +259,6 @@ def paths_a_hand_must_apply(
     files, pr_range: str, repo, declared: set[str] | None = None
 ) -> list[str]:
     """`files` minus every path under a shared role that moves no rendered manifest.
-
-    The list `land_tags.plane_note` is built from. Subtracting the PATHS rather than passing
-    the roles is what keeps `plane_note` a decision over a path list, the way it is for
-    `quiet`: a shared role has no `containers_list` entry by construction, so dropping its
-    paths removes it from `shared_roles` and changes nothing else the note reads —
-    `Reach.tags` maps them to no tag and `services_from_changed_paths` puts them in neither
-    the broad nor the setup half.
 
     Returns `files` unchanged on every failure inside, which keeps every shared role in the
     note.

@@ -81,13 +81,15 @@ def test_a_broad_fallback_the_tick_does_not_apply_still_names_a_verdict(landing)
     assert "land_wait" in [c[0] for c in calls]
 
 
-def test_a_broad_fallback_derives_no_tag_and_runs_no_narrowing(landing):
-    """The deployer's `narrow` scoped such a range to k8s tags until D6.12; Flux applies all
-    of them, so the landing asks it nothing and the changed set names them."""
-    ln, calls = _broad_fallback(
-        landing,
-        Fakes(changed_rc=DEPLOY_BROAD, narrowed_rc=0, narrowed="bazarr,sonarr\n"),
-    )
+def test_a_broad_fallback_derives_no_tag_and_asks_no_hand_for_the_cluster(
+    landing, capsys
+):
+    """Flux applies every k8s tag, so the landing asks nothing more and the changed set names
+    them. Its line names no `deploy.sh` run, which applies nothing on the cluster or the Pi."""
+    ln, calls = _broad_fallback(landing, Fakes(changed_rc=DEPLOY_BROAD))
     deploy.derive_from_diff(ln)
     assert ln.resolved_tags == []
     assert [c[1] for c in calls if c[0] == "deploy_tags"] == [("changed", "beefbeef")]
+    out = capsys.readouterr().out
+    assert "changed set names its k8s tags" in out
+    assert "deploy.sh" not in out and "target=daniel-pi" not in out

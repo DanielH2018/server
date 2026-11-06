@@ -233,8 +233,8 @@ over them. A refusal deferred the plane as `k8s_unapplied` lines (#4333), and a 
 apply held the plane as `ansible/deploy.yml <tags>`. A `narrow-shadow:` line compared each
 service's applied digest with a render record.
 
-`narrow` is read-only and can be run by hand against any range. The rules it applies, and what
-each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
+D6.15 removed the `narrow` subcommand. The rules it applied, and what each one refused, are in
+`scripts/deploy_tools/narrow_lib/broad.py` until D6.18 deletes it.
 
 - **A play file whose parsed YAML is unchanged maps to no tags.** A comment or layout edit to
   `ansible/deploy.yml`, or to a file under `ansible/pre_tasks/`, `ansible/tasks/` or

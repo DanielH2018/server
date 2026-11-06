@@ -1,21 +1,21 @@
-"""Which deploy tags are not Ansible's to deploy, and what `deploy.sh` does with each.
+"""Which deploy tags no Ansible path deploys, and what `deploy.sh` does with each.
 
-A k8s `containers_list` entry that carries `owner` (`lib.k8s_roles.tag_owners`) is applied by
-Flux through `promote`, or is mid-handback, so an Ansible apply of its tag would be a second
-writer. The plan is docs/target-architecture/deploy/d2-first-leaf.md, *What each entry point
-does with a tag that is not Ansible-owned*. Each `deploy.sh` site asks this module:
+Flux applies every k8s `containers_list` entry through `promote`, so an Ansible apply of its
+tag would be a second writer. The refusal reads an entry's platform, and the
+`every-k8s-entry-is-flux-owned` census row holds that each such entry carries `owner: flux`.
+Each `deploy.sh` site asks this module:
 
-- the front half refuses such a tag typed into `--tags`, with exit 5 (`refuse_flux_owned`);
-- `deploy_tags.changed` and the shared-role expansion leave one out and name it
-  (`drop_owned`, `owner_note`);
+- the front half refuses such a tag typed into `--tags`, with exit 5 (`refuse_k8s_tags`);
 - `--list-services` names each on stderr before it runs `deploy_tags.py list`
-  (`mark_owners`).
+  (`mark_k8s_tags`).
+
+`flux_owned` reads `owner` for the landing's gate and handback refusal.
 """
 
 import subprocess
 import sys
 import tempfile
-from collections.abc import Collection, Generator, Mapping
+from collections.abc import Collection, Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -105,90 +105,68 @@ def run_target(args: Collection[str]) -> str:
     return target
 
 
-def owner_note(tag: str, owner: str) -> str:
-    """Who applies `tag` instead of Ansible, as one clause every drop and refusal prints."""
-    if owner == "flux":
-        return f"`{tag}` is applied by Flux through `promote` (owner: flux)"
-    return (
-        f"`{tag}` is mid-handback (owner: {owner}): nothing applies it until a PR removes "
-        "`owner`"
-    )
+def k8s_note(tag: str) -> str:
+    """Who applies `tag` instead of Ansible, as one clause every refusal and mark prints."""
+    return f"`{tag}` is applied by Flux through `promote` (platform: k8s)"
 
 
-def drop_owned(tags: Collection[str], owners: Mapping[str, str], site: str) -> set[str]:
-    """`tags` less every tag in `owners`, with one stderr note per tag left out.
-
-    Args:
-        tags: the tags a site derived.
-        owners: `flux_owned`'s map.
-        site: the flag the note names, such as `--changed`.
-    """
-    for tag in sorted(set(tags) & owners.keys()):
-        print(
-            f"{PROG}: {site}: left out {owner_note(tag, owners[tag])}.", file=sys.stderr
-        )
-    return set(tags) - owners.keys()
-
-
-def mark_owners(owners: Mapping[str, str]) -> None:
-    """Name each tag in `owners` on stderr, for `--list-services`.
+def mark_k8s_tags(tags: Iterable[str]) -> None:
+    """Name each of `tags` on stderr, for `--list-services`.
 
     stderr rather than beside the tag in `deploy_tags.py list`, because that stdout is a
     contract: the locked half locks one service per line of it, and `deploy_ui` splits it on
     whitespace into the tags its API accepts. A mark there would join both lists as a tag.
     """
-    for tag, owner in sorted(owners.items()):
-        print(
-            f"{PROG}: {owner_note(tag, owner)}; --tags {tag} exits 5.", file=sys.stderr
-        )
+    for tag in sorted(tags):
+        print(f"{PROG}: {k8s_note(tag)}; --tags {tag} exits 5.", file=sys.stderr)
 
 
-def read_owners(plan) -> dict[str, str]:
-    """`flux_owned` for `plan`'s checkout at its `--at` commit, read once per run.
+def read_k8s_tags(plan) -> set[str]:
+    """`declared_k8s_tags` for `plan`'s checkout at its `--at` commit, read once per run.
 
-    `plan` is `deploy_lib.run.Plan`; the map is cached on its `owners` field. Empty when
-    `-e target=` names a host other than the k8s host. Raises what `flux_owned` raises.
+    `plan` is `deploy_lib.run.Plan`; the set is cached on its `k8s_tags` field. Empty when
+    `-e target=` names a host other than the k8s host. Raises what `declared_k8s_tags` raises.
     """
-    if plan.owners is None:
+    if plan.k8s_tags is None:
         # Flux applies the k8s host's workloads alone. A run aimed at another host, such as
-        # the Pi, deploys that host's own entry, so the k8s host's `owner` does not govern it
+        # the Pi, deploys that host's own entry, so the k8s host's entry does not govern it
         # even when both hosts list the same tag (`wg-easy`, #5815).
         target = run_target(plan.args)
         if target and target != K8S_HOST:
-            plan.owners = {}
+            plan.k8s_tags = set()
         else:
-            plan.owners = flux_owned(plan.repo_root, plan.at_sha)
-    return plan.owners
+            plan.k8s_tags = declared_k8s_tags(plan.repo_root, plan.at_sha)
+    return plan.k8s_tags
 
 
-def refuse_flux_owned(plan) -> None:
-    """Refuse with 5 when a tag in `plan.tags` is not Ansible's to deploy.
+def refuse_k8s_tags(plan) -> None:
+    """Refuse with 5 when a tag in `plan.tags` names a k8s entry.
 
     The front half asks this after the staleness gate, for `validate_tags`' reason: a stale
-    tree answers with stale ownership. `--skip-tag-check` does not skip it, because that flag
+    tree answers with a stale list. `--skip-tag-check` does not skip it, because that flag
     bypasses a typo check and nothing else. `--check` and `--dry-run` ask it too: the play
     skips such an entry, so neither mode would show anything for it.
 
-    An unreadable ownership map refuses with 1. Reading an unknown `owner` as Ansible-owned
-    would hand the tag to both writers.
+    An unreadable host_vars file refuses with 1. Reading it as declaring no k8s tag would
+    hand the tag to both writers.
 
     Raises:
-        Refused: with `DEPLOY_FLUX_OWNED`, or with `FAILED` when the map is unreadable.
+        Refused: with `DEPLOY_FLUX_OWNED`, or with `FAILED` when the list is unreadable.
     """
     if not plan.tags:
         return
     try:
-        owners = read_owners(plan)
+        declared = read_k8s_tags(plan)
     except (ValueError, subprocess.CalledProcessError) as exc:
         say_error(
             "could not read which tags Flux applies -- nothing was deployed.",
             f"  {exc}",
         )
         raise Refused(FAILED) from None
-    owned = [tag for tag in plan.tags if tag in owners]
+    owned = [tag for tag in plan.tags if tag in declared]
     for tag in owned:
         say_error(
-            f"{owner_note(tag, owners[tag])} -- nothing was deployed.",
+            f"{k8s_note(tag)} -- nothing was deployed.",
             f"  No Ansible path may apply `{tag}`; drop it from --tags to deploy the rest.",
         )
     if owned:

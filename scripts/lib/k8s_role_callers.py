@@ -3,9 +3,8 @@
 
 A helper role has no `containers_list` entry and so no deploy tag of its own. Every reader of
 this graph asks the same question of it: which tags does a change to the helper reach? The
-landing (`land_lib/land_shared.py`), the deployer's `owned_only` split
-(`deploy_tools/shared_role_callers.py`), the broad narrowing (`narrow_lib/broad.py`), the
-`--tags` expansion (`deploy_lib/run.py`) and the release-staleness consumers
+deployer's `owned_only` split (`deploy_tools/shared_role_callers.py`), the broad narrowing
+(`narrow_lib/broad.py`) and the release-staleness consumers
 (`probe_lib/releases_consumers.py`) all read it. `lib.k8s_roles` re-exports it, where those
 readers import it from.
 

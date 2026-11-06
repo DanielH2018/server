@@ -1,21 +1,13 @@
-"""Step 5's other half: a tag Flux applies lands through `promote`, never through deploy.sh.
+"""Step 5's other half: a k8s tag lands through `promote`, never through deploy.sh.
 
-A k8s `containers_list` entry that sets `owner` is not Ansible's to deploy
-(`deploy_lib/owners.py`). `owner: flux` is published, so Flux applies it once `promote` moves
-`prod`. `owner: released` is mid-handback, so nothing applies it. The plan is
-docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*.
-
-`split_owned` takes every such tag out of `resolved_tags` into `owned_tags` before
-`deploy.deploy_by_host` sees the list, because `deploy_by_host` hands its list to deploy.sh as
-given and deploy.sh refuses such a tag with exit 5. A PR whose only tags are such tags runs no
-deploy.sh at all.
-
-The landing derives no k8s tag from paths since D6.12 (docs/target-architecture/deploy/
-d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*). `drop_path_derived` empties
-`owned_tags` unless `--tags` named them, and every landing whose PR `moves_the_bundle` waits
-on the promotion. land-wait's changed set, read from the two `digests.json` files, then names
-the tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that
-moves no bundle file waits on `homelab` alone and gates no tag.
+Flux applies every k8s `containers_list` entry once `promote` moves `prod`, and deploy.sh refuses
+such a tag with exit 5 (`deploy_lib/owners.py`). `split_k8s` therefore takes every such tag out of
+`resolved_tags` before `deploy.deploy_by_host` sees the list. A tag `--tags` named is kept for the
+wait, and a tag this PR's paths named is dropped: every landing whose PR `moves_the_bundle` waits
+on the promotion, and land-wait's changed set, read from the two `digests.json` files, names the
+tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that moves no
+bundle file waits on `homelab` alone and gates no tag. The plan is
+docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*.
 
 `wait_on_promotion` runs `promote.py land-wait` on the merge commit. Its four outcomes
 map to a landing's words:
@@ -76,52 +68,53 @@ def moves_the_bundle(paths) -> bool:
     return not all(_reaches_no_render(p) for p in paths)
 
 
-def published(ln: Landing) -> list[str]:
-    """The `owner: flux` tags `split_owned` took, which a promotion applies and step 7 gates."""
-    return [tag for tag, owner in ln.owned_tags.items() if owner == "flux"]
-
-
 def gated_tags(ln: Landing) -> list[str]:
     """The tags step 7 gates: those deploy.sh deployed, then those a promotion applied.
 
     A tag suspended at the merge commit is left out, as Flux applied nothing for it.
     """
-    return ln.resolved_tags + [t for t in published(ln) if t not in ln.suspended_tags]
+    return ln.resolved_tags + [t for t in ln.flux_tags if t not in ln.suspended_tags]
 
 
 # What `FluxReads.owners_at` raises when the ownership map cannot be read.
 OWNER_READ_ERRORS = (ValueError, subprocess.SubprocessError, OSError)
 
 
-def owners_at_merge(ln: Landing) -> dict[str, str]:
-    """Each tag that is not Ansible-owned at the merge commit, to its `owner`; dies unread.
+def split_k8s(ln: Landing) -> None:
+    """Take every k8s tag out of `resolved_tags`; a `--tags` one joins `flux_tags` for the wait.
 
-    Ownership is read at the merge commit, the tree this landing deploys, because the primary
-    checkout may not carry the PR yet. An unreadable ownership map ends the landing: reading an
-    unknown `owner` as Ansible-owned would hand the tag to two writers.
+    The k8s entries are read at the merge commit, the tree this landing deploys, because the
+    primary checkout may not carry the PR yet. An unreadable list ends the landing: reading it
+    as no k8s tag would hand each tag to deploy.sh, which refuses it.
+
+    A path-derived tag is a guess at what the render moves. A `tasks/`-only change moves no
+    bundle file, and a shared template moves tags no path names, so the landing waits on
+    land-wait's changed set instead and gates what it read.
     """
+    if not ln.resolved_tags:
+        return
     try:
-        return ln.tools.flux.owners_at(ln.opts.primary, ln.merge_sha)
+        declared = ln.tools.flux.k8s_tags_at(ln.opts.primary, ln.merge_sha)
     except OWNER_READ_ERRORS as exc:
         ln.die(
             f"could not read which tags Flux applies at {ln.merge_sha[:12]}, so nothing "
             f"was deployed: {exc}",
             1,
         )
-
-
-def split_owned(ln: Landing) -> None:
-    """Move every tag that is not Ansible-owned out of `resolved_tags` into `owned_tags`."""
-    if not ln.resolved_tags:
+    k8s = [tag for tag in ln.resolved_tags if tag in declared]
+    if not k8s:
         return
-    owners = owners_at_merge(ln)
-    ln.owned_tags = {tag: owners[tag] for tag in ln.resolved_tags if tag in owners}
-    if not ln.owned_tags:
+    ln.resolved_tags = [tag for tag in ln.resolved_tags if tag not in declared]
+    ln.k8s_only = [tag for tag in ln.k8s_only if tag not in declared]
+    if ln.opts.tags:
+        ln.flux_tags = k8s
+        for tag in k8s:
+            say(f"{tag}: a k8s entry, so it lands through promote, not deploy.sh")
         return
-    ln.resolved_tags = [tag for tag in ln.resolved_tags if tag not in owners]
-    ln.k8s_only = [tag for tag in ln.k8s_only if tag not in owners]
-    for tag, owner in ln.owned_tags.items():
-        say(f"{tag}: owner: {owner}, so it lands through promote, not deploy.sh")
+    say(
+        f"{','.join(k8s)}: named by this PR's paths; the promotion's changed set names the "
+        "tags this landing gates"
+    )
 
 
 def _flux_owned(ln: Landing, tags) -> list[str]:
@@ -141,22 +134,6 @@ def _flux_owned(ln: Landing, tags) -> list[str]:
         )
         return list(tags)
     return [tag for tag in tags if owners.get(tag) == "flux"]
-
-
-def drop_path_derived(ln: Landing) -> None:
-    """Empty `owned_tags` unless `--tags` named them: the changed set names a PR's tags.
-
-    A path-derived tag is a guess at what the render moves. A `tasks/`-only change moves no
-    bundle file, and a shared template moves tags no path names, so the landing waits on
-    land-wait's changed set instead and gates what it read (D6.12).
-    """
-    if ln.opts.tags or not ln.owned_tags:
-        return
-    say(
-        f"{','.join(ln.owned_tags)}: named by this PR's paths; the promotion's changed set "
-        "names the tags this landing gates"
-    )
-    ln.owned_tags = {}
 
 
 # What a landing keeps back from `LAND_DEADLINE` after the promotion wait: the health gate and
@@ -187,20 +164,19 @@ def _print_what_else_it_owes(ln: Landing) -> None:
 def wait_on_promotion(ln: Landing) -> None:
     """Wait until a promotion covers the merge commit; return on `settled`, else end the landing.
 
-    The changed set's tags join `owned_tags` as `owner: flux`, so the health gate and the
-    ledger read what the promotion applied rather than what the PR's paths named.
+    The changed set's tags join `flux_tags`, so the health gate and the ledger read what the
+    promotion applied rather than what the PR's paths named.
     """
     pr, sha = ln.opts.pr, ln.merge_sha
-    named = f" ({','.join(ln.owned_tags)})" if ln.owned_tags else ""
+    named = f" ({','.join(ln.flux_tags)})" if ln.flux_tags else ""
     say(f"waiting until a promotion covers {sha[:12]}{named}")
     result = ln.tools.flux.land_wait(
-        sha, published(ln), ln.opts.primary, wait_cap(ln), ln.opts.window_grace
+        sha, list(ln.flux_tags), ln.opts.primary, wait_cap(ln), ln.opts.window_grace
     )
-    for tag in _flux_owned(ln, result.tags):
-        ln.owned_tags.setdefault(tag, "flux")
+    ln.flux_tags += [t for t in _flux_owned(ln, result.tags) if t not in ln.flux_tags]
     # Before any `finish` below, so a failed landing's ledger line names the changed set.
-    ln.ledger.tags_label = ",".join(ln.resolved_tags + list(ln.owned_tags))
-    tags = ",".join(ln.owned_tags) or "homelab"
+    ln.ledger.tags_label = ",".join(ln.resolved_tags + ln.flux_tags)
+    tags = ",".join(ln.flux_tags) or "homelab"
     if result.tags:
         say(f"the changed set names {','.join(result.tags)}")
     if result.widened:
