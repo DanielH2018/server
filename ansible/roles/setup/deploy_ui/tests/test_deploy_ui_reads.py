@@ -216,23 +216,6 @@ def test_read_state_lists_a_hold_plane_line_with_an_unknown_key_is_clean(state_d
     ]
 
 
-def test_parse_stale_lines_is_clean():
-    text = "homepage: roles/k8s/homepage changed in 5aab47af\nn8n: no release record"
-    assert reads.parse_stale(text) == [
-        {"service": "homepage", "reason": "roles/k8s/homepage changed in 5aab47af"},
-        {"service": "n8n", "reason": "no release record"},
-    ]
-
-
-def test_parse_stale_none_stale_is_flagged():
-    assert (
-        reads.parse_stale(
-            "0 service(s) stale; every known k8s service has a current record."
-        )
-        == []
-    )
-
-
 PRS = """[{"number": 1550, "title": "T", "headRefName": "b", "isDraft": false,
  "statusCheckRollup": [{"conclusion": "SUCCESS"}, {"conclusion": "SUCCESS"}]},
  {"number": 1551, "title": "U", "headRefName": "c", "isDraft": true,

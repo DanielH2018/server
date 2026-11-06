@@ -476,7 +476,6 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `manifest-prune-check.sh` | Skips an object labelled `kustomize.toolkit.fluxcd.io/name=<n>` only while a Kustomization `<n>` exists in `flux-system`. It reads that list once per run with the read-only kubeconfig. |
 | `live_drift_check.py` | Needs no skip, because `is_server_side_applied` already excludes kustomize-controller's objects. D2.4a narrows that function: a `kustomize-controller` `Apply` entry does not count on an object that carries `last-applied-configuration`. Flux strips that annotation on every apply, so its presence means Ansible applied the object after a handback. |
 | `gen_role_glance.py`, `service_catalog.py` | For `owner: flux`, print that Flux applies the role through `promote` and that `deploy.sh` refuses it with exit 5, in place of the deploy tag and the auto-deploy stance. |
-| `deploy_ui` | Inherits `deploy.sh`'s refusal and shows its message. |
 
 No skip reads the Flux label alone. After a handback the orphaned objects keep the labels
 `kustomize.toolkit.fluxcd.io/name` and `/namespace`, and kustomize-controller's
@@ -1508,8 +1507,8 @@ later slices size against:
   an entry point is renamed or stops calling the reader (failure class 4).
   `ansible/tests/repo/test_owner_entry_points_census.py` therefore names each row of the
   entry-point table as a member it must find, as `file:symbol`, and follows its calls down
-  to `tag_owners`, `ansible_owned` or `service_owners`. The two host checks and `deploy_ui`
-  read no tree reader, and the census names the reason for each. A table row with no
+  to `tag_owners`, `ansible_owned` or `service_owners`. The two host checks read no tree
+  reader, and the census names the reason for each. A table row with no
   member fails it, and so does a member whose row is gone. The red halves rename an entry
   point, drop a reader call, and add an unmapped row.
 - The narrowing pair in D2.1a fails if an `owner`-only edit reaches any of its five fixture
