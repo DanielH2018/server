@@ -25,7 +25,7 @@ Run: uv run pytest ansible/tests/k8s/test_vip_pins.py
 
 from lib import yaml_fast
 
-from _k8s_render import render_texts, rendered_docs, rendered_k8s_text
+from _k8s_render import host_context, render_texts, rendered_docs, rendered_k8s_text
 
 # The variable the announcement and every workload pin read.
 PRIMARY_NODE_VAR = "k8s_primary_node"
@@ -62,11 +62,31 @@ def _announcing_nodes(metallb_pool_text: str) -> set[str]:
     return nodes
 
 
+def _sentinel_overrides() -> dict:
+    """The primary node variable at the sentinel, with the `hostvars` entry the renderer needs."""
+    box = host_context()
+    node = {**box["hostvars"]["daniel-box"], "containers_list": box["containers_list"]}
+    return {
+        PRIMARY_NODE_VAR: SENTINEL_NODE,
+        "hostvars": {**box["hostvars"], SENTINEL_NODE: node},
+    }
+
+
+def _sentinel_overrides() -> dict:
+    """The primary node variable at the sentinel, with the `hostvars` entry the renderer needs."""
+    box = host_context()
+    node = {**box["hostvars"]["daniel-box"], "containers_list": box["containers_list"]}
+    return {
+        PRIMARY_NODE_VAR: SENTINEL_NODE,
+        "hostvars": {**box["hostvars"], SENTINEL_NODE: node},
+    }
+
+
 def _sentinel_metallb_pool() -> str:
     """metallb-pool.yaml.j2 alone, rendered with the sentinel laid over every role's context."""
     texts = [
         text
-        for role, tpl, text in render_texts({PRIMARY_NODE_VAR: SENTINEL_NODE})
+        for role, tpl, text in render_texts(_sentinel_overrides())
         if (role, tpl) == ("metallb", "metallb-pool.yaml.j2")
     ]
     assert texts, "the sentinel render holds no metallb/metallb-pool.yaml.j2"
@@ -168,7 +188,7 @@ def test_vip_backed_workloads_are_pinned_to_the_announcing_node():
 
 def test_vip_backed_workloads_follow_the_primary_node_variable():
     """The placement half of the sentinel render: every pin moves with the announcement."""
-    docs = _docs_of(render_texts({PRIMARY_NODE_VAR: SENTINEL_NODE}))
+    docs = _docs_of(render_texts(_sentinel_overrides()))
     offences = _pin_offences(docs, SENTINEL_NODE)
     assert offences == [], (
         f"with {PRIMARY_NODE_VAR}={SENTINEL_NODE!r} the announcement moves and these pins "

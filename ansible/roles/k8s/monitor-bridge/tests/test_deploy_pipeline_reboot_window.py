@@ -17,7 +17,7 @@ from datetime import timedelta
 import pytest
 
 import deploy_pipeline
-from _bridge_env import UNDEFINED
+from _bridge_env import blank_stubs
 from _deploy_pipeline_fakes import github
 from _k8s_render import render_pod_env
 from bridge.config import load_config
@@ -61,10 +61,7 @@ def test_the_gauge_reads_0_at_the_same_hour_on_a_weekday(piped):
 
 def test_the_gauge_follows_the_weekly_reboot_variables(piped):
     """A reboot moved to 13:30 moves the window to 08:05-14:15, with no edit to the exporter."""
-    env = {
-        k: "" if str(v) == UNDEFINED else str(v)
-        for k, v in render_pod_env("monitor-bridge", {"weekly_reboot_hour": 13}).items()
-    }
+    env = blank_stubs(render_pod_env("monitor-bridge", {"weekly_reboot_hour": 13}))
     moved = replace(load_config(env), DEPLOY_PIPELINE_GITHUB_TOKEN="read-only-token")
     # The committed schedule's window holds 07:00 and not 13:00; the moved one the reverse.
     assert (window_gauge(piped, at(18, 7)), window_gauge(piped, at(18, 13))) == (1, 0)

@@ -110,8 +110,8 @@ under the same subdirectory names, after every pass that edits rendered text. Th
 `kustomization.yaml` lists the upstream files under `resources` and the patches under
 `patches`. A placeholder render refuses a tag that vendors files and whose own render holds a
 placeholder, because Flux would then substitute into the upstream bytes. No `$` in those bytes
-is escaped. `ansible/tests/_k8s_render.py:rendered_docs` renders templates only, so the fleet
-guards never read the vendored files. H1's *Vendored upstream manifests*
+is escaped. `ansible/tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, which
+holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
 (`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
@@ -249,6 +249,33 @@ role with none or with two. The renderer resolves only the five keys it renders 
 two file lists, the deferred pair and `manifests_prune`. The others stay strings until a
 reader such as `restart.py` resolves them. Role defaults still enter the template context,
 so a template must not name one of these keys for any other purpose.
+
+The renderer holds the manifests role's two defaults it needs as constants:
+`scripts/lib/k8s_roles.py:MANIFESTS_PRUNE_DEFAULT` and `ROLLOUT_TIMEOUT_DEFAULT`. The play still reads the role's own file, and
+`ansible/tests/k8s/test_shared_manifest_defaults.py` holds the two equal until R4.7 deletes the
+play.
+
+**The test harness reads this render.** `ansible/tests/_k8s_render.py:rendered_docs` and
+`rendered_texts` read `render_tag`'s files and deferred files in stub mode, so a fleet guard
+reads the labelled bytes. They stop before the restart stamp and placeholder mode.
+`render_role_template` renders one template unlabelled with `role_context`'s variables, for a
+guard that sets a value the inventory does not hold. A top-level template out of the file
+lists, such as pihole's macro file, is in neither walk. A guard that reads one names it in its
+own fallback table.
+
+## The Jinja dialect the renderer accepts
+
+[ADR-0028](adr/0028-the-renderer-supports-a-closed-jinja-subset.md) specifies the Jinja subset
+the cluster render accepts: every filter, test and lookup, and the variable semantics.
+`scripts/renderer/renderer_lib/dialect.py` holds the three literal sets. `renderer_env` holds
+only those filters and tests and refuses any other lookup, so a template off the list fails the
+render with an error naming the construct. To add a construct, add it to the literal, the ADR's
+table and a case in `scripts/renderer/tests/_dialect_cases.py`, in one PR.
+
+`scripts/renderer/tests/test_renderer_dialect.py` compares each construct with its literal, and
+holds every template, variable value and `k8s/manifests` include value of the k8s roles to the
+list. Host and package modes
+render through `strict_env`, which the subset does not bind.
 
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
 `ansible/templates/`. It fails when a filter or test name does not resolve in the environment
@@ -950,6 +977,14 @@ comment does not count.
 `scripts/lib/ansible_jinja_env.py` or `ansible/filter_plugins/`, or deletes a file under
 `ansible/roles/k8s/`. On any other PR with no line, the job prints the difference and passes,
 because most PRs change render output on purpose.
+
+**A renderer dependency bump needs the line too.** The job reads the closure of
+`scripts/validate/render_diff_job.py:RENDERER_DEPENDENCIES` from `uv.lock`, and compares each
+entry between the merge base and the head, with its `pyproject.toml` requirement. A moved entry
+makes the line mandatory, so Renovate cannot automerge a bump that changes the render. A bump
+of any other package needs no line. A census test,
+`scripts/renderer/tests/test_renderer_dependency_pins.py`, holds the literal to the third-party
+modules the renderer imports.
 
 **Both trees must clear a floor.** `flux/pihole.yaml`, `flux/traefik.yaml` and
 `cluster/pihole-deferred/` must exist, and `flux/` must hold at least `FLUX_FLOOR` files. A PR

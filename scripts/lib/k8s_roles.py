@@ -36,6 +36,8 @@ __all__ = [
     "CLAIM_TEMPLATE",
     "K8S_ROLES",
     "NO_MANIFEST_ROLES",
+    "MANIFESTS_PRUNE_DEFAULT",
+    "ROLLOUT_TIMEOUT_DEFAULT",
     "SHARED_MANIFEST_DEFAULTS",
     "SHARED_ROLES",
     "SKIP_ROLES",
@@ -385,6 +387,12 @@ def k8s_tags(host_vars: Path = K8S_HOST_VARS) -> set[str]:
 
 # Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`
 # when the owning role ships none of its own, mapped to that template's file name. Mirrors
+# The manifests role's two defaults the render reads. A role with no `manifests_prune` of its own
+# arms the prune and renders the `homelab/role` label, and one with no
+# `manifests_rollout_timeout` of its own takes this budget.
+MANIFESTS_PRUNE_DEFAULT = True
+ROLLOUT_TIMEOUT_DEFAULT = "600s"
+
 # `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml, which
 # `ansible/tests/k8s/test_shared_manifest_defaults.py` holds it equal to.
 #

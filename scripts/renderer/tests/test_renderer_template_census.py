@@ -77,6 +77,6 @@ def test_a_template_with_an_unregistered_filter_is_flagged(tmp_path):
 def test_a_template_with_registered_names_is_clean(tmp_path):
     good = tmp_path / "good.yaml.j2"
     good.write_text(
-        "value: {{ name | from_json | to_json }}\n{% if x is search('y') %}{% endif %}\n"
+        "value: {{ name | from_yaml | to_json }}\n{% if x is search('y') %}{% endif %}\n"
     )
     assert unresolved([good]) == {}

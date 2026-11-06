@@ -27,7 +27,7 @@ from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
 from _helpers import render_expr as _render
-from _k8s_render import deploy_play
+from _k8s_play import deploy_play
 from _role_census import manifests_service_of, role_dirs, task_files_by_role
 from renderer.renderer_lib.task_inputs import image_builder_sites, render_defaults
 

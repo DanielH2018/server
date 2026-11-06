@@ -144,6 +144,11 @@ OVER_DERIVED_TRAEFIK_EDGE = {
         "entry's hostname derives an edge no manifest of livesync's renders. The role's own "
         "CLAUDE.md already states the traefik dependency"
     ),
+    "navidrome": (
+        "its route is listed only while `navidrome_k8s_replicas` is above 0, and it is parked "
+        "at 0, so the entry's hostname derives an edge no rendered manifest needs until the "
+        "route comes back"
+    ),
 }
 
 
