@@ -1,4 +1,4 @@
-"""The setup-plane drift reader for hosts that run no manifest-prune-check.
+"""The setup-plane drift reader on every host that renders setup templates.
 
 THE GAP: manifest-prune-check.sh is installed by roles/setup/k3s/tasks/health-crons.yml, imported
 only from that role's main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts. So it exists
@@ -316,22 +316,20 @@ def test_the_tree_age_arm_reads_a_foreign_owned_checkout(tmp_path):
 # ── wiring: the halves that have to agree across four files ───────────────────────────────────
 
 
-def test_the_reader_is_armed_where_no_manifest_prune_check_runs():
+def test_every_host_that_renders_setup_templates_is_armed():
     """The whole finding is a host that renders and is never read.
 
-    daniel-server must be in the allowlist, and daniel-box must not be — it already has
-    manifest-prune-check, and a second reader there would page twice for one drift.
+    Both cluster nodes render setup templates. daniel-pi stamps none, so a reader there would
+    report only that it is unarmed.
     """
     gv = yaml_fast.safe_load(ALL_VARS.read_text())
     hosts = gv["setup_drift_check_hosts"]
-    assert "daniel-server" in hosts, (
-        "daniel-server renders roles/setup/nut_host — the UPS shutdown chain — and is the host the "
-        "finding is about"
+    rendering_hosts = {*gv["k3s_server_hosts"], *gv["k3s_agent_hosts"]}
+    assert {"daniel-box", "daniel-server"} <= rendering_hosts
+    assert not rendering_hosts - set(hosts), (
+        "a host that renders setup templates has no reader"
     )
-    for server in gv["k3s_server_hosts"]:
-        assert server not in hosts, (
-            f"{server} already runs manifest-prune-check; a second reader double-pages one drift"
-        )
+    assert "daniel-pi" not in hosts
 
 
 def test_every_reader_task_is_gated_on_that_allowlist():
