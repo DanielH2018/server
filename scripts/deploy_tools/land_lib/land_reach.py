@@ -470,7 +470,7 @@ def _remaining_at(
     with tree_at(ref, repo) if ref else contextlib.nullcontext() as root:
         at = [(root or repo) / p.relative_to(REPO) for p in paths]
         copies = (
-            DeployedCopies(files, at[3], ref, repo, read_host)
+            DeployedCopies(files, at[3], ref, repo, read_host, at[1], at[2])
             if read_host and ref
             else None
         )

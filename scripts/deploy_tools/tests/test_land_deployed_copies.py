@@ -1,9 +1,10 @@
 """The owed-host note reads a stamped file's record on a host before naming it (#7398).
 
 The note and the task walk are the real ones, over this checkout's roles. Only the host read is
-fake. Each test also pins `daniel-server` in the note it expects to stay, so an empty note
-cannot pass one that expects the host to stay owed. The tests that build a `demo` role check
-which render shapes the walk counts, on shapes this checkout's roles do not hold.
+fake. Each test of the note also pins `daniel-server` in the note it expects to stay, so an empty
+note cannot pass one that expects the host to stay owed. The tests that build a `demo` role check
+which render shapes the walk counts, on shapes this checkout's roles do not hold. The check-timer
+tests ask `holds` directly, over this checkout's roles.
 """
 
 import hashlib
@@ -25,8 +26,15 @@ WITNESS_SHA = hashlib.sha256((REPO / WITNESS).read_bytes()).hexdigest()
 TEMPLATE = "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2"
 TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
 FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/loki-route-witness"
-SHARED_TEMPLATE = "ansible/roles/setup/common/templates/check-timer.service.j2"
-SHARED_TEMPLATE_SHA = hashlib.sha256((REPO / SHARED_TEMPLATE).read_bytes()).hexdigest()
+DRIFT_FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"
+CHECK_TIMER_TEMPLATES = (
+    "ansible/roles/setup/common/templates/check-timer.service.j2",
+    "ansible/roles/setup/common/templates/check-timer.timer.j2",
+)
+
+
+def _sha(path):
+    return hashlib.sha256((REPO / path).read_bytes()).hexdigest()
 
 
 def _reader(row, reads=None):
@@ -120,18 +128,72 @@ def test_a_missing_render_fragment_keeps_the_host_owed():
     assert "daniel-server" in _note([TEMPLATE], _fragment_reader({"status": "absent"}))
 
 
-def test_a_shared_template_also_rendered_under_another_tag_keeps_the_host_owed():
-    """The current loki fragment says nothing of the `setup_drift` render of the same template."""
-    row = {"status": "ok", "text": f"{SHARED_TEMPLATE} {SHARED_TEMPLATE_SHA}\n"}
-    assert "`initial_setup` also reaches daniel-server" in _note(
-        [SHARED_TEMPLATE], _fragment_reader(row)
-    )
+def _holds_check_timer(template, witness_text, drift_text, host="daniel-server"):
+    """Does `initial_setup` read as held on a host with these two render fragments?
+
+    `holds` over the working tree's roles, because `_note` reads the `ansible/` tree at `ref`, and
+    the `gitops_deploy` line a check-timer change also earns keeps the note non-empty. A text of
+    None is a fragment the host does not have.
+    """
+    files = {
+        path: {"status": "ok", "text": text} if text else {"status": "absent"}
+        for path, text in ((FRAGMENT, witness_text), (DRIFT_FRAGMENT, drift_text))
+    }
+    return DeployedCopies(
+        [template],
+        REPO / "ansible/roles/setup",
+        ref="HEAD",
+        repo=REPO,
+        read_host=lambda plan, host: {"stat": {}, "files": files},
+    ).holds("initial_setup", template, host)
 
 
-def _stamp(*tags):
+def test_a_host_the_witness_stamp_skips_holds_on_the_drift_fragment_alone():
+    template = CHECK_TIMER_TEMPLATES[0]
+    line = f"{template} {_sha(template)}\n"
+    assert _holds_check_timer(template, None, line, host="daniel-box")
+
+
+def test_a_host_the_witness_stamp_skips_stays_owed_on_a_stale_drift_fragment():
+    template = CHECK_TIMER_TEMPLATES[0]
+    line = f"{template} {'0' * 64}\n"
+    assert not _holds_check_timer(template, None, line, host="daniel-box")
+
+
+@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
+def test_a_check_timer_template_both_fragments_show_is_held(template):
+    line = f"{template} {_sha(template)}\n"
+    assert _holds_check_timer(template, line, line)
+
+
+@pytest.mark.parametrize(
+    "witness_line, drift_line",
+    [
+        pytest.param("current", "other", id="the-drift-fragment-is-stale"),
+        pytest.param("other", "current", id="the-witness-fragment-is-stale"),
+        pytest.param("current", "", id="the-drift-fragment-predates-the-listing"),
+    ],
+)
+def test_a_check_timer_template_one_fragment_does_not_show_stays_owed(
+    witness_line, drift_line
+):
+    template = CHECK_TIMER_TEMPLATES[0]
+    lines = {
+        "current": f"{template} {_sha(template)}\n",
+        "other": f"{template} {'0' * 64}\n",
+        "": f"{TEMPLATE} {TEMPLATE_SHA}\n",
+    }
+    assert not _holds_check_timer(template, lines[witness_line], lines[drift_line])
+
+
+ON_BOX_ONLY = "inventory_hostname == 'daniel-box'"
+
+
+def _stamp(*tags, when="True"):
     return f"""
 - name: Stamp
   tags: {list(tags)}
+  when: "{when}"
   ansible.builtin.import_tasks: stamp.yml
   vars:
     stamp_render_name: demo
@@ -139,10 +201,11 @@ def _stamp(*tags):
 """
 
 
-def _render(*tags, src="loki-read-route-health.sh.j2"):
+def _render(*tags, src="loki-read-route-health.sh.j2", when="True"):
     return f"""
 - name: Render
   tags: {list(tags)}
+  when: "{when}"
   ansible.builtin.template:
     src: "{src}"
     dest: /tmp/demo
@@ -175,6 +238,18 @@ def test_a_render_every_stamp_run_reaches_lets_the_fragment_count(tmp_path):
 
 def test_a_render_the_stamps_narrower_tag_skips_keeps_it_owed(tmp_path):
     assert not _demo_role_holds(tmp_path, _render("a") + _stamp("a", "b"))
+
+
+def test_a_render_and_its_stamp_both_gated_off_the_host_ask_nothing_of_it(tmp_path):
+    tasks = _render("a", when=ON_BOX_ONLY) + _stamp("a", when=ON_BOX_ONLY)
+    assert _demo_role_holds(tmp_path, tasks + _render("b") + _stamp("b"))
+
+
+def test_a_render_whose_only_proving_stamp_is_gated_off_the_host_keeps_it_owed(
+    tmp_path,
+):
+    tasks = _render("a") + _stamp("a", when=ON_BOX_ONLY)
+    assert not _demo_role_holds(tmp_path, tasks + _render("b") + _stamp("b"))
 
 
 def test_a_stamp_main_does_not_reach_proves_no_render(tmp_path):

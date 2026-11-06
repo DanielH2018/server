@@ -503,17 +503,21 @@ module's retirement arm (D6, *The render-diff gates after D6*).
 PR 1 adds a workflow, `.github/workflows/render-diff.yml`, triggered on `pull_request` with
 the types `opened`, `synchronize`, `reopened` and `edited`, so an edit to the PR body re-runs
 it. It renders the PR's merge base from a worktree of that commit, and the PR head, each with
-`homelab_render.py cluster` in placeholder mode. The merge base, not the base branch's tip,
-is the comparison point, so another session's merge never shows up as this PR's change.
+`homelab_render.py cluster` in placeholder mode. Each side renders as the publish job does:
+`--all-images` and a `--role` for every tag its own `promote.py published-tags` prints,
+because a render with no `--role` writes no `flux/`. The merge base, not the base branch's
+tip, is the comparison point, so another session's merge never shows up as this PR's change.
+`scripts/validate/render_diff_job.py` holds both renders' command and the verdict, so a
+change to either needs no workflow push. The workflow runs the merge base's copy of that
+module, and the module is a hazard path.
 
 **Both renders take one pinned commit value.** D5's soak Job embeds the commit SHA it
 verifies, and its name ends in a digest of that spec (D5, *The soak as a Job* and *Rules for
 every Job Flux applies*). Two renders of two commits therefore always differ under
 `cluster/soak/` and in whatever names that Job, even when no input changed. The renderer
-takes the commit as an input, and the job passes the PR head's SHA to both renders through
-it. No contract names that input yet. R4 refers to it as `--commit`, the name it proposes in
-Open question 10, and PR 1 uses whatever name C1 records. With the value pinned, a remaining
-difference comes from the tree. PR 1's red-proofs show that the pin covers every
+takes the commit as `--revision` (C1 *Modes*, Open question 10), and the job passes the PR
+head's SHA to both renders through it. With the value pinned, a remaining difference comes
+from the tree. PR 1's red-proofs show that the pin covers every
 commit-derived byte, not only the soak's (*Verification*).
 
 The job then compares the two trees:
@@ -522,14 +526,16 @@ The job then compares the two trees:
   included;
 - the head's tag set against the base's. Under `Render-diff: none` the sets must be equal.
   Under a list, every `flux/<tag>.yaml` that appears or disappears must be on the list;
-- a floor on both trees, so two empty renders cannot pass: `flux/pihole.yaml`,
-  `flux/traefik.yaml` and `cluster/pihole-deferred/` exist, and the `flux/` file count is
-  at least the number PR 1 measures;
+- a floor on both trees, so a render that loses a named member or a `flux/` file cannot pass:
+  `flux/pihole.yaml`, `flux/traefik.yaml` and `cluster/pihole-deferred/` exist, and the
+  `flux/` file count is at least the number PR 1 measures. Two empty renders never reach it,
+  because `shadow_diff.py digest` refuses an empty tree and fails the job first;
 - the sorted-tree sha256 that `shadow_diff.py digest` prints (R1's exit 2), for the PR
   description.
 
 The PR body's `Render-diff:` line states the expected result. `Render-diff: none` requires
-zero differences. A list of paths requires the differing files to equal that list. A line
+zero differences. A list of paths requires the differing files to equal that list, except
+`digests.json`, which moves with any file it digests and which a list need not name. A line
 binds whenever it is present, on any PR. The line is mandatory, and its absence fails the
 job, when the PR touches any of these paths:
 
@@ -971,6 +977,7 @@ root is withheld, not suspended*).
   scripts/dev/new_k8s_service.py                   (scaffolds no tasks/)
   scripts/docs/gen_role_glance.py                  (marker names no tasks)
   ansible/tests/_k8s_render.py                     (renders through the renderer; - deploy_play)
+  scripts/validate/render_diff_job.py              (PR 1 adds it, PR 11 removes it)
   .github/workflows/render-diff.yml                (PR 1 adds it, PR 7e adds the pin hazard,
                                                    PR 11 deletes it)
   .github/pull_request_template.md                 (PR 1 adds Render-diff:, PR 11 removes it)
@@ -1600,14 +1607,14 @@ gh pr view <n> --json statusCheckRollup,body \
 ```
 
 To reproduce one PR's verdict by hand, render its merge base and its head with the same
-commit value. `--commit` stands for the input Open question 10 asks C1 to name.
+commit value, the renderer's `--revision`.
 
 ```bash
 git worktree add --detach /tmp/r4-base <merge base>
-uv run python /tmp/r4-base/scripts/renderer/homelab_render.py cluster \
-  --out /tmp/r4-base-out --commit <head sha>
-uv run python scripts/renderer/homelab_render.py cluster \
-  --out /tmp/r4-head-out --commit <head sha>
+uv run python scripts/validate/render_diff_job.py render --tree /tmp/r4-base \
+  --out /tmp/r4-base-out --revision <head sha>
+uv run python scripts/validate/render_diff_job.py render --tree . \
+  --out /tmp/r4-head-out --revision <head sha>
 diff -r /tmp/r4-base-out /tmp/r4-head-out && echo identical
 ls /tmp/r4-base-out/flux | sort > /tmp/r4-base.tags
 ls /tmp/r4-head-out/flux | sort > /tmp/r4-head.tags
@@ -1616,7 +1623,7 @@ ls -d /tmp/r4-head-out/flux/pihole.yaml /tmp/r4-head-out/flux/traefik.yaml \
   /tmp/r4-head-out/cluster/pihole-deferred
 ```
 
-`diff -r` must print nothing, or only the files the PR named. The tag lists must match unless
+`diff -r` must print nothing, or only the files the PR named and `digests.json`. The tag lists must match unless
 the PR named the `flux/<tag>.yaml` that differs, the count must be at least the floor PR 1
 recorded, and the three named members must exist.
 
@@ -1653,8 +1660,10 @@ Exit 6 is read at R4's last PR with `git ls-files 'scripts/renderer/*.py' | grep
   file.
 - The render-diff job: PR 1's description shows the job failing in five cases on branch
   commits. One edits a `flux/<tag>.yaml` field under `Render-diff: none`. One touches
-  `scripts/renderer/` with no `Render-diff:` line. One renders an empty tree on both sides.
-  One removes `cluster/pihole-deferred/`. One raises `k8s_rollout_stabilise_seconds` above
+  `scripts/renderer/` with no `Render-diff:` line. One renders an empty tree on both sides,
+  and it fails at the digest step, because `shadow_diff.py digest` refuses an empty tree. One
+  removes `cluster/pihole-deferred/`, and this is the case that reaches the floor, through
+  `FLOOR_PATHS`. One raises `k8s_rollout_stabilise_seconds` above
   the longest `for:` among the soak's rules, which moves the soak Job's wait W (D5, *The
   soak as a Job*), under `Render-diff: none`, and the run names a file under
   `cluster/soak/`. The first passes once the line names that file.
@@ -1761,9 +1770,9 @@ daniel-box. The operator produces them, because each needs the host:
 
 - **Failure class 3 (empty read as clean).** `_named_files` returns `{}` for a missing task
   file, and the renderer would then derive different lists. Mitigation: the three-stage move,
-  the hard errors in PR 5, and the render-diff gate on every PR. The gate's floor, three
-  named members and a minimum `flux/` count, stops two empty renders from passing, and its
-  `Render-diff:` line is mandatory on the hazard paths. PR 1's inventory names its expected
+  the hard errors in PR 5, and the render-diff gate on every PR. The gate's digest step
+  refuses two empty renders. Its floor, three named members and a minimum `flux/` count, stops
+  a render that loses a member, and its `Render-diff:` line is mandatory on the hazard paths. PR 1's inventory names its expected
   members: the nine host-side roles, the six `verify.yml` files and the twelve
   explicit-list roles.
 - **Failure class 4 (selector drift).** The task-free service predicate could narrow the
@@ -2003,11 +2012,10 @@ daniel-box. The operator produces them, because each needs the host:
     SHA as an input" for the soak Job (D5, *The soak as a Job*), and C1 says only that two
     renders of one commit are byte-identical. No contract names the input, its default, or
     which commit the publish job passes. The render-diff job must pass one value to both
-    renders. *Resolution:* a requested amendment to C1, or a statement in D5, that names the
-    input. R4 proposes `homelab-render cluster --commit SHA`, where the publish job passes
-    the commit it publishes, R, and the render-diff job passes the PR head's SHA to both
-    renders. The gate is "before R4 PR 1 merges". H7's base-and-head proof uses the same
-    input.
+    renders. *Resolution:* resolved in R4.1. The renderer's flag is `homelab-render cluster
+    --revision SHA`, and C1 *Modes* records it. The publish job passes no flag, because its
+    checkout's `HEAD` default is the commit it publishes, R. The render-diff job passes the
+    PR head's SHA to both renders. H7's base-and-head proof uses the same input.
 11. **May a deletion PR exceed the 100–200 line guide?** PRs 6 and 8 are sized by subject.
     The slice document format asks for about 100–200 lines per PR, and the exemption for a
     pure deletion is listed under *Requested amendments not yet applied* (D6 Open question

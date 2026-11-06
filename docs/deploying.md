@@ -194,10 +194,9 @@ healthchecks-config retirement (#3499) left its B2 backups behind this way (#351
 
 ## The deploy queue page
 
-`deploy.local.<domain>` (Authelia two-factor) shows the four things "the queue" means here:
-landings and deploys in flight with the locks each holds, services whose release is behind master,
-the deployer's markers, and open PRs. Each button runs the command you would type: land
-runs `land.sh --pr <n> --since <sha>`, deploy runs `deploy.sh --tags <svc>`, cancel
+`deploy.local.<domain>` (Authelia two-factor) shows the three things "the queue" means here:
+landings and deploys in flight with the locks each holds, the deployer's markers, and open PRs.
+Each button runs the command you would type: land runs `land.sh --pr <n> --since <sha>`, cancel
 SIGTERMs a listed landing, clear hold removes `hold_sha` and its `hold_plane` ledger lines together against a
 SHA you type. Output goes to
 `~/.local/state/deploy-ui/` on daniel-box and one audit line per action reaches Loki under

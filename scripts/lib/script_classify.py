@@ -163,6 +163,19 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
         and isinstance(node.body[0].value, ast.Constant)
         and isinstance(node.body[0].value.value, str)
     }
+    # A `*_PREFIXES` entry is matched against a diff, never run; an argv list is not skipped.
+    prefixes = {
+        element
+        for module in nodes
+        if isinstance(module, ast.Module)
+        for stmt in module.body
+        if isinstance(stmt, ast.Assign)
+        and isinstance(stmt.value, (ast.Tuple, ast.List))
+        and any(
+            isinstance(t, ast.Name) and t.id.endswith("_PREFIXES") for t in stmt.targets
+        )
+        for element in stmt.value.elts
+    }
     found: set[str] = set()
     for node in nodes:
         if (
@@ -170,6 +183,7 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
             and isinstance(node.value, str)
             and node not in docstrings
             and node not in keys
+            and node not in prefixes
         ):
             match = ARGV_RE.fullmatch(node.value.strip())
             if match:

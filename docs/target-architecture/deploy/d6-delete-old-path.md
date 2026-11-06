@@ -2904,10 +2904,17 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
 
 ## Open questions
 
-1. **Does `deploy_ui` retire with the deployer?** It starts `land.sh` and `deploy.sh` and
-   clears `hold_sha`. After D6 it serves the host plane only, and D2's open question 4 asked
-   whether it should clear `DEPLOY_HOLD`. Resolution: the operator decides in D6.3's review
-   (**operator-only**). The design's open question 4 names this.
+1. **Does `deploy_ui` retire with the deployer?** It starts `land.sh` and clears `hold_sha`.
+   After D6 it serves the host plane only, and D2's open question 4 asked whether it should
+   clear `DEPLOY_HOLD`. The operator ruled on 2026-11-06 that the deploy button goes
+   ([#7413](https://github.com/DanielH2018/server/issues/7413)), because every service tag
+   `deploy.sh` could take exits 5. The stale-release panel goes with it, because D6.18 deletes
+   `probe.py releases`. The operator wants a live view of landings in progress, and the page's
+   in-flight panel is the only one in a browser. So the daemon, its route and its firewall rule
+   stay through D6, with the in-flight panel, the land and cancel controls and the hold clear.
+   Resolution: this settles the button half. The `DEPLOY_HOLD` half and whether the daemon
+   retires with the deployer stay with the operator in D6.15's review (**operator-only**). The
+   design's open question 4 names this.
 2. **Do ADR-0011, ADR-0012 and ADR-0017 need amendments?** `gitops-deploy.service` still takes
    the tree lock for the host plane, and `deploy.sh` still takes it for the Pi. design.md
    leaves the amendments to the operator, and R4's open question 8 asks the same about 0012

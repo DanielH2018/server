@@ -1,10 +1,10 @@
-"""Readers behind the four panels of the deploy UI. Pure parsers, stdlib only.
+"""Readers behind the three panels of the deploy UI. Pure parsers, stdlib only.
 
 The daemon runs under `uv run --no-project` on the host interpreter, outside the repo venv,
 so nothing here imports from `scripts/` or `/opt/gitops-deploy` — `gitops_markers`, the
 deployer's own marker table, and `gitops_ledger`, its JSON-lines reader, are installed beside
-this file from the deployer's `files/`. `land.py`, `probe.py` and
-`gh` are reached as subprocesses by `deploy_ui.App`; this module turns their text into rows.
+this file from the deployer's `files/`. `ps`, `fuser` and `gh` are reached as subprocesses
+by `deploy_ui.App`; this module turns their text into rows.
 """
 
 import json
@@ -26,8 +26,8 @@ _RUN_RE = re.compile(
 )
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
-# `deploy.sh --list-services` is a read this daemon itself runs on every deploy POST, and
-# `grep` is whoever is looking for a run. Neither is a run.
+# `deploy.sh --list-services` is a read, and `grep` is whoever is looking for a run. Neither
+# is a run.
 _NOT_A_RUN = re.compile(r"^grep\b|--list-services\b")
 
 
@@ -151,7 +151,7 @@ def runs(
 
     The topmost run or lock holder on a pid's ancestor chain owns every run and holder
     below it. A landing is `uv run … land.py`, its python child, and the `deploy.sh` and
-    `ansible-playbook` it spawns: one row, kind `land`. A page-spawned deploy is
+    `ansible-playbook` it spawns: one row, kind `land`. A terminal deploy is
     `deploy.sh`, `uv run ansible-playbook` and its child: one row, kind `deploy`. A lock
     holder that is neither — the GitOps tick on the tree lock — is a row of kind `lock`,
     so a held lock is never invisible because its holder matched no pattern. fuser lists
@@ -263,19 +263,6 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
         == gitops_ledger.OWED_MANUAL_PLANE
     )
     return st
-
-
-def parse_stale(text: str) -> list[dict]:
-    """Parse `probe.py releases --stale-only` lines of the form `svc: reason`.
-
-    Its no-stale summary has no colon-space before a service name, so it yields nothing.
-    """
-    rows = []
-    for line in text.splitlines():
-        svc, sep, reason = line.partition(": ")
-        if sep and " " not in svc:
-            rows.append({"service": svc, "reason": reason.strip()})
-    return rows
 
 
 def _ci_of(rollup: list[dict]) -> str:

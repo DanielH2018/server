@@ -210,7 +210,7 @@ def test_a_typed_shared_role_reaches_the_tag_validation_as_typed_is_flagged(
 def test_list_services_marks_a_flux_tag_on_stderr_alone_is_flagged(
     tmp_path, monkeypatch, capsys
 ):
-    """stdout stays `deploy_tags.py list`'s alone: the locked half and deploy_ui parse it."""
+    """stdout stays `deploy_tags.py list`'s alone: the locked half parses it."""
     _, calls = run_front_half(monkeypatch, _repo(tmp_path), ["--list-services"])
     assert _deployed(calls)[0][-2:] == ["scripts/deploy_tools/deploy_tags.py", "list"]
     out = capsys.readouterr()
