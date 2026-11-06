@@ -22,7 +22,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 import subprocess
 from typing import NamedTuple
 
-from deploy_tools.narrow_lib import broad, inventory_keys, secret_keys
+from deploy_tools.narrow_lib import inventory_keys, role_reads, secret_keys
 from lib.narrow_git import CannotNarrow
 
 EVERY_HOST = ""
@@ -59,9 +59,12 @@ def key_readers(pr_range: str, repo: _Path) -> list[KeyReader]:
     def explain(message: str) -> None:
         print(message, file=_sys.stderr)
 
-    ctx = broad.Context(repo, new, set(), {}, explain)
+    ctx = role_reads.Context(repo, new, set(), {}, explain)
     rules = secret_keys.Rules(
-        broad._grep, broad._sort_hits, broad.template_importers, broad._role_tags
+        role_reads.grep,
+        role_reads.sort_hits,
+        role_reads.template_importers,
+        role_reads.role_tags,
     )
     found = dict(inventory_keys.setup_reader_paths_by_host(old, ctx))
     try:

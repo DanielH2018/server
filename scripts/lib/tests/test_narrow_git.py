@@ -6,27 +6,7 @@ from lib.narrow_git import (
     CannotNarrow,
     changed_mapping_keys,
     mapping_at,
-    same_parsed_yaml,
 )
-
-
-def test_a_comment_or_layout_edit_parses_the_same():
-    assert same_parsed_yaml("a: [1, 2]\n", "# Why.\na:\n  - 1\n  - 2\n")
-
-
-@pytest.mark.parametrize(
-    "after",
-    [
-        "serial: true\n",
-        "serial: 1.0\n",
-        "serial: '1'\n",
-        "serial: {\n",
-        "d: 2026-13-45\n",
-    ],
-    ids=["bool", "float", "string", "unparseable", "bad-timestamp"],
-)
-def test_a_value_python_calls_equal_or_an_unloadable_text_differs(after: str):
-    assert not same_parsed_yaml("serial: 1\n", after)
 
 
 def test_an_empty_file_is_an_empty_mapping():
@@ -75,8 +55,8 @@ def test_both_narrowing_modules_raise_the_same_class():
     A raise crossing from one half to a caller of the other had to match whichever class the
     catch site happened to import.
     """
-    from deploy_tools.narrow_lib import broad as narrow_broad
+    from deploy_tools.narrow_lib import role_reads
     import narrow_setup
 
-    assert narrow_broad.CannotNarrow is CannotNarrow
+    assert role_reads.CannotNarrow is CannotNarrow
     assert narrow_setup.CannotNarrow is CannotNarrow

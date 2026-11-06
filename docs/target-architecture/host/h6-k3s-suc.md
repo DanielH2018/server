@@ -1996,8 +1996,8 @@ which journald does not store on these hosts, so it reads zero on every run.
     by its fields, so before D6.12 the deployer narrows either PR to the readers of those
     fields: artifacts, blackbox-exporter, pihole and uptime-kuma at `a5abf8581`
     (*Steps*, H6.1b). Resolution: H6.1b and its revert record their narrow output and carry
-    D1.2's stop rule and refusal exit over every tag it names. D2.1c's render census,
-    `ansible/tests/k8s/test_flux_born_entry_reader_census.py`, proves the expected shape.
+    D1.2's stop rule and refusal exit over every tag it names. D2.1c's render census
+    proved the expected shape until D6.18b deleted it with the narrowing.
 12. **`rancher/k3s-upgrade` by digest.** SUC builds the upgrade container's reference from
     `upgrade.image` and the Plan's version, so the Plans name the image by tag. This plan
     cannot confirm whether SUC v0.20.2 accepts a digest there. Recommendation: before

@@ -1419,9 +1419,8 @@ moves the Pi's entries from the first key to the second. The removal of the Pi's
       tags. artifacts reads it through `entry_names`, which lists every entry.
       blackbox-exporter, pihole and uptime-kuma read its `platform` through
       `lan_hostnames`. No reader reads `depends_on`, and `owner` is a deploy-mechanics
-      field. The D2.1c render census,
-      `ansible/tests/k8s/test_flux_born_entry_reader_census.py`, holds that every render the
-      entry moves belongs to a tag the narrowing names. An entry that gains `hostname`,
+      field. The D2.1c render census, until D6.18b deleted it with the narrowing, held that
+      every render the entry moves belongs to a tag the narrowing names. An entry that gains `hostname`,
       `port`, `tier` or `metrics` adds that field's readers, so each PR expects its own
       narrow output rather than a fixed list.
     - **Why the rule stays.** Three of the four, blackbox-exporter, pihole and uptime-kuma,

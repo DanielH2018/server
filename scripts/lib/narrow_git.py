@@ -1,6 +1,6 @@
 """The reads the two narrowing derivations share: a refusal, a `git show`, and a key diff.
 
-`scripts/deploy_tools/narrow_lib/broad.py` asks which service tags a deploy-plane change reaches.
+`scripts/deploy_tools/narrow_lib/role_reads.py` asks which service tags read a moved key.
 `scripts/deploy_tools/narrow_setup.py` asks which `--tags` value a setup-role change needs.
 Different questions over different trees, and both answer them by reading a file at a git ref,
 parsing it as a YAML mapping, and refusing whenever a rule cannot say.
@@ -119,17 +119,6 @@ def same_value(a, b) -> bool:
         RecursionError: both values hold a recursive alias, which `==` cannot walk.
     """
     return a == b and repr(a) == repr(b)
-
-
-def same_parsed_yaml(before: str, after: str) -> bool:
-    """Whether two YAML texts load to the same value, so only comments or layout moved.
-
-    A key reordered reads as a change, and text that does not load is never the same.
-    """
-    try:
-        return same_value(yaml_fast.parse_yaml(before), yaml_fast.parse_yaml(after))
-    except yaml_fast.UnparsableYaml, RecursionError:
-        return False
 
 
 def changed_mapping_keys(before: dict, after: dict, label: str) -> set[str]:

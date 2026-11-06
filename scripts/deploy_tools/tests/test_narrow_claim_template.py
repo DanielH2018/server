@@ -1,7 +1,7 @@
 """The two importer edges `narrow_templates` corrects: a comment, and the claim template (#3445).
 
-Each rule is a pair over the `_narrow_fixtures` tree: the range it narrows, and the range it
-must still refuse or widen. The two real-tree tests pin the facts the claim rule rests on, so a
+Each rule is a pair over the `_narrow_fixtures` tree: the importers it narrows to, and the tree
+it must still refuse or widen. The two real-tree tests pin the facts the claim rule rests on, so a
 `manifests` task that renders the template outside `k8s_claims` fails here rather than leaving
 its callers stale.
 
@@ -12,14 +12,18 @@ import pytest
 
 
 from deploy_tools.deploy_lib import tags as deploy_tags
-from deploy_tools.narrow_lib import broad as narrow_broad
+from deploy_tools.narrow_lib import role_reads
+from deploy_tools.narrow_lib import templates as narrow_templates
 from lib import yaml_fast
 from lib.git import git_stdout
+from lib.narrow_git import CannotNarrow
 from lib.repo_paths import REPO
 
-from _narrow_fixtures import Tree, _refs, build_tree
+from _narrow_fixtures import Tree, build_tree
 
-CLAIM = "ansible/templates/claim-default.yaml.j2"
+CLAIM_NAME = "claim-default.yaml.j2"
+CLAIM = f"ansible/templates/{CLAIM_NAME}"
+MACRO_NAME = "container-resources.yml.j2"
 RENDERER = "ansible/roles/k8s/manifests/tasks/main.yml"
 
 
@@ -27,7 +31,7 @@ RENDERER = "ansible/roles/k8s/manifests/tasks/main.yml"
 def tree(tmp_path) -> Tree:
     t = build_tree(tmp_path)
     # `manifests` is a shared role with no tag and, in this fixture, no caller: without the
-    # claim rule a hit in it refuses, so a green narrowing below is the rule's own work.
+    # claim rule a hit in it refuses, so a green answer below is the rule's own work.
     t.write(
         RENDERER,
         "- ansible.builtin.template:\n"
@@ -46,9 +50,12 @@ def tree(tmp_path) -> Tree:
     return t
 
 
-def test_a_claim_template_change_narrows_to_the_roles_declaring_k8s_claims(tree: Tree):
-    tree.write(CLAIM, "{{ manifests_claim.size }}\n")
-    assert tree.narrow(*_refs(tree)) == {"sonarr"}
+def _importers(tree: Tree, name: str) -> set[str]:
+    return role_reads.template_importers(name, "HEAD", tree.root, {name})
+
+
+def test_the_claim_template_reaches_the_roles_declaring_k8s_claims(tree: Tree):
+    assert _importers(tree, CLAIM_NAME) == {"sonarr"}
 
 
 def test_k8s_claims_set_through_include_vars_is_flagged(tree: Tree):
@@ -59,9 +66,8 @@ def test_k8s_claims_set_through_include_vars_is_flagged(tree: Tree):
         "  vars:\n    k8s_claims: [{name: r, size: 1Gi, storage_class: longhorn}]\n",
     )
     tree.commit("radarr sets the key at its include")
-    tree.write(CLAIM, "{{ manifests_claim.size }}\n")
-    with pytest.raises(narrow_broad.CannotNarrow, match=r"radarr/tasks/main\.yml"):
-        tree.narrow(*_refs(tree))
+    with pytest.raises(CannotNarrow, match=r"radarr/tasks/main\.yml"):
+        _importers(tree, CLAIM_NAME)
 
 
 def test_a_macro_named_only_in_a_jinja_comment_is_clean(tree: Tree):
@@ -70,10 +76,7 @@ def test_a_macro_named_only_in_a_jinja_comment_is_clean(tree: Tree):
         "{# sizes come from container-resources.yml.j2 elsewhere #}\na: b\n",
     )
     tree.commit("radarr mentions the macro in a comment")
-    tree.write(
-        "ansible/templates/container-resources.yml.j2", "{% macro resources(c) %}\n"
-    )
-    assert tree.narrow(*_refs(tree)) == {"sonarr"}
+    assert _importers(tree, MACRO_NAME) == {"sonarr"}
 
 
 def test_a_macro_imported_beside_a_comment_naming_it_is_flagged(tree: Tree):
@@ -88,14 +91,11 @@ def test_a_macro_imported_beside_a_comment_naming_it_is_flagged(tree: Tree):
         "{% raw %}{# {% endraw %}{# container-resources.yml.j2 #}\n",
     )
     tree.commit("radarr imports the macro, bazarr carries a raw block")
-    tree.write(
-        "ansible/templates/container-resources.yml.j2", "{% macro resources(c) %}\n"
-    )
-    assert tree.narrow(*_refs(tree)) == {"sonarr", "radarr", "bazarr"}
+    assert _importers(tree, MACRO_NAME) == {"sonarr", "radarr", "bazarr"}
 
 
 def _declaring_roles() -> set[str]:
-    """The roles whose defaults declare `k8s_claims` at HEAD, the ref the narrowing reads."""
+    """The roles whose defaults declare `k8s_claims` at HEAD, the ref the rule reads."""
     out = git_stdout(
         "grep",
         "-l",
@@ -109,7 +109,7 @@ def _declaring_roles() -> set[str]:
     return {line.split("/")[-3] for line in out.splitlines()}
 
 
-def test_the_real_claim_template_narrows_to_exactly_its_declarers():
+def test_the_real_claim_template_reaches_exactly_its_declarers():
     declarers = _declaring_roles()
     assert {
         "freshrss",
@@ -117,8 +117,9 @@ def test_the_real_claim_template_narrows_to_exactly_its_declarers():
         "speedtest",
         "zigbee2mqtt",
     } <= declarers
-    ctx = narrow_broad.context_for("HEAD", REPO)
-    assert narrow_broad.broad_path_tags(CLAIM, "HEAD", ctx) == declarers
+    ctx = role_reads.context_for("HEAD", REPO)
+    roles = role_reads.template_importers(CLAIM_NAME, "HEAD", REPO, {CLAIM_NAME})
+    assert role_reads.role_tags(roles, ctx) == declarers
 
 
 def test_manifests_renders_the_claim_template_only_per_k8s_claims_entry():
@@ -129,35 +130,17 @@ def test_manifests_renders_the_claim_template_only_per_k8s_claims_entry():
     assert "k8s_claims" in naming[0]["loop"]
 
 
-MACRO = "ansible/templates/container-resources.yml.j2"
+_MACRO_BEFORE = (
+    "{# sizes for every container #}\n"
+    "{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\n"
+    'x: {{ "{# literal #}" }}\n'
+)
 
 
-@pytest.fixture
-def importer(tree: Tree) -> Tree:
-    """`sonarr` imports the macro, with a comment and a string holding `{#` beside the code."""
-    tree.write(
-        MACRO,
-        "{# sizes for every container #}\n"
-        "{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\n"
-        'x: {{ "{# literal #}" }}\n',
-    )
-    tree.write(
-        "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2",
-        "{% from 'container-resources.yml.j2' import resources %}\n",
-    )
-    tree.commit("sonarr imports the macro")
-    return tree
-
-
-def test_a_comment_only_template_edit_narrows_to_nothing(importer: Tree):
+def test_an_edit_inside_a_jinja_comment_renders_the_same():
     """#3459: an edit inside `{# #}`, even one adding lines, renders no bytes."""
-    importer.write(
-        MACRO,
-        "{# sizes for every container,\n   now on two lines #}\n"
-        "{% macro resources(c) %}{{ c.cpu }}{% endmacro %}\n"
-        'x: {{ "{# literal #}" }}\n',
-    )
-    assert importer.narrow(*_refs(importer)) == set()
+    edited = _MACRO_BEFORE.replace("container #}", "container,\n   on two lines #}")
+    assert narrow_templates.comment_only(_MACRO_BEFORE, edited)
 
 
 @pytest.mark.parametrize(
@@ -179,11 +162,8 @@ def test_a_comment_only_template_edit_narrows_to_nothing(importer: Tree):
     ],
     ids=["code-too", "whitespace-control", "string-literal", "comment-line-removed"],
 )
-def test_an_edit_that_renders_differently_still_reaches_its_importers(
-    importer: Tree, edited: str
-):
-    importer.write(MACRO, edited)
-    assert importer.narrow(*_refs(importer)) == {"sonarr"}
+def test_an_edit_that_renders_differently_is_not_comment_only(edited: str):
+    assert not narrow_templates.comment_only(_MACRO_BEFORE, edited)
 
 
 # -- a Jinja-comment-only shared-template edit is quiet (#4926) ---------------------------

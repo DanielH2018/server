@@ -1,10 +1,7 @@
 """Ansible filter plugin: the values a template collects from every `containers_list` entry.
 
-A template that loops `containers_list` itself may read any field of any entry, so the deploy
-narrowing (`scripts/deploy_tools/narrow_lib/containers.py`) counts it as a reader of every
-field, and every entry edit redeploys its role (#4395). Each filter here returns only the values
-its template renders, never an entry. Its `FILTER_FIELDS` row there names the fields it reads,
-so an entry edit reaches the template only when it changes one of them.
+A template that loops `containers_list` itself may read any field of any entry (#4395). Each
+filter here returns only the values its template renders, never an entry.
 
 No Ansible import, so the render harnesses register the same functions the playbook runs.
 """

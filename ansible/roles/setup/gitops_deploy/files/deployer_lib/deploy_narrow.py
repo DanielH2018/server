@@ -42,7 +42,7 @@ NARROW_SETUP_SCRIPT = "scripts/deploy_tools/narrow_setup.py"
 # the same pair as `NOTHING_EXIT` and `NOTHING_OUT`; `scripts/deploy_tools/tests/
 # test_narrow_setup.py` drives its CLI with this module's argv and pins the two together. The
 # value is `lib/exit_codes.py:NARROW_SETUP_NOTHING`, which the deployer cannot import. It is 5
-# rather than 3 because `narrow_cmd` exits 3 for "cannot narrow" (#4453).
+# rather than 3 because `DEPLOY_BROAD` (3) means "cannot narrow" (#4453).
 NARROW_SETUP_NOTHING_EXIT = 5
 
 # What the whole setup-narrowing LOOP gets, across every role one range touches. The per-role

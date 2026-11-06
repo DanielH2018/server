@@ -91,7 +91,7 @@ def test_the_helpers_are_still_undeclared():
 
 
 def test_a_named_repo_is_walked_instead_of_this_checkout(tmp_path, callers):
-    """`narrow_broad.narrow(cwd=X)` must read X's caller graph, not this file's checkout.
+    """`role_callers(X)` must read X's caller graph, not this file's checkout.
 
     Both halves in one test, because the fixture tree is what makes the reject half
     meaningful: the derived edge is the throwaway tree's, and none of the live tree's

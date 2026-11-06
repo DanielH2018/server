@@ -14,14 +14,13 @@ from typing import Any
 import pytest
 
 from _deploy_sh_fakes import scrub_process_git_env
-from _narrow_fixtures import DECLARED, Tree, _refs, build_tree
+from _narrow_fixtures import DECLARED, Tree, build_tree
 from deploy_tools.land_lib import classify
-from deploy_tools.narrow_lib import broad as narrow_broad
+from deploy_tools.narrow_lib import role_reads
 from lib import k8s_role_callers
 from lib.narrow_git import CannotNarrow
 
 INCLUDE = "- ansible.builtin.include_role:\n    name: k8s/helper\n"
-HELPER_TEMPLATE = "ansible/roles/k8s/helper/templates/thing.yaml.j2"
 
 
 def _write_callers(root: Path, clean: str, dropped: str, broken: str) -> None:
@@ -42,14 +41,13 @@ def tree(tmp_path, monkeypatch) -> Tree:
     return build_tree(tmp_path)
 
 
-def test_the_broad_narrowing_refuses_or_names_the_dropped_caller(tree: Tree):
+def test_the_key_readers_context_refuses_or_names_the_dropped_caller(tree: Tree):
     _write_callers(tree.root, "sonarr", "radarr", "- [unclosed\n")
     tree.commit("radarr's include does not load")
-    tree.write(HELPER_TEMPLATE, "kind: Changed\n")
-    old, new = _refs(tree)
     try:
-        tags = narrow_broad.narrow(old, new, cwd=tree.root, declared=DECLARED)
-    except narrow_broad.CannotNarrow:
+        ctx = role_reads.context_for("HEAD", tree.root, declared=DECLARED)
+        tags = role_reads.role_tags({"helper"}, ctx)
+    except CannotNarrow:
         return
     assert "radarr" in tags, f"narrowed to {sorted(tags)}, which misses radarr"
 

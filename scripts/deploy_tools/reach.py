@@ -3,38 +3,23 @@
 
 `reach(paths, quiet)` returns a `Reach`. Every tool that asks this question of a path list
 reads its answer off that one value: `deploy.sh --changed`, `deploy.sh`'s staleness refusal,
-`deploy_tags.py blockers`, the narrowed deploy-plane range and the landing in `land.sh`.
-Behind it sit the deployer's own mapper (`deploy_changes.services_from_changed_paths`), its
-test-path rule, the quiet-path filter and the path-to-role mapper.
+`deploy_tags.py blockers` and the landing in `land.sh`. Behind it sit the deployer's own mapper
+(`deploy_changes.services_from_changed_paths`), its test-path rule, the quiet-path filter and
+the path-to-role mapper.
 
 THREE READINGS, NOT ONE. The callers ask three different questions of the same paths:
 
-- `Reach.changes` is the deployer's `ChangeSet`. `deploy.sh --changed` deploys
-  `changes.k8s`, which includes every k8s role that
-  `deploy_cross_role.K8S_ROLES_IMPORTING_SETUP_FILES` lists for a changed setup-role file.
-- `Reach.tags` is the landing's tag list: each path's own declared role, every role
-  that `lookup()`s a changed file, and every k8s role that
-  `K8S_ROLES_IMPORTING_SETUP_FILES` lists for a changed setup-role file.
-- `Reach.touched` is everything a path could re-render, for the staleness refusal. It is
-  the widest of the three, because being behind on a path that MIGHT reach a service is the
+- `Reach.changes` is the deployer's `ChangeSet`, which `deploy.sh --changed` reads.
+- `Reach.tags` is the landing's tag list: each path's own declared role. `promote` and Flux
+  apply every k8s change, and the landing gates what the promotion's changed set names, so
+  this list derives no reader of a changed file.
+- `Reach.touched` is everything a path could re-render, for the staleness refusal. It is the
+  wider of the last two, because being behind on a path that MIGHT reach a service is the
   reversion that refusal exists to stop.
 
-The first two disagreed on 3 of the last 400 master commits on 2026-10-10. Two were a change
-to `hosts/lib/host_lib.py`, which `changes` mapped to configarr and janitorr
-(they install a copy) and `tags` mapped to nothing. A landing then deployed neither, and their
-copies stayed stale behind a green master, because the tick only defer-and-alerts a k8s role.
-`tags` reads the same table since #4136. The third was monitor-bridge's `check_table.py`,
-which `tags` maps to the role that `lookup()`s the file and `changes` does not. That
-direction stays: the tick defers a k8s change either way, and the landing deploying the reader
-is the wider answer.
-
-The range form with content reads, `narrow_broad.narrow`, takes its deploy-plane paths from
-`Reach.deploy_plane` and its other tags from `Reach.changes`. The per-path content rules stay
-in `narrow_broad`, because they read two trees and this module reads only the path list.
-
 It imports nothing from `scripts/deploy_tools/` and nothing above `lib/`. `deploy_tags`,
-`land_shared`, `land_tags`, `land_reach`, `narrow_broad` and `deploy_staleness` all import
-it, and `scripts/tests/test_scripts_import_direction.py` refuses a cycle through any of them.
+`land_shared`, `land_tags`, `land_reach` and `deploy_staleness` all import it, and
+`scripts/tests/test_scripts_import_direction.py` refuses a cycle through any of them.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_reach.py
 """
@@ -51,7 +36,6 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 
 sys.path.insert(0, str(HOST_LIB_FILES))
-from deployer_lib import deploy_cross_role
 from deployer_lib.deploy_logic import (
     ChangeSet,
     _BROAD_MANUAL_PREFIXES,
@@ -140,54 +124,18 @@ class Reach(NamedTuple):
     loud: list[str]
     quiet: frozenset[str]
 
-    def tags(self, declared: set[str], repo: Path = REPO) -> set[str]:
-        """The deploy tags the loud paths map to, before any shared-role expansion.
-
-        A changed path maps to its role's tag, and also to the tag of every role that
-        `lookup()`s it from another role's tree. That role renders what it looks up, so a
-        landing that deployed only the owner would leave the reader's render stale (#3781).
-
-        A changed setup-role file also maps to every k8s role that ships a copy of it. Those
-        are `K8S_ROLES_IMPORTING_SETUP_FILES`, the table `changes` reads. The table is read
-        directly rather than through `changes.k8s`, which also holds each path's own role
-        before `tag_for` drops a role test (#4136). A file a k8s role's image embeds from
-        outside every role maps to that role the same way, by `K8S_BUILD_CONTEXT_FILES` (#4840).
-        """
-        readers = deploy_cross_role.k8s_lookup_readers(self.loud, repo)
-        holders = set().union(
-            *(deploy_cross_role.k8s_roles_holding(p) for p in self.loud)
-        )
-        return {t for p in self.loud if (t := tag_for(p, declared))} | (
-            (readers | holders) & declared
-        )
-
-    @property
-    def deploy_plane(self) -> list[str]:
-        """The loud paths the deployer applies as `deploy.yml`, in input order.
-
-        Each path is asked of the deployer's own mapper rather than matched against
-        `_BROAD_DEPLOY_PREFIXES`, so a test file or a document under one of those prefixes is
-        dropped here as the tick drops it. `narrow_broad.narrow` matched the prefixes itself,
-        so it sent `ansible/tasks/tests/test_x.py` to `broad_path_tags`, which refused it as
-        read by every deploy. The tick then ran the whole play for a file its own mapper says
-        reaches no host.
-        """
-        return [p for p in self.loud if services_from_changed_paths([p]).broad_deploy]
+    def tags(self, declared: set[str]) -> set[str]:
+        """The deploy tags the loud paths map to, before any shared-role expansion."""
+        return {t for p in self.loud if (t := tag_for(p, declared))}
 
     def touched(self, repo: Path | str = REPO) -> set[str]:
         """Every role whose rendered output a loud path could change.
 
-        The union of the `ChangeSet`'s per-role fields with the two cross-role reads: a role
-        importing a changed `files/*.py` another role owns, and a role `lookup()`ing a
-        changed file. Wider than `tags` by design: the import consumers are in it, because
-        being behind on one still renders an old file.
+        The `ChangeSet`'s k8s roles, plus each role importing a changed `files/*.py` another
+        role owns. Wider than `tags` by design: being behind on an import consumer still
+        renders an old file.
         """
-        cs = self.changes
-        return (
-            cs.k8s
-            | shared_module_consumers(self.loud, repo)
-            | deploy_cross_role.k8s_lookup_readers(self.loud, repo)
-        )
+        return self.changes.k8s | shared_module_consumers(self.loud, repo)
 
 
 def reach(paths, quiet=()) -> Reach:

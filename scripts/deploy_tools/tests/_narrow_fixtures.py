@@ -1,7 +1,6 @@
-"""The throwaway checkout the `narrow_broad` rule tests drive, shared by two suites.
+"""The throwaway checkout the key-reader and setup-narrowing suites drive.
 
-`test_deploy_tags_narrow.py` (the rules) and `test_deploy_tags_narrow_cmd.py` (the command
-wrapper) both need a repo with the shape the rules read -- a `containers_list`, two
+They need a repo with the shape the rules read -- a `containers_list`, two
 `group_vars` keys with different consumer spreads, a shared macro with one importer, and a
 play-level file -- with every `GIT_*` variable stripped from the git calls that build it.
 Under a prek hook `GIT_DIR`/`GIT_INDEX_FILE` are exported and `cwd` loses, so an unscrubbed
@@ -12,8 +11,6 @@ directory on `sys.path`.
 from pathlib import Path
 
 from lib.git_testing import commit, git_out, init_repo
-
-from deploy_tools.narrow_lib import broad as narrow_broad
 
 # The host_vars this fixture declares. Six services, so a key two roles read stays under the
 # coverage ceiling while a key four roles read trips it.
@@ -37,12 +34,6 @@ class Tree:
 
     def commit(self, message: str) -> str:
         return commit(self.root, message)
-
-    def narrow(self, old: str, new: str) -> set[str]:
-        """`narrow_broad.narrow` against this tree, with the real repo's tree kept out."""
-        return narrow_broad.narrow(
-            old, new, cwd=self.root, declared=DECLARED, callers={}
-        )
 
 
 HOST_VARS = """\
@@ -109,24 +100,3 @@ def build_tree(tmp_path) -> Tree:
 def _refs(tree: Tree, message: str = "change") -> tuple[str, str]:
     old = git_out(tree.root, "rev-parse", "HEAD")
     return old, tree.commit(message)
-
-
-# The five readers of every field D2's baseline counted at 70591c307, each in its shape there.
-# 8e79e95d6 moved the live five onto named filters; the pair keeps a reader of every field
-# present, because a template that adds one meets the same `reader_paths` rule.
-WHOLE_ENTRY_READERS = {
-    "pihole": "{% for s in hostvars[k8s_primary_node].containers_list | default([])"
-    " | filter_by_platform('k8s') %}{{ s.hostname }}{% endfor %}\n",
-    "uptime-kuma": "{% for e in hostvars[k8s_primary_node].containers_list"
-    " | selectattr('hostname', 'defined') %}{{ e.hostname }}{% endfor %}\n",
-    "monitor-bridge": "{% set p = containers_list | selectattr('port', 'defined')"
-    " | list %}\n",
-    "artifacts": "{{ containers_list | map(attribute='name') | list }}\n",
-    "netpol-baseline": "{% for e in containers_list %}{{ e.name }}{% endfor %}\n",
-}
-
-
-def write_whole_entry_readers(tree: Tree) -> None:
-    """Write each of `WHOLE_ENTRY_READERS` as its role's `reader.yaml.j2`, uncommitted."""
-    for role, text in WHOLE_ENTRY_READERS.items():
-        tree.write(f"ansible/roles/k8s/{role}/templates/reader.yaml.j2", text)

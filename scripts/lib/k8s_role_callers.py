@@ -3,11 +3,11 @@
 
 A helper role has no `containers_list` entry and so no deploy tag of its own. Every reader of
 this graph asks the same question of it: which tags does a change to the helper reach? The
-broad narrowing (`narrow_lib/broad.py`) reads it. `lib.k8s_roles` re-exports it, where its
+key readers' tag mapping (`narrow_lib/role_reads.py`) reads it. `lib.k8s_roles` re-exports it, where its
 readers import it from.
 
 A task file that does not load raises `CannotNarrow`, because it can hold the only edge to a
-helper. The broad narrowing refuses, the
+helper. The key readers refuse, the
 landing dies naming the file, and the `--tags` expansion leaves the name for the tag validation
 to refuse.
 
@@ -101,7 +101,7 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     role, and no k8s role is reachable from them.
 
     ``repo`` names the checkout to walk, for a caller that reads a tree other than the one
-    this module was imported from (``narrow_broad.narrow(cwd=...)``). Omitted, it walks
+    this module was imported from (``role_reads.context_for(ref, cwd)``). Omitted, it walks
     ``lib.repo_paths.K8S_ROLES``, which is this file's own checkout.
 
     Raises:

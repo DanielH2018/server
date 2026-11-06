@@ -233,8 +233,8 @@ over them. A refusal deferred the plane as `k8s_unapplied` lines (#4333), and a 
 apply held the plane as `ansible/deploy.yml <tags>`. A `narrow-shadow:` line compared each
 service's applied digest with a render record.
 
-D6.15 removed the `narrow` subcommand. The rules it applied, and what each one refused, are in
-`scripts/deploy_tools/narrow_lib/broad.py` until D6.18b deletes it.
+D6.15 removed the `narrow` subcommand, and D6.18b deleted the rules it applied. Their
+record follows.
 
 - **A play file whose parsed YAML is unchanged maps to no tags.** A comment or layout edit to
   `ansible/deploy.yml`, or to a file under `ansible/pre_tasks/`, `ansible/tasks/` or
@@ -284,15 +284,6 @@ applies, defers, alerts on or owes such a tag. D2's plan has the design:
   `deploy_inventory.route_not_ansible_owned` moves the tag out of `cs.k8s`.
 - **The journal names the tag.** `plan_tick` logs `flux: <tag>: owned by <owner>` with the
   paths the range changed.
-- **An added or removed such entry reaches only the readers it can move.**
-  `narrow_lib/containers.py:changed_fields` records it by the fields it carries other than
-  `name` and `owner`. The narrowing applies the readers of those fields, plus every reader of
-  an `EVERY_ENTRY` filter, whose output lists every entry: artifacts' `known_services.json`
-  reads `entry_names`. An added Ansible-owned entry still reaches every template that reads
-  the list. A bare entry reached artifacts, blackbox-exporter, pihole and uptime-kuma on
-  2026-10-14, and `hostname` added authelia and observability.
-  `ansible/tests/k8s/test_flux_born_entry_reader_census.py` renders the tree with such an
-  entry, and fails when a role whose render moves maps to a tag the narrowing does not apply.
 
 `ansible/tests/deploy/test_owner_readers_agree.py` holds `service_owners` equal to
 `scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each reader raises on an

@@ -1,9 +1,7 @@
 """`deploy_cross_role.k8s_lookup_readers`: the k8s roles that `lookup()` another role's file.
 
-A change to such a file must deploy its readers as well as its owner. authelia and traefik
-embed crowdsec's allowlists, so an allowlist landed as `--tags crowdsec` alone would ship the
-list and leave its copies stale. The landing (`reach.Reach.tags`), the deployer's defer alert and the secret census all read
-this derivation.
+authelia and traefik embed crowdsec's allowlists, so a change to one moves their render too.
+The secret census reads `k8s_lookup_map`.
 
 Run: uv run pytest ansible/tests/deploy/test_k8s_lookup_readers.py
 """
@@ -64,12 +62,3 @@ def test_a_check_table_change_lands_with_its_own_role_alone():
     tags, source = land_tags.derive([CHECK_TABLE], changed_files=1)
     assert source == "pr"
     assert tags == ["monitor-bridge"]
-
-
-def test_a_crowdsec_allowlist_change_lands_with_both_embedding_roles():
-    # Non-vacuity for the derivation the check-table tests above now read as empty.
-    tags, source = land_tags.derive(
-        ["ansible/roles/k8s/crowdsec/files/crowdsec-whitelist.yaml"], changed_files=1
-    )
-    assert source == "pr"
-    assert {"authelia", "traefik"} <= set(tags)

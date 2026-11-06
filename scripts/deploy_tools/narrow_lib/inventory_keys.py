@@ -1,12 +1,11 @@
 """Which setup-role files read an inventory key a range moved (#6962).
 
-`deploy_changes` maps a path under `ansible/inventory/` to the deploy plane alone, and
-`broad.narrow` maps each moved key to the deploy tags whose render reads it. Setup roles
+`deploy_changes` maps a path under `ansible/inventory/` to the deploy plane alone. Setup roles
 template the same keys, and `ansible/deploy.yml` renders none of them. PR #6952 moved
 `host_python_version`, which eight setup roles render into their units and crons, and the tick
 applied none of them and recorded none in `manual_plane`.
 
-The key diff is `broad._inventory_tags`'s: every top-level key whose parsed value differs in
+The key diff takes every top-level key whose parsed value differs in
 an inventory YAML file the range touched. A `_`-prefixed file is loaded by no host, and
 `hosts.ini` changes which hosts a play visits rather than a variable, so neither adds a key.
 
@@ -142,7 +141,7 @@ def _ini_vars_naming(text: str, word: re.Pattern) -> list[str]:
 def setup_reader_paths(old_ref: str, ctx) -> secret_keys.SetupReaders:
     """The setup-role files at `ctx.ref` reading an inventory key `old_ref..ctx.ref` moved.
 
-    `ctx` is `broad.Context`.
+    `ctx` is `role_reads.Context`.
 
     Raises:
         CannotNarrow: an inventory YAML file does not parse, or `git` failed. Neither is an

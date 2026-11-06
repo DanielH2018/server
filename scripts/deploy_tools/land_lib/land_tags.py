@@ -32,7 +32,7 @@ from typing import NamedTuple
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 sys.path.insert(1, str(Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
 
-# `service_tags_at` is re-exported rather than defined here: `narrow_broad` needs it too,
+# `service_tags_at` is re-exported rather than defined here: `role_reads` needs it too,
 # and importing this module for it would put a cycle through `deploy_tags`.
 from lib.cli_help import answer_help
 from lib.exit_codes import USAGE_ERROR
@@ -40,7 +40,7 @@ from lib.render_guard import (  # noqa: F401
     containers_entries_in,
     service_tags_at,
 )
-from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
@@ -340,9 +340,7 @@ def derive(
     declared = declared_tags() if declared is None else declared
     # A build role whose workload lives in a different role must not deploy alone: the build
     # would push a new image that nothing rolls onto, and report green doing it.
-    return Derivation(
-        sorted(reach.reach(files, quiet).tags(declared, REPO)), DeriveSource.PR
-    )
+    return Derivation(sorted(reach.reach(files, quiet).tags(declared)), DeriveSource.PR)
 
 
 def doc_paths(paths) -> set[str]:

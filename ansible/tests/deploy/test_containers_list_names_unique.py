@@ -1,10 +1,7 @@
 """No host's `containers_list` repeats a `name`.
 
-The deploy-plane narrowing assumes each name is unique. `narrow_lib/containers.py:entries` keys
-the list by name and keeps the last entry of a repeated name, while the named-lookup filters
-(`entry_port`, `homepage_href`, `tier_priority_class`) return the first. An edit to the first
-copy would then tag no role for that entry (#4399). CI keeps a duplicate off master, and the
-deployer narrows only CI-green master, so the narrowing never meets one.
+The named-lookup filters (`entry_port`, `homepage_href`, `tier_priority_class`) return the
+first entry of a repeated name, so a second copy would never render (#4399).
 
 Run: uv run pytest ansible/tests/deploy/test_containers_list_names_unique.py
 """

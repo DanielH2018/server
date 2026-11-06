@@ -1,22 +1,15 @@
 #!/usr/bin/env python3
 """What a filter plugin defines, and which grep hits for its filter names are callers (#3843).
 
-THE PROBLEM. `ansible/filter_plugins/` is a play-level prefix, so `narrow_broad` refused every
-change under it as "read by every deploy" and the tick ran the whole `ansible/deploy.yml`. That
-is right for a filter the play calls (`toposort.py`'s, from `deploy.yml`), and wrong for one
-only role templates call, which reaches those roles and nothing else.
-
 WHAT THIS KNOWS. The filter names a plugin registers, read from the literal dict its
 `FilterModule.filters()` returns, at both ends of the range so a renamed filter keeps its old
-callers. And which grep hits for one of those names are callers. `narrow_broad._filter_tags`
-maps the callers to tags with the same `_sort_hits` the macro and variable rules use, so a
-caller under the play's own trees still refuses there.
+callers. And which grep hits for one of those names are callers. `narrow_setup` asks both for
+a setup role that calls a filter.
 
 ANY DOUBT IS A REFUSAL: a `filters()` that is not a literal dict of string keys, a deleted
 plugin, a plugin a sibling plugin imports, and a mention in an inventory value all raise
 `CannotNarrow`. One rule needs no caller: `comment_only` reads an edit to comments or
-docstrings alone as reaching nothing (#4412). A module of its own because what a plugin defines reads alone. It imports
-nothing from `narrow_broad`, so the two cannot cycle.
+docstrings alone as reaching nothing (#4412).
 """
 
 import sys as _sys
@@ -155,16 +148,6 @@ def plugin_names(path: str, old_ref: str, new_ref: str, cwd: Path) -> set[str]:
     return names
 
 
-def changed_names(path: str, old_ref: str, new_ref: str, cwd: Path) -> set[str]:
-    """The filter names whose behaviour the range can have changed.
-
-    None when `comment_only` holds, else every name `plugin_names` reads, with its refusals.
-    """
-    if comment_only(path, old_ref, new_ref, cwd):
-        return set()
-    return plugin_names(path, old_ref, new_ref, cwd)
-
-
 def callers(hits: Iterable[str], name: str, ref: str, cwd: Path) -> list[str]:
     """`hits` less every path that names the filter `name` without being able to call it.
 
@@ -175,7 +158,7 @@ def callers(hits: Iterable[str], name: str, ref: str, cwd: Path) -> list[str]:
 
     An inventory value that does call the filter refuses: whatever reads that value is the
     caller, and the key diff cannot see it. The whole-line comment skip is the one
-    `narrow_broad._defines_only` makes, with the block-scalar caveat its docstring names.
+    `role_reads._defines_only` makes, with the block-scalar caveat its docstring names.
     """
     kept = []
     word = re.compile(rf"(?<!\w){re.escape(name)}(?!\w)")

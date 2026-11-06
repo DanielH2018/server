@@ -23,15 +23,13 @@ names itself in the JSON's `refused` string, which is empty otherwise.
 
 WHO CALLS IT. `deployer_lib.deploy_setup_roles.secret_setup_readers` runs it as a SUBPROCESS,
 because it parses YAML and the deployer's unit runs under `uv run --no-project`. Exit
-`DEPLOY_BROAD` (3), the code `narrow_lib/broad.py:narrow_cmd` refuses with, is a refusal: the secrets
+`DEPLOY_BROAD` (3) is a refusal: the secrets
 half refused and the inventory half found no reader. The reason is on stderr, and the tick
 then applies no setup role for the range, which is the behaviour before #5436. Any other
 non-zero exit, such as a traceback's 1, is a failure the tick parks on and retries.
 
 WITH `--deploy-tags` it prints the deploy plane's half instead (#5577): the comma-joined
-`deploy.yml` tags whose render reads a moved key, as `narrow_cmd` does for a range
-carrying a deploy-plane path. The tick asks it only for a range with no such path, which
-`narrow` never sees. Exit 0 with empty stdout is the answer "no k8s role reads one". Exit
+`deploy.yml` tags whose render reads a moved key. Exit 0 with empty stdout is the answer "no k8s role reads one". Exit
 `DEPLOY_BROAD` is a refusal; its stdout names the tags when the refusal is the fleet-coverage
 ceiling, and is empty when the derivation could not say at all.
 
@@ -47,7 +45,7 @@ import json
 import subprocess
 import sys
 
-from deploy_tools.narrow_lib import broad, inventory_keys, secret_keys
+from deploy_tools.narrow_lib import inventory_keys, role_reads, secret_keys
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import DEPLOY_BROAD, FAILED, OK
 from lib.narrow_git import CannotNarrow
@@ -71,11 +69,14 @@ def main(argv: list[str] | None = None) -> int:
         print(message, file=sys.stderr)
 
     rules = secret_keys.Rules(
-        broad._grep, broad._sort_hits, broad.template_importers, broad._role_tags
+        role_reads.grep,
+        role_reads.sort_hits,
+        role_reads.template_importers,
+        role_reads.role_tags,
     )
     if args.deploy_tags:
         return _deploy_tags(args.old, args.new, _Path(args.repo), rules, explain)
-    ctx = broad.Context(_Path(args.repo), args.new, set(), {}, explain)
+    ctx = role_reads.Context(_Path(args.repo), args.new, set(), {}, explain)
     try:
         inventory = inventory_keys.setup_reader_paths(args.old, ctx)
     except (CannotNarrow, subprocess.CalledProcessError) as exc:
@@ -102,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
 def _deploy_tags(old: str, new: str, repo: _Path, rules, explain) -> int:
     """Print the deploy tags reading a key `old..new` moved; exit `DEPLOY_BROAD` to refuse."""
     try:
-        ctx = broad.context_for(new, repo, explain=explain)
+        ctx = role_reads.context_for(new, repo, explain=explain)
         tags = secret_keys.reached(old, ctx, rules)
     except (CannotNarrow, subprocess.CalledProcessError) as exc:
         print(f"secret-readers: cannot say ({exc})", file=sys.stderr)
@@ -110,8 +111,8 @@ def _deploy_tags(old: str, new: str, repo: _Path, rules, explain) -> int:
         if reached:
             print(",".join(sorted(reached)))
         return DEPLOY_BROAD
-    # `broad.narrow`'s own ceiling, for its reason: a list covering most of the fleet saves
-    # none of the full run's time and adds a way to miss what the full run would apply.
+    # A list covering most of the fleet saves none of the full run's time and adds a way to
+    # miss what the full run would apply.
     if len(tags) * 2 > len(ctx.declared):
         print(
             f"secret-readers: cannot say ({len(tags)} of {len(ctx.declared)} services — "

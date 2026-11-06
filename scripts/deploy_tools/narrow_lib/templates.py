@@ -1,4 +1,4 @@
-"""Two importer edges `narrow_broad.template_importers` must not take at face value.
+"""Two importer edges `role_reads.template_importers` must not take at face value.
 
 THE PROBLEM (#3445). A change to `ansible/templates/claim-default.yaml.j2` narrowed to 57 of 60
 services and fell back to the whole play, though only freshrss and zigbee2mqtt render it. Two
@@ -12,7 +12,7 @@ edges carried the fleet, and both were text the grep matched rather than a rende
     CALLER's `k8s_claims`, so a hit in `manifests` reaches the roles that declare that key, not
     every caller of `manifests`. `rendering_roles` swaps the one for the other.
 
-Both refuse on doubt, like every rule `narrow_broad` applies: a template carrying `{% raw %}`
+Both refuse on doubt, like every rule `role_reads` applies: a template carrying `{% raw %}`
 keeps every hit, and a `k8s_claims` mention anywhere but a role's `defaults/main.yml`, the
 renderer's own tasks or a comment raises `CannotNarrow`.
 
@@ -107,24 +107,6 @@ def comment_only(before: str | None, after: str | None) -> bool:
         return False
 
 
-def comment_edit(
-    path: str,
-    old_ref: str,
-    after: str | None,
-    cwd: Path,
-    explain: Callable[[str], None],
-) -> bool:
-    """Whether the shared template at `path` changed since `old_ref` only in its comments.
-
-    A comment-only edit renders the same bytes for every importer, so it reaches none of them,
-    and the release census reads it the same way: it leaves no service stale.
-    """
-    if not comment_only(show_at(old_ref, path, cwd), after):
-        return False
-    explain(f"narrow: {path.split('/')[-1]} comment-only -> (nothing) via {path}")
-    return True
-
-
 def comment_only_shared_templates(
     paths: list[str], old_ref: str, new_ref: str, show
 ) -> set[str]:
@@ -132,9 +114,7 @@ def comment_only_shared_templates(
 
     The deployer's YAML reader cannot answer this: in a `.j2` a `#` line is rendered content
     and a `{# ... #}` block is the comment, so PR #4925's doc-block edit to
-    `checksum-annotation.yml.j2` read as a full `deploy.yml` (#4926). The tick already
-    narrows that edit to nothing (`narrow_lib/broad.py` through `comment_edit` above),
-    and this is the same lexer read, so the landing and the tick agree.
+    `checksum-annotation.yml.j2` read as a full `deploy.yml` (#4926).
 
     `deploy_tags.comment_only_paths` is the caller; `show(ref, path)` reads a side. Not in the
     deployer's `comment_only_broad_changes`, which runs stdlib-only and so has no jinja2. A

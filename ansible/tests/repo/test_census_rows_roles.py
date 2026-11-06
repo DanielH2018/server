@@ -12,7 +12,6 @@ import re
 
 import pytest
 from _helpers import walk_tasks
-from _deploy_mechanics_row import DEPLOY_MECHANICS
 from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
 from _flux_ownership_row import (
@@ -411,7 +410,6 @@ ROWS = (
             }
         ),
     ),
-    DEPLOY_MECHANICS,
     HOST_WRITES,
     HOST_SCRIPT_WRITES,
     OUT_OF_RENDER,
