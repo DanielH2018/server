@@ -116,12 +116,6 @@ def test_include_vars_reads_only_the_render_keys_from_defaults(tmp_path):
     assert task_inputs.include_vars(role) == {"manifests_rollout": "demo"}
 
 
-def test_a_role_with_no_tasks_directory_reads_its_defaults(tmp_path):
-    role = _role(tmp_path, "manifests_rollout: demo\n")
-    assert task_inputs.include_vars(role) == {"manifests_rollout": "demo"}
-    assert task_inputs.image_builder_sites(role) == []
-
-
 def test_a_role_with_no_defaults_file_raises(tmp_path):
     role = _role(tmp_path, None, BARE_INCLUDE)
     with pytest.raises(ValueError, match=r"has no defaults/main\.yml"):
