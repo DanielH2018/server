@@ -213,9 +213,11 @@ runs as `sys_user` and not root.
 **The check judges only a service whose `containers_list` entry carries no `owner`** (#5309). Flux
 applies an owned tag, so no Ansible deploy writes it a newer record, and `--stale-only` drops that
 record. On 2026-11-06 all 66 service tags carried `owner`, so the check judged no service.
-`PromotionStalled` in `ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml` watches the
-same gap on the Flux path: a green master commit that prod has lacked for more than 2 hours. D6.17
-disarms this check.
+Two other rules watch the same gap on the Flux path. `PromotionStalled` in
+`ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml` fires on a green master commit
+that `prod`, the ref Flux follows, has lacked for more than 2 hours. `FluxNotReady` in
+`ansible/roles/k8s/observability/files/rules/flux.yaml` fires on a Kustomization that has not been
+Ready for 15 minutes. D6.17 disarms this check.
 
 **The DOWN message carries the stale services' names and a count, not their reasons** (#2013). A
 refused narrowing marks the whole fleet stale, and the per-service reasons then ran to ~7,500
