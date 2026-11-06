@@ -558,7 +558,7 @@ tuned. The likely episodes:
       Prometheus does not roll. No edge is added, so every other role keeps its place in the
       derived order.
     - Each role's own verify tasks run whether or not its render moved. A `crowdsec` deploy
-      runs the ban gate in `ansible/roles/k8s/crowdsec/tasks/verify.yml`, which M2's PR 2
+      runs the ban gate in the role's `tasks/verify.yml`, since deleted (#7371), which M2's PR 2
       describes, and `docs/crowdsec-waf-record.md` records that gate failing a deploy on
       2026-09-27.
     - Land PR 1 in a quiet window: no other landing in flight, and outside the Sunday 07:25 to

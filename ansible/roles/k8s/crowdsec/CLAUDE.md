@@ -203,8 +203,8 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 - **A failed Job holds the revision.** The old gate reported a non-zero exit from the home-ips
   run and continued. Under Flux any non-zero exit fails `crowdsec-verify`, and the soak does
   not pass.
-- **`tasks/` still holds the Ansible forms** until a follow-up PR deletes them. No run reaches
-  them, because Flux owns the role.
+- **`tasks/main.yml` holds only the `k8s/manifests` include.** No run reaches it, because Flux
+  owns the role, and a handback restores the Ansible wait and gate from git history.
 
 ## Traps
 
