@@ -156,6 +156,15 @@ def _waiter_text(path: pathlib.Path) -> str:
     return path.read_text()
 
 
+def _longest_tick_hold() -> int:
+    unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
+    return _systemd_seconds(_search1(r"^TimeoutStartSec=(\S+)", unit))
+
+
+def _wait_clears_the_hold(wait: int, hold: int) -> bool:
+    return wait >= hold
+
+
 @pytest.mark.parametrize("name", sorted(_LOCK_WAITERS))
 def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     # gitops-deploy.service wraps its whole ExecStart in the git-tree lock, and one
@@ -164,26 +173,21 @@ def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     # attempt is +7 days, and ROTATE_LEAD_DAYS=8 against a 7-day cadence means a token usually
     # gets exactly one eligible run, so a skipped week can put a token overdue.
     #
-    # Derived from the same defaults the deployer reads, so bumping the budget fails this
-    # instead of silently shortening every waiter at once.
+    # The bound is TimeoutStartSec, not the budget: the tick's git calls carry no timeout, so only
+    # systemd ends a hold. Read from the unit, so raising the ceiling fails this.
     path, pattern = _LOCK_WAITERS[name]
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-    worst_hold = _worst_lock_hold(defaults)
-
     wait = int(_search1(pattern, _waiter_text(path)))
-    assert wait >= worst_hold, (
-        f"{name}'s git-tree lock wait of {wait}s must clear gitops-deploy's worst-case lock "
-        f"hold ({worst_hold}s: BROAD_DEPLOY_TIMEOUT_S), or a "
-        f"legitimate long apply makes this job skip a run "
-        f"and page for ordinary contention."
+    ceiling = _longest_tick_hold()
+    assert _wait_clears_the_hold(wait, ceiling), (
+        f"{name}'s git-tree lock wait of {wait}s must clear gitops-deploy's TimeoutStartSec "
+        f"({ceiling}s), or a legitimate long tick makes this job skip a run and page for "
+        f"ordinary contention."
     )
 
 
 def test_a_short_lock_waiter_is_flagged():
-    # Red proof for the parametrized test above, which can only ever be observed passing. This
-    # is a waiter at 1200 against the 1800s hold.
-    defaults = yaml.safe_load(_DEFAULTS.read_text())
-    assert 1200 < _worst_lock_hold(defaults), (
-        "the worst-case hold must exceed 1200 for this red proof to mean anything; if the "
-        "budget shrank below it, re-derive this number rather than deleting the test."
-    )
+    # Red proof for the parametrized test above: 1980 clears the apply budget and the flock wait,
+    # and a tick that takes the lock at once can still hold it past that.
+    ceiling = _longest_tick_hold()
+    assert _wait_clears_the_hold(ceiling, ceiling)
+    assert not _wait_clears_the_hold(1980, ceiling)

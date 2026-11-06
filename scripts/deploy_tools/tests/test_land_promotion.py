@@ -12,7 +12,7 @@ import subprocess
 import pytest
 from dataclasses import replace
 
-from _land_fakes import MERGE_SHA, Fakes
+from _land_fakes import MERGE_SHA, Fakes, receipt
 from deploy_tools.land_lib import land_flux, merge, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE, Outcome
 from deploy_tools.land_lib.host_wait import HostTarget
@@ -215,6 +215,63 @@ def test_a_suspended_tag_with_a_host_package_still_waits_for_the_host(land_run):
     assert "did not wait" not in out
     assert "wait_for_hosts" in _names(calls)
     assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
+
+
+# A wait whose changed set names the suspended tag reaches the health step, and one whose
+# changed set is empty reaches `no_tag_outcome`. Each grades the tick's half on its own.
+_SUSPENDED_WAITS = [
+    pytest.param(("bento-pdf",), id="health-step"),
+    pytest.param((), id="no-tag-outcome"),
+]
+
+
+def _tick_half_under_a_suspended_wait(changed, state) -> Fakes:
+    """A PR the tick applies part of, with no plane, no host target and every tag suspended."""
+    suspended = WaitResult(
+        "suspended",
+        "promote-suspended",
+        "bento-pdf is suspended",
+        suspended=("bento-pdf",),
+        tags=changed,
+    )
+    return _fakes(land_wait=[suspended], self_applied=True, state=state)
+
+
+@pytest.mark.parametrize("changed", _SUSPENDED_WAITS)
+def test_a_suspended_wait_with_a_held_tick_half_is_deploy_failed(land_run, changed):
+    fakes = _tick_half_under_a_suspended_wait(changed, {"hold_sha": "deadbeef"})
+    rc, out, _, calls, logline = land_run([], fakes)
+    assert rc == 1 and "VERDICT: deploy-failed" in out
+    assert "cause=tick-held" in logline
+    assert "gitops_state.py clear-hold deadbeef" in out
+    assert not [c for c in calls if c[0] == "gate" and "bento-pdf" in c[1][0]]
+
+
+@pytest.mark.parametrize("changed", _SUSPENDED_WAITS)
+@pytest.mark.parametrize(
+    "state,expected_rc,verdict",
+    [
+        pytest.param({"behind_since": "x"}, 75, "deferred", id="behind"),
+        pytest.param({}, 1, "needs-manual-apply", id="no-recorded-apply"),
+        pytest.param({"hold_sha": None}, 1, "needs-manual-apply", id="unreadable"),
+    ],
+)
+def test_a_suspended_wait_grades_the_tick_half_into_a_verdict(
+    land_run, changed, state, expected_rc, verdict
+):
+    fakes = _tick_half_under_a_suspended_wait(changed, state)
+    rc, out, _, _, _ = land_run([], fakes)
+    assert rc == expected_rc and f"VERDICT: {verdict}" in out
+
+
+@pytest.mark.parametrize("changed", _SUSPENDED_WAITS)
+def test_a_suspended_wait_with_an_applied_tick_half_settles(land_run, changed):
+    """Nothing is owed, and the tick did apply a half of this PR, so it is not a no-op."""
+    applied = receipt({"ansible/initial_setup.yml": ["renovate_agent"]})
+    fakes = _tick_half_under_a_suspended_wait(changed, applied)
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: settled" in out
+    assert not [c for c in calls if c[0] == "gate" and "bento-pdf" in c[1][0]]
 
 
 def test_a_settled_wait_that_names_a_suspended_tag_gates_the_rest(land_run):

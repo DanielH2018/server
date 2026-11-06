@@ -12,7 +12,7 @@ carelessly, so they are pinned here rather than left to review:
    failure looks identical to having no rule at all, which is what makes it worth a test.
 
 2. **The wrapper must start the unit with `--no-block`.** `gitops-deploy.service` is
-   Type=oneshot with a TimeoutStartSec of an hour (`test_unit_timeout_covers_the_measured_k8s_worst_case`
+   Type=oneshot with a long TimeoutStartSec (`test_unit_timeout_covers_the_broad_apply_worst_case`
    pins the exact value), so a blocking start returns only when the whole tick finishes. Any
    caller with a shorter patience than that — a 10-minute Bash tool
    call is the motivating one — reads that as a hang, not as a running deploy.
@@ -95,7 +95,7 @@ def test_wrapper_starts_the_unit_without_blocking():
     for line in starts:
         assert "--no-block" in line, (
             f"{_WRAPPER} starts the unit blocking: {line!r}. Type=oneshot plus "
-            "TimeoutStartSec=60min means that returns only when the tick finishes."
+            "TimeoutStartSec=40min means that returns only when the tick finishes."
         )
 
 
@@ -196,13 +196,12 @@ def test_unit_pages_on_failure():
     )
 
 
-def test_unit_timeout_covers_the_measured_k8s_worst_case():
-    # The unit's own arithmetic comment sizes TimeoutStartSec to 70min. Its k8s worst case,
-    # 3960s, went with the k8s arms in D6.12; the broad apply needs 1980s, and the 70min stays
-    # because the lander deadlines and LOCK_WAIT derive from it. The docstring at the top of this file defers to this pin for the value.
+def test_unit_timeout_covers_the_broad_apply_worst_case():
+    # The unit's own arithmetic comment sizes TimeoutStartSec to 40min against the broad apply's
+    # 1980s. The docstring at the top of this file defers to this pin for the value.
     unit = rendered_setup_text("gitops_deploy", _UNIT_TEMPLATE)
-    assert re.search(r"^TimeoutStartSec=70min$", unit, re.MULTILINE), (
-        f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 70min. If this is a deliberate "
+    assert re.search(r"^TimeoutStartSec=40min$", unit, re.MULTILINE), (
+        f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 40min. If this is a deliberate "
         "re-size, re-derive it against the budget arithmetic in the unit's own comment and "
         "gitops_deploy/defaults/main.yml before changing this pin."
     )

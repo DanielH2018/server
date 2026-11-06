@@ -591,8 +591,8 @@ mutes this family today.
   among "Four independent strings".
 - This PR leaves alone the comment in
   `ansible/roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`, although it names
-  `k3s Workload Health`. A `crowdsec` deploy runs the ban gate in
-  `ansible/roles/k8s/crowdsec/tasks/verify.yml`, despite its `tags: [never, b1-gate]`. The
+  `k3s Workload Health`. A `crowdsec` deploy runs the ban gate in the role's
+  `tasks/verify.yml`, since deleted (#7371), despite its `tags: [never, b1-gate]`. The
   comment above that file's resume probe says why: `deploy.yml` and `tasks/k8s_batch.yml`
   apply each entry's tags to every task in its role, so `--tags crowdsec` selects them. The
   gate bans daniel-pi at the edge for its run, and its task "Wait for the edge bouncer to pull
@@ -1173,7 +1173,8 @@ refuted.
   Cross-slice notes go to M5, M6 and contracts.
 - **M2-R10-02 (high): PR 2's crowdsec deploy runs the b1 ban gate, which the plan said it
   skips.** Fixed. Confirmed by the comment above the resume probe in
-  `ansible/roles/k8s/crowdsec/tasks/verify.yml` and by the `apply: tags` in `ansible/deploy.yml`
+  crowdsec's `tasks/verify.yml`, since deleted (#7371), and by the `apply: tags` in
+  `ansible/deploy.yml`
   and `ansible/tasks/k8s_batch.yml`. PR 2 drops the crowdsec comment edit, and its deploy and
   *Rollback* no longer name `crowdsec`. The task that waits for the bouncer's pull polls for
   120s, and a pull stall can last ten minutes, so the gate could fail the landing. M6's B6

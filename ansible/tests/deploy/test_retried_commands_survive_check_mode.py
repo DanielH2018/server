@@ -13,9 +13,8 @@ already exclude check mode at a level a per-task read cannot see:
   - Nine carry `when: not (k8s_no_mutate | bool)`, and
     `ansible/inventory/group_vars/all.yml:k8s_no_mutate` is defined as `ansible_check_mode or
     (k8s_dry_run | bool)`. Skipping under a dry run is the same skip.
-  - Two are in `ansible/roles/k8s/crowdsec/tasks/verify.yml`, whose importer in
-    `main.yml` gates the whole file on `not ansible_check_mode`. A `when` on an
-    `import_tasks` propagates to every task in the imported file.
+  - A task file's importer may gate the whole file on `not ansible_check_mode`. A `when` on
+    an `import_tasks` propagates to every task in the imported file.
   - A task may also carry `not ansible_check_mode` inline alongside its own condition.
 
 `excludes_check_mode`, `importer_guards` and `walk_with_inherited_when` teach the predicate
@@ -64,9 +63,8 @@ KNOWN_RETRIED_COMMAND_TASKS = frozenset(
         "Wait for k3s to create its CoreDNS Deployment",
         # skipped with `when: not ansible_check_mode` — waits and mutations
         "Wait for the re-encryption to finish",
-        "Wait for the PVC to reach Bound",
         # skipped by an ancestor guard the per-task read cannot see
-        "Probe the VIP from the banned Pi — expect 403",
+        "Wait for the PVC to reach Bound",
     }
 )
 

@@ -105,8 +105,8 @@ builder`), then re-run. Bad arguments (64) print no verdict.
 A PR whose tag Flux applies waits on `promote.py land-wait`, whose verdicts are settled |
 deploy-failed | gave-up | suspended. A tag suspended at the merge commit applies nothing
 until a PR resumes it, so the wait and the gate leave it out. `suspended` means every such
-tag of the PR is suspended; the landing prints `nothing-to-deploy` and exits 0. The suspend
-PR itself ends this way,
+tag of the PR is suspended; the landing prints `nothing-to-deploy` and exits 0, unless the
+tick applies part of the PR, whose state decides the verdict. The suspend PR itself ends this way,
 before a promotion applies it: check that `probe.py landing` shows `last-good` at or past M.
 `settled` also needs R's `flux/soak` status to read `success` once the PR changes a tag; a
 `failure` there ends the landing `deploy-failed` with cause `soak-failed`, and the detail

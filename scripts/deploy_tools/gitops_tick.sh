@@ -8,7 +8,7 @@
 # manual tick is a real tick.
 #
 # Why a wrapper rather than plain `systemctl start`:
-#   - The unit is Type=oneshot with TimeoutStartSec=45min, so a blocking start can hang
+#   - The unit is Type=oneshot with TimeoutStartSec=40min, so a blocking start can hang
 #     far past any caller's patience (a Claude Code Bash call is capped at 10 minutes).
 #     This starts it with --no-block and then waits on its own bounded budget.
 #   - `journalctl -f` never returns. This prints exactly the journal for the run it
