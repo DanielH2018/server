@@ -14,3 +14,15 @@ ical_proxy_k8s_cpu_limit: 500m
 ical_proxy_k8s_mem_limit: 128Mi
 ical_proxy_k8s_cpu_request: 50m
 ical_proxy_k8s_mem_request: 16Mi
+
+image_builder_builds:  # noqa var-naming[no-role-prefix]
+  - image_builder_name: ical-proxy
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/ical-proxy/templates/Dockerfile.j2"
+    # The one file the Dockerfile COPYs, at the exact context path the COPY names
+    # (flat — ConfigMap keys cannot contain '/').
+    # The source is ical_proxy.py rather than app.py so it cannot shadow homelab-mcp's app.py
+    # in a shared pytest session; the image still runs it as app.py.
+    image_builder_context:
+      "{{ playbook_dir }}/roles/k8s/ical-proxy/files/ical_proxy.py": app.py
+
+manifests_rollout: ical-proxy  # noqa var-naming[no-role-prefix]

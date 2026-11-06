@@ -7,23 +7,14 @@
 # the name `valheim` so that k8s/manifests, which keys k8s_rebuilt_images on manifests_service,
 # rolls this Deployment when a mod version changes — see defaults/main.yml.
 - name: Build the valheim mods image
-  # Skipped when no mod is enabled: the Dockerfile would produce an image holding no DLLs and
-  # the initContainer's `cp /mods/*.dll` would fail on the unmatched glob. The deployment
-  # template drops the initContainer under the same condition.
-  when: valheim_k8s_mods | length > 0
   ansible.builtin.include_role:
     name: k8s/image-builder
-  vars:
-    image_builder_name: valheim
-    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/valheim/templates/Dockerfile.j2"
 
 # Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
 # ahead of the workload (#3387).
 - name: Deploy valheim to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_rollout: valheim
     # No `manifests_rollout_timeout` here. The shared default is not enough for the first boot,
     # so the role sets the key in defaults/main.yml, where the renderer reads it for Flux's
     # `timeout` and k8s/manifests reads it for the rollout wait. An include var of that name
