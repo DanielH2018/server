@@ -123,7 +123,7 @@ def iter_sources(roles: Path):
 def host_name(src: str) -> str:
     """The name a rendered script takes on the host: basename minus `.j2`.
 
-    release_bin.yml's own derivation. A `files` entry can rename (live_drift_check.py is
-    deployed as live-drift-check.py), so this is only correct for templates.
+    release_bin.yml's own derivation. A `files` entry can rename, so this is only correct for
+    templates.
     """
     return Path(src).name.removesuffix(".j2")

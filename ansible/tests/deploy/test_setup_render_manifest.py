@@ -1,6 +1,6 @@
 """The stale-render check only sees templates stamped into the render manifest.
 
-manifest-prune-check.sh's third arm compares each template's source checksum against the one
+setup-drift-check.sh's third arm compares each template's source checksum against the one
 stamped at render time, so a `template:`-rendered artifact that is NOT stamped is invisible to it
 — the same silent-omission shape the arm exists to close.
 
@@ -12,8 +12,8 @@ This file guards two coverage properties of that mechanism:
 
   * **Granularity.** Stamps are per tag family and run last. One file rewritten wholesale by
     every partial run, or written BEFORE any `template:` task, would make `--tags
-    manifest-prune` — the natural command for redeploying the drift check itself — restamp all
-    the k3s scripts while rendering one, so the ones it never touched read as fresh.
+    disk-health` restamp all the k3s scripts while rendering one, so the ones it never touched
+    read as fresh.
 
 A shell template added to the k3s role without being stamped is a coverage regression nothing
 else would report, so it fails here instead.
@@ -31,17 +31,13 @@ _REPO = REPO
 _TEMPLATES = K3S_ROLE / "templates"
 _HEALTH_CRONS = K3S_ROLE / "tasks/health-crons.yml"
 _MANIFEST_DIR = "/var/lib/homelab/setup-render-manifest.d"
-# Arms 2 and 3 live in a library that both consumers source: manifest-prune-check.sh.j2 is
-# installed only on k3s server hosts, and daniel-server renders the whole UPS shutdown chain.
+# Arms 2 and 3 live in a library setup-drift-check.sh.j2 sources.
 # The guards below assert against the file that literally holds the loops — a guard pointed at a wrapper asserts nothing
 # about the code that runs.
 # _ARMS_LIB is plain .sh, no Jinja. _ARM_CONSUMERS are (plane, role, name) *.sh.j2 triples,
 # read from the render below.
 _ARMS_LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
-_ARM_CONSUMERS = (
-    ("setup", "k3s", "manifest-prune-check.sh.j2"),
-    ("setup", "initial_setup", "setup-drift-check.sh.j2"),
-)
+_ARM_CONSUMERS = (("setup", "initial_setup", "setup-drift-check.sh.j2"),)
 
 # Shell templates that are NOT rendered onto this host as standalone scripts, each with the
 # reason. Anything here is exempt from the manifest; everything else must be in it.
@@ -59,9 +55,6 @@ _GROUP_TAGS = {
     "k3s-disk-health": "disk-health",
     "k3s-etcd-snapshot": "etcd-snapshot",
 }
-# Groups whose checks are disarmed: the defaults still list them for the code that stays, and no
-# task stamps them, because a stamp would call a removed script current.
-_DISARMED_GROUPS = frozenset({"k3s-manifest-prune", "k3s-release-staleness"})
 
 
 def _groups() -> list[dict]:
@@ -145,14 +138,13 @@ def test_each_stamp_task_carries_exactly_its_groups_tag_family():
             f"Broader tags restamp templates this run did not render; narrower tags leave the "
             f"group unstamped by the run that did."
         )
-    assert not _DISARMED_GROUPS & by_group.keys()
 
 
 def test_every_group_has_a_declared_tag_family():
     """Guards the mapping above against a new group being added with no tag expectation, which
     would let it into the defaults without any of the checks in this file applying to it."""
     declared = {group["name"] for group in _groups()}
-    unmapped = declared - set(_GROUP_TAGS) - _DISARMED_GROUPS
+    unmapped = declared - set(_GROUP_TAGS)
     assert not unmapped, (
         f"k3s_render_stamp_groups has {sorted(unmapped)} with no entry in _GROUP_TAGS. Add the "
         f"tag family it is rendered under, so the stamp/tag agreement is actually asserted."
@@ -192,36 +184,13 @@ def test_both_readers_source_the_shared_arms():
         )
 
 
-def test_the_k3s_readers_note_rewording_still_matches_the_library():
-    """A bash `${var/from/to}` that matches nothing is a silent no-op.
-
-    manifest-prune-check.sh re-words the library's two unarmed notes to name the playbooks a k3s
-    server actually runs. If the library's phrasing changes, the substitution stops matching and
-    daniel-box's message reverts to the generic wording with nothing failing — the textual
-    coupling this repo escalates to a check rather than leaving as a comment.
-    """
-    lib = _ARMS_LIB.read_text()  # plain .sh, no Jinja (see the comment at its import)
-    reader = rendered_shell_text("setup", "k3s", "manifest-prune-check.sh.j2")
-    patterns = re.findall(r"\$\{(?:DEPLOYED|MANIFEST)_NOTE/([^/]+)/", reader)
-    assert patterns, (
-        "manifest-prune-check.sh.j2 no longer re-words the library's notes. If that was "
-        "deliberate, delete this test; if the substitution was renamed, update the regex."
-    )
-    for needle in patterns:
-        assert needle in lib, (
-            f"manifest-prune-check.sh.j2 substitutes {needle!r} out of the library's unarmed "
-            f"note, but setup-drift-lib.sh no longer contains that phrasing — the substitution "
-            f"is a no-op and daniel-box silently shows the generic wording."
-        )
-
-
 def test_other_setup_roles_stamp_their_own_artifacts():
     """Rendered artifacts outside the k3s role must be watched.
 
     Each owning role includes the shared stamp, and this fails if one stops.
 
     daniel-pi's heartbeat scripts are deliberately absent — homelab-daniel-pi ships them, that
-    host runs no manifest-prune-check, and stamping them would claim coverage it cannot provide.
+    host runs no setup-drift-check, and stamping them would claim coverage it cannot provide.
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/service.yml",
@@ -239,7 +208,7 @@ def test_other_setup_roles_stamp_their_own_artifacts():
         text = (_REPO / rel).read_text()
         assert "stamp_render.yml" in text and "stamp_render_name:" in text, (
             f"{rel} no longer stamps its rendered artifacts, so a stale render of them is "
-            f"invisible to manifest-prune-check — the H1 gap, re-opened."
+            f"invisible to setup-drift-check — the H1 gap, re-opened."
         )
 
 
@@ -289,7 +258,7 @@ def test_every_role_that_deploys_code_declares_its_pairs():
         text = (_REPO / rel).read_text()
         assert "stamp_deployed.yml" in text and "stamp_deployed_name:" in text, (
             f"{rel} no longer declares the code it deploys, so a stale copy of it is invisible "
-            f"to manifest-prune-check's deployed-code arm (2026-08-24 review M-5)."
+            f"to setup-drift-check's deployed-code arm (2026-08-24 review M-5)."
         )
 
 
@@ -308,7 +277,7 @@ def test_the_two_halves_hash_the_same_bytes():
     """The stamp and the check must agree on what "the file" is, byte for byte.
 
     Ansible's file lookup strips a trailing newline by default, so `lookup('file', x) |
-    hash('sha256')` hashes the file minus its final byte, while manifest-prune-check.sh compares
+    hash('sha256')` hashes the file minus its final byte, while setup-drift-check.sh compares
     against `sha256sum x`, which does not. Every stamped entry would read stale from the
     first armed run — simultaneous alerts on a perfectly healthy host.
 
@@ -331,7 +300,7 @@ def test_the_two_halves_hash_the_same_bytes():
     import hashlib
 
     # A genuine byte-level subject, not a render stand-in -- #3178 doesn't apply here.
-    sample = _TEMPLATES / "manifest-prune-check.sh.j2"
+    sample = _TEMPLATES / "disk-health.sh.j2"
     raw = sample.read_bytes()
     assert raw.endswith(b"\n"), (
         f"{sample} no longer ends in a newline; pick another sample"

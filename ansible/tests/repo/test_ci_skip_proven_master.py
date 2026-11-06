@@ -32,6 +32,9 @@ PROOF_CONDITION = (
     " || (!cancelled() && needs.prove.outputs.proven != 'true'))"
     f" && {DRAFT_ARM}"
 )
+# The two jobs that read the build's artifacts also skip when it did not succeed (#7439).
+BUILD_CONSUMERS = ("host_packages", "host_tools_arm64")
+BUILD_ARM = "needs.host_packages_build.result == 'success'"
 DEPENDENTS = (
     "hooks",
     "pr_gates",
@@ -113,7 +116,12 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
         assert set(needs[1:]) <= set(DEPENDENTS), (
             f"{job} waits for a job outside the gate"
         )
-        assert _normal(jobs[job].get("if")) == PROOF_CONDITION, (
+        want = (
+            f"{PROOF_CONDITION} && {BUILD_ARM}"
+            if job in BUILD_CONSUMERS
+            else PROOF_CONDITION
+        )
+        assert _normal(jobs[job].get("if")) == want, (
             f"{job} does not skip on the proof, or does not survive a skipped `prove`"
         )
     # renovate-config skips on a push already, and the ruleset requires it on a PR.
@@ -123,12 +131,15 @@ def test_every_repeated_job_waits_for_the_proof_and_skips_on_it():
     )
 
 
-def _dependent_runs(condition: str, prove: str, proven: str, cancelled: bool) -> bool:
+def _dependent_runs(
+    condition: str, prove: str, proven: str, cancelled: bool, build: str = "success"
+) -> bool:
     """Evaluate a dependent's `if:` as GitHub would, for one `prove` outcome on a push."""
     python = (
         condition.replace(f" && {DRAFT_ARM}", "")
         .replace("needs.prove.result", repr(prove))
         .replace("needs.prove.outputs.proven", repr(proven))
+        .replace("needs.host_packages_build.result", repr(build))
         .replace("!cancelled()", str(not cancelled))
         .replace("&&", " and ")
         .replace("||", " or ")
@@ -161,6 +172,13 @@ def test_a_dependent_runs_when_prove_timed_out_and_skips_on_the_proof(
     for job in DEPENDENTS:
         condition = _normal(_jobs()[job]["if"])
         assert _dependent_runs(condition, prove, proven, cancelled) is runs, job
+
+
+@pytest.mark.parametrize("build", ["failure", "cancelled"])
+def test_a_build_that_did_not_succeed_skips_the_jobs_that_read_its_artifacts(build):
+    for job in BUILD_CONSUMERS:
+        condition = _normal(_jobs()[job]["if"])
+        assert not _dependent_runs(condition, "skipped", "", False, build), job
 
 
 def test_ci_skips_draft_prs_and_runs_when_one_is_marked_ready():
@@ -240,6 +258,8 @@ def test_the_gate_keeps_its_required_name_and_always_runs():
         ("success", "false", _all("success"), True),
         ("success", "", _all("success"), True),
         ("skipped", "", _all("success", hooks="failure"), False),
+        # The build's own result reds the gate, so the jobs that skip after it cannot hide it (#7439).
+        ("skipped", "", _all("success", host_packages_build="failure"), False),
         # The proven path: every dependent skipped, and the gate is green.
         ("success", "true", _all("skipped"), True),
         ("success", "true", _all("skipped", pytest="failure"), False),

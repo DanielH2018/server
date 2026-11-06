@@ -1,8 +1,7 @@
 """Guards for the live prune.
 
 `kubectl apply -f <dir>/` only adds/updates; it never removes a live object whose entry was
-dropped from a role's `manifests_files`. `manifest-prune-check.sh` pages about that after the
-fact. This is the in-place fix: `k8s/manifests` passes `--prune -l homelab/role=<service>
+dropped from a role's `manifests_files`. This is the in-place fix: `k8s/manifests` passes `--prune -l homelab/role=<service>
 --prune-allowlist=<kinds> -n <namespace>` to the apply for a role that arms `manifests_prune`
 (see the DECIDED comment in `ansible/roles/k8s/manifests/defaults/main.yml`).
 
@@ -20,8 +19,6 @@ landing in the fixed allowlist.
 Run: uv run pytest ansible/tests/deploy/test_manifests_prune.py
 """
 
-import sys
-
 import pytest
 from _role_census import role_dirs
 from _helpers import (
@@ -33,16 +30,13 @@ from _helpers import (
     task_named,
     walk_tasks,
 )
-from lib.repo_paths import ALL_VARS, K3S_FILES
+from lib.repo_paths import ALL_VARS
 from renderer.renderer_lib.task_inputs import render_defaults
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files, manifest_template, tag_owners
 from role_label import ROLE_LABEL, homelab_role_label
 
-sys.path.insert(0, str(K3S_FILES))
-
-from manifest_declares import declared_in
 
 _MANIFESTS_TASKS = ROLES / "k8s" / "manifests" / "tasks" / "main.yml"
 _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
@@ -181,8 +175,14 @@ def test_the_forbidden_kind_check_actually_fires() -> None:
     ]
 
 
+def _caller_vars(defaults: dict, include_vars: dict, owned: bool) -> dict:
+    """The manifests vars a caller sets. An Ansible-owned role's defaults lose to k8s/manifests'."""
+    return {**(defaults if owned else {}), **include_vars}
+
+
 def _manifests_includes() -> dict[str, list[dict]]:
-    """Each role's render defaults and `k8s/manifests` include vars, without `tasks_from`, by role."""
+    """Each role's `_caller_vars` per `k8s/manifests` include, without `tasks_from`, by role."""
+    owners = tag_owners()
     found: dict[str, list[dict]] = {}
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
@@ -192,7 +192,11 @@ def _manifests_includes() -> dict[str, list[dict]]:
             include = task.get("ansible.builtin.include_role") or {}
             if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
                 found.setdefault(role.name, []).append(
-                    {**render_defaults(role), **(task.get("vars") or {})}
+                    _caller_vars(
+                        render_defaults(role),
+                        task.get("vars") or {},
+                        owned=role.name in owners,
+                    )
                 )
     return found
 
@@ -236,6 +240,13 @@ def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
         f"{sorted(_UNARMED_ROLES)}. A caller is armed unless it passes `manifests_prune: false`; "
         "excluding one needs an operator decision and a DECIDED marker in its defaults."
     )
+
+
+def test_an_opt_out_in_defaults_counts_only_while_a_tag_has_an_owner() -> None:
+    opt_out = {"manifests_prune": False}
+    assert _caller_vars(opt_out, {}, owned=True) == opt_out
+    assert _caller_vars(opt_out, {}, owned=False) == {}
+    assert _caller_vars({}, opt_out, owned=False) == opt_out
 
 
 @pytest.mark.parametrize("name", _RENDER_TASKS)
@@ -405,8 +416,6 @@ def test_the_filter_adds_the_label_and_nothing_else() -> None:
         before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
         labelled = homelab_role_label(text, role)
         after = list(yaml_fast.safe_load_all(labelled))
-        # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
-        assert declared_in(labelled) == declared_in(text), f"{role}/{name}"
         assert len(after) == len(before), f"{role}/{name} gained or lost a document"
         for old, new in zip(before, after, strict=True):
             assert new["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"

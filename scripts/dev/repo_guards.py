@@ -43,7 +43,6 @@ GUARDS = {
     # The files the `static-ratchet-tests-*` prek hooks run (#5481).
     "scripts/tests/test_scripts_import_direction.py": "2026-10-17",
     "scripts/tests/test_prek_files_cover_entry_imports.py": "2026-10-17",
-    "scripts/diagnostics/tests/test_probe_health_rolled.py": "2026-10-17",
     "ansible/tests/setup/test_lander_deadlines_cover_the_soak.py": "2026-10-17",
     "ansible/tests/k8s/test_checksum_annotations_documented.py": "2026-10-17",
     "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py": "2026-10-17",

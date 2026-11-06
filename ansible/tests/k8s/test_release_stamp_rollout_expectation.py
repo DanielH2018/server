@@ -1,9 +1,7 @@
-"""The release record names which workloads an apply must roll — the play half.
+"""The release record names which workloads an apply must roll.
 
-`probe.py health` reads `rollouts[].restart` from the record `release_stamp.yml` writes and
-fails a workload it names whose `restartedAt` is not newer than the record's `applied_at`.
-That is only sound if two things hold in the play, and both are pinned here rather than
-assumed: the expectation is decided from the SAME facts the `rollout restart` tasks read, and
+`release_stamp.yml` writes `rollouts[].restart`, and two things hold in the play, both pinned
+here rather than assumed: the expectation is decided from the SAME facts the `rollout restart` tasks read, and
 the stamp is written BEFORE those restarts run (so a restart that reaches the workload stamps
 a strictly later time).
 
@@ -43,7 +41,7 @@ from _release_expectation import (
 
 
 def test_the_record_carries_the_rollouts_field():
-    """Non-vacuity for the reader: the key `release_expected_restarts` looks for is written."""
+    """Non-vacuity: the record carries the `rollouts` key."""
     write = task_named(STAMP, "Write the release record")
     assert (
         write["vars"]["manifests_release_record"]["rollouts"]

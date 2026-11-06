@@ -32,8 +32,6 @@ GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]
 # The */10 crons the grace is derived against, and the daily ones it deliberately does not cover.
 FREQUENT_SCRIPTS = ("longhorn-backup-health.sh.j2", "disk-health.sh.j2")
 DAILY_SCRIPTS = ("etcd-token-drift.sh.j2",)
-# Daily checks on a kuma-check timer: the guard IS wired there, with a different skip shape.
-DAILY_TIMER_SCRIPTS = ("manifest-prune-check.sh.j2",)
 
 # Worst boot-to-Ready measured: 07:39:48 boot -> 07:45:06 last pod Ready.
 WORST_BOOT_TO_READY_S = 318
@@ -95,13 +93,13 @@ def test_grace_covers_the_worst_observed_startup():
 
 
 def test_every_named_script_is_one_the_harness_renders():
-    """Non-vacuity: the three lists are hand-written, so a renamed script must fail by name.
+    """Non-vacuity: the two lists are hand-written, so a renamed script must fail by name.
 
     `rendered_shell_text` already fails on a name it cannot find, but only for a list that still
     has members. This names the whole census so a list emptied by a move fails here.
     """
-    named = set(FREQUENT_SCRIPTS + DAILY_SCRIPTS + DAILY_TIMER_SCRIPTS)
-    assert len(named) == 4, "the three script lists overlap or one has been emptied"
+    named = set(FREQUENT_SCRIPTS + DAILY_SCRIPTS)
+    assert len(named) == 3, "the two script lists overlap or one has been emptied"
     missing = sorted(named - rendered_names_for("setup", "k3s"))
     assert missing == [], f"setup/k3s no longer ships: {missing}"
 
@@ -148,21 +146,4 @@ def test_the_daily_crons_do_not():
         text = rendered_shell_text("setup", "k3s", name)
         assert "boot_grace_active" not in text, (
             f"{name} runs daily — a boot skip costs a whole day of coverage"
-        )
-
-
-def test_the_daily_timer_checks_exit_without_a_verdict_inside_the_grace():
-    # The exception to the rule above, and why: a daily check on a kuma-check TIMER
-    # (roles/setup/common/tasks/check_timer.yml) is Persistent, so a slot missed in an
-    # outage runs seconds after boot. Skipping there costs 30 minutes (Restart=on-failure), not
-    # a day — so the guard is wired, and its skip path exits 1 with no push and no hc ping.
-    for name in DAILY_TIMER_SCRIPTS:
-        text = rendered_shell_text("setup", "k3s", name)
-        guard = text.index(f"if boot_grace_active {GRACE_S}")
-        skip_block = text[guard : text.index("\nfi\n", guard)]
-        assert "exit 1" in skip_block, (
-            f"{name}: the boot skip must exit 1 so the timer reruns"
-        )
-        assert "hc-ping" not in skip_block, (
-            f"{name}: the skip path must ping no slug for a run that did not happen"
         )

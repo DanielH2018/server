@@ -82,7 +82,7 @@ from diagnostics.probe_lib.health_kubectl import (
     k8s_pods_args,
     pod_selector,
 )
-from diagnostics.probe_lib.health_rollout import format_k8s_health, unrolled_reason
+from diagnostics.probe_lib.health_rollout import format_k8s_health
 from diagnostics.probe_lib.health_vendored import (
     require_a_vendored_workload,
     vendored_targets,
@@ -196,7 +196,7 @@ def role_cronjob_targets(role, default_namespace, roles_dir=K8S_ROLES):
     return [(namespace, name) for namespace, _kind, name in targets]
 
 
-def format_role_health(role, checked, now, expected_restarts=None):
+def format_role_health(role, checked, now):
     """(text, exit code) for a role whose manifests declare at least one workload.
 
     `checked` is [(namespace, kind, name, workload doc or None, pods doc or None)]. A None
@@ -206,17 +206,9 @@ def format_role_health(role, checked, now, expected_restarts=None):
     test_deploy_detach_notify.py, because a rewording that happened to contain one would put a
     failed deploy back on the skip path with every test still green.
 
-    `expected_restarts` is {workload name: applied_at} from the service's release record
-    (`release_expected_restarts`): each named workload must carry a `restartedAt` newer than
-    that apply, or it FAILS the gate as NOT ROLLED. Empty or None — no record,
-    a record from before the field shipped, or an apply that changed nothing — leaves the
-    verdict exactly as it was, which is what keeps a standalone `probe.py health` and an
-    idempotent re-run green.
-
     Only the first line reaches the Discord verdict (the notifier reads `splitlines()[0]`), so
     it carries the whole result and the per-workload detail follows it.
     """
-    expected_restarts = expected_restarts or {}
     missing, unhealthy, lines = [], [], []
     for namespace, kind, name, workload, pods in checked:
         if workload is None:
@@ -227,11 +219,6 @@ def format_role_health(role, checked, now, expected_restarts=None):
             )
             continue
         text, code = format_k8s_health(workload, pods, f"{namespace}/{name}", now)
-        if name in expected_restarts:
-            reason = unrolled_reason(workload, expected_restarts[name])
-            if reason:
-                text += f" — {reason}"
-                code = 1
         lines.append(f"  {text}")
         if code:
             unhealthy.append(f"{namespace}/{name}")
@@ -294,38 +281,6 @@ def _fetch_workload(name, namespace, cluster, tools=DEFAULT_TOOLS):
     return None, None
 
 
-def _release_record(service, release_dir=None, host_vars=None):
-    """This service's release_stamp.yml record as a dict, or None if unreadable.
-
-    `roles/k8s/manifests/tasks/release_stamp.yml` writes one record per service after every
-    real apply (see `probe_lib/releases.py`, which reads the whole directory; this reads one
-    record by name). None covers a service that has never been deployed since the stamp
-    shipped, and a truncated or missing file — every reader here treats that as "nothing to
-    compare against" rather than a failure of its own.
-
-    None too for a service whose entry carries `owner` in the tree, as
-    `releases_retired.tree_owners` reads it. Flux applies it, so no Ansible apply writes it a
-    newer record, and the last one Ansible wrote would expect restarts that never come.
-    `host_vars` is the file that ownership is read from, the repo's own when None.
-    """
-    from diagnostics.probe_lib.releases import RELEASE_DIR
-    from diagnostics.probe_lib.releases_retired import tree_owners
-
-    if service in tree_owners(host_vars):
-        return None
-    release_dir = RELEASE_DIR if release_dir is None else release_dir
-    try:
-        record = json.loads((release_dir / f"{service}.json").read_text())
-    except OSError, ValueError:
-        return None
-    return record if isinstance(record, dict) else None
-
-
-def _deploy_applied_at(service):
-    """This service's `applied_at` from its release record, or None if unreadable."""
-    return (_release_record(service) or {}).get("applied_at")
-
-
 def _with_alert_plane(role, text, code, ready_at, prom, read):
     """(text, exit code) with the tag's plumbing check, then the alert plane, folded in.
 
@@ -338,57 +293,23 @@ def _with_alert_plane(role, text, code, ready_at, prom, read):
         text, code = health_plumbing.with_checks(role, text, read)
     if code:
         return text, code
-    from diagnostics.probe_lib.releases_retired import tree_owners
+    from lib.k8s_roles import tag_owners
 
-    owner, entry = tree_owners().get(role), _render_context()[1].get(role)
-    applied_at = _deploy_applied_at(role)
-    plane_code, lines = health_alerts.check(
-        role, owner, applied_at, ready_at, entry, prom
-    )
+    owner, entry = tag_owners().get(role), _render_context()[1].get(role)
+    plane_code, lines = health_alerts.check(role, owner, ready_at, entry, prom)
     if plane_code:
         head = f"{role}: the alert plane FAILED the gate after a healthy rollout"
         return "\n".join([head, *lines, text]), 1
     return "\n".join([text, *lines]), 0
 
 
-def release_expected_restarts(record):
-    """{workload name: applied_at} for every workload the recorded apply queued a restart of.
-
-    Read from the record's `rollouts` list, which the stamp builds from the same facts the
-    restart tasks read (release_stamp.yml). Empty whenever the record cannot answer — no
-    record, no `rollouts` key (a record from before the field shipped), an unreadable
-    `applied_at` — so the gate's meaning does not change until a deploy has written the
-    field. Empty is the SAFE direction here, unlike the rest of this gate: an expectation
-    invented from a clock is a false red, while a missing one leaves the two existing halves
-    of the gate in force.
-    """
-    if not isinstance(record, dict):
-        return {}
-    try:
-        applied_at = datetime.strptime(
-            record.get("applied_at") or "", "%Y-%m-%dT%H:%M:%SZ"
-        ).replace(tzinfo=timezone.utc)
-    except ValueError, TypeError:
-        return {}
-    rollouts = record.get("rollouts")
-    if not isinstance(rollouts, list):
-        return {}
-    return {
-        r["name"]: applied_at
-        for r in rollouts
-        if isinstance(r, dict)
-        and r.get("restart") is True
-        and isinstance(r.get("name"), str)
-    }
-
-
 def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
     """(CronJob or None, its latest owned Job or None, that Job's pods or None, reference).
 
-    The reference is the `health_cronjob.FluxRevision` of an `owner: flux` `role`, which has
-    no release record, and `role`'s release-record `applied_at` otherwise.
+    The reference is the `health_cronjob.FluxRevision` of an `owner: flux` `role`, and None
+    otherwise.
     """
-    from diagnostics.probe_lib.releases_retired import tree_owners
+    from lib.k8s_roles import tag_owners
 
     cronjob = _read(cluster, k8s_cronjob_args(name, namespace), tools)
     jobs = _read(cluster, k8s_jobs_args(namespace), tools)
@@ -397,8 +318,8 @@ def _fetch_cronjob(role, name, namespace, cluster, tools=DEFAULT_TOOLS):
     if latest_job:
         job_name = (latest_job.get("metadata") or {}).get("name")
         pods = _read(cluster, k8s_job_pods_args(job_name, namespace), tools)
-    if tree_owners().get(role) != "flux":
-        return cronjob, latest_job, pods, _deploy_applied_at(role)
+    if tag_owners().get(role) != "flux":
+        return cronjob, latest_job, pods, None
     kustomization = _read(cluster, k8s_kustomization_args(role), tools)
     revision = health_cronjob.flux_revision(kustomization, jobs, name)
     return cronjob, latest_job, pods, revision
@@ -603,9 +524,7 @@ def run_health(
         (namespace, kind, name, *_fetch_workload(name, namespace, cluster, tools))
         for namespace, kind, name in targets
     ]
-    text, code = format_role_health(
-        container, checked, now, release_expected_restarts(_release_record(container))
-    )
+    text, code = format_role_health(container, checked, now)
     ready_at = health_alerts.pods_ready_at([c[4] for c in checked])
     text, code = _with_alert_plane(container, text, code, ready_at, prom, read)
     print(text)

@@ -108,6 +108,9 @@ def test_the_teardown_removes_every_textfile_and_stamp_install_leaves():
     render = task_named(
         load_tasks(ROLE / "service.yml"), "Stamp the rendered gitops-deploy units"
     )
+    checks_render = task_named(
+        load_tasks(ROLE / "github_checks.yml"), "Stamp the rendered GitHub checks"
+    )
     deployed = next(
         t
         for t in load_tasks(ROLE / "code.yml")
@@ -125,6 +128,7 @@ def test_the_teardown_removes_every_textfile_and_stamp_install_leaves():
         "/var/lib/node-exporter-textfile/gitops_tick.prom",
         *(f"/var/lib/node-exporter-textfile/{name}.prom" for name in timers),
         f"/var/lib/homelab/setup-render-manifest.d/{render['vars']['stamp_render_name']}",
+        f"/var/lib/homelab/setup-render-manifest.d/{checks_render['vars']['stamp_render_name']}",
         f"/var/lib/homelab/setup-deployed-manifest.d/{deployed['vars']['stamp_deployed_name']}",
     } <= set(removal["loop"])
 

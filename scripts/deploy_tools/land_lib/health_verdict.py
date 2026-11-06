@@ -36,9 +36,8 @@ def _gated_tree(ln: Landing) -> str:
 
     `deployed_at` when no tick was awaited. Otherwise the merge commit, when a
     promotion applied any gated tag: `probe.py health` reads `owner` from the tree it runs in
-    (`releases_retired.tree_owners`), and only a tree carrying the flip knows Flux applies the
-    tag. From a tree before the flip, the probe grades the tag against Ansible's frozen
-    release record and fails it NOT ROLLED, and it looks a CRD-only tag up by name (#5744).
+    (`lib.k8s_roles.tag_owners`), and only a tree carrying the flip knows Flux applies the
+    tag. From a tree before the flip, the probe looks a CRD-only tag up by name (#5744).
     """
     if ln.deployed_at:
         return ln.deployed_at

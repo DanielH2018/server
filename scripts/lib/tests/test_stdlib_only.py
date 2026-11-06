@@ -484,9 +484,3 @@ def test_a_no_project_command_with_a_script_path_is_read_is_clean():
 def test_a_no_project_command_with_no_readable_script_is_flagged(text):
     with pytest.raises(ValueError, match=r"runs no \.py path"):
         role_installs._scripts_run(text, GITOPS_UNIT)
-
-
-def test_every_unrendered_template_is_still_in_the_tree():
-    # A template deleted without its row leaves a skip that nothing exercises.
-    assert role_installs.UNRENDERED_TEMPLATES
-    assert all(path.is_file() for path in role_installs.UNRENDERED_TEMPLATES)

@@ -8,8 +8,7 @@ push credential or pushes. The real template is rendered and run under bash with
 library, so the file the case reads is the file the collector would. Only the WAN and boot-grace
 probes, `uv`, `git`, `curl` and `logger` are stubs, and no Kuma credential file exists in the
 harness, so every case also proves that a host without one still writes its verdict.
-live_drift_check.py is Python and has its cases in
-ansible/roles/setup/k3s/tests/test_live_drift_check.py. The deadline literals are pinned to the
+The deadline literals are pinned to the
 render in ansible/tests/services/test_b1_rule_literals.py.
 """
 
@@ -17,41 +16,12 @@ import hashlib
 import re
 
 import pytest
-from _helpers import load_tasks
 from _shell_render import render_shell_script
 from deploy_tools.narrow_lib.task_walk import file_tags
 from lib.proc_testing import fake_bin, run, write_exec
 from lib.repo_paths import K3S_ROLE, REPO
 
 CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
-# Tag family -> the host paths its disarm removes, so a path nothing retires names itself here.
-DISARMED_PATHS = {
-    "manifest-prune": {
-        "/usr/local/bin/manifest-prune-check.sh",
-        "/usr/local/bin/manifest-declares.py",
-        "/opt/homelab/current/k3s-manifest-prune",
-        "/opt/homelab/releases/k3s-manifest-prune",
-        "/var/lib/homelab/setup-render-manifest.d/k3s-manifest-prune",
-        "/var/lib/homelab/setup-deployed-manifest.d/k3s-manifest-declares",
-        "/var/lib/node-exporter-textfile/manifest-prune-check.prom",
-    },
-    "release-staleness": {
-        "/usr/local/bin/release-staleness-check.sh",
-        "/opt/homelab/current/k3s-release-staleness",
-        "/opt/homelab/releases/k3s-release-staleness",
-        "/var/lib/homelab/release-staleness",
-        "/var/lib/homelab/setup-render-manifest.d/k3s-release-staleness",
-        "/var/lib/node-exporter-textfile/release-staleness-check.prom",
-    },
-    "live-drift": {
-        "/usr/local/bin/live-drift-check.py",
-        "/opt/homelab/current/k3s-live-drift",
-        "/opt/homelab/releases/k3s-live-drift",
-        "/opt/live-drift-check",
-        "/var/lib/homelab/setup-deployed-manifest.d/k3s-live-drift",
-        "/var/lib/node-exporter-textfile/live-drift-check.prom",
-    },
-}
 CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 HC_ENV = "/etc/healthchecks/ping.env"
@@ -59,8 +29,6 @@ UV = "/usr/local/bin/uv"
 SHELL_PRODUCERS = {
     "longhorn-backup-health": "longhorn-backup-health.sh.j2",
     "etcd-snapshot-offbox": "etcd-token-drift.sh.j2",
-    "manifest-prune-check": "manifest-prune-check.sh.j2",
-    "release-staleness-check": "release-staleness-check.sh.j2",
 }
 
 # The real library, with the three things a runner's host decides pinned to what the case sets.
@@ -229,57 +197,10 @@ def test_a_reader_verdict_is_written_and_a_boot_grace_run_writes_nothing(tmp_pat
     assert list(textfile_dir.iterdir()) == []
 
 
-def test_a_failed_fetch_is_the_runs_verdict_and_follows_the_wan_probe(tmp_path):
-    git = {"git": "echo 'fatal: unable to access origin' >&2\nexit 128\n"}
-    # The WAN answers, so the refused fetch is a real fault: success 0.
-    textfile_dir = _run(tmp_path, "release-staleness-check", stubs=git)
-    key = 'homelab_check_success{check="release-staleness-check"}'
-    assert _series(textfile_dir, "release-staleness-check")[key] == "0"
-    # The WAN is down, so the check reports up with a skip note and the WAN check owns the page.
-    offline = tmp_path / "offline"
-    offline.mkdir()
-    textfile_dir = _run(
-        offline, "release-staleness-check", stubs=git, env={"WAN_UP": "0"}
-    )
-    assert _series(textfile_dir, "release-staleness-check")[key] == "1"
-
-
-def _disarm_tasks() -> list[dict]:
-    return [
-        t for t in load_tasks(CRONS) if set(t.get("tags") or []) & DISARMED_PATHS.keys()
-    ]
-
-
-def test_each_disarmed_family_removes_its_host_paths_under_its_own_tag():
-    for tag, paths in DISARMED_PATHS.items():
-        removed = set()
-        for task in _disarm_tasks():
-            module = task.get("ansible.builtin.file") or {}
-            if task["tags"] == [tag] and module.get("state") == "absent":
-                removed.update(task.get("loop") or [module.get("path")])
-        assert paths <= removed, f"{tag} leaves {sorted(paths - removed)} on the host"
-
-
-def test_no_disarmed_family_runs_or_installs_anything():
-    for task in _disarm_tasks():
-        name = task["name"]
-        target = str(task.get("ansible.builtin.import_tasks", ""))
-        assert not target.endswith(
-            ("release_bin.yml", "stamp_render.yml", "stamp_deployed.yml")
-        )
-        if target.endswith("check_timer.yml"):
-            assert task["vars"]["check_timer_state"] == "absent", name
-        if cron := task.get("ansible.builtin.cron"):
-            assert cron["state"] == "absent", name
-
-
-def test_the_task_file_narrows_to_the_six_tags_the_hand_apply_names():
+def test_the_task_file_narrows_to_the_three_tags_the_hand_apply_names():
     # An untagged task returns None here, and the tick then records the maximal `--tags k3s`.
     assert file_tags(CRONS.read_text()) == {
         "backup-health",
         "disk-health",
         "etcd-snapshot",
-        "live-drift",
-        "manifest-prune",
-        "release-staleness",
     }

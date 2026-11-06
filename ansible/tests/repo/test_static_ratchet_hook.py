@@ -55,7 +55,6 @@ ADDED_BY_5481 = {
     "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py": "renovate.json",
     "ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py": "renovate.json",
     "ansible/tests/repo/test_owner_entry_points_census.py": "docs/target-architecture/deploy/d2-first-leaf.md",
-    "scripts/diagnostics/tests/test_probe_health_rolled.py": "scripts/diagnostics/probe.py",
 }
 
 # Six more that failed 2 to 4 PR branches each between 2026-10-18 and 2026-10-25, with the edit

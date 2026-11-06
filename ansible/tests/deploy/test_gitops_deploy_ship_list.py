@@ -5,7 +5,7 @@ The deployer's Python lives in `roles/setup/gitops_deploy/files/`: the entry poi
 `gitops_*` modules flat, and the `deploy_*` libraries in the `deployer_lib/` namespace package
 (#4355). The role names each file twice in `tasks/code.yml`: the `loop:` of the copy task that
 installs it under `/opt/gitops-deploy/`, and the `stamp_deployed_pairs` that records its render
-provenance for `manifest-prune-check.sh`. Neither list is derived from the directory, and this
+provenance for `setup-drift-check.sh`. Neither list is derived from the directory, and this
 test asserts that each covers `files/*.py` and `files/deployer_lib/*.py`.
 
 That gap has the same shape as the one `test_monitor_bridge_modules.py` closes for

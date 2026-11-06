@@ -32,8 +32,7 @@ FLUX_BORN = (
     "longhorn-reconcile",
 )
 # The keys every k8s role defines under one name, as a convention the tooling reads in each role
-# alike. A setup template that names `k8s_autodeploy` (the release-staleness check, the Renovate
-# prompt) reads the convention across all roles, not a value one Flux-born role governs.
+# alike. A setup template that names `k8s_autodeploy` (the Renovate prompt) reads the convention across all roles, not a value one Flux-born role governs.
 # DECIDED: exempt by name, because the census exists for the keys whose value a flip changes, and
 # a flip of these changes a stance and no host-visible state. A role's render metadata is the
 # same convention: it decides what the renderer writes, and no host file reads its value.

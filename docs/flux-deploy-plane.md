@@ -217,17 +217,8 @@ through the deployer's broad plane, beside every other role that reads the list,
 `k8s_autodeploy: false` does not stop that plane. The apply is forward-only: a failure in any
 of those roles writes `hold_sha` for the whole list.
 
-A PR that adds or removes a k8s entry therefore runs two checks before it merges, and quotes
-both in its body:
-
-1. The PR names the tags the landing applies. For an added or removed entry, `flux` is among
-   them.
-2. `uv run python scripts/diagnostics/probe.py releases --stale-only` and
-   `uv run python scripts/diagnostics/probe.py releases` must name none of those tags as
-   stale, `unmerged` or `dirty`. Read the service names, not the exit code. A named service
-   carries a change the tick would apply or revert as a side effect, so wait until its owner
-   lands it.
-
+A PR that adds or removes a k8s entry therefore names the tags the landing applies. For an
+added or removed entry, `flux` is among them.
 The operator accepted that unattended apply on 2026-10-12, for this role's first landing and
 for later landings that reach `flux` as a reader.
 
@@ -343,22 +334,111 @@ or every object in it declares nothing, and the census cannot tell the two apart
 
 ## Handing a service back
 
-A service whose `containers_list` entry sets `owner: flux` is applied by Flux, and every
-Ansible path skips it. Handing it back to Ansible takes two PRs, in this order. Every later
-return of a service to Ansible follows the same order. A retirement takes two PRs as well, in
-the order *Retiring a flux-owned service* states.
+**A handback cannot complete on this tree.** Role docs and inventory comments cite a two-PR
+handback: PR H1 sets `owner: released`, and PR H2 removes `owner`. Four checks refuse it, and no
+procedure on this page gets past them. A trial of H1 on nut's entry measured the first three.
 
-1. **PR H1 sets `owner: released`.** Every Ansible path still skips the service. The next
-   bundle omits `flux/<tag>.yaml`, so the root Kustomization prunes the `<tag>` Kustomization,
-   and `deletionPolicy: Orphan` leaves its objects serving. That bundle reaches the cluster only
-   when `promote` moves `prod`, which needs `DEPLOY_HOLD` to read `none`. A hold is the likeliest
-   reason to hand back. In that case the operator clears it once H1 is on master
-   (**operator-only**).
+- **The tag rule refuses H1.** `scripts/deploy_tools/tag_rule.py:refusals` has no exemption for
+  a released owner. Arm 6 of the render-diff gates printed this on the trial:
+
+  ```text
+  arm 6: nut leaves the bundle while ansible/roles/k8s/nut/ stays. Restore its containers_list
+  entry, or remove the role with it to retire the service (docs/flux-deploy-plane.md, *Retiring
+  a flux-owned service*).
+  ```
+
+  `promote.py check-bundle --against-prod` applies the same rule before any push, with `prod` as
+  its reference. `prod` therefore cannot move past H1, so the `<tag>` Kustomization never reads
+  `NotFound` and H2 never unblocks. Every tag's `deletionPolicy` is still `Orphan`, so this drop
+  would delete nothing yet. The rule exists for the default policy that D6.7 plans.
+- **The object checks refuse H1's objects.** Arm 3 printed one line per object, such as
+  `arm 3: nut no longer renders Deployment/homelab/nut, so Flux prunes it while its Kustomization
+  reads Ready`. `promote.py decide`'s object-loss check skips the candidate on the same loss. A
+  `Removes-Object:` line clears both, but it declares a deletion that `Orphan` does not perform,
+  and the tag rule still refuses the PR.
+- **The ownership census refuses both PRs.** The `every-k8s-entry-is-flux-owned` row in
+  `ansible/tests/repo/_flux_ownership_row.py` fails on any k8s entry without `owner: flux`.
+- **No Ansible path applies H2.** `deploy.sh --tags <tag>` exits 5 for every k8s entry, whatever
+  its `owner` reads, and the GitOps deployer has applied no k8s role since D6.12.
+
+The tag rule's two remedies do not return a service to Ansible. Restoring the entry undoes H1,
+and removing the role retires the service. Fix a bad role forward instead, and stop its
+reconciliation meanwhile with *Stopping one service: `flux_suspend`*. A retirement still works, in
+the order *Retiring a flux-owned service* states. Reopening the handback needs a decision to
+change the tag rule and the census. D6's plan,
+[*The deletion policy, and the end of the handback*](target-architecture/deploy/d6-delete-old-path.md#the-deletion-policy-and-the-end-of-the-handback),
+explains why they refuse it.
+
+### What a handback would have to do
+
+This subsection records the two PRs for that decision. None of it is a runnable procedure.
+
+1. **PR H1 sets `owner: released` and changes the tests listed below.** The next bundle omits
+   `flux/<tag>.yaml`, so the root Kustomization prunes the `<tag>` Kustomization, and
+   `deletionPolicy: Orphan` leaves its objects serving. That bundle reaches the cluster only
+   when `promote` moves `prod`, which needs `DEPLOY_HOLD` to read `none`. During a hold, the
+   operator clears it once H1 is on master (**operator-only**).
 1. **Wait for `NotFound`.**
    `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system <tag>` must return
    `NotFound`.
-1. **PR H2 removes `owner`.** Its body quotes the `NotFound`. Once it merges, the deployer
-   narrows the edit to the service's tag and applies it, and `land.sh` deploys it client-side.
+1. **PR H2 removes `owner` and moves the role's render metadata.** Its body quotes the
+   `NotFound`.
+
+**H2 moves the render metadata in the same PR, before any Ansible run reads the role.** The
+renderer reads this metadata from the role's `defaults/main.yml`. The Ansible path needs it on
+the role's includes:
+
+- **Each `scripts/renderer/renderer_lib/task_inputs.py:RENDER_KEYS` key the role's defaults
+  set** moves to the `vars:` of its `k8s/manifests` include, with its comment and any
+  `# DECIDED:` marker. Delete the key from the defaults, because a render fails on a key set in
+  both places: `task_inputs.py:include_vars` raises on it.
+- **Each `image_builder_builds` entry** moves to the `vars:` of a `k8s/image-builder` include
+  of its own, with its `when:`. Ansible does not read the list, so a bare include fails the
+  role's first assert, and `image_builder_sites` raises on a role that sets both.
+- **`test_no_role_keeps_render_metadata_on_its_include_is_clean`** in
+  `scripts/renderer/tests/test_renderer_task_inputs.py` asserts that no role has such a key,
+  and it has no allowlist. H2 narrows that census to leave the role out.
+
+**H1 and H2 each fail tests that assume every service is flux-owned.** The trial ran
+`scripts/dev/repo_guards.py` and the modules below on nut's entry, not the whole suite, so CI
+may name more:
+
+- **`test_every_k8s_service_is_flux_owned_on_the_tree`** in
+  `scripts/renderer/tests/test_renderer_r4_precondition.py` fails at H1 and at H2, because
+  `owner_problems` flags any owner but `flux`. This test is R4's precondition, so R4 stops until
+  the service is flux-owned again.
+- **`test_census_row_holds_on_the_tree[every-k8s-entry-is-flux-owned]`** in
+  `ansible/tests/repo/test_census_rows_roles.py` fails at H1 and at H2.
+- **`test_every_live_k8s_entry_is_reached_by_all_three_readers`** in
+  `ansible/tests/deploy/test_owner_readers_agree.py` fails at H1. The test inserts `owner: flux`
+  above each live entry, so an entry that reads `owner: released` holds two values, and the
+  readers disagree on whether it is published.
+- **`test_the_floor_never_exceeds_what_the_tree_publishes`** in
+  `scripts/validate/tests/test_validate_render_diff_job.py` fails at H1, because the bundle
+  loses `flux/<tag>.yaml`. H1 lowers `scripts/validate/render_diff_job.py:FLUX_FLOOR`. Its
+  `Render-diff:` line lists every path `render_diff_job.py` reports as differing, not only that
+  file. On nut those are the files under `cluster/nut/`, `cluster/soak/configmap.yaml`,
+  `cluster/soak/job.yaml`, `flux/kustomization.yaml`, `flux/netpol-baseline.yaml` and
+  `flux/nut.yaml`. The job exempts `digests.json`.
+- **`test_every_caller_arms_the_prune_but_the_decided_exclusions`** in
+  `ansible/tests/deploy/test_manifests_prune.py` fails an H2 that leaves `manifests_prune: false`
+  in authelia's or nut's defaults. For a tag with no `owner`, it reads only the `vars:` on the
+  include. No PR changes this test; moving the key turns it green.
+- **`test_every_deployed_role_block_matches_what_the_generator_writes_now`** and
+  `test_the_glance_generator_on_catalog_lib_finds_no_stale_block` fail until the role's *At a
+  glance* block is regenerated. The `regen-role-glance` prek hook does that at commit time.
+
+`manifests_prune` is why the move cannot be skipped. `k8s/manifests` sets it to `true` in its own
+defaults, and a role's own defaults outrank its caller's defaults, so a caller's
+`manifests_prune: false` in `defaults/main.yml` has no effect on the Ansible path. authelia and
+nut hold their `# DECIDED:` opt-outs there. A handback of either one that skips this step arms
+the prune those markers hold off, on the first Ansible deploy after H2. No other `RENDER_KEYS`
+key has a default in `k8s/manifests`, so a bare include still reads it from the caller. Those
+keys move too, so that one role's metadata has one location.
+
+R4 removes the includes this subsection relies on.
+[R4's plan](target-architecture/render/r4-delete-k8s-ansible-path.md) makes its PR 5 raise on any
+of these keys under `tasks/`, and its PR 8 deletes the task files that hold the includes.
 
 Between H1 and H2 the service has no writer and keeps serving its last spec, so the two
 writers never overlap. `land.sh` refuses to merge H2 while the Kustomization exists
@@ -1328,7 +1408,7 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
 
 The render job publishes the deploy tags whose `containers_list` entry carries `owner: flux`.
 `promote.py published-tags` prints them. A tag marked `owner: released` is left out. That
-marking is the first PR of handing a service back (*Handing a service back*).
+marking is the first PR of a handback, which the tag rule refuses (*Handing a service back*).
 
 The build step passes each published tag to the renderer with `--role` and no
 `--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
@@ -1683,7 +1763,8 @@ refuses the publish when:
 - the pull of `prod` fails.
 
 `prod` moves only on promotion, so a refusal persists through later unrelated commits until the
-tag returns or its role directory goes. To retire a service, remove its entry and its role in
+tag returns or its role directory goes. The first line refuses a handback's `owner: released`
+(*Handing a service back*). To retire a service, remove its entry and its role in
 one PR (*Retiring a flux-owned service*). A registry with no `prod` is the first run, and only
 the `flux` line applies. Arm 6 of the render-diff gates runs the same rule on a pull request
 against the base render, so a PR usually fails before it merges.

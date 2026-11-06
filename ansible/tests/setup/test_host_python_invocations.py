@@ -347,8 +347,7 @@ def _shebang_runs(text: str, installed: list[str]) -> list[str]:
 
 def test_no_installed_script_runs_by_its_shebang():
     """A role script's `#!/usr/bin/env python3` is the host's system 3.12, so running it by path
-    escapes the pin the tests above enforce on command strings. #4489 was one:
-    manifest-prune-check ran manifest-declares.py by path, behind `2>/dev/null`."""
+    escapes the pin the tests above enforce on command strings (#4489)."""
     installed = sorted(live for live in role_installs.install_map() if "{{" not in live)
     # Non-vacuous: a script the backup-health cron runs must be in the census this scans for.
     assert "/opt/longhorn-backup-health/longhorn_backup_health.py" in installed

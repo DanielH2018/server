@@ -63,8 +63,7 @@ push_healthchecks() {
 }
 
 # Every exit path reports through here, and the log line is UNCONDITIONAL — see
-# longhorn-backup-health.sh.j2 for the full rationale, and manifest-prune-check.sh.j2 for the same
-# pattern. Short version: the `|| logger` inside the ping helper only fires when the curl itself
+# longhorn-backup-health.sh.j2 for the full rationale. Short version: the `|| logger` inside the ping helper only fires when the curl itself
 # fails, so a successfully-pinged status leaves no durable local record. That makes journald
 # silence ambiguous — a run that succeeded quietly and a cron that never fired look identical —
 # and that line is the check's only history in Loki.
