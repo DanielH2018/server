@@ -180,6 +180,36 @@ def test_a_suspended_tag_is_nothing_to_deploy_without_a_gate(land_run):
     assert "gate" not in _names(calls)
 
 
+@pytest.mark.parametrize(
+    "owed,line",
+    [
+        (
+            {"plane": "rotate it by hand"},
+            "it needs applying by hand: rotate it by hand",
+        ),
+        ({"remaining_setup": "`cmd-server`"}, "`cmd-server`"),
+    ],
+)
+def test_a_suspended_tag_with_a_plane_owed_is_needs_manual_apply(land_run, owed, line):
+    suspended = WaitResult("suspended", "promote-suspended", "bento-pdf is suspended")
+    fakes = _fakes(
+        land_wait=[suspended],
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": "hosts/daniel-pi/package.yml"}],
+                "changedFiles": 1,
+            }
+        },
+        host_targets=[HostTarget("daniel-pi", armed=True)],
+        **owed,
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 1 and "VERDICT: needs-manual-apply" in out
+    assert line in out
+    assert "it also changes the package of daniel-pi" in out
+    assert "gate" not in _names(calls)
+
+
 def test_a_suspended_tag_beside_an_ansible_owned_one_still_gates_that_one(land_run):
     suspended = WaitResult(
         "suspended",

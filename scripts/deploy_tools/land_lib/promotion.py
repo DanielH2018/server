@@ -9,8 +9,8 @@ tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A
 bundle file waits on `homelab` alone and gates no tag. The plan is
 docs/target-architecture/deploy/d6-delete-old-path.md, *`land.sh`'s k8s tags after D6*.
 
-`wait_on_promotion` runs `promote.py land-wait` on the merge commit. Its four outcomes
-map to a landing's words:
+`wait_on_promotion` runs `promote.py land-wait` on the merge commit. Its outcomes map to a
+landing's words:
 
 | land-wait | Verdict | Cause | Exit |
 |---|---|---|---|
@@ -18,6 +18,7 @@ map to a landing's words:
 | deploy-failed | `deploy-failed` | `promote-held`, or `soak-failed` for R's `flux/soak` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
 | suspended | `nothing-to-deploy`, or the gate when deploy.sh deployed a tag | -- | 0 |
+| suspended, with a plane or other hosts owed | `needs-manual-apply` | -- | 1 |
 
 `gave-up` keeps the closed verdict set: it prints `deferred` beside `PROMOTE_TIMEOUT_NOTE`, and
 `land_probe` reads the note and reports the landing as `gave-up`, a resume point, rather than as
@@ -193,14 +194,23 @@ def wait_on_promotion(ln: Landing) -> None:
     print(f"  {result.detail}")
     # DECIDED: `suspended`, every published tag suspended, ends the landing as
     # `nothing-to-deploy`, exit 0, unless deploy.sh deployed a tag, which the gate still
-    # grades. The suspend PR itself ends this way, so a failure verdict would be wrong for it.
-    # Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run waits
-    # on the same suspended tag again. A change that raced the gate onto a suspended tag
-    # never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
+    # grades, or a plane or another host is owed a hand, which ends `needs-manual-apply` as in
+    # `no_tag_outcome`. The suspend PR itself owes neither and ends at exit 0, so a failure
+    # verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a
+    # resume point, and a re-run waits on the same suspended tag again. A change that raced
+    # the gate onto a suspended tag never ends here: land-wait leaves it to `promote.py
+    # decide`'s `suspended-changed` hold.
     if result.verdict == "suspended":
         if ln.resolved_tags:
             return
         _print_what_else_it_owes(ln)
+        if ln.plane or ln.classification.remaining_setup:
+            ln.finish(
+                Verdict.NEEDS_MANUAL_APPLY,
+                1,
+                f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}, "
+                "and what it owes a hand is above",
+            )
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,
             0,
