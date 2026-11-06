@@ -130,15 +130,11 @@ k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee19985
 # is not itself a failure, but a hung one must not leave a
 # Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes
 # from a real one. Keep this above what k3s_longhorn_restore_drill_max_actual_bytes can take.
-# DECIDED: 2700s, raised from 1800s with the cap on 2026-08-24 — and this is NOT free to raise
-# further. The 04:10 cron is placed to clear the 05:15 manifest-prune window, which would otherwise
-# see the drill's transient restore-drill-* objects, so the timeout ceiling is 05:15 minus 04:10
-# minus a margin. 2700s ends by 04:55. A larger cap therefore cannot simply buy more time here:
-# past ~3900s the two windows collide and the cron must move first.
+# DECIDED: 2700s, raised from 1800s with the cap on 2026-08-24. To raise it further, raise
+# longhorn_restore_drill_deadline_seconds with it, or the Job dies before the restore times out.
 k3s_longhorn_restore_drill_timeout_s: 2700
 # 04:10 nightly: after the daily tier's 03:30 run and clear of every weekly shard's 04:30, so the
-# drill never contends with a backup in flight. Also clear of the 05:15 manifest-prune window,
-# which would otherwise see the drill's transient restore-drill-* objects.
+# drill never contends with a backup in flight.
 k3s_longhorn_restore_drill_cron: "10 4 * * *"
 
 manifests_rollout: ''  # noqa var-naming[no-role-prefix]

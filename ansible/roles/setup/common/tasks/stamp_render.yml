@@ -3,9 +3,9 @@
 #
 # WHY A FRAGMENT PER GROUP, not one manifest for the host. A single manifest written by one task
 # that loops EVERY declared template and checksums the repo source of each, unconditionally and
-# before any `template:` task runs, makes a tag-scoped run — `--tags manifest-prune`, the
-# natural command for redeploying the drift check itself — restamp all eight k3s scripts while
-# rendering one, making HAVE == WANT trivially true for the seven it never touched. A fragment
+# before any `template:` task runs, makes a tag-scoped run — `--tags setup_drift`, the natural
+# command for redeploying the drift check itself — restamp every declared template while
+# rendering one, making HAVE == WANT trivially true for the rest it never touched. A fragment
 # is written only by a run that carries its group's
 # tags, so a partial run leaves the other groups' fragments alone, and they stay stale — which is
 # the truth the check exists to report.

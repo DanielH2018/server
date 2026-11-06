@@ -132,9 +132,8 @@ def test_the_cadence_is_weekly_and_clear_of_every_backup_window() -> None:
         2,
         3,
         4,
-        5,
         6,
-    }  # 02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill, 05:15 prune, 06:10 trim
+    }  # 02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill, 06:10 trim
     assert int(hour) not in busy, (
         f"hour {hour} collides with a backup or prune window; the drill must not contend with "
         "the tier it is proving"
