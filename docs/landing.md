@@ -685,11 +685,14 @@ Three things sit in that position:
   record is the live copy. For a `stamp_render.yml` template it is the line in the host's render
   fragment. That line counts only when writing the fragment also runs every task in the role that
   may render the template, which the tasks' tags decide (#7406). A shared template also rendered
-  under another tag therefore stays owed, as `check-timer.service.j2` does for `initial_setup`:
-  the `setup-drift` units render under `setup_drift`, and only the `loki_route_witness` group
-  lists the template. Any other file stays owed: an unstamped file, a task file, a moved key, a
-  pair whose `live` is not a literal path. A host that cannot be read also stays owed. To clear
-  the line after a hand apply, re-run `land.sh`.
+  under a tag whose group does not list it therefore stays owed. A template several groups list
+  counts only when every fragment shows the merge commit's hash, as `check-timer.service.j2`
+  does for `initial_setup`: the `loki_route_witness` and `setup_drift` tags each render it, and
+  each tag's group lists it. A stamp or a render whose `when:` skips a host asks nothing of that
+  host, so daniel-box, whose witness is packaged, holds the template on its `setup-drift-check`
+  fragment alone. Any other file stays owed: an unstamped file, a task file, a moved
+  key, a pair whose `live` is not a literal path. A host that cannot be read also stays owed. To
+  clear the line after a hand apply, re-run `land.sh`.
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.

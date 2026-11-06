@@ -442,6 +442,8 @@
     stamp_render_name: setup-drift-check
     stamp_render_templates:
       - ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2
+      - ansible/roles/setup/common/templates/check-timer.service.j2
+      - ansible/roles/setup/common/templates/check-timer.timer.j2
 
 - name: Remove the setup-plane drift check's files from a host off the list
   tags: [crons, setup_drift]
