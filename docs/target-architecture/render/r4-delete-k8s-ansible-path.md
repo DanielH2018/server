@@ -635,8 +635,9 @@ file and into a function in `renderer_lib`:
 - `kuma_declarations`, with uptime-kuma's two asserts on it as checks that raise during the
   render.
 
-`janitorr_dry_run` is only a rename, so the janitorr template reads `janitorr_k8s_dry_run`
-directly instead.
+`janitorr_dry_run` is only a rename, so it becomes a role default that reads
+`janitorr_k8s_dry_run`. The template keeps the name, because the `janitorr-verify` Job's name
+hashes the template's source, and an edit there would rerun that Job.
 
 `test_image_builder_content_tag.py` is retargeted at the new function. While ansible-core is
 installed, it still evaluates the old expression, held in the test as a literal, through
@@ -647,7 +648,8 @@ PR 4 carries `Render-diff: none`.
 **The service set stops reading tasks.** PR 5 moves `render_targets()` into
 `renderer_lib/targets.py`, and repoints R1's importers at it: the renderer, the
 determinism modules and `shadow_diff.py compare`. A service renders when its role has a
-manifest template or a shared default its entry earns.
+manifest template, a shared default its entry earns or a vendored manifest, the arm that admits
+traefik-crds.
 `scripts/deploy_tools/render_targets.py` stays as it is until PR 6, for two reasons.
 `render_records.py` still calls it, and the facts-locked section
 `render_records/CLAUDE.md#How one run works` cites it as a path atom, so deleting it in
@@ -1661,10 +1663,13 @@ Exit 6 is read at R4's last PR with `git ls-files 'scripts/renderer/*.py' | grep
   `scripts/renderer/` with no `Render-diff:` line. One renders an empty tree on both sides,
   and it fails at the digest step, because `shadow_diff.py digest` refuses an empty tree. One
   removes `cluster/pihole-deferred/`, and this is the case that reaches the floor, through
-  `FLOOR_PATHS`. One raises `k8s_rollout_stabilise_seconds` above
-  the longest `for:` among the soak's rules, which moves the soak Job's wait W (D5, *The
-  soak as a Job*), under `Render-diff: none`, and the run names a file under
-  `cluster/soak/`. The first passes once the line names that file.
+  `FLOOR_PATHS`. One sets `k8s_rollout_stabilise_seconds` to 120 under `Render-diff: none`,
+  and [run 42231495053](https://github.com/DanielH2018/server/actions/runs/42231495053)
+  names `cluster/soak/job.yaml`. That file moves through the Job's `--stabilise-seconds`
+  argument. The soak Job's wait W (D5, *The soak as a Job*) does not move, because the
+  longest `for:` among the soak's rules is 900s. A value above 900 would move W, but
+  `test_the_wait_cap_covers_verifys_wait_on_the_rendered_soak` refuses 3600 at commit time.
+  The first case passes once the line names that file.
 - The commit pin: PR 1's head changes no render input, yet its SHA differs from its merge
   base's. Its run under `Render-diff: none` passes, which shows the pin covers every
   commit-derived byte, the soak Job's included. The same comparison run by hand, with each

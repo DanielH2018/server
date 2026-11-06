@@ -11,7 +11,9 @@ refactors moved no rendered byte (docs/homelab-render.md, *The render-diff gate*
   every problem. `Render-diff: none` allows no difference, and a list of paths must equal the
   differing files. Without the line the job prints the difference and passes, unless the PR
   touches a hazard path or moves a renderer dependency's pin. Both trees must also clear a
-  floor, so two empty renders cannot pass.
+  floor, so a render that loses a named member or a `flux/` file cannot pass. Two empty renders
+  never reach this command: the workflow's digest step fails first, because `shadow_diff.py
+  digest` refuses an empty tree (run 42230095686, quoted in PR #7373).
 
 Exit codes: 0 clean; 1 refused, or a render failed so the job could not judge.
 

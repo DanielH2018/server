@@ -96,7 +96,7 @@ groups:
       # transient failure quiet. Measured 2026-10-24 over the five rotated syslog files (from
       # 2026-09-20) on both cluster hosts, the program-windows above 3 were:
       #   - daniel-box `uv`, 2026-10-05 to 10-08: 49038 tracebacks, about 4200 per window;
-      #   - daniel-box `flock` and `release-staleness-check`: git's `fatal: unable to access`
+      #   - daniel-box `flock` and a release-drift check since deleted: git's `fatal: unable to access`
       #     during GitHub outages, a handful of windows;
       #   - daniel-server `kernel`, 2026-09-24 and 09-28: 34 and 29 `Memory cgroup out of
       #     memory` lines, a container OOM storm against its limits.

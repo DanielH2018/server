@@ -130,7 +130,6 @@ def _flip(**kwargs: object) -> Fakes:
         derived=(["traefik", "traefik-crds", "artifacts"], "pr"),
         self_applied=True,
         owners={MERGE_SHA: dict.fromkeys(FLIPPED, "flux")},
-        kustomizations=set(FLIPPED),
         state=receipt({"ansible/deploy.yml": ["narrowed-to-nothing"]}),
         land_wait=[WaitResult("settled", detail="2 applied", tags=FLIPPED)],
     )

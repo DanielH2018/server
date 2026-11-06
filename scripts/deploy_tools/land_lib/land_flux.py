@@ -1,10 +1,9 @@
 """The process boundaries a landing crosses for a tag Flux applies.
 
 `Tools.flux` holds one `FluxReads`, so a test replaces one of its fields as it replaces any
-other boundary. `promotion.split_k8s`, the gate and `handback.py`'s refusal read which tags an
-entry's `owner` takes from Ansible (`owners_at`). The refusal reads whether a tag still has a
-k8s entry (`k8s_tags_at`) and whether its Kustomization still exists
-(`kustomization_exists`). `promotion.wait_on_promotion` runs
+other boundary. `promotion.split_k8s` and the gate read which tags an entry's `owner` takes
+from Ansible (`owners_at`) and which tags have a k8s entry (`k8s_tags_at`).
+`promotion.wait_on_promotion` runs
 `promote.py land-wait` in process (`run_land_wait`). The plan is
 docs/target-architecture/deploy/d2-first-leaf.md, *How `land.sh` waits*. `pins` holds the reads
 the pin gate makes before a forward-only pin bump merges (`pin_reads.py`, `pin_gate.py`): Flux
@@ -15,7 +14,6 @@ same release as the landing that calls it.
 """
 
 import os
-import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -28,13 +26,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))
 from deploy_tools.deploy_lib.owners import declared_k8s_tags, flux_owned
 from deploy_tools.land_lib.pin_reads import PinReads
-from lib import kubectl
 
 import forge
 from deploy_tools.promote_lib.wait import WaitResult, land_wait
 from deploy_tools.promote_lib.wait_reads import live_wait_reads
-
-KUSTOMIZATIONS = "kustomizations.kustomize.toolkit.fluxcd.io"
 
 
 def owners_at(primary: Path, ref: str) -> dict[str, str]:
@@ -59,48 +54,6 @@ def k8s_tags_at(primary: Path, ref: str) -> set[str]:
     return declared_k8s_tags(primary, ref)
 
 
-class KustomizationUnreadable(RuntimeError):
-    """The read-only kubectl could not say whether a Kustomization exists."""
-
-
-def kustomization_exists(
-    name: str, run: Callable[..., subprocess.CompletedProcess] = kubectl.kubectl
-) -> bool:
-    """Whether the Kustomization `name` exists in flux-system, read with the read-only kubectl.
-
-    `run` is `lib.kubectl.kubectl`, or a fake of it.
-
-    Raises:
-        KustomizationUnreadable: kubectl failed for any reason but `NotFound`.
-    """
-    try:
-        proc = run(
-            "prod",
-            "get",
-            KUSTOMIZATIONS,
-            "-n",
-            "flux-system",
-            name,
-            "-o",
-            "name",
-            timeout=60,
-        )
-    except (
-        OSError,
-        subprocess.SubprocessError,
-        kubectl.MissingKubectl,
-        kubectl.WrongCluster,
-    ) as exc:
-        raise KustomizationUnreadable(str(exc)) from exc
-    if proc.returncode == 0:
-        return True
-    if "NotFound" in proc.stderr:
-        return False
-    raise KustomizationUnreadable(
-        f"kubectl exited {proc.returncode}: {proc.stderr.strip()}"
-    )
-
-
 def run_land_wait(
     merge: str,
     services: list[str],
@@ -119,7 +72,6 @@ class FluxReads:
 
     Attributes:
         owners_at: `owners_at`.
-        kustomization_exists: `kustomization_exists`.
         land_wait: `run_land_wait`, taking the merge commit, the tags the landing names
             on its own, the primary checkout, the cap in seconds, or None for none, and the
             most the reboot window may add to the cap.
@@ -128,7 +80,6 @@ class FluxReads:
     """
 
     owners_at: Callable[[Path, str], dict[str, str]] = owners_at
-    kustomization_exists: Callable[[str], bool] = kustomization_exists
     land_wait: Callable[[str, list[str], Path, float | None, int], WaitResult] = (
         run_land_wait
     )

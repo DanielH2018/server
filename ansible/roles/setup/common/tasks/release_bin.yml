@@ -58,8 +58,8 @@
 #                          and the release cannot drift from the stamp.
 #   release_bin_files      list of {src: <repo-relative>, name: <basename on host>} for artifacts
 #                          copied verbatim. A dict rather than a bare path because the copy case
-#                          is where the two names diverge: files/live_drift_check.py is deployed
-#                          as live-drift-check.py.
+#                          is where the two names can diverge: files/foo_bar.py can deploy as
+#                          foo-bar.py.
 #   release_bin_owner      optional, defaults to root
 #   release_bin_keep       optional, defaults to 5 releases retained
 #

@@ -8,12 +8,10 @@ Usage::
 
 The role is a `containers_list` entry plus a Deployment template (#4298). The entry is
 appended to `ansible/inventory/host_vars/daniel-box.yml`, and `templates/deployment.yaml.j2`
-is the one manifest the role ships. Three small files sit beside the template:
+is the one manifest the role ships. The role has no `tasks/`: the renderer derives the file
+lists from `templates/` and the entry (#3662), and the workload to restart from the role's name.
+Two small files sit beside the template:
 
-* `tasks/main.yml` is the bare `include_role` of `k8s/manifests`, with no `vars:`. That role
-  derives the file lists from `templates/` and the entry (#3662), defaults
-  `manifests_service` to the role's name (#4053), and reads `manifests_rollout |
-  default(manifests_service)` wherever it needs the workload to wait on.
 * `defaults/main.yml` holds what has no other home: the image pin Renovate's k8s-defaults
   manager bumps, the `k8s_autodeploy` stance `lib.k8s_roles.k8s_autodeploy_denylist` raises
   without, the resources, and the pinned uid.
@@ -81,25 +79,6 @@ def var_prefix(name: str) -> str:
     spelled any other way needs a per-line noqa.
     """
     return name.replace("-", "_")
-
-
-def tasks_main(name: str) -> str:
-    """`tasks/main.yml`: the bare include of the shared render/apply/queue role.
-
-    It passes no vars. `k8s/manifests` derives the file lists from the role's `templates/`,
-    adding the shared `service.yaml` and `ingressroute.yaml` because the entry carries a
-    `port` and, for a routed service, a `hostname`. Its rollout target defaults to the
-    service name, which is the scaffolded Deployment's name.
-
-    Keep the `name: k8s/manifests` line unquoted and uncommented:
-    `ansible/tests/deploy/_autodeploy_rollout.py:_primary_rollout_name` matches it literally to
-    resolve a role with no `manifests_rollout` to the role's own name.
-    """
-    return f"""---
-- name: Deploy {name} to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests
-"""
 
 
 def defaults_main(
@@ -296,7 +275,6 @@ def write_role(args, roles_dir: Path | None = None) -> list[Path]:
     """
     role = (roles_dir or K8S_ROLES) / args.name
     files = {
-        role / "tasks" / "main.yml": tasks_main(args.name),
         role / "defaults" / "main.yml": defaults_main(
             args.name, args.image, args.autodeploy, args.autodeploy_reason, args.uid
         ),

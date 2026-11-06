@@ -10,15 +10,16 @@ still while the image changes. That ships a stale image behind a fresh-looking n
 strictly worse than the mutable tag, and it reads green throughout. So every
 test below is a pair: one input that must move the tag, and the identical input that must not.
 
-The expression is read out of the role and evaluated through Ansible's own templar against real
-files on disk, rather than restated here. A restated copy would keep passing after the role
-changed, and a stubbed `lookup` would not prove the real lookups resolve at all.
+`derived.content_tag` is the rule under test. Each tag is checked against the role's expression,
+evaluated through Ansible's own templar against real files on disk, because a stubbed `lookup`
+would not prove the real lookups resolve at all.
 
 Run: uv run pytest ansible/tests/deploy/test_image_builder_content_tag.py
 """
 
 import re
 import shutil
+from typing import cast
 
 import pytest
 from lib import yaml_fast
@@ -26,8 +27,13 @@ from ansible.parsing.dataloader import DataLoader
 from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
 from _helpers import load_tasks
-from _image_builder_tag import set_fact_expression, templar_content_tag
+from _image_builder_tag import (
+    CONTEXT_DATA_EXPRESSION,
+    templar_content_tag,
+    templar_value,
+)
 from _k8s_render import render_role_template
+from renderer.renderer_lib.derived import content_tag
 
 
 ROLE = ANSIBLE / "roles" / "k8s" / "image-builder"
@@ -35,7 +41,6 @@ TASKS = ROLE / "tasks" / "main.yml"
 CONTEXT_TPL = ROLE / "templates" / "context-configmap.yaml.j2"
 BUILD_JOB_TPL = "build-job.yaml.j2"
 
-FACT = "image_builder_content_tag"
 
 # `sha-` + 12 hex. Both halves matter: the prefix is what registry-gc.sh's prune keys on to tell a
 # content tag from `latest` or `buildcache`, and the length is what keeps the tag a legal Docker
@@ -44,28 +49,24 @@ FACT = "image_builder_content_tag"
 TAG_RE = re.compile(r"^sha-[0-9a-f]{12}$")
 
 
-def _tag_expression() -> str:
-    """The Jinja template the role assigns to the content-tag fact, verbatim."""
-    return set_fact_expression(TASKS, FACT)
-
-
 def _tag(dockerfile, context=None, context_files=None, role=ROLE, name="demo") -> str:
-    """Evaluate the shipped expression against real paths, exactly as a deploy does.
+    """`derived.content_tag` over the real context, checked against Ansible's evaluation of it.
 
     Point `role` at a copy of the role to vary the templates themselves.
     """
-    return templar_content_tag(
-        {
-            "image_builder_name": name,
-            "k8s_namespace": "homelab",
-            "image_builder_dockerfile": str(dockerfile),
-            "image_builder_context": {str(k): v for k, v in (context or {}).items()},
-            "image_builder_context_files": {
-                str(k): v for k, v in (context_files or {}).items()
-            },
+    variables = {
+        "image_builder_name": name,
+        "k8s_namespace": "homelab",
+        "image_builder_dockerfile": str(dockerfile),
+        "image_builder_context": {str(k): v for k, v in (context or {}).items()},
+        "image_builder_context_files": {
+            str(k): v for k, v in (context_files or {}).items()
         },
-        role,
-    )
+    }
+    data = cast(dict, templar_value(CONTEXT_DATA_EXPRESSION, variables, role))
+    tag = content_tag(data)
+    assert tag == templar_content_tag(variables, role)
+    return tag
 
 
 def _write(tmp_path, name: str, body: str):
@@ -148,17 +149,8 @@ def test_a_caller_with_no_context_at_all_still_gets_a_tag(dockerfile):
 #
 # The tag hashes the `data` of context-configmap.yaml.j2's own render, so there is no second list
 # of inputs that can fall out of step with the build context. The pair below is the cost of that
-# choice: `data` alone means the render's prose and metadata must NOT move the tag, and these two
-# tests are what say so in both directions.
-
-
-def test_the_hash_reads_the_build_contexts_own_template():
-    """Names the source, so a rewrite that hashes something else has to say so here."""
-    assert CONTEXT_TPL.name in _tag_expression(), (
-        f"the content tag no longer hashes {CONTEXT_TPL.name}'s render. It is the only artefact "
-        "that is by construction every byte the build reads — anything else is a second list of "
-        "inputs, which can silently omit one and hold the tag still across a change to it."
-    )
+# choice: `data` alone means the render's prose and metadata must NOT move the tag, and the two
+# tests below say so.
 
 
 def test_rewording_a_comment_in_that_template_does_not_move_the_tag(

@@ -3,17 +3,6 @@
 # has is write access to the whole media tree, which is why the `janitorr-verify` Job
 # (templates/verify/) gates its revision.
 
-# Read by templates/config/application.yml.j2 through lookup('template'), which defaults it to
-# false. A set_fact rather than an include_role var because the render
-# happens inside the manifests role, and an include var there would have to carry that role's
-# `manifests_` prefix to satisfy ansible-lint — which would put janitorr's deletion switch under
-# a name that says nothing about janitorr. The renderer evaluates this fact from here too
-# (scripts/renderer/renderer_lib/task_inputs.py), so the task stays after the flip.
-- name: Select the dry-run mode janitorr's config renders with
-  tags: [config]
-  ansible.builtin.set_fact:
-    janitorr_dry_run: "{{ janitorr_k8s_dry_run }}"
-
 # The absent arms that remove the retired health reader's host cron, its script, its code
 # directory and its drift fragment moved to setup/k8s_host_files (tasks/janitorr.yml there) in
 # D5's conversion PR for janitorr.

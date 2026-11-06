@@ -14,9 +14,7 @@ route — infra role, no Deployment of its own.
 
 - **Flux applies it, not Ansible** (#5652, Wave D). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
-  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
-  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. The claim carries
+  reaches the cluster when `promote` publishes and verifies the next bundle. The claim carries
   `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
   bundle can delete it.
 - **Must run before any role that mounts `media-data`** — the seven mounters (`sonarr`,

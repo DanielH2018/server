@@ -18,7 +18,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | Phase | Reads | Writes |
 |---|---|---|
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
-| `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the PR head's and merge base's `owner`s and the head's k8s tags (the handback refusal) | -- |
+| `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the head's pins (the pin gate) | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.merged_at`, `ledger.t_merged`, `ledger.merge_sha` |
 | `closing_refs.close_stranded` | `opts.pr` | `warnings` |
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary`, what each host the note would name holds (`deployed_copies`) | `classification` (frozen: the plane note, the self-applied half and their inputs), `resolved_tags`, `needs_diff` |

@@ -25,14 +25,13 @@ runbooks, design documents and generated reference pages are readable in a brows
   a deploy renders manifests, it does not rebuild the site.
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. traefik and authelia stay
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
+  and authelia stay
   Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
   annotation, not in `dependsOn`. The Deployment is `RollingUpdate` with one replica, so a
   roll keeps one pod serving.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. The Kustomization's `wait` replaces the
+  and no Flux path runs it. It stays until R4 deletes it. The Kustomization's `wait` replaces the
   rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so
   an nginx config edit still rolls the pod. The site directory is the host package's (below).
 

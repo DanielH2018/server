@@ -16,9 +16,8 @@ replaced the retired Kopia scope for the Pi.
 
 - **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
-  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
-  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. Its Kustomization renders `decryption`, because the
+  reaches the cluster when `promote` publishes and verifies the next bundle. Its Kustomization
+  renders `decryption`, because the
   private key arrives as the SOPS manifest `pi-peer-backup.ssh-key-secret.sops.yaml`.
 - **Shape:** CronJob 23:00 (America/Chicago), built image (alpine + rsync/ssh/curl + the
   script), any node. The promote workflow's `images` job builds the image and pushes
@@ -109,6 +108,5 @@ replaced the retired Kopia scope for the Pi.
 - Script: `files/pull-pi-peers.sh` (baked into the image — a merged edit moves the content tag,
   and `promote` builds the image and runs the gate).
 - Gate: `flux_cronjob_gates` in `defaults/main.yml`. `tasks/main.yml` keeps the image-builder
-  and manifests includes for a handback, which moves `image_builder_builds` back onto the
-  build include (`ansible/roles/k8s/image-builder/CLAUDE.md`), and no Flux path runs them.
+  and manifests includes until R4 deletes them, and no Flux path runs them.
 - Pi half: `hosts/components/pi-peer-backup-target/component.yml`, with its two files.

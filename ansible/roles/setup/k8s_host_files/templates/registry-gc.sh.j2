@@ -32,10 +32,9 @@
 # exception to contract C4 on field ownership for deploy/ghcr-mirror (#5732), and #6536 extends
 # it to deploy/dockerhub-mirror.
 #
-# ROOT KUBECONFIG, unlike every sibling script deployed by this repo. disk-health.sh,
-# longhorn-backup-health.sh and manifest-prune-check.sh all use the read-only ServiceAccount
-# precisely so a bug there cannot mutate the cluster. This one MUST scale a Deployment, so it
-# holds a credential that can. Everything it does is scoped to the two mirror Deployments, their
+# ROOT KUBECONFIG, unlike every sibling script deployed by this repo.
+# longhorn-backup-health.sh uses the read-only ServiceAccount precisely so a bug there cannot
+# mutate the cluster. This one MUST scale a Deployment, so it holds a credential that can. Everything it does is scoped to the two mirror Deployments, their
 # own Jobs and their keep-set ConfigMaps; keep it that way.
 #
 # ONE LOCK FOR THE WHOLE RUN. The script holds an flock on registry_k8s_gc_lock_file from

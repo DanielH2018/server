@@ -1,6 +1,6 @@
 ---
-# Flux applies pihole through `promote` (`owner: flux`), and no Flux path runs this file. It
-# stays for the handback (docs/flux-deploy-plane.md). The tasks it held before the flip moved:
+# Flux applies pihole through `promote` (`owner: flux`), and no Flux path runs this file. It stays
+# until R4 deletes it. The tasks it held before the flip moved:
 # - `roll_one.yml` and `apply_instance_2.yml`: the one-at-a-time roll is Kustomization order
 #   (`pihole-deferred` depends on `pihole` with `wait: true`), and the sibling check is
 #   `templates/precheck/guard.yaml.j2`, which `pihole` waits on;

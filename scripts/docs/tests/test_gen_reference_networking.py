@@ -34,7 +34,13 @@ def _make(tmp_path):
     )
     roles = tmp_path / "roles_k8s"
 
+    def _defaults(role):
+        path = roles / role / "defaults" / "main.yml"
+        path.parent.mkdir(parents=True)
+        path.write_text("---\n")
+
     def _tpl(role, body):
+        _defaults(role)
         path = roles / role / "templates" / "ingressroute.yaml.j2"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(textwrap.dedent(body))
@@ -46,6 +52,7 @@ def _make(tmp_path):
         "{{ ingressroute(a, b, c, d, extra_middlewares=['csp-karakeep']) }}\n",
     )
     # media-volume: an infra role with no ingressroute template at all.
+    _defaults("media-volume")
     (roles / "media-volume" / "templates").mkdir(parents=True)
     group_vars = tmp_path / "all.yml"
     group_vars.write_text("k8s_public_route: true\n")

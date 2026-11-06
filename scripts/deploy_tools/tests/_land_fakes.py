@@ -192,9 +192,6 @@ class Fakes:
     # an entry for every tag `owners` names at any ref, so a test retires a tag only by saying
     # so. An exception is raised in place of a set.
     k8s_tags: dict[str, set[str] | Exception] = field(default_factory=dict)
-    # `tools.kustomization_exists`: the Kustomizations kubectl finds in flux-system. An
-    # exception is raised for every read.
-    kustomizations: set[str] | Exception = field(default_factory=set)
     # The host wait's answers (`_land_host_fakes.py`): the HostTargets for the merge commit, and
     # the (verdict, rc, detail) `wait_for_hosts` ends with, None being every target settling.
     host_targets: list[Any] = field(default_factory=list)
@@ -424,12 +421,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             raise answer
         return answer
 
-    def kustomization_exists(name):
-        calls.append(("kustomization_exists", (name,), {}))
-        if isinstance(f.kustomizations, Exception):
-            raise f.kustomizations
-        return name in f.kustomizations
-
     land_wait = _seq(f.land_wait, calls, "land_wait")
 
     def pins_at(checkout, sha):
@@ -473,7 +464,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         snapshot=snapshot,
         declared_at=lambda ref, primary: f.declared_at,
         read_state=lambda root, name: f.state.get(name, ""),
-        flux=FluxReads(owners_at, kustomization_exists, land_wait, pins, k8s_tags_at),
+        flux=FluxReads(owners_at, land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,
         **host_fakes(f, calls),
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),

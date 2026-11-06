@@ -22,9 +22,8 @@ and contract unchanged.
 - **Depends on:** sonarr and radarr, at runtime
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. The Deployment is `Recreate` with one
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
+  Deployment is `Recreate` with one
   replica, so a roll stops the loop until the new pod starts. It has no readinessProbe, so the
   Kustomization's `wait` reads the pod Ready as soon as its container starts, as the Ansible
   rollout wait did.
@@ -35,8 +34,8 @@ and contract unchanged.
   `cluster-vars`, so a rotated value is live before autofix-bridge reconciles, and the restart
   checksum rolls the pod. A rotation reaches the cluster only through `cluster_vars.py write`.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the
-  handback. The Kustomization's `wait` replaces the rollout wait, and the restart checksum
+  and no Flux path runs it. It stays until R4 deletes it. The Kustomization's `wait` replaces the
+  rollout wait, and the restart checksum
   replaces the shared restart.
 
 ## Autonomous-role contract (it changes state with no human in the loop)

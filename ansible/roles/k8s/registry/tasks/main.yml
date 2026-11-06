@@ -14,7 +14,7 @@
 # The git history before the flip has the deleted tasks.
 
 # The claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
-# ahead of the workload. The include stays for the handback (docs/flux-deploy-plane.md).
+# ahead of the workload. The include stays until R4 deletes it.
 - name: Deploy the image registry to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests

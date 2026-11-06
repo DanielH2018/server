@@ -20,9 +20,8 @@ shared conventions.
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
-  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. authelia, media-volume and traefik stay
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. authelia, media-volume
+  and traefik stay
   Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
   annotation, not in `dependsOn`. The Deployment is `Recreate`, so a change that rolls it
   takes the service down briefly.
@@ -38,7 +37,7 @@ shared conventions.
   is a shared claim other roles also write; a revert can forget a subtitle file bazarr already
   wrote there, which is self-healing because bazarr checks existence before re-downloading.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its pre-apply snapshot through
+  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `bazarr-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait.
 

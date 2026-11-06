@@ -233,22 +233,6 @@ treats `BLOCKED` as a question about checks. The wait keeps going
 while `await_ci.py` answers `pending`, which is what it answers until a required check
 registers; that is the grace period, so no landing is cut short for polling before CI started.
 
-**A PR that hands a tag back from Flux is refused before the merge while Flux still owns the
-tag.** Before the direct merge, `land_lib/handback.py` compares each tag's `owner` at the PR's
-merge base and at its head. For each tag that the PR makes Ansible-owned, it reads
-`kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system <tag>`. It merges only
-on `NotFound`. A Kustomization that exists, or a read that fails, ends the landing with
-`refused` and nothing merged. The order of the two PRs that hand a service back is in
-[docs/flux-deploy-plane.md](flux-deploy-plane.md#handing-a-service-back). A merge made outside
-`land.sh` bypasses this check.
-
-**The second PR of a retirement passes that check.** A tag whose `containers_list` entry is gone
-at the head is retired rather than handed back, because no Ansible path applies a tag with no
-entry. `land_lib/handback.py` says so in one line and does not read the tag's Kustomization. The merge
-itself is what makes the root prune that Kustomization
-([docs/flux-deploy-plane.md](flux-deploy-plane.md#retiring-a-flux-owned-service)). A failed read
-of the head's entries ends the landing with `refused`.
-
 **A PR that bumps a forward-only pin merges only through the pin gate.** When the head moves
 `k3s_longhorn_version` or `k3s_metallb_version`, `land_lib/pin_gate.py` runs before the direct
 merge. It refuses on any host but daniel-box. It refuses while `DEPLOY_HOLD` reads anything

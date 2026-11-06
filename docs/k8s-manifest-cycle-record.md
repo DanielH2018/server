@@ -234,8 +234,7 @@ reaches the cluster another way.
 This section describes an Ansible-owned role, one whose `containers_list` entry has no `owner`
 key. `verify_secret_keys.yml` runs only from the k8s play in `ansible/deploy.yml`, whose loop
 `ansible_owned` filters to those entries. On 2026-11-05 every entry carries `owner: flux`, so the
-task file runs for none of them until a service is handed back (`docs/flux-deploy-plane.md`,
-*Handing a service back*). Under Flux, `.claude/rules/k8s-templates.md`, *Removing a key from a
+task file runs for none of them. Under Flux, `.claude/rules/k8s-templates.md`, *Removing a key from a
 Secret template*, holds: Flux's server-side apply removes a key it owns, and a key that another
 field manager holds stays live until someone patches it out.
 

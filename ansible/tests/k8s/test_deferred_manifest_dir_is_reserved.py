@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 from renderer.renderer_lib.task_inputs import render_defaults
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
-from _role_census import task_files
+from _role_census import task_files, write_fixture_role
 from test_no_role_stages_files_in_a_pruned_manifest_dir import (
     MANIFESTS_ROLE,
     _included_role,
@@ -94,23 +94,16 @@ _CLAIMER = """---
 """
 
 
-def _write_role(root: Path, name: str, text: str) -> Path:
-    tasks_file = root / name / "tasks" / "main.yml"
-    tasks_file.parent.mkdir(parents=True)
-    tasks_file.write_text(text)
-    return root
-
-
 def test_an_unrelated_service_beside_a_deferrer_is_clean(tmp_path):
-    root = _write_role(tmp_path, "gadget", _DEFERRER)
-    _write_role(root, "widget", _CLAIMER.format(service="widget"))
+    root = write_fixture_role(tmp_path, "gadget", _DEFERRER)
+    write_fixture_role(root, "widget", _CLAIMER.format(service="widget"))
     assert deferred_name_claims(root) == {}
     assert deferred_dirs(root) == {"gadget-instance-2": "gadget"}
 
 
 def test_a_service_claiming_a_deferred_directory_is_flagged(tmp_path):
-    root = _write_role(tmp_path, "gadget", _DEFERRER)
-    _write_role(root, "second", _CLAIMER.format(service="gadget-instance-2"))
+    root = write_fixture_role(tmp_path, "gadget", _DEFERRER)
+    write_fixture_role(root, "second", _CLAIMER.format(service="gadget-instance-2"))
     assert set(deferred_name_claims(root)) == {"gadget-instance-2"}
 
 

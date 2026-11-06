@@ -18,9 +18,8 @@ conventions.
 - **Secret** (a SOPS key, not a value): `cloudflare_dns_token`.
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. Both Deployments are `RollingUpdate`
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
+  Deployments are `RollingUpdate`
   with one replica and no readinessProbe, so the Kustomization's `wait` reads a pod Ready as
   soon as its container starts. That is the same gate the explicit `rollout status` task gave
   under Ansible.
@@ -32,8 +31,8 @@ conventions.
   write`. The renderer stamps a restart checksum on both Deployments, so a changed token rolls
   both pods.
 - **Where the tasks went.** `tasks/main.yml` holds only the `k8s/manifests` include, and no
-  Flux path runs it. The Kustomization's `wait` replaces the Ansible wait task, so a handback
-  restores that task with the rest of the role's Ansible half. The restart checksum replaces
+  Flux path runs it. The Kustomization's `wait` replaces the Ansible wait task. The restart checksum
+  replaces
   the `manifests_extra_rollouts` restart described below.
 
 ## Notable

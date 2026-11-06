@@ -323,8 +323,7 @@ def test_drill_runs_daily() -> None:
         "the drill must run every night for the rotation to cover the fleet"
     )
     assert (int(hour), int(minute)) == (4, 10), (
-        "04:10 sits after the 03:30 daily tier, clear of the 04:30 weekly shards and of the "
-        "05:15 manifest-prune window that would see the drill's transient objects"
+        "04:10 sits after the 03:30 daily tier and clear of the 04:30 weekly shards"
     )
 
 

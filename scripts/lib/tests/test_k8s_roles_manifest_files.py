@@ -28,11 +28,11 @@ TAKES_THE_DEFAULT = "bazarr"
 SHIPS_ITS_OWN = "registry"
 
 
-def _role(tmp_path, name, tasks_body):
+def _role(tmp_path, name, defaults_body):
     role = tmp_path / name
-    (role / "tasks").mkdir(parents=True)
+    (role / "defaults").mkdir(parents=True)
     (role / "templates").mkdir()
-    (role / "tasks" / "main.yml").write_text(tasks_body)
+    (role / "defaults" / "main.yml").write_text(defaults_body)
     return role
 
 
@@ -40,9 +40,9 @@ def test_an_inline_list_is_read(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_files: [deployment.yaml, service.yaml]\n"
-        "    manifests_rollout: widget\n",
+        "---\n"
+        "manifests_files: [deployment.yaml, service.yaml]\n"
+        "manifests_rollout: widget\n",
     )
     assert declared_manifest_files("widget", tmp_path) == {
         "deployment.yaml",
@@ -54,9 +54,9 @@ def test_a_block_list_is_read(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_files:\n      - deployment.yaml\n      - service.yaml\n"
-        "    manifests_secret_files:\n      - secret.yaml\n",
+        "---\n"
+        "manifests_files:\n  - deployment.yaml\n  - service.yaml\n"
+        "manifests_secret_files:\n  - secret.yaml\n",
     )
     assert declared_manifest_files("widget", tmp_path) == {
         "deployment.yaml",
@@ -70,11 +70,11 @@ def test_a_folded_jinja_expression_is_read(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_files: >-\n"
-        "      {{ ([] if widget_manage_claim | bool else ['pvc.yaml'])\n"
-        "         + ['deployment.yaml', 'service.yaml'] }}\n"
-        "    manifests_rollout: widget\n",
+        "---\n"
+        "manifests_files: >-\n"
+        "  {{ ([] if widget_manage_claim | bool else ['pvc.yaml'])\n"
+        "     + ['deployment.yaml', 'service.yaml'] }}\n"
+        "manifests_rollout: widget\n",
     )
     assert declared_manifest_files("widget", tmp_path) == {
         "pvc.yaml",
@@ -88,10 +88,10 @@ def test_a_sibling_key_is_not_read_as_a_manifest(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_files:\n      - deployment.yaml\n"
-        "    manifests_deferred_dir_name: widget-later\n"
-        "  loop_control:\n    label: other.yaml\n",
+        "---\n"
+        "manifests_files:\n  - deployment.yaml\n"
+        "manifests_deferred_dir_name: widget-later\n"
+        "loop_control:\n  label: other.yaml\n",
     )
     assert declared_manifest_files("widget", tmp_path) == {"deployment.yaml"}
 
@@ -101,10 +101,10 @@ def test_a_name_in_a_comment_is_not_read(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_exclude_files:\n"
-        "      # macro.yaml is imported by deployment.yaml, not applied.\n"
-        "      - macro.yaml  # and so is not service.yaml\n",
+        "---\n"
+        "manifests_exclude_files:\n"
+        "  # macro.yaml is imported by deployment.yaml, not applied.\n"
+        "  - macro.yaml  # and so is not service.yaml\n",
     )
     assert declared_manifest_files("widget", tmp_path) == set()
     assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == (
@@ -117,23 +117,22 @@ def test_a_name_in_a_list_item_is_read(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_exclude_files:\n      - service.yaml\n",
+        "---\nmanifests_exclude_files:\n  - service.yaml\n",
     )
     assert resolved_manifest_files("widget", tmp_path, {"port": 80}) == (set(), set())
 
 
-def test_a_role_with_no_tasks_file_declares_nothing(tmp_path):
+def test_a_role_with_no_defaults_file_raises(tmp_path):
     (tmp_path / "widget").mkdir()
-    assert declared_manifest_files("widget", tmp_path) == set()
+    with pytest.raises(ValueError, match=r"widget has no defaults/main\.yml"):
+        declared_manifest_files("widget", tmp_path)
 
 
 def test_the_shared_default_resolves_only_when_the_role_ships_no_template(tmp_path):
     role = _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_files: [deployment.yaml, service.yaml]\n",
+        "---\nmanifests_files: [deployment.yaml, service.yaml]\n",
     )
     assert [p.name for p in shared_default_templates("widget", tmp_path)] == [
         "service-default.yaml.j2"
@@ -150,7 +149,7 @@ def test_a_role_that_names_no_service_gets_no_default(tmp_path):
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [deployment.yaml]\n",
+        "---\nmanifests_files: [deployment.yaml]\n",
     )
     assert shared_default_templates("widget", tmp_path) == []
 
@@ -171,8 +170,7 @@ def test_manifest_template_prefers_the_roles_own_over_the_shared_default(tmp_pat
     role = _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n"
-        "    manifests_files: [deployment.yaml, ingressroute.yaml]\n",
+        "---\nmanifests_files: [deployment.yaml, ingressroute.yaml]\n",
     )
     shared = manifest_template("widget", "ingressroute.yaml", tmp_path)
     assert shared is not None and shared.name == "ingressroute-default.yaml.j2"
@@ -189,23 +187,23 @@ def test_manifest_template_resolves_nothing_for_a_basename_the_role_never_names(
     _role(
         tmp_path,
         "widget",
-        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [deployment.yaml]\n",
+        "---\nmanifests_files: [deployment.yaml]\n",
     )
     assert manifest_template("widget", "ingressroute.yaml", tmp_path) is None
     assert manifest_template("widget", "configmap.yaml", tmp_path) is None
 
 
 def test_a_folded_list_in_defaults_is_read(tmp_path):
-    role = _role(tmp_path, "widget", "---\n- name: Deploy widget\n")
-    (role / "defaults").mkdir()
-    (role / "defaults" / "main.yml").write_text(
+    _role(
+        tmp_path,
+        "widget",
         "---\n"
         "manifests_files: >-  # noqa var-naming[no-role-prefix]\n"
         "  {{ ['deployment.yaml'] + (['route.yaml'] if lever | bool else []) }}\n"
         "\n"
         "manifests_secret_files:  # noqa var-naming[no-role-prefix]\n"
         "  - secret.yaml\n"
-        "other: unrelated.yaml\n"
+        "other: unrelated.yaml\n",
     )
     assert resolved_manifest_files("widget", tmp_path) == (
         {"deployment.yaml", "route.yaml"},
@@ -213,13 +211,11 @@ def test_a_folded_list_in_defaults_is_read(tmp_path):
     )
 
 
-def test_a_file_list_set_in_defaults_and_tasks_is_flagged(tmp_path):
-    role = _role(
-        tmp_path,
-        "widget",
-        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [a.yaml]\n",
+def test_a_file_list_set_in_tasks_is_flagged(tmp_path):
+    role = _role(tmp_path, "widget", "---\n")
+    (role / "tasks").mkdir()
+    (role / "tasks" / "main.yml").write_text(
+        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [a.yaml]\n"
     )
-    (role / "defaults").mkdir()
-    (role / "defaults" / "main.yml").write_text("---\nmanifests_files: [b.yaml]\n")
-    with pytest.raises(ValueError, match=r"manifests_files.*in both"):
+    with pytest.raises(ValueError, match=r"manifests_files.*tasks/main\.yml"):
         resolved_manifest_files("widget", tmp_path)

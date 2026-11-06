@@ -16,11 +16,9 @@ no volume, no route, no secret.
 - **Flux applies it, not Ansible** (D5.5, the first Wave A PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
-  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. To give it back to
-  Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects.
+  image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Flux applies the same render, and the
+  and no Flux path runs it. It stays until R4 deletes it. Flux applies the same render, and the
   Kustomization's `wait` replaces the rollout wait.
   `k8s_autodeploy` no longer gates an apply, because the deployer skips the tag. It still
   decides whether Renovate automerges the image bump.

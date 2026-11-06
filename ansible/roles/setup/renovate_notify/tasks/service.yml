@@ -44,7 +44,7 @@
     daemon_reload: true
   become: true
 
-# Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
+# Render provenance for setup-drift-check.sh's stale-script arm — see the gitops_deploy role
 # for the reasoning.
 - name: Stamp the rendered renovate-notify units
   tags: [renovate-notify-service]

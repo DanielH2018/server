@@ -20,9 +20,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   in-cluster `mosquitto` Service name
 - **Flux applies it, not Ansible** (D5.10, an own-window flip). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. mosquitto is Flux-owned too, so the
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. mosquitto
+  is Flux-owned too, so the
   Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
   accepts one client, so a change that rolls the pod drops every Zigbee device from MQTT until
   the new pod connects.
@@ -40,7 +39,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   published render. Flux substitutes the values from the `homelab-cluster-vars` Secret. A
   rotation reaches the cluster only through `cluster_vars.py write`.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the handback. Its pre-apply snapshot through
+  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `zigbee2mqtt-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait.
 

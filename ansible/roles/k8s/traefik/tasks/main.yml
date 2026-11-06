@@ -1,6 +1,6 @@
 ---
-# Flux applies traefik through `promote` (`owner: flux`), and no Flux path runs this file. It
-# stays for the handback (docs/flux-deploy-plane.md). The tasks it held before the flip moved:
+# Flux applies traefik through `promote` (`owner: flux`), and no Flux path runs this file. It stays
+# until R4 deletes it. The tasks it held before the flip moved:
 # - the CRD install and its "established" wait: the `traefik-crds` tag renders the CRDs, and
 #   traefik's Kustomization depends on it, so Flux applies traefik only once that tag is Ready;
 # - the RBAC staging under /etc/rancher/k3s and its apply: rbac.yaml.j2 renders into this

@@ -48,7 +48,7 @@ from pathlib import Path
 import jinja2
 from ansible.errors import AnsibleError
 
-from deploy_tools.render_targets import render_targets
+from renderer.renderer_lib.targets import render_targets, vendored_paths
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.ansible_jinja_env import ansible_bool
@@ -66,7 +66,6 @@ from lib.render_guard import SHARED_TPL, StrictChainableUndefined
 from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS, K8S_ROLES
 from renderer.renderer_lib.bundle import (
     KUSTOMIZATION,
-    PATCHES_DIR,
     SHARED_KINDS,
     kustomization_text,
     reserved_tags,
@@ -107,10 +106,6 @@ GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
 # Each group variable naming a namespace that a role creates, mapped to that role. A deferred
 # document in that namespace gives `<tag>-deferred` an edge to the role (D4.2).
 NAMESPACE_ROLE_VARS = {"k8s_observability_namespace": "observability"}
-# A role's vendored files sit in these subdirectories of `files/` and keep them under
-# `cluster/<tag>/` (H1 *Vendored upstream manifests*): upstream manifests byte for byte, and
-# Kustomize patches. H1.1d's `health_vendored.py` reads the same two.
-VENDORED_DIRS = ("upstream", PATCHES_DIR)
 # The render keys that decide what the manifests role renders and where.
 INCLUDE_KEYS = frozenset(
     {
@@ -496,9 +491,7 @@ def vendored_files(tag: str, roles: Path = K8S_ROLES) -> dict[str, str]:
     """
     return {
         f"{sub}/{path.name}": path.read_bytes().decode()
-        for sub in VENDORED_DIRS
-        for path in sorted((roles / tag / "files" / sub).glob("*.y*ml"))
-        if path.is_file()
+        for sub, path in vendored_paths(roles / tag)
     }
 
 

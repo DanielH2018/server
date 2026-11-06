@@ -9,7 +9,7 @@ Each `deploy.sh` site asks this module:
 - `--list-services` names each on stderr before it runs `deploy_tags.py list`
   (`mark_k8s_tags`).
 
-`flux_owned` reads `owner` for the landing's gate and handback refusal.
+`flux_owned` reads `owner` for the landing's gate.
 """
 
 import subprocess

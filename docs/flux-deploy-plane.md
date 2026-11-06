@@ -332,58 +332,36 @@ one of those fields. It also exits 1 when the two inputs share no object, or whe
 dry-run object has the Apply entry. Either the dry run did not run as `kustomize-controller`,
 or every object in it declares nothing, and the census cannot tell the two apart. Both inputs can hold Secret data, so delete the two files after the run.
 
-## Handing a service back
+## A Flux-owned service stays Flux-owned
 
-A service whose `containers_list` entry sets `owner: flux` is applied by Flux, and every
-Ansible path skips it. Handing it back to Ansible takes two PRs, in this order. Every later
-return of a service to Ansible follows the same order. A retirement takes two PRs as well, in
-the order *Retiring a flux-owned service* states.
+**The operator ruled on 2026-11-06 that services do not move back from Flux to Ansible.** A
+Flux-owned service stays Flux-owned, or it retires through *Retiring a flux-owned service*. The
+ruling ends the handback, the two-PR move to Ansible that D2 planned as a rollback, and no
+procedure for it exists.
 
-1. **PR H1 sets `owner: released`.** Every Ansible path still skips the service. The next
-   bundle omits `flux/<tag>.yaml`, so the root Kustomization prunes the `<tag>` Kustomization,
-   and `deletionPolicy: Orphan` leaves its objects serving. That bundle reaches the cluster only
-   when `promote` moves `prod`, which needs `DEPLOY_HOLD` to read `none`. A hold is the likeliest
-   reason to hand back. In that case the operator clears it once H1 is on master
-   (**operator-only**).
-1. **Wait for `NotFound`.**
-   `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system <tag>` must return
-   `NotFound`.
-1. **PR H2 removes `owner`.** Its body quotes the `NotFound`. Once it merges, the deployer
-   narrows the edit to the service's tag and applies it, and `land.sh` deploys it client-side.
+To recover from a bad role change, fix the role forward. To stop the role's reconciliation
+meanwhile, use *Stopping one service: `flux_suspend`*.
 
-Between H1 and H2 the service has no writer and keeps serving its last spec, so the two
-writers never overlap. `land.sh` refuses to merge H2 while the Kustomization exists
-([docs/landing.md](landing.md#the-merge-wait)). That refusal is the only guard on the merge:
-a merge made outside `land.sh` bypasses it, and the `NotFound` in H2's body is then the only
-check. The Flux labels and `kustomize-controller`'s `managedFields` entry stay on the objects.
-No skip reads them alone, so they need no removal.
+Three things hold the ruling on the tree:
 
-**A CronJob that a gate Job cannot copy is gated on its schedule.** The restore drill is one:
-a copy of it runs a real restore beside the scheduled one. Such a role goes in
-`UNGATED_BY_DESIGN` in `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py`, and
-its CronJob carries the annotation `homelab/gate: schedule`. That test holds the two sets
-equal. `probe.py health` passes a marked CronJob with no Job for one schedule period after Flux
-first applied the revision, and fails it after that
-(`scripts/diagnostics/probe_lib/health_cronjob.py:format_schedule_gated`, #6128).
+- **The tag rule.** `scripts/deploy_tools/tag_rule.py:refusals` refuses a tag that leaves the
+  bundle while its role directory stays. Arm 6 of the render-diff gates prints this on a pull
+  request, and `promote.py check-bundle --against-prod` applies the same rule before any push:
 
-**A role with a CronJob loses its deploy-time gate in H2.** A `flux_cronjob_gates` entry
-credits only a flux-owned role, because only the renderer writes its gate Job. Ansible's
-counterpart was the `k8s/cronjob-gate` role, retired in #5716 when no role included it. To
-gate the CronJob under Ansible, H2 restores the role and its tests from the commit before
-the retirement, which `git log --diff-filter=D -1 --format=%H --
-ansible/roles/k8s/cronjob-gate/tasks/main.yml` names:
+  ```text
+  arm 6: nut leaves the bundle while ansible/roles/k8s/nut/ stays. Restore its containers_list
+  entry, or remove the role with it to retire the service (docs/flux-deploy-plane.md, *Retiring
+  a flux-owned service*).
+  ```
 
-- `ansible/roles/k8s/cronjob-gate/` and its decision tests, `test_cronjob_gate_decision.py`
-  in `ansible/tests/deploy/`;
-- the `include_role` credit in `_batch_gated_names` (`ansible/tests/deploy/_autodeploy_batch.py`)
-  and its cases in `test_k8s_autodeploy_cronjob_gate_credit.py`;
-- the role's entry in `_GATING_SHARED_ROLES` and in each shared-role list the guards report as
-  missing.
+- **The ownership census.** The `every-k8s-entry-is-flux-owned` row in
+  `ansible/tests/repo/_flux_ownership_row.py` fails on any k8s entry without `owner: flux`.
+- **No Ansible path.** `deploy.sh --tags <tag>` exits 5 for every k8s entry, whatever its `owner`
+  reads, and the GitOps deployer has applied no k8s role since D6.12.
 
-H2 then adds an `include_role: k8s/cronjob-gate` task with `cronjob_gate_name` for each CronJob.
-Without it, `test_every_cronjob_only_role_is_gated_at_deploy_time` fails for a CronJob-only role,
-and an auto-deployed role fails the batch guard. The other way out is `k8s_autodeploy: false`
-with a reason, which leaves the CronJob ungated until its next scheduled firing.
+D6's plan,
+[*The deletion policy, and the end of the handback*](target-architecture/deploy/d6-delete-old-path.md#the-deletion-policy-and-the-end-of-the-handback),
+explains why the handback cannot work under either deletion policy.
 
 ## Reading Flux objects
 
@@ -1318,8 +1296,8 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
 ## The bundle
 
 The render job publishes the deploy tags whose `containers_list` entry carries `owner: flux`.
-`promote.py published-tags` prints them. A tag marked `owner: released` is left out. That
-marking is the first PR of handing a service back (*Handing a service back*).
+`promote.py published-tags` prints them. A tag marked `owner: released` is left out, and the
+tag rule refuses that marking (*A Flux-owned service stays Flux-owned*).
 
 The build step passes each published tag to the renderer with `--role` and no
 `--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
@@ -1591,10 +1569,9 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
 - `flux/homelab-namespace.yaml` sets a tag's fields and no edge. Its `deletionPolicy: Orphan`
   keeps both objects if the kind leaves the bundle, as a revert of D5's namespace PR makes it.
 - `ansible/deploy.yml` applies neither object. Its two namespace `pre_tasks` went in the same
-  commit that added this kind, rather than staying behind a gate on role ownership, because one
-  service handed back would open that gate and give the objects a second writer.
+  commit that added this kind, rather than staying behind a gate on role ownership.
   `ansible/tests/deploy/test_k8s_play_applies_no_namespace.py` evaluates every `pre_tasks` entry
-  of the k8s play against an all-flux inventory and a handed-back one, and fails on a task that
+  of the k8s play against an all-flux inventory and one with an entry that has no `owner`, and fails on a task that
   would apply a Namespace or a LimitRange.
 - Its footprint rule counts its files for every flux-owned tag, because both objects admit
   every tag's pods.
@@ -1674,7 +1651,8 @@ refuses the publish when:
 - the pull of `prod` fails.
 
 `prod` moves only on promotion, so a refusal persists through later unrelated commits until the
-tag returns or its role directory goes. To retire a service, remove its entry and its role in
+tag returns or its role directory goes. The first line refuses `owner: released`
+(*A Flux-owned service stays Flux-owned*). To retire a service, remove its entry and its role in
 one PR (*Retiring a flux-owned service*). A registry with no `prod` is the first run, and only
 the `flux` line applies. Arm 6 of the render-diff gates runs the same rule on a pull request
 against the base render, so a PR usually fails before it merges.
@@ -1740,6 +1718,14 @@ under *Rules for every Job Flux applies (D5.1a3)*.
   nor `urllib` as a value, and reads no double-underscore name such as `__globals__`. The helper retries a refused or timed-out connect for 60
   seconds, because kube-router can refuse a new pod until it learns its address. It never
   retries an answer, so a flaky check fails rather than passing on its second try.
+
+**A CronJob that a gate Job cannot copy is gated on its schedule.** The restore drill is one:
+a copy of it runs a real restore beside the scheduled one. Such a role goes in
+`UNGATED_BY_DESIGN` in `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py`, and
+its CronJob carries the annotation `homelab/gate: schedule`. That test holds the two sets
+equal. `probe.py health` passes a marked CronJob with no Job for one schedule period after Flux
+first applied the revision, and fails it after that
+(`scripts/diagnostics/probe_lib/health_cronjob.py:format_schedule_gated`, #6128).
 
 ### The pre-pull Job
 
@@ -1981,13 +1967,12 @@ instead:
 
 1. **The first PR empties the service's render.** Flux prunes every object the render drops.
    The PR carries a `Removes-Object:` line for each one (*Removing an object on purpose*).
-   Deleting the role's templates is not enough on its own. The PR also edits the role's
-   `k8s/manifests` include, and leaves the `containers_list` entry as it is:
+   Deleting the role's templates is not enough on its own. The PR also adds these keys to the
+   role's `defaults/main.yml`, and leaves the `containers_list` entry as it is:
 
    ```yaml
-     vars:
-       manifests_rollout: ''
-       manifests_exclude_files: [service.yaml, ingressroute.yaml]
+   manifests_rollout: ''
+   manifests_exclude_files: [service.yaml, ingressroute.yaml]
    ```
 
    The renderer refuses a restart target that names no workload in the render, and
@@ -2005,9 +1990,8 @@ instead:
 1. **The second PR removes the `containers_list` entry and the role.** The next bundle omits
    `flux/<tag>.yaml`, and `deletionPolicy: Orphan` leaves nothing behind, because the first
    PR's prune already removed the objects. The name never joins `k8s_retired_services`.
-   The Kustomization still exists when this PR merges, and `land.sh` lets the PR through: the
-   check in [docs/landing.md](landing.md#the-merge-wait) refuses only a tag that keeps its
-   entry at the PR's head.
+   The Kustomization still exists when this PR merges, and the merge is what makes the root
+   prune it. `land.sh` does not read the Kustomization before the merge.
 1. **Delete the claim by hand (operator-only).** Prune never deletes a claim labelled
    `kustomize.toolkit.fluxcd.io/prune: disabled`, so the claim and its Longhorn volume
    outlive both PRs. Once the second PR is on master, and only when the data is no longer

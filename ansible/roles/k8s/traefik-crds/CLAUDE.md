@@ -35,11 +35,10 @@ reaches the CRDs through its edge to `traefik`.
   dropped. `scripts/renderer/tests/test_renderer_crd_census.py` fails a CRD in any tag that
   renders `prune: true`, with this tag as its named member.
 - **The cost of `prune: false`:** a CRD a later upstream release retires stays live until
-  the operator deletes it (**operator-only**). Never revert `flux_prune: false` on its own
-  while the tag is flux-owned; a handback reverts traefik's flip PR whole.
+  the operator deletes it (**operator-only**). Never revert `flux_prune: false` while the tag is
+  flux-owned.
 - **`tier: home-edge`**, traefik's tier, keeps the tag out of the lost-node shed set without
   a `NEVER_SHED` entry (`ansible/filter_plugins/service_tier.py`).
 - **Flux applies it, not Ansible** (D5, traefik's own window). Its `containers_list` entry
   carries `owner: flux` from its first commit. `tasks/main.yml` holds the include of
-  `k8s/manifests` and no Flux path runs it. To hand it back, follow the two-PR handback in
-  `docs/flux-deploy-plane.md` together with traefik's.
+  `k8s/manifests` and no Flux path runs it.

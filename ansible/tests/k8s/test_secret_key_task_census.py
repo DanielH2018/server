@@ -82,7 +82,7 @@ _SIDE_EFFECT_FREE = {
 # the other two, in a role whose `tasks/` R4 deletes, since #5561 dropped sonarr's and radarr's
 # includes of it. The live `STUB_REFUSING` list went with it, empty since uptime-kuma's flip. The
 # fixture pairs below keep `census`, `stale_exemptions` and `stub_refusers_without_the_guard`
-# provably able to go red, for a role handed back to Ansible with such a task.
+# provably able to go red.
 
 
 def census(

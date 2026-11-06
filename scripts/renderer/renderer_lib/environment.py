@@ -1,8 +1,8 @@
 """The strict Jinja environment the renderer renders templates and task expressions in.
 
-`cluster.render_tag` renders a role's templates here, and `task_inputs.derived_facts`
-evaluates the expressions a role's `set_fact` tasks hold. Both read one environment, so a
-template and a task expression see the same filters and the same `lookup`.
+`cluster.render_tag` renders a role's templates here, and `task_inputs.context_data` renders a
+build's context. Both read one environment, so the two see the same filters and the same
+`lookup`.
 
 Typical usage example:
 

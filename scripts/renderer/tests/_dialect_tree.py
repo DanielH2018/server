@@ -1,7 +1,8 @@
 """The dialect's spec fixture for variable semantics: a role tree and its inventory.
 
 `write_tree` writes them, and `TREE_LITERAL` is what the template renders to. The PR that added
-them checked the literal once against an `ansible-playbook` render of the same tree.
+them checked the literal once against an `ansible-playbook` render of the same tree, with the
+render keys on the role's `k8s/manifests` include.
 """
 
 from pathlib import Path
@@ -26,6 +27,8 @@ only_default: from-defaults
 group_over_default: from-defaults
 host_over_group: from-defaults
 derived: "derived-{{ host_over_group }}"
+manifests_deferred_dir_name: from-include
+manifests_prune: false
 """
 _GROUP_VARS = """\
 group_over_default: from-group
@@ -49,15 +52,6 @@ _HOSTS_INI = """\
 h1 ansible_connection=local
 h2 ansible_connection=local ansible_host={{server_ip}} inline_only=from-inline host_file_over_inline=from-inline
 """
-_ROLE_TASKS = """\
-- name: Render
-  ansible.builtin.include_role:
-    name: k8s/manifests
-  vars:
-    manifests_deferred_dir_name: from-include
-    manifests_prune: false
-"""
-
 # What `_TREE_TEMPLATE` renders to on h1, with no extra vars.
 TREE_LITERAL = """\
 default=from-defaults
@@ -83,10 +77,8 @@ def write_tree(root: Path, template: str = _TREE_TEMPLATE) -> tuple[Path, Invent
     role = root / "roles" / "k8s" / "widget"
     (role / "templates").mkdir(parents=True)
     (role / "defaults").mkdir()
-    (role / "tasks").mkdir()
     (role / "templates" / "configmap.yaml.j2").write_text(template)
     (role / "defaults" / "main.yml").write_text(_ROLE_DEFAULTS)
-    (role / "tasks" / "main.yml").write_text(_ROLE_TASKS)
     host_vars = root / "inventory" / "host_vars"
     host_vars.mkdir(parents=True)
     (host_vars / "h1.yml").write_text(_H1_VARS)

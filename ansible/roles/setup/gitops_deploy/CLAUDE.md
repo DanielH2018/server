@@ -66,7 +66,9 @@ ENFORCED: `ansible/tests/services/test_gitops_check_rule_literals.py` pins each 
 literals to the rendered `DEADLINE_S`. Both scripts source the check
 library with `|| exit 1`, so a host that lacks the library fails its timer unit instead of
 skipping the file. The timers keep their `kuma-check-` names, because a rename would orphan the
-installed units.
+installed units. The checks stamp their own render fragment, `gitops-deploy-github-checks`,
+under the tag of their renders: `scripts/deploy_tools/setup_lib/deployed_copies.py:_every_render_stamped`
+counts a fragment only when its stamp's tags are a subset of each render's tags.
 
 ## Safety
 

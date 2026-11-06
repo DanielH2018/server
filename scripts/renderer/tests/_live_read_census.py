@@ -30,7 +30,7 @@ from pathlib import Path
 
 from _live_read_jinja import Reader, references, template_lookups
 
-from deploy_tools.render_targets import render_targets
+from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
 from lib.k8s_roles import (

@@ -21,9 +21,8 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 
 - **Flux applies it, not Ansible** (#5546, Wave C). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
-  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
-  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
+  still stops Renovate's
   automerge of a base-digest bump.
 - **Built by CI.** The promote workflow's `images` job builds both images and pushes
   `ghcr.io/danielh2018/n8n` and `ghcr.io/danielh2018/n8n-runners` under their content tags. A
@@ -44,7 +43,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   is an operator choice this role has not made. `defaults/main.yml` has the measurements, and
   `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism.
 - **Where the tasks went.** `tasks/main.yml` holds the two `k8s/image-builder` includes and
-  the `k8s/manifests` include, and no Flux path runs any of them. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`).
+  the `k8s/manifests` include, and no Flux path runs any of them. They stay until R4 deletes them.
   The builds became the `images` job, and the Kustomization's `wait` replaces the rollout
   wait. The broker-isolation probe that followed them became the `n8n-verify` Job, and its
   tasks were deleted.

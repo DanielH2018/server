@@ -145,8 +145,7 @@ no-op that leaves the change unapplied.
 
 That loop skips an entry that carries `owner`. The k8s play batches `containers_list |
 ansible_owned`, and `ansible_owned` in `ansible/filter_plugins/toposort.py` keeps only the
-entries without `owner`. Flux applies an entry with `owner: flux`, and the first PR that
-hands an entry back to Ansible sets `owner: released`. The `containers_list` fact keeps
+entries without `owner`. Flux applies an entry with `owner: flux`. The `containers_list` fact keeps
 every entry, because templates read it. A `deploy.yml` or `toposort.py` change is still
 broad, so the deployer applies none of it.
 
@@ -272,8 +271,8 @@ record follows.
 ### A tag Flux applies is merged and skipped
 
 A `containers_list` entry that sets `owner` is not Ansible-owned. With `owner: flux`, Flux
-applies the tag through `promote`. With `owner: released`, set by the first PR that hands the
-tag back, no writer applies it. The tick skips both values the same way, so the deployer never
+applies the tag through `promote`. With `owner: released`, which the ownership census refuses,
+no writer applies it. The tick skips both values the same way, so the deployer never
 applies, defers, alerts on or owes such a tag. D2's plan has the design:
 [The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
 

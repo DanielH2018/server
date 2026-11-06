@@ -70,9 +70,9 @@ while reporting success.
 ## Flux-owned roles (target slice D5.4)
 - **The renderer writes every context this role builds.** `homelab-render cluster` writes
   each of the ten contexts to `DIR/images/<name>/` and each content tag to
-  `DIR/images/tags.json` (`scripts/renderer/renderer_lib/images.py`). The tag is this role's
-  own expression, evaluated over the same `data`
-  (`scripts/renderer/renderer_lib/task_inputs.py:image_contexts`).
+  `DIR/images/tags.json` (`scripts/renderer/renderer_lib/images.py`). The tag is
+  `scripts/renderer/renderer_lib/derived.py:content_tag` over the same `data`, which equals
+  this role's own expression.
 - **For a flux-owned role, the content tag comes from `DIR/images/tags.json`.** The
   consumer's ref renders from the same computation, and the render refuses a ref that
   differs. `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS` stays a stub for guards.
@@ -92,7 +92,4 @@ while reporting success.
 - Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
   `templates/context-configmap.yaml.j2`.
 - Not deployed standalone, and no caller reaches it: every caller is `owner: flux`. promote's
-  `images` job builds their images, and `deploy.sh` refuses their tags with exit 5. A caller
-  handed back to Ansible would reach this role through its own deploy tag, and that
-  handback moves each `image_builder_builds` entry back onto a `vars:` include, with its
-  `when:`. Ansible does not read the list, so a bare include builds nothing it can name.
+  `images` job builds their images, and `deploy.sh` refuses their tags with exit 5.
