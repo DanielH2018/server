@@ -86,11 +86,11 @@ _ROTATION_NOTE = (
     "a rotation **maps to no deploy tag by construction**, and a consumer keeps rendering the "
     "OLD value until its own role renders again. Resolve them: `uv run python "
     "scripts/secrets_mgmt/secret_rotation.py consumers <secret>` greps the tree for who now "
-    "holds a stale copy and prints the exact repair command per plane. Where it names a "
-    "`CROSS_HOST_PUSH_TOKENS` member — the set `consumer_tags()` in that same file returns "
-    "EMPTY for — the two halves sit on different hosts or planes, so no single redeploy covers "
-    "both and each carries a written reason for what to run instead. The GitOps tick applies "
-    "a setup role that reads a changed key and that its own host runs (#5436)."
+    "holds a stale copy and prints the exact repair command per plane. Where "
+    "`consumer_tags()` in `scripts/secrets_mgmt/consumers.py` returns EMPTY for the key, the "
+    "weekly rotation skips it and no single redeploy is known to cover its readers, so run "
+    "each printed command. The GitOps tick applies a setup role that reads a changed key and "
+    "that its own host runs (#5436)."
 )
 
 # Where a k8s consumer of a changed key gets the new value, appended to `_ROTATION_NOTE`. The

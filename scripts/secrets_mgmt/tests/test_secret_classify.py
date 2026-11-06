@@ -10,9 +10,9 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_classify.py
 from secrets_mgmt.secrets_lib.secret_classify import classify
 
 
-def test_push_tokens_are_auto():
-    assert classify("monitor_bridge_cpu_push_token") == "auto"
-    assert classify("pi_sd_health_push_token") == "auto"
+def test_no_name_rule_assigns_the_auto_tier():
+    # An `auto` key rotates unattended, so only a registry edit may put a key in that tier.
+    assert classify("monitor_bridge_cpu_push_token") == "assisted"
 
 
 def test_usernames_are_ignored():

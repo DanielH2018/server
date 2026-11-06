@@ -770,7 +770,9 @@ token that has no consumer, and the token stays in `ansible/secret_rotation.yml`
 operator removes it. A follow-up commit after PR 6 makes these changes at once:
 
 - The operator removes the key from `secrets.yml` with `sops` (**operator-only**).
-- `secret_rotation.py sync` drops the registry row.
+- The commit deletes the 3-line registry row from `ansible/secret_rotation.yml` by hand.
+  `secret_rotation.py sync` only reports a stale row and keeps it. After the deletion, `sync`
+  prints `sync: 0 added, 0 stale`.
 - The `consumers.py` entry goes.
 - `scripts/secrets_mgmt/git_dates.py:RETIRED` gains the name.
   `scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py` fails on a departed

@@ -30,20 +30,6 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib.deploy_cross_role import k8s_lookup_map
 
-# Push tokens whose pusher and reader live on DIFFERENT hosts, or which
-# reference the rotation tool itself — one redeploy cannot update both halves atomically, so these
-# stay MANUAL: consumer_tags returns (), the unattended cron skips them, the audit still reminds.
-# The single source the guard test derives its allowlist from; a new cross-host token is added
-# HERE, with its host pair, not to the test.
-CROSS_HOST_PUSH_TOKENS = frozenset(
-    {
-        # No role pushes with it any more. It leaves with the key, in the sops commit R4's
-        # *render_records* section lists, because the census fails on an auto-tier token
-        # with no consumer.
-        "render_records_push_token",
-    }
-)
-
 
 def consumer_tags(name: str) -> tuple[str, ...]:
     """Deploy tags whose redeploy makes a rotated push token take effect.
@@ -51,15 +37,10 @@ def consumer_tags(name: str) -> tuple[str, ...]:
     EMPTY when the consumer spans hosts or nothing reads the token: those stay MANUAL. The
     unattended cron skips them, and the audit still reminds.
     """
-    # This precedes the prefix rule below, so a token named in the set is never claimed by it.
-    if name in CROSS_HOST_PUSH_TOKENS:
-        return ()
-    elif name.startswith("monitor_bridge_"):
-        pusher = "monitor-bridge"
-    else:
-        # anything else unrecognised -> manual
-        return ()
-    return (pusher,)
+    if name.startswith("monitor_bridge_"):
+        return ("monitor-bridge",)
+    # anything else unrecognised -> manual
+    return ()
 
 
 # Planes a role can live on, and what redeploying it actually costs the operator. The

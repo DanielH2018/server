@@ -327,8 +327,8 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         # but skipped, as is a key a per-host SOPS file carries (its `sync` is operator-only).
         due_auto = unattended_due(res["all"], args.all)
         held = tools.host_file_keys()
-        # A record key classified `auto` by name (a `*_push_token` the app mints) would be
-        # `sops set` here with no refusal, so the batch filters it the same way `--name` does.
+        # A record key tiered `auto` by a registry edit would be `sops set` here with no refusal,
+        # so the batch filters it the same way `--name` does.
         targets = [
             r
             for r in due_auto

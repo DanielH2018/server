@@ -181,10 +181,10 @@ that a host file carries is also skipped by the unattended `rotate --commit`, wh
 - `ignore` — not a secret: usernames, the R2 bucket name, static addresses. `domain` left
   the store on 2026-10-15 and is an inventory variable in `ansible/inventory/group_vars/all.yml`.
 
-`sync` gives a newly registered key its tier from two name rules in
-`scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_push_token` is `auto`, `*_user` and
-`*_username` are `ignore`, and every other key is `assisted`. An `external` or `pinned` key gets its tier
-by an edit to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
+`sync` gives a newly registered key its tier from one name rule in
+`scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_user` and `*_username` are `ignore`,
+and every other key is `assisted`. An `auto`, `external` or `pinned` key gets its tier by an edit
+to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
 
 ## `auto` — automated
 
