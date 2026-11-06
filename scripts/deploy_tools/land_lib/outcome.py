@@ -17,17 +17,7 @@ from enum import StrEnum
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from lib.exit_codes import (
-    DEPLOY_BAD_FLAGS,
-    DEPLOY_BROAD,
-    DEPLOY_LOCK_PLAN_FAILED,
-    DEPLOY_LOCK_UNAVAILABLE,
-    DEPLOY_NO_HOSTS,
-    DEPLOY_STALE,
-    FAILED,
-    LAND_FAILED,
-    LAND_GAVE_UP,
-)
+from lib.exit_codes import LAND_FAILED, LAND_GAVE_UP
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -67,10 +57,6 @@ class Verdict(StrEnum):
     # way out. See `await_ci.wait` (#4641, #4649).
     CI_UNPROVEN = "ci-unproven"
     LOCK_BUSY = "lock-busy"
-    # Every stale retry lost the same race: master merged faster than one
-    # tick-and-deploy cycle. Nothing was deployed and re-running is safe, which is the
-    # opposite of what `deploy-failed` reads as. See `deploy.deploy_phase`.
-    TIP_OUTRAN_RETRIES = "tip-outran-retries"
     # The landing stopped on a refusal or an error of its own before it reached any other
     # verdict: the landing policy, a PR closed unmerged or with changes requested, a read
     # that failed. `Outcome` gives every exit-1 end this verdict when its site named none,
@@ -91,13 +77,7 @@ VERDICTS = frozenset(Verdict)
 class Cause(StrEnum):
     """Which deploy failure a `deploy-failed` verdict was, for the board's `by (cause)`.
 
-    The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
-    host-lookup crash) from "changes are live and a task failed after them".
-
-    DEPLOY_EXIT_* NAME THE deploy.sh CODES NO PHASE HANDLES ITSELF. They are enumerated
-    rather than formatted from the return code, because `f"deploy-exit-{rc}"` made the set
-    unbounded and the board groups by this field. `DEPLOY_EXIT_OTHER` is the bucket for a
-    code outside deploy.sh's own contract, which should not happen.
+    The verdict alone cannot tell a tag nothing applies from a failed tick or a held promotion.
 
     PROMOTE_* NAME HOW A WAIT ON PROMOTION ENDED (`promote.py land-wait`), for a PR whose tag
     Flux applies. `promote-held` is DEPLOY_HOLD holding, beside `deploy-failed`.
@@ -105,23 +85,12 @@ class Cause(StrEnum):
     `verify` writes the hold that would end the wait as `promote-held` a poll later (D5.3b3).
     `promote-timeout` is the wait reaching its deadline: twice the promote timeout, counted
     again from each poll that reads an earlier commit's verification in flight. It rides beside
-    `deferred`, as `deploy-exit-4` rides beside `tip-outran-retries`: the promotion applies
-    this PR itself, and a later one may still cover it.
+    `deferred`: the promotion applies this PR itself, and a later one may still cover it.
     """
 
     TICK_HELD = "tick-held"
     TICK_FAILED = "tick-failed"
-    HOST_LOOKUP = "host-lookup"
     TAG_MISS = "tag-miss"
-    PLAYBOOK_FAILED = "playbook-failed"
-    DEPLOY_EXIT_CD_FAILED = "deploy-exit-1"
-    DEPLOY_EXIT_BROAD = "deploy-exit-3"
-    DEPLOY_EXIT_STALE = "deploy-exit-4"
-    DEPLOY_EXIT_BAD_FLAGS = "deploy-exit-64"
-    DEPLOY_EXIT_LOCK_UNAVAILABLE = "deploy-exit-76"
-    DEPLOY_EXIT_NO_HOSTS = "deploy-exit-78"
-    DEPLOY_EXIT_LOCK_PLAN_FAILED = "deploy-exit-79"
-    DEPLOY_EXIT_OTHER = "deploy-exit-other"
     PROMOTE_HELD = "promote-held"
     PROMOTE_TIMEOUT = "promote-timeout"
     SOAK_FAILED = "soak-failed"
@@ -129,29 +98,6 @@ class Cause(StrEnum):
 
 
 CAUSES = frozenset(Cause)
-
-# The deploy.sh exits `deploy_outcome` does not give a verdict of its own, keyed by the
-# wrapper's contract (`exit_codes.py`). `tools.run_deploy` passes only `--tags`, so of these
-# 1 (the `cd` into the primary checkout failed), 4 (stale tree) and 76 (flock failed on the
-# lock file itself) can arrive today; 3 needs `--changed` and 64 needs `--detach`, and both
-# are kept so a call site that adds either flag gets its label without editing this table.
-# 76 also has its own arm in `deploy.deploy_outcome`, so it reaches here only from a caller
-# that runs the wrapper without going through a landing. Anything outside the contract
-# buckets as `deploy-exit-other` rather than inventing a label the board would group on.
-_DEPLOY_EXIT_CAUSES = {
-    FAILED: Cause.DEPLOY_EXIT_CD_FAILED,
-    DEPLOY_BROAD: Cause.DEPLOY_EXIT_BROAD,
-    DEPLOY_STALE: Cause.DEPLOY_EXIT_STALE,
-    DEPLOY_BAD_FLAGS: Cause.DEPLOY_EXIT_BAD_FLAGS,
-    DEPLOY_LOCK_UNAVAILABLE: Cause.DEPLOY_EXIT_LOCK_UNAVAILABLE,
-    DEPLOY_NO_HOSTS: Cause.DEPLOY_EXIT_NO_HOSTS,
-    DEPLOY_LOCK_PLAN_FAILED: Cause.DEPLOY_EXIT_LOCK_PLAN_FAILED,
-}
-
-
-def cause_for_deploy_exit(rc: int) -> Cause:
-    """The bounded `cause` for a deploy.sh exit no phase names itself."""
-    return _DEPLOY_EXIT_CAUSES.get(rc, Cause.DEPLOY_EXIT_OTHER)
 
 
 class Outcome(Exception):

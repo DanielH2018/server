@@ -291,15 +291,22 @@ rather than at its deadline (#4667).
 **Three shapes end `ci-unproven` instead, because no re-run converges on them (#4641, #4649).**
 `await_ci.py` exits `CI_UNPROVEN` and its line names the master tip and the way out:
 
+`promote` refuses a commit without green CI (`.github/workflows/promote.yml`, *Refuse a dispatched
+commit whose CI is not green*), so no route applies the tip without CI. A dispatched CI run starts
+no promotion, because `promote` follows only a CI run from a push. The line therefore prints this
+dispatch, with the tip's full SHA:
+
+```bash
+gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master tip>
+```
+
 - No commit from the merge commit to the tip has a CI run, which includes the merge commit
-  being the tip. To run CI on the tip, run `gh workflow run ci.yml --ref master`, then re-run
-  land.sh. The fallback is to deploy the tip by hand without CI, with
-  `./scripts/deploy.sh --tags <service> --at <tip>`.
+  being the tip. To run CI on the tip, run `gh workflow run ci.yml --ref master`. Once that run
+  is green, run the `promote` dispatch, then re-run land.sh.
 - The nearest descendant is red and a later one is green. While a later one's CI is still
-  running, the wait keeps polling for it rather than ending red. Neither verdict changes, and the
-  tick has already fast-forwarded past your merge commit. To deploy your change, run the
-  `deploy.sh --at <tip>` command the line prints. It deploys the tip, because `deploy.sh`
-  refuses any tree behind `origin/master` with `DEPLOY_STALE`.
+  running, the wait keeps polling for it rather than ending red. Neither verdict changes, so a
+  re-run of land.sh reads the same state. The tip contains your merge commit. To apply your
+  change, run the `promote` dispatch, once the tip is green when the line says so.
 - The nearest descendant is red, and GitHub never ran CI for the tip after it. The wait keeps
   polling until its deadline, since a freshly merged tip has no CI for its first seconds
   either. To give the tip a verdict, run `gh workflow run ci.yml --ref master`, then re-run
@@ -307,51 +314,39 @@ rather than at its deadline (#4667).
 
 **It waits on your merge commit rather than on the tip**, because the tick fast-forwards to the
 newest GREEN commit in its range rather than only to a green tip. A later merge whose CI is
-still running no longer holds your PR. Waiting on the tip is what `tip-outran-retries` measured:
-six landings in the 14 days to 2026-09-11 spent 400-614s each chasing a tip that moved again.
+still running no longer holds your PR. Waiting on the tip cost six landings in the 14 days to
+2026-09-11 400-614s each, chasing a tip that moved again.
 
-## The deploy, and the tick beside it
+## The promotion wait, and the tick beside it
 
-**A PR reaching service tags and nothing the tick applies itself deploys its own merge commit;
-the tick is kicked afterwards, not awaited.** `deploy.sh --at <sha>` renders a snapshot of that
-commit, so nothing needs the primary checkout fast-forwarded first. Step 4 waits for nothing,
-the deploy runs, and only then does `land.sh` start the tick with `--no-wait` — the checkout
-converges while the health gate runs, and the deployer's own 10-minute timer covers a kick that
-failed. A kick that finds a tick already in flight starts nothing, so `land.sh` asks again after
-the health gate. `kick=` on the Landings board says which happened: `started`, `rearmed` (the
-second request started one), `joined` (both joined; the timer converges the checkout, this
-landing did not), `failed`.
+**No landing runs `deploy.sh`.** Every `containers_list` entry is `platform: k8s`, so `promote`
+and Flux apply every tag, and a change to a host's package waits for that host
+(`scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`). A `--tags` value that names no k8s
+entry at the merge commit ends the landing `deploy-failed` with the cause `tag-miss`, because
+nothing would apply it.
 
-Kicking it BEFORE the deploy would not save the time: `gitops-deploy.service` holds the git-tree
-lock for its whole unit run, so `deploy.sh` would queue behind it inside its own `flock` and the
-seconds would move from `tick=` to `lock=`. `tick=0` on the board means step 4 awaited no tick.
-A `lock=` wait beside it is one of two other waits: a tick the deployer's TIMER started, or
-another deploy of the same service holding `server-deploy-<tag>.lock`. The second is the common
-case, because the tree lock is held for the snapshot alone. `holder=` tells them apart — the
-tree lock's wrapper line names its holder, the per-service line names none. Eleven landings in
-the 14 days to 2026-09-11 spent the full 540s in step 4 watching a deployer busy with another
-session's apply.
-
-`tick=0` is about step 4 only. When the deploy exits 4 the landing falls back to the tick and
-the primary checkout, and that tick IS awaited, so a fallback landing reads non-zero there.
+**A PR reaching service tags and nothing the tick applies itself kicks the tick and does not
+await it.** Step 4 waits for nothing. Step 5 starts the tick with `--no-wait`, so the checkout
+converges while the landing waits on the promotion and runs the health gate, and the deployer's
+own 10-minute timer covers a kick that failed. A kick that finds a tick already in flight starts
+nothing, so `land.sh` asks again after the health gate. `kick=` on the Landings board says which
+happened: `started`, `rearmed` (the second request started one), `joined` (both joined; the timer
+converges the checkout, this landing did not), `failed`. `tick=0` on the board means step 4
+awaited no tick. Eleven landings in the 14 days to 2026-09-11 spent the full 540s in step 4
+watching a deployer busy with another session's apply.
 
 **Two shapes keep waiting for the tick**, because there the tick is the apply and the verdict
 reads the deployer's own markers straight afterwards. A PR with **no** service tag is one. A PR
 reaching service tags **and** something the tick applies itself — the deploy plane, or a setup
-role `initial_setup.yml` includes — is the other: it awaits the tick in step 4 and then deploys
-from the primary checkout with no `--at`. Taking the fast path there would grade a tick that had
-not run, and print `needs-manual-apply` (or `deferred`) for work the kicked tick applies a
-minute later. `--tags` does not opt out: the derivation is skipped, the classification is not.
+role `initial_setup.yml` includes — is the other: it awaits the tick in step 4. Taking the fast
+path there would grade a tick that had not run, and print `needs-manual-apply` (or `deferred`)
+for work the kicked tick applies a minute later. `--tags` does not opt out: the derivation is
+skipped, the classification is not.
 
 A change **no** tick can apply — the `plane` a hand must run, which `needs-manual-apply` names —
 does not push a landing off the fast path. Nothing about awaiting a tick would settle it.
 
-**`land.sh` hands `deploy.sh` no k8s tag.** No host declares a Docker entry since H5, so no
-derived tag reaches `deploy.sh` today. The per-host loop stays until H7 and adds
-`-e target=<host>` for a tag only another host declares. A change to a host's package waits for
-that host instead (`scripts/deploy_tools/land_lib/host_wait.py:wait_for_hosts`).
-
-**It scopes the deploy to the PR's own file list rather than a SHA range**, so another session's
+**It scopes the derivation to the PR's own file list rather than a SHA range**, so another session's
 merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
 `--changed <since>` when the count disagrees — the only reason `--since` exists. That fallback
 refuses a range wholesale as soon as one path is broad. Since D6.12 such a range derives no tag
@@ -361,8 +356,7 @@ reaches ships in the `homelab-daniel-pi` package. `--tags` overrides the scope e
 ### Every landing waits on promotion
 
 **A k8s tag never reaches `deploy.sh`.** Step 5 reads the k8s entries at the merge commit
-(`land_lib/promotion.py:split_k8s`) and takes every such tag out of the list before
-`deploy_by_host` sees it.
+(`land_lib/promotion.py:split_k8s`) and takes every such tag out of the list.
 
 **The changed set names the k8s tags, not the PR's paths.** `split_k8s` drops a path-derived
 k8s tag and keeps one `--tags` named. Every PR with a path other than a document or a test waits
@@ -411,8 +405,7 @@ Instead it reads the cluster every 30 seconds:
   the PR is `suspended` in the merge commit's `digests.json`, so Flux applies nothing for
   them until a PR removes their `flux_suspend`. The wait ends at the first poll that reads
   that file and a `none` `DEPLOY_HOLD`, rather than polling to `gave-up`. A hold still ends
-  it `deploy-failed`. When deploy.sh deployed an Ansible-owned tag, the landing goes on to
-  gate that tag instead. When only some of the PR's Flux tags are suspended, the wait leaves
+  it `deploy-failed`. When only some of the PR's Flux tags are suspended, the wait leaves
   the suspended ones out and settles on the rest, and the gate leaves them out too. The
   suspend PR itself ends this way, before any promotion applies it: the suspend takes hold only once `last-good`
   carries it, so check that `probe.py landing` shows `last-good` at or past the merge commit.
@@ -498,10 +491,8 @@ alone.
 two is one authenticated GitHub call per poll, at most 240 an hour. A read that fails keeps
 the wait going, and an unreadable Kustomization list never reads as `settled`.
 
-`land.sh` runs from the primary checkout wherever you invoke it. The deploy no longer depends on
-that — `--at <sha>` renders the merge commit from anywhere — but three reads still ask about the
-primary: `deploy_tags.py hosts`, the diff-derived tag list a truncated file list falls back to,
-and the deploy the exit-4 fallback runs.
+`land.sh` runs from the primary checkout wherever you invoke it. One read asks about the primary:
+the diff-derived tag list a truncated file list falls back to.
 
 ### A PR that adds an edge beside a change is refused before it merges
 
@@ -562,46 +553,26 @@ A PR that moves a key into another role at the same version is no bump, so none 
 four applies to it. A key set in two role files at one commit, or a value that is not `vX.Y.Z`,
 exits 2: the check cannot judge it. There is no bypass.
 
-## The stale-tree retry
-
-**If a PR that reaches YOUR OWN TAGS merges while this one is landing, the first `deploy.sh`
-exits 4.** Under `--at` that is the staleness gate saying a commit in
-`<your sha>..origin/master` renders something your tags render. That newer landing owns the
-service, so this one falls back to the path it had before `--at` existed and retries, up to
-three times: each pass sleeps a backoff that DOUBLES (60s, 120s, 240s), re-runs the blockers
-check, waits for master CI on YOUR OWN merge commit, then ticks — with the wait this time — and
-deploys from the primary checkout. That wait is booked under `wait_ci` and normally returns at
-once, because step 3 already waited on the same SHA.
-
-A tail that touches nothing your tags render no longer refuses the deploy at all: the gate is
-scoped to the paths the requested tags reach.
-
-**Exhausting those retries prints `tip-outran-retries` (`LAND_GAVE_UP`), not `deploy-failed`.** Every
-attempt lost the same race: master merged faster than one tick-and-deploy cycle. Nothing was
-deployed and re-running is safe — the opposite of what `deploy-failed` reads as, and a session
-that did not read the log took it for a fault in its own change. PR #1460 ended that way twice
-on 2026-09-09 with four other sessions holding worktrees; its checkout went from 7 to 9 commits
-behind DURING the landing. The doubling backoff is the other half: three attempts at a fixed 60s
-all fall inside ~4 minutes, against a measured merge rate of roughly one every 2 minutes, so
-they could not converge (issue #1466). A static `behind_since` SHA distinguishes a parked
-deployer from this; a SHA that advances under an unchanged timestamp is this.
-
 ## Reading a `deploy-failed`
 
-**One variant means the opposite of the rest.** `a playbook task failed AFTER applying; some
-changes are live` is `deploy.sh` exit 20 (`DEPLOY_PLAYBOOK_FAILED`): the play reached its tasks and one failed, so
-everything applied before it took effect. Every other `deploy-failed` line means nothing was
-deployed and re-running is safe; this one is not a resume point. It exists because `deploy.sh`
-returned ansible-playbook's own status until 2026-09-02, and ansible exits 2 on a failed host —
-the same number as the tag miss, which is how a run whose manifests both applied was reported as
-`a derived tag matched no service, so nothing deployed` (issue #840).
+**`deploy-failed` does not say what went live.** `land.sh` runs no deploy itself, and `promote`
+and Flux apply master whatever a landing's verdict was. The cause beside it says which stop this
+was, and each one leaves a different state:
 
-**Another names `deploy_tags.py hosts` itself**: `deploy_tags.py hosts failed before any
-deploy.sh ran; nothing was touched`. `land_lib/deploy.py:deploy_by_host` exits `LAND_FAILED` and
-records the cause `host-lookup`. `deploy.sh`'s own rare `cd $repo_root || exit 1` records
-`deploy-exit-1` instead. Before the causes existed, both returned a bare exit 1, and only one of
-them had run a deploy (issue #1016). Unlike `DEPLOY_PLAYBOOK_FAILED`, `host-lookup` means what
-every other `deploy-failed` means: nothing was deployed, and re-running is safe.
+- `tag-miss`: no k8s entry declares a tag named on `--tags` at the merge commit, so nothing applies
+  that tag. `promote` and Flux still apply the rest of the merge, so a tag named beside it can be
+  live. To gate the rest, re-run with the tag corrected.
+- `tick-failed` or `tick-held`: the tick's setup play failed. It may have applied tasks before the
+  failure, so read the deployer's journal before you re-run anything.
+- `promote-held`: `DEPLOY_HOLD` stops every promotion, and the hold does not say whether this merge
+  went live. `decide` writes a forward-only or `suspended-changed` hold before `prod` moves, and
+  a hold set by hand moves nothing. A failed verification's hold follows a move of `prod`, so
+  Flux may have applied this merge already. `settle` then resets `prod` to `last-good`, unless the
+  held commit changes a forward-only tag or a snapshot role. An earlier promotion can also have
+  carried this merge before the hold. To see where it stands, compare the merge commit with the
+  `prod` and `last-good` commits `probe.py landing` prints.
+- `soak-failed`: Flux applied revision R and R's `flux/soak` then read `failure`, so the change is
+  live and `promote`'s verify holds it.
 
 ## The health gate
 
@@ -792,17 +763,14 @@ and `./scripts/deploy.sh --tags pihole-exporter` deployed it a minute later (iss
 
 Every run writes one logfmt line to syslog on exit (`logger -t landing-annotation`): the PR, the
 merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_ci`, `tick`,
-`deploy`, `total` — plus `lock`, the seconds spent waiting on a deploy lock (a sub-part of
-`tick` and `deploy`, not a fifth phase), and `holder`, the command that held it.
+`deploy`, `total` — plus `lock`, the seconds spent waiting on the tree lock (a sub-part of
+`tick`, not a fifth phase), and `holder`, the command that held it. `deploy` is step 5's time,
+which is the promotion wait.
 
-`lock` books two kinds of wait: an attempt that LOST the lock and exited 75, and a wait a
-wrapper rode out and then reported itself — `deploy.sh` queuing in a timed `flock(2)`
-(`deploy_lib/under_locks.py:LOCK_WAIT`) for the tree lock or one of its per-service locks,
-`gitops_tick.sh` watching a tick another actor had already started. Both exit 0, so before they
-reported it the seconds landed in `deploy` and `tick` and every row read `lock=0`. Since
-[ADR-0017](adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) most of what a landing
-waits for is a per-service lock: `deploy.sh` holds the tree lock only for a snapshot of `HEAD`. A
-run that queued on several service locks prints one line each and `lock` is their sum.
+`lock` books two kinds of wait: an attempt that LOST the lock and exited 75, and a wait
+`gitops_tick.sh` rode out and then reported itself, watching a tick another actor had already
+started. The second exits 0, so before it reported the wait the seconds landed in `tick` and
+every row read `lock=0`.
 
 Promtail ships it to Loki and the **Landings** Grafana board (Infrastructure folder) plots it, so
 "sessions wait too long" is answered by the phase medians there rather than by memory:

@@ -20,7 +20,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the PR head's and merge base's `owner`s and the head's k8s tags (the handback refusal) | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.merged_at`, `ledger.t_merged`, `ledger.merge_sha` |
-| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `classification` (frozen: the plane note, the self-applied half and their inputs), `resolved_tags`, `needs_diff`, `k8s_only` |
+| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `classification` (frozen: the plane note, the self-applied half and their inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff`, `host_candidate` | -- |
 | `ci.preflight` | `opts.primary` | -- |
@@ -28,7 +28,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `host_wait.host_targets` (in step 3, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
 | `classify.narrow_plane` (after step 4's tick, or in its place on the fast path) | `classification`, `merge_sha`, the `receipts` marker | `narrowed_plane` |
-| `deploy.deploy_phase` | `resolved_tags`, `k8s_only`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `k8s_only`, `flux_tags`, `suspended_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
+| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_deploy` |
 | `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `ledger.merged_at`, `opts.pr`, `opts.primary` | -- |
 | `health_verdict.health` | `resolved_tags`, `host_targets`, `flux_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
@@ -93,11 +93,9 @@ def _step_hosts(ln: Landing) -> None:
 def _step_tick(ln: Landing) -> None:
     """Run the GitOps tick and stamp when it finished — or skip it here and stamp nothing.
 
-    A PR reaching service tags and NOTHING THE TICK APPLIES ITSELF deploys its own merge commit
-    in step 5 (`deploy.sh --at`), so it needs the tick only to converge the primary checkout
-    eventually. Step 5 kicks it once the deploy has returned, because the tick holds the tree
-    lock for its whole unit run and deploy.sh would otherwise queue behind it. Nothing is
-    awaited here and `tick=0` on the board says so.
+    A PR reaching service tags and NOTHING THE TICK APPLIES ITSELF lands through the promotion,
+    so it needs the tick only to converge the primary checkout eventually. Step 5 kicks it.
+    Nothing is awaited here and `tick=0` on the board says so.
 
     Every other shape keeps waiting, because there the tick is the apply: a PR with no service
     tag, whose verdict `no_tag_outcome` reads off the deployer's markers, and a PR that
@@ -107,8 +105,7 @@ def _step_tick(ln: Landing) -> None:
     # `tick_is_the_apply`, which is `self_applied or remaining_setup`. It is not skipped for
     # every broad prefix: a `Landing.plane` that is not self-applied is by definition what a
     # HAND applies, so no tick can settle it and a tags-plus-plane PR keeps the fast path.
-    # A landing the predicate catches awaits the tick here exactly as it did before the fast
-    # path existed, and step 5 deploys from the primary checkout with no `--at`.
+    # A landing the predicate catches awaits the tick here.
     #
     # Because for that half the TICK is the apply, and step 7 grades it from the deployer's own
     # markers (`tick_state`, `tick_applied`). Kicking a tick and reading those markers seconds
@@ -118,14 +115,14 @@ def _step_tick(ln: Landing) -> None:
     # a concurrent tick has left `behind_since` set. Neither is recoverable by re-reading: the
     # verdict has already been printed and the exit code returned.
     #
-    # The alternative -- keep the fast path and await the kicked tick inside step 7 -- buys the
-    # deploy's seconds back and costs the landing a second place that knows about tick timing,
+    # The alternative -- keep the fast path and await the kicked tick inside step 7 -- buys
+    # seconds back and costs the landing a second place that knows about tick timing,
     # in the phase whose whole job is to report. The latency this gives up is bounded to the
     # PRs that touch a service role and a setup role together.
     if ln.resolved_tags and not ln.tick_is_the_apply:
         say(
-            "this landing deploys its own merge commit, so the tick is not awaited; step 5 "
-            "kicks it after the deploy to converge the primary checkout"
+            "this landing waits on a promotion, so the tick is not awaited; step 5 kicks it "
+            "to converge the primary checkout"
         )
         ln.ledger.t_tick = ln.ledger.t_ci
         # No receipt for this range exists yet, so the PR's own derivation narrows the note.
@@ -147,7 +144,7 @@ _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
     ("pre-flight: can the tick cross what is incoming?", ci.preflight),
     ("waiting for master CI", _step_ci),
     ("GitOps tick (fetch, ff-merge, deploy what is eligible)", _step_tick),
-    ("deploying what the tick deferred", deploy.deploy_phase),
+    ("waiting on the promotion", deploy.deploy_phase),
     ("waiting for hosts to apply", _step_hosts),
     ("health verdict", health_verdict.health),
 )
@@ -176,7 +173,7 @@ def run(ln: Landing) -> Outcome:
 
 
 def _phases(ln: Landing) -> None:
-    # Every later phase runs git and deploy.sh with the primary checkout as cwd. A missing
+    # Every later phase runs git with the primary checkout as cwd. A missing
     # one is worth one named line here rather than an unreadable failure five phases in;
     # land.sh checked it before anything else too.
     if not ln.opts.primary.is_dir():
