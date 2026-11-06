@@ -187,6 +187,11 @@ def _render_keys_on_includes(roles: Path) -> dict[str, set[str]]:
 
 def test_no_role_keeps_render_metadata_on_its_include_is_clean():
     assert _render_keys_on_includes(K8S_ROLES) == {}
+    walked = set(K8S_ROLES.glob("*/tasks/*.yml"))
+    assert {
+        K8S_ROLES / "pihole/tasks/main.yml",
+        K8S_ROLES / "n8n/tasks/main.yml",
+    } <= walked
     pihole = task_inputs.include_vars(K8S_ROLES / "pihole")
     assert pihole["manifests_deferred_files"] == ["deployment-2.yaml"]
     assert pihole["manifests_deferred_dir_name"] == "pihole-instance-2"
