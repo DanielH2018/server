@@ -127,7 +127,7 @@
 
 # The keyed digest of the secret manifests. A separate field from `manifests_digest`, so
 # records without it still compare on the ordinary bytes. Publishes `manifests_release_secret_digest`: the digest,
-# or '' when the host key is unavailable, which the reader treats as "no secret digest".
+# or '' when the host key is unavailable, which means "no secret digest".
 #
 # Nothing below reads a secret manifest into Ansible. secret_hmac.py receives two paths and
 # prints one hex digest, so the register holds a digest and the argv holds paths. No task here
@@ -197,7 +197,7 @@
   tags: [deploy]
   # rc 1 is an unreadable secret file, recorded as ABSENT for the reason the ordinary digest
   # records one. rc 2 is an unreadable key: the digest would name nothing comparable, so it is
-  # omitted and the reader falls back to the path rule. The sorted name->digest map is hashed
+  # omitted. The sorted name->digest map is hashed
   # the same way as `manifests_digest`, so a service with no secret manifests digests an empty map.
   ansible.builtin.set_fact:
     manifests_release_secret_digest: >-

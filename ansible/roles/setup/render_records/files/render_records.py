@@ -237,8 +237,8 @@ def main() -> int:
         return 1
 
     config = load_config(read_config_file(settings.gitops_config))
-    # The deployer's own checkout: the one its tick fetches and the reader resolves
-    # origin/master in. Read from its config rather than templated twice.
+    # The deployer's own checkout: the one its tick fetches. Read from its config rather
+    # than templated twice.
     if not config.repo:
         print(f"{settings.gitops_config} names no REPO_DIR", file=sys.stderr)
         return 1
@@ -290,7 +290,7 @@ def main() -> int:
     started = datetime.now(UTC).strftime(TIMESTAMP)
     began = time.monotonic()
     # --skip-staleness-check: the chosen commit may sit below the tip, and the record names
-    # its own commit, which is what the reader compares. The gate protects a live apply from
+    # its own commit. The gate protects a live apply from
     # a stale tree; a dry run into a record keyed by commit has nothing for it to protect.
     state = settings.checkout.parent
     log_path = state / "ansible.log"

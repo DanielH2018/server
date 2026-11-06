@@ -15,8 +15,7 @@ The CLI prints `render_record_targets`, which adds a third: the entry carries no
 listed it would refuse the whole list. `render_targets()` keeps every render target, because
 the renderer, R1's `compare` and R2 render a Flux-owned tag too.
 
-Derived rather than listed. A list goes stale the day a service is added, and a service missing
-from it reads to the staleness reader as one with nothing to compare.
+Derived rather than listed. A list goes stale the day a service is added.
 
 The producer runs this module from the checkout it is about to render, so the list belongs to
 the commit whose records it writes.

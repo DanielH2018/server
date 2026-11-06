@@ -711,8 +711,7 @@ optimize_pi_host: daniel-pi
 # is an over-broad verdict.
 ops_cron_host: daniel-box
 # The one host that writes k8s render records (roles/setup/render_records). It must be
-# the host the release records name, because the staleness reader refuses a render record
-# whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
+# the host whose primary checkout the GitOps deployer fetches.
 render_records_host: daniel-box
 # The role's defaults pin the producer absent whatever this says (`render_records_state` in
 # roles/setup/render_records/defaults/main.yml, D5's disarm PR), so true here arms nothing: since
