@@ -431,7 +431,7 @@
     - Deploy:
         icon: mdi-rocket-launch
         # LAN-only, like longhorn and the traefik dashboard this tile replaced: the queue page
-        # runs land.sh and deploy.sh, so it is behind Authelia on a name with no public route
+        # starts landings with land.sh, so it is behind Authelia on a name with no public route
         # (roles/setup/deploy_ui/).
         href: {{ containers_list | homepage_href('deploy-ui', domain, lan=true) }}
         description: Deploy queue
