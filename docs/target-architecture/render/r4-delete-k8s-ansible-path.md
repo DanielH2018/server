@@ -526,9 +526,10 @@ The job then compares the two trees:
   included;
 - the head's tag set against the base's. Under `Render-diff: none` the sets must be equal.
   Under a list, every `flux/<tag>.yaml` that appears or disappears must be on the list;
-- a floor on both trees, so two empty renders cannot pass: `flux/pihole.yaml`,
-  `flux/traefik.yaml` and `cluster/pihole-deferred/` exist, and the `flux/` file count is
-  at least the number PR 1 measures;
+- a floor on both trees, so a render that loses a named member or a `flux/` file cannot pass:
+  `flux/pihole.yaml`, `flux/traefik.yaml` and `cluster/pihole-deferred/` exist, and the
+  `flux/` file count is at least the number PR 1 measures. Two empty renders never reach it,
+  because `shadow_diff.py digest` refuses an empty tree and fails the job first;
 - the sorted-tree sha256 that `shadow_diff.py digest` prints (R1's exit 2), for the PR
   description.
 
@@ -1659,8 +1660,10 @@ Exit 6 is read at R4's last PR with `git ls-files 'scripts/renderer/*.py' | grep
   file.
 - The render-diff job: PR 1's description shows the job failing in five cases on branch
   commits. One edits a `flux/<tag>.yaml` field under `Render-diff: none`. One touches
-  `scripts/renderer/` with no `Render-diff:` line. One renders an empty tree on both sides.
-  One removes `cluster/pihole-deferred/`. One raises `k8s_rollout_stabilise_seconds` above
+  `scripts/renderer/` with no `Render-diff:` line. One renders an empty tree on both sides,
+  and it fails at the digest step, because `shadow_diff.py digest` refuses an empty tree. One
+  removes `cluster/pihole-deferred/`, and this is the case that reaches the floor, through
+  `FLOOR_PATHS`. One raises `k8s_rollout_stabilise_seconds` above
   the longest `for:` among the soak's rules, which moves the soak Job's wait W (D5, *The
   soak as a Job*), under `Render-diff: none`, and the run names a file under
   `cluster/soak/`. The first passes once the line names that file.
@@ -1767,9 +1770,9 @@ daniel-box. The operator produces them, because each needs the host:
 
 - **Failure class 3 (empty read as clean).** `_named_files` returns `{}` for a missing task
   file, and the renderer would then derive different lists. Mitigation: the three-stage move,
-  the hard errors in PR 5, and the render-diff gate on every PR. The gate's floor, three
-  named members and a minimum `flux/` count, stops two empty renders from passing, and its
-  `Render-diff:` line is mandatory on the hazard paths. PR 1's inventory names its expected
+  the hard errors in PR 5, and the render-diff gate on every PR. The gate's digest step
+  refuses two empty renders. Its floor, three named members and a minimum `flux/` count, stops
+  a render that loses a member, and its `Render-diff:` line is mandatory on the hazard paths. PR 1's inventory names its expected
   members: the nine host-side roles, the six `verify.yml` files and the twelve
   explicit-list roles.
 - **Failure class 4 (selector drift).** The task-free service predicate could narrow the
