@@ -42,30 +42,21 @@ def preflight(ln: Landing) -> None:
     ln.die(f"pre-flight failed (exit {rc}) — land.sh deployed nothing itself", 1)
 
 
-def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
-    """Wait for master CI on `sha`; red and no-verdict each end the landing with a name.
-
-    `label` names what is being waited on when it is not simply the merge commit -- the
-    stale-retry caller passes `the tip <sha>`. Without one the messages read as step 3's
-    always did: the sha for a red CI, and no `on ...` clause at all for a timeout.
-    """
+def wait_master_ci(ln: Landing, sha: str) -> None:
+    """Wait for master CI on `sha`; red and no-verdict each end the landing with a name."""
     rc, line = ln.tools.await_ci(sha, ln.opts.ci_timeout)
     print(line)
     if rc == CI_GREEN:
         return
-    where = f" on {label}" if label else ""
     if rc == CI_RED:
-        # A caller passing `label` names an origin tip that never went green, which the tick
-        # cannot cross.
-        cannot_cross = " — the tick cannot cross it;" if label else " —"
         ln.die(
-            f"master CI is RED on {label or sha}{cannot_cross} land.sh deployed nothing itself",
+            f"master CI is RED on {sha} — land.sh deployed nothing itself",
             1,
             Verdict.CI_RED,
         )
     if rc == CI_PENDING:
         ln.die(
-            f"no CI verdict{where} inside {ln.opts.ci_timeout}s — land.sh deployed nothing itself",
+            f"no CI verdict inside {ln.opts.ci_timeout}s — land.sh deployed nothing itself",
             75,
             Verdict.CI_TIMEOUT,
         )
@@ -76,10 +67,10 @@ def wait_master_ci(ln: Landing, sha: str, label: str | None = None) -> None:
         # only what this landing did.
         tags = f" (this PR's tags: {ln.tags_csv})" if ln.tags_csv else ""
         ln.die(
-            f"no CI verdict can arrive{where}: {line}{tags} — land.sh deployed nothing itself",
+            f"no CI verdict can arrive: {line}{tags} — land.sh deployed nothing itself",
             1,
             Verdict.CI_UNPROVEN,
         )
     if rc == CI_DISARMED:
-        ln.die(disarmed(where, "land.sh deployed nothing itself"), 1)
-    ln.die(f"await_ci failed{where} (exit {rc}) — land.sh deployed nothing itself", 1)
+        ln.die(disarmed("", "land.sh deployed nothing itself"), 1)
+    ln.die(f"await_ci failed (exit {rc}) — land.sh deployed nothing itself", 1)

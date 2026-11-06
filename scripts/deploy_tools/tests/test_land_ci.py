@@ -41,12 +41,11 @@ def test_red_and_no_verdict_each_end_the_landing_with_a_name(
 ):
     ln, _ = landing(Fakes(await_ci=[(rc, "x")]))
     with pytest.raises(Outcome) as exc:
-        ci.wait_master_ci(ln, "abc", "abc")
+        ci.wait_master_ci(ln, "abc")
     assert (exc.value.rc, exc.value.verdict) == (code, verdict)
 
 
 def test_step_3_names_the_sha_and_omits_the_on_clause_for_a_timeout(landing):
-    """The unlabelled caller is step 3, waiting on the merge commit itself."""
     ln, _ = landing(Fakes(await_ci=[(1, "x")]))
     with pytest.raises(Outcome) as red:
         ci.wait_master_ci(ln, "abc123")
@@ -64,51 +63,18 @@ def test_step_3_names_the_sha_and_omits_the_on_clause_for_a_timeout(landing):
     )
 
 
-def test_a_labelled_wait_names_what_it_waited_on(landing):
-    """The stale-retry caller waits on a tip that is not this PR's merge commit."""
-    ln, _ = landing(Fakes(await_ci=[(75, "x")]), ci_timeout=900)
-    with pytest.raises(Outcome) as exc:
-        ci.wait_master_ci(ln, "def456", "the tip def456")
-    assert (
-        exc.value.error
-        == "no CI verdict on the tip def456 inside 900s — land.sh deployed nothing itself"
-    )
-
-
-def test_a_labelled_red_names_that_the_tick_cannot_cross_it(landing):
-    """A labelled tip wait says "the tick cannot cross it" for a red CI on the tip; the
-    unlabelled step-3 wait does not."""
-    ln, _ = landing(Fakes(await_ci=[(1, "x")]))
-    with pytest.raises(Outcome) as exc:
-        ci.wait_master_ci(ln, "def456", "the tip def456")
-    assert exc.value.error == (
-        "master CI is RED on the tip def456 — the tick cannot cross it; land.sh deployed nothing itself"
-    )
-
-
-def test_an_unrecognized_await_ci_exit_names_what_it_waited_on(landing):
-    """The catch-all `await_ci failed` branch must keep `where`, so a labelled (tip) wait and
-    an unlabelled (step 3) wait read differently on any exit other than 1 or 75."""
+def test_an_unrecognized_await_ci_exit_is_named(landing):
     ln, _ = landing(Fakes(await_ci=[(3, "x")]))
-    with pytest.raises(Outcome) as unlabelled:
+    with pytest.raises(Outcome) as exc:
         ci.wait_master_ci(ln, "abc123")
     assert (
-        unlabelled.value.error
-        == "await_ci failed (exit 3) — land.sh deployed nothing itself"
-    )
-
-    ln, _ = landing(Fakes(await_ci=[(3, "x")]))
-    with pytest.raises(Outcome) as labelled:
-        ci.wait_master_ci(ln, "def456", "the tip def456")
-    assert (
-        labelled.value.error
-        == "await_ci failed on the tip def456 (exit 3) — land.sh deployed nothing itself"
+        exc.value.error == "await_ci failed (exit 3) — land.sh deployed nothing itself"
     )
 
 
 def test_green_returns_and_prints_the_line(landing, capsys):
     ln, _ = landing(Fakes(await_ci=[(0, "0123456: CI green")]))
-    ci.wait_master_ci(ln, "abc", "abc")
+    ci.wait_master_ci(ln, "abc")
     assert "0123456: CI green" in capsys.readouterr().out
 
 
@@ -116,22 +82,21 @@ def test_green_returns_and_prints_the_line(landing, capsys):
 _DISARMED_LINE = "await_ci: no required CI contexts -- refusing to report a verdict"
 
 
-def _disarmed_output(landing, capsys, label: str | None = None) -> str:
+def _disarmed_output(landing, capsys) -> str:
     """Everything land.sh prints when await_ci exits CI_DISARMED, stdout and stderr."""
     from lib.exit_codes import CI_DISARMED
 
     ln, _ = landing(Fakes(await_ci=[(CI_DISARMED, _DISARMED_LINE)]))
     with pytest.raises(Outcome) as exc:
-        ci.wait_master_ci(ln, "abc123", label)
+        ci.wait_master_ci(ln, "abc123")
     exc.value.emit()
     out = capsys.readouterr()
     return out.out + out.err
 
 
-@pytest.mark.parametrize("label", [None, "the tip def456"])
-def test_a_disarmed_gate_is_named_as_disarmed(landing, capsys, label):
+def test_a_disarmed_gate_is_named_as_disarmed(landing, capsys):
     """Exit 2 is CI_DISARMED, not a failed CI run: the output says so (#4464)."""
-    out = _disarmed_output(landing, capsys, label)
+    out = _disarmed_output(landing, capsys)
     assert "disarmed" in out.lower(), out
     assert "(exit 2)" not in out, out
 
@@ -303,12 +268,7 @@ def test_step_3_does_not_end_red_for_good_once_a_later_descendant_is_green(
         assert "promote.yml" in detail, detail
 
 
-@pytest.mark.parametrize(
-    "label, where", [(None, ""), ("the tip def456", " on the tip def456")]
-)
-def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(
-    landing, label, where
-):
+def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(landing):
     """#4641/#4649: exit 1, not the 75 resume point, carrying await_ci's line and the tags."""
     from lib.exit_codes import CI_UNPROVEN
 
@@ -316,9 +276,9 @@ def test_an_unproven_merge_commit_ends_ci_unproven_and_names_the_way_out(
     ln, _ = landing(Fakes(await_ci=[(CI_UNPROVEN, line)]))
     ln.resolved_tags = ["grafana", "loki"]
     with pytest.raises(Outcome) as exc:
-        ci.wait_master_ci(ln, "abc123", label)
+        ci.wait_master_ci(ln, "abc123")
     assert (exc.value.rc, exc.value.verdict) == (1, "ci-unproven")
     assert exc.value.error == (
-        f"no CI verdict can arrive{where}: {line} (this PR's tags: grafana,loki) "
+        f"no CI verdict can arrive: {line} (this PR's tags: grafana,loki) "
         "— land.sh deployed nothing itself"
     )
