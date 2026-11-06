@@ -114,9 +114,9 @@ def _run(tmp_path, script: str, **env: str):
         "GH_TOKEN": "promote-token",
         "RUNNER_TEMP": str(tmp_path),
         "PATH": "/usr/bin:/bin",
-        "RETRY_FUNCTIONS": yaml_fast.safe_load(WORKFLOW.read_text(encoding="utf-8"))[
-            "env"
-        ]["RETRY_FUNCTIONS"],
+        "RETRY_FUNCTIONS": yaml_fast.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+        .get("env", {})
+        .get("RETRY_FUNCTIONS", ""),
     }
     result = proc_run(["bash", "-c", script], env={**base, **env}, stub_bin=stub)
     lines = [line for line in calls.read_text().splitlines() if line]
