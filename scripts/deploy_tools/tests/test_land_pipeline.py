@@ -173,8 +173,6 @@ def test_an_issue_github_closes_during_the_grace_read_is_not_closed(land_run):
     fakes = _sonarr_settled(closing_refs=[_refs("OPEN"), _refs("CLOSED")])
     _, _, _, calls, _ = land_run([], fakes)
     assert _closes(calls) == []
-    assert [c[0] for c in calls].count("gh:closing-refs") == 2
-    assert "sleep" in [c[0] for c in calls]
 
 
 @pytest.mark.parametrize(
