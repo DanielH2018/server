@@ -331,30 +331,27 @@ def test_a_full_deploy_plus_rollback_is_flagged_over_budget():
 def test_the_budget_predicate_tracks_the_units_real_timeout():
     """Pins the numbers the forward-only decision rests on.
 
-    If TimeoutStartSec is raised in gitops-deploy.service.j2, this fails and the decision gets
+    If TimeoutStartSec moves in gitops-deploy.service.j2, this fails and the decision gets
     revisited deliberately rather than drifting.
 
-    The verdict below is the same at 70min as at 60min: a ceiling that fits at 3600 fits at 4200.
-    Derived at that ceiling: 180 + 1212 + 1212 + 300 = 2904 against 3600 FITS, so the budget
-    is not what makes the deploy-plane arm forward-only. broad_budget_ok has no production
-    caller; it is the reasoning made executable, and
-    gitops_deploy.py's broad arm is forward-only in code either way. Funding a broad rollback is a
-    deliberate change to make on its own evidence (a re-measured deploy.yml, and a decision about a
-    rollback that can still be SIGTERMed), not a side effect of a ceiling raised for an unrelated
-    feature.
+    Derived at 40min: 180 + 1212 + 1212 + 300 = 2904 against 2400 OVERRUNS, so the budget rules
+    out a full-deploy rollback. broad_budget_ok has no production caller; it is the reasoning made
+    executable, and gitops_deploy.py's broad arm is forward-only in code either way. Funding a
+    broad rollback is a deliberate change to make on its own evidence (a re-measured deploy.yml,
+    and a decision about a rollback that can still be SIGTERMed).
     """
     unit = (
         pathlib.Path(__file__).resolve().parents[1]
         / "templates"
         / "gitops-deploy.service.j2"
     )
-    assert "TimeoutStartSec=70min" in unit.read_text(), (
+    assert "TimeoutStartSec=40min" in unit.read_text(), (
         "TimeoutStartSec moved — re-derive broad_budget_ok's verdict before trusting it"
     )
-    assert broad_budget_ok(
-        forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=4200
+    assert not broad_budget_ok(
+        forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=2400
     ), (
-        "the re-derivation above says a broad rollback now fits at 70min; if this goes red the "
+        "the re-derivation above says a broad rollback overruns at 40min; if this goes red the "
         "note in this docstring is stale and forward-only needs re-arguing from the budget again"
     )
 

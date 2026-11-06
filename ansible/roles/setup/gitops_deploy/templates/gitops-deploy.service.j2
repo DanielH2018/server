@@ -14,11 +14,10 @@ Type=oneshot
 # 180 (max flock wait) + BROAD_DEPLOY_TIMEOUT_S (1800) = 1980s. The arm is FORWARD-ONLY, so no
 # rollback budget stacks on top.
 #
-# 70min was sized for the k8s path, a forward deploy and its rollback in sequence
-# (180 + 1440 + 1620 = 3240s). It stays at 70min rather than shrinking with that path: four
-# tree-lock waiters, the lander deadlines and `deploy.sh`'s LOCK_WAIT were derived from the
-# same budgets, so a smaller ceiling is a change of its own. A ceiling above the worst case
-# costs nothing on a healthy run, which finishes in well under a minute.
+# 40min leaves 420s above that for the tick's work outside the budget: its git calls carry no
+# timeout, and the CI read, the routing derivations and the alerts run before or after the
+# apply. A ceiling above the worst case costs nothing on a healthy run, which finishes in well
+# under a minute.
 #
 # An overrun never produces a second or concurrent run: systemd finds the unit already
 # `activating` and coalesces the timer's start request into the run already in flight, rather
@@ -40,9 +39,9 @@ Type=oneshot
 #
 # This unit takes those per-service locks too, inside the tree-lock hold above, and the wait for
 # them comes out of the SAME budget as the playbook it is waiting to run
-# (deploy_locks.locked_budget). That is what keeps the four terms below a true ceiling: give the
-# wait a budget of its own and each of them doubles, past this TimeoutStartSec.
-TimeoutStartSec=70min
+# (deploy_locks.locked_budget). That is what keeps BROAD_DEPLOY_TIMEOUT_S a true ceiling: give the
+# wait a budget of its own and it doubles, past this TimeoutStartSec.
+TimeoutStartSec=40min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,
