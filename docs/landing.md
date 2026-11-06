@@ -694,6 +694,14 @@ Three things sit in that position:
   key, a pair whose `live` is not a literal path. A host that cannot be read also stays owed. To
   clear the line after a hand apply, re-run `land.sh`.
 
+  **The line names a host only where the shared task file renders the template.** A role that
+  imports `check_timer.yml` passes `check_timer_state`, and the file's renders are gated on
+  `present`. `setup_lib/setup_role_chains.py:task_gates_shipping_owner_file` reads each render's
+  gate with the import's `vars:` in place. A template change therefore names no host on the
+  teardown half of `gitops_deploy`, and names `initial_setup` only on the hosts its check lists
+  hold. A `vars:` value this read cannot express keeps the host named. A change to
+  `check_timer.yml` itself keeps every importer's reach, because its absent arm runs there.
+
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
 `scripts/deploy_tools/owed_run.py <role>` runs the printed apply commands and the clear in one

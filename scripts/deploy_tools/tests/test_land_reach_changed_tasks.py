@@ -27,6 +27,10 @@ _CRONS = """\
 """
 _ALERT_TEMPLATE = "ansible/roles/setup/common/templates/unit-failure-alert.service.j2"
 _ALL = frozenset({"daniel-box", "daniel-server", "daniel-pi"})
+_CHECK_TIMER_TEMPLATES = tuple(
+    f"ansible/roles/setup/common/templates/check-timer{name}.j2"
+    for name in (".service", ".timer", "-boot.service")
+)
 
 
 def _edit(text: str, job: str) -> str:
@@ -207,6 +211,88 @@ def test_the_alert_template_reaches_gitops_deploy_through_its_install_half_only(
     assert land_reach.setup_shipped_file_hosts("gitops_deploy", _ALERT_TEMPLATE) == {
         "daniel-box"
     }
+
+
+@pytest.mark.parametrize("template", _CHECK_TIMER_TEMPLATES)
+def test_a_check_timer_template_reaches_gitops_deploy_through_its_install_half_only(
+    template,
+):
+    """teardown.yml imports `check_timer.yml` with state absent, so it renders nothing (#7416)."""
+    assert land_reach.setup_shipped_file_hosts("gitops_deploy", template) == {
+        "daniel-box"
+    }
+    note = land_reach.remaining_setup_hosts_note([template], "daniel-box")
+    assert "`gitops_deploy`" not in note, note
+
+
+@pytest.mark.parametrize("template", _CHECK_TIMER_TEMPLATES)
+def test_a_check_timer_template_names_initial_setup_only_on_the_listed_hosts(template):
+    assert land_reach.setup_shipped_file_hosts("initial_setup", template) == {
+        "daniel-box",
+        "daniel-server",
+    }
+
+
+def test_a_check_timer_task_file_change_keeps_the_teardown_hosts():
+    """The file's absent arm runs on the hosts that render nothing, so its own edit owes them."""
+    tasks = "ansible/roles/setup/common/tasks/check_timer.yml"
+    assert land_reach.setup_shipped_file_hosts("gitops_deploy", tasks) == _ALL
+
+
+@pytest.mark.parametrize(
+    "state, hosts",
+    [
+        pytest.param("absent", frozenset(), id="literal-absent"),
+        pytest.param("present", _ALL, id="literal-present"),
+        pytest.param(
+            "{{ 'present' if inventory_hostname in on_list else 'absent' }}",
+            {"daniel-server"},
+            id="per-host",
+        ),
+        pytest.param("{{ state_var }}", frozenset(), id="group-var"),
+        pytest.param("{{ other | default('x') }}", _ALL, id="filter-stays-wide"),
+        pytest.param("{{ '{{' }}-{{ state_var }}", _ALL, id="partial-jinja-stays-wide"),
+    ],
+)
+def test_an_owner_render_is_read_with_the_imports_vars(tmp_path, state, hosts):
+    (tmp_path / "initial_setup.yml").write_text("- hosts: x\n  roles: [demo]\n")
+    (tmp_path / "all.yml").write_text("on_list: [daniel-server]\nstate_var: absent\n")
+    (tmp_path / "host_vars").mkdir()
+    for path, tasks in (
+        (
+            "common/tasks/shared.yml",
+            [
+                {
+                    "name": "Render",
+                    "when": "shared_state == 'present'",
+                    "template": {"src": "x/shared.j2", "dest": "/etc/shared"},
+                }
+            ],
+        ),
+        (
+            "demo/tasks/main.yml",
+            [
+                {
+                    "name": "Import",
+                    "import_tasks": "{{ role_path }}/../common/tasks/shared.yml",
+                    "vars": {"shared_state": state},
+                }
+            ],
+        ),
+    ):
+        (tmp_path / "roles" / path).parent.mkdir(parents=True)
+        (tmp_path / "roles" / path).write_text(yaml.safe_dump(tasks))
+    assert (
+        land_reach.setup_shipped_file_hosts(
+            "demo",
+            "ansible/roles/setup/common/templates/shared.j2",
+            tmp_path / "initial_setup.yml",
+            tmp_path / "all.yml",
+            tmp_path / "host_vars",
+            tmp_path / "roles",
+        )
+        == hosts
+    )
 
 
 def test_an_alert_template_change_names_only_an_importer_rendering_it_elsewhere():

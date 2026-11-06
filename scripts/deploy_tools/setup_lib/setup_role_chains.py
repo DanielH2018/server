@@ -165,6 +165,111 @@ def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]
     )
 
 
+def task_gates_shipping_owner_file(
+    role: str, path: str, roles_dir: Path, may_render
+) -> list[tuple] | None:
+    """Every `when:` chain on a task of `role` that names `path`, a file another role owns.
+
+    A task names it by its basename, or by importing a task file of the owner that names or
+    renders it. A task importing a file that renders it reaches a host only where one of those
+    renders runs, so its chain gains each render's gates, read with the import's `vars:` in
+    place. `gitops_deploy`'s teardown imports `check_timer.yml` with `check_timer_state: absent`,
+    and the file's renders are gated on `present`, so the teardown half renders nothing.
+
+    `may_render(task, path)` says whether a task could render `path`.
+    """
+    role_dir = roles_dir / role
+    renders = _owner_renders(path, roles_dir, may_render)
+    names = _owner_file_names(path, roles_dir) | set(renders)
+    named: list[dict] = []
+
+    def keep(task: dict, _task_file: str) -> bool:
+        text = task_text(task)
+        if not any(name in text for name in names):
+            return False
+        named.append(task)
+        return True
+
+    chains = task_chains(role_dir, keep)
+    if chains is None:
+        return None
+    found: list[tuple] = []
+    for task, chain in zip(named, chains, strict=True):
+        target = next((task[k] for k in _IMPORT_KEYS if k in task), None)
+        gates = renders.get(Path(target).name) if isinstance(target, str) else None
+        found.extend(
+            (*chain, *(_with_import_vars(gate, task.get("vars")) for gate in render))
+            for render in gates or [()]
+        )
+    return found
+
+
+def _owner_file_names(path: str, roles_dir: Path) -> set[str]:
+    """`path`'s basename, and each owner task file that names it, by basename."""
+    basename = Path(path).name
+    names = {basename}
+    parts = Path(path).parts
+    if len(parts) < 5 or parts[:3] != ("ansible", "roles", "setup"):
+        return names
+    for task_file in sorted((roles_dir / parts[3] / "tasks").glob("*.yml")):
+        try:
+            if basename in task_file.read_text():
+                names.add(task_file.name)
+        except OSError:
+            continue
+    return names
+
+
+def _owner_renders(path: str, roles_dir: Path, may_render) -> dict[str, list[tuple]]:
+    """Each task file of `path`'s owner that may render it -> the chain on each such render.
+
+    Empty for a path outside a role's `templates/`. `check_timer.yml` names its pair as
+    `check-timer.{{ item }}.j2`, so a literal match on the basename misses it.
+    """
+    parts = Path(path).parts
+    if len(parts) < 6 or parts[:3] != ("ansible", "roles", "setup"):
+        return {}
+    if parts[4] != "templates":
+        return {}
+    owner = roles_dir / parts[3]
+    found = {}
+    for task_file in sorted((owner / "tasks").glob("*.yml")):
+        chains = task_chains(
+            owner, lambda task, _: may_render(task, path), task_file.name
+        )
+        if chains:
+            found[task_file.name] = chains
+    return found
+
+
+def _with_import_vars(gate: object, import_vars: object) -> object:
+    """`gate` with each import var it reads replaced by that var's value, for `eval`.
+
+    A var this cannot express keeps its name, which resolves to nothing, so the gate reads as
+    unknown and the host stays reached.
+    """
+    if isinstance(gate, list):
+        return [_with_import_vars(g, import_vars) for g in gate]
+    if not isinstance(gate, str) or not isinstance(import_vars, dict):
+        return gate
+    values = {k: _as_expression(v) for k, v in import_vars.items()}
+    return re.sub(
+        r"\b\w+\b",
+        lambda m: f"({values[m[0]]})" if values.get(m[0]) else m[0],
+        gate,
+    )
+
+
+def _as_expression(value: object) -> str | None:
+    """A var's value as a Python expression, or None when part of it is Jinja text."""
+    if not isinstance(value, str):
+        return repr(value)
+    whole = re.fullmatch(r"\s*{{(.*)}}\s*", value, re.DOTALL)
+    if whole and "{{" not in whole[1]:
+        return whole[1].strip()
+    return None if "{{" in value or "{%" in value else repr(value)
+
+
 def _ships_repo_path(task: dict, repo_path: str) -> bool:
     """Whether `repo_path` appears in `task` anywhere but its `name:`."""
     return repo_path in task_text({k: v for k, v in task.items() if k != "name"})
