@@ -75,6 +75,15 @@ def test_resolve_vars_a_whole_value_alias_keeps_the_list_type():
     assert resolved["node_cidrs"] == ["10.42.0.1/32", "10.42.1.1/32"]
 
 
+def test_resolve_vars_maps_combine_over_a_list():
+    """flux's and observability's `manifests_self_rollouts` are this expression, read as defaults."""
+    resolved = resolve_vars(
+        {"rollouts": "{{ workloads | map('combine', extra) | list }}"},
+        {"workloads": [{"name": "a"}], "extra": {"namespace": "obs"}},
+    )
+    assert resolved["rollouts"] == [{"name": "a", "namespace": "obs"}]
+
+
 def test_resolve_vars_a_partial_value_still_renders_to_a_string():
     """The rejecting half: text alongside the expression still goes through `.render()`.
 
