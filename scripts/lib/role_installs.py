@@ -9,7 +9,6 @@ returns the staged copy it runs. `lib.stdlib_only` walks those entries from the 
 Run: uv run pytest scripts/lib/tests/test_stdlib_only.py
 """
 
-import ast
 import atexit
 import functools
 import re
@@ -277,36 +276,11 @@ def _scripts_run(text: str, holder: Path) -> list[str]:
 def installed(directory: Path) -> Path:
     """An out-of-tree directory's staged copy when `stage()` holds one, else `directory`.
 
-    `render_records.py` inserts `/opt/gitops-deploy` to import the deployer's modules, which
-    on the host are what that install directory holds, not the tree.
+    A script that inserts an absolute install directory imports what that directory holds on
+    the host, not the tree.
     """
     if directory.is_absolute() and not directory.is_relative_to(REPO):
         staged = stage() / directory.relative_to("/")
         if staged.is_dir():
             return staged
     return directory
-
-
-@functools.cache
-def staged_overrides() -> dict[str, str]:
-    """Env names a staged script reads its install directory from, pointed at the stage.
-
-    `live_drift_check.py` inserts `os.environ.get("HOST_LIB_DIR", "/opt/live-drift-check")`
-    ahead of `PYTHONPATH`, so on a host that has the directory the import would load the
-    installed copy instead of the staged one under test.
-    """
-    found = {}
-    for live in install_map():
-        for node in ast.walk(ast.parse(staged_path(live).read_text(encoding="utf-8"))):
-            match node:
-                case ast.Call(
-                    func=ast.Attribute(value=ast.Attribute(attr="environ"), attr="get"),
-                    args=[
-                        ast.Constant(value=str() as name),
-                        ast.Constant(value=str() as default),
-                    ],
-                ) if Path(default).is_absolute():
-                    directory = installed(Path(default))
-                    if directory.is_relative_to(stage()):
-                        found[name] = str(directory)
-    return found

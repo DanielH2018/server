@@ -6,9 +6,7 @@ the crons that run them, and render probe-Job manifests under `/etc/rancher/k3s/
 `--dry-run` promises the run changed nothing, host included.
 
 Unguarded, any session's dry run ships its own tree's host half before that tree has landed —
-past the health gate and past the auto-deploy denylist, which both watch the cluster. It is
-also what keeps `roles/setup/render_records` disarmed: an hourly fleet dry run would install
-origin/master's host plane every hour.
+past the health gate and past the auto-deploy denylist, which both watch the cluster.
 
 The guard is `k8s_dry_run`, not `k8s_no_mutate`. `template`, `copy`, `file` and `cron` skip
 their own writes under `--check` and report what would change, and the wider fact would turn

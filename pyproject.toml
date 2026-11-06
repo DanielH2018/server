@@ -360,7 +360,6 @@ extra-paths = [
   "ansible/roles/k8s/arr-notification/files",
   "ansible/roles/k8s/manifests/files",
   "ansible/roles/setup/fake_remux/files",
-  "ansible/roles/setup/render_records/files",
   "ansible/roles/k8s/ical-proxy/files",
   "ansible/roles/k8s/homelab-mcp/files",
   "ansible/roles/k8s/crowdsec/files",

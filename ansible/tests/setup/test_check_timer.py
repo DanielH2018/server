@@ -50,7 +50,6 @@ KNOWN_CHECKS = frozenset(
         "setup-drift",
         "github-ruleset-drift",
         "github-interaction-limit",
-        "render-records",
     }
 )
 

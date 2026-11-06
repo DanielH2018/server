@@ -393,16 +393,6 @@ comparison can go red.
 `ansible/roles/k8s/manifests/tasks/release_stamp.yml:DECIDED: this digest names the bytes`
 carries the same conclusion at the line that writes the digest.
 
-### The hourly render-record producer
-
-**`ansible/roles/setup/render_records/` is the hourly producer** (#2587). It renders every service
-`scripts/deploy_tools/render_targets.py` lists, at the newest origin/master commit whose CI is
-green, from its own detached worktree. `render_records_state` pins the role `absent` until R4
-deletes it, and its Kuma tile went with M6. It shipped disarmed until #2614 guarded every host write
-in a role that includes this one (host scripts, crons, node-staged modules) on
-`not k8s_dry_run | bool`. Without that guard, an hourly dry run would ship origin/master's host
-half ahead of its landing. `render_records_enabled` switches it off.
-
 ## The batch drain's measurement
 
 `ansible/tasks/k8s_batch.yml` includes `tasks_from: drain.yml` at the end of every batch. The

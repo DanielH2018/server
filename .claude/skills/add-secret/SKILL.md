@@ -49,7 +49,7 @@ which only the operator can write. Step 6 tells you which case you are in.
      keys): **DO NOT** `sops set` these — rotating/altering them is a DANGER procedure with
      data-loss risk. Stop and point the user at the `pinned` runbook in `docs/secret-rotation.md`.
    - **auto** — locally generated, no external coupling. Safe to generate. The registry's
-     only `auto` entry is `render_records_push_token`, which goes with its role; do not add another.
+     only `auto` entry is `render_records_push_token`, whose role is deleted; do not add another.
    - **assisted / external** — value comes from a provider console or has an app-side step.
 
 3. **Add the secret** (`.sops.yaml` auto-encrypts anything under `vars/`, so the file stays
