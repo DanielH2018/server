@@ -50,3 +50,5 @@ dri_device_plugin_reaper_deadline_seconds: 120
 # The job's own runs age out too, so a run the reboot interrupts does not become the next
 # tombstone. The output is in Loki past this.
 dri_device_plugin_reaper_job_ttl_seconds: 1800
+
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]

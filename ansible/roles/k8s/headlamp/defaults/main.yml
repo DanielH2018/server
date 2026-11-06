@@ -125,3 +125,11 @@ headlamp_k8s_oidc_callback_url: ""
 # `groups` is the one that carries the RBAC subject; without it the login succeeds and every
 # list call is Forbidden.
 headlamp_k8s_oidc_scopes: "profile,email,groups"
+
+# The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
+# armed apply's `-n homelab` refuses (#3575). The renderer emits them as the deferred
+# document `headlamp-deferred`.
+manifests_deferred_files:  # noqa var-naming[no-role-prefix]
+  - rbac-observability.yaml
+
+manifests_deferred_dir_name: headlamp-observability  # noqa var-naming[no-role-prefix]

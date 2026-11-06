@@ -116,3 +116,5 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ home_assistant_k8s_claim }}"
     storage_class: "{{ home_assistant_k8s_storage_class }}"
     size: "{{ home_assistant_k8s_size }}"
+
+manifests_rollout: home-assistant  # noqa var-naming[no-role-prefix]

@@ -9,10 +9,3 @@
 - name: Deploy headlamp to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    # The Prometheus proxy Role and RoleBinding live in the observability namespace, which the
-    # armed apply's `-n homelab` refuses (#3575). The renderer emits them as the deferred
-    # document `headlamp-deferred`.
-    manifests_deferred_files:
-      - rbac-observability.yaml
-    manifests_deferred_dir_name: headlamp-observability

@@ -127,3 +127,22 @@ flux_verify_drill: false
 # pins, and Renovate's k8s-images manager moves both in one PR, as one dependency. The renderer
 # reads it here (scripts/renderer/renderer_lib/snapshot.py); no task of this role does.
 flux_job_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
+
+# The OCIRepository, the root Kustomization, the Providers and the Alerts are kinds whose
+# CRDs components.yaml installs, so one directory apply would refuse them on a cluster
+# that lacks the CRDs. The tasks at the end of tasks/main.yml wait for the CRDs, then apply them.
+manifests_deferred_files:  # noqa var-naming[no-role-prefix]
+  - sync.yaml
+
+manifests_deferred_dir_name: flux-sync  # noqa var-naming[no-role-prefix]
+
+# The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three, in
+# another namespace. Skip its wait, and tasks/main.yml waits instead.
+manifests_rollout: ''  # noqa var-naming[no-role-prefix]
+
+# ...but tell the release record which workloads this role owns, so `probe.py health flux`
+# reads them, and so the shared role fingerprints their pod templates in flux-system.
+# restart_on: [] on each entry keeps the record from expecting a restart nothing issues
+# (`flux_controllers` has why).
+manifests_self_rollouts: >-  # noqa var-naming[no-role-prefix]
+  {{ flux_controllers | map('combine', {'namespace': flux_namespace}) | list }}

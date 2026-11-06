@@ -8,5 +8,3 @@
 - name: Deploy Longhorn to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
-  vars:
-    manifests_rollout: ''

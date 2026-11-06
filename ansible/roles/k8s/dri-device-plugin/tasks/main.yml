@@ -23,4 +23,3 @@
   vars:
     # The DaemonSet lives in kube-system, so the armed apply and its prune run there.
     manifests_prune_namespace: kube-system
-    manifests_rollout: ''

@@ -9,24 +9,9 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    # The OCIRepository, the root Kustomization, the Providers and the Alerts are kinds whose
-    # CRDs components.yaml installs, so one directory apply would refuse them on a cluster
-    # that lacks the CRDs. The tasks at the end of this file wait for the CRDs, then apply them.
-    manifests_deferred_files:
-      - sync.yaml
-    manifests_deferred_dir_name: flux-sync
     # Every namespaced document lives in flux-system, so the armed apply and its prune run
     # there. The CRDs and the cluster RBAC are cluster-scoped and ignore the namespace.
     manifests_prune_namespace: "{{ flux_namespace }}"
-    # The shared role waits on ONE Deployment in {{ k8s_namespace }}; this role has three, in
-    # another namespace. Skip its wait and wait below.
-    manifests_rollout: ''
-    # ...but tell the release record which workloads this role owns, so `probe.py health flux`
-    # reads them, and so the shared role fingerprints their pod templates in flux-system.
-    # restart_on: [] on each entry keeps the record from expecting a restart nothing issues
-    # (defaults/main.yml has why).
-    manifests_self_rollouts: >-
-      {{ flux_controllers | map('combine', {'namespace': flux_namespace}) | list }}
 
 - name: Wait for the Flux controllers to roll out
   tags: [deploy]
