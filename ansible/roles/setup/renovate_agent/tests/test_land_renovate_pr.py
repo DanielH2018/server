@@ -128,6 +128,7 @@ def test_the_denylist_comes_from_the_derivation_in_the_checkout(tmp_path, monkey
     assert run.calls[0] == [
         "uv",
         "run",
+        "--frozen",
         "python",
         "scripts/dev/k8s_autodeploy_counts.py",
         "--denylist",

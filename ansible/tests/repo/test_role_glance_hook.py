@@ -56,7 +56,6 @@ def test_the_hook_runs_the_generator_in_fix_mode():
         "ansible/inventory/host_vars/daniel-pi.yml",
         "ansible/inventory/group_vars/all.yml",
         "ansible/initial_setup.yml",
-        "ansible/filter_plugins/toposort.py",
         # Where the libraries the generator imports live now, read from the modules
         # themselves, so a move to a directory outside the gate goes red here.
         *(

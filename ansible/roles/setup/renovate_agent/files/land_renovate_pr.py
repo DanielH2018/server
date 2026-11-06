@@ -50,9 +50,11 @@ AUTHOR = "app/renovate"
 BASE = "master"
 BRANCH_PREFIX = "renovate/"
 DENIED_SLUG = "k8s_autodeploy-false"
+# `--frozen`: a rewritten uv.lock would dirty the primary checkout, which parks the deployer.
 DENYLIST_ARGV = (
     "uv",
     "run",
+    "--frozen",
     "python",
     "scripts/dev/k8s_autodeploy_counts.py",
     "--denylist",

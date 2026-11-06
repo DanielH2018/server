@@ -33,7 +33,7 @@ and do nothing else with privilege. The session then reads
 
 The lander re-reads the PR from GitHub with the operator's token and lands it only when every
 check in its module docstring passes. The denied roles come from
-`uv run python scripts/dev/k8s_autodeploy_counts.py --denylist`, run in
+`uv run --frozen python scripts/dev/k8s_autodeploy_counts.py --denylist`, run in
 `RENOVATE_AGENT_REPO_DIR`, the checkout from which it runs `land.sh`, so `renovate.json`'s rule
 and the lander read one derivation. A non-zero exit, a timeout or output holding no list refuses
 the landing. It never reads the PR title, because the session can edit a title. ENFORCED:
