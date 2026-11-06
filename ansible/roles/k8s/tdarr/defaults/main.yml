@@ -57,8 +57,8 @@ k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server)"  # noqa var-naming[no-role-prefix]
 # The claims snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the tdarr-snapshot Kustomization, whose Job snapshots them before tdarr applies
-# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
-# Two claims, two seeds — same pairing as tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
+# (D5.2a). Two claims, two seeds — same pairing as
+# tdarr_k8s_server_claim/tdarr_k8s_configs_claim below.
 # Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa var-naming[no-role-prefix]
 
@@ -79,8 +79,7 @@ tdarr_k8s_configs_size: 1Gi
 tdarr_k8s_storage_class: longhorn
 
 # The claims the renderer emits for this role. The tdarr Kustomization applies them after the
-# tdarr-snapshot Job; after a handback, k8s/manifests applies them ahead of the pre-apply
-# snapshot.
+# tdarr-snapshot Job.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ tdarr_k8s_server_claim }}"
     storage_class: "{{ tdarr_k8s_storage_class }}"

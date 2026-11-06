@@ -85,8 +85,7 @@ pihole_k8s_regex_deny:
 
 # Both Pi-holes are restart targets, so the renderer stamps `checksum/restart` on each
 # (scripts/renderer/renderer_lib/restart.py). Flux rolls instance 1 in `pihole` and instance 2
-# in `pihole-deferred`, after instance 1 is Ready. No Flux path runs a restart task, and a
-# handback restores `roll_one.yml` from the commit before the flip.
+# in `pihole-deferred`, after instance 1 is Ready. No Flux path runs a restart task.
 manifests_rollout: ''  # noqa var-naming[no-role-prefix]
 
 manifests_self_rollouts:  # noqa var-naming[no-role-prefix]

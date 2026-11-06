@@ -408,7 +408,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     owners = tools.owners()
     left_out = tags & owners.keys()
     for tag in sorted(left_out):
-        print(left_out_line(tag, owners[tag]))
+        print(left_out_line(tag))
     tags -= left_out
     if args.deploy and tags:
         if tools.deploy(sorted(tags)) != 0:
