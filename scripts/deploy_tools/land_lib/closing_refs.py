@@ -7,9 +7,10 @@ than the trigger.
 
 `close_stranded` runs in step 1, straight after the merge commit resolves. A later step can crash,
 or wait for hours while `findings.py next` still offers the issue, and a docs-only PR ends inside
-step 1. It is best-effort: a failed read or close changes neither the verdict nor the exit code,
-which report the deploy. The failure prints as a `== ` line, because `handoff.py` relays only
-those to an agent landing through the lander unit.
+step 1. It is best-effort: a failed read or close changes neither the verdict token nor the exit
+code, which report the deploy. The failure goes on `Landing.warnings`, which `pipeline.run` appends
+to the `VERDICT:` line's detail. That line is all `cc-wait land` prints once a landing ends, and
+all it takes back from a lander unit, whose `== ` lines the next phase header displaces.
 
 GitHub closes the issues a moment after the merge, so an open reference is read again after
 `GRACE_S` before the landing closes it. An issue reopened after the merge stays open, because
@@ -111,10 +112,9 @@ def close_stranded(ln: Landing) -> None:
         ln.tools.sleep(GRACE_S)
         stranded = _stranded(_read_refs(ln))
     except (gh_read.GhReadFailed, ValueError) as exc:
-        print(
-            f"== could not read PR #{pr}'s closing references ({exc}); "
-            "check that each issue it closes is closed",
-            flush=True,
+        ln.warn(
+            f"could not read PR #{pr}'s closing references ({exc}); "
+            "check that each issue it closes is closed"
         )
         return
     for issue in stranded:
@@ -122,11 +122,10 @@ def close_stranded(ln: Landing) -> None:
         try:
             _close(ln, str(number))
         except gh_read.GhReadFailed as exc:
-            print(
-                f"== could not close #{number}, which GitHub left open after PR #{pr} "
+            ln.warn(
+                f"could not close #{number}, which GitHub left open after PR #{pr} "
                 f"merged ({exc}); run `uv run python scripts/dev/findings.py close {number} "
-                f"--fixed --pr {pr}`",
-                flush=True,
+                f"--fixed --pr {pr}`"
             )
         else:
             say(f"closed #{number}, which GitHub left open after PR #{pr} merged")

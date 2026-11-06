@@ -20,7 +20,7 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the PR head's and merge base's `owner`s and the head's k8s tags (the handback refusal) | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.merged_at`, `ledger.t_merged`, `ledger.merge_sha` |
-| `closing_refs.close_stranded` | `opts.pr` | -- |
+| `closing_refs.close_stranded` | `opts.pr` | `warnings` |
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary`, what each host the note would name holds (`deployed_copies`) | `classification` (frozen: the plane note, the self-applied half and their inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff`, `host_candidate` | -- |
@@ -161,6 +161,7 @@ def run(ln: Landing) -> Outcome:
         _phases(ln)
     except Outcome as outcome:
         ln.ledger.verdict = outcome.verdict or ""
+        outcome.detail = "; ".join((outcome.detail, *ln.warnings))
         return outcome
     # Unreachable: the last step is `health_verdict.health`, which is `NoReturn`. Returned
     # rather than raised, because `run`'s own `except Outcome` above would not catch an

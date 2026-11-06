@@ -213,6 +213,34 @@ def test_a_failed_read_says_so_and_keeps_the_verdict(land_run):
     assert _closes(calls) == []
 
 
+@pytest.mark.parametrize(
+    ("failing", "wanted"),
+    [
+        (
+            {
+                "closing_refs": [
+                    subprocess.CalledProcessError(1, "gh", stderr="HTTP 403\nDenied")
+                ]
+            },
+            "could not read PR #999's closing references (HTTP 403 Denied)",
+        ),
+        (
+            {"closing_refs": [_refs("OPEN")], "gh_merge_rc": [1]},
+            "findings.py close 7 --fixed --pr 999",
+        ),
+    ],
+)
+def test_a_failed_read_or_close_ends_the_verdict_line_cc_wait_prints(
+    land_run, tmp_path, failing, wanted
+):
+    verdict_file = tmp_path / "999.verdict"
+    fakes = _sonarr_settled(**failing)
+    rc, *_ = land_run(["--verdict-file", str(verdict_file)], fakes)
+    line, *rest = verdict_file.read_text().splitlines()
+    assert rc == 0 and line.startswith("VERDICT: settled (") and not rest
+    assert wanted in line
+
+
 def test_a_close_that_times_out_is_retried(landing):
     from deploy_tools.land_lib import closing_refs
 
