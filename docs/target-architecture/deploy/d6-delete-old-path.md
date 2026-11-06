@@ -385,8 +385,7 @@ reader that D6 does not delete.
       daniel-box joins the list.
 - **The other k8s checks.** `live_drift_check.py` 468, `release-staleness-check.sh.j2` 200,
   and `ansible/roles/setup/k3s/files/manifest_declares.py` 142. The last is copy-deployed
-  beside manifest-prune-check and tested by `ansible/tests/k8s/test_manifest_declares.py`
-  (175).
+  beside manifest-prune-check, with a test module of 175 lines.
 - **The release-staleness cron runs code from the primary checkout.** The script sets
   `REPO_DIR=/home/{{ sys_user }}/server` and runs `scripts/diagnostics/probe.py releases
   --stale-only --kuma` there, every 30 minutes. The tick fast-forwards that checkout. So a

@@ -42,7 +42,7 @@ _HOST_LIB = frozenset(
 _K3S = frozenset({"k3s"})
 _LH = "scripts/lib/longhorn_lib"
 _STAMPED = _HOST_LIB | {"initial_setup"}
-_CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup", "k3s", "render_records"})
+_CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup", "render_records"})
 _ALERT_UNIT = frozenset({"gitops_deploy", "renovate_agent", "renovate_notify"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
