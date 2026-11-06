@@ -108,8 +108,15 @@ def find_job(job_id):
     die("gh: Not Found (HTTP 404)")
 
 
+def emit(text, out):
+    if out:
+        out.write_text(text)
+    else:
+        sys.stdout.write(text)
+
+
 def api(tool, argv):
-    path, query, paginate, slurp, jq = None, {}, False, False, None
+    path, query, paginate, slurp, jq, out = None, {}, False, False, None, None
     args = iter(argv)
     for arg in args:
         if arg == "--paginate":
@@ -121,7 +128,9 @@ def api(tool, argv):
         elif arg in ("-f", "-F", "--field", "--raw-field"):
             key, _, value = next(args).partition("=")
             query[key] = value
-        elif arg in ("-X", "--method", "-H", "--header", "--hostname", "--cache", "--out"):
+        elif arg == "--out":
+            out = Path(next(args))
+        elif arg in ("-X", "--method", "-H", "--header", "--hostname", "--cache"):
             next(args)
         elif path is None:
             path = arg
@@ -133,7 +142,7 @@ def api(tool, argv):
     if match:
         if tool == "ghread":
             die("ghread: the response contains terminal escape sequences")
-        sys.stdout.write(job_log(find_job(int(match[1]))))
+        emit(job_log(find_job(int(match[1]))), out)
         return
 
     if tail == "runs":
@@ -157,13 +166,15 @@ def api(tool, argv):
         die("fake gh: no such endpoint: " + path)
 
     documents = [pages] if slurp else pages
+    written = ""
     for document in documents:
         text = json.dumps(document)
         if jq is not None:
             text = subprocess.run(
                 ["jq", "-c", "-r", jq], input=text, text=True, capture_output=True, check=True
             ).stdout
-        sys.stdout.write(text if not text or text.endswith("\n") else text + "\n")
+        written += text if not text or text.endswith("\n") else text + "\n"
+    emit(written, out)
 
 
 def run_log(argv):
