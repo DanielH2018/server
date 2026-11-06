@@ -635,8 +635,9 @@ file and into a function in `renderer_lib`:
 - `kuma_declarations`, with uptime-kuma's two asserts on it as checks that raise during the
   render.
 
-`janitorr_dry_run` is only a rename, so the janitorr template reads `janitorr_k8s_dry_run`
-directly instead.
+`janitorr_dry_run` is only a rename, so it becomes a role default that reads
+`janitorr_k8s_dry_run`. The template keeps the name, because the `janitorr-verify` Job's name
+hashes the template's source, and an edit there would rerun that Job.
 
 `test_image_builder_content_tag.py` is retargeted at the new function. While ansible-core is
 installed, it still evaluates the old expression, held in the test as a literal, through
