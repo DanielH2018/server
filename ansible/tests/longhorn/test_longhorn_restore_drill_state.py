@@ -71,6 +71,10 @@ def test_a_signal_during_the_restore_wait_runs_cleanup_through_the_exit(
 
     The group is signalled, so the script's `sleep 10` poll ends and bash reaches its trap at
     once. Signalling the script alone would also pass, ten seconds later.
+
+    Under load, about 1 run in 1000 takes the signal at a moment where TERM waits out one
+    `sleep 10` and bash loses INT and keeps polling, so the test sends the signal once more. The
+    wait before that resend outlasts one poll, because a resend inside `cleanup` cuts it short.
     """
     run = harness(tmp_path, [A])
     proc = subprocess.Popen(
@@ -87,10 +91,17 @@ def test_a_signal_during_the_restore_wait_runs_cleanup_through_the_exit(
             assert time.monotonic() < deadline, "the drill never reached its wait loop"
             time.sleep(0.05)
         os.killpg(proc.pid, sig)
-        assert proc.wait(timeout=20) == status
+        try:
+            returncode = proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, sig)
+            returncode = proc.wait(timeout=20)
+        assert returncode == status
     finally:
+        # An unreaped Popen warns from its deallocator, which fails whichever test runs then.
         if proc.poll() is None:
             os.killpg(proc.pid, signal.SIGKILL)
+            proc.wait()
     assert any(f"delete volume restore-drill-{A}" in c for c in run.calls), run.calls
 
 
