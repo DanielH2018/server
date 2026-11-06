@@ -113,6 +113,20 @@ def test_a_host_dropped_from_the_list_loses_the_timer_and_the_cron():
     )
 
 
+def test_a_host_dropped_from_the_list_loses_the_verdict_and_both_stamps():
+    """A `.prom` file left behind exports its last run forever, and HostCheckOverdue never clears."""
+    removal = next(
+        t
+        for t in _flatten(CRON_TASKS)
+        if t["name"] == "Remove the Loki read-route witness files"
+    )
+    assert {
+        "/var/lib/node-exporter-textfile/loki-read-route-health.prom",
+        "/var/lib/homelab/setup-render-manifest.d/loki-route-witness",
+        "/var/lib/homelab/setup-deployed-manifest.d/loki-route-health",
+    } <= set(removal["loop"])
+
+
 def _render(copy) -> str:
     return render_shell_script(
         *copy,
