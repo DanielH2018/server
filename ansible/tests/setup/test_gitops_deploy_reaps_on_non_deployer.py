@@ -103,6 +103,32 @@ def test_the_teardown_reaps_both_timers_and_their_legacy_crons():
     assert _check_timer_imports("teardown.yml", "absent") == installed
 
 
+def test_the_teardown_removes_every_textfile_and_stamp_install_leaves():
+    """Names come from the arm that writes each file, so a rename cannot outrun its removal."""
+    render = task_named(
+        load_tasks(ROLE / "service.yml"), "Stamp the rendered gitops-deploy units"
+    )
+    deployed = next(
+        t
+        for t in load_tasks(ROLE / "code.yml")
+        if "stamp_deployed_name" in (t.get("vars") or {})
+    )
+    timers = _check_timer_imports("github_checks.yml", "present")
+    assert timers, "the GitHub check census found nothing"
+
+    removal = task_named(
+        load_tasks(ROLE / "teardown.yml"),
+        "Remove the deployer's textfiles and stamp fragments",
+    )
+    assert removal["ansible.builtin.file"]["state"] == "absent"
+    assert {
+        "/var/lib/node-exporter-textfile/gitops_tick.prom",
+        *(f"/var/lib/node-exporter-textfile/{name}.prom" for name in timers),
+        f"/var/lib/homelab/setup-render-manifest.d/{render['vars']['stamp_render_name']}",
+        f"/var/lib/homelab/setup-deployed-manifest.d/{deployed['vars']['stamp_deployed_name']}",
+    } <= set(removal["loop"])
+
+
 def _directories_install_creates() -> set[str]:
     """Every path `install.yml`'s directory-creating file task loops over."""
     dirs: set[str] = set()
