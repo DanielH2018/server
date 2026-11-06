@@ -79,7 +79,8 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
   `ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py::test_the_schedule_gate_marker_names_exactly_the_ungated_roles`.
 - **Abort valves.** The Job's `activeDeadlineSeconds` is the restore timeout plus the probe pod's
   300-second bound plus a 600-second margin. The kubelet's SIGTERM at the deadline runs the
-  script's `cleanup` through its TERM trap, within the 300-second grace period. ENFORCED:
+  script's `cleanup` through its TERM trap, within the 300-second grace period. A TERM pending
+  while bash parses a `$(` runs no trap, so SIGKILL skips `cleanup` (#7383). ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_deadline.py::test_the_deadline_clears_the_restore_timeout_plus_the_probe_bound`.
 - **Required evidence.** The pod log, with each verdict line prefixed `longhorn-restore-drill:`.
   Read it with `probe.py loki-query '{container="longhorn-restore-drill"}'`. Backup health's check

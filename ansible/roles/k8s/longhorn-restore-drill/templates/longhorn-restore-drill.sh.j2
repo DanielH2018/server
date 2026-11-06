@@ -98,7 +98,7 @@ cleanup() {
 # A signal runs `cleanup` through the exit. Bash killed by an unhandled TERM skips the EXIT trap,
 # and as PID 1 in a pod it ignores the signal altogether. Bash normally runs a trap after its
 # foreground command returns, so the delay is one poll interval or one kubectl call.
-# Bash 5.2 has three narrow races where a signalled drill keeps polling instead:
+# Bash 5.2.21 has three narrow races where a signalled drill keeps polling instead:
 # - INT in `$(...)`'s wait_for, after the child closed the pipe, when it then exits 0.
 #   wait_sigint_handler sets wait_sigint_received, and only a job's cleanup reads that flag. The
 #   child of a substitution has no job, so bash drops the signal. A second INT ends the drill.
