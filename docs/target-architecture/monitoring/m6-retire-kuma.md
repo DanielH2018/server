@@ -366,7 +366,7 @@ orders these steps inside Flux:
     - **Rejected: a `depends_on: [observability]` edge on uptime-kuma's entry.** The edge
       would run the other way from the one #5821's comment names: uptime-kuma has to wait on
       observability, not the reverse. It costs a PR of its own, because arm 2 of
-      `scripts/validate/cross_plane_order.py` refuses a tag that gains an edge while its own
+      `scripts/validate/render_diff_gates.py` refuses a tag that gains an edge while its own
       render moves. It is also weaker than the split. A Ready `observability` Kustomization
       shows that the apply finished, not that Prometheus reloaded its rules, and the split
       reads the reload itself.

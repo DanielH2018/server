@@ -35,9 +35,10 @@
   `app: janitorr-verify` in `k8s_namespace`. It execs into nothing and dials:
     - sonarr:8989, through sonarr's role-owned fence, whose `netpol_from` lists
       `janitorr-verify` ahead of the flip. #5709 added the peer in a PR of its own, because
-      `scripts/validate/cross_plane_order.py` refuses one PR that changes janitorr and the
-      flux-owned sonarr it depends on. netpol-baseline's sonarr row (`expect: refused`)
-      shows that fence refuses an unlisted pod;
+      the render-diff gate's arm 1 refused one PR that changed the Ansible-owned janitorr and
+      the flux-owned sonarr it depends on. `scripts/validate/render_diff_gates.py` no longer
+      has that arm. netpol-baseline's sonarr row (`expect: refused`) shows that fence refuses
+      an unlisted pod;
     - radarr:7878, the same through radarr's fence and its netpol-baseline row;
     - jellyfin:8096, which `networkpolicy-jellyfin.yaml.j2` opens to every source for jellyfin's
       LAN clients, so it has no peer to add and no refused leg to show.
