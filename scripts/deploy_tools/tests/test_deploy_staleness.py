@@ -196,30 +196,6 @@ def test_a_tree_behind_on_a_broad_path_is_refused_whatever_the_tags(repos, capsy
     assert INVENTORY in capsys.readouterr().err
 
 
-def test_a_tree_behind_on_a_shared_k8s_role_is_refused(repos, capsys):
-    """`k8s/manifests` renders and applies for EVERY k8s service, so no tag list clears it.
-
-    It has no `containers_list` entry, so it is not a tag anyone can deploy and the
-    tag-reach rule never matches it. Being behind on it is being behind on whatever this
-    deploy renders, whichever service it names.
-    """
-    clone = _behind_on(repos, SHARED_K8S)
-    rc = main(
-        [
-            "--repo",
-            str(clone),
-            "--no-fetch",
-            "--state-dir",
-            _no_state(clone),
-            "--tags",
-            "sonarr",
-        ]
-    )
-    err = capsys.readouterr().err
-    assert rc == DEPLOY_STALE
-    assert SHARED_K8S in err and "shared k8s role manifests" in err
-
-
 def test_a_tree_behind_on_the_secrets_file_is_refused(repos, capsys):
     """A rotation commit in the tail maps to no service, and every template can read it.
 

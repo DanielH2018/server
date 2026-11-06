@@ -10,7 +10,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup_plugins.py
 import pytest
 
 import narrow_setup
-from lib.repo_paths import REPO
 
 from _narrow_fixtures import _refs
 from _setup_role_fixtures import DEFAULTS, ROLE, Tree, build, narrow
@@ -98,24 +97,3 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
     calls_plugin.write(PLUGIN, PLUGIN_TEXT.format(factor=3))
     with pytest.raises(narrow_setup.CannotNarrow, match="called by a value"):
         narrow(calls_plugin, *_refs(calls_plugin))
-
-
-# ── the real tree: the two callers #3878 names, so the walk cannot go vacuous ────────────
-
-
-@pytest.mark.parametrize(
-    ("role", "plugin", "tags"),
-    [
-        # `longhorn_groups.py` had one `k3s` caller left after H1.7a, the restore drill's
-        # `longhorn_backup_name` calls. H2.3d moved the drill to its own Flux role, so no setup
-        # role calls a Longhorn filter and this walk keeps one named caller.
-        ("gitops_deploy", "k8s_autodeploy.py", {"gitops-deploy-service"}),
-    ],
-)
-def test_the_real_plugin_callers_narrow_below_their_role_tag(role, plugin, tags):
-    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
-    path = f"ansible/filter_plugins/{plugin}"
-    assert (
-        role in narrow_setup.deploy_cross_role.SETUP_ROLES_CALLING_FILTER_PLUGINS[path]
-    )
-    assert narrow_setup.plugin_tags(path, index, "HEAD", "HEAD", str(REPO)) == tags

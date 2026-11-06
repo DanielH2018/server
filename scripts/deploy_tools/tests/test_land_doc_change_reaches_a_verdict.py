@@ -32,28 +32,18 @@ def test_a_role_document_is_clean():
     assert land_tags.role_for(_DOC) is None
     assert land_tags.shared_roles([_DOC]) == []
     assert land_tags.plane_note([_DOC]) == ""
-    assert land_tags.shared_caller_tags([_DOC]) == {}, (
-        "prose fanned out to every caller"
-    )
     assert land_tags.self_applied([_DOC]) is False
 
 
-def test_a_role_task_file_is_flagged(flux_handed_back):
-    """The reject half: the same role's tasks/ is code, deployed through one smoke caller.
-
-    One caller, not every caller: a `tasks/`-only change to `manifests` renders no different
-    bytes, so landing deploys the cheapest render target as a smoke test.
-    """
+def test_a_role_task_file_is_flagged():
+    """The reject half: the same role's tasks/ is code."""
     assert land_tags.role_for(_TASKS) == "manifests"
     assert land_tags.shared_roles([_TASKS]) == ["manifests"]
-    reached = land_tags.shared_caller_tags([_TASKS], host_vars=flux_handed_back)
-    assert len(reached["manifests"]) == 1
 
 
 def test_a_document_beside_a_real_change_does_not_excuse_it():
     """One quiet document must not take the role change it documents with it."""
-    beside = land_tags.shared_caller_tags([_DOC, _TASKS])["manifests"]
-    assert beside and beside == land_tags.shared_caller_tags([_TASKS])["manifests"]
+    assert land_tags.shared_roles([_DOC, _TASKS]) == ["manifests"]
 
 
 def test_a_setup_role_document_is_clean_whatever_the_range():
@@ -95,9 +85,3 @@ def _verdict(landing, files: list[str]) -> Outcome:
 def test_a_doc_only_change_to_a_tagless_role_ends_nothing_to_deploy(landing):
     outcome = _verdict(landing, [_DOC])
     assert (outcome.verdict, outcome.rc) == ("nothing-to-deploy", 0)
-
-
-def test_a_task_change_to_the_same_role_owes_no_hand_because_its_callers_deploy():
-    """Its verdict is the tag path's, not `no_tag_outcome`'s: the landing deploys the callers
-    `test_a_role_task_file_is_flagged` names, so nothing is left for a hand."""
-    assert land_tags.plane_note([_TASKS]) == ""

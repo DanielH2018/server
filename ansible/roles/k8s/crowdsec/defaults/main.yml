@@ -8,7 +8,7 @@
 # crowdsec_k8s_appsec_port live in group_vars/all.yml — the app pods' sidecars and traefik's
 # bouncer middleware consume them too, and role defaults are invisible across roles.
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Platform: the in-cluster LAPI + AppSec + decision engine every bouncer (including traefik's
 # middleware) queries. A failed deploy could open or close traffic unpredictably fleet-wide.
 # Also Recreate + PVC (the decision DB) on its own state, which compounds the risk but isn't

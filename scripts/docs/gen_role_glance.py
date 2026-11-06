@@ -3,7 +3,7 @@
 
 WHY. A role's CLAUDE.md opens with an "At a glance" block a session reads before touching the
 service, and until 2026-09-19 every line of it was typed by hand: the deploy tag, the image,
-the route, the claims, the auto-deploy stance. Each is declared once elsewhere — the
+the route, the claims. Each is declared once elsewhere — the
 `containers_list` entry, `defaults/main.yml`, the templates — and a hand copy drifts the day
 the source moves (#2058: homepage's doc pinned `:latest` while its defaults pinned a digest).
 The only guard checked that the heading existed. This generator writes the fields that have a
@@ -31,10 +31,9 @@ roles:
   claim by name with its Longhorn backup tier beside it (the catalogue's `backup_tier`
   column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
   tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
-  lists, never typed), and the `k8s_autodeploy` stance with the role's own
-  `k8s_autodeploy_reason`. For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
-  **Applied by** line replaces both the deploy tag and the stance: it names Flux and
-  `promote`, or the handback, and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
+  lists, never typed). For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
+  **Applied by** line replaces the deploy tag: it names Flux and `promote`, or the handback,
+  and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
   `roles:` lists and `include_role` tasks of the bring-up playbooks; every cron it installs,
@@ -98,7 +97,6 @@ from typing import Any
 
 from docs.catalog_lib.catalog_backup import (
     LonghornTiers,
-    autodeploy_stance,
     claim_index,
     claim_tiers,
     entry_owner,
@@ -290,20 +288,6 @@ def glance_lines(
     else:
         lines.append("- **Claims:** none (no PVC)")
 
-    if owner is not None:
-        # The Applied by line already stands in for the stance.
-        return lines
-    stance, reason = autodeploy_stance(role_dir)
-    if stance is None:
-        lines.append(
-            "- **Auto-deploy:** undeclared (no `k8s_autodeploy` in `defaults/main.yml`)"
-        )
-    elif stance:
-        lines.append("- **Auto-deploy:** eligible (`k8s_autodeploy: true`)")
-    else:
-        lines.append(
-            f"- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — {reason or 'no reason given'}"
-        )
     return lines
 
 

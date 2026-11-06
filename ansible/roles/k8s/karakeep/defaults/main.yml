@@ -52,7 +52,7 @@ karakeep_k8s_meili_image: getmeili/meilisearch:v1.55.0@sha256:ff546679970126f882
 # is what a deploy that skipped the build renders — see that role's CLAUDE.md.
 karakeep_k8s_tagger_image: "{{ k8s_registry_pull_host }}/karakeep:{{ k8s_built_image_tags.get('karakeep', 'latest') }}"
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Three independent reasons, not one: (1) stateful — a meilisearch bump migrates the index in
 # place (MEILI_UPGRADE_DB in deployment-meilisearch.yaml.j2), and upstream says that migration
 # is not atomic, so a failure mid-flight needs a human to reindex rather than a retry; (2)

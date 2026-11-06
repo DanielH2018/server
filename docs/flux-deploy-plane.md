@@ -220,8 +220,8 @@ of those roles writes `hold_sha` for the whole list.
 A PR that adds or removes a k8s entry therefore runs two checks before it merges, and quotes
 both in its body:
 
-1. `uv run python scripts/deploy_tools/deploy_tags.py narrow origin/master HEAD` names the
-   tags the landing applies. For an added or removed entry, `flux` is among them.
+1. The PR names the tags the landing applies. For an added or removed entry, `flux` is among
+   them.
 2. `uv run python scripts/diagnostics/probe.py releases --stale-only` and
    `uv run python scripts/diagnostics/probe.py releases` must name none of those tags as
    stale, `unmerged` or `dirty`. Read the service names, not the exit code. A named service
@@ -806,7 +806,7 @@ apply is the resume.
 
 `flux_suspend: true` in a flux-owned role's `defaults/main.yml` stops all reconciliation of
 that role. `k8s_autodeploy: false` is a different lever: it stops Renovate merging the
-role and, while Ansible owns it, the deployer auto-deploying its image bumps. The plan is
+role's image bumps. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, *The stop lever (D5.1b)*. A merged change
 to a suspended role applies nothing until the resume, so the suspend is a temporary stop, and
 three checks hold it there (D5.1d):

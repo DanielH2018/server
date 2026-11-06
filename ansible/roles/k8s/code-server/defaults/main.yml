@@ -1,7 +1,7 @@
 ---
 code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:{{ k8s_built_image_tags.get('code-server', 'latest') }}"
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # `code_server_k8s_image` above names a content tag computed from the build inputs, with no
 # upstream version scheme, so Renovate's k8s-defaults manager has nothing to bump. Since D5.16
 # Flux applies this role, so the flag's live reader is Renovate's automerge denylist.

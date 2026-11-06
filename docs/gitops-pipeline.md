@@ -20,8 +20,9 @@ play deploys a workload.
 [The Flux deploy plane](flux-deploy-plane.md) has what it runs and what it reports.
 
 Each k8s role declares its own `k8s_autodeploy` stance
-(`ansible/roles/k8s/<role>/defaults/main.yml`); `ansible/filter_plugins/k8s_autodeploy.py`
-collects the ones declaring `false` into the denylist above.
+(`ansible/roles/k8s/<role>/defaults/main.yml`), which says whether Renovate may automerge an
+image bump. `scripts/lib/k8s_roles.py` collects the ones declaring `false` into the denylist that
+`renovate.json`'s no-automerge rule and the Renovate lander read.
 
 <!-- Generated from k8s_autodeploy_counts.py, which reads every role's own declaration; edit
      the role's defaults/main.yml, not this table. -->
@@ -234,8 +235,8 @@ over them. A refusal deferred the plane as `k8s_unapplied` lines (#4333), and a 
 apply held the plane as `ansible/deploy.yml <tags>`. A `narrow-shadow:` line compared each
 service's applied digest with a render record.
 
-`narrow` is read-only and can be run by hand against any range. The rules it applies, and what
-each one refuses, are in `scripts/deploy_tools/narrow_lib/broad.py`.
+D6.15 removed the `narrow` subcommand. The rules it applied, and what each one refused, are in
+`scripts/deploy_tools/narrow_lib/broad.py` until D6.18 deletes it.
 
 - **A play file whose parsed YAML is unchanged maps to no tags.** A comment or layout edit to
   `ansible/deploy.yml`, or to a file under `ansible/pre_tasks/`, `ansible/tasks/` or

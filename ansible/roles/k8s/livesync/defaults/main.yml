@@ -1,7 +1,7 @@
 ---
 livesync_k8s_image: couchdb:3.5.2@sha256:5fc596110eac7f412173a7d9de14f70aa5d3e816790fb6e70642755d4a4cf464
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # DENIED — state coupling, not missing recovery. The volume's state is coupled to something
 # the snapshot cannot capture: the CouchDB revisions on connected Obsidian clients. A revert rewinds the server's B-tree while
 # every synced client still holds the newer revisions it already pushed, and replaying those

@@ -4,7 +4,7 @@ loki_homelab_k8s_image: grafana/loki:3.7.9@sha256:0db216b630ae1f348a1584c67f3cea
 # The cluster log shipper.
 loki_homelab_k8s_alloy_image: grafana/alloy:v1.20.1@sha256:2aa2099af76c0098d4af7a4d6e48f86cb66dc1a000222ad927a1c67c6542d13f
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Observability: the log store the Alert History reconstruction, the ruler's own rules
 # (homelab-logs) and monitor-bridge's remaining LogQL check (the HA ban arm) read from
 # — a broken deploy blinds those without

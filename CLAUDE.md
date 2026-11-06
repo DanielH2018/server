@@ -138,8 +138,9 @@ conditions.
   PR created the line, do not stop: run `uv run python scripts/deploy_tools/owed_run.py <role>`
   from any checkout. It refuses a line that needs you. The operator granted that standing
   clearance on 2026-10-24.
-- `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
-  maps to no single service.
+- `deploy.sh --changed` exits 3 and prints a setup or bring-up command: the range holds a broad
+  path only that command applies. `deploy.sh` exits 5 for a k8s tag, and that is no reason to
+  wait: `promote` and Flux apply the change.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
 - The change is in the policies-first ordering plane, where a partial run leaves the exact state
   the ordering exists to prevent.

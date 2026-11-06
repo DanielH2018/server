@@ -23,13 +23,13 @@ names itself in the JSON's `refused` string, which is empty otherwise.
 
 WHO CALLS IT. `deployer_lib.deploy_setup_roles.secret_setup_readers` runs it as a SUBPROCESS,
 because it parses YAML and the deployer's unit runs under `uv run --no-project`. Exit
-`DEPLOY_BROAD` (3), the code `deploy_tags.py narrow` refuses with, is a refusal: the secrets
+`DEPLOY_BROAD` (3), the code `narrow_lib/broad.py:narrow_cmd` refuses with, is a refusal: the secrets
 half refused and the inventory half found no reader. The reason is on stderr, and the tick
 then applies no setup role for the range, which is the behaviour before #5436. Any other
 non-zero exit, such as a traceback's 1, is a failure the tick parks on and retries.
 
 WITH `--deploy-tags` it prints the deploy plane's half instead (#5577): the comma-joined
-`deploy.yml` tags whose render reads a moved key, as `deploy_tags.py narrow` does for a range
+`deploy.yml` tags whose render reads a moved key, as `narrow_cmd` does for a range
 carrying a deploy-plane path. The tick asks it only for a range with no such path, which
 `narrow` never sees. Exit 0 with empty stdout is the answer "no k8s role reads one". Exit
 `DEPLOY_BROAD` is a refusal; its stdout names the tags when the refusal is the fleet-coverage

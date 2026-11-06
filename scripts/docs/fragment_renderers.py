@@ -76,7 +76,7 @@ def render_gitops_prefixes(setup: tuple, deploy: tuple, manual: tuple) -> str:
 def render_autodeploy_coverage(
     eligible: list[str], denied: list[str], not_declaring: list[str]
 ) -> str:
-    """Renders the k8s auto-deploy eligibility fragment.
+    """Renders the fragment of each k8s role's Renovate automerge stance.
 
     Args:
         eligible: role names declaring `k8s_autodeploy: true`.
@@ -85,7 +85,7 @@ def render_autodeploy_coverage(
             service of its own).
     """
     lines = [
-        "| Stance | Roles |",
+        "| Renovate automerge stance | Roles |",
         "|---|---|",
         f"| Eligible | {len(eligible)} |",
         f"| Denied | {len(denied)} |",

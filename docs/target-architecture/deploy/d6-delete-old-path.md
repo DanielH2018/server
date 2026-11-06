@@ -1,6 +1,6 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). No merged PR is recorded for D6.13 to D6.21.
+Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carries D6.13. No merged PR is recorded for D6.13 to D6.21.
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
@@ -1585,6 +1585,11 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
       D6.18 has merged, revert D6.18 first.
     - **Exit criterion:** exit 1's `deploy.sh`, `land.sh` and census halves, and part of
       exit 4 (the exit-3 bullet of *When to wait*).
+    - **As built ([#7339](https://github.com/DanielH2018/server/issues/7339)).** H5.12 emptied
+      the Pi's `containers_list`, so no path derives a Pi tag and `changed` prints no tag at
+      all. Its broad line names `promote` and the `homelab-daniel-pi` package rather than
+      `deploy.sh -e target=daniel-pi`, which deploys nothing since H5.12. `deploy_by_host` stays
+      as the Pi arm this plan keeps until H7, though no tag reaches it.
 7. **D6.16 — Arm the setup-drift reader on daniel-box** (old D6.5a, about 40 lines).
     - **Why apart from D6.17.** D6.17's `NotReporting` arm for the box fires unless the box
       has already written a sample, and the timer runs once a day. So this PR deploys, and
@@ -1821,7 +1826,7 @@ The steps merged in this order.
     - **Move `declared_denylist` out of `deploy_k8s.py`.** `reconcile_denylist` calls it, and
       it reads `_DECLARATION_RE`, `_TRUE_VALUES` and `SHARED_K8S_ROLES` from the same module.
       All four move into `deploy_phases.py` beside their caller. `deploy_logic.py`'s
-      re-export and `ansible/tests/deploy/test_denylist_parsers_agree.py` follow them.
+      re-export and `test_denylist_parsers_agree.py` follow them.
     - **Its own tick runs the old deployer, so the PR carries no deploy-plane path.** The tick
       that fast-forwards D6.1 still runs the code D6.1 replaces, which applies `deploy.yml`
       for a `_BROAD_DEPLOY_PREFIXES` path and writes a hold on failure. At `70591c307`,
@@ -2762,7 +2767,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       `ansible/tests/deploy/`, arm 1's tests in `scripts/validate/tests/`, and the kept arms'
       tests renamed with the module;
     - `scripts/deploy_tools/tests/test_reach.py`, for `Reach.touched`;
-    - `ansible/tests/deploy/test_denylist_parsers_agree.py`, whose import follows
+    - `test_denylist_parsers_agree.py`, whose import follows
       `declared_denylist` into `deploy_phases.py`;
     - the two tick tests in `test_gitops_deploy_main_branches.py`, the promotion half of
       D2's `cs.flux` test, and the deployer half of

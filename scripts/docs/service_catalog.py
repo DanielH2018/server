@@ -9,8 +9,7 @@ assembles them into one place, so the answer drifts out of date the moment someo
 reads it instead of the current tree.
 
 WHAT THIS DOES. Statically parses containers_list, the per-role IngressRoute macro
-call, the k3s role's Longhorn backup-tier volume lists, and each k8s role's
-k8s_autodeploy declaration, then renders one self-contained HTML table — grouped by
+call and the k3s role's Longhorn backup-tier volume lists, then renders one self-contained HTML table — grouped by
 host, one row per service. A fact this cannot derive prints "unknown" (or a more
 specific reason) rather than a guess or a silently missing row: see FIELD NOTES below
 for exactly which facts that is, and why.
@@ -44,12 +43,8 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     referenced by `claimName:` in a pod's volumes list; this script also scans for that
     reference, but a claim referenced with neither form (e.g. hardcoded past a
     yet-undiscovered third pattern) would still read as "no PVC (stateless)".
-  - k8s_autodeploy. Every role/k8s/<name>/defaults/main.yml is SUPPOSED to declare this
-    (ansible/filter_plugins/k8s_autodeploy.py enforces it at deploy time), but this
-    script tolerates a missing declaration by reporting unknown, because a stray role
-    mid-edit should not crash report generation the way it correctly crashes a deploy.
   - owner. An entry that carries `owner` (`lib.k8s_roles.tag_owners`) is not Ansible's to
-    deploy, so its Auto-deploy cell names what applies it instead of a stance: Flux through
+    deploy, so its Auto-deploy cell names what applies it: Flux through
     `promote`, or nothing while it is mid-handback. `deploy.sh` refuses its tag with exit 5.
 
 Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.html
@@ -140,7 +135,6 @@ def build_rows(
                         entry,
                         platform,
                         host_data,
-                        k8s_roles,
                         entry_owner(entry, owners),
                     ),
                 )

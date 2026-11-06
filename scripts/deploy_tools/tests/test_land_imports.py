@@ -39,7 +39,6 @@ MODULES = frozenset(
         "land_probe",
         "land_reach",
         "key_readers",
-        "land_rerolls",
         "land_shared",
         "land_tags",
         "land_tags_cli",
@@ -59,8 +58,6 @@ ALLOWED = {
         "land_flux",
         "land_platform",
         "land_reach",
-        "land_rerolls",
-        "land_shared",
         "land_tags",
         "land_tested_base",
         # The moved-key readers `Classifier.key_readers` derives (#6968).
@@ -148,7 +145,6 @@ ALLOWED = {
     # The boundaries for a tag Flux applies. It imports promote_lib.wait, outside land_lib.
     # It also holds the pin gate's reads, `pin_reads.PinReads`.
     "land_flux": {"pin_reads"},
-    "land_rerolls": set(),
     "land_shared": set(),
     "land_tested_base": set(),
     # cc-wait's `land` source runs under `uv run --no-project`, so it reads only the

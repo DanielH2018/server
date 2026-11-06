@@ -15,8 +15,10 @@ SONARR = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
 TOOLING = "scripts/dev/fanout_lib/brief.py"
 
 
-def test_a_k8s_role_template_deploys_its_tag():
-    assert deploy_line([SONARR]).startswith("deploys tag sonarr")
+def test_a_k8s_role_template_lands_through_promote():
+    line = deploy_line([SONARR])
+    assert "`promote` applies the k8s half" in line and "changed set" in line
+    assert "deploy.sh" not in line
 
 
 def test_a_scripts_only_change_is_expected_to_deploy_nothing():
@@ -60,7 +62,7 @@ def test_the_brief_carries_the_block_for_this_repo_only():
     issue = Issue(1, "t", f"Fix `{SONARR}`.")
     brief = render_brief([issue], "daniel-box", "1", "worktree-orch", [])
     assert "## Precomputed from the cited paths" in brief
-    assert "deploys tag sonarr" in brief
+    assert "`promote` applies the k8s half" in brief
     dotfiles = Target("DanielH2018/dotfiles", "/tmp/dotfiles", "origin/main")
     other = render_brief([issue], "daniel-box", "1", "w", [], target=dotfiles)
     assert "## Precomputed" not in other
@@ -73,4 +75,4 @@ def test_show_brief_prints_only_the_block(capsys):
     assert main(["show", "5", "--brief"], tools) == 0
     out = capsys.readouterr().out
     assert out.startswith("## Precomputed from the cited paths")
-    assert "deploys tag sonarr" in out
+    assert "`promote` applies the k8s half" in out

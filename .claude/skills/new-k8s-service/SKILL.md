@@ -20,7 +20,7 @@ uv run python scripts/dev/new_k8s_service.py <name> \
 
 That appends the `containers_list` entry and writes `templates/deployment.yaml.j2`, the one
 manifest the role ships (#4298). Beside it go a `tasks/main.yml` that is the bare include of
-`k8s/manifests` with no vars, a `defaults/main.yml` holding the image pin, auto-deploy stance,
+`k8s/manifests` with no vars, a `defaults/main.yml` holding the image pin, Renovate stance,
 resources and uid, and a `CLAUDE.md`. It then runs the role-glance generator over the new doc. Its output renders clean through `prek run --all-files` with no hand edits.
 
 **Copying a sibling is what this replaced** (#2855). A sibling's files carry its narration, and
@@ -59,7 +59,7 @@ scaffolder names both when it finishes:
 - `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`, and
   `ROLES_WITH_A_DEFAULT_INGRESSROUTE` beside it for a routed role.
 
-The new role moves the auto-deploy coverage docs fragment. The `regen-doc-fragments` prek hook
+The new role moves the Renovate stance docs fragment. The `regen-doc-fragments` prek hook
 rewrites it on your commit and fails once, so stage what it wrote and commit again.
 
 **The pod-spec shell comes from two shared macros, which the scaffolder already calls.** A
@@ -88,10 +88,9 @@ and parses it as YAML. App config a manifest embeds via `lookup()` goes in `temp
 static assets in `files/`. `Dockerfile*` is exempt and may sit in `templates/` directly.
 
 **Every role under `roles/k8s/` declares `k8s_autodeploy` and `k8s_autodeploy_reason` in
-`defaults/main.yml`.** `ansible/filter_plugins/k8s_autodeploy.py` derives the GitOps
-auto-deploy denylist from those declarations. It raises at template time on a role that
-declares nothing, so a missing stance fails `initial_setup.yml --tags gitops_deploy` rather
-than defaulting to either answer. Declare `true` for an ordinary service whose image pin
+`defaults/main.yml`.** `lib.k8s_roles.k8s_autodeploy_denylist` derives the Renovate denylist
+from those declarations. It raises on a role that declares nothing, so a missing stance fails
+CI and refuses every unattended Renovate landing rather than defaulting to either answer. Declare `true` for an ordinary service whose image pin
 Renovate bumps. Declare `false` for a role that deploys no workload of its own, or one an
 unattended image bump could break, and say which in the reason — the reason is what makes the
 stance reviewable. The scaffolder writes `true` unless you pass `--no-autodeploy`, and writes
@@ -109,7 +108,7 @@ that heading is generated.** The scaffolder writes the heading, the markers and 
 skeleton, and runs the generator once. After any later change to the role's defaults,
 templates or `containers_list` entry, the `regen-role-glance` prek hook re-runs
 `scripts/docs/gen_role_glance.py` at commit time. It writes the deploy tag, image
-repositories, route, claims and auto-deploy stance between two `generated_from` markers and
+repositories, route and claims between two `generated_from` markers and
 leaves everything below them alone. When it rewrites a block it fails the commit once, so
 stage the doc and commit again. `scripts/docs/tests/test_gen_role_glance.py` fails CI only
 for a commit that skipped the hook. Put the reasoning
@@ -179,7 +178,7 @@ what gates the apply. Two limits specific to a *brand-new* service:
   Those show only after Flux applies the tag. Gate it with
   `uv run python scripts/diagnostics/probe.py health <name>`.
 - A routed service has no ingress probe until `observability` deploys, because the blackbox
-  targets render in that role and it is denylisted from auto-deploy. Run
+  targets render in that role and it is on the denylist. Run
   `./scripts/deploy.sh --tags observability` once the tag is live and before the gate. A gate
   run before that skips the probe half with a note naming this deploy.
 
@@ -187,31 +186,9 @@ An entry with the `owner` line deleted deploys through `./scripts/deploy.sh --ta
 The `deploy` skill covers that wrapper's exit codes and the `--check` / `--dry-run` / `prek`
 split, and the rest of this section applies to such an entry.
 
-**A role declaring `k8s_autodeploy: false` heals itself within two ticks, but you can render it
-now.** The deployer re-renders its own config.env when the baked denylist disagrees with the
-declarations at its checkout's HEAD (`deploy_phases.reconcile_denylist`, #1294), so the command
-below is what you run to skip the wait — roughly ten minutes after the tick fast-forwards your
-role in — rather than the only thing that ever fixes it. Run it after the role lands on master:
-
-```bash
-uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy
-```
-
-The denylist is baked into `/etc/gitops-deploy/config.env`, and only that playbook renders it.
-`deploy.sh` runs deploy.yml, which runs no setup role, so the new role's declaration reaches the
-host only through that playbook — by your hand here, or by the deployer running it for itself on
-the tick after the fast-forward. Until it is re-rendered, the deployer reads a denylist at origin
-that disagrees with its own config and disarms image-pin auto-deploy for **every** service, not
-just the new one, logging to `journalctl -u gitops-deploy.service`:
-
-```
-denylist: k8s auto-deploy disarmed — stale (denied at origin but not in config: ['<name>'])
-```
-
-`changed=0` on the *Write deployer config* task means the host was already current. Render
-after the push, not before: rendering from an unpushed tree produces the opposite mismatch,
-which the deployer reports as *in config but not at origin*. A `k8s_autodeploy: true`
-declaration adds no denylist entry and needs none of this.
+**A role declaring `k8s_autodeploy: false` needs no step of its own.** renovate.json's rule is
+held to the derived list by a test, so a new denied role adds its paths there, and the Renovate
+lander derives its list from the checkout on each landing.
 
 ## 5. Verify the service, not just the pod
 

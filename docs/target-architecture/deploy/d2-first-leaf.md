@@ -464,7 +464,6 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `deploy.yml` k8s play | The batch loop runs over `containers_list \| ansible_owned`. The `containers_list` fact keeps every entry, because templates read it. |
 | `deploy.sh --tags T` | Exits `DEPLOY_FLUX_OWNED` (5) before any lock and prints that T lands through `promote`. |
 | `deploy.sh --changed` | Drops T before `derive_changed_tags`'s empty check, so a derivation left empty ends as `Refused(0)`, with a note naming T. |
-| `deploy.sh --tags manifests` | `expand_shared_tags`'s expansion drops T with a note. A typed T still refuses. An expansion left empty deploys nothing. |
 | `deploy.sh --list-services` | Marks T with its owner. |
 | GitOps deployer | Routes T's paths to a new `cs.flux` set: fast-forwarded, logged, never deferred, never alerted, never owed. `_deploy_plane` drops T before its `if not tags` check, so a list left empty is `NARROWED_TO_NOTHING`. Ownership is read at the commit being applied. |
 | `land.sh` | Splits the PR's tags before `deploy_by_host`. T waits on promotion (below), and `deploy.sh` runs only when an Ansible-owned tag remains. Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |

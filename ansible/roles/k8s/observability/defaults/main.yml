@@ -105,7 +105,7 @@ observability_ksm_flux_resource_state:
               revision: [status, artifact, revision]
               url: [spec, url]
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Observability: the Claude Code telemetry stack (collector/Loki/Prometheus/Grafana/Tempo/
 # kube-state-metrics/Alertmanager) — a broken deploy blinds this whole diagnostic surface with nothing else
 # watching it. ALSO Recreate + a PVC on each stateful sub-service (loki-data, grafana-data,

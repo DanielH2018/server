@@ -5,7 +5,7 @@ homepage_k8s_image: ghcr.io/gethomepage/homepage:latest@sha256:19c5c09184458a41b
 # The seed-config initContainer just needs `cp`; alpine is the smallest image that has it.
 homepage_k8s_init_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless: RollingUpdate Deployment, no PVC — unlike freshrss/speedtest/zigbee2mqtt it declares
 # no claim, since all its state (services/widgets/bookmarks/CSS) is rendered templates,
 # not runtime data. readinessProbe present, image digest-pinned.

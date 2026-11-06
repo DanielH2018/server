@@ -4,7 +4,7 @@
 # under `capabilities: drop: [ALL]` fails at startup rather than at request time.
 docs_k8s_image: nginxinc/nginx-unprivileged:1.31-alpine@sha256:b5047b9b76845eac124358373c6852377c52e4b05834a47647e955dd91cb8f1e
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateless Deployment, RollingUpdate, no PVC, HTTP readinessProbe, and the tag above is a
 # real version rather than a mutable :latest.
 # Deliberately unprefixed: one constant key name every role uses, so the completeness guard

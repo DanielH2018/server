@@ -58,7 +58,7 @@ netpol_baseline_node_cidrs: "{{ k3s_cni0_gateways }}"
 # traefik's trustedIPs still reads the full list. A colon appears only in an IPv6 CIDR.
 netpol_baseline_traefik_https_sources: "{{ (cloudflare_ips | reject('search', ':') | list) + [lan_subnet, wg_client_subnet, k3s_pod_cidr] }}"
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "renders NetworkPolicies plus one verify Job and pins no image; Flux applies it, and the Job fails the revision if the live exempt set has drifted"  # noqa var-naming[no-role-prefix]
 

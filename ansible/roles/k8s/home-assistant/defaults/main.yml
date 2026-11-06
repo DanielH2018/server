@@ -13,7 +13,7 @@ home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.11.0-ls263@sha2
 # Kustomization for a published tag alone, so an Ansible deploy ignores it.
 flux_prepull_timeout: 4500s  # noqa var-naming[no-role-prefix]
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Migrating state — the sharpest case in the fleet: strategy is Recreate and the config volume
 # is a ReadWriteOnce `k8s_claims` entry below, so a bad image swap can migrate
 # the volume before the gate observes a fault and then fail the rollback redeploy against data

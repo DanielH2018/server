@@ -1201,26 +1201,6 @@ containers_list:
 # initial_setup.yml and fails the play with it, so one bad service would take down the
 # whole OS-hardening run.
 has_gitops: true
-# k8s auto-deploy. Eligibility is an image-only diff to a non-denylisted service's
-# defaults/main.yml — see roles/setup/gitops_deploy/defaults/main.yml, where every denylist
-# entry carries its reason. The cleared pilot list means the denylist alone governs.
-#
-# DO NOT hand-maintain the eligible list here. Run
-# `uv run python scripts/dev/k8s_autodeploy_counts.py` — it derives eligible/denied from the
-# role sources, and the partition is CI-enforced by
-# test_k8s_autodeploy_guard.py::test_every_role_is_either_denied_or_declares_itself_deployable.
-# A list written here goes stale silently and reads as current; see the memory
-# `autodeploy-counts-must-be-measured-not-computed`.
-#
-# code-server, homelab-mcp and ical-proxy are absent from the denylist deliberately: their
-# pins are Jinja registry refs Renovate cannot reach, so they can never qualify (design §7).
-# That is a structural fact about those roles, not a count, so it keeps.
-#
-# NOT yet proven end-to-end: no real Renovate PR has ever traversed this path. The drill
-# covered deploy → gate → restore; the deployer's git plumbing around it (detect → ff-merge
-# → deploy → catch → hold → reset → redeploy → Discord) has never run.
-gitops_deploy_k8s_autodeploy_enabled: true
-gitops_deploy_k8s_autodeploy_pilot: []
 # This is the k3s node — it must NOT have Docker. k3s brings its own containerd and its
 # flannel/kube-proxy iptables rules, and the k3s role's fail-closed guard blocks
 # k3s-bringup.yml on a node that runs Docker. Keep this false.
