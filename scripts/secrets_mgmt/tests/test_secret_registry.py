@@ -178,7 +178,7 @@ def test_sync_adds_missing_and_preserves_existing():
     assert (
         reg["entries"]["kept_push_token"]["last_rotated"] == "2026-05-05"
     )  # untouched
-    assert reg["entries"]["new_push_token"]["tier"] == "auto"
+    assert reg["entries"]["new_push_token"]["tier"] == "assisted"
 
 
 def test_sync_reports_stale_registry_entries():

@@ -12,7 +12,6 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_secret_consumers.py
 from pathlib import Path
 
 from secrets_mgmt.consumers import (
-    CROSS_HOST_PUSH_TOKENS,
     FLUX_PATH,
     consumer_commands,
     consumer_tags,
@@ -32,29 +31,19 @@ def test_consumer_tags_routes_the_bridge_prefix_to_the_bridge():
     assert consumer_tags("monitor_bridge_ha_token") == ("monitor-bridge",)
 
 
-def test_consumer_tags_cross_host_tokens_are_manual():
-    # Cross-host: the unattended cron must NOT auto-rotate these. Their pusher sits on another
-    # HOST, so a tag would assert a repair one playbook run cannot perform.
-    assert consumer_tags("render_records_push_token") == ()
-
-
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
-    # Registry-driven guard: a new single-host `auto` push token must resolve a consumer_tag
-    # (so the unattended weekly `rotate --commit --deploy` cron actually rotates it) or sit in
-    # the explicit known-manual allowlist. Without this, a token whose consumer_tag falls
-    # through to None silently drops out of rotation and only surfaces months later as an
-    # OVERDUE page — exactly how arr_autoblock_push_token slipped in when autofix-bridge landed.
-    # Derived from the module's own CROSS_HOST_PUSH_TOKENS (single source): each entry
-    # documents its pusher/label host pair beside the name.
+    # Registry-driven guard: a new `auto` key must resolve a consumer_tag, so the unattended
+    # weekly `rotate --commit --deploy` cron actually rotates it. Without this, a token whose
+    # consumer_tag falls through to () silently drops out of rotation and only surfaces months
+    # later as an OVERDUE page — exactly how arr_autoblock_push_token slipped in when
+    # autofix-bridge landed. The tier has no row until someone registers a new `auto` key, so
+    # this passes on any consumer_tags until then.
     reg = load_registry()
     auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
-    assert auto  # sanity: the registry has auto-tier tokens
-    unrotatable = [
-        n for n in auto if not consumer_tags(n) and n not in CROSS_HOST_PUSH_TOKENS
-    ]
+    unrotatable = [n for n in auto if not consumer_tags(n)]
     assert not unrotatable, (
-        "auto-tier tokens with no consumer_tags and not known-manual — they silently drop "
-        "out of unattended rotation: %s" % unrotatable
+        "auto-tier tokens with no consumer_tags — they silently drop out of unattended "
+        "rotation: %s" % unrotatable
     )
 
 
@@ -91,8 +80,8 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
     """The same failure one step along: every consumer tag must be a real deploy tag.
 
     `ansible-playbook deploy.yml --tags <unmatched>` runs nothing and exits 0, so the rotation still
-    reads as deployed. A token pushed by a SETUP role with no `containers_list` entry declines in
-    CROSS_HOST_PUSH_TOKENS instead of naming its role for this reason.
+    reads as deployed. A token pushed by a SETUP role with no `containers_list` entry resolves no
+    tag instead of naming its role for this reason.
     """
     from deploy_tools.deploy_lib import tags as deploy_tags
 

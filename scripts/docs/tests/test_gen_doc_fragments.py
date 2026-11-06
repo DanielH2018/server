@@ -97,7 +97,6 @@ def test_module_constant_rejects_a_name_that_is_not_assigned():
 def test_registry_counts_cover_every_registered_secret():
     counts = readers.registry_counts(g.SECRET_REGISTRY)
     assert sum(counts.values()) > 100
-    assert "auto" in counts
 
 
 def test_registry_record_keys_reads_the_source_field():
