@@ -134,7 +134,7 @@ def test_an_owed_manual_plane_counts_and_a_torn_line_is_skipped(tmp_path):
                 }
             ),
             json.dumps(
-                {"class": "k8s_deferred", "subject": "x", "origin": "abc", "at": 1}
+                {"class": "hold_plane", "subject": "x", "origin": "abc", "at": 1}
             ),
             '{"class": "manual_plane", "at"',
         ]

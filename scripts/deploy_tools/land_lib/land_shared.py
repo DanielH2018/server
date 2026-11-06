@@ -252,13 +252,6 @@ def guard_map_rows(files, pr_range: str, git) -> frozenset[str] | None:
     Not a `Classifier`, because it reads git, and never passed to `plane_note`: an empty set
     there would read as a role a hand must apply.
 
-    The callers left undeployed owe the deployer nothing. The tick's `k8s_unapplied` line for
-    `manifests` asked the same question per caller until D6.12 deleted its discharge
-    (#5106). A caller whose row did not move carries the change from its release record, its
-    matching render, or the matching render the line stored before the producer overwrote it
-    (#5122), provided no other `manifests` change lands between that commit and the line's. The line then drops once the callers deployed here carry it, and does not wait for
-    the untouched callers' render to reach the map change.
-
     Args:
         files: the PR's changed paths, the list the landing's caller expansion reads.
         pr_range: `<old>..<new>` bounding this PR's own change.

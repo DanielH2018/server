@@ -19,8 +19,7 @@ marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
 import json
 import os
 import pathlib
-from collections.abc import Callable
-from typing import Any, ClassVar, NamedTuple
+from typing import Any, ClassVar
 
 from deployer_lib.deploy_config import log
 from deployer_lib.deploy_git import behind_marker
@@ -32,20 +31,15 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
     NO_PLAYBOOK,
     STATE_DIR,
     ContentionEntry,
-    K8sDeferredEntry,
     ManualPlaneEntry,
     format_alerted,
     parse_alerted,
     parse_contention,
 )
 from gitops_ledger import (
-    OWED_K8S_DEFERRED,
-    OWED_K8S_UNAPPLIED,
     OWED_MANUAL_PLANE,
     RECEIPT_KEEP,
     drop_owed,
-    k8s_deferred_entries,
-    k8s_unapplied_entries,
     manual_plane_entries,
     parse_receipts,
     put_manual_plane,
@@ -53,43 +47,12 @@ from gitops_ledger import (
 )
 from host_lib import atomic_write
 
-# DECIDED: one class, over the 600-line cap, rather than three mixins. The hold, the alert
-# slots and the k8s owed classes were split out only because this module stood at the cap
+# DECIDED: one class, over the 600-line cap, rather than three mixins. The hold and the alert
+# slots were split out only because this module stood at the cap
 # (#2663), and each mixin read and wrote through `read`/`write`, which only this class
 # defines and they must not. A piece that cannot be read without its parent adds an
 # interface and hides nothing, so they folded back in #3661; the allowlist entry carries the
 # reason.
-
-
-class _K8sOwedClass(NamedTuple):
-    """How one k8s owed class's entries are read out of the ledger."""
-
-    # The two readers differ: a deferred service on two lines keeps its OLDER entry, the age
-    # monitor-bridge pages on.
-    entries: Callable[[str | None], list[K8sDeferredEntry]]
-
-
-# DECIDED: no tick writes either class since D6.12, which deleted their writers with
-# `deploy_k8s_owed.py`. A line an older tick wrote is still read, and cleared by hand with
-# `gitops_state.py clear-owed`, until D6.6 deletes the readers and the two class names.
-_K8S_OWED: dict[str, _K8sOwedClass] = {
-    # The image bumps a broad tick merged and could not deploy (#2449). The paging class:
-    # monitor-bridge pages on the oldest entry past its age gate.
-    OWED_K8S_DEFERRED: _K8sOwedClass(k8s_deferred_entries),
-    # The k8s changes a tick merged and would never apply (#2570). Nothing pages on it; the
-    # SessionStart banner and the journal read it.
-    OWED_K8S_UNAPPLIED: _K8sOwedClass(k8s_unapplied_entries),
-}
-
-
-def _k8s_owed(cls: str) -> _K8sOwedClass:
-    """The table row for `cls`, or ValueError for a class `DeployerState` does not own."""
-    try:
-        return _K8S_OWED[cls]
-    except KeyError:
-        raise ValueError(
-            f"{cls!r} is not a k8s owed class; expected one of {sorted(_K8S_OWED)}"
-        ) from None
 
 
 class DeployerState:
@@ -249,24 +212,6 @@ class DeployerState:
             raise KeyError(slot)
         return slot
 
-    # ── the k8s owed classes: `k8s_deferred` and `k8s_unapplied`, one entry per service ───
-
-    def owed_pending(self, cls: str) -> list[K8sDeferredEntry]:
-        """Every `cls` entry still owed. `k8s_deferred` comes back oldest entry first."""
-        return _k8s_owed(cls).entries(self.read("owed"))
-
-    def clear_owed(self, cls: str, services) -> list[str]:
-        """Drop the `cls` entries naming any of `services`. Returns the names cleared.
-
-        `gitops_state.py clear-owed` is the one caller. A torn ledger line naming one of
-        `services` goes as well (#2657).
-        """
-        _k8s_owed(cls)
-        text, cleared = drop_owed(self.read("owed"), cls, services)
-        if cleared:
-            self.write("owed", text or None)
-        return cleared
-
     # ── the per-SHA tick receipt (#3391) ──────────────────────────────────────────────────
 
     def record_receipt(self, origin: str, base: str, **planes: dict[str, Any]) -> None:
@@ -278,8 +223,7 @@ class DeployerState:
             **planes: each merged into the receipt key it names. `applied`: playbook -> the
                 tags it applied with; called once per plan, so a setup-then-deploy range
                 ends with both. `manual`: setup role tag -> the narrowest tags its change in
-                this range needs, or None where no derivation could narrow it. `deferred`:
-                playbook -> the services a refused narrowing owed instead (#4333, #4843).
+                this range needs, or None where no derivation could narrow it.
 
         Every key the stored receipt carries beyond these survives the merge, for the reason
         `gitops_markers.parse_owed` gives. The marker keeps the newest `RECEIPT_KEEP` lines.
@@ -297,7 +241,7 @@ class DeployerState:
                 lines.append(line)
         obj = obj or {"origin": origin, "base": base}
         for key, new in planes.items():
-            assert key in ("applied", "manual", "deferred"), key
+            assert key in ("applied", "manual"), key
             held = obj.get(key)
             if not isinstance(held, dict):
                 held = {}

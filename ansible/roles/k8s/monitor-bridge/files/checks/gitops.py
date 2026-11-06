@@ -29,7 +29,6 @@ from gitops_markers import (
     agent_join_cmds,
     agent_pin_cmds,
     by_hand,
-    k8s_deferred_deploy_cmd,
     maximal_apply_warning,
     owed_clear_cmd,
     parse_behind,
@@ -38,10 +37,8 @@ from gitops_markers import (
     server_tags,
 )
 from gitops_ledger import (
-    OWED_K8S_DEFERRED,
     OWED_MANUAL_PLANE,
     held_planes,
-    k8s_deferred_entries,
     manual_plane_entries,
 )
 from gitops_hold import DeployerSnapshot
@@ -158,13 +155,7 @@ def gitops_status(
         cfg.GITOPS_CONTENTION_MAX_S, for the reason `max_behind_s` does.
       owed: the deployer's `owed` ledger, or None. Its `hold_plane` class names the planes
         the held arm prints. Its `manual_plane` class is the
-        setup-role arm above (#3392); `gitops_ledger.manual_plane_entries` reads it. Its `k8s_deferred`
-        class is the last arm, through `gitops_ledger.k8s_deferred_entries`. That arm is
-        age-gated on `max_behind_s`, for the reasons the `manual_plane` arm is: a bump deferred
-        ten minutes ago is a tick that ran out of wall clock rather than a fault, and a bump
-        nobody has deployed blocks no other session's landing. It is here at all because the
-        deferring tick MERGED the bump, so `behind_since` is empty and no later tick's range
-        carries it — the failure mode `manual_plane` closed one plane over (#2449).
+        setup-role arm above (#3392); `gitops_ledger.manual_plane_entries` reads it.
     """
     max_behind_s = cfg.GITOPS_BEHIND_MAX_S if max_behind_s is None else max_behind_s
     max_contention_s = (
@@ -244,24 +235,6 @@ def gitops_status(
                     max_behind_s / 3600,
                     "it" if len(pending) == 1 else "them",
                     _apply_and_clear(pending, narrow),
-                )
-            )
-    deferred = k8s_deferred_entries(owed)
-    if deferred:
-        oldest = min(e.at for e in deferred)
-        age_s = (time.time() if now is None else now) - oldest
-        if age_s > max_behind_s:
-            services = sorted({e.service for e in deferred})
-            return False, (
-                "%s merged but not deployed for %.0fh (> %.0fh) — a broad tick ran out of "
-                "budget for the image bump and fast-forwarded past it, so no later range "
-                "carries it; deploy `%s`, then `%s`"
-                % (
-                    ", ".join(services),
-                    age_s / 3600,
-                    max_behind_s / 3600,
-                    k8s_deferred_deploy_cmd(services),
-                    owed_clear_cmd(OWED_K8S_DEFERRED, services[0]),
                 )
             )
     return True, "no held deploy"

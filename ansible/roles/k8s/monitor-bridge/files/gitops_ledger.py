@@ -7,18 +7,16 @@
 `gitops_markers` holds the line-format markers, whose parsers accept an exact field count and
 skip any other line. Their reader copies redeploy on their own schedules, so a field a new
 writer appended read as no pending work in a reader that had not redeployed. That is why
-`manual_plane` once needed a `manual_plane_tags` sidecar and `k8s_unapplied` was its own
-file. Every reader here
-ignores the keys it does not know, and every writer carries them through a rewrite, so a new
-key is invisible to an old reader instead of erasing the line.
+`manual_plane` once needed a `manual_plane_tags` sidecar. Every reader here ignores the keys it
+does not know, and every writer carries them through a rewrite, so a new key is invisible to an
+old reader instead of erasing the line.
 
 Shipped with the deployer (`tasks/code.yml`) and imported from the checkout through the same
 `sys.path` insert as `gitops_markers`. monitor-bridge carries a copy beside its `gitops_markers`
 copy, written by `scripts/dev/gen_gitops_markers.py`, because it pages on `manual_plane` and
-`k8s_deferred` and names the `hold_plane` entries: a class it reads can move into the ledger
-only once that copy reads it. deploy-ui installs this source beside its `gitops_markers`, for
-its `k8s_deferred` panel and its hold panel and Clear. renovate-agent installs it for the
-plane its hold skip names.
+names the `hold_plane` entries: a class it reads can move into the ledger only once that copy
+reads it. deploy-ui installs this source beside its `gitops_markers`, for its hold panel and
+Clear. renovate-agent installs it for the plane its hold skip names.
 
 Stdlib only, plus `gitops_markers`.
 """
@@ -28,28 +26,10 @@ from typing import NamedTuple
 
 from gitops_markers import (
     NO_PLAYBOOK,
-    K8sDeferredEntry,
     ManualPlaneEntry,
 )
 
 # ── the owed-work ledger (#3392) ─────────────────────────────────────────────────────────
-
-# A k8s role change — hand-edited or denylisted — that a tick fast-forwarded and will never
-# apply. The subject is the service, under the `--tags` value that selects it.
-#
-# NOTHING PAGES ON THIS CLASS, by construction rather than by omission (#2570): forty of the
-# fifty-four k8s roles are denylisted (`docs/reference/decisions.md`), so a page on their
-# ordinary changes would hold GitOps Deploy — Status red as normal operation. Its readers are
-# the SessionStart banner and the deployer's own journal, both read by a person who is
-# already looking.
-#
-# THE ENTRY DISCHARGES ITSELF. A denylisted role is one this deployer never applies, so an
-# entry with only a deployer-side clear would accumulate one per routine landing. Every tick
-# asks, per entry, whether the service's release record
-# (`roles/k8s/manifests/tasks/release_stamp.yml`) names a commit that CONTAINS the recorded
-# SHA (`deploy_defer.discharge_k8s_unapplied`), which discharges an operator's own
-# `deploy.sh` too.
-OWED_K8S_UNAPPLIED = "k8s_unapplied"
 
 # A setup role a tick fast-forwarded past and cannot apply itself. The subject is the role,
 # under the `--tags` value that selects it. Two keys are this class's own: `playbook`, the
@@ -62,16 +42,6 @@ OWED_K8S_UNAPPLIED = "k8s_unapplied"
 # `manual_plane_entries` gives it.
 OWED_MANUAL_PLANE = "manual_plane"
 
-# A promoted image bump a BROAD tick fast-forwarded and ran out of budget to deploy. The
-# subject is the service, under the `--tags` value that selects it. monitor-bridge pages on it
-# past its age gate, so it moved the way `manual_plane` did: every reader learned the class
-# before the writer recorded it, and the line-marker readers and the fold of its last lines
-# went once daniel-box held no legacy file (#3392).
-#
-# Unlike `k8s_unapplied`, a line KEEPS its recorded origin: the deployer clears it on the
-# apply that covers it, so nothing needs the origin to advance.
-OWED_K8S_DEFERRED = "k8s_deferred"
-
 # A broad apply that failed and holds the deployer. The subject is the whole entry text
 # `gitops_hold.hold_plane_marker` writes, `<playbook> <tags>`, rather than the playbook alone:
 # two failed applies of one playbook with different tags are two entries, and each clears
@@ -79,16 +49,14 @@ OWED_K8S_DEFERRED = "k8s_deferred"
 # which is #878's erasure over again. `hold_sha` still decides whether anything pages; this
 # class only says which planes the hold is waiting on.
 #
-# It moved the way `k8s_deferred` did (#3392): every reader learned the class before the
+# It moved the way `manual_plane` did (#3392): every reader learned the class before the
 # writer recorded it, and the line-marker half of `held_planes` and the fold of its last
 # entries went once daniel-box held no legacy `hold_plane` file.
 OWED_HOLD_PLANE = "hold_plane"
 
 # Every class a ledger line may carry. A reader asks for its classes by name and never sees
 # the rest, which is what lets a new class ship before every reader knows it.
-OWED_CLASSES: frozenset[str] = frozenset(
-    {OWED_HOLD_PLANE, OWED_K8S_DEFERRED, OWED_K8S_UNAPPLIED, OWED_MANUAL_PLANE}
-)
+OWED_CLASSES: frozenset[str] = frozenset({OWED_HOLD_PLANE, OWED_MANUAL_PLANE})
 
 
 class OwedEntry(NamedTuple):
@@ -261,32 +229,6 @@ def drop_owed(text: str | None, cls: str, subjects) -> tuple[str, list[str]]:
     return "\n".join(kept), sorted(dropped)
 
 
-def k8s_unapplied_entries(owed: str | None) -> list[K8sDeferredEntry]:
-    """Every pending `k8s_unapplied` change in the `owed` ledger.
-
-    Returned as `K8sDeferredEntry` because every caller reads `.service`, `.origin` and `.at`
-    off it.
-    """
-    return [
-        K8sDeferredEntry(e.origin, e.subject, e.at)
-        for e in parse_owed(owed, OWED_K8S_UNAPPLIED)
-    ]
-
-
-def k8s_deferred_entries(owed: str | None) -> list[K8sDeferredEntry]:
-    """Every pending deferred image bump in the `owed` ledger, oldest first.
-
-    One entry per service. A service on two lines keeps the OLDER one, its origin included,
-    because the age gate dates the page from the first deferral.
-    """
-    oldest: dict[str, K8sDeferredEntry] = {}
-    for e in parse_owed(owed, OWED_K8S_DEFERRED):
-        held = oldest.get(e.subject)
-        if held is None or e.at < held.at:
-            oldest[e.subject] = K8sDeferredEntry(e.origin, e.subject, e.at)
-    return sorted(oldest.values(), key=lambda e: e.at)
-
-
 def held_planes(owed: str | None) -> list[str]:
     """Every plane a hold waits on: each `hold_plane` ledger subject, oldest first.
 
@@ -450,17 +392,12 @@ class Receipt(NamedTuple):
         manual: setup role tag -> the narrowest tags its change in this range needs, for
             each role the tick left owed to a hand. An empty frozenset means no derivation
             could narrow it, so the reader prints the whole-role tag.
-        deferred: playbook -> the services each one owes, for a plane the tick refused to
-            narrow and deferred to the `k8s_unapplied` ledger instead of running (#4333).
-            The plane is applied once none of those services has a ledger line left, which
-            `deferred_still_owed` counts (#4843).
     """
 
     origin: str
     base: str
     applied: dict[str, tuple[str, ...]]
     manual: dict[str, frozenset[str]]
-    deferred: dict[str, frozenset[str]]
 
 
 def _receipt(obj: dict | None) -> Receipt | None:
@@ -471,20 +408,19 @@ def _receipt(obj: dict | None) -> Receipt | None:
     if obj is None:
         return None
     origin, base = obj.get("origin"), obj.get("base")
-    planes = [obj.get(k, {}) for k in ("applied", "manual", "deferred")]
+    planes = [obj.get(k, {}) for k in ("applied", "manual")]
     if not (isinstance(origin, str) and origin and isinstance(base, str)):
         return None
     if not all(isinstance(p, dict) for p in planes):
         return None
     if not all(isinstance(v, list) for p in planes for v in p.values()):
         return None
-    applied, manual, deferred = planes
+    applied, manual = planes
     return Receipt(
         origin,
         base,
         {k: tuple(str(t) for t in v) for k, v in applied.items()},
         {k: frozenset(str(t) for t in v) for k, v in manual.items()},
-        {k: frozenset(str(t) for t in v) for k, v in deferred.items()},
     )
 
 
@@ -499,33 +435,11 @@ def parse_receipts(text: str | None) -> list[Receipt]:
 
 
 def receipt_line(receipt: Receipt) -> str:
-    """One `receipts` line, the reverse of `parse_receipts` for a single receipt.
-
-    `deferred` is written only when it holds a plane, so a rewrite leaves every receipt
-    written before the key existed byte-for-byte as it was.
-    """
+    """One `receipts` line, the reverse of `parse_receipts` for a single receipt."""
     obj = {
         "origin": receipt.origin,
         "base": receipt.base,
         "applied": {k: list(v) for k, v in sorted(receipt.applied.items())},
         "manual": {k: sorted(v) for k, v in sorted(receipt.manual.items())},
     }
-    if receipt.deferred:
-        obj["deferred"] = {k: sorted(v) for k, v in sorted(receipt.deferred.items())}
     return json.dumps(obj, sort_keys=True)
-
-
-def deferred_still_owed(
-    receipt: Receipt, playbook: str, owed: str | None
-) -> int | None:
-    """How many of the services `receipt` deferred `playbook` to still hold a ledger line.
-
-    0 means every one has discharged, through a deploy or the render proof, so the plane
-    is applied. A service the tick recorded under `k8s_deferred` instead is owed there, so
-    both classes count, each service once. None when the ledger could not be read, which
-    proves nothing either way.
-    """
-    if owed is None:
-        return None
-    lines = parse_owed(owed, OWED_K8S_UNAPPLIED) + parse_owed(owed, OWED_K8S_DEFERRED)
-    return len(receipt.deferred.get(playbook, frozenset()) & {e.subject for e in lines})

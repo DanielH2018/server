@@ -5,7 +5,7 @@ rotated value reaches a service only when that service renders again. That holds
 also why the refusal was wider than the change: the services that must render again are the
 ones that read a key the range moved, and the key names are plaintext in the SOPS file. PR
 #5405 added one key read only by `setup/claude_code`, and the refusal deferred all 55 k8s
-services to `k8s_unapplied` for it.
+services for it.
 
 SOPS re-encrypts only the values an edit changed, so the ciphertext of every other key is
 byte-identical across the commit. Measured on the last eight commits to touch the file,

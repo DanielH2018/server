@@ -221,42 +221,14 @@ def log_path_of(pid: int) -> str:
         return ""
 
 
-def k8s_deferred_rows(owed: str | None) -> list[dict[str, str]]:
-    """Each image bump the deployer deferred and still holds, oldest deferral first.
-
-    Args:
-        owed: the `owed` ledger's text, whose `k8s_deferred` class holds the bumps (#3392).
-
-    One row per service, carrying the two commands an operator runs in order: the deploy that
-    applies the merged bump, then the clear that drops its line. The page prints both rather
-    than offering a button, because this daemon's deploy button takes the service lock and a
-    budget deferral means the tick ran out of wall clock — the operator picks the moment.
-
-    A garbled line is skipped, never guessed at, for the reason `gitops_ledger.parse_owed`
-    gives.
-    """
-    return [
-        {
-            "service": e.service,
-            "origin": e.origin[:8],
-            "deploy": gitops_markers.k8s_deferred_deploy_cmd([e.service]),
-            "clear": gitops_markers.owed_clear_cmd(
-                gitops_ledger.OWED_K8S_DEFERRED, e.service
-            ),
-        }
-        for e in gitops_ledger.k8s_deferred_entries(owed)
-    ]
-
-
 def read_state(state_dir: Path) -> dict[str, str | list]:
-    """Read the three markers the panels show, plus the held planes and the deferred bumps.
+    """Read the three markers the panels show, plus the held planes.
 
     The keys are the markers' basenames from `gitops_markers.MARKERS`, the deployer's own
     table copied into this `files/`, which is what the page reads. A missing marker is ''. The `hold_plane_entries` key is every plane the hold waits on,
     the `owed` ledger's `hold_plane` class read through `gitops_ledger.held_planes` (#3392).
     It is what the page lists, one entry per failed apply, because a Clear drops all of them
     at once (#2453). The
-    `k8s_deferred_entries` key comes from the ledger's `k8s_deferred` class. The
     `manual_plane_owed` key is that class's raw ledger lines, served for `probe.py landing` on
     a host that cannot read the state directory itself (#3676), which words them with the
     banner's own renderer. The ledger's other classes are not served.
@@ -284,7 +256,6 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
     st[last_run.name] = last_run_text
     owed = snap.owed
     st["hold_plane_entries"] = gitops_ledger.held_planes(owed)
-    st["k8s_deferred_entries"] = k8s_deferred_rows(owed)
     st["manual_plane_owed"] = "\n".join(
         line
         for line in (owed or "").splitlines()

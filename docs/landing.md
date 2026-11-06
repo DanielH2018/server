@@ -700,9 +700,7 @@ Four things sit in that position:
   `shared_role_callers.smoke_caller` derives it — and the other 56 take the new task logic on
   their own next deploy. PR #3117 was the measured case: 57 tags, about 20 minutes, and 0 of 60
   release records showed the restart it was changing. The `# DECIDED:` at `smoke_caller` holds
-  the ruling and the gap it accepts, and `deploy_k8s_owed.discharge_k8s_unapplied` still reads
-  every caller, because its question is whether the change is applied rather than whether it
-  runs.
+  the ruling and the gap it accepts.
   **A change confined to `manifests`' standalone-guard map deploys only the rows that
   moved** (#4932). The guard task reads one row of `files/standalone_secret_keys.json`,
   the row for its own service. `land_shared.guard_map_rows` therefore diffs the map over

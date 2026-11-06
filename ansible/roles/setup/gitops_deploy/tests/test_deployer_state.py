@@ -25,9 +25,7 @@ import yaml
 from deployer_lib import deploy_io
 from gitops_ledger import (
     OWED_HOLD_PLANE,
-    OWED_K8S_DEFERRED,
     RECEIPT_KEEP,
-    owed_line,
     parse_owed,
     parse_receipts,
 )
@@ -210,54 +208,6 @@ def test_an_operators_clear_removes_the_marker(state):
     assert state.read("contention") is None
 
 
-# ── the k8s_deferred class of the owed ledger ──────────────────────────────────
-def test_clearing_one_deferred_bump_leaves_the_others(state):
-    """`gitops_state.py clear-owed` is the one writer left for this class (D6.12)."""
-    state.write(
-        "owed",
-        "\n".join(
-            owed_line(OWED_K8S_DEFERRED, s, SHA, 1000) for s in ("radarr", "sonarr")
-        ),
-    )
-    assert state.clear_owed(OWED_K8S_DEFERRED, {"sonarr"}) == ["sonarr"]
-    assert [e.service for e in state.owed_pending(OWED_K8S_DEFERRED)] == ["radarr"]
-    assert state.clear_owed(OWED_K8S_DEFERRED, {"radarr"}) == ["radarr"]
-    assert state.read("owed") is None
-
-
-def test_a_garbled_k8s_deferred_line_is_carried_through_a_clear(state):
-    """Skipped by every reader, never dropped: it is the only record of a deferral.
-
-    The REJECTING half of the #2657 repair: this line names nobody, so no clear and no record
-    can act on it without guessing.
-    """
-    state.write("owed", f"garbage\n{owed_line(OWED_K8S_DEFERRED, 'sonarr', SHA, 1000)}")
-    assert state.clear_owed(OWED_K8S_DEFERRED, {"sonarr"}) == ["sonarr"]
-    assert state.read("owed") == "garbage"
-
-
-_TORN_SONARR = json.dumps({"class": "k8s_deferred", "subject": "sonarr", "origin": SHA})
-
-
-def test_a_torn_k8s_deferred_line_naming_the_service_is_cleared(state):
-    """Nothing else ever drops it: the clear is the only reverse this class has."""
-    state.write("owed", _TORN_SONARR)
-    assert state.clear_owed(OWED_K8S_DEFERRED, {"sonarr"}) == ["sonarr"]
-    assert state.read("owed") is None
-
-
-@pytest.mark.parametrize("call", ["owed_pending", "clear_owed"])
-def test_a_class_the_k8s_pair_does_not_own_is_refused(state, call):
-    """`hold_plane` has its own writer: the pair must not touch a line with k8s semantics."""
-    args = {
-        "owed_pending": (),
-        "clear_owed": ({"x"},),
-    }[call]
-    with pytest.raises(ValueError, match="not a k8s owed class"):
-        getattr(state, call)(OWED_HOLD_PLANE, *args)
-    assert state.read("owed") is None
-
-
 # ── the hold_plane class of the owed ledger ────────────────────────────────────
 def _held(state) -> list[tuple[str, str]]:
     return [
@@ -352,16 +302,12 @@ def test_a_receipt_merges_every_plan_of_one_origin_into_one_line(state):
     )
     state.record_receipt("o" * 40, "b" * 40, manual={"k3s": frozenset({"kubeconfig"})})
     state.record_receipt("o" * 40, "b" * 40, applied={"ansible/deploy.yml": []})
-    state.record_receipt(
-        "o" * 40, "b" * 40, deferred={"ansible/deploy.yml": ["sonarr"]}
-    )
     (receipt,) = parse_receipts(state.read("receipts"))
     assert receipt.applied == {
         "ansible/initial_setup.yml": ("x",),
         "ansible/deploy.yml": (),
     }
     assert receipt.manual == {"k3s": frozenset({"kubeconfig"})}
-    assert receipt.deferred == {"ansible/deploy.yml": frozenset({"sonarr"})}
 
 
 def test_a_receipt_keeps_a_key_this_writer_does_not_know(state):

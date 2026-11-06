@@ -9,8 +9,6 @@ from pathlib import Path
 import pytest
 
 from _land_fakes import MERGE_SHA, Fakes, receipt
-from gitops_ledger import OWED_K8S_UNAPPLIED, owed_line
-from gitops_markers import MARKERS
 from deploy_tools.deploy_lib.detach_notify import GateResult
 from deploy_tools.land_lib import health_verdict, outcome
 from deploy_tools.land_lib.outcome import Outcome
@@ -276,66 +274,6 @@ def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
     with pytest.raises(Outcome) as exc:
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-
-
-# The tick's own deferral of a deploy plane it could not narrow (#4333): the range is
-# merged, its receipt applies nothing and records the owed services under `deferred`, and
-# each of them holds a `k8s_unapplied` line. No tick writes one since D6.12, and a deploy-plane
-# PR no longer needs `ansible/deploy.yml` from the tick, so the deferral's own tests went with
-# it; the reader stays until D6.6. The case below keeps a stale receipt from passing.
-OWED = ("sonarr", "radarr")
-DEFERRED_RECEIPT = receipt({}, deferred={"ansible/deploy.yml": list(OWED)})
-OWED_LINES = {
-    MARKERS["owed"]: "\n".join(
-        owed_line(OWED_K8S_UNAPPLIED, s, "d" * 40, 1.0) for s in OWED
-    )
-}
-# The remedy `land_tags.broad_remediation` derives for a deploy-plane path.
-DEPLOY_PLANE_COMMAND = (
-    "`git merge --ff-only origin/master` FIRST, then "
-    "`uv run ansible-playbook ansible/deploy.yml`"
-)
-DEPLOY_PLANE_PATH = "ansible/filter_plugins/toposort.py"
-
-
-def _deferred(landing, state: dict, pr_path: str = DEPLOY_PLANE_PATH):
-    """A converged tick, the deployer's markers `state`, for a PR changing `pr_path`."""
-    ln, _ = _deployed(
-        landing,
-        Fakes(
-            self_applied=True, self_applied_command=DEPLOY_PLANE_COMMAND, state=state
-        ),
-    )
-    ln.classification = replace(ln.classification, pr_paths=(pr_path,))
-    return ln
-
-
-@pytest.mark.parametrize(
-    "state, pr_path",
-    [
-        # Another session's ff-merge crossed the PR, so no receipt; a later tick owes
-        # unrelated services at origins past the merge. That is not this PR's deferral.
-        (OWED_LINES, DEPLOY_PLANE_PATH),
-        # A setup-plane PR owes `initial_setup.yml`, whatever its range's receipt deferred.
-        (
-            DEFERRED_RECEIPT | OWED_LINES,
-            "ansible/roles/setup/renovate_agent/tasks/main.yml",
-        ),
-    ],
-    ids=["no-receipt-later-lines", "setup-plane-pr"],
-)
-def test_a_range_the_tick_did_not_defer_keeps_the_stranded_remedy(
-    landing, capsys, state, pr_path
-):
-    """Only the receipt of the range that crossed the merge names this PR's deferral."""
-    ln = _deferred(landing, state, pr_path)
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    out = capsys.readouterr().out
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "never see this range again" in out
-    assert f"Apply it: {DEPLOY_PLANE_COMMAND}" in out
-    assert "k8s_unapplied" not in out
 
 
 def test_an_unrecorded_apply_read_mid_tick_is_deferred_not_owed_to_a_hand(

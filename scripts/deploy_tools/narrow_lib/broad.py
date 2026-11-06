@@ -26,8 +26,7 @@ can move because of it:
   - a play file (`ansible/deploy.yml`, `pre_tasks/`, `tasks/`, `post_tasks/`) whose parsed YAML
     is unchanged: no tags, since Ansible discards a comment. Any other play-file change refuses.
 
-ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` defers a refused plane to
-`k8s_unapplied`, naming every candidate, rather than running the whole play (#4333).
+ANY DOUBT IS A REFUSAL, naming every candidate, rather than a guess at a narrower set (#4333).
 
 `lib.narrow_git` holds the primitives this shares with `narrow_setup`: `CannotNarrow`,
 `show_at` and the YAML mapping parse, one copy each.
@@ -385,7 +384,7 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
 
     The unit both consumers share: `narrow` calls it per path of the tick's range, and
     `releases.compute_stale` per path of a record's range. Raises `CannotNarrow` where no
-    rule can say. The tick then defers the plane to `k8s_unapplied` (#4333), and the census
+    rule can say. The census then
     marks every service sharing the record stale: the set a full deploy would re-stamp.
     """
     if paths.is_prose(path):  # a doc no playbook applies
