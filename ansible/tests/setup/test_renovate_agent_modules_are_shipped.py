@@ -2,7 +2,7 @@
 """Every Python module in the renovate_agent role's `files/` reaches the host, and is watched.
 
 The role enumerates its modules by name twice — once in the "Install agent Python files" copy
-loop, once in `stamp_deployed_pairs` for setup-drift-check.sh's stale-script arm. Neither
+loop, once in `stamp_deployed_pairs` for setup-drift-check.sh's deployed-code arm. Neither
 list is derived from the directory, so a module added to `files/` and to neither list is one
 the host never receives, and the suite stays green because every test reaches `files/` through
 its own `sys.path` insert.

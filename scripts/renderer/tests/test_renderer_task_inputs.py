@@ -171,7 +171,6 @@ def test_an_image_builder_fact_outside_its_include_passes(tmp_path):
 
 def test_a_moved_key_is_refused_only_while_flux_owns_the_role(tmp_path):
     role = _role(tmp_path, tasks=BARE_INCLUDE + "  vars:\n    manifests_prune: false\n")
-    refuse_moved_keys_in_tasks(role, {"name": "role", "owner": "released"})
     refuse_moved_keys_in_tasks(role, {"name": "role"})
     with pytest.raises(ValueError, match="manifests_prune"):
         refuse_moved_keys_in_tasks(role, {"name": "role", "owner": "flux"})

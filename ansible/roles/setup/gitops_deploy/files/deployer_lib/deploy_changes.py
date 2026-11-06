@@ -259,7 +259,7 @@ def comment_only_broad_changes(paths, old_ref: str, new_ref: str, show) -> set[s
 
 # A k8s role's `defaults/` file. Ansible reads it only through its values, so an edit that
 # moves no content line renders the same manifests. `manifests` is left out: it is the renderer
-# every service includes, and `probe_lib/releases_diff.py` skips it for the same reason.
+# every service includes.
 _K8S_DEFAULTS_FILE = re.compile(
     r"^ansible/roles/k8s/(?!manifests/)[^/]+/defaults/[^/]+\.ya?ml$"
 )
@@ -270,7 +270,7 @@ def comment_only_k8s_defaults(paths, old_ref: str, new_ref: str, show) -> set[st
 
     A caller drops the paths returned here before classifying, as it drops
     `comment_only_broad_changes`'s. Its readers are `deploy_phases.plan_tick` and
-    `deploy_lib/tags.py:comment_only`.
+    `deploy_lib/tags.py:comment_only_paths`.
 
     Kept apart from `comment_only_broad_changes` rather than widening
     `_COMMENT_ONLY_PREFIXES`: land.sh's plane note and the `blockers` verdict read that one,

@@ -32,7 +32,7 @@ roles:
   column, per claim — `catalog_backup.claim_tiers` is the one derivation both print, so a
   tier here is read from the claim's StorageClass and the k3s role's `k3s_longhorn_*_volumes`
   lists, never typed, and a claim named by a shell variable has none). For an entry that carries `owner` (`lib.k8s_roles.tag_owners`), an
-  **Applied by** line replaces the deploy tag: it names Flux and `promote`, or the handback,
+  **Applied by** line replaces the deploy tag: it names Flux and `promote`,
   and says `deploy.sh` refuses `--tags=<tag>` with exit 5;
 - a setup role (`roles/setup/<name>/`, every directory but the include-only `common`): the
   playbook and tag that apply it, with the `when:` that restricts it to a host, read from the
@@ -196,7 +196,7 @@ def pulled_repository(ref: str, *, owner: str | None, built: frozenset[str]) -> 
     """The repository a render of the role pulls `ref` from.
 
     `ghcr_refs` moves a flux-owned tag's built-image refs to GHCR in the render, and leaves
-    the role's defaults on the in-cluster registry for the handback (D5.4b). So the defaults
+    the role's defaults on the in-cluster registry (D5.4b). So the defaults
     name the wrong repository for exactly those refs, and this one swap mirrors the render's.
     Every other image of a flux-owned role keeps its own host, as it does in the render.
     """
@@ -232,7 +232,7 @@ def glance_lines(
     defaults = role_defaults(role_dir)
     tags = ",".join(entry_tags(entry))
     if owner is not None:
-        lines = [f"- **Applied by:** {owner_stance(owner, tags)}"]
+        lines = [f"- **Applied by:** {owner_stance(tags)}"]
     else:
         lines = [f'- **Deploy tag:** `--tags "{tags}"`']
 

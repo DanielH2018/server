@@ -474,7 +474,7 @@ def backup_tier(
     return "; ".join(seen)
 
 
-def owner_stance(owner: str, tags: str = "") -> str:
+def owner_stance(tags: str = "") -> str:
     """What applies a k8s service whose `containers_list` entry carries `owner`, as one clause.
 
     The glance and the catalogue print it in place of the deploy tag, because no Ansible path deploys such a tag. The plan is
@@ -482,17 +482,13 @@ def owner_stance(owner: str, tags: str = "") -> str:
     that is not Ansible-owned*.
 
     Args:
-        owner: the entry's `owner` value.
         tags: the entry's deploy tags, comma-joined. When given, the refusal names them as a
             literal `--tags=<tags>`, which the glance needs: the role-doc census
             (`ansible/tests/repo/test_role_claude_md.py`) wants `--tags` and the role's name
             on one line, and the `=` form gives the glance's wrap no space to break at.
     """
     tag = f"`--tags={tags}`" if tags else "its tag"
-    refusal = f"`deploy.sh` refuses {tag} with exit 5"
-    if owner == "flux":
-        return f"Flux, through `promote` (`owner: flux`); {refusal}"
-    return f"nothing until a PR removes `owner` (`owner: {owner}`, mid-handback); {refusal}"
+    return f"Flux, through `promote` (`owner: flux`); `deploy.sh` refuses {tag} with exit 5"
 
 
 def entry_owner(entry: dict[str, Any], owners: dict[str, str]) -> str | None:
@@ -520,7 +516,7 @@ def autodeploy_eligibility(
         "n/a: applied by" the entry's `owner_stance`, or an `UNKNOWN`/"n/a" explanation.
     """
     if owner is not None:
-        return f"n/a: applied by {owner_stance(owner)}"
+        return f"n/a: applied by {owner_stance()}"
     if platform != "k8s":
         if host_data.get("has_gitops") is False:
             return "n/a (host has no GitOps auto-deploy path)"

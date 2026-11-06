@@ -186,7 +186,7 @@ def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file
     only through that task file's importers (#3319). `common` is not recorded, so the alert
     does not print the resolv.conf remediation for it."""
     path = "ansible/roles/setup/common/templates/check-timer.timer.j2"
-    consumers = {"gitops_deploy", "initial_setup", "render_records"}
+    consumers = {"gitops_deploy", "initial_setup"}
     assert setup_roles_for(path) == consumers
     assert setup_tags_for([path]) == consumers
 

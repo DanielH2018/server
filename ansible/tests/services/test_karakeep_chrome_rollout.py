@@ -73,7 +73,6 @@ def test_an_unrelated_karakeep_edit_restarts_the_sidecars_but_not_chrome():
     }
     record = rollouts(manifests_extra_rollouts=_extras(), **_UNRELATED_EDIT)
     assert record[CHROME]["restart"] is False, (
-        "the release record expects a restart of chrome that the role never issues, so "
-        "probe.py health reads it as NOT ROLLED"
+        "the release record expects a restart of chrome that the role never issues"
     )
     assert record["karakeep-meilisearch"]["restart"] is True

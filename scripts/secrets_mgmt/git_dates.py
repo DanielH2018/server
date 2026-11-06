@@ -249,6 +249,8 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_speedtest_push_token",
         "monitor_bridge_swallowed_verdicts_push_token",
         "monitor_bridge_wan_reachable_push_token",
+        # R4: its only reader was the render_records role, which #7478 deleted.
+        "render_records_push_token",
     }
 )
 

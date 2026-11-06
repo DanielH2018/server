@@ -359,11 +359,12 @@ The operator accepted it on 2026-10-14, and the session merges D2.8 itself (Open
 
 ### The ownership flag and its three readers
 
-`owner` on an entry takes one of two values:
-
-- `flux`: Flux applies the tag. The renderer publishes it, and every Ansible path skips it.
-- `released`: the first PR of a handback (*Rollback*). The renderer leaves the tag out of the
-  bundle, and every Ansible path still skips it.
+`owner` on an entry takes one value, `flux`: Flux applies the tag. The renderer publishes it,
+and every Ansible path skips it. Every reader raises on `released`, the second value this plan
+gave the first PR of a handback, because the operator ruled on 2026-11-06 that services do not
+move back from Flux to Ansible (`docs/flux-deploy-plane.md`, *A Flux-owned service stays
+Flux-owned*). The later mentions of `released` and the handback in this plan record what D2
+shipped.
 
 An entry without `owner` is Ansible-owned. So there are two predicates, and no reader mixes
 them:
@@ -384,7 +385,7 @@ Three readers answer both predicates:
   deployer runs under `uv run --no-project`.
 
 A census test in `ansible/tests/deploy/` asserts that the three agree on both predicates,
-on the live inventory and on a fixture with one `flux` entry and one `released` entry. Each
+on the live inventory and on a fixture with two `flux` entries and one without `owner`. Each
 reader fails on any other value, and the census holds a fixture for that.
 
 `owner` is a deploy-mechanics field. D2.1a names the set in `narrow_lib/containers.py` as
@@ -467,7 +468,6 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `deploy.sh --list-services` | Marks T with its owner. |
 | GitOps deployer | Routes T's paths to a new `cs.flux` set: fast-forwarded, logged, never deferred, never alerted, never owed. `_deploy_plane` drops T before its `if not tags` check, so a list left empty is `NARROWED_TO_NOTHING`. Ownership is read at the commit being applied. |
 | `land.sh` | Splits the PR's tags. T waits on promotion (below). Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |
-| `render_targets.py` CLI | `main` prints a new `render_record_targets(host)`, which leaves T out of the hourly record list. `render_targets()` stays the full universe for the renderer, R1's `compare` and R2. |
 | `secret_rotation.py --deploy` | `cmd_rotate` drops T before it calls `rotation_tools.run_deploy`, which runs `ansible-playbook ansible/deploy.yml` without `deploy.sh`. It runs no playbook when nothing remains. D3 gives a rotated cluster secret its path. |
 | `probe.py health T` | Reads T's Kustomization, not a release record, for its reference time when the tree marks T flux-owned (`tag_owners`). |
 | `gen_role_glance.py`, `service_catalog.py` | For `owner: flux`, print that Flux applies the role through `promote` and that `deploy.sh` refuses it with exit 5, in place of the deploy tag and the auto-deploy stance. |

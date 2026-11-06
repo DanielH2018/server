@@ -194,7 +194,7 @@ with the reason.
   rather than the resolv.conf remediation `common` would print.
 - A `common/templates/` file a common task file renders inherits that task file's importers. The
   kuma-check pair routes to the roles importing `check_timer.yml`. `narrow_setup` finds no
-  reader of the template in `gitops_deploy`, `render_records` or `k3s`, so those apply or are
+  reader of the template in `gitops_deploy` or `k3s`, so those apply or are
   recorded under their whole-role tag.
 - `resolv.conf.j2` is the exception (`SETUP_FILES_ROUTED_TO_OWNER`). `k3s` renders it and is a hand
   apply, since it runs from `k3s-bringup.yml`, so the file routes `common` to `manual_plane`, whose
@@ -274,13 +274,13 @@ applies, defers, alerts on or owes such a role. Without that branch of
 
 - **The journal names the role.** `plan_tick` logs `flux: <role>: fast-forwarding <paths>`.
 
-A `containers_list` entry that sets `owner` is not Ansible-owned. With `owner: flux`, Flux
-applies the tag through `promote`. With `owner: released`, which the ownership census refuses,
-no writer applies it. D2's plan has the design:
+A `containers_list` entry that sets `owner` is not Ansible-owned: with `owner: flux`, Flux
+applies the tag through `promote`. The tick skips such a tag, so the deployer never
+applies, defers, alerts on or owes it. D2's plan has the design:
 [The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
 `ansible/tests/deploy/test_owner_readers_agree.py` holds the two readers that remain equal,
 `scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each raises on an `owner`
-value other than `flux` or `released`.
+value other than `flux`.
 
 ### Both apply arms are forward-only
 

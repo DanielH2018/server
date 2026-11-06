@@ -48,17 +48,15 @@ which only the operator can write. Step 6 tells you which case you are in.
    - **pinned** (`authelia_storage_encryption_key` and similar break-glass
      keys): **DO NOT** `sops set` these — rotating/altering them is a DANGER procedure with
      data-loss risk. Stop and point the user at the `pinned` runbook in `docs/secret-rotation.md`.
-   - **auto** — locally generated, no external coupling. Safe to generate. The registry's
-     only `auto` entry is `render_records_push_token`, which goes with its role; do not add another.
+   - **auto** — locally generated, no external coupling. Safe to generate. The registry holds
+     no `auto` entry; do not add one without a `consumer_tags` route in
+     `scripts/secrets_mgmt/consumers.py`, which the unattended rotation needs.
    - **assisted / external** — value comes from a provider console or has an app-side step.
 
 3. **Add the secret** (`.sops.yaml` auto-encrypts anything under `vars/`, so the file stays
    encrypted on disk):
    - **Preferred (value stays private):** tell the user to run it themselves —
      `! sops ansible/vars/secrets.yml` — add the `name: value` line in the editor, save, exit.
-   - **Never add a push token.** A new check pages through an Alertmanager rule, which needs no
-     per-check secret (`docs/adr/0026-one-alert-plane-on-prometheus-and-alertmanager.md`). If a task asks for a
-     `*_push_token`, stop and point the user at the ADR's producer recipes.
    - **A generated value (auto tier):** generate and set without echoing the value:
      `openssl rand -base64 32 | jq -Rc . | sops set --value-stdin ansible/vars/secrets.yml '["<name>"]'`
      (the value is never printed, and never reaches `sops`'s argv). `--value-stdin` parses
@@ -98,9 +96,9 @@ which only the operator can write. Step 6 tells you which case you are in.
 7. **Register for rotation tracking:** `uv run python scripts/secrets_mgmt/secret_rotation.py sync` — this
    reconciles `ansible/secret_rotation.yml` (plaintext registry: names/tiers/dates, no values)
    with the live secret names and assigns a tier + staggered due-date. `sync` knows only
-   `*_push_token` (`auto`) and `*_user`/`*_username` (`ignore`); every other name lands in
-   `assisted`. **If step 2 classified the key `external` or `pinned`, edit its `tier` in the
-   registry now** — `sync` preserves the edit. Then
+   `*_user`/`*_username` (`ignore`); every other name lands in `assisted`. **If step 2 classified
+   the key `auto`, `external` or `pinned`, edit its `tier` in the registry now** — `sync`
+   preserves the edit. Then
    `uv run python scripts/secrets_mgmt/secret_rotation.py audit` to confirm it registered cleanly.
 
 8. **Commit** — stage the plaintext registry change, the (still-encrypted) secrets file, and

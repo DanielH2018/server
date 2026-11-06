@@ -159,19 +159,23 @@ def test_d1s_empty_root_with_no_published_tag_is_flagged(tmp_path):
 
 
 def _host_vars(tmp_path, owners):
+    """`owners` maps a k8s entry's name to its `owner`; None writes no `owner` key."""
     path = tmp_path / "daniel-box.yml"
     path.write_text(
         "containers_list:\n"
         + "".join(
-            f"  - name: {name}\n    platform: k8s\n    owner: {owner}\n"
+            f"  - name: {name}\n    platform: k8s\n"
+            + (f"    owner: {owner}\n" if owner else "")
             for name, owner in owners.items()
         )
     )
     return path
 
 
-def test_a_released_tag_is_absent_from_the_bundle_and_the_census_is_clean(tmp_path):
-    host_vars = _host_vars(tmp_path, {"bento-pdf": "flux", "sonarr": "released"})
+def test_a_tag_without_owner_is_absent_from_the_bundle_and_the_census_is_clean(
+    tmp_path,
+):
+    host_vars = _host_vars(tmp_path, {"bento-pdf": "flux", "sonarr": None})
     assert bundle_census.published_tags(host_vars) == ["bento-pdf"]
     out = _bundle(tmp_path, ["bento-pdf"])
     # The CLI runs the publish gates too, and the host gate's named member is this route.
@@ -189,7 +193,7 @@ def test_a_flux_owned_tag_missing_from_the_bundle_is_flagged(tmp_path, capsys):
 
 
 def test_published_tags_prints_nothing_when_no_tag_is_flux_owned(tmp_path, capsys):
-    host_vars = _host_vars(tmp_path, {"sonarr": "released"})
+    host_vars = _host_vars(tmp_path, {"sonarr": None})
     assert promote.main(["published-tags", "--host-vars", str(host_vars)]) == OK
     assert capsys.readouterr().out == ""
 

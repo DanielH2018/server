@@ -88,8 +88,7 @@ def test_observability_a_changed_render_expects_nothing_to_roll():
     """The red half. Every workload here declares `restart_on` without `config`, because
     each ConfigMap is hashed into its own pod template — the apply rolls the one that changed
     and `manifests_rolled_by_apply` reports it, so no restart TASK runs and the record must
-    expect no `restartedAt`. Expecting one is not a quiet failure: `probe.py health` reads it
-    as NOT ROLLED and fails the deploy."""
+    expect no `restartedAt`. Expecting one would record a restart no task issues."""
     rollouts = _observability_rollouts(
         manifests_apply={"stdout": "deployment.apps/grafana configured"},
     )

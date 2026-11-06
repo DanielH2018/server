@@ -69,7 +69,6 @@ _LIVE_NAME = (
     "A live name or matcher, such as `etcd_drill_full_kuma_interval_s` or the "
     "webhook labelled Kuma: renaming it touches its readers (#7194)."
 )
-_R4_DELETES = "The render_records role, which R4 deletes (#7178)."
 _SHIPPED_COMMENT = (
     "A comment in a file the role renders or ships names Kuma as history: rewording it changes "
     "the bytes that deploy, so it goes with the role's next change (#7194)."
@@ -101,16 +100,6 @@ _PROSE_HOLDERS = {
             "ansible/roles/setup/hypervisor/templates/etcd-restore-drill-vm.sh.j2",
         ),
         _LIVE_NAME,
-    ),
-    **dict.fromkeys(
-        (
-            "ansible/roles/setup/render_records/CLAUDE.md",
-            "ansible/roles/setup/render_records/defaults/main.yml",
-            "ansible/roles/setup/render_records/files/render_records.py",
-            "ansible/roles/setup/render_records/tasks/main.yml",
-            "ansible/roles/setup/render_records/templates/config.env.j2",
-        ),
-        _R4_DELETES,
     ),
     **dict.fromkeys(
         (

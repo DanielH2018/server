@@ -20,7 +20,7 @@
 #                           its own order. Staged in `manifests_deferred_dir_name`, a sibling
 #                           directory this role's prune and its `kubectl apply -f <dir>/` never
 #                           touch. Its bytes reach `manifests_digest`, so a change to a
-#                           deferred template is visible to `probe.py releases --stale-only`.
+#                           deferred template moves the digest.
 #   manifests_deferred_dir_name  the sibling directory basename under
 #                           /etc/rancher/k3s/manifests/. Required with the above, and reserved
 #                           the way `<service>-netpol` is -- see
@@ -36,8 +36,8 @@
 #   manifests_self_rollouts [{name, kind, image?, namespace?}] a role with
 #                           `manifests_rollout: ''` restarts through its OWN task after this
 #                           role returns. Reaches the release record's `rollouts[]`
-#                           (release_stamp.yml), so `probe.py health` holds the same roll
-#                           expectation for them it holds for the shared restart's targets,
+#                           (release_stamp.yml), with the same roll expectation it records
+#                           for the shared restart's targets,
 #                           and the pod-template fingerprints below, so the owning role can
 #                           skip its private restart of a workload the apply already rolled
 #                           -- never the shared restart or the drain, which such a
@@ -523,7 +523,7 @@
 
 - name: Record the render digest for {{ manifests_service }}
   tags: [deploy]
-  # Render-only mode: the digest the staleness reader compares against the release
+  # Render-only mode: a digest comparable with the release
   # record's. Straight after the renders, so nothing an apply does can reach the bytes.
   ansible.builtin.include_tasks: render_record.yml
   when:
@@ -788,7 +788,8 @@
   tags: [deploy]
   # name -> bool, read by the two restart tasks, by the private restarts in pihole and
   # observability and by release_stamp.yml, which must decide `rollouts[].restart` from
-  # the same answer or `probe.py health` fails the skipped restart as NOT ROLLED. Both reads must have succeeded for a difference to count: a read that
+  # the same answer or the record owes a restart that was skipped. Both reads must have
+  # succeeded for a difference to count: a read that
   # failed on one side only (a transient kubectl error) reads as "not rolled" and restarts.
   ansible.builtin.set_fact:
     manifests_rolled_by_apply: >-
@@ -833,7 +834,7 @@
 # healthy rollout would be missing for exactly the deploys an operator most needs to identify.
 #
 # Before the restarts below, not after: the record also names which workloads this apply must
-# roll (`rollouts[].restart`, read by `probe.py health`), and it decides that from the same
+# roll (`rollouts[].restart`), and it decides that from the same
 # facts the restart tasks read -- so the rebuilt-image fact above has to be set first, and the
 # record's `applied_at` has to precede the `restartedAt` a restart stamps on the workload.
 - name: Record the applied release for {{ manifests_service }}
@@ -958,8 +959,8 @@
     label: "{{ item.name }}"
   vars:
     # Templated per iteration, and the same expression release_stamp.yml reads for the
-    # record's `restart`: two readers that disagree leave `probe.py health` expecting a
-    # restart this task skipped, or skipping one it issued.
+    # record's `restart`: two readers that disagree leave the record owing a
+    # restart this task skipped, or omitting one it issued.
     manifests_target_triggers: "{{ item.get('restart_on', manifests_restart_triggers_default) }}"
   when:
     - not k8s_dry_run | bool

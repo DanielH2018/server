@@ -180,8 +180,7 @@ def test_the_shared_apply_carries_instance_one_only():
 
 def test_instance_twos_bytes_reach_the_release_digest():
     """The point of rendering through the shared role: the deferred file is stat'd
-    into `manifests_release_files`, so `manifests_digest` covers it and
-    `probe.py releases --stale-only` can clear or catch a change to it. A render alone would not
+    into `manifests_release_files`, so `manifests_digest` covers it. A render alone would not
     have done that — the digest loops a list, not a directory."""
     checksum = task_named(
         load_tasks(_MANIFESTS_TASKS / "release_digest.yml"),

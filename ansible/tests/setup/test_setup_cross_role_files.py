@@ -80,7 +80,6 @@ KNOWN_EDGES = {
     "ansible/roles/setup/common/templates/check-timer.timer.j2": {
         "gitops_deploy",
         "initial_setup",
-        "render_records",
     },
     # Copied from the checkout by a literal `src:`; the second through release_bin.yml.
     "scripts/backup/etcd_restore_drill.sh": {"hypervisor"},

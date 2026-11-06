@@ -770,7 +770,9 @@ token that has no consumer, and the token stays in `ansible/secret_rotation.yml`
 operator removes it. A follow-up commit after PR 6 makes these changes at once:
 
 - The operator removes the key from `secrets.yml` with `sops` (**operator-only**).
-- `secret_rotation.py sync` drops the registry row.
+- The commit deletes the 3-line registry row from `ansible/secret_rotation.yml` by hand.
+  `secret_rotation.py sync` only reports a stale row and keeps it. After the deletion, `sync`
+  prints `sync: 0 added, 0 stale`.
 - The `consumers.py` entry goes.
 - `scripts/secrets_mgmt/git_dates.py:RETIRED` gains the name.
   `scripts/secrets_mgmt/tests/test_departed_secrets_are_accounted_for.py` fails on a departed
@@ -1276,10 +1278,13 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
    `group_vars/all.yml`, the `render-records` Kuma tile if M6 has not retired Kuma, and the
    readers D6 left (*render_records*).
     - **Tests whose subject goes:** the role's own `tests/`,
-      `ansible/tests/setup/test_render_records_role.py`, the render_records rows of the
-      tests that list setup roles, `scripts/deploy_tools/tests/test_render_targets.py`, and
+      `test_render_records_role.py`, the render_records rows of the
+      tests that list setup roles, `test_render_targets.py`, and
       PR 5's equality test. `scripts/deploy_tools/render_targets.py` goes too, because
       `render_records.py` was its last caller. PR 5's floor test stays.
+      At R4.5's base, `scripts/validate/render_diff_gates.py` also imported it, for its default
+      `targets`. R4.5 repoints that import at `renderer_lib/targets.py`, which lists the same
+      66 tags on 2026-11-06.
     - **Stale sections.** Edit `ansible/roles/k8s/manifests/CLAUDE.md#Release records`, which
       cites the role's directory, unless D6 already removed that section.
     - **The park and the owed apply.** The range parks the tick (`broad_manual`), with the

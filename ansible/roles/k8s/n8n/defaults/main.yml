@@ -5,8 +5,8 @@
 # tags, and the renderer points these refs there with `imagePullPolicy: IfNotPresent`.
 #
 # The `:latest` fallback is what an Ansible render without the `k8s_built_image_tags` fact gets.
-# tasks/main.yml still builds both images ahead of the render, for the handback to Ansible; no
-# Flux path runs it.
+# tasks/main.yml still builds both images ahead of the render until R4 deletes those tasks; no
+# Flux path runs them.
 #
 # Renovate cannot track the two vars below (they are local registry refs, not upstream ones) — the
 # FROM lines in the Dockerfiles are what actually moves, and Renovate's built-in dockerfile manager

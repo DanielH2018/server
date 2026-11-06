@@ -48,11 +48,10 @@ def _deployed(calls):
 # -- deploy.sh --tags T --------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("owner", ["flux", "released"])
-def test_a_typed_k8s_tag_is_flagged(owner, tmp_path, monkeypatch, capsys):
+def test_a_typed_k8s_tag_is_flagged(tmp_path, monkeypatch, capsys):
     """Exit 5 for the whole list, before the locked half takes any lock."""
     code, calls = run_front_half(
-        monkeypatch, _repo(tmp_path, owner), ["--tags", "alpha,bento"]
+        monkeypatch, _repo(tmp_path), ["--tags", "alpha,bento"]
     )
     assert code == DEPLOY_FLUX_OWNED
     assert _deployed(calls) == []

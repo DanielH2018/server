@@ -26,7 +26,7 @@ import toposort
 from _helpers import HOST_VARS
 from toposort import ansible_owned
 
-# One `flux` entry, one `released` entry with two tags, one Ansible-owned k8s entry, and a
+# One `flux` entry, one `flux` entry with two tags, one Ansible-owned k8s entry, and a
 # Docker entry, which no reader of the k8s plane judges.
 FIXTURE = """\
 containers_list:
@@ -35,7 +35,7 @@ containers_list:
     owner: flux
   - name: n8n
     platform: k8s
-    owner: released
+    owner: flux
     tags: [n8n, n8n-images]
   - name: sonarr
     platform: k8s
@@ -71,26 +71,26 @@ def _write(tmp_path: Path, text: str) -> Path:
     return path
 
 
-def test_the_two_readers_agree_on_a_flux_and_a_released_entry_is_clean(tmp_path):
+def test_the_two_readers_agree_on_owned_and_unowned_entries_is_clean(tmp_path):
     path = _write(tmp_path, FIXTURE)
     assert _disagreements(path) == []
     assert tag_owners(path) == {
         "bento-pdf": "flux",
-        "n8n": "released",
-        "n8n-images": "released",
+        "n8n": "flux",
+        "n8n-images": "flux",
     }
 
 
-def test_a_reader_that_misses_released_is_flagged(tmp_path):
-    """The census's red half: a reader that knows only `flux` disagrees."""
+def test_a_reader_that_misses_a_tag_is_flagged(tmp_path):
+    """The census's red half: a reader that drops one tag of an entry disagrees."""
     path = _write(tmp_path, FIXTURE)
 
-    def flux_only(where: Path) -> dict[str, str]:
-        return {t: o for t, o in tag_owners(where).items() if o == "flux"}
+    def misses_a_tag(where: Path) -> dict[str, str]:
+        return {t: o for t, o in tag_owners(where).items() if t != "n8n-images"}
 
-    assert _disagreements(path, flux_only) == [
+    assert _disagreements(path, misses_a_tag) == [
         "not Ansible-owned: filter ['bento-pdf', 'n8n', 'n8n-images'], script "
-        "['bento-pdf']"
+        "['bento-pdf', 'n8n']"
     ]
 
 
@@ -118,7 +118,7 @@ def test_every_live_k8s_entry_is_reached_by_both_readers(tmp_path):
     assert set(tags.values()) == {"flux"}
 
 
-@pytest.mark.parametrize("value", ["ansible", "Flux", "", "~", "[flux]"])
+@pytest.mark.parametrize("value", ["released", "ansible", "Flux", "", "~", "[flux]"])
 def test_each_reader_raises_on_any_other_owner_value(tmp_path, value: str):
     text = FIXTURE.replace("owner: flux", f"owner: {value}")
     path = _write(tmp_path, text)
@@ -129,4 +129,4 @@ def test_each_reader_raises_on_any_other_owner_value(tmp_path, value: str):
 
 
 def test_the_two_readers_accept_the_same_owner_values():
-    assert k8s_roles.OWNER_VALUES == toposort.OWNER_VALUES == {"flux", "released"}
+    assert k8s_roles.OWNER_VALUES == toposort.OWNER_VALUES == {"flux"}

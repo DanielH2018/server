@@ -306,7 +306,7 @@ pass_filenames = false
 # alternative. Every file under hosts/ and the host renderer's modules are in scope because the
 # validator renders every host package through that renderer (H3.2c); a package unit may be a
 # static file, so no suffix narrows the hosts/ alternative.
-files = "^(scripts/lib/narrow_git\\.py|hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(scripts/lib/narrow_git\\.py|hosts/.*|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
 # opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
@@ -408,7 +408,7 @@ pass_filenames = false
 # `rotation_tools.py`, and a per-file list here is a list that goes stale on the next split.
 # `rotate` writes the cluster file in process, which loads the renderer: `cluster_vars` imports
 # `scripts/renderer/` and, through it, the filter plugins and render helpers listed below.
-files = "^(scripts/lib/narrow_git\\.py|ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|hosts/lib/host_lib\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/.*\\.py|scripts/renderer/.*\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|estate|exit_codes|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|plain_scalar|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(scripts/lib/narrow_git\\.py|ansible/vars/secrets\\.yml|ansible/secret_rotation\\.yml|scripts/secrets_mgmt/.*\\.py|hosts/lib/host_lib\\.py|ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role\\.py|ansible/filter_plugins/.*\\.py|scripts/renderer/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/longhorn_lib/longhorn_backups\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|estate|exit_codes|git|jinja_comments|k8s_context|k8s_role_callers|k8s_roles|k8s_yaml|plain_scalar|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # The cluster's SOPS files (target slice D3): the cluster file
 # ansible/vars/cluster-vars.sops.env, the manifests under ansible/vars/cluster-manifests/ and
@@ -430,7 +430,7 @@ name = "Cluster SOPS files are ciphertext written by cluster_vars.py"
 entry = "uv run --frozen python scripts/secrets_mgmt/cluster_vars.py check --no-render --base HEAD"
 language = "system"
 pass_filenames = false
-files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|hosts/lib/host_lib\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py$)"
+files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|hosts/lib/host_lib\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py$)"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
 # (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which installs
@@ -472,7 +472,7 @@ name = "Role At a glance blocks match their sources"
 entry = "uv run --frozen python scripts/docs/gen_role_glance.py --fix"
 language = "system"
 pass_filenames = false
-files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|hosts/packages/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations|render_targets)\\.py|scripts/deploy_tools/setup_lib/setup_gates\\.py)$"
+files = "^(ansible/(roles|inventory|filter_plugins|templates)/.*|hosts/components/.*|hosts/[^/]+/package\\.yml|hosts/packages/.*|ansible/[^/]+\\.ya?ml|scripts/(docs|lib)/.*\\.py|scripts/renderer/renderer_lib/.*\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/deploy_tools/setup_lib/setup_gates\\.py)$"
 
 # Rewrites a stale docs fragment (docs/assets/generated/fragments/) in the commit that moves
 # one of its tunables, and fails like a formatter so the author stages the fragment and commits
@@ -821,7 +821,7 @@ name = "Every known unit template is still discovered"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider scripts/validate/tests/test_validate_unit_templates.py::test_discover_templates_finds_the_known_set"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(unit_templates|tests/test_validate_unit_templates)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(render_targets|chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|ansible/filter_plugins/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(ansible/roles/.*\\.(service|timer|socket|rules)\\.j2|scripts/validate/(unit_templates|tests/test_validate_unit_templates)\\.py|scripts/validate/validate_lib/[^/]+\\.py|scripts/renderer/renderer_lib/[^/]+\\.py|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py|scripts/lib/[^/]+\\.py|ansible/filter_plugins/[^/]+\\.py|pyproject\\.toml|uv\\.lock)$"
 
 
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file

@@ -15,7 +15,7 @@
 #
 # WHAT THIS IS NOT. It is not a deploy gate and it refuses nothing. It is a record written after
 # a successful apply, so a later reader can tell a release apart from the tree it came from.
-# `uv run python scripts/diagnostics/probe.py releases` is that reader.
+# No code reads it since D6.18a deleted its one reader.
 #
 # WHY THE RENDERED BYTES, not the repo sources. stamp_render.yml already hashes repo sources for
 # the setup plane, and that answers a different question ("is the deployed copy the repo's
@@ -66,12 +66,12 @@
   tags: [deploy]
   # `restart` mirrors the condition on the two `rollout restart` tasks in main.yml, one entry per
   # workload they would target: the primary (`manifests_rollout`, empty for a role that rolls
-  # its own or nothing) and every `manifests_extra_rollouts` entry. `probe.py health` reads
-  # `restart: true` as "this apply queued a restart, so the workload's `restartedAt` must be
-  # newer than `applied_at`". A gate that compared pod
-  # age against a deploy's start would fail every idempotent re-run; this fires only where the
-  # play itself decided a roll was due. `kubectl rollout restart` stamps `restartedAt` on the
-  # workload's pod template, so a queued restart that never reached the workload reads as one.
+  # its own or nothing) and every `manifests_extra_rollouts` entry. `restart: true` means
+  # "this apply queued a restart, so the workload's `restartedAt` must be newer than
+  # `applied_at`". A comparison of pod age against a deploy's start would flag every
+  # idempotent re-run; this marks only where the play itself decided a roll was due.
+  # `kubectl rollout restart` stamps `restartedAt` on the workload's pod template, so a queued
+  # restart that never reached the workload leaves the stamp older than `applied_at`.
   #
   # The `created` clause is the same one the restart tasks carry: a workload this apply created
   # is not restarted (it races the initial rollout), so none is expected of it either. So is
@@ -188,20 +188,18 @@
       # dry run produces a digest comparable with this one.
       #
       # DECIDED: this digest names the bytes an apply wrote, and only a play reproduces it.
-      # Issue #2505 proposed deciding staleness by comparing it against a fresh render, which
-      # would retire the five path narrowings in `probe.py releases --stale-only`. The offline
-      # harness cannot feed that: it stubs SOPS values and a placeholder `domain`, and matched 9
+      # Issue #2505 proposed deciding staleness by comparing it against a fresh render. The
+      # offline harness cannot feed that: it stubs SOPS values and a placeholder `domain`, and matched 9
       # of 57 records on 2026-09-25. A render-mode dry run matched all 45 services it can reach
-      # (#2574). This digest is blind to secret manifests; `secret_digest` below covers them,
-      # and the reader clears a service that has any only when both records' `secret_digest`
-      # match too (#2586, #2574). Full reasoning in this role's CLAUDE.md, under
+      # (#2574). This digest is blind to secret manifests; `secret_digest` below covers them
+      # (#2586, #2574). Full reasoning in this role's CLAUDE.md, under
       # `## Release records`.
       manifests_digest: "{{ manifests_release_digest }}"
       # The count is what makes a dropped secret manifest visible.
       secret_manifests: "{{ manifests_secret_files_resolved | sort }}"
       # HMAC-SHA256 under the host key, over the sorted secret files -- see the header and the
-      # DECIDED marker in release_digest.yml. '' when the host key was unreadable, which a
-      # reader treats as absent. A record written before this field has none at all.
+      # DECIDED marker in release_digest.yml. '' when the host key was unreadable, which
+      # means absent. A record written before this field has none at all.
       secret_digest: "{{ manifests_release_secret_digest }}"
       # [{name, kind, restart}] -- see the task that builds it above.
       rollouts: "{{ manifests_release_rollouts }}"

@@ -1296,8 +1296,8 @@ A wait shorter than a verification is safe and costs a promotion. `decide` gives
 ## The bundle
 
 The render job publishes the deploy tags whose `containers_list` entry carries `owner: flux`.
-`promote.py published-tags` prints them. A tag marked `owner: released` is left out, and the
-tag rule refuses that marking (*A Flux-owned service stays Flux-owned*).
+`promote.py published-tags` prints them. A tag that loses the marking is left out, and the
+tag rule refuses that change (*A Flux-owned service stays Flux-owned*).
 
 The build step passes each published tag to the renderer with `--role` and no
 `--secret-stubs`. No `--secret-stubs` is what selects placeholder mode, the only mode that
@@ -1651,8 +1651,8 @@ refuses the publish when:
 - the pull of `prod` fails.
 
 `prod` moves only on promotion, so a refusal persists through later unrelated commits until the
-tag returns or its role directory goes. The first line refuses `owner: released`
-(*A Flux-owned service stays Flux-owned*). To retire a service, remove its entry and its role in
+tag returns or its role directory goes. The first line refuses removing `owner: flux`
+from a live entry (*A Flux-owned service stays Flux-owned*). To retire a service, remove its entry and its role in
 one PR (*Retiring a flux-owned service*). A registry with no `prod` is the first run, and only
 the `flux` line applies. Arm 6 of the render-diff gates runs the same rule on a pull request
 against the base render, so a PR usually fails before it merges.
@@ -1950,7 +1950,7 @@ names the exact line to add. Two removals pass without a line:
   `kustomize.toolkit.fluxcd.io/prune: disabled` passes. D5.1a2 stamps that label on claims;
   a claim rendered without it is pruned like any other object and needs the line.
 
-A tag that leaves the render, because it reads `owner: released` or lost its entry, is judged
+A tag that leaves the render, because it lost `owner: flux` or its entry, is judged
 like any other, so each object still in its base render needs a line. The arm reads the PR's own commits, which a squash merge need not copy, so it runs on pull
 requests only. On master `decide` reads the same lines and applies both exemptions. The two
 checks share one implementation of them, `stem` and `prune_disabled` in

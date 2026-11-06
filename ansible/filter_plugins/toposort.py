@@ -186,11 +186,10 @@ def filter_by_platform(containers_list, platform="docker"):
     return [c for c in containers_list if c.get("platform", "docker") == platform]
 
 
-# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. `released`:
-# the first PR of a handback, which every Ansible path still skips. The twin of
+# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. The twin of
 # `scripts/lib/k8s_roles.py:OWNER_VALUES`, which a filter plugin cannot import. The plan is
 # docs/target-architecture/deploy/d2-first-leaf.md, *The ownership flag and its three readers*.
-OWNER_VALUES = frozenset({"flux", "released"})
+OWNER_VALUES = frozenset({"flux"})
 
 
 def ansible_owned(containers_list):

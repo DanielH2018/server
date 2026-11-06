@@ -4,9 +4,8 @@
 #
 # Shared by release_stamp.yml, which records what an apply wrote, and render_record.yml, which
 # records what a render-only pass over origin/master would write. They share this file
-# rather than a copied expression because the comparison `probe.py releases --stale-only` makes
-# between the two digests is only meaningful while both are computed by the same code. A copy
-# drifts one edit at a time, and every drift reads as a stale service.
+# rather than a copied expression because a comparison between the two digests is only
+# meaningful while both are computed by the same code. A copy drifts one edit at a time.
 #
 # Reads `manifests_dest_dir`, so it runs against whichever directory the caller rendered into,
 # and `manifests_deferred_dir` for the files the caller applies itself. Publishes
@@ -76,8 +75,7 @@
   tags: [deploy]
   # The bytes the OWNING role applies, from the sibling directory this role rendered them into
   # . Without this the digest would cover half of pihole's workload: a change to
-  # `deployment-2.yaml.j2` would move no digest, so `probe.py releases --stale-only` could
-  # neither clear the path hit by a match nor catch it by a mismatch. A separate loop rather
+  # `deployment-2.yaml.j2` would move no digest. A separate loop rather
   # than one over both lists, because the two live in different directories.
   ansible.builtin.stat:
     path: "{{ manifests_deferred_dir }}/{{ item }}"
@@ -123,13 +121,13 @@
   # Secret manifests never reach it: the stats above loop `manifests_files`, the claim files and
   # `manifests_deferred_files` only. They get their own keyed digest below, in a separate field,
   # so this one is unchanged by that. Adding a deferred file to a role DOES move this
-  # digest, so that service reads stale until its next deploy writes a fresh record.
+  # digest.
   ansible.builtin.set_fact:
     manifests_release_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
 
 # The keyed digest of the secret manifests. A separate field from `manifests_digest`, so
 # records without it still compare on the ordinary bytes. Publishes `manifests_release_secret_digest`: the digest,
-# or '' when the host key is unavailable, which the reader treats as "no secret digest".
+# or '' when the host key is unavailable, which means "no secret digest".
 #
 # Nothing below reads a secret manifest into Ansible. secret_hmac.py receives two paths and
 # prints one hex digest, so the register holds a digest and the argv holds paths. No task here
@@ -199,7 +197,7 @@
   tags: [deploy]
   # rc 1 is an unreadable secret file, recorded as ABSENT for the reason the ordinary digest
   # records one. rc 2 is an unreadable key: the digest would name nothing comparable, so it is
-  # omitted and the reader falls back to the path rule. The sorted name->digest map is hashed
+  # omitted. The sorted name->digest map is hashed
   # the same way as `manifests_digest`, so a service with no secret manifests digests an empty map.
   ansible.builtin.set_fact:
     manifests_release_secret_digest: >-

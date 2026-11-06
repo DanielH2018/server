@@ -132,8 +132,7 @@
 
 # Paths mirror manifests_release_dir and manifests_render_record_dir in
 # roles/k8s/manifests/defaults/main.yml, which a play-level task cannot read. A record left
-# behind keeps the service in `probe.py releases`, and in `--stale-only` against a render
-# that no longer exists.
+# behind would describe a service that no longer exists.
 - name: Remove the release and render records of {{ retired_service.name }}
   tags: [always]
   ansible.builtin.file:

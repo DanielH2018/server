@@ -234,7 +234,7 @@ def tag_kustomization(
         "timeout": timeout,
         "prune": prune,
         "wait": True,
-        # Removing a tag from the bundle, by a handback or a render bug, leaves its objects
+        # Removing a tag from the bundle, as a render bug can, leaves its objects
         # serving rather than deleting them. D6 decides whether to switch (C3).
         "deletionPolicy": "Orphan",
     }
