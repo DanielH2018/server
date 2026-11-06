@@ -31,10 +31,10 @@ conventions.
   cloudflare-ddns reconciles. A rotation reaches the cluster only through `cluster_vars.py
   write`. The renderer stamps a restart checksum on both Deployments, so a changed token rolls
   both pods.
-- **Where the tasks went.** `tasks/main.yml` holds the `k8s/manifests` include and the "Wait
-  for the cloudflare-ddns rollouts" task, and no Flux path runs either. They stay for the
-  handback. The Kustomization's `wait` replaces the wait task, and the restart checksum
-  replaces the `manifests_extra_rollouts` restart described below.
+- **Where the tasks went.** `tasks/main.yml` holds only the `k8s/manifests` include, and no
+  Flux path runs it. The Kustomization's `wait` replaces the Ansible wait task, so a handback
+  restores that task with the rest of the role's Ansible half. The restart checksum replaces
+  the `manifests_extra_rollouts` restart described below.
 
 ## Notable
 - Renders **two** Deployments (`cloudflare-ddns-direct`, `cloudflare-ddns-proxied`), neither

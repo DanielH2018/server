@@ -5,8 +5,8 @@ whole batch at the end. Almost
 every role tolerates that, because nothing in them touches the workload they just rolled. The
 ones that do read the OUTGOING pod, and every assertion they make describes it.
 
-The failure is a deploy running against the pod it just restarted. crowdsec shows it: some
-registrations land, then the pod goes down mid-loop, and `no_log` censors the body into a bare
+The failure is a deploy running against the pod it just restarted. crowdsec showed it: some
+registrations landed, then the pod went down mid-loop, and `no_log` censored the body into a bare
 "non-zero return code". registry showed a second form, where the push self-test got
 `connection refused` on its first pod and passed on its retry; its flip deleted those tasks.
 
@@ -16,17 +16,16 @@ rollout that has not started.
 
 WHAT THIS FILE PROMISES
 -----------------------
-Two halves. `_MUST_GATE` is a hand-written set; the derived half below finds the rest from
-their own shape, so the next role written this way fails the suite rather than waiting for an
-incident.
+The census below finds these roles from their own shape, so the next role written this way
+fails the suite rather than waiting for an incident.
 
-The derived half recognises three shapes of "inspects a pod", all of them via `kubectl`:
+It recognises three shapes of "inspects a pod", all of them via `kubectl`:
 
-  1. `get pod -l app=<workload>`     — no live member since jellyfin and janitorr flipped
+  1. `get pod -l app=<workload>`     — flux's three controllers
   2. `get pod -l <anylabel>=<value>` — no live member since pihole flipped
-  3. `exec`/`logs <target>`          — crowdsec (`exec deploy/crowdsec`) and observability
-                                       (`exec deploy/grafana`), plus every `exec {{ reg.stdout }}`
-                                       whose register is traced back to the lookup that filled it
+  3. `exec`/`logs <target>`          — no live member since crowdsec and observability flipped;
+                                       also every `exec {{ reg.stdout }}` whose register is traced
+                                       back to the lookup that filled it
 
 The register trace follows the bare `{{ reg.stdout }}` form only. A filter or an index on it
 (`{{ reg.stdout | trim }}`) is unresolved, not resolved-to-nothing, so it fails until excused.
@@ -54,16 +53,14 @@ WHAT IT DOES NOT COVER, deliberately:
     pod they touch belongs to someone else.
   * `logs job/<name>` and other Job targets. A Job has no rollout for `rollout status` to gate.
   * Reaching a workload over its Service instead of `kubectl`, which no command text here can
-    see. That is why a role written this way stays in the hand-written `_MUST_GATE` and cannot
-    be derived.
+    see.
   * `when:` conditions. A gate that is skipped at runtime still counts as a gate here. pihole's
     is conditional on the manifests having changed, which is also the only run that rolls it.
 
 WHERE THE MACHINERY LIVES. `_role_tasks.py` expands a role's tasks — includes
 followed, blocks flattened, literal loops unrolled. `_inline_rollout_targets.py` resolves a
 task's target and a gate's target to workload names off the rendered manifests. This file is
-the contract above, the hand-written `_MUST_GATE`, the excused `_UNRESOLVED_TARGETS`, and the
-assertions.
+the contract above, the excused `_UNRESOLVED_TARGETS`, and the assertions.
 """
 
 import re
@@ -83,99 +80,19 @@ from _inline_rollout_targets import (
 )
 
 
-# role -> the workload its own tasks talk to after the manifests include.
-_MUST_GATE = {
-    "crowdsec": "crowdsec",
-}
-
-
-# ── what each role renders ──────────────────────────────────────────────────────────────────
-
-
-# ── the role's tasks, flattened and loop-expanded ───────────────────────────────────────────
-
-
-# ── reading a command's workload ────────────────────────────────────────────────────────────
-
-
-# ── the hand-written set ───────────────────────────────────────────────────────────────────
-
-
-def test_every_hand_written_role_gates_on_its_own_rollout() -> None:
-    for role, workload in _MUST_GATE.items():
-        assert _gate_indexes(_tasks(role)).get(workload) is not None, (
-            f"{role} no longer waits for {workload} before using it. k8s/manifests queues the "
-            "rollout for the end of the batch, so without this the role runs against the pod "
-            "it just restarted."
-        )
-
-
-def test_the_gate_precedes_everything_that_uses_the_workload() -> None:
-    for role, workload in _MUST_GATE.items():
-        tasks = _tasks(role)
-        gate = _gate_indexes(tasks)[workload]
-        users = [
-            index
-            for index, task in enumerate(tasks)
-            if index != gate
-            and workload in task.cmd
-            and "rollout status" not in task.cmd
-        ]
-        assert users, (
-            f"{role}: no task uses {workload} any more; re-check whether the gate is needed"
-        )
-        assert gate < min(users), (
-            f"{role}: the rollout gate runs at task {gate}, after task {min(users)} which "
-            f"already uses {workload}. The gate has to come first to be a gate."
-        )
-
-
-def test_the_gate_uses_rollout_status_not_a_readiness_wait() -> None:
-    for role, workload in _MUST_GATE.items():
-        tasks = _tasks(role)
-        cmd = tasks[_gate_indexes(tasks)[workload]].cmd
-        assert "condition=Available" not in cmd, (
-            f"{role}: every Deployment here is single-replica, so the OLD pod satisfies "
-            "Available and this returns instantly against a rollout that has not begun."
-        )
-        assert "--timeout=" in cmd, f"{role}: an ungated wait hangs the deploy: {cmd}"
-
-
-def test_the_gate_is_tagged_with_what_it_protects() -> None:
-    # `[deploy]` alone, not `[config, deploy]`: tags union for SELECTION but exclusion matches
-    # ANY tag, so a dual-tagged gate vanishes under the documented `--skip-tags deploy` and the
-    # config-only run silently loses it.
-    #
-    # Only the hand-written set. The derived roles reach their gate through an include or a
-    # block that carries the tag for them, so the tag is not on the task this file returns.
-    for role, workload in _MUST_GATE.items():
-        tasks = _tasks(role)
-        gate = tasks[_gate_indexes(tasks)[workload]]
-        assert gate.tags == ["deploy"], (
-            f"{role}: the gate is tagged {gate.tags!r}; it protects deploy-tagged tasks "
-            "and must carry exactly that tag."
-        )
-
-
-# ── the derived half ────────────────────────────────────────────────────────────────────────
-
-
 # Named here so a derivation that silently stops matching fails loudly rather than passing an
 # empty set: replacing a hardcoded list by shape can drop an entry while reading as a widening.
 #
-# crowdsec is in BOTH halves, and that is the point: it is the one role whose shape the
-# derivation and the hand-written set agree on, so the two halves are checked against each
-# other on every run.
 _KNOWN_SELF_POD_ROLES = {
-    "crowdsec",
+    "flux",
 }
 
-# 8 resolved self-pod inspections across those roles, since observability's flip deleted its
-# tasks, janitorr's and jellyfin's verify tasks went at their flip, and pihole's flip deleted
-# its roll and gravity tasks (27 before them; crowdsec's three registration execs had already
-# become an initContainer, #5741). The floor is the measured count: a lower floor cannot tell
-# "one role changed shape" from "the matcher broke and half the corpus stopped being read".
-_MIN_SELF_POD_INSPECTIONS = 8
+# 3 resolved self-pod inspections, flux's restart-count snapshot once per controller, since
+# crowdsec's follow-up deleted its verify tasks (8 before it; 27 before the flips of
+# observability, janitorr, jellyfin and pihole). The floor is the measured count: a lower floor
+# cannot tell "one role changed shape" from "the matcher broke and half the corpus stopped being
+# read".
+_MIN_SELF_POD_INSPECTIONS = 3
 # Pod inspections whose target is a Jinja expression this file cannot resolve, each excused
 # with the reason. An entry here is NOT "assume it is fine" — it is a claim that the ordering
 # is carried by something else in the same role, written down where the next reader meets it.
@@ -311,9 +228,7 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # not a readiness wait. A reader meeting an outlier (arr-notification above the 300s default)
 # could not tell a considered budget from a typo without going and looking.
 _GATE_BUDGETS = {
-    "cloudflare-ddns": (300, "default"),
     "flux": (300, "default; one looped gate covering the three Flux controllers"),
-    "crowdsec": (300, "default"),
     "arr-notification": (
         660,
         "`arr_notification_rollout_timeout`, matching sonarr's budget because the seed it "
