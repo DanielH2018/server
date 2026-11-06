@@ -374,8 +374,9 @@ reader that D6 does not delete.
 - **Only daniel-server runs the setup-drift reader.**
     - `group_vars/all.yml:setup_drift_check_hosts` lists daniel-server alone. Its comment says
       manifest-prune-check "exists on daniel-box alone".
-    - `ansible/tests/deploy/test_setup_drift_check.py::test_the_reader_is_armed_where_no_manifest_prune_check_runs`
-      asserts that no k3s server host is in the list.
+    - `test_the_reader_is_armed_where_no_manifest_prune_check_runs` in
+      `ansible/tests/deploy/test_setup_drift_check.py` asserts that no k3s server host is in
+      the list. D6.16 renames it `test_every_host_that_renders_setup_templates_is_armed`.
     - The Kuma tile is "Setup Plane Drift (agent hosts)", with one token,
       `setup_drift_push_token`.
     - After manifest-prune-check goes, nothing reads daniel-box's setup-plane stamps unless
