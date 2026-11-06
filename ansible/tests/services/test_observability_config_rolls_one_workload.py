@@ -27,8 +27,7 @@ The role rolls per workload instead, and this module guards the ways that goes q
 
 `restart_on` decides what the release record expects (`rollouts[].restart`,
 `k8s/manifests/tasks/release_stamp.yml`). Every entry declares `[]`: a `secret` trigger there
-would hold a reader to a roll that another Secret file's edit never made, and `probe.py health
-observability` would fail it as NOT ROLLED. The role's amend raises the record for the
+would hold a reader to a roll that another Secret file's edit never made. The role's amend raises the record for the
 workloads its restart rolled.
 """
 

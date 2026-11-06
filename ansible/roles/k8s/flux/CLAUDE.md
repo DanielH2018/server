@@ -102,7 +102,7 @@ PR 1 maps each task in `tasks/main.yml` to that successor, and R4 deletes the fi
 hands them to the end-of-play stabilisation gate, as observability does. Every
 `flux_controllers` entry carries `restart_on: []`, because no task here restarts a controller
 and no controller reads a Secret or ConfigMap through its pod spec; `defaults/main.yml` has the
-full reason. `probe.py health flux` would otherwise fail all three as NOT ROLLED after a
+full reason. The release record would otherwise owe all three a restart after a
 NetworkPolicy edit, or after a rotation of either Secret that `templates/secret.yaml.j2`
 renders.
 

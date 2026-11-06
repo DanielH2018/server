@@ -111,8 +111,7 @@ def test_release_stamp_gates_each_signal_on_the_entrys_triggers():
     for signal in sorted(_SIGNALS):
         assert f"'{signal}' in {_TRIGGERS_VAR}" in expression, (
             f"the release record's restart clause no longer gates the {signal!r} signal on the "
-            "entry's own triggers, so a narrowed entry still expects a restart it never gets — "
-            "probe.py health reads that as NOT ROLLED."
+            "entry's own triggers, so a narrowed entry still expects a restart it never gets."
         )
 
 

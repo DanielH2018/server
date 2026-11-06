@@ -308,15 +308,14 @@ gains the field on its next deploy.
 `<manifests_deferred_dir_name>/<basename>` rather than by basename alone, because it lives in
 another directory and two same-named files would otherwise collide into one entry — a collision
 that reads as a match. Adding a deferred file to a role therefore moves that service's
-`manifests_digest`, so it reads stale once until its next deploy writes a fresh record, the same
-one-redeploy convergence `secret_digest` had.
+`manifests_digest`.
 
 `rollouts` names each workload the shared restart tasks would target — the primary
 `manifests_rollout` and every `manifests_extra_rollouts` entry — with `restart: true` where this
 apply queued one (a changed render, a changed secret render, or a rebuilt image, and not a
 workload the apply created or one the apply itself rolled —
-`manifests_rolled_by_apply`). `probe.py health` reads it and fails a `restart: true` workload
-whose `restartedAt` is not newer than `applied_at` (#1867). The stamp is included before the
+`manifests_rolled_by_apply`). A `restart: true` workload owes a `restartedAt` newer than
+`applied_at` (#1867), and no code reads that since D6.18a. The stamp is included before the
 restart tasks for that comparison to hold, and after the rebuilt-image fact so both read one
 answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the order.
 
@@ -362,11 +361,11 @@ result, a fact, and anything that later prints either. That left a digest match 
   task slurps, looks up or `set_fact`s a secret manifest's content, and the key is never on an
   argv, which is why it is not `openssl dgst -hmac`.
   `ansible/tests/k8s/test_secret_digest_reads_no_content.py` holds all of that.
-- An unreadable key writes `secret_digest: ''`, which the reader treats as absent.
+- An unreadable key writes `secret_digest: ''`, which means absent.
 
 `ansible/roles/k8s/manifests/tasks/release_digest.yml:DECIDED: HMAC-SHA256 under a host-local key`
-carries the decision at the task that computes it. Deleting the key re-keys every future digest:
-each service with secret manifests then reads stale until its next deploy.
+carries the decision at the task that computes it. Deleting the key re-keys every future digest,
+so a digest written before the deletion never matches one written after it.
 
 ### What reproduces `manifests_digest`
 

@@ -1,9 +1,8 @@
 """The keyed secret-manifest digest must move with the content and leak nothing without the key.
 
 `files/secret_hmac.py` is what release_digest.yml runs, one call per secret file, for the
-`secret_digest` both records carry. The staleness reader clears a service with secret
-manifests only when the two records' digests match, so a digest that failed to move would
-hide a real change. An edit to uptime-kuma's `static-monitors.yaml` was the motivating case.
+`secret_digest` both records carry. A digest that failed to move would hide a real change
+to a secret manifest. An edit to uptime-kuma's `static-monitors.yaml` was the motivating case.
 
 Run: uv run pytest ansible/roles/k8s/manifests/tests
 """

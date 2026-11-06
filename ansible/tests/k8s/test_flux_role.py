@@ -227,7 +227,7 @@ def test_a_changed_secret_render_expects_no_controller_to_roll():
 
 def test_without_restart_on_a_changed_secret_render_expects_every_controller_to_roll():
     """The red half: the shared default `[config, secret, image]` stamps all three, and no
-    task restarts them, so `probe.py health flux` would read each as NOT ROLLED."""
+    task restarts them, so the record would owe each one a restart nothing issues."""
     entries = [
         {k: v for k, v in e.items() if k != "restart_on"}
         for e in load_defaults(FLUX)["flux_controllers"]
