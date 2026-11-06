@@ -8,7 +8,7 @@ qbittorrent_k8s_wireguard_image: lscr.io/linuxserver/wireguard:latest@sha256:236
 # with the one qBittorrent's peers see.
 qbittorrent_k8s_verify_egress_url: https://api.ipify.org
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # DENIED for state coupling, not missing recovery. The snapshot Job and the revert runbook work
 # fine here; the problem is that the config volume's state is coupled to something a snapshot
 # cannot capture — the data volume (media-data, torrents/ subpath) its bookkeeping references.

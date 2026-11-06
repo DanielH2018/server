@@ -26,9 +26,9 @@ run a commit. When a fragment's content last changed is its git history.
 STATIC PARSING ONLY, like every generator here. Role defaults and the inventory are read
 through `lib.estate`, which parses the YAML and applies Ansible's precedence, and Python
 constants with `ast`, never by importing the deployer or the rotation tool --
-both bootstrap sys.path and read the environment on import. The k8s auto-deploy stance is
-the one exception: `scripts/dev/k8s_autodeploy_counts.py` and the `k8s_autodeploy` filter
-plugin it wraps do neither -- they only walk role directories and `yaml.safe_load` their
+both bootstrap sys.path and read the environment on import. The k8s Renovate stance is
+the one exception: `scripts/dev/k8s_autodeploy_counts.py` and the `lib.k8s_roles` derivation
+it wraps do neither -- they only walk role directories and `yaml.safe_load` their
 defaults -- so this script imports them rather than re-deriving the same partition.
 
 WHERE THE PIECES LIVE. `fragment_readers.py` parses the tree, `fragment_renderers.py` turns
@@ -163,7 +163,6 @@ def _autodeploy_coverage() -> tuple[str, list[str]]:
     eligible, denied, not_declaring = autodeploy_stances()
     return render_autodeploy_coverage(eligible, denied, not_declaring), [
         "scripts/dev/k8s_autodeploy_counts.py",
-        "ansible/filter_plugins/k8s_autodeploy.py",
     ]
 
 

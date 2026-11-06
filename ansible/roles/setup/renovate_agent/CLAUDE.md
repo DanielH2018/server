@@ -83,6 +83,8 @@ the caps or the schedule cannot quietly widen it.
   cannot see, so the "look" the denial asks for is a person and not this session's gated land.
   The prompt leaves such a PR open and puts its `land.sh` command in the digest, and reads
   `headRefName` beside the title because the marker can survive in the branch alone (#2641).
+  The lander reads the denied roles from `scripts/dev/k8s_autodeploy_counts.py --denylist` in
+  the primary checkout, and refuses when that command fails or prints no list.
   `ansible/tests/setup/test_renovate_agent_unit.py` pins that the prompt names the same marker
   the rule's `groupName` carries, and
   `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py` asserts the

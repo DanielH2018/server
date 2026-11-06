@@ -109,7 +109,7 @@ valheim_k8s_mods:
     version: 0.3.2
     url: https://thunderstore.io/package/download/MidnightMods/AchievementEnabler/0.3.2/
     sha256: 2e7346d86a975f9c1c8a3e3a7d4599fcad186114e0ccea1078e24ea17fd07d46
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Two independent reasons: (1) probe-less — the
 # Deployment renders no readinessProbe at all, same shape as terraria; (2) migrating state —
 # strategy is Recreate and valheim-config comes from k8s_claims below (hardcoded

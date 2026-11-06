@@ -3,7 +3,7 @@
 # tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 speedtest_k8s_image: lscr.io/linuxserver/speedtest-tracker:latest@sha256:14d56d7c4ff0af18f0a09be8494352ba40d23196e78c5f812cee69afaa1edc45
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Auto-deploy is on although strategy is Recreate and speedtest_k8s_claim below is seeded
 # from k8s_claims below, which hardcodes ReadWriteOnce — the migrating-state shape
 # (Recreate + RWO PVC) that once kept sonarr/radarr/prowlarr off the list. Flux's

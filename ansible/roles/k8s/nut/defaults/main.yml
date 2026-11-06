@@ -8,7 +8,7 @@ nut_k8s_image: "{{ k8s_registry_pull_host }}/nut:{{ k8s_built_image_tags.get('nu
 # the same address into upsmon.conf, so a change here is a change to hosts/components/nut-secondary.
 nut_k8s_cluster_ip: 10.43.171.124
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # NOT probe-less — verified against templates/deployment.yaml.j2, this Deployment DOES render
 # a readinessProbe (and a livenessProbe). The denylist comment block groups this role under
 # "probe-less Deployments," which is stale for nut specifically; the real reason is the

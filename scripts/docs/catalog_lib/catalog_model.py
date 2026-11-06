@@ -35,7 +35,7 @@ class ServiceRow:
         auth_tier: Whether the route sits behind Authelia, read from `use_authelia`, and
             the policy its entry declares (`auth_tier`) when it does.
         backup_tier: The Longhorn backup tier(s) its PVC(s) fall into, or "n/a" off k8s.
-        autodeploy: Whether the GitOps deployer will auto-apply this service's image bumps.
+        autodeploy: What applies this service's changes.
     """
 
     name: str

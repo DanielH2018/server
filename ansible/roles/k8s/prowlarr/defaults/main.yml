@@ -1,7 +1,7 @@
 ---
 prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.7.0.5723-ls167@sha256:431d7efebcef466e56adaa40a7a2fa2b0e85159a037b8bf465eaadbf0cf5bedf
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Migrating state — strategy is Recreate and the config volume (indexer definitions + API keys)
 # comes from k8s_claims below (hardcoded ReadWriteOnce). This role renders TWO
 # Deployments (prowlarr + flaresolverr) and Flux gates both through the Kustomization's wait,

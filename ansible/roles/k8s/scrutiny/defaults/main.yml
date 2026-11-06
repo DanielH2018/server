@@ -8,7 +8,7 @@ scrutiny_k8s_web_image: ghcr.io/analogj/scrutiny:master-web@sha256:192656ce791dc
 scrutiny_k8s_collector_image: ghcr.io/analogj/scrutiny:master-collector@sha256:e0d55d2742017c7025e491e05eb516bc71758c575f7e0bfefe34f9ce13aced89
 scrutiny_k8s_influxdb_image: influxdb:2.9@sha256:a450f6faf9573e6c2e96a0f575885ae8b7387cc87e4de94599e247ebfa3ac417
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Stateful / manual-upgrade: pins a rolling upstream branch tag on a stateful monitoring
 # service by policy — moving to a different tag/branch is deliberately a manual, supervised
 # redeploy, never unsupervised auto-merge. ALSO Recreate + a real config PVC from k8s_claims

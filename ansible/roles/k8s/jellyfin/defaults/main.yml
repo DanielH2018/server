@@ -19,7 +19,7 @@ jellyfin_k8s_image: lscr.io/linuxserver/jellyfin:10.11.11ubu2604-ls47@sha256:438
 # published tag alone, so an Ansible deploy ignores it.
 flux_prepull_timeout: 2700s  # noqa var-naming[no-role-prefix]
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Migrating state — strategy is Recreate and the config volume is a ReadWriteOnce claim
 # (`k8s_claims` below), so a bad image swap can migrate the library
 # database, artwork and trickplay data before the gate observes a fault, then fail the rollback

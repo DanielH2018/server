@@ -10,7 +10,7 @@ traefik_k8s_image: traefik:v3.7.13@sha256:24841fe2de7304c149343d877d2923b4c8800a
 # upstream's definitions (#5666). That copy's version must share this image's minor:
 # ansible/tests/k8s/test_traefik_crds.py fails a minor bump here until the copy is refreshed.
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Platform: this is the ingress edge everything else routes through. A failed deploy removes
 # the ability to reach — or observe — anything else in the fleet, including this pod, and
 # etp-local-vips-blackout-on-node-join shows host probes stay green straight through that kind

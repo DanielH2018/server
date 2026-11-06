@@ -28,7 +28,7 @@ autofix_bridge_modules:
     path: jobs_metrics.py
     src: "{{ playbook_dir }}/roles/k8s/crowdsec/files/jobs_metrics.py"
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Observability: the auto-remediation twin of monitor-bridge — a broken deploy silently stops
 # fixing *arr queue issues with no page of its own (AutofixBridgeStale is a slower
 # backstop, not a rollout gate). ALSO renders no readinessProbe on its Deployment (probe-less),

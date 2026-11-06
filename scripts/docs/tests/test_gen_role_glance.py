@@ -415,7 +415,7 @@ def test_a_hand_edited_setup_block_is_flagged(tmp_path):
 
 
 # An entry that carries `owner` is not Ansible's to deploy (D2.4b): the deploy tag and the
-# auto-deploy stance would both mislead, so one Applied by line names what applies it.
+# stance would both mislead, so one Applied by line names what applies it.
 
 
 def _littlelink_block(tmp_path, owner):
@@ -439,7 +439,7 @@ def _littlelink_block(tmp_path, owner):
 def test_an_ansible_owned_role_glance_is_clean(tmp_path):
     block = _littlelink_block(tmp_path, None)
     assert '- **Deploy tag:** `--tags "littlelink"`' in block
-    assert "- **Auto-deploy:**" in block
+    assert "Auto-deploy" not in block
     assert "Applied by" not in block
 
 

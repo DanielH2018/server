@@ -23,6 +23,7 @@ from pathlib import Path as _Path
 
 _SCRIPTS = _Path(__file__).resolve().parents[2]
 _sys.path.insert(0, str(_SCRIPTS))
+_sys.path.insert(1, str(_SCRIPTS / "deploy_tools"))  # the bare `import reach` below
 
 from deploy_tools.land_lib import land_tags  # noqa: E402
 import reach  # noqa: E402

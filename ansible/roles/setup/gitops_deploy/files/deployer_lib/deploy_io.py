@@ -18,9 +18,9 @@ Two rules hold this module's shape:
   it needs — `repo`, `hostname`, a timeout — as an argument, so a test can call it directly and
   so `gitops_deploy` stays the one place the deployer's configuration is bound.
 - **Most of these reach a caller as a `DeployTools` field (`deploy_toolbox.py`), so a test
-  replaces the field, not this module. `k8s_declarations_at` and `deploy_broad` are not
-  fields, because the argv they build is what the suite asserts on.
-  Each takes a required `run` instead, which a caller passes as `tools.run`.**
+  replaces the field, not this module. `deploy_broad` is not a field, because the argv it
+  builds is what the suite asserts on. It takes a required `run` instead, which a caller
+  passes as `tools.run`.**
 
 Stdlib only: the unit runs under `uv run --no-project`, never from a venv. The `# DECIDED:`
 marker at `templates/gitops-deploy.service.j2`'s `ExecStart` says why.
@@ -256,63 +256,6 @@ def host_vars_owners(
         )
         text = checkout
     return checkout, service_owners(text)
-
-
-# ── reading k8s roles out of git ──────────────────────────────────────────────────────────────
-
-
-def k8s_role_paths(listing: str) -> dict[str, str | None]:
-    """Map each k8s role to its defaults/main.yml path in a `git ls-tree -r --name-only` listing.
-
-    A role with no defaults/main.yml at that ref maps to None, which
-    `deploy_phases.declared_denylist` reads as denied. Paths look like
-    `ansible/roles/k8s/<role>/<rest...>`, so the role name is the FOURTH segment — this
-    indexing shipped an off-by-one once already.
-
-    Pure string parsing, callable on its own so it's unit-testable without git; the I/O caller
-    is `k8s_declarations_at`.
-    """
-    roles: dict[str, str | None] = {}
-    for path in listing.splitlines():
-        # "ansible/roles/k8s/<role>/<rest...>" — a real role always has a file at least one
-        # directory deep, so anything shallower (a stray file directly under roles/k8s/) is
-        # not a role and must not be recorded as one.
-        parts = path.split("/")
-        if len(parts) < 5:
-            continue
-        role = parts[3]
-        if parts[4] == "defaults" and path.endswith("defaults/main.yml"):
-            roles[role] = path
-        else:
-            # Still record the role so one with no defaults/ at all is visible as None. A
-            # setdefault here never clobbers an already-found defaults/main.yml path, and
-            # doesn't need to run before it either — the listing's order doesn't matter.
-            roles.setdefault(role, None)
-    return roles
-
-
-def k8s_declarations_at(
-    repo: str, ref: str, *, run: Callable[..., str]
-) -> dict[str, str | None]:
-    """Every k8s role's defaults/main.yml as it exists at `ref`.
-
-    Reads the ref directly rather than the working tree. `deploy_phases.reconcile_denylist`
-    compares it with the denylist the deployer's config was rendered from.
-
-    A role directory present at the ref with no defaults/main.yml maps to None, which
-    `deploy_phases.declared_denylist` reads as denied. The path parsing itself is k8s_role_paths(), a pure
-    function unit-tested without git; this function does only the git I/O around it.
-    """
-    listing = run(
-        ["git", "ls-tree", "-r", "--name-only", ref, "ansible/roles/k8s/"], cwd=repo
-    )
-    paths = k8s_role_paths(listing)
-    return {
-        role: run(["git", "show", f"{ref}:{path}"], cwd=repo)
-        if path is not None
-        else None
-        for role, path in paths.items()
-    }
 
 
 # ── deploying ─────────────────────────────────────────────────────────────────────────────────

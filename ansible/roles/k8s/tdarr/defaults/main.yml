@@ -37,7 +37,7 @@ tdarr_k8s_rollout_timeout: "{{ manifests_rollout_timeout }}"
 # retry; a longer budget would hold a worker for over an hour on every cold pull instead.
 flux_prepull_timeout: 3000s  # noqa var-naming[no-role-prefix]
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Flux's tdarr-snapshot Job snapshots both config claims below before each revision applies,
 # and the operator can revert them after a failed one; that machinery works here. Auto-deploy
 # stays off for two compounding reasons:

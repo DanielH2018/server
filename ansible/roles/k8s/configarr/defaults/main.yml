@@ -6,7 +6,7 @@
 # was a daniel-box host cron; setup/k8s_host_files keeps the absent arms that remove it.
 configarr_k8s_image: ghcr.io/raydak-labs/configarr:1.39.0@sha256:416ac26c7d5dcf081cae827e7477d32cb959fc1b24619c5fece48b1cf0093b52
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "CronJob gated on every revision by a gate Job in configarr-verify, which proves the new image RUNS and fails the revision on a sync that exits non-zero; the gate Job has no ownerReference, so concurrencyPolicy Forbid cannot keep a scheduled run off it, but the reconciler is convergent, so running the same sync twice is harmless; the configarr-health CronJob is gated the same way, and an extra run of it only re-reads the last Job and re-pushes its verdict"  # noqa var-naming[no-role-prefix]
 

@@ -243,8 +243,7 @@ def test_broad_stays_true_for_every_split_arm():
 def _task_imports(playbook) -> set[str]:
     """Every repo-relative task file a parsed playbook imports or includes.
 
-    Fails closed on an argument shape it does not understand, the same bias
-    `declared_denylist` takes: silently skipping one would let a converted call site drop out of
+    Fails closed on an argument shape it does not understand: silently skipping one would let a converted call site drop out of
     the set while `assert imports` still passed on the remaining entries — the vacuous pass this
     guard exists to prevent, moved one level up into the parser.
     """

@@ -173,13 +173,6 @@ ROWS = (
             "ansible/tests/deploy/_autodeploy.py": (
                 "filters with is_leftover_dir inline, the predicate role_dirs uses"
             ),
-            "ansible/tests/deploy/test_denylist_parsers_agree.py": (
-                "mirrors the denylist filter's own skips inline, as its comment argues"
-            ),
-            "ansible/tests/deploy/test_k8s_autodeploy_denylist.py": (
-                "counts the denied roles independently of the filter it checks, as its "
-                "comment argues, and filters with is_leftover_dir inline"
-            ),
             "ansible/tests/_role_census.py": "is role_dirs, the walk every other guard calls",
         },
     ),

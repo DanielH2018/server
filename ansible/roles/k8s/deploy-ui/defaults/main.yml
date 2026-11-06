@@ -1,5 +1,5 @@
 ---
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Route-only role (see tasks/main.yml): it renders no Deployment of its own, only a
 # selector-less Service, its EndpointSlice and the IngressRoute onto deploy-ui.service on
 # daniel-box. There is no workload to wait

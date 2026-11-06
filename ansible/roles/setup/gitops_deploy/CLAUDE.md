@@ -93,9 +93,8 @@ Each arm is a rule and the function that holds it; the record page has its incid
   merges into `manual_plane` (#4326, narrowing `deploy_defer`'s `DECIDED:` marker).
 - **No k8s role takes anything from this tick, so `flux_suspend: true` in its defaults is how
   you stop one**: it suspends every Kustomization of the tag (`docs/flux-deploy-plane.md`,
-  *Stopping one service*). The `k8s_autodeploy` denylist
-  (`filter_plugins/k8s_autodeploy.py`) still renders into `config.env` through
-  `deploy_phases.reconcile_denylist`, and no apply reads it; D6.13 deletes both.
+  *Stopping one service*). `k8s_autodeploy` is not this role's: it only says whether Renovate
+  may automerge an image bump.
 - **An encrypted-vars-only push merges and alerts once per SHA.** It applies only the setup
   roles reading a key it changed, which `deploy_defer.route_key_readers` routes (#5436). The
   same router sends a moved inventory key to the setup roles that template it (#6962). A k8s

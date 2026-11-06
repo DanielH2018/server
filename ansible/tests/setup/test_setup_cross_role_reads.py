@@ -32,9 +32,6 @@ from deployer_lib.deploy_cross_role import (
 # A setup role naming a plugin's filter where no rendered value can go stale, with the reason.
 # H5.12 deleted the last one, engine-upgrade.yml's per-project loop over `filter_by_platform`.
 _FILTER_CALLERS_EXEMPT: dict[tuple[str, str], str] = {}
-KNOWN_FILTER_CALLERS = {
-    "ansible/filter_plugins/k8s_autodeploy.py": {"gitops_deploy"},
-}
 _COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 
 
@@ -146,8 +143,17 @@ def _tree_filter_callers() -> dict[str, frozenset[str]]:
 
 def test_the_filter_callers_table_equals_the_tree():
     assert _tree_filter_callers() == SETUP_ROLES_CALLING_FILTER_PLUGINS
-    for plugin, roles in KNOWN_FILTER_CALLERS.items():
-        assert SETUP_ROLES_CALLING_FILTER_PLUGINS.get(plugin) == roles, plugin
+
+
+def test_the_filter_caller_census_reads_named_plugins_and_roles():
+    # The table is empty, so an empty census would equal it: name what the scan must find.
+    plugins = _plugin_names()
+    assert "toposort_containers" in plugins["ansible/filter_plugins/toposort.py"]
+    texts = _setup_role_texts()
+    assert any(
+        path.endswith("gitops_deploy/defaults/main.yml")
+        for path in texts["gitops_deploy"]
+    )
 
 
 def test_every_filter_caller_exemption_is_still_a_caller():

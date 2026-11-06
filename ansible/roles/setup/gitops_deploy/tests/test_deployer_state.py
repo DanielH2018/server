@@ -53,7 +53,6 @@ EXPECTED_MARKERS = frozenset(
         ("diverged", "diverged_sha"),
         ("behind", "behind_since"),
         ("alerted", "alerted_shas"),
-        ("denylist_rendered", "denylist_rendered_sha"),
         ("dirty_alerted", "dirty_alerted_date"),
         ("pending_alerts", "pending_alerts.json"),
     }

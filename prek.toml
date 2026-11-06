@@ -737,7 +737,7 @@ pass_filenames = false
 files = "(\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(ansible/filter_plugins|scripts/(lib|validate))/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The two Renovate-rule modules: renovate.json against the autodeploy denylist, which each
-# k8s role's `k8s_autodeploy` in its defaults and the filter plugin decide, and against who
+# k8s role's `k8s_autodeploy` in its defaults and `lib.k8s_roles` decide, and against who
 # owns each pin. Role defaults and the Dockerfile templates hold nearly every pin; a pin a
 # custom manager reads from a workflow, a task file or prek.toml reaches CI's `pytest` job
 # instead of this hook. The modules reach every filter plugin and scripts/validate through
@@ -748,7 +748,7 @@ name = "Renovate rules carry the autodeploy denylist marker"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py ansible/tests/deploy/test_renovate_denylist_marker_reaches_the_pr_title.py"
 language = "system"
 pass_filenames = false
-files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(lib|validate)/.*\\.py|pyproject\\.toml|uv\\.lock)$"
+files = "^(renovate\\.json|ansible/inventory/.*|ansible/roles/[^/]+/[^/]+/(defaults/.*|templates/Dockerfile[^/]*)|ansible/filter_plugins/[^/]+\\.py|ansible/tests/(_[^/]+|deploy/_autodeploy|deploy/test_renovate_[^/]+)\\.py|scripts/(lib|validate)/.*\\.py|scripts/dev/k8s_autodeploy_counts\\.py|pyproject\\.toml|uv\\.lock)$"
 
 # Six more rules that failed PR CI between 2026-10-18 and 2026-10-25: the eval cases'
 # CLAUDE.md quotes, the k8s_host_files pairs, the Landings board, the deployer's import

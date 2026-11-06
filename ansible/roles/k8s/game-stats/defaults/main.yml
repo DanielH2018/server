@@ -3,7 +3,7 @@
 # mounted from a ConfigMap, so a build would add a layer and change nothing that runs.
 game_stats_k8s_image: python:3.14-alpine@sha256:f6a589d43c42b9e7f7dc67a12d37132491f362859a5d750607710cc56da3bc72
 
-# Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
+# Renovate stance: whether an image bump here may automerge. `promote` deploys what merges.
 # Games: companion stats exporters for the hand-operated terraria and valheim servers — grouped
 # with them operationally, not deployed unattended. Each ALSO independently matches the
 # migrating-state shape: Recreate + a ReadWriteOnce PVC holding the all-time SQLite DB. Loki's

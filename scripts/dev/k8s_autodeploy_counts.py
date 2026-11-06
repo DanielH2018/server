@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Print the k8s auto-deploy eligible and denylist counts, measured off the tree.
+"""Print the k8s `k8s_autodeploy` stance counts, or the denylist, measured off the tree.
 
-Run: uv run python scripts/dev/k8s_autodeploy_counts.py
+Run: uv run python scripts/dev/k8s_autodeploy_counts.py [--denylist]
 
 This project has stated a wrong count in a PR body three times running (slice 4, slice 7a,
 and the slice 7b plan) — print the counts instead of computing them by hand.
 
-Both numbers read the same source `ansible/filter_plugins/k8s_autodeploy.py` derives the
-gitops_deploy denylist from, and the same source `ansible/tests/deploy/_autodeploy.py`'s
-`_auto_deployable` reads for eligibility: each role's own `k8s_autodeploy` declaration in
-`ansible/roles/k8s/<role>/defaults/main.yml`. The guard test's
+`--denylist` prints the roles declaring `k8s_autodeploy: false`, comma-separated, and exits 1
+when the derivation raises. `land_renovate_pr.py` reads that output as its denylist, so it and
+renovate.json's no-automerge rule read one list.
+
+Both counts read `lib.k8s_roles.k8s_autodeploy_denylist` and the same source
+`ansible/tests/deploy/_autodeploy.py`'s `_auto_deployable` reads for eligibility: each role's
+own `k8s_autodeploy` declaration in `ansible/roles/k8s/<role>/defaults/main.yml`. The guard test's
 `test_every_role_is_either_denied_or_declares_itself_deployable` asserts the two sets partition
 every role exactly, so eligible + denylist always equals the role count.
 """
@@ -19,14 +22,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, K8S_ROLES
-
-sys.path.insert(0, str(FILTER_PLUGINS))
+from lib.repo_paths import ANSIBLE, K8S_ROLES
 
 from lib import yaml_fast
 from lib.cli_help import answer_help
-from lib.k8s_roles import role_dirs
-from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
+from lib.k8s_roles import SHARED_ROLES, k8s_autodeploy_denylist, role_dirs
 
 
 def eligible_roles() -> list[str]:
@@ -59,18 +59,32 @@ def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
         `(eligible, denied, not_declaring)`, each sorted.
     """
     eligible = eligible_roles()
-    denied = k8s_autodeploy_denylist(str(ANSIBLE))
+    denied = k8s_autodeploy_denylist(ANSIBLE)
     not_declaring = sorted(set(all_role_names()) - set(eligible) - set(denied))
     return eligible, denied, not_declaring
 
 
-def main(argv: Sequence[str] = ()) -> None:
+def print_denylist(ansible: Path = ANSIBLE) -> int:
+    """Print the denylist comma-separated, and return the exit code."""
+    try:
+        denied = k8s_autodeploy_denylist(ansible)
+    except ValueError as exc:
+        print(f"k8s_autodeploy_counts.py: {exc}", file=sys.stderr)
+        return 1
+    print(",".join(denied))
+    return 0
+
+
+def main(argv: Sequence[str] = ()) -> int:
     answer_help(__doc__, list(argv))
+    if "--denylist" in argv:
+        return print_denylist()
     eligible, denied, not_declaring = autodeploy_stances()
     print(f"eligible: {len(eligible)}")
     print(f"denylist: {len(denied)}")
     print(f"not declaring: {len(not_declaring)}")
+    return 0
 
 
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    sys.exit(main(sys.argv[1:]))
