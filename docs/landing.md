@@ -467,7 +467,7 @@ Instead it reads the cluster every 30 seconds:
   Renovate lander needs it too: its unit runs on after the session ends, so a landing started
   late on a Saturday can still be waiting on Sunday's window (#5457).
 
-Two holds coexist until slice D6 retires the deployer, and `probe.py landing` prints both on
+Two holds coexist, and `probe.py landing` prints both on
 every run, each naming its source and the tags it holds:
 
 ```text
@@ -476,9 +476,9 @@ DEPLOY_HOLD (promote workflow, Flux-owned tags): 0123abcd... failed=bento-pdf
 prod: 3cf44936 sha256:4e55da43005e   last-good: 9f1e2d3c sha256:0b7a51c2e9d4
 ```
 
-`hold_sha` stops the deployer and `land.sh`'s Ansible-owned tags. `DEPLOY_HOLD` stops every
-promotion, so it ends `land-wait` for a flux-owned tag and leaves an Ansible-owned landing
-alone.
+`hold_sha` stops the deployer, which applies the host plane only since D6.12. `DEPLOY_HOLD`
+stops every promotion, so it ends `land-wait` for a flux-owned tag. The printed label for
+`hold_sha` still reads "Ansible-owned tags" (`scripts/diagnostics/probe_lib/promote_state.py`).
 
 `land-wait` reads the Kustomizations with the read-only `kubectl`, ancestry with
 `git merge-base --is-ancestor` in the primary checkout, `DEPLOY_HOLD` with
