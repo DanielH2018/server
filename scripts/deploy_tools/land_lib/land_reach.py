@@ -433,6 +433,7 @@ def remaining_setup_hosts(
     ref: str = "",
     repo: Path = REPO,
     key_readers: Sequence[KeyReader] = (),
+    read_host: Callable[[dict, str], dict] | None = None,
 ) -> dict[str, frozenset[str]]:
     """Role -> the hosts beyond `local_host` a role the tick applied there still reaches.
 
@@ -446,8 +447,12 @@ def remaining_setup_hosts(
     `key_readers` are the setup-role files reading a `secrets.yml` or inventory key the range
     moved (`key_readers.key_readers`). Each adds the roles the tick routes it to, as
     `deploy_defer.route_key_readers` does, at the reach of that file (#6968).
+
+    `read_host` is as `remaining_setup_hosts_note` takes it.
     """
-    return _remaining_at(files, local_host, quiet, pr_range, ref, repo, key_readers)[0]
+    return _remaining_at(
+        files, local_host, quiet, pr_range, ref, repo, key_readers, read_host
+    )[0]
 
 
 def _remaining_at(

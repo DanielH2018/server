@@ -1,4 +1,4 @@
-"""The owed-host note reads a stamped file's live copy before naming its host (#7398).
+"""The owed-host note reads a stamped file's record on a host before naming it (#7398).
 
 The note and the task walk are the real ones, over this checkout's roles. Only the host read is
 fake. Each test also pins `daniel-server` in the note it expects to stay, so an empty note
@@ -16,16 +16,24 @@ WITNESS_LIVE = "/opt/loki-route-health/loki_route_health.py"
 # The second path PR #7295 changed. No setup role ships it, so it owes nothing either way.
 COMPONENT_COPY = "hosts/components/loki-route-witness/loki_route_health.py"
 CRONS = "ansible/roles/setup/initial_setup/tasks/crons.yml"
+DRIFT_LIB = "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 WITNESS_SHA = hashlib.sha256((REPO / WITNESS).read_bytes()).hexdigest()
+TEMPLATE = "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2"
+TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
+FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/loki-route-witness"
 
 
 def _reader(row, reads=None):
     def read_host(plan, host):
         if reads is not None:
             reads.append((plan, host))
-        return {"stat": {WITNESS_LIVE: row}}
+        return {"stat": {WITNESS_LIVE: row}, "files": {}}
 
     return read_host
+
+
+def _fragment_reader(row):
+    return lambda plan, host: {"stat": {}, "files": {FRAGMENT: row}}
 
 
 def _note(files, read_host):
@@ -68,13 +76,39 @@ def test_a_changed_sibling_with_no_stamped_copy_keeps_the_host_owed():
     assert "daniel-server" in _note([WITNESS, CRONS], _reader(row))
 
 
-def test_the_read_asks_for_the_merge_commits_hash_once_per_host():
+def test_the_read_asks_for_the_merge_commits_hash():
     reads = []
-    row = {"status": "ok", "sha256": WITNESS_SHA}
-    _note([WITNESS, COMPONENT_COPY, CRONS], _reader(row, reads))
+    _note([WITNESS, COMPONENT_COPY], _reader({"status": "absent"}, reads))
     assert reads == [
         (
-            {"stat": [WITNESS_LIVE], "rootq": {WITNESS_LIVE: WITNESS_SHA}},
+            {
+                "stat": [WITNESS_LIVE],
+                "rootq": {WITNESS_LIVE: WITNESS_SHA},
+                "files": [],
+            },
             "daniel-server",
         )
     ]
+
+
+def test_two_stamped_files_read_each_host_once():
+    """`ufw limit ssh` refuses a sixth connection in 30 seconds."""
+    reads = []
+    _note([WITNESS, DRIFT_LIB], _reader({"status": "absent"}, reads))
+    hosts = [host for _, host in reads]
+    assert "daniel-server" in hosts
+    assert len(hosts) == len(set(hosts))
+
+
+def test_a_template_the_host_last_rendered_at_this_source_is_owed_nothing():
+    row = {"status": "ok", "text": f"{TEMPLATE} {TEMPLATE_SHA}\nother.j2 {'1' * 64}\n"}
+    assert _note([TEMPLATE], _fragment_reader(row)) == ""
+
+
+def test_a_template_rendered_from_another_source_keeps_the_host_owed():
+    row = {"status": "ok", "text": f"{TEMPLATE} {'0' * 64}\n"}
+    assert "daniel-server" in _note([TEMPLATE], _fragment_reader(row))
+
+
+def test_a_missing_render_fragment_keeps_the_host_owed():
+    assert "daniel-server" in _note([TEMPLATE], _fragment_reader({"status": "absent"}))

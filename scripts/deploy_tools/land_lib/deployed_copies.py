@@ -2,11 +2,14 @@
 
 The owed-host note derives reach from task gates, so it says which hosts a file lands on and
 nothing about what they hold. A host another apply already reached still read as unapplied
-(#7398). This answers that for the one kind of file whose live bytes can be compared:
-`stamp_deployed.yml`'s `{live, src}` pairs name `copy:`-deployed files, which are byte-identical
-to their source.
+(#7398). This answers that for the two kinds of file a host keeps a record of:
 
-Everything else stays owed: a template, a task file, a key, a pair whose `live` is not a
+- `stamp_deployed.yml`'s `{live, src}` pairs name `copy:`-deployed files, which are
+  byte-identical to their source, so the live bytes are compared with the merge commit's.
+- `stamp_render.yml`'s fragments hold the source hash of each template the host last rendered,
+  so the fragment's line is compared with the merge commit's hash.
+
+Everything else stays owed: an unstamped file, a task file, a key, a pair whose `live` is not a
 literal path, a host that cannot be read. The note is then what it was without this read, which
 costs one hand check; the other direction would hide an apply a host still needs.
 """
@@ -27,10 +30,16 @@ from lib import yaml_fast
 from lib.git import git_process
 
 GIT_TIMEOUT_S = 30
+# `stamp_render.yml`'s directory on a host.
+RENDER_MANIFEST_DIR = "/var/lib/homelab/setup-render-manifest.d/"
 
 
-def _pairs_in(tasks: object) -> Iterable[tuple[str, str]]:
-    """Each `(src, live)` a parsed task list stamps, blocks included."""
+def _stamps_in(tasks: object) -> Iterable[tuple[str, str]]:
+    """Each `(src, record)` a parsed task list stamps, blocks included.
+
+    `record` is the path of the live copy, or of the render fragment under
+    `RENDER_MANIFEST_DIR` that lists the template.
+    """
     if not isinstance(tasks, list):
         return
     for task in tasks:
@@ -41,22 +50,29 @@ def _pairs_in(tasks: object) -> Iterable[tuple[str, str]]:
             for pair in task_vars.get("stamp_deployed_pairs") or ():
                 if isinstance(pair, dict):
                     yield str(pair.get("src")), str(pair.get("live"))
+            for template in task_vars.get("stamp_render_templates") or ():
+                fragment = f"{RENDER_MANIFEST_DIR}{task_vars.get('stamp_render_name')}"
+                yield str(template), fragment
         for section in ("block", "rescue", "always"):
-            yield from _pairs_in(task.get(section))
+            yield from _stamps_in(task.get(section))
 
 
-def _matches(row: dict | None, sha: str) -> bool:
-    """Does one `host_reader` stat row show the file's content hashing to `sha`?"""
-    if not row or row.get("status") != "ok":
+def _record_shows(doc: dict, record: str, src: str, sha: str) -> bool:
+    """Does `record`, as `host_reader` read it into `doc`, show `src` at hash `sha`?"""
+    if record.startswith(RENDER_MANIFEST_DIR):
+        row = (doc.get("files") or {}).get(record) or {}
+        return f"{src} {sha}" in row.get("text", "").splitlines()
+    row = (doc.get("stat") or {}).get(record) or {}
+    if row.get("status") != "ok":
         return False
     return row.get("sha256") == sha or row.get("match") is True
 
 
 class DeployedCopies:
-    """The live copies of one landing's changed files, read once per host.
+    """What each host records of one landing's changed files, read once per host.
 
     `ufw limit ssh` refuses a sixth connection in 30 seconds, so the first question about a
-    host reads every copy this landing could ask about in one `read_host` call.
+    host reads every record this landing could ask about in one `read_host` call.
 
     Args:
       files: the changed paths.
@@ -79,11 +95,11 @@ class DeployedCopies:
         self._ref = ref
         self._repo = repo
         self._read_host = read_host
-        self._rows: dict[str, dict] = {}
+        self._docs: dict[str, dict] = {}
 
     @cached_property
-    def _lives(self) -> dict[tuple[str, str], list[str]]:
-        """`(role, src)` -> each path the role deploys that changed file to."""
+    def _records(self) -> dict[tuple[str, str], list[str]]:
+        """`(role, src)` -> each record of that changed file the role stamps on a host."""
         found: dict[tuple[str, str], list[str]] = {}
         for tasks_file in self._roles_dir.glob("*/tasks/**/*.yml"):
             role = tasks_file.relative_to(self._roles_dir).parts[0]
@@ -91,16 +107,16 @@ class DeployedCopies:
                 tasks = yaml_fast.parse_yaml(tasks_file.read_text())
             except yaml_fast.UnparsableYaml, OSError:
                 continue
-            for src, live in _pairs_in(tasks):
+            for src, record in _stamps_in(tasks):
                 if src in self._files:
-                    found.setdefault((role, src), []).append(live)
+                    found.setdefault((role, src), []).append(record)
         return found
 
     @cached_property
     def _shas(self) -> dict[str, str]:
         """Each stamped changed file's SHA-256 at `ref`; a file `ref` lacks has no entry."""
         shas = {}
-        for src in {src for _, src in self._lives}:
+        for src in {src for _, src in self._records}:
             # `cat-file`, because a textconv or a newline translation would change the hash.
             blob = git_process("cat-file", "blob", f"{self._ref}:{src}", cwd=self._repo)
             try:
@@ -113,34 +129,36 @@ class DeployedCopies:
                 shas[src] = hashlib.sha256(content).hexdigest()
         return shas
 
-    def _rows_on(self, host: str) -> dict:
-        if host not in self._rows:
-            asks = {
-                live: self._shas[src]
-                for (_, src), lives in self._lives.items()
-                for live in lives
-                if src in self._shas and "{{" not in live
+    def _doc_on(self, host: str) -> dict:
+        if host not in self._docs:
+            shas_by_record = {
+                record: self._shas[src]
+                for (_, src), records in self._records.items()
+                for record in records
+                if src in self._shas and "{{" not in record
             }
+            fragments = {r for r in shas_by_record if r.startswith(RENDER_MANIFEST_DIR)}
+            asks = {r: h for r, h in shas_by_record.items() if r not in fragments}
+            plan = {"stat": sorted(asks), "rootq": asks, "files": sorted(fragments)}
             try:
-                doc = self._read_host({"stat": sorted(asks), "rootq": asks}, host)
-                self._rows[host] = doc.get("stat") or {}
+                self._docs[host] = self._read_host(plan, host)
             except core.Unreadable as exc:
                 print(
                     f"could not read what {host} holds ({exc.message}), so its copies count "
                     "as unapplied",
                     file=sys.stderr,
                 )
-                self._rows[host] = {}
-        return self._rows[host]
+                self._docs[host] = {}
+        return self._docs[host]
 
     def holds(self, role: str, path: str, host: str) -> bool:
-        """Does every copy `role` deploys of `path` on `host` match the merge commit?
+        """Does every record `role` stamps of `path` on `host` show the merge commit's bytes?
 
-        False for a file with no stamped pair, and for one whose copy is missing or unread.
+        False for a file with no stamp, and for one whose record is missing or unread.
         """
-        lives = self._lives.get((role, path))
+        records = self._records.get((role, path))
         sha = self._shas.get(path)
-        if not lives or not sha:
+        if not records or not sha:
             return False
-        rows = self._rows_on(host)
-        return all(_matches(rows.get(live), sha) for live in lives)
+        doc = self._doc_on(host)
+        return all(_record_shows(doc, record, path, sha) for record in records)
