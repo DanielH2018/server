@@ -210,6 +210,32 @@ def test_a_suspended_tag_with_a_plane_owed_is_needs_manual_apply(land_run, owed,
     assert "gate" not in _names(calls)
 
 
+def test_a_suspended_tag_with_a_host_package_still_waits_for_the_host(land_run):
+    suspended = WaitResult(
+        "suspended",
+        "promote-suspended",
+        "bento-pdf is suspended",
+        suspended=("bento-pdf",),
+        tags=("bento-pdf",),
+    )
+    fakes = _fakes(
+        land_wait=[suspended],
+        gh_views={
+            "files,changedFiles": {
+                "files": [{"path": "hosts/daniel-pi/package.yml"}],
+                "changedFiles": 1,
+            }
+        },
+        host_targets=[HostTarget("daniel-pi", armed=True)],
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: settled" in out
+    assert "hosts: daniel-pi" in out
+    assert "did not wait" not in out
+    assert "wait_for_hosts" in _names(calls)
+    assert [c[1] for c in calls if c[0] == "gate"] == [([],)]
+
+
 def test_a_suspended_tag_beside_an_ansible_owned_one_still_gates_that_one(land_run):
     suspended = WaitResult(
         "suspended",

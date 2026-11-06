@@ -423,7 +423,8 @@ Instead it reads the cluster every 30 seconds:
 - **`needs-manual-apply`, from land-wait's `suspended`, exit 1.** The same wait, on a PR that
   also owes a plane a hand applies or a setup role's other hosts. The output names what is
   owed and each host package the landing did not wait on, and the gate does not run. The
-  suspend PR itself owes neither, so it keeps `nothing-to-deploy`.
+  suspend PR itself owes neither, so it keeps `nothing-to-deploy`. A PR that changes a host
+  package and owes neither goes on to the host wait, and its verdict comes from that wait.
 - **`deferred`, cause `promote-timeout`, exit 75.** No promotion covered the merge commit
   within twice the promote timeout (83 minutes,
   `scripts/deploy_tools/promote_lib/wait.py:LAND_WAIT_TIMEOUT_S`), or within twice

@@ -103,7 +103,7 @@ def applied_wording(ln: Landing) -> str:
     A hosts-only landing, one with host targets and no service tag, never reads "services
     deployed", whatever else the tick applied for it.
     """
-    services = bool(promotion.gated_tags(ln) or ln.flux_tags)
+    services = bool(promotion.gated_tags(ln))
     if not ln.host_targets:
         return "services deployed"
     return "services deployed and hosts applied" if services else "hosts applied"
