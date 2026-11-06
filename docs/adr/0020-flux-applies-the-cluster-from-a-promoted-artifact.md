@@ -15,9 +15,9 @@ Accepted. The operator approved starting slice D1 on 2026-10-12, when this recor
 and set it to `Accepted`.
 
 This record supersedes [ADR-0010](0010-pull-based-gitops-over-argo-and-flux.md), whose status
-reads `Superseded by ADR-0020`. It leaves ADR-0011, ADR-0012 and ADR-0017 unamended. Several
-sentences in them describe the Ansible deploy path, and *Consequences* lists where they
-differ from the tree. The operator decides those amendments separately.
+reads `Superseded by ADR-0020`. The operator ruled on 2026-11-06, in the session that orchestrates slice D6, to approve this
+record and to amend ADR-0012 and ADR-0017. Each of those two carries a dated *Amendment*
+section that names the statements this record overtakes. ADR-0011 stays unchanged.
 
 ## Context
 
@@ -137,9 +137,9 @@ on 2026-10-12.
 - The deployer's setup arm, its fast-forward and `deploy_ui` stay until slice H7.
 - `hold_sha` covers the host plane only, and `DEPLOY_HOLD` covers the cluster.
 
-**ADR-0011, ADR-0012 and ADR-0017 differ from the tree, and this record does not amend them.**
-D6 Open question 2 leaves the amendments to the operator. The differing statements are listed
-in the pull request that accepts this record.
+**ADR-0012 and ADR-0017 differ from the tree, and each carries an *Amendment* section.** The
+operator ruled on 2026-11-06 that ADR-0011 stays unchanged, because its decision, one lock on
+every path that writes the git tree, still holds for the host plane.
 
 ## Governs
 

@@ -1,6 +1,6 @@
 # D6 — Delete the old deploy path; ADR superseding 0010
 
-Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carried D6.13. D6.18 was split into D6.18a and D6.18b on 2026-11-06 ([#7414](https://github.com/DanielH2018/server/issues/7414)). [#7454](https://github.com/DanielH2018/server/issues/7454) carried D6.18b, and [#7469](https://github.com/DanielH2018/server/issues/7469) the deployer half of old D6.4. D6.20 merged as [#7487](https://github.com/DanielH2018/server/pull/7487) after the operator's decision ([#7479](https://github.com/DanielH2018/server/issues/7479)), and the deployer's routing as [#7489](https://github.com/DanielH2018/server/pull/7489), both on 2026-11-06. D6.21 is the last PR. It is a draft that moves `docs/adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md` to `Accepted`, and it waits on the operator's approval of that ADR.
+Status: IN PROGRESS. D6.10 was dropped with no PR (#5425). D6.11 merged as [#6044](https://github.com/DanielH2018/server/pull/6044). D6.12 was first attempted as [#6432](https://github.com/DanielH2018/server/pull/6432), which closed unmerged on 2026-10-30, and merged as [#7327](https://github.com/DanielH2018/server/pull/7327). [#7337](https://github.com/DanielH2018/server/issues/7337) carried D6.13. D6.18 was split into D6.18a and D6.18b on 2026-11-06 ([#7414](https://github.com/DanielH2018/server/issues/7414)). [#7454](https://github.com/DanielH2018/server/issues/7454) carried D6.18b, and [#7469](https://github.com/DanielH2018/server/issues/7469) the deployer half of old D6.4. D6.20 merged as [#7487](https://github.com/DanielH2018/server/pull/7487) after the operator's decision ([#7479](https://github.com/DanielH2018/server/issues/7479)), and the deployer's routing as [#7489](https://github.com/DanielH2018/server/pull/7489), both on 2026-11-06. D6.21 is the last PR ([#7495](https://github.com/DanielH2018/server/pull/7495)). It moves `docs/adr/0020-flux-applies-the-cluster-from-a-promoted-artifact.md` to `Accepted` and amends ADR-0012 and ADR-0017, after the operator's approval of 2026-11-06 (Open question 2). Status becomes COMPLETE when it lands.
 
 Re-sliced on 2026-10-17 at the operator's request: 17 steps became 12 PRs, and #5425 later
 dropped D6.10, so 11 carry code. *Steps, as PRs* maps each old step label to the PR that
@@ -1736,13 +1736,14 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18b, and D6.1
       finishes both at the end.
     - **Waits on:** every other D6 PR, with D6.20 or the operator's ruling that D6 ends at
       `Orphan`. Also G5, if G5 has started.
-    - **Operator gates:** approving the ADR (**operator-only**).
+    - **Operator gates:** approving the ADR (**operator-only**). The operator approved it on
+      2026-11-06 (Open question 2).
     - **Before merge:** `test_adr_links.py`, `mkdocs build --strict`, and exit 6's two counts.
     - **Rollback:** *Rollback*'s D6.8b bullet. An accepted ADR is never rewritten.
     - **Exit criterion:** exits 3, 4 and 6.
 
-Open question 2, the amendments to ADR-0011, ADR-0012 and ADR-0017, is **operator-only** and
-belongs to no PR.
+Open question 2, the amendments to ADR-0011, ADR-0012 and ADR-0017, was ruled on 2026-11-06
+and D6.21 carries it.
 
 <details markdown="1">
 <summary>The 17 steps before the re-slice, D6.0 to D6.8b</summary>
@@ -2954,8 +2955,14 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
    design's open question 4 names this.
 2. **Do ADR-0011, ADR-0012 and ADR-0017 need amendments?** `gitops-deploy.service` still takes
    the tree lock for the host plane, and `deploy.sh` still takes it for the Pi. design.md
-   leaves the amendments to the operator, and R4's open question 8 asks the same about 0012
-   (**operator-only**).
+   leaves the amendments to the operator, and R4's open question 8 asks the same about 0012.
+   The operator ruled on 2026-11-06, in the orchestrating session: "Yes to the ADRs". The
+   question was whether to approve ADR-0020 and amend ADR-0011, ADR-0012 and ADR-0017, with
+   the recommendation of a short "superseded in part by ADR-0020" note on 0012 and 0017 and
+   no change to 0011.
+   Resolution: D6.21 makes the amendments. ADR-0012 and ADR-0017 each gain a dated
+   *Amendment* section, because `test_adr_links.py` defines no partial-supersession status.
+   ADR-0011 stays unchanged.
 3. **Does the in-cluster registry retire?** This is D5's open question 2. Resolution: D6.6
    counts its remaining consumers. With none, a retirement PR follows D6, outside this slice.
    From D6.7c, break-glass promotion is a standing consumer, so the registry stays, and
