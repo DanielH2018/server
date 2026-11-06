@@ -7,6 +7,9 @@ import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
 from deploy_tools.land_lib.tools import Classifier
+from deploy_tools.promote_lib.wait import WaitResult
+
+_ORDERED = ("await_ci", "tick", "land_wait", "gate")
 
 
 def _names(calls):
@@ -130,18 +133,26 @@ def test_help_does_not_annotate():
     assert not any(c[0] == "logger" for c in calls)
 
 
+def _sonarr_settled(**kwargs: object) -> Fakes:
+    """land-wait's changed set names sonarr, and the owner that keeps it gated."""
+    fakes = Fakes(
+        land_wait=[WaitResult("settled", detail="1 applied", tags=("sonarr",))],
+        owners={MERGE_SHA: {"sonarr": "flux"}},
+    )
+    for name, value in kwargs.items():
+        setattr(fakes, name, value)
+    return fakes
+
+
 def test_settled_end_to_end(land_run):
-    rc, out, _, calls, logline = land_run([], Fakes())
+    rc, out, _, calls, logline = land_run([], _sonarr_settled())
     assert rc == 0 and out.rstrip().endswith(
         f"VERDICT: settled (PR #999, {MERGE_SHA}, tags: sonarr)"
     )
-    # The tick sits BETWEEN the deploy and the gate, not before the deploy: the deployer's
-    # unit holds the tree lock for its whole run, so a tick kicked first is one deploy.sh
-    # waits out inside its own flock.
-    assert [c[0] for c in calls if c[0] in ("await_ci", "tick", "deploy", "gate")] == [
+    assert [c[0] for c in calls if c[0] in _ORDERED] == [
         "await_ci",
-        "deploy",
         "tick",
+        "land_wait",
         "gate",
     ]
     assert "verdict=settled cause= exit=0" in logline and "tags=sonarr" in logline
@@ -150,7 +161,7 @@ def test_settled_end_to_end(land_run):
 
 
 def test_a_tagged_landing_kicks_the_tick_and_books_no_tick_time(land_run):
-    """Step 4 is a kick, not a wait: step 5 deploys the merge commit itself.
+    """Step 4 is a kick, not a wait: step 5 waits on the promotion that applies the merge.
 
     `tick=0` on the board therefore means NO TICK WAS AWAITED, not a tick that took no time.
     """
@@ -168,44 +179,39 @@ def test_a_landing_with_tags_and_a_self_applied_plane_awaits_the_tick(land_run):
     names an older origin SHA and the landing prints `needs-manual-apply` (or `deferred`, with
     `behind_since` set) for work the kicked tick applies a minute afterwards.
     """
-    _rc, _out, _err, calls, _logline = land_run([], Fakes(self_applied=True))
-    assert [c[0] for c in calls if c[0] in ("await_ci", "tick", "deploy", "gate")] == [
+    _rc, _out, _err, calls, _logline = land_run([], _sonarr_settled(self_applied=True))
+    assert [c[0] for c in calls if c[0] in _ORDERED] == [
         "await_ci",
         "tick",
-        "deploy",
+        "land_wait",
         "gate",
     ]
     assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
-    assert next(c for c in calls if c[0] == "deploy")[2]["at"] == ""
 
 
-@pytest.mark.parametrize(
-    "self_applied,order,awaited",
-    [
-        (False, ["await_ci", "deploy", "tick", "gate"], False),
-        (True, ["await_ci", "tick", "deploy", "gate"], True),
-    ],
-)
+@pytest.mark.parametrize("self_applied", [False, True])
 def test_a_tags_override_takes_the_same_two_paths_as_a_derived_landing(
-    land_run, self_applied, order, awaited
+    land_run, self_applied
 ):
     """`--tags` skips the derivation, not the decision about which path this landing takes.
 
     Both halves matter. The FLAGGED one is `self_applied=True`: `classify` must not return at
     its first statement when `opts.tags` has populated `resolved_tags`, or the predicate reads
-    False and a mixed PR lands with `--tags` deployed `--at` and prints a verdict that never
-    read the deployer's markers. The CLEAN one is the tags-only override, which must keep the
+    False and a mixed PR prints a verdict that never read the deployer's markers. The CLEAN one
+    is the tags-only override, which must keep the
     fast path -- classifying on this path must not turn into awaiting a tick for everyone.
     """
     _rc, _out, _err, calls, _logline = land_run(
         ["--tags", "sonarr"], Fakes(self_applied=self_applied)
     )
-    assert [
-        c[0] for c in calls if c[0] in ("await_ci", "tick", "deploy", "gate")
-    ] == order
+    assert [c[0] for c in calls if c[0] in _ORDERED] == [
+        "await_ci",
+        "tick",
+        "land_wait",
+        "gate",
+    ]
     tick_kwargs = next(c for c in calls if c[0] == "tick")[2]
-    assert (list(tick_kwargs) == ["observe"]) is awaited
-    assert (next(c for c in calls if c[0] == "deploy")[2]["at"] == "") is awaited
+    assert (list(tick_kwargs) == ["observe"]) is self_applied
 
 
 def test_a_landing_with_no_service_tag_still_waits_for_the_tick(land_run):
@@ -222,7 +228,7 @@ def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
         ["--since", "abc"], Fakes(derived=([], "fallback"), changed="sonarr")
     )
     names = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls]
-    assert names.index("tick") < names.index("changed") < names.index("deploy")
+    assert names.index("tick") < names.index("changed") < names.index("land_wait")
     # And it AWAITS that tick. The derivation reads `<since>...HEAD` in the primary checkout,
     # so this is the one tagged path the kick would break: an empty fallback tag list is what
     # routes it away from the kick, and ordering alone would not notice if that changed.
@@ -230,7 +236,7 @@ def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
 
 
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
-    """Every phase runs git and deploy.sh there, so it is checked first and named plainly.
+    """Every phase runs git there, so it is checked first and named plainly.
 
     It ends `refused`, as every exit-1 stop does (#4451), rather than the `aborted` the
     board reserves for a path that named no verdict.
@@ -318,7 +324,7 @@ def test_the_real_classifier_derives_a_tag_from_a_real_path(land_run):
     `quiet_paths` from shelling out to git: with no range it returns immediately, and every
     broad path stays loud -- the direction a wrong answer there must fall.
     """
-    fakes = Fakes(
+    fakes = _sonarr_settled(
         pull_ref_rc=1,
         gh_views={
             "files,changedFiles": {
@@ -353,7 +359,7 @@ def test_every_numbered_step_header_uses_the_same_denominator(land_run):
     """Finding 27: `/6` was written out seven times against eight prints, checked by nobody."""
     from deploy_tools.land_lib import pipeline
 
-    _, out, _, _, _ = land_run([])
+    _, out, _, _, _ = land_run([], _sonarr_settled())
     headers = [ln for ln in out.splitlines() if ln.startswith("== ")]
     numbered = [h for h in headers if "/" in h.split()[1]]
     assert [h.split()[1] for h in numbered] == [

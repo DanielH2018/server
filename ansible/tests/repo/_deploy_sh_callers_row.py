@@ -38,7 +38,6 @@ TABLE_HEADING = "### What each entry point does with a tag that is not Ansible-o
 # there. The row says what the caller does with a flux-owned tag, which `deploy.sh` refuses
 # with exit 5 for the whole list. `unlisted_rows` holds each cell to the table.
 DEPLOY_SH_ENTRY_POINTS = {
-    "scripts/deploy_tools/land_lib/tools.py": "`land.sh`",
     "ansible/roles/setup/deploy_ui/files/deploy_ui.py": "`deploy_ui`",
     # It runs deploy.sh over the list that row's CLI prints.
     "ansible/roles/setup/render_records/files/render_records.py": "`render_targets.py` CLI",
@@ -127,7 +126,7 @@ DEPLOY_SH_CALLERS = Census(
     ),
     green=(
         Subject(
-            "scripts/deploy_tools/land_lib/tools.py",
+            "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
             'argv = ["./scripts/deploy.sh", "--tags", ",".join(tags)]\n',
         ),
         Subject(

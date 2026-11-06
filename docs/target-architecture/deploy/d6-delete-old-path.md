@@ -35,7 +35,7 @@ What stays until H7:
   that replaces the fast-forward.
 - Setup narrowing, the setup routing tables in `deploy_cross_role.py`, and
   `land_lib/land_reach.py`.
-- The shared part of `reach.py`, and `land.sh`'s setup and Pi arms.
+- The shared part of `reach.py`, and `land.sh`'s setup arm and host wait.
 
 R4 deletes the Ansible k8s mechanics: the manifests role's tasks, the k8s play in
 `ansible/deploy.yml`, `render_records`, and `render_targets.py` with D2's skip in it.
@@ -85,9 +85,11 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
     - `scripts/deploy_tools/promote.py` is at most 900 lines. D1 states about 320 and D2
       about 350. The headroom covers D5's additions and D6.7b's tag rule and object-loss
       change.
-    - `land.sh`, `land.py` and `land_lib/` together are at most 6,400 lines. They measured
-      6,258 at `70591c307`. The bound allows all of D2.3's about 220 lines to land there,
-      less the 121 lines of `land_rerolls.py` that D6.3 deletes, and D6.3 deletes more.
+    - `land.sh`, `land.py` and `land_lib/` together are at most 8,800 lines. They measured
+      8,622 once [#7349](https://github.com/DanielH2018/server/issues/7349) deleted the
+      `deploy.sh` arm, and the bound leaves about 180 lines for D6.18 to D6.21. It replaces a
+      bound stated from 6,258 lines at `70591c307`, which the tree outgrew: the same files
+      measured 9,390 after D6.15, and no D6 PR removes that much.
 
 ## Baseline at `70591c307`
 
@@ -555,7 +557,7 @@ These facts come from the D2, D4 and D5 plans, because their code does not exist
     - the deployer;
     - setup narrowing, meaning `narrow_setup.py`, `setup_routing.py` and the seven
       `narrow_lib` modules listed in the Baseline;
-    - `land_reach.py`, the shared rest of `reach.py`, and `land.sh`'s setup and Pi arms;
+    - `land_reach.py`, the shared rest of `reach.py`, and `land.sh`'s setup arm and host wait;
     - `deploy_cross_role.py`. H7 moves `k8s_lookup_map` out first.
 - **Stays after D6:**
     - the deployer's setup arm and its fast-forward, and `deploy_git.py:ci_verdict`;
@@ -1588,8 +1590,12 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18, and D6.15
     - **As built ([#7339](https://github.com/DanielH2018/server/issues/7339)).** H5.12 emptied
       the Pi's `containers_list`, so no path derives a Pi tag and `changed` prints no tag at
       all. Its broad line names `promote` and the `homelab-daniel-pi` package rather than
-      `deploy.sh -e target=daniel-pi`, which deploys nothing since H5.12. `deploy_by_host` stays
-      as the Pi arm this plan keeps until H7, though no tag reaches it.
+      `deploy.sh -e target=daniel-pi`, which deploys nothing since H5.12.
+    - **Followed by [#7349](https://github.com/DanielH2018/server/issues/7349).** No tag reached
+      `land.sh`'s `deploy.sh` arm after this PR, so H7 keeps no such arm. #7349 deleted it with
+      `land_lib/stale_retarget.py`, `land_lib/land_platform.py`, `Landing.k8s_only` and
+      `deploy_tags.py hosts`. A Pi change lands through the host wait
+      (`land_lib/host_wait.py:wait_for_hosts`). It also restated exit 6's landing bound.
 7. **D6.16 — Arm the setup-drift reader on daniel-box** (old D6.5a, about 40 lines).
     - **Why apart from D6.17.** D6.17's `NotReporting` arm for the box fires unless the box
       has already written a sample, and the timer runs once a day. So this PR deploys, and
@@ -2464,7 +2470,7 @@ gh run view <databaseId> --log | grep -E 'case=break-glass(-red)?'
 # Exit 6, at D6's last PR.
 wc -l scripts/deploy_tools/promote.py                   # at most 900
 git ls-files scripts/deploy_tools/land.sh scripts/deploy_tools/land.py \
-  'scripts/deploy_tools/land_lib/*.py' | grep -v /tests/ | xargs cat | wc -l   # at most 6,400
+  'scripts/deploy_tools/land_lib/*.py' | grep -v /tests/ | xargs cat | wc -l   # at most 8,800
 
 # D6.7, on its PR before merge: the drill ran (not skipped) and passed all three cases.
 gh run list --workflow flux-deletion-drill.yml --branch <D6.7 branch> --limit 1 \
@@ -3753,7 +3759,7 @@ Folded from the 2026-10-12 pillar review; not adversarially reviewed. The pre-st
   its fallback, names k3s and Flux as fixed premises with their exit cost, and records no
   tracing by decision.
 - **F-05 (end sizes).** Exit 6 bounds `promote.py` at 900 lines and the landing code at
-  6,400, and *Verification* reads both.
+  8,800, and *Verification* reads both.
 - **Coordinator note from D2.** D6.7b removes the handback exemption from D2.6c's
   object-loss check in `decide`, so the guard is live before D6.7 switches the policy.
 - **Coordinator note from D3.** D6.1 is the PR in which D3.4's interim `cluster-vars` rule

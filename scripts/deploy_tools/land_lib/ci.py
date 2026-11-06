@@ -1,8 +1,7 @@
 """Step 2, pre-flight, and step 3, the master CI wait -- in that order, on purpose.
 
 A _BROAD_MANUAL_PREFIXES change anywhere in the incoming range stops the tick
-fast-forwarding, which guarantees deploy.sh refuses as stale (exit 4) however green CI
-turns out.
+fast-forwarding however green CI turns out.
 """
 
 import sys as _sys

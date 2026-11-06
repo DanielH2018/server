@@ -42,7 +42,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_LIB_FILES
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 sys.path.insert(0, str(HOST_LIB_FILES))
 
-from deployer_lib.deploy_git import ci_walk_candidates, read_check_pages
+from deployer_lib.deploy_git import read_check_pages
 from deployer_lib.deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict
 from host_lib import github_get, github_token
 
@@ -327,7 +327,7 @@ def descendant_verdict(
     # never ran CI for. That descendant's run tested a tree that contains every change in the
     # merge commit, which is the rule the tick already deploys by (it fast-forwards to the
     # newest green ancestor of the tip). What it does not prove is the merge commit's own
-    # tree, the one land.sh deploys with `deploy.sh --at`. Nothing can prove that once the
+    # tree, the one the landing gates. Nothing can prove that once the
     # push event is gone, and the alternative is a landing no re-run converges (#4621).
     # A RED one ends the walk rather than being stepped over: a later green commit may hold
     # the fix the merge commit lacks, so its green says nothing about the tree deployed.
@@ -341,38 +341,6 @@ def descendant_verdict(
         if verdict != "pending":
             return candidate, verdict
     return "", "pending"
-
-
-def newest_green_descendant(
-    sha: str, fetch=fetch_check_runs, git_out=git_stdout
-) -> str:
-    """The newest commit on origin/master after `sha` whose own CI is green, or "".
-
-    `land.sh` deploys it when `deploy.sh --at <sha>` exits 4: it contains `sha`, so it reverts
-    no one's work, and its own CI is green. The walk is the tick's: `rev-list --first-parent`,
-    newest first, bounded by `ci_walk_candidates` and `DESCENDANT_LIMIT`. That drops the tip,
-    whose verdict the tick holds; this caller holds none, so the tip is offered first. A
-    pending commit is skipped for an older one. The caller fetches origin/master first.
-    """
-    try:
-        rev_list = git_out(
-            "rev-list", "--first-parent", f"{sha}..origin/master"
-        ).split()
-    except subprocess.CalledProcessError, OSError:
-        return ""
-    candidates = rev_list[:1] + [
-        c for _, c in ci_walk_candidates(rev_list, None, DESCENDANT_LIMIT)
-    ]
-    required = required_contexts()
-    for candidate in candidates:
-        verdict = verdict_for(candidate, fetch=fetch, required=required)
-        if verdict == "pass":
-            return candidate
-        if verdict == "fail":
-            # DECIDED: the first red ends the walk. A red between `sha` and a green is the
-            # `ci-unproven` case (see `descendant_verdict`), so the caller falls back.
-            return ""
-    return ""
 
 
 def green_after(

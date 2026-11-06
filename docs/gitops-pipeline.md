@@ -450,7 +450,7 @@ way, because it spans every range that made the role pending. No covering receip
 receipt could not narrow, prints the role tag. A contended tick that resets its ff-merge drops its
 receipt with the rest of what it recorded.
 
-A landing that deploys its own merge commit skips the tick, so no row exists for its range yet.
+A landing that awaits no tick has no row for its range yet.
 It prints the tags derived for that PR alone (`land_tags.own_narrow_tags`), with the narrowed
 `--applied` clear beside them, which drops only those tags from whatever row the next tick
 records.

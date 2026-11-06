@@ -3,8 +3,7 @@
 Exit 3 means the tick fast-forwarded NOTHING. A landing that carried on from there would
 leave the primary checkout behind origin with every later step reading that as "the tick
 deferred". Each attempt already waits 180s inside the unit, so five of them cover a long
-deploy. This is the one implementation both call sites use -- step 4 and the stale retry
-in the deploy phase. land.sh's stale-retry copy had none of the retry or the accounting.
+deploy.
 """
 
 import sys as _sys
@@ -29,18 +28,12 @@ def kick_tick(ln: Landing) -> None:
     the checkout converges for whoever reads it later. What became of the request is booked
     as `ledger.kick`, because the board is the only place the answer outlives the log.
 
-    DECIDED: called AFTER `deploy.sh` returns, not before it. `gitops-deploy.service` wraps
-    its whole unit run in the git-tree lock, and deploy.sh waits up to LOCK_WAIT (3840s) for
-    that same lock to cut its snapshot -- so a tick kicked first does not remove the wait, it
-    moves it out of `tick=` and into `lock=`. Kicked after, it runs while this landing gates,
-    and the gate's own snapshot takes no lock at all.
-
     DECIDED: a non-zero exit here is LOGGED AND IGNORED, where `run_tick` below ends the
     landing on one. The two are asked different questions. `run_tick` is the step that APPLIES
     the change, so a tick that did not run means nothing was deployed; this kick applies
     nothing, and the deployer's own 10-minute timer converges the checkout whether this
-    request landed or not. Failing a landing whose deploy succeeded, because a convenience
-    request to systemd did not, would be the worse answer.
+    request landed or not. Failing a landing because a convenience request to systemd did not
+    land would be the worse answer.
 
     A JOINED request (exit 4) started nothing: the run in flight fetched origin before this
     PR merged, so it does not carry the merge commit and the checkout stays behind when it
@@ -54,7 +47,7 @@ def kick_tick(ln: Landing) -> None:
     rc = ln.tools.tick(wait=False)
     if rc == TICK_OK:
         ln.ledger.kick = "started"
-        say("tick kicked, not awaited (this landing deployed the merge commit itself)")
+        say("tick kicked, not awaited (a promotion applies this landing)")
         return
     if rc == TICK_JOINED:
         ln.ledger.kick = "joined"
@@ -65,8 +58,8 @@ def kick_tick(ln: Landing) -> None:
         return
     ln.ledger.kick = "failed"
     say(
-        f"tick kick failed (exit {rc}); carrying on -- the deploy above rendered the merge "
-        "commit, and the deployer's own timer converges the primary checkout"
+        f"tick kick failed (exit {rc}); carrying on -- the deployer's own timer converges "
+        "the primary checkout"
     )
 
 
@@ -80,10 +73,7 @@ def rearm_tick(ln: Landing) -> None:
     after the kick -- a rollout wait plus the 180s restart window -- so it is the one point
     where the joined run has most likely ended. A second join is booked and said, not
     retried: the deployer's own 10-minute timer converges the checkout, and this landing's
-    deploy is already live and gated. No-op unless the first kick joined. Unreachable after a
-    deploy that failed, because `deploy_outcome` ends the landing before the gate: a `joined`
-    row beside a `deploy-failed` verdict was asked once, and convergence is moot when nothing
-    shipped.
+    change is already live and gated. No-op unless the first kick joined.
     """
     if ln.ledger.kick != "joined":
         return
@@ -117,9 +107,6 @@ def run_tick(ln: Landing) -> None:
         # landing gave up watching: `hold_sha` is legitimately empty while the apply is still
         # running, which is indistinguishable from a settled deferral.
         #
-        # ASSIGNED, not raised: this is the second call site (the deploy phase's stale retry
-        # runs the tick again), and a retry that returns 0 watched a tick to completion. Left
-        # sticky, that landing would print the race note over markers that are now settled.
         ln.tick_watch_abandoned = rc == TICK_STILL_RUNNING
         return
     if rc == TICK_LOCK_CONTENTION:

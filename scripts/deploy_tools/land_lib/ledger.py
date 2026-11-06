@@ -2,30 +2,28 @@
 
 This is the only record of where a landing's time goes: how long the merge took to arrive,
 how long master CI took after it, the tick, the deploy. `lock` is seconds the landing spent
-waiting on the tree lock -- part of `tick` and `deploy`, not a fifth phase.
+waiting on the tree lock -- part of `tick`, not a fifth phase.
 
 `lock` has two sources. An attempt that LOST the lock and exited 75 is booked by
 `landing.retry_while_locked`, backoff included. A wait a wrapper rode out INSIDE its own
-flock and then reported on its stderr is booked by `landing.note_in_flock_wait`: deploy.sh
-queuing in `flock -w`, gitops_tick.sh watching a tick another actor started. Both of those
-exit 0, so without the report the seconds would land in `deploy` and `tick` and every row
-would read `lock=0`. The two sources cannot double-count: a wrapper reports only a wait that
+flock and then reported on its stderr is booked by `landing.note_in_flock_wait`:
+gitops_tick.sh watching a tick another actor started. That exits 0, so without the report the
+seconds would land in `tick` and every row would read `lock=0`. The two sources cannot double-count: a wrapper reports only a wait that
 ended in an acquire or a join, never one that ended in contention.
 
-`kick` is what became of the tick a fast-path landing kicks after `deploy.sh --at`: `started`
+`kick` is what became of the tick a fast-path landing kicks in step 5: `started`
 (a tick of its own, which converges the primary while the gate runs), `rearmed` (the first
 request joined a run already in flight and the second, after the gate, started one), `joined`
 (both requests joined; nothing this landing did converges the primary, the timer does),
 `failed` (systemd refused the request), and empty for a landing that kicked none. The joined
 tick fetched before the merge, so it does not carry the landing's commit.
 
-`cause` is a one-token reason beside a `deploy-failed` verdict. Two exit-75 verdicts carry one
-too: `tip-outran-retries` with `deploy-exit-4`, and `deferred` with `promote-timeout`, the wait
-on a promotion that no promotion covered in time. Every other verdict leaves it empty. The
-Landings board's cause panel selects `cause!=""`, so it counts those two beside the
-`deploy-failed` causes (#4998). The verdict alone cannot tell "nothing was deployed" (a tag miss, a failed tick, a
-host-lookup crash) from "changes are live and a task failed after them", so `cause` lets the
-board split them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,
+`cause` is a one-token reason beside a `deploy-failed` verdict. One exit-75 verdict carries one
+too: `deferred` with `promote-timeout`, the wait on a promotion that no promotion covered in
+time. Every other verdict leaves it empty. The Landings board's cause panel selects `cause!=""`,
+so it counts that one beside the `deploy-failed` causes (#4998). The verdict alone cannot tell
+a tag nothing applies from a failed tick or a held promotion, so `cause` lets the board split
+them. Its vocabulary is `outcome.Cause` and it is checked HERE, on assignment,
 because the board groups by the field: a value invented at one of the seven writing sites
 becomes a bar on the dashboard, and nothing downstream would reject it.
 """

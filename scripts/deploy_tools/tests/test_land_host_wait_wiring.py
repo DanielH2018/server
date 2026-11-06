@@ -94,7 +94,6 @@ def test_a_hosts_only_landing_deploys_nothing_and_waits_for_the_host(land_run):
         rc == 0
         and f"VERDICT: settled (PR #999, {MERGE_SHA}, tags: , hosts: daniel-pi)" in out
     )
-    assert "deploy" not in _names(calls)
     # The tick was awaited at step 4, because the PR has no tag.
     assert _names(calls).index("tick") < _names(calls).index("wait_for_hosts")
     [wait] = [c for c in calls if c[0] == "wait_for_hosts"]
@@ -118,14 +117,14 @@ def test_a_host_wait_that_defers_ends_the_landing_deferred(land_run):
     assert rc == 75 and "VERDICT: deferred (PR #999 — not armed)" in out
 
 
-def test_a_tag_and_a_host_deploy_then_wait(land_run):
+def test_a_tag_and_a_host_wait_on_the_promotion_then_the_host(land_run):
     fakes = Fakes(
         gh_views=_files("ansible/roles/k8s/sonarr/defaults/main.yml", PI_PACKAGE),
         host_targets=[PI],
     )
     rc, out, _, calls, _ = land_run([], fakes)
     assert rc == 0
-    assert _names(calls).index("deploy") < _names(calls).index("wait_for_hosts")
+    assert _names(calls).index("land_wait") < _names(calls).index("wait_for_hosts")
     assert _names(calls).index("wait_for_hosts") < _names(calls).index("gate")
     assert "services deployed" not in out
 
@@ -139,7 +138,7 @@ def test_the_host_wait_sits_between_the_deploy_phase_and_the_verdict():
     labels = [label for label, _ in pipeline._STEPS]
     assert (
         labels.index("waiting for hosts to apply")
-        == labels.index("deploying what the tick deferred") + 1
+        == labels.index("waiting on the promotion") + 1
     )
     assert labels[-1] == "health verdict"
 
@@ -149,7 +148,7 @@ def test_the_host_wait_sits_between_the_deploy_phase_and_the_verdict():
 
 def _deployed(landing, tags, targets, **fakes):
     ln, _ = landing(Fakes(**fakes))
-    ln.merge_sha, ln.resolved_tags, ln.host_targets = MERGE_SHA, tags, targets
+    ln.merge_sha, ln.flux_tags, ln.host_targets = MERGE_SHA, tags, targets
     return ln
 
 
