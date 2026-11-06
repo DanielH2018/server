@@ -12,7 +12,7 @@ from pathlib import PurePosixPath
 
 import pytest
 from _row_table import tracked
-from deploy_tools import deploy_tags
+from deploy_tools.deploy_lib import tags
 from lib.repo_paths import REPO
 
 # Spelled apart so this file stays out of the issue's `git grep` over `scripts`.
@@ -128,8 +128,11 @@ def test_no_landing_state_carries_k8s_only_unless_the_plan_names_its_reader():
 
 
 def test_deploy_tags_hosts_refuses_k8s_only_unless_the_plan_names_its_reader():
-    refused = deploy_tags.main(["hosts", "--k8s-only=dozzle", "dozzle"]) != 0
-    assert refused or _plan_names_the_arms_reader()
+    if _plan_names_the_arms_reader():
+        return
+    with pytest.raises(SystemExit) as refused:
+        tags.main(["hosts", "--k8s-only=dozzle", "dozzle"])
+    assert refused.value.code != 0
 
 
 @pytest.mark.parametrize(
