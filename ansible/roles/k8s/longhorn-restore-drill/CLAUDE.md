@@ -86,11 +86,15 @@ real, and tears everything down. It moved here from `setup/k3s` at H2.3d.
 - **The next run sweeps what a SIGKILL leaves.** A TERM pending while bash parses a `$(` runs no
   trap, so SIGKILL skips `cleanup`. Bash offers no setting that closes this race, and an OOM kill
   or a lost node skips `cleanup` the same way. The next run tears down each older leftover before
-  it reads the candidates, and logs a `SWEPT:` line. A delete that fails fails the run, so a stuck
-  leftover blocks every nightly drill until check 7 reports `last-success` as stale. A younger
-  Volume stays, because it can belong to a live hand run. ENFORCED:
+  it reads the candidates, and logs a `SWEPT:` line. A delete that fails or outlasts
+  `longhorn_restore_drill_delete_timeout_seconds` fails the run and keeps the Volume, which is how
+  the next run finds the leftover again. A stuck leftover, such as a pod Terminating on a lost node,
+  therefore blocks every nightly drill and the stamps it refreshes, with a `FAIL:` line each night,
+  until check 7 reports `last-success` as stale. A younger Volume stays, because it can belong to a
+  live hand run. ENFORCED:
   `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_the_next_run_sweeps_a_leftover_past_the_deadline_and_grace`,
-  `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_volume_a_live_run_can_hold_is_not_swept`.
+  `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_volume_a_live_run_can_hold_is_not_swept`,
+  `ansible/tests/longhorn/test_longhorn_restore_drill_state.py::test_a_leftover_that_cannot_be_removed_fails_the_run_before_any_restore`.
 - **Required evidence.** The pod log, with each verdict line prefixed `longhorn-restore-drill:`.
   Read it with `probe.py loki-query '{container="longhorn-restore-drill"}'`. Backup health's check
   7 reads the stamp ConfigMap's `last-success`, and check 8 reads the per-volume keys, so a drill

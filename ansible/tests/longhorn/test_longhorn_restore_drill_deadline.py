@@ -53,7 +53,10 @@ def test_the_deadline_clears_the_restore_timeout_plus_the_probe_bound() -> None:
 
 def test_the_grace_period_covers_one_poll_and_the_four_cleanup_deletes() -> None:
     pod = _cronjob()["spec"]["jobTemplate"]["spec"]["template"]["spec"]
-    assert pod["terminationGracePeriodSeconds"] == 300
+    delete_timeout = load_yaml(DRILL_DEFAULTS)[
+        "longhorn_restore_drill_delete_timeout_seconds"
+    ]
+    assert pod["terminationGracePeriodSeconds"] > 10 + 4 * delete_timeout
 
 
 def test_the_cronjob_is_unsuspended_and_never_overlaps() -> None:

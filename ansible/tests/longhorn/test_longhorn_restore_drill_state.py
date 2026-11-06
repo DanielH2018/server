@@ -152,22 +152,39 @@ def test_a_volume_a_live_run_can_hold_is_not_swept(tmp_path: Path) -> None:
     assert not any(f"restore-drill-{B}" in c for c in run.calls), run.calls
 
 
+@pytest.mark.parametrize("kind", ["pod", "pvc", "pv", "volume"])
 def test_a_leftover_that_cannot_be_removed_fails_the_run_before_any_restore(
-    tmp_path: Path,
+    tmp_path: Path, kind: str
 ) -> None:
+    # fact: ansible/roles/k8s/longhorn-restore-drill/CLAUDE.md#What the drill is and what it writes (the autonomous-role contract)
     run = harness(tmp_path, [A])
     add_drill_volume(run, f"restore-drill-{B}", _OLD - _deadline_and_grace() - 1)
 
     proc = run(
         env={
             **_FROZEN_CLOCK,
-            "K3S_STUB_DELETE_FAILS": f"delete volume restore-drill-{B}",
+            "K3S_STUB_DELETE_FAILS": f"delete {kind} restore-drill-{B}",
         }
     )
 
     assert proc.returncode == 1
     assert f"cannot remove the leftover restore-drill-{B}" in proc.stderr
+    assert "SWEPT" not in proc.stdout
     assert not any("apply -f" in c for c in run.calls), run.calls
+    if kind != "volume":
+        assert not any(f"delete volume restore-drill-{B}" in c for c in run.calls)
+
+
+def test_every_teardown_delete_is_bounded(tmp_path: Path) -> None:
+    run = harness(tmp_path, [A])
+    add_drill_volume(run, f"restore-drill-{B}", _OLD - _deadline_and_grace() - 1)
+
+    run(env=_FROZEN_CLOCK)
+
+    timeout = load_yaml(DRILL_DEFAULTS)["longhorn_restore_drill_delete_timeout_seconds"]
+    deletes = [c for c in run.calls if " delete " in f" {c}"]
+    assert len(deletes) == 8, "the sweep's four deletes and `cleanup`'s four"
+    assert all(f"--timeout={timeout}s" in c for c in deletes), deletes
 
 
 # BusyBox hands the template to mkstemp, which requires it to end in XXXXXX; GNU mktemp does not.
