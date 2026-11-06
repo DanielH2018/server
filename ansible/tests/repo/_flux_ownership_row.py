@@ -187,7 +187,7 @@ K8S_ENTRIES_ARE_FLUX_OWNED = Census(
     ),
     files=_entry_subjects,
     offence=_not_flux_owned,
-    red=(RoleSubject("sonarr", None), RoleSubject("sonarr", "released")),
+    red=(RoleSubject("sonarr", None), RoleSubject("sonarr", "ansible")),
     green=(RoleSubject("sonarr", "flux"),),
     # The count D5 ended with. A selector that stops matching fails here, not on nothing.
     min_matches=66,

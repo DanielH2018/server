@@ -341,11 +341,10 @@ def k8s_entries(host_vars: Path = K8S_HOST_VARS) -> dict[str, dict]:
     return Estate(inventory).k8s_entries()
 
 
-# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. `released`:
-# the first PR of a handback, which the renderer leaves out of the bundle. Every Ansible path
-# skips both; an entry without `owner` is Ansible-owned. The plan is
+# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag, and every
+# Ansible path skips it; an entry without `owner` is Ansible-owned. The plan is
 # docs/target-architecture/deploy/d2-first-leaf.md, *The ownership flag and its three readers*.
-OWNER_VALUES = frozenset({"flux", "released"})
+OWNER_VALUES = frozenset({"flux"})
 
 
 def tag_owners(host_vars: Path = K8S_HOST_VARS) -> dict[str, str]:

@@ -96,13 +96,12 @@ def test_an_entry_without_owner_is_kept_and_one_with_owner_is_dropped():
         {"name": "a"},
         {"name": "f", "owner": "flux"},
         {"name": "b"},
-        {"name": "r", "owner": "released"},
     ]
     assert _names(ansible_owned(containers)) == ["a", "b"]
 
 
-@pytest.mark.parametrize("owner", ["Flux", "ansible", "", None, ["flux"]])
-def test_an_owner_value_outside_the_two_raises(owner):
+@pytest.mark.parametrize("owner", ["released", "Flux", "ansible", "", None, ["flux"]])
+def test_an_owner_value_other_than_flux_raises(owner):
     with pytest.raises(AnsibleFilterError, match="has owner"):
         ansible_owned([{"name": "a"}, {"name": "x", "owner": owner}])
 
@@ -128,13 +127,12 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     ]
     fixtures = [
         {"name": "fixture-flux", "platform": "k8s", "owner": "flux"},
-        {"name": "fixture-released", "platform": "k8s", "owner": "released"},
     ]
-    # Mid-list, so a filter that kept them would put them inside a batch, not after the last.
+    # Mid-list, so a filter that kept it would put it inside a batch, not after the last.
     middle = len(live) // 2
     fact, visited = _run_k8s_play(live[:middle] + fixtures + live[middle:])
 
-    assert {"fixture-flux", "fixture-released"} <= set(_names(fact)), (
+    assert "fixture-flux" in _names(fact), (
         "the containers_list fact lost an owned entry, so a template reading it would stop "
         "seeing a service Flux applies"
     )
@@ -146,9 +144,7 @@ def test_the_batch_loop_skips_owned_entries_that_templates_still_see():
     # since D5.20, n8n since #5546, nut since D5.17, artifacts, autofix-bridge, cloudflare-ddns,
     # docs and game-stats since D5.19, monitor-bridge and prowlarr since #5594, and karakeep,
     # media-volume and pi-peer-backup since #5652, blackbox-exporter since D5's last Wave A PR, zigbee2mqtt since D5.10, and home-assistant since D5.11, and flux since D5 step 29, so the live list holds owned entries too.
-    owned = {"fixture-flux", "fixture-released"} | {
-        c["name"] for c in live if "owner" in c
-    }
+    owned = {"fixture-flux"} | {c["name"] for c in live if "owner" in c}
     assert {
         "artifacts",
         "autofix-bridge",
@@ -230,8 +226,8 @@ def test_ansible_owned_drops_exactly_the_entries_carrying_owner_is_clean(path):
         assert _play_visit_mismatch(containers) == ""
 
 
-def _handed_back(containers: list[dict], name: str = "flux") -> list[dict]:
-    """The live list with `name`'s `owner` removed, the handback D5's *Rollback* names.
+def _without_owner(containers: list[dict], name: str = "flux") -> list[dict]:
+    """The live list with `name`'s `owner` removed.
 
     Since D5 step 29 every k8s entry on daniel-box carries `owner`, so the live list alone
     leaves nothing for a filter that drops one entry too many to drop.
@@ -244,16 +240,16 @@ def _handed_back(containers: list[dict], name: str = "flux") -> list[dict]:
 
 
 def test_a_filter_dropping_an_entry_without_owner_is_flagged():
-    containers = _handed_back(_containers(HOST_VARS / "daniel-box.yml"))
+    containers = _without_owner(_containers(HOST_VARS / "daniel-box.yml"))
     assert _owner_drop_mismatch(containers, lambda cs: ansible_owned(cs)[:-1]) != ""
 
 
 def test_a_batch_loop_dropping_an_entry_without_owner_is_flagged():
     # The loop skips every owned entry, as it must, but it also drops the last Ansible-owned
-    # entry, the handed-back flux. That makes it the play half's red case: the visit check the
+    # entry, flux without its `owner`. That makes it the play half's red case: the visit check the
     # clean half runs on the live list must flag the missing entry.
     loop = "{{ (containers_list | ansible_owned)[:-1] | batch(2) | list }}"
-    containers = _handed_back(_containers(HOST_VARS / "daniel-box.yml"))
+    containers = _without_owner(_containers(HOST_VARS / "daniel-box.yml"))
     assert _play_visit_mismatch(containers, loop) != ""
 
 

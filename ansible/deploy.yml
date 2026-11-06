@@ -104,9 +104,8 @@
 
     # No pre_task applies the `homelab` Namespace or its LimitRange. The shared kind
     # `homelab-namespace` is their only writer (D5 step 30), and a gate here on role ownership
-    # would let one handback re-arm a second writer beside it. A handed-back role still deploys,
-    # because Flux keeps the Namespace. ansible/tests/deploy/test_k8s_play_applies_no_namespace.py
-    # holds that.
+    # would let an entry without `owner` re-arm a second writer beside it.
+    # ansible/tests/deploy/test_k8s_play_applies_no_namespace.py holds that.
     #
     # Before the batches, so a retired service's IngressRoutes and claim are gone before any
     # role applies. Gated because it is a write, and a host with no k8s workloads has no staged
@@ -147,10 +146,9 @@
     # roll at once. The toposorted order from the pre_tasks above still holds within and across
     # batches, which is what traefik's CRDs and authelia's middleware depend on.
     #
-    # `ansible_owned` drops an entry that carries `owner` (Flux applies it, or a handback has
-    # released it) here and not in the containers_list fact above: templates read that fact, and
-    # pihole reads it through hostvars, so an entry Ansible skips still has to be visible to
-    # them. docs/target-architecture/deploy/d2-first-leaf.md has the ownership flag.
+    # `ansible_owned` drops an entry that carries `owner`, because Flux applies it, here and not
+    # in the containers_list fact above: templates read that fact, and pihole reads it through
+    # hostvars, so an entry Ansible skips still has to be visible to them. docs/target-architecture/deploy/d2-first-leaf.md has the ownership flag.
     - name: Deploy k8s workloads in batches
       ansible.builtin.include_tasks: tasks/k8s_batch.yml
       loop: "{{ containers_list | ansible_owned | batch(k8s_rollout_batch_width | int) | list }}"

@@ -46,7 +46,7 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     by a shell variable (`${DRILL}`, in a script's own manifest) reads as no declared tier.
   - owner. An entry that carries `owner` (`lib.k8s_roles.tag_owners`) is not Ansible's to
     deploy, so its Auto-deploy cell names what applies it: Flux through
-    `promote`, or nothing while it is mid-handback. `deploy.sh` refuses its tag with exit 5.
+    `promote`. `deploy.sh` refuses its tag with exit 5.
 
 Run: uv run python scripts/docs/service_catalog.py --out /tmp/service_catalog.html
 Tests: uv run pytest scripts/docs/tests/test_service_catalog.py

@@ -433,7 +433,6 @@ def test_an_ansible_owned_role_gets_no_credit_for_the_flux_opt_in(widget_role) -
     """Nothing renders the gate Job of a role Ansible still owns, so the opt-in gates nothing."""
     role = widget_role(defaults=_GATED_CRONJOB_DEFAULTS)
     assert flux_gated_names(role, owners={}) == set()
-    assert flux_gated_names(role, owners={"widget": "released"}) == set()
 
 
 def test_pi_peer_backup_is_gated_by_its_flux_gate_alone() -> None:

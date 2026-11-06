@@ -81,16 +81,6 @@ def test_a_pr_of_documents_and_tests_alone_waits_on_no_promotion(land_run, path)
     assert "land_wait" not in _names(calls)
 
 
-def test_a_released_tag_waits_but_is_neither_published_nor_gated(land_run):
-    """`owner: released` has no writer: no Ansible path applies it and Flux no longer
-    publishes it, so the wait covers the prune and the gate has nothing of it to grade."""
-    fakes = _fakes(owners={MERGE_SHA: {"bento-pdf": "released"}})
-    rc, _, _, calls, _ = land_run([], fakes)
-    assert rc == 0
-    assert [c[1][:2] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
-    assert "gate" not in _names(calls)
-
-
 def test_a_held_promotion_is_deploy_failed_with_promote_held(land_run):
     held = WaitResult("deploy-failed", "promote-held", "DEPLOY_HOLD holds abc")
     rc, out, _, calls, logline = land_run([], _fakes(land_wait=[held]))

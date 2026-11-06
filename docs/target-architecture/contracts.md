@@ -520,9 +520,9 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   its Kustomization.
 - **Values of `owner`.** `owner` takes `flux`. The operator ruled on 2026-11-06 that a
   flux-owned service stays flux-owned or retires (`docs/flux-deploy-plane.md`, *Retiring a
-  flux-owned service*), so no PR sets another value or removes `owner` from a live entry. The
-  readers still parse `released` until H1.9 deletes `owner`: it leaves the tag out of the bundle
-  while every Ansible path skips it, and the `every-k8s-entry-is-flux-owned` census refuses it.
+  flux-owned service*), so no PR sets another value or removes `owner` from a live entry. Every
+  reader raises on another value, and the `every-k8s-entry-is-flux-owned` census refuses an
+  entry without `owner`.
 - **What skips a flux-owned entry.** In that same PR, the Ansible k8s play, `deploy.sh`, the
   GitOps deployer's k8s arms and `land.sh` all skip it. No commit may leave a role reachable
   by both Ansible and Flux.

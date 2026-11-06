@@ -89,8 +89,6 @@ PLAYBOOK = """\
     [
         ("flux", "terraria", "ghcr.io/danielh2018/terraria"),
         (None, "terraria", "<k8s_registry_pull_host>/terraria"),
-        # Mid-handback, the render no longer moves the ref, so neither does the glance.
-        ("ansible", "terraria", "<k8s_registry_pull_host>/terraria"),
         # Only a built image moves to GHCR; no role builds this one.
         ("flux", "selftest", "<k8s_registry_pull_host>/selftest"),
     ],

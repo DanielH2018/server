@@ -36,8 +36,8 @@ whose role declares snapshot claims (`snapshot_tags`), those whose role sets
 `flux_prepull_timeout` (`prepull_tags`), those whose role ships pre-apply check Jobs as
 `templates/precheck/*.yaml.j2` (`prechecking_tags`), and those whose role ships verify or post-apply
 mutation Jobs as `templates/verify/*.yaml.j2` (`verifying_tags`) or opts a CronJob into a gate
-Job with `flux_cronjob_gates` (`gating_tags`). A tag marked
-`owner: released` is left out of both the bundle and the allowlist (C4).
+Job with `flux_cronjob_gates` (`gating_tags`). A tag without
+`owner: flux` is left out of both the bundle and the allowlist (C4).
 
 The plan is docs/target-architecture/deploy/d2-first-leaf.md, *Publication and verification*,
 and docs/target-architecture/host/h1-cluster-config-to-flux.md, *Plumbing tags are never pruned*,

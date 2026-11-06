@@ -35,15 +35,15 @@ def test_service_owners_reads_quoted_and_commented_values_and_flow_tags():
         '    owner: "flux"  # D2.7\n'
         "  - name: n8n\n"
         "    platform: k8s\n"
-        "    owner: released\n"
+        "    owner: flux\n"
         "    tags: [n8n, 'n8n-images']\n"
         "  - name: sonarr\n"
         "    platform: k8s\n"
     )
     assert service_owners(text) == {
         "bento-pdf": "flux",
-        "n8n": "released",
-        "n8n-images": "released",
+        "n8n": "flux",
+        "n8n-images": "flux",
     }
 
 

@@ -53,7 +53,7 @@ from secret_stubs import homelab_secret_stub
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
 
 # The host gate's named member: bento-pdf's `.local.` route, as (tag, namespace, name). The
-# gate asserts it only while the tag is published, so a handback does not fail it.
+# gate asserts it only while the tag is published, so a bundle without the tag does not fail it.
 NAMED_ROUTE = ("bento-pdf", "homelab", "bento-pdf")
 
 _HOST = re.compile(r"(?<![A-Za-z])Host\(([^)]*)\)")

@@ -41,13 +41,12 @@ def _listing(hostvars_text: str) -> str:
     return _LIST_END.split(hostvars_text[start.end() :], maxsplit=1)[0]
 
 
-# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. `released`:
-# the first PR of a handback, which the renderer leaves out of the bundle. Every Ansible path
-# skips both; an entry without `owner` is Ansible-owned. A copy of
+# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag, and every
+# Ansible path skips it; an entry without `owner` is Ansible-owned. A copy of
 # `scripts/lib/k8s_roles.py:OWNER_VALUES`, which this stdlib-only unit cannot import;
 # `ansible/tests/deploy/test_owner_readers_agree.py` holds the copies equal. The plan is
 # docs/target-architecture/deploy/d2-first-leaf.md, *The ownership flag and its three readers*.
-OWNER_VALUES = frozenset({"flux", "released"})
+OWNER_VALUES = frozenset({"flux"})
 
 # `owner:` and `tags:` at the sub-key indent, each with the rest of its line.
 _ENTRY_OWNER = re.compile(r"^    owner:(.*)$", re.MULTILINE)
