@@ -32,7 +32,8 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `ledger.merged_at`, `opts.pr`, `opts.primary` | -- |
 | `health_verdict.health` | `resolved_tags`, `host_targets`, `flux_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
-Every phase may end the landing by raising an `Outcome`, and the last one always does.
+Every phase may end the landing by raising an `Outcome`, and the last one always does. `run`
+then calls `closing_refs.close_stranded`, which reads `merge_sha` and `opts.pr` and writes nothing.
 """
 
 from collections.abc import Callable
@@ -44,6 +45,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import (
     ci,
     classify,
+    closing_refs,
     deploy,
     health_verdict,
     host_wait,
@@ -158,6 +160,7 @@ def run(ln: Landing) -> Outcome:
         _phases(ln)
     except Outcome as outcome:
         ln.ledger.verdict = outcome.verdict or ""
+        closing_refs.close_stranded(ln)
         return outcome
     # Unreachable: the last step is `health_verdict.health`, which is `NoReturn`. Returned
     # rather than raised, because `run`'s own `except Outcome` above would not catch an
