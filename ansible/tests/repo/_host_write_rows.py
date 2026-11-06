@@ -122,7 +122,7 @@ def flipped_allow_entries(allow: dict[str, str], entries: dict[str, dict]) -> li
 
     Flux runs no task of a flux-owned role, so its host writes would stop silently at the
     flip. The flip PR moves them and drops the entry. An entry left behind would allow a write
-    re-added after a handback, so the entry itself is refused, written or not.
+    re-added to the role's tasks, so the entry itself is refused, written or not.
     """
     return sorted(
         rel

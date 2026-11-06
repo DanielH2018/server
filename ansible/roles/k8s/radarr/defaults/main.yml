@@ -16,8 +16,7 @@ k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO PVC, protected by the radarr-snapshot Job before each revision and an operator revert to it after a failed one; -lsNN versioning still hides a breaking bump. WEIGHED: radarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"  # noqa var-naming[no-role-prefix]
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the radarr-snapshot Kustomization, whose Job snapshots it before radarr applies
-# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
-# The snapshot is the recovery point this role's auto-deploy depends on.
+# (D5.2a). The snapshot is the recovery point this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [radarr-config]  # noqa var-naming[no-role-prefix]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
@@ -25,11 +24,9 @@ k8s_autodeploy_snapshot_pvcs: [radarr-config]  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
 # The rollout budget, declared once. Read as Flux's health-check `timeout` and by
-# `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift. After a
-# handback, k8s/manifests' rollout wait reads it too. A first boot installing DOCKER_MODS
-# takes up to 10 minutes. That is the whole 600s default (Flux's, and
-# manifests_rollout_timeout_default after a handback), so the default leaves no margin over the
-# startupProbe that allows it.
+# `progressDeadlineSeconds` in templates/deployment.yaml.j2, so the two cannot drift. A first
+# boot installing DOCKER_MODS takes up to 10 minutes. That is the whole of Flux's 600s default,
+# so the default leaves no margin over the startupProbe that allows it.
 # The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
 # fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
 # is unreachable unless the deadline is rendered from this variable too.
@@ -74,7 +71,7 @@ radarr_k8s_log_rotate: "10"
 radarr_k8s_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0@sha256:af535d94061cf97a52e1661945ffba78c03f9443eae7c0da1a80a5a4be56b520
 
 # The claim the renderer emits for this role. The radarr Kustomization applies it after the
-# radarr-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply snapshot.
+# radarr-snapshot Job.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ radarr_k8s_claim }}"
     storage_class: "{{ radarr_k8s_storage_class }}"

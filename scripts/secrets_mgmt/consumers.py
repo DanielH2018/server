@@ -218,17 +218,16 @@ FLUX_PATH = (
 )
 
 
-def left_out_line(tag: str, owner: str) -> str:
+def left_out_line(tag: str) -> str:
     """The line `rotate --commit` prints for a consumer it left out of its redeploy.
 
     `rotate --commit` has already run `write` in process (`sync_cluster_files`), so for an
     `owner: flux` consumer the rest of the Flux path is the commit landing.
     """
-    if owner == "flux":
-        reach = "; Flux applies it once the commit carrying the cluster files lands"
-    else:
-        reach = ", which no Ansible path may apply"
-    return "  not redeployed: %s carries owner: %s%s" % (tag, owner, reach)
+    return (
+        "  not redeployed: %s carries owner: flux; Flux applies it once the commit "
+        "carrying the cluster files lands" % tag
+    )
 
 
 def consumer_commands(name: str, repo: str = REPO) -> list[str]:
@@ -241,8 +240,7 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     line and named on a line of its own. `deploy.sh` exits 5 on such a tag, and exit 5 refuses
     the whole run, so one owned tag on the line would deploy none of the other consumers. The
     owners are read from `repo`'s own host_vars, the same tree the census read. An
-    `owner: flux` tag's line is the Flux path, `FLUX_PATH`; any other owner's line says only
-    that no Ansible path may apply it.
+    `owner: flux` tag's line is the Flux path, `FLUX_PATH`.
     """
     consumers = tree_consumers(name, repo=repo)
     deploy_roles = sorted(r for r, plane in consumers.items() if plane == "deploy")
@@ -277,12 +275,5 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
             "it decrypts) rewrites the SOPS file that the package `hosts/%s/package.yml` "
             "carries" % (host, host)
         )
-    for tag in owned_tags:
-        if owners[tag] == "flux":
-            commands.append(FLUX_PATH % tag)
-        else:
-            commands.append(
-                "%s carries owner: %s, which no Ansible path may apply"
-                % (tag, owners[tag])
-            )
+    commands.extend(FLUX_PATH % tag for tag in owned_tags)
     return commands

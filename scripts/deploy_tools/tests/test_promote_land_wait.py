@@ -48,7 +48,7 @@ def test_a_hold_set_before_the_merge_ends_the_wait_at_the_first_poll():
 
 
 def test_a_hold_set_during_the_wait_ends_it_as_deploy_failed():
-    sim = Sim(polls=[at(P)], holds=["none", "none", "held by H1 for a handback"])
+    sim = Sim(polls=[at(P)], holds=["none", "none", "held by the operator"])
     result = sim.wait()
     assert result.cause == "promote-held" and sim.sleeps == 2
 

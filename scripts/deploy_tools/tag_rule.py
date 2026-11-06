@@ -1,8 +1,8 @@
 """The tag rule: a deploy tag leaves the bundle only with its role, and `flux` never leaves.
 
 A Kustomization that leaves the bundle takes its objects with it once it follows the default
-deletion policy, so a tag dropped by a render bug, a handback or a rename would delete a
-running service. The rule compares the tags of a reference bundle with those of the head
+deletion policy, so a tag dropped by a render bug or a rename would delete a running
+service. The rule compares the tags of a reference bundle with those of the head
 render and refuses:
 
 - a tag in the reference that the head lacks while its role directory stays;
@@ -18,8 +18,8 @@ on promotion, so a refusal persists until the tag returns or its role directory 
 later unrelated commit still fails. A failed pull fails the publish. A `prod` the registry does
 not hold is the first run, as for `decide`, and the reference is then empty.
 `render_diff_gates.py`'s arm 6 is the early warning on a pull request, with the base render as
-its reference. The plan is docs/target-architecture/deploy/d6-delete-old-path.md, *The deletion
-policy, and the end of the handback*.
+its reference. The plan is the deletion policy section of
+docs/target-architecture/deploy/d6-delete-old-path.md.
 """
 
 import sys

@@ -196,7 +196,7 @@ def test_a_dropped_prune_disabled_claim_is_clean():
     assert removal(BENTO | {claim}, BENTO, unpruned={claim}) == []
 
 
-def test_a_handback_that_drops_the_whole_render_is_flagged():
+def test_a_tag_that_drops_its_whole_render_is_flagged():
     """The default deletion policy deletes what leaves with the tag."""
     assert len(removal(BENTO, set(), head_flux=())) == len(BENTO)
 

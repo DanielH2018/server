@@ -14,8 +14,7 @@ k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "state coupled outside the volume — the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired devices; the snapshot Job and the operator revert work fine and are not the blocker"  # noqa var-naming[no-role-prefix]
 # The claim snapshotted before each revision applies. Under Flux the renderer turns this
 # list into the zigbee2mqtt-snapshot Kustomization, whose Job snapshots it before zigbee2mqtt applies
-# (D5.2a). After a handback, k8s/manifests takes the same snapshot through k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy.
+# (D5.2a). Declared regardless of k8s_autodeploy.
 k8s_autodeploy_snapshot_pvcs: [zigbee2mqtt-data]  # noqa var-naming[no-role-prefix]
 
 # The config-install initContainer needs alpine (`install`). Same init image peanut and
@@ -39,8 +38,7 @@ zigbee2mqtt_k8s_storage_class: longhorn
 zigbee2mqtt_k8s_size: 2Gi
 
 # The claim the renderer emits for this role. The zigbee2mqtt Kustomization applies it after the
-# zigbee2mqtt-snapshot Job; after a handback, k8s/manifests applies it ahead of the pre-apply
-# snapshot.
+# zigbee2mqtt-snapshot Job.
 k8s_claims:  # noqa var-naming[no-role-prefix]
   - name: "{{ zigbee2mqtt_k8s_claim }}"
     storage_class: "{{ zigbee2mqtt_k8s_storage_class }}"
