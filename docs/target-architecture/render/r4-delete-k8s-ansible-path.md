@@ -508,7 +508,8 @@ it. It renders the PR's merge base from a worktree of that commit, and the PR he
 because a render with no `--role` writes no `flux/`. The merge base, not the base branch's
 tip, is the comparison point, so another session's merge never shows up as this PR's change.
 `scripts/validate/render_diff_job.py` holds both renders' command and the verdict, so a
-change to either needs no workflow push.
+change to either needs no workflow push. The workflow runs the merge base's copy of that
+module, and the module is a hazard path.
 
 **Both renders take one pinned commit value.** D5's soak Job embeds the commit SHA it
 verifies, and its name ends in a digest of that spec (D5, *The soak as a Job* and *Rules for

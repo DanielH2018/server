@@ -942,7 +942,11 @@ because most PRs change render output on purpose.
 
 **Both trees must clear a floor.** `flux/pihole.yaml`, `flux/traefik.yaml` and
 `cluster/pihole-deferred/` must exist, and `flux/` must hold at least `FLUX_FLOOR` files. A PR
-that retires a tag lowers `FLUX_FLOOR` in its own diff.
+that retires a tag lowers `FLUX_FLOOR` in its own diff and lists the tag's `flux/<tag>.yaml`.
+Each listed retired tag lowers the head's floor by one.
+
+**The merge base's copy of the job runs.** A change to `render_diff_job.py` takes effect once it
+has merged, and its PR carries the line, because the module is a hazard path.
 
 To reproduce a verdict by hand, follow *Exit 3* under *Verification* in
 `docs/target-architecture/render/r4-delete-k8s-ansible-path.md`.

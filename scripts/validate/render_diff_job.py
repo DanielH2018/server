@@ -37,7 +37,7 @@ from lib.cli_help import ArgumentParser
 from lib.git import git_stdout
 
 # The `flux/` files of the render at #7365's base: 66 tags, three shared kinds and the index.
-# A PR that retires a tag lowers this in its own diff.
+# A PR that retires a tag lowers this in its own diff and lists the tag's flux file.
 FLUX_FLOOR = 70
 FLOOR_PATHS = ("flux/pihole.yaml", "flux/traefik.yaml", "cluster/pihole-deferred")
 # Moves with any file it digests, so a list need not name it. `none` still refuses it.
@@ -50,6 +50,7 @@ _LINE = re.compile(r"^Render-diff:[ \t]*(.*?)[ \t]*$", re.MULTILINE)
 _FENCE = re.compile(r"^```.*?^```[ \t]*$", re.MULTILINE | re.DOTALL)
 _COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 _HAZARD_PREFIXES = (
+    "scripts/validate/render_diff_job.py",
     "scripts/renderer/",
     "scripts/lib/k8s_roles.py",
     "scripts/lib/ansible_jinja_env.py",
@@ -125,8 +126,9 @@ def floor_problems(root: Path, side: str, floor: int = FLUX_FLOOR) -> list[str]:
     count = sum(1 for path in (root / "flux").glob("*") if path.is_file())
     if count < floor:
         problems.append(
-            f"{side}: flux/ holds {count} files, under FLUX_FLOOR's {floor}. A PR that "
-            "retires a tag lowers FLUX_FLOOR in scripts/validate/render_diff_job.py"
+            f"{side}: flux/ holds {count} files, under the floor of {floor}. A PR that "
+            "retires a tag lowers FLUX_FLOOR in scripts/validate/render_diff_job.py and "
+            "lists the tag's flux file"
         )
     return problems
 
@@ -176,17 +178,21 @@ def judge(
 ) -> Verdict:
     """Judge two rendered trees against the PR's changed paths and body."""
     moved = differing(base, head)
-    problems = floor_problems(base, "base", floor) + floor_problems(head, "head", floor)
+    problems = floor_problems(base, "base", floor)
     try:
         paths = declared(body)
     except ValueError as exc:
+        problems += floor_problems(head, "head", floor)
         return Verdict([*problems, f"{exc}. {FORMS}"], moved)
+    retired = _flux_tags(base) - _flux_tags(head)
+    listed = {name for name in retired if f"flux/{name}" in (paths or ())}
+    problems += floor_problems(head, "head", floor - len(listed))
     if paths is not None:
         return Verdict(problems + _line_problems(paths, base, head, moved), moved)
     hazards = hazard_paths(changes)
     if hazards:
         problems.append(
-            f"this PR touches {hazards[0]} and {len(hazards) - 1} more hazard paths, and its "
+            f"this PR touches {len(hazards)} hazard paths, the first {hazards[0]}, and its "
             f"body has no Render-diff: line. {FORMS}"
         )
     return Verdict(problems, moved)

@@ -1,6 +1,6 @@
-"""The render-diff job's verdict on fixture trees, and its reading of the PR body.
+"""The render-diff job's verdict on fixture trees, and its command line in a scratch repo.
 
-The workflow that calls it runs only on GitHub. Each case here is a verdict the workflow's
+The workflow that calls it runs only on GitHub. Each verdict case here is one the workflow's
 red-proofs show on a real render.
 
 Run: uv run pytest scripts/validate/tests/test_validate_render_diff_job.py
@@ -11,6 +11,10 @@ from pathlib import Path
 
 import pytest
 
+from lib.git_testing import commit, init_repo, scrub_process_git_env
+from lib.proc_testing import fake_bin, path_with
+from renderer.renderer_lib.bundle import SHARED_KINDS
+from renderer.renderer_lib.cluster import flux_owned_tags
 from validate import render_diff_job as job
 
 PIHOLE = "flux/pihole.yaml"
@@ -100,6 +104,7 @@ def test_a_tag_that_appears_must_be_listed(base, tmp_path):
     "change",
     [
         ("M", "scripts/renderer/homelab_render.py"),
+        ("M", "scripts/validate/render_diff_job.py"),
         ("M", "scripts/lib/k8s_roles.py"),
         ("M", "scripts/lib/ansible_jinja_env.py"),
         ("M", "ansible/filter_plugins/toposort.py"),
@@ -138,6 +143,20 @@ def test_two_empty_renders_fail_the_floor(tmp_path):
     for side in ("base", "head"):
         assert f"{side}: flux/pihole.yaml is missing from the render" in problems
         assert any(p.startswith(f"{side}: flux/ holds 0 files") for p in problems)
+
+
+def test_a_listed_retired_tag_lowers_the_heads_floor_alone(tmp_path):
+    old = tree(tmp_path / "base", {"flux/gone.yaml": "gone\n"})
+    new = head(tmp_path)
+    listed = "Render-diff: flux/gone.yaml"
+    assert job.judge(old, new, DOCS_CHANGE, listed, floor=3).problems == []
+    assert job.judge(old, new, DOCS_CHANGE, "no line", floor=3).problems != []
+    assert job.judge(new, new, DOCS_CHANGE, "no line", floor=3).problems != []
+
+
+def test_the_floor_never_exceeds_what_the_tree_publishes():
+    published = len(flux_owned_tags()) + len(SHARED_KINDS) + 1
+    assert job.FLUX_FLOOR <= published
 
 
 def test_a_removed_deferred_directory_fails_the_floor(base, tmp_path):
@@ -189,3 +208,91 @@ def test_both_sides_render_the_publish_jobs_form_with_the_pinned_commit():
 def test_no_published_tag_renders_the_shared_kinds_alone():
     command = job.render_command([], Path("/out"), "a" * 40)
     assert "--shared-only" in command and "--role" not in command
+
+
+MOVED_DEFAULT = "ansible/roles/k8s/demo/defaults/main.yml"
+
+
+@pytest.fixture
+def renamed_out_of_a_role(tmp_path, monkeypatch) -> tuple[str, str]:
+    """A scratch repo as the cwd, whose second commit renames a file out of a k8s role."""
+    scrub_process_git_env(monkeypatch)
+    repo = init_repo(tmp_path / "repo")
+    first = commit(repo, "add", **{MOVED_DEFAULT: "key: value\n"})
+    second = commit(
+        repo, "rename", **{MOVED_DEFAULT: None, "docs/moved.yml": "key: value\n"}
+    )
+    monkeypatch.chdir(repo)
+    return first, second
+
+
+def full_tree(root: Path) -> Path:
+    """A rendered tree that clears the real FLUX_FLOOR."""
+    tree(root)
+    for number in range(job.FLUX_FLOOR):
+        (root / "flux" / f"tag-{number}.yaml").write_text("tag\n")
+    return root
+
+
+def test_a_rename_splits_into_its_delete_and_its_add(renamed_out_of_a_role):
+    assert sorted(job.changed_paths(*renamed_out_of_a_role)) == [
+        ("A", "docs/moved.yml"),
+        ("D", MOVED_DEFAULT),
+    ]
+
+
+def compare_args(tmp_path: Path, shas: tuple[str, str]) -> list[str]:
+    trees = [str(full_tree(tmp_path / side)) for side in ("out-base", "out-head")]
+    return ["compare", *trees, "--merge-base", shas[0], "--head", shas[1]]
+
+
+def test_main_refuses_a_rename_out_of_a_role_with_no_line(
+    tmp_path, monkeypatch, capsys, renamed_out_of_a_role
+):
+    monkeypatch.setenv("PR_BODY", "no line here")
+    assert job.main(compare_args(tmp_path, renamed_out_of_a_role)) == 1
+    assert f"the first {MOVED_DEFAULT}" in capsys.readouterr().out
+
+
+def test_main_passes_the_same_rename_once_the_body_carries_the_line(
+    tmp_path, monkeypatch, renamed_out_of_a_role
+):
+    monkeypatch.setenv("PR_BODY", "Render-diff: none")
+    assert job.main(compare_args(tmp_path, renamed_out_of_a_role)) == 0
+
+
+FAKE_UV = """\
+#!/bin/sh
+echo "$@" >> "$FAKE_UV_LOG"
+case "$*" in
+  *published-tags*) echo "pihole traefik"; exit "${FAKE_LISTING_EXIT:-0}" ;;
+  *homelab_render*) exit "${FAKE_RENDER_EXIT:-0}" ;;
+esac
+"""
+
+
+@pytest.fixture
+def fake_uv(tmp_path, monkeypatch) -> Path:
+    """`uv` on PATH as a script that logs its argv, and exits as the test's variables say."""
+    bin_dir = fake_bin(tmp_path / "bin", uv=FAKE_UV)
+    log = tmp_path / "uv.log"
+    monkeypatch.setenv("PATH", path_with(bin_dir))
+    monkeypatch.setenv("FAKE_UV_LOG", str(log))
+    return log
+
+
+def render_args(tmp_path: Path) -> list[str]:
+    return ["render", "--tree", str(tmp_path), "--out", "out", "--revision", "a" * 40]
+
+
+def test_main_renders_the_listed_tags_with_the_pinned_commit(tmp_path, fake_uv):
+    assert job.main(render_args(tmp_path)) == 0
+    rendered = fake_uv.read_text().splitlines()[-1]
+    assert f"--revision {'a' * 40}" in rendered
+    assert rendered.endswith("--role pihole --role traefik")
+
+
+@pytest.mark.parametrize("variable", ["FAKE_LISTING_EXIT", "FAKE_RENDER_EXIT"])
+def test_main_fails_when_a_render_step_fails(tmp_path, monkeypatch, fake_uv, variable):
+    monkeypatch.setenv(variable, "3")
+    assert job.main(render_args(tmp_path)) == 1

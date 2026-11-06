@@ -103,7 +103,7 @@ def grammar_problems(
         if tag == "flux" and entry.get("owner") == "flux":
             continue
         tasks_dir = roles / tag / "tasks"
-        for path in sorted(tasks_dir.rglob("*.yml")):
+        for path in sorted(p for p in tasks_dir.rglob("*") if p.is_file()):
             for task in _leaf_tasks(yaml_fast.safe_load(path.read_text())):
                 if not _permitted(task, tasks_dir, path, facts):
                     problems.append(f"{tag}/{path.name}: {task.get('name')}")
@@ -188,6 +188,16 @@ def test_an_imported_sibling_holding_a_kubectl_command_task_fails(tmp_path):
     _write(tmp_path, "demo/tasks/extra.yml", KUBECTL)
     assert grammar_problems({"demo": OWNED}, tmp_path) == [
         "demo/extra.yml: Patch the workload"
+    ]
+
+
+def test_an_imported_sibling_of_any_suffix_is_read(tmp_path):
+    _write(
+        tmp_path, "demo/tasks/main.yml", "- ansible.builtin.import_tasks: extra.yaml\n"
+    )
+    _write(tmp_path, "demo/tasks/extra.yaml", KUBECTL)
+    assert grammar_problems({"demo": OWNED}, tmp_path) == [
+        "demo/extra.yaml: Patch the workload"
     ]
 
 
