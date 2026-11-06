@@ -5,17 +5,17 @@ PR #7295 merged with GitHub listing #7291 as a closing reference, and #7291's ti
 work master already held (#7397). The cause is unknown, so the landing checks the result rather
 than the trigger.
 
-`close_stranded` runs once, when the landing ends, because a docs-only PR ends inside step 1 and
-a failed landing can end at any step after the merge. It is best-effort. A failed read or close
-prints the remedy and changes neither the verdict nor the exit code, which report the deploy.
+`close_stranded` runs in step 1, straight after the merge commit resolves. A later step can crash,
+or wait for hours while `findings.py next` still offers the issue, and a docs-only PR ends inside
+step 1. It is best-effort: a failed read or close changes neither the verdict nor the exit code,
+which report the deploy. The failure prints as a `== ` line, because `handoff.py` relays only
+those to an agent landing through the lander unit.
 
 GitHub closes the issues a moment after the merge, so an open reference is read again after
 `GRACE_S` before the landing closes it. An issue reopened after the merge stays open, because
 someone chose that and a landing can be re-run days later. An issue in another repo also stays
 open, because `gh issue close <n>` would close this repo's issue of the same number.
 """
-
-import subprocess
 
 import sys as _sys
 from pathlib import Path as _Path
@@ -103,9 +103,7 @@ def _stranded(refs: JsonObject) -> list[JsonObject]:
 
 
 def close_stranded(ln: Landing) -> None:
-    """Close each issue GitHub left open after this PR merged; a no-op before the merge."""
-    if not ln.merge_sha:
-        return
+    """Close each issue GitHub left open after this merged PR; the caller holds a merged PR."""
     pr = ln.opts.pr
     try:
         if not _stranded(_read_refs(ln)):
@@ -113,32 +111,40 @@ def close_stranded(ln: Landing) -> None:
         ln.tools.sleep(GRACE_S)
         stranded = _stranded(_read_refs(ln))
     except (gh_read.GhReadFailed, ValueError) as exc:
-        say(
-            f"could not read PR #{pr}'s closing references ({exc}); "
-            "check that each issue it closes is closed"
+        print(
+            f"== could not read PR #{pr}'s closing references ({exc}); "
+            "check that each issue it closes is closed",
+            flush=True,
         )
         return
     for issue in stranded:
         number = issue.get("number")
-        comment = (
-            f"Fixed by PR #{pr}. GitHub left this issue open after the merge, "
-            "so the landing closed it."
-        )
         try:
-            ln.tools.gh(
-                "issue",
-                "close",
-                str(number),
-                "--reason",
-                "completed",
-                "--comment",
-                comment,
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            say(
-                f"could not close #{number}, which GitHub left open after PR #{pr} merged "
-                f"({exc}); run `uv run python scripts/dev/findings.py close {number} "
-                f"--fixed --pr {pr}`"
+            _close(ln, str(number))
+        except gh_read.GhReadFailed as exc:
+            print(
+                f"== could not close #{number}, which GitHub left open after PR #{pr} "
+                f"merged ({exc}); run `uv run python scripts/dev/findings.py close {number} "
+                f"--fixed --pr {pr}`",
+                flush=True,
             )
         else:
             say(f"closed #{number}, which GitHub left open after PR #{pr} merged")
+
+
+def _close(ln: Landing, number: str) -> None:
+    """Close issue `number`, retried through a transient failure.
+
+    A retry is safe: `gh issue close` on a closed issue exits 0 and posts no comment.
+    """
+    comment = (
+        f"Fixed by PR #{ln.opts.pr}. GitHub left this issue open after the merge, "
+        "so the landing closed it."
+    )
+    gh_read.read(
+        lambda: ln.tools.gh(
+            "issue", "close", number, "--reason", "completed", "--comment", comment
+        ),
+        ln.tools.sleep,
+        f"gh issue close {number}",
+    )

@@ -156,6 +156,11 @@ def _closes(calls) -> list[tuple]:
     return [c[1] for c in calls if c[0] == "gh" and c[1][:2] == ("issue", "close")]
 
 
+def _relayed(out: str) -> str:
+    """The lines of `out` that `handoff._relay` passes to an agent landing through the unit."""
+    return "\n".join(ln for ln in out.splitlines() if ln.startswith("== "))
+
+
 def test_an_issue_github_left_open_is_closed_without_changing_the_verdict(land_run):
     rc, out, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[_refs("OPEN")]))
     assert rc == 0 and "VERDICT: settled" in out
@@ -197,15 +202,50 @@ def test_a_failed_close_names_the_remedy_and_keeps_the_verdict(land_run):
     fakes = _sonarr_settled(closing_refs=[_refs("OPEN")], gh_merge_rc=[1])
     rc, out, _, _, _ = land_run([], fakes)
     assert rc == 0 and "VERDICT: settled" in out
-    assert "findings.py close 7 --fixed --pr 999" in out
+    assert "findings.py close 7 --fixed --pr 999" in _relayed(out)
 
 
 def test_a_failed_read_says_so_and_keeps_the_verdict(land_run):
     failure = subprocess.CalledProcessError(1, "gh", stderr="HTTP 403")
     rc, out, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[failure]))
     assert rc == 0 and "VERDICT: settled" in out
-    assert "could not read PR #999's closing references" in out
+    assert "could not read PR #999's closing references" in _relayed(out)
     assert _closes(calls) == []
+
+
+def test_a_close_that_times_out_is_retried(landing):
+    from deploy_tools.land_lib import closing_refs
+
+    ln, _ = landing(Fakes(closing_refs=[_refs("OPEN")]))
+    attempts = []
+
+    def gh(*args):
+        attempts.append(args)
+        if len(attempts) == 1:
+            raise subprocess.TimeoutExpired("gh", 1)
+
+    ln.tools.gh = gh
+    closing_refs.close_stranded(ln)
+    assert len(attempts) == 2
+
+
+def test_the_close_comes_before_any_wait_a_later_step_can_die_in(land_run):
+    _, _, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[_refs("OPEN")]))
+    names = [
+        "close" if c[0] == "gh" and c[1][:2] == ("issue", "close") else c[0]
+        for c in calls
+    ]
+    assert names.index("close") < names.index("await_ci")
+
+
+def test_a_docs_only_landing_still_closes_a_stranded_issue(land_run):
+    fakes = Fakes(
+        closing_refs=[_refs("OPEN")],
+        gh_views={"files,changedFiles": {"files": [], "changedFiles": 0}},
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert [c[:3] for c in _closes(calls)] == [("issue", "close", "7")]
 
 
 def test_a_landing_that_ends_before_the_merge_commit_closes_nothing(land_run):

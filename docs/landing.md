@@ -183,11 +183,11 @@ it.
 
 **The landing closes a closing reference GitHub left open.** PR #7295 merged with #7291 in
 `closingIssuesReferences`, GitHub never closed #7291, and the backlog dispatched it twice more
-(issue #7397). When a landing ends on a merged PR, `land_lib/closing_refs.py` reads each
-reference's state, waits 15 seconds for GitHub to catch up, and closes any issue still open. It
-leaves an issue reopened after the merge and an issue in another repo open. A failed read or
-close prints the remedy and changes neither the verdict nor the exit code. A PR merged without
-`land.sh` gets no such check.
+(issue #7397). In step 1, `land_lib/closing_refs.py` reads each reference's state, waits 15
+seconds for GitHub to catch up, and closes any issue still open. It leaves an issue reopened
+after the merge and an issue in another repo open. A failed read or close prints a `== ` line,
+which reaches an agent landing through the lander unit, and changes neither the verdict nor the
+exit code. A PR merged without `land.sh` gets no such check.
 
 **Open the PR with `--fill` and a body file — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is
