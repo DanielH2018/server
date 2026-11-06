@@ -2301,9 +2301,11 @@ The steps merged in this order.
     - `ansible/tests/setup/test_setup_cross_role_files.py` loses its k8s table.
     - **Test.** In `scripts/deploy_tools/tests/`, a PR whose only path is under
       `ansible/roles/k8s/bento-pdf/templates/` reaches `land-wait` with `bento-pdf` after
-      `ChangeSet.k8s` is gone. Its red half is this PR without the `cs.flux` route, where
-      the path maps to no tag. D6.1's and D6.3's landing tests stay green, and the PR body
-      quotes all of them, with `land.py --help` and `deploy_tags.py changed origin/master`.
+      `ChangeSet.k8s` is gone. `land_tags.derive` reads no `ChangeSet`, so the `cs.flux` route
+      cannot turn this test red, and the routing test covers the route. Its red half is a
+      `declared` set without `bento-pdf`, where the landing names no tag. D6.1's and D6.3's
+      landing tests stay green, and the PR body quotes all of them, with `land.py --help` and
+      `deploy_tags.py changed origin/master`.
     - The changes to the deployer's files apply through the tick, as D6.1's did.
 11. **D6.6 — The k8s ledger readers** (about 350 lines removed). It merges after D6.0
     found the ledger empty, and after D6.1 stopped the writers.

@@ -126,7 +126,7 @@ def test_a_secrets_change_pages_once_naming_the_sha(
 def test_no_secrets_change_pages_nothing(gitops_deploy, state_dir, settings, state):
     tools, seen = _posts(state_dir)
     deploy_alerts.alert_secrets_deferred(
-        tools, state, settings, ORIGIN, ChangeSet(k8s={"sonarr"})
+        tools, state, settings, ORIGIN, ChangeSet(flux={"sonarr"})
     )
     assert seen == []
     assert _alerted(state_dir, "secrets") is None

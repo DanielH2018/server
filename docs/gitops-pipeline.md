@@ -201,15 +201,12 @@ with the reason.
   remediation names the commands.
 
 A k8s role can read a `common` file too. `configarr` and `janitorr` stage `host_lib.py` into
-their health CronJobs' ConfigMaps. `K8S_ROLES_IMPORTING_SETUP_FILES` puts each in `ChangeSet.k8s` when a file
-it stages changes. The deployer applies no k8s role since D6.12, so the role's moved render reaches
-the cluster through `promote`. The same test holds that table to the k8s roles' tasks.
+their health CronJobs' ConfigMaps. The deployer applies no k8s role since D6.12, so the role's
+moved render reaches the cluster through `promote`, and the deployer keeps no table of them.
 
 A k8s role's image can embed a file from outside every role, as homelab-mcp's embeds
 `scripts/diagnostics/probe_lib/obs_api.py`. An edit to it moves the image's content tag, so
-`K8S_BUILD_CONTEXT_FILES` puts the embedding role in `ChangeSet.k8s` the same way (#4840).
-The same test holds it to each role's `image_builder_context_files` and
-`image_builder_context` keys.
+`promote` rebuilds the image the same way.
 
 The third class is the bring-up playbooks, which run by hand by construction. The deployer's own
 role, `roles/setup/gitops_deploy/`, is not one of them: it applies itself as `initial_setup.yml
@@ -270,23 +267,20 @@ record follows.
 
 ### A tag Flux applies is merged and skipped
 
+`promote` and Flux apply every k8s role, so the tick routes each changed path under
+`ansible/roles/k8s/<role>/` to `cs.flux`, with no read of the role's `owner`. The tick never
+applies, defers, alerts on or owes such a role. Without that branch of
+`deploy_changes.services_from_changed_paths`, a k8s path would map to no set at all.
+
+- **The journal names the role.** `plan_tick` logs `flux: <role>: fast-forwarding <paths>`.
+
 A `containers_list` entry that sets `owner` is not Ansible-owned: with `owner: flux`, Flux
 applies the tag through `promote`. The tick skips such a tag, so the deployer never
 applies, defers, alerts on or owes it. D2's plan has the design:
 [The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
-
-- **Ownership is read at the commit being applied.** `deploy_io.host_vars_owners` reads this
-  host's host_vars at origin with `git show`, and `deploy_inventory.service_owners` parses it.
-  The range that sets `owner` therefore already skips its own tag. An unreadable file at
-  origin falls back to the checkout, which carries every `owner` an earlier range merged.
-- **A changed path of such a role goes to `cs.flux`**, beside `cs.k8s`.
-  `deploy_inventory.route_not_ansible_owned` moves the tag out of `cs.k8s`.
-- **The journal names the tag.** `plan_tick` logs `flux: <tag>: owned by <owner>` with the
-  paths the range changed.
-
-`ansible/tests/deploy/test_owner_readers_agree.py` holds `service_owners` equal to
-`scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each reader raises on an
-`owner` value other than `flux`.
+`ansible/tests/deploy/test_owner_readers_agree.py` holds the two readers that remain equal,
+`scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each raises on an `owner`
+value other than `flux`.
 
 ### Both apply arms are forward-only
 
@@ -830,9 +824,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   and a secret's k8s reader included. `k8s_autodeploy` says only whether Renovate may automerge
   an image bump. `deploy_phases.reconcile_denylist` re-renders the denylist line of `config.env`
   when it disagrees with the declarations at `HEAD`, because the Renovate lander reads that line.
-  A changed path under `roles/k8s/**` lands in `cs.k8s`, and
-  `deploy_inventory.route_not_ansible_owned` moves an owned tag into `cs.flux`. The tick
-  fast-forwards past both. A role `defaults/` edit that moves no content line is not a change at
+  A changed path under `roles/k8s/**` lands in `cs.flux`, and the tick fast-forwards past it.
+  A role `defaults/` edit that moves no content line is not a change at
   all (`deploy_changes.comment_only_k8s_defaults`, #4460): the tick drops the path before it
   classifies. `templates/` and `tasks/` are outside that read.
 
@@ -841,7 +834,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   arm's rules and accepted trade-offs.
 
 - **A k8s role's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`, `meta/`)**
-  join `cs.k8s` with the rest of the role, and the tick fast-forwards past them. `*.md`
+  join `cs.flux` with the rest of the role, and the tick fast-forwards past them. `*.md`
   (CLAUDE.md/README) is a silent ff-merge too. The separate `tasks` channel served the Pi's
   Compose roles under `roles/containers/`, and went with them (#6980). A state directory that
   still holds a `tasks <sha>` line in its `alerted` marker keeps it inert: `parse_alerted` reads

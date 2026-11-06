@@ -1,33 +1,25 @@
-"""`deploy_cross_role.k8s_lookup_readers`: the k8s roles that `lookup()` another role's file.
+"""`deploy_cross_role.k8s_lookup_map`: the k8s roles that `lookup()` another role's file.
 
-authelia and traefik embed crowdsec's allowlists, so a change to one moves their render too.
-The secret census reads `k8s_lookup_map`.
+authelia and traefik embed crowdsec's allowlists. The secret census reads this map.
 
 Run: uv run pytest ansible/tests/deploy/test_k8s_lookup_readers.py
 """
 
 from deploy_tools.land_lib import land_tags
-from deployer_lib.deploy_cross_role import k8s_lookup_map, k8s_lookup_readers
+from deployer_lib.deploy_cross_role import k8s_lookup_map
 from lib.repo_paths import REPO
 
 CHECK_TABLE = "ansible/roles/k8s/monitor-bridge/files/check_table.py"
 
 
-def test_the_check_table_reaches_no_other_role():
+def test_the_map_names_the_live_readers_and_no_unread_file():
+    lookups = k8s_lookup_map(REPO)
+    assert lookups["roles/k8s/crowdsec/files/crowdsec-whitelist.yaml"] == {
+        "authelia",
+        "traefik",
+    }
     # uptime-kuma looked the table up until M6 batch A6's Cutover-2 deleted its bridge tiles.
-    assert k8s_lookup_readers([CHECK_TABLE], REPO) == set()
-
-
-def test_crowdsec_allowlists_reach_both_roles_that_embed_them():
-    path = "ansible/roles/k8s/crowdsec/files/crowdsec-whitelist.yaml"
-    assert k8s_lookup_readers([path], REPO) == {"authelia", "traefik"}
-
-
-def test_a_file_no_other_role_reads_reaches_nobody():
-    assert (
-        k8s_lookup_readers(["ansible/roles/k8s/monitor-bridge/files/registry.py"], REPO)
-        == set()
-    )
+    assert CHECK_TABLE.removeprefix("ansible/") not in lookups
 
 
 def test_a_reader_is_found_in_a_fixture_tree(tmp_path):
@@ -40,22 +32,17 @@ def test_a_reader_is_found_in_a_fixture_tree(tmp_path):
         "# roles/k8s/owner/files/b.txt is named in prose only\n"
     )
     assert k8s_lookup_map(tmp_path) == {"roles/k8s/owner/files/a.txt": {"reader"}}
-    assert (
-        k8s_lookup_readers(["ansible/roles/k8s/owner/files/b.txt"], tmp_path) == set()
-    )
 
 
 def test_a_lookup_with_keyword_arguments_is_a_reader(tmp_path):
-    """A keyword argument after the path still names the file, so its change reaches the reader."""
+    """A keyword argument after the path still names the file."""
     reader = tmp_path / "ansible" / "roles" / "k8s" / "reader" / "templates"
     reader.mkdir(parents=True)
     (reader / "x.yaml.j2").write_text(
         "data: {{ lookup('file', playbook_dir + '/roles/k8s/flux/defaults/main.yml',"
         " rstrip=False) }}\n"
     )
-    assert k8s_lookup_readers(
-        ["ansible/roles/k8s/flux/defaults/main.yml"], tmp_path
-    ) == {"reader"}
+    assert k8s_lookup_map(tmp_path) == {"roles/k8s/flux/defaults/main.yml": {"reader"}}
 
 
 def test_a_check_table_change_lands_with_its_own_role_alone():
