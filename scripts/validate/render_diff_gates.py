@@ -2,7 +2,7 @@
 """Refuse a PR whose render diff Flux would apply unsafely (D4.4, D5.1d, D5.1f, D6.12).
 
 This gate renders the cluster at the PR's base and head with `homelab-render cluster` and
-refuses four shapes. It was `cross_plane_order.py` until D6.12, when every k8s role was
+refuses five shapes. It was `cross_plane_order.py` until D6.12, when every k8s role was
 flux-owned and its arm 1, the order between a flux-owned and an Ansible-owned tag along one
 dependency edge, lost its subject. The numbers of the arms that stay are kept, because docs,
 commit messages and `ansible/deploy.yml` cite them. A tag counts for arm 2 whenever its
@@ -14,13 +14,13 @@ after D6*).
   its own render moves in the same PR. A tag that becomes flux-owned in the PR is not judged:
   its Kustomization is born with its edges, and D3's `checksum/restart` stamp moves its render
   in the same commit, so judging it would refuse every flip.
-- **Arm 3, a dropped object (D5.1f).** A tag flux-owned at both ends loses an object of any
-  kind from its render, and no commit in `base..head` carries `Removes-Object:
+- **Arm 3, a dropped object (D5.1f, D6.19).** A tag flux-owned at the base loses an object of
+  any kind from its render, or leaves the render whole, and no commit in `base..head` carries `Removes-Object:
   <kind>/<namespace>/<name>` for it (`lib/removes_object.py`). Flux would prune it while its
   Kustomization reads Ready. A rename passes: the object's kind, namespace and name, with the
   renderer's trailing `-<digest8>` removed, still render in the head. So does an object
   labelled or annotated `kustomize.toolkit.fluxcd.io/prune: disabled`, which prune never
-  deletes. A handback passes, since a tag that is not flux-owned at the head is not judged.
+  deletes. `decide` judges the same drop (`object_loss.py`).
 - **Arm 4, a flux-owned retirement (D5.1f).** A name joins `k8s_retired_services` whose
   entry carries `owner: flux` on the base. The play's teardown deletes the last render
   Ansible staged, and Flux at the old `prod` re-creates it. Such a service retires by two
@@ -32,6 +32,10 @@ after D6*).
   The arm reads the `suspended` field, never the `flux_suspend` key, so a role that derives
   the key from another variable is covered too (d5-bulk-move.md, *A suspended role takes no
   change*). A shared-template change whose render reaches the tag waits for the resume.
+- **Arm 6, the tag rule (D6.19).** A tag in the base render leaves the head while its role
+  directory stays, `flux` is missing at the head, or a tag whose base render holds a
+  PersistentVolume leaves at all (`tag_rule.py`). The publish job's guard is the same rule
+  against `prod`, which also catches a PR whose checks ran on an old base.
 
 Arm 3 reads the trailers from the PR's own commits, and the CI step runs on pull requests
 only, where `HEAD^1..HEAD` is those commits and the merge.
@@ -52,7 +56,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -64,11 +68,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from deploy_tools.changed_set import suspended_changed
 from deploy_tools.object_loss import bundle_documents, prune_disabled, stem
 from deploy_tools.render_targets import render_targets
+from deploy_tools import tag_rule
 from deploy_tools.promote_lib.prune import ReadError
 from lib import removes_object, yaml_fast
 from lib.cli_help import ArgumentParser
 from lib.ansible_inventory import K8S_HOST
 from lib.git import git, git_env, git_stdout
+from lib.k8s_roles import role_dirs
 from lib.repo_paths import FILTER_PLUGINS, GITOPS_DEPLOY_FILES, REPO
 from renderer.renderer_lib.bundle import DIGESTS, SHARED_KINDS
 from renderer.renderer_lib.cluster import NAMESPACE_ROLE_VARS
@@ -76,6 +82,7 @@ from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
     Ordering,
     kustomization_edges,
+    split_kind,
 )
 
 # A filter plugin and the deployer's library are imported by file path, not as packages.
@@ -111,11 +118,13 @@ class Snapshot:
             edges `kustomization_edges` derives.
         namespace_roles: Each namespace a role creates mapped to that role.
         objects: Each rendered directory's tag mapped to its objects, as
-            `<kind>/<namespace>/<name>`; a `<tag>-deferred` directory's count for `<tag>`.
+            `<kind>/<namespace>/<name>`; a per-tag kind's directory counts for `<tag>`.
         unpruned: The objects labelled or annotated `kustomize.toolkit.fluxcd.io/prune:
             disabled`.
         retired: The names `k8s_retired_services` lists.
         digests: The render's parsed `digests.json`, or empty when no tag is flux-owned.
+        tags: The deploy tags the render's `flux/` publishes.
+        role_names: The role directories in the tree.
     """
 
     renders: Mapping[str, str]
@@ -127,6 +136,8 @@ class Snapshot:
     unpruned: Iterable[str] = ()
     retired: Iterable[str] = ()
     digests: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
+    tags: Collection[str] = ()
+    role_names: Collection[str] = ()
 
     def plane(self, tag: str) -> str:
         return self.owners.get(tag, ANSIBLE_PLANE)
@@ -195,7 +206,7 @@ def removal_problems(
     )
     held_stems = {stem(ident) for ident in held}
     found = []
-    for tag in sorted(base.flux_owned() & head.flux_owned()):
+    for tag in sorted(base.flux_owned()):
         for ident in sorted(set(base.objects.get(tag, ())) - held):
             if ident in declared or ident in unpruned or stem(ident) in held_stems:
                 continue
@@ -228,6 +239,15 @@ def suspended_problems(base: Snapshot, head: Snapshot) -> list[str]:
     ]
 
 
+def tag_problems(base: Snapshot, head: Snapshot) -> list[str]:
+    """Arm 6: each tag that may not leave the render, with the base as the reference."""
+    holders = tag_rule.persistent_volume_tags(
+        (ident, tag) for tag, idents in base.objects.items() for ident in idents
+    )
+    found = tag_rule.refusals(base.tags, head.tags, head.role_names, holders)
+    return [f"arm 6: {line}" for line in found]
+
+
 def _objects(dirs: Mapping[str, Mapping[str, str]]) -> tuple[dict, frozenset[str]]:
     """Each tag's objects, and the ones prune skips, from `cluster/`'s directories."""
     files = {
@@ -239,9 +259,7 @@ def _objects(dirs: Mapping[str, Mapping[str, str]]) -> tuple[dict, frozenset[str
     unpruned = set()
     try:
         for ident, directory, doc in bundle_documents(files):
-            objects.setdefault(directory.removesuffix(DEFERRED_SUFFIX), set()).add(
-                ident
-            )
+            objects.setdefault(split_kind(directory)[0], set()).add(ident)
             if prune_disabled(doc):
                 unpruned.add(ident)
     except ReadError as exc:
@@ -329,6 +347,9 @@ def snapshot(
             )
         except ValueError as exc:
             raise RenderFailed(f"{DIGESTS} is not JSON: {exc}") from exc
+        tags = tag_rule.bundle_tags(
+            path.relative_to(out).as_posix() for path in Path(out).rglob("*.yaml")
+        )
     renders = {
         tag: _digest(
             {f"{tag}/{k}": v for k, v in dirs[tag].items()}
@@ -358,6 +379,8 @@ def snapshot(
             str(e["name"]) for e in group.get("k8s_retired_services") or []
         ),
         digests=digests if isinstance(digests, dict) else {},
+        tags=tags,
+        role_names=frozenset(path.name for path in role_dirs(tree / K8S_ROLES)),
     )
 
 
@@ -415,12 +438,14 @@ def gate(
     found = problems(snaps[0], snaps[1])
     found += removal_problems(snaps[0], snaps[1], removes_object.declared(messages))
     found += suspended_problems(snaps[0], snaps[1])
+    found += tag_problems(snaps[0], snaps[1])
     for line in found:
         print(f"[FAIL] {line}", file=sys.stderr)
     if not found:
         print(
             f"render-diff-gates: {base[:9]}..{head[:9]} adds no edge beside a change, "
-            f"removes nothing Flux owns undeclared and changes no suspended tag"
+            f"removes nothing Flux owns undeclared, changes no suspended tag and drops no "
+            f"tag the tag rule keeps"
         )
     return REFUSED if found else CLEAN
 

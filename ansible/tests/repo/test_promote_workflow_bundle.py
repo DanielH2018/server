@@ -22,7 +22,7 @@ from _helpers import REPO
 from lib import yaml_fast
 
 WORKFLOW = REPO / ".github" / "workflows" / "promote.yml"
-CENSUS = "promote.py check-bundle out"
+CENSUS = "promote.py check-bundle out --against-prod"
 # The no-tag branch passes --all-images too: the `images` job refuses a render without
 # tags.json, and `publish` needs that job (#5593).
 SHARED_ONLY = "homelab_render.py cluster --out out --shared-only --all-images"
@@ -228,6 +228,12 @@ RED = {
         "render: does not run check-bundle after the build",
     ),
     "no census step": (_without_the_census, "render: runs no `promote.py"),
+    "a census that skips the tag rule": (
+        lambda wf: _render_steps(wf)[_step(wf, "check-bundle")].update(
+            run="uv run python scripts/deploy_tools/promote.py check-bundle out"
+        ),
+        "render: runs no `promote.py check-bundle out --against-prod`",
+    ),
     "gitleaks after the handoff": (
         _gitleaks_after_handoff,
         "render: hands out/ on before check-bundle, the ciphertext check or gitleaks",

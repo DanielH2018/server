@@ -508,7 +508,7 @@ and the deploy the exit-4 fallback runs.
 CI's **Render-diff gates** step, in the `pr_gates` job on pull requests only, runs
 `scripts/validate/render_diff_gates.py --base HEAD^1`. It renders the cluster at the base and
 at the merge commit with `homelab-render cluster`, each side with its own tree's renderer. A
-tag counts as changed when its `cluster/<tag>/` output moved. The gate refuses four shapes,
+tag counts as changed when its `cluster/<tag>/` output moved. The gate refuses five shapes,
 and keeps the arm numbers its history gave them:
 
 - **Arm 2, edge first.** A tag that is flux-owned at the base and at the head gains a
@@ -516,9 +516,13 @@ and keeps the arm numbers its history gave them:
   the PR is not judged, because its Kustomization is born with its edges. **To split an arm-2
   refusal, land the edge alone first**, then the change.
 - **Arms 3 and 4, removals.** A flux-owned object dropped without a `Removes-Object:` trailer,
-  and a flux-owned name added to `k8s_retired_services` (`docs/flux-deploy-plane.md`,
+  a whole tag's objects included, and a flux-owned name added to `k8s_retired_services` (`docs/flux-deploy-plane.md`,
   *Retiring a flux-owned service*).
 - **Arm 5, suspended tags.** A change to the render of a tag `flux_suspend` holds.
+- **Arm 6, the tag rule.** A tag leaves the render while its role directory stays, `flux` is
+  missing, or a tag whose base render holds a PersistentVolume leaves at all. The publish job
+  runs the same rule against `prod`, so a PR whose checks ran on an old base still fails there
+  (`docs/flux-deploy-plane.md`, *The tag rule*).
 
 The gate has no bypass, because a bypass would become the default route. A render that fails at
 either end exits 2, and the step fails without a verdict.
