@@ -412,7 +412,33 @@ def test_wait_keeps_polling_past_a_red_descendant_while_a_later_one_is_in_flight
     """#4649 at merge time: the fix's CI is still running when the red one is found."""
     code, msg = _wait_past_a_red_descendant(later_goes_green_at=600)
     assert code == await_ci.CI_UNPROVEN, msg
-    assert "fix" in msg and "deploy.sh" in msg
+    assert "fix" in msg and "gh workflow run promote.yml" in msg
+    assert "deploy.sh" not in msg, msg
+
+
+def test_a_run_less_tip_names_ci_then_a_promote_dispatch_with_the_full_sha():
+    """#7368: deploy.sh refuses every k8s tag, and promote.yml refuses an abbreviated `sha`."""
+    tip = "a" * 40
+    now = [0]
+
+    def sleep(seconds):
+        now[0] += seconds
+
+    code, msg = await_ci.wait(
+        "old",
+        await_ci.DROPPED_PUSH_GRACE_S * 2,
+        20,
+        sleep=sleep,
+        clock=lambda: now[0],
+        fetch=lambda _s: [],
+        fetch_suites=lambda _s: [],
+        descendants=lambda _s: [tip],
+        fetch_tip=lambda: tip,
+    )
+    assert code == await_ci.CI_UNPROVEN, msg
+    assert "gh workflow run ci.yml --ref master" in msg, msg
+    assert f"--ref master -f sha={tip}`" in msg, msg
+    assert "deploy.sh" not in msg, msg
 
 
 def test_a_red_descendant_whose_later_one_never_settles_ends_red_saying_why():

@@ -333,7 +333,7 @@ def descendant_verdict(
     # the fix the merge commit lacks, so its green says nothing about the tree deployed.
     # Neither verdict changes once both exist, so `wait` ends that case on CI_UNPROVEN, not
     # on CI_RED: CI_RED's resume is a re-run, and every re-run reads the same red (#4649).
-    # `green_after` finds the later green, and the CI_UNPROVEN line says to deploy the tip.
+    # `green_after` finds the later green, and the CI_UNPROVEN line says to promote the tip.
     # While a later one has no verdict yet, `wait` keeps polling rather than ending red.
     required = required_contexts()
     for candidate in descendants(sha)[:DESCENDANT_LIMIT]:
@@ -445,6 +445,13 @@ def _is_run_less(sha: str, fetch, fetch_suites) -> bool:
         return _push_was_dropped(fetch(sha), fetch_suites(sha), required_contexts())
     except urllib.error.URLError, TimeoutError, ValueError, OSError:
         return False
+
+
+def _promote_command(sha: str) -> str:
+    """The dispatch that promotes `sha`; promote.yml's `render` refuses all but a 40-hex `sha`."""
+    return (
+        f"`gh workflow run promote.yml -R DanielH2018/server --ref master -f sha={sha}`"
+    )
 
 
 def _tip_of(sha: str, descendants) -> str:
@@ -561,8 +568,8 @@ def wait(
                         f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
                         f"its nearest descendant {nearest[:8]} is RED and {fixed[:8]} after "
                         f"it is green, and neither verdict changes on a re-run. The tip "
-                        f"{tip[:8]} contains {target[:8]}: deploy it by hand with "
-                        f"`./scripts/deploy.sh --tags <service> --at {tip[:8]}`"
+                        f"{tip[:8]} contains {target[:8]}: promote it with "
+                        f"{_promote_command(tip)}"
                         + (f" once {tip[:8]} is green" if tip != fixed else "")
                     )
                 if not unsettled:
@@ -580,14 +587,14 @@ def wait(
                         f"its nearest descendant {nearest[:8]} is RED, and GitHub never ran "
                         f"CI for the tip {unsettled[:8]} after it. Run it on the tip with "
                         "`gh workflow run ci.yml --ref master`, then re-run: a green tip "
-                        "ends ci-unproven and names the tip to deploy by hand"
+                        "ends ci-unproven and names the command that promotes it"
                     )
                 if now >= deadline:
                     return CI_RED, (
                         f"{nearest[:8]}: CI RED (GitHub never ran CI for {target[:8]}; "
                         f"{nearest[:8]} is its nearest descendant with a verdict). "
                         f"{unsettled[:8]} after it has no verdict yet; if it goes green, "
-                        "a re-run ends ci-unproven and names the tip to deploy by hand"
+                        "a re-run ends ci-unproven and names the command that promotes it"
                     )
                 sleep(interval_s)
                 continue
@@ -612,9 +619,10 @@ def wait(
                 return CI_UNPROVEN, (
                     f"{target[:8]}: no verdict can arrive — GitHub never ran CI for it, "
                     f"{after}, so no re-run converges until something runs CI. Run it on "
-                    f"the tip {tip[:8]} with `gh workflow run ci.yml --ref master`, then "
-                    "re-run; or deploy the tip without CI by hand with "
-                    f"`./scripts/deploy.sh --tags <service> --at {tip[:8]}`"
+                    f"the tip {tip[:8]} with `gh workflow run ci.yml --ref master`. A "
+                    "dispatched CI run starts no promotion, and `promote` refuses a commit "
+                    "without green CI, so once it is green promote the tip with "
+                    f"{_promote_command(tip)}, then re-run"
                 )
             if dropped:
                 return 75, (

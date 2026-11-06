@@ -291,15 +291,22 @@ rather than at its deadline (#4667).
 **Three shapes end `ci-unproven` instead, because no re-run converges on them (#4641, #4649).**
 `await_ci.py` exits `CI_UNPROVEN` and its line names the master tip and the way out:
 
+`promote` refuses a commit without green CI (`.github/workflows/promote.yml`, *Refuse a dispatched
+commit whose CI is not green*), so no route applies the tip without CI. A dispatched CI run starts
+no promotion, because `promote` follows only a CI run from a push. The line therefore prints this
+dispatch, with the tip's full SHA:
+
+```bash
+gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master tip>
+```
+
 - No commit from the merge commit to the tip has a CI run, which includes the merge commit
-  being the tip. To run CI on the tip, run `gh workflow run ci.yml --ref master`, then re-run
-  land.sh. The fallback is to deploy the tip by hand without CI, with
-  `./scripts/deploy.sh --tags <service> --at <tip>`.
+  being the tip. To run CI on the tip, run `gh workflow run ci.yml --ref master`. Once that run
+  is green, run the `promote` dispatch, then re-run land.sh.
 - The nearest descendant is red and a later one is green. While a later one's CI is still
-  running, the wait keeps polling for it rather than ending red. Neither verdict changes, and the
-  tick has already fast-forwarded past your merge commit. To deploy your change, run the
-  `deploy.sh --at <tip>` command the line prints. It deploys the tip, because `deploy.sh`
-  refuses any tree behind `origin/master` with `DEPLOY_STALE`.
+  running, the wait keeps polling for it rather than ending red. Neither verdict changes, so a
+  re-run of land.sh reads the same state. The tip contains your merge commit. To apply your
+  change, run the `promote` dispatch, once the tip is green when the line says so.
 - The nearest descendant is red, and GitHub never ran CI for the tip after it. The wait keeps
   polling until its deadline, since a freshly merged tip has no CI for its first seconds
   either. To give the tip a verdict, run `gh workflow run ci.yml --ref master`, then re-run
@@ -553,7 +560,13 @@ was, and each one leaves a different state:
   live. To gate the rest, re-run with the tag corrected.
 - `tick-failed` or `tick-held`: the tick's setup play failed. It may have applied tasks before the
   failure, so read the deployer's journal before you re-run anything.
-- `promote-held`: `DEPLOY_HOLD` holds the promotion, so this merge is not applied.
+- `promote-held`: `DEPLOY_HOLD` stops every promotion, and the hold does not say whether this merge
+  went live. `decide` writes a forward-only or `suspended-changed` hold before `prod` moves, and
+  a hold set by hand moves nothing. A failed verification's hold follows a move of `prod`, so
+  Flux may have applied this merge already. `settle` then resets `prod` to `last-good`, unless the
+  held commit changes a forward-only tag or a snapshot role. An earlier promotion can also have
+  carried this merge before the hold. To see where it stands, compare the merge commit with the
+  `prod` and `last-good` commits `probe.py landing` prints.
 - `soak-failed`: Flux applied revision R and R's `flux/soak` then read `failure`, so the change is
   live and `promote`'s verify holds it.
 
