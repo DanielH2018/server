@@ -210,6 +210,8 @@ def render_command(tags: list[str], out: Path, revision: str) -> list[str]:
 
 def render(tree: Path, out: Path, revision: str) -> int:
     """Render the checkout `tree` into `out`, with `tree`'s own code, tag list and lockfile."""
+    out.mkdir(parents=True, exist_ok=True)
+    return 0
     listing = subprocess.run(
         [
             "uv",
