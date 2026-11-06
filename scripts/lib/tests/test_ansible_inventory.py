@@ -86,6 +86,22 @@ def test_an_unbalanced_quote_fails_naming_the_host(tmp_path):
         inventory_hosts(ini)
 
 
+@pytest.mark.parametrize(
+    "pair, key",
+    [
+        ("ansible_port=22", "ansible_port"),
+        ("""x='"b"'""", "x"),
+        ("flag=True", "flag"),
+        ('ansible_port="22"', "ansible_port"),
+    ],
+)
+def test_a_value_ansible_evaluates_fails_naming_the_host(tmp_path, pair, key):
+    ini = tmp_path / "hosts.ini"
+    ini.write_text(f"[all]\nh1 ansible_user=ubuntu\nh2 {pair}\n")
+    with pytest.raises(ValueError, match=f"host h2: {key}=.*host_vars"):
+        inventory_hosts(ini)
+
+
 def test_the_real_inventory_declares_the_three_hosts():
     """Non-vacuity against ground truth: the derived tuples elsewhere read this list."""
     assert set(host_names()) >= {"daniel-box", "daniel-server", "daniel-pi"}
