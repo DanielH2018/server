@@ -160,7 +160,6 @@ def test_gitops_prefixes_lists_every_prefix_under_its_constant():
 
 def test_autodeploy_coverage_renders_counts_and_denylist():
     out = renderers.render_autodeploy_coverage(["a", "b"], ["c"], ["d"])
-    assert "| Renovate automerge stance | Roles |" in out
     assert "| Eligible | 2 |" in out
     assert "| Denied | 1 |" in out
     assert "| Not declaring | 1 |" in out

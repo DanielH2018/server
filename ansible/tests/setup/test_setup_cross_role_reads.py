@@ -145,6 +145,17 @@ def test_the_filter_callers_table_equals_the_tree():
     assert _tree_filter_callers() == SETUP_ROLES_CALLING_FILTER_PLUGINS
 
 
+def test_the_filter_caller_census_reads_named_plugins_and_roles():
+    # The table is empty, so an empty census would equal it: name what the scan must find.
+    plugins = _plugin_names()
+    assert "toposort_containers" in plugins["ansible/filter_plugins/toposort.py"]
+    texts = _setup_role_texts()
+    assert any(
+        path.endswith("gitops_deploy/defaults/main.yml")
+        for path in texts["gitops_deploy"]
+    )
+
+
 def test_every_filter_caller_exemption_is_still_a_caller():
     # An exemption for a call that is gone is dead weight, and would hide a new one.
     found = filter_callers(_plugin_names(), _setup_role_texts())
