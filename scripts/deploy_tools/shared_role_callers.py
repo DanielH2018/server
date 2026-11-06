@@ -10,8 +10,8 @@ volume-snapshot` into a deploy of every caller, and `land_tags` reads `caller_ta
 shared role's callers instead of reporting `needs-manual-apply`. `main` prints one JSON
 object with two keys: `callers` maps each role to its sorted `caller_tags`, and `owned_only`
 lists the roles that some tag runs but only `owner`-setting tags run (#5052). The deployer
-ran it as a subprocess to discharge a shared role's `k8s_unapplied` line until D6.12 deleted
-that discharge; no caller reads the CLI since, and D6.4 deletes the module.
+ran it as a subprocess to discharge a shared role's ledger line until D6.12 deleted that
+discharge; no caller reads the CLI since, and D6.4 deletes the module.
 
 THE READERS DIFFER, and `smoke_caller` is why. A hand-typed `deploy.sh --tags manifests` deploys every caller too, which the operator ruled on
 in #2717. The landing narrows a deploy-run-only change to ONE caller, and the `# DECIDED:` at
@@ -39,8 +39,7 @@ from lib.repo_paths import HOST_VARS, K8S_ROLES
 
 
 # DECIDED: transitive. `longhorn-api` and `volume-revert` are called only by shared roles, so a
-# walk that stopped at the first hop would name no tag for them and their `k8s_unapplied` lines
-# would need a hand to clear. #2704 replaced the land side's first-hop `covered_roles` with this
+# walk that stopped at the first hop would name no tag for them. #2704 replaced the land side's first-hop `covered_roles` with this
 # for the same reason.
 def caller_tags(
     role: str, declared: set[str], callers: dict[str, set[str]]
@@ -96,7 +95,7 @@ SMOKE_TESTABLE_SHARED_ROLES = frozenset({"manifests"})
 #
 # WHY ONE IS ENOUGH. `manifests` acts through the bytes it renders, so the other 56 callers
 # re-read the new task logic on their own next deploy with nothing left behind — and the
-# deployer's `k8s_unapplied` line for `manifests` discharged on a render-digest match without
+# deployer's ledger line for `manifests` discharged on a render-digest match without
 # any deploy at all until D6.12 (#3057). That marker accepted the one gap this shares: a change to HOW `manifests` applies can leave live state different
 # from what the change would produce while no digest moves.
 #

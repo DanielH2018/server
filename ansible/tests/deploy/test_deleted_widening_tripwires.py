@@ -208,12 +208,10 @@ def test_the_tasks_file_census_is_not_empty():
 # `_role_tags` stops at a role that has a `containers_list` entry and never reads that entry's
 # OTHER declared tags, so an entry declaring a second tag (the `tags: [n8n-images, n8n]` shape)
 # hides a recording caller: a `--tags n8n` deploy runs the builder and writes `n8n.json` while
-# the derivation sees no recording caller. That leaves a `k8s_unapplied` line nothing but a hand
-# clears.
+# the derivation sees no recording caller.
 
 
-# Every containers_list source in the inventory. The symptom is k8s-only, because `k8s_unapplied`
-# is; the shape check is deliberately wider, so a docker entry growing the shape is still seen.
+# Every containers_list source in the inventory. The shape check is deliberately wider than k8s, so a docker entry growing the shape is still seen.
 def containers_list_sources(repo: Path = REPO) -> list[Path]:
     inventory = Path(repo) / "ansible" / "inventory"
     return sorted(inventory.glob("host_vars/*.yml")) + sorted(
@@ -240,7 +238,7 @@ def test_no_containers_list_entry_declares_another_tag_is_clean():
         f"these containers_list entries declare a tag other than their own name: {found}. The "
         "shared-role record derivation stops at a role that has an entry and never reads that "
         "entry's other tags, so a deploy under the second tag writes a release record the "
-        "derivation cannot see and the role's k8s_unapplied line needs a hand to clear (#2666). "
+        "derivation cannot see (#2666). "
         f"Restore the widening with `git show {DELETED_IN} -- "
         "scripts/deploy_tools/shared_role_callers.py`."
     )
