@@ -1970,9 +1970,10 @@ instead:
 
 1. **If the tag renders `<tag>-deferred`, `<tag>-verify` or `<tag>-precheck`, a first PR empties
    those templates.** These kinds keep `deletionPolicy: Orphan`, so their objects outlive a
-   Kustomization that leaves the bundle. Overwrite each template with an empty file and keep
-   its name in `manifests_deferred_files`, because the renderer writes a directory, and so a
-   Kustomization, only for a kind that still lists a file. The Kustomization then holds no
+   Kustomization that leaves the bundle. Overwrite each template with an empty file. Keep the
+   file, and keep a deferred file's name in `manifests_deferred_files`, because the renderer
+   writes a directory, and so a Kustomization, only for a kind that still has a file. The
+   Kustomization then holds no
    object, and its inventory prune deletes the old ones. Deleting the template instead removes
    the Kustomization and leaves its objects behind. The PR carries a `Removes-Object:` line
    for each object (*Removing an object on purpose*). A `manifests_extra_rollouts` entry that
