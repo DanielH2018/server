@@ -1250,6 +1250,7 @@
  "scripts/diagnostics/tests/test_probe_health_plumbing.py": 0.0,
  "scripts/diagnostics/tests/test_probe_health_resolver.py": 7.65,
  "scripts/diagnostics/tests/test_probe_health_rolled.py": 0.0,
+ "scripts/diagnostics/tests/test_probe_health_schedule_gate_checkout_age.py": 2.99,
  "scripts/diagnostics/tests/test_probe_health_surge.py": 0.0,
  "scripts/diagnostics/tests/test_probe_health_vendored.py": 0.02,
  "scripts/diagnostics/tests/test_probe_host_reader.py": 0.09,
