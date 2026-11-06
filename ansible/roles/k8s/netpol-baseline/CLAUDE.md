@@ -68,9 +68,8 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
   `netpol-baseline` or its verify Job. The flip PR repeats D4's drill on this edge.
 - **Flux applies it, not Ansible** (D5, Wave D's last flip). The `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. `tasks/main.yml` holds one task, the
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle.
+  `tasks/main.yml` holds one task, the
   include of `k8s/manifests`, and `defaults/main.yml` holds the deferred file list.
 - **`templates/verify/` is the probe's Flux form.** The Job runs
   `files/netpol_baseline_verify.py` twice. Its `gate` initContainer reads the targets'

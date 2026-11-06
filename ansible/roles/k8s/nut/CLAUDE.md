@@ -15,7 +15,7 @@ the pin is physical and never unwinds.
 
 - **Flux's render pulls `ghcr.io/danielh2018/nut:<content tag>`**, with `imagePullPolicy:
   IfNotPresent` (D5.4b), and the *Image* line above names that repository. The role's defaults
-  still name the in-cluster registry, for the handback. The image is built from
+  still name the in-cluster registry. The image is built from
   `templates/Dockerfile.j2` (debian:bookworm-slim + nut). Config is **not** baked in, because
   the image is public on GHCR and `upsd.users` carries passwords. It mounts from the
   `nut-config` Secret, and the entrypoint stages it to `/etc/nut`.
@@ -36,9 +36,8 @@ the pin is physical and never unwinds.
 - **Flux applies it, not Ansible** (D5.17, Wave C's UPS PR, which went alone). Its
   `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
   deployer all skip it. A merged change reaches the cluster when `promote` publishes and
-  verifies the next bundle. To give it back to Ansible, follow the two-PR handback in
-  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
-  The Deployment is `Recreate`, so every roll stops upsd for the container start, plus a pull
+  verifies the next bundle. The Deployment is `Recreate`, so every roll stops upsd for the container
+  start, plus a pull
   when the content tag moved. That gap is time without power-cut shutdown coverage. The flip
   itself rolled nut once, because the image ref moved to GHCR and the restart checksum
   appeared.
@@ -49,7 +48,7 @@ the pin is physical and never unwinds.
   `files/entrypoint.sh`, `files/upssched-cmd` or `templates/Dockerfile.j2` moves the content
   tag, and the next promotion builds the image and rolls the pod.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The `k8s/image-builder` include became promote's `images` job
+  They stay until R4 deletes them. The `k8s/image-builder` include became promote's `images` job
   (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout: nut`
   names the Deployment for the stabilisation gate and the shared restart. The Kustomization's
   `wait` replaces the gate, and the restart checksum the renderer stamps replaces the restart.

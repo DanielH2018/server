@@ -2,8 +2,8 @@
 # The shared media volume for the media stack's nine workloads. Declares it to the cluster; the
 # setup role k8s_host_files creates its directories on the node (tasks/media-volume.yml there).
 #
-# Flux owns this role, so no Flux path runs the include below; it stays for a handback
-# (docs/flux-deploy-plane.md). The hardlink probe this file ran after it is the Job in
+# Flux owns this role, so no Flux path runs the include below; it stays until R4 deletes it. The
+# hardlink probe this file ran after it is the Job in
 # `media-volume-verify` (templates/verify/job.yaml.j2).
 
 - name: Declare the media volume to the cluster

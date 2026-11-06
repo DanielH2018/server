@@ -518,9 +518,11 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
 
 - **Ownership flag.** A `containers_list` entry gains `owner: flux` in the same PR that adds
   its Kustomization.
-- **Values of `owner`.** `owner` takes `flux` or `released`. `released` leaves the tag out of
-  the bundle while every Ansible path still skips it. A handback is two PRs: `released`, then
-  the removal of `owner` once the tag's Kustomization reads `NotFound`.
+- **Values of `owner`.** `owner` takes `flux`. The operator ruled on 2026-11-06 that a
+  flux-owned service stays flux-owned or retires (`docs/flux-deploy-plane.md`, *Retiring a
+  flux-owned service*), so no PR sets another value or removes `owner` from a live entry. The
+  readers still parse `released` until H1.9 deletes `owner`: it leaves the tag out of the bundle
+  while every Ansible path skips it, and the `every-k8s-entry-is-flux-owned` census refuses it.
 - **What skips a flux-owned entry.** In that same PR, the Ansible k8s play, `deploy.sh`, the
   GitOps deployer's k8s arms and `land.sh` all skip it. No commit may leave a role reachable
   by both Ansible and Flux.
@@ -1136,7 +1138,8 @@ Applied to this page:
 - **A second `owner` value for the handback** (D2 Open question 7). C4 *Values of `owner`*
   now states that `owner` takes `flux` or `released`. D2.1a, D2.1b, D2.1d and D2.2 already
   implement `released` in code, so the contract now matches the code. *Requests on C4*
-  leaves the list, which clears the gate before D2.7 merges.
+  leaves the list, which clears the gate before D2.7 merges. The 2026-11-06 ruling later
+  amended *Values of `owner`* to `flux` alone, because it ended the handback.
 - **D2.5 and D2.6b own what the contract credited to D4.3a** (D2 Open question 6, D4 Open
   question 5). C2 *Verification* credits D2.5 for the name-based expected statuses. C3
   *Shared kinds* and *Publish census* credit D2.6b for the empty `SHARED_KINDS` and the

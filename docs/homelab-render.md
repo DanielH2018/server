@@ -757,7 +757,7 @@ can refuse a stub value, so the census credits only the `homelab_secret_stubs` g
 sonarr's API reads, and its two asserts on the reads' registers, passed on that guard until
 sonarr's Flux flip deleted them. The census no longer runs over the real tree (#5886): every task
 it selected sat in a flux-owned role or in arr-notification's `tasks/`, which nothing includes.
-Its fixture pairs stay, for a role handed back to Ansible with such a task.
+Its fixture pairs stay, so the census can still go red.
 
 The same module checks that a task which fails on a stub value, as uptime-kuma's push-token
 format check did, carries the `homelab_secret_stubs` guard itself. That check predates the

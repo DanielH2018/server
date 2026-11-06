@@ -21,9 +21,8 @@ conventions.
   `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
   deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no `probe.py
-  health` run. To give it back to Ansible, follow the two-PR handback in
-  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
-  authelia, media-volume and traefik stay Ansible-owned, so the Kustomization records them in
+  health` run. authelia, media-volume and traefik stay Ansible-owned, so the Kustomization records
+  them in
   its `homelab/ansible-owned-deps` annotation, not in `dependsOn`. The Deployment is
   `Recreate`, so a change that rolls it takes the service down briefly.
 - **The `sonarr-snapshot` Job snapshots `sonarr-config` before each revision applies**
@@ -38,12 +37,12 @@ conventions.
   revert can desync import/rename history from files left in place, recoverable by a library
   rescan.
 - **Where the tasks went.** `tasks/main.yml` holds one include, `k8s/manifests`, and no Flux
-  path runs it. It stays for the handback. The pre-apply snapshot through `k8s/volume-snapshot`
+  path runs it. It stays until R4 deletes it. The pre-apply snapshot through `k8s/volume-snapshot`
   became the `sonarr-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
   The library reads of `tasks/verify.yml`, deleted here, became the `sonarr-verify` Job.
   arr-notification's seed Job beside it declares the Discord notification (*Notable*). Its
-  `k8s/arr-notification` include went in #5561, so a handback re-adds it as well as reverting
-  the flip. The seed Job's `lookup()`s are what make sonarr a caller of arr-notification in
+  `k8s/arr-notification` include went in #5561. The seed Job's `lookup()`s are what make sonarr a
+  caller of arr-notification in
   `scripts/lib/k8s_role_callers.py:role_callers`.
 
 ## Notable

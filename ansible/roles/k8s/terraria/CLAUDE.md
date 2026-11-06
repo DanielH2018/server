@@ -28,9 +28,8 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   irreplaceable world data.
 - **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
-  change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
-  back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
-  the flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
+  false` still stops Renovate's
   automerge of the digest bump. The Deployment is `Recreate`, so a change that rolls it takes
   the server down until the new pod passes its startup probe.
 - **Parked at `replicas: 0`.** `ansible/inventory/group_vars/all.yml:terraria_k8s_replicas` is
@@ -42,7 +41,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   The restore checklist on #822 has the rest. The comment above the value in `group_vars`
   still names `--tags terraria`, which `deploy.sh` refuses with exit 5.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The build became
+  `k8s/manifests`, and no Flux path runs either. They stay until R4 deletes them. The build became
   the `images` job (D5.4), which pushes `ghcr.io/danielh2018/terraria:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR
   one with `imagePullPolicy: IfNotPresent`

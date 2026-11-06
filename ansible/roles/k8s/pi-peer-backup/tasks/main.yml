@@ -3,8 +3,8 @@
 # 03:30 daily-backup group carries it to B2) and reports its verdict to Prometheus through a
 # ConfigMap.
 #
-# Flux owns this role, so no Flux path runs either include below; they stay for a handback
-# (docs/flux-deploy-plane.md). promote's `images` job builds the image, and the renderer's
+# Flux owns this role, so no Flux path runs either include below; they stay until R4 deletes them.
+# promote's `images` job builds the image, and the renderer's
 # gate Job in `pi-peer-backup-verify` replaced the k8s/cronjob-gate include this file held.
 # The two daniel-pi writes moved to roles/setup/k8s_host_files/tasks/pi-peer-backup.yml.
 

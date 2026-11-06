@@ -12,9 +12,6 @@ Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in
 
 Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
 include of `k8s/manifests` alone. To give the role
-back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
-the flag leaves two writers on the objects.
-
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
 It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the
 `otel-collector` DaemonSet and no other grant.

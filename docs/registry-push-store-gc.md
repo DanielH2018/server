@@ -104,8 +104,7 @@ curl -s -o /dev/null -w '%{http_code}\n' -X DELETE "http://localhost:5000/v2/$re
 A `202` is a deleted manifest. A delete by digest removes every tag that points at that digest,
 so check that no kept tag shares it first. A legacy repository's `latest` and its newest
 `sha-<12 hex>` tag share one digest, which is harmless when the whole repository goes.
-Handing one of those roles back to Ansible rebuilds its image, because `k8s/image-builder`
-skips a build only when the store serves both of its tags. The registry Deployment sets
+The registry Deployment sets
 `REGISTRY_STORAGE_DELETE_ENABLED`, which is what permits the delete.
 
 If no tag is left to delete, stop here. A collection would free nothing, and the page needs a

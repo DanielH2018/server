@@ -22,15 +22,14 @@ claims are unchanged.
 
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. Both Deployments are `Recreate` over
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
+  Deployments are `Recreate` over
   an RWO claim, so a roll stops the old pod before the new one starts and the exporter's
   metrics gap for that interval, as they did under Ansible. `k8s_autodeploy: false` gates no
   apply. It stops Renovate automerging the image bump.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It
-  stays for the handback. The Kustomization's `wait` replaces the rollout wait, and the
+  and no Flux path runs it. It stays until R4 deletes it. The Kustomization's `wait` replaces the
+  rollout wait, and the
   restart checksum the renderer stamps on each Deployment replaces the shared restart.
 
 - **Must sort AFTER `loki-homelab`**: `depends_on: [loki-homelab]` on the `containers_list`

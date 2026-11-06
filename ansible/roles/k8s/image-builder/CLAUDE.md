@@ -92,7 +92,4 @@ while reporting success.
 - Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
   `templates/context-configmap.yaml.j2`.
 - Not deployed standalone, and no caller reaches it: every caller is `owner: flux`. promote's
-  `images` job builds their images, and `deploy.sh` refuses their tags with exit 5. A caller
-  handed back to Ansible would reach this role through its own deploy tag, and that
-  handback moves each `image_builder_builds` entry back onto a `vars:` include, with its
-  `when:`. Ansible does not read the list, so a bare include builds nothing it can name.
+  `images` job builds their images, and `deploy.sh` refuses their tags with exit 5.

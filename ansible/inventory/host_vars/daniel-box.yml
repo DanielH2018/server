@@ -95,8 +95,7 @@ containers_list:
   - name: crowdsec
     platform: k8s
     # Flux applies crowdsec through `promote` and runs its ban-and-lift check as the
-    # `crowdsec-verify` Job (D5, crowdsec's own window). The handback is two PRs,
-    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # `crowdsec-verify` Job (D5, crowdsec's own window).
     owner: flux
     # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
     no_backup_claims: [crowdsec-db]
@@ -181,8 +180,7 @@ containers_list:
   - name: traefik-crds
     platform: k8s
     # Flux applies traefik-crds and traefik through `promote`, and every Ansible path skips
-    # them (D5, traefik's own window). The handback is two PRs, `owner: released` then
-    # removing `owner`: docs/flux-deploy-plane.md.
+    # them (D5, traefik's own window).
     owner: flux
     tier: home-edge
   - name: traefik
@@ -204,8 +202,7 @@ containers_list:
   - name: authelia
     platform: k8s
     # Flux applies authelia through `promote`, and every Ansible path skips it (D5, authelia's
-    # own window). The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # own window).
     owner: flux
     # This portal's name is the OIDC issuer Jellyfin's SSO plugin points at.
     hostname: "auth"
@@ -227,8 +224,7 @@ containers_list:
         role_owned: true
   - name: bento-pdf
     platform: k8s
-    # Flux applies bento-pdf through `promote`, and every Ansible path skips it (D2.7). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies bento-pdf through `promote`, and every Ansible path skips it (D2.7).
     owner: flux
     # Single-label on purpose — bento-pdf.local.<domain> is covered by the existing
     # *.local.<domain> wildcard cert; a nested bento-pdf.k8s.local.<domain> would not be.
@@ -238,8 +234,7 @@ containers_list:
     auth_tier: one_factor
   - name: texbrain
     platform: k8s
-    # Flux applies texbrain through `promote`, and every Ansible path skips it (D4.5). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies texbrain through `promote`, and every Ansible path skips it (D4.5).
     owner: flux
     # Single label, for the same wildcard-cert reason as bento-pdf above.
     hostname: "texbrain"
@@ -253,8 +248,7 @@ containers_list:
     platform: k8s
     # Flux applies headlamp through `promote`, and `headlamp-verify` runs the isolation probe the
     # deleted tasks ran. Its observability RBAC is `headlamp-deferred`, which waits on observability
-    # (D5, Wave D). The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # (D5, Wave D).
     owner: flux
     hostname: "headlamp"
     port: 4466
@@ -271,8 +265,7 @@ containers_list:
   # stolen password alone.
   - name: deploy-ui
     platform: k8s
-    # Flux applies deploy-ui through `promote`, and every Ansible path skips it (D5.6). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies deploy-ui through `promote`, and every Ansible path skips it (D5.6).
     owner: flux
     hostname: "deploy"
     port: 8790
@@ -286,8 +279,7 @@ containers_list:
   # blast radius than code-server/n8n.
   - name: longhorn-ui
     platform: k8s
-    # Flux applies longhorn-ui through `promote`, and every Ansible path skips it (D5.6). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies longhorn-ui through `promote`, and every Ansible path skips it (D5.6).
     owner: flux
     hostname: "longhorn"
     port: 80
@@ -299,8 +291,7 @@ containers_list:
   - name: dri-device-plugin
     platform: k8s
     # Flux applies dri-device-plugin through `promote` (D5, Wave D); its soak verify is the
-    # `K8sExtendedResourceMissing` alert. The handback is two PRs, `owner: released` then
-    # removing `owner`: docs/flux-deploy-plane.md.
+    # `K8sExtendedResourceMissing` alert.
     owner: flux
   # The shared /data volume the nine media workloads mount. Storage, not a service.
   # Must precede every media workload — a pod that mounts an undeclared claim stays
@@ -309,8 +300,7 @@ containers_list:
   - name: media-volume
     platform: k8s
     # Flux applies media-volume through `promote`, and its hardlink check runs as a Job in
-    # `media-volume-verify` (D5, Wave D). The handback is two PRs, `owner: released` then
-    # removing `owner`: docs/flux-deploy-plane.md.
+    # `media-volume-verify` (D5, Wave D).
     owner: flux
   # Mounts media-volume's claim at /data, so `depends_on` puts it after that role — as it does
   # for every other media-data mounter below. ansible/tests/deploy/test_k8s_toposort.py pins
@@ -318,8 +308,7 @@ containers_list:
   - name: sonarr
     platform: k8s
     # Flux applies sonarr through `promote`, and its verify Job and arr-notification's seed Job
-    # run in `sonarr-verify` (D5.20). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # run in `sonarr-verify` (D5.20).
     owner: flux
     weekly_backup_claims: {sonarr-config: 6}  # Sat
     depends_on: [media-volume]
@@ -354,8 +343,7 @@ containers_list:
   - name: qbittorrent
     platform: k8s
     # Flux applies qbittorrent through `promote`, decrypts its Mullvad account Secret, and runs
-    # its verify, prefs and gate Jobs in `qbittorrent-verify` (D5, Wave D). The handback is two
-    # PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # its verify, prefs and gate Jobs in `qbittorrent-verify` (D5, Wave D).
     owner: flux
     weekly_backup_claims: {qbittorrent-config: 4}  # Thu
     depends_on: [media-volume]
@@ -378,8 +366,7 @@ containers_list:
   - name: radarr
     platform: k8s
     # Flux applies radarr through `promote`, and arr-notification's seed Job runs in
-    # `radarr-verify` (D5.20). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # `radarr-verify` (D5.20).
     owner: flux
     weekly_backup_claims: {radarr-config: 2}  # Tue
     depends_on: [media-volume]
@@ -415,8 +402,7 @@ containers_list:
   - name: prowlarr
     platform: k8s
     # Flux applies prowlarr through `promote`, and its flaresolverr isolation check runs in
-    # `prowlarr-verify` (#5594). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # `prowlarr-verify` (#5594).
     owner: flux
     weekly_backup_claims: {prowlarr-config: 4}  # Thu
     hostname: "prowlarr"
@@ -441,8 +427,7 @@ containers_list:
       - prowlarr-verify            # templates/verify/ Job's control leg — see the policy's header
   - name: bazarr
     platform: k8s
-    # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies bazarr through `promote`, and every Ansible path skips it (D5.9).
     owner: flux
     weekly_backup_claims: {bazarr-config: 5}  # Fri
     depends_on: [media-volume]
@@ -463,8 +448,7 @@ containers_list:
   - name: jellyfin
     platform: k8s
     # Flux applies jellyfin through `promote`, caps its snapshot space and checks the render node
-    # and the library in `jellyfin-verify` (D5, Wave D). The handback is two PRs, `owner:
-    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    # and the library in `jellyfin-verify` (D5, Wave D).
     owner: flux
     weekly_backup_claims: {jellyfin-config: 1}  # Mon
     # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
@@ -481,8 +465,7 @@ containers_list:
   - name: tdarr
     platform: k8s
     # Flux applies tdarr through `promote`, pulls its image in `tdarr-prepull` first, snapshots
-    # both config claims, and checks the device and library in `tdarr-verify` (D5, Wave D). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # both config claims, and checks the device and library in `tdarr-verify` (D5, Wave D).
     owner: flux
     weekly_backup_claims: {tdarr-server: 1, tdarr-configs: 2}  # Mon, Tue
     # dri-device-plugin advertises the `devic.es/dri` resource this pod requests.
@@ -498,8 +481,7 @@ containers_list:
   - name: configarr
     platform: k8s
     # Flux applies configarr through `promote` and runs its two gate Jobs in `configarr-verify`
-    # (D5, Wave D). The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # (D5, Wave D).
     owner: flux
     depends_on: [sonarr, radarr]
 
@@ -508,8 +490,7 @@ containers_list:
   - name: janitorr
     platform: k8s
     # Flux applies janitorr through `promote` and checks its dry-run state, its reach and its
-    # leaving-soon links in `janitorr-verify` (D5, Wave D). The handback is two PRs, `owner:
-    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    # leaving-soon links in `janitorr-verify` (D5, Wave D).
     owner: flux
     depends_on: [media-volume, sonarr, radarr, jellyfin]
 
@@ -517,8 +498,7 @@ containers_list:
     platform: k8s
     # Flux applies observability through `promote`, restarts a workload whose Secret changed
     # through the renderer's restart annotation, and reads the OTLP bind address back in
-    # `observability-verify` (D5, Wave D). The handback is two PRs, `owner: released` then
-    # removing `owner`: docs/flux-deploy-plane.md.
+    # `observability-verify` (D5, Wave D).
     owner: flux
     # `hostname`/`port` describe Grafana — the only routed workload here. The OTEL
     # collector, Loki, Prometheus and Tempo are reached on the node's loopback via hostPort
@@ -538,8 +518,7 @@ containers_list:
   # The public link-in-bio landing page, so a login gate would break it.
   - name: littlelink
     platform: k8s
-    # Flux applies littlelink through `promote`, and every Ansible path skips it (D5.6). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies littlelink through `promote`, and every Ansible path skips it (D5.6).
     owner: flux
     hostname: "www"
     port: 3000
@@ -547,8 +526,7 @@ containers_list:
   - name: speedtest
     platform: k8s
     # Flux applies speedtest through `promote`, and substitutes its APP_KEY Secret from
-    # homelab-cluster-vars (D5.9). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # homelab-cluster-vars (D5.9).
     owner: flux
     hostname: "speedtest"
     port: 80
@@ -575,13 +553,11 @@ containers_list:
   - name: cloudflare-ddns
     platform: k8s
     # Flux applies cloudflare-ddns through `promote` and substitutes its API-token Secret from
-    # homelab-cluster-vars (D5.19). The handback is two PRs,
-    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # homelab-cluster-vars (D5.19).
     owner: flux
   - name: freshrss
     platform: k8s
-    # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies freshrss through `promote`, and every Ansible path skips it (D5.9).
     owner: flux
     weekly_backup_claims: {freshrss-config: 5}  # Fri
     hostname: "freshrss"
@@ -605,8 +581,7 @@ containers_list:
   # list so the Deployment and Service keep being reconciled; only the pod count is 0.
   - name: navidrome
     platform: k8s
-    # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies navidrome through `promote`, and every Ansible path skips it (D5.8).
     owner: flux
     weekly_backup_claims: {navidrome-data: 3}  # Wed
     hostname: "navidrome"
@@ -623,8 +598,7 @@ containers_list:
   - name: livesync
     platform: k8s
     # Flux applies livesync through `promote`, and substitutes its CouchDB credentials Secret
-    # from homelab-cluster-vars (D5.9). The handback is two PRs, `owner: released` then
-    # removing `owner`: docs/flux-deploy-plane.md.
+    # from homelab-cluster-vars (D5.9).
     owner: flux
     hostname: "livesync"
     # blackbox-extra's http_401 target covers it: CouchDB's 401 is the end-to-end signal.
@@ -646,8 +620,7 @@ containers_list:
   - name: homepage
     platform: k8s
     # Flux applies homepage through `promote`, and substitutes its config Secret from
-    # homelab-cluster-vars (D5.7). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # homelab-cluster-vars (D5.7).
     owner: flux
     hostname: "homepage"
     port: 3000
@@ -657,8 +630,7 @@ containers_list:
   - name: peanut
     platform: k8s
     # Flux applies peanut through `promote`, and substitutes its Secret from
-    # homelab-cluster-vars (D3.6). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # homelab-cluster-vars (D3.6).
     owner: flux
     hostname: "peanut"
     port: 8080
@@ -672,7 +644,6 @@ containers_list:
   - name: artifacts
     platform: k8s
     # Flux applies artifacts through `promote`; its host directories are k8s_host_files' (D5.19).
-    # The handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
     owner: flux
     hostname: "artifacts"
     port: 8080
@@ -684,8 +655,7 @@ containers_list:
   # Authelia. The role's ingressroute template records why it stopped being LAN-only.
   - name: docs
     platform: k8s
-    # Flux applies docs through `promote`; its site directory is k8s_host_files' (D5.19). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies docs through `promote`; its site directory is k8s_host_files' (D5.19).
     owner: flux
     hostname: "docs"
     port: 8080
@@ -697,8 +667,7 @@ containers_list:
   - name: homelab-mcp
     platform: k8s
     # Flux applies homelab-mcp through `promote`, pulls its image from GHCR, and substitutes
-    # its token Secret from homelab-cluster-vars (D5.14). The handback is two PRs,
-    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # its token Secret from homelab-cluster-vars (D5.14).
     owner: flux
     port: 8000
     use_authelia: false
@@ -710,8 +679,7 @@ containers_list:
   - name: karakeep
     platform: k8s
     # Flux applies karakeep through `promote`, snapshots karakeep-data in `karakeep-snapshot`,
-    # and runs the archive pruner's gate in `karakeep-verify` (D5, Wave C). The handback is two
-    # PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # and runs the archive pruner's gate in `karakeep-verify` (D5, Wave C).
     owner: flux
     weekly_backup_claims: {karakeep-data: 3}  # Wed
     hostname: "karakeep"
@@ -767,8 +735,7 @@ containers_list:
     platform: k8s
     # Flux applies registry through `promote`, and the `registry-verify` Jobs replace the
     # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host cron and the
-    # one writer of ghcr-mirror's replicas (#5732). The handback is two PRs, `owner: released`
-    # then removing `owner`: docs/flux-deploy-plane.md.
+    # one writer of ghcr-mirror's replicas (#5732).
     owner: flux
     tier: platform
   # two_factor even on the LAN: arbitrary workflow execution on a stolen
@@ -776,8 +743,7 @@ containers_list:
   # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
     platform: k8s
-    # Flux applies n8n through `promote`, and every Ansible path skips it (#5546). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies n8n through `promote`, and every Ansible path skips it (#5546).
     owner: flux
     weekly_backup_claims: {n8n-data: 0, n8n-files: 5}  # Sun, Fri
     hostname: "n8n"
@@ -799,8 +765,7 @@ containers_list:
     platform: k8s
     # Flux applies mosquitto through `promote` (D5.20). The MosquittoLanAddressNotPinned rule
     # replaces the LAN-address assert, and cluster_vars.py write refuses a `:` in
-    # mqtt_password_hash. The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # mqtt_password_hash.
     owner: flux
     tier: home-automation
 
@@ -809,8 +774,7 @@ containers_list:
   - name: zigbee2mqtt
     platform: k8s
     # Flux applies zigbee2mqtt through `promote`, and substitutes its network key and MQTT
-    # credentials from homelab-cluster-vars (D5.10, own window). The handback is two PRs,
-    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # credentials from homelab-cluster-vars (D5.10, own window).
     owner: flux
     depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
@@ -827,8 +791,7 @@ containers_list:
   - name: home-assistant
     platform: k8s
     # Flux applies home-assistant through `promote`, and substitutes its Google project id and
-    # Google service-account Secret from homelab-cluster-vars (D5.11, own window). The handback
-    # is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Google service-account Secret from homelab-cluster-vars (D5.11, own window).
     owner: flux
     hostname: "home-assistant"
     # Records HA's own listener rather than setting it: HA binds 8123 by default, and
@@ -852,8 +815,7 @@ containers_list:
   # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.
   - name: pihole
     platform: k8s
-    # Flux applies pihole through `promote`, and every Ansible path skips it (D5.26). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies pihole through `promote`, and every Ansible path skips it (D5.26).
     owner: flux
     hostname: "pihole"
     # blackbox-extra's dns_a_homepage target covers it: a DNS query against the VIP.
@@ -871,8 +833,7 @@ containers_list:
   # holding a second copy of the credential.
   - name: pihole-exporter
     platform: k8s
-    # Flux applies pihole-exporter through `promote`, and every Ansible path skips it (D5.5). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies pihole-exporter through `promote`, and every Ansible path skips it (D5.5).
     owner: flux
     port: 80
     depends_on: [pihole]
@@ -893,16 +854,14 @@ containers_list:
   # this pod is not hostNetwork, but a distinct number keeps `ss -ltnp` on a node unambiguous.
   - name: gpu-exporter
     platform: k8s
-    # Flux applies gpu-exporter through `promote`, and every Ansible path skips it (D5.5). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies gpu-exporter through `promote`, and every Ansible path skips it (D5.5).
     owner: flux
     port: 9101
 
   - name: ical-proxy
     platform: k8s
     # Flux applies ical-proxy through `promote`, pulls its image from GHCR, and substitutes
-    # its calendar-feed Secret from homelab-cluster-vars (D5.14). The handback is two PRs,
-    # `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # its calendar-feed Secret from homelab-cluster-vars (D5.14).
     owner: flux
     hostname: "ical-proxy"
     # blackbox-extra's target for /calendar1.ics covers it, over the ClusterIP.
@@ -932,8 +891,7 @@ containers_list:
   - name: wg-easy
     platform: k8s
     # Flux applies wg-easy through `promote`, and every Ansible path skips it (D5.12, own window,
-    # operator on the LAN). The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # operator on the LAN).
     owner: flux
     weekly_backup_claims: {wg-easy-config: 4}  # Thu
     tier: platform
@@ -951,8 +909,7 @@ containers_list:
     platform: k8s
     # Flux applies code-server through `promote`, snapshots both claims in its
     # code-server-snapshot Job first, and substitutes its password Secret from
-    # homelab-cluster-vars (D5.16). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # homelab-cluster-vars (D5.16).
     owner: flux
     weekly_backup_claims: {code-server-workspace: 0}  # Sun
     # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
@@ -974,8 +931,7 @@ containers_list:
   # via its Service (the wg-easy pattern — the router's forward points at this device).
   - name: terraria
     platform: k8s
-    # Flux applies terraria through `promote`, and every Ansible path skips it (D5.15). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies terraria through `promote`, and every Ansible path skips it (D5.15).
     owner: flux
     weekly_backup_claims: {terraria-config: 3}  # Wed
 
@@ -984,8 +940,7 @@ containers_list:
   - name: valheim
     platform: k8s
     # Flux applies valheim through `promote`, and substitutes its join-password Secret from
-    # homelab-cluster-vars (D5.15). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # homelab-cluster-vars (D5.15).
     owner: flux
     weekly_backup_claims: {valheim-config: 2}  # Tue
 
@@ -995,8 +950,7 @@ containers_list:
   # DaemonSet.
   - name: loki-homelab
     platform: k8s
-    # Flux applies loki-homelab through `promote`, and every Ansible path skips it (D5.8). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies loki-homelab through `promote`, and every Ansible path skips it (D5.8).
     owner: flux
     hostname: "loki-homelab"
     # `ScrapeTargetDown` (service loki-homelab) covers it, through the entry's own scrape job.
@@ -1012,8 +966,7 @@ containers_list:
   # Loki. No web UI and no route; each exporter's Service is scraped in-cluster.
   - name: game-stats
     platform: k8s
-    # Flux applies game-stats through `promote` (D5.19). The handback is two PRs, `owner:
-    # released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies game-stats through `promote` (D5.19).
     owner: flux
     weekly_backup_claims: {terraria-stats-data: 0, valheim-stats-data: 1}  # Sun, Mon
     depends_on: [loki-homelab]
@@ -1033,8 +986,6 @@ containers_list:
   - name: monitor-bridge
     platform: k8s
     # Flux applies monitor-bridge through `promote`, and every Ansible path skips it (#5594).
-    # The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
     owner: flux
     tier: platform
     # The check exporter's listener (files/verdict_export.py), beside the deploy-pipeline
@@ -1048,14 +999,12 @@ containers_list:
         interval: 1m
   - name: node-exporter
     platform: k8s
-    # Flux applies node-exporter through `promote`, and every Ansible path skips it (D5.7). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies node-exporter through `promote`, and every Ansible path skips it (D5.7).
     owner: flux
   - name: autofix-bridge
     platform: k8s
     # Flux applies autofix-bridge through `promote` and substitutes its env Secret from
-    # homelab-cluster-vars (D5.19). The handback is two PRs, `owner: released` then removing
-    # `owner`: docs/flux-deploy-plane.md.
+    # homelab-cluster-vars (D5.19).
     owner: flux
     # The check exporter's listener (autofix.py, through jobs_metrics.py), which serves the
     # *arr remediation loop's verdict as homelab_check_* gauges (M6 batch B7). The entry has no `port` of its own, so the item names it. The `metrics` item renders
@@ -1073,8 +1022,7 @@ containers_list:
   - name: nut
     platform: k8s
     # Flux applies nut through `promote` and pulls its image from GHCR, first through the
-    # in-cluster ghcr.io mirror (D5.17). The handback is two PRs, `owner: released` then
-    # removing `owner`: docs/flux-deploy-plane.md.
+    # in-cluster ghcr.io mirror (D5.17).
     owner: flux
     tier: platform
   # The Prometheus face of the same upsd, as its own workload rather than a sidecar: the nut pod
@@ -1082,8 +1030,7 @@ containers_list:
   # exporter bump. No port and no route derive — it is a scrape target only.
   - name: nut-exporter
     platform: k8s
-    # Flux applies nut-exporter through `promote`, and every Ansible path skips it (D5.5). The
-    # handback is two PRs, `owner: released` then removing `owner`: docs/flux-deploy-plane.md.
+    # Flux applies nut-exporter through `promote`, and every Ansible path skips it (D5.5).
     owner: flux
     # upsd's own variables: battery charge and runtime, load, input voltage, and ups.status as
     # a per-flag 0/1. Before this job, UPS state reached Grafana only as `hass_*` series from
@@ -1110,8 +1057,7 @@ containers_list:
     platform: k8s
     # Flux applies pi-peer-backup through `promote` and runs its gate in
     # `pi-peer-backup-verify`; its two daniel-pi writes moved to `setup/k8s_host_files` (D5,
-    # Wave C). The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # Wave C).
     owner: flux
     weekly_backup_claims: {pi-peer-backup-data: 6}  # Sat
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
@@ -1119,8 +1065,7 @@ containers_list:
   - name: scrutiny
     platform: k8s
     # Flux applies scrutiny through `promote`, and substitutes its InfluxDB credentials Secret
-    # from homelab-cluster-vars (D5.8). The handback is two PRs, `owner: released` then
-    # removing `owner`: docs/flux-deploy-plane.md.
+    # from homelab-cluster-vars (D5.8).
     owner: flux
     weekly_backup_claims: {scrutiny-web-config: 6}  # Sat
     # The volume holds ONLY the SMART TSDB (verified single mount), regenerating from the
@@ -1171,8 +1116,7 @@ containers_list:
   - name: blackbox-exporter
     platform: k8s
     # Flux applies blackbox-exporter through `promote`, and every Ansible path skips it (D5, Wave
-    # A's last PR). The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # A's last PR).
     owner: flux
     port: 9115
   # Deploys LAST: every workload role must finish before this role fences the namespace
@@ -1193,8 +1137,7 @@ containers_list:
     platform: k8s
     # Flux applies netpol-baseline through `promote` and checks the policies in
     # `netpol-baseline-verify`, which depends on `netpol-baseline-deferred` (D5, Wave D's last
-    # flip). The handback is two PRs, `owner: released` then removing `owner`:
-    # docs/flux-deploy-plane.md.
+    # flip).
     owner: flux
 # False until this host's first manual initial_setup.yml + deploy.yml run finishes green
 # (README §4): the gitops_deploy handler shells a full deploy at the end of

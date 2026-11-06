@@ -20,8 +20,7 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
   `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
   deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its digest-bump PRs therefore draw no `land-wait` and no
-  `probe.py health` run. To give it back to Ansible, follow the two-PR handback in
-  `docs/flux-deploy-plane.md`; a plain revert of the flag leaves two writers on the objects.
+  `probe.py health` run.
 - **Secrets:** `peanut_username`, `peanut_password` (web UI login), `nut_ha_password`
   (upsd's read-only login, shared with Home Assistant, which PeaNUT uses to poll `upsd`) —
   see `templates/secret.yaml.j2`. The published render holds a `${<key>}` placeholder for

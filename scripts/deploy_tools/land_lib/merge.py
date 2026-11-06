@@ -77,7 +77,7 @@ from lib.exit_codes import CI_DISARMED, CI_GREEN, CI_PENDING, CI_RED
 from lib.json_types import JsonObject, as_list, as_object, as_object_list
 from lib import removes_object
 from deploy_tools import await_ci
-from deploy_tools.land_lib import gh_read, handback, pace, pin_gate, policy
+from deploy_tools.land_lib import gh_read, pace, pin_gate, policy
 from deploy_tools.land_lib.landing import BRANCH, Landing
 from deploy_tools.land_lib.outcome import Verdict, disarmed, say
 from deploy_tools.land_lib.pr_json import CommitMessage, parse_file
@@ -589,10 +589,9 @@ def await_merge(ln: Landing) -> None:
     updated_from = ""
     # The `waited + held` at which the wait ends; the branch update moves it, once.
     wait_ends_at = o.merge_timeout
-    # The head the handback refusal and the pin gate last passed, so a merge GitHub refuses
-    # and the wait retries reads kubectl, runs the gates and posts the status again only for a
-    # new head.
-    handback_checked = ""
+    # The head the pin gate last passed, so a merge GitHub refuses and the wait retries runs
+    # the gate and posts the status again only for a new head.
+    gated_head = ""
     # The forward-only pins that head bumps, whose land rule is read again before each retry.
     gated_pins: list[str] = []
     # The head await_ci last read as skipped in a draft, and the `waited` it was first read at.
@@ -687,10 +686,9 @@ def await_merge(ln: Landing) -> None:
                     updated_from = head
                     wait_ends_at = waited + held + o.merge_timeout
                 else:
-                    if head != handback_checked:
-                        handback.refuse_handback_while_flux_owns(ln, head)
+                    if head != gated_head:
                         gated_pins = pin_gate.gate_before_merge(ln, head)
-                        handback_checked = head
+                        gated_head = head
                     else:
                         pin_gate.recheck_before_merge(ln, gated_pins)
                     refusal = _merge_directly(ln, head)

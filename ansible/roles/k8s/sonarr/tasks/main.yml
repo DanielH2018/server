@@ -1,5 +1,5 @@
 ---
-# Flux applies sonarr (D5.20), and no Ansible path reaches this file; it stays for the handback.
+# Flux applies sonarr (D5.20), and no Ansible path reaches this file; it stays until R4 deletes it.
 # The verify reads became the Job in templates/verify/.
 - name: Deploy sonarr to the cluster
   ansible.builtin.include_role:
@@ -9,5 +9,4 @@
   # var of that name would override the default and loop through `sonarr_k8s_rollout_timeout`.
 
 # The Discord Connect notification runs as the seed Job in templates/verify/notification.yaml.j2.
-# The arr-notification include that declared it went in #5561, so a handback re-adds it
-# (`arr_notification_app: sonarr`) as well as reverting the D5.20 flip.
+# The arr-notification include that declared it went in #5561.

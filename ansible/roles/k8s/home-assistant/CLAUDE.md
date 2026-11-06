@@ -23,9 +23,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   ships `files/` into the cluster. Edit HA config HERE, then merge; `promote` applies it.
 - **Flux applies it, not Ansible** (D5.11, an own-window flip). Its `containers_list` entry
   carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
-  merged change reaches the cluster when `promote` publishes and verifies the next bundle. To
-  give it back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain
-  revert of the flag leaves two writers on the objects. The Deployment is `Recreate`, so a
+  merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
+  Deployment is `Recreate`, so a
   change that rolls it takes HA down for the length of the pod restart, about 2 minutes. The
   `home-assistant-prepull` Kustomization pulls the 720 MB image onto the node before that
   restart, so the old pod serves through the pull (`flux_prepull_timeout` in
@@ -44,8 +43,8 @@ LinuxServer.io Home Assistant. See repo-root `CLAUDE.md` for shared conventions,
   render, and Flux substitutes the values from the `homelab-cluster-vars` Secret. A rotation
   reaches the cluster only through `cluster_vars.py write`.
 - **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays for the
-  handback. Its pre-apply snapshot through `k8s/volume-snapshot` became the
+  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
+  `k8s/volume-snapshot` became the
   `home-assistant-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
 - **Port 8123, no Authelia**, so the companion app works unchanged. MQTT goes via the
   in-cluster `mosquitto` Service, NUT via the in-cluster `nut` Service (admitted by

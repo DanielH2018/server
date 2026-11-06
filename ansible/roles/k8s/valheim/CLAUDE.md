@@ -37,9 +37,8 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   chain, so the join password is the only access control.
 - **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
-  change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
-  back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
-  the flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
+  false` still stops Renovate's
   automerge of the wrapper bump. The Deployment is `Recreate`, so a change that rolls it takes
   the server down until the new pod passes its startup probe: 2m16s from pod start to Ready on
   the 2026-10-14 roll, with the install claim already populated. Every roll restarts the
@@ -53,7 +52,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   operator runs after a hand rotation. The renderer stamps a restart checksum on the
   Deployment, so a changed value rolls the pod.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The mods build
+  `k8s/manifests`, and no Flux path runs either. They stay until R4 deletes them. The mods build
   became the `images` job (D5.4), which pushes `ghcr.io/danielh2018/valheim:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/valheim`; the renderer rewrites the `mods`
   initContainer's ref to the GHCR one with `imagePullPolicy: IfNotPresent`

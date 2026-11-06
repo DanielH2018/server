@@ -20,9 +20,8 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 - **Host:** daniel-box (k3s), pinned by a required node affinity · **Port:** 8443
 - **Flux applies it, not Ansible** (D5.16, Wave C). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
-  change reaches the cluster when `promote` publishes and verifies the next bundle. To give it
-  back to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of
-  the flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
+  false` still stops Renovate's
   automerge of a base-image or build-pin bump.
 - **Both claims are snapshotted before each revision applies.** The role declares
   `k8s_autodeploy_snapshot_pvcs`, so the render adds the `code-server-snapshot` Kustomization,
@@ -47,7 +46,7 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
   Deployment keeps the default rollout budget and the editor is down only for the container
   start.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The defaults name
+  `k8s/manifests`, and no Flux path runs either. They stay until R4 deletes them. The defaults name
   `<k8s_registry_pull_host>/code-server`; the renderer rewrites both refs to the GHCR one with
   `imagePullPolicy: IfNotPresent` (`scripts/renderer/renderer_lib/images.py:ghcr_refs`). The
   snapshot Job replaces k8s/volume-snapshot's pre-apply snapshot, and the Kustomization's

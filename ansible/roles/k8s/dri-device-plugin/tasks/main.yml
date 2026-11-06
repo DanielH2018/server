@@ -11,8 +11,7 @@
 # It is also the only privileged component in the media stack, and deliberately so: it holds the
 # privilege in one small auditable DaemonSet instead of spreading it across long-running media
 # services. Consumers stay unprivileged and just request the resource.
-# Flux owns this role, so no Flux path runs the include below; it stays for a handback
-# (docs/flux-deploy-plane.md). The
+# Flux owns this role, so no Flux path runs the include below; it stays until R4 deletes it. The
 # rollout wait and the `devic.es/dri` readback this file ran after it are gone with the flip. The
 # soak's verify is M2's `K8sExtendedResourceMissing` rule (`verify="true"`,
 # ansible/roles/k8s/observability/files/rules/k8s-workloads.yaml): it fires when no node reports

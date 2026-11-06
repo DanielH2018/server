@@ -7,7 +7,6 @@ UI state. Under Flux the declaration runs as a seed Job in sonarr's and radarr's
 `lookup()`. Those lookups are the role's only callers: sonarr and radarr included it from their
 `tasks/main.yml` with `arr_notification_app` until #5561, which dropped the includes because
 no Ansible path ran them after the Flux flip (D5.20). `tasks/` stays until R4 deletes it, and a
-handback of either app re-adds that app's include.
 
 **Why it exists.** A Connect notification is a row in `sonarr.db` / `radarr.db` on the app's
 config PVC. No manifest reproduces it, so a Longhorn revert past its creation, or anyone

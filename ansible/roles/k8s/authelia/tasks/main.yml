@@ -1,6 +1,6 @@
 ---
-# Flux applies authelia through `promote` (`owner: flux`), and no Flux path runs this file. It
-# stays for the handback (docs/flux-deploy-plane.md). The checks it held before the flip moved
+# Flux applies authelia through `promote` (`owner: flux`), and no Flux path runs this file. It stays
+# until R4 deletes it. The checks it held before the flip moved
 # to `cluster_vars.py write`, which refuses each of these before a value reaches the cluster:
 # - "Fail if the claude-ui credentials are missing": an empty `authelia_claude_totp_secret`;
 # - "Fail if a stored Authelia digest is malformed": a malformed or shared value in the three

@@ -24,9 +24,8 @@ finding and why the prefs plane is shaped this way.
 
 - **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry carries
   `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
-  reaches the cluster when `promote` publishes and verifies the next bundle. To give it back
-  to Ansible, follow the two-PR handback in `docs/flux-deploy-plane.md`; a plain revert of the
-  flag leaves two writers on the objects. `k8s_autodeploy: false` still stops Renovate's
+  reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
+  still stops Renovate's
   automerge of a pin bump.
 - **The Mullvad account reaches the pod through a SOPS manifest.** `mullvad_account` is all
   digits, which no Flux placeholder can carry as a string, so `render_sops_manifests` ships
