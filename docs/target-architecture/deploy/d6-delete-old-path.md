@@ -86,8 +86,8 @@ artifact, and marks [ADR-0010](../../adr/0010-pull-based-gitops-over-argo-and-fl
       about 350. The headroom covers D5's additions and D6.7b's tag rule and object-loss
       change.
     - `land.sh`, `land.py` and `land_lib/` together are at most 8,800 lines. They measured
-      8,635 once [#7349](https://github.com/DanielH2018/server/issues/7349) deleted the
-      `deploy.sh` arm, and the bound leaves about 165 lines for D6.18 to D6.21. It replaces a
+      8,636 once [#7349](https://github.com/DanielH2018/server/issues/7349) deleted the
+      `deploy.sh` arm, and the bound leaves about 160 lines for D6.18 to D6.21. It replaces a
       bound stated from 6,258 lines at `70591c307`, which the tree outgrew: the same files
       measured 9,390 after D6.15, and no D6 PR removes that much.
 
