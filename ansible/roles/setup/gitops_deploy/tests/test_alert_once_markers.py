@@ -34,8 +34,6 @@ _SOURCES = (
 _KNOWN_CHANNELS = frozenset(
     {
         "secrets",
-        "k8s",
-        "stale_denylist",
         "ci",
         "broad",
     }

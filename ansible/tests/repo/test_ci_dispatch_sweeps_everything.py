@@ -44,7 +44,7 @@ SCOPED_STEPS = frozenset(
         "Notice step failed",
         "Upload notice failure",
         "Check whether this PR touches the type proof's inputs",
-        "Cross-plane order gate",
+        "Render-diff gates",
         "Cluster pin checks",
     }
 )

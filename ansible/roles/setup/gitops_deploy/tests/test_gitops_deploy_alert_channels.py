@@ -2,7 +2,7 @@
 
 alert_once() advances its per-SHA marker on DETECTION, not delivery, and hands the post to
 deliver(): a webhook blip is redelivered by the queue, and an ff-merged path that noops on
-the next tick does not re-page. alert_deferred() and alert_secrets_deferred() choose the
+the next tick does not re-page. alert_secrets_deferred() chooses the
 channel and the text. DeployerState.record_behind() stamps the behind-origin marker
 once and keeps the first-seen time across later pushes, and the entrypoint() that feeds it
 never lets a git failure page. Every test runs
@@ -21,7 +21,6 @@ import pytest
 from deployer_lib import deploy_alerts
 from deployer_lib import deploy_state
 from deployer_lib.deploy_changes import ChangeSet
-from deployer_lib.deploy_remediation import k8s_remediation
 from deployer_lib.deploy_toolbox import DeployTools
 from gitops_markers import parse_alerted
 
@@ -131,46 +130,6 @@ def test_no_secrets_change_pages_nothing(gitops_deploy, state_dir, settings, sta
     )
     assert seen == []
     assert _alerted(state_dir, "secrets") is None
-
-
-# ── alert_deferred(): the k8s channel ──────────────────────────────────────────────────────────────
-def test_an_empty_changeset_pages_nothing(gitops_deploy, state_dir, settings, state):
-    tools, seen = _posts(state_dir)
-    deploy_alerts.alert_deferred(tools, state, settings, ORIGIN, ChangeSet())
-    assert seen == []
-    # The keyed marker itself, not a glob for per-channel basenames: those
-    # files do not exist at all, so `not any(...endswith("_alerted_sha"))` would pass over a
-    # slot this call had written.
-    assert _marker(state_dir, "alerted_shas") is None
-
-
-def test_a_k8s_change_pages_with_the_remediation_for_this_host(
-    gitops_deploy, state_dir, settings, state
-):
-    tools, seen = _posts(state_dir)
-    cs = ChangeSet(k8s={"sonarr"})
-    deploy_alerts.alert_deferred(
-        tools, state, settings, ORIGIN, cs, declared_k8s={"sonarr"}
-    )
-    ((key, content),) = seen
-    assert key == f"k8s:{ORIGIN}"
-    assert "`sonarr`" in content and ORIGIN[:8] in content
-    assert content.endswith(k8s_remediation({"sonarr"}, {"sonarr"}, set()))
-    assert _alerted(state_dir, "k8s") == ORIGIN
-
-
-def test_an_unread_inventory_prescribes_the_full_deploy(
-    gitops_deploy, state_dir, settings, state
-):
-    # declared_k8s=None is the caller that has not read host_vars. Treated as the empty set,
-    # every changed role reads as untaggable and the remediation is the full deploy: slower,
-    # but a `--tags` line for a role with no entry exits 0 having applied nothing.
-    tools, seen = _posts(state_dir)
-    deploy_alerts.alert_deferred(
-        tools, state, settings, ORIGIN, ChangeSet(k8s={"sonarr"})
-    )
-    ((_key, content),) = seen
-    assert content.endswith(k8s_remediation({"sonarr"}, set(), set()))
 
 
 # ── DeployerState.record_behind(): the behind-origin marker ───────────────────────────────────

@@ -54,7 +54,6 @@ from deploy_tools.deploy_lib.messages import PROG, say_error
 from deploy_tools.deploy_lib.playbook import (
     annotate,
     annotate_failure,
-    discharge_owed_k8s,
     run_playbook,
 )
 from lib.detach_fork import (
@@ -159,22 +158,18 @@ def notify(run: locked.Run, status: int, log: Path, notifier: str) -> int:
 
 @dataclass(frozen=True)
 class ChildSteps:
-    """The five steps `deploy_and_gate` runs, so a test replaces a field, not a module."""
+    """The four steps `deploy_and_gate` runs, so a test replaces a field, not a module."""
 
     run_playbook: Callable[[locked.Run], int] = run_playbook
     annotate: Callable[[locked.Run], None] = annotate
     annotate_failure: Callable[[locked.Run, float], None] = annotate_failure
-    discharge: Callable[[Path], None] = discharge_owed_k8s
     notify: Callable[[locked.Run, int, Path, str], int] = notify
 
 
 def deploy_and_gate(
     run: locked.Run, log: Path, notifier: str, steps: ChildSteps | None = None
 ) -> int:
-    """Run the playbook, annotate and discharge a success, then run the notifier's health gate.
-
-    The discharge is the foreground run's `discharge_owed_k8s` (#4087), run before the gate so
-    the ledger no longer names the change when the verdict posts.
+    """Run the playbook, annotate a success, then run the notifier's health gate.
 
     Returns:
       The notifier's exit code: 0 when the gate settled, which needs the playbook's 0 too.
@@ -194,7 +189,6 @@ def deploy_and_gate(
     # matched no host deployed nothing, so it draws no marker either way.
     if status == 0:
         steps.annotate(run)
-        steps.discharge(run.repo_root)
     elif status != DEPLOY_NO_HOSTS:
         steps.annotate_failure(run, time.monotonic() - started)
     # The snapshot outlives the playbook by exactly this call: the notifier's health gate

@@ -27,6 +27,7 @@ from _land_fakes import (
 )
 from deploy_tools.deploy_lib import detach_notify
 from deploy_tools.deploy_lib.detach_notify import NotifyTools
+from deploy_tools.promote_lib.wait import WaitResult
 from lib.exit_codes import PROBE_UNREADABLE
 
 SNAPSHOTS = Path("/snap")
@@ -115,8 +116,9 @@ def _land(
 def _flip(**kwargs: object) -> Fakes:
     """#5720's shape: traefik and traefik-crds flip to `owner: flux` beside an Ansible tag.
 
-    The `host_vars` edit is a deploy-plane change, so the tick is the apply, and the primary
-    checkout does not carry the merge commit (`merge_applied_rc` defaults to 1).
+    The `host_vars` edit is a deploy-plane change, and the primary checkout does not carry
+    the merge commit (`merge_applied_rc` defaults to 1). The promotion's changed set names
+    the two flipped tags, which the gate grades (D6.12).
     """
     fakes = Fakes(
         gh_views={
@@ -132,6 +134,7 @@ def _flip(**kwargs: object) -> Fakes:
         owners={MERGE_SHA: dict.fromkeys(FLIPPED, "flux")},
         kustomizations=set(FLIPPED),
         state=receipt({"ansible/deploy.yml": ["narrowed-to-nothing"]}),
+        land_wait=[WaitResult("settled", detail="2 applied", tags=FLIPPED)],
     )
     return replace(fakes, **kwargs)
 

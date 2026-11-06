@@ -220,7 +220,7 @@ def test_a_candidate_that_drops_a_prune_disabled_claim_is_promoted(
 @pytest.mark.parametrize("where", ["labels", "annotations"])
 def test_decide_and_the_pr_gate_agree_on_a_dropped_prune_disabled_claim(where):
     """The PR gate's arm 3 and `decide` judge the same drop the same way, so neither drifts."""
-    from validate.cross_plane_order import Snapshot, _objects, removal_problems
+    from validate.render_diff_gates import Snapshot, _objects, removal_problems
 
     prod_dirs = {"bento-pdf": {**WITH_ROUTE, "pvc.yaml": _claim(where)}}
     target_dirs = {"bento-pdf": WITH_ROUTE}
@@ -247,7 +247,7 @@ def test_decide_and_the_pr_gate_agree_on_a_dropped_prune_disabled_claim(where):
 def test_the_digest_suffix_is_defined_in_one_module():
     """One implementation of the rename exemption serves `decide` and the PR gate (#5291).
 
-    `bundle.py` names the suffix, and today `object_loss.py` and `cross_plane_order.py` each
+    `bundle.py` names the suffix, and today `object_loss.py` and `render_diff_gates.py` each
     compile their own copy of the pattern that strips it.
     """
     literal = "-[0-9a-f]{8}$"

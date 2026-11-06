@@ -1,10 +1,10 @@
 """The verdict a landing reaches when its diff derivation refuses the range as broad.
 
 A truncated file list sends the landing to `deploy.sh --changed`, which refuses a broad
-range, and `land.sh` must still end with a `VERDICT:` line while the tick it kicked is
-applying that very merge commit -- not exit 1 telling the session to deploy by hand. The
-pairs here are the three ways that range can end: the tick's marker covers it, the marker
-was read mid-apply, or the tick is not the apply at all.
+range, and `land.sh` must still end with a `VERDICT:` line. Since D6.12 such a range waits on
+the promotion, whose changed set names its k8s tags, and then grades from the deployer's
+markers. The pairs here are the three ways that range can end: the tick's marker covers it,
+the marker was read mid-apply, or the tick is not the apply at all.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_broad_fallback_verdict.py
 """
@@ -50,7 +50,7 @@ def test_a_broad_fallback_grades_from_the_deployers_markers(landing):
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
     assert (exc.value.verdict, exc.value.rc) == ("settled", 0)
-    assert "no tag list scoping its diff" in exc.value.detail
+    assert [c[1][:2] for c in _calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
 
 
 def test_a_broad_fallback_over_an_abandoned_tick_watch_is_deferred(landing):
@@ -69,43 +69,25 @@ def test_a_broad_fallback_over_an_abandoned_tick_watch_is_deferred(landing):
 
 def test_a_broad_fallback_the_tick_does_not_apply_still_names_a_verdict(landing):
     """`--since` bounds a range wider than this PR, so another session's broad merge can
-    refuse the derivation for a PR that touched nothing broad. That one is still owed to a
-    hand — but with a `VERDICT:` line."""
-    ln, _calls = _broad_fallback(landing, Fakes(changed_rc=DEPLOY_BROAD))
+    refuse the derivation for a PR that touched nothing broad. It waits on the promotion,
+    and a changed set naming no tag ends it with a `VERDICT:` line."""
+    ln, calls = _broad_fallback(landing, Fakes(changed_rc=DEPLOY_BROAD))
     ln.classification = Classification(
         self_applied=False,
     )
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
-    assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)
+    assert (exc.value.verdict, exc.value.rc) == ("nothing-to-deploy", 0)
+    assert "land_wait" in [c[0] for c in calls]
 
 
-# ── the deployer's own narrowing, tried before the range is called broad ──
-
-
-def test_a_broad_fallback_the_narrowing_can_scope_deploys_those_tags(landing):
-    """CLEAN half. `changed` refuses a range wholesale on ONE broad path, so a >100-file PR
-    touching group_vars alongside a service role deployed nothing at all."""
+def test_a_broad_fallback_derives_no_tag_and_runs_no_narrowing(landing):
+    """The deployer's `narrow` scoped such a range to k8s tags until D6.12; Flux applies all
+    of them, so the landing asks it nothing and the changed set names them."""
     ln, calls = _broad_fallback(
         landing,
         Fakes(changed_rc=DEPLOY_BROAD, narrowed_rc=0, narrowed="bazarr,sonarr\n"),
     )
     deploy.derive_from_diff(ln)
-    assert ln.resolved_tags == ["bazarr", "sonarr"]
-    assert [c[1] for c in calls if c[0] == "deploy_tags"] == [
-        ("changed", "beefbeef"),
-        ("narrow", "beefbeef", "HEAD"),
-    ]
-
-
-def test_a_narrowing_that_reaches_nothing_deploys_nothing_rather_than_settling(landing):
-    """Exit 0 with empty stdout is `narrow` answering "this range moves no rendered output".
-
-    `deploy_phase` sends an empty tag list to `no_tag_outcome`, which grades from the
-    deployer's markers — not to a deploy of nothing reported as settled.
-    """
-    ln, _calls = _broad_fallback(
-        landing, Fakes(changed_rc=DEPLOY_BROAD, narrowed_rc=0, narrowed="\n")
-    )
-    deploy.derive_from_diff(ln)
     assert ln.resolved_tags == []
+    assert [c[1] for c in calls if c[0] == "deploy_tags"] == [("changed", "beefbeef")]

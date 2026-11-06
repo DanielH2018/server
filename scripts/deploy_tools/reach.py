@@ -190,7 +190,6 @@ class Reach(NamedTuple):
         cs = self.changes
         return (
             cs.k8s
-            | cs.k8s_deploy
             | shared_module_consumers(self.loud, repo)
             | deploy_cross_role.k8s_lookup_readers(self.loud, repo)
         )

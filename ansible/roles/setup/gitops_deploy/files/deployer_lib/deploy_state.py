@@ -47,12 +47,9 @@ from gitops_ledger import (
     k8s_deferred_entries,
     k8s_unapplied_entries,
     manual_plane_entries,
-    owed_line,
-    parse_owed,
     parse_receipts,
     put_manual_plane,
     receipt_line,
-    rewrite_owed,
 )
 from host_lib import atomic_write
 
@@ -65,26 +62,23 @@ from host_lib import atomic_write
 
 
 class _K8sOwedClass(NamedTuple):
-    """What one k8s owed class does differently from the other."""
+    """How one k8s owed class's entries are read out of the ledger."""
 
-    # Reads the class's entries out of the ledger text. The two readers differ: a deferred
-    # service on two lines keeps its OLDER entry, the age monitor-bridge pages on.
+    # The two readers differ: a deferred service on two lines keeps its OLDER entry, the age
+    # monitor-bridge pages on.
     entries: Callable[[str | None], list[K8sDeferredEntry]]
-    # Whether recording an already-listed service moves its entry to the new origin (#2644).
-    advance: bool
 
 
+# DECIDED: no tick writes either class since D6.12, which deleted their writers with
+# `deploy_k8s_owed.py`. A line an older tick wrote is still read, and cleared by hand with
+# `gitops_state.py clear-owed`, until D6.6 deletes the readers and the two class names.
 _K8S_OWED: dict[str, _K8sOwedClass] = {
     # The image bumps a broad tick merged and could not deploy (#2449). The paging class:
-    # monitor-bridge pages on the oldest entry past its age gate. An entry KEEPS ITS ORIGIN:
-    # nothing compares this class's SHA, and `deploy_defer.unrecord` can reset the merge.
-    OWED_K8S_DEFERRED: _K8sOwedClass(k8s_deferred_entries, advance=False),
-    # The k8s changes a tick merged and will never apply (#2570). Nothing pages on it; the
-    # SessionStart banner and the journal read it. An entry MOVES TO THE NEW ORIGIN:
-    # `deploy_k8s_owed.discharge_k8s_unapplied` drops an entry once a release record descends
-    # from the SHA it names, so one left at the OLDEST origin discharges over every later
-    # change to the same service.
-    OWED_K8S_UNAPPLIED: _K8sOwedClass(k8s_unapplied_entries, advance=True),
+    # monitor-bridge pages on the oldest entry past its age gate.
+    OWED_K8S_DEFERRED: _K8sOwedClass(k8s_deferred_entries),
+    # The k8s changes a tick merged and would never apply (#2570). Nothing pages on it; the
+    # SessionStart banner and the journal read it.
+    OWED_K8S_UNAPPLIED: _K8sOwedClass(k8s_unapplied_entries),
 }
 
 
@@ -261,32 +255,11 @@ class DeployerState:
         """Every `cls` entry still owed. `k8s_deferred` comes back oldest entry first."""
         return _k8s_owed(cls).entries(self.read("owed"))
 
-    def record_owed(self, cls: str, origin: str, services, now: float) -> list[str]:
-        """Record a `cls` entry per service in `services`. Returns the ones added.
-
-        A service already listed keeps its first-seen stamp, which dates the oldest change.
-        Under `k8s_unapplied` its entry moves to `origin`; under `k8s_deferred` it keeps its
-        origin too. A moved entry stays OUT of the return value, which
-        `deploy_defer.unrecord` clears: an entry predating the tick survives the reset.
-
-        `rewrite_owed` owns the repair of a TORN line naming one of `services` (#2657), and
-        the move to `origin`. A repaired service reads as listed, so this updates its line
-        rather than appending a second one beside it.
-        """
-        advance = _k8s_owed(cls).advance
-        owed = self.read("owed")
-        wanted = set(services)
-        text = rewrite_owed(owed, cls, wanted, origin, now, advance)
-        added = sorted(wanted - {e.subject for e in parse_owed(text, cls)})
-        lines = text.splitlines() + [owed_line(cls, s, origin, now) for s in added]
-        if added or text != (owed or ""):
-            self.write("owed", "\n".join(lines))
-        return added
-
     def clear_owed(self, cls: str, services) -> list[str]:
         """Drop the `cls` entries naming any of `services`. Returns the names cleared.
 
-        A torn ledger line naming one of `services` goes as well (#2657).
+        `gitops_state.py clear-owed` is the one caller. A torn ledger line naming one of
+        `services` goes as well (#2657).
         """
         _k8s_owed(cls)
         text, cleared = drop_owed(self.read("owed"), cls, services)

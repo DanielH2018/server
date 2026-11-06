@@ -122,18 +122,6 @@ def test_the_smoke_path_rule_is_the_reach_rule_minus_meta():
     assert land_shared._DEPLOY_RUN_SUBDIRS == reach - {"meta"}
 
 
-def test_the_smoke_set_cannot_widen_past_the_digest_provable_roles():
-    """Both sets mean "this role acts only through the bytes it renders", so pin them.
-
-    `deploy_k8s_owed.DIGEST_PROVABLE_ROLES` carries the argument per role. A role added here but
-    not there would be smoke-tested on one caller while the deployer still demands a record
-    from all of them.
-    """
-    from deployer_lib.deploy_k8s_owed import DIGEST_PROVABLE_ROLES
-
-    assert SMOKE_TESTABLE_SHARED_ROLES <= DIGEST_PROVABLE_ROLES
-
-
 def test_a_hand_typed_tags_run_still_expands_to_every_caller():
     """The asymmetry #2717 decided: `deploy.sh --tags manifests` is the operator asking."""
     declared = land_shared.declared_tags()

@@ -1,11 +1,12 @@
-"""The cross-plane gate's `_is_clean` / `_is_flagged` pairs, one per bullet of D4.4's step.
+"""The render-diff gates' `_is_clean` / `_is_flagged` pairs, one per arm.
 
 Most pairs judge two synthetic snapshots, with the dependency map built by the play's own
-`build_k8s_dep_map`. The `hostname`/`auth_tier` pair and the `workload-shell.yml.j2` pair only
+`build_k8s_dep_map`. The `hostname`/`auth_tier` pair and the `workload-shell.yml.j2` test only
 prove something through a real render, because the question is which roles' output an edit
-moves; they render bento-pdf and authelia from a copy of HEAD's tree.
+moves; they render bento-pdf and authelia from a copy of HEAD's tree. Arm 1's pairs went with
+the arm in D6.12.
 
-Run: uv run pytest scripts/validate/tests/test_validate_cross_plane_order.py
+Run: uv run pytest scripts/validate/tests/test_validate_render_diff_gates.py
 """
 
 import re
@@ -15,19 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from _cross_plane_inventory import hand_back_authelia
 from deploy_tools.object_loss import PRUNE_KEY, prune_disabled
 from deploy_tools.render_targets import render_targets
-from validate import cross_plane_order as gate
+from validate import render_diff_gates as gate
 from toposort import build_k8s_dep_map
-
-AUTHELIA_IMAGE_BUMP = (
-    "--- a/ansible/roles/k8s/authelia/defaults/main.yml\n"
-    "+++ b/ansible/roles/k8s/authelia/defaults/main.yml\n"
-    "-authelia_k8s_image: authelia/authelia:4.39.1\n"
-    "+authelia_k8s_image: authelia/authelia:4.39.2\n"
-)
-BENTO_IMAGE_BUMP = AUTHELIA_IMAGE_BUMP.replace("authelia", "bento_pdf")
 
 
 def snap(moved=(), flux=("bento-pdf",), texbrain_deps=(), side="base"):
@@ -46,101 +38,10 @@ def snap(moved=(), flux=("bento-pdf",), texbrain_deps=(), side="base"):
     )
 
 
-def judge(moved, base_kw=None, head_kw=None, paths=(), diffs=None):
+def judge(moved, base_kw=None, head_kw=None):
     base = snap(moved, side="base", **(base_kw or {}))
     head = snap(moved, side="head", **(head_kw or {}))
-    return gate.problems(base, head, paths, diffs or {})
-
-
-def test_a_change_to_bento_pdf_alone_is_clean():
-    assert judge({"bento-pdf"}) == []
-
-
-def test_a_template_change_in_bento_pdf_and_authelia_together_is_flagged():
-    flagged = judge({"bento-pdf", "authelia"})
-    assert len(flagged) == 1
-    assert flagged[0].startswith(
-        "arm 1: bento-pdf (flux) depends on authelia (ansible)"
-    )
-
-
-def test_an_image_pin_bump_in_both_roles_is_clean():
-    diffs = {"bento-pdf": BENTO_IMAGE_BUMP, "authelia": AUTHELIA_IMAGE_BUMP}
-    assert judge({"bento-pdf", "authelia"}, diffs=diffs) == []
-
-
-def test_an_image_pin_bump_beside_a_shared_template_change_is_flagged():
-    diffs = {"bento-pdf": BENTO_IMAGE_BUMP, "authelia": AUTHELIA_IMAGE_BUMP}
-    paths = ["ansible/templates/workload-shell.yml.j2"]
-    assert len(judge({"bento-pdf", "authelia"}, paths=paths, diffs=diffs)) == 1
-
-
-def test_a_tasks_change_counts_though_it_moves_no_render_is_flagged():
-    flagged = judge({"bento-pdf"}, paths=["ansible/roles/k8s/authelia/tasks/main.yml"])
-    assert len(flagged) == 1
-
-
-def test_a_tasks_change_in_a_flux_owned_role_is_clean():
-    """bento-pdf's tasks run nowhere once Flux owns it, so they pair with nothing (OQ 9)."""
-    assert (
-        judge({"authelia"}, paths=["ansible/roles/k8s/bento-pdf/tasks/main.yml"]) == []
-    )
-
-
-# A renderer-only PR: nothing publishes an Ansible-owned tag's `homelab-render` output, so
-# only the flux-owned half of what it moves reaches a cluster (#5213).
-RENDERER_ONLY = ["scripts/renderer/renderer_lib/cluster.py"]
-
-
-def test_a_renderer_only_change_moving_bento_pdf_and_authelia_is_clean():
-    assert judge({"bento-pdf", "authelia"}, paths=RENDERER_ONLY) == []
-
-
-def test_a_renderer_only_change_counts_the_flux_owned_tag_alone():
-    base = snap({"bento-pdf", "authelia"}, side="base")
-    head = snap({"bento-pdf", "authelia"}, side="head")
-    assert gate.counted(base, head, RENDERER_ONLY, {}) == {"bento-pdf"}
-
-
-# What a real renderer PR carries beside the renderer: docs, tests and the shard weights. None
-# of them reaches an Ansible apply.
-RENDERER_WITH_DOCS_AND_TESTS = RENDERER_ONLY + [
-    "docs/homelab-render.md",
-    "scripts/renderer/tests/test_renderer_cluster.py",
-    "ansible/tests/repo/test_census_rows_text.py",
-    "scripts/dev/pytest_shard_weights.json",
-]
-
-
-def test_a_renderer_change_with_its_docs_and_tests_is_clean():
-    assert judge({"bento-pdf", "authelia"}, paths=RENDERER_WITH_DOCS_AND_TESTS) == []
-
-
-@pytest.mark.parametrize(
-    "beside",
-    [
-        "ansible/templates/workload-shell.yml.j2",
-        "ansible/roles/k8s/authelia/templates/configmap.yaml.j2",
-        "scripts/lib/plain_scalar.py",
-        "scripts/diagnostics/probe_lib/obs_api.py",
-        "uv.lock",
-        "ansible.cfg",
-    ],
-)
-def test_a_renderer_change_beside_a_path_ansible_reads_is_flagged(beside):
-    flagged = judge({"bento-pdf", "authelia"}, paths=RENDERER_ONLY + [beside])
-    assert len(flagged) == 1 and flagged[0].startswith("arm 1: bento-pdf (flux)")
-
-
-def test_ansible_scripts_names_the_files_a_task_ships():
-    """homelab-mcp's tasks ship obs_api.py into its image build."""
-    assert "scripts/diagnostics/probe_lib/obs_api.py" in gate.ansible_scripts()
-
-
-def test_a_change_beside_netpol_baseline_is_flagged_through_applies_last():
-    flagged = judge({"bento-pdf", "netpol-baseline"})
-    assert len(flagged) == 1
-    assert "netpol-baseline (ansible) depends on bento-pdf (flux)" in flagged[0]
+    return gate.problems(base, head)
 
 
 def test_an_edge_added_with_a_change_to_the_dependent_is_flagged_by_arm_2():
@@ -166,7 +67,7 @@ def test_a_flip_that_moves_the_render_and_gains_edges_is_clean():
     head_kw = {"flux": ("bento-pdf", "texbrain"), "texbrain_deps": ["bento-pdf"]}
     base, head = snap({"texbrain"}), snap({"texbrain"}, side="head", **head_kw)
     assert head.depends_on("texbrain") - base.depends_on("texbrain") == {"bento-pdf"}
-    assert gate.problems(base, head, [], {}) == []
+    assert gate.problems(base, head) == []
 
 
 # The real-render pairs. One HEAD copy per test, rendered for the two roles the edits reach.
@@ -183,7 +84,7 @@ SHELL_EDIT = (
 def head_tree(tmp_path_factory) -> Path:
     tree = tmp_path_factory.mktemp("head")
     gate.extract("HEAD", tree, ("ansible", "scripts", "hosts"))
-    return hand_back_authelia(tree)
+    return tree
 
 
 @pytest.fixture(scope="module")
@@ -213,45 +114,25 @@ def _bento_entry_edit(field: str, value: str, new: str) -> tuple[str, str]:
     return entry, entry.replace(f"{field}: {value}", f"{field}: {new}")
 
 
-def test_an_inventory_edit_that_moves_bento_pdf_and_authelia_is_flagged(
+def test_an_inventory_edit_counts_both_roles_it_moves(
     tmp_path, head_tree, head_snapshot
 ):
     edit = _bento_entry_edit("hostname", '"bento-pdf"', '"pdf"')
     head = edited(tmp_path, head_tree, {str(gate.HOST_VARS): edit})
-    assert gate.counted(head_snapshot, head, [], {}) == {"bento-pdf", "authelia"}
-    flagged = gate.problems(head_snapshot, head, [str(gate.HOST_VARS)], {})
-    assert len(flagged) == 1 and flagged[0].startswith("arm 1: bento-pdf (flux)")
+    assert gate.counted(head_snapshot, head) == {"bento-pdf", "authelia"}
 
 
-def test_an_auth_tier_edit_that_moves_authelia_alone_is_clean(
-    tmp_path, head_tree, head_snapshot
-):
+def test_an_auth_tier_edit_counts_authelia_alone(tmp_path, head_tree, head_snapshot):
     edit = _bento_entry_edit("auth_tier", "one_factor", "two_factor")
     head = edited(tmp_path, head_tree, {str(gate.HOST_VARS): edit})
-    assert gate.counted(head_snapshot, head, [], {}) == {"authelia"}
-    assert gate.problems(head_snapshot, head, [str(gate.HOST_VARS)], {}) == []
+    assert gate.counted(head_snapshot, head) == {"authelia"}
 
 
-def test_a_shared_template_change_reaching_both_planes_is_flagged(
+def test_a_shared_template_change_counts_every_importer(
     tmp_path, head_tree, head_snapshot
 ):
     head = edited(tmp_path, head_tree, {SHELL: SHELL_EDIT})
-    assert gate.counted(head_snapshot, head, [SHELL], {}) == {"bento-pdf", "authelia"}
-    assert gate.problems(head_snapshot, head, [SHELL], {})
-
-
-def test_step_1_of_copy_and_migrate_is_clean(tmp_path, head_tree, head_snapshot):
-    """The changed macro under a new name, with only the Ansible-owned importer moved to it."""
-    copy = "ansible/templates/workload-shell-next.yml.j2"
-    text = (head_tree / SHELL).read_text()
-    (tmp_path / "ansible/templates").mkdir(parents=True)
-    (tmp_path / copy).write_text(text.replace(*SHELL_EDIT))
-    imports = ("'workload-shell.yml.j2'", "'workload-shell-next.yml.j2'")
-    importers = ("deployment.yaml.j2", "deployment-redis.yaml.j2")
-    edits = {f"ansible/roles/k8s/authelia/templates/{t}": imports for t in importers}
-    head = edited(tmp_path, head_tree, edits)
-    assert gate.counted(head_snapshot, head, [copy], {}) == {"authelia"}
-    assert gate.problems(head_snapshot, head, [copy], {}) == []
+    assert gate.counted(head_snapshot, head) == {"bento-pdf", "authelia"}
 
 
 # Arms 3 and 4 (D5.1f), the removal gates. bento-pdf is flux-owned in the fixtures.

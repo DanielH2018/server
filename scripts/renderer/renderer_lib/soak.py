@@ -98,7 +98,7 @@ def resolve_revision(given: str | None, repo: Path = REPO) -> str:
         ValueError: `given` is not 40 hex characters, or git fails or prints anything else.
     """
     try:
-        # Set only by cross_plane_order.snapshot(): a snapshot is an extracted tree with no
+        # Set only by render_diff_gates.snapshot(): a snapshot is an extracted tree with no
         # version-control metadata, and it may be rendered by an older renderer that has no
         # --revision flag to pass. The publish path sets neither, so it stays on HEAD.
         found = (
