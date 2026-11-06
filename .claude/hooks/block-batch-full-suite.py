@@ -47,7 +47,7 @@ from _hook_common import (
     strip_shell_keywords,
 )
 
-# The brief's guard set selects 114 modules; `ansible/tests` alone selects 537 and the whole
+# `scripts/dev/repo_guards.py` selects 143 modules; `ansible/tests` alone selects 537 and the whole
 # suite about 1,337.
 MAX_MODULES = 300
 
