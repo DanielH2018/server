@@ -153,8 +153,9 @@ case. That cost is the intended one, because R4.8 has to reimplement each ansibl
 The refusal binds `renderer_env`, which the cluster render and its task-computed values use.
 `strict_env`, which host and package modes render through, has every registered filter, and
 `resolve_vars` resolves variable values in its own environment, so the render refuses none of
-them. The census covers them instead: role defaults, inventory values and the `INCLUDE_KEYS`
-values of each role's `k8s/manifests` include. H3 owns the host templates' subset.
+them. The census covers them instead: role defaults, inventory values, and the values of each
+role's `k8s/manifests` include for the keys `cluster.py:INCLUDE_KEYS` and `restart.py:TARGET_KEYS`
+name. H3 owns the host templates' subset.
 
 The list holds filters no template names, because the expressions in role tasks and defaults use
 them: `combine` and `map` for observability's rollouts, and `reject` and the Longhorn claim filters

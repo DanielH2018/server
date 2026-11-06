@@ -28,6 +28,7 @@ from renderer.renderer_lib.dialect import (
     off_the_list,
 )
 from renderer.renderer_lib.environment import render_file, renderer_env
+from renderer.renderer_lib.restart import TARGET_KEYS
 from renderer.renderer_lib.task_inputs import include_vars
 
 ADR = REPO / "docs" / "adr" / "0028-the-renderer-supports-a-closed-jinja-subset.md"
@@ -170,15 +171,23 @@ def test_every_variable_value_stays_on_the_list():
     assert offenders == {}
 
 
+# `resolve_vars` refuses no filter, so the census is the only check on these values:
+# `role_context` resolves the first set and `restart_targets` the second.
+_RESOLVED_INCLUDE_KEYS = INCLUDE_KEYS | frozenset(TARGET_KEYS)
+
+
+def _resolved_include_values(role: Path) -> dict:
+    return {k: v for k, v in include_vars(role).items() if k in _RESOLVED_INCLUDE_KEYS}
+
+
 def _include_value_problems(roles: Path) -> dict[str, set[Construct]]:
     """Each role whose `k8s/manifests` include hands the render a value off the list."""
     problems = {}
     for role in sorted(p for p in roles.iterdir() if (p / "tasks").is_dir()):
         try:
-            include = include_vars(role)
+            read = _resolved_include_values(role)
         except ValueError:
             continue  # It renders nothing through this include, and `render_tag` refuses it.
-        read = {k: v for k, v in include.items() if k in INCLUDE_KEYS}
         off = {c for value in _jinja_values(read) for c in off_the_list(value)}
         if off:
             problems[role.name] = off
@@ -190,10 +199,17 @@ def test_every_include_value_the_render_resolves_stays_on_the_list():
         k in INCLUDE_KEYS and _jinja_values(v)
         for k, v in include_vars(K8S_ROLES / "navidrome").items()
     ), "the census no longer reaches navidrome's templated file list"
+    authelia = _resolved_include_values(K8S_ROLES / "authelia")
+    assert _jinja_values(authelia.get("manifests_extra_rollouts")), (
+        "the census no longer reaches authelia's templated restart targets"
+    )
     assert _include_value_problems(K8S_ROLES) == {}
 
 
-def test_an_off_the_list_include_value_is_flagged(tmp_path):
+@pytest.mark.parametrize(
+    "key", ["manifests_files", "manifests_rollout", "manifests_extra_rollouts"]
+)
+def test_an_off_the_list_include_value_is_flagged(tmp_path, key):
     tasks = tmp_path / "widget" / "tasks"
     tasks.mkdir(parents=True)
     (tasks / "main.yml").write_text(
@@ -201,7 +217,7 @@ def test_an_off_the_list_include_value_is_flagged(tmp_path):
         "  ansible.builtin.include_role:\n"
         "    name: k8s/manifests\n"
         "  vars:\n"
-        '    manifests_files: "{{ x | wordcount }}"\n'
+        f'    {key}: "{{{{ x | wordcount }}}}"\n'
     )
     assert _include_value_problems(tmp_path) == {
         "widget": {Construct("filter", "wordcount")}
