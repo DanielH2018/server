@@ -89,8 +89,8 @@ def run(
             a bounded tail of what the killed process had printed, which on an
             `ansible-playbook` run names the task that was still running.
     """
-    # timeout defaults to None so the long deploy/git calls are unbounded as before;
-    # only the k8s deploy/rollback calls pass one.
+    # timeout defaults to None, so a git call is unbounded; the setup applies and the
+    # routing subprocesses pass one.
     if timeout is None:
         r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=None)
     else:
