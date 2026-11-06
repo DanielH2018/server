@@ -362,7 +362,7 @@ _DENYLIST = {"authelia", "traefik"}
 
 def _rule_set(group: str, package: str = "vendor/plugin") -> list[dict]:
     return [
-        {"groupName": MANUAL_GROUP_PREFIX + ", so the tick applies nothing)"},
+        {"groupName": MANUAL_GROUP_PREFIX + ", so a person merges it)"},
         {"groupName": group, "matchPackageNames": [package], "automerge": False},
     ]
 

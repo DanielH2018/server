@@ -165,6 +165,12 @@ def test_the_verdict_names_what_the_landing_applied(landing, tags, targets, word
     assert health_verdict.applied_wording(ln) == wording
 
 
+def test_a_suspended_tag_is_not_named_as_a_service_deployed(landing):
+    ln = _deployed(landing, [], [PI])
+    ln.flux_tags = ln.suspended_tags = ["bento-pdf"]
+    assert health_verdict.applied_wording(ln) == "hosts applied"
+
+
 def test_a_hosts_only_landing_never_reads_services_deployed(landing, capsys):
     """The tick applied a setup role of its own, and the wording still names the hosts."""
     ln = _deployed(landing, [], [PI], state={"behind_since": "1"})

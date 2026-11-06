@@ -103,6 +103,22 @@ def test_the_teardown_reaps_both_timers_and_their_legacy_crons():
     assert _check_timer_imports("teardown.yml", "absent") == installed
 
 
+def test_the_teardown_removes_every_textfile_the_deployer_exports():
+    """A `.prom` left behind keeps exporting its last run, so HostCheckOverdue never clears."""
+    removal = task_named(
+        load_tasks(ROLE / "teardown.yml"),
+        "Remove the GitOps tick and GitHub check textfiles",
+    )
+    module = removal["ansible.builtin.file"]
+    assert module["state"] == "absent"
+    assert module["path"] == "/var/lib/node-exporter-textfile/{{ item }}"
+    assert removal.get("become") is True, "the textfile directory is root-owned"
+    checks = _check_timer_imports("github_checks.yml", "present")
+    assert {"gitops_tick.prom", *(f"{name}.prom" for name in checks)} == set(
+        removal["loop"]
+    )
+
+
 def _directories_install_creates() -> set[str]:
     """Every path `install.yml`'s directory-creating file task loops over."""
     dirs: set[str] = set()

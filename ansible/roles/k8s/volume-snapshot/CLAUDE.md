@@ -102,15 +102,14 @@ either alone is guarded against neither. **The call site skips the whole role, n
 mutations**, so **a wrong claim name surfaces only on a real deploy**, as the "PVC has no
 spec.volumeName" assert failing before the apply.
 
-## Reverting: automated via k8s/volume-revert
+## Reverting through k8s/volume-revert
 
-For an Ansible-owned role, a rollback is not a manual operation. `roles/k8s/manifests` includes `k8s/volume-revert` between
-this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha` — which gitops-deploy sets
-only when it redeploys a failed auto-deploy's prior good commit, and which carries the FAILED
-commit's SHA. The claim list comes from the rolled-back-to tree, so a claim the failed commit
-renamed makes that role's "no snapshot matches this deploy" assert fire before anything moves.
+**No automated rollback runs.** `roles/k8s/manifests` still includes `k8s/volume-revert` between
+this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha`. D6.12 deleted the
+tick's rollback redeploy, the one caller that set that variable, so the include does not fire on
+any path this repo runs.
 
-**For a flux-owned role the revert is an operator-only runbook.** The `<tag>-snapshot` Job takes
+**The revert is an operator-only runbook.** The `<tag>-snapshot` Job takes
 the snapshot in this role's name shape, with the role's `digest8` in place of `<sha8>`. `promote`
 runs in CI and cannot reach Longhorn, so a failed revision that changes a snapshot role holds as
 `<T> stateful=<names>` and leaves `prod` on T. The hold's Discord post carries each changed
