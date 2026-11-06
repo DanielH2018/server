@@ -1,8 +1,8 @@
-"""Step 5's other half: a k8s tag lands through `promote`, never through deploy.sh.
+"""Step 5's wait: a k8s tag lands through `promote`, never through deploy.sh.
 
 Flux applies every k8s `containers_list` entry once `promote` moves `prod`, and deploy.sh refuses
 such a tag with exit 5 (`deploy_lib/owners.py`). `split_k8s` therefore takes every such tag out of
-`resolved_tags` before `deploy.deploy_by_host` sees the list. A tag `--tags` named is kept for the
+`resolved_tags`. A tag `--tags` named is kept for the
 wait, and a tag this PR's paths named is dropped: every landing whose PR `moves_the_bundle` waits
 on the promotion, and land-wait's changed set, read from the two `digests.json` files, names the
 tags the health gate and the `source=promote` marker read (`WaitResult.tags`). A PR that moves no
@@ -17,7 +17,7 @@ landing's words:
 | settled | the landing goes on to the health gate | -- | -- |
 | deploy-failed | `deploy-failed` | `promote-held`, or `soak-failed` for R's `flux/soak` | 1 |
 | gave-up | `deferred` | `promote-timeout` | 75 |
-| suspended | `nothing-to-deploy`, or the next steps when deploy.sh deployed a tag or a host package changed | -- | 0 |
+| suspended | `nothing-to-deploy`, or the next steps when a host package changed | -- | 0 |
 | suspended, with a plane or other hosts owed | `needs-manual-apply` | -- | 1 |
 
 `gave-up` keeps the closed verdict set: it prints `deferred` beside `PROMOTE_TIMEOUT_NOTE`, and
@@ -70,11 +70,11 @@ def moves_the_bundle(paths) -> bool:
 
 
 def gated_tags(ln: Landing) -> list[str]:
-    """The tags step 7 gates: those deploy.sh deployed, then those a promotion applied.
+    """The tags step 7 gates: those a promotion applied.
 
     A tag suspended at the merge commit is left out, as Flux applied nothing for it.
     """
-    return ln.resolved_tags + [t for t in ln.flux_tags if t not in ln.suspended_tags]
+    return [t for t in ln.flux_tags if t not in ln.suspended_tags]
 
 
 # What `FluxReads.owners_at` raises when the ownership map cannot be read.
@@ -86,7 +86,7 @@ def split_k8s(ln: Landing) -> None:
 
     The k8s entries are read at the merge commit, the tree this landing deploys, because the
     primary checkout may not carry the PR yet. An unreadable list ends the landing: reading it
-    as no k8s tag would hand each tag to deploy.sh, which refuses it.
+    as no k8s tag would report each tag as matching no entry.
 
     A path-derived tag is a guess at what the render moves. A `tasks/`-only change moves no
     bundle file, and a shared template moves tags no path names, so the landing waits on
@@ -106,7 +106,6 @@ def split_k8s(ln: Landing) -> None:
     if not k8s:
         return
     ln.resolved_tags = [tag for tag in ln.resolved_tags if tag not in declared]
-    ln.k8s_only = [tag for tag in ln.k8s_only if tag not in declared]
     if ln.opts.tags:
         ln.flux_tags = k8s
         for tag in k8s:
@@ -176,7 +175,7 @@ def wait_on_promotion(ln: Landing) -> None:
     )
     ln.flux_tags += [t for t in _flux_owned(ln, result.tags) if t not in ln.flux_tags]
     # Before any `finish` below, so a failed landing's ledger line names the changed set.
-    ln.ledger.tags_label = ",".join(ln.resolved_tags + ln.flux_tags)
+    ln.ledger.tags_label = ",".join(ln.flux_tags)
     tags = ",".join(ln.flux_tags) or "homelab"
     if result.tags:
         say(f"the changed set names {','.join(result.tags)}")
@@ -193,16 +192,13 @@ def wait_on_promotion(ln: Landing) -> None:
         return
     print(f"  {result.detail}")
     # DECIDED: `suspended`, every published tag suspended, ends the landing as
-    # `nothing-to-deploy`, exit 0, unless deploy.sh deployed a tag, which the gate still
-    # grades, a host package changed, which the host wait still waits on, or a plane or another
-    # host is owed a hand, which ends `needs-manual-apply` as in `no_tag_outcome`. The suspend
-    # PR itself owes none of these and ends at exit 0, so a failure verdict would be wrong for
-    # it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume point, and a re-run
-    # waits on the same suspended tag again. A change that raced the gate onto a suspended tag
-    # never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
+    # `nothing-to-deploy`, exit 0, unless a host package changed, which the host wait still
+    # waits on, or a plane or another host is owed a hand, which ends `needs-manual-apply` as in
+    # `no_tag_outcome`. The suspend PR itself owes none of these and ends at exit 0, so a failure
+    # verdict would be wrong for it. Exit 75 would be wrong too: `land_probe` reads 75 as a resume
+    # point, and a re-run waits on the same suspended tag again. A change that raced the gate onto
+    # a suspended tag never ends here: land-wait leaves it to `promote.py decide`'s `suspended-changed` hold.
     if result.verdict == "suspended":
-        if ln.resolved_tags:
-            return
         owes_a_hand = ln.plane or ln.classification.remaining_setup
         if ln.host_targets and not owes_a_hand:
             return
@@ -219,8 +215,7 @@ def wait_on_promotion(ln: Landing) -> None:
             0,
             f"PR #{pr}, {sha} — {result.detail}. The landing gated none of {tags}",
         )
-    if result.verdict != "suspended":
-        _print_what_else_it_owes(ln)
+    _print_what_else_it_owes(ln)
     if result.verdict == "deploy-failed" and result.cause == Cause.SOAK_FAILED:
         ln.ledger.cause = Cause.SOAK_FAILED
         ln.finish(

@@ -474,8 +474,8 @@ def report(out: Path, published: list[str], roles: Path = K8S_ROLES) -> int:
     return OK
 
 
-# The subcommands `promote.py` hands to `run`. Both read the checkout alone, in the render
-# job, which holds no token.
+# The subcommands `promote.py` hands to `run`. Both read the checkout alone; the one GHCR read
+# in the render job, `--against-prod`'s, is `promote.py`'s through `forge.py`.
 COMMANDS = ("check-bundle", "published-tags")
 
 
@@ -486,6 +486,11 @@ def add_parsers(commands) -> None:
         help="run the publish census and gates over a rendered bundle",
     )
     checker.add_argument("out", type=Path, help="the bundle root the render job built")
+    checker.add_argument(
+        "--against-prod",
+        action="store_true",
+        help="also run the tag rule against the bundle at prod, pulled from GHCR",
+    )
     lister = commands.add_parser(
         "published-tags",
         help="print the deploy tags the bundle publishes, one per line",

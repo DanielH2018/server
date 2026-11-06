@@ -81,7 +81,9 @@ THE OTHER SUBCOMMANDS, each stated in its module's docstring:
 
 CHECK-BUNDLE. `check-bundle DIR` runs the publish census and the source, host and no-stub gates
 before any push, and `published-tags` prints the render step's `--role` list. Both read the
-checkout alone (`bundle_census.py`, `bundle_gates.py`).
+checkout alone (`bundle_census.py`, `bundle_gates.py`). `--against-prod`, which the render job
+passes, also runs the tag rule against the bundle at `prod`, and a failed pull is a refusal
+(`tag_rule.py`).
 
 Exit codes:
   0   decide: promote, held, current or deferred. prune: every read, delete and verify succeeded.
@@ -89,7 +91,7 @@ Exit codes:
       verify: good. ci-verdict: pass. hold: every message posted. reset-check: a move or none.
   1   decide: error, and nothing moves, a failed write of the gate's hold included. prune: a
       read, a delete or a verify failed. land-wait: deploy-failed, a hold, or suspended.
-      check-bundle: the census or a gate failed, one line each.
+      check-bundle: the census, a gate or the tag rule failed, one line each.
       verify: failed, or no verdict. ci-verdict: anything but pass. hold: the record is
       unreadable, or a message was not posted. reset-check: a refusal.
   64  usage error
@@ -121,6 +123,7 @@ import bundle_census
 import forge
 from changed_set import suspended_changed
 import object_loss
+import tag_rule
 from deploy_tools.promote_lib import forward_only, reset, stateful, supersede
 from deploy_tools.promote_lib import verify_promotion as verify, wait, wait_reads
 from deploy_tools.promote_lib.decision import (
@@ -440,7 +443,11 @@ def main(
     bundle_census.add_parsers(commands)
     args = parser.parse_args(argv)
     if args.command in bundle_census.COMMANDS:
-        return bundle_census.run(args)
+        code = bundle_census.run(args)
+        if args.command == "check-bundle" and args.against_prod:
+            registry = (f or forge.connect(os.environ)).registry
+            return tag_rule.check_publish(args.out, registry) or code
+        return code
     if args.command == "hold":
         if post is None:
             post = forge.Discord(os.environ.get(stateful.WEBHOOK_ENV, "")).post

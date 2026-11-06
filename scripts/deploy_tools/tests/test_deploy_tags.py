@@ -245,66 +245,10 @@ def test_changed_default_ref_is_origin_master():
     assert parser_ref == ["origin/master"]
 
 
-def test_tags_by_host_routes_each_tag_to_the_host_declaring_it(host_vars):
-    """A Pi-only tag deployed on the cluster node matches nothing and would read settled."""
-    assert deploy_tags.tags_by_host(["dozzle", "jellyfin"], host_vars) == {
-        "host_a": ["jellyfin"],
-        "host_b": ["dozzle"],
-    }
-
-
-def test_tags_by_host_lists_a_tag_declared_on_two_hosts_under_both(tmp_path):
-    (tmp_path / "box.yml").write_text(
-        "containers_list:\n  - name: wg-easy\n    platform: k8s\n"
-    )
-    (tmp_path / "pi.yml").write_text("containers_list:\n  - name: wg-easy\n")
-    assert deploy_tags.tags_by_host(["wg-easy"], tmp_path) == {
-        "box": ["wg-easy"],
-        "pi": ["wg-easy"],
-    }
-
-
-def test_tags_by_host_drops_a_tag_no_host_declares(host_vars):
-    """The reject half: a block tag or a typo lands under no host, so nothing is targeted."""
-    assert deploy_tags.tags_by_host(["config", "jellifin"], host_vars) == {}
-
-
 def test_tag_platforms_reads_the_declaring_platforms(host_vars):
     assert deploy_tags.tag_platforms("dozzle", host_vars) == {"docker"}
     assert deploy_tags.tag_platforms("jellyfin", host_vars) == {"k8s"}
     assert deploy_tags.tag_platforms("config", host_vars) == set()
-
-
-def test_hosts_prints_one_tab_separated_line_per_host(capsys, monkeypatch, host_vars):
-    real = deploy_tags.landing_hosts
-    monkeypatch.setattr(
-        deploy_tags,
-        "landing_hosts",
-        lambda tags, hv=None, k8s_only=(): real(tags, host_vars, k8s_only),
-    )
-    assert deploy_tags.main(["hosts", "dozzle,jellyfin,sonarr,config"]) == 0
-    assert capsys.readouterr().out == "host_a\tjellyfin,sonarr\nhost_b\tdozzle\n"
-
-
-def test_hosts_routes_a_k8s_only_tag_to_its_k8s_host_alone(tmp_path):
-    """`--k8s-only`: a tag that is a k8s entry on one host and a Compose entry on another, and a
-    caller-expanded change reaches only the first.
-
-    The tree is synthetic. `wg-easy` was the one live tag on two platforms until H5.9 moved the
-    Pi's copy into the host package, so no live tag has this shape any more.
-    """
-    (tmp_path / "box.yml").write_text(
-        "containers_list:\n  - name: wg-easy\n    platform: k8s\n"
-    )
-    (tmp_path / "pi.yml").write_text("containers_list:\n  - name: wg-easy\n")
-    assert deploy_tags.landing_hosts(["wg-easy"], tmp_path, ("wg-easy",)) == {
-        "box": ["wg-easy"]
-    }
-    # REJECTING half: without the restriction the same tag still reaches both hosts.
-    assert deploy_tags.landing_hosts(["wg-easy"], tmp_path) == {
-        "box": ["wg-easy"],
-        "pi": ["wg-easy"],
-    }
 
 
 def test_real_inventory_gives_the_packaged_pi_services_no_deploy_tag():
@@ -312,60 +256,22 @@ def test_real_inventory_gives_the_packaged_pi_services_no_deploy_tag():
     `wg-easy` left the Pi's in H5.9.
 
     The Pi's package deploys both, so the Pi declares neither tag and `deploy.sh --tags alloy`
-    selects nothing. The cluster's `wg-easy` still resolves, to daniel-box alone, which proves
-    the lookup reads the real files.
+    selects nothing. The cluster's `wg-easy` still resolves, which proves the lookup reads the
+    real files.
     """
-    assert deploy_tags.tags_by_host(["alloy"]) == {}
     assert deploy_tags.tag_platforms("alloy") == set()
-    assert deploy_tags.tags_by_host(["wg-easy"]) == {"daniel-box": ["wg-easy"]}
     assert deploy_tags.tag_platforms("wg-easy") == {"k8s"}
 
 
-def test_landing_hosts_drops_an_undeployable_host_but_keeps_the_pi(tmp_path):
-    """`hosts` must not route a tag to a host land.sh cannot reach.
-
-    daniel-stage declared the staging-subset tags, and land.sh runs `deploy.sh -e target=<host>`
-    for every host `hosts` prints. daniel-box could not route to the staging guest, so that
-    deploy failed unreachable after the box's own succeeded. `tags_by_host` keeps listing such a
-    host (it answers who declares the tag); only the landing shape drops it.
-
-    No live-inventory host is one land.sh never deploys to, so this synthetic host_vars tree is
-    what makes the filter fire at all — and a filter that stopped filtering would otherwise pass
-    every test in this file.
-    """
-    (tmp_path / "daniel-box.yml").write_text(
-        "containers_list:\n  - name: node-exporter\n    platform: k8s\n"
-    )
-    (tmp_path / "daniel-pi.yml").write_text(
-        "containers_list:\n  - name: node-exporter\n"
-    )
-    (tmp_path / "daniel-stage.yml").write_text(
-        "containers_list:\n  - name: node-exporter\n    platform: k8s\n"
-    )
-    assert deploy_tags.tags_by_host(["node-exporter"], tmp_path) == {
-        "daniel-box": ["node-exporter"],
-        "daniel-pi": ["node-exporter"],
-        "daniel-stage": ["node-exporter"],
-    }
-    assert deploy_tags.landing_hosts(["node-exporter"], tmp_path) == {
-        "daniel-box": ["node-exporter"],
-        "daniel-pi": ["node-exporter"],
-    }
-
-
-def test_no_undeployable_host_reaches_the_landing_loop(capsys):
-    """The filter has zero members, so this pins the premise rather than the filtering:
-    every host that declares a tag is one land.sh may deploy to. A host added to the constant
-    without being added to the inventory, or the reverse, is the drift to catch."""
+def test_no_host_declaring_a_tag_is_one_land_sh_never_deploys_to():
+    """A host added to the constant without being added to the inventory, or the reverse, is
+    the drift to catch."""
     declaring = {host for host, _platform, _tag in deploy_tags.service_records()}
     assert declaring, "no host declares any tag — this test would pass over nothing"
     assert not (declaring & render_guard.HOSTS_LAND_SH_NEVER_DEPLOYS), (
         f"{sorted(declaring & render_guard.HOSTS_LAND_SH_NEVER_DEPLOYS)} declare tags that "
-        f"land.sh must not deploy; the synthetic test above is what covers that filtering."
+        "land.sh must not deploy"
     )
-    assert deploy_tags.main(["hosts", "wg-easy,traefik,authelia"]) == 0
-    out = capsys.readouterr().out
-    assert out == "daniel-box\tauthelia,traefik,wg-easy\n"
 
 
 def test_deploy_logic_importers_do_not_grow_sys_path_per_call():

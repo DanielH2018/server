@@ -44,7 +44,7 @@ def test_land_help_lists_exactly_the_verdicts_the_enum_defines():
 
 
 def test_the_enum_still_has_the_members_the_help_line_is_measured_against():
-    assert {"settled", "deploy-failed", "tip-outran-retries"} <= EXPECTED, (
+    assert {"settled", "deploy-failed", "unbuilt"} <= EXPECTED, (
         "Verdict lost a member this test names; the check above is measured against a "
         "vocabulary that no longer exists"
     )

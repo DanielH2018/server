@@ -411,16 +411,16 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             LAND_FAILED,
             "LAND_FAILED",
-            "CI red or unproven, blocked by a change needing a hand, the deploy failed, the health gate "
-            "failed, or the PR was closed without merging, conflicts with master, or its own CI is red.",
+            "CI red or unproven, a change needing a hand, a tag no k8s entry declares, a failed tick "
+            "or promotion, a failed health gate, or a PR closed, conflicting or with red CI.",
         ),
         _c(LAND_BAD_ARGS, "LAND_BAD_ARGS", "the command line is wrong."),
         _c(
             LAND_GAVE_UP,
             "LAND_GAVE_UP",
-            "gave up waiting — a budget elapsed, the deploy lock stayed busy, the tick was skipped "
-            "for lock contention every time, master outran one tick-and-deploy cycle, the tick "
-            "has not yet crossed origin, or no host package containing the merge is published.",
+            "gave up waiting — a budget elapsed, the tick was skipped for lock contention every "
+            "time, the tick has not yet crossed origin, no promotion covered the merge in time, "
+            "or no host package containing the merge is published.",
         ),
     ),
     "scripts/deploy_tools/gitops_tick.sh": (

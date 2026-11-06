@@ -1669,6 +1669,26 @@ It fails when:
   `k8s_autodeploy_snapshot_pvcs` is not a literal list;
 - `digests.json` is missing or names another set.
 
+### The tag rule
+
+`promote.py check-bundle out --against-prod` also compares the bundle's tags with those of the
+bundle at `prod`, which the render job pulls from GHCR. `scripts/deploy_tools/tag_rule.py`
+refuses the publish when:
+
+- a tag at `prod` is missing while its role directory stays;
+- `flux` is missing, whatever `prod` holds;
+- a tag at `prod` is missing and its render there holds a PersistentVolume, whether or not its
+  role directory stays. C3 gives PersistentVolumes no prune exemption
+  (`docs/target-architecture/contracts.md`, *Wider prune exemptions*), so media-volume cannot
+  be renamed or retired while it renders `media-data`;
+- the pull of `prod` fails.
+
+`prod` moves only on promotion, so a refusal persists through later unrelated commits until the
+tag returns or its role directory goes. To retire a service, remove its entry and its role in
+one PR (*Retiring a flux-owned service*). A registry with no `prod` is the first run, and only
+the `flux` line applies. Arm 6 of the render-diff gates runs the same rule on a pull request
+against the base render, so a PR usually fails before it merges.
+
 ### The publish gates
 
 `check-bundle` runs three gates beside the census, in
@@ -1932,10 +1952,9 @@ undeclared object, and weighs older ones. When every candidate loses an object, 
 `current`, and D2.6d's `PromotionStalled` alert pages after 2 hours. A later commit that carries the line
 releases the walk.
 
-An object whose whole Kustomization leaves the bundle is exempt. That happens when a service
-is handed back and its entry reads `owner: released` (*Handing a service back*).
-`deletionPolicy: Orphan` prunes none of its objects. The exemption holds only while that
-policy does, and D6.7's switch away from Orphan must remove it.
+An object whose whole Kustomization leaves the bundle counts like any other, because the default
+deletion policy would delete it. So a tag that leaves with objects still in its render needs one
+line per object.
 
 The promote job checks out master with `fetch-depth: 0`, because `decide` reads these lines
 with `git log` back to `prod`'s commit.
@@ -1944,8 +1963,8 @@ with `git log` back to `prod`'s commit.
 
 CI's render-diff gates, `scripts/validate/render_diff_gates.py`, refuse the PR before it
 merges, so a removal never reaches `decide` undeclared. Its arm 3 renders the cluster at the
-PR's base and head. It fails when a tag that is `owner: flux` at both ends loses an object of
-any kind, and no commit of the PR carries the `Removes-Object:` line for it. The failure line
+PR's base and head. It fails when a tag that is `owner: flux` at the base loses an object of
+any kind, or leaves the render whole, and no commit of the PR carries the `Removes-Object:` line for it. The failure line
 names the exact line to add. Two removals pass without a line:
 
 - **A rename by digest.** The renderer ends a Job's name in its spec digest and a script
@@ -1955,9 +1974,8 @@ names the exact line to add. Two removals pass without a line:
   `kustomize.toolkit.fluxcd.io/prune: disabled` passes. D5.1a2 stamps that label on claims;
   a claim rendered without it is pruned like any other object and needs the line.
 
-A tag handed back passes too. A tag that is not `owner: flux` at the head, because it reads
-`owner: released` or lost its entry, is not judged, so the revert of a flip needs no lines.
-The arm reads the PR's own commits, which a squash merge need not copy, so it runs on pull
+A tag that leaves the render, because it reads `owner: released` or lost its entry, is judged
+like any other, so each object still in its base render needs a line. The arm reads the PR's own commits, which a squash merge need not copy, so it runs on pull
 requests only. On master `decide` reads the same lines and applies both exemptions. The two
 checks share one implementation of them, `stem` and `prune_disabled` in
 `scripts/deploy_tools/object_loss.py`, so they cannot judge the same drop differently (#5291).
