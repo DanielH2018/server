@@ -1661,10 +1661,13 @@ Exit 6 is read at R4's last PR with `git ls-files 'scripts/renderer/*.py' | grep
   `scripts/renderer/` with no `Render-diff:` line. One renders an empty tree on both sides,
   and it fails at the digest step, because `shadow_diff.py digest` refuses an empty tree. One
   removes `cluster/pihole-deferred/`, and this is the case that reaches the floor, through
-  `FLOOR_PATHS`. One raises `k8s_rollout_stabilise_seconds` above
-  the longest `for:` among the soak's rules, which moves the soak Job's wait W (D5, *The
-  soak as a Job*), under `Render-diff: none`, and the run names a file under
-  `cluster/soak/`. The first passes once the line names that file.
+  `FLOOR_PATHS`. One sets `k8s_rollout_stabilise_seconds` to 120 under `Render-diff: none`,
+  and [run 42231495053](https://github.com/DanielH2018/server/actions/runs/42231495053)
+  names `cluster/soak/job.yaml`. That file moves through the Job's `--stabilise-seconds`
+  argument. The soak Job's wait W (D5, *The soak as a Job*) does not move, because the
+  longest `for:` among the soak's rules is 900s. A value above 900 would move W, but
+  `test_the_wait_cap_covers_verifys_wait_on_the_rendered_soak` refuses 3600 at commit time.
+  The first case passes once the line names that file.
 - The commit pin: PR 1's head changes no render input, yet its SHA differs from its merge
   base's. Its run under `Render-diff: none` passes, which shows the pin covers every
   commit-derived byte, the soak Job's included. The same comparison run by hand, with each
