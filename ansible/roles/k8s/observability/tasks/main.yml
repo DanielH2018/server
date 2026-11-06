@@ -1,6 +1,6 @@
 ---
 # Flux owns observability (D5, Wave D), so no Ansible run reaches this file. It stays for the
-# handback (docs/flux-deploy-plane.md), and the renderer reads the include's vars. The tasks it
+# handback (docs/flux-deploy-plane.md), and the renderer reads the role's defaults. The tasks it
 # held before the flip moved:
 # - the dashboard ConfigMaps: `grafana-dashboards.yaml` renders into the bundle, and Flux
 #   applies it server-side, which the 262144-byte annotation cap needs;

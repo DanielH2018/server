@@ -50,7 +50,7 @@ _MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
 # Kinds that must never be pruned by this mechanism — see the module docstring.
 _FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
 # The roles that include k8s/manifests without arming its prune, each by operator decision
-# recorded as a DECIDED marker at its include (#3388). Every other caller is armed.
+# recorded as a DECIDED marker in its defaults (#3388). Every other caller is armed.
 _UNARMED_ROLES = frozenset({"authelia", "nut"})
 # The three render tasks whose source the armed switch replaces with the labelling wrapper.
 _RENDER_TASKS = (
@@ -234,7 +234,7 @@ def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
     assert callers - _ARMED_ROLES == _UNARMED_ROLES, (
         f"unarmed callers {sorted(callers - _ARMED_ROLES)} differ from the decided exclusions "
         f"{sorted(_UNARMED_ROLES)}. A caller is armed unless it passes `manifests_prune: false`; "
-        "excluding one needs an operator decision and a DECIDED marker at its include."
+        "excluding one needs an operator decision and a DECIDED marker in its defaults."
     )
 
 
@@ -498,6 +498,6 @@ def load_yaml_namespace() -> str:
 def test_manifests_prune_defaults_on() -> None:
     """The operator flipped the default on 2026-10-09 (#3662); an exclusion is an explicit false."""
     assert _defaults()["manifests_prune"] is True, (
-        "manifests_prune must default true. A role that must not prune passes "
-        "`manifests_prune: false` at its include, behind a DECIDED marker."
+        "manifests_prune must default true. A role that must not prune sets "
+        "`manifests_prune: false` in its defaults, behind a DECIDED marker."
     )

@@ -10,7 +10,7 @@ nothing and `prod` stays where it was. `report` runs the source, host and no-stu
 - each `<name>.yaml` holds exactly the Kustomization `<name>`, with path `./cluster/<name>`,
   then each per-tag kind its role's inputs call for, in `TAG_KIND_SUFFIXES` order, each with
   path `./cluster/<name><suffix>` (the per-file rule, D4.3 and D5.1a1): `-deferred` when the
-  role passes `manifests_deferred_files`, `-snapshot` when it declares
+  role sets `manifests_deferred_files`, `-snapshot` when it declares
   `k8s_autodeploy_snapshot_pvcs`, `-prepull` when it sets `flux_prepull_timeout`,
   `-precheck` when it ships `templates/precheck/` (#5719), and `-verify` when it ships
   `templates/verify/`;
@@ -30,8 +30,8 @@ tag from the commit that publishes it, so a tag the bundle does not publish yet 
 
 The allowlist comes from the renderer's inputs, never from its output, so a renderer bug
 cannot widen it: the tags the inventory marks `owner: flux` (`published_tags`), the literal
-`SHARED_KINDS`, and the published tags whose role passes `manifests_deferred_files` to its
-`k8s/manifests` include (`deferring_tags`), read as the renderer reads the include, and those
+`SHARED_KINDS`, and the published tags whose role sets `manifests_deferred_files` (`deferring_tags`), read as the
+renderer reads it, and those
 whose role declares snapshot claims (`snapshot_tags`), those whose role sets
 `flux_prepull_timeout` (`prepull_tags`), those whose role ships pre-apply check Jobs as
 `templates/precheck/*.yaml.j2` (`prechecking_tags`), and those whose role ships verify or post-apply
@@ -102,8 +102,8 @@ def deferring_tags(
 ) -> tuple[frozenset[str], list[str]]:
     """The published tags that defer files, and one line per tag it could not judge.
 
-    A tag defers files when its role passes a non-empty `manifests_deferred_files` to the
-    `k8s/manifests` include that renders, which alone makes the renderer write
+    A tag defers files when its role sets a non-empty `manifests_deferred_files`, which alone
+    makes the renderer write
     `cluster/<tag>-deferred/` and the Kustomization `<tag>-deferred`. A value that is not a
     literal list, such as a Jinja string, is a problem rather than a guess.
     """

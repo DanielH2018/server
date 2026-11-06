@@ -1,7 +1,7 @@
 ---
 # Flux applies this role through `promote`, and every Ansible path skips it (D5, Wave D's last
-# flip). No task here runs. The renderer reads this include for the files it renders and the
-# deferred directory the observability policies go to, so the vars below stay.
+# flip). No task here runs. The renderer reads defaults/main.yml for the files it renders and
+# the deferred directory the observability policies go to.
 #
 # The checks this file ran before it applied are gone, and each has a successor (#5685):
 #   - The lever asserts ("Check the netpol-baseline levers") are the `LEVER_ASSERTS` literal in

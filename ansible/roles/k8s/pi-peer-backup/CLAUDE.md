@@ -109,5 +109,6 @@ replaced the retired Kopia scope for the Pi.
 - Script: `files/pull-pi-peers.sh` (baked into the image — a merged edit moves the content tag,
   and `promote` builds the image and runs the gate).
 - Gate: `flux_cronjob_gates` in `defaults/main.yml`. `tasks/main.yml` keeps the image-builder
-  and manifests includes for a handback, and no Flux path runs them.
+  and manifests includes for a handback, which moves `image_builder_builds` back onto the
+  build include (`ansible/roles/k8s/image-builder/CLAUDE.md`), and no Flux path runs them.
 - Pi half: `hosts/components/pi-peer-backup-target/component.yml`, with its two files.

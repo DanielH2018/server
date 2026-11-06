@@ -44,7 +44,7 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   is an operator choice this role has not made. `defaults/main.yml` has the measurements, and
   `docs/flux-deploy-plane.md`, *The pre-pull Job*, has the mechanism.
 - **Where the tasks went.** `tasks/main.yml` holds the two `k8s/image-builder` includes and
-  the `k8s/manifests` include, and no Flux path runs any of them. They stay for the handback.
+  the `k8s/manifests` include, and no Flux path runs any of them. They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`).
   The builds became the `images` job, and the Kustomization's `wait` replaces the rollout
   wait. The broker-isolation probe that followed them became the `n8n-verify` Job, and its
   tasks were deleted.

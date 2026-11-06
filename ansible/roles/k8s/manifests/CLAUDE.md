@@ -84,7 +84,7 @@ deferred pair below.
   `tags: [always]`: a gitops-deploy run filters `[deploy]` out, which left the drain waiting
   on nothing behind a `failed=0` recap.
 - **Dropping a manifest from the file list leaves the live object serving** only where a
-  role passes `manifests_prune: false`. An armed role renders through
+  role sets `manifests_prune: false`. An armed role renders through
   `ansible/templates/role-labelled.yaml.j2`, which labels every document, since the `-l`
   selector also filters the apply. Pruned kinds:
   `ansible/roles/k8s/manifests/defaults/main.yml:manifests_prune_allowlist`. It applies in

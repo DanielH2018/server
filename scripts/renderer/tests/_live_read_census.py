@@ -43,7 +43,11 @@ from lib.render_guard import SHARED_TPL
 from lib.repo_paths import ANSIBLE, K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib.cluster import LABEL_WRAPPER, tag_context
-from renderer.renderer_lib.task_inputs import derived_facts, include_vars
+from renderer.renderer_lib.task_inputs import (
+    derived_facts,
+    include_vars,
+    render_defaults,
+)
 from toposort import filter_by_platform
 
 K8S_PLAY = "Deploy k8s workloads"
@@ -343,7 +347,12 @@ def tag_templates(
 
 def _deferred(role: Path) -> set[str]:
     """The `manifests_deferred_files` basenames in `role`'s defaults and manifests include."""
-    declared = include_vars(role).get("manifests_deferred_files") or []
+    declared = [render_defaults(role).get("manifests_deferred_files") or []]
+    for path in sorted((role / "tasks").glob("*.yml")):
+        for task in _tasks(yaml_fast.safe_load(path.read_text())):
+            declared.append(
+                (task.get("vars") or {}).get("manifests_deferred_files") or []
+            )
     return {
         n
         for value in _values(declared)

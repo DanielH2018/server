@@ -49,7 +49,7 @@ the pin is physical and never unwinds.
   `files/entrypoint.sh`, `files/upssched-cmd` or `templates/Dockerfile.j2` moves the content
   tag, and the next promotion builds the image and rolls the pod.
 - **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay for the handback. The `k8s/image-builder` include became promote's `images` job
+  They stay for the handback, which moves `image_builder_builds` back onto the build include (`ansible/roles/k8s/image-builder/CLAUDE.md`). The `k8s/image-builder` include became promote's `images` job
   (D5.4a2) and the GHCR ref (D5.4b). The role's `manifests_rollout: nut`
   names the Deployment for the stabilisation gate and the shared restart. The Kustomization's
   `wait` replaces the gate, and the restart checksum the renderer stamps replaces the restart.

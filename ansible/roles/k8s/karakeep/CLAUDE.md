@@ -28,7 +28,8 @@ loop to auto-tag bookmarks.
   `karakeep` depends on both (#5778). `karakeep` waits up to its 1200s
   `manifests_rollout_timeout`. `karakeep-verify` then runs the archive
   pruner's gate (below). `tasks/main.yml` keeps the image-builder and manifests includes for
-  a handback, and no Flux path runs them.
+  a handback, which moves `image_builder_builds` back onto the build include
+  (`ansible/roles/k8s/image-builder/CLAUDE.md`), and no Flux path runs them.
 - **The Authelia bypass:** `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
   browser extension and mobile app can't pass 2FA, and they speak tRPC, not the REST API).
   `/api/auth/*` (next-auth's password login) stays behind Authelia on both names: the bypass

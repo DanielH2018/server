@@ -1,6 +1,6 @@
 ---
 # Flux owns headlamp (D5, Wave D), so no Ansible run reaches this file. It stays for the
-# handback (docs/flux-deploy-plane.md), and the renderer reads the include's vars. The tasks it
+# handback (docs/flux-deploy-plane.md), and the renderer reads the role's defaults. The tasks it
 # held before the flip moved:
 # - the observability-namespace RBAC apply: `rbac-observability.yaml` renders into
 #   `headlamp-deferred`, whose Kustomization `dependsOn` observability;
