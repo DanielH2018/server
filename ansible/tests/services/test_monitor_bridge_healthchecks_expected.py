@@ -28,7 +28,6 @@ WIRED_SLUGS = frozenset(
         "longhorn-backup-health",
         "daniel-box-disk-health",
         "alertmanager-watchdog",
-        "manifest-prune-check",
         "etcd-snapshot-offbox",
         "pi-peer-backup",
         "registry-gc",

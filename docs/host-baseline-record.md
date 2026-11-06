@@ -209,19 +209,16 @@ audit used the same form until H7.36 moved it to `homelab-secret-rotation-audit.
 `secret-rotation` component of `homelab-daniel-box`, which keeps the exit-code contract as plain
 units. Its `secret_rotation.py audit --verdict` returns 1 when the audit reads `down`.
 
-**Why it exists separately from `manifest-prune-check.sh`.** That check answers the same two
-questions plus an orphaned-cluster-object arm, but it is installed by
-`roles/setup/k3s/tasks/health-crons.yml`, imported only from that role's `main.yml`, which
-`k3s-bringup.yml` asserts onto `k3s_server_hosts`. So it exists on daniel-box and nowhere else,
-while daniel-server renders the entire UPS shutdown chain. Confirmed live 2026-08-29:
-daniel-server had no `/var/lib/homelab/setup-render-manifest.d` at all, and its
-`/etc/nut/upsmon.conf` was dated Aug 17 against a template changed on 2026-08-28 (review M-10).
+**Why it runs on every host that renders setup templates.** The role's only other reader,
+`manifest-prune-check.sh`, ran on `k3s_server_hosts` alone, while daniel-server renders the entire
+UPS shutdown chain. Confirmed live 2026-08-29: daniel-server had no
+`/var/lib/homelab/setup-render-manifest.d` at all, and its `/etc/nut/upsmon.conf` was dated Aug 17
+against a template changed on 2026-08-28 (review M-10).
 
-**daniel-box runs both readers.** They read the same stamp directories through the same library.
-The box needs this reader armed because the drift checks' disarm removes manifest-prune-check, and
-the box must keep one detector across that removal. Until then the redundancy is harmless:
-`SetupDriftFailed` and `SetupDriftNotReporting` name `origin="daniel-server"` alone, so the box's
-verdict pages nothing, and manifest-prune-check's rules page the box's stale renders.
+**daniel-box's setup-plane drift detector is this reader.** D6.17 disarmed manifest-prune-check,
+which read the same stamp directories through the same library. `SetupDriftFailed` and
+`SetupDriftNotReporting` carry one arm per `origin`, so one host's fresh sample cannot mask the
+other's silence.
 
 - **The two arms are not reimplemented** — both readers source `files/setup-drift-lib.sh`,
   copied to `/usr/local/lib` like `homelab-check-lib.sh`. Two copies of a drift check are free to

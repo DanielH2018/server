@@ -852,8 +852,8 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   one back and deferred every other k8s change.** `git log -p -- docs/gitops-pipeline.md` has that
   arm's rules and accepted trade-offs.
 
-  - **The release-staleness check watches for a merged k8s change that never reached the cluster,
-    and it judges only a service whose `containers_list` entry carries no `owner`** (#5309). A
+  - **The release-staleness check watched for a merged k8s change that never reached the cluster,
+    and it judged only a service whose `containers_list` entry carries no `owner`** (#5309). A
     daniel-box cron owned by `sys_user`, not root
     (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
     `k3s_release_staleness_cron_minute`), runs
@@ -863,13 +863,12 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     no Ansible deploy writes it a newer record. On 2026-11-06 all 66 service tags carried `owner`,
     so the check judged no service. `PromotionStalled` and `FluxNotReady` watch the same gap on
     the Flux path, and `docs/k3s-node-plane-crons-and-incidents.md` has the check's account.
-    D6.17 disarms it. For a tag with no `owner`, these rules hold:
+    D6.17 disarmed it, and D6.18 deletes its code. For a tag with no `owner`, these rules held:
     - The check compares the service's release record (the applied commit that
       `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
       `origin/master` under that service's own role AND the shared roles that supply bytes to
       every service's manifests (`probe_lib/releases.py`'s `manifest_affecting_shared_roles()`).
-      It writes the `release-staleness-check` textfile verdict, which `ReleaseStalenessCheckFailed`
-      pages, and the verdict is down when any such service is stale or has no record.
+      It writes the `release-staleness-check` textfile verdict, and the verdict is down when any such service is stale or has no record.
     - A record whose service no `containers_list` entry declares is dropped first
       (`releases_retired.py`), because a retired role's record outlives the role and the commit
       that deleted it would read as drift no deploy tag can clear.

@@ -350,8 +350,8 @@ def test_no_installed_script_runs_by_its_shebang():
     escapes the pin the tests above enforce on command strings. #4489 was one:
     manifest-prune-check ran manifest-declares.py by path, behind `2>/dev/null`."""
     installed = sorted(live for live in role_installs.install_map() if "{{" not in live)
-    # Non-vacuous: the script #4489 named must be in the census this scans for.
-    assert "/usr/local/bin/manifest-declares.py" in installed
+    # Non-vacuous: a script the backup-health cron runs must be in the census this scans for.
+    assert "/opt/longhorn-backup-health/longhorn_backup_health.py" in installed
     offenders = [
         f"{path.relative_to(_REPO)}: {live}"
         for path in sorted(ROLES.rglob("*"))

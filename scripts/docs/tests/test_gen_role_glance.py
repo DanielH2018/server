@@ -192,12 +192,20 @@ def test_timer_units_skips_an_import_whose_state_is_absent(tmp_path):
     assert f.timer_units(role) == []
 
 
-def test_timer_units_finds_the_k3s_roles_named_timers():
-    units = {unit for unit, _ in f.timer_units(K3S_ROLE)}
+def test_timer_units_finds_the_initial_setup_roles_named_timers():
+    units = {unit for unit, _ in f.timer_units(K3S_ROLE.parent / "initial_setup")}
     assert {
+        "kuma-check-setup-drift.timer",
+        "kuma-check-loki-read-route.timer",
+    } <= units, sorted(units)
+
+
+def test_timer_units_skips_the_k3s_roles_disarmed_timers():
+    units = {unit for unit, _ in f.timer_units(K3S_ROLE)}
+    assert not units & {
         "kuma-check-manifest-prune.timer",
         "kuma-check-live-drift.timer",
-    } <= units, sorted(units)
+    }, sorted(units)
 
 
 def test_setup_glance_lines_names_every_source_when_a_role_has_none(tmp_path):

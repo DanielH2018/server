@@ -2,7 +2,7 @@
 
 `test_alertmanager_routing.py` is at its line cap, so the `host-checks.yaml` share of its
 `PAGING` outcome that belongs to B1 lives here, on the same walk of the rendered routing tree.
-The ten k3s-cron rules page. The `critical` ones (the longhorn-backup and etcd-snapshot pairs)
+The four k3s-cron rules page. The `critical` ones (the longhorn-backup and etcd-snapshot pairs)
 mail as well as post, the rest post to Discord alone, and a rule that regains `shadow` walks to
 the blackhole instead.
 
@@ -27,20 +27,26 @@ EXPECTED = {
     "LonghornBackupHealthNotReporting/daniel-box": ["discord", "email"],
     "EtcdSnapshotOffboxFailed/daniel-box": ["discord", "email"],
     "EtcdSnapshotOffboxNotReporting/daniel-box": ["discord", "email"],
-    "ManifestPruneCheckFailed/daniel-box": ["discord"],
-    "ManifestPruneCheckNotReporting/daniel-box": ["discord"],
-    "ReleaseStalenessCheckFailed/daniel-box": ["discord"],
-    "ReleaseStalenessCheckNotReporting/daniel-box": ["discord"],
-    "LiveDriftCheckFailed/daniel-box": ["discord"],
-    "LiveDriftCheckNotReporting/daniel-box": ["discord"],
 }
+DISARMED_CHECKS = ("ManifestPrune", "ReleaseStaleness", "LiveDrift")
 
 
-def test_the_ten_b1_rules_are_the_ones_this_module_expects():
+def test_every_expected_b1_rule_is_in_the_paging_set():
     # Non-vacuity by name: a rule dropped from the file, or an expected rule that is still
     # shadow, fails here instead of walking past the parametrized tests below.
     assert set(EXPECTED) <= set(host_sets(shadow=False))
     assert not set(EXPECTED) & set(host_sets(shadow=True))
+
+
+def test_the_disarmed_checks_have_no_rule():
+    # Their producers stop at the hand apply, so a rule left behind would page NotReporting.
+    rules = set(host_sets(shadow=False)) | set(host_sets(shadow=True))
+    disarmed = {
+        f"{check}Check{suffix}/daniel-box"
+        for check in DISARMED_CHECKS
+        for suffix in ("Failed", "NotReporting")
+    }
+    assert not rules & disarmed, sorted(rules & disarmed)
 
 
 @pytest.mark.parametrize("name", sorted(EXPECTED))

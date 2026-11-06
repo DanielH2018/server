@@ -137,26 +137,19 @@ check 7 reads those and reports `down` when the drill stops running — a drill 
 looks identical to one never scheduled, which is how the hand-run drill of 2026-08-16 went
 unrepeated until the cron existed.
 
-## The read-only crons, and the two that became timers
+## The read-only crons
 
-`Longhorn backup health`, `daniel-box disk health`, `Manifest prune drift check`, `Release
-staleness drift check`, `Live object drift check`, `B2 deletion accounting`, `B2 backup budget
+`Longhorn backup health`, `daniel-box disk health`, `B2 deletion accounting`, `B2 backup budget
 listing` and the `--list-only` etcd drill read the cluster or the bucket and write nothing to
-either. The Longhorn, disk, manifest prune, release staleness and live drift checks each write
+either. The Longhorn and disk checks each write
 a textfile metric, such as `disk-health.prom`, that the `host-checks` rules page through
 Alertmanager. The B2 accounting pair
 appends to the local ledger, which is bookkeeping, not state.
 
-`Manifest prune drift check` and `Live object drift check` are kuma-check timers rather than crons
-since 2026-09-19, importing `setup/common`'s `check_timer.yml`. Each script writes a failing
-verdict to its textfile and exits non-zero, and the service's `Restart=on-failure` reruns it every
-30 min until it exits 0. The `host-checks` rule that reads the textfile therefore resolves when
-the fault does rather than at the next slot. The timers are
-`Persistent=true`, and both checks carry the boot grace so a catch-up run at boot exits 1 without
-a verdict and the restart carries the real one. A third, `remember log rotation health`, was
-retired on 2026-09-28 with the remember plugin (#2852). `systemctl status kuma-check-<name>` shows
-`auto-restart` while the check fails. Manifest prune's healthchecks.io `/fail` ping repeats on
-every rerun; healthchecks notifies on a status change, so a check already down is not paged again.
+D6.17 disarmed the three drift checks: `Manifest prune drift check`, `Release staleness drift
+check` and `Live object drift check`. `tasks/health-crons.yml` holds their absent arms, and D6.18
+deletes their code. `setup-drift-check.sh` reads the host-plane stamps on daniel-box, and its
+`SetupDrift` rules in `files/rules/initial-setup-checks.yaml` page for it.
 
 ## k3s's own output is in `/var/log/k3s.log`, not the journal
 
@@ -199,12 +192,13 @@ daniel-box names them, one per issuer, and healing only the VIP one leaves the p
 errors running — then let the next 10s tick redial. The full sequence, the recovery caveat and the
 measured error chain are in that defaults file's comment above the key.
 
-## The release-staleness check watches for a merged k8s change that never reached the cluster
+## The release-staleness check watched for a merged k8s change that never reached the cluster
 
+D6.17 disarmed this check and D6.18 deletes its code, so this section records what it did.
 A merged k8s change can sit on `origin/master` while the cluster runs the old manifests.
 `release-staleness-check.sh` watches that gap. It runs `probe.py releases --stale-only` every
 `k3s_release_staleness_cron_minute`. It writes a failing verdict to
-`release-staleness-check.prom`, which the Prometheus rule `ReleaseStalenessCheckFailed` reads,
+`release-staleness-check.prom`,
 while any service's applied commit sits behind `origin/master` under its role paths, or under an
 inventory key or shared macro its render reads (#1993). A merge younger than `k3s_release_staleness_grace_minutes` is named in the
 `up` message and not counted, so a landing still deploying its own merge does not page. The
@@ -218,7 +212,7 @@ Two other rules watch the same gap on the Flux path. `PromotionStalled` in
 `ansible/roles/k8s/observability/files/rules/deploy-pipeline.yaml` fires on a green master commit
 that `prod`, the ref Flux follows, has lacked for more than 2 hours. `FluxNotReady` in
 `ansible/roles/k8s/observability/files/rules/flux.yaml` fires on a Kustomization that has not been
-Ready for 15 minutes. D6.17 disarms this check.
+Ready for 15 minutes.
 
 **The DOWN message carries the stale services' names and a count, not their reasons** (#2013). A
 refused narrowing marks the whole fleet stale, and the per-service reasons then ran to ~7,500
@@ -234,7 +228,7 @@ reaches nobody. The cron keeps the set the last DOWN recorded in
 `/var/lib/homelab/release-staleness/stale-set` (written by `probe.py releases --names-out`). When
 the set differs, the cron's syslog line opens `Stale set changed:` with the added and cleared
 names, and `probe.py releases --stale-only` prints the current list. Kuma's re-notify on a changed
-set went with its tile in M6 batch B1. That loss is accepted, because D6.17 disarms this check. A
+set went with its tile in M6 batch B1. That loss was accepted, because D6.17 disarmed this check. A
 DOWN that is not a verdict (the fetch failing, or the probe exiting above 1) keeps the recorded
 set, or records an empty one so the first verdict after it can still log the change. A probe run
 that finds nothing stale clears it.
@@ -360,9 +354,6 @@ tag again.
 **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own PATH; a
 new one that does not dies on `command -v k3s` and, if it writes its verdict before the check,
 reads permanently green.
-
-**The drift checks and the prune check are staggered on purpose** (05:15 and 05:45) so two full
-kubectl sweeps do not land on the API server at once. Keep a new sweep off those minutes.
 
 ## What opens the two control-plane gates under `--tags k3s`
 
