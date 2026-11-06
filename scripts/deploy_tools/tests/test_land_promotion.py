@@ -423,7 +423,7 @@ def test_a_tag_no_k8s_entry_declares_is_flagged(land_run):
     fakes = Fakes(k8s_tags={MERGE_SHA: {"sonarr"}})
     rc, out, _, calls, logline = land_run(["--tags", "sonarr,typo"], fakes)
     assert rc == 1 and "VERDICT: deploy-failed" in out and "typo" in out
-    assert "cause=tag-miss" in logline
+    assert "cause=tag-miss" in logline and "tags=typo" in logline
     assert not {"land_wait", "gate"} & set(_names(calls))
 
 

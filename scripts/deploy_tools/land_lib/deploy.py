@@ -190,6 +190,7 @@ def deploy_phase(ln: Landing) -> None:
         derive_from_diff(ln)
     promotion.split_k8s(ln)
     if ln.resolved_tags:
+        ln.ledger.tags_label = ln.tags_csv
         ln.ledger.cause = Cause.TAG_MISS
         ln.finish(
             Verdict.DEPLOY_FAILED,
