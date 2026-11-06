@@ -1,7 +1,7 @@
 """The process boundaries a landing crosses for a tag Flux applies.
 
 `Tools.flux` holds one `FluxReads`, so a test replaces one of its fields as it replaces any
-other boundary. `promotion.split_owned` and `handback.py`'s refusal read which tags an
+other boundary. `promotion.split_k8s`, the gate and `handback.py`'s refusal read which tags an
 entry's `owner` takes from Ansible (`owners_at`). The refusal reads whether a tag still has a
 k8s entry (`k8s_tags_at`) and whether its Kustomization still exists
 (`kustomization_exists`). `promotion.wait_on_promotion` runs

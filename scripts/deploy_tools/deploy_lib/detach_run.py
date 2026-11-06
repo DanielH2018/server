@@ -179,8 +179,6 @@ def deploy_and_gate(
     deploy of the same service could take the lock and roll a `Recreate` workload under that
     sample, and the run would post `unhealthy` about a healthy change. The hold grows by the
     gate's few probe calls; a deploy queued behind it waits `SERVICE_LOCK_WAIT_S`, 1800s.
-    land.sh cannot hold its deploy's locks across its own gate, so it waits out the later
-    deploy instead (`land_rerolls.later_deploys`).
     """
     steps = steps or ChildSteps()
     started = time.monotonic()

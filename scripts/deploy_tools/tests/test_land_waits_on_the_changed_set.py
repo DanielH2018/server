@@ -22,6 +22,7 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_classifier, build_tools
 from _land_wait_fakes import M, P, Sim, at, digests
 from deploy_tools.land_lib import land_tags
 from deploy_tools.promote_lib import wait as promote_wait
+from lib.exit_codes import DEPLOY_BROAD
 
 FLUX = ("authelia", "bento-pdf", "texbrain")
 
@@ -31,31 +32,35 @@ def land_run_main(monkeypatch, capsys):
     """`land.main(["--pr", "999"])` over the given tools and classifier; (rc, stdout)."""
     import land
 
-    def run(tools, classifier):
+    def run(tools, classifier, *args):
         monkeypatch.setenv("LAND_PRIMARY", str(PRIMARY))
-        rc = land.main(["--pr", "999"], tools=tools, classifier=classifier)
+        rc = land.main(["--pr", "999", *args], tools=tools, classifier=classifier)
         return rc, capsys.readouterr().out
 
     return run
 
 
-def _land(land_run_main, paths: list[str], sim: Sim):
+def _land(land_run_main, paths: list[str], sim: Sim, changed_files=None, **kwargs):
     """Land a PR changing `paths`, with land-wait reading `sim`; (rc, out, calls).
 
     The landing's merge commit is `MERGE_SHA`; the simulated registry names it `M`.
+    `changed_files` above `len(paths)` is a list `gh` truncated, so the landing needs `--since`.
+    `kwargs` are further `Fakes` fields.
     """
+    changed_files = len(paths) if changed_files is None else changed_files
     fakes = Fakes(
         gh_views={
             "files,changedFiles": {
                 "files": [{"path": p} for p in paths],
-                "changedFiles": len(paths),
+                "changedFiles": changed_files,
             }
         },
-        derived=tuple(land_tags.derive(paths, len(paths))),
+        derived=tuple(land_tags.derive(paths, changed_files)),
         self_applied=land_tags.self_applied(paths),
         plane=land_tags.plane_note(paths),
         owners={MERGE_SHA: dict.fromkeys(FLUX, "flux")},
         gate=(True, []),
+        **kwargs,
     )
     tools, calls = build_tools(fakes)
 
@@ -66,7 +71,8 @@ def _land(land_run_main, paths: list[str], sim: Sim):
         )
 
     tools = replace(tools, flux=replace(tools.flux, land_wait=land_wait))
-    rc, out = land_run_main(tools, build_classifier(fakes, calls))
+    since = ("--since", "beefbeef") if changed_files > len(paths) else ()
+    rc, out = land_run_main(tools, build_classifier(fakes, calls), *since)
     return rc, out, calls
 
 
@@ -149,6 +155,32 @@ def test_a_templates_only_pr_reaches_land_wait_and_gates_the_changed_set(
     assert [c[1] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
     assert sim.annotations == _annotation("authelia,bento-pdf")
     assert _gated(calls) == [["authelia", "bento-pdf"]]
+
+
+def test_a_range_over_the_file_page_with_a_template_settles_on_the_changed_set(
+    land_run_main,
+):
+    """`gh` lists 100 of 137 files, and `changed` refuses the range for its template. Nobody can
+    deploy that range by hand, so the verdict rests on land-wait alone."""
+    sim = Sim(
+        polls=[at(M, "bento-pdf")],
+        published={
+            M: digests(authelia="a", bento_pdf="b2", texbrain="t"),
+            P: digests(authelia="a", bento_pdf="b1", texbrain="t"),
+        },
+    )
+    rc, out, calls = _land(
+        land_run_main,
+        ["ansible/templates/claim-default.yaml.j2"],
+        sim,
+        changed_files=137,
+        changed_rc=DEPLOY_BROAD,
+    )
+    assert "VERDICT: settled" in out, out
+    assert "needs-manual-apply" not in out and "target=daniel-pi" not in out
+    assert rc == 0
+    assert [c[1] for c in calls if c[0] == "land_wait"] == [(MERGE_SHA, [])]
+    assert _gated(calls) == [["bento-pdf"]]
 
 
 def test_a_manifests_only_pr_reaches_land_wait_and_gates_the_changed_set(

@@ -40,10 +40,11 @@ and the failure message says so.
     volume_revert_sha: 1a2b3c4d            # the deploy tag the snapshot was named with
 ```
 
-Two call sites pass these. `roles/k8s/manifests` includes the role for an Ansible-owned role's
-automated rollback, from `k8s_autodeploy_snapshot_pvcs`, `manifests_service` and
-`k8s_restore_snapshot_sha`. `ansible/volume-revert.yml` is the operator-only entry point for a
-flux-owned role, and takes all three as `-e` inputs: the hold post prints one command per changed
+Two call sites pass these. `roles/k8s/manifests` includes the role from
+`k8s_autodeploy_snapshot_pvcs`, `manifests_service` and `k8s_restore_snapshot_sha`, and nothing
+sets that last variable since D6.12 deleted the tick's rollback redeploy.
+`ansible/volume-revert.yml` is the operator-only entry point for a flux-owned role, and takes all
+three as `-e` inputs: the hold post prints one command per changed
 snapshot role, with that role's `digest8` as the SHA. The runbook that runs it is *The revert
 runbook* in `docs/volume-snapshot-drills.md`. The playbook includes this role alone, never runs
 `deploy.yml`, and gathers facts through the shared preamble, because `k8s/longhorn-api` reads
@@ -57,8 +58,7 @@ named `t`. The input assert rejects it by type.
 being rolled back — `git rev-parse --short=8 HEAD`'s output at that commit, used verbatim.
 `--short=8` is a minimum, not a width: git returns more characters when eight are ambiguous, so
 this role checks the shape (`^[0-9a-f]{8,}$`) and transforms nothing, and truncating to eight
-would fail to match a nine-character name. `gitops-deploy`'s automated rollback is the one caller
-that passes a fixed 8-character slice instead; the docs page has why that stays fail-closed.
+would fail to match a nine-character name.
 
 A flux-owned role has no automated caller. Its snapshot Job names snapshots with the role's
 `digest8`, not a commit, so its revert passes `volume_revert_sha=<digest8>`. The stateful hold's

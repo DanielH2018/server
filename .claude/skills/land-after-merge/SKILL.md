@@ -127,14 +127,16 @@ The `VERDICT:` line is the last line of the log. `land.sh --help` lists the clos
 | `unbuilt` | A host the landing would defer on has no package published at or after the merge, and the builder reports a failing reason, so no updater fire can apply it. Read `uv run python scripts/diagnostics/probe.py builder`, fix the builder, then re-run the same `land.sh` command. |
 | `handoff-timeout` | The lander unit outlived land.sh's wait and may still be running. Re-run the same command; it waits on the unit again rather than starting a second landing. |
 
-**A tag whose `containers_list` entry sets `owner` never reaches `deploy.sh`.** `land.sh`
+**A k8s tag never reaches `deploy.sh`.** `land.sh`
 waits until a promotion covers the merge commit (`promote.py land-wait`) and then gates the
 `owner: flux` tags. A `deploy-failed` with cause `promote-held` means `DEPLOY_HOLD` holds
 promotion, and clearing it is **operator-only**: stop and name the hold. Cause
 `soak-failed` means the soak Job failed on the promoted revision, which `verify` holds next:
 report the services the printed `kubectl` command names, and stop. A
 `nothing-to-deploy` whose detail says a tag "is suspended" means Flux applies nothing for that
-tag until a PR removes its `flux_suspend`; the suspend PR itself ends this way. A PR that removes
+tag until a PR removes its `flux_suspend`; the suspend PR itself ends this way. The same wait on a
+PR that also owes a plane or a setup role's other hosts ends `needs-manual-apply`, and one that
+changes a host package goes on to the host wait. A PR that removes
 `owner` is refused before the merge while the tag's Kustomization still exists; the handback
 order is in [docs/flux-deploy-plane.md](../../../docs/flux-deploy-plane.md).
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,

@@ -21,7 +21,6 @@ from deploy_tools.promote_lib.wait import WaitResult
 from typing import Any
 
 from deploy_tools.deploy_lib.detach_notify import GateResult
-from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
 from _land_host_fakes import host_fakes
 from deploy_tools.land_lib.options import Options
@@ -111,10 +110,6 @@ class Fakes:
     hosts_at: dict[str, list[str]] | None = None
     changed: str = ""
     changed_rc: int = 0
-    # `deploy_tags.py narrow`, the second derivation a broad `changed` refusal falls back to.
-    # It refuses by default, which is what every range written before it did.
-    narrowed: str = ""
-    narrowed_rc: int = DEPLOY_BROAD
     # `git diff --name-only <since>...HEAD`: the paths the fallback derivation proves a tag's
     # platform from, and the return code of the read.
     diff_paths: list[str] = field(default_factory=list)
@@ -122,12 +117,6 @@ class Fakes:
     gate: tuple[bool, list[str]] = field(
         default_factory=lambda: (True, ["sonarr: healthy"])
     )
-    # What the gate returns from its second call onward -- the re-gate after a later deploy.
-    # None repeats `gate`.
-    regate: tuple[bool, list[str]] | None = None
-    # `tools.later_deploys`: each tag another deploy re-rolled after this landing's own, to
-    # the commit that deploy rendered.
-    later_deploys: dict[str, str] = field(default_factory=dict)
     # What `tools.snapshot` yields: a directory for a snapshot that was taken, None for one
     # that could not be (the tree lock busy, the worktree add failed).
     gate_snapshot: Path | None = Path("/snap")
@@ -137,16 +126,12 @@ class Fakes:
     remaining_setup: str = ""
     key_readers: tuple = ()
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
-    # `land_tags.shared_caller_tags`: each shared role the PR changes, to the tags that run it.
-    shared_callers: dict[str, set[str]] = field(default_factory=dict)
     # `land_platform.k8s_only_tags`: the tags the changed paths derive, which the landing may
     # route to a `platform: k8s` entry alone.
     path_k8s_only: list[str] = field(default_factory=list)
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.
     declared_at: set[str] | None = None
-    # `git ls-tree -d` of the role trees at the merge commit; None falls back to this checkout.
-    role_dirs_at: frozenset[str] | None = None
     # `git merge-base --is-ancestor <merge_sha> <recorded apply>`: 0 means the recorded broad
     # apply included this PR, non-zero means it ran at a commit that did not contain it.
     is_ancestor_rc: int = 0
@@ -163,11 +148,7 @@ class Fakes:
     state: Mapping[str, str | None] = field(default_factory=dict)
     # What `tools.own_narrowing` answers on the fast path: role tag -> this PR's derivation.
     own_narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
-    # The paths `tools.paths_a_hand_must_apply` drops: a shared role's change that moves no
-    # rendered manifest. None leaves the list as the PR's own.
-    plane_paths_dropped: frozenset[str] = frozenset()
-    # `git show <ref>:<path>` text by ref, for `land_shared.guard_map_rows`. An absent ref
-    # answers as a missing file.
+    # `git show <ref>:<path>` text by ref. An absent ref answers as a missing file.
     show_at: dict[str, str] = field(default_factory=dict)
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
@@ -288,9 +269,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         return list(f.path_k8s_only)
 
     return Classifier(
-        plane_note=lambda paths, declared=None, quiet=(), narrow_tags=None, role_dirs=None: (
-            f.plane
-        ),
+        plane_note=lambda paths, quiet=(), narrow_tags=None: f.plane,
         self_applied=lambda paths, quiet=(): f.self_applied,
         self_applied_command=lambda paths, quiet=(): f.self_applied_command,
         remaining_setup_hosts=remaining_setup_hosts,
@@ -299,9 +278,6 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
-        shared_caller_tags=lambda paths, declared=None, role_dirs=None: (
-            f.shared_callers
-        ),
         k8s_only_tags=k8s_only_tags,
     )
 
@@ -407,8 +383,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.hosts_rc, f.hosts)
         if args[0] == "changed":
             return _cp(f.changed_rc, f.changed)
-        if args[0] == "narrow":
-            return _cp(f.narrowed_rc, f.narrowed)
         raise AssertionError(args)
 
     def landing_hosts_at(tags, ref, primary, k8s_only=()):
@@ -422,13 +396,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         return f.hosts_at
 
     def gate(tags, cwd=None):
-        again = any(c[0] == "gate" for c in calls)
         calls.append(("gate", (tags,), {"cwd": cwd}))
-        return GateResult(*(f.regate if again and f.regate else f.gate))
-
-    def later_deploys(tags, since):
-        calls.append(("later_deploys", (list(tags), since), {}))
-        return f.later_deploys
+        return GateResult(*f.gate)
 
     @contextlib.contextmanager
     def snapshot(primary, sha):
@@ -516,17 +485,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         deploy_tags=deploy_tags,
         gate=gate,
         snapshot=snapshot,
-        later_deploys=later_deploys,
         declared_at=lambda ref, primary: f.declared_at,
-        role_dirs_at=lambda ref, primary: f.role_dirs_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
         flux=FluxReads(owners_at, kustomization_exists, land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,
         **host_fakes(f, calls),
-        paths_a_hand_must_apply=lambda paths, pr_range, primary, declared: [
-            p for p in paths if p not in f.plane_paths_dropped
-        ],
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),

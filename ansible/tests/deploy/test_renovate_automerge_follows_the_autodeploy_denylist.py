@@ -51,7 +51,7 @@ from _role_census import role_dirs
 _RENOVATE = REPO / "renovate.json"
 
 # The rule is found by the fixed prefix of its groupName: `{{depName}}` keeps Renovate's
-# per-service grouping (one PR per image, the deployer's rollback unit), and the parenthetical
+# per-service grouping (one PR per image, one bump's revert), and the parenthetical
 # is the `manual —` tell the renovate-prs skill triages by.
 MANUAL_GROUP_PREFIX = "k8s image {{depName}} (manual — k8s_autodeploy: false"
 
@@ -363,7 +363,7 @@ _DENYLIST = {"authelia", "traefik"}
 
 def _rule_set(paths: list[str], **overrides) -> list[dict]:
     rule = {
-        "groupName": MANUAL_GROUP_PREFIX + ", so the tick applies nothing)",
+        "groupName": MANUAL_GROUP_PREFIX + ", so a person merges it)",
         "automerge": False,
         "matchFileNames": paths,
     }
@@ -417,7 +417,7 @@ _DOCKERFILE_ROLES = {"traefik", "sonarr"}
 
 def _dockerfile_rule_set(paths: list[str], **overrides) -> list[dict]:
     rule = {
-        "groupName": DOCKERFILE_MANUAL_GROUP_PREFIX + ", so the tick applies nothing)",
+        "groupName": DOCKERFILE_MANUAL_GROUP_PREFIX + ", so a person merges it)",
         "automerge": False,
         "matchManagers": ["dockerfile"],
         "matchFileNames": paths,

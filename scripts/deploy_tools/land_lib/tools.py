@@ -47,9 +47,9 @@ _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
 from deployer_lib.deploy_locks import TREE_LOCK as LOCK
 from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
-from deploy_tools import await_ci, shared_role_reach
-from deploy_tools.land_lib import land_platform, land_reach, land_rerolls
-from deploy_tools.land_lib import land_flux, land_shared, land_tags, land_tested_base
+from deploy_tools import await_ci
+from deploy_tools.land_lib import land_platform, land_reach
+from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import verdict_log
 from deploy_tools.land_lib.key_readers import KeyReader, readable_key_readers
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
@@ -457,33 +457,6 @@ def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
         return None
 
 
-def role_dirs_at(ref: str, primary: Path) -> frozenset[str] | None:
-    """The `<plane>/<role>` directories under `ansible/roles/` at `ref`, or None when unreadable.
-
-    An empty listing is None too, for the reason `declared_tags_at` gives: no role existing
-    anywhere is damage, and None makes `land_shared.shared_roles` read this checkout instead.
-    """
-    try:
-        out = git(
-            "ls-tree",
-            "-d",
-            "--name-only",
-            ref,
-            "ansible/roles/k8s/",
-            "ansible/roles/setup/",
-            cwd=primary,
-            check=False,
-        )
-    except subprocess.SubprocessError, OSError:
-        return None
-    if out.returncode:
-        return None
-    dirs = frozenset(
-        line.removeprefix("ansible/roles/") for line in out.stdout.splitlines() if line
-    )
-    return dirs or None
-
-
 # Each basename `read_state` accepts, mapped to the `DeployerSnapshot` field that holds it.
 _SNAPSHOT_FIELDS = {MARKERS[f]: f for f in DeployerSnapshot._fields}
 
@@ -515,22 +488,15 @@ def read_state(deployer_state: Path, name: str) -> str | None:
 # differently (`files` against `paths`), and a Protocol matches a keyword-capable parameter by
 # NAME -- so without the `/` a fake with an equally valid signature is rejected.
 class PlaneNote(Protocol):
-    """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or "".
-
-    `declared` pins the set of tags that exist, the same way `Derive` does — production passes
-    the set read at the merge commit, and None falls back to the tree `land_tags` lives in.
-    `role_dirs` is the same answer for which role directories exist.
-    """
+    """`land_tags.plane_note`: what a PR still needs a HUMAN to apply, or ""."""
 
     def __call__(
         self,
         files: list[str],
         /,
-        declared: set[str] | None = None,
         *,
         quiet: Iterable[str] = (),
         narrow_tags: dict[str, frozenset[str]] | None = None,
-        role_dirs: frozenset[str] | None = None,
     ) -> str: ...
 
 
@@ -600,11 +566,7 @@ class Tools:
     snapshot: Callable[[Path, str], contextlib.AbstractContextManager[Path | None]] = (
         gate_snapshot
     )
-    # The tags another deploy re-rolled after this landing's own, each with the commit that
-    # deploy rendered. Asked only after a failed gate; it waits out any such deploy first.
-    later_deploys: Callable[..., dict[str, str]] = land_rerolls.later_deploys
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
-    role_dirs_at: Callable[[str, Path], frozenset[str] | None] = role_dirs_at
     # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
     # commit a fast-path landing deploys. None sends the caller to the subprocess.
     landing_hosts_at: Callable[[Any, str, Path, Any], dict[str, list[str]] | None] = (
@@ -617,11 +579,6 @@ class Tools:
     own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
         land_tags.own_narrow_tags
     )
-    # Also runs git over the PR's range -- the key diff of a shared role's `defaults/main.yml`
-    # and a grep of every template for those keys. `classify.classify` is its caller.
-    paths_a_hand_must_apply: Callable[
-        [list[str], str, Path, set[str] | None], list[str]
-    ] = shared_role_reach.paths_a_hand_must_apply
     lock_holder: Callable[[], str] = lock_holder
     # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
@@ -633,7 +590,7 @@ class Tools:
     record_verdict: Callable[[str, int, str], None] = verdict_log.record
     sleep: Callable[[float], None] = time.sleep
     clock: Callable[[], float] = time.monotonic
-    # Wall-clock seconds, for comparing with a release record's `applied_at`.
+    # Wall-clock seconds, for the ledger's `merged_at` and the pace check.
     wall_clock: Callable[[], float] = time.time
     # None means `host_wait`'s own, which imports this module and so cannot be named here.
     host_targets: Callable[[Path, str], list[Any]] | None = None
@@ -657,18 +614,7 @@ class Classifier:
     # the paths' reach as the tick does (#6968). It reads git, unlike the rest of this class.
     key_readers: Callable[[str, Path], list[KeyReader]] = readable_key_readers
     derive: Derive = land_tags.derive
-    # Reads the role-caller graph from this checkout's tree, as `plane_note` always has.
-    # `...`, not the argument list: `role_dirs` is passed by keyword.
-    shared_caller_tags: Callable[..., dict[str, set[str]]] = (
-        land_tags.shared_caller_tags
-    )
-    # Which of those roles was narrowed to one smoke caller, so the operator line says so
-    # rather than claiming every caller was deployed.
-    smoke_narrowed_roles: Callable[[list[str], set[str] | None], frozenset[str]] = (
-        land_shared.narrowed_roles
-    )
-    # Which derived tags the PR's own paths prove are a k3s change. Beside
-    # `shared_caller_tags` because `deploy_by_host` routes the union of the two the same way.
+    # Which derived tags the PR's own paths prove are a k3s change.
     k8s_only_tags: Callable[[list[str], set[str] | None], list[str]] = (
         land_platform.k8s_only_tags
     )

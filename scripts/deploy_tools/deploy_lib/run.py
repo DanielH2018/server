@@ -49,10 +49,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.deploy_lib.ansible_tmp import drop_ansible_local_tmp, sweep_stale
 from deploy_tools.deploy_lib.flags import NothingToDeploy, Refused, check_passthrough
 from deploy_tools.deploy_lib.owners import (
-    mark_owners,
-    owner_note,
-    read_owners,
-    refuse_flux_owned,
+    mark_k8s_tags,
+    read_k8s_tags,
+    refuse_k8s_tags,
 )
 from deploy_tools.deploy_lib.messages import report, say, say_error, say_warning
 from lib.cli_help import answer_help
@@ -65,7 +64,7 @@ from lib.exit_codes import (
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_VARS, REPO
 
-# `deploy_logic`, for the build couplings `expand_shared_roles` adds. Imported lazily there.
+# `deploy_logic`, for `deploy_tags.changed`. Imported lazily there.
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 # What a detached run starts once its playbook exits. Named here, in the module every deploy
@@ -97,8 +96,8 @@ class Plan:
     # What reaches ansible-playbook: every argument this wrapper does not consume.
     args: list[str] = field(default_factory=list)
     staleness_checked: bool = False
-    # `owners.read_owners`' answer, read once per run.
-    owners: dict[str, str] | None = None
+    # `owners.read_k8s_tags`' answer, read once per run.
+    k8s_tags: set[str] | None = None
 
     @property
     def tags_csv(self) -> str:
@@ -170,78 +169,9 @@ def run_changed(plan: Plan, git_diff=None) -> tuple[int, str]:
                 plan.changed_ref,
                 cwd=plan.repo_root,
                 git_diff=git_diff,
-                skip=read_owners(plan),
             )
         )
     return status, out.getvalue().strip()
-
-
-def expand_shared_roles(plan: Plan) -> None:
-    """Replace each shared k8s role in `--tags` with the tags of every role that runs it.
-
-    A shared role — `volume-snapshot`, `manifests`, `image-builder` — has no `containers_list`
-    entry, so Ansible selects nothing for `--tags volume-snapshot` and exits 0. It runs under
-    its callers' tags with their variables, so deploying every caller is what applies it.
-
-    Runs before the staleness gate, so the gate, the tag validation and the per-service locks
-    all see the services that actually deploy. A name no declared role runs is left as typed,
-    and the validation refuses it by name. Fails open: a crash here leaves the typed tags,
-    which the validation then refuses, so a bug in the expansion never blocks a deploy the
-    validation would have let through. A task file `role_callers` cannot load takes that path too,
-    so the typed name is refused rather than expanded to too few callers.
-
-    A caller Flux applies is left out with a note; a typed one stays for `refuse_flux_owned`.
-    An expansion left empty ends with nothing to deploy, because an empty `--tags` is a full run.
-    """
-    if not plan.tags:
-        return
-    try:
-        from deploy_tools.deploy_lib import tags as deploy_tags
-        from deploy_tools.shared_role_callers import expand_shared_tags
-        from lib.k8s_roles import role_callers
-
-        declared = deploy_tags.known_tags(plan.repo_root / HOST_VARS_REL, plan.at_sha)
-        if set(plan.tags) <= declared:
-            return
-        owners = read_owners(plan)
-        tags, replaced, dropped = expand_shared_tags(
-            plan.tags, declared, role_callers(plan.repo_root), skip=owners.keys()
-        )
-    # Broad on purpose: the expansion fails open, per the docstring.
-    except Exception:
-        traceback.print_exc()
-        return
-    for role, left_out in dropped.items():
-        for tag in left_out:
-            note = owner_note(tag, owners[tag])
-            say(f"deploy.sh: left `{tag}` out of `{role}`'s callers: {note}.")
-    for role, reached in ((r, t) for r, t in replaced.items() if t):
-        say(
-            f"deploy.sh: `{role}` is a shared role with no containers_list entry; deploying the "
-            f"{len(reached)} service(s) that run it: {', '.join(reached)}"
-        )
-    if replaced and not tags:
-        say(
-            "deploy.sh: no service Ansible deploys runs those roles -- nothing was deployed."
-        )
-        raise NothingToDeploy
-    if replaced:
-        plan.tags = tags
-        plan.args = [*_without_tags(plan.args), f"--tags={plan.tags_csv}"]
-
-
-def _without_tags(args: list[str]) -> list[str]:
-    """`args` minus every `--tags`/`-t` flag and its value."""
-    out: list[str] = []
-    skip_next = False
-    for arg in args:
-        if skip_next:
-            skip_next = False
-        elif arg in ("--tags", "-t"):
-            skip_next = True
-        elif not arg.startswith("--tags="):
-            out.append(arg)
-    return out
 
 
 def run_locked(plan: Plan) -> int:
@@ -402,8 +332,8 @@ def derive_changed_tags(plan: Plan, args: list[str], tools: Tools) -> list[str]:
     the run would exit 0 having deployed nothing -- the one code no consumer treats as a
     resume point. Exit 4 is the honest answer, and land.sh already retries it.
 
-    `deploy_tags.changed` leaves out a tag Flux applies and names it, so a derivation that
-    reached only such tags arrives here empty and ends with nothing to deploy.
+    `deploy_tags.changed` leaves out a k8s tag and names it, so a derivation that reached only
+    such tags arrives here empty and ends with nothing to deploy.
     """
     if not plan.changed:
         return args
@@ -552,7 +482,7 @@ def _gated_run(argv: list[str], tools: Tools) -> int:
         args = derive_changed_tags(plan, args, tools)
         parse_wrapper_flags(args, plan)
         if plan.list_services:
-            mark_owners(read_owners(plan))
+            mark_k8s_tags(read_k8s_tags(plan))
             tools.exec_argv(
                 ["uv", "run", "python", "scripts/deploy_tools/deploy_tags.py", "list"]
             )
@@ -561,14 +491,13 @@ def _gated_run(argv: list[str], tools: Tools) -> int:
         # subprocess, a lock wait or a snapshot, and it must read as a bad command line on
         # every path out of here rather than as a playbook that failed mid-deploy.
         check_passthrough(plan.args)
-        expand_shared_roles(plan)
         # A tree behind origin/master renders stale templates and reverts live config while
         # every repo-side check reads green. Before --check and --dry-run too: a green dry run
         # against a stale tree is the misleading signal itself.
         if not plan.skip_staleness_check:
             staleness_gate(plan, tools)
         validate_tags(plan, tools)
-        refuse_flux_owned(plan)
+        refuse_k8s_tags(plan)
     except Refused as refused:
         return refused.code
     if removed := sweep_stale():

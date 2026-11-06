@@ -47,7 +47,7 @@ def _gated_tree(ln: Landing) -> str:
     """
     if ln.deployed_at:
         return ln.deployed_at
-    flux = set(promotion.published(ln))
+    flux = set(ln.flux_tags)
     if any(tag in flux for tag in promotion.gated_tags(ln)):
         return ln.merge_sha
     return ""
@@ -97,56 +97,13 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
         )
 
 
-def _regate_after_later_deploys(ln: Landing) -> GateResult | None:
-    """After a failed gate, gate again if a later deploy re-rolled the workloads.
-
-    Returns None when no later deploy re-rolled a tag, and otherwise the second gate's result,
-    whose `settled` this function narrows as below.
-
-    A later deploy of the same service can roll its pods under the gate's one sample, once
-    this landing's deploy has released the service lock (#3812). This gates again once that
-    deploy has ended, so the verdict grades what it left, and a change that is still broken
-    fails the second gate too.
-
-    A healthy second gate settles only where every re-rolled tag's later deploy rendered a
-    commit that CONTAINS this PR. The tick's rollback redeploys an older pin, and settling on
-    its healthy pods would report a change that is no longer live.
-    """
-    rerolled = ln.tools.later_deploys(ln.resolved_tags, ln.deploy_ended_at)
-    if not rerolled:
-        return None
-    ln.regated = ",".join(rerolled)
-    say(
-        f"{ln.regated}: a later deploy rolled this out again after this landing's own "
-        "deploy; gating the generation that deploy left"
-    )
-    result = gate_from_the_deployed_tree(ln)
-    for line in result.lines:
-        say(line)
-    if not result.settled:
-        return result
-    without = {
-        tag: commit
-        for tag, commit in rerolled.items()
-        if not commit
-        or ln.git("merge-base", "--is-ancestor", ln.merge_sha, commit).returncode
-    }
-    for tag, commit in without.items():
-        rendered = commit[:12] or "a commit its release record does not name"
-        say(
-            f"{tag}: the later deploy rendered {rendered}, which is not proved to contain "
-            f"{ln.merge_sha[:12]} -- this change may no longer be live"
-        )
-    return result._replace(settled=not without)
-
-
 def applied_wording(ln: Landing) -> str:
     """What the landing applied, for the verdict lines: services, hosts, or both.
 
     A hosts-only landing, one with host targets and no service tag, never reads "services
     deployed", whatever else the tick applied for it.
     """
-    services = bool(promotion.gated_tags(ln) or ln.owned_tags)
+    services = bool(promotion.gated_tags(ln))
     if not ln.host_targets:
         return "services deployed"
     return "services deployed and hosts applied" if services else "hosts applied"
@@ -159,12 +116,6 @@ def health(ln: Landing) -> NoReturn:
     result = gate_from_the_deployed_tree(ln)
     for line in result.lines:
         say(line)
-    # An unreadable gate saw no pods rolled under it; it saw nothing at all, so there is no
-    # later deploy to wait out.
-    if not result.settled and not result.unreadable:
-        result = _regate_after_later_deploys(ln) or result
-        if ln.regated:
-            tags += f" (re-gated after a later deploy of {ln.regated})"
     # Before any verdict, so every exit below has asked: the gate is the wait that lets a
     # joined tick end (`tick.rearm_tick`).
     tick.rearm_tick(ln)

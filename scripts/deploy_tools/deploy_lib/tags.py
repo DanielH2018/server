@@ -30,7 +30,7 @@ import argparse
 import difflib
 import subprocess
 import sys
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
 
@@ -42,7 +42,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 _sys.path.insert(1, str(_Path(__file__).resolve().parents[1]))  # scripts/deploy_tools
-from deploy_tools.deploy_lib import owners
+from deploy_tools.deploy_lib.owners import k8s_note
 from deploy_tools.deploy_lib.messages import PROG
 from lib.cli_help import ArgumentParser, error, warn
 from lib.git import git, git_stdout
@@ -191,8 +191,6 @@ def split_shared_roles(
     and arr-notification — because other roles include them by literal
     name. Handing one to `--tags` poisons the WHOLE list: deploy.sh validates every tag and
     exits 2 on the first unknown one, so the valid services beside it are refused too.
-
-    `deploy_logic.k8s_remediation` turns the shared half into an instruction that works.
     """
     declared = service_tags(host_vars)
     tags = set(tags)
@@ -279,9 +277,9 @@ def _load_deploy_logic():
     function rather than at module import time, so `validate`/`list`/`describe` never pay
     for or depend on this cross-directory import succeeding — only `changed` needs it.
     """
-    from deployer_lib.deploy_logic import broad_remediation, k8s_remediation
+    from deployer_lib.deploy_logic import broad_remediation
 
-    return broad_remediation, k8s_remediation
+    return broad_remediation
 
 
 def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
@@ -321,7 +319,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     # cross-directory import they are kept clear of.
     from reach import reach
 
-    broad_remediation, _ = _load_deploy_logic()
+    broad_remediation = _load_deploy_logic()
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -368,21 +366,10 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     return DEPLOY_BROAD
 
 
-def _cmd_narrow(args: argparse.Namespace) -> int:
-    """Print the tags a deploy-plane range reaches. See narrow_lib/broad.py for the rules."""
-    # Lazy for the reason `_load_deploy_logic` is: `validate` must not pay for a yaml parse.
-    from deploy_tools.narrow_lib.broad import narrow_cmd
-
-    return narrow_cmd(args.old, args.new)
-
-
-# DECIDED: role `tasks/` and `handlers/` comment-only edits stay out of this set (#4926). A
-# SHARED role's one (image-builder's tasks, say) already deploys no caller: the landing expands
-# callers over `shared_role_reach.paths_a_hand_must_apply`, which drops a comment-only shared
-# path, and `derive` maps a shared role to no tag of its own. A service role's own edit keeps
-# its one tag, because a task file has its own defer channel
-# (`deploy_changes.comment_only_k8s_defaults`' docstring). `land_lib/land_tags_cli.py` expands
-# over the same filtered list, so the CLI agrees with the landing (#4945).
+# DECIDED: role `tasks/` and `handlers/` comment-only edits stay out of this set (#4926). `derive`
+# maps a SHARED role to no tag of its own, and a service role's own edit keeps its one tag,
+# because a task file has its own defer channel (`deploy_changes.comment_only_k8s_defaults`'
+# docstring).
 def comment_only_paths(
     paths: list[str], old_ref: str, new_ref: str, show=None
 ) -> set[str]:
@@ -419,24 +406,34 @@ def comment_only_paths(
     )
 
 
+# What a broad refusal says about the half `--changed` no longer derives: since D6.15 no tag it
+# prints is a k8s tag, and the Pi's Compose services left `containers_list` in H5.
+_BROAD_DEPLOY_NOTE = (
+    "`promote` and Flux apply the cluster half, and a Pi Compose service this reaches ships "
+    "in the `homelab-daniel-pi` package. `deploy.sh` applies neither."
+)
+
+
 def changed(
     ref: str,
     cwd: Path = REPO,
     git_diff: Callable[[str, Path], list[str]] | None = None,
-    skip: Mapping[str, str] | None = None,
 ) -> int:
-    """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`.
+    """Print, on stdout, the comma-joined --tags value for every non-k8s service changed vs `ref`.
 
     Nothing else goes to stdout, so `deploy_lib/run.py` can capture it directly. Everything
     explaining the derivation goes to stderr. `cwd` is the checkout whose diff is read:
     `deploy_lib/run.py` passes its caller's working tree rather than this module's checkout.
     `git_diff` is the seam for the diff itself; None resolves `_git_diff_paths` at call time,
-    so a test that patches the module attribute still reaches it. `skip` is `deploy.sh`'s
-    `owners.flux_owned` map, whose tags are left out; land.sh's CLI call passes none (D2.3).
+    so a test that patches the module attribute still reaches it.
+
+    A k8s tag is left out and named, because `deploy.sh` refuses it with exit 5. A broad range
+    exits 3 with `_BROAD_DEPLOY_NOTE` for its deploy-plane half and `broad_remediation` for a
+    setup-plane or bring-up half, which a hand may still owe.
     """
     from reach import reach
 
-    broad_remediation, k8s_remediation = _load_deploy_logic()
+    broad_remediation = _load_deploy_logic()
     try:
         paths = (git_diff or _git_diff_paths)(ref, cwd)
     except subprocess.CalledProcessError as exc:
@@ -460,39 +457,27 @@ def changed(
             "asking.",
             prog=PROG,
         )
-        print(
-            f"  Run manually instead: {broad_remediation(cs.broad_deploy, cs.broad_setup, cs.setup_roles, playbooks=cs.manual_playbooks)}",
-            file=sys.stderr,
-        )
+        if cs.broad_deploy:
+            print(f"  {_BROAD_DEPLOY_NOTE}", file=sys.stderr)
+        if cs.broad_setup:
+            print(
+                f"  Run manually instead: {broad_remediation(False, True, cs.setup_roles, playbooks=cs.manual_playbooks)}",
+                file=sys.stderr,
+            )
         return DEPLOY_BROAD
 
     if cs.secrets:
         warn(
-            "--changed: ansible/vars/secrets.yml changed — a new value only reaches a "
-            "service on THAT service's own deploy, so confirm the consuming service's tag is "
-            "in the list below.",
+            "--changed: ansible/vars/secrets.yml changed, and it derives no tag. `uv run python "
+            "scripts/secrets_mgmt/secret_rotation.py consumers <secret>` names what reads a "
+            "secret and how each gets the new value.",
             prog=PROG,
         )
 
-    # Before the split, so a shared role beside a list the drop empties still exits 3.
-    derived = owners.drop_owned(set(cs.k8s), skip or {}, "--changed")
-    host_vars = cwd / HOST_VARS.relative_to(REPO)
-    tags, shared = split_shared_roles(derived, host_vars)
-    if shared:
-        # Emitting these as tags makes deploy.sh refuse the whole list (exit 2), so the
-        # shared roles leave the tag list and become an instruction that can actually
-        # apply them.
-        warn(
-            f"--changed: {', '.join(shared)} "
-            f"{'is a shared role' if len(shared) == 1 else 'are shared roles'} with no "
-            f"containers_list entry. {k8s_remediation(set(shared), service_tags(host_vars))}",
-            prog=PROG,
-        )
-        if not tags:
-            # Exit 3, the documented "broad, maps to no single service" refusal. Returning 0
-            # with an empty tag list makes deploy.sh exit 0 having deployed nothing, which is
-            # the false green this change removes.
-            return DEPLOY_BROAD
+    records = service_records(cwd / HOST_VARS.relative_to(REPO))
+    tags = sorted(set(cs.k8s) & {r.tag for r in records if r.platform != "k8s"})
+    for tag in sorted(set(cs.k8s) & {r.tag for r in records if r.platform == "k8s"}):
+        print(f"{PROG}: --changed: left out {k8s_note(tag)}.", file=sys.stderr)
     if not tags:
         print(
             f"{PROG}: --changed: no deployable service changed vs {ref}.",
@@ -573,11 +558,6 @@ def main(
     )
     bl.add_argument("ref", nargs="?", default="origin/master")
     bl.set_defaults(func=_cmd_blockers)
-
-    na = sub.add_parser("narrow", help="narrow a deploy-plane range, or exit 3")
-    na.add_argument("old")
-    na.add_argument("new")
-    na.set_defaults(func=_cmd_narrow)
 
     ho = sub.add_parser(
         "hosts",
