@@ -412,7 +412,6 @@
     check_timer_state: absent
     check_timer_name: manifest-prune
     check_timer_description: Manifest prune drift check (textfile verdict)
-    check_timer_exec: /usr/local/bin/manifest-prune-check.sh
     check_timer_user: root
     check_timer_on_calendar: "*-*-* {{ '%02d' | format(k3s_manifest_prune_cron_hour | int) }}:{{ '%02d' | format(k3s_manifest_prune_cron_minute | int) }}:00"
     check_timer_restart_sec: 30min
@@ -467,9 +466,6 @@
     check_timer_state: absent
     check_timer_name: live-drift
     check_timer_description: Live object drift check (textfile verdict)
-    check_timer_exec: >-
-      /usr/local/bin/uv run --no-project --no-python-downloads
-      --python {{ host_python_version }} /usr/local/bin/live-drift-check.py
     check_timer_user: "{{ sys_user }}"
     check_timer_environment:
       - "KUBECONFIG=/home/{{ sys_user }}/.kube/config"

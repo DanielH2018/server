@@ -52,8 +52,8 @@ MUST_FIND = (
     "/etc/systemd/system/gitops-deploy.service",
     "/etc/systemd/system/gitops-deploy-alert.service",
     "/etc/systemd/system/coredns-host.service",
-    "/etc/systemd/system/kuma-check-live-drift.timer",
-    "/etc/systemd/system/kuma-check-live-drift-boot.service",
+    "/etc/systemd/system/kuma-check-setup-drift.timer",
+    "/etc/systemd/system/kuma-check-setup-drift-boot.service",
     "/etc/systemd/system/renovate-agent-land@.service",
 )
 
