@@ -177,7 +177,7 @@ def test_ha_heartbeat_disabled_when_no_url_token(cfg):
     assert "disabled" in msg
 
 
-# Loki's Kuma /ready probe stays green even if promtail stops shipping (positions-file
+# Loki's /ready probe stays green even if promtail stops shipping (positions-file
 # corruption, label regression) — a silently-dead log pipeline.
 # This check counts ingested log lines for an always-active stream over a window and
 # goes down when zero: a freshness watchdog analogous to the SMART/restore-drill ones.
