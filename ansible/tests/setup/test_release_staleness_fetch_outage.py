@@ -108,7 +108,6 @@ def test_a_fetch_that_fails_with_the_link_up_throughout_reads_down(tmp_path):
     assert "skipped" not in pushes[0]
     assert "retried" not in pushes[0]
     assert [line.split()[0] for line in _status_lines(logs)] == ["status=down"], logs
-    # The banner's verdict file carries the fetch's verdict, so it reads as a broken check.
     verdict = (tmp_path / "state" / "verdict").read_text()
     assert verdict.startswith("status=down git fetch origin master failed"), verdict
 

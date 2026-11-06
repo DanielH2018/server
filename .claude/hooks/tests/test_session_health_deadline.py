@@ -24,7 +24,6 @@ def _probes(**overrides):
     probes = {
         "read_payload": lambda: {"source": "startup"},
         "target_problems": lambda: [],
-        "stale_release_problems": lambda: [],
         "master_moved_problems": lambda: [],
         "parked_deployer_problems": lambda: [],
         "other_live_sessions": lambda cwd: [],
@@ -77,26 +76,6 @@ def test_a_probe_past_the_deadline_is_named_and_the_rest_still_print(capsys):
     assert "loki" in out
     assert "the removable-worktree survey did not finish within 0.2s" in out
     assert "never printed" not in out
-
-
-def test_a_hung_stale_release_read_keeps_the_down_target_line(capsys):
-    never = threading.Event()
-
-    def hung():
-        never.wait()
-        return []
-
-    probes = _probes(
-        target_problems=lambda: ["  ✗ target loki [loki:3100] down"],
-        stale_release_problems=hung,
-    )
-    try:
-        assert _mod.main(deadline=0.2, **probes) == 0
-    finally:
-        never.set()
-    out = capsys.readouterr().out
-    assert "loki" in out
-    assert "the stale-release check did not finish within 0.2s" in out
 
 
 def test_a_hung_worktree_costs_its_own_session_line_only():

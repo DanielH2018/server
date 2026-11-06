@@ -445,8 +445,6 @@
 
 - name: Retire the release-staleness drift check's host files
   tags: [release-staleness]
-  # Removing the state directory takes the banner's verdict file with it, and the SessionStart
-  # reader stays silent on a host with no such directory.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent

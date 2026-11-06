@@ -1,7 +1,7 @@
 """Run the SessionStart banner's probes at once, under one total deadline.
 
 Each probe reads something slow and independent: `probe.py targets` through `uv run`, the
-stale-release journal, the primary checkout's `git status`, a diff per live worktree, and
+primary checkout's `git status`, a diff per live worktree, and
 `prune_worktrees.py --brief`, which reaches GitHub. Run one after another, their individual
 caps added up to more than the 15s the harness gives the hook, and a kill at that budget
 discards every section still buffered (#6153). Run together, the slowest probe sets the cost.

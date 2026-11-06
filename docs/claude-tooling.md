@@ -932,8 +932,7 @@ and timeout-bounded. Its probes run at the same time, in `hooklib/sections.py`, 
 `TOTAL_DEADLINE_S` inside the hook's 15s budget. A probe still running at that deadline
 prints a `⚠ … did not finish` line rather than nothing. The banner's problem lines come in three groups, in this order:
 
-- **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target, and
-  services whose running release is behind origin/master's manifests.
+- **Service lines** (`.claude/hooks/hooklib/service_lines.py`): a down Prometheus scrape target.
 - **Deployer lines** (`parked_deployer_problems`): a **dirty primary checkout**, a **GitOps
   deployer parked behind origin**, a **setup role the tick merged but cannot apply** (the
   `manual_plane` ledger class), consecutive ticks deferred on a service lock, an image bump
@@ -944,7 +943,7 @@ A failed import is loud and a failed read is silent. A module the banner cannot 
 `lib.deployer_park`, `lib.worktrees`) prints a `⚠ … is broken` line, and a failed `hooklib`
 import is reported in the fan-out section below. A read that fails at run time, such as a
 `git status` timeout or an unreadable marker file, returns no line, so a silent banner is not
-proof of health. The release-staleness check is the one read that reports its own failure.
+proof of health.
 
 The dirty checkout and the park stop every deploy in the fleet. A worktree session cannot
 inspect either, because the isolation guard refuses a git command targeting the shared

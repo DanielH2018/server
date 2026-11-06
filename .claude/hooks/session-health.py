@@ -12,7 +12,6 @@ or `--help` prints this text and exits 0.
 When a Claude Code session opens in this repo, this prints anything already broken so
 work doesn't start blind:
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
-  * services a leftover release-staleness verdict file names; that check is disarmed
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
   * a dirty primary checkout, or a GitOps deployer parked behind origin — the two states that
     stop every deploy in the fleet and that a worktree session cannot look at for itself,
@@ -55,8 +54,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Three sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
-# `hooklib`-not-`lib`): the worktree, scrape-target and stale-release lines. Wrapped like
+# Two sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
+# `hooklib`-not-`lib`): the worktree and scrape-target lines. Wrapped like
 # `lib.deployer_park` below, in its own try so a failure names the package that broke rather
 # than deployer_park's unrelated line. `SyntaxError` is caught alongside `ImportError` because
 # these modules use PEP 758 syntax and `run-hook.sh` sends this hook's stderr to /dev/null, exits 0.
@@ -333,17 +332,6 @@ def target_problems():
     return service_lines.target_problems(_run, REPO)
 
 
-def stale_release_problems():
-    """hooklib's stale-release line, read from the disarmed check's verdict file.
-
-    A probe of its own rather than the tail of `target_problems`, so a slow read past the
-    deadline cannot cost the down-target lines that already finished.
-    """
-    if service_lines is None:
-        return []
-    return service_lines.stale_release_problems()
-
-
 def master_moved_problems(git=None):
     """One line when this branch is behind origin/master's remote-tracking ref, else [].
 
@@ -548,7 +536,6 @@ def main(
     *,
     read_payload=read_payload,
     target_problems=target_problems,
-    stale_release_problems=stale_release_problems,
     master_moved_problems=master_moved_problems,
     parked_deployer_problems=parked_deployer_problems,
     other_live_sessions=other_live_sessions,
@@ -590,7 +577,6 @@ def main(
     cwd = os.getcwd()
     (
         targets,
-        stale_release,
         master_moved,
         parked,
         sessions,
@@ -600,7 +586,6 @@ def main(
     ) = run_sections(
         [
             ("the scrape-target check", target_problems),
-            ("the stale-release check", stale_release_problems),
             ("the behind-master check", master_moved_problems),
             ("the parked-deployer check", parked_deployer_problems),
             ("the other-session scan", lambda: other_live_sessions(cwd)),
@@ -612,7 +597,7 @@ def main(
     )
     # master_moved last deliberately: "this branch is behind origin/master" is the SYMPTOM of a
     # parked deployer, so the cause reads first.
-    problems = targets + stale_release + parked + master_moved
+    problems = targets + parked + master_moved
 
     banner = format_banner(problems, landing=bool(parked))
     if banner:
