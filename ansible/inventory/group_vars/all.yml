@@ -305,18 +305,12 @@ k3s_server_hosts:
 k3s_agent_hosts:
   - daniel-server
 
-# Hosts that render setup-plane templates, each armed with the reader that reports a stale render.
-# daniel-server has no other reader: manifest-prune-check is installed by
-# roles/setup/k3s/tasks/health-crons.yml, imported only from that role's main.yml, which
-# k3s-bringup.yml asserts onto k3s_server_hosts, while daniel-server renders the entire UPS
-# shutdown chain. daniel-box runs both readers, because its manifest-prune-check arms are the
-# ones the drift checks' disarm removes.
+# Hosts that render setup-plane templates, each armed with setup-drift-check, the reader that
+# reports a stale render. It is the only such reader on either host.
 #
-# An allowlist for the same reason as k3s_server_hosts above, though the failure directions
-# differ: naming a host that already runs manifest-prune-check gives it a second, redundant
-# reader, while forgetting one leaves it unwatched. Redundancy is the safe direction, so a host
-# in doubt belongs here. daniel-pi is deliberately absent — it stamps no setup templates,
-# so a reader there would report only that it is unarmed.
+# An allowlist for the same reason as k3s_server_hosts above: forgetting a host leaves it
+# unwatched. daniel-pi is deliberately absent — it stamps no setup templates, so a reader there
+# would report only that it is unarmed.
 # ENFORCED by ansible/tests/deploy/test_setup_drift_check.py.
 setup_drift_check_hosts:
   - daniel-box
@@ -457,11 +451,6 @@ k8s_psa_labels:
 # bounds a runaway while leaving the rejection path essentially unreachable.
 #
 # LimitRange evaluates at pod CREATE only, so adding this evicts nothing.
-#
-# NOT WATCHED BY manifest-prune-check. `limitrange` is absent from its kind list, and adding
-# it would make the check red on day one: homelab's copy is rendered by the shared kind
-# homelab-namespace, beside the namespace, so it appears in no staged manifest dir and reads as
-# an orphan.
 #
 # ROLLBACK: set to {} and let the change promote. Neither copy then renders, and the
 # homelab-namespace and observability Kustomizations, both `prune: true`, delete them live.

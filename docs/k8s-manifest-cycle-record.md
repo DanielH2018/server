@@ -108,7 +108,7 @@ reading a Deployment's `jsonpath` off a DaemonSet — `0 == 0`, passing vacuousl
 out of `manifests_prune`** (authelia and nut). For a role whose list is derived, deleting the
 template or excluding it drops it. `kubectl apply -f <dir>/` sweeps the whole directory, so the role
 deletes the staged file for you — but the **live object keeps serving**. It needs one hand
-`kubectl delete`, which the `manifest-prune-check.sh` host cron flags. Bit for real on
+`kubectl delete`. Bit for real on
 2026-08-13: a retired IngressRoute deleted live at 18:51 was re-created by the 18:53 deploy from
 its stale staged file.
 
@@ -151,8 +151,6 @@ Every caller but authelia and nut is armed. An orphan whose staged file was dele
 BEFORE its role was armed — including the claude-otel-ingest IngressRoute #1076 names — never
 receives the label and stays invisible to the selector; it still needs one manual
 `kubectl delete`. Arming a role with such an orphan is safe, because the prune cannot see it.
-`manifest-prune-check.sh` keeps watching every role, armed or not, until a real deploy has been
-seen pruning a real orphan.
 
 ## Which rebuilt image rolls which workload
 

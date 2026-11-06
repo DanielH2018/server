@@ -12,7 +12,7 @@ or `--help` prints this text and exits 0.
 When a Claude Code session opens in this repo, this prints anything already broken so
 work doesn't start blind:
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
-  * services the release-staleness cron last found running manifests behind origin/master
+  * services a leftover release-staleness verdict file names; that check is disarmed
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
   * a dirty primary checkout, or a GitOps deployer parked behind origin — the two states that
     stop every deploy in the fleet and that a worktree session cannot look at for itself,
@@ -334,7 +334,7 @@ def target_problems():
 
 
 def stale_release_problems():
-    """hooklib's stale-release line, read from the cron's verdict file.
+    """hooklib's stale-release line, read from the disarmed check's verdict file.
 
     A probe of its own rather than the tail of `target_problems`, so a slow read past the
     deadline cannot cost the down-target lines that already finished.
