@@ -672,7 +672,7 @@ Three things sit in that position:
   `land_tags.py`).
 
   **The line reads the host before it names it.** A host another apply already reached
-  owes nothing. `land_lib/deployed_copies.py` drops the host from a changed file's reach when the
+  owes nothing. `setup_lib/deployed_copies.py` drops the host from a changed file's reach when the
   host's own record shows the merge commit's bytes (#7398). For a `stamp_deployed.yml` pair that
   record is the live copy. For a `stamp_render.yml` template it is the line in the host's render
   fragment. Any other file stays owed: an unstamped file, a task file, a moved key, a pair whose

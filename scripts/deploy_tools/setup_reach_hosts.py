@@ -11,7 +11,7 @@ WHAT THIS PRINTS. One JSON object on stdout: each setup role the tick applies on
 to the sorted hosts other than HOST that the range's change to it reaches. `{}` when none
 does. `land_lib.land_reach.remaining_setup_hosts` holds the derivation that `land.sh`'s note
 reads too, so the tick and the landing name the same hosts. Both drop a host that already holds
-the changed file (`land_lib/deployed_copies.py`), and a host that cannot be read stays named.
+the changed file (`setup_lib/deployed_copies.py`), and a host that cannot be read stays named.
 
 A role reaches here through a path the range changed under it, through a repo file
 `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` routes to it such as the etcd drill script, or through a

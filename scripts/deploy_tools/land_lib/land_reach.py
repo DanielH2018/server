@@ -49,7 +49,7 @@ from deployer_lib.deploy_logic import (
 from gitops_markers import PLAYBOOK_CMD
 
 import narrow_setup
-from deploy_tools.land_lib.deployed_copies import DeployedCopies
+from deploy_tools.setup_lib.deployed_copies import DeployedCopies
 from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.narrow_lib.setup_index import RoleIndex
 from reach import reach
