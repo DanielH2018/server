@@ -1434,6 +1434,7 @@
  "scripts/renderer/tests/test_renderer_precheck.py": 0.98,
  "scripts/renderer/tests/test_renderer_prepull.py": 1.32,
  "scripts/renderer/tests/test_renderer_prune_label.py": 5.06,
+ "scripts/renderer/tests/test_renderer_reads_no_task_file.py": 4.19,
  "scripts/renderer/tests/test_renderer_restart.py": 2.2,
  "scripts/renderer/tests/test_renderer_roundtrip.py": 11.37,
  "scripts/renderer/tests/test_renderer_secret_aliases.py": 0.08,

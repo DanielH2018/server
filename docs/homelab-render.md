@@ -248,9 +248,12 @@ on a role without that file. A `manifests_*` key outside `RENDER_KEYS`, such as
 `manifests_rollout_kind`, is read only by the Ansible path and stays on the include.
 
 The render takes no value from a role's `tasks/`, so it renders the same bytes with those
-directories gone. Its one read there is `scripts/lib/k8s_roles.py:refuse_moved_keys_in_tasks`, which raises
-on a line setting a `RENDER_KEYS` key, `image_builder_builds` or `image_builder_name`, because
-the renderer would otherwise drop that value without a word.
+directories gone, and `scripts/renderer/tests/test_renderer_reads_no_task_file.py` holds that.
+Its one read there is `scripts/lib/k8s_roles.py:refuse_moved_keys_in_tasks`. That function parses
+the files and raises on a `RENDER_KEYS` key, `image_builder_builds`, `manifests_rollout_timeout`
+or an `image_builder_*` var on a `k8s/image-builder` include, because the renderer would otherwise
+drop the value without a word. A role whose entry is not `owner: flux` is exempt, because a
+role handed back to Ansible needs these keys on its include and Flux applies nothing of its render.
 
 The renderer resolves only the five keys it renders with: the
 two file lists, the deferred pair and `manifests_prune`. The others stay strings until a

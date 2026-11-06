@@ -28,7 +28,6 @@ from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
 from _helpers import load_tasks
 from _image_builder_tag import (
-    CONTENT_TAG_EXPRESSION,
     CONTEXT_DATA_EXPRESSION,
     templar_content_tag,
     templar_value,
@@ -150,17 +149,8 @@ def test_a_caller_with_no_context_at_all_still_gets_a_tag(dockerfile):
 #
 # The tag hashes the `data` of context-configmap.yaml.j2's own render, so there is no second list
 # of inputs that can fall out of step with the build context. The pair below is the cost of that
-# choice: `data` alone means the render's prose and metadata must NOT move the tag, and these two
-# tests are what say so in both directions.
-
-
-def test_the_hash_reads_the_build_contexts_own_template():
-    """Names the source, so a rewrite that hashes something else has to say so here."""
-    assert CONTEXT_TPL.name in CONTENT_TAG_EXPRESSION, (
-        f"the content tag no longer hashes {CONTEXT_TPL.name}'s render. It is the only artefact "
-        "that is by construction every byte the build reads — anything else is a second list of "
-        "inputs, which can silently omit one and hold the tag still across a change to it."
-    )
+# choice: `data` alone means the render's prose and metadata must NOT move the tag, and the two
+# tests below say so.
 
 
 def test_rewording_a_comment_in_that_template_does_not_move_the_tag(

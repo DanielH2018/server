@@ -454,23 +454,52 @@ _MOVED_KEYS = RENDER_KEYS | {
     "image_builder_name",
     "manifests_rollout_timeout",
 }
-_MOVED_KEY_LINE = re.compile(
-    rf"^\s*(?:-\s+)?({'|'.join(sorted(_MOVED_KEYS))}):", re.MULTILINE
-)
 
 
-def refuse_moved_keys_in_tasks(role_dir: Path) -> None:
+def _moved_keys(node: object) -> set[str]:
+    """The moved keys anywhere in parsed YAML, and any `image_builder_*` var on its include."""
+    if isinstance(node, list):
+        return {key for item in node for key in _moved_keys(item)}
+    if not isinstance(node, dict):
+        return set()
+    found = set(_MOVED_KEYS & node.keys())
+    task_vars = node.get("vars")
+    if isinstance(task_vars, dict) and any(
+        isinstance(args, dict) and args.get("name") == "k8s/image-builder"
+        for args in node.values()
+    ):
+        found |= {key for key in task_vars if str(key).startswith("image_builder_")}
+    return found | {key for value in node.values() for key in _moved_keys(value)}
+
+
+# Keyed on the text, so an edit between two renders reaches the second, and a render reads each
+# role's tasks once per reader (#5900).
+@functools.lru_cache(maxsize=512)
+def _moved_keys_in_text(text: str) -> frozenset[str]:
+    return frozenset(_moved_keys(yaml_fast.safe_load(text)))
+
+
+def refuse_moved_keys_in_tasks(role_dir: Path, entry: dict | None = None) -> None:
     """Raise when `role_dir`'s `tasks/` still sets a key the renderer reads from defaults.
 
     The renderer takes no value from `tasks/`, so such a key would silently stop rendering.
     This refusal is the one read of a task file on the render path. A `manifests_*` key only
-    Ansible reads is outside the set and passes.
+    Ansible reads is outside the set and passes. So does a role whose `containers_list` entry
+    is not flux-owned: Flux applies nothing of its render, and a handback to Ansible has to
+    put these keys on the include.
+
+    Args:
+        role_dir: The role directory.
+        entry: The role's `containers_list` entry. Omitted, it is read from the k8s host's vars.
 
     Raises:
         ValueError: A file under `tasks/` sets a key of the set.
     """
-    for path in sorted((role_dir / "tasks").glob("*.yml")):
-        found = sorted(set(_MOVED_KEY_LINE.findall(path.read_text())))
+    entry = _real_entry(role_dir.name) if entry is None else entry
+    if entry and entry.get("owner") != "flux":
+        return
+    for path in sorted((role_dir / "tasks").glob("*.y*ml")):
+        found = sorted(_moved_keys_in_text(path.read_text()))
         if found:
             raise ValueError(
                 f"{role_dir.name} sets {found} in tasks/{path.name}, and the renderer reads "

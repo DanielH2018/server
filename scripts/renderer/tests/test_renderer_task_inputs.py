@@ -141,6 +141,42 @@ def test_a_moved_key_in_tasks_raises(tmp_path, key):
         task_inputs.image_builder_sites(role)
 
 
+@pytest.mark.parametrize(
+    "vars_text",
+    ["  vars: {manifests_rollout: x}\n", '  vars:\n    "manifests_rollout": x\n'],
+)
+def test_a_moved_key_in_flow_style_or_quoted_raises(tmp_path, vars_text):
+    role = _role(tmp_path, tasks=BARE_INCLUDE + vars_text)
+    with pytest.raises(ValueError, match=r"manifests_rollout.*tasks/main\.yml"):
+        task_inputs.include_vars(role)
+
+
+def test_any_image_builder_var_on_its_include_raises(tmp_path):
+    include = BARE_INCLUDE.replace("k8s/manifests", "k8s/image-builder")
+    role = _role(
+        tmp_path, tasks=include + "  vars:\n    image_builder_context_files: {a: b}\n"
+    )
+    with pytest.raises(ValueError, match="image_builder_context_files"):
+        task_inputs.image_builder_sites(role)
+
+
+def test_an_image_builder_fact_outside_its_include_passes(tmp_path):
+    """image-builder's own tasks set facts under this prefix."""
+    role = _role(
+        tmp_path,
+        tasks="- ansible.builtin.set_fact:\n    image_builder_content_tag: sha-1\n",
+    )
+    assert task_inputs.image_builder_sites(role) == []
+
+
+def test_a_moved_key_is_refused_only_while_flux_owns_the_role(tmp_path):
+    role = _role(tmp_path, tasks=BARE_INCLUDE + "  vars:\n    manifests_prune: false\n")
+    refuse_moved_keys_in_tasks(role, {"name": "role", "owner": "released"})
+    refuse_moved_keys_in_tasks(role, {"name": "role"})
+    with pytest.raises(ValueError, match="manifests_prune"):
+        refuse_moved_keys_in_tasks(role, {"name": "role", "owner": "flux"})
+
+
 def test_an_ansible_only_key_in_tasks_passes(tmp_path):
     """A comment naming a moved key passes too, as coredns's tasks file has one."""
     role = _role(
