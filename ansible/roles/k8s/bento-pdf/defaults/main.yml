@@ -17,4 +17,3 @@ bento_pdf_k8s_mem_request: 32Mi
 # and mounts 0755 root-owned, so without an fsGroup the container EPERMs on its own scratch
 # directories.
 bento_pdf_k8s_uid: 101
-manifests_rollout_timeout: 123s
