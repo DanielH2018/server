@@ -1,0 +1,70 @@
+name: render-diff
+
+# Proves that an R4 PR moved no rendered byte, or only the files it named. Each side renders
+# with its own tree, tag list and lockfile, and both take the PR head's SHA as --revision, so
+# the soak Job's commit cannot read as a difference. scripts/validate/render_diff_job.py holds
+# the verdict, and docs/homelab-render.md, *The render-diff gate*, explains the Render-diff:
+# line. `edited` re-runs the job when the PR body changes. There is no `paths:` filter, because
+# a required context that never reports blocks every merge. R4.9 removes this file.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-diff-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  render-diff:
+    name: render-diff
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0  # the merge base and its tree need history
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - name: Render the merge base and the head with one commit value
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          merge_base="$(git merge-base "origin/$BASE_REF" "$HEAD_SHA")"
+          echo "MERGE_BASE=$merge_base" >> "$GITHUB_ENV"
+          git worktree add --detach "$RUNNER_TEMP/base-tree" "$merge_base"
+          job=scripts/validate/render_diff_job.py
+          # The merge base's copy runs, so a change to the job takes effect once it has merged.
+          # A merge base from before the job existed has no copy.
+          job_tree="$RUNNER_TEMP/base-tree"
+          [ -f "$job_tree/$job" ] || job_tree="$GITHUB_WORKSPACE"
+          echo "JOB_TREE=$job_tree" >> "$GITHUB_ENV"
+          cd "$job_tree"
+          uv run --frozen python "$job" render --tree "$RUNNER_TEMP/base-tree" \
+            --revision "$HEAD_SHA" --out "$RUNNER_TEMP/base-out"
+          uv run --frozen python "$job" render --tree "$GITHUB_WORKSPACE" \
+            --revision "$HEAD_SHA" --out "$RUNNER_TEMP/head-out"
+
+      - name: Print the difference and the head's tree digest
+        run: |
+          diff -r "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out" || true
+          uv run --frozen python scripts/renderer/shadow_diff.py digest "$RUNNER_TEMP/head-out"
+
+      # The body reaches the script through the environment, because it is untrusted text.
+      - name: Judge the difference against the Render-diff line
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          cd "$JOB_TREE"
+          uv run --frozen python scripts/validate/render_diff_job.py compare \
+            "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out" \
+            --merge-base "$MERGE_BASE" --head "$HEAD_SHA"

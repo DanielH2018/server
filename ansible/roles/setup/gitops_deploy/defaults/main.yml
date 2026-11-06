@@ -39,6 +39,7 @@ gitops_deploy_tick_interval: 10min
 # images` is required for merges but has no `push:` trigger, so it never produces a check run on
 # master and could never be waited on by a tick. `flux-deletion-drill` is the same shape: it runs
 # on `pull_request` only, skips itself when no deletion path changed, and always reports (#6042).
+# `render-diff` also runs on `pull_request` only, and R4's last PR removes it.
 #
 # Declared here so github-ruleset-drift.sh can compare it against the live ruleset daily. That
 # comparison is the whole point: this list is a hand-copy of remote state that can silently go
@@ -50,6 +51,7 @@ gitops_deploy_expected_ruleset_contexts:
   - pull + boot changed images
   - renovate config validator
   - flux-deletion-drill
+  - render-diff
 # Nobody merges past the CI gate. A bypass actor added here could merge an un-CI'd PR, through
 # land.sh's REST merge or any other merge call it makes. Each entry is
 # `<actor_type>:<actor_id>:<bypass_mode>`, as the rulesets API names them.

@@ -912,6 +912,45 @@ diff /tmp/r1-ci.txt /tmp/r1-box.txt
 
 The `diff` must print nothing, and both files must hold one line per directory.
 
+## The render-diff gate
+
+The required `render-diff` job proves that a PR moved no rendered byte, or only the files it
+named. R4 needs that proof because its refactors must leave the render alone, and R4.9
+removes the job. It is not `scripts/validate/render_diff_gates.py`, whose arms refuse an
+unsafe edge or removal.
+
+`.github/workflows/render-diff.yml` calls `scripts/validate/render_diff_job.py` twice:
+
+- `render` renders the PR's merge base and its head, each from its own checkout, tag list and
+  lockfile, as the publish job does.
+- `compare` compares the two complete trees and reads the PR body's `Render-diff:` line.
+
+**Both renders take one commit value.** The `soak` Job embeds the commit it judges, so two
+renders of two commits always differ under `cluster/soak/`. The job passes the PR head's SHA
+to both renders as `--revision` (C1 *Modes*), so a remaining difference comes from the tree.
+
+**The line has two forms.** `Render-diff: none` allows no difference. A list such as
+`Render-diff: flux/x.yaml, cluster/x/y.yaml` must equal the differing files, except
+`digests.json`, which moves with any file it digests. A line inside a code fence or an HTML
+comment does not count.
+
+**The line is mandatory on the hazard paths.** A PR with no line fails when it touches
+`ansible/roles/k8s/*/tasks/`, `scripts/renderer/`, `scripts/lib/k8s_roles.py`,
+`scripts/lib/ansible_jinja_env.py` or `ansible/filter_plugins/`, or deletes a file under
+`ansible/roles/k8s/`. On any other PR with no line, the job prints the difference and passes,
+because most PRs change render output on purpose.
+
+**Both trees must clear a floor.** `flux/pihole.yaml`, `flux/traefik.yaml` and
+`cluster/pihole-deferred/` must exist, and `flux/` must hold at least `FLUX_FLOOR` files. A PR
+that retires a tag lowers `FLUX_FLOOR` in its own diff and lists the tag's `flux/<tag>.yaml`.
+Each listed retired tag lowers the head's floor by one.
+
+**The merge base's copy of the job runs.** A change to `render_diff_job.py` takes effect once it
+has merged, and its PR carries the line, because the module is a hazard path.
+
+To reproduce a verdict by hand, follow *Exit 3* under *Verification* in
+`docs/target-architecture/render/r4-delete-k8s-ansible-path.md`.
+
 ## What the render does not cover
 
 Zero diff covers what the manifests role renders: each role's applied directory, its deferred
