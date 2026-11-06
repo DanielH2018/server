@@ -15,7 +15,6 @@ from render_guard import (
     HOST_VARS_IN_TREE,
     REPO,
     host_files,
-    hosts_for_tags,
     load_yaml,
     service_records_at_or_none,
     service_tags_at_or_none,
@@ -107,14 +106,9 @@ def test_service_records_at_a_ref_keep_the_declaring_host(tmp_path):
         ("daniel-box", "k8s", "sonarr"),
         ("daniel-pi", "docker", "newpi"),
     ]
-    assert hosts_for_tags(["newpi", "sonarr", "config"], records) == {
-        "daniel-box": ["sonarr"],
-        "daniel-pi": ["newpi"],
-    }
     # The same tag is declared on NO host at the commit before it.
-    assert (
-        hosts_for_tags(["newpi"], service_records_at_or_none(shas[0], tmp_path)) == {}
-    )
+    before = service_records_at_or_none(shas[0], tmp_path)
+    assert before is not None and ("daniel-pi", "docker", "newpi") not in before
 
 
 def test_unreadable_service_records_are_none_rather_than_an_empty_list(tmp_path):

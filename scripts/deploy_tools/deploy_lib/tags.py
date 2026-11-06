@@ -54,8 +54,6 @@ from lib.render_guard import (
     entry_platform,
     entry_tags,
     host_files,
-    hosts_for_tags,
-    landing_hosts_for_tags,
     service_tags_at_or_none,
 )
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_TAG_MISS
@@ -147,26 +145,6 @@ def known_tags(host_vars: Path = HOST_VARS, at: str = "") -> set[str]:
     """
     declared = service_tags_at_or_none(at, REPO) if at else None
     return (declared or service_tags(host_vars)) | set(BLOCK_TAGS) | set(RESERVED_TAGS)
-
-
-def tags_by_host(
-    tags, host_vars: Path = HOST_VARS, k8s_only=()
-) -> dict[str, list[str]]:
-    """{host: sorted tags} for every host whose containers_list declares one of `tags`.
-
-    A deploy reaches only the host it runs against: deploy.yml's `hosts:` defaults to the
-    local hostname, and `-e target=<host>` is the only way to another one. A tag alone is
-    therefore not enough to deploy from. The caller has to know WHICH host declares it and add
-    `-e target=` when that host is not the local node. Without it, `--tags alloy` on
-    daniel-box for a role only daniel-pi declares matches no service and exits 0, so a landing
-    would read `settled` while the Pi still ran the old container.
-
-    A tag no host declares (a block tag, a typo) lands under none; `validate` is the place
-    that refuses those. A tag declared on two hosts lands under both, so each host's copy is
-    deployed -- unless it is named in `k8s_only`, which routes it to the `platform: k8s` entry
-    alone. `hosts_for_tags` carries that rule and why it is opt-in.
-    """
-    return hosts_for_tags(tags, service_records(host_vars), k8s_only)
 
 
 def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
@@ -493,29 +471,6 @@ def changed(
     return 0
 
 
-def landing_hosts(
-    tags, host_vars: Path = HOST_VARS, k8s_only=()
-) -> dict[str, list[str]]:
-    """`tags_by_host` minus the hosts land.sh never deploys to."""
-    return landing_hosts_for_tags(tags, service_records(host_vars), k8s_only)
-
-
-def _cmd_hosts(args: argparse.Namespace) -> int:
-    """Print `<host>\\t<comma-joined tags>` per host land.sh deploys, for a comma-joined tag list.
-
-    The shape land.sh consumes: one line per host, so a `while read host tags` loop can run
-    one deploy.sh per host and add `-e target=` when the host is not the local node.
-
-    `--k8s-only` is the tree-read twin of `land_tags.landing_hosts_at`'s own argument, and the
-    landing passes the same subset to both.
-    """
-    tags = [t for t in args.tags.split(",") if t]
-    k8s_only = [t for t in (args.k8s_only or "").split(",") if t]
-    for host, host_tags in landing_hosts(tags, k8s_only=k8s_only).items():
-        print(f"{host}\t{','.join(host_tags)}")
-    return 0
-
-
 def main(
     argv: list[str] | None = None,
     git_diff: Callable[[str, Path], list[str]] | None = None,
@@ -558,18 +513,6 @@ def main(
     )
     bl.add_argument("ref", nargs="?", default="origin/master")
     bl.set_defaults(func=_cmd_blockers)
-
-    ho = sub.add_parser(
-        "hosts",
-        help="print `<host>\\t<tags>` per host declaring one of the comma-joined tags",
-    )
-    ho.add_argument("tags")
-    ho.add_argument(
-        "--k8s-only",
-        default="",
-        help="comma-joined subset of TAGS to route to their `platform: k8s` entry only",
-    )
-    ho.set_defaults(func=_cmd_hosts)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -10,7 +10,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_ledger.py
 import pytest
 
 from deploy_tools.land_lib.ledger import Ledger, annotation_line
-from deploy_tools.land_lib.outcome import CAUSES, Cause, cause_for_deploy_exit
+from deploy_tools.land_lib.outcome import CAUSES, Cause
 
 SHA = "0123456789abcdef0123456789abcdef01234567"
 
@@ -117,21 +117,3 @@ def test_an_unknown_cause_is_coerced_at_construction_too():
 def test_the_empty_cause_stays_legal():
     """An empty cause is the no-cause value beside every verdict but deploy-failed."""
     assert Ledger(pr="1", t_start=0.0).cause == ""
-
-
-@pytest.mark.parametrize(
-    "rc, expected",
-    [
-        (1, "deploy-exit-1"),
-        (3, "deploy-exit-3"),
-        (4, "deploy-exit-4"),
-        (64, "deploy-exit-64"),
-        (9, "deploy-exit-other"),
-        (255, "deploy-exit-other"),
-    ],
-)
-def test_an_unhandled_deploy_exit_maps_into_the_closed_vocabulary(rc, expected):
-    """Every deploy.sh code keeps the label the board already groups by; the rest bucket."""
-    cause = cause_for_deploy_exit(rc)
-    assert cause == expected
-    Ledger(pr="1", t_start=0.0).cause = cause  # must not raise

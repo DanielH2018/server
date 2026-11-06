@@ -131,9 +131,6 @@ class Options:
     pace_master_runs: int = PACE_MASTER_RUNS
     lock_retries: int = 5
     lock_backoff: int = 60
-    # A single retry covered one merge landing during the wait; a third merge landing during
-    # the tip wait moved the tip again and the retry's own deploy exited 4.
-    stale_retries: int = 3
     primary: Path = PRIMARY_CHECKOUT
     deployer_state: Path = Path(STATE_DIR)
     # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land

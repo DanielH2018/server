@@ -125,12 +125,11 @@ def classify(ln: Landing) -> None:
     """Tags, the plane a hand must apply, and whether the tick applies part of this PR.
 
     Computed whether or not tags were derived: a PR can touch a deployable role AND a
-    plane, and then the deploy succeeds while half the change is unapplied.
+    plane, and then the landing settles while half the change is unapplied.
 
     `--tags` skips the DERIVATION only. The self-applied half is classified on that path too,
     because `tick_is_the_apply` decides whether step 4 awaits the tick and an override that
-    left it False landed a mixed PR on the fast path: the deploy succeeded, the tick's own
-    half was never graded, and the landing printed `settled` over an unapplied setup role.
+    left it False landed a mixed PR on the fast path: the tick's own half was never graded, and the landing printed `settled` over an unapplied setup role.
     `--tags` is the form CLAUDE.md prescribes for scoping to your own services, so it is the
     common way to land, not an escape hatch.
     """
@@ -190,12 +189,6 @@ def classify(ln: Landing) -> None:
         remaining_setup=remaining_setup,
     )
     if ln.resolved_tags:
-        # DECIDED: `--tags` leaves `k8s_only` empty, so a two-platform tag such as `wg-easy`
-        # routes to every declaring host (#2748). The operator's list carries no provenance,
-        # and narrowing it from the PR's paths would second-guess an explicit "deploy exactly
-        # these services". Staying wide costs one Pi Compose deploy that recreates nothing.
-        # Narrowing is the direction of issue #929: a tag that reached no host while the
-        # landing printed `settled` over a Pi still running the old container.
         return
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
@@ -209,15 +202,6 @@ def classify(ln: Landing) -> None:
         quiet=quiet,
     )
     ln.resolved_tags = list(tags)
-    if source == DeriveSource.PR:
-        # The tags a changed PATH names, each a k3s change because no tag is declared on two
-        # platforms (`land_platform`). Read over `paths` rather than `tags`, so that a tag
-        # `derive` reached some other way than by path stays unrestricted. The FALLBACK path
-        # answers the same question in step 5 instead, over the diff's paths rather than this
-        # file list, which `gh` truncated -- `deploy.record_k8s_only`.
-        ln.k8s_only = _classified(
-            ln, "k8s-only tag classification", c.k8s_only_tags, paths, declared
-        )
     if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
             ln.die(
@@ -243,7 +227,7 @@ def narrow_plane(ln: Landing, awaited: bool = True) -> None:
     `manual` half holds the narrowest tags each role needs over that tick's range alone. The
     range contains this PR, so the row is quoted as it stands.
 
-    A landing that deploys its own merge commit never awaits the tick (`awaited=False`), so
+    A landing on the fast path never awaits the tick (`awaited=False`), so
     no receipt exists for its range. It renders the PR's own derivation instead.
 
     Every failure leaves `narrowed_plane` None, so `Landing.plane` stays step 1's note with

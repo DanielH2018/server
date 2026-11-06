@@ -27,19 +27,14 @@ from deploy_tools.land_lib.outcome import (
 
 
 def _primary_carries(ln: Landing, sha: str) -> bool:
-    """Does the primary checkout contain `sha`?
-
-    Asked of `deployed_at`, not the merge commit: a stale `--at` run is retargeted to a green
-    descendant (`stale_retarget.retarget`), and a primary holding only the merge
-    commit does not hold that tree.
-    """
+    """Does the primary checkout contain `sha`?"""
     return ln.git("merge-base", "--is-ancestor", sha, "HEAD").returncode == 0
 
 
 def _gated_tree(ln: Landing) -> str:
     """The commit the gate renders from, or "" for the primary checkout as it stands.
 
-    `deployed_at` when deploy.sh deployed a snapshot. Otherwise the merge commit, when a
+    `deployed_at` when no tick was awaited. Otherwise the merge commit, when a
     promotion applied any gated tag: `probe.py health` reads `owner` from the tree it runs in
     (`releases_retired.tree_owners`), and only a tree carrying the flip knows Flux applies the
     tag. From a tree before the flip, the probe grades the tag against Ansible's frozen
@@ -58,12 +53,11 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
 
     `probe.py health <tag>` enumerates the workloads to gate by rendering the role's
     manifests, from the checkout it is invoked in, and reads each tag's `owner` from it too.
-    A landing that deployed a snapshot of its merge commit (`deployed_at`) has not moved the
-    primary checkout, so gating from there enumerates nothing for a role that commit ADDS and
-    the whole gate reads `skipped`. A landing whose promotion applied a tag gates from its
-    merge commit for the same reason, even when no deploy.sh ran (`_gated_tree`). With
-    neither, deploy.sh rendered the primary, and the gate runs there too, never in land.sh's
-    own checkout, which may predate the merge.
+    A landing that awaited no tick (`deployed_at`) has not moved the primary checkout, so
+    gating from there enumerates nothing for a role that commit ADDS and the whole gate reads
+    `skipped`. A landing whose promotion applied a tag gates from its merge commit for the same
+    reason (`_gated_tree`). With neither, the gate runs in the primary, never in land.sh's own
+    checkout, which may predate the merge.
 
     A snapshot that could not be taken FAILS THE GATE, unless the primary already contains the
     commit. Falling back to the primary unconditionally is what the first cut did, and it
@@ -74,8 +68,8 @@ def gate_from_the_deployed_tree(ln: Landing) -> GateResult:
     """
     at = _gated_tree(ln)
     if not at:
-        # deploy.sh rendered the primary, which the tick fast-forwarded. land.sh's own
-        # checkout may predate the merge and see none of a role it adds.
+        # The tick fast-forwarded the primary. land.sh's own checkout may predate the merge and
+        # see none of a role it adds.
         return ln.tools.gate(promotion.gated_tags(ln), cwd=ln.opts.primary)
     with ln.tools.snapshot(ln.opts.primary, at) as snap:
         if snap is not None:

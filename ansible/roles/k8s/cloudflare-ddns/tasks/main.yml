@@ -4,7 +4,7 @@
     name: k8s/manifests
   vars:
     # This role ships two Deployments and neither is named after the service, so the shared
-    # wait cannot find one. Skipped here and both waited on explicitly below.
+    # wait cannot find one.
     manifests_rollout: ""
     # Both Deployments read their Kuma push token from the Secret through env, and env is
     # resolved once at pod start — so a rotated token reaches the Secret and the running pods
@@ -17,15 +17,3 @@
     manifests_extra_rollouts:
       - name: cloudflare-ddns-direct
       - name: cloudflare-ddns-proxied
-
-- name: Wait for the cloudflare-ddns rollouts
-  tags: [deploy]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} rollout status
-      deploy/cloudflare-ddns-{{ item }} --timeout=300s
-  loop:
-    - proxied
-    - direct
-  become: true
-  changed_when: false

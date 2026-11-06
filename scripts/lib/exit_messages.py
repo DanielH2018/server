@@ -31,9 +31,9 @@ from lib.exit_codes import contract
 # `land-after-merge` wait both find a landing's outcome by grepping `^VERDICT:`.
 #
 # DECIDED: deploy.sh and the tick print that same shape under their OWN prefix rather than
-# under `VERDICT:`. A landing runs both as subprocesses with stdout INHERITED
-# (`land_lib/tools.py:run_deploy`), so their lines reach the landing's own logfile ABOVE its
-# verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report the deploy's
+# under `VERDICT:`. A landing runs the tick as a subprocess with stdout INHERITED
+# (`land_lib/tools.py:run_tick`), so its lines reach the landing's own logfile ABOVE its
+# verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report the tick's
 # outcome as the landing's on every landing, with nothing failing. One format, three prefixes,
 # one renderer. Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it
 # carries the measurement.

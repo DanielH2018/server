@@ -466,7 +466,7 @@ applies nothing and says so. No site ever hands an empty `--tags` value on.
 | `deploy.sh --changed` | Drops T before `derive_changed_tags`'s empty check, so a derivation left empty ends as `Refused(0)`, with a note naming T. |
 | `deploy.sh --list-services` | Marks T with its owner. |
 | GitOps deployer | Routes T's paths to a new `cs.flux` set: fast-forwarded, logged, never deferred, never alerted, never owed. `_deploy_plane` drops T before its `if not tags` check, so a list left empty is `NARROWED_TO_NOTHING`. Ownership is read at the commit being applied. |
-| `land.sh` | Splits the PR's tags before `deploy_by_host`. T waits on promotion (below), and `deploy.sh` runs only when an Ansible-owned tag remains. Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |
+| `land.sh` | Splits the PR's tags. T waits on promotion (below). Before it merges, it refuses a PR that makes T Ansible-owned while T's Kustomization exists (*Rollback*). |
 | `smoke_caller` | Leaves T out of the candidates. `land.sh` would drop T from its `deploy.sh` call, so a flux-owned smoke caller would exercise nothing. |
 | `render_targets.py` CLI | `main` prints a new `render_record_targets(host)`, which leaves T out of the hourly record list. `render_targets()` stays the full universe for the renderer, R1's `compare` and R2. |
 | `secret_rotation.py --deploy` | `cmd_rotate` drops T before it calls `rotation_tools.run_deploy`, which runs `ansible-playbook ansible/deploy.yml` without `deploy.sh`. It runs no playbook when nothing remains. D3 gives a rotated cluster secret its path. |

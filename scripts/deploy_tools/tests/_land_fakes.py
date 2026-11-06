@@ -96,24 +96,10 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
-    # `tools.newest_green_descendant`: the commit a stale `--at` run is retargeted to, "" for
-    # none. One entry per call, the last repeating.
-    green_descendants: list[str] = field(default_factory=lambda: [""])
     tick: list[int] = field(default_factory=lambda: [0])
-    deploy: list[int] = field(default_factory=lambda: [0])
     blockers: list[int] = field(default_factory=lambda: [0])
-    hosts: str = ""
-    hosts_rc: int = 0
-    # What `containers_list` routes each tag to at the merge commit (`tools.landing_hosts_at`).
-    # None is the read having failed, so a landing falls back to `deploy_tags.py hosts`
-    # against the primary -- the `hosts` string above.
-    hosts_at: dict[str, list[str]] | None = None
     changed: str = ""
     changed_rc: int = 0
-    # `git diff --name-only <since>...HEAD`: the paths the fallback derivation proves a tag's
-    # platform from, and the return code of the read.
-    diff_paths: list[str] = field(default_factory=list)
-    diff_rc: int = 0
     gate: tuple[bool, list[str]] = field(
         default_factory=lambda: (True, ["sonarr: healthy"])
     )
@@ -126,9 +112,6 @@ class Fakes:
     remaining_setup: str = ""
     key_readers: tuple = ()
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
-    # `land_platform.k8s_only_tags`: the tags the changed paths derive, which the landing may
-    # route to a `platform: k8s` entry alone.
-    path_k8s_only: list[str] = field(default_factory=list)
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.
     declared_at: set[str] | None = None
@@ -262,12 +245,6 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         )
         return f.remaining_setup
 
-    def k8s_only_tags(paths, declared=None):
-        # The paths are recorded: the fallback derivation must hand the DIFF's paths rather
-        # than the PR's file list, which `gh` truncated.
-        record.append(("k8s_only_tags", tuple(paths), {}))
-        return list(f.path_k8s_only)
-
     return Classifier(
         plane_note=lambda paths, quiet=(), narrow_tags=None: f.plane,
         self_applied=lambda paths, quiet=(): f.self_applied,
@@ -278,7 +255,6 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
-        k8s_only_tags=k8s_only_tags,
     )
 
 
@@ -345,8 +321,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.fetch_rc)
         if args == ("rev-parse", "FETCH_HEAD"):
             return _cp(0, "prhead\n")
-        if args[0] == "diff":
-            return _cp(f.diff_rc, "\n".join(f.diff_paths) + "\n")
         if args[0] == "ls-tree":
             tree = f.head_tree
             if tree is None:
@@ -379,21 +353,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         calls.append(("deploy_tags", tuple(args), {"cwd": primary}))
         if args[0] == "blockers":
             return _cp(blockers())
-        if args[0] == "hosts":
-            return _cp(f.hosts_rc, f.hosts)
         if args[0] == "changed":
             return _cp(f.changed_rc, f.changed)
         raise AssertionError(args)
-
-    def landing_hosts_at(tags, ref, primary, k8s_only=()):
-        calls.append(
-            (
-                "landing_hosts_at",
-                (list(tags), ref),
-                {"cwd": primary, "k8s_only": list(k8s_only)},
-            )
-        )
-        return f.hosts_at
 
     def gate(tags, cwd=None):
         calls.append(("gate", (tags,), {"cwd": cwd}))
@@ -428,7 +390,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     def k8s_tags_at(primary, ref):
         calls.append(("k8s_tags_at", (ref,), {"cwd": primary}))
         if ref not in f.k8s_tags:
-            return {t for m in f.owners.values() if isinstance(m, dict) for t in m}
+            # Every `containers_list` entry is k8s, so whatever the landing derived is one.
+            owned = {t for m in f.owners.values() if isinstance(m, dict) for t in m}
+            return owned | set(f.derived[0]) | {"sonarr", "radarr"}
         answer = f.k8s_tags[ref]
         if isinstance(answer, Exception):
             raise answer
@@ -476,17 +440,12 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         gh=gh_run,
         git=git_run,
         await_ci=await_ci,
-        newest_green_descendant=_seq(
-            f.green_descendants, calls, "newest_green_descendant"
-        ),
         tested_base=lambda head: f.tested_base.get(head),
         tick=_seq(f.tick, calls, "tick"),
-        deploy=_seq(f.deploy, calls, "deploy"),
         deploy_tags=deploy_tags,
         gate=gate,
         snapshot=snapshot,
         declared_at=lambda ref, primary: f.declared_at,
-        landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
         flux=FluxReads(owners_at, kustomization_exists, land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,

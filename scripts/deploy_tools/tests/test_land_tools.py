@@ -61,23 +61,6 @@ def test_deploy_tags_is_the_relative_path_in_the_primary_checkout(monkeypatch):
     assert seen["cwd"] == Path("/primary")
 
 
-def test_deploy_adds_target_only_for_a_remote_host(monkeypatch):
-    seen = _capture(monkeypatch)
-    tools.run_deploy(Path("/primary"), ["alloy"], "daniel-pi")
-    assert seen["argv"] == [
-        "./scripts/deploy.sh",
-        "--tags",
-        "alloy",
-        "-e",
-        "target=daniel-pi",
-    ]
-    tools.run_deploy(Path("/primary"), ["sonarr"], None)
-    assert seen["argv"] == ["./scripts/deploy.sh", "--tags", "sonarr"]
-    # deploy.sh renders from its working directory, so a wrong cwd would deploy the wrong
-    # checkout's templates and report success.
-    assert seen["cwd"] == Path("/primary")
-
-
 def test_the_tick_runs_from_beside_land_py(monkeypatch):
     seen = _capture(monkeypatch)
     tools.run_tick()
@@ -261,35 +244,10 @@ def test_a_joined_line_books_its_wait_even_when_the_in_flight_seconds_are_missin
 
 
 def test_a_kicked_tick_passes_no_wait(monkeypatch):
-    """The landing deploys the merge commit itself, so it starts the tick and moves on."""
+    """The landing waits on a promotion, so it starts the tick and moves on."""
     seen = _capture(monkeypatch)
     tools.run_tick(wait=False)
     assert seen["argv"] == [str(tools.HERE / "gitops_tick.sh"), "--no-wait"]
-
-
-def test_a_deploy_of_a_named_commit_passes_at(monkeypatch):
-    """Both halves in one pair with the test below: `--at` appears only when asked for."""
-    seen = _capture(monkeypatch)
-    tools.run_deploy(Path("/primary"), ["sonarr"], None, at="c0ffee")
-    assert seen["argv"] == [
-        "./scripts/deploy.sh",
-        "--tags",
-        "sonarr",
-        "--at",
-        "c0ffee",
-    ]
-
-
-def test_a_deploy_of_the_primary_checkout_passes_no_at(monkeypatch):
-    seen = _capture(monkeypatch)
-    tools.run_deploy(Path("/primary"), ["sonarr"], "daniel-pi")
-    assert seen["argv"] == [
-        "./scripts/deploy.sh",
-        "--tags",
-        "sonarr",
-        "-e",
-        "target=daniel-pi",
-    ]
 
 
 def _commit(repo: Path, name: str) -> str:

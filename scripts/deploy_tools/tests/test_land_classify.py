@@ -70,33 +70,11 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
     )
 
 
-def test_classify_leaves_the_tags_alone_when_no_path_proves_a_platform(landing):
+def test_classify_records_the_derived_tags(landing):
     ln, _ = landing(Fakes(derived=(["sonarr", "radarr"], "pr")))
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.tags_csv == "sonarr,radarr"
-    assert ln.k8s_only == []
-
-
-def test_classify_records_the_tags_a_changed_path_proves_are_k3s(landing):
-    """A PR touching only `roles/k8s/wg-easy/` names a tag the Pi also declares,
-    and the routing read has to be told the change is the cluster's."""
-    ln, _ = landing(Fakes(derived=(["wg-easy"], "pr"), path_k8s_only=["wg-easy"]))
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.k8s_only == ["wg-easy"]
-
-
-def test_a_truncated_file_list_proves_nothing_about_a_platform(landing):
-    """REJECTING half: on the FALLBACK path `derive_from_diff` rebuilds the tags in step 5 from
-    a diff this classification never reads, so no tag may be restricted here. Step 5 answers
-    the same question over the diff's own paths instead (`deploy.record_k8s_only`)."""
-    ln, _ = landing(
-        Fakes(derived=([], "fallback"), path_k8s_only=["wg-easy"]), since="abc"
-    )
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.k8s_only == []
 
 
 # ── a role this PR registers is not a role somebody forgot to register ──

@@ -262,7 +262,7 @@ def test_land_sh_regate_exits_0_and_runs_no_landing(land_run):
     )
     assert rc == 0
     assert _gh_urls(calls) == [STATUS_URL]
-    assert not {"await_ci", "tick", "deploy"} & set(_names(calls))
+    assert not {"await_ci", "tick", "land_wait"} & set(_names(calls))
     assert logline == ""
     assert "VERDICT" not in out
 

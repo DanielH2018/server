@@ -1,4 +1,4 @@
-"""Step 5: one deploy.sh per declaring host, the lock and stale retries, the deploy verdicts.
+"""Step 5: the fallback's derivation, the verdicts of a landing with no tag, the phase's stamps.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy.py
 """
@@ -6,7 +6,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy.py
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, receipt
-from lib.exit_codes import LAND_GAVE_UP
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
@@ -23,168 +22,6 @@ def _ready(landing, fakes=None, **opts):
     ln.ledger.t_ci = 2.0
     ln.ledger.t_tick = 3.0
     return ln, calls
-
-
-def test_each_tag_deploys_on_the_host_that_declares_it(landing, capsys):
-    """`--tags alloy` on daniel-box matched no service; the Pi ran the old container."""
-    ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))
-    ln.resolved_tags = ["sonarr", "alloy"]
-    assert deploy.deploy_by_host(ln) == 0
-    assert [c[1] for c in calls if c[0] == "deploy"] == [
-        (PRIMARY, ["sonarr"], None),
-        (PRIMARY, ["alloy"], "daniel-pi"),
-    ]
-    assert "deploying there with -e target=daniel-pi" in capsys.readouterr().out
-
-
-def test_tags_no_host_declares_fall_through_to_one_deploy(landing):
-    ln, calls = _ready(landing, Fakes(hosts=""))
-    ln.resolved_tags = ["k8s-manifests"]
-    deploy.deploy_by_host(ln)
-    assert [c[1] for c in calls if c[0] == "deploy"] == [
-        (PRIMARY, ["k8s-manifests"], None)
-    ]
-
-
-def test_under_at_the_hosts_are_read_at_the_merge_commit(landing, capsys):
-    """A PR adding a Pi role and its containers_list entry together declares the
-    role on daniel-pi in no checkout until the tick fast-forwards. The primary read routed it
-    to no host and the landing ran deploy.sh locally, without `-e target=daniel-pi`."""
-    ln, calls = _ready(landing, Fakes(hosts="", hosts_at={"daniel-pi": ["newpi"]}))
-    ln.resolved_tags = ["newpi"]
-    assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
-    assert [c[1] for c in calls if c[0] == "landing_hosts_at"] == [
-        (["newpi"], MERGE_SHA)
-    ]
-    assert [c[0] for c in calls if c[0] == "deploy_tags"] == []
-    assert [(c[1][1:], c[2]["at"]) for c in calls if c[0] == "deploy"] == [
-        ((["newpi"], "daniel-pi"), MERGE_SHA)
-    ]
-    assert "declared on daniel-pi, deploying there" in capsys.readouterr().out
-
-
-def test_an_unreadable_merge_commit_falls_back_to_the_primary_read(landing):
-    """REJECTING half: None from the ref read is damage, not "no host declares it".
-
-    The fallback is the subprocess against the primary, whose failure arm below stays the one
-    that ends the landing; only an empty answer from BOTH reads falls through to one local
-    deploy.
-    """
-    ln, calls = _ready(landing, Fakes(hosts="daniel-pi\talloy\n", hosts_at=None))
-    ln.resolved_tags = ["alloy"]
-    assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
-    assert [c[1] for c in calls if c[0] == "deploy_tags"] == [("hosts", "alloy")]
-    assert [c[1][1:] for c in calls if c[0] == "deploy"] == [(["alloy"], "daniel-pi")]
-
-
-def test_a_tag_the_merge_commit_declares_on_no_host_deploys_locally(landing):
-    """`{}` is a read that SUCCEEDED and found no declaring host -- a new cluster role -- so it
-    is one local deploy, not the primary fallback that None is."""
-    ln, calls = _ready(landing, Fakes(hosts="daniel-pi\talloy\n", hosts_at={}))
-    ln.resolved_tags = ["k8s-manifests"]
-    assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
-    assert [c[0] for c in calls if c[0] == "deploy_tags"] == []
-    assert [c[1][1:] for c in calls if c[0] == "deploy"] == [(["k8s-manifests"], None)]
-
-
-def test_without_at_the_hosts_come_from_the_primary(landing):
-    """The exit-4 fallback deploys the primary checkout, so it routes from that tree too."""
-    ln, calls = _ready(landing, Fakes(hosts="", hosts_at={"daniel-pi": ["alloy"]}))
-    ln.resolved_tags = ["alloy"]
-    assert deploy.deploy_by_host(ln) == 0
-    assert [c[0] for c in calls if c[0] == "landing_hosts_at"] == []
-    assert [c[1][1:] for c in calls if c[0] == "deploy"] == [(["alloy"], None)]
-
-
-def test_a_retry_resumes_at_the_host_that_failed(landing):
-    ln, calls = _ready(
-        landing,
-        Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n", deploy=[0, 75, 0]),
-    )
-    ln.resolved_tags = ["sonarr", "alloy"]
-    assert deploy.deploy_with_lock_retry(ln) == 0
-    assert [c[1][1:] for c in calls if c[0] == "deploy"] == [
-        (["sonarr"], None),
-        (["alloy"], "daniel-pi"),
-        (["alloy"], "daniel-pi"),
-    ]
-    assert ln.ledger.lock_waited > 0
-
-
-def test_the_lock_holder_is_sampled_before_the_deploy_attempt(landing):
-    """The deploy half of the tick's own guard: the sample precedes the attempt.
-
-    The fake answers once and then goes empty, so a post-attempt read would book nothing --
-    but the ORDER assertion is what actually discriminates, since a post-attempt read
-    consumes the same first answer.
-    """
-    ln, calls = _ready(
-        landing, Fakes(deploy=[75, 0], lock_holder=["42 flock deploy", ""])
-    )
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_with_lock_retry(ln)
-    names = [c[0] for c in calls]
-    assert names.index("lock_holder") < names.index("deploy")
-    assert ln.ledger.lock_holder == "42 flock deploy"
-
-
-def test_a_mapping_failure_dies_with_its_own_verdict(landing):
-    """This must not surface as a bare `deploy-failed (exit 1)`."""
-    ln, calls = _ready(landing, Fakes(hosts_rc=1))
-    ln.resolved_tags = ["sonarr"]
-    with pytest.raises(Outcome) as exc:
-        deploy.deploy_by_host(ln)
-    assert exc.value.verdict == "deploy-failed"
-    assert (
-        "deploy_tags.py hosts failed before any deploy.sh ran; nothing was touched"
-        in exc.value.error
-    )
-    assert ln.ledger.cause == "host-lookup"
-    assert "deploy" not in [c[0] for c in calls]
-
-
-@pytest.mark.parametrize(
-    "rc, verdict, code, phrase, cause",
-    [
-        (
-            2,
-            "deploy-failed",
-            1,
-            "a derived tag matched no service, so nothing deployed",
-            "tag-miss",
-        ),
-        (20, "deploy-failed", 1, "some changes are live", "playbook-failed"),
-        (75, "lock-busy", 75, "lock stayed busy", ""),
-        # 79: the wrapper got no lock list, took nothing and ran nothing. Its
-        # own arm, so the verdict says "nothing deployed" rather than the bare exit below.
-        (
-            79,
-            "deploy-failed",
-            1,
-            "no lock list, so nothing deployed",
-            "deploy-exit-79",
-        ),
-        # 3, 4 and 64 keep the exact labels the board already groups by; anything outside
-        # deploy.sh's own contract buckets, so the `cause` vocabulary stays closed.
-        (3, "deploy-failed", 1, "exit 3", "deploy-exit-3"),
-        (4, "deploy-failed", 1, "exit 4", "deploy-exit-4"),
-        (9, "deploy-failed", 1, "exit 9", "deploy-exit-other"),
-    ],
-)
-def test_deploy_outcomes(landing, rc, verdict, code, phrase, cause):
-    """Every deploy-failed names its cause, so Loki can tell the shapes apart."""
-    ln, _ = _ready(landing)
-    ln.resolved_tags = ["sonarr"]
-    with pytest.raises(Outcome) as exc:
-        deploy.deploy_outcome(ln, rc)
-    assert (exc.value.rc, exc.value.verdict) == (code, verdict)
-    assert phrase in (exc.value.detail + exc.value.error)
-    assert ln.ledger.cause == cause
-
-
-def test_a_clean_deploy_returns(landing):
-    ln, _ = _ready(landing)
-    deploy.deploy_outcome(ln, 0)
 
 
 @pytest.mark.parametrize(
@@ -237,136 +74,23 @@ def test_a_held_tick_names_the_clear_command_with_the_full_sha(landing, capsys):
 def test_the_diff_fallback_derives_after_the_tick(landing):
     ln, calls = _ready(landing, Fakes(changed="sonarr"), since="abc")
     ln.needs_diff = True
-    deploy.deploy_phase(ln)
+    deploy.derive_from_diff(ln)
     assert ln.resolved_tags == ["sonarr"]
     assert ("deploy_tags", ("changed", "abc"), {"cwd": PRIMARY}) in calls
 
 
 def test_the_diff_fallback_drops_an_empty_tag_element(landing):
-    """A doubled or trailing comma is not a service, so it is dropped here rather than
-    handed to deploy.sh as a tag miss that refuses the whole list."""
-    ln, calls = _ready(landing, Fakes(changed="sonarr,,radarr,"), since="abc")
+    """A doubled or trailing comma is not a service, so it is dropped here rather than read
+    as a tag miss that ends the landing."""
+    ln, _ = _ready(landing, Fakes(changed="sonarr,,radarr,"), since="abc")
     ln.needs_diff = True
-    deploy.deploy_phase(ln)
+    deploy.derive_from_diff(ln)
     assert ln.resolved_tags == ["sonarr", "radarr"]
-    deploy_argv = [c for c in calls if c[0] == "deploy"]
-    assert deploy_argv and deploy_argv[0][1][1] == ["sonarr", "radarr"]
-
-
-def test_a_stale_tree_waits_on_its_own_merge_commit_before_reticking(landing):
-    """Exit 4 is a resume point.
-
-    What it waits on is this landing's OWN merge commit, not the tip. The tick fast-forwards
-    to the newest green commit in the incoming range, so a tip that is still pending does not
-    hold this PR -- waiting on it would lose to a tip that moves again (the
-    `tip-outran-retries` verdict). The tip here is deliberately a different SHA, so a wait
-    that still read the tip would fail this.
-    """
-    tip = "feedfacefeedfacefeedfacefeedfacefeedface"
-    ln, calls = _ready(landing, Fakes(deploy=[4, 0], tip=tip))
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_phase(ln)
-    first = next(i for i, c in enumerate(calls) if c[0] == "deploy")
-    tail = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls[first + 1 :]]
-    assert (
-        tail.index("blockers")
-        < tail.index("await_ci")
-        < tail.index("tick")
-        < tail.index("deploy")
-    )
-    assert next(c for c in calls[first:] if c[0] == "await_ci")[1][0] == MERGE_SHA
-
-
-def test_the_stale_retrys_ci_wait_is_booked_under_wait_ci_and_its_tick_under_tick(
-    landing,
-):
-    """Two phases, two halves, and the board reads both.
-
-    Shifting t_ci and t_tick by the same amount is what keeps the backoff and the CI wait out
-    of `deploy=`. Adding the fallback tick's OWN seconds to t_tick alone is what stops `tick=0`
-    describing a landing that awaited a tick -- which the fast path's `tick=0` must keep
-    meaning, so the width has to grow here and nowhere else.
-    """
-    ln, _ = _ready(landing, Fakes(deploy=[4, 0], tip="f" * 40))
-    ln.resolved_tags = ["sonarr"]
-    t_ci, t_tick = ln.ledger.t_ci, ln.ledger.t_tick
-    deploy.deploy_phase(ln)
-    assert ln.ledger.t_ci > t_ci
-    assert ln.ledger.t_tick - ln.ledger.t_ci > t_tick - t_ci
-
-
-def test_a_stale_retry_is_bounded(landing):
-    ln, calls = _ready(landing, Fakes(deploy=[4]))
-    ln.resolved_tags = ["sonarr"]
-    with pytest.raises(Outcome):
-        deploy.deploy_phase(ln)
-    assert [c[0] for c in calls].count("deploy") == 4  # first attempt + 3 stale retries
-
-
-def test_losing_every_tip_race_is_not_a_deploy_failure(landing):
-    """Exit 4 means NOTHING was deployed and re-running is safe, which is the opposite of what
-    `deploy-failed` reads as. Exit 75 is the resume-point code `lock-busy` already uses.
-    """
-    ln, _ = _ready(landing, Fakes(deploy=[4]))
-    ln.resolved_tags = ["sonarr"]
-    with pytest.raises(Outcome) as exc:
-        deploy.deploy_phase(ln)
-    assert exc.value.verdict == "tip-outran-retries" and exc.value.rc == LAND_GAVE_UP
-    assert ln.ledger.cause == "deploy-exit-4"
-
-
-def test_a_deploy_that_actually_fails_is_still_a_deploy_failure(landing):
-    """The rejecting half: a non-stale deploy exit keeps `deploy-failed` and exit 1."""
-    ln, _ = _ready(landing, Fakes(deploy=[2]))
-    ln.resolved_tags = ["sonarr"]
-    with pytest.raises(Outcome) as exc:
-        deploy.deploy_phase(ln)
-    assert exc.value.verdict == "deploy-failed" and exc.value.rc == 1
-
-
-def test_a_stale_retry_backs_off_between_attempts(landing):
-    """Mirror the lock-contention retry's own backoff (`lock_backoff`, already used above):
-    the stale retries must not burn through with no sleep between them while master CI on the
-    merge commit is still pending."""
-    ln, calls = _ready(landing, Fakes(deploy=[4, 4, 4, 0]))
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_phase(ln)
-    sleeps = [c[1][0] for c in calls if c[0] == "sleep"]
-    # And it DOUBLES: a fixed 60s spends every attempt inside ~4 minutes, which loses to a
-    # merge rate of one every 2 minutes.
-    b = ln.opts.lock_backoff
-    assert sleeps == [b, b * 2, b * 4]
-
-
-def test_a_stale_retry_waits_on_ci_even_when_the_tip_is_unchanged(landing):
-    """A landing that hits exit 4 while master CI on the merge commit is still pending must
-    wait on the merge commit on every attempt: an unchanged tip (default Fakes
-    tip == MERGE_SHA) must still get a wait and a backoff."""
-    ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_phase(ln)
-    assert [c[0] for c in calls].count("await_ci") == 1
-
-
-def test_a_blocker_landing_during_the_wait_ends_the_retry_as_blocked(landing):
-    ln, _ = _ready(landing, Fakes(deploy=[4], blockers=[3]))
-    ln.resolved_tags = ["sonarr"]
-    with pytest.raises(Outcome) as exc:
-        deploy.deploy_phase(ln)
-    assert exc.value.verdict == "blocked"
-
-
-def test_a_contended_retick_inside_the_stale_retry_is_booked(landing):
-    """The retry's tick loses the lock and must retry and book it, not carry on."""
-    ln, calls = _ready(landing, Fakes(deploy=[4, 0], tick=[3, 0]))
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_phase(ln)
-    assert [c[0] for c in calls].count("tick") == 2 and ln.ledger.lock_waited > 0
 
 
 def test_deploy_phase_stamps_the_ledger(landing):
     ln, _ = _ready(landing)
-    ln.resolved_tags = ["sonarr"]
+    ln.flux_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     assert ln.ledger.tags_label == "sonarr" and ln.ledger.t_deploy is not None
 
@@ -382,95 +106,3 @@ def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
         deploy.no_tag_outcome(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
     assert "could not be read" in capsys.readouterr().out
-
-
-def test_a_tagged_pr_deploys_its_own_merge_commit(landing):
-    """The point of the slice: no waiting for the tick to fast-forward the primary onto it."""
-    ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))
-    ln.resolved_tags = ["sonarr", "alloy"]
-    deploy.deploy_phase(ln)
-    assert [c[2]["at"] for c in calls if c[0] == "deploy"] == [MERGE_SHA, MERGE_SHA]
-    assert ln.deployed_at == MERGE_SHA
-
-
-def test_a_later_commit_on_the_same_tags_falls_back_to_the_primary(landing, capsys):
-    """Exit 4 under `--at` means a newer merge reaches these tags and owns the service.
-
-    The fallback is the path this had before `--at`: tick, then deploy the primary checkout.
-    The REJECTING half of the test above -- without it, an implementation that passed `--at`
-    on every retry would look identical from the first attempt alone.
-    """
-    ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_phase(ln)
-    ats = [c[2]["at"] for c in calls if c[0] == "deploy"]
-    assert ats == [MERGE_SHA, ""]
-    assert ln.deployed_at == ""
-    names = [c[0] for c in calls]
-    assert names.index("tick") < len(names) - 1
-    assert (
-        "falling back to the tick and the primary checkout" in capsys.readouterr().out
-    )
-
-
-def test_the_fallback_redeploys_every_host_from_one_tree(landing):
-    """A partial multi-host deploy must not leave two hosts rendered from two commits.
-
-    Host A succeeds at `--at <merge sha>`, host B exits 4. Keeping A in `deployed_hosts` would
-    retry B alone, and the single health gate would then render ONE of the two trees and call
-    the other settled unseen -- A's brand-new workload enumerating nothing in a primary that
-    has not pulled it. Forgetting the hosts with the commit is what keeps one landing to one
-    tree.
-    """
-    ln, calls = _ready(
-        landing,
-        Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n", deploy=[0, 4, 0, 0]),
-    )
-    ln.resolved_tags = ["sonarr", "alloy"]
-    deploy.deploy_phase(ln)
-    deploys = [(c[1][1], c[2]["at"]) for c in calls if c[0] == "deploy"]
-    assert deploys == [
-        (["sonarr"], MERGE_SHA),
-        (["alloy"], MERGE_SHA),
-        (["sonarr"], ""),
-        (["alloy"], ""),
-    ]
-    assert ln.deployed_at == ""
-
-
-def test_the_tick_is_kicked_after_the_deploy_not_before_it(landing):
-    """`gitops-deploy.service` holds the tree lock for its whole unit run.
-
-    Kicked first, deploy.sh waits that out inside its own flock to cut the snapshot and the
-    seconds move from `tick=` to `lock=` -- the wait is not removed, only relabelled. The
-    rejecting half is the test below: the exit-4 fallback awaits a tick instead, and must not
-    also kick one.
-    """
-    ln, calls = _ready(landing, Fakes())
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_phase(ln)
-    names = [c[0] for c in calls]
-    assert names.index("deploy") < names.index("tick")
-    assert next(c for c in calls if c[0] == "tick")[2] == {"wait": False}
-
-
-def test_the_fallback_awaits_a_tick_and_does_not_also_kick_one(landing):
-    """One tick request per landing, as before `--at`: the fallback's is the awaited one."""
-    ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
-    ln.resolved_tags = ["sonarr"]
-    deploy.deploy_phase(ln)
-    ticks = [c[2] for c in calls if c[0] == "tick"]
-    assert len(ticks) == 1 and "wait" not in ticks[0]
-
-
-def test_every_deploy_lets_the_landing_book_the_wait_inside_flock(landing):
-    """deploy.sh waits inside `flock -w` and exits 0, so no retry ever books those seconds."""
-    ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))
-    ln.resolved_tags = ["sonarr", "alloy"]
-    deploy.deploy_by_host(ln)
-    observers = [c[2]["observe"] for c in calls if c[0] == "deploy"]
-    assert len(observers) == 2
-    for observe in observers:
-        observe(300, "pid 8: ansible-playbook")
-    assert ln.ledger.lock_waited == 600
-    assert ln.ledger.lock_holder == "pid 8: ansible-playbook"
