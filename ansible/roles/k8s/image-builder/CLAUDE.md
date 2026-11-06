@@ -91,7 +91,6 @@ while reporting success.
 ## Editing
 - Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
   `templates/context-configmap.yaml.j2`.
-- Not deployed standalone — deploy an Ansible-owned caller instead, e.g.
-  `./scripts/deploy.sh --tags "n8n"`. A flux-owned caller, such as ical-proxy, never reaches
-  this role: promote's `images` job builds its image, and `deploy.sh` refuses its tag with
-  exit 5.
+- Not deployed standalone, and no caller reaches it: every caller is `owner: flux`. promote's
+  `images` job builds their images, and `deploy.sh` refuses their tags with exit 5. A caller
+  handed back to Ansible would reach this role through its own deploy tag.
