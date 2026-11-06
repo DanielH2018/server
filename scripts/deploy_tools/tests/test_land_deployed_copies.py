@@ -3,18 +3,21 @@
 The note and the task walk are the real ones, over this checkout's roles. Only the host read is
 fake. Each test of the note also pins `daniel-server` in the note it expects to stay, so an empty
 note cannot pass one that expects the host to stay owed. The tests that build a `demo` role check
-which render shapes the walk counts, on shapes this checkout's roles do not hold. The check-timer
-tests ask `holds` directly, over this checkout's roles.
+which render shapes the walk counts, on shapes this checkout's roles do not hold. Most check-timer
+tests ask `holds` directly, over this checkout's roles. The rest ask `_remaining_hosts` over the
+checkout rather than `ref`'s archived tree, with a test before the apply that pins the hosts owed.
 """
 
 import hashlib
 
 import pytest
+import setup_routing
 
+from deploy_tools.land_lib import land_reach
 from deploy_tools.land_lib.land_reach import remaining_setup_hosts_note
 from deploy_tools.setup_lib.deployed_copies import DeployedCopies
 from diagnostics.probe_lib import core
-from lib.repo_paths import REPO
+from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 
 WITNESS = "ansible/roles/setup/initial_setup/files/loki_route_health.py"
 WITNESS_LIVE = "/opt/loki-route-health/loki_route_health.py"
@@ -33,6 +36,7 @@ GITHUB_CHECKS_FRAGMENT = (
 CHECK_TIMER_TEMPLATES = (
     "ansible/roles/setup/common/templates/check-timer.service.j2",
     "ansible/roles/setup/common/templates/check-timer.timer.j2",
+    "ansible/roles/setup/common/templates/check-timer-boot.service.j2",
 )
 
 
@@ -212,33 +216,45 @@ def test_a_check_timer_template_on_a_stale_github_checks_fragment_stays_owed(tem
     assert not _gitops_deploy_holds(template, f"{template} {'0' * 64}\n")
 
 
-def test_a_landing_from_daniel_server_names_no_host_after_an_apply_on_daniel_box():
-    template = CHECK_TIMER_TEMPLATES[0]
-    line = f"{template} {_sha(template)}\n"
-    rows = {
-        path: {"status": "ok", "text": line}
-        for path in (FRAGMENT, DRIFT_FRAGMENT, GITHUB_CHECKS_FRAGMENT)
-    }
-    note = remaining_setup_hosts_note(
+def _owed_from_daniel_server(template, files):
+    """What a landing from daniel-server owes, over this checkout's roles rather than `ref`'s."""
+    copies = DeployedCopies(
         [template],
-        "daniel-server",
+        REPO / "ansible/roles/setup",
         ref="HEAD",
         repo=REPO,
-        read_host=lambda plan, host: {"stat": {}, "files": rows},
+        read_host=lambda plan, host: {"stat": {}, "files": files},
     )
-    assert "gitops_deploy" not in note
+    with setup_routing.routed_by(REPO):
+        return land_reach._remaining_hosts(
+            [template],
+            "daniel-server",
+            (),
+            land_reach._INITIAL_SETUP_YML,
+            ALL_VARS,
+            HOST_VARS,
+            land_reach._SETUP_ROLES_DIR,
+            "",
+            REPO,
+            copies,
+        )
 
 
-def test_a_landing_from_daniel_server_names_daniel_box_before_an_apply_there():
-    template = CHECK_TIMER_TEMPLATES[0]
-    note = remaining_setup_hosts_note(
-        [template],
-        "daniel-server",
-        ref="HEAD",
-        repo=REPO,
-        read_host=lambda plan, host: {"stat": {}, "files": {}},
+@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
+def test_a_landing_from_daniel_server_names_no_host_after_an_apply_on_daniel_box(
+    template,
+):
+    row = {"status": "ok", "text": f"{template} {_sha(template)}\n"}
+    files = dict.fromkeys((FRAGMENT, DRIFT_FRAGMENT, GITHUB_CHECKS_FRAGMENT), row)
+    assert _owed_from_daniel_server(template, files) == ({}, {})
+
+
+@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
+def test_a_landing_from_daniel_server_names_daniel_box_before_an_apply_there(template):
+    assert _owed_from_daniel_server(template, {}) == (
+        {"gitops_deploy": {"daniel-box"}, "initial_setup": {"daniel-box"}},
+        {},
     )
-    assert "`gitops_deploy` also reaches daniel-box" in note
 
 
 ON_BOX_ONLY = "inventory_hostname == 'daniel-box'"
@@ -310,6 +326,47 @@ def test_a_render_whose_only_proving_stamp_is_gated_off_the_host_keeps_it_owed(
 def test_a_stamp_main_does_not_reach_proves_no_render(tmp_path):
     """A `tasks_from` play can run the untagged stamp under a tag that skips the render."""
     assert not _demo_role_holds(tmp_path, _render("a"), entry=_stamp())
+
+
+def _import_with_state(state):
+    return f"""
+- name: Import the render
+  ansible.builtin.import_tasks: entry.yml
+  vars:
+    check_timer_state: "{state}"
+"""
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        pytest.param("absent", id="a-literal"),
+        pytest.param(
+            "{{ 'present' if inventory_hostname == 'daniel-box' else 'absent' }}",
+            id="an-expression-false-on-the-host",
+        ),
+    ],
+)
+def test_a_render_an_import_pins_off_the_host_asks_nothing_of_it(tmp_path, state):
+    entry = _render("a", when="check_timer_state == 'present'")
+    assert _demo_role_holds(tmp_path, _import_with_state(state), entry=entry)
+
+
+@pytest.mark.parametrize(
+    "state",
+    [
+        pytest.param("present", id="a-literal"),
+        pytest.param(
+            "{{ 'present' if inventory_hostname == 'daniel-server' else 'absent' }}",
+            id="an-expression-true-on-the-host",
+        ),
+        pytest.param("{{ no_such_var }}", id="a-name-the-read-cannot-resolve"),
+        pytest.param("ab{{ 'sent' }}", id="text-mixed-with-jinja"),
+    ],
+)
+def test_a_render_an_import_leaves_on_the_host_stays_owed(tmp_path, state):
+    entry = _render("a", when="check_timer_state == 'present'")
+    assert not _demo_role_holds(tmp_path, _import_with_state(state), entry=entry)
 
 
 def test_a_template_no_task_renders_keeps_it_owed(tmp_path):
