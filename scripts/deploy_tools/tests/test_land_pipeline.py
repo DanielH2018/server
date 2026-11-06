@@ -3,6 +3,8 @@
 Run: uv run pytest scripts/deploy_tools/tests/test_land_pipeline.py
 """
 
+import subprocess
+
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
@@ -142,6 +144,146 @@ def _sonarr_settled(**kwargs: object) -> Fakes:
     for name, value in kwargs.items():
         setattr(fakes, name, value)
     return fakes
+
+
+def _refs(state: str, repo: str = "o/server", reopened_at: str | None = None) -> dict:
+    """The closing-reference read: PR #999 merged at noon, naming issue #7."""
+    issue = {"number": 7, "state": state, "repo": repo, "reopenedAt": reopened_at}
+    return {"repo": "o/server", "mergedAt": "2026-11-05T12:00:00Z", "issues": [issue]}
+
+
+def _closes(calls) -> list[tuple]:
+    return [c[1] for c in calls if c[0] == "gh" and c[1][:2] == ("issue", "close")]
+
+
+def _relayed(out: str) -> str:
+    """The lines of `out` that `handoff._relay` passes to an agent landing through the unit."""
+    return "\n".join(ln for ln in out.splitlines() if ln.startswith("== "))
+
+
+def test_an_issue_github_left_open_is_closed_without_changing_the_verdict(land_run):
+    rc, out, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[_refs("OPEN")]))
+    assert rc == 0 and "VERDICT: settled" in out
+    assert [c[:3] for c in _closes(calls)] == [("issue", "close", "7")]
+    assert "--reason" in _closes(calls)[0] and "completed" in _closes(calls)[0]
+
+
+def test_an_issue_github_already_closed_is_not_closed_again(land_run):
+    _, _, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[_refs("CLOSED")]))
+    assert _closes(calls) == []
+    assert not [c for c in calls if c[0] == "sleep"]
+
+
+def test_an_issue_github_closes_during_the_grace_read_is_not_closed(land_run):
+    fakes = _sonarr_settled(closing_refs=[_refs("OPEN"), _refs("CLOSED")])
+    _, _, _, calls, _ = land_run([], fakes)
+    assert _closes(calls) == []
+
+
+@pytest.mark.parametrize(
+    ("refs", "reason"),
+    [
+        (_refs("OPEN", repo="o/dotfiles"), "not closing another repo's issue"),
+        (_refs("OPEN", reopened_at="2026-11-05T13:00:00Z"), "reopened after the merge"),
+    ],
+)
+def test_an_open_issue_the_landing_must_not_close_stays_open(land_run, refs, reason):
+    _, out, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[refs]))
+    assert _closes(calls) == [] and reason in out
+
+
+def test_an_issue_reopened_before_the_merge_is_closed(land_run):
+    refs = _refs("OPEN", reopened_at="2026-11-05T11:00:00Z")
+    _, _, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[refs]))
+    assert [c[:3] for c in _closes(calls)] == [("issue", "close", "7")]
+
+
+def test_a_failed_close_names_the_remedy_and_keeps_the_verdict(land_run):
+    fakes = _sonarr_settled(closing_refs=[_refs("OPEN")], gh_merge_rc=[1])
+    rc, out, _, _, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: settled" in out
+    assert "findings.py close 7 --fixed --pr 999" in _relayed(out)
+
+
+def test_a_failed_read_says_so_and_keeps_the_verdict(land_run):
+    failure = subprocess.CalledProcessError(1, "gh", stderr="HTTP 403")
+    rc, out, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[failure]))
+    assert rc == 0 and "VERDICT: settled" in out
+    assert "could not read PR #999's closing references" in _relayed(out)
+    assert _closes(calls) == []
+
+
+@pytest.mark.parametrize(
+    ("failing", "wanted"),
+    [
+        (
+            {
+                "closing_refs": [
+                    subprocess.CalledProcessError(1, "gh", stderr="HTTP 403\nDenied")
+                ]
+            },
+            "could not read PR #999's closing references (HTTP 403 Denied)",
+        ),
+        (
+            {"closing_refs": [_refs("OPEN")], "gh_merge_rc": [1]},
+            "findings.py close 7 --fixed --pr 999",
+        ),
+    ],
+)
+def test_a_failed_read_or_close_ends_the_verdict_line_cc_wait_prints(
+    land_run, tmp_path, failing, wanted
+):
+    verdict_file = tmp_path / "999.verdict"
+    fakes = _sonarr_settled(**failing)
+    rc, *_ = land_run(["--verdict-file", str(verdict_file)], fakes)
+    line, *rest = verdict_file.read_text().splitlines()
+    assert rc == 0 and line.startswith("VERDICT: settled (") and not rest
+    assert wanted in line
+
+
+def test_a_close_that_times_out_is_retried(landing):
+    from deploy_tools.land_lib import closing_refs
+
+    ln, _ = landing(Fakes(closing_refs=[_refs("OPEN")]))
+    attempts = []
+
+    def gh(*args):
+        attempts.append(args)
+        if len(attempts) == 1:
+            raise subprocess.TimeoutExpired("gh", 1)
+
+    ln.tools.gh = gh
+    closing_refs.close_stranded(ln)
+    assert len(attempts) == 2
+
+
+def test_the_close_comes_before_any_wait_a_later_step_can_die_in(land_run):
+    _, _, _, calls, _ = land_run([], _sonarr_settled(closing_refs=[_refs("OPEN")]))
+    names = [
+        "close" if c[0] == "gh" and c[1][:2] == ("issue", "close") else c[0]
+        for c in calls
+    ]
+    assert names.index("close") < names.index("await_ci")
+
+
+def test_a_docs_only_landing_still_closes_a_stranded_issue(land_run):
+    fakes = Fakes(
+        closing_refs=[_refs("OPEN")],
+        gh_views={"files,changedFiles": {"files": [], "changedFiles": 0}},
+    )
+    rc, out, _, calls, _ = land_run([], fakes)
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
+    assert [c[:3] for c in _closes(calls)] == [("issue", "close", "7")]
+
+
+def test_a_landing_that_ends_before_the_merge_commit_closes_nothing(land_run):
+    fakes = _sonarr_settled(
+        closing_refs=[_refs("OPEN")],
+        gh_views={"mergeCommit": {"mergeCommit": None}},
+    )
+    rc, _, _, calls, _ = land_run([], fakes)
+    assert rc != 0
+    assert _closes(calls) == [] and "gh:closing-refs" not in [c[0] for c in calls]
 
 
 def test_settled_end_to_end(land_run):

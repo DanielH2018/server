@@ -181,6 +181,14 @@ The refusal prints the offending line: `gh pr edit <n> --body-file` with the ref
 body another session wrote, since the fan-out agent opens the PR and a daniel-box session lands
 it.
 
+**The landing closes a closing reference GitHub left open.** PR #7295 merged with #7291 in
+`closingIssuesReferences`, GitHub never closed #7291, and the backlog dispatched it twice more
+(issue #7397). In step 1, `land_lib/closing_refs.py` reads each reference's state, waits 15
+seconds for GitHub to catch up, and closes any issue still open. It leaves an issue reopened
+after the merge and an issue in another repo open. A failed read or close keeps the verdict token
+and the exit code, and its message and remedy end the `VERDICT:` line's detail. `cc-wait land`
+prints that line, through a lander unit too. A PR merged without `land.sh` gets no such check.
+
 **Open the PR with `--fill` and a body file — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is
 refused whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the check

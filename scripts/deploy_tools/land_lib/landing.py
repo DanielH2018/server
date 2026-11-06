@@ -108,6 +108,7 @@ class Landing:
         # The plane note rendered again with the narrow tags the deployer recorded for this
         # PR's range, by `classify.narrow_plane`; None until then, or when nothing narrowed.
         self.narrowed_plane: str | None = None
+        self.warnings: list[str] = []  # `warn` fills it; `pipeline.run` reports it
         self.needs_diff = False
         self.host_candidate = False  # a path is under HOST_INPUTS
         self.host_targets: list[Any] = []  # HostTargets; host_wait imports us
@@ -175,6 +176,13 @@ class Landing:
         )
 
     # -- ending the landing -------------------------------------------------------------
+
+    def warn(self, text: str) -> None:
+        """Report a failure that keeps the verdict: a `== ` line now, the verdict's detail later."""
+        # One line, because `handoff._relay` filters by line and `verdict_in` reads only one.
+        line = " ".join(text.split())
+        print(f"== {line}", flush=True)
+        self.warnings.append(line)
 
     def die(self, msg: str, rc: int, verdict: str | None = None) -> NoReturn:
         """Stop with `land: <msg>` on stderr, and a VERDICT line on stdout.
