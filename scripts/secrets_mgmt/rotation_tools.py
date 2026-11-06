@@ -147,7 +147,7 @@ def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
 def tree_owners() -> dict[str, str]:
     """Each k8s deploy tag whose `containers_list` entry carries `owner`, to that value.
 
-    No Ansible path may deploy such a tag: Flux applies it, or it is mid-handback.
+    No Ansible path may deploy such a tag: Flux applies it.
     """
     from lib.k8s_roles import tag_owners
 

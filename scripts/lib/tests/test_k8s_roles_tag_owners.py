@@ -14,20 +14,20 @@ containers_list:
     owner: flux
   - name: n8n
     platform: k8s
-    owner: released
+    owner: flux
     tags: [n8n, n8n-images]
   - name: sonarr
     platform: k8s
 """
 
 
-def test_both_owner_values_map_every_tag_of_their_entry(tmp_path):
+def test_an_owner_maps_every_tag_of_its_entry(tmp_path):
     host_vars = tmp_path / "daniel-box.yml"
     host_vars.write_text(HOST_VARS)
     assert tag_owners(host_vars) == {
         "bento-pdf": "flux",
-        "n8n": "released",
-        "n8n-images": "released",
+        "n8n": "flux",
+        "n8n-images": "flux",
     }
 
 
@@ -37,10 +37,10 @@ def test_k8s_tags_names_every_tag_of_every_k8s_entry(tmp_path):
     assert k8s_tags(host_vars) == {"bento-pdf", "n8n", "n8n-images", "sonarr"}
 
 
-@pytest.mark.parametrize("value", ["ansible", "Flux", "", "~", "[flux]"])
+@pytest.mark.parametrize("value", ["released", "ansible", "Flux", "", "~", "[flux]"])
 def test_any_other_owner_value_raises(tmp_path, value: str):
     host_vars = tmp_path / "daniel-box.yml"
-    host_vars.write_text(HOST_VARS.replace("owner: flux", f"owner: {value}"))
+    host_vars.write_text(HOST_VARS.replace("owner: flux", f"owner: {value}", 1))
     with pytest.raises(ValueError, match="bento-pdf"):
         tag_owners(host_vars)
 

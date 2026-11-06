@@ -1,21 +1,19 @@
-"""No pre_task of the k8s play applies a Namespace or a LimitRange, owned or handed back.
+"""No pre_task of the k8s play applies a Namespace or a LimitRange, whoever owns an entry.
 
 The shared kind `homelab-namespace` is the only writer of the `homelab` Namespace and its
 LimitRange (D5 step 30). D5's namespace PR deleted the two `ansible/deploy.yml` pre_tasks that
 applied them, rather than gating them on role ownership such as
-`containers_list | ansible_owned | length > 0`. Every role PR's rollback is D2's handback, so one
-handback would open that gate and re-arm Ansible's client-side apply beside `homelab-namespace`,
-with no end to the overlap.
+`containers_list | ansible_owned | length > 0`. One entry without `owner` would open that gate
+and re-arm Ansible's client-side apply beside `homelab-namespace`, with no end to the overlap.
 
 `test_no_pre_task_would_apply_a_namespace_or_limitrange` evaluates every pre_task of the k8s
 play against two inventory fixtures built from daniel-box's k8s entries: every entry flux-owned,
-and the same list with one entry handed back, its `owner` removed as D2's second handback PR
-removes it. An `import_tasks` or `include_tasks` pre_task contributes its file's tasks under its
+and the same list with one entry's `owner` removed. An `import_tasks` or `include_tasks` pre_task contributes its file's tasks under its
 own `when`. A task applies a Namespace or a LimitRange when it runs a `kubectl` write or a
 `kubernetes.core` module and its text, or a fact an earlier task set, names either kind. Its
 `when` is evaluated with the play's filters, `ansible_owned` among them, and a condition that
 cannot be evaluated counts as true. The red half is a fixture play keeping the deleted apply
-under the ownership gate, which runs against the handed-back fixture.
+under the ownership gate, which runs against the fixture without `owner`.
 
 `test_homelab_namespace_is_rendered_and_a_shared_kind` fails when the kind is missing from the
 render or from `SHARED_KINDS`.
@@ -139,12 +137,12 @@ def namespace_appliers(pre_tasks: list[dict], containers: list[dict]) -> list[st
 
 
 def _fixtures() -> dict[str, list[dict]]:
-    """Every k8s entry flux-owned, and the same list with its first entry handed back."""
+    """Every k8s entry flux-owned, and the same list with `owner` off its first entry."""
     entries = yaml_fast.safe_load((HOST_VARS / "daniel-box.yml").read_text())
     k8s = toposort.filter_by_platform(entries["containers_list"], "k8s")
     owned = [{**entry, "owner": "flux"} for entry in k8s]
-    handed_back = [{k: v for k, v in owned[0].items() if k != "owner"}, *owned[1:]]
-    return {"every entry flux-owned": owned, "one entry handed back": handed_back}
+    unowned = [{k: v for k, v in owned[0].items() if k != "owner"}, *owned[1:]]
+    return {"every entry flux-owned": owned, "one entry without owner": unowned}
 
 
 def test_the_walk_reaches_every_pre_task_and_the_included_files():
@@ -168,15 +166,15 @@ def test_no_pre_task_would_apply_a_namespace_or_limitrange():
         assert namespace_appliers(pre_tasks, containers) == [], fixture
 
 
-def test_a_play_gating_the_apply_on_role_ownership_is_flagged_on_a_handback():
+def test_a_play_gating_the_apply_on_role_ownership_is_flagged_without_owner():
     [play] = yaml_fast.safe_load(_GATED_PLAY)
     fixtures = _fixtures()
     assert (
         namespace_appliers(play["pre_tasks"], fixtures["every entry flux-owned"]) == []
     )
-    assert namespace_appliers(play["pre_tasks"], fixtures["one entry handed back"]) == [
-        "Apply the workload namespace"
-    ]
+    assert namespace_appliers(
+        play["pre_tasks"], fixtures["one entry without owner"]
+    ) == ["Apply the workload namespace"]
 
 
 def namespace_kind_problems(files: dict[str, str], kinds: Iterable[str]) -> list[str]:

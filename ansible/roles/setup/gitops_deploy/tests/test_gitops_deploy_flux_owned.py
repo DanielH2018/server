@@ -72,14 +72,14 @@ def test_a_flux_owned_image_bump_lands_in_flux_is_flagged(gitops_deploy, tick, s
 def test_a_flux_owned_image_bump_merges_and_does_nothing_else_is_flagged(
     gitops_deploy, tick, state, capsys
 ):
-    _declare(tick, checkout={"sonarr": "released"}, origin={"sonarr": "released"})
+    _declare(tick, checkout={"sonarr": "flux"}, origin={"sonarr": "flux"})
     _sonarr_image_bump(tick)
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == []
     assert tick.posts == []
     assert (
-        f"flux: sonarr: owned by released at {ORIGIN[:8]} — fast-forwarding "
+        f"flux: sonarr: owned by flux at {ORIGIN[:8]} — fast-forwarding "
         f"{SONARR_DEFAULTS}" in capsys.readouterr().out
     )
 
@@ -101,8 +101,8 @@ def test_an_owner_added_in_the_range_is_read_at_origin_is_flagged(
 def test_an_owner_removed_in_the_range_is_read_at_origin_is_clean(
     gitops_deploy, tick, state
 ):
-    """A handback's second PR: the checkout still has `owner`, and origin removes it."""
-    _declare(tick, checkout={"sonarr": "released"}, origin={})
+    """The checkout still has `owner`, and origin has removed it: origin decides."""
+    _declare(tick, checkout={"sonarr": "flux"}, origin={})
     _sonarr_image_bump(tick)
     plan = _plan(tick, state)
     assert plan.cs.k8s == {"sonarr"}

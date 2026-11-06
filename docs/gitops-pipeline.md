@@ -270,10 +270,9 @@ record follows.
 
 ### A tag Flux applies is merged and skipped
 
-A `containers_list` entry that sets `owner` is not Ansible-owned. With `owner: flux`, Flux
-applies the tag through `promote`. With `owner: released`, which the ownership census refuses,
-no writer applies it. The tick skips both values the same way, so the deployer never
-applies, defers, alerts on or owes such a tag. D2's plan has the design:
+A `containers_list` entry that sets `owner` is not Ansible-owned: with `owner: flux`, Flux
+applies the tag through `promote`. The tick skips such a tag, so the deployer never
+applies, defers, alerts on or owes it. D2's plan has the design:
 [The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
 
 - **Ownership is read at the commit being applied.** `deploy_io.host_vars_owners` reads this
@@ -287,7 +286,7 @@ applies, defers, alerts on or owes such a tag. D2's plan has the design:
 
 `ansible/tests/deploy/test_owner_readers_agree.py` holds `service_owners` equal to
 `scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each reader raises on an
-`owner` value other than `flux` or `released`.
+`owner` value other than `flux`.
 
 ### Both apply arms are forward-only
 

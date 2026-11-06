@@ -150,7 +150,7 @@ def test_every_k8s_service_is_flux_owned_on_the_tree():
 
 def test_a_service_without_flux_as_its_writer_fails_and_a_flux_owned_one_passes():
     assert owner_problems({"demo": {}}) == ["demo carries owner None, not flux"]
-    assert owner_problems({"demo": {"owner": "released"}}) != []
+    assert owner_problems({"demo": {"owner": "ansible"}}) != []
     assert owner_problems({"demo": OWNED}) == []
 
 
