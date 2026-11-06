@@ -23,9 +23,10 @@ It recognises three shapes of "inspects a pod", all of them via `kubectl`:
 
   1. `get pod -l app=<workload>`     — flux's three controllers
   2. `get pod -l <anylabel>=<value>` — no live member since pihole flipped
-  3. `exec`/`logs <target>`          — no live member since crowdsec and observability flipped;
-                                       also every `exec {{ reg.stdout }}` whose register is traced
-                                       back to the lookup that filled it
+  3. `exec`/`logs <target>`          — no live member since crowdsec and observability flipped, so
+                                       the `_WIDGET` fixtures below prove it; also every
+                                       `exec {{ reg.stdout }}` whose register is traced back to the
+                                       lookup that filled it
 
 The register trace follows the bare `{{ reg.stdout }}` form only. A filter or an index on it
 (`{{ reg.stdout | trim }}`) is unresolved, not resolved-to-nothing, so it fails until excused.
@@ -65,24 +66,29 @@ the contract above, the excused `_UNRESOLVED_TARGETS`, and the assertions.
 
 import re
 
+import pytest
+from lib import yaml_fast
+
 from _helpers import rollout_seconds
 from _role_census import role_dirs
-from _role_tasks import _K8S_ROLES, _Task, _tasks
+from _role_tasks import _K8S_ROLES, _Task, _expand, _tasks
 from _inline_rollout_targets import (
     _UNRESOLVED,
+    _Workloads,
     _exec_target,
     _gate_indexes,
     _inspections,
+    _inspections_in,
     _kind_slash_name,
     _owned,
     _selector_targets,
     _tokens,
+    _workloads,
 )
 
 
 # Named here so a derivation that silently stops matching fails loudly rather than passing an
 # empty set: replacing a hardcoded list by shape can drop an entry while reading as a widening.
-#
 _KNOWN_SELF_POD_ROLES = {
     "flux",
 }
@@ -99,6 +105,17 @@ _MIN_SELF_POD_INSPECTIONS = 3
 _UNRESOLVED_TARGETS: dict[tuple[str, str], str] = {}
 
 
+def _own_inspections(
+    tasks: list[_Task], workloads: _Workloads
+) -> list[tuple[int, _Task, set[str]]]:
+    """The inspections in `tasks` that name a workload the role itself renders."""
+    return [
+        (index, task, targets & set(workloads.owned))
+        for index, task, targets in _inspections_in(tasks, workloads)
+        if isinstance(targets, set) and targets & set(workloads.owned)
+    ]
+
+
 def _self_pod_roles() -> dict[str, list[tuple[int, _Task, set[str]]]]:
     """role -> its inspections that name a workload the role itself renders."""
     found: dict[str, list[tuple[int, _Task, set[str]]]] = {}
@@ -106,11 +123,7 @@ def _self_pod_roles() -> dict[str, list[tuple[int, _Task, set[str]]]]:
         role = role_dir.name
         if not (role_dir / "tasks" / "main.yml").is_file() or not _owned(role):
             continue
-        own = [
-            (index, task, targets & set(_owned(role)))
-            for index, task, targets in _inspections(role)
-            if isinstance(targets, set) and targets & set(_owned(role))
-        ]
+        own = _own_inspections(_tasks(role), _workloads(role))
         if own:
             found[role] = own
     return found
@@ -131,25 +144,109 @@ def test_the_derivation_still_matches_the_roles_it_was_written_for() -> None:
     )
 
 
-def test_every_role_that_inspects_its_own_pod_gates_on_its_rollout() -> None:
-    for role, inspections in _self_pod_roles().items():
-        gates = _gate_indexes(_tasks(role))
-        for index, task, targets in inspections:
-            for workload in sorted(targets):
-                gate = gates.get(workload)
-                assert gate is not None, (
-                    f"{role}: task {index} ({task.raw_name!r}) inspects the pod of workload "
+def _gate_problems(tasks: list[_Task], workloads: _Workloads) -> list[str]:
+    """Why each inspection of the role's own pod is not preceded by a gate on its rollout."""
+    problems = []
+    gates = _gate_indexes(tasks)
+    for index, task, targets in _own_inspections(tasks, workloads):
+        for workload in sorted(targets):
+            gate = gates.get(workload)
+            if gate is None:
+                problems.append(
+                    f"task {index} ({task.raw_name!r}) inspects the pod of workload "
                     f"{workload!r} without ever waiting for its rollout. k8s/manifests QUEUES "
-                    "the rollout for k8s/manifests/tasks/drain.yml, so this reads the pod being replaced, "
-                    "and every assertion after it describes the outgoing pod. The gate must "
-                    f"name that same workload: `rollout status "
-                    f"{_owned(role)[workload].lower()}/{workload}`."
+                    "the rollout for k8s/manifests/tasks/drain.yml, so this reads the pod being "
+                    "replaced, and every assertion after it describes the outgoing pod. The gate "
+                    f"must name that same workload: `rollout status "
+                    f"{workloads.owned[workload].lower()}/{workload}`."
                 )
-                assert gate < index, (
-                    f"{role}: the rollout gate for {workload!r} is at task {gate}, after the "
+            elif gate >= index:
+                problems.append(
+                    f"the rollout gate for {workload!r} is at task {gate}, after the "
                     f"inspection at {index} ({task.raw_name!r}). A gate that runs second is "
                     "not a gate."
                 )
+    return problems
+
+
+def test_every_role_that_inspects_its_own_pod_gates_on_its_rollout() -> None:
+    for role in _self_pod_roles():
+        problems = _gate_problems(_tasks(role), _workloads(role))
+        assert not problems, f"{role}: " + "; ".join(problems)
+
+
+_GATE = """\
+- name: Wait for widget
+  ansible.builtin.command:
+    cmd: k3s kubectl -n homelab rollout status deploy/widget --timeout=300s
+"""
+_EXEC = """\
+- name: Read widget's state
+  ansible.builtin.command:
+    cmd: k3s kubectl -n homelab exec deploy/widget -c widget -- cat /state
+"""
+_LOGS = """\
+- name: Read widget's log
+  ansible.builtin.command:
+    cmd: k3s kubectl -n homelab logs deploy/widget --tail=5
+"""
+_POD_LOOKUP = """\
+- name: Find widget's pod
+  ansible.builtin.command:
+    cmd: k3s kubectl -n homelab get pod -l app=widget -o name
+  register: widget_pod
+"""
+_EXEC_TRACED = """\
+- name: Read state through the found pod
+  ansible.builtin.command:
+    cmd: k3s kubectl -n homelab exec {{ widget_pod.stdout }} -- cat /state
+"""
+
+
+_WIDGET = _Workloads(
+    owned={"widget": "Deployment"},
+    by_label={("app", "widget"): {"widget"}},
+)
+
+
+def _widget_tasks(tasks: str, tmp_path) -> list[_Task]:
+    return _expand("widget", yaml_fast.safe_load(tasks), tmp_path, {})
+
+
+@pytest.mark.parametrize(
+    "tasks",
+    [
+        pytest.param(_GATE + _EXEC, id="exec"),
+        pytest.param(_GATE + _LOGS, id="logs"),
+        pytest.param(_GATE + _POD_LOOKUP + _EXEC_TRACED, id="traced-register"),
+    ],
+)
+def test_an_inspection_after_its_gate_is_clean(tasks, tmp_path) -> None:
+    expanded = _widget_tasks(tasks, tmp_path)
+    assert _own_inspections(expanded, _WIDGET), (
+        "the inspection in this fixture was not recognised"
+    )
+    assert _gate_problems(expanded, _WIDGET) == []
+
+
+@pytest.mark.parametrize(
+    ("tasks", "flagged"),
+    [
+        pytest.param(_EXEC, "Read widget's state", id="exec-no-gate"),
+        pytest.param(_LOGS, "Read widget's log", id="logs-no-gate"),
+        pytest.param(_EXEC + _GATE, "Read widget's state", id="exec-before-gate"),
+        pytest.param(
+            _POD_LOOKUP + _EXEC_TRACED,
+            "Read state through the found pod",
+            id="traced-register-no-gate",
+        ),
+    ],
+)
+def test_an_inspection_without_a_prior_gate_is_flagged(
+    tasks, flagged, tmp_path
+) -> None:
+    problems = _gate_problems(_widget_tasks(tasks, tmp_path), _WIDGET)
+    assert any(flagged in problem for problem in problems)
 
 
 def test_no_pod_inspection_has_an_unexplained_target() -> None:
@@ -197,7 +294,7 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
         for task in _tasks(role):
             if "wait --for=" not in task.cmd:
                 continue
-            targets = _selector_targets(role, task.cmd)
+            targets = _selector_targets(_workloads(role), task.cmd)
             reference = _kind_slash_name(_exec_target(_tokens(task.cmd), "wait") or "")
             named = (targets if isinstance(targets, set) else set()) | (
                 {reference[1]} if reference else set()
@@ -280,14 +377,22 @@ def test_the_gate_budget_census_is_non_vacuous() -> None:
     )
 
 
+def _budget_problems(
+    found: dict[str, set[int]], declared: dict[str, tuple[int, str]]
+) -> list[str]:
+    """Each role whose gate waits something other than its declared budget."""
+    return [
+        f"{role}'s inline rollout gate waits {sorted(budgets)}s, not the declared "
+        f"{declared[role][0]}s ({declared[role][1]}). Change the declaration and its reason "
+        "together, or change the gate back."
+        for role, budgets in found.items()
+        if budgets != {declared[role][0]}
+    ]
+
+
 def test_every_inline_gate_waits_its_declared_budget() -> None:
-    for role, budgets in _inline_gate_budgets().items():
-        expected, reason = _GATE_BUDGETS[role]
-        assert budgets == {expected}, (
-            f"{role}'s inline rollout gate waits {sorted(budgets)}s, not the declared "
-            f"{expected}s ({reason}). Change the declaration and its reason together, or "
-            "change the gate back."
-        )
+    problems = _budget_problems(_inline_gate_budgets(), _GATE_BUDGETS)
+    assert not problems, "; ".join(problems)
 
 
 def test_a_templated_gate_budget_resolves_and_a_bad_one_does_not() -> None:
@@ -299,9 +404,9 @@ def test_a_templated_gate_budget_resolves_and_a_bad_one_does_not() -> None:
     assert rollout_seconds("{{ arr_notification_no_such_timeout }}", role) is None
 
 
+def test_a_declared_gate_budget_is_clean() -> None:
+    assert _budget_problems({"widget": {300}}, {"widget": (300, "default")}) == []
+
+
 def test_a_drifted_gate_budget_is_flagged() -> None:
-    # Red proof for the check above, which can only ever be observed passing.
-    expected, _ = _GATE_BUDGETS["arr-notification"]
-    assert {900} != {expected}, (
-        "the comparison must reject a budget that moved; if it does not, it measures nothing."
-    )
+    assert _budget_problems({"widget": {900}}, {"widget": (300, "default")})

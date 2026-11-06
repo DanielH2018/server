@@ -9,6 +9,7 @@ docstring of `test_inline_rollout_gates.py` is the contract.
 
 import re
 from collections import defaultdict
+from dataclasses import dataclass
 
 from _role_tasks import _JINJA, _Task, _tasks
 from _k8s_render import rendered_docs
@@ -72,8 +73,21 @@ def _owned(role: str) -> dict[str, str]:
     return _index()[0].get(role, {})
 
 
-def _workloads_with_label(role: str, key: str, value: str) -> set[str]:
-    return set(_index()[1].get(role, {}).get((key, value), set()))
+@dataclass(frozen=True)
+class _Workloads:
+    """What one role renders.
+
+    Attributes:
+        owned: Each workload's name and kind.
+        by_label: Each pod-template label, as (key, value), and the workloads carrying it.
+    """
+
+    owned: dict[str, str]
+    by_label: dict[tuple[str, str], set[str]]
+
+
+def _workloads(role: str) -> _Workloads:
+    return _Workloads(_owned(role), _index()[1].get(role, {}))
 
 
 def _tokens(cmd: str) -> list[str]:
@@ -148,7 +162,7 @@ def _exec_target(tokens: list[str], verb: str) -> str | None:
     return None
 
 
-def _selector_targets(role: str, cmd: str) -> set[str] | object | None:
+def _selector_targets(workloads: _Workloads, cmd: str) -> set[str] | object | None:
     match = re.search(r"(?:^|\s)(?:-l|--selector=?)\s*(\S+)", cmd)
     if not match:
         return None
@@ -161,11 +175,11 @@ def _selector_targets(role: str, cmd: str) -> set[str] | object | None:
     key, _, value = selector.partition("=")
     if "{{" in key or "{{" in value:
         return _UNRESOLVED
-    return _workloads_with_label(role, key, value)
+    return set(workloads.by_label.get((key, value), set()))
 
 
 def _pod_targets(
-    role: str, task: _Task, registers: dict[str, set[str] | object]
+    workloads: _Workloads, task: _Task, registers: dict[str, set[str] | object]
 ) -> set[str] | object | None:
     """The workloads a task's command inspects a pod of.
 
@@ -178,7 +192,7 @@ def _pod_targets(
         return None
     tokens = _tokens(cmd)
     if re.search(r"(?:^|\s)get\s+pods?(?:\s|$)", cmd):
-        return _selector_targets(role, cmd)
+        return _selector_targets(workloads, cmd)
     for verb in ("exec", "logs"):
         if verb not in tokens:
             continue
@@ -192,7 +206,7 @@ def _pod_targets(
                 return None
             if "{{" in reference[1]:
                 return _UNRESOLVED
-            return {reference[1]} & set(_owned(role))
+            return {reference[1]} & set(workloads.owned)
         if "{{" in target:
             traced = re.fullmatch(r"\{\{(\w+)\.stdout\}\}", target)
             if traced and traced.group(1) in registers:
@@ -204,8 +218,10 @@ def _pod_targets(
     return None
 
 
-def _inspections(role: str) -> list[tuple[int, _Task, set[str] | object]]:
-    """(index, task, targets) for every pod inspection in the role, in play order.
+def _inspections_in(
+    tasks: list[_Task], workloads: _Workloads
+) -> list[tuple[int, _Task, set[str] | object]]:
+    """(index, task, targets) for every pod inspection in `tasks`, in play order.
 
     The register map is built as the walk goes, so `exec {{ jellyfin_k8s_pod.stdout }}` inherits
     the targets of the `get pod -l app=jellyfin` that filled it. A register produced by a task
@@ -214,11 +230,15 @@ def _inspections(role: str) -> list[tuple[int, _Task, set[str] | object]]:
     """
     registers: dict[str, set[str] | object] = {}
     found = []
-    for index, task in enumerate(_tasks(role)):
-        targets = _pod_targets(role, task, registers)
+    for index, task in enumerate(tasks):
+        targets = _pod_targets(workloads, task, registers)
         if targets is None:
             continue
         if task.register:
             registers[task.register] = targets
         found.append((index, task, targets))
     return found
+
+
+def _inspections(role: str) -> list[tuple[int, _Task, set[str] | object]]:
+    return _inspections_in(_tasks(role), _workloads(role))
