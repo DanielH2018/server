@@ -246,7 +246,9 @@ hook runs it, neither at commit nor at push. The one exception is `static-ratche
 its `static-ratchet-tests-*` siblings: at commit time it runs twenty-nine static ratchet, lint
 and census test files. CI's `pytest` job runs the suite whole on every PR. To see a red test
 before CI does, run `uv run pytest` yourself. A fan-out batch names test paths instead, and
-`.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run.
+`.claude/hooks/block-batch-full-suite.py` refuses its whole-suite run. To catch the repo-wide
+census tests that no test beside a change reaches, run `uv run python scripts/dev/repo_guards.py`
+once before `gh pr create`.
 `.gitignore`'s root deny is load-bearing — one untracked file parks the deployer.
 
 ## Python & Tests

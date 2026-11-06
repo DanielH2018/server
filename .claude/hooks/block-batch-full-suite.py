@@ -47,7 +47,7 @@ from _hook_common import (
     strip_shell_keywords,
 )
 
-# The brief's guard set selects 114 modules; `ansible/tests` alone selects 537 and the whole
+# `scripts/dev/repo_guards.py` selects 143 modules; `ansible/tests` alone selects 537 and the whole
 # suite about 1,337.
 MAX_MODULES = 300
 
@@ -90,8 +90,7 @@ DENY_REASON = (
     "the PR, and the review pipeline resumes you with each failing check if it goes red. A "
     "local full run held 2.3 GiB for about six minutes, which is what limits how many batches "
     "a host fits. Name the tests beside your change by path (`uv run pytest <test files or "
-    "tests/ directory>`), then run the guard set the brief's 'Before you open the PR' step "
-    "names."
+    "tests/ directory>`), then run the guard set: `uv run python scripts/dev/repo_guards.py`."
 )
 
 
