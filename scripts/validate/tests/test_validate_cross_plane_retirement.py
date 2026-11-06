@@ -32,8 +32,12 @@ def test_an_emptied_deferred_template_keeps_the_kustomization(tmp_path, head_sna
     head = gate.snapshot(tmp_path, ROLES)
     assert DEFERRED in head.deferred
     lost = set(head_snapshot.objects["headlamp"]) - set(head.objects["headlamp"])
-    assert lost, "the emptied template rendered an object"
-    assert gate.removal_problems(head_snapshot, head, lost) == []
+    assert {(i.split("/")[0], i.split("/")[-1]) for i in lost} == {
+        ("Role", "headlamp-prometheus-proxy"),
+        ("RoleBinding", "headlamp-prometheus-proxy"),
+    }
+    problems = gate.removal_problems(head_snapshot, head, set())
+    assert len(problems) == len(lost) and all(p.startswith("arm 3:") for p in problems)
 
 
 def test_a_dropped_deferred_template_removes_the_kustomization(

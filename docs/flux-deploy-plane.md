@@ -1982,9 +1982,10 @@ instead:
    that holds this PR, and the objects must read `NotFound`, before the next step.
    `scripts/validate/tests/test_validate_cross_plane_retirement.py` renders both forms.
 1. **The retiring PR removes the `containers_list` entry and the role.** It carries a
-   `Removes-Object:` line for each object in `cluster/<tag>/` that has no prune exemption. The
-   next bundle omits `flux/<tag>.yaml`, and the root prunes `<tag>`, whose finalizer deletes
-   those objects. The name never joins `k8s_retired_services`. The Kustomization still exists
+   `Removes-Object:` line for each object with no prune exemption in every directory the tag
+   still renders: `cluster/<tag>/` and each suffixed kind, whose objects arm 3 counts for
+   `<tag>`, including those `Orphan` keeps. The next bundle omits `flux/<tag>.yaml`, and the
+   root prunes `<tag>`, whose finalizer deletes the objects of `cluster/<tag>/`. The name never joins `k8s_retired_services`. The Kustomization still exists
    when this PR merges, and the merge is what makes the root prune it. `land.sh` does not read
    the Kustomization before the merge.
 1. **Delete what the kept kinds leave behind by hand (operator-only).** The renderer derives

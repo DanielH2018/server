@@ -24,6 +24,7 @@ from renderer.renderer_lib.bundle import (
 )
 from renderer.renderer_lib.ordering import (
     ANSIBLE_OWNED_DEPS,
+    TAG_KIND_SUFFIXES,
     Ordering,
     dependency_cycle,
     kustomization_edges,
@@ -244,13 +245,18 @@ def test_a_tags_kinds_follow_it_in_its_file_in_suffix_order():
 
 
 POLICY_TAGS = ["bento-pdf", "flux", "pihole"]
+PIHOLE_KINDS = [f"pihole{suffix}" for suffix in TAG_KIND_SUFFIXES]
 
 
 def _policy_bundle() -> dict[str, str]:
     """A bundle holding `flux`, `flux-deferred` and every per-tag kind beside the shared kinds."""
     directories = _every_kind() | {
         name: {"x.yaml": CONFIGMAP.format(namespace="homelab")}
-        for name in ("flux", "flux-deferred")
+        for name in (
+            "flux",
+            "flux-deferred",
+            *(f"pihole{suffix}" for suffix in TAG_KIND_SUFFIXES),
+        )
     }
     return bundle_files(directories, {}, POLICY_TAGS, TIMEOUT, DOTENV)
 
@@ -283,9 +289,13 @@ def _tags_with_a_policy(files: dict[str, str]) -> list[str]:
 
 def test_the_kept_set_is_clean_and_covers_every_shared_kind():
     files = _policy_bundle()
-    assert {"flux", "flux-deferred", "cluster-vars", *SHARED_KINDS} <= set(
-        _policies(files)
-    )
+    assert {
+        "flux",
+        "flux-deferred",
+        "cluster-vars",
+        *SHARED_KINDS,
+        *PIHOLE_KINDS,
+    } <= set(_policies(files))
     assert _orphan_missing(files) == []
 
 
@@ -294,11 +304,7 @@ def test_a_kept_kustomization_without_deletion_policy_orphan_is_flagged():
     files["flux/pihole.yaml"] = files["flux/pihole.yaml"].replace(
         "deletionPolicy: Orphan", "deletionPolicy: Delete"
     )
-    assert _orphan_missing(files) == [
-        "pihole-deferred",
-        "pihole-snapshot",
-        "pihole-verify",
-    ]
+    assert _orphan_missing(files) == PIHOLE_KINDS
 
 
 def test_every_tag_but_flux_taking_the_default_policy_is_clean():
