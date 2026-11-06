@@ -436,6 +436,7 @@
  "ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py": 0.22,
  "ansible/tests/longhorn/test_longhorn_restore_drill_oversize.py": 0.19,
  "ansible/tests/longhorn/test_longhorn_restore_drill_retry.py": 0.24,
+ "ansible/tests/longhorn/test_longhorn_restore_drill_signal_timeout.py": 4.48,
  "ansible/tests/longhorn/test_longhorn_restore_drill_state.py": 0.68,
  "ansible/tests/longhorn/test_longhorn_storageclass.py": 0.04,
  "ansible/tests/longhorn/test_prune_backups.py": 0.0,

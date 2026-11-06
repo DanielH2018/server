@@ -2579,12 +2579,7 @@ The deletions have red proofs of their own:
   the key and a test, so the tick applies nothing. The timer's state variable
   (`check_timer_state`) follows the list, so the box loses the
   timer once the session runs the same operator-attended `--tags setup_drift` apply as the
-  forward PR. That apply leaves three files, because their tasks carry a `when:` and no absent
-  arm. So the operator then runs
-  `sudo rm -f /var/lib/node-exporter-textfile/setup-drift-check.prom /usr/local/bin/setup-drift-check.sh /var/lib/homelab/setup-render-manifest.d/setup-drift-check`
-  on the box. A `.prom` file left behind keeps exporting its last run, and `HostCheckOverdue`
-  fires about 25 hours later and never clears. The fragment left behind can read as a stale
-  render in manifest-prune-check.
+  forward PR. That apply also removes the box's `.prom` file, script and render fragment.
 - **D6.5 and D6.5b.** D6.5 removed host units, B1's six rules and the `.prom` files. To
   restore them, revert D6.5b first,
   then D6.5. The revert of D6.5b restores files that no task names at its head, so it lands

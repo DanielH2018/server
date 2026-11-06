@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Setup-plane drift check for hosts that run no manifest-prune-check — managed by Ansible
+# Setup-plane drift check for every host that renders setup templates — managed by Ansible
 # (initial_setup role); edits overwritten.
 #
 # Usage: setup-drift-check.sh [-h|--help]
 # Takes no arguments. systemd timer kuma-check-setup-drift.timer runs it as root daily at 08:20
-# on hosts that run no manifest-prune-check.sh, and again every 30 minutes while the last run
+# on each host in setup_drift_check_hosts, and again every 30 minutes while the last run
 # failed. It compares the deployed scripts with the render manifests under /var/lib/homelab. Each
 # run writes its verdict to $TEXTFILE_DIR/setup-drift-check.prom for node_exporter's textfile
 # collector (default /var/lib/node-exporter-textfile; a test points it elsewhere), which
@@ -13,11 +13,10 @@
 #
 # WHAT THIS EXISTS FOR (2026-08-29 review M-10). The setup plane is deployed only by a manual
 # `initial_setup.yml`; nothing converges it, so a host can run an old render of a script or an
-# old copy of deployed code indefinitely. manifest-prune-check.sh reports exactly that — and it
-# is installed by roles/setup/k3s/tasks/health-crons.yml, imported only from that role's
-# main.yml, which k3s-bringup.yml asserts onto k3s_server_hosts. So the reader exists on
-# daniel-box and NOWHERE else, while daniel-server renders the entire UPS shutdown chain
-# (roles/nut_host: upsmon.conf, nut.conf, the secondary watchdog). Live on 2026-08-29:
+# old copy of deployed code indefinitely. Every host that renders setup templates needs a reader
+# of that drift, and setup_drift_check_hosts names those hosts. On 2026-08-29 the only reader,
+# manifest-prune-check.sh, ran on k3s_server_hosts alone, while daniel-server renders the entire
+# UPS shutdown chain (roles/nut_host: upsmon.conf, nut.conf, the secondary watchdog). That day
 # daniel-server had no /var/lib/homelab/setup-render-manifest.d at all, and its
 # /etc/nut/upsmon.conf was dated Aug 17 against a template changed on 2026-08-28.
 #
