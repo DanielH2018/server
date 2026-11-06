@@ -29,8 +29,8 @@ Service carries beside it.
 
 A role's vendored files are no template, and `attach_vendored` adds them to `DIR/cluster/<tag>/`
 byte for byte after every pass that edits rendered text (H1.1a). `rendered_docs()` in
-`ansible/tests/_k8s_render.py` renders `templates/*.j2` alone, so the fleet guards never read
-them; H1's *Vendored upstream manifests* names the guards that bypasses and why it is accepted.
+`ansible/tests/_k8s_render.py` reads `render_tag`'s output, which holds none of them, so the
+fleet guards never read them; H1's *Vendored upstream manifests* names the guards that bypasses and why it is accepted.
 
 A value a role task computes, such as a content tag or a script checksum, comes from
 `task_inputs.derived_facts` and goes in as a `set_fact` would, over every file layer.
@@ -54,6 +54,7 @@ from lib.ansible_inventory import K8S_HOST
 from lib.ansible_jinja_env import ansible_bool
 from lib.k8s_roles import (
     CLAIM_TEMPLATE,
+    MANIFESTS_PRUNE_DEFAULT,
     SHARED_MANIFEST_DEFAULTS,
     resolved_manifest_files,
     role_fields,
@@ -99,7 +100,6 @@ if str(FILTER_PLUGINS) not in _sys.path:
 from toposort import K8S_APPLIES_LAST, build_k8s_dep_map, filter_by_platform
 
 LABEL_WRAPPER = SHARED_TPL / "role-labelled.yaml.j2"
-MANIFESTS_DEFAULTS = K8S_ROLES / "manifests" / "defaults" / "main.yml"
 FLUX_DEFAULTS = K8S_ROLES / "flux" / "defaults" / "main.yml"
 FLUX_JOB_CONNECT = K8S_ROLES / "manifests" / "files" / "flux_job_connect.py"
 GROUP_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
@@ -143,6 +143,8 @@ class RenderedTag:
             `templates/verify/` (D5.1a1).
         precheck: The same for `DIR/cluster/<tag>-precheck/`, empty for a role that ships no
             `templates/precheck/` (#5719).
+        sources: Each rendered file of `files` and `deferred` mapped to the basename of the
+            template it renders from, such as `service-default.yaml.j2` for `service.yaml`.
     """
 
     tag: str
@@ -152,6 +154,7 @@ class RenderedTag:
     prepull: dict[str, str] = field(default_factory=dict)
     verify: dict[str, str] = field(default_factory=dict)
     precheck: dict[str, str] = field(default_factory=dict)
+    sources: dict[str, str] = field(default_factory=dict)
 
     def directories(self) -> dict[str, dict[str, str]]:
         """Each directory name under `DIR/cluster/` mapped to the files it holds."""
@@ -270,20 +273,6 @@ def bundle_ordering(
     )
 
 
-def rollout_timeout_default() -> str:
-    """`manifests_rollout_timeout_default` as the manifests role's own defaults set it."""
-    return str(
-        yaml_fast.safe_load(MANIFESTS_DEFAULTS.read_text())[
-            "manifests_rollout_timeout_default"
-        ]
-    )
-
-
-def _manifests_prune_default() -> object:
-    """`manifests_prune` as the manifests role's own defaults set it."""
-    return yaml_fast.safe_load(MANIFESTS_DEFAULTS.read_text())["manifests_prune"]
-
-
 def _sources(
     tag: str, names: set[str], own_only: bool, templates: Path | None = None
 ) -> dict[str, Path]:
@@ -321,6 +310,55 @@ def tag_context(
     return ctx
 
 
+def role_context(
+    tag: str,
+    stubs: dict,
+    host: str = K8S_HOST,
+    built: dict[str, str] | None = None,
+    roles: Path = K8S_ROLES,
+) -> tuple[dict, dict]:
+    """The variables `tag`'s templates render with, and the include vars that decide its files.
+
+    Args:
+        tag: The deploy tag.
+        stubs: The extra vars that outrank every other layer: a mode's secret values.
+        host: The inventory host whose context the tag renders in.
+        built: The images `tag`'s role builds, each mapped to its content tag. None computes
+            them here.
+        roles: The role tree `tag`'s role is read from.
+
+    Returns:
+        The context, then the resolved `INCLUDE_KEYS` of the role's `k8s/manifests` include.
+
+    Raises:
+        RenderError: A layer will not resolve, or a role task's expression fails.
+    """
+    role_dir = roles / tag
+    try:
+        ctx = tag_context(role_dir, tag, stubs, host)
+        # A role default can read a fact a task sets, as every `*_k8s_image` built here reads
+        # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
+        # go in as the overrides of a second pass, as `set_fact` outranks every file layer.
+        # The stub file's extra vars outrank them in turn.
+        facts = derived_facts(role_dir, ctx, built)
+        ctx = tag_context(role_dir, tag, {**facts, **stubs}, host)
+    except (ValueError, jinja2.TemplateError, AnsibleError) as exc:
+        raise RenderError(f"{tag}: {exc}") from exc
+    try:
+        raw = include_vars(role_dir)
+        # Only the keys the render reads. The rest (rollout timeouts, extra rollouts) may name
+        # facts a role task sets, which Ansible resolves only where a task reads them.
+        read = {k: v for k, v in raw.items() if k in INCLUDE_KEYS}
+        include = resolve_vars(
+            read, {**ctx, **read}, undefined_cls=StrictChainableUndefined
+        )
+    except (ValueError, jinja2.TemplateError) as exc:
+        raise RenderError(f"{tag}: its k8s/manifests include: {exc}") from exc
+    # The include's vars outrank the role defaults and the inventory; the stub file's extra
+    # vars outrank them in turn.
+    return {**ctx, **include, **stubs, "manifests_service": tag}, include
+
+
 def render_tag(
     tag: str,
     stubs: dict,
@@ -346,30 +384,8 @@ def render_tag(
             listed basename has no template.
     """
     role_dir = roles / tag
-    try:
-        ctx = tag_context(role_dir, tag, stubs, host)
-        # A role default can read a fact a task sets, as every `*_k8s_image` built here reads
-        # `k8s_built_image_tags`. The first pass leaves such a default undefined, so the facts
-        # go in as the overrides of a second pass, as `set_fact` outranks every file layer.
-        # The stub file's extra vars outrank them in turn.
-        facts = derived_facts(role_dir, ctx, built)
-        ctx = tag_context(role_dir, tag, {**facts, **stubs}, host)
-    except (ValueError, jinja2.TemplateError, AnsibleError) as exc:
-        raise RenderError(f"{tag}: {exc}") from exc
+    ctx, include = role_context(tag, stubs, host, built, roles)
     entry = ctx["container_item"]
-    try:
-        raw = include_vars(role_dir)
-        # Only the keys the render reads. The rest (rollout timeouts, extra rollouts) may name
-        # facts a role task sets, which Ansible resolves only where a task reads them.
-        read = {k: v for k, v in raw.items() if k in INCLUDE_KEYS}
-        include = resolve_vars(
-            read, {**ctx, **read}, undefined_cls=StrictChainableUndefined
-        )
-    except (ValueError, jinja2.TemplateError) as exc:
-        raise RenderError(f"{tag}: its k8s/manifests include: {exc}") from exc
-    # The include's vars outrank the role defaults and the inventory; the stub file's extra
-    # vars outrank them in turn.
-    ctx: dict = {**ctx, **include, **stubs, "manifests_service": tag}
     refusal = sync_suspend_refusal(tag, ansible_bool(ctx.get(SYNC_SUSPEND_KEY, False)))
     if refusal:
         raise RenderError(refusal)
@@ -380,7 +396,7 @@ def render_tag(
         secret = set(include["manifests_secret_files"])
     deferred = set(include.get("manifests_deferred_files") or [])
     # Through `bool`, as the render tasks read it: an include's quoted "false" is False.
-    prune = ansible_bool(include.get("manifests_prune", _manifests_prune_default()))
+    prune = ansible_bool(include.get("manifests_prune", MANIFESTS_PRUNE_DEFAULT))
 
     env = renderer_env(role_dir / "templates", ctx)
 
@@ -395,20 +411,24 @@ def render_tag(
             raise RenderError(f"{tag}/{out_name} from {path.name}: {exc}") from exc
 
     rendered = {}
+    sources = {}
     templates = role_dir / "templates"
     for name, src in {
         **_sources(tag, files, False, templates),
         **_sources(tag, secret, True, templates),
     }.items():
         rendered[name] = render(src, name, prune, item=name)
+        sources[name] = src.name
     for claim in ctx.get("k8s_claims") or []:
         name = f"claim-{claim['name']}.yaml"
         rendered[name] = render(CLAIM_TEMPLATE, name, prune, manifests_claim=claim)
+        sources[name] = CLAIM_TEMPLATE.name
     rendered[KUSTOMIZATION] = kustomization_text(list(rendered))
 
     later = {}
     for name, src in _sources(tag, deferred, True, templates).items():
         later[name] = render(src, name, False, item=name)
+        sources[name] = src.name
     if later:
         later[KUSTOMIZATION] = kustomization_text(list(later))
 
@@ -449,6 +469,7 @@ def render_tag(
         later,
         verify=jobs[VERIFY_TEMPLATES_DIR],
         precheck=jobs[PRECHECK_TEMPLATES_DIR],
+        sources=sources,
     )
 
 

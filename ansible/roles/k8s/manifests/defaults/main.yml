@@ -59,6 +59,7 @@ manifests_shadow_dir: ''
 # ansible/tests/deploy/test_manifests_prune.py:_UNARMED_ROLES holds that rule. A deferred render
 # (pihole's instance 2, headlamp's observability RBAC, netpol-baseline's observability policies)
 # never goes through the labelling wrapper, so the caller's prune cannot select it.
+# `scripts/lib/k8s_roles.py:MANIFESTS_PRUNE_DEFAULT` mirrors this for the renderer.
 manifests_prune: true
 
 # The one namespace an armed role's apply and prune run in (`-n`). kubectl refuses a document
@@ -110,8 +111,10 @@ manifests_prune_allowlist:
 # every k8s role's rollout depend on a registry round-trip that can itself fail. The cost of the flat value is a slower failure on a genuinely stuck rollout; the health
 # gate reports that either way.
 #
-# Read by `ansible/tests/_helpers.py:MANIFESTS_ROLLOUT_DEFAULT_S`, which is what the two budget
-# guards and the inline-gate census size themselves against — so raising this re-derives them.
+# `scripts/lib/k8s_roles.py:ROLLOUT_TIMEOUT_DEFAULT` mirrors this for
+# the renderer, and `ansible/tests/k8s/test_shared_manifest_defaults.py` holds the two in step.
+# `ansible/tests/_helpers.py:MANIFESTS_ROLLOUT_DEFAULT_S` reads the constant, which is what the
+# two budget guards and the inline-gate census size themselves against.
 manifests_rollout_timeout_default: 600s
 
 # Which of this role's three change signals queues a `rollout restart` for a rollout entry, and

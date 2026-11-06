@@ -89,6 +89,7 @@ from renderer.renderer_lib.bundle import (
     bundle_files,
     write_bundle,
 )
+from lib.k8s_roles import ROLLOUT_TIMEOUT_DEFAULT
 from renderer.renderer_lib.ordering import NO_ORDERING, Ordering
 from renderer.renderer_lib.cluster import (
     RenderedTag,
@@ -98,7 +99,6 @@ from renderer.renderer_lib.cluster import (
     bundle_ordering,
     flux_owned_tags,
     render_tag,
-    rollout_timeout_default,
     select_tags,
     tag_context,
     write_cluster,
@@ -349,7 +349,7 @@ def _placeholder_cluster(
             label_tags(tags, owned), result.sops_manifests, published, manifests_dir
         )
         tags = attach_vendored(tags, result.key_sets, vendored)
-        tags = attach_snapshots(tags, published, rollout_timeout_default(), vendored)
+        tags = attach_snapshots(tags, published, ROLLOUT_TIMEOUT_DEFAULT, vendored)
         tags = attach_prepulls(tags, published, vendored)
         tags = attach_gates(tags, published, vendored, result.key_sets)
         bundle = (
@@ -450,7 +450,7 @@ def _shared_bundle(
             directories,
             key_sets,
             published,
-            rollout_timeout_default(),
+            ROLLOUT_TIMEOUT_DEFAULT,
             dotenv,
             decrypting or [],
             ordering,

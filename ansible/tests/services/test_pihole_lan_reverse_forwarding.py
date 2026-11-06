@@ -17,21 +17,25 @@ import ipaddress
 
 from _helpers import ALL_VARS, load_yaml
 from _k8s_render import rendered_texts
+from lib import yaml_fast
 
 
 def _dnsmasq_conf() -> str:
     """The rendered dnsmasq config as it is embedded in Pi-hole's ConfigMap.
 
-    Read as text: dnsmasq directives are lines inside a YAML string value, so parsing the
-    document confirms the key exists and says nothing about the directives in it.
+    Each ConfigMap's data values joined: dnsmasq directives are lines inside a YAML string
+    value, and the rendered text may hold that value on one escaped line.
     """
-    texts = [
-        text
+    values = [
+        value
         for role, tpl, text in rendered_texts()
         if role == "pihole" and tpl.endswith("configmap.yaml.j2")
+        for doc in yaml_fast.safe_load_all(text)
+        if doc
+        for value in doc["data"].values()
     ]
-    assert texts, "pihole's configmap template rendered nothing — the census is empty"
-    return "\n".join(texts)
+    assert values, "pihole's configmap template rendered nothing — the census is empty"
+    return "\n".join(values)
 
 
 def _server_directives(conf: str) -> list[str]:

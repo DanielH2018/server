@@ -23,7 +23,8 @@ Run: uv run pytest ansible/tests/k8s/test_k8s_manifests.py
 from lib import yaml_fast
 
 from _helpers import ANSIBLE
-from _k8s_render import K8S_PLAY_NAME, deploy_play, rendered_build_job_text
+from _k8s_render import rendered_build_job_text
+from _k8s_play import K8S_PLAY_NAME, deploy_play
 from _workload_property_rows import token_path_offence, volume_mounts
 
 

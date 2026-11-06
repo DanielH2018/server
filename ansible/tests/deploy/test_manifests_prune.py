@@ -358,39 +358,56 @@ def _without_role_label(doc: dict) -> dict:
     return {**doc, "metadata": metadata}
 
 
-def test_every_armed_render_is_labelled_and_otherwise_unchanged() -> None:
-    """The armed roles' real renders, passed through the filter the wrapper calls.
+def test_every_armed_render_carries_the_label() -> None:
+    """The selector filters the apply, so an unlabelled document would stop being applied.
 
-    Every document gains the label and nothing else: a Deployment's selector and pod-template
-    labels, a quoted string and a multi-line value all read back as rendered, and the host's
-    stdlib reader declares the same objects from the new bytes. bazarr's claim
-    is the named member: the selector filters the apply, so an unlabelled claim would stop
-    being applied.
+    bazarr's claim and littlelink's shared Service are the named members.
     """
+    armed = _armed_roles()
     seen = set()
     for role, name, text in rendered_texts():
-        if role not in _ARMED_ROLES:
-            continue
-        before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
-        # A macro-only template (pihole's pihole-deployment.yaml.j2) renders empty and is
-        # never staged; the deploy renders only the files the role names.
-        if not before and name.removesuffix(".j2") not in declared_manifest_files(role):
+        deferred = armed.get(role, {}).get("manifests_deferred_files") or []
+        if role not in armed or name.removesuffix(".j2") in deferred:
             continue
         seen.add((role, name))
-        labelled = homelab_role_label(text, role)
-        after = list(yaml_fast.safe_load_all(labelled))
-        # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
-        assert declared_in(labelled) == declared_in(text), f"{role}/{name}"
-        assert len(after) == len(before), f"{role}/{name} gained or lost a document"
-        for old, new in zip(before, after, strict=True):
-            assert new["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"
-            assert _without_role_label(new) == old, (
-                f"{role}/{name} changed beyond the label"
-            )
+        for doc in yaml_fast.safe_load_all(text):
+            if doc:
+                assert doc["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"
     assert {
         ("bazarr", "claim-default.yaml.j2"),
         ("littlelink", "service-default.yaml.j2"),
     } <= seen
+
+
+@pytest.mark.parametrize(
+    ("role", "name"),
+    [
+        ("observability", "grafana.yaml.j2"),
+        ("home-assistant", "configmap.yaml.j2"),
+        ("littlelink", "service-default.yaml.j2"),
+        ("sonarr", "deployment.yaml.j2"),
+    ],
+)
+def test_the_filter_adds_the_label_and_nothing_else(role: str, name: str) -> None:
+    """Real unlabelled renders, passed through the filter the wrapper calls.
+
+    Each document gains the label and nothing else: a Deployment's selector and pod-template
+    labels, a quoted string and a multi-line value all read back as rendered, and the host's
+    stdlib reader declares the same objects from the new bytes.
+    """
+    text = render_role_template(role, name)
+    before = [d for d in yaml_fast.safe_load_all(text) if d is not None]
+    assert before, f"{role}/{name} renders no document"
+    labelled = homelab_role_label(text, role)
+    after = list(yaml_fast.safe_load_all(labelled))
+    # manifest-prune-check.sh reads the staged bytes by position, without PyYAML.
+    assert declared_in(labelled) == declared_in(text), f"{role}/{name}"
+    assert len(after) == len(before), f"{role}/{name} gained or lost a document"
+    for old, new in zip(before, after, strict=True):
+        assert new["metadata"]["labels"][ROLE_LABEL] == role, f"{role}/{name}"
+        assert _without_role_label(new) == old, (
+            f"{role}/{name} changed beyond the label"
+        )
 
 
 def _staged_templates(role: str) -> set[str]:

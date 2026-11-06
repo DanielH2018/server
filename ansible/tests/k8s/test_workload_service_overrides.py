@@ -22,10 +22,10 @@ from _role_census import role_dirs
 from lib import yaml_fast
 from lib.k8s_roles import declared_manifest_files
 from lib.repo_paths import K8S_ROLES
+from lib.k8s_roles import MANIFESTS_PRUNE_DEFAULT
 from role_label import ROLE_LABEL
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "workload-service.yaml"
-MANIFESTS_DEFAULTS = K8S_ROLES / "manifests" / "defaults" / "main.yml"
 WORKLOAD_KINDS = {"Deployment": "deployment", "DaemonSet": "daemonset"}
 
 # The rule that maps each kind, by its recorded name.
@@ -62,7 +62,6 @@ MUST_FIND = frozenset(
 
 def _armed_roles() -> set[str]:
     """The roles whose `k8s/manifests` include arms the prune, and so renders the label."""
-    default = yaml_fast.safe_load(MANIFESTS_DEFAULTS.read_text())["manifests_prune"]
     armed = set()
     for role in role_dirs():
         main = role / "tasks" / "main.yml"
@@ -72,7 +71,10 @@ def _armed_roles() -> set[str]:
             include = task.get("ansible.builtin.include_role") or {}
             if include.get("name") != "k8s/manifests" or "tasks_from" in include:
                 continue
-            if (task.get("vars") or {}).get("manifests_prune", default) is True:
+            prune = (task.get("vars") or {}).get(
+                "manifests_prune", MANIFESTS_PRUNE_DEFAULT
+            )
+            if prune is True:
                 armed.add(role.name)
     return armed
 

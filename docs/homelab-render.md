@@ -110,8 +110,8 @@ under the same subdirectory names, after every pass that edits rendered text. Th
 `kustomization.yaml` lists the upstream files under `resources` and the patches under
 `patches`. A placeholder render refuses a tag that vendors files and whose own render holds a
 placeholder, because Flux would then substitute into the upstream bytes. No `$` in those bytes
-is escaped. `ansible/tests/_k8s_render.py:rendered_docs` renders templates only, so the fleet
-guards never read the vendored files. H1's *Vendored upstream manifests*
+is escaped. `ansible/tests/_k8s_render.py:rendered_docs` reads `render_tag`'s output, which
+holds no vendored file, so the fleet guards never read them. H1's *Vendored upstream manifests*
 (`docs/target-architecture/host/h1-cluster-config-to-flux.md`) says why that is accepted.
 
 A placeholder render with `--role` also writes the publish bundle, `DIR/flux/` and
@@ -238,6 +238,19 @@ its render tasks in `ansible/roles/k8s/manifests/tasks/main.yml`:
 `include_vars` reads the include whose `tasks_from` is absent or `main`, and refuses a role
 with none or with two. It keeps the `manifests_*` keys, and the renderer resolves only the
 five it reads: the two file lists, the deferred pair and `manifests_prune`.
+
+The renderer holds the manifests role's two defaults it needs as constants:
+`scripts/lib/k8s_roles.py:MANIFESTS_PRUNE_DEFAULT` and `ROLLOUT_TIMEOUT_DEFAULT`. The play still reads the role's own file, and
+`ansible/tests/k8s/test_shared_manifest_defaults.py` holds the two equal until R4.7 deletes the
+play.
+
+**The test harness reads this render.** `ansible/tests/_k8s_render.py:rendered_docs` and
+`rendered_texts` read `render_tag`'s files and deferred files in stub mode, so a fleet guard
+reads the labelled bytes. They stop before the restart stamp and placeholder mode.
+`render_role_template` renders one template unlabelled with `role_context`'s variables, for a
+guard that sets a value the inventory does not hold. A top-level template out of the file
+lists, such as pihole's macro file, is in neither walk. A guard that reads one names it in its
+own fallback table.
 
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
 `ansible/templates/`. It fails when a filter or test name does not resolve in the environment
