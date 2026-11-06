@@ -97,3 +97,69 @@ def test_an_inventory_value_calling_the_filter_is_flagged(calls_plugin):
     calls_plugin.write(PLUGIN, PLUGIN_TEXT.format(factor=3))
     with pytest.raises(narrow_setup.CannotNarrow, match="called by a value"):
         narrow(calls_plugin, *_refs(calls_plugin))
+
+
+def test_a_deleted_plugin_is_flagged(calls_plugin):
+    calls_plugin.remove(PLUGIN)
+    with pytest.raises(narrow_setup.CannotNarrow, match="was deleted"):
+        narrow(calls_plugin, *_refs(calls_plugin))
+
+
+def test_a_plugin_another_plugin_imports_is_flagged(calls_plugin):
+    """The importer's filters change with this one, and are not in this file's `filters()`."""
+    calls_plugin.write(
+        "ansible/filter_plugins/louder.py", "from demo_filters import demo_double\n"
+    )
+    calls_plugin.commit("a sibling imports it")
+    calls_plugin.write(PLUGIN, PLUGIN_TEXT.format(factor=3))
+    with pytest.raises(narrow_setup.CannotNarrow, match="imported by"):
+        narrow(calls_plugin, *_refs(calls_plugin))
+
+
+@pytest.mark.parametrize(
+    "filters, refusal",
+    [
+        ("dict(demo_double=demo_double)", "no literal dict"),
+        ("{**OTHER}", "no literal dict"),
+        ("{", "does not parse"),
+    ],
+    ids=["dict-call", "unpacked", "syntax-error"],
+)
+def test_filter_names_no_static_read_can_list_are_flagged(
+    calls_plugin, filters: str, refusal: str
+):
+    calls_plugin.write(
+        PLUGIN,
+        f"class FilterModule:\n    def filters(self):\n        return {filters}\n",
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match=refusal):
+        narrow(calls_plugin, *_refs(calls_plugin))
+
+
+@pytest.mark.parametrize(
+    "path, text",
+    [
+        ("ansible/inventory/group_vars/all.yml", "# `demo_double` doubles\nkey: 1\n"),
+        ("ansible/inventory/README.md", "`demo_double` doubles a list\n"),
+        ("ansible/inventory/_example.yml", 'shared: "{{ [1] | demo_double }}"\n'),
+    ],
+    ids=["whole-line-comment", "markdown", "file-no-host-loads"],
+)
+def test_an_inventory_mention_that_cannot_call_the_filter_is_clean(
+    calls_plugin, path: str, text: str
+):
+    calls_plugin.write(path, text)
+    calls_plugin.commit("the inventory mentions the filter")
+    calls_plugin.write(PLUGIN, PLUGIN_TEXT.format(factor=3))
+    assert narrow(calls_plugin, *_refs(calls_plugin)) == frozenset({"beta"})
+
+
+def test_a_helper_method_beside_filters_does_not_hide_its_names(calls_plugin):
+    calls_plugin.write(
+        PLUGIN,
+        PLUGIN_TEXT.format(factor=3).replace(
+            "class FilterModule:\n",
+            "class FilterModule:\n    def helper(self):\n        return []\n\n",
+        ),
+    )
+    assert narrow(calls_plugin, *_refs(calls_plugin)) == frozenset({"beta"})

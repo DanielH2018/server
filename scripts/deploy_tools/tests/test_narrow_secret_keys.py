@@ -12,8 +12,10 @@ import pytest
 
 import narrow_setup
 import secret_setup_readers
+from deploy_tools.narrow_lib import role_reads
 from deployer_lib.deploy_setup_roles import SECRET_READERS_REFUSED_EXIT
 from lib.exit_codes import DEPLOY_BROAD, FAILED
+from lib.narrow_git import CannotNarrow
 
 from _narrow_fixtures import Tree, _refs, build_tree
 
@@ -255,3 +257,165 @@ def test_a_shipper_reading_none_of_the_secrets_keys_keeps_its_narrow_answer(
 def test_the_deployer_reads_the_scripts_refusal_code_and_no_crash_shares_it():
     """The tick merges on a refusal and parks on a crash, which Python exits 1 with."""
     assert SECRET_READERS_REFUSED_EXIT == DEPLOY_BROAD != FAILED
+
+
+# ── the `role_reads` rules, through the script the tick runs ─────────────────────────────────
+EXTRA_VARS = "ansible/inventory/group_vars/extra.yml"
+SETUP_READER = "ansible/roles/setup/claude_code/templates/env.j2"
+
+
+def _refusal(tree: Tree, capsys, *argv: str) -> tuple[int, str]:
+    """`secret_setup_readers.py` over the tree's last commit: its exit and its stderr."""
+    old, new = _refs(tree)
+    rc = secret_setup_readers.main([*argv, old, new, "--repo", str(tree.root)])
+    return rc, capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "value",
+    ['consumer: "{{ setup_only_token }}"\n', "plain: 1  # setup_only_token\n"],
+    ids=["templated-value", "trailing-comment"],
+)
+def test_a_secret_another_inventory_value_reads_is_flagged(
+    tree: Tree, capsys, value: str
+):
+    """The value's own parsed form does not move, so its readers stay out of the key walk."""
+    tree.write(EXTRA_VARS, value)
+    tree.commit("an inventory value names the secret")
+    tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+    rc, err = _refusal(tree, capsys)
+    assert rc == DEPLOY_BROAD
+    assert "read by another value" in err
+
+
+@pytest.mark.parametrize(
+    "path, text",
+    [
+        (EXTRA_VARS, "setup_only_token: plain\n"),
+        (EXTRA_VARS, "# setup_only_token is documented here\nplain: 1\n"),
+        ("ansible/inventory/_example.yml", 'consumer: "{{ setup_only_token }}"\n'),
+    ],
+    ids=["its-own-definition", "whole-line-comment", "file-no-host-loads"],
+)
+def test_an_inventory_mention_that_reads_nothing_is_clean(
+    tree: Tree, capsys, path: str, text: str
+):
+    tree.write(path, text)
+    tree.commit("the inventory mentions the secret")
+    tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+    rc, found = _setup_readers(tree, capsys)
+    assert rc == 0
+    assert found["paths"] == [SETUP_READER]
+
+
+def test_a_secret_a_shared_template_names_is_flagged(tree: Tree, capsys):
+    """A setup role may import that template, and the key walk does not follow it."""
+    tree.write("ansible/templates/shared.yml.j2", "k: {{ setup_only_token }}\n")
+    tree.commit("a shared template names the secret")
+    tree.write(SECRETS, _with(BASE_SECRETS, "setup_only_token", "xxx"))
+    rc, err = _refusal(tree, capsys)
+    assert rc == DEPLOY_BROAD
+    assert "shared template shared.yml.j2" in err
+
+
+def test_deploy_tags_skips_a_key_only_the_manifests_guard_map_names(tree: Tree, capsys):
+    """The guard map renders no key. Counted, it maps to `manifests`, which no tag applies."""
+    tree.write(SECRETS, _with(BASE_SECRETS, "guard_only_key", "yyy"))
+    assert _deploy_tags(tree, capsys) == (0, "")
+
+
+def test_deploy_tags_adds_the_role_rendering_a_key_through_lookup(tree: Tree, capsys):
+    """uptime-kuma's shape: it renders a push token out of monitor-bridge's `files/`."""
+    tree.write(
+        "ansible/roles/k8s/sonarr/files/table.py",
+        "TOKEN = '{{ jellyfin_api_key }}'\n",
+    )
+    tree.write(
+        "ansible/roles/k8s/radarr/templates/tiles.yaml.j2",
+        "{{ lookup('template', playbook_dir + '/roles/k8s/sonarr/files/table.py') }}\n",
+    )
+    tree.commit("a cross-role lookup")
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    assert _deploy_tags(tree, capsys) == (0, "jellyfin,radarr,sonarr")
+
+
+def test_deploy_tags_follows_a_macro_another_macro_imports(tree: Tree, capsys):
+    """The two macros import each other, so the walk also has to stop."""
+    tree.write(
+        "ansible/templates/inner.yml.j2",
+        "{% from 'outer.yml.j2' import o %}k: {{ jellyfin_api_key }}\n",
+    )
+    tree.write("ansible/templates/outer.yml.j2", "{% from 'inner.yml.j2' import i %}\n")
+    tree.write(
+        "ansible/roles/k8s/lidarr/templates/d.yaml.j2",
+        "{% from 'outer.yml.j2' import o %}\n",
+    )
+    tree.commit("a macro chain")
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    assert _deploy_tags(tree, capsys) == (0, "jellyfin,lidarr")
+
+
+def _include(tree: Tree, caller: str, helper: str) -> None:
+    tree.write(
+        f"ansible/roles/k8s/{caller}/tasks/{helper}.yml",
+        f"- ansible.builtin.include_role:\n    name: k8s/{helper}\n",
+    )
+
+
+def test_deploy_tags_maps_a_shared_role_to_its_callers_and_theirs(tree: Tree, capsys):
+    """`helper` and `middle` call each other, so the walk also has to stop."""
+    tree.write(
+        "ansible/roles/k8s/helper/templates/s.yaml.j2", "k: {{ jellyfin_api_key }}\n"
+    )
+    _include(tree, "middle", "helper")
+    _include(tree, "helper", "middle")
+    _include(tree, "lidarr", "middle")
+    tree.commit("a shared role reads the key")
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    assert _deploy_tags(tree, capsys) == (0, "jellyfin,lidarr")
+
+
+def test_deploy_tags_refuses_a_shared_role_nothing_calls(tree: Tree, capsys):
+    tree.write(
+        "ansible/roles/k8s/orphan/templates/s.yaml.j2", "k: {{ jellyfin_api_key }}\n"
+    )
+    tree.commit("a role with no entry and no caller reads the key")
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    rc, err = _refusal(tree, capsys, "--deploy-tags")
+    assert rc == DEPLOY_BROAD
+    assert "orphan has no containers_list entry and no caller" in err
+
+
+def test_deploy_tags_refuses_a_host_vars_file_that_does_not_parse(tree: Tree, capsys):
+    tree.write("ansible/inventory/host_vars/daniel-box.yml", "containers_list: [\n")
+    tree.write(SECRETS, _with(BASE_SECRETS, "jellyfin_api_key", "zzz"))
+    rc, err = _refusal(tree, capsys, "--deploy-tags")
+    assert rc == DEPLOY_BROAD
+    assert "does not parse" in err
+
+
+def _ctx(tree: Tree, ref: str = "HEAD") -> role_reads.Context:
+    return role_reads.Context(tree.root, ref, set(), {}, lambda _m: None)
+
+
+def test_a_macro_scan_drops_a_filter_plugin_naming_the_macro(tree: Tree):
+    """`toposort.py` names `ingressroute.yml.j2`, and can never render it."""
+    hits = ["ansible/filter_plugins/toposort.py"]
+    assert role_reads.sort_hits(hits, "the macro m", _ctx(tree)).roles == set()
+
+
+def test_a_variable_a_filter_plugin_names_is_flagged(tree: Tree):
+    hits = ["ansible/filter_plugins/toposort.py"]
+    with pytest.raises(CannotNarrow, match="which every deploy runs"):
+        role_reads.sort_hits(hits, "the variable v", _ctx(tree), "v")
+
+
+def test_a_macro_scan_refuses_an_inventory_hit_it_cannot_judge(tree: Tree):
+    hits = ["ansible/inventory/group_vars/all.yml"]
+    with pytest.raises(CannotNarrow, match="with no key"):
+        role_reads.sort_hits(hits, "the macro m", _ctx(tree))
+
+
+def test_a_grep_git_cannot_run_is_flagged(tree: Tree):
+    with pytest.raises(CannotNarrow, match="failed"):
+        role_reads.grep(_ctx(tree, "0" * 40), "k", word=True)
