@@ -650,3 +650,6 @@ keyless
 
 # The read-only root inspector and its socket client (docs/claude-agent-user.md, #6350)
 rootq('s)?
+
+# Returning a flux-owned service to Ansible (docs/flux-deploy-plane.md)
+handback

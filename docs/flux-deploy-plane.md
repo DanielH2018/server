@@ -344,9 +344,9 @@ or every object in it declares nothing, and the census cannot tell the two apart
 ## Handing a service back
 
 A service whose `containers_list` entry sets `owner: flux` is applied by Flux, and every
-Ansible path skips it. Handing it back to Ansible takes two PRs, in this order. Every later
-return of a service to Ansible follows the same order. A retirement takes two PRs as well, in
-the order *Retiring a flux-owned service* states.
+Ansible path skips it. Handing it back to Ansible is the two-PR handback, in this order. Every
+later return of a service to Ansible follows the same order. A retirement takes two PRs as
+well, in the order *Retiring a flux-owned service* states.
 
 1. **PR H1 sets `owner: released`.** Every Ansible path still skips the service. The next
    bundle omits `flux/<tag>.yaml`, so the root Kustomization prunes the `<tag>` Kustomization,
@@ -357,8 +357,36 @@ the order *Retiring a flux-owned service* states.
 1. **Wait for `NotFound`.**
    `kubectl get kustomizations.kustomize.toolkit.fluxcd.io -n flux-system <tag>` must return
    `NotFound`.
-1. **PR H2 removes `owner`.** Its body quotes the `NotFound`. Once it merges, the deployer
-   narrows the edit to the service's tag and applies it, and `land.sh` deploys it client-side.
+1. **PR H2 removes `owner` and moves the role's render metadata.** Its body quotes the
+   `NotFound`. Once it merges, the deployer narrows the edit to the service's tag and applies
+   it, and `land.sh` deploys it client-side.
+
+**H2 moves the render metadata in the same PR, before any Ansible run reads the role.** The
+renderer reads this metadata from the role's `defaults/main.yml`. The Ansible path needs it on
+the role's includes:
+
+- **Each `scripts/renderer/renderer_lib/task_inputs.py:RENDER_KEYS` key the role's defaults
+  set** moves to the `vars:` of its `k8s/manifests` include, with its comment and any
+  `# DECIDED:` marker. Delete the key from the defaults, because `include_vars` raises on a key
+  set in both places.
+- **Each `image_builder_builds` entry** moves to the `vars:` of a `k8s/image-builder` include
+  of its own, with its `when:`. Ansible does not read the list, so a bare include builds
+  nothing it can name, and `image_builder_sites` raises on a role that sets both.
+- **`test_no_role_keeps_render_metadata_on_its_include_is_clean`** in
+  `scripts/renderer/tests/test_renderer_task_inputs.py` fails on any such key, so H2 exempts
+  the role there.
+
+`manifests_prune` is why the order matters. `k8s/manifests` sets it to `true` in its own
+defaults, and a role's own defaults outrank its caller's defaults, so a caller's
+`manifests_prune: false` in `defaults/main.yml` has no effect on the Ansible path. authelia and
+nut hold their `# DECIDED:` opt-outs there. A handback of either one that skips this step arms
+the prune those markers hold off, on the first Ansible deploy after H2. No other `RENDER_KEYS`
+key has a default in `k8s/manifests`, so a bare include still reads it from the caller. Those
+keys move too, so that one role's metadata has one location.
+
+A handback ends with R4. [R4's plan](target-architecture/render/r4-delete-k8s-ansible-path.md)
+makes its PR 5 raise on any of these keys under `tasks/`, and its PR 8 deletes the task files
+that hold the includes.
 
 Between H1 and H2 the service has no writer and keeps serving its last spec, so the two
 writers never overlap. `land.sh` refuses to merge H2 while the Kustomization exists
