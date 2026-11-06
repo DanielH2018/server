@@ -1820,7 +1820,7 @@ The steps merged in this order.
     - **Move `declared_denylist` out of `deploy_k8s.py`.** `reconcile_denylist` calls it, and
       it reads `_DECLARATION_RE`, `_TRUE_VALUES` and `SHARED_K8S_ROLES` from the same module.
       All four move into `deploy_phases.py` beside their caller. `deploy_logic.py`'s
-      re-export and `ansible/tests/deploy/test_denylist_parsers_agree.py` follow them.
+      re-export and `test_denylist_parsers_agree.py` follow them.
     - **Its own tick runs the old deployer, so the PR carries no deploy-plane path.** The tick
       that fast-forwards D6.1 still runs the code D6.1 replaces, which applies `deploy.yml`
       for a `_BROAD_DEPLOY_PREFIXES` path and writes a hold on failure. At `70591c307`,
@@ -2756,7 +2756,7 @@ Each risk names the failure class from `docs/failure-classes.md` where one fits.
       `ansible/tests/deploy/`, arm 1's tests in `scripts/validate/tests/`, and the kept arms'
       tests renamed with the module;
     - `scripts/deploy_tools/tests/test_reach.py`, for `Reach.touched`;
-    - `ansible/tests/deploy/test_denylist_parsers_agree.py`, whose import follows
+    - `test_denylist_parsers_agree.py`, whose import follows
       `declared_denylist` into `deploy_phases.py`;
     - the two tick tests in `test_gitops_deploy_main_branches.py`, the promotion half of
       D2's `cs.flux` test, and the deployer half of
