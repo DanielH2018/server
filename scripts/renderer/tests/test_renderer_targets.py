@@ -39,13 +39,17 @@ def _old_set(host_vars: Path, roles: Path) -> set[str]:
 
 
 def test_the_old_and_new_predicates_agree_on_the_tree():
+    """A role with no `tasks/` renders, and the old predicate cannot see it."""
     old = {
         entry["name"]
         for entry in containers_entries(HOST_VARS / f"{K8S_HOST}.yml")
         if entry_platform(entry) == "k8s"
         and includes_manifests(K8S_ROLES / entry["name"])
     }
-    assert set(render_targets(K8S_HOST)) == old
+    new = {
+        tag for tag in render_targets(K8S_HOST) if (K8S_ROLES / tag / "tasks").is_dir()
+    }
+    assert new == old
 
 
 def test_a_role_with_nothing_to_render_is_left_out_of_both(tmp_path):
