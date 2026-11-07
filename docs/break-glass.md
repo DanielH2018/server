@@ -334,6 +334,7 @@ Check these before you start:
 - A client connects from outside the LAN through the cluster's wg-easy on `51820/udp` (item 6).
   The Pi's wg-easy is down for the whole rebuild.
 - The old SD card is out of the Pi and kept unchanged, because it is the rollback.
+- The Pi is on Ethernet, because script step 4 masks `wpa_supplicant.service`.
 - daniel-box's host-package repository answers. Script step 5 installs from it and exits 1 when
   it cannot. A rerun continues, because each script step is idempotent.
 - `pi-peer-backup-data` is on the cluster. After a cluster loss, restore it first by
@@ -344,123 +345,123 @@ that role fails its `pi-peer-backup-verify` gate. A builder run that changes onl
 daniel-box's packages stages the Pi as the canary, so its gate stays open until step 10.
 
 1. To name the host, flash stock Ubuntu 24.04 for Raspberry Pi and edit `user-data` on the card's
-   boot partition before first boot. The script refuses the image's default hostname, `ubuntu`.
-   The script's step 5 also turns off SSH passwords, so add the operator's key here.
+    boot partition before first boot. The script refuses the image's default hostname, `ubuntu`.
+    The script's step 5 also turns off SSH passwords, so add the operator's key here.
 
-   ```yaml
-   hostname: daniel-pi
-   ssh_authorized_keys:
-     - <the operator's public key>
-   ```
+    ```yaml
+    hostname: daniel-pi
+    ssh_authorized_keys:
+      - <the operator's public key>
+    ```
 
 2. Copy `hosts/bootstrap-host.sh` and `hosts/keys/homelab-archive-keyring.gpg` from a clone or
-   the item 8 bundle onto the boot partition. Both files are public.
+    the item 8 bundle onto the boot partition. Both files are public.
 3. Boot the Pi and log in at the console. Install `age`, because script step 3 runs `age-keygen`
-   before the package that depends on `age` installs. Create the `ssh-users` group and add
-   `ubuntu`, because the package's `AllowGroups ssh-users` otherwise locks out `ubuntu` and
-   `pi-peer-backup`.
+    before the package that depends on `age` installs. Create the `ssh-users` group and add
+    `ubuntu`, because the package's `AllowGroups ssh-users` otherwise locks out `ubuntu` and
+    `pi-peer-backup`.
 
-   ```bash
-   cloud-init status --wait
-   sudo apt-get update
-   sudo apt-get install -y age
-   sudo groupadd -f ssh-users
-   sudo usermod -aG ssh-users ubuntu
-   hostname -I
-   ```
+    ```bash
+    cloud-init status --wait
+    sudo apt-get update
+    sudo apt-get install -y age
+    sudo groupadd -f ssh-users
+    sudo usermod -aG ssh-users ubuntu
+    hostname -I
+    ```
 
-   The address must equal `server_ip` in `ansible/inventory/host_vars/daniel-pi.yml`. The tree
-   declares no address for the Pi, so correct the router's lease if it differs.
+    The address must equal `server_ip` in `ansible/inventory/host_vars/daniel-pi.yml`. No package
+    pins the address, so correct the router's DHCP reservation if it differs.
 4. To create the age key and run the one-time host steps, run the script through `sh`, because
-   the boot partition is FAT. It prints the new public key.
+    the boot partition is FAT. It prints the new public key.
 
-   ```bash
-   sudo sh /boot/firmware/bootstrap-host.sh daniel-pi --until 4
-   ```
+    ```bash
+    sudo sh /boot/firmware/bootstrap-host.sh daniel-pi --until 4
+    ```
 
 5. To let the first package decrypt its secrets, add the new key to the
-   `vars/hosts/daniel-pi\.sops\.yaml$` rule in `ansible/.sops.yaml`, **without removing the old
-   key**. `compose-run` refuses to start the project without `compose.env`, and
-   `homelab-secrets` cannot write that file until the package carries ciphertext for this key.
-   On daniel-box, run the re-encrypt from `ansible/`, commit, and merge through a PR. The merged
-   PR's host wait does not settle until step 10.
+    `vars/hosts/daniel-pi\.sops\.yaml$` rule in `ansible/.sops.yaml`, **without removing the old
+    key**. `compose-run` refuses to start the project without `compose.env`, and
+    `homelab-secrets` cannot write that file until the package carries ciphertext for this key.
+    On daniel-box, run the re-encrypt from `ansible/`, commit, and merge through a PR. The merged
+    PR's host wait does not settle until step 10.
 
-   ```bash
-   sops updatekeys vars/hosts/daniel-pi.sops.yaml
-   ```
+    ```bash
+    sops updatekeys vars/hosts/daniel-pi.sops.yaml
+    ```
 
-   Wait until `uv run python scripts/diagnostics/probe.py builder` lists a `homelab-daniel-pi`
-   version built from that merge.
+    Wait until `uv run python scripts/diagnostics/probe.py builder` lists a `homelab-daniel-pi`
+    version built from that merge.
 6. To restore the WireGuard keys, first create the directories on the Pi. The first line runs as
-   `ubuntu`, because `systemd-tmpfiles` refuses a parent that `ubuntu` does not own.
+    `ubuntu`, because `systemd-tmpfiles` refuses a parent that `ubuntu` does not own.
 
-   ```bash
-   install -d /home/ubuntu/server/containers/wg-easy
-   sudo install -d -o root -g root -m 0755 /home/ubuntu/server/containers/wg-easy/config
-   ```
+    ```bash
+    install -d /home/ubuntu/server/containers/wg-easy
+    sudo install -d -o root -g root -m 0755 /home/ubuntu/server/containers/wg-easy/config
+    ```
 
-   Then copy `wg0.conf` and `wg0.json` from daniel-box, outside the 23:00 window of the
-   `pi-peer-backup` CronJob. The pipe writes no client private key to daniel-box's disk. The
-   Pi's new SSH host key makes `ssh` refuse until `ssh-keygen -R` removes the old entry, so run
-   that once for `daniel-pi` and once for the inventory's `server_ip`.
+    Then copy `wg0.conf` and `wg0.json` from daniel-box, outside the 23:00 window of the
+    `pi-peer-backup` CronJob. The pipe writes no client private key to daniel-box's disk. The
+    Pi's new SSH host key makes `ssh` refuse until `ssh-keygen -R` removes the old entry, so run
+    that once for `daniel-pi` and once for the inventory's `server_ip`.
 
-   ```bash
-   image=$(sudo k3s kubectl -n homelab get cronjob pi-peer-backup \
-       -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}')
-   sudo k3s kubectl -n homelab apply -f - << EOF
-   apiVersion: v1
-   kind: Pod
-   metadata:
-     name: wg-easy-restore
-   spec:
-     restartPolicy: Never
-     securityContext: {runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000}
-     containers:
-       - name: restore
-         image: $image
-         command: [sleep, "3600"]
-         volumeMounts: [{name: data, mountPath: /data}]
-     volumes:
-       - name: data
-         persistentVolumeClaim: {claimName: pi-peer-backup-data}
-   EOF
-   sudo k3s kubectl -n homelab wait --for=condition=Ready pod/wg-easy-restore --timeout=300s
-   sudo k3s kubectl -n homelab exec wg-easy-restore -- \
-       tar -C /data/peers -cf - wg0.conf wg0.json |
-       ssh daniel-pi \
-       'sudo tar -C /home/ubuntu/server/containers/wg-easy/config --no-same-owner -xf -'
-   sudo k3s kubectl -n homelab delete pod wg-easy-restore
-   ```
+    ```bash
+    image=$(sudo k3s kubectl -n homelab get cronjob pi-peer-backup \
+        -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}')
+    sudo k3s kubectl -n homelab apply -f - << EOF
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: wg-easy-restore
+    spec:
+      restartPolicy: Never
+      securityContext: {runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000}
+      containers:
+        - name: restore
+          image: $image
+          command: [sleep, "3600"]
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: pi-peer-backup-data}
+    EOF
+    sudo k3s kubectl -n homelab wait --for=condition=Ready pod/wg-easy-restore --timeout=300s
+    sudo k3s kubectl -n homelab exec wg-easy-restore -- \
+        tar -C /data/peers -cf - wg0.conf wg0.json |
+        ssh daniel-pi \
+        'sudo tar -C /home/ubuntu/server/containers/wg-easy/config --no-same-owner -xf -'
+    sudo k3s kubectl -n homelab delete pod wg-easy-restore
+    ```
 
 7. To install the packages and write the first integrity baselines, run the whole script. It
-   takes over an hour on this board. When it stops, read the reason on stderr, fix the cause, and
-   run the same command again. A rerun resumes an unfinished baseline.
+    takes over an hour on this board. When it stops, read the reason on stderr, fix the cause, and
+    run the same command again. A rerun resumes an unfinished baseline.
 
-   ```bash
-   sudo sh /boot/firmware/bootstrap-host.sh daniel-pi
-   ```
+    ```bash
+    sudo sh /boot/firmware/bootstrap-host.sh daniel-pi
+    ```
 
-   Script step 5 prints a warning and continues when `packages.azlux.fr` does not answer. Rerun
-   the script once that host answers, or `/var/log` stays on the SD card.
+    Script step 5 prints a warning and continues when `packages.azlux.fr` does not answer. Rerun
+    the script once that host answers, or `/var/log` stays on the SD card.
 8. To start the Compose project and move `/var/log` to RAM, reboot the Pi. Script step 6 only
-   installs the Docker engine, and `log2ram` mounts only at boot. After the reboot, check each:
+    installs the Docker engine, and `log2ram` mounts only at boot. After the reboot, check each:
 
-   ```bash
-   findmnt /var/log
-   ls /var/lib/aide/aide.db /var/lib/rkhunter/db/rkhunter.dat
-   systemctl is-enabled dailyaidecheck.timer
-   systemctl is-active homelab-compose.service
-   sudo docker ps
-   ```
+    ```bash
+    findmnt /var/log
+    ls /var/lib/aide/aide.db /var/lib/rkhunter/db/rkhunter.dat
+    systemctl is-enabled dailyaidecheck.timer
+    systemctl is-active homelab-compose.service
+    sudo docker ps
+    ```
 
-   `findmnt` shows a tmpfs, `systemctl is-enabled` prints `masked`, `systemctl is-active` prints
-   `active`, and `docker ps` lists `wg-easy`, `alloy`, `autoheal` and `docker-proxy` running.
+    `findmnt` shows a tmpfs, `systemctl is-enabled` prints `masked`, `systemctl is-active` prints
+    `active`, and `docker ps` lists `wg-easy`, `alloy`, `autoheal` and `docker-proxy` running.
 9. To re-pin the host key, compare the key `ssh` shows with `ssh-keygen -lf
-   /etc/ssh/ssh_host_ed25519_key.pub` at the console. Then write the output of
-   `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
-   `ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
-   PR. `promote` applies the new `pi-peer-backup-ssh` Secret. Each other account that has the
-   old key in its `known_hosts`, such as the agent user, needs the same `ssh-keygen -R`.
+    /etc/ssh/ssh_host_ed25519_key.pub` at the console. Then write the output of
+    `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
+    `ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
+    PR. `promote` applies the new `pi-peer-backup-ssh` Secret. Each other account that has the
+    old key in its `known_hosts`, such as the agent user, needs the same `ssh-keygen -R`.
 10. To make the Pi report the applied version, start the updater on the Pi. Only the updater
     writes `homelab_host_applied_info`, and its poll starts it only for a newer publish.
 
@@ -482,7 +483,7 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     the second must read 0. A landing's host wait reads the first series, so a Pi that cannot
     write its textfile directory leaves every later host landing waiting.
 
-    Then prove the two remaining paths. To prove the peer backup, run
+    Then prove the two remaining paths, which are **operator-only**. To prove the peer backup, run
     `sudo k3s kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup` on
     daniel-box, and read its verdict with
     `uv run python scripts/diagnostics/probe.py loki-query '{container="pi-peer-backup"}'`. Delete
