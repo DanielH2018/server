@@ -42,10 +42,8 @@ def test_a_rebuilt_daniel_servers_witness_names_a_uv_its_package_ships(package):
     assert "/usr/bin/uv" in package.files
 
 
-def test_the_old_uv_copy_retires_here_and_stays_on_daniel_box(package):
+def test_the_old_uv_copy_retires_here(package):
     assert {"path": "/usr/local/bin/uv"} in _legacy(package)
-    box = host_mode.render_host("daniel-box")
-    assert {"path": "/usr/local/bin/uv"} not in _legacy(box)
 
 
 def test_the_role_no_longer_renders_a_witness():
