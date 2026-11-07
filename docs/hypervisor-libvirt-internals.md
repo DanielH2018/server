@@ -149,7 +149,8 @@ and `server.log` — pruned at `hypervisor_etcd_drill_log_retention_days`.
 
 ## The SUC rehearsal mode
 
-`etcd-restore-drill-vm --rehearse-suc` (H6.1b2) rehearses the `system-upgrade` Plan on this
+`/usr/lib/homelab/etcd-restore-drill-vm --rehearse-suc` (H6.1b2), run after
+`/usr/lib/homelab/etcd-drill-prepare` on a host that has not drilled yet, rehearses the `system-upgrade` Plan on this
 guest before it touches production. It is run by hand and never scheduled. The H6 plan's
 *Rehearsal in a drill guest* section owns the design. This section holds what the code does.
 
