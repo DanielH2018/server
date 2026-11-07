@@ -1,6 +1,6 @@
 # renovate_notify internals — the sandbox, the parsers and the module layout
 
-`ansible/roles/setup/renovate_notify/CLAUDE.md` is the role doc, and it keeps the operating
+`hosts/components/renovate-notify/CLAUDE.md` is the role doc, and it keeps the operating
 rules: the five arms, the fingerprint gate, the two ways the stuck-pending clock goes inert.
 This page is the working-out behind them — why the unit's sandbox needs two overrides, how the
 dashboard parsers were measured, where the logic lives and what a dry run does not prove. A
@@ -8,7 +8,7 @@ session reads it when it edits that code, not on every touch of the role (#2989)
 
 ## The unit is sandboxed, and two things about that surprise people
 
-Unlike `renovate-agent.service`, this one is confined — it queries HTTPS and writes only its
+Unlike `homelab-renovate-agent.service`, this one is confined — it queries HTTPS and writes only its
 state dir, so `ProtectSystem=strict` + `ProtectHome=read-only` cost nothing. Two consequences
 are load-bearing rather than incidental:
 

@@ -194,8 +194,6 @@ def test_other_setup_roles_stamp_their_own_artifacts():
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/service.yml",
-        "ansible/roles/setup/renovate_notify/tasks/service.yml",
-        "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
         # THIS LIST IS AN ENUMERATION: it cannot see the next new role. Deriving it means
         # asserting that every `src:`-referenced .j2 under roles/setup/ is stamped, which would
@@ -249,8 +247,6 @@ def test_every_role_that_deploys_code_declares_its_pairs():
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/code.yml",
-        "ansible/roles/setup/renovate_notify/tasks/code.yml",
-        "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
         "ansible/roles/setup/k3s/tasks/health-crons.yml",
     }
@@ -397,8 +393,6 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
 _STAMP_SITES = (
     "ansible/roles/setup/k3s/tasks/health-crons.yml",
     "ansible/roles/setup/gitops_deploy/tasks/service.yml",
-    "ansible/roles/setup/renovate_notify/tasks/service.yml",
-    "ansible/roles/setup/fake_remux/tasks/main.yml",
     "ansible/roles/setup/initial_setup/tasks/crons.yml",
 )
 _STAMP_REF = '"{{ role_path }}/../common/tasks/stamp_render.yml"'
@@ -413,8 +407,8 @@ def test_every_stamp_site_imports_rather_than_includes():
     filtered out, and the run reports changed=0 with no fragment on disk. `import_tasks` is
     static — the tags are attached to the imported tasks at parse time, so they are selected too.
 
-    The four other roles do not show it. Their stamps sit under a ROLE-level tag
-    (`gitops_deploy`, `renovate_notify`, `fake_remux`), which does reach a dynamic include's
+    The other roles do not show it. Their stamps sit under a ROLE-level tag
+    (`gitops_deploy`), which does reach a dynamic include's
     children.
     """
     for rel in _STAMP_SITES:

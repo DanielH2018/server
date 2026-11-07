@@ -39,7 +39,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from _setup_render import render_component_text, render_setup_text
+from _setup_render import render_component_text
 from deploy_tools.bundle_census import published_tags
 from deploy_tools.land_lib import handoff, options, promotion
 from deploy_tools.chained_timeout import VERIFY_CAP_S
@@ -54,8 +54,8 @@ from renderer.renderer_lib import images
 LANDERS = {
     "claude-land": (render_component_text, "claude-code", "claude-land@.service.j2"),
     "renovate-agent-land": (
-        render_setup_text,
-        "renovate_agent",
+        render_component_text,
+        "renovate-agent",
         "renovate-agent-land@.service.j2",
     ),
 }

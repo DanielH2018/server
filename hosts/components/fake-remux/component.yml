@@ -1,0 +1,71 @@
+# The fake-remux detector, reconciler and mkv repair on daniel-box as packaged timers (H7.37, H7.11,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.37 the fake_remux role installed
+# them as four crons. CLAUDE.md beside this file holds the rules and the contract.
+#
+# The services carry no OnFailure= alert, as the crons had none. Each state file's verdict is
+# what pages, and `flock -w 600` losing its wait is not a broken unit. The three that touch media
+# keep `policy: manual`, so reconcile never restarts one mid-swap.
+units:
+  homelab-fake-remux-scan.service: {policy: manual}
+  homelab-fake-remux-reconcile.service: {policy: manual}
+  homelab-mkv-attachment-repair.service: {policy: manual}
+depends:
+  - ffmpeg
+  # mkvpropedit, which renames a font attachment in an mkv header without re-encoding.
+  - mkvtoolnix
+outputs:
+  # The path stays /etc/autofix-fake-remux/config.env: both scripts fall back to it, and a wrong
+  # path reports `disabled (no Sonarr API key)` and exits 0, scanning nothing.
+  - src: templates/fake-remux.config.env.j2
+    path: /etc/autofix-fake-remux/config.env
+    owner: ubuntu
+    group: ubuntu
+    mode: "0600"
+    keys: [sonarr_api_key, arr_discord_webhook_url]
+    persist: false
+    link: true
+files:
+  - {src: files/fake_remux.py, dst: /usr/lib/homelab/fake-remux/fake_remux.py, mode: "0755"}
+  - {src: files/state_push.py, dst: /usr/lib/homelab/fake-remux/state_push.py, mode: "0755"}
+  - {src: files/mkv_attachment_repair.py, dst: /usr/lib/homelab/fake-remux/mkv_attachment_repair.py, mode: "0755"}
+  - {src: files/mkv_attachment_logic.py, dst: /usr/lib/homelab/fake-remux/mkv_attachment_logic.py}
+  - {src: files/fake_remux_lib/fake_remux_scan.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_scan.py}
+  - {src: files/fake_remux_lib/fake_remux_logic.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_logic.py}
+  - {src: files/fake_remux_lib/fake_remux_replace.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_replace.py}
+  - {src: files/fake_remux_lib/fake_remux_replace_logic.py, dst: /usr/lib/homelab/fake-remux/fake_remux_lib/fake_remux_replace_logic.py}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/fake-remux/host_lib.py}
+  - {src: templates/policy.json.j2, dst: /usr/lib/homelab/fake-remux/policy.json}
+  - {src: templates/fake-remux-health.sh.j2, dst: /usr/lib/homelab/fake-remux-health, mode: "0755"}
+  - {src: units/homelab-fake-remux-scan.service.j2, dst: /usr/lib/systemd/system/homelab-fake-remux-scan.service}
+  - {src: units/homelab-fake-remux-scan.timer.j2, dst: /usr/lib/systemd/system/homelab-fake-remux-scan.timer}
+  - {src: units/homelab-fake-remux-reconcile.service.j2, dst: /usr/lib/systemd/system/homelab-fake-remux-reconcile.service}
+  - {src: units/homelab-fake-remux-reconcile.timer.j2, dst: /usr/lib/systemd/system/homelab-fake-remux-reconcile.timer}
+  - {src: units/homelab-mkv-attachment-repair.service.j2, dst: /usr/lib/systemd/system/homelab-mkv-attachment-repair.service}
+  - {src: units/homelab-mkv-attachment-repair.timer.j2, dst: /usr/lib/systemd/system/homelab-mkv-attachment-repair.timer}
+  - {src: units/homelab-fake-remux-health.service.j2, dst: /usr/lib/systemd/system/homelab-fake-remux-health.service}
+  - {src: units/homelab-fake-remux-health.timer.j2, dst: /usr/lib/systemd/system/homelab-fake-remux-health.timer}
+enable:
+  homelab-fake-remux-scan.timer: timers.target
+  homelab-fake-remux-reconcile.timer: timers.target
+  homelab-mkv-attachment-repair.timer: timers.target
+  homelab-fake-remux-health.timer: timers.target
+# What the fake_remux role installed before H7.37. Reconcile retires each once the timers above have
+# started. /var/lib/autofix-fake-remux stays: it holds the ledger and the three state files.
+legacy:
+  - {cron_file: fake-remux-scan}
+  - {cron_file: fake-remux-reconcile}
+  - {cron_file: mkv-attachment-repair}
+  - {cron_file: fake-remux-health}
+  - {path: /usr/local/bin/fake-remux-health.sh}
+  - {path: /etc/autofix-fake-remux/policy.json}
+  - {path: /opt/autofix-fake-remux/host_lib.py}
+  - {path: /opt/autofix-fake-remux/state_push.py}
+  - {path: /opt/autofix-fake-remux/fake_remux.py}
+  - {path: /opt/autofix-fake-remux/mkv_attachment_repair.py}
+  - {path: /opt/autofix-fake-remux/mkv_attachment_logic.py}
+  - {path: /opt/autofix-fake-remux/fake_remux_lib/fake_remux_scan.py}
+  - {path: /opt/autofix-fake-remux/fake_remux_lib/fake_remux_logic.py}
+  - {path: /opt/autofix-fake-remux/fake_remux_lib/fake_remux_replace.py}
+  - {path: /opt/autofix-fake-remux/fake_remux_lib/fake_remux_replace_logic.py}
+  - {path: /var/lib/homelab/setup-render-manifest.d/fake-remux}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/fake-remux}

@@ -38,8 +38,6 @@ TASKS = COMMON / "tasks" / "alert_unit.yml"
 KNOWN_ALERTS = frozenset(
     {
         "gitops-deploy",
-        "renovate-agent",
-        "renovate-notify",
     }
 )
 CALLER_VARS = (

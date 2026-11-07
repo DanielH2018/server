@@ -1,0 +1,9 @@
+# Shipped by the fake-remux component with its enable link.
+[Unit]
+Description=Run the fake-remux scan daily
+
+[Timer]
+OnCalendar=*-*-* {{ '%02d' | format(fake_remux_scan_cron_hour | int) }}:{{ '%02d' | format(fake_remux_scan_cron_minute | int) }}:00
+
+[Install]
+WantedBy=timers.target

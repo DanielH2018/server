@@ -65,14 +65,13 @@ such as the deploy itself, falls under the root chain above.
 
 ## The template: `renovate-agent`
 
-The repo already ran one Claude agent as a separate user. The `renovate_agent` setup role
+The repo already ran one Claude agent as a separate user. The `renovate-agent` component
 creates `renovate-agent` with its own home under `/var/lib`, its own clone, its own copies of
 `uv` and `claude_guard`, a hardened unit, and a GitHub token that cannot push. A polkit rule lets
 it start one lander unit, which runs root-owned code as `ubuntu` and re-checks the PR.
 
-The `claude` agent reuses that shape. The identity tasks live in the shared
-`ansible/roles/setup/common/tasks/agent_user.yml`, which both agents call, and the `claude`
-agent gets a lander of the same shape.
+The `claude` agent reuses that shape: its own identity script in
+`hosts/components/claude-code/`, and a lander of the same shape.
 
 ## Rules the design follows
 
@@ -138,8 +137,8 @@ authorized key.
   script is `hosts/components/claude-code/files/claude-clone-sync.sh`, and it re-syncs the
   `.venv` and the collections when a pull moves their lock files. The hook shim and the
   homelab-ui launcher run from that clone, so a stale clone breaks both.
-- **The agent has commit hooks.** The shared `agent_user.yml` copies the operator's pinned `prek`
-  and `uvx` beside `uv`. The `claude_code` role runs `prek install` in the clone, which covers
+- **The agent has commit hooks.** The agent's setup installs a pinned `prek` and `uvx` beside
+  `uv`. The `claude_code` role runs `prek install` in the clone, which covers
   every worktree made from it, so the agent's commits run gitleaks and the commit-time ratchets.
   The role installs the pinned Ansible collections into the clone, and the `.profile` sets
   `ANSIBLE_COLLECTIONS_PATH` so a worktree falls back to them. `renovate-agent` gets the binary
@@ -253,7 +252,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 ### The approval floor
 
 The approval list is a floor. It keeps the explicit grant points and the gate itself. The agent's
-own roles (`claude_code`, `renovate_agent`), the deployer (`gitops_deploy`), `agent_user.yml`,
+own components (`claude-code`, `renovate-agent`), the deployer (`gitops_deploy`),
 `host_lib.py` and `ansible/inventory/` are not on it, so a PR changing them lands without the
 operator.
 

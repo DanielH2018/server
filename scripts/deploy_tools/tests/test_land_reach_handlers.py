@@ -33,8 +33,6 @@ _ROLES_WITH_HANDLERS = frozenset(
         "docker_install",
         "gitops_deploy",
         "k3s",
-        "renovate_agent",
-        "renovate_notify",
     }
 )
 

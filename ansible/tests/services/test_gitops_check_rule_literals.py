@@ -24,11 +24,11 @@ WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")
 # Alert prefix -> (template, the `check` label its textfile carries).
 PRODUCERS = {
     "GitHubRulesetDrift": (
-        ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2"),
+        ("components", "github-checks", "github-ruleset-drift.sh.j2"),
         "github-ruleset-drift",
     ),
     "GitHubInteractionLimit": (
-        ("setup", "gitops_deploy", "github-interaction-limit.sh.j2"),
+        ("components", "github-checks", "github-interaction-limit.sh.j2"),
         "github-interaction-limit",
     ),
 }

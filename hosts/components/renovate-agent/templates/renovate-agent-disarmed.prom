@@ -1,0 +1,3 @@
+# HELP homelab_check_disarmed 1 while the check's producer is switched off on purpose.
+# TYPE homelab_check_disarmed gauge
+homelab_check_disarmed{check="renovate-agent"} 1

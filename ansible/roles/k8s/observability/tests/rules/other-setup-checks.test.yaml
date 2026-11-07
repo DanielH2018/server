@@ -146,7 +146,7 @@ tests:
               description: 'No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 13:00 timer did not fire or the run failed, and OnFailure
                 will also have posted to Discord. It says nothing about Renovate itself. Read `systemctl
-                status renovate-notify.timer` and `journalctl -u renovate-notify`.'
+                status homelab-renovate-notify.timer` and `journalctl -u homelab-renovate-notify`.'
       - eval_time: 900h
         alertname: RenovateAgentNotReporting
         exp_alerts:
@@ -159,7 +159,7 @@ tests:
               summary: The renovate agent on daniel-box has not completed a clean run in 28 hours.
               description: 'No renovate-agent verdict newer than 28 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 06:00 timer did not fire, the run crashed, or a worktree-blocked
-                tick skipped it. Read `systemctl status renovate-agent.timer` and `journalctl -u renovate-agent`.'
+                tick skipped it. Read `systemctl status homelab-renovate-agent.timer` and `journalctl -u homelab-renovate-agent`.'
   - interval: 1h
     input_series:
       - series: homelab_check_success{check="ups-secondary-health", instance="daniel-box", job="node",
@@ -328,7 +328,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux scan on daniel-box reported a failure.
-              description: fake-remux-health.sh read the daily scan's state file and found a failure or
+              description: fake-remux-health read the daily scan's state file and found a failure or
                 a run older than 26 hours. Read the `fake-remux scan` cron and state.json in /var/lib/autofix-fake-remux.
                 The `fake-remux-health` syslog tag holds the message.
   - interval: 1h
@@ -393,7 +393,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The fake-remux reconciler on daniel-box reported a failure.
-              description: fake-remux-health.sh read the reconciler's state file and found a failure or
+              description: fake-remux-health read the reconciler's state file and found a failure or
                 a run older than 1.2 hours. Read the `fake-remux reconcile` cron and replace_state.json
                 in /var/lib/autofix-fake-remux. The `fake-remux-health` syslog tag holds the message.
   - interval: 1h
@@ -459,7 +459,7 @@ tests:
               origin: daniel-box
             exp_annotations:
               summary: The mkv attachment repair on daniel-box reported a failure.
-              description: fake-remux-health.sh read the repair sweep's state file and found a failure
+              description: fake-remux-health read the repair sweep's state file and found a failure
                 or a run older than 1.2 hours. Read the `mkv attachment repair` cron and mkv_attachment_state.json
                 in /var/lib/autofix-fake-remux. The `fake-remux-health` syslog tag holds the message.
   - interval: 1h
@@ -678,7 +678,7 @@ tests:
               description: 'No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 13:00 timer did not fire or the run failed, and OnFailure
                 will also have posted to Discord. It says nothing about Renovate itself. Read `systemctl
-                status renovate-notify.timer` and `journalctl -u renovate-notify`.'
+                status homelab-renovate-notify.timer` and `journalctl -u homelab-renovate-notify`.'
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="renovate-notify", instance="daniel-box",
@@ -722,7 +722,7 @@ tests:
               summary: The renovate agent on daniel-box has not completed a clean run in 28 hours.
               description: 'No renovate-agent verdict newer than 28 hours reached Prometheus from daniel-box''s
                 textfile collector: the daily 06:00 timer did not fire, the run crashed, or a worktree-blocked
-                tick skipped it. Read `systemctl status renovate-agent.timer` and `journalctl -u renovate-agent`.'
+                tick skipped it. Read `systemctl status homelab-renovate-agent.timer` and `journalctl -u homelab-renovate-agent`.'
   - interval: 1h
     input_series:
       - series: homelab_check_last_run_timestamp_seconds{check="renovate-agent", instance="daniel-box",

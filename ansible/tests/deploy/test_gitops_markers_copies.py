@@ -19,7 +19,6 @@ Run: uv run pytest ansible/tests/deploy/test_gitops_markers_copies.py
 
 import re
 
-import pytest
 from _helpers import REPO
 from lib import yaml_fast
 
@@ -47,10 +46,6 @@ _COPY_TASKS = {
     "deploy_ui": (
         "ansible/roles/setup/deploy_ui/tasks/code.yml",
         "Install the deploy-ui files",
-    ),
-    "renovate_agent": (
-        "ansible/roles/setup/renovate_agent/tasks/code.yml",
-        "Install agent Python files",
     ),
 }
 
@@ -127,13 +122,20 @@ def test_every_setup_consumer_copy_loop_installs_the_source():
         )
 
 
-@pytest.mark.parametrize("role", ["deploy_ui", "renovate_agent"])
-def test_the_setup_copy_loops_install_the_ledger_beside_the_markers(role):
-    """Both import `gitops_ledger`: deploy-ui for its panels, renovate-agent for the planes
-    its hold skip names (#3392)."""
-    task_file, task_name = _COPY_TASKS[role]
+def test_the_setup_copy_loops_install_the_ledger_beside_the_markers():
+    """deploy-ui imports `gitops_ledger` for its panels."""
+    task_file, task_name = _COPY_TASKS["deploy_ui"]
     (task,) = _tasks_named(task_file, task_name)
     assert "{{ role_path }}/../gitops_deploy/files/gitops_ledger.py" in task["loop"]
+
+
+def test_the_renovate_agent_package_ships_the_state_modules_it_imports():
+    """renovate-agent imports all three: its hold skip names the planes (#3392)."""
+    spec = (REPO / "hosts/components/renovate-agent/component.yml").read_text()
+    for name in ("gitops_markers.py", "gitops_ledger.py", "gitops_hold.py"):
+        assert (
+            f"{{shared: {name}, dst: /usr/lib/homelab/renovate-agent/{name}}}" in spec
+        )
 
 
 def test_the_monitor_bridge_module_list_carries_the_copy():

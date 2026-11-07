@@ -1,0 +1,355 @@
+"""prepare_worktree() must lock the run tree so a concurrent session's SessionStart pruner
+(scripts/dev/prune_worktrees.py --prune) can't delete it mid-run, and must be able to unlock
+its own previous tree so the next tick can still recreate it. See issue #1069.
+
+It must also reclaim a directory git has no worktree record of, which is what a killed session
+leaves behind and what stopped the agent for two days from 2026-09-08 (issue #1477).
+
+Every boundary comes through `agent_toolbox.AgentTools`, so nothing here patches a module
+attribute — see that class's docstring and `ansible/tests/repo/monkeypatch_allowlist.txt`.
+
+Run: uv run pytest hosts/components/renovate-agent/tests/test_prepare_worktree.py
+"""
+
+import json
+import os
+import pathlib
+import re
+
+import agent_toolbox
+import pytest
+import run_worktree
+from lib.git_testing import commit, git_out, init_repo, scrub_process_git_env
+
+# Mirrors LOCK_OWNER in the dotfiles-deployed `claude_worktree` package, which
+# scripts/lib/_claude_worktree.py loads. The lock reason must parse the same way
+# session_is_alive() parses it, or a live run's lock reads as "unrecognized format" there too
+# (which happens to also be treated as alive, but for the wrong reason: never rely on that).
+LOCK_OWNER = re.compile(r"\(pid (\d+) start (\d+)\)")
+
+
+class _RecordingRun:
+    """Stands in for agent_toolbox.run(): records every argv, returns success.
+
+    `registered` is the path list `git worktree list --porcelain` answers with, because
+    prepare_worktree asks that question before deciding whether an existing directory is
+    git's to remove or debris to reclaim.
+    """
+
+    def __init__(self, registered: list[str] | None = None) -> None:
+        self.calls: list[list[str]] = []
+        self.registered = registered or []
+
+    def __call__(self, argv, cwd=None, timeout=120):
+        self.calls.append(argv)
+        if "list" in argv and "--porcelain" in argv:
+            return 0, "".join(f"worktree {p}\nHEAD abc\n\n" for p in self.registered)
+        return 0, ""
+
+    def subcommands(self) -> list[str]:
+        """The `git worktree <subcommand>` word of each recorded call, in order."""
+        out = []
+        for argv in self.calls:
+            if "worktree" in argv:
+                out.append(argv[argv.index("worktree") + 1])
+        return out
+
+
+def _tools(run, **kwargs) -> agent_toolbox.AgentTools:
+    return agent_toolbox.AgentTools(run=run, **kwargs)
+
+
+class TestLocksTheNewTree:
+    def test_prepare_worktree_locks_after_add_with_a_parseable_reason(
+        self, tmp_path
+    ) -> None:
+        recorder = _RecordingRun()
+        path = str(tmp_path / "renovate-auto")
+
+        run_worktree.prepare_worktree(
+            str(tmp_path), path, "worktree-renovate-auto", _tools(recorder)
+        )
+
+        assert recorder.subcommands() == ["prune", "add", "lock"]
+        lock_call = next(c for c in reversed(recorder.calls) if "lock" in c)
+        assert lock_call[:5] == ["git", "-C", str(tmp_path), "worktree", "lock"]
+        reason = lock_call[lock_call.index("--reason") + 1]
+        match = LOCK_OWNER.search(reason)
+        assert match, f"reason {reason!r} does not match LOCK_OWNER"
+        assert int(match.group(1)) == os.getpid()
+
+    def test_a_failed_lock_raises_naming_the_git_error(self, tmp_path) -> None:
+        def failing_run(argv, cwd=None, timeout=120):
+            if "lock" in argv:
+                return 1, "fatal: unable to lock"
+            return 0, ""
+
+        path = str(tmp_path / "renovate-auto")
+
+        with pytest.raises(RuntimeError, match="git worktree lock failed"):
+            run_worktree.prepare_worktree(
+                str(tmp_path), path, "worktree-renovate-auto", _tools(failing_run)
+            )
+
+
+class TestUnlocksBeforeRemovingItsOwnTree:
+    def test_prepare_worktree_unlocks_before_removing_an_existing_tree(
+        self, tmp_path
+    ) -> None:
+        path = tmp_path / "renovate-auto"
+        path.mkdir()
+        recorder = _RecordingRun(registered=[str(path)])
+
+        run_worktree.prepare_worktree(
+            str(tmp_path), str(path), "worktree-renovate-auto", _tools(recorder)
+        )
+
+        subs = recorder.subcommands()
+        # git worktree remove refuses a locked tree outright, and one --force does not
+        # override a lock (git requires it twice) — the unlock must precede the remove.
+        assert subs.index("unlock") < subs.index("remove")
+        assert path.is_dir(), "a registered tree is git's to remove, not ours to rmtree"
+
+
+class TestSyncsTheTreeTheHooksRunIn:
+    """The hooks run `uv run --no-sync` in the run worktree, which starts with no `.venv`."""
+
+    def test_the_locked_tree_is_synced_before_the_session(self, tmp_path) -> None:
+        calls: list[tuple[list[str], str | None]] = []
+
+        def run(argv, cwd=None, timeout=120):
+            calls.append((argv, cwd))
+            return 0, ""
+
+        path = str(tmp_path / "renovate-auto")
+        run_worktree.prepare_worktree(
+            str(tmp_path), path, "worktree-renovate-auto", _tools(run)
+        )
+
+        assert calls[-1] == (["uv", "sync", "--frozen", "--quiet"], path)
+        assert "lock" in calls[-2][0]
+
+    def test_a_failed_sync_raises_naming_the_uv_error(self, tmp_path) -> None:
+        def run(argv, cwd=None, timeout=120):
+            return (1, "error: lockfile needs updating") if argv[0] == "uv" else (0, "")
+
+        with pytest.raises(RuntimeError, match="uv sync failed: error: lockfile"):
+            run_worktree.prepare_worktree(
+                str(tmp_path),
+                str(tmp_path / "renovate-auto"),
+                "worktree-renovate-auto",
+                _tools(run),
+            )
+
+
+class TestReclaimsAnUnregisteredDirectory:
+    """A killed session leaves a directory git has no worktree record of.
+
+    `worktree remove` refuses a path it does not know, so the `worktree add` that follows
+    dies on `fatal: ... already exists` unless the directory is reclaimed first.
+    """
+
+    def test_an_unregistered_directory_is_removed_and_the_add_proceeds(
+        self, tmp_path
+    ) -> None:
+        path = tmp_path / "renovate-auto"
+        path.mkdir()
+        (path / "ansible.cfg").write_text("debris\n")
+        recorder = _RecordingRun(registered=[str(tmp_path)])
+
+        run_worktree.prepare_worktree(
+            str(tmp_path), str(path), "worktree-renovate-auto", _tools(recorder)
+        )
+
+        assert not path.exists(), "the orphan must be gone before `worktree add` runs"
+        assert recorder.subcommands() == ["list", "prune", "add", "lock"]
+
+    def test_a_directory_that_cannot_be_removed_raises_naming_it(
+        self, tmp_path
+    ) -> None:
+        """The rejecting half: reclaiming is best-effort, and a failure must not reach `add`."""
+        path = tmp_path / "renovate-auto"
+        path.mkdir()
+        tools = _tools(_RecordingRun(), rmtree=lambda *a, **k: None)
+
+        with pytest.raises(RuntimeError, match="orphaned directory"):
+            run_worktree.prepare_worktree(
+                str(tmp_path), str(path), "worktree-renovate-auto", tools
+            )
+
+
+class TestReusabilityDoesNotReadThePrimaryCheckout:
+    def test_an_unregistered_directory_is_never_git_statused(self, tmp_path) -> None:
+        """git searches UPWARD, so `git -C <orphan> status` answers about the primary checkout."""
+        path = tmp_path / "renovate-auto"
+        path.mkdir()
+        recorder = _RecordingRun(registered=[str(tmp_path)])
+
+        reusable, why = run_worktree.worktree_is_reusable(
+            str(tmp_path), str(path), "worktree-renovate-auto", _tools(recorder)
+        )
+
+        assert reusable and why == ""
+        assert not any("status" in argv for argv in recorder.calls)
+
+    def test_a_registered_tree_with_uncommitted_work_is_still_refused(
+        self, tmp_path
+    ) -> None:
+        """The rejecting half: the check that protects unlanded work must still fire."""
+        path = tmp_path / "renovate-auto"
+        path.mkdir()
+
+        def fake_run(argv, cwd=None, timeout=120):
+            if "list" in argv and "--porcelain" in argv:
+                return 0, f"worktree {path}\nHEAD abc\n\n"
+            if "status" in argv:
+                return 0, " M ansible/deploy.yml\n"
+            return 0, ""
+
+        reusable, why = run_worktree.worktree_is_reusable(
+            str(tmp_path), str(path), "worktree-renovate-auto", _tools(fake_run)
+        )
+
+        assert not reusable and "uncommitted changes" in why
+
+
+def _repo_with_run_worktree(tmp_path, monkeypatch) -> tuple[pathlib.Path, pathlib.Path]:
+    """A scratch repo whose `origin/master` holds two commits, plus the run worktree on
+    `worktree-renovate-auto` at the second one. The worktree's branch starts level with master.
+
+    Scrubs GIT_* from the environment for the code under test too: worktree_is_reusable's
+    own git calls take no environment and would otherwise resolve to the live repository.
+    """
+    scrub_process_git_env(monkeypatch)
+    repo = init_repo(tmp_path / "repo")
+    commit(repo, "init", **{"a.txt": "one\n"})
+    commit(repo, "base", **{"a.txt": "two\n"})
+    git_out(repo, "update-ref", "refs/remotes/origin/master", "master")
+    wt = repo / ".claude" / "worktrees" / "renovate-auto"
+    git_out(
+        repo, "worktree", "add", "-q", "-b", "worktree-renovate-auto", str(wt), "master"
+    )
+    return repo, wt
+
+
+class TestReusabilityAsksAboutContentNotAncestry:
+    """A squash merge keeps a branch's content and discards its commits, so ancestry counts
+    them forever. From 2026-09-14 the agent refused its own tree every day while its two
+    commits sat on master as PR #1812 (#2014). Real git, not a fake: the premise under test
+    is what `git merge-tree` answers for a squash and for a revert.
+    """
+
+    def test_a_squash_landed_branch_is_reusable(self, tmp_path, monkeypatch) -> None:
+        repo, wt = _repo_with_run_worktree(tmp_path, monkeypatch)
+        (wt / "a.txt").write_text("three\n")
+        git_out(wt, "commit", "-q", "-am", "bump one", "--no-gpg-sign")
+        (wt / "b.txt").write_text("new\n")
+        git_out(wt, "add", "b.txt")
+        git_out(wt, "commit", "-q", "-m", "bump two", "--no-gpg-sign")
+        git_out(repo, "merge", "--squash", "-q", "worktree-renovate-auto")
+        git_out(repo, "commit", "-q", "-m", "squash of both", "--no-gpg-sign")
+        git_out(repo, "update-ref", "refs/remotes/origin/master", "master")
+        # The stuck state itself: ancestry still counts the two commits as unlanded.
+        ahead = git_out(
+            repo, "rev-list", "--count", "origin/master..worktree-renovate-auto"
+        )
+        assert ahead.strip() == "2"
+
+        reusable, why = run_worktree.worktree_is_reusable(
+            str(repo), str(wt), "worktree-renovate-auto"
+        )
+
+        assert reusable and why == ""
+
+    def test_a_revert_only_branch_is_refused(self, tmp_path, monkeypatch) -> None:
+        """Merging a revert changes master's tree, so the branch still holds work."""
+        repo, wt = _repo_with_run_worktree(tmp_path, monkeypatch)
+        git_out(wt, "revert", "--no-edit", "--no-gpg-sign", "HEAD")
+
+        reusable, why = run_worktree.worktree_is_reusable(
+            str(repo), str(wt), "worktree-renovate-auto"
+        )
+
+        assert not reusable
+        assert why == "worktree-renovate-auto holds 1 commit(s) not on origin/master"
+
+
+class _ForgeAndGit:
+    """Answers the git and gh calls branch_content_is_on_master makes, recording them.
+
+    `merge_tree` is what `git merge-tree` returns; `merged_heads` the head SHAs `gh pr list
+    --state merged` reports, or None for a failed gh. The branch tip is always "feedbeef".
+    """
+
+    def __init__(
+        self, merge_tree: tuple[int, str], merged_heads: list[str] | None = None
+    ) -> None:
+        self.merge_tree = merge_tree
+        self.merged_heads = merged_heads
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv, cwd=None, timeout=120):
+        self.calls.append(argv)
+        if "rev-parse" in argv:
+            return 0, "0123abcd\n" if argv[-1].endswith("^{tree}") else "feedbeef\n"
+        if "merge-tree" in argv:
+            return self.merge_tree
+        if argv[0] == "gh":
+            if self.merged_heads is None:
+                return 1, "gh: auth required"
+            return 0, json.dumps([{"headRefOid": h} for h in self.merged_heads])
+        raise AssertionError(f"unexpected call {argv}")
+
+
+class TestContainmentFailsClosed:
+    """No verdict from git or the forge must read as NOT contained: a wrong yes deletes work."""
+
+    def test_master_tree_as_the_merge_result_is_contained(self) -> None:
+        tools = _tools(_ForgeAndGit((0, "0123abcd\n")))
+        assert run_worktree.branch_content_is_on_master("/r", "b", tools, "o/r")
+
+    def test_a_conflicting_merge_tree_with_no_merged_pr_is_not_contained(self) -> None:
+        run = _ForgeAndGit(
+            (1, "0123abcd\nCONFLICT (content): a.txt\n"), merged_heads=[]
+        )
+        assert not run_worktree.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
+
+    def test_empty_merge_tree_output_is_not_contained(self) -> None:
+        run = _ForgeAndGit((0, ""), merged_heads=[])
+        assert not run_worktree.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
+
+
+class TestTheForgeSettlesADriftedSquash:
+    """A live tree can be past merge-tree: master drifts into a conflict on
+    base-pin-history.tsv, so `merge-tree` exits 1. Only the forge knows it merged the PR from
+    that tip. Matching is on the head SHA — the branch name is reused every tick.
+    """
+
+    _CONFLICT = (1, "0123abcd\nCONFLICT (content): a.txt\n")
+
+    def test_a_merged_pr_at_this_tip_is_contained(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=["feedbeef"])
+        assert run_worktree.branch_content_is_on_master("/r", "b", _tools(run), "o/r")
+        gh = next(c for c in run.calls if c[0] == "gh")
+        assert gh[gh.index("--repo") + 1] == "o/r" and gh[gh.index("--head") + 1] == "b"
+
+    def test_a_merged_pr_from_an_older_tip_is_not_contained(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=["00000000"])
+        assert not run_worktree.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
+
+    def test_a_failed_gh_is_not_contained(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=None)
+        assert not run_worktree.branch_content_is_on_master(
+            "/r", "b", _tools(run), "o/r"
+        )
+
+    def test_no_repo_slug_never_asks_the_forge(self) -> None:
+        run = _ForgeAndGit(self._CONFLICT, merged_heads=["feedbeef"])
+        assert not run_worktree.branch_content_is_on_master("/r", "b", _tools(run))
+        assert not any(c[0] == "gh" for c in run.calls)

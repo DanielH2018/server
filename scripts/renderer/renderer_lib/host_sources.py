@@ -30,6 +30,10 @@ from renderer.renderer_lib.environment import strict_env
 # allowlist rather than a path, so a component cannot copy any other file of the repo.
 SHARED_FILES = {
     "homelab-check-lib.sh": "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    # The deployer's state modules, which the renovate-agent component reads until H7.19b.
+    "gitops_markers.py": "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
+    "gitops_ledger.py": "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
+    "gitops_hold.py": "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",
 }
 
 # The setup roles whose defaults and templates a component may render with `role:` (H4, *NUT on

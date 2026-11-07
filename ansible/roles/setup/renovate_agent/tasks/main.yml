@@ -1,64 +1,10 @@
 ---
-# One task file per subject, each under its own tag, so the GitOps deployer can apply a change
-# to the code alone (`--tags renovate-agent-code`) or to the units alone (`--tags renovate-agent-service`)
-# rather than the whole role (#3135). `narrow_setup` reads a task file's OWN tags, so each task
-# in code.yml and service.yml carries its tag, and each import below repeats it so an edit to
-# this file narrows too. The directories serve both halves.
-- name: Create the agent session's own user, tools and clone
-  tags: [renovate-agent-code, renovate-agent-service]
-  # The session reads third-party text, so it runs as a user with no sudo and no read on
-  # /home/{{ sys_user }} (0750). renovate-agent-land@.service is the one privileged thing it
-  # may start. The same file builds claude_code's agent user.
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/agent_user.yml"
-  vars:
-    agent_user_name: "{{ renovate_agent_user }}"
-    agent_user_home: "{{ renovate_agent_home }}"
-    agent_user_clone_dir: "{{ renovate_agent_clone_dir }}"
-    agent_user_repo: "{{ renovate_agent_repo }}"
+# The unattended Renovate agent is package-owned: hosts/components/renovate-agent ships it in
+# homelab-daniel-box (H7.37). docs/target-architecture/host/h7-delete-ansible.md.
 
-- name: Create renovate-agent directories
-  tags: [renovate-agent-code, renovate-agent-service]
-  ansible.builtin.file:
-    path: "{{ item.path }}"
-    state: directory
-    owner: "{{ item.owner }}"
-    group: "{{ item.group }}"
-    mode: "{{ item.mode }}"
-  loop:
-    # Code and the rendered prompt: readable by the agent and by the lander, writable by root
-    # alone, so the session cannot change what the lander runs.
-    - {path: /opt/renovate-agent, owner: root, group: root, mode: "0755"}
-    - {path: /etc/renovate-agent, owner: root, group: "{{ renovate_agent_user }}", mode: "0750"}
-  become: true
-
-- name: Let the agent's user read the deployer's hold markers
-  tags: [renovate-agent-code, renovate-agent-service]
-  # The wrapper skips a run while the deployer holds (agent_logic.decide), and the deployer's
-  # state directory is 0750 sys_user. Read-only, by ACL. The default entry makes every marker
-  # the deployer writes readable as it is created.
-  #
-  # Not recursive (#3607). The deployer rewrites its markers on every tick, and each new file
-  # already carries `user:<agent>:r--` from the default entry. A recursive `rX` over them only
-  # recomputed the mask to r-x, and reported `changed` on every apply. A marker that predates
-  # the default entry on a fresh host stays unreadable until the deployer rewrites it. A
-  # marker the agent cannot read fails the run with a Discord post naming the ACL (#3703),
-  # because an unreadable hold is not "no hold".
-  ansible.posix.acl:
-    path: /var/lib/gitops-deploy
-    entity: "{{ renovate_agent_user }}"
-    etype: user
-    permissions: "{{ item.permissions }}"
-    default: "{{ item.default }}"
-    state: present
-  loop:
-    - {permissions: rX, default: false}
-    - {permissions: r, default: true}
-  become: true
-
-- name: Install the renovate-agent code
-  tags: [renovate-agent-code]
-  ansible.builtin.import_tasks: code.yml
-
-- name: Install and arm the renovate-agent units
-  tags: [renovate-agent-service]
-  ansible.builtin.import_tasks: service.yml
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line, and the tick applies the role on daniel-box as a no-op.
+- name: End the role, whose work the host package owns
+  ansible.builtin.meta: end_role

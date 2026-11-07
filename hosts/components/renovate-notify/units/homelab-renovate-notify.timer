@@ -1,0 +1,11 @@
+# Shipped by the renovate-notify component with its enable link.
+[Unit]
+Description=Run the Renovate manual-action notifier daily
+
+[Timer]
+OnCalendar=*-*-* 13:00:00
+RandomizedDelaySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

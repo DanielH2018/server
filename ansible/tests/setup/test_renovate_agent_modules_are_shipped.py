@@ -1,58 +1,43 @@
 #!/usr/bin/env python3
-"""Every Python module in the renovate_agent role's `files/` reaches the host, and is watched.
+"""Every Python module in the renovate-agent component's `files/` reaches the host.
 
-The role enumerates its modules by name twice — once in the "Install agent Python files" copy
-loop, once in `stamp_deployed_pairs` for setup-drift-check.sh's deployed-code arm. Neither
-list is derived from the directory, so a module added to `files/` and to neither list is one
-the host never receives, and the suite stays green because every test reaches `files/` through
-its own `sys.path` insert.
+`component.yml` lists its files one by one, so a module split out of the wrapper and left off the
+list leaves the unit dying at import on the host while every test here, which runs from the source
+tree, stays green.
 
 Run: uv run pytest ansible/tests/setup/test_renovate_agent_modules_are_shipped.py
 """
 
+from pathlib import Path
+
 from lib import yaml_fast
 from _helpers import ANSIBLE
 
-ROLE = ANSIBLE / "roles" / "setup" / "renovate_agent"
-TASKS = ROLE / "tasks" / "code.yml"
+COMPONENT = ANSIBLE.parent / "hosts" / "components" / "renovate-agent"
+SPEC = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
 
 
-def listing_problems(shipped: set[str], tasks: list[dict]) -> list[str]:
-    """Which of `shipped` the role's two hand-written module lists leave out."""
-    (copy,) = [t for t in tasks if t.get("name") == "Install agent Python files"]
-    copied = {item for item in copy["loop"] if item.endswith(".py")}
-    (stamp,) = [
-        t for t in tasks if t.get("name") == "Record the deployed renovate-agent code"
-    ]
-    stamped = {
-        pair["src"].rsplit("/", 1)[1] for pair in stamp["vars"]["stamp_deployed_pairs"]
+def listing_problems(shipped: set[str], files: list[dict]) -> list[str]:
+    """Which of `shipped` the component's file list leaves out of the install directory."""
+    listed = {
+        Path(entry["dst"]).name
+        for entry in files
+        if entry["dst"].startswith("/usr/lib/homelab/renovate-agent/")
     }
-    problems = []
-    if shipped - copied:
-        problems.append(
-            f"not installed on the host: {sorted(shipped - copied)} — add them to the "
-            "'Install agent Python files' loop"
-        )
-    if shipped - stamped:
-        problems.append(
-            f"not stamped for drift detection: {sorted(shipped - stamped)} — add them "
-            "to stamp_deployed_pairs"
-        )
-    return problems
+    missing = sorted(shipped - listed)
+    return [f"not installed on the host: {missing}"] if missing else []
 
 
-def test_every_shipped_module_is_installed_and_stamped() -> None:
-    shipped = {p.name for p in (ROLE / "files").glob("*.py")}
+def test_every_shipped_module_is_installed() -> None:
+    shipped = {p.name for p in (COMPONENT / "files").glob("*.py")}
     # The census finds its subject by glob, so it names members it must find: the entry
     # module and the two modules it splits into.
     for member in ("renovate_agent.py", "agent_toolbox.py", "run_worktree.py"):
-        assert member in shipped, f"{member} is gone from the role's files/"
-    assert listing_problems(shipped, yaml_fast.safe_load(TASKS.read_text())) == []
+        assert member in shipped, f"{member} is gone from the component's files/"
+    assert listing_problems(shipped, SPEC["files"]) == []
 
 
-def test_a_module_missing_from_either_list_is_flagged() -> None:
-    """The rejecting half: a module neither list names must produce both complaints."""
-    tasks = yaml_fast.safe_load(TASKS.read_text())
-    problems = listing_problems({"newly_split.py"}, tasks)
-    assert len(problems) == 2
-    assert all("newly_split.py" in p for p in problems)
+def test_a_module_missing_from_the_list_is_flagged() -> None:
+    """The rejecting half: a module the list does not name must produce the complaint."""
+    problems = listing_problems({"newly_split.py"}, SPEC["files"])
+    assert problems == ["not installed on the host: ['newly_split.py']"]

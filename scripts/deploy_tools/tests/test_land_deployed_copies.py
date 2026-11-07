@@ -29,9 +29,6 @@ COPY_SHA = hashlib.sha256((REPO / COPY).read_bytes()).hexdigest()
 TEMPLATE = "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
 TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
 DRIFT_FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"
-GITHUB_CHECKS_FRAGMENT = (
-    "/var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks"
-)
 CHECK_TIMER_TEMPLATES = (
     "ansible/roles/setup/common/templates/check-timer.service.j2",
     "ansible/roles/setup/common/templates/check-timer.timer.j2",
@@ -161,30 +158,6 @@ def test_a_check_timer_template_the_drift_fragment_does_not_show_stays_owed(drif
     assert not _holds_check_timer(template, lines[drift_line])
 
 
-def _gitops_deploy_holds(template, fragment_text):
-    """Does `gitops_deploy` read as held on daniel-box with this GitHub-checks fragment?"""
-    return DeployedCopies(
-        [template],
-        REPO / "ansible/roles/setup",
-        ref="HEAD",
-        repo=REPO,
-        read_host=lambda plan, host: {
-            "stat": {},
-            "files": {GITHUB_CHECKS_FRAGMENT: {"status": "ok", "text": fragment_text}},
-        },
-    ).holds("gitops_deploy", template, "daniel-box")
-
-
-@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
-def test_a_check_timer_template_the_github_checks_fragment_shows_is_held(template):
-    assert _gitops_deploy_holds(template, f"{template} {_sha(template)}\n")
-
-
-@pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
-def test_a_check_timer_template_on_a_stale_github_checks_fragment_stays_owed(template):
-    assert not _gitops_deploy_holds(template, f"{template} {'0' * 64}\n")
-
-
 def _owed_from_daniel_server(template, files):
     """What a landing from daniel-server owes, over this checkout's roles rather than `ref`'s."""
     copies = DeployedCopies(
@@ -214,14 +187,14 @@ def test_a_landing_from_daniel_server_names_no_host_after_an_apply_on_daniel_box
     template,
 ):
     row = {"status": "ok", "text": f"{template} {_sha(template)}\n"}
-    files = dict.fromkeys((DRIFT_FRAGMENT, GITHUB_CHECKS_FRAGMENT), row)
+    files = dict.fromkeys((DRIFT_FRAGMENT,), row)
     assert _owed_from_daniel_server(template, files) == ({}, {})
 
 
 @pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
 def test_a_landing_from_daniel_server_names_daniel_box_before_an_apply_there(template):
     assert _owed_from_daniel_server(template, {}) == (
-        {"gitops_deploy": {"daniel-box"}, "initial_setup": {"daniel-box"}},
+        {"initial_setup": {"daniel-box"}},
         {},
     )
 

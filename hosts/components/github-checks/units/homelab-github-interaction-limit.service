@@ -1,0 +1,24 @@
+# Shipped by the github-checks component. Started by homelab-github-interaction-limit.timer.
+#
+# THE CONTRACT IS THE EXIT CODE. The script re-applies the limit, writes its verdict to a textfile a
+# Prometheus rule reads, then exits non-zero after `down` and 0 after `up`. Restart=on-failure reruns
+# it every RestartSec until it exits 0. The re-arm PUT is idempotent, so a rerun is the same write.
+[Unit]
+Description=GitHub interaction-limit re-arm (textfile verdict)
+After=network-online.target
+Wants=network-online.target
+# No OnFailure= alert, deliberately. A down verdict is a unit failure by this contract, and the
+# alert units page on a unit that broke. The rule already pages the verdict.
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User=root
+ExecStart=/usr/lib/homelab/github-interaction-limit
+SyslogIdentifier=github-interaction-limit
+# Only Restart=always and Restart=on-success are refused for Type=oneshot (systemd 255).
+Restart=on-failure
+RestartSec=30min
+# The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and gates
+# homelab-github-interaction-limit-boot.service (#4495). `$$` hands the variable to the shell.
+ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/kuma-check/github-interaction-limit.down; else mkdir -p /var/lib/kuma-check && touch /var/lib/kuma-check/github-interaction-limit.down; fi'

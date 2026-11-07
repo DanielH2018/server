@@ -332,7 +332,9 @@ def _defaults():
     import yaml
 
     return yaml.safe_load(
-        (ANSIBLE / "roles/setup/gitops_deploy/defaults/main.yml").read_text()
+        (
+            ANSIBLE.parent / "hosts/components/github-checks/defaults/main.yml"
+        ).read_text()
     )
 
 

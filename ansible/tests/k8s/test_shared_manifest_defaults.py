@@ -62,7 +62,6 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "peanut",
         "prowlarr",
         "radarr",
-        "sonarr",
         "speedtest",
         "texbrain",
         "zigbee2mqtt",

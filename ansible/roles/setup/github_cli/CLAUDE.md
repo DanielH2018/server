@@ -24,5 +24,5 @@ The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` mar
   installed needs a second `chezmoi apply`.
 - `gh auth login` is interactive and stays a hand step (**operator-only**), in
   `docs/host-packages.md`, *Rebuilding daniel-box*. Until it runs, every `gh auth token` reader on
-  the host runs anonymous at 60 requests/hour: `gitops_deploy`'s CI gate and its two GitHub timers,
-  and `renovate_agent`.
+  the host runs anonymous at 60 requests/hour: `gitops_deploy`'s CI gate, the two timers of the
+  `github-checks` component, and the `renovate-agent` component's session.

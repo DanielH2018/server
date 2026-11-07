@@ -109,7 +109,7 @@ def test_an_unreadable_marker_names_the_acl_not_a_sudo_the_agent_lacks(tmp_path)
     finally:
         (tmp_path / "hold_sha").chmod(0o600)
     assert "sudo" not in out
-    assert "getfacl /var/lib/gitops-deploy" in out and "--tags claude_code" in out
+    assert "getfacl /var/lib/gitops-deploy" in out
 
 
 def test_no_state_directory_exits_unreadable_and_says_where_it_lives(tmp_path, capsys):
