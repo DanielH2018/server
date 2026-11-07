@@ -2,22 +2,19 @@
 
 These tests hold what the plan fixes about the unit: the 10-minute monotonic timer, the run inside
 the git-tree lock, the builder's token as a credential, the deployer's CI contexts and walk bound,
-and the autonomous-role contract row. test_checkout_sync.py covers the script's behaviour.
+and the modules the script imports. The census row `component-timers-carry-a-contract` holds the
+contract, and test_checkout_sync.py covers the script's behaviour.
 
 Run: uv run pytest hosts/lib/tests/test_checkout_sync_component.py
 """
 
 import pytest
 from _checkout_package import render_daniel_box
-from repo._component_contract_row import _uncontracted_timers
-from _row_table import Subject
 
 from lib.estate import REPO_INVENTORY
 from lib.render_context import render_context
-from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
-COMPONENT = "hosts/components/checkout-sync/component.yml"
 UNITS = "/usr/lib/systemd/system"
 LIB = "/usr/lib/homelab/checkout-sync"
 
@@ -75,12 +72,3 @@ def test_the_script_ships_beside_the_modules_it_imports(package):
         "host_lib.py",
     ):
         assert f"{LIB}/{name}" in package.files, name
-
-
-def test_the_contract_row_passes_and_fails_without_the_contract():
-    text = (REPO / COMPONENT).read_text()
-    assert _uncontracted_timers(Subject(COMPONENT, text)) == []
-    stripped = "\n".join(
-        line for line in text.splitlines() if not line.startswith("# - ")
-    )
-    assert _uncontracted_timers(Subject(COMPONENT, stripped)) != []

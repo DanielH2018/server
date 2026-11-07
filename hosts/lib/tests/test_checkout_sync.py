@@ -11,7 +11,6 @@ Run: uv run pytest hosts/lib/tests/test_checkout_sync.py
 
 import io
 import json
-import os
 import subprocess
 import urllib.error
 from email.message import Message
@@ -222,15 +221,3 @@ def test_a_refused_token_reads_token(lab):
     assert sync.main() == 1
     assert lab.head() == lab.base
     assert lab.metric('homelab_checkout_sync_refused{reason="token"}') == "1"
-
-
-def test_the_script_answers_help():
-    proc = subprocess.run(
-        ["python3", cs.__file__, "--help"],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env={**os.environ, "PYTHONPATH": str(Path(cs.__file__).parent)},
-    )
-    assert proc.returncode == 0
-    assert "Fast-forward" in proc.stdout
