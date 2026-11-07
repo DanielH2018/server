@@ -95,7 +95,7 @@ def test_is_diverged_false_when_origin_ahead():
 
 
 def test_is_diverged_false_when_local_ahead_unpushed():
-    # committed-but-unpushed local commit is a plain noop (secret-rotate's domain), not divergence.
+    # committed-but-unpushed local commit is a plain noop, not divergence.
     assert not is_diverged("originX", "localY", origin_ahead=False, local_ahead=True)
 
 

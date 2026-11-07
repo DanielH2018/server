@@ -426,7 +426,7 @@ if [ "$COMMIT_RC" -ne 0 ]; then
 fi
 
 # Branch, push, reset master, PR, landing: scripts/deploy_tools/publish_pr.py, shared with
-# docs-refresh and secret-rotate. Exit 1 means the commit is still local on master, 2 that the
+# docs-refresh. Exit 1 means the commit is still local on master, 2 that the
 # branch is on origin without a PR; either way the message says which.
 PR_BODY="Weekly hermetic homelab-agent eval sweep, rolled into evals/history.json by evals/trend.py. $(tr '\n' ' ' < "$TREND_OUT" | tail -c 800)"
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \

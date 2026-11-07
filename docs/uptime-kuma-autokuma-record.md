@@ -287,8 +287,8 @@ one WARN per sync in the AutoKuma sidecar's log and never creates the monitor, s
 HTTP 404 and nothing pages (#3985). Until #4005, `probe.py kuma-drift` could not see it either.
 It reported the tile as "no beat due yet" until the tile's interval had passed since Kuma
 started, which for a weekly tile is never. From #4005 it checked the status page for the name and
-reported a declared tile absent from the page as missing. `secret_rotation.py rotate` mints `token_hex(16)`; a token added by
-hand needs the same shape. The deploy asserts the format over every rendered push tile through
+reported a declared tile absent from the page as missing. A `token_hex(16)` value has that shape, and a token added by
+hand needs it too. The deploy asserts the format over every rendered push tile through
 the `kuma_malformed_push_tokens` filter and names each refused id.
 
 ## The status page sync, in detail

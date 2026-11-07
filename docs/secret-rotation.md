@@ -159,8 +159,6 @@ key a host file carries. No cron calls `sync`.
 <!-- Cadences and counts are generated from TIER_DAYS and the registry; edit those. -->
 --8<-- "assets/generated/fragments/secret-tiers.md"
 
-- `auto` — has no member, and no job rotates a secret unattended. A future locally generated
-  secret brings the tier and its weekly job back in its own change.
 - `assisted` — app passwords, API keys and OIDC secrets. An app-side step, below.
 - `external` — provider-managed (Cloudflare, Discord, Mullvad, SMTP, LLM). Mint in the
   provider console.
@@ -173,7 +171,9 @@ key a host file carries. No cron calls `sync`.
 `sync` gives a newly registered key its tier from one name rule in
 `scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_user` and `*_username` are `ignore`,
 and every other key is `assisted`. An `external` or `pinned` key gets its tier by an edit
-to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
+to its `tier` in the registry after that `sync`, and `sync` preserves the edit. No job rotates
+a secret unattended. `audit --check` refuses a row whose tier is not in the table above, so a
+hand edit cannot register a tier that nothing audits.
 
 ## `assisted` — app-issued (regenerate in the app, then update SOPS)
 
@@ -184,8 +184,8 @@ since the value already existed — `secret_rotation.py record --key <name> --la
 run `host_secrets.py sync <host>` (**operator-only**) for each host file that carries the key
 (*Per-host SOPS files*, above), then
 redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). A
-date left behind is not fatal: `audit` and `rotate` both advance it to the commit that changed
-the ciphertext before deciding what is due. Examples:
+date left behind is not fatal: `audit` advances it to the commit that changed the ciphertext
+before deciding what is due. Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
   **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches.** It
   stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is
@@ -397,10 +397,8 @@ changed.
 
 For each of these keys SOPS holds a **copy** of a credential the app owns. Nothing in the tree writes
 the value to the app, so `sops set` plus a deploy rotates nothing: the recap says `changed`, the
-pod rolls, and the old credential still works. The registry marks them `source: record`, and
-`secret_rotation.py rotate` refuses them in both of its paths (`--name`, and the unattended
-batch) with a reason naming this section. `sync` never touches an existing entry, so the field
-survives it. Each has a different mechanism:
+pod rolls, and the old credential still works. The registry marks them `source: record`.
+`sync` never touches an existing entry, so the field survives it. Each has a different mechanism:
 
 - `authelia_password` — the role renders the digest `authelia_password_argon2`, never this
   plaintext, so a changed `authelia_password` is inert on its own. A rotation mints the new

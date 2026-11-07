@@ -823,7 +823,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the
   *reverse* of those commits) and mis-fire an apply. Push to clear it.
 - **Divergence watchdog** (`deploy_logic.is_diverged`): if local and origin differ yet *neither*
-  is an ancestor of the other (for example `secret-rotate` committed locally, its push failed, then origin
+  is an ancestor of the other (for example a cron committed locally, its push failed, then origin
   advanced), the deployer can't fast-forward and every tick noops while origin's new commits — a
   Renovate/security bump — never deploy. Both other GitOps signals stay green (`last_run` keeps
   ticking, no hold), so each tick writes the diverged SHA to `/var/lib/gitops-deploy/diverged_sha`

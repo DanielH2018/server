@@ -1,30 +1,18 @@
 """Fakes for every `RotationTools` boundary, so the tests around it patch nothing.
 
 Every fake appends `(name, args, kwargs)` to a shared `calls` list, which is how a test proves
-"the registry was saved after the value was written" without reading source.
-
-THE SUBPROCESS BOUNDARY KEEPS ITS REAL IMPLEMENTATION. `sops_set` is `rotation_tools`' own
-function with a recording `run` injected, not a lambda. Replacing it wholesale would retire the
-argv assertions that are its point — the token must reach the process on stdin, never in argv.
-`process_calls` returns exactly what it handed the runner.
+"the registry was saved" or "it was not" without reading source.
 """
 
 import datetime as dt
-import subprocess
 from dataclasses import dataclass, field
-from functools import partial
-from pathlib import Path
 
 import yaml
 
 # Package-qualified, as `_land_fakes.py` reaches `land_lib.tools`: a bare `import
 # rotation_tools` binds a SECOND module object in a pytest session, since the module under
 # test reaches the same file as `secrets_mgmt.rotation_tools`.
-from secrets_mgmt.cluster_vars_check import Expected, Tree
-from secrets_mgmt.rotation_tools import (
-    RotationTools,
-    sops_set,
-)
+from secrets_mgmt.rotation_tools import RotationTools
 
 TODAY = dt.date(2026, 9, 1)
 
@@ -40,24 +28,6 @@ class Fakes:
     # touched the encrypted store.
     history: list[tuple[str, str, dict[str, str]]] = field(default_factory=list)
     git_error: BaseException | None = None
-    run_error: BaseException | None = None
-    # A non-zero rc raises for a caller that passed `check=True`, the way subprocess does.
-    run_rc: int = 0
-    # Deploy tag to `owner`, as `lib.k8s_roles.tag_owners` maps it. The default is the live
-    # tree, where every consumer `consumer_tags` names is flux-owned.
-    owners: dict[str, str] = field(default_factory=lambda: {"monitor-bridge": "flux"})
-    # The tree the cluster hook reads. The default holds no cluster file, so the hook is a
-    # no-op and no test reaches the real `cluster_vars.py write`; a test that wants the hook
-    # to run builds a tree in `tmp_path`.
-    cluster_root: Path = Path("/nonexistent-cluster-tree")
-    expected: Expected = field(
-        default_factory=lambda: Expected(frozenset(), frozenset(), ())
-    )
-    expected_error: BaseException | None = None
-    write_rc: int = 0
-    check_rc: int = 0
-    # The keys the per-host SOPS files carry. Empty is the live tree's answer until H4.2.
-    host_keys: frozenset[str] = frozenset()
 
 
 def build_tools(f: Fakes) -> tuple[RotationTools, list]:
@@ -81,16 +51,6 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
             raise AssertionError(f"unscripted git call: {args}")
         return yaml.safe_dump(blobs[args[1].split(":", 1)[0]])
 
-    def run(cmd, **kwargs):
-        calls.append(("run", (cmd,), kwargs))
-        if f.run_error is not None:
-            raise f.run_error
-        # `check=True` raises here for the same reason it does in subprocess. `sops_set`
-        # passes it and reads the exception as "the rotation must not be recorded".
-        if kwargs.get("check") and f.run_rc:
-            raise subprocess.CalledProcessError(f.run_rc, cmd)
-        return subprocess.CompletedProcess(cmd, f.run_rc, stdout="", stderr="")
-
     def load_registry(*_args, **_kwargs) -> dict:
         calls.append(("load_registry", (), {}))
         return f.registry
@@ -102,20 +62,6 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         calls.append(("sops_names", (), {}))
         return list(f.names)
 
-    def cluster_expected() -> Expected:
-        calls.append(("cluster_expected", (), {}))
-        if f.expected_error is not None:
-            raise f.expected_error
-        return f.expected
-
-    def cluster_write(tree: Tree, expected: Expected) -> int:
-        calls.append(("cluster_write", (tree, expected), {}))
-        return f.write_rc
-
-    def cluster_check(tree: Tree) -> int:
-        calls.append(("cluster_check", (tree,), {}))
-        return f.check_rc
-
     # `tier_days` is left at its default: every test wants the real table, and the default
     # is a literal in `rotation_tools`.
     return RotationTools(
@@ -124,19 +70,7 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         load_registry=load_registry,
         save_registry=save_registry,
         sops_names=sops_names,
-        host_file_keys=lambda: f.host_keys,
-        sops_set=partial(sops_set, run=run),
-        owners=lambda: f.owners,
-        cluster_tree=lambda: Tree(f.cluster_root),
-        cluster_expected=cluster_expected,
-        cluster_write=cluster_write,
-        cluster_check=cluster_check,
     ), calls
-
-
-def process_calls(calls: list[tuple]) -> list[tuple[list[str], dict]]:
-    """Only the subprocess calls, as (argv, kwargs), in the order they were made."""
-    return [(args[0], kwargs) for name, args, kwargs in calls if name == "run"]
 
 
 def named_calls(calls: list[tuple]) -> list[str]:

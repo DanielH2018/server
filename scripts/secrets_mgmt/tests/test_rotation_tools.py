@@ -2,14 +2,14 @@
 
 These sat in test_secret_rotation.py while the functions did. They cover the seam module's
 own contracts — the registry file format and the cadence table it holds — so they moved with
-the code rather than staying beside the caller.
+the code rather than staying beside the caller. The `sops_set` tests cover `sops_io`, the leaf
+that holds the one write to a SOPS file.
 
 Run: uv run pytest scripts/secrets_mgmt/tests/test_rotation_tools.py
 """
 
-from secrets_mgmt import rotation_tools
 from secrets_mgmt import secret_rotation as sr
-from _rotation_fakes import Fakes, build_tools, process_calls
+from secrets_mgmt import sops_io
 from secrets_mgmt.rotation_tools import RotationTools, load_registry, save_registry
 
 
@@ -20,7 +20,7 @@ from secrets_mgmt.rotation_tools import RotationTools, load_registry, save_regis
 def test_registry_round_trips_losslessly(tmp_path):
     reg = {
         "entries": {
-            "b_token": {"tier": "auto", "last_rotated": "2026-06-01"},
+            "b_token": {"tier": "external", "last_rotated": "2026-06-01"},
             "a_token": {"tier": "assisted", "last_rotated": "2026-05-15"},
         }
     }
@@ -32,7 +32,7 @@ def test_registry_round_trips_losslessly(tmp_path):
 def test_saved_registry_keeps_managed_header_and_sorts_keys(tmp_path):
     path = str(tmp_path / "reg.yml")
     save_registry(
-        {"entries": {"z_tok": {"tier": "auto"}, "a_tok": {"tier": "auto"}}}, path
+        {"entries": {"z_tok": {"tier": "pinned"}, "a_tok": {"tier": "pinned"}}}, path
     )
     text = (tmp_path / "reg.yml").read_text()
     assert text.startswith("# Secret rotation registry — MANAGED")
@@ -62,36 +62,40 @@ def test_the_default_tier_table_is_the_one_secret_rotation_assigns():
     assert RotationTools().tier_days == sr.TIER_DAYS
 
 
-# ── the subprocess arm is time-bounded ──────────────────────────────────────
+# ── sops_io.sops_set: the one write to a SOPS file ─────────────────────────
 def test_sops_set_bounds_its_subprocess_with_a_timeout():
-    """A `sops` that never returns must not hang the cron that called it.
+    """A `sops` that never returns must not hang `cluster_vars.py write`, its caller.
 
-    `sops_set` runs unattended from the weekly rotate cron, which holds the repo-tree lock the
-    deploy pipeline shares while it runs. `subprocess.run` waits forever without this kwarg, so
-    the bound is asserted where it is handed to the process rather than where it is written.
+    `subprocess.run` waits forever without this kwarg, so the bound is asserted where it is
+    handed to the process rather than where it is written.
     """
-    tools, recorded = build_tools(Fakes())
-    tools.sops_set("a_push_token", "deadbeef")
+    calls = []
+    sops_io.sops_set("a_push_token", "deadbeef", run=lambda cmd, **kw: calls.append(kw))
+    assert [kw.get("timeout") for kw in calls] == [30]
 
-    timeouts = [
-        (cmd[1], kwargs.get("timeout")) for cmd, kwargs in process_calls(recorded)
-    ]
-    assert timeouts == [("set", 30)], (
-        "every sops call must carry a timeout: %s" % timeouts
+
+def test_sops_set_sends_the_value_on_stdin_never_in_argv():
+    """argv is world-readable in /proc/<pid>/cmdline, so the value travels on stdin."""
+    calls = []
+    sops_io.sops_set(
+        "a_push_token", "deadbeef", run=lambda cmd, **kw: calls.append((cmd, kw))
     )
+    ((cmd, kw),) = calls
+    assert not any("deadbeef" in part for part in cmd)
+    assert kw["input"] == '"deadbeef"'
 
 
 def test_sops_set_writes_the_file_it_is_given_and_secrets_yml_by_default():
     """`cluster_vars.py write` sets keys in the cluster file through the same argv builder."""
     argvs = []
-    rotation_tools.sops_set("a_key", "v", run=lambda cmd, **_kw: argvs.append(cmd))
-    rotation_tools.sops_set(
+    sops_io.sops_set("a_key", "v", run=lambda cmd, **_kw: argvs.append(cmd))
+    sops_io.sops_set(
         "a_key",
         "v",
         path="/elsewhere/cluster.env",
         run=lambda cmd, **_kw: argvs.append(cmd),
     )
     assert [cmd[3] for cmd in argvs] == [
-        rotation_tools.SECRETS_FILE,
+        sops_io.SECRETS_FILE,
         "/elsewhere/cluster.env",
     ]

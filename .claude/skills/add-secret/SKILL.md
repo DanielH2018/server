@@ -97,7 +97,7 @@ which only the operator can write. Step 6 tells you which case you are in.
    reconciles `ansible/secret_rotation.yml` (plaintext registry: names/tiers/dates, no values)
    with the live secret names and assigns a tier + staggered due-date. `sync` knows only
    `*_user`/`*_username` (`ignore`); every other name lands in `assisted`. **If step 2 classified
-   the key `auto`, `external` or `pinned`, edit its `tier` in the registry now** — `sync`
+   the key `external` or `pinned`, edit its `tier` in the registry now** — `sync`
    preserves the edit. Then
    `uv run python scripts/secrets_mgmt/secret_rotation.py audit` to confirm it registered cleanly.
 

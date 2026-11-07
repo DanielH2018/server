@@ -47,7 +47,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   and its `DECIDED:` marker). A `:latest@sha256:` pin is therefore not unpinned, floating or
   untracked. Re-pinning it to a version tag is not a required fix; many channel tags have no
   version to pin. A bare floating tag with no digest is a real finding.
-- **Secret rotation:** `scripts/secrets_mgmt/secret_rotation.py` (sync/audit/rotate) + `ansible/secret_rotation.yml`
+- **Secret rotation:** `scripts/secrets_mgmt/secret_rotation.py` (sync/audit/record/consumers) + `ansible/secret_rotation.yml`
   (plaintext registry: names/tiers/dates, no values) + a daily audit timer
   (`hosts/components/secret-rotation/`) whose textfile verdict `SecretRotationAuditFailed` pages.
 
@@ -55,7 +55,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
 - `Read`/`Grep` the workflow, `prek.toml`, `renovate.json`, the gitops_deploy files + CLAUDE.md.
 - `uv run pytest <suite>` (read-only test run), `uv run python scripts/secrets_mgmt/secret_rotation.py audit`,
   `uv run python scripts/validate/compose_templates.py` — confirm the live state matches the comments.
-  Never run a command that writes state (no `rotate`/`sync`, no deploy, no commit, no push).
+  Never run a command that writes state (no `sync`/`record`, no deploy, no commit, no push).
 
 ## Method
 1. VERIFY against the live config before flagging — read the actual workflow/renovate/registry and
