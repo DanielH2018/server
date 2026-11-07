@@ -8,5 +8,8 @@
 
 - name: Install the k3s server
   ansible.builtin.import_tasks: server.yml
+# Runs nothing on a host in `k3s_packaged_hosts['node-address']`. The agent pin play still reaches it.
+- name: Pin the node's LAN address
+  ansible.builtin.import_tasks: static-address.yml
 - name: Release k3s's bundled CoreDNS addon to Flux
   ansible.builtin.import_tasks: coredns.yml
