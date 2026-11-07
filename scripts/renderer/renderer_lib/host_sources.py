@@ -28,8 +28,18 @@ from renderer.renderer_lib.environment import strict_env
 # path, because a role still installs it there: initial_setup installs homelab-check-lib.sh on
 # every host, and the Pi heartbeats' package copies read the same bytes (M6 B5). A named
 # allowlist rather than a path, so a component cannot copy any other file of the repo.
+_LONGHORN_LIB = "scripts/lib/longhorn_lib"
 SHARED_FILES = {
     "homelab-check-lib.sh": "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    # What the backup-health reader imports. The reapers, `probe.py` and the runbook gates import
+    # the same modules from the checkout, so they stay single in scripts/lib/.
+    "longhorn_backup_health_logic.py": f"{_LONGHORN_LIB}/longhorn_backup_health_logic.py",
+    "longhorn_backups.py": f"{_LONGHORN_LIB}/longhorn_backups.py",
+    "longhorn_cluster_state.py": f"{_LONGHORN_LIB}/longhorn_cluster_state.py",
+    "longhorn_cron_evidence_logic.py": f"{_LONGHORN_LIB}/longhorn_cron_evidence_logic.py",
+    "longhorn_etcd_s3_logic.py": f"{_LONGHORN_LIB}/longhorn_etcd_s3_logic.py",
+    "longhorn_restore_drill_stamps.py": f"{_LONGHORN_LIB}/longhorn_restore_drill_stamps.py",
+    "longhorn_skipped_volumes_logic.py": f"{_LONGHORN_LIB}/longhorn_skipped_volumes_logic.py",
 }
 
 # The setup roles whose defaults and templates a component may render with `role:` (H4, *NUT on
@@ -37,8 +47,10 @@ SHARED_FILES = {
 # renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
 # SHARED_FILES, so a component cannot read any other role. `initial_setup` joined in H7.30, which
 # moved the Pi's fail2ban group, maintenance jobs and ufw. H7.31 moved daniel-server's and H7.32
-# daniel-box's; the role still applies its other subjects on daniel-box.
-ROLE_SOURCES = frozenset({"common", "initial_setup", "nut_host"})
+# daniel-box's; the role still applies its other subjects on daniel-box. `k3s` joined in H7.35:
+# daniel-server's pin play still applies the address pin's templates that daniel-box's package
+# renders.
+ROLE_SOURCES = frozenset({"common", "initial_setup", "k3s", "nut_host"})
 # The components a host's package.yml may borrow sources from with `component:`. claude-code's
 # agent user and its per-uid slice cap sit in each host's package.yml, because the uid differs
 # per host, and they render the component's defaults and templates (#6773). A named allowlist,

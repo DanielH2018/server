@@ -15,9 +15,9 @@ import shutil
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
 from lib.proc_testing import fake_bin, run, write_exec
-from lib.repo_paths import K3S_FILES, K3S_ROLE
+from lib.repo_paths import K3S_FILES, K3S_HOST_CHECKS
 
-BACKUP_HEALTH = K3S_ROLE / "templates" / "longhorn-backup-health.sh.j2"
+BACKUP_HEALTH = K3S_HOST_CHECKS / "templates" / "longhorn-backup-health.sh.j2"
 BACKUP_HEALTH_READER = K3S_FILES / "longhorn_backup_health.py"
 
 
@@ -122,20 +122,19 @@ def _run_rendered_shim(
 
     The seams: the reader invocation becomes `fake_reader_body`; the shared check library is a
     stub whose `write_check_textfile` records the success flag it receives and whose
-    `boot_grace_active` always reports "not booting"; the healthchecks.io key file is swapped
-    for a tmp copy; and `curl` is a stub on PATH that records its argv. Returns
+    `boot_grace_active` always reports "not booting"; the healthchecks.io key credential is a
+    tmp file; and `curl` is a stub on PATH that records its argv. Returns
     `(proc, verdict, curl_calls)` where `verdict` is `up` or `down` as the textfile write
     received it (None when never called) and `curl_calls` is one argv line per curl invocation.
 
     `extra_stub_files` places additional executables (name -> script body) on the same PATH
     directory as the `curl` stub, ahead of the real binaries — e.g. a `mktemp` that fails.
 
-    The healthchecks.io seam is not optional on this host: `/etc/healthchecks/ping.env` is
-    0640 root:ubuntu, so the test user CAN read the real key, and until this seam existed a
-    test run sourced it and sent a fixture `up` ping to the real off-site dead-man for
-    `longhorn-backup-health`. Two independent guards: the path is replaced, and `curl` is
-    stubbed so a missed replacement leaks a real key into a file under tmp_path rather than
-    onto the wire. The assertions on `curl_calls` never print a URL for that reason.
+    A run that reached the real key would send a fixture `up` ping to the real off-site
+    dead-man for `longhorn-backup-health`. Two independent guards: the credential path is
+    replaced, and `curl` is stubbed so a missed replacement leaks a real key into a file under
+    tmp_path rather than onto the wire. The assertions on `curl_calls` never print a URL for
+    that reason.
     """
     ctx = v.template_context(BACKUP_HEALTH)
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
@@ -144,8 +143,9 @@ def _run_rendered_shim(
         tmp_path / "fake-reader.sh", "#!/usr/bin/env bash\n" + fake_reader_body
     )
 
-    hc_ping_env = tmp_path / "ping.env"
-    hc_ping_env.write_text(f"HC_PING_KEY='{FAKE_HC_PING_KEY}'\n")
+    credentials = tmp_path / "credentials"
+    credentials.mkdir()
+    (credentials / "healthchecks_ping_key").write_text(FAKE_HC_PING_KEY)
     textfile_call = tmp_path / "textfile-call.txt"
 
     curl_calls = tmp_path / "bin" / "curl-calls"
@@ -166,11 +166,12 @@ def _run_rendered_shim(
         "boot_grace_active() { return 1; }\n"
         f'write_check_textfile() {{ printf "%s" "$2" > {textfile_call}; }}\n'
     )
-    script = script.replace("/usr/local/lib/homelab-check-lib.sh", str(check_lib))
-    script = script.replace("/etc/healthchecks/ping.env", str(hc_ping_env))
+    script = script.replace("/usr/lib/homelab/homelab-check-lib.sh", str(check_lib))
+    script = script.replace("${CREDENTIALS_DIRECTORY:-/nonexistent}", str(credentials))
+    script = script.replace("$CREDENTIALS_DIRECTORY", str(credentials))
     reader_invocation = re.search(
         r"/usr/local/bin/uv run --no-project --no-python-downloads --python \S+ "
-        r"/opt/longhorn-backup-health/longhorn_backup_health\.py",
+        r"/usr/lib/homelab/longhorn-backup-health/longhorn_backup_health\.py",
         script,
     )
     assert reader_invocation, "the reader invocation line moved; update this test"
@@ -185,11 +186,11 @@ def _run_rendered_shim(
 
 
 def _assert_pings_carry_only_the_fixture_key(curl_calls: list[str]) -> None:
-    # Deliberately no URL in the failure message: a missed ping.env replacement means these
-    # lines hold the REAL healthchecks key.
+    # Deliberately no URL in the failure message: a missed credential replacement means
+    # these lines hold the REAL healthchecks key.
     assert len(curl_calls) == 1, f"expected the one hc-ping call, got {len(curl_calls)}"
     assert all(FAKE_HC_PING_KEY in call for call in curl_calls), (
-        "a healthchecks ping did not carry the fixture key: the ping.env path replacement "
+        "a healthchecks ping did not carry the fixture key: the credential replacement "
         "in _run_rendered_shim missed, and the real key was sourced"
     )
 

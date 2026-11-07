@@ -91,20 +91,6 @@ def test_the_k3s_agent_walk_holds_none_of_the_server_crons():
     assert "/etc/rancher/k3s/kuma-push.env" not in paths
 
 
-@pytest.mark.parametrize(
-    "path",
-    ["/etc/healthchecks/ping.env"],
-)
-def test_a_secret_read_through_default_is_not_compared_by_content(path):
-    """`{{ token | default("") }}` rendered empty and was compared against the live token."""
-    wants, _ = applied_tasks.expected(
-        K3S, "daniel-box", applied.context(K3S, "daniel-box")
-    )
-    (want,) = {w for w in wants if w.path == path}
-    assert want.sha256 is None
-    assert "STUB" in want.why_no_content
-
-
 def test_a_host_whose_files_write_nothing_is_not_read_and_not_a_gap(tmp_path):
     """The Pi is down or rate-limited often; a host with no path must not turn that into 75."""
     role = tmp_path / "x" / "tasks"

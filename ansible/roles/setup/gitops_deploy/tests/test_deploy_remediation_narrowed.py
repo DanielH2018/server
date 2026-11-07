@@ -174,7 +174,7 @@ def test_the_gated_tags_are_every_tag_the_gated_tasks_carry():
     narrowed `--tags` naming its tag would take the control plane down silently.
     """
     reachable = {p.name for p in _reachable_task_files()}
-    assert {"main.yml", "server.yml", "node.yml"} <= reachable, sorted(reachable)
+    assert {"main.yml", "server.yml"} <= reachable, sorted(reachable)
     assert "agent.yml" not in reachable, "agent.yml is not reached by the role's entry"
     gated = _gated_tasks()
     assert len(gated) >= 3, f"only {len(gated)} gated tasks found in the role"

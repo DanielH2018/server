@@ -1,0 +1,7 @@
+# The state the checks write. `/var/lib/homelab` holds the operator's token stamp. node-exporter's
+# textfile collector reads the textfile directory through a hostPath, the deploy user's checks
+# write to it, and setgid keeps that group on new files. Created at boot and by bootstrap-host.sh.
+#Type Path Mode User Group Age
+d /var/lib/homelab 0755 root root -
+d /var/lib/node-exporter-textfile 2775 root {{ sys_user }} -
+d {{ k3s_cron_fired_stamp_dir }} 0755 {{ sys_user }} {{ sys_user }} -

@@ -36,6 +36,14 @@ RECORDED = {
     "docs-refresh": {("render", "docs-refresh")},
     "eval-sweep": {("render", "eval-run")},
     "secret-rotation": {("render", "secret-rotation")},
+    # c1d338364:ansible/roles/setup/k3s/tasks/health-crons.yml, and #2978 retired the reap one.
+    "k3s-host-checks": {
+        ("render", "k3s-backup-health"),
+        ("render", "k3s-disk-health"),
+        ("render", "k3s-etcd-snapshot"),
+        ("deployed", "k3s-longhorn-backup-health-reader"),
+        ("deployed", "k3s-longhorn-reap"),
+    },
     # a2bed5696^:ansible/roles/setup/nut_host/tasks/main.yml
     "nut-secondary": {("render", "nut-host")},
     # 84bb0bbf0a:ansible/roles/setup/initial_setup/tasks/integrity.yml

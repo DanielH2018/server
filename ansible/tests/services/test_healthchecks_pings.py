@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import ANSIBLE, REPO
-from _shell_render import rendered_shell_text
+from _shell_render import rendered_shell_text, shell_template_path
 from lib.repo_paths import ROLES
 
 _COMPONENTS = REPO / "hosts" / "components"
@@ -74,7 +74,8 @@ def _rendered_shell_template(path: Path) -> str | None:
     """`path`'s rendered text when it is a shell template the renderer can address, else None.
 
     The roster is keyed on a (plane, role, name) triple derived from
-    `roles/<plane>/<role>/templates/<name>.sh.j2`, and `rendered_shell_text` RAISES for a
+    `roles/<plane>/<role>/templates/<name>.sh.j2` or
+    `hosts/components/<role>/templates/<name>.sh.j2`, and `rendered_shell_text` RAISES for a
     triple it does not hold. So the shape is checked structurally first: a `*.sh.j2` outside
     that exact depth — one nested a directory deeper under `templates/` — reads as source
     rather than failing the whole census. `_shell_render` derives the plane and role from the
@@ -82,14 +83,15 @@ def _rendered_shell_template(path: Path) -> str | None:
     """
     if not path.name.endswith(".sh.j2"):
         return None
-    try:
-        rel = path.relative_to(ROLES)
-    except ValueError:
+    if path.is_relative_to(_COMPONENTS):
+        rel = (_COMPONENTS.name, *path.relative_to(_COMPONENTS).parts)
+    elif path.is_relative_to(ROLES):
+        rel = path.relative_to(ROLES).parts
+    else:
         return None
-    if len(rel.parts) != 4 or rel.parts[2] != "templates":
+    if len(rel) != 4 or rel[2] != "templates":
         return None
-    plane, role, name = rel.parts[0], rel.parts[1], rel.parts[3]
-    return rendered_shell_text(plane, role, name)
+    return rendered_shell_text(rel[0], rel[1], rel[3])
 
 
 def _ping_files() -> list[Path]:
@@ -210,7 +212,7 @@ def test_ping_is_optional(path: Path) -> None:
 # The template this module's render routing is proved on, as a (plane, role, name) triple. Named
 # rather than discovered: a routing test over a template picked by glob reads green the day the
 # glob returns nothing, which is the failure mode the routing itself exists to remove.
-_RENDERED_SENDER = ("setup", "k3s", "disk-health.sh.j2")
+_RENDERED_SENDER = ("components", "k3s-host-checks", "disk-health.sh.j2")
 
 
 def test_a_shell_template_is_read_rendered_not_as_source() -> None:
@@ -221,7 +223,7 @@ def test_a_shell_template_is_read_rendered_not_as_source() -> None:
     holding `{{` and fail here rather than silently reading templates again (#3190).
     """
     plane, role, name = _RENDERED_SENDER
-    path = ROLES / plane / role / "templates" / name
+    path = shell_template_path(plane, role, name)
     assert "{{" in path.read_text(), (
         f"{name} no longer carries Jinja, so it cannot prove the render routing. Point "
         f"_RENDERED_SENDER at a ping template that does."

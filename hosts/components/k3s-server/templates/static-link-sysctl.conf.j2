@@ -1,0 +1,7 @@
+# The address pin's `ignore-carrier: true` keeps its default routes installed with the cable out,
+# and the kernel still routes over a linkdown route by default, so they would beat the metric-600
+# routes of the wifi fallback (#4510, #4561). Per link, so cni0, flannel.1 and the VM bridge keep
+# the default. udev re-runs systemd-sysctl for the link's prefix on every net device add, so the
+# key survives a reboot even when the NIC appears late.
+net.ipv4.conf.{{ k3s_node_static_link }}.ignore_routes_with_linkdown=1
+net.ipv6.conf.{{ k3s_node_static_link }}.ignore_routes_with_linkdown=1

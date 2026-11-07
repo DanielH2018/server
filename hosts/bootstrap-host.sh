@@ -20,7 +20,8 @@
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them);
 #      on the Pi, then log2ram from the Azlux source its package ships
-#   6  the Pi only: stop and disable systemd-resolved, then start homelab-docker-engine.service once
+#   6  the Pi and daniel-box: stop and disable systemd-resolved, and on the Pi start
+#      homelab-docker-engine.service once
 #   7  where the package ships the integrity scans: the first rkhunter and AIDE baselines, and
 #      the mask on the aide package's dailyaidecheck.timer. A missing database on a host whose
 #      logs show it had one is refused; --rebaseline writes a new one after the operator looks.
@@ -605,12 +606,27 @@ if [ "$host" = daniel-pi ] &&
 fi
 stop_after 5
 
-# Step 6: the Pi only. The package ships the engine unit as a manual one, so nothing else starts it.
-if [ "$host" = daniel-pi ]; then
+# Step 6: the hosts whose package ships /etc/resolv.conf: the Pi and daniel-box. The package ships
+# the Pi's engine unit as a manual one, so nothing else starts it.
+if [ "$host" = daniel-pi ] || [ "$host" = daniel-box ]; then
     # Never before step 5: its apt-get reaches Ubuntu's archive by name, through the stub resolver
     # that /etc/resolv.conf links to until the package replaces the link with a regular file.
     [ ! -L "$ROOT/etc/resolv.conf" ] ||
         die "/etc/resolv.conf is still a symlink after the install, so stopping systemd-resolved would leave this host without DNS"
+    # daniel-box's file names 127.0.0.1 and nothing else, so the forwarder must answer before
+    # resolved goes. A public name: this proves the forwarder, not Pi-hole, which may be down.
+    if [ "$host" = daniel-box ]; then
+        answered=no
+        for _ in 1 2 3 4 5 6 7 8; do
+            if [ -n "$(dig +short +time=2 +tries=1 @127.0.0.1 github.com 2> /dev/null)" ]; then
+                answered=yes
+                break
+            fi
+            sleep "${BOOTSTRAP_DNS_RETRY_DELAY:-2}"
+        done
+        [ "$answered" = yes ] ||
+            die "coredns-host.service does not answer on 127.0.0.1, so stopping systemd-resolved would leave this host without DNS"
+    fi
     if [ "$(systemctl is-enabled systemd-resolved.service 2> /dev/null)" = enabled ]; then
         systemctl disable systemd-resolved.service || die "cannot disable systemd-resolved.service"
         echo "bootstrap-host: disabled systemd-resolved.service"
@@ -618,6 +634,8 @@ if [ "$host" = daniel-pi ]; then
     if systemctl is-active --quiet systemd-resolved.service; then
         systemctl stop systemd-resolved.service || die "cannot stop systemd-resolved.service"
     fi
+fi
+if [ "$host" = daniel-pi ]; then
     if systemctl cat homelab-docker-engine.service > /dev/null 2>&1; then
         systemctl start homelab-docker-engine.service ||
             die "homelab-docker-engine.service failed to start"

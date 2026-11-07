@@ -348,8 +348,8 @@ def test_no_installed_script_runs_by_its_shebang():
     """A role script's `#!/usr/bin/env python3` is the host's system 3.12, so running it by path
     escapes the pin the tests above enforce on command strings (#4489)."""
     installed = sorted(live for live in role_installs.install_map() if "{{" not in live)
-    # Non-vacuous: a script the backup-health cron runs must be in the census this scans for.
-    assert "/opt/longhorn-backup-health/longhorn_backup_health.py" in installed
+    # Non-vacuous: a script the fake-remux cron runs must be in the census this scans for.
+    assert "/opt/autofix-fake-remux/fake_remux.py" in installed
     offenders = [
         f"{path.relative_to(_REPO)}: {live}"
         for path in sorted(ROLES.rglob("*"))

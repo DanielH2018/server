@@ -606,19 +606,16 @@ this section is **operator-only**, and the guest drill below has not run yet. Th
 
 ### What the packages do not hold yet
 
-The two packages do not rebuild a whole node until H7.34 (daniel-server) and H7.35 (daniel-box)
-land. A node rebuilt from them alone lacks:
+`homelab-daniel-box` holds the server's whole host half since H7.35. `homelab-daniel-server` does
+not until H7.34 lands. A daniel-server rebuilt from its package alone lacks:
 
-- the UFW rules for k3s's join ports and for Prometheus's scrapes. The UFW arm of reconcile enables
-  UFW on a rebuilt host, so daniel-box cannot reach a rebuilt agent's VXLAN, kubelet or metrics
-  ports until the rules exist;
+- the UFW rules for k3s's join ports. The UFW arm of reconcile enables UFW on a rebuilt host, so
+  daniel-box cannot reach a rebuilt agent's VXLAN, kubelet or metrics ports until the rules exist;
 - the Longhorn host prerequisites and the `multipathd` blacklist;
-- the static LAN address, the host CoreDNS forwarder and the read-only kubeconfig;
-- `/etc/rancher/k3s/etcd-s3.env`, which *Restoring* in [the etcd restore doc](k3s-etcd-restore.md)
-  sources;
-- daniel-server's LVM volumes, which `bootstrap-host.sh` step 4 does not create yet.
+- the static LAN address;
+- its LVM volumes, which `bootstrap-host.sh` step 4 does not create yet.
 
-Until those two slices land, a node rebuilt from this section is not a working node.
+Until that slice lands, a daniel-server rebuilt from this section is not a working node.
 [The break-glass doc](break-glass.md), *Scenario: daniel-server is dead, daniel-box survives*, says
 what completes a daniel-server rebuild during an outage.
 
@@ -682,18 +679,17 @@ daniel-box serves the repository, so it builds its own packages from the clone.
     ```
 
 1. To restore etcd as well, do it now, while k3s is still stopped. A new disk holds no local
-   snapshot, so the restore reads R2, and no package writes the file holding R2's credentials.
-   Create `/etc/rancher/k3s/etcd-s3.env` (root, mode 0600) by hand. It sets `AWS_ACCESS_KEY_ID`,
-   `AWS_SECRET_ACCESS_KEY`, `ETCD_S3_BUCKET` and `ETCD_S3_ENDPOINT`, from the `r2_access_key_id`,
-   `r2_secret_access_key` and `r2_bucket` keys of `ansible/vars/secrets.yml`, with the endpoint
-   `<r2_account_id>.r2.cloudflarestorage.com`. Then follow *Restoring* in
-   [the etcd restore doc](k3s-etcd-restore.md), which also reads the config the package installed.
+   snapshot, so the restore reads R2. `homelab-secrets` renders
+   `/etc/rancher/k3s/etcd-s3.env` from the host's SOPS file, and the package links it there. Follow
+   *Restoring* in [the etcd restore doc](k3s-etcd-restore.md), which also reads the config the
+   package installed.
 1. Start k3s. No package enable link names `k3s.service`, and reconcile never starts a `windowed`
    unit, so this hand command is the only start on the package path:
 
     ```bash
     sudo systemctl enable --now k3s.service
     sudo k3s kubectl get node daniel-box
+    sudo systemctl start homelab-k3s-kubeconfig.service
     ```
 
 1. Bring up Flux:

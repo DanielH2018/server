@@ -187,7 +187,7 @@ stored blocks rather than with anything a deploy touches.
 them to the B2 BackupTarget, and prices each one at its volume's `1 + lv1 + lv2` block-tree walk.
 It reads Loki and the Kubernetes API only, so it spends nothing on B2 and is safe on a timer.
 
-Two crons run it (`roles/setup/k3s/tasks/health-crons.yml`): the accounting pass at 07:10, then
+Two timers run it (`hosts/components/k3s-host-checks/`): the accounting pass at 07:10, then
 the `b2-budget` listing at 07:20. **That order is the constraint.** A deletion can only be priced
 by a listing taken before it — afterwards the tree is smaller than the one the deletion walked —
 so each pass charges against the previous day's listing and the listing then refreshes for

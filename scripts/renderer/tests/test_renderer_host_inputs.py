@@ -117,7 +117,15 @@ def test_an_imported_module_under_no_member_is_flagged(render, tracked):
 def test_host_inputs_names_the_secrets_file_and_the_shared_check_lib():
     assert "ansible/vars/secrets.yml" in HOST_INPUTS
     assert "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh" in HOST_INPUTS
-    assert set(SHARED_FILES.values()) <= set(HOST_INPUTS)
+    # A directory member ends `/` and covers what sits under it, as `scripts/lib/` covers the
+    # backup-health reader's libraries.
+    directories = tuple(i for i in HOST_INPUTS if i.endswith("/"))
+    uncovered = {
+        path
+        for path in SHARED_FILES.values()
+        if path not in HOST_INPUTS and not path.startswith(directories)
+    }
+    assert uncovered == set()
 
 
 def test_host_inputs_module_imports_nothing():

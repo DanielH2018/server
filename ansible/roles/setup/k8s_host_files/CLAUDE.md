@@ -2,8 +2,7 @@
 
 This role holds the host writes that D5 moves out of the k8s roles before each role flips to
 Flux: docs's site directory, traefik's absent arm, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
-media-volume's media
-directories, observability's retired dashboard staging trees. A Flux-owned
+observability's retired dashboard staging trees. A Flux-owned
 role has no Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
 `docs/target-architecture/deploy/d5-bulk-move.md`, sections *Host-side rows* and *The
 `k8s_host_files` role enters the setup plane once (D5.1h)*.
@@ -34,9 +33,9 @@ from `tasks/main.yml` with `ansible.builtin.import_tasks`. The import is static 
 `type: Directory`. H7.10a moved that directory into the docs-refresh component's `tmpfiles.d`
 file (`hosts/components/docs-refresh/`) and deleted the task file. artifacts' PR wrote a task
 file for the three trees artifacts' Deployment mounts the same way, and H7.40 moved them into
-the claude-code component's `tmpfiles.d` file and deleted it. media-volume's PR wrote `tasks/media-volume.yml`,
-which creates the directory media-volume's static PersistentVolume names and its `media/` and
-`torrents/` subdirectories, with no mode. configarr's PR wrote `tasks/configarr.yml`, the
+the claude-code component's `tmpfiles.d` file and deleted it. media-volume's PR wrote a task file for the
+directory media-volume's static PersistentVolume names and its `media/` and `torrents/`
+subdirectories, and H7.35 moved them into daniel-box's `tmpfiles.d` file and deleted it. configarr's PR wrote `tasks/configarr.yml`, the
 absent arms that remove H2.5b's retired host health reader: its cron, its script, its working
 directory and its drift fragment. observability's dashboard conversion wrote
 `tasks/observability.yml`, an absent arm over the three trees its old `tasks/dashboards.yml`
@@ -80,10 +79,11 @@ because `initial_setup.yml` has no dry-run mode.
 
 `ansible/tests/setup/test_k8s_host_files_pairs.py` holds those rules. It derives every key this
 role's imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and
-asserts that each copy equals its source. media-volume's PR added `media_volume_host_path` and
-the `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
-when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which H7.25 moved
-into the `pi-peer-backup-target` component's authorized-key line.
+asserts that each copy equals its source. Its census names no key: media-volume's copy moved
+to daniel-box's package in H7.35, where `hosts/lib/tests/test_box_k3s_host_half.py` holds it
+equal, and pi-peer-backup's
+`pi_peer_backup_src_dir` moved into the `pi-peer-backup-target` component's authorized-key line
+in H7.25.
 
 `ansible/tests/setup/test_k8s_host_files_rows.py` names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or

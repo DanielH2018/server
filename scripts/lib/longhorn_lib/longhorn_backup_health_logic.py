@@ -34,7 +34,7 @@ import re
 
 # Both resolve via longhorn_backup_health.py's own sys.path.insert(0, <own dir>), which runs
 # before it imports this module. That directory holds this package and host_lib.py, which is
-# copied there as a sibling at release time (/opt/longhorn-backup-health/, health-crons.yml).
+# shipped there as a sibling (/usr/lib/homelab/longhorn-backup-health/, k3s-host-checks).
 # In the checkout the inserts below stand in for that copy.
 import sys as _sys
 from pathlib import Path as _Path

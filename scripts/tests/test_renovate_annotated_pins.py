@@ -42,7 +42,6 @@ KNOWN_ANNOTATED = frozenset(
     {
         "twpayne/chezmoi",
         "k3s-io/k3s",
-        "coredns/coredns",
         "docker-ce",
         "maxlerebourg/crowdsec-bouncer-traefik-plugin",
         "node",

@@ -78,10 +78,9 @@ def test_the_scans_load_no_credential_and_the_package_lists_no_scan_token(packag
     assert "healthchecks_ping_key" in package.credentials
 
 
-def test_the_k3s_health_crons_keep_their_ping_key_file(manifest):
+def test_the_maintenance_wrapper_retires(manifest):
     paths = {e["path"] for e in manifest["legacy"] if "path" in e}
     assert "/usr/local/bin/host-maintenance.sh" in paths
-    assert not {p for p in paths if p.startswith("/etc/healthchecks")}
 
 
 def test_the_weekly_reboot_pings_this_hosts_check(package, tmp_path, context):
@@ -107,29 +106,28 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_every_other_roles_rules(
     lan = context["lan_subnet"]
     agent = "192.0.2.10"
     deploy_ui = "deploy-ui from the k3s cluster"
+    k3s = [
+        r
+        for r in manifest["ufw"]["rules"]
+        if r["id"].startswith(("k3s-join-", "coredns-host-"))
+    ]
     builder = [
         [r["spec"], f"homelab:{r['id']}"]
         for r in manifest["ufw"]["rules"]
         if r["id"].startswith("apt-repo-")
     ]
-    # The live rules in `ufw status` order (2026-10-31): setup/k3s's join rules and coredns-host
-    # metrics allows carry no comment, and setup/deploy_ui labels its allows with its own comment.
+    # The live rules in `ufw status` order: the k3s join rules and coredns-host metrics allows
+    # carry no comment, and setup/deploy_ui labels its allows with its own comment.
     others = [
-        [f"allow from {agent} to any port 6443 proto tcp", ""],
-        [f"allow from {agent} to any port 8472 proto udp", ""],
-        [f"allow from {agent} to any port 10250 proto tcp", ""],
-        [f"allow from {agent} to any port 9100 proto tcp", ""],
-        [f"allow from {agent} to any port 7946 proto tcp", ""],
-        [f"allow from {agent} to any port 7946 proto udp", ""],
-        ["allow from 10.42.0.0/16 to any port 9253 proto tcp", ""],
-        [f"allow from {agent} to any port 9253 proto tcp", ""],
         ["allow from 10.42.0.0/16 to any port 8790 proto tcp", deploy_ui],
         [f"allow from {agent} to any port 8790 proto tcp", deploy_ui],
         ["allow from 192.0.2.20 to any port 8790 proto tcp", deploy_ui],
     ] + builder
     node.state["ufw"] = {
         "active": True,
-        "rules": [[LAN.format(lan=lan), ""], ["limit 22/tcp", ""]] + others,
+        "rules": [[LAN.format(lan=lan), ""], ["limit 22/tcp", ""]]
+        + [[r["spec"], ""] for r in k3s]
+        + others,
         "policy": {"incoming": "deny", "outgoing": "allow", "routed": "deny"},
         "fail": [],
     }
@@ -140,6 +138,12 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_every_other_roles_rules(
     assert [tuple(r) for r in node.state["ufw"]["rules"]] == [
         (LAN.format(lan=lan), "homelab:keep:lan-ssh"),
         ("limit 22/tcp", "homelab:keep:ssh-limit"),
+    ] + [
+        (
+            r["spec"],
+            f"homelab:keep:{r['id']}" if r.get("keep") else f"homelab:{r['id']}",
+        )
+        for r in k3s
     ] + [tuple(r) for r in others]
     # A `ufw default` or an enable on an active k3s node reloads the ruleset under kube-router,
     # which wiped the before chains here on 2026-10-25.

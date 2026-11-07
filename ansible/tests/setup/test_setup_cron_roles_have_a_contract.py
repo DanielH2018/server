@@ -100,7 +100,7 @@ def test_census_finds_the_roles_known_to_install_crons():
         for d in role_dirs(SETUP_ROLES, skip_dotted=True)
         if _installs_a_cron_or_timer(d)
     }
-    expected = {"gitops_deploy", "renovate_agent", "k3s", "fake_remux"}
+    expected = {"gitops_deploy", "renovate_agent", "fake_remux"}
     assert expected <= found, f"missing from the cron/timer census: {expected - found}"
 
 

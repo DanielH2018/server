@@ -30,6 +30,7 @@ DEPS = {
     "uv": "astral-sh/uv",
     "flux": "fluxcd/flux2",
     "vale": "vale-cli/vale",
+    "coredns": "coredns/coredns",
 }
 
 

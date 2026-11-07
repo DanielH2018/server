@@ -95,7 +95,6 @@ KNOWN_PINS = frozenset(
         "jellyfin_k8s_anisync",
         "jellyfin_k8s_introskipper",
         "k3s_install_script",
-        "k3s_host_coredns",
         "chezmoi_setup_installer",
         "initial_setup_uv_installer",
         "code_server_k8s_node",

@@ -1340,8 +1340,9 @@ steps are:
     - The local `homelab-updater` ships `homelab.sources`, and `homelab-daniel-box` starts
       the signer, the builder and the repo. The next updater run moves the host onto the
       signed repo, at the same version or a newer one.
-6. On the Pi only, stop and disable `systemd-resolved`, then start
-   `homelab-docker-engine.service` once. The disable waits for this step because step 5's
+6. On the Pi and daniel-box, stop and disable `systemd-resolved`. On daniel-box the step
+   first proves the forwarder answers, because `/etc/resolv.conf` names only it. On the Pi it
+   then starts `homelab-docker-engine.service` once. The disable waits for this step because step 5's
    `apt-get` reaches Ubuntu's archive through the stub resolver, and `/etc/resolv.conf` links
    to that stub until the package replaces the link. The step refuses if the link is still
    there. The package shipped the engine unit in
@@ -2010,6 +2011,12 @@ the `manual_plane` clearing, and *Rollback*'s
     the backup health reader, the B2 accounting and listing crons, the root-disk heartbeat, the
     cluster-token drift check, the Healthchecks.io key and the etcd restore credentials.
     `k3s/tasks/longhorn-host.yml`'s packages and multipath drop-in move here as well.
+    **Amended 2026-11-07.** `homelab-tools` ships CoreDNS, as *Architecture-specific binaries*
+    has it. `/etc/resolv.conf` names only the forwarder on daniel-box, so `bootstrap-host.sh`
+    step 6 also stops `systemd-resolved` there, once the forwarder answers. The kubeconfig
+    oneshot takes the token from the `k3s_readonly_token` credential and the CA from k3s's admin
+    kubeconfig, so it reads no cluster. The drill stays in place in the checkout, as old H7.13's
+    daniel-server half does not.
 12. **H7.36.** All three steps move daniel-box timers that read the primary checkout, and
     each keeps its `## Autonomous-role contract` in its component. It carries the docs site
     directory's `tmpfiles.d` line and the docs role's `CLAUDE.md` edit.

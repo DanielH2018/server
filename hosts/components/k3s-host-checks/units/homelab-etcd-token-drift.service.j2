@@ -1,0 +1,14 @@
+# Shipped by the host package's k3s-host-checks component. Started by homelab-etcd-token-drift.timer.
+[Unit]
+Description=Compare the cluster token with the operator's stamp and report the verdict
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+ExecStart=/usr/lib/homelab/etcd-token-drift.sh
+# The textfile, the Healthchecks.io slug and the rules read this name.
+SyslogIdentifier=etcd-snapshot-offbox
+# Import, not Load: Load fails the unit on a missing file, and the check must still write its verdict.
+ImportCredential=healthchecks_ping_key

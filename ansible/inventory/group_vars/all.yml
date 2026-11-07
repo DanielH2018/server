@@ -607,7 +607,7 @@ k8s_pi_client_ip: "{{ hostvars['daniel-pi'].server_ip }}"
 # (deploy-ui.service) rather than a pod.
 k8s_node_client_ip: "{{ hostvars['daniel-box'].server_ip }}"
 # The port daniel-box's host CoreDNS publishes its Prometheus endpoint on. DUPLICATED FROM
-# `k3s_host_dns_metrics_port` in roles/setup/k3s/defaults/main.yml, deliberately: role
+# `k3s_host_dns_metrics_port` in hosts/components/k3s-host-dns/defaults/main.yml, deliberately: role
 # defaults are only in scope while that role runs, and the k8s play never includes it, so a
 # reference across the boundary is undefined rather than shared. The two are kept equal by
 # ansible/tests/setup/test_coredns_metrics_port_agrees.py — a drift would leave this job scraping

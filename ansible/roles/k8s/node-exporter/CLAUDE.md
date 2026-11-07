@@ -106,7 +106,7 @@ mounted at `/textfile` and read by `--collector.textfile.directory`. A host prod
 - **Every check file writes the `homelab_check_*` HELP text byte for byte as the others
   do.** node_exporter drops a family whose HELP differs from the one an earlier file gave it,
   and it sets `node_textfile_scrape_error`. A new producer copies the HELP lines from
-  `ansible/roles/setup/k3s/templates/disk-health.sh.j2`, and
+  `hosts/components/k3s-host-checks/templates/disk-health.sh.j2`, and
   `ansible/roles/k8s/node-exporter/tests/test_iscsi_sessions.py::test_every_check_file_producer_writes_the_same_help_text`
   compares them.
 

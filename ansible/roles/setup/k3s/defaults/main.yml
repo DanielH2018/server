@@ -125,49 +125,11 @@ k3s_secrets_encryption: true
 # allowScheduling:false and asserts zero replicas landed.
 k3s_agent_longhorn_scheduling: true
 
-# The restore drill itself is the `longhorn-restore-drill` Flux role's (H2.3d): its schedule, its
-# volume pin, its size cap, its content floor, its timeout, its probe image and its empty-volume
-# waiver are that role's defaults, and no `setup/` file reads them. What stays here is what a host
-# reader reads: the namespace and the two bounds of backup health's checks
-# 7 and 8 further down.
-#
-# The namespace the drill's stamp ConfigMap, `longhorn-restore-drill-stamps`, lives in. Backup
-# health's checks 7 and 8, the Longhorn upgrade gate and the docs state page read the ConfigMap in
-# this namespace. It mirrors the role's `longhorn_drill_namespace`, which the drill itself reads,
-# and ansible/tests/k8s/test_restore_drill_stamps.py holds the pair equal.
-k3s_longhorn_restore_drill_namespace: homelab
-
-# Where the B2-accounting cron line touches a stamp before its work runs, owned by sys_user so
-# that cron can write it and longhorn-backup-health can read it. Check 10 reads the stamp to tell "the cron fired and its run failed" from "the cron stopped firing",
-# which the /etc/cron.d stat cannot: initial_setup hardens that directory to 0700 root (#3677).
-k3s_cron_fired_stamp_dir: /var/lib/longhorn-cron-fired
-# How stale the drill's last success may be before the heartbeat calls it out. Nightly cadence, so
-# this allows two consecutive failed or skipped nights — short enough that a drill which has
-# silently stopped is noticed within the week, long enough not to page on a single bad night.
-# Cadence and this number move TOGETHER: check 7's stamp age is the drill's only alert path
-# (`logger` and stderr reach nobody), so raising the cadence without lowering this buys nothing.
-k3s_longhorn_restore_drill_max_age_days: 3
-# Coverage slack, on top of one full rotation cycle. Check 8 derives the window as
-# (candidate count + this) days, so it tracks the fleet automatically instead of going stale each
-# time a volume joins the backup set. A volume that fails every time it comes up stays invisible
-# to check 7 — the global stamp goes green on the other 24 — and this is what catches it.
-# It also absorbs the drill's retry: a failed attempt is re-drilled the next night, and
-# that night is one the rotation does not advance on, so a cycle runs (candidate count + volumes
-# currently failing) nights. At 5 the window stays correct until 5 volumes fail at once — a
-# state check 8 is already paging about on its own terms.
-k3s_longhorn_restore_drill_coverage_slack_days: 5
-
-# How far back checks 9 and 10 of longhorn-backup-health.sh read the `b2-deletions` journal tag.
-# The cron runs daily, so 26h holds the last run under either DST offset with a couple of hours of
-# jitter to spare. It is also how long a reported fault stays RED: an UNPRICED deletion — a
-# permanent event, not a state — ages out after this window. The trim's arms read Longhorn's
-# `trim` CronJob and its newest Job instead, and take their cadence from its schedule.
-#
-# Check 10 makes the window load-bearing twice over. It alarms when the window holds NO
-# line from the cron, which is only a fault because 26h exceeds one 24h cron period — below one
-# period the check disables that arm rather than page on normal silence. The same 26h is the
-# grace for a freshly installed cron, so there is no second tunable to keep in step.
-k3s_longhorn_cron_evidence_window_hours: 26
+# The hosts whose package owns each subject (H7, *Moving one host at a time*). The role writes the
+# subject only on the hosts left out, so a package and a task never hold the same path.
+k3s_packaged_hosts:
+  node-address: [daniel-box]
+  inotify: [daniel-box]
 
 # Read-only cluster access for {{ sys_user }}. The admin kubeconfig k3s writes is root:root
 # 0640, so every `kubectl` otherwise goes through sudo — which is passworded on this host and
@@ -184,313 +146,16 @@ k3s_readonly_sa_name: homelab-readonly
 k3s_readonly_sa_namespace: kube-system
 k3s_readonly_kubeconfig_server: https://127.0.0.1:6443
 
-# The R2 (daily) and weekly volume lists, `k3s_longhorn_r2_volumes` and
-# `k3s_longhorn_weekly_volumes`, live in the `longhorn-reconcile` role's defaults since H1.7a.
-# That job is their only reader that applies them to the cluster.
-
-# Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). A host cron writes a check
-# textfile that a Prometheus rule reads; that template's DECIDED marker says why it is not a
-# monitor-bridge check.
-#
-# 30h against a 03:30 daily job: one full day plus 6h of slack, so a single late or slow run
-# does not page, while a genuinely missed day does — ~26.5h after the fact. Deliberately looser
-# than the interval, because the failure worth catching is "the job stopped", not "the job ran
-# 40 minutes late".
-k3s_longhorn_backup_max_age_hours: 30
-
-# How far back the Error-state check looks. An Error Backup object is immortal once the job that
-# created it is gone: Longhorn's `retain: N` prunes only Completed backups owned by a live job,
-# and the reaper skips every state that is not Completed. Unbounded, one bad night pins the
-# backup monitor red permanently, reported on every 10-minute tick with no way to clear it. 24h
-# is one full daily cycle, so a real
-# failure pages through its own retry window and then clears itself.
-k3s_longhorn_backup_error_max_age_hours: 24
-
-# The weekly tier's equivalent bound, for the volumes in k3s_longhorn_weekly_volumes. Same
-# reasoning scaled to a weekly 04:30 job: 8 days plus 6h, so one late or skipped run pages while
-# a normal ~7-day-old backup does not. Without a second bound these volumes would be walked by
-# nothing — the daily 30h could never apply to them, so they would simply be left out of the coverage
-# loop and could stop backing up indefinitely with the check green. The bound is per-volume, so
-# the weekday sharding (each volume still backed up every 7 days) leaves it unchanged.
-k3s_longhorn_weekly_backup_max_age_hours: 198
-
-# */10 rather than the Pi crons' */5: this queries the k8s API rather than reading a local file,
-# and nothing here changes faster than the daily backup it watches. The script derives DEADLINE_S
-# from this value, and LonghornBackupHealthNotReporting's literal must follow it
-# (ansible/tests/services/test_b1_rule_literals.py).
-k3s_longhorn_backup_health_cron_minute: "*/10"
-
-# The B2 deletion ledger's two crons (tasks/health-crons.yml). 07:10 charges the day's completed
-# deletions, 07:20 re-lists the block tree so tomorrow's charges have a price. That ORDER is the
-# constraint, not the hour: a deletion can only be priced by a listing taken before it, because
-# afterwards the tree is smaller than the one the deletion walked. Both sit after the 06:10 trim
-# and clear of both prune windows, and both land on the same UTC day as those windows under
-# either DST offset — the ledger is keyed on the UTC day B2's counters reset on.
-k3s_b2_deletion_accounting_cron_hour: "7"
-k3s_b2_deletion_accounting_cron_minute: "10"
-k3s_b2_budget_cron_hour: "7"
-k3s_b2_budget_cron_minute: "20"
-
-# Daily-backup-volume budget. B2 exposes no cap-headroom API, so nothing can measure the
-# remaining allowance directly; what CAN be watched is the input that grows, the count of
-# Longhorn's daily backups against the free tier's 2500-transaction Class B/C ceiling.
-#
-# A PROXY, and the health script says so in its message: it counts Longhorn's own daily backups,
-# and cannot see the b2-usage rclone's share of the same account-wide cap. So the
-# budget is deliberately well under what Longhorn alone could consume — the headroom left over is
-# for the other consumer.
-#
-# Raising it is NOT silencing the warning — this arm counts backups, not what they cost, so a
-# threshold below the normal count fires every morning on a condition deliberately created, and
-# a monitor that pages daily for an expected reason is one nobody reads. What detects the thing
-# actually feared — the cap firing — is **B2 Reachable**, which probes b2_authorize_account and
-# reports B2's own `transaction_cap_exceeded`. This arm stays a growth tripwire, set above the
-# normal count.
-#
-# A tripwire on GROWTH, not a derived ceiling: the threshold sits just above the normal count
-# rather than coming from a per-backup cost model.
-#
-# 16: every backed-up volume uses 16 MiB blocks, so block count per volume fell about 8.6x
-# (sonarr 200 -> 23, prowlarr 216 -> 25) and with it the prune cost each backup carries.
-# `probe.py b2-budget` prices a stored block at ~2 Class C, matching the two shards it could
-# price (d4: 50 blocks / 101 C, d6: 35 / 70 C). The worst projected shard is ~220 Class C
-# against the 2100 budget, where d2 alone was 1359 at 2 MiB blocks.
-#
-# Deliberately 16 rather than the ~24 the arithmetic allows. All 21 volumes backing up on one day
-# would cost roughly 790 Class C, so cost is not the binding constraint and the count is —
-# which is exactly when a growth tripwire has to stay tight. 16 sits just above what a
-# migration-sized night produced (12) rather than at the ceiling.
-#
-# PROMOTING TO 24. Elapsed time is not the gate; these three are:
-#
-#   1. Every shard has been priced. `probe.py b2-budget` can only cost a shard whose volumes
-#      already hold backups, so while a weekday's volumes have none yet (after a rebuild, say)
-#      the ~220 worst-shard figure above is a projection. Promote on the measured number.
-#   2. That measured worst shard is not materially above ~220 Class C. If it is, the ~2 C/block
-#      model is wrong and the arithmetic behind 24 goes with it.
-#   3. The arm has not fired at 16 on a day with no deliberate burst. A tripwire already firing
-#      on ordinary traffic is one to investigate, not one to loosen.
-#
-# b2-budget models cost, it does not measure it — B2 publishes no usage API, so the console's
-# Caps & Alerts page stays the only ground truth for what was actually spent.
-#
-# Raise it only together with a decision about the cap itself, never to silence the warning.
-#
-# DECIDED: a modeled proxy (B2-destined backups per 24h), not a metered count; B2's per-class
-# counters are Partner-tier only, so never publish a log-derived Class-B figure as a cap
-# fraction.
-k3s_longhorn_daily_backup_budget: 16
-
-# Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's
-# storageMinimalAvailablePercentage=25 stops replica scheduling once the disk passes 75% used, so
-# this pages at the line where the storage plane starts degrading, not after. Same */10 cron and
-# derived textfile deadline as the backup heartbeat above.
-k3s_disk_max_pct: 75
-k3s_disk_health_cron_minute: "*/10"
-
-# Boot grace for the */10 health crons (boot_grace_active in homelab-check-lib.sh). A cron firing
-# seconds after boot evaluates a half-started cluster and sends a healthchecks.io `/fail`, which
-# alerts immediately — the check's own grace cannot absorb it. A boot is the worked example:
-# daniel-box booted at 07:39:48, the */10 crons ran at 07:40:00, and the last pod
-# reached Ready at 07:45:06, so `longhorn-backup-health` paged.
-#
-# DERIVED, not chosen. Two bounds, and the value is the only round number between them:
-#   LOWER  — must exceed the worst observed boot-to-Ready, 5m18s (07:39:48 boot, 07:45:06
-#            last pod Ready). Anything shorter lets the cron run against a cluster that
-#            is still coming up, which is the bug.
-#   UPPER  — must stay STRICTLY BELOW the 600s cron interval, so at most one slot is ever skipped
-#            whatever minute the host boots on. That single-miss bound is what lets the dead-men
-#            keep a grace of period + one slot instead of an open-ended one.
-# 420 < 600 satisfies the upper bound with 3 minutes of margin, and clears the lower by 102s.
-# Raising this past 599 breaks the arithmetic in docs/healthchecks-io-deadman.md — the guard test
-# in ansible/tests/setup/test_health_cron_boot_grace.py enforces the bound rather than the number.
-#
-# NOT applied to the daily etcd-token-drift cron (02:45). For it a skipped slot is a skipped DAY,
-# which is a worse trade than the rare boot landing inside its one-minute window; its 1-hour
-# grace already covers a late run.
-k3s_health_cron_boot_grace_s: 420
-
-# The longest legitimate gap between two textfile writes of the once-a-day etcd-token-drift check:
-# a day plus an hour. The textfile rule carries it as a literal, pinned to this value by
-# ansible/tests/services/test_b1_rule_literals.py. Move the schedule and this together.
-k3s_daily_check_deadline_s: 90000
-
-# ── Cluster-token drift check (templates/etcd-token-drift.sh.j2) ─────────────────────────────
-# k3s's own schedule writes the etcd snapshots and uploads them to R2: the `etcd-s3` and
-# `etcd-snapshot-*` keys of `k3s_server_config` in hosts/components/k3s-server/component.yml. H6's
-# windowed unit applies a change to them with one gated restart. Their folder is R2's
-# `etcd-snapshots`, not the `longhorn` prefix the orphaned-backup reaper walks, and not B2, whose
-# Class-B cap is the scarce axis. Backup health's check 12 reads the upload's freshness.
-#
-# This script compares the live cluster token with the operator's stamp. Its schedule keys keep
-# the names they had when the script also uploaded, so the Healthchecks.io cadence is unchanged.
-k3s_etcd_s3_cron_hour: "2"
-k3s_etcd_s3_cron_minute: "45"
-
-# The restore side of the same tier. The snapshot above is taken, uploaded and alarmed; without
-# a schedule nothing proves it comes BACK, and an off-box copy verified once by hand drifts. The
-# Longhorn plane applies the same rule — its drill is scheduled and its stamp is read
-# fail-closed — and etcd is the tier that carries the Backup CRs needed to FIND the Longhorn
-# backups, so it is the worse one to leave unproven.
-#
-# DECIDED: `--list-only`, weekly, and NOT the full restore. --list-only proves the off-box leg
-# end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass
-# on daniel-box at all — five structural failures listed in scripts/backup/etcd_restore_drill.sh's
-# header, under `It does NOT pass beside a live k3s` — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and
-# scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two
-# restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled
-# list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the
-# `install -d "$SCRATCH"` that creates the directory at all, so however often it fails it writes
-# nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not ON THIS
-# HOST. The full drill IS scheduled since #1175 — monthly, in a throwaway guest on daniel-server
-# (`etcd_drill_full_cron` in group_vars, mechanism in roles/setup/hypervisor), where the guest's
-# disk is deleted after every run and so nothing accumulates anywhere.
-#
-# Monday 10:20: clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill),
-# clear of the 06:10 trim, and in an hour nothing else uses. Daytime
-# is deliberate for a read-only drill — --list-only downloads ~8 MB and decompresses it, so there
-# is no restore stage to wedge, and a failure is visible on a day someone is around.
-k3s_etcd_restore_drill_armed: true
-k3s_etcd_restore_drill_cron: "20 10 * * 1"
-
-# The no-backup volume list, `k3s_longhorn_nobackup_volumes`, lives in the `longhorn-reconcile`
-# role's defaults since H1.7a, with the other two tier lists.
-
-# The nameserver lines this node's /etc/resolv.conf carries, IN ORDER. First entry wins on
-# every query; the rest are fallbacks. See templates/resolv.conf.j2 for why the order alone
-# is the whole mechanism.
-#
-# The preference order lives in k3s_host_dns_upstreams below, where the host forwarder applies
-# it; this file names only the forwarder.
-#
-# A cold start does not need Pi-hole: the forwarder's public fallback upstreams cover it. The
-# window before the VIP exists is nearly empty — k3s is active ~20s into boot, and a warm
-# containerd store resolves no registry names at boot (zero image pulls and zero
-# name-resolution failures in the first 10 minutes). A REBUILT node with an empty image store
-# is the real case, and that runs k3s-bringup.yml by hand anyway.
-#
-# DELIBERATELY NO FALLBACK ENTRY. Adding `1.1.1.1` behind the forwarder would make a dead
-# CoreDNS silently degrade to unfiltered DNS — a drop-in that reads as working while resolving
-# through Cloudflare half the time. A dead forwarder here
-# takes the node's DNS with it, which is loud. `Restart=always` on the unit covers a crash,
-# and tasks/node.yml proves CoreDNS answers BEFORE it points this file at it.
-k3s_node_dns_upstreams:
-  - 127.0.0.1
-
-# Seconds to wait for each nameserver, and how many rounds over the WHOLE list to make before
-# returning an error — `attempts` is rounds, not per-server retries (resolv.conf(5)). One
-# round at 2s means a dead Pi-hole costs one 2s timeout per lookup and then answers, rather
-# than failing.
-k3s_node_dns_timeout: 2
-k3s_node_dns_attempts: 1
-k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_dns_attempts }}"
-
-# ---------------------------------------------------------------------------
-# The host forwarder
-#
-# glibc picks a nameserver per query and cannot ask "is Pi-hole up?" — it only learns an
-# entry is dead by spending a timeout on it, per process, with no memory. A local CoreDNS
-# CAN ask: `health_check` probes each upstream out of band, so a dead Pi-hole is skipped
-# BEFORE a query is sent to it rather than after one has already stalled.
-#
-# It also makes the answer observable. VERIFIED AGAINST THE PINNED BUILD, because the obvious
-# guess is wrong: 1.14.7 exports no `coredns_forward_requests_total`. The per-upstream series
-# is `coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="10.0.0.243:53"}`,
-# and it says what
-# fraction of this node's queries actually reached Pi-hole, which is the question otherwise
-# answerable only by hand with a marked lookup.
-k3s_host_coredns_enabled: true
-# extractVersion strips the tag's `v` (the var holds a bare `1.14.7`) and anchors on three
-# components (#3087). coredns/coredns carries stray tags `v002` ... `v011`, and the earlier
-# `^v(?<version>.*)$` admitted `v011`, which Renovate ranked above 1.14.7 and proposed as PR
-# #3061: a 404 URL beside the old sha256, in a plane the deployer never applies. The anchor
-# drops the stray tags without capping the major, so a real 2.0.0 stays offerable. Finish
-# the sha256 below with `asset_pins.py --refresh coredns/coredns`, then compare it with the
-# release's coredns_<ver>_linux_amd64.tgz.sha256.
-# renovate: datasource=github-releases depName=coredns/coredns extractVersion=^v(?<version>\d+\.\d+\.\d+)$
-k3s_host_coredns_version: "1.14.7"
-
-# amd64 only — daniel-box is the sole consumer, and node.yml is a server-node play. The
-# checksum is PINNED IN-REPO rather than fetched from the release's .sha256 sidecar: a
-# sidecar fetched over the same connection as the tarball is authenticated by the same
-# thing the tarball is, so it verifies transport integrity and nothing else. Pinning it
-# here means a changed artifact fails the deploy and shows up as a diff. A Renovate version
-# bump is a MANUAL FINISH: the hash below is not derivable from the tag, so `automerge: false`.
-k3s_host_coredns_sha256: "9a09356438c6d9591cb80011a2a7a52f87fc3a113f6690e41f243f98b98faac9"
-
-# WHERE THE PREFERENCE LIVES. This is the ordered forward list, and `policy sequential`
-# below is what makes it an order rather than a load-balance — CoreDNS's forward plugin
-# defaults to `random`, which would make the list a coin-flip. Two public entries, not one, because a forwarder with a single fallback has the
-# same single point of failure the fallback exists to remove.
-k3s_host_dns_upstreams:
-  - "{{ dns_k8s_vip }}"
-  - 1.1.1.1
-  - 1.0.0.1
-
-# A health check is "a recursive DNS query (. IN NS)" against each upstream. While an
-# upstream reports unhealthy CoreDNS re-probes it every 0.5s regardless of this interval and
-# stops probing once it is healthy again, so this value bounds how long a NEWLY dead Pi-hole
-# keeps receiving queries, not how fast a recovered one is picked back up.
-#
-# max_fails 2, not 1: a single lost UDP packet must not evict Pi-hole. And not 0 — that
-# value means "never mark this upstream down and never health check it", which would turn
-# the whole mechanism off while still reading like it was configured.
-k3s_host_dns_health_check: 5s
-k3s_host_dns_max_fails: 2
-
-# Answers served from cache never reach an upstream, so this bounds how stale a Pi-hole
-# blocklist change can be on this node. 30s is short enough that a blocklist edit takes
-# effect within a minute and long enough to absorb a boot's worth of repeat lookups.
-k3s_host_dns_cache_ttl: 30
-
-# Metrics bind to the node's LAN address, NOT 127.0.0.1. Prometheus scrapes from inside a
-# pod, where 127.0.0.1 is the pod's own loopback and reaches nothing on the host. The UFW
-# allow in tasks/node.yml is the other half — pod-to-host traffic terminates in a host
-# process, which is the one class that meets UFW's default-deny INPUT.
-k3s_host_dns_metrics_port: 9253
-
-# Installed outside /usr/local/bin deliberately: this binary is version-pinned by Ansible and
-# a bare `coredns` on PATH would be ambiguous with anything a future package installs.
-# Two paths, deliberately. The versioned one is what `creates:` keys on, so a Renovate bump
-# actually reinstalls; a single unversioned path would make the pin INERT after the first
-# install — the file would say 1.15.0 and the node would keep running 1.14.7 forever, with
-# every check green. The stable path is a symlink and is what the unit executes, so the unit
-# file does not churn on every bump.
-k3s_host_coredns_dir: /usr/local/lib/coredns
-k3s_host_coredns_versioned_bin: "{{ k3s_host_coredns_dir }}/{{ k3s_host_coredns_version }}/coredns"
-k3s_host_coredns_bin: "{{ k3s_host_coredns_dir }}/coredns"
-k3s_host_coredns_conf: /etc/coredns/Corefile
-k3s_host_coredns_url: >-
-  https://github.com/coredns/coredns/releases/download/v{{ k3s_host_coredns_version }}/coredns_{{ k3s_host_coredns_version }}_linux_amd64.tgz
-# Where get_url lands the tarball it checks against k3s_host_coredns_sha256. Inside the
-# versioned directory, not /tmp: a file that survives a reboot is what lets get_url's own
-# checksum comparison skip the download on every later run.
-k3s_host_coredns_tarball: "{{ k3s_host_coredns_versioned_bin | dirname }}/coredns_{{ k3s_host_coredns_version }}_linux_amd64.tgz"
-
-# DELIBERATELY A PUBLIC NAME, not `pi.hole`. This gate protects the resolv.conf switch, so
-# what it must establish is "the forwarder answers", not "Pi-hole is up". Probing pi.hole
-# would fail the deploy whenever Pi-hole is down — precisely the case the fallback exists to
-# survive. Which upstream actually served the answer is the metric's job, not the gate's.
-k3s_host_dns_probe_name: github.com
-
-# Links whose DHCP lease must not contribute resolvers. The drop-in above pins the node's
-# DNS, but it does not stop systemd-resolved from ALSO listing the lease's servers per link
-# — six nameservers total, against the 3 Kubernetes gives a pod. See templates/netplan-dns.yaml.j2.
-# eno1 is the only link carrying a lease with DNS; enx9cebe885f44e (USB NIC) is down and is
-# left alone so the override cannot outlive the interface it names.
-k3s_node_dns_dhcp_links:
-  - eno1
-
-# The link that carries server_ip, which tasks/static-address.yml pins statically so k3s can
+# The link that carries server_ip, which the package's netplan file pins statically so k3s can
 # start while the gateway's DHCP server is down (#3882, #3891 for the agent). Empty removes
-# the pin and re-applies netplan. Set it in host_vars only once the gateway keeps server_ip
+# the pin at the next package install. Set it in host_vars only once the gateway keeps server_ip
 # out of its DHCP pool.
 k3s_node_static_link: ""
 
-# The WiFi link that tasks/static-address.yml joins to the home network as a fallback uplink,
+# The WiFi link that the package's netplan file joins to the home network as a fallback uplink,
 # using the SOPS keys `wifi_ssid` and `wifi_password`. Its routes sit at metric 600, behind
 # the pinned link's 100, so it carries traffic only while the pinned link has no carrier.
-# Empty removes the file and re-applies netplan.
+# Empty removes the file at the next package install.
 k3s_node_wifi_link: ""
 
 # ── Cluster DNS (tasks/coredns.yml) ─────────────────────────────────────────────────────
@@ -508,9 +173,6 @@ k3s_coredns_skip_marker: /var/lib/rancher/k3s/server/manifests/coredns.yaml.skip
 k3s_coredns_read_retries: 30
 k3s_coredns_read_delay: 10
 
-# node.yml's resolver probe retries this many times at 5s. It was sized for CoreDNS's `reload`
-# plugin, which re-reads the Corefile within ~30s, and node.yml reuses the count.
-k3s_coredns_probe_retries: 8
 
 # ── Agent join ─────────────────────────────────────────────────────────────
 # daniel-server joins as an AGENT, not a second server (a two-member etcd halves
@@ -522,40 +184,6 @@ k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
 # The agent's flags are `k3s_agent_config` in hosts/components/k3s-agent/component.yml since
 # H6.5b. The package renders them into /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and they
 # take effect at the agent's next start. tasks/agent.yml passes the installer a bare `agent`.
-
-# The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
-# into /var/lib/homelab/setup-render-manifest.d/ so setup-drift-check.sh can tell whether this
-# host has run the role since they last changed.
-#
-# GROUPED BY TAG FAMILY, and the grouping is the correctness property, not organisation. Each
-# group is stamped by a task carrying that family's tags, so `--tags disk-health` restamps
-# only disk-health.sh. A single flat list stamped by one untagged loop over all of them
-# would declare them all current while a tag-scoped run rendered one, and the rest it never
-# touched would read as fresh forever. Keep each group's membership identical to the tags on the
-# `template:` task that renders it; ansible/tests/deploy/test_setup_render_manifest.py asserts that.
-#
-# Paths are relative to the REPO ROOT, not to templates/, because the manifest is shared with
-# four other setup-plane roles — the check joins nothing onto a hardcoded directory.
-k3s_render_stamp_groups:
-  # This group is read TWICE: stamp_render.yml stamps it, and release_bin.yml deploys it as a
-  # versioned release (health-crons.yml). One list on purpose — a release and its stamp
-  # describing different file sets is the partial-group false-green that health-crons.yml's
-  # stamp comment warns about, and sharing the list makes them incapable of disagreeing. The
-  # host name of each script is its basename minus `.j2`.
-  - name: k3s-backup-health         # tags: [backup-health]
-    templates:
-      # Longhorn backup-plane heartbeat. Runs as the sys_user, not root: it reads the cluster
-      # through that user's read-only kubeconfig, which is the whole point — the cron cannot
-      # mutate anything. No no_log: this renders no secret. That it renders no secret is also
-      # what makes this group eligible for a versioned release at all — see release_bin.yml's
-      # header.
-      - ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2
-  - name: k3s-disk-health           # tags: [disk-health]
-    templates:
-      - ansible/roles/setup/k3s/templates/disk-health.sh.j2
-  - name: k3s-etcd-snapshot         # tags: [etcd-snapshot]
-    templates:
-      - ansible/roles/setup/k3s/templates/etcd-token-drift.sh.j2
 
 # Node-to-node traffic UFW must admit (both hosts default-deny INPUT, and unlike every
 # service port this traffic terminates in host processes, not Docker/kube NAT):
@@ -610,21 +238,6 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
 # Agent node IPs the server-side firewall admits. Set in daniel-box host_vars once an
 # agent exists; empty means the allow tasks are no-ops.
 k3s_agent_node_ips: []
-
-# Which of the role's topic files run. Every flag here defaults TRUE, so prod's behaviour is
-# the behaviour of the role with nothing overridden — a staging cluster turns pieces OFF in
-# its own host_vars rather than prod turning them on. ENFORCED by
-# ansible/tests/setup/test_k3s_stage_gates.py, because a gate that defaults false silently stops
-# doing prod's work and every repo-side check still reads green.
-#
-# DECIDED: `when:` on the existing `import_tasks`, not a switch to `include_tasks`. An import
-# is static, so each task keeps its own tags and `--tags backup-health` still selects; a
-# dynamic include would hide those tags from selection and break the tag-based deploys.
-
-# The host heartbeat crons: Healthchecks.io ping keys, the backup-plane and restore-drill
-# checks. Off anywhere that must not ping prod's monitoring, which would
-# make a staging failure page a real operator.
-k3s_manage_health_crons: true
 
 # Storage smoke check (tasks/storage_smoke.yml) — opt-in, never part of a bringup. See that
 # file for why prod does not run it.

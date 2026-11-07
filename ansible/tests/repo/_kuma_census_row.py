@@ -64,7 +64,6 @@ _INERT_LABEL = (
     "The inert `org.homelab.kuma-docker-monitor` label: a label change recreates the container, "
     "so these go in the next Pi compose change (the plan's open question 7)."
 )
-_K3S_COMMENT = "A setup/k3s comment that names Kuma as a check's reader (#7147, #6882)."
 _LIVE_NAME = (
     "A live name or matcher, such as `etcd_drill_full_kuma_interval_s` or the "
     "webhook labelled Kuma: renaming it touches its readers (#7194)."
@@ -76,6 +75,9 @@ _SHIPPED_COMMENT = (
 _UNIT_FAMILY = "Names the `kuma-check` unit family without the prefix: ADR 0026 keeps the units (#7194)."
 
 _PROSE_HOLDERS = {
+    "hosts/components/k3s-host-checks/component.yml": (
+        "`legacy:` removes the retired `kuma-push.env` from the host, so it names the path."
+    ),
     **dict.fromkeys(
         (
             "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
@@ -84,10 +86,6 @@ _PROSE_HOLDERS = {
             "hosts/components/pi-compose/services/wg-easy/compose.yaml.j2",
         ),
         _INERT_LABEL,
-    ),
-    **dict.fromkeys(
-        ("ansible/roles/setup/k3s/tasks/health-crons.yml",),
-        _K3S_COMMENT,
     ),
     **dict.fromkeys(
         (

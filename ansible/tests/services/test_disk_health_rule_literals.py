@@ -18,7 +18,7 @@ from lib import yaml_fast
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "host-checks.yaml"
 ALERT = "DiskHealthNotReporting"
-TEMPLATE = ("setup", "k3s", "disk-health.sh.j2")
+TEMPLATE = ("components", "k3s-host-checks", "disk-health.sh.j2")
 # A bare `>` comparison: `>=` and `==` are not the stale-file arm.
 STALE_ARM = re.compile(r"(?<![<>=!])>(?!=)\s*(\d+)")
 WINDOW = re.compile(r"absent_over_time\([^)]*\[(\d+)s\]\)")

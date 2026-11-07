@@ -111,14 +111,6 @@ def test_a_task_var_reading_a_register_leaves_a_stub_not_an_unchecked_row(tmp_pa
     assert "STUB" in wants[0].why_no_content
 
 
-def test_the_real_k3s_role_hashes_the_node_resolv_conf():
-    """`tasks/node.yml` passes the shared template its nameservers through the task's `vars:`."""
-    role = applied.SETUP / "k3s"
-    wants, _ = applied_tasks.expected(role, "daniel-box", applied.context(role, "daniel-box"))  # fmt: skip
-    resolv = next(w for w in wants if w.path == "/etc/resolv.conf")
-    assert resolv.sha256 is not None, resolv.why_no_content
-
-
 def test_a_vars_lookup_reads_the_vars_or_a_stub_for_a_secret(tmp_path):
     main = (
         "- name: Write the token\n"

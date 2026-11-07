@@ -1,0 +1,16 @@
+# Shipped by the host package's k3s-host-checks component. Started by homelab-b2-budget-listing.timer.
+[Unit]
+Description=List the B2 block tree that prices the next day's deletions
+After=network-online.target k3s.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+# Without KUBECONFIG the read-only kubectl falls back to a root-owned k3s.yaml, so the BackupTarget
+# lookup that decides B2-versus-R2 would fail only when unattended.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config
+ExecStart=/home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/diagnostics/probe.py b2-budget
+SyslogIdentifier=b2-budget

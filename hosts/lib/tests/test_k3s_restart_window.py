@@ -42,6 +42,12 @@ _KEYS = (
     "claude_code_triage_claude_oauth_token: x\n"
     "authelia_agent_password: x\n"
     "healthchecks_ping_key: x\n"
+    "r2_access_key_id: x\n"
+    "r2_secret_access_key: x\n"
+    "r2_bucket: x\n"
+    "r2_account_id: x\n"
+    "wifi_ssid: x\n"
+    "wifi_password: x\n"
 )
 
 DEFAULT_ACCURACY_S = 60  # systemd's AccuracySec when a timer sets none
@@ -68,7 +74,7 @@ EXEMPT = {
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",
 }
 # Non-vacuity: each scan must find its member, or an empty scan would pass.
-CRON_MEMBER = "Longhorn backup health"
+CRON_MEMBER = "fake-remux scan"
 CRONJOB_MEMBER = "configarr"
 RECURRING_MEMBER = "daily-backup"
 
