@@ -821,6 +821,7 @@
  "hosts/lib/tests/test_claude_code_on_daniel_box.py": 2.6,
  "hosts/lib/tests/test_component_retired_stamp_fragments.py": 0.09,
  "hosts/lib/tests/test_crowdsec_probe_component.py": 0.5,
+ "hosts/lib/tests/test_deploy_ui_component.py": 19.2,
  "hosts/lib/tests/test_docs_refresh_component.py": 0.15,
  "hosts/lib/tests/test_eval_sweep_component.py": 0.11,
  "hosts/lib/tests/test_h737_box_components.py": 1.75,
