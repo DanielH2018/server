@@ -33,7 +33,6 @@ DECLARED = [
     "pull + boot changed images",
     "renovate config validator",
     "flux-deletion-drill",
-    "render-diff",
 ]
 
 # The check library the script sources, with `reachout_verdict` stubbed to the WAN-reachable

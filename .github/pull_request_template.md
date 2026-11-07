@@ -20,24 +20,6 @@ Full procedure: CLAUDE.md → "After a PR Merges — Pull, Deploy, Verify".
 - [ ] Deliberately deferred — reason:
 - [ ] Nothing to deploy (docs-, test-, or `tasks/`-only)
 
-## Render-diff
-
-<!--
-The `render-diff` job compares this PR's render with its merge base's, and reads one line at
-the start of a line in this body. The line is mandatory when the PR touches
-`ansible/roles/k8s/*/tasks/`, deletes anything under `ansible/roles/k8s/`, or touches
-`scripts/renderer/`, `scripts/lib/k8s_roles.py`, `scripts/lib/ansible_jinja_env.py` or
-`ansible/filter_plugins/`, or moves a `uv.lock` or `pyproject.toml` entry of a renderer
-dependency, such as Jinja2 or MarkupSafe. Without it those PRs fail. Elsewhere it is optional,
-and it binds when present. Write one of these two forms below this comment, on a line of its own:
-
-    Render-diff: none
-    Render-diff: flux/x.yaml, cluster/x/y.yaml
-
-`none` allows no rendered difference. A list must equal the files that differ. A line inside
-this comment or a code fence does not count.
--->
-
 ## Verification
 
 <!--

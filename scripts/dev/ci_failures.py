@@ -14,7 +14,7 @@ the jobs endpoint, so a passing step that shares a boundary second can still con
 
 It counts a test module from a `FAILED` or `ERROR` line in pytest's short-summary shape. It skips
 a line with no runner timestamp and everything inside a step's `##[group]Run` header, because
-that header echoes the step's env, and `render-diff` carries the PR body there. No log text
+that header echoes the step's env, and a step's env can carry a PR body. No log text
 other than a module path reaches the report.
 
 Usage:
