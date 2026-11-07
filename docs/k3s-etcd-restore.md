@@ -360,9 +360,12 @@ sudo rm -rf /var/lib/rancher/k3s/agent/client-*.crt /var/lib/rancher/k3s/agent/c
 sudo systemctl start k3s-agent
 ```
 
-If it does not rejoin, run the join on daniel-server, with the server token from
-`docs/break-glass.md` item 2:
-`K3S_URL=https://<daniel-box>:6443 K3S_TOKEN=<token> sudo -E hosts/bootstrap-host.sh daniel-server`.
+If it does not rejoin, check the agent's env file on daniel-server,
+`/etc/systemd/system/k3s-agent.service.env`. Its `K3S_URL` names daniel-box's `server_ip`, and its
+`K3S_TOKEN` matches the server token in `docs/break-glass.md` item 2. Correct either value with
+`sudoedit`, then restart `k3s-agent`. A rerun of `hosts/bootstrap-host.sh` does not help here: it
+skips the installer on a node where k3s is installed, so it never rewrites that file.
+`k3s-bringup.yml`'s agent join does not help either: its agent task refuses since H7.34.
 
 [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
 `docs/host-packages.md` covers a replacement host on the package path, either node.

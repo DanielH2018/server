@@ -624,10 +624,10 @@ this section is **operator-only**, and the guest drill below has not run yet. Th
 
 `homelab-daniel-box` holds the server's whole host half since H7.35. `homelab-daniel-server`
 holds the agent's join rules, the Longhorn host prerequisites, the `multipathd` blacklist and
-the static LAN address since H7.34. A rebuilt daniel-server lacks only its LVM volumes, which
-`bootstrap-host.sh` step 4 does not create yet.
-[The break-glass doc](break-glass.md), *Scenario: daniel-server is dead, daniel-box survives*, says
-what completes a daniel-server rebuild during an outage.
+the static LAN address since H7.34. The address pin takes effect at the next boot, so
+*Rebuilding daniel-server* reboots before it starts the agent. Neither package touches LVM. The
+Ubuntu installer creates each node's one volume, `ubuntu-vg/ubuntu-lv`, and step 2 below grows it.
+No other LVM volume exists on either node.
 
 ### Preparing the installer on either node
 
@@ -780,23 +780,30 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     sudo --preserve-env=K3S_URL,K3S_TOKEN ./bootstrap-host.sh daniel-server
     ```
 
-1. Start the agent, for the same reason as on daniel-box, and read the node from daniel-box:
+1. Rebuild the initramfs and reboot, before the agent starts. The reboot does two things:
+    - It loads the i915 option the package ships. i915 loads from the initramfs, so
+      `/etc/modprobe.d/i915.conf` reaches it only then, and QuickSync needs the GuC firmware the
+      option enables.
+    - It brings up the static LAN address. The package's netplan pin activates only at boot, and
+      the agent's `node-ip` is `server_ip`, so an agent started on a DHCP address it does not
+      hold fails to join.
 
     ```bash
+    sudo update-initramfs -u
+    sudo reboot
+    ```
+
+1. Check that the node holds `server_ip` on `k3s_node_static_link`, which
+   `ansible/inventory/host_vars/daniel-server.yml` names. Then start the agent, for the same
+   reason as on daniel-box, and read the node from daniel-box:
+
+    ```bash
+    ip -4 addr show <k3s_node_static_link>
     sudo systemctl enable --now k3s-agent.service
     ```
 
     ```bash
     sudo k3s kubectl get node daniel-server
-    ```
-
-1. To load the i915 option the package ships, rebuild the initramfs and reboot. i915 loads from the
-   initramfs, so `/etc/modprobe.d/i915.conf` reaches it only then, and QuickSync needs the GuC
-   firmware the option enables:
-
-    ```bash
-    sudo update-initramfs -u
-    sudo reboot
     ```
 
 1. As the operator, apply the dotfiles. They install the per-user uv, `prek` and the pinned Python,
@@ -816,9 +823,6 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     cd ~/server
     ~/.local/bin/prek install
     ```
-
-Until H7.34 lands, the node this section builds lacks the items that *What the packages do not hold
-yet* lists, so it does not yet serve the cluster.
 
 The agent keeps the server token, because k3s documents no switch to an agent-scoped token for an
 agent that has already joined.
@@ -901,7 +905,12 @@ arm64 only.
 1. Add the host to every other set that names hosts:
     - `NAMED` in `scripts/validate/validate_lib/package_roots.py`, as `homelab-<host>`, which both
       `host_packages` scans read;
-    - `CANARY_ORDER` in `hosts/lib/builder_rollout_gate.py`;
+    - `CANARY_ORDER` in `hosts/lib/builder_rollout_gate.py`, after daniel-box. This PR changes
+      both `hosts/<host>` and `hosts/daniel-box`, and the rollout gate stages only the first of
+      them in `CANARY_ORDER`. With daniel-box first, daniel-box installs the rule below before the
+      builder publishes `homelab-<host>`. With the new host first, its package publishes while
+      daniel-box's firewall still refuses it, and the gate waits on a host that cannot install;
+
     - a third `apt-repo-<host>` rule under `ufw:` in `hosts/components/builder/component.yml`, or
       daniel-box's firewall refuses the host's `apt-get update` in step 6;
     - one `HostReconcileFailed` rule in
@@ -922,8 +931,15 @@ arm64 only.
 
     A new cluster node instead needs a k3s mode in `hosts/bootstrap-host.sh` and an entry in `NODES`
     in `hosts/lib/k3s_gates.py`.
-1. **Operator-only**, after the merge: once the builder has published the package, run the script
-   to the end.
+1. **Operator-only**, after the merge: once the builder has published `homelab-<host>`, run the
+   script to the end. The gate publishes it only after daniel-box reports the merge commit, so
+   daniel-box's firewall already holds the rule. Do not write the release file to publish it
+   sooner. To confirm the rule, check on daniel-box that the host's `server_ip` appears on port
+   8791:
+
+    ```bash
+    sudo ufw status | grep 8791
+    ```
 
     ```bash
     sudo ./bootstrap-host.sh <host>
