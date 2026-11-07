@@ -1,0 +1,63 @@
+# The mirror registries' weekly garbage collection (H7.64,
+# docs/target-architecture/host/h7-delete-ansible.md). Nothing else collects the ghcr-mirror and
+# dockerhub-mirror stores, which run with a zero proxy TTL, so without this component they grow
+# until their claims fill. It stays a host script by the operator's ruling on #5680 and #5732:
+# the script is the one writer of each mirror Deployment's `spec.replicas`.
+#
+# homelab-registry-gc.timer starts homelab-registry-gc.service on Sunday at 04:20. The service
+# runs as root because registry-gc.sh reads the root kubeconfig. It runs `systemd-tmpfiles
+# --create` first, because dpkg creates a missing parent directory at 0755 and registry-jobs is
+# 0700. The script stays 0700 for the same reason: it implies where that credential lives.
+#
+# `registry_k8s_manage_gc` gates each file and the enable link, so setting it false in a host's
+# host_vars drops the collector from that host's next package version, and setting it true ships
+# it again. `defaults/main.yml` holds copies of the registry role's keys
+# (hosts/components/registry-gc/tests/test_registry_gc_component.py holds them equal).
+#
+# Autonomous-role contract (the run scales two Deployments and edits two stores with no human in
+# the loop).
+#
+# - Scope / exclusions: registry-gc.sh scales `deploy/ghcr-mirror` and then
+#   `deploy/dockerhub-mirror`, one at a time. It runs each mirror's Job from
+#   /etc/rancher/k3s/manifests/registry-jobs/, writes each keep-set ConfigMap, and warms each
+#   mirror through its loopback hostPort. It never scales `deploy/registry`, the push store. The
+#   operator accepted the script as the one writer of the ghcr-mirror's `spec.replicas` (#5732),
+#   and #6536 extends that to the dockerhub-mirror's. Nothing else.
+# - Mode (explicit and reversible): the timer's enable link arms it. `registry_k8s_manage_gc: false`
+#   in host_vars, or reverting this component, stops it on the install that drops the link.
+#   `systemctl stop homelab-registry-gc.timer` stops it until the next package install.
+# - Authoritative sources: the live cluster's workload specs and statuses for the keep sets, and
+#   each store's own revision links for what they keep.
+# - Abort valves: the flock on `registry_k8s_gc_lock_file`, the Job deadline, and the keep set that
+#   fails closed: a run that cannot read the workloads prunes nothing and reports down.
+# - Required evidence, every run: the `registry-gc` textfile under
+#   /var/lib/node-exporter-textfile/, which RegistryGcFailed and RegistryGcNotReporting read, a
+#   ping to the `registry-gc` Healthchecks.io check, /var/lib/registry-gc/state.json, and both
+#   mirror phases in `journalctl -t registry-gc`. A run that ends `status=down` can still exit 0,
+#   so the textfile is the verdict and the unit's result is not.
+# - Next-run review: `/var/lib/registry-gc/<mirror>-down` left behind names a mirror a killed run
+#   stranded at zero. The next run restores it first. Read the registry-gc-<mirror> Job logs
+#   before changing a keep count.
+#
+# ENFORCED: hosts/components/registry-gc/tests/test_registry_gc_component.py (the units, the links
+# and the legacy entries), ansible/tests/services/test_registry_gc_ghcr_mirror.py and
+# test_registry_gc_dockerhub_mirror.py (the script's behaviour against stubs).
+files:
+  - {src: templates/registry-gc.sh.j2, dst: /usr/lib/homelab/registry-gc.sh, mode: "0700", when: registry_k8s_manage_gc}
+  - {src: templates/ghcr-mirror-gc-job.yaml.j2, dst: /etc/rancher/k3s/manifests/registry-jobs/ghcr-mirror-gc-job.yaml, when: registry_k8s_manage_gc}
+  - {src: templates/dockerhub-mirror-gc-job.yaml.j2, dst: /etc/rancher/k3s/manifests/registry-jobs/dockerhub-mirror-gc-job.yaml, when: registry_k8s_manage_gc}
+  - {src: tmpfiles.d/homelab-registry-gc.conf, dst: /usr/lib/tmpfiles.d/homelab-registry-gc.conf, when: registry_k8s_manage_gc}
+  - {src: units/homelab-registry-gc.service, dst: /usr/lib/systemd/system/homelab-registry-gc.service, when: registry_k8s_manage_gc}
+  - {src: units/homelab-registry-gc.timer, dst: /usr/lib/systemd/system/homelab-registry-gc.timer, when: registry_k8s_manage_gc}
+# Manual, because reconcile otherwise restarts a changed unit that is active, which would abandon
+# a collection partway through.
+units:
+  homelab-registry-gc.service: {policy: manual, when: registry_k8s_manage_gc}
+enable:
+  homelab-registry-gc.timer: {target: timers.target, when: registry_k8s_manage_gc}
+# What k8s_host_files installed. Reconcile retires each after it has tried to start the timer, and
+# it retires them even when that start failed. The two Job manifests keep their paths, and dpkg
+# replaces the unowned files.
+legacy:
+  - {cron_file: registry-gc}
+  - {path: /usr/local/bin/registry-gc.sh}

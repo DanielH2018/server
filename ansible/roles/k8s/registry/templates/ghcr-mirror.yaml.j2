@@ -105,7 +105,7 @@ spec:
   cut and continuing with `Range: bytes=<sent>-`. Measured from daniel-box on 2026-10-29 at a
   300 KB/s client rate on the same layer: straight from ghcr.io it was cut at 140 MiB after
   479s, and through the sidecar it hit that cut, resumed once and completed with the right
-  digest in 728s. registry-gc.sh's weekly warm phase (setup/k8s_host_files) still fetches
+  digest in 728s. registry-gc.sh's weekly warm phase (hosts/components/registry-gc) still fetches
   every referenced blob ahead of need, so a cold start during a WAN outage finds it cached.
   A Jinja comment, so that editing it renames no verify Job and rolls nothing.
 #}
@@ -114,7 +114,7 @@ spec:
             # Never expire. The default 168h would drop nut's image a week after its last
             # rebuild, which is the cold pull during a WAN outage this mirror exists for.
             # distribution's proxyregistry.go reads a zero TTL as "never expire". The weekly
-            # GC's offline prune (setup/k8s_host_files/files/ghcr-mirror-prune.sh) is what bounds the store instead.
+            # GC's offline prune (hosts/components/registry-gc/files/ghcr-mirror-prune.sh) is what bounds the store instead.
             - name: REGISTRY_PROXY_TTL
               value: "0s"
           # Its own claim, not registry-data. Every ghcr.io image in the cluster pulls through

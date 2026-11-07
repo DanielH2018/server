@@ -81,7 +81,7 @@ PATHS = (
     ("/etc/cron.d", "*"),
     ("/etc/ufw", "user.rules"),
     ("/etc/ufw", "user6.rules"),
-    ("/usr/local/bin", "registry-gc.sh"),
+    ("/usr/lib/homelab", "registry-gc.sh"),
     ("/etc/systemd/system", "*.service"),
     ("/etc/systemd/system", "*.timer"),
     # The polkit rules this role installs, fanout-alert, land and triage, which `probe.py
@@ -89,7 +89,7 @@ PATHS = (
     ("/etc/polkit-1/rules.d", "50-claude-*.rules"),
     # DENY paths, so only `stat` answers them, and without size or mtime (#6369).
     ("/etc/claude-rc", "alert-webhook.env"),
-    # k8s_host_files' rows under the k3s manifests tree (#6988). The tree stays denied, because
+    # The registry-jobs rows under the k3s manifests tree (#6988). The tree stays denied, because
     # it holds every staged role's secret.yaml, so each name here is exact. DENY_EXEMPT lifts
     # the two mirror GC Jobs off DENY, so every tier-1 verb answers those.
     ("/etc/rancher/k3s/manifests", "registry-jobs"),

@@ -1,0 +1,33 @@
+---
+# Copies of the registry role's variables that the GC script, Job manifests and timer read. The
+# registry role keeps the originals because the docs fragments and its deploy-time mirror restore
+# read them too. hosts/components/registry-gc/tests/test_registry_gc_component.py holds each copy
+# equal to roles/k8s/registry/defaults/main.yml. An image bump edits both copies in one PR only
+# because renovate.json lists this file in every rule that matches the registry role's defaults;
+# scripts/tests/test_renovate_host_file_copies.py holds the two resolving alike.
+registry_k8s_manage_gc: true
+registry_k8s_gc_cron_weekday: "0"
+registry_k8s_gc_cron_hour: "4"
+registry_k8s_gc_cron_minute: "20"
+registry_k8s_gc_deadline_s: 1200
+registry_k8s_gc_ttl_s: 604800
+registry_k8s_gc_lock_file: /run/lock/registry-gc.lock
+registry_k8s_ghcr_mirror_claim: registry-ghcr-mirror
+registry_k8s_ghcr_mirror_keep_revisions: 3
+registry_k8s_dockerhub_mirror_claim: registry-dockerhub-mirror
+registry_k8s_dockerhub_mirror_keep_revisions: 3
+registry_k8s_image: registry:3.1.2@sha256:d4032d4cc323c1731c707931ecada07a53076eac38e3b61ae57533f170f2c6c3
+registry_k8s_netpol_probe_image: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+
+# How long registry-gc.sh's warm phase may read manifests and blobs through the mirror after the
+# GC. Not a copy: only this component's script reads it. A cold warm of every ghcr.io image the
+# cluster ran on 2026-10-24, about 6.1 GB before deduplication, takes about 2 minutes at the
+# 49 MB/s measured that day. 1800s leaves room for a slow week and bounds how long the run holds
+# the GC lock.
+registry_gc_ghcr_mirror_warm_budget_s: 1800
+# The same bound on the dockerhub-mirror's warm phase, which runs after the ghcr-mirror's. Half
+# the ghcr-mirror's: Docker Hub's anonymous limit refuses a cold warm's manifest reads long before
+# bandwidth runs out. Both watchers allow two hours past the schedule, and
+# ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py fails when the two
+# phases' worst case outgrows that.
+registry_gc_dockerhub_mirror_warm_budget_s: 900

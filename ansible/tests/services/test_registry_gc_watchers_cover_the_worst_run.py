@@ -77,7 +77,7 @@ def allowance_problems(name: str, allowance: int, worst: int) -> list[str]:
 
 
 def _script() -> str:
-    return rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
+    return rendered_shell_text("components", "registry-gc", "registry-gc.sh.j2")
 
 
 def _worst() -> int:
