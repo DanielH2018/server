@@ -203,6 +203,27 @@ def test_a_disarmed_gate_or_a_missing_token_asks_github_nothing(lab, env, reason
     assert lab.metric(f'homelab_checkout_sync_refused{{reason="{reason}"}}') == "1"
 
 
+def test_a_missing_credential_never_falls_back_to_the_gh_login(
+    lab, tmp_path, monkeypatch
+):
+    # sys_user's gh is logged in as the repo owner, so a fallback would spend that token.
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    ran = tmp_path / "gh-ran"
+    gh = bin_dir / "gh"
+    gh.write_text(f"#!/bin/sh\ntouch {ran}\necho operator-token\n")
+    gh.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}:/usr/bin:/bin")
+    tip = lab.push("a")
+    lab.ci[tip] = GREEN
+    sync = lab.sync(CREDENTIALS_DIRECTORY="/nonexistent")
+    assert sync.main() == 0
+    assert not ran.exists(), "the run asked gh for a token"
+    assert sync.requests == 0
+    assert lab.head() == lab.base
+    assert lab.metric('homelab_checkout_sync_refused{reason="token"}') == "1"
+
+
 def test_a_refused_token_reads_token(lab):
     tip = lab.push("a")
     lab.ci[tip] = GREEN
