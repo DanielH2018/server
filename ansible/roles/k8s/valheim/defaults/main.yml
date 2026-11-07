@@ -58,8 +58,8 @@ valheim_k8s_bepinex: "{{ 'true' if valheim_k8s_mods | length > 0 else 'false' }}
 # and copied into the plugins tree by the `mods` initContainer. Built rather than downloaded at
 # boot so a Thunderstore outage cannot silently bring the server up vanilla — see the Dockerfile.
 #
-# `valheim`, not `valheim-mods`: k8s/manifests keys `k8s_rebuilt_images` on `manifests_service`,
-# so a rebuilt image rolls the Deployment only when the built image's name matches the role's.
+# `valheim`, not `valheim-mods`: `k8s_built_image_tags` holds the content tag under the built
+# image's name, so this lookup and the build must agree on it.
 valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image_tags.get('valheim', 'latest') }}"
 
 # ── The mod set ─────────────────────────────────────────────────────────────────────────

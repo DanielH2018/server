@@ -1,8 +1,8 @@
 """Guards on which k8s roles Renovate may automerge an image bump for.
 
-`roles/k8s/manifests` waits on the primary rollout —
+A role's rollouts are the primary —
 `{{ manifests_rollout_kind | default('deploy') }}/{{ manifests_rollout | default(manifests_service) }}` — plus every
-`manifests_extra_rollouts` entry, and runs `assert_stable.yml` against each. A rendered
+`manifests_extra_rollouts` entry. A rendered
 Deployment is gated only if its own `metadata.name` matches the primary rollout name or one of
 the declared extras; a name that can't be resolved statically (a Jinja expression) counts as
 ungated, the fail-closed direction. Four role shapes therefore auto-deploy without a working
@@ -51,7 +51,7 @@ These guards are the only thing standing between a role shape and an ungated aut
 The synthetic-role unit tests for the two gate kinds live in
 test_k8s_autodeploy_batch_gates.py and test_k8s_autodeploy_rollout_gates.py, and the derivation
 they share is _autodeploy.py. What stays here is what reads the live tree — the declaration
-partition, the roles/k8s/manifests contract, and the PVC/claim accounting.
+partition, and the PVC/claim accounting.
 """
 
 from pathlib import Path

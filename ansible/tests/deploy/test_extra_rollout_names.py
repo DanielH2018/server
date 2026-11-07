@@ -44,12 +44,9 @@ def test_extra_rollout_naming_the_wrong_deployment_reads_as_ungated(
     catches it: the second Deployment's real name isn't in {primary, declared extra}.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_extra_rollouts:\n"
-        "      - name: widget-typo\n",
+        defaults="manifests_service: widget\n"
+        "manifests_extra_rollouts:\n"
+        "  - name: widget-typo\n",
         templates={},
     )
     (role / "templates" / "deployment.yaml.j2").write_text(
@@ -74,30 +71,22 @@ def test_extra_rollout_entry_with_a_second_key_hides_no_later_entry(
     across a blank line, which the old `\\s*` crossed to credit cloudflare-ddns with `Wait`.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_extra_rollouts:\n"
-        "      - name: widget-chrome\n"
-        "        restart_on: []\n"
-        "      - name: widget-agent\n"
-        "        kind: daemonset\n"
-        "        restart_on:\n"
-        "          - config\n"
-        "      - name: widget-cache\n"
-        "    manifests_self_rollouts:\n"
-        "      - name: not-an-extra\n",
+        defaults="manifests_extra_rollouts:\n"
+        "  - name: widget-chrome\n"
+        "    restart_on: []\n"
+        "  - name: widget-agent\n"
+        "    kind: daemonset\n"
+        "    restart_on:\n"
+        "      - config\n"
+        "  - name: widget-cache\n"
+        "manifests_self_rollouts:\n"
+        "  - name: not-an-extra\n",
         templates={},
     )
     assert _extra_rollouts(role) == {"widget-chrome", "widget-agent", "widget-cache"}
     followed_by_a_task = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_extra_rollouts:\n"
-        "      - name: widget-direct\n"
-        "\n"
-        "- name: Wait for the widget rollouts\n",
+        defaults="manifests_extra_rollouts:\n  - name: widget-direct\n\n",
+        tasks="- name: Wait for the widget rollouts\n",
         templates={},
     )
     assert _extra_rollouts(followed_by_a_task) == {"widget-direct"}

@@ -255,7 +255,6 @@
  "ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py": 0.15,
  "ansible/tests/k8s/test_deploy_strategy.py": 0.01,
  "ansible/tests/k8s/test_derived_manifest_files.py": 2.98,
- "ansible/tests/k8s/test_empty_rollout_still_restarts_on_secret_change.py": 0.54,
  "ansible/tests/k8s/test_flaresolverr_disable_media.py": 0.07,
  "ansible/tests/k8s/test_flux_jobs_pull_if_not_present.py": 7.84,
  "ansible/tests/k8s/test_flux_role.py": 0.12,

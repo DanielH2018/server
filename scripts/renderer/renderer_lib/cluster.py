@@ -1,13 +1,11 @@
 """Render k8s roles into C1's cluster layout: `DIR/cluster/<tag>/` and its `kustomization.yaml`.
 
-Each tag renders what the Ansible manifests role renders for it, with the play-time context
+Each tag renders with the play-time context
 from `renderer_lib.context`, through the repo's Jinja environment and a strict undefined. A
 name no layer supplies stops the render, where the render guards' `StubUndefined` would print
 `STUB` into the output.
 
-The manifests role's file rules, as "Render manifests", "Render secret manifests", "Render
-volume claims" and "Render deferred manifests" in `ansible/roles/k8s/manifests/tasks/main.yml`
-apply them:
+The file rules:
 
 - The file lists come from `resolved_manifest_files`, or from the role's own
   `manifests_files` and `manifests_secret_files` where it sets them.
@@ -330,7 +328,7 @@ def role_context(
         inventory: Where the inventory files live.
 
     Returns:
-        The context, then the resolved `INCLUDE_KEYS` of the role's `k8s/manifests` include.
+        The context, then the resolved `INCLUDE_KEYS` of the role's defaults.
 
     Raises:
         RenderError: A layer will not resolve, or a role task's expression fails.
@@ -355,7 +353,7 @@ def role_context(
             read, {**ctx, **read}, undefined_cls=StrictChainableUndefined
         )
     except (ValueError, jinja2.TemplateError) as exc:
-        raise RenderError(f"{tag}: its k8s/manifests include: {exc}") from exc
+        raise RenderError(f"{tag}: its render keys: {exc}") from exc
     # The include's vars outrank the role defaults and the inventory; the stub file's extra
     # vars outrank them in turn.
     return {**ctx, **include, **stubs, "manifests_service": tag}, include

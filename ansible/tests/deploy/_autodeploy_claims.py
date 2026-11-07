@@ -34,7 +34,7 @@ def _pvc_names(text: str) -> list[str]:
     - A PVC document nested inside `{% if ... %}` is credited whether or not that condition is
       ever true.
     - A `.j2` file left in the tree after being dropped from `manifests_files` (the list
-      `roles/k8s/manifests` actually applies) is credited too — this glob has no notion of
+      the renderer actually applies) is credited too — this glob has no notion of
       "still deployed".
 
     So this predicate is not fail-closed: it is fail-open in both of those shapes, and
@@ -92,7 +92,7 @@ def _rendered_pvc_claims(role: Path) -> tuple[set[str], list[str]]:
 
     1. A `kind: PersistentVolumeClaim` document in the role's own `templates/*.j2`, such as
        the observability claims.
-    2. A `name:` in the role's `k8s_claims` default, which `k8s/manifests` renders from the
+    2. A `name:` in the role's `k8s_claims` default, which the renderer renders from the
        shared `claim-default.yaml.j2` — the path #3387 moved every claim onto.
 
     Every token found by any path is resolved through `_resolve_claim_token`. A token that
