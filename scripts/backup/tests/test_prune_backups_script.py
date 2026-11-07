@@ -29,7 +29,11 @@ class Runs:
         return subprocess.CompletedProcess(argv, self.drain_code)
 
 
+SECRETS_READ: list[str] = []
+
+
 def secret(name: str) -> str:
+    SECRETS_READ.append(name)
     return f"value-of-{name}"
 
 
@@ -96,9 +100,11 @@ def test_a_failed_sync_is_an_error_that_prints_the_retry(capsys):
 
 def test_an_empty_live_list_refuses_before_the_drain_and_the_secrets(capsys):
     runs = Runs()
+    SECRETS_READ.clear()
     code = run(runs, "--volumes", "pvc-a", "--apply", kubectl=lambda *a, **k: "\n")
     assert code == B2_DRAIN_ERRORED
     assert not runs.drain
+    assert not SECRETS_READ
     assert "no Longhorn volumes" in capsys.readouterr().err
 
 

@@ -225,18 +225,26 @@ class Revert:
     def wait_for_state(self, volume: str, state: str) -> dict:
         """Poll until `volume` reads `state`, and return the volume.
 
+        A failed read polls again, because stopping here for an API-server blip strands the
+        volume in maintenance mode.
+
         Raises:
             RevertError: the state did not arrive within STATE_TIMEOUT_S.
         """
         deadline = self.clock() + STATE_TIMEOUT_S
         while True:
-            found = self._volume(volume)
-            current = (found.get("status") or {}).get("state")
-            if current == state:
-                return found
+            try:
+                found = self._volume(volume)
+            except KubectlFailed as err:
+                seen = f"could not be read ({err})"
+            else:
+                current = (found.get("status") or {}).get("state")
+                if current == state:
+                    return found
+                seen = f"reads '{current}'"
             if self.clock() >= deadline:
                 raise RevertError(
-                    f"volume {volume} reads '{current}', not '{state}', after "
+                    f"volume {volume} {seen}, not '{state}', after "
                     f"{STATE_TIMEOUT_S}s. {_RECOVERY}"
                 )
             self.sleep(POLL_INTERVAL_S)
@@ -304,6 +312,7 @@ def main(
     post: Callable[[str, str, str, dict], None] = post_action,
     sleep: Callable[[float], None] = time.sleep,
     hostname: Callable[[], str] = socket.gethostname,
+    clock: Callable[[], float] = time.monotonic,
 ) -> int:
     """Parse the flags and run the revert.
 
@@ -313,6 +322,7 @@ def main(
         post: posts one Longhorn API action.
         sleep: waits between polls.
         hostname: reads this node's name, which is the Longhorn node name up to the first dot.
+        clock: reads monotonic time for the state waits.
 
     Returns:
         OK when it reverted or would revert, FAILED on a refusal or a failed step, and
@@ -341,7 +351,7 @@ def main(
         error(f"--sha takes eight or more lowercase hex digits, not {args.sha!r}")
         return USAGE_ERROR
     try:
-        Revert(kubectl or for_mode(args.apply, APPLY_COMMAND), post, sleep).run(
+        Revert(kubectl or for_mode(args.apply, APPLY_COMMAND), post, sleep, clock).run(
             args.namespace,
             args.service,
             args.sha,

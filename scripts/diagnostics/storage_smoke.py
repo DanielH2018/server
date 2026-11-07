@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.parse_args(argv)
     try:
-        kubectl = for_mode(True, SCRIPT)
+        kubectl = for_mode(True, SCRIPT, cluster=None)
     except (KubectlFailed, MissingKubectl) as err:
         error(str(err))
         return FAILED

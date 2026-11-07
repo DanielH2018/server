@@ -4,8 +4,11 @@ A dry run reads through the first kubeconfig this user can read, which on daniel
 read-only ServiceAccount. An apply needs the root-only k3s kubeconfig, so the operator runs the
 script under sudo, and `for_mode` names that command when they did not.
 
-A runner raises `KubectlFailed` on a non-zero exit, because each caller's next step acts on the
-answer: an unread volume state must stop a revert, never read as an empty one.
+`for_mode` refuses a kubeconfig that serves another cluster, because each script acts on what it
+reads: a drain trusts the live-volume list to refuse a live volume by name.
+
+A runner raises `KubectlFailed` on a non-zero exit, because an unread volume state must never
+read as an empty one. A caller that can poll again catches it.
 
 Typical usage example:
 
@@ -13,6 +16,7 @@ Typical usage example:
     pvc = json.loads(kubectl("-n", "homelab", "get", "pvc", "app-config", "-o", "json"))
 """
 
+import json
 import os
 import subprocess
 import sys
@@ -24,7 +28,16 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
-from lib.kubectl import K3S_KUBECONFIG, MissingKubectl, find_kubeconfig, find_tool
+from lib.kubectl import (
+    DEFAULT_CLUSTER,
+    K3S_KUBECONFIG,
+    MissingKubectl,
+    cluster_of,
+    cluster_refusal,
+    find_kubeconfig,
+    find_tool,
+    node_names,
+)
 
 DEFAULT_TIMEOUT_S = 60
 
@@ -74,9 +87,22 @@ def runner(
     return kubectl
 
 
+def served_cluster(kubectl: Kubectl) -> str | None:
+    """The cluster `kubectl` reaches, or None when its node list names none.
+
+    Raises:
+        KubectlFailed: the node read failed.
+    """
+    try:
+        return cluster_of(node_names(json.loads(kubectl("get", "nodes", "-o", "json"))))
+    except ValueError:
+        return None
+
+
 def for_mode(
     apply: bool,
     apply_command: str,
+    cluster: str | None = DEFAULT_CLUSTER,
     tool: Callable[[str], str | None] = find_tool,
     kubeconfig: Callable[[], Path | None] = find_kubeconfig,
     readable: Callable[[Path], bool] = lambda path: os.access(path, os.R_OK),
@@ -88,14 +114,16 @@ def for_mode(
         apply: whether this run writes, which needs the root-only k3s kubeconfig.
         apply_command: the script's path from the repo root and its flags, which the refusal
             prints.
+        cluster: the cluster the kubeconfig must serve; None skips the check, for a new
+            cluster whose node names no table holds.
         tool: resolves the kubectl binary.
         kubeconfig: picks the kubeconfig a dry run reads through.
         readable: says whether this user can read the k3s kubeconfig.
         run: the process boundary, handed to `runner`.
 
     Raises:
-        KubectlFailed: an apply by a user who cannot read the k3s kubeconfig. The message prints
-            the sudo command.
+        KubectlFailed: an apply by a user who cannot read the k3s kubeconfig, whose message
+            prints the sudo command, or a kubeconfig that does not serve `cluster`.
         MissingKubectl: this host has no kubectl, or a dry run finds no readable kubeconfig.
     """
     if apply and not readable(K3S_KUBECONFIG):
@@ -109,4 +137,8 @@ def for_mode(
     chosen = K3S_KUBECONFIG if apply else kubeconfig()
     if chosen is None:
         raise MissingKubectl("no readable kubeconfig on this host")
-    return runner(chosen, binary, run=run)
+    kubectl = runner(chosen, binary, run=run)
+    refusal = cluster and cluster_refusal(cluster, served_cluster(kubectl))
+    if refusal:
+        raise KubectlFailed(f"{chosen}: {refusal}")
+    return kubectl

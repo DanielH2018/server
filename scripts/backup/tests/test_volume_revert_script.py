@@ -1,5 +1,6 @@
 """The revert script's refusals and its whole call sequence, against a fake cluster."""
 
+import itertools
 import json
 
 import pytest
@@ -90,6 +91,7 @@ def run(cluster: Cluster, argv: list[str]) -> int:
         kubectl=cluster.kubectl,
         post=cluster.post,
         sleep=lambda _: None,
+        clock=itertools.count(step=10).__next__,
         hostname=lambda: f"{NODE}.lan",
     )
 
@@ -177,7 +179,22 @@ def test_a_live_frontend_stops_before_the_revert_and_says_the_service_is_down(ca
     assert "at zero replicas" in capsys.readouterr().err
 
 
-def test_a_failed_read_after_the_scale_down_says_the_service_is_down(capsys):
+def test_a_read_that_fails_once_during_a_wait_does_not_stop_the_revert():
+    cluster = Cluster()
+    real = cluster.kubectl
+    failures = [KubectlFailed("the API server went away")]
+
+    def failing_once(*args, stdin=None):
+        if args[2] != "scale" and args[3] == "volumes.longhorn.io" and failures:
+            raise failures.pop()
+        return real(*args, stdin=stdin)
+
+    cluster.kubectl = failing_once
+    assert run(cluster, [*ARGS, "--apply"]) == OK
+    assert [c for c in cluster.calls if c[0] == "snapshotRevert"]
+
+
+def test_reads_that_keep_failing_end_the_wait_and_say_the_service_is_down(capsys):
     cluster = Cluster()
     real = cluster.kubectl
 
@@ -188,7 +205,9 @@ def test_a_failed_read_after_the_scale_down_says_the_service_is_down(capsys):
 
     cluster.kubectl = failing
     assert run(cluster, [*ARGS, "--apply"]) == FAILED
-    assert "at zero replicas" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "the API server went away" in err
+    assert "at zero replicas" in err
 
 
 def test_a_state_that_never_arrives_fails_the_wait():
