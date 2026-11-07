@@ -1224,8 +1224,9 @@ checkout within 10 minutes, and no landing step reads the checkout after the mer
   loses its `tick_state` and `tick_applied` arms, so a PR that reaches only a setup role
   ends `nothing-to-deploy`. H7.19b deletes the rest of the setup arm. H7.49a may merge
   while daniel-box's `initial_setup`, `k3s` or `gitops_deploy` tasks remain. Until H7.52,
-  the timer's tick still applies such a PR within 10 minutes, and land.sh no longer waits
-  on that tick, so the PR's author reads the changed state on the host.
+  the timer's tick still applies an `initial_setup` or `gitops_deploy` change within 10
+  minutes, and it records a `manual_plane` line for a `k3s` change. land.sh reports neither,
+  so the PR's author reads the changed state on the host or the line in `owed.jsonl`.
 - `gitops_tick.sh` itself, with its wrapper test and the land tests whose subject is the
   tick. The PR derives that list from `git grep -l -E
   'gitops_tick|run_tick|kick_tick|rearm_tick|tick_state|tick_applied'` at its base, and
@@ -1305,6 +1306,8 @@ steps are:
       holds, so supplying it is **operator-only**. The guard skips the installer when the
       binary is at `k3s_version` and the unit exists, so a rerun never rewrites the env
       file.
+    - Added by H7.58 to H7.60: the Pi's swap file, the `networkd-dispatcher.service` mask on
+      all three hosts, and the removal of the LXD snaps on daniel-server.
 5. Install `chezmoi` from `homelab-tools`, then run `apt-get install homelab-updater
    homelab-<hostname>`, then `systemd-tmpfiles --create`, as boot does. That creates each
    directory a package declares in `tmpfiles.d`, the Pi's textfile directory (H7.4) among
@@ -1791,8 +1794,8 @@ H3 and H4 through H5 and H6, and D1, D5 and D6 through R4. Each host's package b
 PRs: H3 created `homelab-daniel-pi`, H4 creates `homelab-daniel-server`, and H6.2 creates
 `homelab-daniel-box`. Nothing waits on H7, so no narrowing can form a cycle. Two cited H2 IDs
 are absent from H2's step list. H2 dropped H2.6, which appears only as a condition that H7.2e
-handles either way, so it adds no edge. H2.10 never existed. Old H7.13 cites it for the S3
-folder the drill reads, and H2.8a settled that folder as `etcd-snapshots`.
+handles either way, so it adds no edge. H2.10 is absent from H2's plan. Old H7.13 cites it for
+the S3 folder the drill reads, and H2.8a settled that folder as `etcd-snapshots`.
 
 **The H2 edges name PRs, not the slice (2026-11-07).** Each row names the H2 PRs that edit its
 files or that it reads, from the file lists of the PRs H2's Status line names:
@@ -1801,7 +1804,10 @@ files or that it reads, from the file lists of the PRs H2's Status line names:
 - H7.35 moves `k3s/tasks/health-crons.yml`, which H2.3d
   ([#6105](https://github.com/DanielH2018/server/pull/6105)), H2.2c and H2.3f
   ([#7008](https://github.com/DanielH2018/server/pull/7008)) and H2.8b
-  ([#7176](https://github.com/DanielH2018/server/pull/7176)) edit.
+  ([#7176](https://github.com/DanielH2018/server/pull/7176)) edit. It also `git mv`s the
+  templates and defaults that H2.3a
+  ([#5349](https://github.com/DanielH2018/server/pull/5349)) and H2.3c
+  ([#6086](https://github.com/DanielH2018/server/pull/6086)) edit.
 - H7.48 turns the absent arms in that file into legacy entries, and it empties
   `k8s_host_files`, whose rows H2.4c
   ([#5753](https://github.com/DanielH2018/server/pull/5753)) and the *arr PRs
@@ -1835,7 +1841,7 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.32 daniel-box: `initial_setup`, part 2 | H7.7c, H7.7f, H7.7i | yes, with H7.30 | H7.31 live, H6.2 |
 | H7.33 daniel-box: NUT secondary | H7.8 | yes | H4, H6.2 |
 | H7.34 daniel-server: the `k3s` agent half and `hypervisor` | H7.9a, H7.13 | yes | H7.31, H6.1b2, H6.5b, H2.8a |
-| H7.35 daniel-box: the `k3s` host half | H7.9b | no: H6.4a, H6.4b and the H2 PRs it names edit the same task files, so it starts once they merge | H7.32, H6.4a, H6.4b, H2.2c, H2.3d, H2.3f, H2.8b, D5's media-volume row |
+| H7.35 daniel-box: the `k3s` host half | H7.9b | no: H6.4a, H6.4b and the H2 PRs it names edit the same task files, so it starts once they merge | H7.32, H6.4a, H6.4b, H2.2c, H2.3a, H2.3c, H2.3d, H2.3f, H2.8b, D5's media-volume row |
 | H7.36 daniel-box: the checkout timers | H7.10a, H7.10b, H7.10c | yes | H6.2, D5's docs row |
 | H7.37 daniel-box: Renovate and `fake_remux` | H7.11 | yes; D6.15's review picks the deploy_ui branch | H6.2, D6 |
 | H7.38 Per-user tooling in `DanielH2018/dotfiles` | H7.12a | yes | none |
@@ -2164,7 +2170,9 @@ the `manual_plane` clearing, and *Rollback*'s
     asks for. It merges before H7.53. H7.42 merged with `k3s`'s tasks still in place, so
     old H7.9's fallback no longer names a PR. This PR deletes `k3s/tasks/server.yml` and
     `k3s/tasks/coredns.yml` and empties the role, because the procedure it writes replaces
-    them, gates included. The procedure also gains H7.60's and H7.62's steps.
+    the bring-up they run. Its body names where each of `server.yml`'s checks goes, the
+    secrets-encryption and datastore checks among them, or why one is deleted. The procedure
+    also gains H7.60's and H7.62's steps.
 21. **H7.45.** Both steps replace an operator playbook or runbook role with a script. The
     operator drills the snapshot command once (**operator-only**).
 22. **H7.46** stays alone. It carries the renders-without-ansible-core proof and lands the
@@ -2193,7 +2201,8 @@ the `manual_plane` clearing, and *Rollback*'s
 27. **H7.51** stays alone, because it must be live and fast-forwarding before H7.52 removes
     the timer. It carries the checkout-sync proofs and the window-test exemption.
 28. **H7.52** stays alone. It merges only while `hold_sha` is empty and `owed.jsonl` holds no
-    line. It carries the proof for H6's deployer-coupled checks. Its revert needs the
+    line. It carries the proof for H6's deployer-coupled checks. `gitops_deploy/tasks/teardown.yml`'s
+    removals become legacy entries in the packages of the hosts it applied to. Its revert needs the
     operator's `--tags gitops_deploy` re-apply ON daniel-box (**operator-only**).
 29. **H7.53.** H7.19b deletes the deployer's code once its timer is gone, and H7.19c then fails
     the census on any setup task left. H7.19b may still split in two, the re-home first. It
@@ -2214,16 +2223,24 @@ the `manual_plane` clearing, and *Rollback*'s
     to `initial_setup_packaged_hosts`, and H7.60 deletes the subjects' tasks. A new
     `host-hardening` component ships the paths below with the bytes the tasks wrote, so dpkg
     takes each path over. Each PR carries the rendered files' `visudo -cf` and
-    `rsyslogd -N1` proofs, and a read-only live check for each subject.
+    `rsyslogd -N1` proofs, and a read-only live check for each subject. Bootstrap step 4 below
+    means new work: these rows edit `hosts/bootstrap-host.sh` and its container test, because
+    the script as merged does none of it.
     - **`access.yml`.** The component ships `/etc/sudoers.d/10-timestamp`. A `tmpfiles.d` `Z`
       line with mode `~0700` holds the sys user's `.ssh`. A `sysusers.d` file declares
       `ssh-users` and the sys user's membership, which replaces the note in the `sshd`
       component's header. `10-homelab.conf` sets `AllowGroups ssh-users`, so this subject can
       lock a host out. Each PR reads `id <sys_user>` and opens a new SSH session before it
-      merges. `Give root back its own SSH directory` is deleted, because it repairs damage the
+      merges. On 2026-11-07 the group lists `ubuntu` on the Pi and daniel-box, and `root`,
+      `ubuntu` and `claude` on daniel-server. No tracked script under `hosts/` or `scripts/`
+      names a `root@` login, so the file does not declare root, and daniel-server's entry stays
+      host history. `Give root back its own SSH directory` is deleted, because it repairs damage the
       pinned path stopped; each PR body quotes the owner of `/root/.ssh`.
-    - **`accounting.yml`.** `/etc/issue` and `/etc/issue.net` are conffiles of `base-files`,
-      so the banners go through the line arm, one declaration per line.
+    - **`accounting.yml`.** `/etc/issue` and `/etc/issue.net` are conffiles of `base-files`
+      (`dpkg-query -W -f='${Conffiles}' base-files` on the Pi and daniel-box, 2026-11-07), so
+      the banners go through the line arm, one declaration per line. No tracked sshd
+      configuration sets `Banner`. If H7.58's `sshd -T` reads `banner none`, no SSH login shows
+      `/etc/issue.net`, and that file's lines are deleted with that reason.
     - **`audit-and-kernel.yml`.** `auditd` is a `Depends`, and its unit is enabled in the
       package. The component ships `/etc/audit/rules.d/hardening.rules` with
       `try-restart:auditd.service`, the module blacklist and
