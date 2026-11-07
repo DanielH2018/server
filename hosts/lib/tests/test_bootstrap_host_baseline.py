@@ -37,7 +37,10 @@ def test_a_pi_rerun_keeps_its_swap_file_and_fstab_line_and_formats_nothing(tmp_p
     (host.root / "etc").mkdir(parents=True, exist_ok=True)
     swap.write_text("live swap")
     (host.root / "etc/fstab").write_text("/swapfile none swap sw 0 0\n")
-    host._stub("swapon", f'[ "$1" != --show=NAME ] || echo {swap}')
+    host._stub(
+        "swapon",
+        f'if [ "$1" = --show=NAME ]; then echo {swap}; else echo "swapon $*" >> {host.log}; fi',
+    )
 
     result = host.run("daniel-pi", "--until", "4")
 

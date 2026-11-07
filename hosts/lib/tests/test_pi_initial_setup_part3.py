@@ -23,6 +23,7 @@ ROLE = ANSIBLE / "roles" / "setup" / "initial_setup"
 SUDOERS = "/etc/sudoers.d/10-timestamp"
 BLACKLIST = "/etc/modprobe.d/blacklist-rare-network.conf"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-hardening.conf"
+KEEP_CONFFILES = "/etc/apt/apt.conf.d/53homelab-keep-conffiles"
 BANNER = (
     "WARNING: Unauthorized access to this system is prohibited.\n"
     "All connections are monitored and recorded.\n"
@@ -125,6 +126,21 @@ def test_the_blacklist_edits_adopt_the_lines_the_task_wrote(package):
     assert adopted == written
     # kmod owns this path as a conffile, so a file entry would fail dpkg's unpack.
     assert BLACKLIST not in package.files
+
+
+@pytest.mark.skipif(not shutil.which("apt-config"), reason="needs apt's apt-config")
+def test_apt_parses_the_conffile_option_unattended_upgrade_requires(package, tmp_path):
+    # Without --force-confold or --force-confnew, unattended-upgrade skips a package whose conffile
+    # would prompt, so base-files and kmod would wait for a hand run.
+    conf = tmp_path / "keep.conf"
+    conf.write_bytes(package.files[KEEP_CONFFILES][0])
+    dump = subprocess.run(
+        ["apt-config", "-c", str(conf), "dump"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout
+    assert 'DPkg::Options:: "--force-confold";' in dump
 
 
 def test_the_tmpfiles_lines_cover_the_ssh_directory_and_every_restricted_path(package):

@@ -22,7 +22,11 @@
 # Keep the sudoers file valid: a malformed drop-in locks sudo out. `visudo -cf` in
 # hosts/lib/tests/test_pi_initial_setup_part3.py holds it.
 #
-# unattended-upgrades is a Depends here. Its policy is the `unattended-upgrades` component's.
+# unattended-upgrades is a Depends here. Its origin policy is the `unattended-upgrades` component's.
+# 53homelab-keep-conffiles sets `--force-confold` for every apt run on the host. Without a force-conf
+# option, unattended-upgrade skips any package whose conffile would prompt, which includes base-files
+# and kmod once the line arm edits theirs. The option keeps the edited file. A caller's own
+# `--force-confnew`, such as bootstrap's log2ram install, is still answered without a prompt.
 depends:
   - auditd
   - debsums
@@ -37,6 +41,7 @@ files:
   - {src: templates/wireguard.conf, dst: /etc/modules-load.d/wireguard.conf, activate: modules-load}
   - {src: templates/coredump-disable.conf, dst: /etc/systemd/coredump.conf.d/disable.conf}
   - {src: tmpfiles.d/homelab-hardening.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-hardening.conf}
+  - {src: templates/53homelab-keep-conffiles, dst: /etc/apt/apt.conf.d/53homelab-keep-conffiles}
 lines:
   - {path: /etc/issue, line: "WARNING: Unauthorized access to this system is prohibited.", regexp: '^(Ubuntu |WARNING: Unauthorized access)'}
   - {path: /etc/issue, line: "All connections are monitored and recorded.", regexp: '^All connections are monitored'}

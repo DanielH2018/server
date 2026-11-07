@@ -2293,7 +2293,10 @@ the `manual_plane` clearing, and *Rollback*'s
       the release's regular updates pocket as well as security: the operator ruled "widen it" on
       2026-11-07, so no Ubuntu update waits for a hand run. The `unattended-upgrades` component
       has shipped that pocket since [#398](https://github.com/DanielH2018/server/pull/398), so
-      `host-hardening` adds only the `Depends`. Docker's and the homelab repository's origins stay
+      `host-hardening` adds the `Depends`. It also ships `--force-confold` in `apt.conf.d`. Without a
+      force-conf option `unattended-upgrade` skips a package whose conffile would prompt, and the
+      line arm edits conffiles of `base-files` and `kmod`, so those would wait for a hand run once
+      the dist-upgrade goes. Docker's and the homelab repository's origins stay
       out. The watchdog stop and its handler
       guard only that dist-upgrade, so they go with it. The Docker hold goes for the same
       reason, because `homelab-docker-engine.service` sets the hold when it installs the

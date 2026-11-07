@@ -23,9 +23,11 @@ is not ours to change; this covers only the extras we add.
 Run: uv run pytest ansible/tests/setup/test_unattended_origins_pattern.py
 """
 
+import fnmatch
 import re
 
 import pytest
+from homelab_repo_sign import COMPONENT, SUITE
 from lib import yaml_fast
 from _helpers import ALL_VARS
 from _host_packages import HOSTS, shipped_text
@@ -66,39 +68,103 @@ def test_var_is_defined():
     )
 
 
+# The release field each matcher reads in match_whitelist_string, /usr/bin/unattended-upgrade.
+MATCHER_FIELDS = {
+    "o": "origin",
+    "origin": "origin",
+    "l": "label",
+    "label": "label",
+    "a": "archive",
+    "suite": "archive",
+    "archive": "archive",
+    "c": "component",
+    "component": "component",
+    "site": "site",
+    "n": "codename",
+    "codename": "codename",
+}
+# `apt-cache policy` on daniel-pi, 2026-11-07. A repository may publish no codename.
+DOCKER = {
+    "origin": "Docker",
+    "label": "Docker CE",
+    "archive": "noble",
+    "component": "stable",
+    "site": "download.docker.com",
+    "codename": "",
+}
+HOMELAB = {
+    "origin": SUITE,
+    "label": SUITE,
+    "archive": SUITE,
+    "component": COMPONENT,
+    "site": "10.0.0.215",
+    "codename": SUITE,
+}
+REGULAR_UPDATES = {
+    "origin": "Ubuntu",
+    "label": "Ubuntu",
+    "archive": "noble-updates",
+    "component": "main",
+    "site": "ports.ubuntu.com",
+    "codename": "noble",
+}
+
+
 def matches(pattern: str, release: dict[str, str]) -> bool:
-    """Whether every token of `pattern` matches `release`, as match_whitelist_string reads it."""
+    """Whether unattended-upgrade's match_whitelist_string accepts `release` for `pattern`."""
     filled = pattern.replace("${distro_id}", "Ubuntu").replace(
         "${distro_codename}", "noble"
     )
     return all(
-        release.get(key) == value
+        fnmatch.fnmatch(release[MATCHER_FIELDS[key]], value)
         for key, value in (token.split("=", 1) for token in filled.split(","))
     )
 
 
-def test_the_operators_widening_reaches_the_regular_updates_pocket():
-    release = {"origin": "Ubuntu", "archive": "noble-updates"}
-    assert any(matches(pattern, release) for pattern in patterns())
+def shipped_patterns(host: str) -> list[str]:
+    """The Origins-Pattern entries of `host`'s rendered drop-in."""
+    return re.findall(
+        r'^Unattended-Upgrade::Origins-Pattern:: "(.*)";$',
+        shipped_text(host, DROP_IN),
+        re.MULTILINE,
+    )
 
 
-# The fields `apt-cache policy` prints for these repositories on daniel-pi, 2026-11-07.
+@pytest.mark.parametrize("host", HOSTS)
+def test_each_host_ships_the_regular_updates_pocket(host: str):
+    assert any(matches(p, REGULAR_UPDATES) for p in shipped_patterns(host))
+
+
+# An unattended engine swap took the Pi down (#1961), and the updater alone moves homelab-*.
+@pytest.mark.parametrize("host", HOSTS)
+@pytest.mark.parametrize("release", [DOCKER, HOMELAB], ids=["docker", "homelab"])
+def test_no_shipped_pattern_reaches_docker_or_the_homelab_repository(
+    host: str, release: dict[str, str]
+):
+    assert not [p for p in shipped_patterns(host) if matches(p, release)]
+
+
 @pytest.mark.parametrize(
-    "name, release",
+    "pattern, release",
     [
-        ("Docker", {"origin": "Docker", "archive": "noble", "codename": ""}),
-        ("homelab", {"origin": "homelab", "archive": "homelab", "codename": "homelab"}),
+        ("origin=Docker", DOCKER),
+        ("o=Docker,a=noble", DOCKER),
+        ("l=Docker CE", DOCKER),
+        ("site=download.docker.com", DOCKER),
+        ("origin=*", DOCKER),
+        ("o=homelab", HOMELAB),
+        ("a=home*", HOMELAB),
+        ("n=homelab", HOMELAB),
+        ("site=10.0.0.215", HOMELAB),
+        ("origin=*", HOMELAB),
     ],
 )
-def test_no_pattern_reaches_docker_or_the_homelab_repository(name, release):
-    # An unattended engine swap took the Pi down (#1961), and the updater alone moves homelab-*.
-    assert not any(matches(pattern, release) for pattern in patterns()), name
+def test_a_pattern_that_names_the_repository_by_any_matcher_is_found(pattern, release):
+    assert matches(pattern, release)
 
 
-def test_the_match_reader_can_find_docker_when_a_pattern_names_it():
-    assert matches(
-        "origin=Docker,archive=noble", {"origin": "Docker", "archive": "noble"}
-    )
+def test_every_matcher_this_file_accepts_has_a_field_the_reader_compares():
+    assert set(MATCHER_FIELDS) == MATCHERS
 
 
 @pytest.mark.parametrize("pattern", patterns())
