@@ -169,8 +169,8 @@ tests:
               description: >-
                 secret-rotation-audit.sh on daniel-box ended with a non-zero exit code: a secret
                 is past its rotation window, a secret in secrets.yml is missing from the
-                registry, or a prior weekly secret-rotate left the tree dirty or unpushed. Run
-                `secret_rotation.py audit` by hand to read which.
+                registry, a registry row carries a tier with no cadence, or the gh CLI token is
+                not authenticated. Run `secret_rotation.py audit` by hand to read which.
   - interval: 1h
     input_series:
       - series: 'homelab_check_success{check="setup-drift-check", instance="daniel-server", job="node", origin="daniel-server"}'

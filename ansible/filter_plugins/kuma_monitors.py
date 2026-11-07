@@ -30,7 +30,7 @@ _KUMA_KEYS = frozenset({"id", "name"})
 ID_SUFFIX = "-k8s"
 
 # AutoKuma's own check, from its error text: "push token should be 32 characters and contain
-# only letters and numbers". `secret_rotation.py rotate` mints `token_hex(16)`, which passes.
+# only letters and numbers". A `token_hex(16)` value passes.
 _PUSH_TOKEN = re.compile(r"[A-Za-z0-9]{32}")
 
 

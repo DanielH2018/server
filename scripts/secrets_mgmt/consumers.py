@@ -1,11 +1,9 @@
-"""Who holds a copy of a secret, by two deliberately different mechanisms.
+"""Who holds a copy of a secret, measured from the tree.
 
-`consumer_tags()` routes by NAME. It is fast, it covers the push-token fleet, and it is what
-the unattended weekly rotation acts on: a token with no tags is MANUAL and the cron skips it.
-
-`tree_consumers()` measures the same question from the tree with a grep. It answers "who is
-still holding the old value?" for every secret, including the ones name-routing has no rule
-for — the question a rotation actually poses, and the one `audit` does not answer.
+`tree_consumers()` answers "who is still holding the old value?" for every secret with a grep
+over the roles and host components — the question a rotation actually poses, and the one
+`audit` does not answer. `consumer_commands()` turns that answer into the apply command per
+plane.
 
 Both are pure reads: nothing here decrypts, writes or shells out.
 """
@@ -27,18 +25,6 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deployer_lib.deploy_cross_role import k8s_lookup_map
-
-
-def consumer_tags(name: str) -> tuple[str, ...]:
-    """Deploy tags whose redeploy makes a rotated push token take effect.
-
-    EMPTY when the consumer spans hosts or nothing reads the token: those stay MANUAL. The
-    unattended cron skips them, and the audit still reminds.
-    """
-    if name.startswith("monitor_bridge_"):
-        return ("monitor-bridge",)
-    # anything else unrecognised -> manual
-    return ()
 
 
 # Planes a role can live on, and what redeploying it actually costs the operator. The
@@ -181,17 +167,9 @@ def _host_package_corpus(repo: str) -> list[tuple[str, str, str]]:
 def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
     """Every role that REFERENCES this secret, measured from the tree — role -> plane.
 
-    The counterpart to `consumer_tags()` above, and deliberately a different mechanism.
-    `consumer_tags()` routes by NAME, which is fast and covers the push-token fleet, but its
-    own comment records what name-routing costs: nine of 41 `monitor_bridge_*` tokens named a
-    role that renders them nowhere, and the fix was measured with `grep -rl <token>
-    ansible/roles/` rather than reasoned from the prefix. This does that grep in code so the
-    measurement is repeatable and can be asserted against.
-
-    It answers the question a rotation actually poses — "who now holds a stale copy?" — which
-    `consumer_tags()` cannot for anything outside its table. `sonarr_api_key` falls to that
-    function's default and returns `()`, meaning MANUAL: correct, but it names nobody, so its
-    consumers can hold a dead key until someone finds them.
+    A grep in code rather than routing by name: name-routing once sent nine of 41
+    `monitor_bridge_*` tokens to a role that renders them nowhere. It answers the question a
+    rotation actually poses — "who now holds a stale copy?" — for every secret.
 
     Returns a plane per role because the repair command differs by plane and one of them is
     unreachable from `deploy.sh` — see `_ROLE_PLANES`. A host package that carries the secret
@@ -214,18 +192,6 @@ FLUX_PATH = (
     "`uv run python scripts/secrets_mgmt/cluster_vars.py write` (operator-only), commits it "
     "with secrets.yml, and the PR lands with `./scripts/deploy_tools/land.sh`"
 )
-
-
-def flux_applies_line(tag: str) -> str:
-    """The line `rotate --commit` prints for each consumer of a rotated secret.
-
-    `rotate --commit` has already run `write` in process (`sync_cluster_files`), so the rest
-    of the Flux path is the commit landing.
-    """
-    return (
-        "  not redeployed: %s carries owner: flux; Flux applies it once the commit "
-        "carrying the cluster files lands" % tag
-    )
 
 
 def consumer_commands(name: str, repo: str = REPO) -> list[str]:

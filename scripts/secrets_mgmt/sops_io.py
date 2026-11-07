@@ -1,9 +1,9 @@
 """The SOPS write helper, which imports no other secrets_mgmt module.
 
 `sops_set` writes one secret into a SOPS file through `sops set`, with the runner injectable.
-It lives here, and not in `rotation_tools.py`, because both `rotation_tools.py` and
-`cluster_vars.py` need it and each imports the other's work: a leaf both can import keeps the
-import graph acyclic.
+`cluster_vars.py write` is its caller. It lives in a leaf that imports no other secrets_mgmt
+module, so `rotation_tools.py` can take `REPO` and `SECRETS_FILE` from here without importing
+the cluster renderer.
 """
 
 import os
@@ -46,9 +46,6 @@ def sops_set(
         text=True,
         check=True,
         cwd=REPO,
-        # A hung `sops set` would otherwise hang the weekly secret-rotate cron forever,
-        # mid-batch, still holding the repo-tree lock the deploy pipeline shares.
-        # `cmd_rotate` catches the TimeoutExpired alongside its other failures, so the names
-        # already written to the store are still reported.
+        # A hung `sops set` would otherwise hang `cluster_vars.py write` forever, mid-batch.
         timeout=30,
     )
