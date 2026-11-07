@@ -20,10 +20,14 @@
 # `initial_setup_packaged_hosts`. The scans and the reboot read one more credential,
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-box`, operator-only).
 #
-# The package declares no ufw rule beyond the SSH pair and the builder's two repository allows.
-# Every other live rule belongs to a role that still writes it: the k3s join rules and the
-# coredns-host metrics allows to `setup/k3s` (H7.35 declares the join rules `keep`), and the
-# deploy-ui allows to `setup/deploy_ui`. None carries a `homelab:` label, so the arm leaves them.
+# The deploy-ui allows are the one live ufw rule set the package does not declare: `setup/deploy_ui`
+# still writes them, with no `homelab:` label, so the arm leaves them.
+#
+# H7.35 moves the k3s server's host half here: `k3s-server` gains Longhorn's packages, the read-only
+# kubeconfig, the inotify key, the join rules declared `keep` and the address pin, whose wifi half
+# reads `wifi_ssid` and `wifi_password`. `k3s-host-dns` holds the resolver and the host forwarder, and
+# `k3s-host-checks` the backup, disk and token checks, whose restore credentials read `r2_*`
+# (`host_secrets.py sync daniel-box`, operator-only).
 #
 # The builder and the repository moved in H7.41b (hosts/components/builder). Other timers stay with
 # Ansible until H7. H6.4a adds the k3s-server component, whose first k3s.service drop-in lets the
@@ -36,6 +40,10 @@
 # sits above the component's defaults (H3, *Component variables*). A package-level `defaults:` map
 # reaches only the package's own files, never a component's.
 description: daniel-box's homelab host package
+# media-volume's host path, a copy of the k8s role's default for the tmpfiles.d file below. puid
+# and pgid come from group_vars. hosts/lib/tests/test_box_k3s_host_half.py holds the copy equal.
+defaults:
+  media_volume_host_path: /srv/media
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
 # agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).
 component: claude-code
@@ -69,6 +77,8 @@ components:
   - sshd
   - host-tuning
   - k3s-server
+  - k3s-host-dns
+  - k3s-host-checks
   - claude-code
   - sops
   # H7.61: this package's own units name /usr/bin/uv. initial_setup keeps writing
@@ -122,6 +132,7 @@ depends:
 files:
   # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
   - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}
+  - {src: tmpfiles.d/homelab-media-volume.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-media-volume.conf}
   # The agent's login-session slice, capped like the Remote Control unit (claude-code component).
   - src: "component:templates/login-slice-caps.conf.j2"
     dst: /usr/lib/systemd/system/user-996.slice.d/homelab-claude-caps.conf
@@ -130,7 +141,6 @@ legacy:
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
   # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's
-  # own legacy list cannot name because only a `has_fwupd` host carries it. /etc/healthchecks
-  # stays: the k3s role's health crons on this host read the key file in it.
+  # own legacy list cannot name because only a `has_fwupd` host carries it.
   - {path: /usr/local/bin/host-maintenance.sh}
   - {cron: "Weekly firmware update", user: root}

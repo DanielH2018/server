@@ -316,11 +316,10 @@ def test_cron_targets_resolve_a_job_line_carrying_jinja_with_spaces(tmp_path):
 
 
 def test_the_widened_resolver_covers_the_scripts_it_was_written_for(cron_map):
-    # Pin the one script the `| logger` suffix fix still brings in (docs-refresh.sh left for a
-    # systemd unit, H7.10a, and the trim for a Longhorn RecurringJob, H2.2c), so a later narrowing
-    # shows up here rather than as a guard quietly covering less than it claims.
+    # Pin the one script the `| logger` suffix fix still brings in, so a later narrowing shows up
+    # here rather than as a guard quietly covering less than it claims.
     names = {t.name for t in cron_map}
-    assert "longhorn-backup-health.sh.j2" in names
+    assert "fake-remux-health.sh.j2" in names
 
 
 def test_the_real_tree_has_no_kubeconfig_violation():
@@ -370,19 +369,3 @@ def test_uv_interpreter_passes_the_connection_user(tmp_path):
     # The interpreter lives under that user's HOME, so its own uv finds it unaided.
     tpl = _cron_role(tmp_path, user="ubuntu")
     assert cc.cron_uv_interpreter_error(tpl, UV_PINNED, roles=tmp_path) is None
-
-
-def test_the_real_tree_has_no_uv_interpreter_violation():
-    offenders = []
-    root_crons = set()
-    for tpl, _task_file, cron, _env in ct.iter_cron_targets():
-        if str(cron.get("user", "")) == "root":
-            root_crons.add(tpl.name)
-        if not tpl.exists():
-            continue
-        # Source text, deliberately — the rule's own second argument, as above.
-        if cc.cron_uv_interpreter_error(tpl, tpl.read_text()):
-            offenders.append(tpl.name)
-    assert offenders == [], offenders
-    # Non-vacuity: the rule must be examining the root cron it was written for.
-    assert "etcd-token-drift.sh.j2" in root_crons

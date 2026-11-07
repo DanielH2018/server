@@ -1,7 +1,7 @@
 ---
 # The cluster identity and the workload-tier PriorityClasses, handed to Flux (H1.2). Two
 # objects here are needed before Flux can run: Flux's own controllers name `homelab-critical`,
-# and `setup/k3s`'s kubeconfig.yml reads the read-only token Secret. So a rebuilt cluster
+# and the read-only kubeconfig carries the token this Secret holds. So a rebuilt cluster
 # applies this tag by hand before it installs Flux (docs/longhorn-disaster-recovery.md,
 # *Procedure (fresh host, total loss)*, step 2).
 

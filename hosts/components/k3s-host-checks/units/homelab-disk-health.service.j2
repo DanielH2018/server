@@ -1,0 +1,14 @@
+# Shipped by the host package's k3s-host-checks component. Started by homelab-disk-health.timer.
+[Unit]
+Description=Check the root disk's headroom and report the verdict
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User={{ sys_user }}
+ExecStart=/usr/lib/homelab/disk-health.sh
+SyslogIdentifier=disk-health
+# Import, not Load: Load fails the unit on a missing file, and the check must still write its verdict.
+ImportCredential=healthchecks_ping_key

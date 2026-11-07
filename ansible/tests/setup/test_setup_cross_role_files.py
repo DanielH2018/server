@@ -60,7 +60,6 @@ KNOWN_EDGES = {
         "deploy_ui",
         "fake_remux",
         "gitops_deploy",
-        "k3s",
         "renovate_agent",
         "renovate_notify",
     },
@@ -68,7 +67,6 @@ KNOWN_EDGES = {
         "deploy_ui",
         "fake_remux",
         "gitops_deploy",
-        "k3s",
         "renovate_agent",
         "renovate_notify",
     },
@@ -81,9 +79,8 @@ KNOWN_EDGES = {
         "gitops_deploy",
         "initial_setup",
     },
-    # Copied from the checkout by a literal `src:`; the second through release_bin.yml.
+    # Copied from the checkout by a literal `src:`.
     "scripts/backup/etcd_restore_drill.sh": {"hypervisor"},
-    "scripts/deploy_tools/prune_releases.py": {"k3s"},
 }
 # A module the setup roles ship that sits outside the setup tree since H7.2e: the shared
 # `hosts/lib/` modules and the `scripts/lib/longhorn_lib/` package. No role owns them, so every
@@ -218,7 +215,8 @@ def test_the_deployers_table_equals_the_trees_cross_role_files():
         for path, roles in SETUP_FILES_SHIPPED_BY_OTHER_ROLES.items()
         if "/defaults/" not in path
     }
-    assert _tree_edges() == shipped
+    # A file reached only through a task file nothing imports reaches no role.
+    assert {path: roles for path, roles in _tree_edges().items() if roles} == shipped
 
 
 def test_the_scan_finds_the_known_edges():

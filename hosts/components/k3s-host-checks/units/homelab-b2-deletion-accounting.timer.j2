@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-host-checks component with its enable link.
+[Unit]
+Description=Charge the day's completed backup deletions to the B2 ledger
+
+[Timer]
+OnCalendar=*-*-* {{ k3s_b2_deletion_accounting_cron_hour }}:{{ k3s_b2_deletion_accounting_cron_minute }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

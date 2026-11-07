@@ -200,7 +200,7 @@ The exit criterion has three parts:
       (the cron key), `ansible/tests/k8s/test_base_images_digest_pinned.py` (the image key),
       `scripts/tests/test_renovate_managers.py` (why `roles/setup/*/defaults` is scanned),
       `ansible/tests/repo/test_shared_render_accessors.py` (the stamp-dir key),
-      `ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.py`,
+      `test_kuma_env_renders_for_every_cron_tag.py` (retired by H7.35),
       `scripts/validate/tests/test_shell_template_cron_rules.py` and
       `scripts/validate/tests/test_validate_shell_templates.py`.
 - **The drill's cluster calls.** Its `KUBECTL` is `k3s kubectl`, the root admin kubeconfig.
@@ -1950,7 +1950,7 @@ carries `prune: disabled`.
     - `scripts/tests/test_renovate_managers.py` and `renovate.json`: the reason for scanning
       `roles/setup/*/defaults` moves with the image key, and the scan goes if no other image
       key remains there;
-    - `ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.py`,
+    - `test_kuma_env_renders_for_every_cron_tag.py` (retired by H7.35),
       `scripts/validate/tests/test_shell_template_cron_rules.py` and
       `scripts/validate/tests/test_validate_shell_templates.py`, which name the drill template;
     - the reaper census's setup arm, whose named member moves to `longhorn-backup-health.sh`;

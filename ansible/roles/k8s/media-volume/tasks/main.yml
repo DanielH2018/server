@@ -1,6 +1,6 @@
 ---
 # The shared media volume for the media stack's nine workloads. Declares it to the cluster; the
-# setup role k8s_host_files creates its directories on the node (tasks/media-volume.yml there).
+# daniel-box package creates its directories on the node (hosts/daniel-box/tmpfiles.d/).
 #
 # Flux owns this role, so no Flux path runs the include below; it stays until R4 deletes it. The
 # hardlink probe this file ran after it is the Job in

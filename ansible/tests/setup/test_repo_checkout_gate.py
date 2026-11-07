@@ -44,7 +44,6 @@ KNOWN_HITS = frozenset(
     {
         "Install Git hooks",
         "Install pinned Ansible collections from requirements.yml",
-        "Schedule the etcd restore drill",
     }
 )
 

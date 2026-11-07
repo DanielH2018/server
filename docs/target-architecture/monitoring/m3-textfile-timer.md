@@ -129,7 +129,7 @@ cluster outage.
   heartbeat scripts" in `health-crons.yml` renders `kuma-push.env` under `backup-health`,
   `disk-health`, `manifest-prune`, `etcd-snapshot` and `release-staleness`.
 - **Code and tests that name this script, its tile or its token:**
-    - `ansible/tests/setup/test_kuma_env_renders_for_every_cron_tag.py`. The red proof
+    - `test_kuma_env_renders_for_every_cron_tag.py` (retired by H7.35). The red proof
       `test_task_missing_the_env_tag_is_flagged` and its clean half
       `test_task_carrying_a_tag_the_env_task_has_is_clean` use `disk-health.sh.j2` as the
       fixture for a script that sources the env file. `_missing_env_tags` skips any script that

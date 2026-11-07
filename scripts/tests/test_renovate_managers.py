@@ -17,6 +17,7 @@ release-download URL guard is in `test_renovate_release_urls.py`.
 Run: uv run pytest scripts/tests/test_renovate_managers.py
 """
 
+import json
 import re
 from pathlib import PurePosixPath
 
@@ -183,35 +184,22 @@ def test_control_plane_version_pins_are_tracked() -> None:
     )
 
 
-def test_coredns_extract_skips_the_upstream_stray_tags() -> None:
-    """The coredns manager's extractVersionTemplate must read `v1.14.7` and skip `v011`.
+def test_coredns_allowed_versions_skip_the_upstream_stray_tags() -> None:
+    """coredns/coredns carries stray tags `v002` ... `v011` beside its releases (#3087).
 
-    coredns/coredns carries stray tags `v002` ... `v011` beside its real `v1.x.y` releases. An
-    extraction of `^v(?<version>.*)$` admits `v011`; Renovate then ranks `011` above `1.14.7` as
-    a major and raises a PR whose download URL 404s and whose paired sha256 still belongs to
-    1.14.7. The pin sits in the `k3s-bringup.yml` plane the GitOps deployer never applies, so
-    nothing would have surfaced the break until someone ran that playbook by hand.
-
-    Asserted on the pattern rather than on a version bound, because a bound of `^1\\.` would also
-    hide a real 2.0.0 — the silent-staleness failure mode this manager exists to close.
+    Renovate would rank `v011` above 1.14.7 and raise a PR whose download URL 404s and whose paired
+    digest stays at 1.14.7. Asserted on the pattern rather than on a version bound, because a
+    bound would hide a real 2.0.0.
     """
-    coredns = [m for m in _MANAGERS if m.get("depNameTemplate") == "coredns/coredns"]
-    assert len(coredns) == 1, (
-        "expected exactly one coredns/coredns custom manager in renovate.json, found "
-        f"{len(coredns)} — this test no longer guards what it names"
-    )
-    extract = re.compile(_to_python_regex(coredns[0]["extractVersionTemplate"]))
-
-    tag = extract.fullmatch("v1.14.7")
-    assert tag is not None and tag.group("version") == "1.14.7", (
-        "the coredns extractVersionTemplate no longer reads a real release tag — the manager is "
-        "inert and the host resolver ages with no signal"
-    )
-    stray = [t for t in ("v002", "v005", "v011") if extract.fullmatch(t)]
-    assert not stray, (
-        f"the coredns extractVersionTemplate admits upstream's stray tags {stray} — Renovate "
-        "ranks those above 1.14.7 as a major and proposes a version with no release tarball (#3087)"
-    )
+    (rule,) = [
+        r
+        for r in json.loads((REPO / "renovate.json").read_text())["packageRules"]
+        if r.get("matchPackageNames") == ["coredns/coredns"] and "allowedVersions" in r
+    ]
+    allowed = re.compile(rule["allowedVersions"].strip("/"))
+    assert allowed.fullmatch("v1.14.7")
+    assert allowed.fullmatch("v2.0.0")
+    assert not [t for t in ("v002", "v005", "v011") if allowed.fullmatch(t)]
 
 
 # Images BUILT by this repo and pushed to the node-local registry, not pulled from an upstream

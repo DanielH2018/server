@@ -57,7 +57,6 @@ from _role_census import task_files
 KNOWN_RETRIED_COMMAND_TASKS = frozenset(
     {
         # opted out with `check_mode: false` — reads of pre-existing state
-        "Read the read-only ServiceAccount token",
         "Read the secrets-encryption status",
         # The bounded read of Deployment `coredns` that precedes the `.skip` marker (H1.4).
         "Wait for k3s to create its CoreDNS Deployment",

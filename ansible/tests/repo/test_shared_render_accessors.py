@@ -190,7 +190,7 @@ GUARDED_SHELL_TEMPLATES = frozenset(
     {
         ("components", "claude-code", "sync-artifacts.sh.j2"),
         ("k8s", "longhorn-restore-drill", "longhorn-restore-drill.sh.j2"),
-        ("setup", "k3s", "longhorn-backup-health.sh.j2"),
+        ("components", "k3s-host-checks", "longhorn-backup-health.sh.j2"),
     }
 )
 

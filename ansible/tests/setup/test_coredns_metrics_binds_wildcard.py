@@ -12,14 +12,14 @@ going down, and it names a connection refusal rather than a bind failure. Re-int
 node address is a one-word edit that renders, parses, and deploys green.
 
 The exposure argument is settled elsewhere: UFW's INPUT is default-deny, and
-`roles/setup/k3s/tasks/node.yml` opens this port to the pod CIDR and the agent nodes only.
+`hosts/components/k3s-host-dns/component.yml` opens this port to the pod CIDR and the agent nodes only.
 `test_coredns_metrics_port_allows_agent_nodes.py` guards that half.
 """
 
 import re
 
 from _helpers import load_yaml
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import K3S_HOST_DNS
 from _setup_render import rendered_setup_text
 
 _COREFILE = "host-corefile.j2"
@@ -36,7 +36,7 @@ def expected_port() -> int:
     template INTERPOLATES the variable, and against a literal expectation a template that
     hardcoded the same number would pass.
     """
-    return load_yaml(K3S_DEFAULTS)[_PORT_VAR]
+    return load_yaml(K3S_HOST_DNS / "defaults" / "main.yml")[_PORT_VAR]
 
 
 def metrics_bind_problem(corefile: str, port: int) -> str | None:
@@ -70,7 +70,7 @@ def metrics_bind_problem(corefile: str, port: int) -> str | None:
 
 def test_the_live_corefile_binds_the_wildcard() -> None:
     problem = metrics_bind_problem(
-        rendered_setup_text("k3s", _COREFILE), expected_port()
+        rendered_setup_text("k3s-host-dns", _COREFILE), expected_port()
     )
     assert problem is None, problem
 

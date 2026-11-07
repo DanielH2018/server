@@ -17,9 +17,6 @@ Run: uv run pytest scripts/lib/tests/test_longhorn_backup_health_cron_evidence.p
 """
 
 from longhorn_lib import longhorn_cron_evidence_logic as logic
-from _shell_render import rendered_shell_text
-from lib import yaml_fast
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
 
 _NOW = 1_700_000_000.0
 
@@ -298,28 +295,6 @@ def test_cron_liveness_reads_a_stale_fire_stamp_as_not_firing():
     assert len(problems) == 1
     assert "b2-deletions has not fired in the last 26h" in problems[0][1]
     assert "/var/lib/longhorn-cron-fired/b2-deletion-accounting" in problems[0][1]
-
-
-def test_the_cron_touches_the_stamp_the_shim_exports():
-    """The cron writes the stamp and the shim names it; nothing else holds the two paths together."""
-    stamp_dir = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[
-        "k3s_cron_fired_stamp_dir"
-    ]
-    tasks = yaml_fast.safe_load((K3S_ROLE / "tasks" / "health-crons.yml").read_text())
-    b2_job = next(
-        t["ansible.builtin.cron"]["job"]
-        for t in tasks
-        if t.get("ansible.builtin.cron", {}).get("cron_file")
-        == "b2-deletion-accounting"
-    )
-    shim = rendered_shell_text("setup", "k3s", "longhorn-backup-health.sh.j2")
-    assert b2_job.startswith(
-        "touch {{ k3s_cron_fired_stamp_dir }}/b2-deletion-accounting;"
-    ), b2_job
-    assert (
-        f'LONGHORN_B2_DELETIONS_CRON_FIRED_STAMP="{stamp_dir}/b2-deletion-accounting"'
-        in shim
-    )
 
 
 def test_cron_liveness_does_not_double_report_a_journal_read_that_failed():

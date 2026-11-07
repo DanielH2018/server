@@ -14,9 +14,8 @@ import re
 from lib.proc_testing import fake_bin, run, write_exec
 from _shell_render import render_shell_script
 
-TEMPLATE = ("setup", "k3s", "disk-health.sh.j2")
-REAL_LIB = "/usr/local/lib/homelab-check-lib.sh"
-HC_ENV = "/etc/healthchecks/ping.env"
+TEMPLATE = ("components", "k3s-host-checks", "disk-health.sh.j2")
+REAL_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 PROM = "disk-health.prom"
 SEP = "\x1e"
 # What the stub `date +%s` prints, so the timestamp assertion reads no live clock.
@@ -43,13 +42,10 @@ def _df(used_pct: int) -> str:
 def _run(tmp_path, used_pct=40, boot_grace=False, textfile_dir=None):
     """Run the rendered script once; return (textfile dir, every kuma_push call as (status, msg))."""
     body = render_shell_script(*TEMPLATE)
-    for literal in (REAL_LIB, HC_ENV):
-        assert literal in body, f"{'/'.join(TEMPLATE)} no longer references {literal}"
+    assert REAL_LIB in body, f"{'/'.join(TEMPLATE)} no longer references {REAL_LIB}"
 
     lib = tmp_path / "homelab-check-lib.sh"
     lib.write_text(LIB_STUB)
-    hc_env = tmp_path / "ping.env"
-    hc_env.write_text("")
     pushed = tmp_path / "pushed"
     pushed.write_text("")
     if textfile_dir is None:
@@ -58,7 +54,7 @@ def _run(tmp_path, used_pct=40, boot_grace=False, textfile_dir=None):
 
     script = write_exec(
         tmp_path / "disk-health.sh",
-        body.replace(REAL_LIB, str(lib)).replace(HC_ENV, str(hc_env)),
+        body.replace(REAL_LIB, str(lib)),
     )
     stubs = fake_bin(
         tmp_path / "bin",

@@ -75,8 +75,8 @@ def render_with(tmp_path, component: dict):
 
 
 def test_a_role_outside_the_allowlist_is_refused(tmp_path):
-    with pytest.raises(RenderRefused, match="role 'k3s' is not one of"):
-        render_with(tmp_path, {"role": "k3s", "files": []})
+    with pytest.raises(RenderRefused, match="role 'render_records' is not one of"):
+        render_with(tmp_path, {"role": "render_records", "files": []})
 
 
 def test_a_role_template_with_no_role_is_refused(tmp_path):

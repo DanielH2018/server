@@ -36,9 +36,6 @@ from _role_census import task_files
 JOURNAL_ROUTED = {
     # The verdict crons: silent when healthy, but their failure stderr is the evidence.
     "fake-remux health": "fake-remux-health",
-    "Longhorn backup health": "longhorn-backup-health",
-    "daniel-box disk health": "disk-health",
-    "etcd token drift": "etcd-snapshot-offbox",
     # The fake-remux workers discarded both streams to /dev/null until #6162, which the
     # every-cron judge below accepts, so naming them here is what holds them to the journal.
     "fake-remux scan": "fake-remux-scan",
@@ -94,15 +91,14 @@ def test_a_stdout_only_redirect_does_not_satisfy_the_check():
 KNOWN_CRONS = frozenset(
     {
         "fake-remux scan",  # setup/fake_remux/tasks/main.yml
-        "Longhorn backup health",  # setup/k3s/tasks/health-crons.yml
-        "etcd token drift",  # setup/k3s/tasks/health-crons.yml
     }
 )
-# 12 after D6.17 removed the release-staleness cron (13 after the initial_setup crons no host
+# 6 after H7.35 moved setup/k3s's crons into package timers, 12 after D6.17 removed the
+# release-staleness cron (13 after the initial_setup crons no host
 # ran were deleted, 20 after H2.2c moved the Longhorn
 # trim to a RecurringJob, 21 after H7.40 moved the artifacts node's two crons into package
 # timers, 23 before that, and 29 before H7.36).
-_CENSUS_FLOOR = 11
+_CENSUS_FLOOR = 5
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 
@@ -115,9 +111,8 @@ _ROUTED_STAGE = re.compile(
 )
 
 # Commands that print nothing unless they fail. `logger` covers the fallback stage of
-# `... >/dev/null 2>&1 || logger -t tag 'msg'`; `touch` is the b2-deletion-accounting fire
-# stamp longhorn-backup-health's check 10 reads.
-_SILENT_COMMANDS = frozenset({"cd", "logger", "touch"})
+# `... >/dev/null 2>&1 || logger -t tag 'msg'`.
+_SILENT_COMMANDS = frozenset({"cd", "logger"})
 
 
 def _stages(job: str) -> list[str]:

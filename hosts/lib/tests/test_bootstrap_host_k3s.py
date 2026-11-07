@@ -151,3 +151,38 @@ def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
     assert (host.root / "installer.runs").read_text().splitlines() == ["run"] * 13
     assert [c for c in host.commands() if c.startswith("sleep")] == ["sleep 30"] * 12
     assert host.apt_calls() == []
+
+
+def _box_with_resolved_enabled(tmp_path) -> tuple[FakeHost, list[str]]:
+    host = FakeHost(tmp_path, hostname="daniel-box")
+    host.stock_kit()
+    host._stub(
+        "systemctl",
+        f'echo "systemctl $*" >> {host.log}\n'
+        "case $1 in is-enabled) echo enabled ;; is-active) exit 0 ;; is-failed) exit 1 ;; esac",
+    )
+    clone = host.clone(tmp_path)
+    args = ["daniel-box", "--local-build", str(clone), "--offline", str(host.kit)]
+    return host, args + ["--until", "6"]
+
+
+def test_the_server_stops_resolved_once_the_forwarder_answers(tmp_path):
+    host, args = _box_with_resolved_enabled(tmp_path)
+
+    result = host.run(*args)
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert "systemctl disable systemd-resolved.service" in commands
+    assert "systemctl stop systemd-resolved.service" in commands
+
+
+def test_a_forwarder_that_never_answers_leaves_resolved_running(tmp_path):
+    host, args = _box_with_resolved_enabled(tmp_path)
+    host._stub("dig", "exit 0")
+
+    result = host.run(*args, BOOTSTRAP_DNS_RETRY_DELAY="0")
+
+    assert result.returncode != 0
+    assert "coredns-host.service does not answer" in result.stderr
+    assert "systemctl stop systemd-resolved.service" not in host.commands()

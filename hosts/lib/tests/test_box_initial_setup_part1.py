@@ -48,8 +48,10 @@ def test_the_sysctl_edits_equal_the_pis_twenty_keys():
     pi_tuning = {e["line"] for e in tuning if e["path"] == SYSCTL}
 
     assert len(pi_tuning) == 2
-    assert len(lines(server)) == 20
-    assert lines(server) == lines(pi) - pi_tuning
+    # k3s-server's inotify key is the one daniel-box adds, and the Pi runs no kubelet.
+    hardening = lines(server) - {"fs.inotify.max_user_instances=1024"}
+    assert len(hardening) == 20
+    assert hardening == lines(pi) - pi_tuning
 
 
 def test_the_apt_origin_patterns_include_the_servers_github_cli_origin(package):

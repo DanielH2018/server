@@ -228,7 +228,7 @@ def test_the_live_page_lists_both_a_packaged_timer_and_a_role_cron(tmp_path):
         "| homelab-docs-refresh.timer | `OnCalendar=*-*-* 06,18:17:00` | daniel-box |"
         in page
     )
-    assert "| etcd restore drill |" in page
+    assert "| fake-remux scan |" in page
 
 
 def test_hosts_that_differ_on_a_timers_schedule_get_a_row_each():

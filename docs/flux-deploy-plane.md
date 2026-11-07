@@ -608,10 +608,10 @@ cluster.
 `kustomize-controller`'s field manager, and the read-only token exists.
 
 ```bash
-uv run ansible-playbook ansible/k3s-bringup.yml --skip-tags kubeconfig
+uv run ansible-playbook ansible/k3s-bringup.yml
 uv run python scripts/renderer/homelab_render.py cluster --out <out> --role cluster-base
 sudo k3s kubectl apply --server-side --field-manager=kustomize-controller -k <out>/cluster/cluster-base
-uv run ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
+sudo systemctl restart homelab-k3s-kubeconfig.service
 ```
 
 The `homelab` Namespace and its LimitRange come from the shared kind `homelab-namespace`, which

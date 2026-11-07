@@ -1,0 +1,15 @@
+# Shipped by the host package's k3s-host-checks component. Started by homelab-etcd-restore-drill.timer.
+[Unit]
+Description=Prove the off-box etcd snapshots can be listed and downloaded
+After=network-online.target homelab-secrets.service k3s.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+# In place from the checkout, as the docs refresh runs: the checkout is what stays current, and
+# the script reads the repo's gate beside it. --list-only ONLY: the k3s_etcd_restore_drill_cron
+# block in defaults/main.yml says why the full restore must not run on this host.
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/home/{{ sys_user }}/server/scripts/backup/etcd_restore_drill.sh --list-only
+SyslogIdentifier=etcd-restore-drill

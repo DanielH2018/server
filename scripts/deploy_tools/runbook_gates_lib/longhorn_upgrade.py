@@ -63,7 +63,7 @@ from deploy_tools.runbook_gates_lib.gate_runner import (
 )
 from lib import yaml_fast
 from lib.kubectl import DEFAULT_TOOLS, Tools, kubectl
-from lib.repo_paths import HOST_LIB_FILES, K3S_DEFAULTS
+from lib.repo_paths import HOST_LIB_FILES, K3S_HOST_CHECKS_DEFAULTS
 
 # The backup target names, shared with the backup-health cron (#3737); it imports host_lib.
 sys.path.insert(0, str(HOST_LIB_FILES))
@@ -97,13 +97,13 @@ ENGINE_IMAGES_ARGS = (
 # ── the gates, as pure verdicts over what the cluster or the tree answered ──────────────────
 
 
-def restore_drill_max_age_s(defaults_file: _Path = K3S_DEFAULTS) -> float:
+def restore_drill_max_age_s(defaults_file: _Path = K3S_HOST_CHECKS_DEFAULTS) -> float:
     """The drill's freshness window in seconds, read from the k3s role's defaults."""
     defaults = yaml_fast.safe_load(defaults_file.read_text())
     return float(defaults[MAX_AGE_KEY]) * 86400
 
 
-def restore_drill_namespace(defaults_file: _Path = K3S_DEFAULTS) -> str:
+def restore_drill_namespace(defaults_file: _Path = K3S_HOST_CHECKS_DEFAULTS) -> str:
     """The namespace of the drill's stamp ConfigMap, read from the k3s role's defaults."""
     return str(yaml_fast.safe_load(defaults_file.read_text())[NAMESPACE_KEY])
 

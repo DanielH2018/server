@@ -28,56 +28,60 @@ the task. `state:` must follow the armed flag rather than being hardcoded `prese
 Run: uv run pytest ansible/tests/setup/test_etcd_restore_drill_cron.py
 """
 
+import json
 from pathlib import Path
 
+import pytest
+
 from _helpers import ANSIBLE
-from _helpers import load_yaml, load_defaults
-from lib.repo_paths import K3S_ROLE
+from _helpers import load_defaults
+from lib import yaml_fast
+from lib.repo_paths import K3S_HOST_CHECKS
+from renderer.renderer_lib import host as host_mode
 
 
-CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 DRILL = Path(ANSIBLE).parent / "scripts" / "backup" / "etcd_restore_drill.sh"
 READER = Path(ANSIBLE) / "roles/k8s/monitor-bridge/files/checks/service.py"
 PAGING_RULES = (
     Path(ANSIBLE) / "roles/k8s/observability/files/rules/bridge-exporter.yaml"
 )
-CRON_TASK = "Schedule the etcd restore drill"
+SERVICE = "/usr/lib/systemd/system/homelab-etcd-restore-drill.service"
+TIMER = "homelab-etcd-restore-drill.timer"
 
 
-def _tasks() -> list[dict]:
-    docs = load_yaml(CRONS)
-    return docs if isinstance(docs, list) else []
+@pytest.fixture(scope="module")
+def package() -> host_mode.Package:
+    return host_mode.render_host("daniel-box")
 
 
-def _cron_task() -> dict:
-    task = next((t for t in _tasks() if t.get("name") == CRON_TASK), None)
-    assert task is not None, (
-        f"{CRON_TASK!r} is missing from health-crons.yml — without it the etcd snapshot is "
-        "taken and alarmed but never restore-proven, which is the state this test exists for"
+def _service(package) -> str:
+    body = package.files[SERVICE][0]
+    return body.decode() if isinstance(body, bytes) else body
+
+
+def _exec_start(package) -> str:
+    return next(
+        line for line in _service(package).splitlines() if line.startswith("ExecStart=")
     )
-    return task
 
 
-def test_the_drill_is_scheduled() -> None:
-    """The accepting half: a cron exists at all."""
-    cron = _cron_task()["ansible.builtin.cron"]
-    assert cron.get("user") == "root", (
+def test_the_drill_is_scheduled(package) -> None:
+    """The accepting half: the timer ships and its enable link arms it."""
+    manifest = package.files["/usr/lib/homelab/manifest.json"][0]
+    assert TIMER in json.loads(manifest)["enable_links"]
+    assert "\nUser=" not in _service(package), (
         "the drill reads /etc/rancher/k3s/etcd-s3.env (0600 root) and the k3s server token; "
         "the read-only ServiceAccount cannot see either"
     )
-    assert "etcd-snapshot" in _cron_task().get("tags", []), (
-        "the drill must ship with the tag that deploys the R2 credentials it reads, or a "
-        "tag-scoped run installs the cron without the etcd-s3.env it needs"
-    )
 
 
-def test_only_the_list_only_mode_is_scheduled() -> None:
+def test_only_the_list_only_mode_is_scheduled(package) -> None:
     """The rejecting half, and the one that matters.
 
-    A cron invoking the full drill would leave a restored etcd database and a cluster-token copy
+    A unit invoking the full drill would leave a restored etcd database and a cluster-token copy
     in /var/tmp on every failure, for 30 days, on a host where the full drill cannot pass.
     """
-    job = _cron_task()["ansible.builtin.cron"]["job"]
+    job = _exec_start(package)
     assert "--list-only" in job, (
         "only the list-only leg is provable on this host; see the five structural failures in "
         "scripts/backup/etcd_restore_drill.sh's header"
@@ -90,37 +94,29 @@ def test_only_the_list_only_mode_is_scheduled() -> None:
         )
 
 
-def test_the_job_sets_a_path_that_reaches_k3s() -> None:
-    """Cron inherits no PATH, and the drill's preflight is `command -v k3s`."""
-    job = _cron_task()["ansible.builtin.cron"]["job"]
-    assert "PATH=" in job, (
-        "without an explicit PATH the drill dies at `command -v k3s` and reports k3s missing on "
+def test_the_job_sets_a_path_that_reaches_k3s(package) -> None:
+    """The drill's preflight is `command -v k3s`, and k3s lives in /usr/local/bin."""
+    assert "Environment=PATH=/usr/local/bin:" in _service(package), (
+        "without /usr/local/bin the drill dies at `command -v k3s` and reports k3s missing on "
         "a host that has it"
     )
-    assert "/usr/local/bin" in job.split("PATH=", 1)[1].split()[0], (
-        "k3s lives in /usr/local/bin; a PATH that omits it defeats the point of setting one"
-    )
 
 
-def test_the_drill_can_be_disarmed_without_deleting_the_task() -> None:
+def test_the_drill_can_be_disarmed_without_deleting_the_entries() -> None:
     """A one-way arming switch is a bug: adding a way in means adding the way out."""
-    cron = _cron_task()["ansible.builtin.cron"]
-    state = str(cron.get("state", "present"))
-    assert "k3s_etcd_restore_drill_armed" in state, (
-        "state: must follow k3s_etcd_restore_drill_armed, or disarming the drill means "
-        "deleting the task rather than flipping a flag"
-    )
-    assert "absent" in state, (
-        "the disarmed branch must remove the cron, not leave it installed"
-    )
-    assert load_defaults(K3S_ROLE)["k3s_etcd_restore_drill_armed"] is True, (
+    spec = yaml_fast.safe_load((K3S_HOST_CHECKS / "component.yml").read_text())
+    assert spec["enable"][TIMER]["when"] == "k3s_etcd_restore_drill_armed"
+    units = [e for e in spec["files"] if "homelab-etcd-restore-drill" in e["dst"]]
+    assert len(units) == 2
+    assert {e["when"] for e in units} == {"k3s_etcd_restore_drill_armed"}
+    assert load_defaults(K3S_HOST_CHECKS)["k3s_etcd_restore_drill_armed"] is True, (
         "the drill ships armed; a default-off drill is the unproven state this closes"
     )
 
 
 def test_the_cadence_is_weekly_and_clear_of_every_backup_window() -> None:
     """Contending with a backup window would make the drill the thing that broke the backup."""
-    minute, hour, dom, month, dow = load_defaults(K3S_ROLE)[
+    minute, hour, dom, month, dow = load_defaults(K3S_HOST_CHECKS)[
         "k3s_etcd_restore_drill_cron"
     ].split()
     assert (dom, month) == ("*", "*")
@@ -152,7 +148,7 @@ def test_the_scripts_ordering_note_still_matches_reality() -> None:
     """
     header = DRILL.read_text()
     assert "never deployed to a cron target" not in header, (
-        "the drill IS now scheduled by health-crons.yml; leaving that claim in place would tell "
+        "the drill IS now scheduled by the k3s-host-checks component; leaving that claim in place would tell "
         "the next reader the reader-half is still blocked when it is not"
     )
     assert "monitor-bridge/files/checks/service.py" in header, (

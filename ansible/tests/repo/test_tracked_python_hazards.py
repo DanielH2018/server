@@ -137,7 +137,7 @@ KNOWN_TEST_FILES = frozenset(
     {
         "scripts/dev/tests/test_findings_claim_staleness.py",
         "ansible/roles/k8s/monitor-bridge/tests/test_check_r2.py",
-        "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py",
+        "hosts/components/k3s-host-checks/tests/test_longhorn_backup_health_reader.py",
     }
 )
 

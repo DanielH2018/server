@@ -1,0 +1,89 @@
+# The host forwarder's and the node resolver's tunables. The renderer loads this file beneath
+# component.yml's own defaults.
+
+# The nameserver lines this node's /etc/resolv.conf carries, IN ORDER. First entry wins on
+# every query; the rest are fallbacks. See templates/resolv.conf.j2 for why the order alone
+# is the whole mechanism.
+#
+# The preference order lives in k3s_host_dns_upstreams below, where the host forwarder applies
+# it; this file names only the forwarder.
+#
+# A cold start does not need Pi-hole: the forwarder's public fallback upstreams cover it. The
+# window before the VIP exists is nearly empty — k3s is active ~20s into boot, and a warm
+# containerd store resolves no registry names at boot (zero image pulls and zero
+# name-resolution failures in the first 10 minutes). A REBUILT node with an empty image store
+# is the real case, and hosts/bootstrap-host.sh step 6 proves the forwarder answers on one.
+#
+# DELIBERATELY NO FALLBACK ENTRY. Adding `1.1.1.1` behind the forwarder would make a dead
+# CoreDNS silently degrade to unfiltered DNS — a drop-in that reads as working while resolving
+# through Cloudflare half the time. A dead forwarder here
+# takes the node's DNS with it, which is loud. `Restart=always` on the unit covers a crash,
+# and hosts/bootstrap-host.sh step 6 refuses to stop systemd-resolved until CoreDNS answers.
+k3s_node_dns_upstreams:
+  - 127.0.0.1
+
+# Seconds to wait for each nameserver, and how many rounds over the WHOLE list to make before
+# returning an error — `attempts` is rounds, not per-server retries (resolv.conf(5)). One
+# round at 2s means a dead Pi-hole costs one 2s timeout per lookup and then answers, rather
+# than failing.
+k3s_node_dns_timeout: 2
+k3s_node_dns_attempts: 1
+k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_dns_attempts }}"
+
+# ---------------------------------------------------------------------------
+# The host forwarder
+#
+# glibc picks a nameserver per query and cannot ask "is Pi-hole up?" — it only learns an
+# entry is dead by spending a timeout on it, per process, with no memory. A local CoreDNS
+# CAN ask: `health_check` probes each upstream out of band, so a dead Pi-hole is skipped
+# BEFORE a query is sent to it rather than after one has already stalled.
+#
+# It also makes the answer observable. VERIFIED AGAINST THE PINNED BUILD, because the obvious
+# guess is wrong: 1.14.7 exports no `coredns_forward_requests_total`. The per-upstream series
+# is `coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="10.0.0.243:53"}`,
+# and it says what
+# fraction of this node's queries actually reached Pi-hole, which is the question otherwise
+# answerable only by hand with a marked lookup.
+#
+# The binary is `coredns` in hosts/packages/homelab-tools/package.yml, pinned per architecture.
+k3s_host_coredns_bin: /usr/lib/homelab/bin/coredns
+k3s_host_coredns_conf: /etc/coredns/Corefile
+
+# WHERE THE PREFERENCE LIVES. This is the ordered forward list, and `policy sequential`
+# below is what makes it an order rather than a load-balance — CoreDNS's forward plugin
+# defaults to `random`, which would make the list a coin-flip. Two public entries, not one, because a forwarder with a single fallback has the
+# same single point of failure the fallback exists to remove.
+k3s_host_dns_upstreams:
+  - "{{ dns_k8s_vip }}"
+  - 1.1.1.1
+  - 1.0.0.1
+
+# A health check is "a recursive DNS query (. IN NS)" against each upstream. While an
+# upstream reports unhealthy CoreDNS re-probes it every 0.5s regardless of this interval and
+# stops probing once it is healthy again, so this value bounds how long a NEWLY dead Pi-hole
+# keeps receiving queries, not how fast a recovered one is picked back up.
+#
+# max_fails 2, not 1: a single lost UDP packet must not evict Pi-hole. And not 0 — that
+# value means "never mark this upstream down and never health check it", which would turn
+# the whole mechanism off while still reading like it was configured.
+k3s_host_dns_health_check: 5s
+k3s_host_dns_max_fails: 2
+
+# Answers served from cache never reach an upstream, so this bounds how stale a Pi-hole
+# blocklist change can be on this node. 30s is short enough that a blocklist edit takes
+# effect within a minute and long enough to absorb a boot's worth of repeat lookups.
+k3s_host_dns_cache_ttl: 30
+
+# Metrics bind to the node's LAN address, NOT 127.0.0.1. Prometheus scrapes from inside a
+# pod, where 127.0.0.1 is the pod's own loopback and reaches nothing on the host. The UFW
+# allow in component.yml is the other half — pod-to-host traffic terminates in a host
+# process, which is the one class that meets UFW's default-deny INPUT.
+k3s_host_dns_metrics_port: 9253
+
+# Links whose DHCP lease must not contribute resolvers. The drop-in above pins the node's
+# DNS, but it does not stop systemd-resolved from ALSO listing the lease's servers per link
+# — six nameservers total, against the 3 Kubernetes gives a pod. See templates/netplan-dns.yaml.j2.
+# eno1 is the only link carrying a lease with DNS; enx9cebe885f44e (USB NIC) is down and is
+# left alone so the override cannot outlive the interface it names.
+k3s_node_dns_dhcp_links:
+  - eno1

@@ -2600,7 +2600,7 @@ subject's tests.
     - `ansible/roles/setup/k3s/CLAUDE.md` loses the RecurringJob actuator and the two arm
       flags' text, and the `longhorn-backup` role `CLAUDE.md` gains them. Its *Mode /
       arming* bullet drops `k3s_manage_backup_targets`;
-    - `ansible/tests/setup/test_k3s_stage_gates.py`, whose docstring names
+    - `test_k3s_stage_gates.py` (retired by H7.35), whose docstring names
       `longhorn-backup.yml` as one of the gated imports. `health-crons.yml` keeps its gate,
       so `test_some_imports_are_gated` still finds one;
     - `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recovery.md` and

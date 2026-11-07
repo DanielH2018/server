@@ -237,12 +237,16 @@ not rotated again by the weekly cron. Examples:
   in 90 minutes and OOM-killed it; the only visible signal was the "k3s Container OOM" monitor,
   which self-clears one hour after the kill while subtitle fetching stays silently broken.
 - `k3s_readonly_token` (H6.3b): the token of the cluster's read-only ServiceAccount
-  (`homelab-readonly` in `kube-system`), which `homelab-k3s-restart` loads to read the API. It is
+  (`homelab-readonly` in `kube-system`), which `homelab-k3s-restart` loads to read the API and
+  `homelab-k3s-kubeconfig` writes into the read-only `~/.kube/config` on daniel-box. It is
   non-expiring, so rotating it means deleting the ServiceAccount's token Secret and reading the
   recreated value with `sudo k3s kubectl -n kube-system get secret homelab-readonly-token -o
   jsonpath='{.data.token}' | base64 -d`, which is **operator-only**. Then `sops set` the new
   value, run `host_secrets.py sync daniel-box` (and each other host that carries the key), and
-  commit. The unit reads the credential at its next window.
+  commit. `homelab-k3s-restart` reads the credential at its next window. Reconcile restarts
+  `homelab-k3s-kubeconfig` when the package lands, because the unit is a dependent of the
+  `k3s/readonly-token` output. Plain `kubectl` and the backup-health reader get 401 between the
+  deletion and that restart.
 - `alloy_pi_http_password` (H5.8): the basic-auth password on the Pi's Alloy listener. It is a
   lock rather than a login, so no app issues it: mint a new random value yourself. After
   `sops set`, the operator runs `uv run python scripts/secrets_mgmt/host_secrets.py sync

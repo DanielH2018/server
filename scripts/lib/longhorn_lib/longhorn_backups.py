@@ -15,9 +15,9 @@ The Ansible tasks, the restore drill and `seed_volume_backup.yml` take them from
 through `ansible/filter_plugins/longhorn_groups.py` (#3946). The static StorageClass file cannot
 call a filter and still spells `no-backup` out.
 
-WHERE IT RUNS. The health cron imports it as `longhorn_lib.longhorn_backups`, copied into
-/opt/longhorn-backup-health/longhorn_lib/ with `host_lib.py` beside the package
-(`tasks/health-crons.yml`). The reapers and probe.py run from the repo checkout and put the
+WHERE IT RUNS. The health timer imports it as `longhorn_lib.longhorn_backups`, shipped in
+/usr/lib/homelab/longhorn-backup-health/longhorn_lib/ with `host_lib.py` beside the package
+(hosts/components/k3s-host-checks). The reapers and probe.py run from the repo checkout and put the
 directory holding the package on `sys.path` (`lib.repo_paths.K3S_FILES`). It
 must stay importable on the host Python floor, with no import beyond the standard library and
 `host_lib`.
