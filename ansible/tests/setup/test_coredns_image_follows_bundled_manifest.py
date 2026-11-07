@@ -23,7 +23,7 @@ _COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
 
 # The k3s version the excerpt below was read from, and the image block of that version's
 # manifests/coredns.yaml before k3s substitutes `%{SYSTEM_DEFAULT_REGISTRY}%`.
-_EXCERPT_K3S_VERSION = "v1.37.1+k3s1"
+_EXCERPT_K3S_VERSION = "v1.37.2+k3s1"
 _EXCERPT = """\
       containers:
       - name: coredns

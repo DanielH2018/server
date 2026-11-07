@@ -16,7 +16,7 @@ def test_the_agent_installs_k3s_in_agent_mode_and_never_prints_the_token(tmp_pat
 
     assert result.returncode == 0, result.stderr
     args = (host.root / "installer.args").read_text()
-    assert args.startswith("agent v1.37.1+k3s1 skipenable=true skipstart=true")
+    assert args.startswith("agent v1.37.2+k3s1 skipenable=true skipstart=true")
     assert "url=https://server.invalid:6443 token=set" in args
     assert AGENT_ENV["K3S_TOKEN"] not in result.stdout + result.stderr
     assert (host.root / "etc/systemd/system/k3s-agent.service").exists()
@@ -67,7 +67,7 @@ def test_the_server_installs_in_server_mode_even_with_agent_variables_exported(
 
     assert result.returncode == 0, result.stderr
     args = (host.root / "installer.args").read_text()
-    assert args.startswith("server v1.37.1+k3s1")
+    assert args.startswith("server v1.37.2+k3s1")
     assert args.strip().endswith("url=unset token=")
 
 
