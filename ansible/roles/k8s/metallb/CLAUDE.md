@@ -6,7 +6,7 @@ Jellyfin's LAN address). A bad apply here takes the edge and DNS offline togethe
 probes stay green.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=metallb`
   with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
@@ -14,8 +14,7 @@ probes stay green.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (H1.3). Its `containers_list` entry carries `owner: flux`
-  from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
-  runs it. A rebuilt cluster gets it from the `metallb` Kustomization at step 6 of
+  from its first commit. A rebuilt cluster gets it from the `metallb` Kustomization at step 6 of
   `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*.
 - **The workloads are `files/upstream/metallb-native.yaml`**, upstream's file byte for byte,
   pinned by `k3s_metallb_version` and the `metallb_vendored_manifests` item in

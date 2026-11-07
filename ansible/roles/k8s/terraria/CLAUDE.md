@@ -5,7 +5,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/terraria/`). See repo-root `CLAUDE.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=terraria` with exit 5
 - **Image:** `ghcr.io/danielh2018/terraria` (`terraria_k8s_image`)
@@ -27,7 +27,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   (`ansible/roles/k8s/image-builder/CLAUDE.md`). All of this matters because the volume holds
   irreplaceable world data.
 - **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of the digest bump. The Deployment is `Recreate`, so a change that rolls it takes
@@ -40,8 +40,7 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
   that `promote` applies for the server plus Ansible deploys of game-stats and observability.
   The restore checklist on #822 has the rest. The comment above the value in `group_vars`
   still names `--tags terraria`, which `deploy.sh` refuses with exit 5.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay until R4 deletes them. The build became
+- **Where the tasks went.** The build became
   the `images` job (D5.4), which pushes `ghcr.io/danielh2018/terraria:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/terraria`; the renderer rewrites that ref to the GHCR
   one with `imagePullPolicy: IfNotPresent`

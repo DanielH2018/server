@@ -5,7 +5,7 @@ devic.es/dri`, advertised by `k8s/dri-device-plugin`). See repo-root `CLAUDE.md`
 shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=tdarr`
   with exit 5
 - **Image:** `ghcr.io/haveagitgat/tdarr` (`tdarr_k8s_image`)
@@ -39,7 +39,7 @@ shared conventions.
   **not** in the Service — exposing it would publish an unauthenticated channel for a
   process that rewrites media.
 - **Flux owns tdarr (D5, Wave D).** `promote` applies it, and no Ansible run reaches
-  `tasks/main.yml`. Its checks run in three places, each on every roll:
+  it. Its checks run in three places, each on every roll:
     - `tdarr-prepull` pulls the image onto the node before `tdarr` applies;
     - the Deployment's `vaapi-encode` initContainer runs the encode;
     - the `tdarr-verify` Job proves the render node opens and the library is writable.

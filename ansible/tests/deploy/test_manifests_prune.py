@@ -1,316 +1,54 @@
-"""Guards for the live prune.
-
-`kubectl apply -f <dir>/` only adds/updates; it never removes a live object whose entry was
-dropped from a role's `manifests_files`. This is the in-place fix: `k8s/manifests` passes `--prune -l homelab/role=<service>
---prune-allowlist=<kinds> -n <namespace>` to the apply for a role that arms `manifests_prune`
-(see the DECIDED comment in `ansible/roles/k8s/manifests/defaults/main.yml`).
+"""Guards for the prune label an armed role renders.
 
 An armed role renders through `ansible/templates/role-labelled.yaml.j2`, whose
-`homelab_role_label` filter stamps the label onto every document (#3388). The selector filters
-the apply as well as the prune, so a document without the label would silently stop being
-applied.
-
-Two things make a wrong prune catastrophic rather than merely wrong: pruning a Secret or a
-PersistentVolumeClaim. Neither is recoverable the way a Deployment or a Service is (a re-apply
-re-creates those; a re-apply of a lost Secret loses its rotated value, and a lost PVC loses
-data). `test_the_allowlist_never_names_a_secret_or_a_claim` is the guard against either ever
-landing in the fixed allowlist.
+`homelab_role_label` filter stamps the label onto every document (#3388). Flux's own inventory
+decides what it prunes, so the label names the role on each live object.
 
 Run: uv run pytest ansible/tests/deploy/test_manifests_prune.py
 """
 
 import pytest
-from _role_census import role_dirs
 from _helpers import (
     ROLES,
-    jinja_env,
-    load_defaults,
-    load_tasks,
-    render_expr,
-    task_named,
-    walk_tasks,
 )
-from lib.repo_paths import ALL_VARS
 from renderer.renderer_lib.task_inputs import render_defaults
 from _k8s_render import render_role_template, rendered_texts
 from lib import yaml_fast
-from lib.k8s_roles import declared_manifest_files, manifest_template, tag_owners
+from lib.k8s_roles import (
+    MANIFESTS_PRUNE_DEFAULT,
+    tag_owners,
+)
 from role_label import ROLE_LABEL, homelab_role_label
 
 
-_MANIFESTS_TASKS = ROLES / "k8s" / "manifests" / "tasks" / "main.yml"
-_MANIFESTS_DEFAULTS = ROLES / "k8s" / "manifests" / "defaults" / "main.yml"
-
-# Kinds that must never be pruned by this mechanism — see the module docstring.
-_FORBIDDEN_PRUNE_KINDS = ("Secret", "PersistentVolumeClaim")
-# The roles that include k8s/manifests without arming its prune, each by operator decision
-# recorded as a DECIDED marker in its defaults (#3388). Every other caller is armed.
+# The roles that opt out of the prune, each by operator decision recorded as a DECIDED marker
+# in its defaults (#3388). Every other role is armed.
 _UNARMED_ROLES = frozenset({"authelia", "nut"})
-# The three render tasks whose source the armed switch replaces with the labelling wrapper.
-_RENDER_TASKS = (
-    "Render manifests",
-    "Render secret manifests",
-    "Render volume claims",
-)
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load(_MANIFESTS_DEFAULTS.read_text()) or {}
-
-
-def _apply_cmd() -> str:
-    task = task_named(load_tasks(_MANIFESTS_TASKS), "Apply manifests")
-    return str(task["ansible.builtin.command"]["cmd"])
-
-
-def _render(context: dict) -> str:
-    return jinja_env().from_string(_apply_cmd()).render(**context)
-
-
-_BASE_CONTEXT = {
-    "manifests_dest_dir": "/etc/rancher/k3s/manifests/widget",
-    "k8s_dry_run": False,
-    "manifests_service": "widget",
-    "k8s_namespace": "homelab",
-    "manifests_prune_namespace": "homelab",
-    "manifests_prune_allowlist": ["apps/v1/Deployment", "core/v1/Service"],
-}
-
-
-def test_prune_flags_are_absent_when_not_armed() -> None:
-    """A role that opts out with `manifests_prune: false` must never prune."""
-    rendered = _render({**_BASE_CONTEXT, "manifests_prune": False})
-    assert "--prune" not in rendered
-
-
-def test_prune_flags_are_absent_when_armed_with_no_kinds() -> None:
-    """manifests_prune: true with an empty allowlist is still inert, not `--prune --all`.
-
-    An empty --prune-allowlist would leave kubectl's own default allowlist in effect, which
-    covers kinds a role never declared to this mechanism (Pod, ReplicationController) — the
-    empty case must disable pruning outright, not silently widen it.
-    """
-    rendered = _render(
-        {**_BASE_CONTEXT, "manifests_prune": True, "manifests_prune_allowlist": []}
-    )
-    assert "--prune" not in rendered
-
-
-def test_prune_flags_render_when_armed() -> None:
-    rendered = _render({**_BASE_CONTEXT, "manifests_prune": True})
-    assert "--prune " in rendered or rendered.rstrip().endswith("--prune")
-    assert "-l homelab/role=widget" in rendered
-    assert "--prune-allowlist=apps/v1/Deployment" in rendered
-    assert "--prune-allowlist=core/v1/Service" in rendered
-    assert "-n homelab" in rendered
-
-
-def test_prune_namespace_defaults_to_homelab_and_takes_a_roles_own() -> None:
-    """A role passing no `manifests_prune_namespace` renders the `-n homelab` it always did."""
-    context = {**_BASE_CONTEXT, "manifests_prune": True}
-    default = _defaults()["manifests_prune_namespace"]
-    shared = _render(
-        {**context, "manifests_prune_namespace": render_expr(default, **context)}
-    )
-    own = _render({**context, "manifests_prune_namespace": "observability"})
-    assert shared.split()[-2:] == ["-n", "homelab"]
-    assert own.split()[-2:] == ["-n", "observability"]
-
-
-def test_prune_allowlist_uses_one_flag_per_kind_not_a_comma_joined_value() -> None:
-    """kubectl apply --prune-allowlist takes exactly one <group/version/kind> per flag.
-
-    Kinds comma-joined into ONE flag value
-    (`--prune-allowlist=apps/v1/Deployment,core/v1/Service,...`) are parsed by kubectl as a
-    single GroupVersionKind and rejected outright: `error: invalid GroupVersionKind format:
-    apps/v1/Deployment,core/v1/Service,...`, failing every deploy of an armed role. Rendered
-    with the real allowlist, so a regression back to `join(',')` fails this test instead of
-    only failing a real deploy.
-    """
-    allowlist = _defaults()["manifests_prune_allowlist"]
-    rendered = _render(
-        {
-            **_BASE_CONTEXT,
-            "manifests_prune": True,
-            "manifests_prune_allowlist": allowlist,
-        }
-    )
-    assert ",".join(allowlist[:2]) not in rendered, (
-        "the kinds are comma-joined into a single --prune-allowlist value again — kubectl "
-        "rejects that as an invalid GroupVersionKind. See #1092's registry deploy failure."
-    )
-    assert rendered.count("--prune-allowlist=") == len(allowlist)
-
-
-def test_prune_selector_is_keyed_on_the_calling_role_not_a_constant() -> None:
-    """A hardcoded role name in the selector would scope every armed role to one label."""
-    context = {**_BASE_CONTEXT, "manifests_prune": True}
-    widget = _render({**context, "manifests_service": "widget"})
-    gadget = _render({**context, "manifests_service": "gadget"})
-    assert "-l homelab/role=widget" in widget
-    assert "-l homelab/role=gadget" in gadget
-    assert "-l homelab/role=widget" not in gadget
-    assert "-l homelab/role=gadget" not in widget
-
-
-def _forbidden(kinds: list[str]) -> list[str]:
-    return [k for k in kinds if k.rsplit("/", 1)[-1] in _FORBIDDEN_PRUNE_KINDS]
-
-
-def test_the_allowlist_never_names_a_secret_or_a_claim() -> None:
-    allowlist = _defaults()["manifests_prune_allowlist"]
-    assert allowlist, "manifests_prune_allowlist is empty, so no armed role prunes"
-    assert not _forbidden(allowlist), (
-        f"manifests_prune_allowlist names {_forbidden(allowlist)}. Pruning a Secret loses a "
-        "rotated value with no re-apply to recover it from; pruning a PersistentVolumeClaim "
-        "loses data. Neither kind may ever be pruned this way."
-    )
-
-
-def test_the_forbidden_kind_check_actually_fires() -> None:
-    """Control: prove the matcher above rejects a Secret/PVC entry rather than passing vacuously."""
-    assert _forbidden(["apps/v1/Deployment", "core/v1/Secret"]) == ["core/v1/Secret"]
-    assert _forbidden(["core/v1/PersistentVolumeClaim"]) == [
-        "core/v1/PersistentVolumeClaim"
-    ]
-
-
-def _caller_vars(defaults: dict, include_vars: dict, owned: bool) -> dict:
-    """The manifests vars a caller sets. An Ansible-owned role's defaults lose to k8s/manifests'."""
-    return {**(defaults if owned else {}), **include_vars}
-
-
-def _manifests_includes() -> dict[str, list[dict]]:
-    """Each role's `_caller_vars` per `k8s/manifests` include, without `tasks_from`, by role."""
-    owners = tag_owners()
-    found: dict[str, list[dict]] = {}
-    for role in role_dirs():
-        main = role / "tasks" / "main.yml"
-        if not main.is_file():
-            continue
-        for task in walk_tasks(load_tasks(main)):
-            include = task.get("ansible.builtin.include_role") or {}
-            if include.get("name") == "k8s/manifests" and "tasks_from" not in include:
-                found.setdefault(role.name, []).append(
-                    _caller_vars(
-                        render_defaults(role),
-                        task.get("vars") or {},
-                        owned=role.name in owners,
-                    )
-                )
-    return found
 
 
 def _armed_roles() -> dict[str, dict]:
-    """Each armed role and its include's `vars:`; an include omitting the flag takes the default."""
-    default = _defaults()["manifests_prune"]
-    return {
-        role: vars_
-        for role, blocks in _manifests_includes().items()
-        for vars_ in blocks
-        if vars_.get("manifests_prune", default) is True
-    }
+    """Each armed role and its render defaults; a role omitting the flag takes the default."""
+    armed = {}
+    for tag in tag_owners():
+        defaults = render_defaults(ROLES / "k8s" / tag)
+        if defaults.get("manifests_prune", MANIFESTS_PRUNE_DEFAULT) is True:
+            armed[tag] = defaults
+    return armed
 
 
 _ARMED_ROLES = frozenset(_armed_roles())
-_OWNED = frozenset(tag_owners())  # Flux applies these with no `-n`.
-
-
-def test_no_role_widens_the_allowlist_or_keeps_a_kinds_list() -> None:
-    """The allowlist is one list for every armed role, so no caller passes its own."""
-    offenders = sorted(
-        role
-        for role, blocks in _manifests_includes().items()
-        for vars_ in blocks
-        if {"manifests_prune_allowlist", "manifests_prune_kinds"} & vars_.keys()
-    )
-    assert not offenders, (
-        f"{offenders} pass their own prune kinds. The fixed manifests_prune_allowlist in "
-        "k8s/manifests' defaults is the only list, so the Secret/claim guard covers every role."
-    )
 
 
 def test_every_caller_arms_the_prune_but_the_decided_exclusions() -> None:
     """registry, the first armed role, and observability, armed in its own namespace, are the
-    named members: a census that stopped finding the include would pass on an empty set."""
-    callers = set(_manifests_includes())
+    named members: a census that stopped finding the tags would pass on an empty set."""
+    callers = set(tag_owners())
     assert {"registry", "observability"} <= _ARMED_ROLES
     assert callers - _ARMED_ROLES == _UNARMED_ROLES, (
         f"unarmed callers {sorted(callers - _ARMED_ROLES)} differ from the decided exclusions "
-        f"{sorted(_UNARMED_ROLES)}. A caller is armed unless it passes `manifests_prune: false`; "
+        f"{sorted(_UNARMED_ROLES)}. A role is armed unless it sets `manifests_prune: false`; "
         "excluding one needs an operator decision and a DECIDED marker in its defaults."
     )
-
-
-def test_an_opt_out_in_defaults_counts_only_while_a_tag_has_an_owner() -> None:
-    opt_out = {"manifests_prune": False}
-    assert _caller_vars(opt_out, {}, owned=True) == opt_out
-    assert _caller_vars(opt_out, {}, owned=False) == {}
-    assert _caller_vars({}, opt_out, owned=False) == opt_out
-
-
-@pytest.mark.parametrize("name", _RENDER_TASKS)
-def test_an_armed_role_renders_through_the_labelling_wrapper(name: str) -> None:
-    task = task_named(load_tasks(_MANIFESTS_TASKS), name)
-    src = str(task["ansible.builtin.template"]["src"])
-    inner = "/repo/roles/k8s/widget/templates/deployment.yaml.j2"
-    context = {"playbook_dir": "/repo", "manifests_label_src": inner}
-    armed = jinja_env().from_string(src).render(**context, manifests_prune=True)
-    unarmed = jinja_env().from_string(src).render(**context, manifests_prune=False)
-    assert armed.strip() == "/repo/templates/role-labelled.yaml.j2"
-    assert unarmed.strip() == inner
-    assert "manifests_label_src" in task["vars"]
-
-
-def _render_src(name: str, **context) -> str:
-    task = task_named(load_tasks(_MANIFESTS_TASKS), name)
-    src = str(task["ansible.builtin.template"]["src"])
-    return jinja_env().from_string(src).render(**context).strip()
-
-
-def test_a_deferred_render_never_carries_the_callers_label() -> None:
-    """pihole's instance-2 Deployment must stay invisible to `-l homelab/role=pihole`.
-
-    The deferred directory is applied by the caller, outside the shared apply, so the caller's
-    prune never declares its objects. A deferred document labelled with the caller's service
-    would be a prune candidate and be deleted on every deploy of an armed role. The deferred
-    render keeps the raw template, so its objects carry no `homelab/role` label at all. The
-    control is the caller's own render, which the same armed context does route through the
-    wrapper.
-    """
-    context = {
-        "playbook_dir": "/repo",
-        "manifests_service": "pihole",
-        "item": "deployment-2.yaml",
-        "manifests_label_src": "/repo/roles/k8s/pihole/templates/deployment.yaml.j2",
-        "manifests_shared_defaults": {},
-        "manifests_prune": True,
-    }
-    wrapper = "/repo/templates/role-labelled.yaml.j2"
-    assert _render_src("Render manifests", **context) == wrapper
-    assert _render_src("Render deferred manifests", **context) == (
-        "/repo/roles/k8s/pihole/templates/deployment-2.yaml.j2"
-    )
-
-
-def _empty_files_guard_holds(**context) -> bool:
-    task = task_named(
-        load_tasks(_MANIFESTS_TASKS), "Check that a role arming the prune"
-    )
-    assert task["when"] == "manifests_prune | bool"
-    env = jinja_env()
-    return all(
-        env.from_string("{{ " + cond + " }}").render(**context)
-        for cond in task["ansible.builtin.assert"]["that"]
-    )
-
-
-def test_an_armed_role_naming_no_manifest_is_flagged() -> None:
-    assert not _empty_files_guard_holds(manifests_files_resolved=[])
-
-
-def test_an_armed_role_naming_a_manifest_is_clean() -> None:
-    assert _empty_files_guard_holds(manifests_files_resolved=["deployment.yaml"])
 
 
 def test_an_empty_render_is_flagged() -> None:
@@ -423,110 +161,3 @@ def test_the_filter_adds_the_label_and_nothing_else() -> None:
                 f"{role}/{name} changed beyond the label"
             )
     assert ("littlelink", "service-default.yaml.j2") in seen
-
-
-def _staged_templates(role: str) -> set[str]:
-    """The template names the armed apply stages for `role`: its file lists plus its claims.
-
-    A deferred file and a probe Job's own directory are applied outside the armed
-    `kubectl apply -n <namespace>`, so they are left out on purpose.
-    """
-    names = {
-        tpl.name
-        for basename in declared_manifest_files(role)
-        if (tpl := manifest_template(role, basename)) is not None
-    }
-    return names | {"claim-default.yaml.j2"}
-
-
-def _foreign_namespaces(text: str, namespace: str) -> list[tuple[str, str, str]]:
-    """(kind, name, namespace) for each document placed in a namespace other than `namespace`.
-
-    Only `metadata.namespace` counts. A cluster-scoped document carries none, and a binding's
-    `subjects[].namespace` names where its subject lives, not where the binding goes.
-    """
-    return [
-        (doc["kind"], doc["metadata"]["name"], ns)
-        for doc in yaml_fast.safe_load_all(text)
-        if isinstance(doc, dict)
-        and (ns := (doc.get("metadata") or {}).get("namespace"))
-        not in (None, namespace)
-    ]
-
-
-def _prune_namespace(role: str, vars_: dict) -> str:
-    """The namespace an armed include passes as `-n`, over its role defaults and group_vars."""
-    defaults = load_defaults(ROLES / "k8s" / role)
-    expr = vars_.get("manifests_prune_namespace", "{{ k8s_namespace }}")
-    return render_expr(str(expr), **{**defaults, **_group_vars()})
-
-
-DEFERRED_FILES = {
-    "headlamp": "rbac-observability.yaml.j2",
-    "netpol-baseline": "networkpolicy-alertmanager.yaml.j2",
-}
-
-
-def test_an_armed_role_renders_nothing_outside_the_prune_namespace() -> None:
-    """The armed apply passes `-n <manifests_prune_namespace>`, and kubectl refuses a document
-    placed elsewhere.
-
-    The refusal reads `the namespace from the provided object "observability" does not match
-    the namespace "homelab"`, and only a server-side dry run or a real deploy raised it: arming
-    headlamp passed pytest and prek while its rbac.yaml still carried the Prometheus proxy Role
-    in observability (#3575). DEFERRED_FILES names the roles that reach another namespace.
-    """
-    armed = {role: _prune_namespace(role, v) for role, v in _armed_roles().items()}
-    checked, offenders = set(), []
-    for role, name, text in rendered_texts():
-        if role not in armed or role in _OWNED or name not in _staged_templates(role):
-            continue
-        checked.add(role)
-        offenders += [
-            (role, name, *found) for found in _foreign_namespaces(text, armed[role])
-        ]
-    assert (set(DEFERRED_FILES) - _OWNED) <= checked
-    assert not offenders, (
-        f"armed roles render documents outside their prune namespace: {offenders}. The armed "
-        "apply passes `-n <manifests_prune_namespace>`, so kubectl refuses the whole directory. "
-        "Pass the role's one namespace as `manifests_prune_namespace`, or render the stray "
-        "documents into a deferred directory the role applies itself "
-        "(`manifests_deferred_files`, as headlamp's observability RBAC does)."
-    )
-
-
-def test_each_role_armed_outside_homelab_names_its_own_namespace() -> None:
-    """Control: observability's render passes only against its own prune namespace.
-
-    Checked against `homelab`, the check above refuses it.
-    """
-    armed = {role: _prune_namespace(role, v) for role, v in _armed_roles().items()}
-    assert armed["observability"] == "observability"
-    assert armed["dri-device-plugin"] == "kube-system"
-    text = render_role_template("observability", "loki.yaml.j2")
-    assert _foreign_namespaces(text, load_yaml_namespace())
-    assert not _foreign_namespaces(text, "observability")
-
-
-@pytest.mark.parametrize(("role", "name"), DEFERRED_FILES.items())
-def test_the_foreign_namespace_check_finds_each_deferred_file(role, name) -> None:
-    """Control: the check above refuses this file's render, and passes only as it is unstaged."""
-    assert name not in _staged_templates(role)
-    found = _foreign_namespaces(render_role_template(role, name), load_yaml_namespace())
-    assert {namespace for _kind, _name, namespace in found} == {"observability"}
-
-
-def _group_vars() -> dict:
-    return yaml_fast.safe_load(ALL_VARS.read_text())
-
-
-def load_yaml_namespace() -> str:
-    return _group_vars()["k8s_namespace"]
-
-
-def test_manifests_prune_defaults_on() -> None:
-    """The operator flipped the default on 2026-10-09 (#3662); an exclusion is an explicit false."""
-    assert _defaults()["manifests_prune"] is True, (
-        "manifests_prune must default true. A role that must not prune sets "
-        "`manifests_prune: false` in its defaults, behind a DECIDED marker."
-    )

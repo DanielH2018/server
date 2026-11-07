@@ -12,7 +12,7 @@ docs/target-architecture/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*. The
   counted as changed. Its `timeout` adds the fleet W and two margins, so the Job's wait never
   outlives it;
 - `cluster/soak/`: the Job `soak-<spec digest8>` in `flux-system`, which runs
-  `ansible/roles/k8s/manifests/files/flux_soak.py` with R's SHA in its arguments; the ConfigMap
+  `scripts/renderer/job_files/flux_soak.py` with R's SHA in its arguments; the ConfigMap
   `soak-<content digest8>` holding that script, byte copies of `flux_job_connect.py` and
   `scripts/deploy_tools/changed_set.py`, and `services.json`, the per-service map W reads; and
   the ServiceAccount `soak` with its RBAC, whose pod and ReplicaSet reads are a ClusterRole.
@@ -46,7 +46,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.git import git_stdout
-from lib.repo_paths import ALL_VARS, K8S_ROLES, REPO, SCRIPTS
+from lib.repo_paths import ALL_VARS, JOB_FILES, K8S_ROLES, REPO, SCRIPTS
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_DIR,
@@ -66,7 +66,7 @@ from renderer.renderer_lib.ordering import (
 )
 
 SOAK = "soak"
-FILES = K8S_ROLES / "manifests" / "files"
+FILES = JOB_FILES
 SCRIPT = FILES / "flux_soak.py"
 HELPER = FILES / "flux_job_connect.py"
 CHANGED_SET = SCRIPTS / "deploy_tools" / "changed_set.py"

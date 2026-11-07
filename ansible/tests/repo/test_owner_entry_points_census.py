@@ -27,7 +27,7 @@ from _helpers import REPO
 HEADER = "Entry point"
 
 # The two readers of the `owner` flag. Every chain that reads the tree ends at one of them.
-READERS = frozenset({"tag_owners", "ansible_owned"})
+READERS = frozenset({"tag_owners"})
 
 
 @dataclass(frozen=True)
@@ -60,9 +60,6 @@ K8S_TAGS = (
 # Each first cell of the plan's owner table, as written there, to the chain from the entry
 # point down to the reader it asks.
 ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
-    "`deploy.yml` k8s play": (
-        Link("ansible/deploy.yml", None, "containers_list | ansible_owned"),
-    ),
     "`deploy.sh --tags T`": (
         Link(RUN, "_gated_run", "refuse_k8s_tags"),
         Link(OWNERS, "refuse_k8s_tags", "read_k8s_tags"),
@@ -221,7 +218,7 @@ def _source_with(rel: str, text: str) -> Source:
 
 
 def test_every_entry_point_in_the_owner_table_reads_ownership_is_clean():
-    assert len(table_rows(_plan())) >= 10
+    assert len(table_rows(_plan())) >= 9
     assert census_problems(_plan()) == []
 
 
@@ -242,18 +239,6 @@ def test_an_entry_point_that_stops_reading_ownership_is_flagged():
     )
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
         f"`probe.py health T`: {rel}:_with_alert_plane no longer calls `tag_owners`"
-    ]
-
-
-def test_a_playbook_loop_that_drops_the_filter_is_flagged():
-    rel = "ansible/deploy.yml"
-    text = (
-        (REPO / rel)
-        .read_text()
-        .replace("containers_list | ansible_owned", "containers_list")
-    )
-    assert census_problems(_plan(), source=_source_with(rel, text)) == [
-        f"`deploy.yml` k8s play: {rel} no longer holds `containers_list | ansible_owned`"
     ]
 
 

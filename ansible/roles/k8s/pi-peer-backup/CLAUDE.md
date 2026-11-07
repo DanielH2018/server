@@ -6,7 +6,7 @@ nightly into a Longhorn PVC; the Saturday weekly shard (weekly-backup-d6) carrie
 replaced the retired Kopia scope for the Pi.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=pi-peer-backup` with exit 5
 - **Image:** `ghcr.io/danielh2018/pi-peer-backup` (`pi_peer_backup_k8s_image`)
@@ -15,7 +15,7 @@ replaced the retired Kopia scope for the Pi.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. Its Kustomization
   renders `decryption`, because the
   private key arrives as the SOPS manifest `pi-peer-backup.ssh-key-secret.sops.yaml`.
@@ -107,6 +107,5 @@ replaced the retired Kopia scope for the Pi.
 ## Editing
 - Script: `files/pull-pi-peers.sh` (baked into the image — a merged edit moves the content tag,
   and `promote` builds the image and runs the gate).
-- Gate: `flux_cronjob_gates` in `defaults/main.yml`. `tasks/main.yml` keeps the image-builder
-  and manifests includes until R4 deletes them, and no Flux path runs them.
+- Gate: `flux_cronjob_gates` in `defaults/main.yml`.
 - Pi half: `hosts/components/pi-peer-backup-target/component.yml`, with its two files.

@@ -490,9 +490,8 @@ and keeps the arm numbers its history gave them:
   `dependsOn` edge, and its own render moves in the same PR. A tag that becomes flux-owned in
   the PR is not judged, because its Kustomization is born with its edges. **To split an arm-2
   refusal, land the edge alone first**, then the change.
-- **Arms 3 and 4, removals.** A flux-owned object dropped without a `Removes-Object:` trailer,
-  a whole tag's objects included, and a flux-owned name added to `k8s_retired_services` (`docs/flux-deploy-plane.md`,
-  *Retiring a flux-owned service*).
+- **Arm 3, removals.** A flux-owned object dropped without a `Removes-Object:` trailer, a whole
+  tag's objects included (`docs/flux-deploy-plane.md`, *Retiring a flux-owned service*).
 - **Arm 5, suspended tags.** A change to the render of a tag `flux_suspend` holds.
 - **Arm 6, the tag rule.** A tag leaves the render while its role directory stays, `flux` is
   missing, or a tag whose base render holds a PersistentVolume leaves at all. The publish job
@@ -699,9 +698,8 @@ decision is a file list GitHub truncated, which is derived from the diff in step
 
 **A document under a role is not a manual apply.** A `.md` — a role's `CLAUDE.md`, a
 `README.md`, one under `files/` — maps to no role and to no plane, because no playbook applies
-prose. Landing PR #1696 ended `needs-manual-apply` for `ansible/roles/k8s/manifests/`, whose
-only changed file was that role's CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue
-#1701). `land_tags.role_for` now agrees with the deployer's own mapper, and
+prose. Landing PR #1696 ended `needs-manual-apply` for a role whose only changed file was its
+CLAUDE.md, and asked for a full `ansible/deploy.yml` (issue #1701). `land_tags.role_for` now agrees with the deployer's own mapper, and
 `land_tags.quiet_paths` drops a `.md` under the setup plane before any diff is read.
 
 **A role the PR itself registers is not one either.** Which tags exist is read at the MERGE

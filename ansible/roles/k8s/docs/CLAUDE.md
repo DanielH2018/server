@@ -4,7 +4,7 @@ Serves the built MkDocs Material site over `docs/`, behind Traefik and Authelia,
 runbooks, design documents and generated reference pages are readable in a browser.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=docs`
   with exit 5
 - **Image:** `nginxinc/nginx-unprivileged` (`docs_k8s_image`)
@@ -24,14 +24,13 @@ runbooks, design documents and generated reference pages are readable in a brows
 - **Built by:** `scripts/docs/build_docs.py`, run by `homelab-docs-refresh.service`. **Not by this role** —
   a deploy renders manifests, it does not rebuild the site.
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. traefik
   and authelia stay
   Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
   annotation, not in `dependsOn`. The Deployment is `RollingUpdate` with one replica, so a
   roll keeps one pod serving.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. The Kustomization's `wait` replaces the
+- **Where the task went.** The Kustomization's `wait` replaces the
   rollout wait, and the restart checksum the renderer stamps replaces the shared restart, so
   an nginx config edit still rolls the pod. The site directory is the host package's (below).
 

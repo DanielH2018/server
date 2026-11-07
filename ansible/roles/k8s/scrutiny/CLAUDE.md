@@ -4,7 +4,7 @@ Scrutiny's web UI plus a collector DaemonSet and an InfluxDB backend that holds 
 SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=scrutiny` with exit 5
 - **Images:** `ghcr.io/analogj/scrutiny` (`scrutiny_k8s_web_image`), `ghcr.io/analogj/scrutiny`
@@ -33,14 +33,13 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   rolling branch tags on a stateful monitor, and the InfluxDB and web Deployments are
   `Recreate` with RWO claims, so a bump that rolls either takes the UI and API down briefly.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies,
   authelia and traefik, stay
   Ansible-owned, so the Kustomization records them in its `homelab/ansible-owned-deps`
   annotation, not in `dependsOn`.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. The default `manifests_rollout:
+- **Where the task went.** The default `manifests_rollout:
   scrutiny-web` names
   the web Deployment for the stabilisation gate and the shared restart. The Kustomization's
   `wait` replaces the gate, and the restart checksum the renderer stamps on `scrutiny-web` replaces the

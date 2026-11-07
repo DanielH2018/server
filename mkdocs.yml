@@ -211,7 +211,7 @@ nav:
           - The GitOps pipeline: gitops-pipeline.md
           - Host packages: host-packages.md
           - The Flux deploy plane: flux-deploy-plane.md
-          - The homelab-render shadow renderer: homelab-render.md
+          - The homelab-render renderer: homelab-render.md
           - Secret rotation: secret-rotation.md
       - Monitoring and alerting:
           - Healthchecks.io deadman: healthchecks-io-deadman.md
@@ -253,7 +253,6 @@ nav:
               - hypervisor libvirt internals: hypervisor-libvirt-internals.md
               - Docker engine pins and runtime: docker-engine-pins-and-runtime.md
           - Storage:
-              - k8s manifest cycle record: k8s-manifest-cycle-record.md
               - volume-snapshot drill record: volume-snapshot-drills.md
               - volume-revert drill and sizing: volume-revert-drill-and-sizing.md
           - Renovate:
