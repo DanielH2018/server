@@ -31,22 +31,6 @@ def test_consumer_tags_routes_the_bridge_prefix_to_the_bridge():
     assert consumer_tags("monitor_bridge_ha_token") == ("monitor-bridge",)
 
 
-def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
-    # Registry-driven guard: a new `auto` key must resolve a consumer_tag, so the unattended
-    # weekly `rotate --commit` cron actually rotates it. Without this, a token whose
-    # consumer_tag falls through to () silently drops out of rotation and only surfaces months
-    # later as an OVERDUE page — exactly how arr_autoblock_push_token slipped in when
-    # autofix-bridge landed. The tier has no row until someone registers a new `auto` key, so
-    # this passes on any consumer_tags until then.
-    reg = load_registry()
-    auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
-    unrotatable = [n for n in auto if not consumer_tags(n)]
-    assert not unrotatable, (
-        "auto-tier tokens with no consumer_tags — they silently drop out of unattended "
-        "rotation: %s" % unrotatable
-    )
-
-
 # DECIDED: no test here asserts a cross-host token is not badly overdue. One did, and on
 # 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no
 # code change. Overdue is runtime state: SecretRotationAuditFailed pages the daily audit for any
@@ -55,7 +39,7 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
 
 
 # ── consumer_tag correctness ────────────────────────────────────────────────
-# The guard above proves a token RESOLVES a tag. Nothing proved the tag was right, which is
+# Nothing else proves a token's consumer tag is right, which is
 # this estate's recurring guard-scope shape: a check written alongside a fix inherits the
 # fix's scope. Routing every `monitor_bridge_*` name to monitor-bridge by prefix is wrong
 # when such a token is pushed from another role's health script entirely —

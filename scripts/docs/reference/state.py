@@ -65,9 +65,8 @@ from lib import yaml_fast
 
 from docs.catalog_lib import package_timers
 from docs.reference import crons as crons_mod
-from lib.git import git
 from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K8S_ROLES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K8S_ROLES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -190,44 +189,6 @@ def docs_refresh_run(build_info: Path = _DOCS_SITE_BUILD_INFO) -> LoopRun:
     return LoopRun(built_at, f"generators: {generators}")
 
 
-def secret_rotate_run(repo: Path = REPO) -> LoopRun:
-    """The weekly secret rotation.
-
-    Cadence: `homelab-secret-rotation.timer`.
-
-    No local state file -- this is the last commit that touched the plaintext rotation
-    registry, which also moves on a manual `secret_rotation.py rotate`, not only the cron. A
-    proxy, not the cron's own liveness signal; the docstring on the task names this trade.
-    """
-    target = repo / "ansible" / "secret_rotation.yml"
-    if not target.is_file():
-        return LoopRun(
-            None,
-            "ansible/secret_rotation.yml not found in this checkout",
-            unreadable=True,
-        )
-    result = git(
-        "log",
-        "-1",
-        "--format=%cI%n%s",
-        "--",
-        "ansible/secret_rotation.yml",
-        cwd=repo,
-        check=False,
-        timeout=10,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        return LoopRun(
-            None, "no commit history for the rotation registry", unreadable=True
-        )
-    when_line, _, subject = result.stdout.strip().partition("\n")
-    try:
-        when = dt.datetime.fromisoformat(when_line)
-    except ValueError:
-        return LoopRun(None, "commit date did not parse", unreadable=True)
-    return LoopRun(when, f"last touched by: {subject or '(no subject)'}")
-
-
 def longhorn_restore_drill_run(
     tools: Tools = DEFAULT_TOOLS,
     namespace: str | None = None,
@@ -343,11 +304,6 @@ def _loops(tools: Tools = DEFAULT_TOOLS) -> list[tuple[str, LoopRun, float | Non
             "docs-refresh",
             docs_refresh_run(),
             _timer_cadence("homelab-docs-refresh.timer"),
-        ),
-        (
-            "secret-rotate",
-            secret_rotate_run(),
-            _timer_cadence("homelab-secret-rotation.timer"),
         ),
         (
             "longhorn-restore-drill",

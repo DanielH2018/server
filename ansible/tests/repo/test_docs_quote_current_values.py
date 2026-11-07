@@ -55,7 +55,6 @@ from lib.repo_paths import K3S_DEFAULTS
 
 GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 PROBE_HEALTH = REPO / "scripts/diagnostics/probe_lib/health_rollout.py"
-SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
 
 
 def _k3s_default(name: str) -> Callable[[], str]:
@@ -114,12 +113,6 @@ ROWS: list[Row] = [
         r"restarted in the last (\d+)s\.",
         "health_rollout.RECENT_RESTART_SECONDS",
         _python_constant(PROBE_HEALTH, "RECENT_RESTART_SECONDS"),
-    ),
-    Row(
-        "docs/secret-rotation.md",
-        r"`ROTATE_LEAD_DAYS` = (\d+)",
-        "secret_rotation.ROTATE_LEAD_DAYS",
-        _python_constant(SECRET_ROTATION, "ROTATE_LEAD_DAYS"),
     ),
 ]
 

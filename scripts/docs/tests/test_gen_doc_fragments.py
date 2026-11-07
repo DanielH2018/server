@@ -194,11 +194,10 @@ def test_traefik_ports_names_both_container_ports():
 
 
 def test_secret_tiers_renders_cadence_and_count_per_tier():
-    out = renderers.render_secret_tiers({"auto": 180, "ignore": None}, 8, {"auto": 3})
+    out = renderers.render_secret_tiers({"auto": 180, "ignore": None}, {"auto": 3})
     assert "| `auto` | 180 d | 3 |" in out
     assert "| `ignore` | — | 0 |" in out
-    assert "3 secrets are registered" in out
-    assert "`ROTATE_LEAD_DAYS` = 8" in out
+    assert "3 secrets are registered." in out
 
 
 def test_record_keys_names_each_key_and_the_count():

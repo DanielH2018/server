@@ -1,9 +1,9 @@
-"""The rendered `secret-rotation` component: the weekly rotation and the daily audit (H7.10c).
+"""The rendered `secret-rotation` component: the daily audit (H7.10c).
 
-The scripts' behaviour is run against stubs in `ansible/tests/setup/`. These tests hold what the
-move added: the units that run the scripts, which load no credential since M6 batch B2's
+The script's behaviour is run against stubs in `ansible/tests/setup/`. These tests hold what the
+move added: the units that run the script, which load no credential since M6 batch B2's
 Cutover-2 dropped the Kuma push, the enable links, the legacy entries that retire the Ansible-era
-cron and timer, and the Autonomous-role contract.
+crons and timer, and the Autonomous-role contract.
 
 Run: uv run pytest hosts/lib/tests/test_secret_rotation_component.py
 """
@@ -32,37 +32,25 @@ def package(tmp_path_factory):
     return render_fixture(tmp_path_factory.mktemp("daniel-box"), ("secret-rotation",))
 
 
-def test_both_scripts_install_executable_and_read_no_credential(package):
-    for name in ("secret-rotate", "secret-rotation-audit"):
-        body = text(package, f"{LIB}/{name}")
-        assert package.files[f"{LIB}/{name}"][1] == 0o755
-        assert "CREDENTIALS_DIRECTORY" not in body
-        assert "STUB" not in body
+def test_the_script_installs_executable_and_reads_no_credential(package):
+    body = text(package, f"{LIB}/secret-rotation-audit")
+    assert package.files[f"{LIB}/secret-rotation-audit"][1] == 0o755
+    assert "CREDENTIALS_DIRECTORY" not in body
+    assert "STUB" not in body
 
 
-@pytest.mark.parametrize(
-    ("unit", "script"),
-    [
-        ("homelab-secret-rotation", "secret-rotate"),
-        ("homelab-secret-rotation-audit", "secret-rotation-audit"),
-    ],
-)
-def test_each_service_runs_its_script_as_sys_user_with_no_credential(
-    package, unit, script
-):
+def test_the_service_runs_its_script_as_sys_user_with_no_credential(package):
     user = render_context(None, "daniel-box", inventory=REPO_INVENTORY)["sys_user"]
-    service = text(package, f"{UNITS}/{unit}.service")
+    service = text(package, f"{UNITS}/homelab-secret-rotation-audit.service")
     assert f"User={user}\n" in service
-    assert f"ExecStart={LIB}/{script}\n" in service
+    assert f"ExecStart={LIB}/secret-rotation-audit\n" in service
     assert "LoadCredential=" not in service
     assert "Wants=network-online.target\n" in service
 
 
-def test_each_service_keeps_the_journal_tag_the_cron_logged_under(package):
-    """`journalctl -t secret-rotate` and the Loki streams keyed on it replaced a `logger -t`."""
-    rotation = text(package, f"{UNITS}/homelab-secret-rotation.service")
+def test_the_service_keeps_the_journal_tag_the_cron_logged_under(package):
+    """The Loki streams keyed on `secret-rotation-audit` replaced a `logger -t`."""
     audit = text(package, f"{UNITS}/homelab-secret-rotation-audit.service")
-    assert "SyslogIdentifier=secret-rotate\n" in rotation
     assert "SyslogIdentifier=secret-rotation-audit\n" in audit
 
 
@@ -75,20 +63,25 @@ def test_the_audit_reruns_while_red_and_a_boot_unit_covers_a_reboot(package):
     assert "start --no-block homelab-secret-rotation-audit.service" in boot
 
 
-def test_the_timers_keep_the_cron_and_kuma_check_slots(package):
-    weekly = text(package, f"{UNITS}/homelab-secret-rotation.timer")
-    assert "OnCalendar=Sun *-*-* 09:00:00\n" in weekly
+def test_the_timer_keeps_the_kuma_check_slot(package):
     audit = text(package, f"{UNITS}/homelab-secret-rotation-audit.timer")
     assert "OnCalendar=*-*-* 08:30:00\n" in audit
     assert "Persistent=true\n" in audit
 
 
-def test_the_component_links_both_timers_and_the_boot_unit(package):
+def test_the_component_links_the_audit_timer_and_the_boot_unit(package):
     assert {
-        "homelab-secret-rotation.timer",
         "homelab-secret-rotation-audit.timer",
         "homelab-secret-rotation-audit-boot.service",
     } <= set(package.enable_links())
+
+
+def test_the_package_ships_no_weekly_rotation(package):
+    """The `auto` tier is retired, so no unit or script rotates a secret unattended."""
+    assert f"{UNITS}/homelab-secret-rotation.timer" not in package.files
+    assert f"{UNITS}/homelab-secret-rotation.service" not in package.files
+    assert f"{LIB}/secret-rotate" not in package.files
+    assert "homelab-secret-rotation.timer" not in set(package.enable_links())
 
 
 def test_the_package_retires_the_ansible_era_cron_timer_and_scripts(package):

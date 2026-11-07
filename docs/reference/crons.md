@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-06 18:17 UTC
-generated_sha: bb59748cd0
+generated_at: 2026-11-07 15:25 UTC
+generated_sha: 210d1d2707
 ---
 
 !!! warning "Generated file — do not edit"
@@ -51,15 +51,15 @@ generated_sha: bb59748cd0
 | homelab-firmware-update.timer | `OnCalendar=Sun *-*-* 07:00:00` | daniel-box | `root` | read the script | `hosts/components/host-maintenance/units/homelab-firmware-update.timer` |
 | homelab-infra-map.timer | `OnCalendar=*-*-* *:00,15,30,45:00` | daniel-box | `ubuntu` | read the script | `hosts/components/infra-map/units/homelab-infra-map.timer` |
 | homelab-k3s-restart.timer | `OnCalendar=Mon..Fri *-*-02..31 11:32:00` | daniel-box | `root` | yes (deploy, restart) | `hosts/components/k3s-restart/units/homelab-k3s-restart.timer.j2` |
-| homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
+| homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
 | homelab-pi-gz-integrity.timer | `OnCalendar=*-*-* 01:40:00, OnActiveSec=1min` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-gz-integrity.timer` |
 | homelab-pi-recovery.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-recovery.timer` |
 | homelab-pi-sd-health.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-sd-health.timer` |
 | homelab-pi-watchdog-health.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-watchdog-health.timer` |
 | homelab-reboot.timer | `OnCalendar=Sun *-*-* 07:30:00 UTC` | daniel-box, daniel-pi, daniel-server | `root` | yes (reboot) | `hosts/components/host-maintenance/units/homelab-reboot.timer.j2` |
+| homelab-registry-gc.timer | `OnCalendar=Sun *-*-* 04:20:00` | daniel-box | `root` | read the script | `hosts/components/registry-gc/units/homelab-registry-gc.timer` |
 | homelab-rkhunter-check.timer | `OnCalendar=Wed *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-rkhunter-check.timer` |
 | homelab-secret-rotation-audit.timer | `OnCalendar=*-*-* 08:30:00` | daniel-box | `ubuntu` | read the script | `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer` |
-| homelab-secret-rotation.timer | `OnCalendar=Sun *-*-* 09:00:00` | daniel-box | `ubuntu` | yes (rotate) | `hosts/components/secret-rotation/units/homelab-secret-rotation.timer` |
 | homelab-sync-artifacts.timer | `OnCalendar=*-*-* *:00/5:00` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/units/homelab-sync-artifacts.timer.j2` |
 | homelab-updater-poll.timer | `OnBootSec=15min, OnUnitActiveSec=15min` | daniel-pi | `root` | read the script | `hosts/components/pi-updater-poll/units/homelab-updater-poll.timer` |
 | homelab-updater.timer | `OnBootSec=5min, OnUnitActiveSec=5min` | daniel-box, daniel-server | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |

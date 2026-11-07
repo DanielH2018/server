@@ -414,8 +414,6 @@ reader that D6 does not delete.
       `ansible/secret_rotation.yml` lists each.
     - `scripts/secrets_mgmt/secret_rotation.py:cmd_sync` adds back a `secrets.yml` key that
       the registry lacks.
-    - `scripts/secrets_mgmt/tests/test_secret_consumers.py::test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual`
-      fails for a token with no consumer.
     - Their consumers are uptime-kuma's `static-monitors.yaml.j2`, the k3s role's
       `live-drift-check.env.j2`, and the shared `kuma-push.env.j2`, which renders
       `manifest_prune_push_token` and `release_staleness_push_token` beside the tokens of the

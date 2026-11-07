@@ -101,20 +101,15 @@ def test_a_budget_that_outgrows_the_ceiling_is_caught():
     )
 
 
-_SECRET_ROTATE = (
-    _REPO / "hosts/components/secret-rotation/templates/secret-rotate.sh.j2"
-)
-
 # Every job that waits for the git-tree lock, with the regex that reads its wait.
 #
-# The three cron templates are read RENDERED: their wait lives in git-tree-lock.j2, the macro
+# The two cron templates are read RENDERED: their wait lives in git-tree-lock.j2, the macro
 # each one imports (#3722), so the template source no longer holds the number at all.
 #
 # WHY A CENSUS AND NOT ONE TEST EACH. A per-consumer test only covers the consumers somebody
 # remembered to write one for. This table is the thing a new waiter has to be added to, and the
 # non-vacuity test below is what makes forgetting fail rather than pass silently.
 _LOCK_WAITERS = {
-    "secret-rotate.sh.j2": (_SECRET_ROTATE, r"^flock\s+-w\s+(\d+)\s+9"),
     "docs-refresh.sh.j2": (
         _REPO / "hosts/components/docs-refresh/templates/docs-refresh.sh.j2",
         r"^flock\s+-w\s+(\d+)\s+9",
@@ -136,7 +131,6 @@ def test_the_lock_waiter_census_is_non_vacuous():
     # still passing, which is the failure this whole table exists to stop. Assert the names, not
     # a count, so the message says WHICH waiter went missing.
     assert set(_LOCK_WAITERS) == {
-        "secret-rotate.sh.j2",
         "docs-refresh.sh.j2",
         "eval-run.sh.j2",
         "deploy_lib/under_locks.py",
@@ -169,9 +163,7 @@ def _wait_clears_the_hold(wait: int, hold: int) -> bool:
 def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     # gitops-deploy.service wraps its whole ExecStart in the git-tree lock, and one
     # activation runs the broad apply budget inside that one hold. A waiter that gives up early does not fail safe: it fires its unit's OnFailure= alert for
-    # ordinary contention AND skips that run. For the weekly secret-rotate that means the next
-    # attempt is +7 days, and ROTATE_LEAD_DAYS=8 against a 7-day cadence means a token usually
-    # gets exactly one eligible run, so a skipped week can put a token overdue.
+    # ordinary contention AND skips that run.
     #
     # The bound is TimeoutStartSec, not the budget: the tick's git calls carry no timeout, so only
     # systemd ends a hold. Read from the unit, so raising the ceiling fails this.
