@@ -1,0 +1,13 @@
+# Shipped by the host package's registry-gc component with its enable link. Sunday 04:20. The
+# values equal registry_k8s_gc_cron_* in hosts/components/registry-gc/defaults/main.yml, which
+# the deadman cadences fragment reads through the registry role's copy
+# (hosts/components/registry-gc/tests/test_registry_gc_component.py holds them equal).
+[Unit]
+Description=Run the mirror registries' garbage collection on Sunday at 04:20
+
+[Timer]
+OnCalendar=Sun *-*-* 04:20:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

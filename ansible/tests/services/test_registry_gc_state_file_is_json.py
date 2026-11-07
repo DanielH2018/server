@@ -5,9 +5,9 @@ error text. An operator reads the file with `jq` after a run, so a message that 
 breaks that read on the run whose message mattered (#4606).
 
 `finish()` is sliced out of the RENDERED script and run with `curl`, `logger` and `kuma_push`
-stubbed as shell functions. The `curl` stub is load-bearing: `finish()` sources
-`/etc/healthchecks/ping.env` whenever it is readable, so on daniel-box an unstubbed run would
-send a real `/fail` ping to the live `registry-gc` dead-man.
+stubbed as shell functions. The `curl` stub is load-bearing: `finish()` reads the unit's
+`healthchecks_ping_key` credential whenever it is readable, so a run with the credential and no
+stub would send a real `/fail` ping to the live `registry-gc` dead-man.
 """
 
 import json
@@ -19,7 +19,7 @@ from _shell_render import rendered_shell_function
 from lib.proc_testing import run
 
 FINISH = rendered_shell_function(
-    "setup", "k8s_host_files", "registry-gc.sh.j2", "finish"
+    "components", "registry-gc", "registry-gc.sh.j2", "finish"
 )
 
 

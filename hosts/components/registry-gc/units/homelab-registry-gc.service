@@ -1,0 +1,14 @@
+# Shipped by the host package's registry-gc component. Started by homelab-registry-gc.timer.
+[Unit]
+Description=Collect the mirror registries' stores and report the result
+After=network-online.target homelab-secrets.service k3s.service
+Wants=network-online.target homelab-secrets.service
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+ExecStartPre=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-registry-gc.conf
+ExecStart=/usr/lib/homelab/registry-gc.sh
+SyslogIdentifier=registry-gc
+# The Healthchecks.io key. The script reads it from $CREDENTIALS_DIRECTORY.
+LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key

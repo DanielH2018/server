@@ -16,6 +16,9 @@ by name. media-volume's conversion PR added `media_volume_host_path` with the `g
 and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which H7.25 moved into the Pi package;
 hosts/lib/tests/test_pi_tuning_component.py holds that copy equal to the k8s default.
 
+The registry-gc component's copies of registry's keys are held equal by
+`hosts/components/registry-gc/tests/test_registry_gc_component.py` since H7.64 moved the collector
+out of this role.
 The docs-refresh component's copy of `docs_host_site_dir` is held equal to docs' default by
 `hosts/lib/tests/test_docs_refresh_component.py` since H7.10a moved the directory out of this role.
 The claude-code component's copies of artifacts' four keys are held equal by
@@ -48,19 +51,6 @@ EXPECTED_PAIRS: frozenset[str] = frozenset(
         "media_volume_host_path",
         "pgid",
         "puid",
-        "registry_k8s_dockerhub_mirror_claim",
-        "registry_k8s_dockerhub_mirror_keep_revisions",
-        "registry_k8s_gc_cron_hour",
-        "registry_k8s_gc_cron_minute",
-        "registry_k8s_gc_cron_weekday",
-        "registry_k8s_gc_deadline_s",
-        "registry_k8s_gc_lock_file",
-        "registry_k8s_gc_ttl_s",
-        "registry_k8s_ghcr_mirror_claim",
-        "registry_k8s_ghcr_mirror_keep_revisions",
-        "registry_k8s_image",
-        "registry_k8s_manage_gc",
-        "registry_k8s_netpol_probe_image",
     }
 )
 

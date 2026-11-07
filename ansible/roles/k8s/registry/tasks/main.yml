@@ -1,9 +1,8 @@
 ---
 # Flux owns registry (D5, Wave D), so no Ansible run reaches this file. The self-tests and the
 # netpol probe are the `registry-verify` Jobs in templates/verify/, which Flux applies once the
-# `registry` Kustomization reads Ready. The ghcr-mirror's GC (registry-gc.sh, its cron,
-# /var/lib/registry-gc and ghcr-mirror-gc-job.yaml) installs from
-# roles/setup/k8s_host_files/tasks/registry.yml, because the mirror's GC stays a host script.
+# `registry` Kustomization reads Ready. The mirrors' GC is daniel-box's `registry-gc` host
+# component, because it stays a host script.
 #
 # What the deleted tasks did, and what replaces each:
 #   - the rollout waits: the Kustomization's `wait` and the verify Jobs' deadlines;

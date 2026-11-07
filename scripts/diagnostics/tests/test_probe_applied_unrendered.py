@@ -18,13 +18,9 @@ from types import SimpleNamespace
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from diagnostics.probe_lib import applied, applied_facts, applied_tasks
+from diagnostics.probe_lib import applied, applied_tasks
 from lib.exit_codes import PROBE_FAILED, PROBE_OK
 
-REGISTRY_GC_CRON = (
-    "#Ansible: Registry garbage collection\n"
-    "20 4 * * 0 root /usr/local/bin/registry-gc.sh 2>&1 | logger -t registry-gc\n"
-)
 CRON_TASK = """\
 - name: Schedule it
   ansible.builtin.cron: {name: Nightly x, minute: "5", hour: "3", user: root, job: /usr/local/bin/x.sh, cron_file: x}
@@ -102,15 +98,6 @@ def _run_tmp(tmp_path, capsys, tasks, ctx, live, files):
     return code, _rows(capsys.readouterr().out)
 
 
-def test_the_registry_gc_cron_want_carries_the_hash_of_the_line_the_module_writes():
-    role = applied.SETUP / "k8s_host_files"
-    wants, _ = applied_tasks.expected(
-        role, "daniel-box", applied.context(role, "daniel-box")
-    )
-    cron = next(w for w in wants if w.path == "/etc/cron.d/registry-gc")
-    assert cron.sha256 == _sha(REGISTRY_GC_CRON), cron
-
-
 def test_a_cron_file_as_the_module_writes_it_reads_ok(tmp_path, capsys):
     """The task omits `day`, `month` and `weekday`, which the module writes as `*`."""
     live = {"/etc/cron.d/x": CRON_TEXT}
@@ -124,44 +111,3 @@ def test_a_cron_file_edited_by_hand_is_drift(tmp_path, capsys):
     code, rows = _run_tmp(tmp_path, capsys, CRON_TASK, {}, live, {})
     assert rows["/etc/cron.d/x"][0] == "DRIFT", rows
     assert code == PROBE_FAILED
-
-
-def _registry_gc_rows(live):
-    role = applied.SETUP / "k8s_host_files"
-    wants, _ = applied_tasks.expected(
-        role, "daniel-box", applied.context(role, "daniel-box")
-    )
-    return wants
-
-
-def test_the_registry_gc_script_render_holds_no_stub():
-    """The script embedded a push token until M6 batch B6c's Cutover-2, so its render was a STUB
-    and its content was not compared. It embeds none now, so the probe hashes the real render."""
-    wants = _registry_gc_rows({})
-    script = next(w for w in wants if w.path == "/usr/local/bin/registry-gc.sh")
-    assert script.sha256, script
-    assert script.why_no_content != applied_facts.STUB_RENDER, script
-
-
-def test_k8s_host_files_compares_the_registry_gc_rows_with_the_real_render(capsys):
-    """Both rows read ok when the host holds what the apply wrote."""
-    live = {"/etc/cron.d/registry-gc": REGISTRY_GC_CRON}
-    wants = _registry_gc_rows(live)
-    ns = SimpleNamespace(role="k8s_host_files", host="daniel-box", dry_run=False)
-    applied.run_applied(ns, read=_reader(wants, live, {}))
-    rows = _rows(capsys.readouterr().out)
-    for path in ("/etc/cron.d/registry-gc", "/usr/local/bin/registry-gc.sh"):
-        assert rows[path][0] == "ok", rows[path][1]
-
-
-def test_a_registry_gc_script_edited_after_the_apply_is_drift(capsys):
-    """The rejecting half: a live script that differs from the render is DRIFT."""
-    live = {
-        "/etc/cron.d/registry-gc": REGISTRY_GC_CRON,
-        "/usr/local/bin/registry-gc.sh": "#!/bin/bash\necho edited\n",
-    }
-    wants = _registry_gc_rows(live)
-    ns = SimpleNamespace(role="k8s_host_files", host="daniel-box", dry_run=False)
-    applied.run_applied(ns, read=_reader(wants, live, {}))
-    status, line = _rows(capsys.readouterr().out)["/usr/local/bin/registry-gc.sh"]
-    assert status == "DRIFT", line

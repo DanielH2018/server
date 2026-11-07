@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Renovate resolves each k8s image pin that `setup/k8s_host_files` copies like its source.
+"""Renovate resolves each k8s image pin that the `registry-gc` component copies like its source.
 
-`setup/k8s_host_files` keeps copies of the registry role's image pins for the ghcr-mirror GC
-Job (#5827), and `ansible/tests/setup/test_k8s_host_files_pairs.py` holds each copy equal to
+The `registry-gc` component keeps copies of the registry role's image pins for the ghcr-mirror GC
+Job (#5827), and `hosts/components/registry-gc/tests/test_registry_gc_component.py` holds each copy equal to
 its source. Renovate updates both copies, but it puts a dep on a branch by the group name the
 packageRules resolve for that file. When the two files resolve differently, each copy lands in
 its own PR and both PRs fail the pairs test. #5859 and #5835 did that: the copy matched none of
@@ -23,7 +23,7 @@ import pytest
 from _renovate import _PACKAGE_RULES, _REPO, _resolve_setting
 from lib import yaml_fast
 
-HOST_FILES_DEFAULTS = _REPO / "ansible/roles/setup/k8s_host_files/defaults/main.yml"
+HOST_FILES_DEFAULTS = _REPO / "hosts/components/registry-gc/defaults/main.yml"
 K8S_ROLES = _REPO / "ansible/roles/k8s"
 
 # The copies the census must find, so a moved or renamed pin fails as a missing member rather
@@ -139,7 +139,7 @@ _PIN = Copy(
     "x_image",
     "registry",
     "ansible/roles/k8s/registry/defaults/main.yml",
-    "ansible/roles/setup/k8s_host_files/defaults/main.yml",
+    "hosts/components/registry-gc/defaults/main.yml",
 )
 
 
