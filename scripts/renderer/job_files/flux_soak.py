@@ -16,16 +16,19 @@ notification-controller posts as `flux/soak`. In order, it:
    It prints the pending names whenever they change. Each poll takes the set from a fresh
    list and also waits on the root, because that list settles only once the root has applied
    and pruned R's Kustomizations. Each poll re-runs step 1's check, so the Job exits 1 once
-   `homelab` stops holding R;
+   `homelab` stops holding R. Until the deadline, steps 1 to 3 read a 5xx or a dropped
+   connection from the API server as "not ready yet" and retry it, because a k3s upgrade
+   restarts the API server under the soak, and step 4's pod reads retry it for as long; a
+   4xx still fails;
 4. waits W past the latest first Ready among the pods R created, then fails on a restart after
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
    alert activated after T0.
 
 A pass prints the services it judged, then one `event=deploy` logfmt line, the cluster's deploy
 annotation. A failure prints the same line with `result=fail` and `duration_s`, writes
-`failed-services: <service>,...` to the termination message and exits 1. Every
-connection goes through `flux_job_connect.open_url`, which the Job census requires, and the
-API server's CA reaches `urlopen` through `SSL_CERT_FILE`, which the Job sets.
+`failed-services: <service>,...` to the termination message and exits 1. Every read is
+`soak_reads.py`'s, whose connections go through `flux_job_connect.open_url`, which the Job
+census requires.
 
 Run: python3 flux_soak.py --revision <R> --services services.json ... (the Job's command)
 """
@@ -38,18 +41,13 @@ import os
 import sys
 import tarfile
 import time
-import urllib.error
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlencode
 
 from changed_set import ROOT, changed_set
-from flux_job_connect import Request, open_url
+from soak_reads import Reads, SoakError, TransientError, live_reads, parse_time
 
-API = "https://kubernetes.default.svc"
-TOKEN_FILE = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 TERMINATION_LOG = "/dev/termination-log"
 FLUX_NAMESPACE = "flux-system"
 KUSTOMIZATIONS = (
@@ -77,37 +75,24 @@ POLL_SECONDS = 15
 ALERT_FILTER = 'shadow!="true",alertname!="Watchdog"'
 
 
-class SoakError(Exception):
-    """The soak cannot reach a verdict, or a read it must not narrow on failed."""
+def retry_transient[T](reads: Reads, deadline: float, read: Callable[[], T]) -> T:
+    """`read()`, re-run every poll while it raises TransientError until `deadline`.
+
+    Raises:
+        SoakError: `read` failed for another reason, or was still failing at `deadline`.
+    """
+    while True:
+        try:
+            return read()
+        except TransientError as err:
+            if reads.clock() >= deadline:
+                raise SoakError(f"{err}, still failing at the deadline") from err
+            print(f"soak: {err}; retrying", file=sys.stderr)
+        reads.sleep(POLL_SECONDS)
 
 
 def origin(revision: str) -> str:
     return f"master@sha1:{revision}"
-
-
-def parse_time(text: str) -> float:
-    return datetime.fromisoformat(text.replace("Z", "+00:00")).timestamp()
-
-
-@dataclass
-class Reads:
-    """Every read the soak makes, one callable each, so a test replaces them with fixtures.
-
-    Attributes:
-        api: the parsed JSON at an API server path. Raises SoakError on any failure.
-        fetch: the bytes at an artifact URL. Raises SoakError on any failure.
-        query: a PromQL instant query's `data.result`, at a Unix time or now.
-        prometheus_start: when the Prometheus process started, as a Unix time.
-        clock: the Unix time now.
-        sleep: waits; a test passes its own.
-    """
-
-    api: Callable[[str], dict]
-    fetch: Callable[[str], bytes]
-    query: Callable[[str, float | None], list]
-    prometheus_start: Callable[[], float]
-    clock: Callable[[], float] = time.time
-    sleep: Callable[[float], None] = time.sleep
 
 
 @dataclass(frozen=True)
@@ -281,7 +266,9 @@ def await_ready(reads: Reads, inputs: Inputs, digests: tuple, deadline: float) -
     """
     logged: list[str] = []
     while True:
-        kustomizations = reads.api(KUSTOMIZATIONS)["items"]
+        kustomizations = retry_transient(
+            reads, deadline, lambda: reads.api(KUSTOMIZATIONS)["items"]
+        )
         scope = scope_of(inputs, digests, kustomizations)
         left = pending(kustomizations, scope.kustomizations | {ROOT}, inputs.revision)
         if not left:
@@ -297,7 +284,7 @@ def await_ready(reads: Reads, inputs: Inputs, digests: tuple, deadline: float) -
         # so none of them would ever name R. kustomize-controller holds the next promotion's
         # health check behind this Job (#5704), so the Job ends itself rather than wait out
         # its deadline.
-        read_sources(reads, inputs.revision)
+        retry_transient(reads, deadline, lambda: read_sources(reads, inputs.revision))
         reads.sleep(POLL_SECONDS)
 
 
@@ -311,11 +298,20 @@ def _controller(obj: Mapping) -> Mapping:
 def workload_pods(
     reads: Reads, inputs: Inputs, namespaces: Iterable[str], t0: float
 ) -> dict:
-    """Each pod created after T0 whose owner chain ends in a Deployment, DaemonSet or StatefulSet."""
+    """Each pod created after T0 whose owner chain ends in a Deployment, DaemonSet or StatefulSet.
+
+    A transient read is retried for up to `inputs.wait_seconds`, because a k3s upgrade's API
+    server restart can land after its Kustomization reads Ready.
+    """
+    deadline = reads.clock() + inputs.wait_seconds
+
+    def api(path: str) -> dict:
+        return retry_transient(reads, deadline, lambda: reads.api(path))
+
     owners: dict[str, str] = {}
     pods = {}
     for namespace in sorted(namespaces):
-        for pod in reads.api(f"/api/v1/namespaces/{namespace}/pods")["items"]:
+        for pod in api(f"/api/v1/namespaces/{namespace}/pods")["items"]:
             meta = pod["metadata"]
             if (
                 meta["name"] == inputs.own_pod
@@ -331,7 +327,7 @@ def workload_pods(
                 if path not in owners:
                     # A refused read exits through SoakError rather than dropping every
                     # Deployment pod from the restart leg.
-                    owners[path] = _controller(reads.api(path)).get("kind", "")
+                    owners[path] = _controller(api(path)).get("kind", "")
                 kind = owners[path]
             if kind in WORKLOADS:
                 pods[(namespace, meta["name"])] = pod
@@ -500,14 +496,21 @@ def judge_alerts(reads: Reads, scope: Scope, t0: float, verdict: Verdict) -> Non
 def soak(reads: Reads, inputs: Inputs) -> Verdict:
     """The soak's verdict on R. Raises SoakError when it cannot reach one."""
     start = reads.clock()
-    sources, t0 = read_sources(reads, inputs.revision)
+    deadline = start + inputs.wait_seconds
+    sources, t0 = retry_transient(
+        reads, deadline, lambda: read_sources(reads, inputs.revision)
+    )
     digests = read_both_digests(reads, inputs, sources)
-    scope = scope_of(inputs, digests, reads.api(KUSTOMIZATIONS)["items"])
+    scope = scope_of(
+        inputs,
+        digests,
+        retry_transient(reads, deadline, lambda: reads.api(KUSTOMIZATIONS)["items"]),
+    )
     if scope.widened:
         print(f"soak: scope widened to the fleet: {scope.widened}", file=sys.stderr)
     verdict = Verdict()
     if scope.services:
-        scope = await_ready(reads, inputs, digests, start + inputs.wait_seconds)
+        scope = await_ready(reads, inputs, digests, deadline)
     if not scope.services:
         print("soak: R changes no service; nothing to judge")
         return verdict
@@ -528,41 +531,6 @@ def soak(reads: Reads, inputs: Inputs) -> Verdict:
     judge_pods(reads, inputs, scope, t0, before, verdict)
     judge_alerts(reads, scope, t0, verdict)
     return verdict
-
-
-def live_reads(
-    prometheus: str,
-    token_file: str = TOKEN_FILE,
-    sleep: Callable[[float], None] = time.sleep,
-) -> Reads:
-    """The reads the Job makes, each through `open_url`, which waits on `sleep` to retry."""
-    token = Path(token_file).read_text().strip()
-
-    def get(request: Request | str, what: str) -> bytes:
-        try:
-            with open_url(request, timeout=30, sleep=sleep) as response:
-                return response.read()
-        except urllib.error.HTTPError as err:
-            raise SoakError(f"{what}: HTTP {err.code}") from err
-        except OSError as err:
-            raise SoakError(f"{what}: {err}") from err
-
-    def api(path: str) -> dict:
-        headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-        return json.loads(get(Request(API + path, headers=headers), path))
-
-    def query(promql: str, at: float | None) -> list:
-        params = {"query": promql} | ({} if at is None else {"time": f"{at:.3f}"})
-        body = json.loads(get(f"{prometheus}/api/v1/query?{urlencode(params)}", promql))
-        if body.get("status") != "success":
-            raise SoakError(f"{promql}: {body.get('error')}")
-        return body["data"]["result"]
-
-    def prometheus_start() -> float:
-        url = f"{prometheus}/api/v1/status/runtimeinfo"
-        return parse_time(json.loads(get(url, url))["data"]["startTime"])
-
-    return Reads(api, lambda url: get(url, url), query, prometheus_start)
 
 
 def deploy_line(revision: str, services: str, result: str, duration_s=None) -> str:
