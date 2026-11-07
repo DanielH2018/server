@@ -29,7 +29,8 @@ Every POST also needs `X-Deploy-UI: 1` so a cross-site form cannot ride the Auth
 
 - To stop it on daniel-box for a while, run `sudo systemctl mask --now deploy-ui.service`.
   To remove it, drop `deploy-ui` from `components:` in `hosts/daniel-box/package.yml`; the next
-  package version stops it and removes its ufw rules.
+  package version stops it, and reconcile deletes its three ufw rules over two runs, because
+  the arm deletes at most two in one run.
 - Remove the `deploy-ui` entry from `containers_list` in `host_vars/daniel-box.yml` and
   deploy, which drops the route (`roles/k8s/deploy-ui`) and `deploy.local`.
 

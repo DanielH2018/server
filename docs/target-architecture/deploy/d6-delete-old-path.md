@@ -1582,8 +1582,9 @@ D6.12, three chains run side by side: D6.13 and D6.14, D6.16 to D6.18b, and D6.1
     - **Written ahead: yes.** The census row's floor is the count of k8s entries that D5
       ends with, so the writer fills that number in at rebase.
     - **Waits on:** D6.12, merged. It builds on D6.12's changed-set wiring.
-    - **Operator gates:** in its review, the operator decides whether `deploy_ui` retires with
-      the deployer (**operator-only**, Open question 1).
+    - **Operator gates:** in its review, the operator decided whether `deploy_ui` retires with
+      the deployer. It does not: #7419 ruled on 2026-11-07 that H7.50 re-homes it (Open
+      question 1).
     - **Before merge:** the `k8s_remediation` symbol grep, `land.py --help`,
       `deploy_tags.py changed origin/master`, the fallback test's red run, and D6.12's four
       landing tests.

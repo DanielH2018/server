@@ -4,7 +4,7 @@ The components are host-neutral and `test_pi_initial_setup_part2.py` holds their
 tests hold what is specific to this host, the last one to move: the
 crons the role once wrote here are retired and replaced by timers, the firmware update ships
 only where fwupd is, the scans read this host's own tokens, and
-reconcile adopts the two SSH rules while it leaves every rule another role writes alone.
+reconcile adopts the two SSH rules and the k3s rules, and leaves the rules it already labels alone.
 
 Run: uv run pytest hosts/lib/tests/test_box_initial_setup_part2.py
 """
@@ -118,7 +118,7 @@ def test_the_weekly_reboot_pings_this_hosts_check(package, tmp_path, context):
     ]
 
 
-def test_reconcile_adopts_the_ssh_rules_and_leaves_every_other_roles_rules(
+def test_reconcile_adopts_the_ssh_rules_and_leaves_the_rules_it_already_holds(
     package, manifest, tmp_path, context
 ):
     node = seeded_pi(package, tmp_path)
