@@ -176,6 +176,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
         "host-maintenance",
         "integrity-scans",
         "k3s-agent",
+        "worktree-holders",
         "worktree-sweep",
     )
     # claude-code's one templated entry names daniel-server's sys_user, and a `when:` never
@@ -195,6 +196,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     assert ours == [
         {"path": "/etc/apt/sources.list.d/github-cli.list"},
         {"path": "/usr/local/bin/sops"},
+        {"path": "/usr/local/bin/vale"},
         {"path": "/usr/local/bin/host-maintenance.sh"},
         {"path": "/etc/healthchecks/ping.env"},
         {"path": "/etc/healthchecks"},
