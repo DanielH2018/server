@@ -250,9 +250,8 @@ limit that decides `unhealthy` under that stall. 60s is what the other Pi probes
 ## The Pi's wg-easy in the host package (H5.9)
 
 Since H5.9 the Pi's wg-easy is one service of the `homelab-daniel-pi` package's Compose
-project, not an Ansible role. `./scripts/deploy.sh --tags wg-easy -e target=daniel-pi` deploys
-nothing on the Pi. The Pi's updater installs the package, and `homelab-compose.service` runs
-the project.
+project, not an Ansible role. `deploy.sh` deploys nothing on the Pi. The Pi's updater installs
+the package, and `homelab-compose.service` runs the project.
 
 - **Where it lives.** The service file is
   `hosts/components/pi-compose/services/wg-easy/compose.yaml.j2`, and its header holds the
@@ -310,6 +309,5 @@ from a LAN session and are **operator-only**. An agent does not run them.
 8. **Record the output** of steps 4, 6 and 7 in the PR body or the landing note.
 
 If a step fails, restore the old project from the LAN: revert the move PR, wait for the Pi to
-install the reverted package, then run
-`./scripts/deploy.sh --tags "wg-easy" -e target=daniel-pi` from daniel-box. Between those two
-steps the cluster's endpoint (H5.5) is the only way in.
+install the reverted package, and let `homelab-compose.service` run the reverted project. Until
+then the cluster's endpoint (H5.5) is the only way in.

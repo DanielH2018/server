@@ -49,8 +49,8 @@ class Link:
 
 
 OWNERS = "scripts/deploy_tools/deploy_lib/owners.py"
-RUN = "scripts/deploy_tools/deploy_lib/run.py"
 ROTATION_TOOLS = "scripts/secrets_mgmt/rotation_tools.py"
+RUN = "scripts/deploy_tools/deploy_lib/run.py"
 
 K8S_TAGS = (
     Link(OWNERS, "read_k8s_tags", "declared_k8s_tags"),
@@ -223,10 +223,10 @@ def test_every_entry_point_in_the_owner_table_reads_ownership_is_clean():
 
 
 def test_a_renamed_entry_point_is_flagged():
-    rel = "scripts/secrets_mgmt/secret_rotation.py"
-    text = (REPO / rel).read_text().replace("def cmd_rotate(", "def rotate(")
+    rel = "scripts/deploy_tools/land_lib/promotion.py"
+    text = (REPO / rel).read_text().replace("def wait_on_promotion(", "def wait(")
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
-        f"`secret_rotation.py rotate`: {rel} defines no `cmd_rotate`"
+        f"`land.sh`: {rel} defines no `wait_on_promotion`"
     ]
 
 
@@ -244,8 +244,8 @@ def test_an_entry_point_that_stops_reading_ownership_is_flagged():
 
 def test_a_plan_row_no_member_names_is_flagged():
     plan = _plan().replace(
-        "| `secret_rotation.py rotate` |",
-        "| `new_entry.py` | Skips T.\n| `secret_rotation.py rotate` |",
+        "| `probe.py health T` |",
+        "| `new_entry.py` | Skips T.\n| `probe.py health T` |",
         1,
     )
     assert census_problems(plan) == [
