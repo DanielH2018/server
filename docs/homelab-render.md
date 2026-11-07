@@ -742,6 +742,17 @@ lines for those tags as a render of all of them. `digest_line` and `directory_di
 It exits 64 on a usage error. `scripts/lib/exit_codes.py` holds the codes as its `SHADOW_*`
 family.
 
+## The advisory render-diff job
+
+`.github/workflows/render-diff.yml` renders the merge base and the PR head with one
+`--revision`, prints `diff -r` of the two trees, and prints the head's digest. The job sets
+`continue-on-error: true` and no ruleset requires it, so it blocks nothing. A reviewer reads
+the printed diff before merging a change to the renderer or to a package it imports.
+`renovate.json` disables automerge for `jinja2`, `pyyaml` and `markupsafe`, the dependency
+closure of the renderer, so a bump of one waits for that read.
+`scripts/tests/test_renovate_renderer_closure_no_automerge.py` holds the rule to the imports
+of the renderer and to `uv.lock`. R4 Open question 12 records the ruling.
+
 ## The render is deterministic and reads only the repo
 
 Four test modules prove R1's exit criterion 2: `test_renderer_determinism_0.py` to

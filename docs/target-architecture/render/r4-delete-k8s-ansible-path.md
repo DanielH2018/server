@@ -1,9 +1,10 @@
 # R4 — Delete the k8s Ansible path
 
 Status: DONE when R4.9 merges. R4.1 to R4.8 merged by 2026-11-07, and R4.6 was skipped
-because `ansible/volume-revert.yml` exists. R4.9 retires the render-diff gate. Exit 6
-overran: the renderer holds 13,549 non-test lines against 2,600, and the operator decides it
-in [#7580](https://github.com/DanielH2018/server/issues/7580).
+because `ansible/volume-revert.yml` exists. R4.9 retires the render-diff gate and keeps the
+`render-diff` job as an advisory one (Open question 12, option 2). Exit 6 overran: the
+renderer held 13,549 non-test lines against 2,600, and the operator accepted the overrun on
+2026-11-07 in [#7580](https://github.com/DanielH2018/server/issues/7580).
 [#5473](https://github.com/DanielH2018/server/pull/5473) re-sliced the plan on 2026-10-17.
 
 Re-sliced on 2026-10-17 at the operator's request: 18 steps became 9 PRs. One of the nine,
@@ -1194,8 +1195,9 @@ Two costs follow from the narrowing:
     - **Why alone and last.** The operator removes the context from the live ruleset first
       (**operator-only**), and R4.9 merges the same day. Its description lists every R4 PR
       with its `render-diff` run, which is exit 3's evidence. Exit 6 is read here.
-    - **Operator-only.** Removing the context, pushing the workflow's deletion, ruling on
-      Open question 12, and deciding an exit 6 overrun.
+    - **Operator-only.** Removing the context, ruling on Open question 12, and deciding an
+      exit 6 overrun. The operator ruled on the last two on 2026-11-07, so the context
+      removal remains.
 
 <details markdown="1">
 <summary>The step list before the 2026-10-17 re-slice: 18 steps</summary>
@@ -1646,6 +1648,14 @@ On daniel-box, `systemctl list-unit-files 'kuma-check-render-records*'` lists no
 Exit 6 is read at R4's last PR with `git ls-files 'scripts/renderer/*.py' | grep -v
 /tests/ | xargs cat | wc -l`, which prints at most 2,600.
 
+**Exit 6 ruling, 2026-11-07.** The command printed 13,549 across 47 files against the 2,600
+bound. The operator ruled in the orchestrating session: "I agree with option 2 for renovate
+and accept the cap overrun". The 2,600 bound is replaced by a ceiling at the size measured
+when R4.9 merged, 13,546 lines after master's later deletions. The ceiling is
+`LINE_CEILING` in `scripts/renderer/tests/test_renderer_size_ceiling.py`, which fails when the
+command's count grows past it. A PR that grows the renderer raises the constant in its own
+diff.
+
 **Red-proofs:**
 
 - The dialect census (PR 7d): a fixture template that uses a filter off the list fails the
@@ -2064,6 +2074,17 @@ daniel-box. The operator produces them, because each needs the host:
     Recommendation: the second, because it keeps no required context, and a human reads
     the printed diff before merging. Resolution: the operator rules in PR 11's review, and
     PR 11 implements the choice.
+
+    **Ruled 2026-11-07: option 2.** The operator said in the orchestrating session: "I agree
+    with option 2 for renovate and accept the cap overrun". R4.9 implements it. The
+    `render-diff` workflow stays as an advisory job (`continue-on-error: true`, no required
+    context) that renders the merge base and the head and prints the difference and the head's
+    digest. The mandatory `Render-diff:` line, the comparison module and the template section
+    stay deleted. `renovate.json` holds the rule that disables automerge for the renderer's
+    dependency closure: `jinja2`, `pyyaml` and `markupsafe`, which
+    `scripts/tests/test_renovate_renderer_closure_no_automerge.py` derives from the renderer's
+    imports and `uv.lock`. The operator still removes the `render-diff` context from ruleset
+    20912512 before this PR merges.
 
 ## Review log
 

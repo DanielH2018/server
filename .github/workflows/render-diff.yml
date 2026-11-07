@@ -1,0 +1,67 @@
+name: render-diff
+
+# Advisory: renders the merge base and the PR head with one commit value, then prints the
+# difference and the head's tree digest. It fails nothing and no ruleset requires it
+# (R4 Open question 12, option 2). A human reads the printed diff before merging a renderer or
+# renderer-dependency change. renovate.json disables automerge for the renderer's dependency
+# closure, so a bump that moves output waits for that read.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - scripts/renderer/**
+      - scripts/lib/**
+      - ansible/roles/k8s/**
+      - ansible/inventory/group_vars/**
+      - uv.lock
+      - pyproject.toml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: render-diff-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  render-diff:
+    name: render-diff
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    continue-on-error: true  # advisory: a red job here is information, never a block
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0  # the merge base and its tree need history
+          persist-credentials: false
+
+      - uses: ./.github/actions/setup  # zizmor: ignore[self-repository] -- see the action's header
+
+      - name: Render the merge base and the head with one commit value
+        env:
+          BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          merge_base="$(git merge-base "origin/$BASE_REF" "$HEAD_SHA")"
+          git worktree add --detach "$RUNNER_TEMP/base-tree" "$merge_base"
+          render() {
+            local tree="$1" out="$2" tag
+            local -a selection=()
+            cd "$tree"
+            for tag in $(uv run --frozen python scripts/deploy_tools/promote.py published-tags); do
+              selection+=(--role "$tag")
+            done
+            [ "${#selection[@]}" -gt 0 ] || selection=(--shared-only)
+            uv run --frozen python scripts/renderer/homelab_render.py cluster --out "$out" \
+              --all-images --revision "$HEAD_SHA" "${selection[@]}"
+          }
+          (render "$RUNNER_TEMP/base-tree" "$RUNNER_TEMP/base-out")
+          (render "$GITHUB_WORKSPACE" "$RUNNER_TEMP/head-out")
+
+      - name: Print the difference and the head's tree digest
+        run: |
+          diff -r "$RUNNER_TEMP/base-out" "$RUNNER_TEMP/head-out" || true
+          uv run --frozen python scripts/renderer/shadow_diff.py digest "$RUNNER_TEMP/head-out"
