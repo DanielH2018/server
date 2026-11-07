@@ -6,24 +6,17 @@ the workloads that carry none. A workload the table misses lands in `service="un
 an entry for a workload that is gone or labelled is dead text that still looks like coverage.
 
 So the table is derived here, not trusted. Every k8s role renders through
-`_k8s_render.rendered_docs`, and the labelling rule `k8s/manifests` applies decides which
-Deployments and DaemonSets carry the label: an armed role's files get it through
-`ansible/templates/role-labelled.yaml.j2`, and its deferred files and an unarmed role's files
-do not. The table must map exactly the rest, each to its own role.
+`_k8s_render.rendered_docs`, and the table must map exactly the Deployments and DaemonSets
+that render with no label, each to its own role.
 
 Run: uv run pytest ansible/tests/k8s/test_workload_service_overrides.py
 """
 
 import re
 
-from _helpers import load_tasks, walk_tasks
 from _k8s_render import rendered_docs
-from _role_census import role_dirs
 from lib import yaml_fast
-from lib.k8s_roles import declared_manifest_files
 from lib.repo_paths import K8S_ROLES
-from lib.k8s_roles import MANIFESTS_PRUNE_DEFAULT
-from renderer.renderer_lib.task_inputs import render_defaults
 from role_label import ROLE_LABEL
 
 RULES = K8S_ROLES / "observability" / "files" / "rules" / "workload-service.yaml"
@@ -61,24 +54,7 @@ MUST_FIND = frozenset(
 )
 
 
-def _armed_roles() -> set[str]:
-    """The roles whose `k8s/manifests` include arms the prune, and so renders the label."""
-    armed = set()
-    for role in role_dirs():
-        main = role / "tasks" / "main.yml"
-        if not main.is_file():
-            continue
-        for task in walk_tasks(load_tasks(main)):
-            include = task.get("ansible.builtin.include_role") or {}
-            if include.get("name") != "k8s/manifests" or "tasks_from" in include:
-                continue
-            task_vars = {**render_defaults(role), **(task.get("vars") or {})}
-            if task_vars.get("manifests_prune", MANIFESTS_PRUNE_DEFAULT) is True:
-                armed.add(role.name)
-    return armed
-
-
-def unlabelled_workloads(docs, armed: set[str]) -> dict[tuple[str, str, str], str]:
+def unlabelled_workloads(docs) -> dict[tuple[str, str, str], str]:
     """Each rendered Deployment and DaemonSet that reaches the cluster with no tag label.
 
     Returns:
@@ -86,15 +62,12 @@ def unlabelled_workloads(docs, armed: set[str]) -> dict[tuple[str, str, str], st
         it, mapped to the role that renders the workload.
     """
     found = {}
-    for role, tpl, doc in docs:
+    for role, _, doc in docs:
         kind = WORKLOAD_KINDS.get(doc.get("kind"))
         if kind is None:
             continue
         meta = doc["metadata"]
-        stamped = role in armed and tpl.removesuffix(".j2") in declared_manifest_files(
-            role
-        )
-        if stamped or ROLE_LABEL in (meta.get("labels") or {}):
+        if ROLE_LABEL in (meta.get("labels") or {}):
             continue
         found[(kind, meta["namespace"], meta["name"])] = role
     return found
@@ -185,7 +158,7 @@ def override_problems(table: dict, unlabelled: dict) -> list[str]:
 
 
 def test_the_override_table_is_clean_on_the_render():
-    unlabelled = unlabelled_workloads(rendered_docs(), _armed_roles())
+    unlabelled = unlabelled_workloads(rendered_docs())
     missing = MUST_FIND - unlabelled.keys()
     assert not missing, (
         f"the derivation no longer finds {sorted(missing)}, so it is checking less than the "

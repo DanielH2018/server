@@ -135,9 +135,7 @@ def test_rotate_commit_sends_new_token_on_stdin_not_argv():
         )
     )
 
-    args = SimpleNamespace(
-        name=name, all=False, commit=True, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=name, all=False, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     assert "save_registry" in named_calls(recorded), (
         "the new date was never written back"
@@ -189,9 +187,7 @@ def test_rotate_records_the_names_a_failed_batch_already_wrote():
     # `RotationTools` is frozen, so a per-test boundary is a `replace`, never a setattr.
     tools = replace(tools, sops_set=failing_sops_set)
 
-    args = SimpleNamespace(
-        name=None, all=True, commit=True, deploy=True, no_derive=False
-    )
+    args = SimpleNamespace(name=None, all=True, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 3
     # Most-overdue first, so the failure lands on the second of two — the half that proves
     # earlier names were already written. A runner that failed the FIRST call would leave that
@@ -232,9 +228,7 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
 
     tools = replace(tools, sops_set=hanging_sops_set)
 
-    args = SimpleNamespace(
-        name=None, all=True, commit=True, deploy=True, no_derive=False
-    )
+    args = SimpleNamespace(name=None, all=True, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 3
     assert attempted == [first, second]
 
@@ -254,34 +248,51 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
 
 
 # ── what `cmd_rotate` tells the operator to do next ─────────────────────────
-def test_rotate_without_deploy_says_commit_then_deploy_sh(capsys):
-    """deploy.sh deploys HEAD, so the Next: line must say to commit before it deploys."""
+def test_rotate_says_commit_then_land(capsys):
+    """Flux reaches a rotated value only through a landed commit, so the Next: line says so."""
     name = "monitor_bridge_test_token"
     tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01"))))
-    args = SimpleNamespace(
-        name=name, all=False, commit=True, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=name, all=False, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
-    assert "Next: commit " in out and "./scripts/deploy.sh --tags " in out, out
-    assert "ansible-playbook" not in out, out
+    assert "Next: commit " in out and "then land the commit" in out, out
+    assert "deploy.sh" not in out, out
 
 
-def test_rotate_deploy_failure_names_the_revert_command_and_tags(capsys):
+def test_rotate_refuses_a_consumer_flux_does_not_apply_before_writing(capsys):
+    """Nothing applies a tag Flux does not own, so its token must never be minted."""
     name = "monitor_bridge_test_token"
-    tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01")), run_rc=1))
-    # `run_rc` would also fail the `sops set`, which passes `check=True`; only the deploy
-    # should fail here.
-    tools = replace(tools, sops_set=lambda _name, _value: None)
-    args = SimpleNamespace(
-        name=name, all=False, commit=True, deploy=True, no_derive=False
+    tools, calls = build_tools(
+        Fakes(registry=_reg((name, "auto", "2026-01-01")), owners={})
     )
+    args = SimpleNamespace(name=name, all=False, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 1
-    err = capsys.readouterr().err
-    assert "DEPLOY FAILED for tags " in err, err
-    assert (
-        "git checkout -- ansible/vars/secrets.yml ansible/secret_rotation.yml" in err
-    ), err
+    captured = capsys.readouterr()
+    assert "NO DEPLOY PATH for tags monitor-bridge" in captured.err, captured.err
+    assert "Nothing was written" in captured.err, captured.err
+    assert "Next: commit" not in captured.out, captured.out
+    assert process_calls(calls) == [], "a refused rotation reached `sops set`"
+    assert "save_registry" not in named_calls(calls)
+
+
+def test_a_mixed_batch_names_only_the_tag_flux_does_not_own():
+    """One flux-owned consumer must not carry a batch past the one that has no path."""
+    tags = {"alpha": ("monitor-bridge",), "beta": ("widget",)}
+    assert sr.unapplied_tags(
+        ["alpha", "beta"], {"monitor-bridge": "flux"}, tags.__getitem__
+    ) == ["widget"]
+
+
+def test_a_dry_run_reports_the_same_refusal(capsys):
+    """The bare `rotate` is the dry run, so it must show what `--commit` would refuse."""
+    name = "monitor_bridge_test_token"
+    tools, calls = build_tools(
+        Fakes(registry=_reg((name, "auto", "2026-01-01")), owners={})
+    )
+    args = SimpleNamespace(name=name, all=False, commit=False, no_derive=False)
+    assert sr.cmd_rotate(args, tools) == 1
+    assert "NO DEPLOY PATH" in capsys.readouterr().err
+    assert process_calls(calls) == []
 
 
 # ── `source: record` keys ─────────────────────────────────────
@@ -306,9 +317,7 @@ def test_rotate_refuses_a_record_key_by_name_with_the_reason(capsys):
     tools, recorded = build_tools(
         Fakes(registry=_record_registry(name, source="record"))
     )
-    args = SimpleNamespace(
-        name=name, all=False, commit=True, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=name, all=False, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 64
     err = capsys.readouterr().err
     assert name in err and "source: record" in err and "Rotate it in the app" in err
@@ -320,9 +329,7 @@ def test_rotate_writes_the_same_auto_key_when_it_is_not_a_record():
     """The accepting half: identical fixture minus `source: record` is rotated."""
     name = "app_owned_push_token"
     tools, recorded = build_tools(Fakes(registry=_record_registry(name)))
-    args = SimpleNamespace(
-        name=name, all=False, commit=True, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=name, all=False, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     assert len(process_calls(recorded)) == 1
 
@@ -333,9 +340,7 @@ def test_unattended_rotate_skips_a_record_key_and_says_so(capsys):
     tools, recorded = build_tools(  # field stands between it and `sops set`
         Fakes(registry=_record_registry(name, source="record"))
     )
-    args = SimpleNamespace(
-        name=None, all=True, commit=True, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=None, all=True, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     assert process_calls(recorded) == []
     assert (
@@ -346,9 +351,7 @@ def test_unattended_rotate_skips_a_record_key_and_says_so(capsys):
 def test_unattended_rotate_still_writes_the_same_key_without_the_record_field():
     name = "monitor_bridge_test_token"
     tools, recorded = build_tools(Fakes(registry=_record_registry(name)))
-    args = SimpleNamespace(
-        name=None, all=True, commit=True, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=None, all=True, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     assert len(process_calls(recorded)) == 1
 
@@ -385,9 +388,7 @@ def test_rotate_skips_the_entry_git_shows_rotated_and_still_takes_the_overdue_on
     capsys,
 ):
     tools, _recorded = build_tools(_two_token_fixture())
-    args = SimpleNamespace(
-        name=None, all=False, commit=False, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=None, all=False, commit=False, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
     assert "DRY-RUN would rotate %-40s" % STALE in out, out
@@ -398,9 +399,7 @@ def test_rotate_skips_the_entry_git_shows_rotated_and_still_takes_the_overdue_on
 def test_rotate_no_derive_trusts_the_recorded_date(capsys):
     """The flag's own red proof: the same fixture with the derive off selects both."""
     tools, _recorded = build_tools(_two_token_fixture())
-    args = SimpleNamespace(
-        name=None, all=False, commit=False, deploy=False, no_derive=True
-    )
+    args = SimpleNamespace(name=None, all=False, commit=False, no_derive=True)
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
     assert "DRY-RUN would rotate %-40s" % HAND_ROTATED in out, out
@@ -417,9 +416,7 @@ def test_rotate_commit_writes_back_only_the_dates_it_rotated():
     `secret_rotation.yml` for secrets the run never touched.
     """
     tools, recorded = build_tools(_two_token_fixture())
-    args = SimpleNamespace(
-        name=None, all=False, commit=True, deploy=False, no_derive=False
-    )
+    args = SimpleNamespace(name=None, all=False, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     saved = [c[1][0] for c in recorded if c[0] == "save_registry"]
     assert len(saved) == 1

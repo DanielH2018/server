@@ -299,9 +299,7 @@ def rewrite_command(cmd, which=shutil.which):
     #
     # Only the ansible CLIs get it, rather than everything this arm routes. The fixup is harmless
     # anywhere, but it changes the command text the auto-mode classifier reads, and an ansible
-    # command already prompts where a `pytest` does not. A script that spawns ansible without
-    # naming it — `secret_rotation.py rotate --deploy` — restores the flag itself instead;
-    # nothing in its command text could have told this arm to.
+    # command already prompts where a `pytest` does not.
     #
     # Matched against `cmd`, whose offsets the walk computed and the splices above invalidated.
     if any(_SEGMENT_ANSIBLE.match(cmd[start:]) for start in starts) and (

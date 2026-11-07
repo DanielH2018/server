@@ -25,7 +25,7 @@ TICK = [
     [HELD_AT - 600.0, 5, "held", "sudo", "  ubuntu : TTY=pts/3 ; COMMAND=/bin/sh -c 'echo BECOME-SUCCESS-x'"],
     [HELD_AT - 1.0, 3, "held", "flock", "[DEPRECATION WARNING]: INJECT_FACTS_AS_VARS default to `True` is deprecated"],
     [HELD_AT + 0.0, 3, "held", "flock", "k8s-deploy: failed for ['home-assistant']: uv run --frozen ansible-playbook ansible/deploy.yml --tags home-assistant -> 2"],
-    [HELD_AT + 0.0, 3, "held", "flock", "TASK [k8s/manifests : Wait for the queued rollouts to finish] ******************"],
+    [HELD_AT + 0.0, 3, "held", "flock", "TASK [k8s/volume-revert : Wait for the queued rollouts to finish] ******************"],
     [HELD_AT + 0.0, 3, "held", "flock", 'fatal: [daniel-box]: FAILED! => {"changed": false, "cmd": "k3s kubectl -n homelab rollout status"}'],
     [HELD_AT + 1.0, 5, "held", "flock", "k8s-deploy: deploying home-assistant (timeout 1620s)"],
 ]  # fmt: skip

@@ -101,7 +101,7 @@ def image_tag(ref: str) -> str:
 # --- the k8s rollout budget, wherever a role spells it ---------------------------------------
 
 
-# `k8s/manifests` waits `manifests_rollout_timeout | default(manifests_rollout_timeout_default)`,
+# A role's rollout budget is `manifests_rollout_timeout | default(manifests_rollout_timeout_default)`,
 # and three guards size themselves against it: the two rollback-budget tests, which read a role's
 # call site, and the inline-gate budget census, which reads a `rollout status --timeout=`. All
 # three read the literal text, so a role that moved its number into a variable — sonarr, which
@@ -158,10 +158,10 @@ _ROLLOUT_TIMEOUT_CALL_SITE = re.compile(
 
 
 def manifests_rollout_timeout_s(role: Path) -> int:
-    """The seconds a role's `k8s/manifests` include waits for its rollout.
+    """The seconds a role declares for its rollout.
 
     The include var when the role's tasks pass one, else the role's own
-    `manifests_rollout_timeout` default, which k8s/manifests reads the same way (#5464), else
+    `manifests_rollout_timeout` default (#5464), else
     `MANIFESTS_ROLLOUT_DEFAULT_S`. A budget this reader cannot resolve RAISES: the whole point
     is that an unreadable budget must not read as the default, which is how a 660s service
     would be sized as a 300s one.

@@ -25,8 +25,6 @@ _DEFAULTS = _ROLE / "defaults/main.yml"
 # file that defines them.
 _VALIDATOR = _REPO / "scripts/lib/k8s_roles.py"
 
-_MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
-
 _GUARD = "not (k8s_no_mutate | bool)"
 
 

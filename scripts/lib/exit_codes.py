@@ -683,8 +683,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             SECRET_ROTATION_FAILED,
             "SECRET_ROTATION_FAILED",
-            "the registry is out of sync under --check, --push pushed down, or a --deploy "
-            "redeploy failed after the new tokens were written.",
+            "the registry is out of sync under --check, --push pushed down, or rotate found a "
+            "consumer with no owner: flux, before writing anything.",
         ),
         _c(
             SECRET_ROTATION_SOPS_FAILED,

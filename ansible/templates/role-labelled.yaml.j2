@@ -1,5 +1,5 @@
 {#
-  The render k8s/manifests writes for a role that arms `manifests_prune` (#3388): the role's own
+  The render for a role that arms `manifests_prune` (#3388): the role's own
   template, rendered, then passed through the `homelab_role_label` filter
   (ansible/filter_plugins/role_label.py), which stamps `homelab/role: <manifests_service>` onto
   every document and refuses an empty render.

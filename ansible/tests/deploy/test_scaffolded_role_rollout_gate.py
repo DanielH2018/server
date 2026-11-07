@@ -1,6 +1,6 @@
 """A role `scripts/dev/new_k8s_service.py` scaffolds is gated on the Deployment it ships.
 
-The scaffolder writes a bare `k8s/manifests` include with no `manifests_rollout` (#4298), so
+The scaffolder writes no `manifests_rollout` (#4298), so
 the gate waits on the role's own name. These tests run the rollout-gate guards' resolver over a
 scaffolded role rather than restating its regex.
 """

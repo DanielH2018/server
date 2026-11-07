@@ -184,7 +184,7 @@ def test_changed_derives_no_tag_for_a_k8s_role_or_a_shared_one(capsys, monkeypat
         deploy_tags,
         "_git_diff_paths",
         lambda ref, cwd=None: [
-            "ansible/roles/k8s/manifests/tasks/main.yml",
+            "ansible/roles/k8s/volume-snapshot/tasks/main.yml",
             "ansible/roles/k8s/jellyfin/defaults/main.yml",
         ],
     )
@@ -200,7 +200,7 @@ def test_changed_on_a_shared_role_alone_exits_0_with_no_tag(capsys, monkeypatch)
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
-        lambda ref, cwd=None: ["ansible/roles/k8s/manifests/tasks/main.yml"],
+        lambda ref, cwd=None: ["ansible/roles/k8s/volume-snapshot/tasks/main.yml"],
     )
     assert deploy_tags.main(["changed"]) == 0
     captured = capsys.readouterr()
