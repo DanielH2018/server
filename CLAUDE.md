@@ -77,7 +77,7 @@ on the run says so. Commit first. `--check` and `--dry-run` still read the worki
 initial setup.
 
 ### Checking a k8s change without deploying it
-`prek run --all-files` and the PR's `render-diff` job check a k8s change before it merges.
+`prek run --all-files` and CI's render-diff gates check a k8s change before it merges.
 `docs/homelab-render.md` has the renderer commands that show the manifests a change produces.
 
 ## After a PR Merges — Pull, Deploy, Verify

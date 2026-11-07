@@ -140,7 +140,7 @@ def _gate_naming_leaf(tmp_path, statement: str):
 
 
 def test_a_path_in_a_prefixes_tuple_is_not_an_invocation(tmp_path):
-    """`render_diff_job.py` lists the libraries whose diffs it gates; listing is not running."""
+    """A gate that lists library paths in a prefixes tuple does not run them."""
     assert (
         _gate_naming_leaf(tmp_path, '_HAZARD_PREFIXES = ("scripts/dev/pkg/leaf.py",)')
         == "library"

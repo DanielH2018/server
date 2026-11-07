@@ -1,6 +1,10 @@
 # R4 — Delete the k8s Ansible path
 
-Status: PLANNED. No R4 PR has merged. [#5473](https://github.com/DanielH2018/server/pull/5473) re-sliced the plan on 2026-10-17.
+Status: DONE when R4.9 merges. R4.1 to R4.8 merged by 2026-11-07, and R4.6 was skipped
+because `ansible/volume-revert.yml` exists. R4.9 retires the render-diff gate. Exit 6
+overran: the renderer holds 13,549 non-test lines against 2,600, and the operator decides it
+in [#7580](https://github.com/DanielH2018/server/issues/7580).
+[#5473](https://github.com/DanielH2018/server/pull/5473) re-sliced the plan on 2026-10-17.
 
 Re-sliced on 2026-10-17 at the operator's request: 18 steps became 9 PRs. One of the nine,
 R4.6, runs only if R4.1 finds the revert runbook without its own entry (*Steps, as PRs*).
