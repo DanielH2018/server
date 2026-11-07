@@ -22,7 +22,7 @@ from validate.render_diff_job import (
 SCRIPTS = REPO / "scripts"
 FILTER_PLUGINS = REPO / "ansible" / "filter_plugins"
 # An import's top-level module, where its distribution's name differs.
-DISTRIBUTIONS = {"ansible": "ansible-core", "yaml": "pyyaml"}
+DISTRIBUTIONS = {"yaml": "pyyaml"}
 
 
 def _lock(jinja: str = "3.1.6", tool: str = "1.0") -> str:
@@ -133,7 +133,8 @@ def test_a_requirement_edit_with_the_lock_unmoved_counts():
 
 def test_the_closure_reaches_jinja2s_dependency_in_the_real_lock():
     closure = dependency_closure((REPO / "uv.lock").read_text())
-    assert {"jinja2", "markupsafe", "pyyaml", "ansible-core"} <= closure
+    assert {"jinja2", "markupsafe", "pyyaml"} <= closure
+    assert "ansible-core" not in closure
 
 
 def test_every_third_party_module_the_renderer_imports_is_in_the_literal():
@@ -148,7 +149,8 @@ def test_every_third_party_module_the_renderer_imports_is_in_the_literal():
         REPO / "hosts" / "lib",
     )
     imported = _third_party_imports(entries, roots)
-    assert {"jinja2", "yaml", "ansible"} <= imported
+    assert {"jinja2", "yaml"} <= imported
+    assert "ansible" not in imported
     assert _census_problems(entries, roots) == set()
 
 

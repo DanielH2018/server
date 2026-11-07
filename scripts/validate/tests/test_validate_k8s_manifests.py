@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """What one whole-tree run of the k8s manifest validator must report.
 
-`main()` renders every k8s role once — ~7s — and six guards below read different parts of that
-single run: unresolved claimNames, schema failures, a role default shadowing the inventory, an
+`main()` renders every k8s role once — ~20s — and five guards below read different parts of that
+single run: unresolved claimNames, schema failures, an
 https route with no `tls:`, a NetworkPolicy on a Service's port, and the coverage tail naming
 any object no schema checked.
 
@@ -18,6 +18,8 @@ import io
 
 import pytest
 
+from renderer.renderer_lib import cluster
+from renderer.renderer_lib.bundle import KUSTOMIZATION
 from validate.validate_lib import k8s_schema
 from validate import k8s_manifests as vkm
 
@@ -26,7 +28,7 @@ from validate import k8s_manifests as vkm
 def real_tree():
     """Run the validator over the real tree ONCE per worker: (exit code, stdout, stderr).
 
-    A full run renders every k8s role and costs ~7s (2026-09-01; ~3.8s when this was written).
+    A full run renders every k8s role through the renderer and costs ~20s (2026-11-07).
     Six guards below assert on different parts of the same run's output, and until 2026-09-01
     two fixtures each paid for their own run — one capturing stderr, one stdout — so every
     worker rendered the tree twice. The run is a pure function of the repo tree, so one
@@ -65,12 +67,6 @@ def test_real_tree_passes_the_schema(real_tree_run):
     rc, err = real_tree_run
     assert rc == 0
     assert "fails the v" not in err
-
-
-def test_no_real_role_shadows_an_inventory_key(real_tree_run):
-    """The regression guard, over the real tree: zero collisions."""
-    _rc, err = real_tree_run
-    assert "redefines inventory key" not in err
 
 
 def test_every_real_https_route_declares_tls(real_tree_run):
@@ -133,6 +129,43 @@ def test_an_object_no_vendored_schema_covers_is_flagged(monkeypatch, tmp_path):
     out = buf.getvalue()
     assert _UNCOVERED in out
     assert "traefik.io/v1alpha1/IngressRoute" in out
+
+
+def _run_with_render(render) -> tuple[int, str]:
+    """`main()` over the real roles, with `render` standing in for the renderer's."""
+    err = io.StringIO()
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+        rc = vkm.main(render=render)
+    return rc, err.getvalue()
+
+
+def test_a_tag_the_renderer_refuses_is_flagged():
+    def refuse(tag, stubs):
+        raise cluster.RenderError(f"{tag}: refused")
+
+    rc, err = _run_with_render(refuse)
+    assert rc == 1
+    assert "[FAIL] traefik: traefik: refused" in err
+
+
+@pytest.mark.parametrize("field", ["files", "deferred", "verify", "precheck"])
+def test_invalid_yaml_in_any_rendered_directory_is_flagged(field):
+    written = {"files": {}, field: {"bad.yaml": "kind: [\n"}}
+
+    def render(tag, stubs):
+        return cluster.RenderedTag(tag, **written)
+
+    rc, err = _run_with_render(render)
+    assert rc == 1
+    assert "[FAIL] traefik/bad.yaml" in err
+
+
+def test_a_directory_s_kustomization_is_not_validated_as_a_manifest_is_clean():
+    def render(tag, stubs):
+        return cluster.RenderedTag(tag, {KUSTOMIZATION: "kind: [\n"})
+
+    rc, err = _run_with_render(render)
+    assert rc == 0, err
 
 
 def _ghost_and_real(tmp_path):

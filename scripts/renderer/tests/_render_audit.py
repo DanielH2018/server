@@ -5,8 +5,8 @@ takes the tags at positions `k`, `k + PARTS`, ... of the sorted `render_targets`
 renders them twice, each time in a subprocess with its own `PYTHONHASHSEED`. The subprocess is
 `_render_audit_child.py`, which installs an audit hook before it imports the renderer. The hook
 ends the process on any `open` outside the repo, the output directory, the stub file and the
-interpreter's own prefixes, on any `socket.connect`, and on any program start but the two
-probes ansible-core's import runs, which the child names in `IMPORT_PROBES`.
+interpreter's own prefixes, on any `socket.connect`, and on any program start. Each render runs
+with ansible-core unimportable, which is the every-tag half of R4's exit criterion 4.
 
 In CI, `check_part` writes one digest line per rendered directory, as `shadow_diff.py digest`
 prints it, to two places. When `GITHUB_STEP_SUMMARY` is set, it appends them to the job
@@ -63,16 +63,9 @@ def run_step(
     spec: dict,
     seed: str = SEEDS[0],
     timeout: float = 60,
-    ansible_tmp: Path | None = None,
 ):
-    """Run one step of `_render_audit_child.py` under the audit hook, from the repo root.
-
-    `ansible_tmp` becomes `ANSIBLE_LOCAL_TEMP`. ansible-core creates that directory when the
-    renderer imports it, and its default is under the invoking user's home.
-    """
+    """Run one step of `_render_audit_child.py` under the audit hook, from the repo root."""
     env = {**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": str(SCRIPTS)}
-    if ansible_tmp is not None:
-        env["ANSIBLE_LOCAL_TEMP"] = str(ansible_tmp)
     return run(
         [sys.executable, str(CHILD), json.dumps(spec)],
         cwd=REPO,
@@ -149,15 +142,15 @@ def check_part(module_file: str, tmp_path: Path, record_property) -> None:
 
     outs = []
     for seed in SEEDS:
-        out, ansible_tmp = tmp_path / f"seed-{seed}", tmp_path / f"ansible-tmp-{seed}"
+        out = tmp_path / f"seed-{seed}"
         spec = {
-            "allow": [str(REPO), str(out), str(stubs), str(ansible_tmp)],
+            "allow": [str(REPO), str(out), str(stubs)],
             "step": "render",
             "out": str(out),
             "tags": tags,
             "stubs": str(stubs),
         }
-        done = run_step(spec, seed, RENDER_TIMEOUT, ansible_tmp)
+        done = run_step(spec, seed, RENDER_TIMEOUT)
         assert done.returncode == 0, f"seed {seed}: {done.stderr}"
         outs.append(out)
 

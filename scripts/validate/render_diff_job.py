@@ -62,7 +62,7 @@ _HAZARD_PREFIXES = (
 )
 # The packages the renderer imports, by their uv.lock names. A census test holds this to the
 # renderer's imports, and the job reads each one's locked dependencies from here.
-RENDERER_DEPENDENCIES = frozenset({"ansible-core", "jinja2", "pyyaml"})
+RENDERER_DEPENDENCIES = frozenset({"jinja2", "pyyaml"})
 _REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9._-]+")
 _ROLE_TASKS = re.compile(r"^ansible/roles/k8s/[^/]+/tasks/")
 _K8S_ROLES = "ansible/roles/k8s/"
