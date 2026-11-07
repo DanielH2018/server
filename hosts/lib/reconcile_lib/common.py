@@ -58,7 +58,8 @@ def _log_timing(message: str) -> None:
     try:
         log(message)
     except OSError:
-        pass  # A closed stderr must not change what a command did or reports.
+        # The unwritten text stays buffered and the shutdown flush would exit 120; devnull drops it.
+        sys.stderr = open(os.devnull, "w")
 
 
 def timed(action: str, call: Callable[[], T]) -> T:

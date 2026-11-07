@@ -81,7 +81,9 @@ homelab_host_reconcile.prom (reconcile_lib/textfile.py).
 
 The journal holds two lines for every command the run calls and for its wait on the dpkg lock:
 `<action> starts` before it and `<action> took <N>s` after it. A run systemd's timeout killed ends
-on the `starts` line of the action it was in (#7490).
+on the `starts` line of the action it was in, when the time ran out inside a command or the lock
+wait (#7490). Python work between commands has no line, so a long gap after a `took` line means
+that work.
 
 HOMELAB_ROOT prefixes every path this reads or writes. Only the tests in hosts/lib/tests/ set it.
 """

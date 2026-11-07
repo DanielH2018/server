@@ -374,7 +374,9 @@ LAN session:
 
 1. Read `journalctl -u homelab-updater -u homelab-reconcile` and fix the cause. Reconcile logs
    `<action> starts` and `<action> took <N>s` around every command it calls. A run its start
-   timeout killed ends on the `starts` line of the action it was in.
+   timeout killed ends on the `starts` line of the action it was in, when the time ran out inside
+   a command or the `dpkg` lock wait. Python work between commands has no line, so a long gap after
+   a `took` line means that work.
 1. When the installed package is fine and the failure was transient, rerun reconcile. The
    command clears the hold only if reconcile passes:
 

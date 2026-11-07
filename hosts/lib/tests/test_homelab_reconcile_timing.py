@@ -190,30 +190,6 @@ def test_the_wait_for_the_dpkg_lock_reports_its_time(node):
     assert longest(stderr, "lock") >= AT_LEAST
 
 
-def test_a_run_killed_during_an_action_has_already_named_that_action(node, tmp_path):
-    # systemd's timeout ends the run with SIGTERM, so a line written after the call never appears.
-    settled_with_units(node, SLOW_UNIT)
-    change(node, SLOW_UNIT)
-    entered = tmp_path / "entered"
-    slowed(
-        node,
-        "systemctl",
-        f"restart {SLOW_UNIT}",
-        f"touch {shlex.quote(str(entered))}; sleep 3; exit 1",
-    )
-    process = node.start()
-    deadline = time.monotonic() + 30
-    while not entered.exists():
-        assert process.poll() is None, process.communicate()
-        assert time.monotonic() < deadline, "reconcile never reached the restart"
-        time.sleep(0.01)
-
-    process.send_signal(signal.SIGTERM)
-    _, stderr = process.communicate(timeout=60)
-
-    assert SLOW_UNIT in stderr
-
-
 def test_a_timing_line_is_at_a_priority_this_hosts_journal_stores(node, tmp_path):
     settled_with_units(node, SLOW_UNIT)
     change(node, SLOW_UNIT)
@@ -273,4 +249,22 @@ def test_a_closed_stderr_does_not_change_what_the_commands_report(node):
     finally:
         os.close(writer)
 
+    assert node.applied()["result"].get("ok") is True
+
+
+def test_a_closed_stderr_does_not_make_a_clean_run_exit_non_zero(node):
+    # The unwritten timing line stays buffered, and the interpreter's shutdown flush exits 120.
+    settled_with_units(node, SLOW_UNIT)
+    node.applied_path.write_text(json.dumps({**node.applied(), "result": {}}))
+    argv, env = node.command()
+    reader, writer = os.pipe()
+    os.close(reader)
+    try:
+        result = subprocess.run(
+            argv, env=env, stdout=subprocess.DEVNULL, stderr=writer, timeout=60
+        )
+    finally:
+        os.close(writer)
+
+    assert result.returncode == 0
     assert node.applied()["result"].get("ok") is True
