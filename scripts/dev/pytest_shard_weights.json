@@ -815,6 +815,8 @@
  "hosts/lib/tests/test_box_initial_setup_part2.py": 14.26,
  "hosts/lib/tests/test_box_k3s_host_half.py": 6.68,
  "hosts/lib/tests/test_builder_component.py": 0.24,
+ "hosts/lib/tests/test_checkout_sync.py": 0.91,
+ "hosts/lib/tests/test_checkout_sync_component.py": 0.14,
  "hosts/lib/tests/test_claude_agent_browser.py": 7.15,
  "hosts/lib/tests/test_claude_agent_home.py": 1.98,
  "hosts/lib/tests/test_claude_artifacts_node_timers.py": 1.95,
