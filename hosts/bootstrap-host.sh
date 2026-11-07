@@ -16,7 +16,9 @@
 #   3  create /etc/homelab/age.key when missing, and print its public key
 #   4  the one-time host steps: the Pi's swap file, its debloat purge, its rsyslog and wpa_supplicant
 #      masks and the removal of rsyslog's text logs; on every host, the networkd-dispatcher mask, the
-#      ssh-users group and the sys user's membership; on a cluster node, the k3s binary
+#      ssh-users group and the sys user's membership; on a cluster node, the k3s binary, with its
+#      unit neither enabled nor started, because the operator starts it after the restores.
+#      daniel-server's one LVM volume comes from the Ubuntu installer, not from this script
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them);
 #      on the Pi, then log2ram from the Azlux source its package ships
@@ -588,6 +590,9 @@ else
 fi
 systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"
+if [ -n "$k3s_unit" ]; then
+    echo "bootstrap-host: $k3s_unit stays stopped until the operator starts it, as docs/host-packages.md, Rebuilding a cluster node, says"
+fi
 # The package ships Azlux's source, so log2ram cannot be one of its Depends. Reconcile starts as
 # the install above ends, holds dpkg's lock briefly and may write /etc/log2ram.conf first. dpkg
 # would stop at a conffile prompt on that file, and upstream's copy already holds the arm's values.
