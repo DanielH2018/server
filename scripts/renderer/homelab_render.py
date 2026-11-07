@@ -112,7 +112,6 @@ from renderer.renderer_lib.restart import outside_secrets, restart_targets
 from renderer.renderer_lib.restart import restart_values, stamp
 from renderer.renderer_lib.restart import source_digests
 from renderer.renderer_lib.context import load_stubs
-from lib.ansible_jinja_env import ansible_local_temp
 from renderer.renderer_lib.host import render_host, render_package, write_packages
 from renderer.renderer_lib.sops_entries import (
     copy_sops_manifests,
@@ -573,27 +572,26 @@ def main(argv: list[str] | None = None) -> int:
             "--all-images writes image contexts, which a stub-mode render never writes, "
             "so it does not take --secret-stubs"
         )
-    with ansible_local_temp():
-        if args.command != "cluster":
-            return packages(
-                args.out, getattr(args, "host", None), getattr(args, "name", None)
-            )
-        # Function-level: a host render must not open the soak's deploy_tools imports.
-        from renderer.renderer_lib.soak import resolve_revision
-
-        try:
-            revision = resolve_revision(args.revision)
-        except ValueError as exc:
-            print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
-            return RENDER_REFUSED
-        return cluster(
-            args.out,
-            args.roles,
-            args.secret_stubs,
-            render=partial(render_placeholders, all_images=args.all_images),
-            shared_only=args.shared_only,
-            revision=revision,
+    if args.command != "cluster":
+        return packages(
+            args.out, getattr(args, "host", None), getattr(args, "name", None)
         )
+    # Function-level: a host render must not open the soak's deploy_tools imports.
+    from renderer.renderer_lib.soak import resolve_revision
+
+    try:
+        revision = resolve_revision(args.revision)
+    except ValueError as exc:
+        print(f"homelab-render: {exc}. Nothing was written.", file=sys.stderr)
+        return RENDER_REFUSED
+    return cluster(
+        args.out,
+        args.roles,
+        args.secret_stubs,
+        render=partial(render_placeholders, all_images=args.all_images),
+        shared_only=args.shared_only,
+        revision=revision,
+    )
 
 
 if __name__ == "__main__":

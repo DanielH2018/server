@@ -26,6 +26,9 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/renderer_lib/derived.py:content_tag` computes each built image's tag
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
   tags a host renders.
+- `scripts/renderer/renderer_lib/filters.py` holds the Ansible-dialect filters, so the renderer
+  imports no ansible-core. `scripts/renderer/tests/test_renderer_filters.py` compares each with
+  ansible-core's while it is installed.
 - `scripts/renderer/shadow_diff.py digest` hashes a render (*Hash a render tree*).
   `scripts/renderer/renderer_lib/shadow.py` holds its library.
 - Four determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
@@ -758,19 +761,17 @@ it means adding or removing modules to match.
 
 Each subprocess runs `scripts/renderer/tests/_render_audit_child.py`, which installs an audit
 hook before it imports the renderer. The hook ends the process on any file open outside the
-repo, the output directory, the stub file, ansible-core's local temp directory and the
-interpreter's prefixes, and on any `socket.connect`. `/dev/null` is the one device it allows.
-It also ends the process on any program start but two: `ip link` and `ldconfig -p`, which
-ansible-core's import runs to read a MAC address for `uuid.getnode` and to find the C library.
-A child process reads the host without an `open` in the process the hook watches, so the hook
-names these two in `scripts/renderer/tests/_render_audit_child.py:IMPORT_PROBES` and refuses
-the rest. No template reads either result, and a rendered byte that depended on one would
-differ between the CI runner's digest lines and daniel-box's. The test points
-`ANSIBLE_LOCAL_TEMP` into its own directory, because ansible-core creates that directory on
-import and its default is under the user's home. The hook lives in a subprocess because Python
-cannot remove an audit hook, and one installed in an xdist worker would outlive the test. The
-CLI sets `ANSIBLE_LOCAL_TEMP` to the system temp directory when the caller has not set it, so
-`homelab_render.py cluster` writes nothing under the home directory either.
+repo, the output directory, the stub file and the interpreter's prefixes, and on any
+`socket.connect`. `/dev/null` is the one device it allows. It also ends the process on any
+program start, because a child process reads the host without an `open` in the process the hook
+watches. The hook lives in a subprocess because Python cannot remove an audit hook, and one
+installed in an xdist worker would outlive the test.
+
+The same subprocess sets `sys.modules['ansible'] = None`, so `import ansible` raises wherever the
+renderer reaches for it, and the four modules together render every tag that way.
+`scripts/renderer/tests/test_renderer_ansible_free.py`
+holds the validator and a host package to the same condition, and proves the condition can fail:
+a shim that makes `renderer_lib/filters.py` import `ansible` ends the render.
 
 In CI, each module writes one `digest_line` per directory it rendered to two places. The job
 log carries each as a line `render digest at <sha> (position <k> of 4): <line>`, which
