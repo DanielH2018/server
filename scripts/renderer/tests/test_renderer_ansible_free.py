@@ -3,7 +3,7 @@
 Each check starts a subprocess that sets `sys.modules['ansible'] = None`, so `import ansible`
 raises wherever the code reaches for it, a deferred import included. The determinism modules
 render every tag the same way (`_render_audit_child.py`). Here are the validator, a host
-package, a filter's refusal, and the red half: a shim that makes `renderer_lib.filters`, which
+package, a filter's refusal, and the red half: a shim that makes `renderer_lib.jinja_filters`, which
 every render imports, import `ansible` first.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_ansible_free.py
@@ -18,11 +18,11 @@ from lib.repo_paths import REPO, SCRIPTS
 from renderer import shadow_diff
 
 BLOCK = "import sys\nsys.modules['ansible'] = None\n"
-# Runs before the renderer's first import of `renderer_lib.filters`.
+# Runs before the renderer's first import of `renderer_lib.jinja_filters`.
 FILTERS_IMPORT_ANSIBLE = """
 class FiltersImportAnsible:
     def find_spec(self, name, path=None, target=None):
-        if name == "renderer.renderer_lib.filters":
+        if name == "renderer.renderer_lib.jinja_filters":
             import ansible
         return None
 sys.meta_path.insert(0, FiltersImportAnsible())

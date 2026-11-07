@@ -8,7 +8,7 @@ hand-written ``bool``, the setup guard had the real ``bool``/``comment``/``to_uu
 plugins, and the unit and config guards had none. A template rendered clean under one guard
 and failed under another for no reason a reader could derive from the template (#2408).
 
-This module registers ONE set: ``renderer_lib/filters.py``'s reimplementations and this repo's
+This module registers ONE set: ``renderer_lib/jinja_filters.py``'s reimplementations and this repo's
 ``filter_plugins/``. ``to_json`` is ``k8s_yaml.to_json_stub``, because a guard renders secrets
 as ``StubUndefined``, and plain-data JSON would abort the render this module exists to
 complete. The renderer's own environment replaces it with ``filters.to_json``.
@@ -173,7 +173,7 @@ def register_ansible_filters(env: Environment) -> Environment:
     import service_tier
     import updater_lag_grace
     from toposort import filter_by_platform
-    from renderer.renderer_lib import filters
+    from renderer.renderer_lib import jinja_filters as filters
 
     env.filters["b64encode"] = filters.b64encode
     env.filters["basename"] = filters.basename

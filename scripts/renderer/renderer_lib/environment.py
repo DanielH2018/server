@@ -26,7 +26,7 @@ from jinja2.runtime import Context
 from lib.ansible_jinja_env import template_env
 from lib.k8s_yaml import make_lookup
 from lib.render_guard import StrictChainableUndefined, pad_to_source_newlines
-from renderer.renderer_lib import filters
+from renderer.renderer_lib import jinja_filters as filters
 from renderer.renderer_lib.dialect import FILTERS, LOOKUPS, TESTS
 
 

@@ -26,7 +26,7 @@ steps, and this page describes each piece once its PR has merged.
 - `scripts/renderer/renderer_lib/derived.py:content_tag` computes each built image's tag
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
   tags a host renders.
-- `scripts/renderer/renderer_lib/filters.py` holds the Ansible-dialect filters, so the renderer
+- `scripts/renderer/renderer_lib/jinja_filters.py` holds the Ansible-dialect filters, so the renderer
   imports no ansible-core. `scripts/renderer/tests/test_renderer_filters.py` compares each with
   ansible-core's while it is installed.
 - `scripts/renderer/shadow_diff.py digest` hashes a render (*Hash a render tree*).
@@ -772,7 +772,7 @@ The same subprocess sets `sys.modules['ansible'] = None`, so `import ansible` ra
 renderer reaches for it, and the four modules together render every tag that way.
 `scripts/renderer/tests/test_renderer_ansible_free.py`
 holds the validator and a host package to the same condition, and proves the condition can fail:
-a shim that makes `renderer_lib/filters.py` import `ansible` ends the render.
+a shim that makes `renderer_lib/jinja_filters.py` import `ansible` ends the render.
 
 In CI, each module writes one `digest_line` per directory it rendered to two places. The job
 log carries each as a line `render digest at <sha> (position <k> of 4): <line>`, which

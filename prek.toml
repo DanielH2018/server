@@ -185,7 +185,7 @@ name = "Validate rendered docker-compose templates"
 entry = "uv run --frozen python scripts/validate/compose_templates.py"
 language = "system"
 pass_filenames = false
-files = "^(scripts/renderer/renderer_lib/filters\\.py|scripts/validate/validate_lib/ok_lines\\.py|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|scripts/validate/validate_lib/ok_lines\\.py|hosts/components/pi-compose/services/[^/]+/compose\\.yaml\\.j2|ansible/templates/[^/]+\\.yml\\.j2|ansible/inventory/(host_vars/[^/]+|group_vars/all)\\.yml|scripts/validate/compose_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Structurally validate the Home Assistant config (pure Python, no Docker): YAML syntax,
 # duplicate keys, broken !include targets, and a syntax parse-check of inline + custom_templates
@@ -279,7 +279,7 @@ pass_filenames = false
 # would leave the hook's selector matching a 197-line facade while its subject sat elsewhere.
 # A host component's templates are in scope since H3.8b, with its component.yml, whose
 # defaults the render reads, and each host's package.yml, which names the host it renders for.
-files = "^(scripts/renderer/renderer_lib/filters\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|release_bin_groups|render_context|render_guard|repo_paths|yaml_fast)\\.py|scripts/validate/validate_lib/(cron_checks|cron_targets|shell_lint)\\.py|ansible/filter_plugins/[^/]+\\.py)$"
+files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|hosts/components/.*|hosts/[^/]+/package\\.yml|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/.*\\.sh\\.j2|ansible/inventory/group_vars/all\\.yml|scripts/validate/shell_templates\\.py|scripts/lib/(ansible_inventory|ansible_jinja_env|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|release_bin_groups|render_context|render_guard|repo_paths|yaml_fast)\\.py|scripts/validate/validate_lib/(cron_checks|cron_targets|shell_lint)\\.py|ansible/filter_plugins/[^/]+\\.py)$"
 
 # Render every systemd unit template (*.service.j2 / *.timer.j2) with stubbed vars PLUS the
 # owning role's real defaults, and verify the output with `systemd-analyze verify`. Neither
@@ -357,7 +357,7 @@ pass_filenames = false
 # changes the verdict for a template the same commit may not touch. secret_rotation.yml is in
 # scope for the same reason — it is the plaintext census of SOPS names (never values), and a
 # secret renamed there without its template is the shape this guard exists to catch.
-files = "^(scripts/renderer/renderer_lib/filters\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/setup/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|host_vars/[^/]+)\\.yml|ansible/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
+files = "^(scripts/renderer/renderer_lib/jinja_filters\\.py|scripts/validate/validate_lib/ok_lines\\.py|ansible/roles/setup/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|host_vars/[^/]+)\\.yml|ansible/secret_rotation\\.yml|scripts/validate/setup_templates\\.py|scripts/lib/ansible_jinja_env\\.py|ansible/filter_plugins/[^/]+\\.py|scripts/lib/(ansible_inventory|cli_help|exit_codes|estate|git|k8s_context|k8s_yaml|render_context|render_guard|repo_paths|yaml_fast)\\.py)$"
 
 # Lint the GitHub Actions workflows themselves. `check-yaml` above only proves they PARSE —
 # nothing until now checked that a job's `needs:` names a job that exists, that a `${{ }}`
@@ -734,7 +734,7 @@ name = "Shell entry points answer --help"
 entry = "uv run --frozen pytest -q -n0 -p no:cacheprovider ansible/tests/repo/test_shell_entry_points_answer_help.py"
 language = "system"
 pass_filenames = false
-files = "(^scripts/renderer/renderer_lib/filters\\.py$|\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(ansible/filter_plugins|scripts/(lib|validate))/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
+files = "(^scripts/renderer/renderer_lib/jinja_filters\\.py$|\\.sh(\\.j2)?$|^ansible/tests/(_[^/]+|repo/test_shell_entry_points_answer_help)\\.py$|^(ansible/filter_plugins|scripts/(lib|validate))/.*\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # The two Renovate-rule modules: renovate.json against the autodeploy denylist, which each
 # k8s role's `k8s_autodeploy` in its defaults and `lib.k8s_roles` decide, and against who

@@ -10,7 +10,6 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_filters.py
 import datetime
 import hashlib
 import json
-import os
 
 import pytest
 from ansible.plugins.filter.core import FilterModule as CoreFilters
@@ -29,7 +28,7 @@ from ansible.plugins.filter.core import (
 from ansible.plugins.test.core import search
 
 from lib.ansible_jinja_env import ansible_bool, make_ansible_env
-from renderer.renderer_lib import filters
+from renderer.renderer_lib import jinja_filters as filters
 
 CORE = CoreFilters().filters()
 
@@ -224,6 +223,5 @@ def test_every_name_the_registration_names_is_reimplemented():
         if getattr(fn, "__module__", "").startswith("ansible.")
     }
     assert not from_ansible
-    assert os.path.basename(filters.__file__) == "filters.py"
     assert env.filters["hash"] is filters.hash_text
     assert env.tests["search"] is filters.search

@@ -36,10 +36,10 @@ outlive H7.
 | Filter | Source | Note |
 |---|---|---|
 | `authelia_service_rules` | `ansible/filter_plugins/` | See the spec case. |
-| `basename` | `filters.py` | See the spec case. |
-| `bool` | `filters.py` | `'false'`, `'no'`, `'0'` and `0` read False. Not Python's `bool()`. |
+| `basename` | `jinja_filters.py` | See the spec case. |
+| `bool` | `jinja_filters.py` | `'false'`, `'no'`, `'0'` and `0` read False. Not Python's `bool()`. |
 | `capitalize` | Jinja | See the spec case. |
-| `combine` | `filters.py` | See the spec case. |
+| `combine` | `jinja_filters.py` | See the spec case. |
 | `default` | Jinja | `default(x, true)` also replaces a falsy value. |
 | `dictsort` | Jinja | See the spec case. |
 | `entry_names` | `ansible/filter_plugins/` | See the spec case. |
@@ -47,9 +47,9 @@ outlive H7.
 | `first` | Jinja | See the spec case. |
 | `flux_components` | `ansible/filter_plugins/` | See the spec case. |
 | `format` | Jinja | See the spec case. |
-| `from_yaml` | `filters.py` | See the spec case. |
+| `from_yaml` | `jinja_filters.py` | See the spec case. |
 | `grafana_deploy_annotated` | `ansible/filter_plugins/` | See the spec case. |
-| `hash` | `filters.py` | Takes the algorithm's name, such as `sha256`. |
+| `hash` | `jinja_filters.py` | Takes the algorithm's name, such as `sha256`. |
 | `homelab_role_label` | `ansible/filter_plugins/` | Re-serialises the text with `homelab/role` on every document. |
 | `homepage_href` | `ansible/filter_plugins/` | See the spec case. |
 | `homepage_widget_url` | `ansible/filter_plugins/` | See the spec case. |
@@ -81,7 +81,7 @@ outlive H7.
 | `string` | Jinja | See the spec case. |
 | `tier_backup_claims` | `ansible/filter_plugins/` | See the spec case. |
 | `tier_priority_class` | `ansible/filter_plugins/` | See the spec case. |
-| `to_json` | `filters.py` | Keeps key order and escapes non-ASCII to `\uXXXX`. No `<` escape, unlike `tojson`. |
+| `to_json` | `jinja_filters.py` | Keeps key order and escapes non-ASCII to `\uXXXX`. No `<` escape, unlike `tojson`. |
 | `tojson` | Jinja | Sorts keys and escapes `<`, `>`, `&` and `'` for HTML. |
 | `trim` | Jinja | See the spec case. |
 | `unique` | Jinja | See the spec case. |
@@ -101,7 +101,7 @@ as a filter named as an argument of `map` does.
 | `equalto` | Jinja. Used by name in `selectattr`. |
 | `in` | Jinja. Used by name in `selectattr`. |
 | `none` | Jinja. |
-| `search` | `filters.py`. A regex search anywhere in the value. |
+| `search` | `jinja_filters.py`. A regex search anywhere in the value. |
 
 ### Lookups
 

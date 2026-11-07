@@ -17,10 +17,10 @@ from lib.proc_testing import run
 # registered fails by name.
 EXPECTED_FILTERS = {
     "bool": "lib.ansible_jinja_env.ansible_bool",
-    "comment": "renderer.renderer_lib.filters.comment",
-    "hash": "renderer.renderer_lib.filters.hash_text",
-    "mandatory": "renderer.renderer_lib.filters.mandatory",
-    "to_uuid": "renderer.renderer_lib.filters.to_uuid",
+    "comment": "renderer.renderer_lib.jinja_filters.comment",
+    "hash": "renderer.renderer_lib.jinja_filters.hash_text",
+    "mandatory": "renderer.renderer_lib.jinja_filters.mandatory",
+    "to_uuid": "renderer.renderer_lib.jinja_filters.to_uuid",
     "filter_by_platform": "toposort.filter_by_platform",
     "authelia_service_rules": "authelia_access.authelia_service_rules",
     "lan_hostnames": "entry_fields.lan_hostnames",
