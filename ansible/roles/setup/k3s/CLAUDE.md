@@ -22,8 +22,8 @@ deployer prints this warning beside the command it suggests, from
 **`--tags k3s` never reaches an agent node, and nothing here needs to.** daniel-server's agent
 half is its package's since H7.34: `hosts/components/k3s-agent/` ships the Longhorn packages, the
 multipath drop-in, the inotify key, the join rules and the address pin, and
-`hosts/bootstrap-host.sh` installs and joins k3s. `tasks/agent.yml` is one task that refuses,
-because `k3s-bringup.yml`'s join play names it until H7.20a. `tasks/static-address.yml` is
+`hosts/bootstrap-host.sh` installs and joins k3s. `tasks/agent.yml` and `tasks/agent_verify.yml` are each one
+task that refuses, because `k3s-bringup.yml`'s join plays name them until H7.20a. `tasks/static-address.yml` is
 daniel-box's pin, and each of its tasks skips `k3s_packaged_hosts`'s hosts. The deployer's join
 and pin printers (`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`) therefore name no
 agent command for this role.

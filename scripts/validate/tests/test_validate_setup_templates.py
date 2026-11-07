@@ -78,7 +78,7 @@ def test_a_defined_variable_is_clean(tmp_path, ctx, known):
     tpl.parent.mkdir(parents=True)
     tpl.write_text(
         'secret: "{{ longhorn_b2_key_id }}"\n'  # SOPS registry
-        'runtime: "{{ hypervisor_staging_net_uuid }}"\n'  # set_fact in a setup-plane task
+        'runtime: "{{ common_release_sha }}"\n'  # set_fact in a setup-plane task
         'inventory: "{{ domain }}"\n'  # group_vars/all.yml
         'magic: "{{ inventory_hostname }}"\n'  # Ansible-supplied
         'required: "{{ nut_monitor_password | mandatory }}"\n'  # the Ansible filter
@@ -138,7 +138,7 @@ def test_runtime_vars_reads_both_set_fact_spellings():
     by returning a set narrower than the tree, which only a named member catches.
     """
     names = v.runtime_vars()
-    assert "hypervisor_staging_net_uuid" in names  # ansible.builtin.set_fact
+    assert "common_release_sha" in names  # ansible.builtin.set_fact
     assert (
         "common_resolver_nameservers" in names
     )  # ansible.builtin.set_fact, another role

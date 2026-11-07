@@ -2013,7 +2013,8 @@ the `manual_plane` clearing, and *Rollback*'s
       `netplan generate` fails on one. `agent_verify.yml`'s Ready and address checks and its
       Longhorn scheduling patch go without a replacement, because `k3s_agent_longhorn_scheduling`
       was `true`, Longhorn's default, and H7.44's cluster-node procedure owns the post-join reads.
-      `agent.yml` stays as one task that refuses, because the join play names it until H7.20a.
+      `agent.yml` and `agent_verify.yml` stay as one task each that refuses, because the join plays
+      name them until H7.20a.
 11. **H7.35** stays alone, because it edits the task files that H6.4a, H6.4b and the H2 PRs it
     names edit. It carries the netplan `manual:` activation, the media-volume `tmpfiles.d`
     lines and the `manual_plane` line for `k3s`. Old H7.9b names disk health and the etcd list

@@ -81,8 +81,7 @@ KNOWN_EDGES = {
         "gitops_deploy",
         "initial_setup",
     },
-    # Copied from the checkout by a literal `src:`; the second through release_bin.yml.
-    "scripts/backup/etcd_restore_drill.sh": {"hypervisor"},
+    # Copied from the checkout through release_bin.yml.
     "scripts/deploy_tools/prune_releases.py": {"k3s"},
 }
 # A module the setup roles ship that sits outside the setup tree since H7.2e: the shared

@@ -16,6 +16,9 @@ from renderer.renderer_lib.host_outputs import OUTPUT_ROOTS
 HOSTS = REPO / "hosts"
 PERSISTED = {
     "homelab-daniel-server:/var/lib/homelab-secrets/etc/nut/upsmon.conf",
+    # Copied into /etc/netplan by homelab-netplan-wifi, which reads it at boot before the secrets
+    # unit could render a tmpfs copy.
+    "homelab-daniel-server:/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml",
     "homelab-daniel-box:/var/lib/homelab-secrets/etc/nut/upsmon.conf",
 }
 # Packages the census must find, so a glob that stops matching cannot empty it.

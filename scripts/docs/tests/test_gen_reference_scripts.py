@@ -319,7 +319,7 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         # the `./scripts/deploy.sh --tags` command, and the classifier cites that file. A person
         # also runs it by hand; the gate is simply a caller the classifier can see.
         "deploy.sh": "gate",
-        "etcd_restore_drill.sh": "gate",  # a role copies it; its crons hide behind wrappers
+        "etcd_restore_drill.sh": "adhoc",  # a package ships it, and its cron names a full path
     }
     assert {name: verdicts[name][0] for name in expected} == expected
 

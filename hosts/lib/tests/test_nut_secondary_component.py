@@ -75,8 +75,8 @@ def render_with(tmp_path, component: dict):
 
 
 def test_a_role_outside_the_allowlist_is_refused(tmp_path):
-    with pytest.raises(RenderRefused, match="role 'k3s' is not one of"):
-        render_with(tmp_path, {"role": "k3s", "files": []})
+    with pytest.raises(RenderRefused, match="role 'gitops_deploy' is not one of"):
+        render_with(tmp_path, {"role": "gitops_deploy", "files": []})
 
 
 def test_a_role_template_with_no_role_is_refused(tmp_path):
@@ -174,6 +174,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     others = (
         "claude-code",
         "host-maintenance",
+        "hypervisor",
         "integrity-scans",
         "k3s-agent",
         "worktree-sweep",

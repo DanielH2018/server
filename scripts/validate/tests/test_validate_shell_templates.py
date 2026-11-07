@@ -82,6 +82,7 @@ def test_discover_templates_finds_the_known_set():
         "pi-recovery-health.sh.j2",
         "pi-watchdog-health.sh.j2",
         "etcd-restore-drill-vm.sh.j2",
+        "etcd-drill-prepare.sh.j2",
         "sync-artifacts.sh.j2",
         "longhorn-backup-health.sh.j2",
         "longhorn-restore-drill.sh.j2",
@@ -214,9 +215,7 @@ def test_component_defaults_and_host_reach_the_render_context():
 def test_hostvars_carries_every_hosts_inventory_address():
     # A `hostvars` stub here once replaced render_context's whole map with daniel-server alone,
     # so the etcd drill's fence rendered `STUB` where daniel-box's and daniel-pi's addresses go.
-    path = (
-        v.ROLES / "setup" / "hypervisor" / "templates" / "etcd-restore-drill-vm.sh.j2"
-    )
+    path = v.COMPONENTS / "hypervisor" / "templates" / "etcd-restore-drill-vm.sh.j2"
     text = sl.render_template(path, v.template_context(path))
     box, pi = (
         yaml_fast.safe_load((HOST_VARS / f"{h}.yml").read_text())["server_ip"]

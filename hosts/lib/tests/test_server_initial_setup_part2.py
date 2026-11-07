@@ -109,7 +109,7 @@ def test_the_weekly_reboot_pings_this_hosts_check(package, tmp_path, context):
     ]
 
 
-def test_reconcile_adopts_the_ssh_rules_and_leaves_the_k3s_and_hand_added_rules(
+def test_reconcile_adopts_the_ssh_and_join_rules_and_leaves_the_hand_added_rule(
     package, tmp_path, context
 ):
     node = seeded_pi(package, tmp_path)
@@ -119,7 +119,7 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_k3s_and_hand_added_rules(
     )
     node.state["users"] = {"claude": 995}
     lan = context["lan_subnet"]
-    server = "192.0.2.10"
+    server = "10.0.0.215"
     # The live rules in `ufw status` order (2026-10-31): the k3s agent's five join rules carry no
     # comment, and the 45876 allow from the pod network has no writer in the repo.
     others = [
@@ -139,13 +139,29 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_k3s_and_hand_added_rules(
         "fail": [],
     }
 
+    for objects in package.libvirt.values():
+        for declared in objects:
+            xml = node.root / declared["path"].lstrip("/")
+            xml.parent.mkdir(parents=True, exist_ok=True)
+            xml.write_bytes(package.files[declared["path"]][0])
+
     result = node.run()
 
     assert result.returncode == 0, result.stderr
+    join = [
+        "k3s-join-vxlan",
+        "k3s-join-kubelet",
+        "k3s-join-node-exporter",
+        "k3s-join-memberlist-tcp",
+        "k3s-join-memberlist-udp",
+    ]
     assert [tuple(r) for r in node.state["ufw"]["rules"]] == [
         (LAN.format(lan=lan), "homelab:keep:lan-ssh"),
         tuple(others[0]),
         ("limit 22/tcp", "homelab:keep:ssh-limit"),
-    ] + [tuple(r) for r in others[1:]]
+    ] + [
+        (rule[0], f"homelab:keep:{name}")
+        for rule, name in zip(others[1:], join, strict=True)
+    ]
     ufw = [c["argv"][1:] for c in node.calls("ufw")]
     assert not [a for a in ufw if a[:1] in (["--force"], ["default"], ["delete"])]

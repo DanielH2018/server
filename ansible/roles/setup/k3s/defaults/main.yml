@@ -125,6 +125,7 @@ k3s_secrets_encryption: true
 # deploy-plane change.
 k3s_packaged_hosts:
   node-address: [daniel-server]
+  inotify: [daniel-server]
 
 # The restore drill itself is the `longhorn-restore-drill` Flux role's (H2.3d): its schedule, its
 # volume pin, its size cap, its content floor, its timeout, its probe image and its empty-volume

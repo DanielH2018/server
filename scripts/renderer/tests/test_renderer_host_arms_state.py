@@ -85,9 +85,7 @@ def test_a_network_renders_with_the_host_context_and_reconcile_accepts_the_secti
         pytest.param(
             f"<network><name>other</name><uuid>{UUID}</uuid></network>", id="name"
         ),
-        pytest.param(
-            f"<filter><name>staging</name><uuid>{UUID}</uuid></filter>", id="root"
-        ),
+        pytest.param(f"<filter name='staging'><uuid>{UUID}</uuid></filter>", id="root"),
         pytest.param("<network><name>staging</name>", id="not-xml"),
     ],
 )
@@ -244,3 +242,15 @@ def test_every_host_package_in_the_tree_renders_a_manifest_reconcile_accepts():
     for name in names:
         manifest = _manifest(host_mode.render_host(name))
         _reconcile().parse_manifest(json.dumps(manifest))
+
+
+def test_an_nwfilter_is_named_by_its_roots_attribute(hosts):
+    """libvirt holds a filter's name in `<filter name=...>`, where a network has a child element."""
+    component = {"libvirt": {"nwfilters": [{"name": "fence", "src": "f.xml.j2"}]}}
+    named = f"<filter name='fence' chain='root'><uuid>{UUID}</uuid></filter>"
+    root = hosts({"components": ["c"]}, {"c": component}, {"f.xml.j2": named})
+    package = host_mode.render_host("daniel-pi", root)
+    assert [o["name"] for o in package.libvirt["nwfilters"]] == ["fence"]
+    other = f"<filter name='other' chain='root'><uuid>{UUID}</uuid></filter>"
+    with pytest.raises(RenderRefused, match="libvirt"):
+        _render_xml(hosts, component, {"f.xml.j2": other})

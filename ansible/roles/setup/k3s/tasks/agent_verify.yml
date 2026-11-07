@@ -1,0 +1,9 @@
+---
+# DECIDED: this stays a task file that refuses, for the reason tasks/agent.yml gives: the verify
+# play in k3s-bringup.yml names it until H7.20a.
+- name: Refuse the verification, which belongs to the join bootstrap-host.sh owns
+  tags: [k3s_agent]
+  ansible.builtin.fail:
+    msg: >-
+      k3s-bringup.yml no longer joins an agent, so there is no join to verify. Run
+      hosts/bootstrap-host.sh on the agent, then read `kubectl get node`.
