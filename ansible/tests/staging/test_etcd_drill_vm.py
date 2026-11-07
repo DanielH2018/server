@@ -147,7 +147,8 @@ def _prepare(tmp_path) -> tuple[Path, Path]:
     write_exec(stubs / "usermod", f'#!/bin/sh\necho "usermod $*" >> {calls}\n')
     write_exec(stubs / "chgrp", "#!/bin/sh\n")
     write_exec(stubs / "curl", f'#!/bin/sh\necho "curl" >> {calls}\n')
-    write_exec(stubs / "sha256sum", "#!/bin/sh\nexit 0\n")
+    # Drain stdin: a stub that exits first can SIGPIPE the script's `echo |` under pipefail.
+    write_exec(stubs / "sha256sum", "#!/bin/sh\ncat > /dev/null\nexit 0\n")
     write_exec(
         stubs / "ssh-keygen",
         f'#!/bin/sh\necho "ssh-keygen" >> {calls}\n'
