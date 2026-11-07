@@ -14,7 +14,7 @@ the shlex-split leaves intact (verified: single-quoted survives, bare-quoted doe
 ansible/roles/setup/k3s/tasks/server.yml's comment for the same reasoning).
 
 This trap recurs: ansible/roles/setup/k3s/tasks/server.yml,
-ansible/roles/setup/k3s/tasks/agent_verify.yml and ansible/roles/k8s/pihole/tasks/roll_one.yml
+ansible/roles/k8s/pihole/tasks/roll_one.yml
 all carry the quoted form, which is why it is an executable check rather than a comment.
 
 shlex strips backslashes as readily as it strips double quotes, and `\.` is how a jsonpath
@@ -44,7 +44,7 @@ _SKIP_DIRS = {"collections"}  # vendored third-party, not ours to fix
 # starts with a quote right after `=` and is excluded by the negative lookahead.
 #
 # Both safe spellings have to be excluded, because this repo uses both: `jsonpath='{...}'`
-# (pihole/roll_one.yml, setup/k3s/agent_verify.yml) and `'jsonpath={...}'` (volume-revert's
+# (pihole/roll_one.yml) and `'jsonpath={...}'` (volume-revert's
 # argv list). The lookbehind covers the second — without it the checks below flag correctly
 # quoted code, which is how a guard gets weakened or deleted rather than obeyed.
 _UNQUOTED_JSONPATH_WITH_DOUBLE_QUOTE = re.compile(r"(?<!')jsonpath=(?!')\S*\"")

@@ -1,0 +1,59 @@
+# The KVM/libvirt host, its fenced `staging` network and the monthly etcd restore drill (H7.34,
+# docs/target-architecture/host/h7-delete-ansible.md, old step H7.13). The `hypervisor` setup role
+# wrote all of it; the role is an unconditional `end_role` until H7.20a. CLAUDE.md beside this file
+# holds the rules and the autonomous-role contract.
+#
+# What a package cannot ship, `etcd-drill-prepare` makes before each run: the checksum-pinned base
+# image, the guest's pinned host key, and the seed ISO that embeds the private half.
+depends:
+  - qemu-system-x86
+  - qemu-utils
+  - libvirt-daemon-system
+  - libvirt-clients
+  - virtinst
+  - xorriso
+  - curl
+libvirt:
+  networks:
+    - {name: staging, src: templates/staging-network.xml.j2}
+  nwfilters:
+    - {name: staging-egress-fence, src: templates/staging-nwfilter.xml.j2}
+files:
+  - {src: templates/etcd-restore-drill-vm.sh.j2, dst: /usr/lib/homelab/etcd-restore-drill-vm, mode: "0755"}
+  - {src: templates/etcd-drill-prepare.sh.j2, dst: /usr/lib/homelab/etcd-drill-prepare, mode: "0755"}
+  - {shared: etcd_restore_drill.sh, dst: /usr/lib/homelab/etcd-drill/etcd-restore-drill.sh, mode: "0755"}
+  - {src: files/etcd-drill-guest-run.sh, dst: /usr/lib/homelab/etcd-drill/etcd-drill-guest-run.sh, mode: "0755"}
+  - {src: files/suc_rehearsal.py, dst: /usr/lib/homelab/etcd-drill/suc_rehearsal.py, mode: "0755"}
+  - {src: files/suc-rehearsal-guest-run.sh, dst: /usr/lib/homelab/etcd-drill/suc-rehearsal-guest-run.sh, mode: "0755"}
+  - {src: templates/etcd-drill-vm.xml.j2, dst: /usr/lib/homelab/etcd-drill/etcd-drill.xml}
+  - {src: templates/etcd-drill-meta-data.j2, dst: /usr/lib/homelab/etcd-drill/meta-data}
+  - {src: templates/etcd-drill-user-data.j2, dst: /usr/lib/homelab/etcd-drill/user-data.in}
+  - {src: units/homelab-etcd-restore-drill.service.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.service}
+  - {src: units/homelab-etcd-restore-drill.timer.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.timer}
+outputs:
+  # The R2 credentials the orchestrator copies into the guest for a run. The bucket also holds every
+  # Longhorn backup, so the file stays root's alone, and it lives on tmpfs between runs.
+  - src: templates/etcd-drill-s3.env.j2
+    path: /etc/homelab/etcd-drill-s3.env
+    destination: etcd-drill/s3.env
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [r2_access_key_id, r2_secret_access_key, r2_bucket, r2_account_id]
+enable:
+  homelab-etcd-restore-drill.timer: {target: timers.target, when: hypervisor_etcd_drill_armed}
+legacy:
+  - {path: /etc/cron.d/etcd-restore-drill-vm}
+  - {path: /usr/local/bin/etcd-restore-drill-vm}
+  - {path: /usr/local/lib/etcd-restore-drill.sh}
+  - {path: /usr/local/lib/etcd-drill-guest-run.sh}
+  - {path: /usr/local/lib/suc_rehearsal.py}
+  - {path: /usr/local/lib/suc-rehearsal-guest-run.sh}
+  - {path: /etc/libvirt/declared-networks/staging.xml}
+  - {path: /etc/libvirt/declared-networks/staging-egress-fence.xml}
+  - {path: /etc/libvirt/declared-networks/etcd-drill.xml}
+  - {path: /etc/libvirt/declared-networks}
+  # libvirt's `default` network would bring up virbr0 and a NAT ruleset on a host that runs flannel's
+  # and kube-router's chains. The libvirt arm never touches an object it did not declare, so the
+  # autostart link libvirt's postinst creates retires here, and etcd-drill-prepare stops the network.
+  - {path: /etc/libvirt/qemu/networks/autostart/default.xml}

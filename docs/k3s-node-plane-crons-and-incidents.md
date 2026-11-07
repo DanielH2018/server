@@ -226,19 +226,11 @@ route the link's `[DHCP] RouteMetric`, or 1024 when there is none. netplan 1.1.2
 therefore dropped enp88s0's RA route to 1024, behind wlo1's 600, and IPv6 egress took wlo1
 (#4561). The template sets `dhcp6: true` with `dhcp6-overrides: {route-metric: 100}`. That adds
 no client in practice: the gateway's RA sets the M flag, so `systemd-networkd` already ran DHCPv6 on the
-link. With both links up, `ip -6 route get 2606:4700:4700::1111` must name `enp88s0`. The join play cannot
-apply the pin: it reaches daniel-server over SSH through a dynamic `include_role`, which
-`--tags node-address` cannot select, and a `netplan apply` there would reconfigure the link
-the session uses. A separate opt-in play imports the same task file statically and runs on
-daniel-server itself. To apply or back out the pin there, run this on daniel-server:
-
-```bash
-uv run ansible-playbook ansible/k3s-bringup.yml \
-  -e pin_agent_address=daniel-server --tags node-address
-```
-
-While `pin_agent_address` is set, the server play matches no hosts, so its server-host guard
-does not refuse the agent. The run touches nothing of the agent join.
+link. With both links up, `ip -6 route get 2606:4700:4700::1111` must name `enp88s0`.
+daniel-server's package ships its pin (`hosts/components/k3s-agent/`), and a change goes live at
+the next boot, because `netplan apply` would reconfigure the link an SSH session rides on. To
+back the pin out there, empty `k3s_node_static_link` in its host_vars: the next package drops the
+files.
 
 ## Both nodes fall back to WiFi when ethernet loses carrier
 

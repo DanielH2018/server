@@ -155,6 +155,7 @@ pythonpath = [
   # The claude-code host component's scripts, which its tests import by bare name the way a
   # role's tests import its `files/` through ansible/roles/conftest.py.
   "hosts/components/claude-code/files",
+  "hosts/components/hypervisor/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
   # how pytest names the test modules under them). Each remaining subdirectory is listed as well
@@ -366,7 +367,7 @@ extra-paths = [
   "ansible/roles/k8s/traefik/files",
   "ansible/roles/k8s/artifacts/files",
   "ansible/roles/setup/k3s/files",
-  "ansible/roles/setup/hypervisor/files",
+  "hosts/components/hypervisor/files",
   "ansible/roles/setup/renovate_notify/files",
   "ansible/roles/setup/renovate_agent/files",
   "hosts/components/claude-code/files",

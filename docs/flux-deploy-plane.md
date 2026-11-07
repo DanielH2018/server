@@ -713,11 +713,12 @@ step 6 applies. The Ansible k8s play creates neither object.
     kubectl -n flux-system wait kustomization/<tag> --for=condition=Ready --timeout=600s
     ```
 
-    Wait until each reads `Ready`. Then run the agent join and the storage smoke test, which
-    both need Longhorn:
+    Wait until each reads `Ready`. Then join the agent and run the storage smoke test, which
+    both need Longhorn. The first command runs on daniel-server, and the operator supplies the
+    server token from `docs/break-glass.md` item 2:
 
     ```bash
-    uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent
+    K3S_URL=https://<daniel-box>:6443 K3S_TOKEN=<token> sudo -E hosts/bootstrap-host.sh daniel-server
     sudo .venv/bin/python -B scripts/diagnostics/storage_smoke.py
     ```
 

@@ -20,6 +20,15 @@ from lib.deployer_park import (
     read_manual_plane_marker,
 )
 from gitops_markers import MARKERS
+import gitops_markers
+
+
+@pytest.fixture(autouse=True)
+def _agent_tables_hold_k3s(monkeypatch):
+    """The printers' tables are empty since H7.34, and H7.53 deletes the printers with the deployer."""
+    monkeypatch.setitem(gitops_markers.AGENT_JOIN_TAGS, "k3s", "k3s_agent")
+    monkeypatch.setitem(gitops_markers.AGENT_PIN_TAGS, "k3s", "node-address")
+
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
 _MARKER = "abc1230000000000000000000000000000000000 1000"

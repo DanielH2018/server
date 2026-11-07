@@ -6,7 +6,7 @@ is install-only: flipping a host to has_docker: false skips the role entirely, a
 declarative reaps what Docker left behind, so `has_docker: false` in host_vars describes an
 intention that no code converges to.
 
-So hypervisor and gitops_deploy dispatch internally on their flags, each with an install half
+So gitops_deploy dispatches internally on their flags, each with an install half
 and a teardown half. docker_install kept only its teardown half when H7.26 moved the install
 into the Pi's package. This asserts the shape stays that way: a tasks/main.yml that includes one
 file `when: <flag>` must also include one `when: not <flag>`. Roles gated in a playbook
@@ -40,7 +40,6 @@ _NEGATIVE = re.compile(r"^\s*when:\s*not\s+(has_\w+)\s*$", re.M)
 # this guard could go green while checking less than it did.
 KNOWN_DISPATCHERS = frozenset(
     {
-        ("hypervisor", "has_hypervisor"),
         ("gitops_deploy", "has_gitops"),
     }
 )

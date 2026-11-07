@@ -1,4 +1,4 @@
-<!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
+<!-- hosts/components/hypervisor. -->
 <!--
   The egress fence for every guest on the staging network. One drop rule per production range
   — the LAN, the cluster's pod CIDR and its Service CIDR — applied at the guest's own tap
@@ -56,7 +56,7 @@
          virsh -c qemu:///system destroy <the domain holding it>
          virsh -c qemu:///system nwfilter-undefine {{ hypervisor_staging_nwfilter_name }}
 
-       then re-run the role, which redefines the filter. That refusal is a feature: a referenced
+       and the next reconcile defines the filter again. That refusal is a feature: a referenced
        fence cannot be removed out from under a running guest. -->
   <uuid>{{ hypervisor_staging_nwfilter_name | to_uuid }}</uuid>
   <!-- DECIDED: the cluster's pod and Service ranges are fenced alongside the LAN, and the

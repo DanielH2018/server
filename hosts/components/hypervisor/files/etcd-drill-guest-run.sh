@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # etcd-drill-guest-run.sh — the half of the etcd restore drill that runs INSIDE the throwaway
-# guest. Copied in by etcd-restore-drill-vm (roles/setup/hypervisor) together with the k3s
+# guest. Copied in by etcd-restore-drill-vm (hosts/components/hypervisor) together with the k3s
 # binary, the cluster token and the R2 env file, at the paths scripts/backup/etcd_restore_drill.sh
 # already reads — so that script runs here unmodified, as /usr/local/bin/etcd-restore-drill.
 #
@@ -21,7 +21,7 @@
 # Exit code is the drill's own: 0 only when the snapshot restored and served its objects.
 #
 # Usage: etcd-drill-guest-run [--detached]
-# Not run by hand. The etcd-restore-drill-vm cron on daniel-server stages it in the guest as
+# Not run by hand. homelab-etcd-restore-drill.service on daniel-server stages it in the guest as
 # /usr/local/bin/etcd-drill-guest-run and calls it over ssh as root. --detached starts the run
 # in the background and returns at once; the output lands in /var/tmp/etcd-drill.out and the
 # exit code in /var/tmp/etcd-drill.rc. It reads /etc/rancher/k3s/etcd-s3.env

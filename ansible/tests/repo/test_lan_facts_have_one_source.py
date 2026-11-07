@@ -91,7 +91,7 @@ ALLOWLIST: list[tuple[str, str]] = [
         "hostvars['daniel-box'].server_ip)",
     ),
     (
-        r"^ansible/roles/setup/hypervisor/defaults/main\.yml$",
+        r"^hosts/components/hypervisor/defaults/main\.yml$",
         "the source definition site for the hypervisor's own staging-net gateway/DHCP range "
         "(DECIDED comment above: chosen against a census of daniel-server's routes, not a "
         "copy of staging_net_cidr)",

@@ -2,11 +2,10 @@
 """Guards the k3s install tasks' `when:` now that SUC owns both nodes' versions.
 
 SUC's `k3s-server` Plan has been the only writer of daniel-box's version since H6.3c, and its
-`k3s-agent` Plan the only writer of daniel-server's since H6.3d. So neither install task may
+`k3s-agent` Plan the only writer of daniel-server's since H6.3d. So the install task may not
 mention `k3s_version` in its `when:`: a pin bump would make Ansible reinstall the binary SUC is
-replacing, and the two writers would fight over it. Each task runs for a missing binary alone
-(a fresh host): the flags are each host's package's, daniel-box's since H6.4b and
-daniel-server's since H6.5b.
+replacing, and the two writers would fight over it. The server's task runs for a missing binary alone
+(a fresh host), and hosts/bootstrap-host.sh is the agent's install since H7.34.
 
 Each test here encodes a way the guard regresses while everything still reads green:
 
@@ -19,9 +18,6 @@ Each test here encodes a way the guard regresses while everything still reads gr
     which leaves its register undefined — and it is the guard consuming it two tasks later
     that fails, not the read. That is the same shape as the repo's
     check-mode-breaks-downstream-consumers class, and grepping for `retries:` would miss it.
-
-  * The agent stops reading its own binary. The agent is a separate host, so the server's
-    reading says nothing about it.
 
 Run: uv run pytest ansible/tests/setup/test_k3s_version_guard.py
 """
@@ -37,11 +33,6 @@ K3S_TASKS = K3S_ROLE / "tasks"
 # (task file, install-task name, the register its binary read must fill)
 INSTALLS = [
     ("server.yml", "Install the k3s server", "k3s_installed_version"),
-    (
-        "agent.yml",
-        "Install the k3s agent",
-        "k3s_agent_installed_version",
-    ),
 ]
 
 
@@ -63,7 +54,7 @@ def _version_reads(filename: str) -> list[dict]:
 
 @pytest.mark.parametrize(
     "filename,name,register,subcommand",
-    [(*INSTALLS[0], "server"), (*INSTALLS[1], "agent")],
+    [(*INSTALLS[0], "server")],
 )
 def test_the_install_passes_no_flags(filename, name, register, subcommand) -> None:
     """The package owns each node's flags, so the installer gets a bare subcommand."""
@@ -114,26 +105,3 @@ def test_version_read_is_non_fatal_and_idempotent() -> None:
             assert task.get("changed_when") is False, (
                 f"{filename}: reading a version is not a change."
             )
-
-
-def test_each_host_reads_its_own_version() -> None:
-    """The agent must not share the server's register.
-
-    They are different hosts. One register across both would let the agent's guard read the
-    server's binary, so a missing agent binary would never be installed.
-    """
-    registers = set()
-    for filename, name, expected_register in INSTALLS:
-        reads = _version_reads(filename)
-        found = {t.get("register") for t in reads}
-        assert expected_register in found, (
-            f"{filename}: expected the version read to register "
-            f"{expected_register!r}, found {found!r}"
-        )
-        assert expected_register in str(_named(filename, name).get("when", "")), (
-            f"{filename}: the install guard does not consult {expected_register!r}"
-        )
-        registers |= found
-    assert len(registers) == len(INSTALLS), (
-        f"server and agent must use distinct registers, got {registers!r}"
-    )

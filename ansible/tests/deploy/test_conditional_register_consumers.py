@@ -89,7 +89,7 @@ _KNOWN_TASK_FILES = frozenset(
     {
         # Each of these holds a consumer flagged through the `stdout_lines`/`stderr_lines`/`delta`
         # entries in SKIP_MISSING or through a when-gated producer under the check-mode rule.
-        "setup/hypervisor/tasks/teardown.yml",
+        "k8s/volume-revert/tasks/claim.yml",
     }
 )
 

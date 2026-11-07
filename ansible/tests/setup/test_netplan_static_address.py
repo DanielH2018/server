@@ -12,6 +12,8 @@ from lib import yaml_fast
 from _setup_render import render_setup_text
 
 _TEMPLATE = "netplan-static-address.yaml.j2"
+# daniel-server's package owns its pin, so each task of the file skips it.
+PACKAGED_GUARD = "inventory_hostname not in k3s_packaged_hosts['node-address']"
 # Both k3s nodes. daniel-box's pin runs from k3s-bringup.yml's server play, daniel-server's
 # from its agent-address play (#3891).
 _NODES = ("daniel-box", "daniel-server")
@@ -123,14 +125,16 @@ def test_emptying_the_link_removes_the_pin_and_reapplies() -> None:
     assert len(removal) == 1, (
         "no task removes the pin when k3s_node_static_link is empty"
     )
-    assert removal[0]["when"] == "k3s_node_static_link | length == 0"
+    assert removal[0]["when"] == [PACKAGED_GUARD, "k3s_node_static_link | length == 0"]
     flag = f"{removal[0]['register']}.changed"
     commands = [t for t in tasks if "ansible.builtin.command" in t]
     assert {t["ansible.builtin.command"]["cmd"] for t in commands} == {
         "netplan generate",
         "netplan apply",
     }
-    assert all(flag in t["when"] for t in commands), "removal does not trigger netplan"
+    assert all(flag in t["when"][-1] for t in commands), (
+        "removal does not trigger netplan"
+    )
 
 
 def _agent_pin_play_problems(plays: list[dict]) -> list[str]:
@@ -217,14 +221,14 @@ def linkdown_sysctl_problems(tasks: list[dict]) -> list[str]:
         problems.append(f"value is {args.get('value')!r}, not '1'")
     if args.get("sysctl_file") != _LINKDOWN_FILE:
         problems.append(f"writes {args.get('sysctl_file')}, not {_LINKDOWN_FILE}")
-    if task.get("when") != "k3s_node_static_link | length > 0":
+    if task.get("when") != [PACKAGED_GUARD, "k3s_node_static_link | length > 0"]:
         problems.append("does not run exactly when a link is pinned")
     removal = [
         t
         for t in tasks
         if t.get("ansible.builtin.file", {}).get("path") == _LINKDOWN_FILE
         and t["ansible.builtin.file"].get("state") == "absent"
-        and t.get("when") == "k3s_node_static_link | length == 0"
+        and t.get("when") == [PACKAGED_GUARD, "k3s_node_static_link | length == 0"]
     ]
     if len(removal) != 1:
         problems.append("no task removes the sysctl file when the link is emptied")

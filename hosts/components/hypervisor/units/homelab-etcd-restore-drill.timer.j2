@@ -1,0 +1,12 @@
+# Shipped by the host package's hypervisor component with its enable link, while
+# hypervisor_etcd_drill_armed holds. etcd_drill_full_cron is also what the textfile deadline sizes.
+{% set cron = etcd_drill_full_cron.split() %}
+[Unit]
+Description=Run the full etcd restore drill monthly
+
+[Timer]
+OnCalendar=*-*-{{ '%02d' % (cron[2] | int) }} {{ '%02d' % (cron[1] | int) }}:{{ '%02d' % (cron[0] | int) }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

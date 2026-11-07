@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from diagnostics.probe_lib import gitops_view as view
 from lib.exit_codes import PROBE_UNREADABLE
 
+
 SHA = "2d25ced3" + "0" * 32
 NOW = 1_800_000_000.0
 

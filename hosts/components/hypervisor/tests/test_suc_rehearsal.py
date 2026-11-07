@@ -4,7 +4,7 @@ Each decision has an accept case and the reject cases that a silent pass would h
 verdict tests matter most: a rehearsal that passes on a Kustomization that is red for another
 reason, or on a Plan that never ran, proves nothing about the Plan it was run for.
 
-Run: uv run pytest ansible/roles/setup/hypervisor/tests/test_suc_rehearsal.py
+Run: uv run pytest hosts/components/hypervisor/tests/test_suc_rehearsal.py
 """
 
 import copy

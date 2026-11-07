@@ -2019,6 +2019,18 @@ the `manual_plane` clearing, and *Rollback*'s
     drill reads (`etcd-snapshots`, from H2.8a), and the drill run once by hand, then from its
     timer. `hypervisor/tasks/teardown.yml`'s removals become legacy entries in the packages of
     the hosts it applied to.
+    - **The S3 folder** stays `etcd-snapshots`, under the prefix `offbox-`: H2.8a's drop-in sets
+      `etcd-s3-folder: etcd-snapshots` and `etcd-snapshot-name: offbox`, so native snapshots keep
+      the shape the drill's guest lists. H2.8c reads only whether retention prunes the retired
+      script's objects, and the guest takes the newest object either way, so H7.34 does not read it.
+    - **What the plan left open, as built.** The wifi fallback holds SOPS values, so it is an
+      output that `homelab-netplan-wifi` copies into `/etc/netplan` after netplan's generator
+      accepts it. A package symlink there would dangle while the output is missing, and
+      `netplan generate` fails on one. `agent_verify.yml`'s Ready and address checks and its
+      Longhorn scheduling patch go without a replacement, because `k3s_agent_longhorn_scheduling`
+      was `true`, Longhorn's default, and H7.44's cluster-node procedure owns the post-join reads.
+      `agent.yml` and `agent_verify.yml` stay as one task each that refuses, because the join plays
+      name them until H7.20a.
 11. **H7.35** stays alone, because it edits the task files that H6.4a, H6.4b and the H2 PRs it
     names edit. It carries the netplan `manual:` activation, the media-volume `tmpfiles.d`
     lines and the `manual_plane` line for `k3s`. Old H7.9b names disk health and the etcd list

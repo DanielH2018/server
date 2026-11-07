@@ -318,3 +318,4 @@
     state: present
     reload: true
   become: true
+  when: inventory_hostname not in k3s_packaged_hosts['inotify']

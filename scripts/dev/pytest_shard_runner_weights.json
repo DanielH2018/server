@@ -183,7 +183,7 @@
  "ansible/roles/setup/homelab_builder/tests/test_host_package_builder_stage.py": 0.81,
  "ansible/roles/setup/homelab_builder/tests/test_host_package_builder_tools.py": 0.21,
  "ansible/roles/setup/homelab_builder/tests/test_repo_signer.py": 1.63,
- "ansible/roles/setup/hypervisor/tests/test_suc_rehearsal.py": 5.58,
+ "hosts/components/hypervisor/tests/test_suc_rehearsal.py": 5.58,
  "ansible/roles/setup/initial_setup/tests/test_worktree_holders.py": 0.01,
  "ansible/roles/setup/k3s/tests/test_longhorn_backup_grace_cron.py": 1.51,
  "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py": 26.72,

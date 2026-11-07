@@ -32,17 +32,18 @@ def test_the_package_ships_the_three_components_and_activates_ssh_and_journald(p
     assert "/etc/apt/apt.conf.d/52unattended-upgrades-local" in package.files
 
 
-def test_the_sysctl_edits_equal_the_pis_without_its_two_memory_keys():
+def test_the_sysctl_edits_are_the_pis_without_its_memory_keys_plus_the_agents_inotify_key():
     server = host_mode.render_host("daniel-server")
     pi = host_mode.render_host("daniel-pi")
 
     def lines(pkg):
         return {e["line"] for e in pkg.lines if e["path"] == SYSCTL}
 
-    assert len(lines(server)) == 20
+    assert len(lines(server)) == 21
     # vm.swappiness and vm.page-cluster belong to the Pi's zram tuning (pi-tuning), not here.
     pi_only = {"vm.swappiness=130", "vm.page-cluster=0"}
-    assert lines(server) == lines(pi) - pi_only
+    agent_only = {"fs.inotify.max_user_instances=1024"}
+    assert lines(server) == (lines(pi) - pi_only) | agent_only
 
 
 def test_the_apt_origin_patterns_include_the_servers_github_cli_origin(package):

@@ -24,8 +24,8 @@ rejoin and the Longhorn reattach, and it has never been done.
 
 ## The full drill runs monthly in a throwaway guest
 
-`roles/setup/hypervisor` installs `etcd-restore-drill-vm` on daniel-server (its `etcd_drill.yml`),
-a root cron on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first day of each month, 11:20 UTC). One run:
+`hosts/components/hypervisor` ships `etcd-restore-drill-vm` on daniel-server,
+and `homelab-etcd-restore-drill.timer` runs it as root on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first day of each month, 11:20 UTC). One run:
 
 1. builds a transient libvirt guest (`etcd-drill`, 2 GiB / 2 vCPU / 20 G) from the same pinned
    cloud image as the staging guest, on the staging network and behind its egress fence — the
@@ -46,10 +46,11 @@ a root cron on `etcd_drill_full_cron` (`inventory/group_vars/all.yml`: the first
 5. stamps `/var/lib/etcd-restore-drill/last-success-full` on daniel-server and writes the verdict
    to the `etcd-restore-drill-vm` textfile. `EtcdRestoreDrillFailed` (critical) reads the verdict,
    and `EtcdRestoreDrillNotReporting` reads the file against a deadline
-   (`etcd_drill_full_kuma_interval_s`, 35 days) that derives from the cron's period.
+   (`etcd_drill_full_kuma_interval_s`, 35 days) that derives from the timer's period.
 
-To run it by hand on daniel-server: `sudo /usr/local/bin/etcd-restore-drill-vm`. It takes a lock,
-so a run that overlaps the cron refuses rather than building a second guest.
+To run it by hand on daniel-server: `sudo systemctl start homelab-etcd-restore-drill.service`, and
+read it with `journalctl -u homelab-etcd-restore-drill`. It takes a lock,
+so a run that overlaps the timer refuses rather than building a second guest.
 
 What this proves and does not: everything the script header says — the off-box snapshot is
 complete, readable by this k3s version, and its object graph comes back. It does not exercise the
@@ -209,7 +210,7 @@ level=fatal msg="Error: failed to get CA certs: Get \"https://127.0.0.1:1/cacert
 ```
 
 To list with no k3s server, send R2 a SigV4 `ListObjectsV2` request. The monthly drill guest has
-no k3s server and lists the same way, in `ansible/roles/setup/hypervisor/files/etcd-drill-guest-run.sh`.
+no k3s server and lists the same way, in `hosts/components/hypervisor/files/etcd-drill-guest-run.sh`.
 
 ```bash
 sudo -i
@@ -359,8 +360,9 @@ sudo rm -rf /var/lib/rancher/k3s/agent/client-*.crt /var/lib/rancher/k3s/agent/c
 sudo systemctl start k3s-agent
 ```
 
-If it does not rejoin, re-run the documented join:
-`uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server`.
+If it does not rejoin, run the join on daniel-server, with the server token from
+`docs/break-glass.md` item 2:
+`K3S_URL=https://<daniel-box>:6443 K3S_TOKEN=<token> sudo -E hosts/bootstrap-host.sh daniel-server`.
 
 [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
 `docs/host-packages.md` covers a replacement host on the package path, either node.
