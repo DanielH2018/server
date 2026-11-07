@@ -12,7 +12,7 @@ GITHUB_TOKEN or GH_TOKEN (optional). Stdlib only.
 Usage: renovate_notify.py [--dry-run]
 
 Run by renovate-notify.service from renovate-notify.timer (daily), installed as
-/opt/renovate-notify/renovate_notify.py. `--dry-run` logs what it would post instead of
+/usr/lib/homelab/renovate-notify/renovate_notify.py. `--dry-run` logs what it would post instead of
 calling Discord, and persists neither the fingerprint nor the liveness marker. `-h` and
 `--help` print this text.
 """

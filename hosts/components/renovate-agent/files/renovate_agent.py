@@ -18,7 +18,7 @@ Stdlib only.
 Usage: renovate_agent.py   (takes no arguments; -h/--help prints this text)
 
 Run by renovate-agent.service from renovate-agent.timer (daily), installed as
-/opt/renovate-agent/renovate_agent.py. To start a tick by hand, run
+/usr/lib/homelab/renovate-agent/renovate_agent.py. To start a tick by hand, run
 `sudo systemctl start renovate-agent`. RENOVATE_AGENT_CONFIG overrides the config path.
 REPO, REPO_DIR and PROMPT_FILE are required in the config file.
 """
