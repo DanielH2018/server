@@ -18,7 +18,7 @@ What can silently re-arm the mutation:
   * `rollout restart` losing its explicit guard — same always-changed render means it fires on
     every dry run, restarting the live Deployment;
   * `verify_secret_keys` losing its guard — it `kubectl patch`es live Secrets;
-  * a role gaining a cluster write outside roles/k8s/manifests without a `k8s_no_mutate`
+  * a role gaining a cluster write without a `k8s_no_mutate`
     guard, so that role half-applies under a dry run.
 
 The last one is checked by re-deriving the census from the role sources rather than by
@@ -33,7 +33,6 @@ from lib import yaml_fast
 from _helpers import ALL_VARS, REPO
 from _role_census import role_dirs, role_task_files
 
-# The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
 from _k8s_guards import (
     _GUARD_FACT,
     _chunk_mutates,
@@ -67,7 +66,7 @@ def _mutates_outside_manifests(role: Path) -> bool:
 
 
 def _bypasses_manifests(role: Path) -> bool:
-    """A role that never includes roles/k8s/manifests applies its objects some other way."""
+    """A role whose tasks never name the manifests role applies its objects some other way."""
     main = role / "tasks/main.yml"
     return main.exists() and "manifests" not in main.read_text()
 

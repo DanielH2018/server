@@ -337,7 +337,7 @@ def k8s_tags(host_vars: Path = K8S_HOST_VARS) -> set[str]:
     }
 
 
-# Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`
+# Manifest basenames the renderer renders from a shared template under `ansible/templates/`
 # when the owning role ships none of its own, mapped to that template's file name. Mirrors
 # The manifests role's two defaults the render reads. A role with no `manifests_prune` of its own
 # arms the prune and renders the `homelab/role` label, and one with no
@@ -444,7 +444,7 @@ def _cached_k8s_entries() -> dict[str, dict]:
 def resolved_manifest_files(
     role, k8s_roles=None, entry=None
 ) -> tuple[set[str], set[str]]:
-    """`(manifests_files, manifests_secret_files)` as `k8s/manifests` resolves them for `role`.
+    """`(manifests_files, manifests_secret_files)` as the renderer resolves them for `role`.
 
     A list the role sets wins. Otherwise the list is derived:
 
@@ -493,7 +493,7 @@ def resolved_manifest_files(
 
 
 def declared_manifest_files(role, k8s_roles=None, entry=None) -> set[str]:
-    """Every manifest basename `k8s/manifests` renders into `role`'s staging directory.
+    """Every manifest basename the renderer renders for `role`.
 
     Its files and its secret files, as `resolved_manifest_files` resolves them. The deploy
     renders exactly these, so this is also the list an offline harness has to cover to render
@@ -504,7 +504,7 @@ def declared_manifest_files(role, k8s_roles=None, entry=None) -> set[str]:
 
 
 def manifest_template(role, basename, k8s_roles=None, entry=None) -> Path | None:
-    """The template `k8s/manifests` renders `basename` from for `role`, or None if it renders none.
+    """The template the renderer renders `basename` from for `role`, or None if it renders none.
 
     The role's own `templates/<basename>.j2` first, then the shared default under
     `ansible/templates/` for a basename the role resolves into `manifests_files` and ships
@@ -527,7 +527,7 @@ def manifest_template(role, basename, k8s_roles=None, entry=None) -> Path | None
 
 
 def shared_default_templates(role, k8s_roles=None, entry=None) -> list[Path]:
-    """The shared templates `k8s/manifests` renders for `role` because it ships none itself.
+    """The shared templates the renderer renders for `role` because it ships none itself.
 
     Sorted, so a harness iterating this renders in a stable order.
     """
@@ -541,7 +541,7 @@ def shared_default_templates(role, k8s_roles=None, entry=None) -> list[Path]:
     )
 
 
-# The shared template `k8s/manifests` renders once per entry of a role's `k8s_claims`, as
+# The shared template the renderer renders once per entry of a role's `k8s_claims`, as
 # `claim-<name>.yaml`. One template, many renders, so a harness cannot find these claims by
 # walking templates: it renders this once per context `claim_contexts` returns.
 CLAIM_TEMPLATE = SHARED_TPL / "claim-default.yaml.j2"

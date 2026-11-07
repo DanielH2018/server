@@ -32,6 +32,11 @@ _ROLE_RUN = re.compile(
     r"((?:\{\{[^}]*\}\}|[^\s\"'{}])+\.py)\b"
 )
 _JINJA = re.compile(r"\{\{\s*([\w|. ]+?)\s*\}\}")
+# Templates no task renders, so no host runs their commands. The setup-drift reader still compares
+# this one's bytes on a host that has not retired its fragment (#7561).
+UNRENDERED_TEMPLATES = frozenset(
+    {"setup/initial_setup/templates/loki-read-route-health.sh.j2"}
+)
 
 
 def _role_of(path: Path) -> Path:
@@ -219,6 +224,7 @@ def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
         if (
             path.suffix not in {".yml", ".yaml", ".j2"}
             or "tests" in path.relative_to(ROLES).parts
+            or path.relative_to(ROLES).as_posix() in UNRENDERED_TEMPLATES
             or not path.is_file()
         ):
             continue

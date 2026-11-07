@@ -13,7 +13,7 @@ array. Anything else is DOWN, including a body that parses but carries no label 
 answering with an empty label set means the read path returns nothing useful, which is what the
 operator's `loki-query` would hit next.
 
-Shipped by the homelab-daniel-box package's loki-route-witness component to
+Shipped by the loki-route-witness component to
 /usr/lib/homelab/ and run by /usr/lib/homelab/loki-read-route-health. Stdlib only: the wrapper runs it through
 `uv run --no-project` on the pinned interpreter, so it resolves no project and needs no
 dependencies of its own.

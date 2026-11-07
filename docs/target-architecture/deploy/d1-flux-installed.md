@@ -1193,7 +1193,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
     - Add the task that deletes `ocirepository/verify-drill` while the lever is false, from
       *Decisions*.
     - Add `"flux-sync": "flux"` to `KNOWN_DEFERRED_DIRS` in
-      `ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py`.
+      `test_deferred_manifest_dir_is_reserved.py`, deleted with the role tasks it read.
     - The self-rollout test from D1.2 gains a case over this PR's render: the new
       `secret.yaml.j2` changes the secret render, and no controller is expected to roll.
     - Land with `land.sh --tags flux`. Within two minutes the OCIRepository resolves `prod`.

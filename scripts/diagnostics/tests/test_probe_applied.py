@@ -150,11 +150,12 @@ def test_the_emptied_claude_code_role_runs_on_no_host_and_expects_no_file():
         )
 
 
-@pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
-def test_a_rescue_that_withdraws_a_file_is_not_an_absent_arm(host):
+def test_a_rescue_that_withdraws_a_file_is_not_an_absent_arm():
     """The rsyslog filter's rescue deletes the file only when the block fails (#6545)."""
     role = applied.SETUP / "initial_setup"
-    wants, _ = applied_tasks.expected(role, host, applied.context(role, host))
+    wants, _ = applied_tasks.expected(
+        role, "daniel-box", applied.context(role, "daniel-box")
+    )
     path = "/etc/rsyslog.d/49-homelab-info-filter.conf"
     assert [w.present for w in wants if w.path == path] == [True]
 

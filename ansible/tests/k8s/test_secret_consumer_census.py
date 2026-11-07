@@ -55,7 +55,7 @@ def _phantom_tags(name: str, tags) -> list[str]:
     """Tags claiming a role that does not reference the secret.
 
     A `monitor_bridge_*` token routed by name prefix to a role that renders it NOWHERE makes
-    `rotate --deploy` write a new value, deploy the wrong role, leave the real pusher on the
+    `rotate --commit` write a new value, deploy the wrong role, leave the real pusher on the
     old token and stamp `last_rotated` green. This makes the `grep -rl` check repeatable.
     """
     census = _consumers(name)
@@ -63,7 +63,7 @@ def _phantom_tags(name: str, tags) -> list[str]:
 
 
 def _setup_plane_blind_spots(name: str, tags) -> list[str]:
-    """Setup-plane consumers of a secret that `rotate --deploy` believes it can finish.
+    """Setup-plane consumers of a secret that `rotate --commit` believes it can finish.
 
     A non-empty `consumer_tags()` means the unattended path will rotate, deploy those tags and
     record success. `deploy.sh` derives valid tags from `containers_list`, so a setup-plane
@@ -171,7 +171,7 @@ def test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret(
 
     assert not phantom, (
         f"{name} routes to {phantom}, which reference it nowhere in ansible/roles/. "
-        "`rotate --deploy` would deploy that role, leave the real consumer on the old value, "
+        "`rotate --commit` would deploy that role, leave the real consumer on the old value, "
         "and stamp last_rotated green."
     )
 

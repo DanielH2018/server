@@ -16,11 +16,9 @@ checking that argv. Injecting the runner instead lets a test drive the REAL buil
 asserting what it hands the process.
 """
 
-import contextlib
 import datetime as dt
 import glob
 import os
-import subprocess
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from types import MappingProxyType
@@ -29,8 +27,7 @@ from zoneinfo import ZoneInfo
 import yaml
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
-# directory on sys.path, and pyproject's `pythonpath` is a pytest setting. `sys` is spelled
-# `_sys` throughout so `run_deploy` below shares the one import the bootstrap needs.
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 import sys as _sys
 from pathlib import Path as _Path
 
@@ -117,33 +114,6 @@ def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
         fh.write(body)
 
 
-def run_deploy(tags: list[str], *, run: Callable = subprocess.run) -> int:
-    """Redeploy the rotated secrets' consumers; returns the playbook's exit code."""
-    cmd = [
-        "uv",
-        "run",
-        # --frozen: never mutate uv.lock (parity with the GitOps deployer) — a lock
-        # rewrite here leaves the tree dirty and wedges the next weekly run's
-        # clean-tree check in secret-rotate.sh.
-        "--frozen",
-        "ansible-playbook",
-        "ansible/deploy.yml",
-        "--tags",
-        ",".join(sorted(tags)),
-    ]
-    print("  deploying:", " ".join(cmd))
-    # Ansible exits at import on a non-blocking stdout or stderr, and Claude Code's
-    # Bash tool hands its child both with O_NONBLOCK set. The flag lives on the open
-    # file description this process shares with the child, so clearing it here clears
-    # it for ansible; anywhere else it is already clear and this does nothing. The
-    # .claude/hooks/uv-python.py fixup cannot reach here — this command names ansible
-    # nowhere a hook reading the session's command text could see it.
-    for handle in (_sys.stdin, _sys.stdout, _sys.stderr):
-        with contextlib.suppress(OSError, ValueError):
-            os.set_blocking(handle.fileno(), True)
-    return run(cmd, cwd=REPO).returncode
-
-
 def tree_owners() -> dict[str, str]:
     """Each k8s deploy tag whose `containers_list` entry carries `owner`, to that value.
 
@@ -204,7 +174,6 @@ class RotationTools:
     sops_names: Callable[..., list[str]] = sops_names
     host_file_keys: Callable[[], frozenset[str]] = host_file_keys
     sops_set: Callable[[str, str], None] = sops_set
-    deploy: Callable[[list[str]], int] = run_deploy
     owners: Callable[[], Mapping[str, str]] = tree_owners
     cluster_tree: Callable[[], Tree] = cluster_tree
     cluster_expected: Callable[[], Expected] = cluster_expected

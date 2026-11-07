@@ -1,4 +1,4 @@
-# Shipped by homelab-daniel-box with its enable link. Hourly at minute 23, which keeps it off the
+# Shipped with its enable link. Hourly at minute 23, which keeps it off the
 # :00 and :30 slots the */10 and */30 health checks already crowd.
 [Unit]
 Description=Loki read-route witness (timer)

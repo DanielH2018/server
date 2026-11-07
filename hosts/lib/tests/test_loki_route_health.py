@@ -5,10 +5,15 @@ refuses a host arrives as exit 0 with the body `404 page not found`. The accept
 half below is the live response measured from daniel-server; the reject halves are
 that 404 and the two shapes a route can answer while carrying nothing.
 
-Run: uv run pytest ansible/roles/setup/initial_setup/tests/test_loki_route_health.py
+Run: uv run pytest hosts/lib/tests/test_loki_route_health.py
 """
 
-from loki_route_health import verdict
+import runpy
+
+from lib.repo_paths import REPO
+
+READER = REPO / "hosts/components/loki-route-witness/loki_route_health.py"
+verdict = runpy.run_path(str(READER))["verdict"]
 
 # Measured from daniel-server, `uv run python scripts/diagnostics/probe.py loki-labels`.
 LIVE = (

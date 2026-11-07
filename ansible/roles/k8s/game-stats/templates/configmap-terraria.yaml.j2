@@ -6,8 +6,7 @@
 # lookup('file'), not a template: the scripts are Jinja-hostile, since their Prometheus
 # exposition strings carry {…} braces. The lookup's text is not templated again.
 #
-# Rendered here, inside the manifests, so a script edit changes the render. While Ansible owns
-# the role, k8s/manifests' rollout restart rolls the pod on that; under Flux, the renderer's
+# Rendered here, inside the manifests, so a script edit changes the render. The renderer's
 # `checksum/restart` hashes this ConfigMap because the pod names it in `volumes`.
 apiVersion: v1
 kind: ConfigMap

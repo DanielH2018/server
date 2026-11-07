@@ -1,7 +1,7 @@
 """`declared_manifest_files` reads every value shape a caller writes a file list in.
 
 The offline render harnesses ask this which manifests a role renders, so they can render
-the shared default `k8s/manifests` would render for a basename the role ships no template for.
+the shared default the renderer would render for a basename the role ships no template for.
 A shape it fails to read returns fewer names, the harness renders one manifest fewer,
 and every guard built on the corpus passes with less coverage than yesterday.
 

@@ -456,12 +456,12 @@ def test_remaining_setup_hosts_note_stays_empty_for_pr_1241():
     template that `tasks/crons.yml` installs on one host alone. The role-level reach
     said all three hosts and the landing exited 1 with `needs-manual-apply`, prescribing
     two playbook runs that change nothing -- 7 of the 18 such verdicts in the two days to
-    2026-09-05 had this shape. The Loki witness is the role's one-host template: daniel-box's
-    witness is a host-package component, so this task installs it on daniel-server alone."""
+    2026-09-05 had this shape. The holder scan's socket is the role's one-host template: every
+    other host's package owns or retires it, so this task installs it on daniel-box alone."""
     files = [
-        "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2",
+        "ansible/roles/setup/initial_setup/templates/worktree-holders.socket.j2",
     ]
-    assert land_reach.remaining_setup_hosts_note(files, "daniel-server") == ""
+    assert land_reach.remaining_setup_hosts_note(files, "daniel-box") == ""
 
 
 def test_setup_file_hosts_reads_a_role_markdown_as_shipped_nowhere(

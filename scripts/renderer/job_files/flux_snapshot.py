@@ -20,7 +20,7 @@ server's CA reaches `urlopen` through `SSL_CERT_FILE`, which the Job sets. Stand
 only. Exit 0 when every claim is snapshotted or skipped, 1 on the first failure, naming it.
 
 Run: python3 flux_snapshot.py (in the Job; it takes no arguments)
-     uv run pytest ansible/roles/k8s/manifests/tests/test_flux_snapshot.py
+     uv run pytest scripts/renderer/tests/test_flux_snapshot.py
 """
 
 import argparse
