@@ -26,7 +26,7 @@ registry_k8s_size: 10Gi
 # Its own claim, because every ghcr.io image in the cluster pulls through it: 27 distinct
 # images on 2026-10-18, tdarr's and valheim's among them. Its TTL is zero so nut's image
 # survives a long gap between rebuilds, which leaves the weekly GC's offline prune
-# (setup/k8s_host_files/files/ghcr-mirror-prune.sh, #5541) as the only thing that reclaims it. Losing it costs
+# (hosts/components/registry-gc/files/ghcr-mirror-prune.sh, #5541) as the only thing that reclaims it. Losing it costs
 # re-pulls from ghcr.io, not data, hence longhorn-nobackup.
 registry_k8s_ghcr_mirror_claim: registry-ghcr-mirror
 registry_k8s_ghcr_mirror_size: 30Gi
@@ -72,22 +72,21 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # caller was Ansible-owned, because under Flux its scale-down of deploy/registry would have a
 # second writer on `spec.replicas` (D5, Wave D's registry bullet).
 #
-# The weekly garbage collection: the ghcr-mirror-gc-job manifest, the script, its state directory
-# and the cron that runs it. False for a cluster whose alerting should not hear about this
+# The weekly garbage collection: daniel-box's `registry-gc` host component, which holds a copy of
+# each key here that it reads. False for a cluster whose alerting should not hear about this
 # registry — registry-gc.sh writes its result to the registry-gc textfile and pings
 # healthchecks.io, so leaving it on elsewhere reports a foreign registry's health to a real
 # operator, which is what k3s_manage_health_crons exists to prevent.
 #
-# Skip-only, matching every sibling flag in this repo: turning it off on a host that already
-# has the cron installs nothing and removes nothing. A removal arm would be the one shape the
-# `oneshot-plays-run-local` hazard makes dangerous — a host-gated `state: absent` run against
-# the wrong host deletes quietly. Uninstall by hand if a cluster ever needs it.
+# False in a host's host_vars drops the component's files and timer from that host's next
+# package version.
 registry_k8s_manage_gc: true
 
 #
 # Sunday 04:20 — after the 03:30 Longhorn backup group and the weekly 07:30 host reboot's blast
 # radius, and off the 30-min gitops-deploy tick's busiest hours. GC takes the ghcr-mirror offline
-# for its duration, so this wants the quietest window available.
+# for its duration, so this wants the quietest window available. The component's timer carries
+# the same time as a literal, and its test holds the two equal.
 registry_k8s_gc_cron_weekday: "0"
 registry_k8s_gc_cron_hour: "4"
 registry_k8s_gc_cron_minute: "20"

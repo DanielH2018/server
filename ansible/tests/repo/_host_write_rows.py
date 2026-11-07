@@ -220,7 +220,7 @@ HOST_WRITES = Census(
         ),
     ),
     # Every task file of a role with a `containers_list` entry is a member, whether or not it
-    # writes. registry's GC moved to `k8s_host_files` and left no k8s role with a host write, so a
+    # writes. registry's GC moved to a host component and left no k8s role with a host write, so a
     # count of writes would match nothing and ask for the row's deletion. The row stays as the
     # guard that no k8s role grows one, and its red cases prove the offence still fires.
     min_matches=3,

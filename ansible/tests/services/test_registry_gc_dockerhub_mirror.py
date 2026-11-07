@@ -19,9 +19,9 @@ from pathlib import Path
 from _shell_render import rendered_shell_function, rendered_shell_text
 from lib.proc_testing import run
 
-_SCRIPT = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
+_SCRIPT = rendered_shell_text("components", "registry-gc", "registry-gc.sh.j2")
 FUNCTIONS = "\n".join(
-    rendered_shell_function("setup", "k8s_host_files", "registry-gc.sh.j2", name)
+    rendered_shell_function("components", "registry-gc", "registry-gc.sh.j2", name)
     for name in (
         "use_dockerhub_store",
         "ghcr_refs",

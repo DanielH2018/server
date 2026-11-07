@@ -10,7 +10,8 @@ metadata:
   namespace: {{ k8s_namespace }}
 data:
   ghcr-mirror-prune.sh: |
-{{ lookup('file', playbook_dir + '/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh') | indent(4, true) }}
+{% set prune_script %}{% include 'files/ghcr-mirror-prune.sh' %}{% endset %}
+{{ prune_script | indent(4, true) }}
 ---
 # Prune and collect the dockerhub-mirror store (#6536), as ghcr-mirror-gc-job.yaml.j2 does the
 # ghcr-mirror's. That template's comments hold for each line here. registry-gc.sh scales only

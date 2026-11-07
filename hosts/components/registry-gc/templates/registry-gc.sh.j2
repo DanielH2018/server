@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Registry garbage collection — managed by Ansible (k8s/registry role); edits overwritten.
+# Registry garbage collection — shipped by the registry-gc component; edits overwritten.
 #
 # WHY THIS EXISTS: the ghcr-mirror Deployment (ghcr-mirror.yaml.j2) runs with REGISTRY_PROXY_TTL
 # 0s, so nothing expires an image it cached, and its store grows with every upgrade of any
@@ -38,10 +38,9 @@
 # own Jobs and their keep-set ConfigMaps; keep it that way.
 #
 # ONE LOCK FOR THE WHOLE RUN. The script holds an flock on registry_k8s_gc_lock_file from
-# before the scale-down until after the restore, and the registry deploy restores a mirror it
-# finds at zero only under the same lock (tasks/main.yml), so the deploy can never put the pod
-# back while this run prunes the store (#5736). The kernel drops the lock when the process
-# dies, however it dies.
+# before the scale-down until after the restore, so anything that restores a mirror under the
+# same lock can never put the pod back while this run prunes the store (#5736). The kernel drops
+# the lock when the process dies, however it dies.
 #
 # A STAMP THAT OUTLIVES THE RUN. /var/lib/registry-gc/ghcr-mirror-down, and dockerhub-mirror-down
 # beside it, exists from just before the scale-down until that mirror is serving again. A run killed in between leaves it behind,
@@ -60,12 +59,12 @@
 # a fixed order, so the store fills over the following weeks.
 #
 # Usage: registry-gc.sh (no arguments)
-# Runs from the registry-gc root cron on daniel-box, weekly at the time set by
-# registry_k8s_gc_cron_weekday, _hour and _minute. For each mirror in turn it scales the
-# Deployment to 0, runs its Job from /etc/rancher/k3s/manifests/registry-jobs/ (the prune and
-# garbage-collect), scales the mirror back and warms it. It writes the result to the
-# registry-gc textfile on every run, and pings healthchecks.io when a key is configured.
-# It reads /etc/rancher/k3s/k3s.yaml and /usr/local/lib/homelab-check-lib.sh, and keeps its
+# homelab-registry-gc.service runs it as root on daniel-box, weekly at the time its timer holds.
+# For each mirror in turn it scales the Deployment to 0, runs its Job from
+# /etc/rancher/k3s/manifests/registry-jobs/ (the prune and garbage-collect), scales the mirror
+# back and warms it. It writes the result to the registry-gc textfile on every run, and pings
+# healthchecks.io when the unit's credential holds a key.
+# It reads /etc/rancher/k3s/k3s.yaml and /usr/lib/homelab/homelab-check-lib.sh, and keeps its
 # state in /var/lib/registry-gc.
 
 set -uo pipefail
@@ -77,19 +76,19 @@ for arg in "$@"; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t registry-gc "homelab-check-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t registry-gc "homelab-check-lib.sh missing — install homelab-daniel-box on this host"
   exit 1
 }
 
-# The longest legitimate gap between two textfile writes: the weekly cron plus two hours for the
+# The longest legitimate gap between two textfile writes: the weekly timer plus two hours for the
 # worst run, the interval the deleted Kuma `Registry GC` tile had. RegistryGcNotReporting in
 # observability's rules/registry.yaml reads it, and
 # ansible/tests/services/test_registry_gc_watchers_cover_the_worst_run.py pins all three.
 DEADLINE_S=612000
 
-# Cron's default PATH (/usr/bin:/bin) omits /usr/local/bin, where the k3s installer puts the
-# binary. Without this every kubectl call below silently resolves to nothing.
+# The k3s installer puts the binary in /usr/local/bin. A run from a bare environment lacks it, and
+# every kubectl call below would silently resolve to nothing.
 export PATH="/usr/local/bin:${PATH}"
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
@@ -114,15 +113,15 @@ FAILED=0
 COMPLETED=0
 STATE_DIR=/var/lib/registry-gc
 STATE_FILE="${STATE_DIR}/state.json"
-# The stamp and the lock the header describes. tasks/main.yml names the lock too.
+# The stamp and the lock the header describes.
 MIRROR_STAMP="${STATE_DIR}/ghcr-mirror-down"
 LOCK_FILE={{ registry_k8s_gc_lock_file }}
-# The mirror's loopback hostPort. This cron runs on the registry node, which reaches it there,
+# The mirror's loopback hostPort. This unit runs on the registry node, which reaches it there,
 # as that node's registries.yaml entry does.
 MIRROR_URL="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_ghcr_mirror_port }}"
 # Every manifest type a registry can store, as node-exporter's mirror pull checks send.
 ACCEPT=application/vnd.oci.image.index.v1+json,application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.list.v2+json,application/vnd.docker.distribution.manifest.v2+json
-WARM_BUDGET_S={{ k8s_host_files_ghcr_mirror_warm_budget_s }}
+WARM_BUDGET_S={{ registry_gc_ghcr_mirror_warm_budget_s }}
 # The upstream's refs write_mirror_keep_set read, one `<repo>@<digest>` or `<repo>:<tag>` per line.
 WARM_REFS=""
 
@@ -137,7 +136,7 @@ use_dockerhub_store() {
   MIRROR_JOB_MANIFEST=$DOCKERHUB_JOB_MANIFEST
   MIRROR_STAMP="${STATE_DIR}/dockerhub-mirror-down"
   MIRROR_URL="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_dockerhub_mirror_port }}"
-  WARM_BUDGET_S={{ k8s_host_files_dockerhub_mirror_warm_budget_s }}
+  WARM_BUDGET_S={{ registry_gc_dockerhub_mirror_warm_budget_s }}
   WARM_REFS=""
   MIRROR_STARTED=0 MIRROR_DONE=0 MIRROR_DOWN=0 MIRROR_NOTE="" MIRROR_MSG=""
 }
@@ -165,8 +164,9 @@ finish() {
   # files it audits by matching HC_PING_KEY / HC_URL, so a locally-renamed variable drops this
   # script out of the parametrization and the guards silently stop being checked.
   local HC_PING_KEY=""
-  # shellcheck source=/dev/null
-  [[ -r /etc/healthchecks/ping.env ]] && . /etc/healthchecks/ping.env
+  if [[ -r "${CREDENTIALS_DIRECTORY:-/nonexistent}/healthchecks_ping_key" ]]; then
+    HC_PING_KEY="$(<"$CREDENTIALS_DIRECTORY/healthchecks_ping_key")"
+  fi
   if [[ -n "$HC_PING_KEY" ]]; then
     local HC_URL="https://hc-ping.com/${HC_PING_KEY}/registry-gc"
     [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
@@ -215,7 +215,7 @@ restore_mirror_store() {
   return 1
 }
 
-# The mirror MUST come back even if GC dies, the deadline trips, or cron kills us. Without this
+# The mirror MUST come back even if GC dies or the deadline trips. Without this
 # a failed run leaves the cluster unable to pull that upstream's images during a WAN outage until
 # a human notices, which is the outage the mirror exists to prevent.
 scale_up_and_report() {

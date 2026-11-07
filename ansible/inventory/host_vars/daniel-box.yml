@@ -734,7 +734,7 @@ containers_list:
   - name: registry
     platform: k8s
     # Flux applies registry through `promote`, and the `registry-verify` Jobs replace the
-    # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host cron and the
+    # self-tests and the netpol probe (D5, Wave D). `registry-gc.sh` stays a host script and the
     # one writer of ghcr-mirror's replicas (#5732).
     owner: flux
     tier: platform

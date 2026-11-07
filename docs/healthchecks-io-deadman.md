@@ -17,7 +17,7 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `daniel-box-disk-health` | `roles/setup/k3s/templates/disk-health.sh.j2` | `/` over the headroom threshold, or `df` fails |
 | `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-token-drift.sh.j2` | the cluster token changed since the off-box copy was stamped, or the token or its stamp cannot be read |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
-| `registry-gc` | `roles/setup/k8s_host_files/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
+| `registry-gc` | `hosts/components/registry-gc/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
 | `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
 | `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
@@ -162,12 +162,12 @@ The `{{ sys_user }}`-run scripts are `0755` (their crons must execute them), so 
 in them is readable by every local account on daniel-box. The ping key spoofs every check in the
 project, so it lives in
 `/etc/healthchecks/ping.env` at `0640 root:{{ sys_user }}` and is sourced at runtime. That
-covers every caller: `etcd-token-drift` and `registry-gc` run as root, the other two as
+covers every caller: `etcd-token-drift` runs as root, the other two as
 `{{ sys_user }}`. Same shape as `/etc/renovate-notify/config.env`.
 
-(`registry-gc.sh` is `0700 root:root` — a root-only cron, so it never needed the `0755` the
-others do. The env file is still the right home for the key: keeping it out of the scripts is
-what makes the mode of any one of them stop mattering.)
+`registry-gc.sh` is `0700 root:root` and reads the key from its unit's
+`healthchecks_ping_key` credential instead. Its unit uses `ImportCredential=`, so a missing key
+skips the ping and the collection still runs.
 
 For `pi-peer-backup` the URL is a key in the existing k8s Secret, not a file on a host.
 
@@ -257,7 +257,7 @@ The `/10`-minute checks report within ten minutes of the deploy. To force the da
 ```bash
 sudo /usr/local/bin/etcd-token-drift.sh   # compares the token with its stamp, changes nothing
 sudo k3s kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup
-sudo /usr/local/bin/registry-gc.sh   # scales the ghcr-mirror down for the duration — see below
+sudo systemctl start homelab-registry-gc.service   # scales each mirror down for the duration — see below
 ```
 
 Forcing `registry-gc` is not free: it takes the ghcr-mirror offline while the GC job runs, so

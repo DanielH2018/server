@@ -23,11 +23,14 @@ The `registries.yaml` half is `ansible/tests/setup/test_k3s_registries_mirror_gh
 NetworkPolicy half is in `ansible/tests/k8s/test_registry_netpol_grants_follow_the_pinned_node.py`.
 """
 
+import functools
 import re
 
 import pytest
 
 from lib import yaml_fast
+from lib.repo_paths import REPO
+from renderer.renderer_lib import host as host_mode
 from _manifest_guards import K8S, _render, _role_context
 from _shell_render import rendered_shell_text
 
@@ -35,14 +38,22 @@ ROLE = "registry"
 CTX = _role_context(ROLE, domain="example.com")
 
 
-HOST_FILES = K8S.parent / "setup" / "k8s_host_files"
+GC_COMPONENT = REPO / "hosts" / "components" / "registry-gc"
+GC_JOB_DIR = "/etc/rancher/k3s/manifests/registry-jobs"
+
+
+@functools.cache
+def _box_package() -> host_mode.Package:
+    return host_mode.render_host("daniel-box")
 
 
 def _docs(template: str) -> list[dict]:
-    # The GC Job renders from the setup role since the conversion, with registry's context:
-    # test_k8s_host_files_pairs.py holds its copies of the registry keys equal to the originals.
-    base = HOST_FILES if template.endswith("gc-job.yaml.j2") else K8S / ROLE
-    rendered = _render(base / "templates" / template, **CTX)
+    # A GC Job renders only in host mode, which reads the prune script from the component.
+    if template.endswith("gc-job.yaml.j2"):
+        name = template.removesuffix(".j2")
+        rendered = _box_package().files[f"{GC_JOB_DIR}/{name}"][0].decode()
+    else:
+        rendered = _render(K8S / ROLE / "templates" / template, **CTX)
     return [d for d in yaml_fast.safe_load_all(rendered) if d]
 
 
@@ -253,7 +264,7 @@ def test_only_the_mirror_stores_have_a_gc_job():
     of deploy/registry would be a second writer on a field Flux renders."""
     templates = sorted(
         p.name
-        for base in (K8S / ROLE, HOST_FILES)
+        for base in (K8S / ROLE, GC_COMPONENT)
         for p in (base / "templates").glob("*gc-job.yaml.j2")
     )
     assert templates == [
@@ -307,7 +318,7 @@ def test_the_mirror_prune_reads_an_optional_keep_set_and_the_script_verbatim(sto
         and d["metadata"]["name"]
         == volumes[f"{store}-prune-script"]["configMap"]["name"]
     ]
-    source = (HOST_FILES / "files" / "ghcr-mirror-prune.sh").read_text()
+    source = (GC_COMPONENT / "files" / "ghcr-mirror-prune.sh").read_text()
     assert script["data"]["ghcr-mirror-prune.sh"] == source
 
 
@@ -348,15 +359,15 @@ def test_the_service_routes_each_port_to_one_deployment_by_name():
 
 
 def test_registry_gc_applies_the_mirror_manifests_the_deploy_stages():
-    """Each mirror's Job is its own file, which the cron reads at GC time (#1669)."""
+    """Each mirror's Job is its own file, which the script reads at GC time (#1669)."""
     reads = re.findall(
         r"^(?:MIRROR|DOCKERHUB)_JOB_MANIFEST=(\S+)$",
-        rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2"),
+        rendered_shell_text("components", "registry-gc", "registry-gc.sh.j2"),
         re.MULTILINE,
     )
     assert len(reads) == 2, reads
-    tasks = (HOST_FILES / "tasks" / "registry.yml").read_text()
+    installed = _box_package().files
     for read in reads:
-        assert f"dest: {read}\n" in tasks, (
-            f"no task stages {read}, the file the cron applies"
+        assert read in installed, (
+            f"the package ships no {read}, the file the script applies"
         )

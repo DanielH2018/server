@@ -1,8 +1,7 @@
 # `setup/k8s_host_files` — the host-side rows of k8s roles, applied through the setup plane
 
 This role holds the host writes that D5 moves out of the k8s roles before each role flips to
-Flux: docs's site directory, traefik's absent arm, registry's
-ghcr-mirror GC, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
+Flux: docs's site directory, traefik's absent arm, the absent arms H2 leaves in crowdsec, configarr, janitorr and qbittorrent,
 media-volume's media
 directories, observability's retired dashboard staging trees. A Flux-owned
 role has no Ansible apply left to carry them, so each lands here in its own conversion PR. The plan is
@@ -22,8 +21,8 @@ The redirect is what a shell with non-blocking stdio needs.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "k8s_host_files"` when `inventory_hostname ==
   'daniel-box'`
-- **Crons (1):**
-  - `Registry garbage collection` — `20 4 * * 0`
+- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
+  `templates/*.timer.j2`)
 <!-- /generated_from -->
 
 ## What it holds
@@ -49,13 +48,9 @@ the absent arms for the prefs drift check's retired host cron and script. traefi
 `tasks/traefik.yml`, the two absent arms that remove the retired Cloudflare IP drift cron and
 its script. registry's push-store GC
 retirement wrote `tasks/registry.yml`, the absent arm for the `gc-job.yaml` manifest nothing
-reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it: the Job
-manifest, `registry-gc.sh`, `/var/lib/registry-gc` and the `registry-gc` cron. #6536 added the
-dockerhub-mirror's Job manifest, `templates/dockerhub-mirror-gc-job.yaml.j2`, which the same
-script applies in a second phase. #6913 added a host-side record of `registry-gc.sh`'s
-SHA-256, because the script's render held a push token as a STUB. M6 batch B6c's Cutover-2 dropped the push and the record task, so
-`probe.py applied` hashes the real render. #6987 deleted the probe's reader of the record and
-added an absent arm in `tasks/registry.yml` that removes the record directory from daniel-box.
+reads any more. registry's conversion PR added the ghcr-mirror GC's host side to it, and H7.64
+moved that into `hosts/components/registry-gc/`. #6987 added an absent arm in
+`tasks/registry.yml` that removes the retired apply-time record directory from daniel-box.
 crowdsec's first conversion
 PR wrote `tasks/crowdsec.yml`, which installed the edge probe's script, service and timer on
 daniel-pi for crowdsec's off-cluster verify. H5.14 moved those into the Pi package
@@ -77,40 +72,26 @@ because `initial_setup.yml` has no dry-run mode.
   k8s role's own name. A change then edits both, and each half routes to its own plane. A
   shared key in `group_vars/all.yml` routes to the deploy plane only, which never runs
   `initial_setup.yml`.
-- **A copy sits in its task's `vars:`, not in this role's defaults, unless a template reads it.** A task file with
-  several tasks wraps them in one `block:` and puts the copies in the block's `vars:`. Role defaults are play-wide in `initial_setup.yml`, so a
-  defaults copy of a key another setup role names becomes a cross-role read, which
-  `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a row in the deployer's
-  cross-role table (#5472). A copy of `sys_user` or another `group_vars` key would make
-  this role's defaults read by nearly every setup role. Task vars reach only the task.
-  The exception is a key that only this role's templates and rows name. The strict render test
-  and the shell-template gate resolve a template's names from role defaults, and Renovate
-  reaches a setup role's defaults, so registry's image pins and GC settings sit in
-  `defaults/main.yml`. No other setup role names a `registry_k8s_*` key.
+- **A copy sits in its task's `vars:`.** A task file with several tasks wraps them in one
+  `block:` and puts the copies in the block's `vars:`. Role defaults are play-wide in
+  `initial_setup.yml`, so a defaults copy of a key another setup role names becomes a cross-role
+  read, which `ansible/tests/setup/test_setup_cross_role_reads.py` refuses without a row in the
+  deployer's cross-role table (#5472). Task vars reach only the task.
 
-Two tests in `ansible/tests/setup/` hold those rules:
+`ansible/tests/setup/test_k8s_host_files_pairs.py` holds those rules. It derives every key this
+role's imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and
+asserts that each copy equals its source. media-volume's PR added `media_volume_host_path` and
+the `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
+when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which H7.25 moved
+into the `pi-peer-backup-target` component's authorized-key line.
 
-- `ansible/tests/setup/test_k8s_host_files_render.py` renders every template here under
-  `StrictUndefined`, with this role's defaults and the inventory. A template reading a
-  variable that only a `roles/k8s/` defaults file defines fails it. Its named members are
-  the registry GC templates.
-- `ansible/tests/setup/test_k8s_host_files_pairs.py` derives every key this role's defaults or
-  imported task `vars:` share with a k8s role's defaults or `group_vars/all.yml`, and asserts
-  that each copy equals its source. media-volume's PR added `media_volume_host_path` and the
-  `group_vars` keys `puid` and `pgid`, copied so that the setup plane re-applies the owner
-  when they change, and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which
-  H7.25 moved into the `pi-peer-backup-target` component's authorized-key line.
-
-A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
+`ansible/tests/setup/test_k8s_host_files_rows.py` names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
 its path, owner, group or mode changes, and pins a looped row's `loop`. Each
 conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
 census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
 
-`ansible/roles/setup/k8s_host_files/tests/test_ghcr_mirror_prune.py` runs the Jobs' prune
-script against a store tree built in `tmp_path`. Both mirrors' Jobs run that one script.
-
-## Autonomous-role contract (it will install a timer and remove crons with no human in the loop)
+## Autonomous-role contract (it will remove crons with no human in the loop)
 
 The GitOps tick applies the role as `initial_setup.yml --tags k8s_host_files` on every merge
 that touches it. It holds host directories, the absent arms for configarr's, janitorr's and
@@ -119,16 +100,8 @@ crowdsec's retired crons.
 - **Scope / exclusions:** host files, directories and units that a k8s role's Ansible apply
   owned before its flip, plus the absent arms that remove a retired role's crons. **Never** a
   Kubernetes object, never a `kubectl` write from a task, and never a row outside the D5 list
-  above. One cron is the exception: `registry-gc.sh` runs weekly as root. It scales
-  `deploy/ghcr-mirror` and then `deploy/dockerhub-mirror`, one at a time, and applies the Job
-  manifest this role stages for each. The task installs the script and the cron and runs
-  neither. The operator accepted that script as the one writer of the ghcr-mirror's
-  `spec.replicas` (#5732), and #6536 extends that to the dockerhub-mirror's. No task writes on
-  daniel-pi.
+  above. No task writes on daniel-pi.
 - **Mode (explicit + reversible):** each row carries the arm variable its source role used.
-  `registry_k8s_manage_gc: false` skips the whole registry GC block, as it did in the registry
-  role. It only skips: a host that already has the cron keeps it, so disarming a host means
-  removing `/etc/cron.d/registry-gc` by hand (operator-only).
   Removing a row is a revert of its conversion PR, which puts the task back in the k8s role.
   Reverting D5.1h removes the playbook entry and parks the tick once more.
 - **Authoritative sources:** the repo at the commit being applied, through this role's own
@@ -138,13 +111,5 @@ crowdsec's retired crons.
   hold clears.
 - **Required evidence:** the tick's receipt and `land.sh`'s `VERDICT:` line for every PR that
   changes this role.
-- **Registry GC evidence:** the weekly `registry-gc` run (Sunday 04:20) writes the
-  `registry-gc` textfile under `/var/lib/node-exporter-textfile/` and pings healthchecks.io
-  as `registry-gc`. The `registry-gc` journal
-  (`journalctl -t registry-gc`) shows both mirror phases. A conversion apply leaves the cron
-  file and the script's hash unchanged. After the restore the run warms the mirror: it GETs
-  blobs through the mirror's loopback hostPort and writes nothing to the cluster. The run's
-  message, in `/var/lib/registry-gc/state.json` and the healthchecks.io ping, ends with the
-  warm counts, such as `warmed 354 blob(s), 6207 MB in 133s`.
 - **Next-run review:** before moving a new row in, run `--list-tasks` with
   `--tags k8s_host_files` and read the recap of the last apply.
