@@ -13,7 +13,8 @@
 #   1  refuse a hostname other than <hostname>, or a host this script does not know
 #   2  install the keyring once it carries the pinned key and nothing else, then homelab.sources
 #      (--local-build installs the keyring only, because no repository is running yet)
-#   3  create /etc/homelab/age.key when missing, and print its public key
+#   3  install age when age-keygen is missing, create /etc/homelab/age.key when missing, and print
+#      its public key
 #   4  the one-time host steps: the Pi's swap file, its debloat purge, its rsyslog and wpa_supplicant
 #      masks and the removal of rsyslog's text logs; on every host, the networkd-dispatcher mask, the
 #      ssh-users group and the sys user's membership; on a cluster node, the k3s binary
@@ -32,6 +33,7 @@
 # origin/master's first-parent chain with a green CI verdict (hosts/lib/bootstrap_anchor.py).
 # --offline <kit-dir> reads every fetch from the break-glass kit (docs/break-glass.md, item 8),
 # checks each file against the pin the download path checks, and makes neither GitHub read.
+# Ubuntu's archive stays a requirement, for age in step 3 and for the packages' Depends in step 5.
 # --tools-seed <dir> reads each pinned file <dir>/<sha256> holds instead of downloading it, and
 # downloads the rest. Each file is still checked against its pin. CI's bootstrap cases pass it.
 #
@@ -269,11 +271,37 @@ EOF
 fi
 stop_after 2
 
-# Step 3: create the age key if missing, then print its public half. The key is written to a
-# temporary name under umask 077 and renamed, so a failed age-keygen leaves no partial key that
-# the next run would take for a real one. The private half is never printed.
+# update_all_sources: update every apt source. Offline, a source on a GitHub host is left out, and
+# the next online updater run reads it again.
+update_all_sources() {
+    update_dir=/etc/apt/sources.list.d
+    if [ -n "$kit" ]; then
+        update_dir=$(mktemp -d)
+        CLEAN="$CLEAN $update_dir"
+        for source in "$ROOT"/etc/apt/sources.list.d/*; do
+            [ -e "$source" ] || continue
+            case "${source##*/}" in
+                *github-cli*) ;;
+                *) cp "$source" "$update_dir/" ;;
+            esac
+        done
+    fi
+    apt-get update -o "Dir::Etc::sourceparts=$update_dir"
+}
+
+# Step 3: install age if missing, then create the age key if missing and print its public half.
+# A stock image carries no age and no package lists, and homelab-<hostname>'s Depends on age comes
+# too late at step 5. The key is written to a temporary name under umask 077 and renamed, so a
+# failed age-keygen leaves no partial key that the next run would take for a real one. The private
+# half is never printed.
+if ! command -v age-keygen > /dev/null; then
+    apt-get install -y --no-install-recommends age ||
+        { update_all_sources && apt-get install -y --no-install-recommends age; } ||
+        die "cannot install age, whose age-keygen creates and reads $AGE_KEY"
+    command -v age-keygen > /dev/null || die "the age package installed no age-keygen"
+    echo "bootstrap-host: installed age"
+fi
 if [ ! -s "$ROOT$AGE_KEY" ]; then
-    command -v age-keygen > /dev/null || die "age-keygen is not installed, so cannot create $AGE_KEY"
     install -d -m 0755 "$(dirname "$ROOT$AGE_KEY")"
     rm -f "$ROOT$AGE_KEY.tmp"
     (
@@ -565,22 +593,8 @@ else
     done
 
     # The whole sources.list.d is read, so apt resolves the packages' Depends against Ubuntu's
-    # archive. Offline, a source on a GitHub host is left out, and the next online updater
-    # run reads it again.
-    update_dir=/etc/apt/sources.list.d
-    if [ -n "$kit" ]; then
-        update_dir=$work/sources.list.d
-        mkdir -p "$update_dir"
-        for source in "$ROOT"/etc/apt/sources.list.d/*; do
-            [ -e "$source" ] || continue
-            case "${source##*/}" in
-                *github-cli*) ;;
-                *) cp "$source" "$update_dir/" ;;
-            esac
-        done
-    fi
-    apt-get update -o "Dir::Etc::sourceparts=$update_dir" ||
-        die "apt-get update failed; the .deb Depends need Ubuntu's archive"
+    # archive.
+    update_all_sources || die "apt-get update failed; the .deb Depends need Ubuntu's archive"
     # One install, so apt resolves the three packages' Depends among themselves.
     set -- "$work"/debs/homelab-tools_*.deb "$work"/debs/homelab-updater_*.deb \
         "$work/debs/homelab-$host"_*.deb

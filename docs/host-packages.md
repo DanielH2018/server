@@ -625,11 +625,12 @@ what completes a daniel-server rebuild during an outage.
 ### Preparing the installer on either node
 
 1. To set up the installer's inputs, set the hostname to the node's inventory name, because step
-   1 refuses any other. Then install what steps 2 and 3 read before any package exists:
+   1 refuses any other. Then install what the next step and step 2 read before any package
+   exists. Step 3 installs `age` itself:
 
     ```bash
     sudo apt-get update
-    sudo apt-get install -y age git gnupg curl
+    sudo apt-get install -y git gnupg curl
     ```
 
 1. Clone the repository from GitHub, or from the kit's repo bundle
