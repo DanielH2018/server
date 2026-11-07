@@ -10,6 +10,7 @@ Run: uv run pytest hosts/lib/tests/test_homelab_reconcile.py
 import fcntl
 import os
 import time
+from pathlib import Path
 
 import pytest
 from _reconcile_host import V1, Node
@@ -178,6 +179,77 @@ def test_a_masked_unit_is_never_started_and_an_unmasked_one_is(node):
 
 
 # Step 4: legacy entries.
+
+
+TIMER = "homelab-gc.timer"
+CRON_ENTRY = {"cron_file": "gc"}
+
+
+def replaced_cron(node: Node) -> Path:
+    """Ship a linked timer and the legacy cron file its component retires."""
+    node.unit(TIMER, linked=True)
+    cron = node.root / "etc/cron.d/gc"
+    cron.parent.mkdir(parents=True, exist_ok=True)
+    cron.write_text("0 4 * * 0 root /usr/local/bin/gc.sh\n")
+    node.manifest["legacy"].append(CRON_ENTRY)
+    node.manifest["handoffs"] = [{"units": [TIMER], "legacy": [CRON_ENTRY]}]
+    return cron
+
+
+def test_a_failed_restart_keeps_the_legacy_entry_until_the_unit_starts(node):
+    cron = replaced_cron(node)
+    node.state["fail"].append(f"restart {TIMER}")
+
+    result = node.run()
+
+    assert result.returncode == 1
+    assert cron.exists()
+    assert node.applied()["retired"] == []
+    assert f"{TIMER} failed to start" in result.stdout + result.stderr
+
+    node.state["fail"].clear()
+
+    assert node.run().returncode == 0
+    assert not cron.exists()
+    assert len(node.applied()["retired"]) == 1
+
+
+def test_a_failed_start_keeps_the_legacy_entry(node):
+    cron = replaced_cron(node)
+    node.manifest["legacy"].clear()
+    settled(node)
+    node.manifest["legacy"].append(CRON_ENTRY)
+    node.state["units"][TIMER]["active"] = "inactive"
+    node.state["fail"].append(f"start {TIMER}")
+
+    assert node.run().returncode == 1
+    assert ["start", TIMER] in node.actions()
+    assert cron.exists()
+    assert node.applied()["retired"] == []
+
+
+def test_a_failed_unit_of_another_spec_keeps_no_legacy_entry(node):
+    cron = replaced_cron(node)
+    node.unit("homelab-other.timer", linked=True)
+    node.state["fail"].append("restart homelab-other.timer")
+
+    assert node.run().returncode == 1
+    assert not cron.exists()
+    assert len(node.applied()["retired"]) == 1
+
+
+def test_a_failed_unit_does_not_keep_the_copy_that_shadows_it(node):
+    node.unit(TIMER, linked=True)
+    copy = node.root / "etc/systemd/system" / TIMER
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    copy.write_text("[Unit]\nDescription=stale\n")
+    entry = {"path": f"/etc/systemd/system/{TIMER}"}
+    node.manifest["legacy"].append(entry)
+    node.manifest["handoffs"] = [{"units": [TIMER], "legacy": [entry]}]
+    node.state["fail"].append(f"restart {TIMER}")
+
+    assert node.run().returncode == 1
+    assert not copy.exists()
 
 
 def test_a_legacy_cron_line_is_removed_and_the_rest_of_the_crontab_kept(node):

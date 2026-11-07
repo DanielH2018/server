@@ -75,6 +75,21 @@ def test_a_host_manifest_lists_units_links_policies_and_legacy_entries(hosts):
             {"cron_file": "beat"},
             {"unit": "beat.service"},
         ],
+        "handoffs": [
+            {
+                "units": [
+                    "homelab-beat.service",
+                    "homelab-beat.timer",
+                    "homelab-updater.timer",
+                ],
+                "legacy": [
+                    {"path": "/usr/local/bin/beat.sh"},
+                    {"cron": "Beat heartbeat", "user": "ubuntu"},
+                    {"cron_file": "beat"},
+                    {"unit": "beat.service"},
+                ],
+            }
+        ],
         "reconcilers": [],
         "activations": {},
         "arms": dict.fromkeys(("libvirt", "lines", "ufw", "users")),
@@ -223,6 +238,42 @@ def test_a_legacy_entry_ships_without_its_when_only_while_it_holds(hosts, on):
         _reconcile().parse_manifest(json.dumps(_manifest(package)))["legacy"]
         == expected
     )
+
+
+def test_each_handoff_holds_only_its_own_specs_units_and_entries(hosts):
+    components = {
+        "one": {
+            "files": [{"src": "u", "dst": f"{UNITS}/homelab-one.timer"}],
+            "legacy": [{"cron_file": "one"}],
+        },
+        "two": {
+            "files": [{"src": "u", "dst": f"{UNITS}/homelab-two.timer"}],
+            "legacy": [{"cron_file": "two"}],
+        },
+        "files-only": {"legacy": [{"path": "/usr/local/bin/stale"}]},
+    }
+    root = hosts({"components": list(components)}, components, {"u": ""})
+
+    assert host_mode.render_host("daniel-pi", root).handoffs == [
+        {"units": ["homelab-one.timer"], "legacy": [{"cron_file": "one"}]},
+        {"units": ["homelab-two.timer"], "legacy": [{"cron_file": "two"}]},
+    ]
+
+
+@pytest.mark.parametrize(
+    "handoffs",
+    [
+        {},
+        [{"units": ["homelab-x.timer"]}],
+        [{"units": ["not a unit"], "legacy": []}],
+        [{"units": [], "legacy": [{"nope": "x"}]}],
+    ],
+)
+def test_reconcile_refuses_malformed_handoffs(handoffs):
+    reconcile = _reconcile()
+
+    with pytest.raises(reconcile.ManifestError, match="handoffs"):
+        reconcile.parse_manifest(json.dumps({"handoffs": handoffs}))
 
 
 def test_a_legacy_when_that_is_no_boolean_is_flagged(hosts):

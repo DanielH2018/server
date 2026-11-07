@@ -99,6 +99,13 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   a blocking `systemctl restart homelab-secrets.service` before step 2. Legacy entries retire only
   once that unit is active and every credential and output in `secrets.json` exists. A package
   without the field makes no call that names `homelab-secrets`, as the Pi's did until H4.5.
+- **A legacy entry whose replacement failed to start.** Reconcile keeps the entry while a unit
+  the same component or package spec ships failed to start in that run, and logs
+  `keeping <entry>: <unit> failed to start`. The failed start already fails the run, so the host
+  holds, and the entry retires on the first run after the unit starts. A unit reconcile did not
+  try to start blocks nothing: a `manual`, `windowed` or masked one. An `/etc` copy that shadows a
+  packaged unit is the exception. Reconcile removes it whatever the start did, because that
+  copy may be why the unit failed.
 - **A legacy directory.** A `path` entry naming a directory retires only once the directory is
   empty: reconcile runs `rmdir`, never a recursive delete. A non-empty one stays and fails the
   run. A package therefore lists the directory after the files in it, as the Pi's does for

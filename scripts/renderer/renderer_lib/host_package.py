@@ -47,6 +47,7 @@ class Package:
         scripts: Each maintainer script's name, such as `postinst`, mapped to its bytes.
         policies: Each unit given a restart policy, mapped to `manual` or `windowed`.
         legacy: The legacy entries reconcile retires, each with its values rendered.
+        handoffs: Each spec's legacy entries paired with the units that spec ships.
         tools: Each pinned upstream binary, by name and then architecture (`host_tools.py`).
             A package with tools renders one tree per architecture.
         secrets: Whether the package lists the `secrets-unit` component (`host_outputs.py`).
@@ -70,6 +71,7 @@ class Package:
     scripts: dict[str, bytes] = field(default_factory=dict)
     policies: dict[str, str] = field(default_factory=dict)
     legacy: list[dict[str, str]] = field(default_factory=list)
+    handoffs: list[dict] = field(default_factory=list)
     tools: dict[str, dict[str, Pin]] = field(default_factory=dict)
     secrets: bool = False
     credentials: list[str] = field(default_factory=list)
@@ -120,6 +122,23 @@ class Package:
                 and PurePosixPath(dst).parent.name.endswith(".wants")
             }
         )
+
+    def spec_units(self) -> set[str]:
+        """Every unit the package ships a file, a drop-in or an enable link for so far."""
+        return {*self.units(), *self.dropin_targets(), *self.enable_links()}
+
+    def add_handoff(self, units_before: set[str], legacy_before: int) -> None:
+        """Pair what one spec added to the package: its legacy entries and its units.
+
+        Args:
+            units_before: `spec_units()` from before the spec rendered. A unit an earlier spec
+                already shipped is not this spec's.
+            legacy_before: The length of `legacy` from before the spec rendered.
+        """
+        units = sorted(self.spec_units() - units_before)
+        legacy = self.legacy[legacy_before:]
+        if units and legacy:
+            self.handoffs.append({"units": units, "legacy": legacy})
 
     def nfpm_spec(self, arch: str = "all") -> str:
         """The `nfpm.yaml` the builder runs `nfpm package` on, from the package directory.
