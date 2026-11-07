@@ -80,8 +80,8 @@ PI_SWAPFILE_SIZE=1G
 # ansible/roles/k8s/system-upgrade/defaults/main.yml, so a rebuilt node never installs an older
 # k3s than the SUC Plans target. Renovate bumps both files in one PR.
 # renovate: datasource=github-releases depName=k3s-io/k3s
-K3S_VERSION=v1.37.1+k3s1
-K3S_INSTALL_URL=https://raw.githubusercontent.com/k3s-io/k3s/v1.37.1+k3s1/install.sh
+K3S_VERSION=v1.37.2+k3s1
+K3S_INSTALL_URL=https://raw.githubusercontent.com/k3s-io/k3s/v1.37.2+k3s1/install.sh
 K3S_INSTALL_SHA256=ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
 
 # The nfpm and uv pins are the blocks of hosts/packages/homelab-tools/package.yml, byte for byte,

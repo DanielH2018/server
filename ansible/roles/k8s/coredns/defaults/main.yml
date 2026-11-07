@@ -5,7 +5,7 @@
 # substitutes it. A k3s bump refreshes the templates by hand, and
 # ansible/tests/setup/test_coredns_image_follows_bundled_manifest.py ties them to the version.
 
-# The CoreDNS image k3s v1.37.1+k3s1 bundles, with `%{SYSTEM_DEFAULT_REGISTRY}%` replaced by the
+# The CoreDNS image k3s v1.37.2+k3s1 bundles, with `%{SYSTEM_DEFAULT_REGISTRY}%` replaced by the
 # empty string as k3s stages it. The k3s addon stopped reconciling it when the `.skip` marker
 # went in, so this pin is the only thing that moves the image: a k3s bump changes k3s_version,
 # the test's excerpt, this pin and any template change in one PR (H6).
