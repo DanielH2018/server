@@ -132,7 +132,7 @@ def _run_ups(tmp_path, unit_state="active"):
         assert literal in body, (
             f"ups-secondary-health.sh no longer references {literal}"
         )
-    body = body.replace(PACKAGED_CHECK_LIB_PATH, str(CHECK_LIB)).replace(
+    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
         "/etc/nut/upsmon.conf", str(upsmon)
     )
     textfile_dir, env = _env(
