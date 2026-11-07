@@ -5,10 +5,6 @@ entry point outside the census*). `deploy.sh` refuses a whole `--tags` list with
 one tag is applied by Flux, so each caller has to say what it does with such a tag. The row
 sits in its own module because `test_census_rows_text.py`, which imports it into `ROWS`, is
 near the cap for a test module. `table_rows` reads D2's entry-point table for the owner census.
-
-`secret_rotation.py --deploy` has a row in that table but no entry here.
-`rotation_tools.run_deploy` runs `ansible-playbook ansible/deploy.yml` itself, never the
-wrapper, so D2.1d's `ansible_owned` batch loop governs it instead (#4960).
 """
 
 import re

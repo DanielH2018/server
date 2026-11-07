@@ -68,7 +68,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import SECRET_ROTATION_BAD_ARGS
 from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
-from secrets_mgmt.consumers import left_out_line
+from secrets_mgmt.consumers import flux_applies_line
 from secrets_mgmt.git_dates import (
     RENAMED_FROM,
     advance_last_rotated,
@@ -289,14 +289,13 @@ def sync_cluster_files(rotated: list[str], tools: RotationTools) -> list[str] | 
 
 
 def cmd_rotate(args, tools: RotationTools) -> int:
-    """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
+    """Rotate `args.name`, or every coming-due auto-tier secret.
 
     Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
     the registry dates advanced to git's (skipped with `--no-derive`). Exits 64 when
     `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
-    through the batch or the cluster files fail to follow it (`sync_cluster_files`), 1 when `--deploy` is given and the redeploy fails (the new tokens are written but
-    their consumers are not), 0 otherwise. A consumer whose entry carries `owner` is left out of
-    the redeploy and named, and no deploy runs when none is left.
+    through the batch or the cluster files fail to follow it (`sync_cluster_files`), 0
+    otherwise. Flux applies each consumer once the commit lands, and this names each one.
     """
     reg = tools.load_registry()
     now = tools.today()
@@ -404,32 +403,15 @@ def cmd_rotate(args, tools: RotationTools) -> int:
             % (", ".join(written), " ".join(REVERT_PATHS + CLUSTER_PATHS))
         )
         return 3
-    # Before the redeploy, which must not run a tag Flux applies.
-    owners = tools.owners()
-    left_out = tags & owners.keys()
-    for tag in sorted(left_out):
-        print(left_out_line(tag))
-    tags -= left_out
-    if args.deploy and tags:
-        if tools.deploy(sorted(tags)) != 0:
-            error(
-                "DEPLOY FAILED for tags %s — new tokens written to secrets.yml but consumers "
-                "NOT updated. Revert the working tree (`git checkout -- "
-                "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
-                % ",".join(sorted(tags))
-            )
-            return 1
-    elif args.deploy:
-        if left_out:
-            print("  deployed nothing: no consumer is left for Ansible to deploy")
-    else:
-        # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
-        files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
-        files = ", ".join(files[:-1]) + " and " + files[-1]
-        print(
-            "\nNext: commit " + files + ", then land the PR with "
-            "`./scripts/deploy_tools/land.sh`, so Flux applies the rotated value"
-        )
+    for tag in sorted(tags):
+        print(flux_applies_line(tag))
+    # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
+    files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
+    files = ", ".join(files[:-1]) + " and " + files[-1]
+    print(
+        "\nNext: commit " + files + ", then land the PR with "
+        "`./scripts/deploy_tools/land.sh`, so Flux applies the rotated value"
+    )
     return 0
 
 
@@ -481,8 +463,8 @@ def cmd_record(args, tools: RotationTools) -> int:
     return 0
 
 
-def main(argv=None) -> int:
-    """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
+def build_parser() -> ArgumentParser:
+    """The command line: one subparser per subcommand, each naming its function as `func`."""
     p = ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -524,7 +506,10 @@ def main(argv=None) -> int:
     pr.add_argument("--all", action="store_true", help="all auto secrets, not only due")
     pr.add_argument("--name", help="rotate one named auto secret")
     pr.add_argument(
-        "--deploy", action="store_true", help="redeploy consumers after rotating"
+        "--deploy",
+        action="store_true",
+        help="ignored: Flux applies a consumer once the commit lands. secret-rotate.sh still "
+        "passes it",
     )
     pr.add_argument(
         "--no-derive",
@@ -549,7 +534,12 @@ def main(argv=None) -> int:
         help="the date the credential was last rotated; may be earlier than what is recorded",
     )
     prec.set_defaults(func=cmd_record)
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv=None) -> int:
+    """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
+    args = build_parser().parse_args(argv)
     # One `RotationTools` per run, built here and threaded down: every git call, sops call,
     # registry read or write and clock read a subcommand makes goes through it.
     return args.func(args, RotationTools())

@@ -50,7 +50,6 @@ class Link:
 
 OWNERS = "scripts/deploy_tools/deploy_lib/owners.py"
 RUN = "scripts/deploy_tools/deploy_lib/run.py"
-ROTATION_TOOLS = "scripts/secrets_mgmt/rotation_tools.py"
 
 K8S_TAGS = (
     Link(OWNERS, "read_k8s_tags", "declared_k8s_tags"),
@@ -99,12 +98,6 @@ ENTRY_POINTS: dict[str, tuple[Link, ...]] = {
         Link("scripts/deploy_tools/land_lib/promotion.py", "_flux_owned", "owners_at"),
         Link("scripts/deploy_tools/land_lib/land_flux.py", "owners_at", "flux_owned"),
         Link(OWNERS, "flux_owned", "tag_owners"),
-    ),
-    # `cmd_rotate` calls `tools.owners()`, a field of `RotationTools` whose default is `tree_owners`.
-    "`secret_rotation.py --deploy`": (
-        Link("scripts/secrets_mgmt/secret_rotation.py", "cmd_rotate", "owners"),
-        Link(ROTATION_TOOLS, "RotationTools", "tree_owners", call=False),
-        Link(ROTATION_TOOLS, "tree_owners", "tag_owners"),
     ),
     "`probe.py health T`": (
         Link(
@@ -221,15 +214,15 @@ def _source_with(rel: str, text: str) -> Source:
 
 
 def test_every_entry_point_in_the_owner_table_reads_ownership_is_clean():
-    assert len(table_rows(_plan())) >= 10
+    assert len(table_rows(_plan())) >= 9
     assert census_problems(_plan()) == []
 
 
 def test_a_renamed_entry_point_is_flagged():
-    rel = "scripts/secrets_mgmt/secret_rotation.py"
-    text = (REPO / rel).read_text().replace("def cmd_rotate(", "def rotate(")
+    rel = "scripts/deploy_tools/land_lib/promotion.py"
+    text = (REPO / rel).read_text().replace("def wait_on_promotion(", "def wait(")
     assert census_problems(_plan(), source=_source_with(rel, text)) == [
-        f"`secret_rotation.py --deploy`: {rel} defines no `cmd_rotate`"
+        f"`land.sh`: {rel} defines no `wait_on_promotion`"
     ]
 
 
@@ -259,8 +252,8 @@ def test_a_playbook_loop_that_drops_the_filter_is_flagged():
 
 def test_a_plan_row_no_member_names_is_flagged():
     plan = _plan().replace(
-        "| `secret_rotation.py --deploy` |",
-        "| `new_entry.py` | Skips T.\n| `secret_rotation.py --deploy` |",
+        "| `probe.py health T` |",
+        "| `new_entry.py` | Skips T.\n| `probe.py health T` |",
         1,
     )
     assert census_problems(plan) == [
@@ -275,13 +268,4 @@ def test_a_chain_that_stops_short_of_a_reader_is_flagged():
     assert census_problems(_plan(), short) == [
         "`land.sh`: the chain ends at `_flux_owned`, which is none of "
         f"{sorted(READERS)}"
-    ]
-
-
-def test_an_owner_map_no_longer_read_from_the_tools_is_flagged():
-    """A local named `owners` must not stand in for the `tools.owners()` call."""
-    rel = "scripts/secrets_mgmt/secret_rotation.py"
-    text = (REPO / rel).read_text().replace("owners = tools.owners()", "owners = {}")
-    assert census_problems(_plan(), source=_source_with(rel, text)) == [
-        f"`secret_rotation.py --deploy`: {rel}:cmd_rotate no longer calls `owners`"
     ]

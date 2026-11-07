@@ -216,11 +216,11 @@ FLUX_PATH = (
 )
 
 
-def left_out_line(tag: str) -> str:
-    """The line `rotate --commit` prints for a consumer it left out of its redeploy.
+def flux_applies_line(tag: str) -> str:
+    """The line `rotate --commit` prints for each consumer of a rotated secret.
 
-    `rotate --commit` has already run `write` in process (`sync_cluster_files`), so for an
-    `owner: flux` consumer the rest of the Flux path is the commit landing.
+    `rotate --commit` has already run `write` in process (`sync_cluster_files`), so the rest
+    of the Flux path is the commit landing.
     """
     return (
         "  not redeployed: %s carries owner: flux; Flux applies it once the commit "
