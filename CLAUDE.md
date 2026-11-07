@@ -66,13 +66,12 @@ Run ansible through `uv run` so it uses the repo's pinned env
 fail.
 **A k8s service deploys through `promote`, never through Ansible.** `deploy.sh` exits 5 for a
 k8s tag, `--check` and `--dry-run` included. The merge is the deploy, and `land.sh` follows it.
-**The setup plane and the Pi deploy through `./scripts/deploy.sh`**, not the playbook directly.
-`docs/deploying.md` owns the lock rules and lists the holders.
+**A setup role applies through the GitOps deployer, and the Pi's services ship in its host
+package.** `./scripts/deploy.sh` runs `ansible/deploy.yml`, which applies no role.
+`docs/deploying.md` says which path applies a change and what the wrapper still does, owns the
+lock rules and lists the holders.
 
-**It deploys `HEAD`, not your working tree.** An uncommitted edit is not deployed, and nothing
-on the run says so. Commit first. `--check` and `--dry-run` still read the working tree.
-
-**A failing run says what its exit code means in its last two lines.** `docs/deploying.md`'s
+**A failing wrapper run says what its exit code means in its last two lines.** `docs/deploying.md`'s
 *Exit codes are resume points* owns the rest. The `deploy` skill has config-only runs and
 initial setup.
 

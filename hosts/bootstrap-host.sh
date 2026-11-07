@@ -15,8 +15,11 @@
 #      (--local-build installs the keyring only, because no repository is running yet)
 #   3  create /etc/homelab/age.key when missing, and print its public key
 #   4  the one-time host steps: the Pi's swap file, its debloat purge, its rsyslog and wpa_supplicant
-#      masks and the removal of rsyslog's text logs; on every host, the networkd-dispatcher mask, the
-#      ssh-users group and the sys user's membership; on a cluster node, the k3s binary
+#      masks and the removal of rsyslog's text logs; daniel-server's LXD snap and its bases; on every
+#      host, the networkd-dispatcher mask, the ssh-users group and the sys user's membership; on a
+#      cluster node, the k3s binary, with its unit neither enabled nor started, because the operator
+#      starts it after the restores.
+#      daniel-server's one LVM volume comes from the Ubuntu installer, not from this script
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them);
 #      on the Pi, then log2ram from the Azlux source its package ships
@@ -429,6 +432,17 @@ if [ "$host" = daniel-pi ]; then
         "$ROOT"/var/log/debug*
 fi
 
+if [ "$host" = daniel-server ]; then
+    # The Ubuntu Server installer seeded these on this one machine. lxd goes before the bases it
+    # uses, and snapd itself stays.
+    for snap in lxd core20 core22; do
+        if snap list "$snap" > /dev/null 2>&1; then
+            snap remove "$snap" || die "cannot remove the $snap snap"
+            echo "bootstrap-host: removed the $snap snap"
+        fi
+    done
+fi
+
 mask_unit networkd-dispatcher.service
 
 # The sshd component's AllowGroups admits only this group, so both exist before step 5 installs it.
@@ -588,6 +602,9 @@ else
 fi
 systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"
+if [ -n "$k3s_unit" ]; then
+    echo "bootstrap-host: $k3s_unit stays stopped until the operator starts it, as docs/host-packages.md, Rebuilding a cluster node, says"
+fi
 # The package ships Azlux's source, so log2ram cannot be one of its Depends. Reconcile starts as
 # the install above ends, holds dpkg's lock briefly and may write /etc/log2ram.conf first. dpkg
 # would stop at a conffile prompt on that file, and upstream's copy already holds the arm's values.

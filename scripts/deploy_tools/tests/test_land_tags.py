@@ -219,9 +219,9 @@ _PR_617_FILES = [
     "ansible/roles/k8s/homepage/defaults/main.yml",
     "ansible/roles/k8s/jellyfin/defaults/main.yml",
     "ansible/roles/k8s/karakeep/defaults/main.yml",
-    "ansible/roles/k8s/manifests/defaults/main.yml",
-    "ansible/roles/k8s/manifests/tasks/main.yml",
-    "ansible/roles/k8s/manifests/tasks/release_stamp.yml",
+    "ansible/roles/k8s/volume-snapshot/defaults/main.yml",
+    "ansible/roles/k8s/volume-snapshot/tasks/main.yml",
+    "ansible/roles/k8s/volume-snapshot/tasks/release_stamp.yml",
     "ansible/roles/k8s/media-volume/defaults/main.yml",
     "ansible/roles/k8s/monitor-bridge/defaults/main.yml",
     "ansible/roles/k8s/n8n/defaults/main.yml",
@@ -276,7 +276,7 @@ def test_pr_617_reports_only_the_setup_plane():
 
 
 def test_a_shared_role_with_callers_derives_no_tag_of_its_own():
-    files = ["ansible/roles/k8s/manifests/tasks/main.yml"]
+    files = ["ansible/roles/k8s/volume-snapshot/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")
     assert land_tags.plane_note(files) == ""

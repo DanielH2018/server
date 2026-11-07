@@ -142,8 +142,8 @@ def _template_texts(role: Path) -> dict[str, str]:
 def _deployment_templates(role: Path) -> list[str]:
     """Templates rendering a `kind: Deployment` or `kind: DaemonSet`, by name.
 
-    Both are gated the same way: `roles/k8s/manifests` waits on `<kind>/<name>` and the guards
-    below check that every rendered workload is named in that wait. Matching only Deployment
+    Both are gated the same way: a role's rollout entries name `<kind>/<name>`, and the guards
+    below check that every rendered workload is named in those entries. Matching only Deployment
     would make a DaemonSet role render zero workloads and pass every shape guard ungated.
 
     The `kind` match tolerates optional quoting (`kind: "Deployment"`) and an optional trailing
@@ -425,11 +425,8 @@ def _declares_autodeploy(role: Path) -> bool:
 
 # ── k8s_autodeploy_snapshot_pvcs ─────────────────────────────────────────────────────────────
 #
-# k8s/manifests takes a pre-apply Longhorn snapshot of a role's `k8s_autodeploy_snapshot_pvcs`
-# claims (roles/k8s/manifests/tasks/main.yml, guarded on `not k8s_no_mutate`). That guard means
-# --dry-run never exercises volume-snapshot at all — a typo'd claim name is invisible to a dry
-# run and surfaces only on a real deploy, as the "PVC has no spec.volumeName" assert failing
-# before the apply. The claim-name test below is therefore the only pre-deploy catch.
+# The renderer writes a pre-apply Longhorn snapshot Job for a role's
+# `k8s_autodeploy_snapshot_pvcs` claims. A typo'd claim name surfaces only on a real deploy. The claim-name test below is therefore the only pre-deploy catch.
 #
 # Most roles declare their claims as `k8s_claims` entries in defaults/main.yml
 # (`name: "{{ <role>_k8s_claim }}"`) and render no PersistentVolumeClaim template of their own.

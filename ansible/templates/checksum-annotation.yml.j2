@@ -3,7 +3,7 @@
   restart on content it mounts but `ansible.builtin.template` never rendered. A ConfigMap
   staged by `kubectl create configmap --from-file` (observability's Grafana dashboards are the
   one left) sits outside the manifests role's own render/apply cycle, so `manifests_render is changed`
-  (roles/k8s/manifests/tasks/main.yml) never fires for it and the pod keeps running the code
+  never fires for it and the pod keeps running the code
   it started with. See "A config edit won't restart the pod (k3s)" in the repo CLAUDE.md.
 
   A role that instead embeds its file via `lookup('file'|'template', ...)` directly INTO a

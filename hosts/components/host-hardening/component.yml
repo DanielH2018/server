@@ -14,6 +14,9 @@
 #   shows no release string on its console.
 # - /etc/issue.net has no declaration. No tracked sshd configuration sets `Banner`, so no SSH login
 #   shows it.
+# - /etc/modprobe.d/i915.conf is unowned on daniel-server, the one `has_igpu` host. i915 loads from
+#   the initramfs, so a change to it goes live only after `update-initramfs -u` and a reboot, which
+#   the rebuild procedure in docs/host-packages.md runs by hand.
 #
 # The `ssh-users` group and the sys user's membership are step 4 of hosts/bootstrap-host.sh, which
 # runs before the `sshd` component's AllowGroups line lands. A `.ssh` owner drifted to root returns
@@ -43,6 +46,7 @@ files:
   - {src: templates/coredump-disable.conf, dst: /etc/systemd/coredump.conf.d/disable.conf}
   - {src: tmpfiles.d/homelab-hardening.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-hardening.conf}
   - {src: templates/53homelab-keep-conffiles, dst: /etc/apt/apt.conf.d/53homelab-keep-conffiles}
+  - {src: templates/i915.conf, dst: /etc/modprobe.d/i915.conf, when: has_igpu}
 lines:
   - {path: /etc/issue, line: "WARNING: Unauthorized access to this system is prohibited.", regexp: '^(Ubuntu |WARNING: Unauthorized access)'}
   - {path: /etc/issue, line: "All connections are monitored and recorded.", regexp: '^All connections are monitored'}

@@ -17,7 +17,7 @@ services is derived from it (#3389). Four consumers read it:
 
 No Ansible import, so `scripts/lib/service_tiers.py` and the docs generators read the same
 function the playbook runs. `FilterModule` re-raises a function's `ValueError` as
-`AnsibleFilterError` prefixed with the filter's name.
+`FilterError` prefixed with the filter's name.
 """
 
 import sys as _sys

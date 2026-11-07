@@ -245,7 +245,7 @@ PROPERTIES = (
         Property(
             name="progress-deadline-covers-rollout-budget",
             reason=(
-                "k8s/manifests/tasks/drain.yml runs `kubectl rollout status --timeout=<budget>` "
+                "A rollout wait runs `kubectl rollout status --timeout=<budget>` "
                 "with the role's manifests_rollout_timeout, and `rollout status` also exits as soon "
                 "as the Deployment is marked ProgressDeadlineExceeded (progressDeadlineSeconds, "
                 "default 600). A pod stuck Pulling makes no progress, so a budget above the deadline "

@@ -94,7 +94,7 @@ def _role(tmp_path, defaults: str | None = "---\n", tasks: str | None = None) ->
     return role
 
 
-BARE_INCLUDE = "- ansible.builtin.include_role:\n    name: k8s/manifests\n"
+BARE_INCLUDE = "- ansible.builtin.include_role:\n    name: k8s/image-builder\n"
 
 
 def test_builds_in_defaults_are_read_in_order_with_their_when(tmp_path):

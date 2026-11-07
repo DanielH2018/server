@@ -133,7 +133,7 @@ observability_grafana_storage: 1Gi
 # costs only those two, and the cost is one re-sent notification per open alert.
 observability_alertmanager_storage: 1Gi
 
-# The role's claims, rendered by k8s/manifests (#3387). Each names `namespace` because the claims
+# The role's claims, which the renderer renders (#3387). Each names `namespace` because the claims
 # live beside their workloads in k8s_observability_namespace, not in the shared k8s_namespace.
 # No `k8s_autodeploy_snapshot_pvcs` here, so the claims are applied by the directory apply,
 # after 00-namespace.yaml creates the namespace on a fresh cluster.

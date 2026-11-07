@@ -68,6 +68,44 @@ def test_every_host_gets_ssh_users_and_the_networkd_dispatcher_mask_in_step_4(
     assert "systemctl mask networkd-dispatcher.service" in commands
 
 
+def test_a_rebuilt_daniel_server_removes_the_lxd_snap_before_its_bases(tmp_path):
+    host = stocked_server(tmp_path)
+    host._stub(
+        "snap",
+        f'if [ "$1" = list ]; then exit 0; else echo "snap $*" >> {host.log}; fi',
+    )
+
+    result = host.run(
+        "daniel-server", "--until", "4", "--offline", str(host.kit), **AGENT_ENV
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert [c for c in host.commands() if c.startswith("snap ")] == [
+        "snap remove lxd",
+        "snap remove core20",
+        "snap remove core22",
+    ]
+
+
+def test_a_daniel_server_without_the_snaps_removes_nothing(tmp_path):
+    host = stocked_server(tmp_path)
+
+    result = host.run(
+        "daniel-server", "--until", "4", "--offline", str(host.kit), **AGENT_ENV
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert not [c for c in host.commands() if c.startswith("snap ")]
+
+
+def test_the_pi_never_asks_about_the_snaps(tmp_path):
+    host = FakeHost(tmp_path)
+    host._stub("snap", f'echo "snap $*" >> {host.log}')
+
+    assert host.run("daniel-pi", "--until", "4").returncode == 0
+    assert not [c for c in host.commands() if c.startswith("snap ")]
+
+
 def test_a_host_already_holding_the_group_and_membership_changes_neither(tmp_path):
     host = FakeHost(tmp_path)
     host._stub("getent", "echo ssh-users:x:1001:ubuntu")

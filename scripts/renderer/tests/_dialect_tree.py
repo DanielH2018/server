@@ -2,7 +2,7 @@
 
 `write_tree` writes them, and `TREE_LITERAL` is what the template renders to. The PR that added
 them checked the literal once against an `ansible-playbook` render of the same tree, with the
-render keys on the role's `k8s/manifests` include.
+render keys on a role include.
 """
 
 from pathlib import Path

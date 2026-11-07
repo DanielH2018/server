@@ -33,8 +33,8 @@ not need one.
 ONE TRANSPORT, TWO CALLERS. Every request goes through `flux_job_connect.open_url`, the
 helper the Job census requires of a script Flux runs, so the script imports only modules that
 census admits. The Job's ConfigMap carries the helper beside the script. `tasks/main.yml`
-runs this file on the controller with `PYTHONPATH` at `roles/k8s/manifests/files`, where the
-helper lives, rather than keeping a second transport here. A refused connect therefore
+runs this file on the controller with `PYTHONPATH` at the directory where the helper lives,
+rather than keeping a second transport here. A refused connect therefore
 retries for 60 seconds on both paths.
 
 RUN IT: `tasks/main.yml` invokes it with no arguments to seed, and with `--test` to make the

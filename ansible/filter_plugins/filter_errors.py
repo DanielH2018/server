@@ -1,6 +1,6 @@
 """`_as_filter`, the one wrapper the filter plugins register their filters through (#4527).
 
-It re-raises a filter's `ValueError` as `AnsibleFilterError("<filter>: ...")`. Seven plugins
+It re-raises a filter's `ValueError` as `FilterError("<filter>: ...")`. Seven plugins
 carried a verbatim copy after #4480 and #4505; each now imports this one.
 
 DECIDED: the home is `ansible/filter_plugins/`, not a directory outside it. A change here
@@ -18,23 +18,30 @@ importer inserts it first; the pytest `pythonpath` already holds it.
 import functools
 
 
+class FilterError(ValueError):
+    """A filter that refused its input. The message opens with the filter's name.
+
+    The renderer reads it as the `ValueError` it is, and Ansible reports any exception a filter
+    raises, so neither needs ansible-core to see the refusal.
+    """
+
+
 def _as_filter(func):
-    """`func` as Ansible calls it: a ValueError re-raised as `AnsibleFilterError`.
+    """`func` as the renderer and Ansible call it: a ValueError re-raised as `FilterError`.
 
     The message opens with `<func's name>: `, which is the name the filter registers under.
     The prefix names the filter that refused, since a render failure otherwise reaches the
-    operator as a bare message under the task's template path (#4480). The import is deferred
-    so the module still loads where Ansible is not installed.
+    operator as a bare message under the task's template path (#4480).
     """
 
     @functools.wraps(func)
     def wrapped(*args, **kwargs):
         try:
             return func(*args, **kwargs)
+        except FilterError:
+            raise
         except ValueError as exc:
-            from ansible.errors import AnsibleFilterError
-
-            raise AnsibleFilterError(f"{func.__name__}: {exc}") from exc
+            raise FilterError(f"{func.__name__}: {exc}") from exc
 
     return wrapped
 

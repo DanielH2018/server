@@ -39,6 +39,7 @@ ACTION = re.compile(
 COMMANDS = {
     "ssh.service": ("sshd", "-t"),
     "fail2ban.service": ("fail2ban-client", "-t"),
+    "rsyslog.service": ("rsyslogd", "-N1"),
 }
 # The files reconcile parses itself, by the action kind or the unit, and the grammar of a line.
 PARSERS = {"sysctl": "sysctl", "systemd-journald.service": "ini"}

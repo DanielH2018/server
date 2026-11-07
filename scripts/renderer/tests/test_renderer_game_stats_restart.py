@@ -34,7 +34,7 @@ GAMES = {
     "valheim-stats": ("valheim-stats-script", "valheim_stats.py"),
 }
 KINDS = frozenset({"ConfigMap", "Secret"})
-# k8s/manifests applies client-side, which copies the object into an annotation capped at
+# A client-side apply copies the object into an annotation capped at
 # 262144 bytes. Half of it leaves room for the scripts to grow before the apply is refused.
 ANNOTATION_BUDGET = 262144 // 2
 

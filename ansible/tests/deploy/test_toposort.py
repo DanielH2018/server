@@ -3,7 +3,7 @@
 
 The k8s play in deploy.yml orders every deploy through this filter, so a silent bug here
 would mis-order services. Pure in/out logic — no Ansible
-runtime needed beyond the AnsibleFilterError import.
+runtime needed beyond the plugin itself.
 
 Lives in ansible/tests/ (not under filter_plugins/) so Ansible's filter-plugin loader
 doesn't try to import it as a plugin; the `pythonpath` setting in pyproject.toml puts
@@ -13,9 +13,8 @@ Run: uv run pytest ansible/tests
 """
 
 import pytest
-from ansible.errors import AnsibleFilterError
 
-from toposort import toposort_containers
+from toposort import DependencyCycle, toposort_containers
 
 
 def _containers(*specs):
@@ -61,7 +60,7 @@ class TestToposort:
     def test_cycle_raises(self):
         cl = _containers("a", "b")
         deps = {"a": ["b"], "b": ["a"]}
-        with pytest.raises(AnsibleFilterError) as exc:
+        with pytest.raises(DependencyCycle) as exc:
             toposort_containers(cl, deps)
         assert "cycle" in str(exc.value).lower()
 

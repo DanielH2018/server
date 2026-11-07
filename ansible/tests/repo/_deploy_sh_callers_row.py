@@ -6,9 +6,8 @@ one tag is applied by Flux, so each caller has to say what it does with such a t
 sits in its own module because `test_census_rows_text.py`, which imports it into `ROWS`, is
 near the cap for a test module. `table_rows` reads D2's entry-point table for the owner census.
 
-`secret_rotation.py --deploy` has a row in that table but no entry here.
-`rotation_tools.run_deploy` runs `ansible-playbook ansible/deploy.yml` itself, never the
-wrapper, and `deploy.yml` applies no k8s role.
+`secret_rotation.py rotate` has a row in that table but no entry here: it runs no deploy.
+Flux applies an `owner: flux` consumer once the commit lands, and it refuses any other.
 """
 
 import re

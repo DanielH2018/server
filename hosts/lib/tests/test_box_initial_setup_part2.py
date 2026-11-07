@@ -84,6 +84,30 @@ def test_the_k3s_health_crons_keep_their_ping_key_file(manifest):
     assert not {p for p in paths if p.startswith("/etc/healthchecks")}
 
 
+@pytest.mark.parametrize(
+    ("host", "firmware", "key_file"),
+    [
+        ("daniel-box", True, False),
+        ("daniel-server", False, True),
+        ("daniel-pi", False, True),
+    ],
+)
+def test_the_wrapper_and_key_file_stay_with_the_crons_that_use_them(
+    host, firmware, key_file
+):
+    handoff = next(
+        group
+        for group in host_mode.render_host(host).handoffs
+        if {"cron": "Weekly system restart", "user": "root"} in group["legacy"]
+    )
+    assert "homelab-reboot.timer" in handoff["units"]
+    assert {"path": "/usr/local/bin/host-maintenance.sh"} in handoff["legacy"]
+    assert (
+        {"cron": "Weekly firmware update", "user": "root"} in handoff["legacy"]
+    ) == firmware
+    assert ({"path": "/etc/healthchecks"} in handoff["legacy"]) == key_file
+
+
 def test_the_weekly_reboot_pings_this_hosts_check(package, tmp_path, context):
     result, calls = _reboot(package, tmp_path, validate_failed=False)
 

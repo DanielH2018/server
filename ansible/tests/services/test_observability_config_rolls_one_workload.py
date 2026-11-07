@@ -1,6 +1,6 @@
 """One observability config edit must roll one observability workload.
 
-The role sets `manifests_rollout: ''`, so `k8s/manifests` neither waits nor restarts for it,
+The role sets `manifests_rollout: ''`, so the renderer neither waits nor restarts for it,
 and the role does both itself. A restart gated on `manifests_render is changed` would be a
 per-ROLE signal that fires when ANY of the role's manifests changed, restarting every workload
 for an edit only one of them reads.
@@ -25,8 +25,7 @@ The role rolls per workload instead, and this module guards the ways that goes q
     ConfigMap as a whole directory; without either, a rule edit reaches the ConfigMap and never
     the evaluation. `_rules_reload_problems` pins both in place of the key count.
 
-`restart_on` decides what the release record expects (`rollouts[].restart`,
-`k8s/manifests/tasks/release_stamp.yml`). Every entry declares `[]`: a `secret` trigger there
+`restart_on` decides what the release record expects (`rollouts[].restart`). Every entry declares `[]`: a `secret` trigger there
 would hold a reader to a roll that another Secret file's edit never made. The role's amend raises the record for the
 workloads its restart rolled.
 """

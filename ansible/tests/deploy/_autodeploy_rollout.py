@@ -1,6 +1,6 @@
 """Is a Deployment or DaemonSet credited as gated -- the rollout half of the derivation.
 
-A role's primary rollout is gated by `roles/k8s/manifests`; every other workload it renders
+A role's primary rollout is gated by its `manifests_rollout` entry; every other workload it renders
 must be named in `manifests_extra_rollouts` or it deploys ungated. A role that sets
 `manifests_rollout: ""` skips the primary gate entirely, so it is an offender unless every
 workload it renders, batch included, is gated by something this module can see.
@@ -24,7 +24,7 @@ def _sets_empty_rollout(role: Path) -> bool:
 
     Tolerates a trailing comment (`manifests_rollout: ''  # nothing to roll`) — this repo's
     house style comments nearly every var, and a raw-text matcher requiring end-of-line right
-    after the closing quote would go blind to that shape while `roles/k8s/manifests` itself
+    after the closing quote would go blind to that shape while the renderer itself
     still evaluates the same value as empty and skips the rollout entirely. Without this, both
     `_rollout_gate_offender` and the Deployment gate below would read a commented empty rollout
     as "sets no `manifests_rollout` at all" rather than "sets it to nothing."
@@ -51,9 +51,7 @@ def _rollout_gate_offender(role: Path) -> bool:
     - A batch-only role (no Deployment/DaemonSet at all) whose rendered Jobs/CronJobs are all
       credited by `_batch_gated_names`.
     - A role that skips the PRIMARY rollout but gates its Deployment through
-      `manifests_extra_rollouts` instead. Extras roll and soak independently of the primary —
-      `roles/k8s/manifests/tasks/main.yml`'s extra-rollout queue task carries no
-      `manifests_rollout | length > 0` condition — so `_ungated_deployments(role) == []` is
+      `manifests_extra_rollouts` instead. Extras roll and soak independently of the primary, so `_ungated_deployments(role) == []` is
       already proof this Deployment IS gated, and an unconditional "renders a Deployment ⇒
       offender" rule would falsely accuse this shape.
     - A role rendering an ungated Deployment `_deployment_templates` can't see by itself (a
@@ -69,7 +67,7 @@ def _rollout_gate_offender(role: Path) -> bool:
 
     That gives two cases:
 
-    - A role that never calls `k8s/manifests` is outside this guard entirely. Its workloads, if
+    - A role that sets no `manifests_rollout` is outside this guard entirely. Its workloads, if
       any, reach the cluster some other way, and whatever gates them is not
       `manifests_rollout`. `test_auto_deployable_roles_gate_every_batch_workload_they_render`
       and `_GATING_SHARED_ROLES` are what cover that shape.
@@ -79,8 +77,7 @@ def _rollout_gate_offender(role: Path) -> bool:
     """
     if not _sets_empty_rollout(role):
         return False
-    # Flux applies a flux-owned role, so the `k8s/manifests` include that `manifests_rollout`
-    # configures never runs. The Kustomization's `wait` takes the rollout wait's place, and the
+    # Flux applies a flux-owned role. The Kustomization's `wait` takes the rollout wait's place, and the
     # batch guard still requires each CronJob in `flux_cronjob_gates`.
     if _owners().get(role.name) == "flux":
         return False
@@ -132,14 +129,13 @@ def _extra_rollouts(role: Path) -> set[str]:
 
 
 def _primary_rollout_name(role: Path) -> str:
-    """The Deployment name `roles/k8s/manifests` waits on as this role's primary rollout.
+    """The Deployment name this role declares as its primary rollout.
 
-    Mirrors `manifests_rollout | default(manifests_service)` from
-    `roles/k8s/manifests/tasks/main.yml`. `manifests_service` defaults to the role directory's
+    Reads `manifests_rollout | default(manifests_service)`. `manifests_service` defaults to the role directory's
     name (#4053), a caller that overrides it writes a literal string, and every
     `manifests_rollout` override is likewise a literal (checked repo-wide), so a regex match is
-    safe here. A role whose `tasks/` never calls k8s/manifests resolves to '', which matches no
-    real Deployment name. A role with no `tasks/` renders under its own name.
+    safe here. A role with `tasks/` that sets neither key renders nothing and resolves to '', which
+    matches no real Deployment name. A role with no `tasks/` renders under its own name.
 
     Tolerates a trailing comment after the value, as `_sets_empty_rollout` does. Without it,
     `manifests_rollout: ''  # nothing to roll` would disagree between the two matchers reading
@@ -158,27 +154,18 @@ def _primary_rollout_name(role: Path) -> str:
     service = re.search(r"^\s*manifests_service:\s*(\S+)\s*$", text, re.MULTILINE)
     if service:
         return service.group(1)
-    return (
-        role.name
-        if not (role / "tasks").is_dir()
-        or re.search(r"^\s*name:\s*k8s/manifests\s*$", text, re.MULTILINE)
-        else ""
-    )
+    return "" if (role / "tasks").is_dir() else role.name
 
 
 def _primary_rollout_kind(role: Path) -> str:
-    """The kubectl kind `roles/k8s/manifests` will use for this role's primary rollout.
+    """The kubectl kind of this role's primary rollout.
 
     Mirrors `manifests_rollout_kind | default('deploy')`. Same regex-is-safe reasoning as
-    `_primary_rollout_name`: every caller sets this to a literal, and the shared role asserts
-    the value is one of 'deploy'/'daemonset' before anything reads it.
+    `_primary_rollout_name`: every role sets this to a literal.
     """
-    tasks = role / "tasks/main.yml"
-    if not tasks.is_file():
-        return "deploy"
     match = re.search(
         r"""^\s*manifests_rollout_kind:\s*(?:"([^"]*)"|'([^']*)'|(\S+))\s*$""",
-        tasks.read_text(),
+        _render_metadata_text(role),
         re.MULTILINE,
     )
     if not match:

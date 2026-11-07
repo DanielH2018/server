@@ -5,9 +5,9 @@ is expected"), so docs-refresh.sh and secret-rotate.sh must publish through a PR
 sent to /dev/null leaves an alert that says it failed and nothing that says why, so the cause
 stays invisible until the rejected command is run by hand.
 
-secret-rotate is the more consequential of the two: it changes a live credential and
-redeploys its consumer BEFORE publishing, so an unpublished rotation leaves the running
-value and origin disagreeing, and the next deploy from origin re-applies the old one.
+secret-rotate is the more consequential of the two: it writes a new credential value and the
+value reaches the cluster only when the commit lands, so an unpublished rotation never goes
+live and the token keeps its old value.
 
 The publish sequence itself -- branch, push, reset master, `gh pr create`, `gh pr merge
 --auto` -- lives in scripts/deploy_tools/publish_pr.py, which the three crons call, and is
@@ -198,10 +198,32 @@ def test_secret_rotate_fails_closed_when_origin_is_unreachable():
     )
 
 
-def test_secret_rotate_never_reverts_a_live_rotation():
-    """The credential is already live and its consumer redeployed by the time this publishes.
+def test_secret_rotate_failed_publish_does_not_claim_a_deploy():
+    """The rotation writes files only, so a failed publish leaves the value unapplied.
 
-    Reverting there would discard the only record of the value that is actually running.
+    An alert or PR body that says "deployed" or "live" sends the operator to check a cluster
+    that never changed. The alert must still carry the publisher's message ($PUB_MSG).
+    """
+    claims = [
+        line
+        for line in code_lines(SECRET_ROTATE)
+        if re.search(r"\b(alert|logger|say_failure)\b|--body", line)
+        and re.search(r"\bdeployed\b|\bredeployed\b|ALREADY live", line)
+    ]
+    assert not claims, f"a message claims a deploy the script does not run: {claims!r}"
+    failed = next(
+        line
+        for line in code_lines(SECRET_ROTATE)
+        if line.lstrip().startswith("alert") and "$PUB_MSG" in line
+    )
+    assert "not yet live" in failed, failed
+
+
+def test_secret_rotate_never_reverts_a_committed_rotation():
+    """Reverting after the commit spends the token's one eligible run for the week.
+
+    ROTATE_LEAD_DAYS exceeds the weekly cadence by one day, so a discarded value is not
+    retried before the token is overdue; a human can still land the commit the publisher left.
     """
     lines = code_lines(SECRET_ROTATE)
     starts = [i for i, line in enumerate(lines) if "commit --no-verify -m" in line]
@@ -212,8 +234,8 @@ def test_secret_rotate_never_reverts_a_live_rotation():
         line for line in lines[starts[0] :] if re.search(r"(^|\s|;)revert\b", line)
     ]
     assert not after, (
-        f"the publish path calls revert after the rotation is live, which strands the "
-        f"running value: {after!r}"
+        f"the publish path calls revert after the commit, which discards the written "
+        f"value: {after!r}"
     )
 
 

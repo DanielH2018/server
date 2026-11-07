@@ -15,10 +15,6 @@ kind from being written inline.
 
 from pathlib import Path
 
-import yaml
-
-from lib import yaml_fast
-from lib.k8s_roles import RENDER_KEYS
 from lib.k8s_roles import role_dirs as _role_dirs
 
 from _helpers import K8S_ROLES, ROLES
@@ -96,38 +92,3 @@ def task_files_by_role(plane: Path | None = None) -> list[tuple[Path, Path]]:
     """
     roles = every_plane_role_dirs() if plane is None else role_dirs(plane)
     return [(role, path) for role in roles for path in role_task_files(role)]
-
-
-def manifests_service_of(task: dict, role: str) -> str | None:
-    """The service a `k8s/manifests` include deploys, or None for any other task.
-
-    A caller that omits `manifests_service` deploys under its own role directory's name, which
-    is the default `k8s/manifests/defaults/main.yml` computes (#4053). A guard reading the
-    include's `vars:` has to apply the same fallback, or it reads every caller as nameless.
-
-    Args:
-        task: one task as loaded from a role's tasks file.
-        role: the directory name of the role whose tasks file holds `task`.
-    """
-    include = task.get("ansible.builtin.include_role") or task.get("include_role") or {}
-    if not isinstance(include, dict) or include.get("name") != "k8s/manifests":
-        return None
-    return str((task.get("vars") or {}).get("manifests_service", role)).strip()
-
-
-def write_fixture_role(root: Path, name: str, tasks_text: str) -> Path:
-    """Write role `name` under `root`, with each task's `RENDER_KEYS` vars moved to its defaults.
-
-    A fixture states a role as one tasks file, and the readers take these keys from defaults alone.
-    """
-    tasks = yaml_fast.safe_load(tasks_text)
-    defaults = {}
-    for task in tasks:
-        task_vars = task.get("vars") or {}
-        for key in RENDER_KEYS & task_vars.keys():
-            defaults[key] = task_vars.pop(key)
-    (root / name / "tasks").mkdir(parents=True)
-    (root / name / "defaults").mkdir()
-    (root / name / "tasks" / "main.yml").write_text(yaml.safe_dump(tasks))
-    (root / name / "defaults" / "main.yml").write_text(yaml.safe_dump(defaults))
-    return root

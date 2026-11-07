@@ -31,7 +31,7 @@ injected downstream of a broken command left a whole branch dead while every tes
 
 The drill-proven order and the shape of each Longhorn call are pinned in
 `test_volume_revert_sequence.py`; the mutation guards in `test_volume_revert_guards.py`; the
-snapshot selection in `test_volume_revert_selection.py`; the `roles/k8s/manifests` include
+snapshot selection in `test_volume_revert_selection.py`; the playbook's include
 in `test_volume_revert_include.py`. What stays here is the input check, the seam tests
 against the live API server, and the checks on the validator and dry-run lists.
 """
