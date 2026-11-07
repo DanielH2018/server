@@ -3,10 +3,14 @@
 import os
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from pathlib import Path
+from typing import TypeVar
 
 # HOMELAB_ROOT prefixes every path reconcile reads or writes. Only the tests set it.
 ROOT = Path(os.environ.get("HOMELAB_ROOT", "/"))
+T = TypeVar("T")
 
 
 # sd-daemon(3) priorities. Without one, journald files a line at the unit's default priority,
@@ -50,11 +54,38 @@ def under_root(path: Path) -> Path:
     return ROOT / path.relative_to("/")
 
 
-def run(*argv: str, stdin: str | None = None) -> subprocess.CompletedProcess:
+def _log_timing(message: str) -> None:
     try:
-        return subprocess.run(argv, input=stdin, capture_output=True, text=True)
-    except OSError as exc:
-        return subprocess.CompletedProcess(argv, 127, "", str(exc))
+        log(message)
+    except OSError:
+        # The unwritten text stays buffered and the shutdown flush would exit 120; devnull drops it.
+        sys.stderr = open(os.devnull, "w")
+
+
+def timed(action: str, call: Callable[[], T]) -> T:
+    """Return `call()`, logging `action` before it starts and how long it took after it returns.
+
+    systemd's start timeout kills the run mid-call, so the line before the call is the one that
+    names the action a timed-out run was in. Both lines carry no level, which stores them at the
+    SyslogLevel=notice homelab-reconcile.service sets.
+    """
+    _log_timing(f"{action} starts")
+    started = time.monotonic()
+    result = call()
+    _log_timing(f"{action} took {time.monotonic() - started:.1f}s")
+    return result
+
+
+def run(*argv: str, stdin: str | None = None) -> subprocess.CompletedProcess:
+    """Run a command to completion and time it in the journal; never put a secret in `argv`."""
+
+    def call() -> subprocess.CompletedProcess:
+        try:
+            return subprocess.run(argv, input=stdin, capture_output=True, text=True)
+        except OSError as exc:
+            return subprocess.CompletedProcess(argv, 127, "", str(exc))
+
+    return timed(" ".join(argv), call)
 
 
 def systemctl(*args: str) -> subprocess.CompletedProcess:
