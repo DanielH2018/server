@@ -15,7 +15,33 @@
 # that starts without registries.yaml pulls every in-cluster image over HTTPS and fails. Return a
 # file to Ansible with the attended procedure in the H6 plan's *Rollback*.
 #
+# The rest of the agent's host half (H7.34): the Longhorn packages, the multipath drop-in, the
+# inotify key, the join rules and the address pin. The join itself is bootstrap-host.sh's. No
+# host-half path lives only in setup/k3s on daniel-server, whose role is still daniel-box's until
+# H7.35, so the pin's templates render in place through `role: k3s`.
+#
+# DECIDED: the wifi fallback reaches /etc/netplan through a copy, never an output's symlink.
+# `netplan generate` fails on a dangling link in that directory (measured 2026-11-07), so a
+# missing SOPS key would take every link down at the next boot. `homelab-netplan-wifi` installs
+# the rendered file only after it passes the generator, and leaves the old file otherwise. The
+# copy has no owner in dpkg, so emptying `k3s_node_wifi_link` is the way back: the next package
+# drops the output and the units, and the `legacy:` entries retire both copies. Do that before
+# dropping this component, which would leave the installed file behind.
+#
+# Both netplan files carry `manual:systemd-networkd.service`: `netplan apply` reconfigures the
+# link an SSH session rides on, so a change goes live at the next boot.
+#
+# FORWARD-ONLY for the address pin. Reverting the PR that added it deletes the file, and an agent
+# that boots while the gateway's DHCP is down cannot bind server_ip (#3882). A revert therefore owes
+# `k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address` on daniel-server before
+# the next reboot (operator-only); the revert restores that play's tasks.
+#
 # ENFORCED: ansible/tests/setup/test_k3s_agent_component.py.
+role: k3s
+depends:
+  - open-iscsi
+  - nfs-common
+  - multipath-tools
 defaults:
   # The log file k3s writes. The k3s-server component carries the same path, because Alloy tails
   # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
@@ -29,9 +55,8 @@ defaults:
     node-ip: "{{ server_ip }}"
     # INERT: Longhorn honors this label only when the cluster-level
     # `create-default-disk-labeled-nodes` setting is true, which this cluster never sets, so a
-    # default disk appears anyway. The label stays, because removing it changes the agent's
-    # flags for nothing. The enforced lever is agent_verify.yml patching the Longhorn node CR to
-    # allowScheduling:false, and `k3s_agent_longhorn_scheduling` flips that back deliberately.
+    # default disk appears anyway and the node schedules replicas. The label stays, because
+    # removing it changes the agent's flags for nothing.
     node-label:
       - node.longhorn.io/create-default-disk=false
     kubelet-arg:
@@ -43,7 +68,59 @@ files:
   - {src: templates/registries.yaml.j2, dst: /etc/rancher/k3s/registries.yaml, mode: "0600", activate: "manual:k3s-agent.service"}
   - {src: templates/logrotate-k3s-agent.j2, dst: /etc/logrotate.d/k3s-agent}
   - {src: templates/tmpfiles-k3s-agent.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-agent.conf}
+  # Longhorn's devices must stay out of multipathd's reach, or mounts fail. The block Ansible wrote
+  # in the owned /etc/multipath.conf stays as a harmless duplicate.
+  - {src: templates/multipath-longhorn.conf, dst: /etc/multipath/conf.d/50-homelab-longhorn.conf, activate: "reload:multipathd.service"}
+  - {src: "role:netplan-static-address.yaml.j2", dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
+  - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
+  - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
+  - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}
+outputs:
+  - src: templates/netplan-wifi-fallback.json.j2
+    path: /etc/netplan/80-homelab-wifi-fallback.yaml
+    destination: netplan/80-homelab-wifi-fallback.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [wifi_ssid, wifi_password]
+    persist: true
+    link: false
+    dependents: [homelab-netplan-wifi.service]
+    format: json   # homelab-secrets escapes each value, and JSON is YAML to netplan
+    when: "k3s_node_wifi_link | length > 0"
+enable:
+  homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until
   # reconcile removes it.
   - {path: /etc/systemd/system/k3s-agent.service.d/10-log-to-file.conf}
+  # The installer the join task kept here. bootstrap-host.sh fetches its own copy per run.
+  - {path: /usr/local/bin/k3s-install.sh}
+  # Emptying a link is the way back from the pin: the next package drops the file and this retires
+  # the path Ansible wrote. The link's live value stays until the next reboot, which is harmless.
+  - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}
+  - {path: /etc/sysctl.d/90-homelab-static-link.conf, when: "k3s_node_static_link | length == 0"}
+  # Both copies of the wifi credentials.
+  - {path: /etc/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
+  - {path: /var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
+lines:
+  # kubelet's log watchers and every root-uid container share the per-uid default of 128.
+  - {path: /etc/sysctl.conf, line: fs.inotify.max_user_instances=1024, regexp: '^\s*fs\.inotify\.max_user_instances\s*=', activate: sysctl}
+# The inter-node join rules, allowed FROM the server ON this agent. Each spec is the rule as `ufw
+# show added` prints it. `keep`: no revert and no floor ever deletes one, because the agent stops
+# being a node without them. The live rules carry no comment, so the arm adopts each by appending
+# it again, which relabels it in place. test_k3s_agent_component.py holds the ports equal to
+# k3s_join_agent_ports, whose symmetry with the server side is a test too.
+ufw:
+  rules:
+    - {id: k3s-join-vxlan, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 8472 proto udp", keep: true}
+    - {id: k3s-join-kubelet, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 10250 proto tcp", keep: true}
+    - {id: k3s-join-node-exporter, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 9100 proto tcp", keep: true}
+    - {id: k3s-join-memberlist-tcp, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto tcp", keep: true}
+    - {id: k3s-join-memberlist-udp, spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto udp", keep: true}
+  legacy:
+    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 8472 proto udp", comment: "", replaced_by: k3s-join-vxlan}
+    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 10250 proto tcp", comment: "", replaced_by: k3s-join-kubelet}
+    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 9100 proto tcp", comment: "", replaced_by: k3s-join-node-exporter}
+    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto tcp", comment: "", replaced_by: k3s-join-memberlist-tcp}
+    - {spec: "allow from {{ hostvars['daniel-box'].server_ip }} to any port 7946 proto udp", comment: "", replaced_by: k3s-join-memberlist-udp}

@@ -50,8 +50,10 @@
 # credential. The `unattended-upgrades` component above applies the regular updates pocket, this
 # host has no Docker to hold, and no homelab origin is allowed.
 #
-# The package declares no ufw rule of its own. The k3s agent's join rules stay `setup/k3s`
-# rules until H7.34 declares them `keep`; they carry no `homelab:` label, so the arm leaves them.
+# H7.34 adds the rest of the k3s agent's host half to `k3s-agent` (the join rules declared `keep`,
+# the multipath drop-in, the inotify key and the address pin, whose wifi half reads `wifi_ssid` and
+# `wifi_password`) and the `hypervisor` component, the monthly etcd restore drill and its libvirt
+# state (`r2_*`, `host_secrets.py sync daniel-server`, operator-only).
 description: daniel-server's homelab host package
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
 # agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).
@@ -59,7 +61,7 @@ component: claude-code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, host-hardening, rsyslog-filter, loki-route-witness]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders, host-hardening, rsyslog-filter, loki-route-witness]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:

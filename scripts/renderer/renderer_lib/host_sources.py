@@ -31,6 +31,8 @@ from renderer.renderer_lib.environment import strict_env
 _LONGHORN_LIB = "scripts/lib/longhorn_lib"
 SHARED_FILES = {
     "homelab-check-lib.sh": "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    # daniel-box's weekly list-only timer runs it from the checkout (H7.35).
+    "etcd_restore_drill.sh": "scripts/backup/etcd_restore_drill.sh",
     # What the backup-health reader imports. The reapers, `probe.py` and the runbook gates import
     # the same modules from the checkout, so they stay single in scripts/lib/.
     "longhorn_backup_health_logic.py": f"{_LONGHORN_LIB}/longhorn_backup_health_logic.py",
@@ -51,9 +53,9 @@ SHARED_FILES = {
 # renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
 # SHARED_FILES, so a component cannot read any other role. `initial_setup` joined in H7.30, which
 # moved the Pi's fail2ban group, maintenance jobs and ufw. H7.31 moved daniel-server's and H7.32
-# daniel-box's; the role still applies its other subjects on daniel-box. `k3s` joined in H7.35:
-# daniel-server's pin play still applies the address pin's templates that daniel-box's package
-# renders.
+# daniel-box's; the role still applies its other subjects on daniel-box. `k3s` joined in H7.34
+# and H7.35: both nodes' packages render the address pin's templates in place, because
+# `tasks/static-address.yml` still names them until H7.20a.
 ROLE_SOURCES = frozenset({"common", "initial_setup", "k3s", "nut_host"})
 # The components a host's package.yml may borrow sources from with `component:`. claude-code's
 # agent user and its per-uid slice cap sit in each host's package.yml, because the uid differs

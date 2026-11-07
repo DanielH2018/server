@@ -46,19 +46,16 @@ def _cron_jobs() -> dict[str, str]:
 
 # ── every cron ───────────────────────────────────────────────────────────────
 
-# Named members from the files the census reads, so a glob that stops matching fails here
-# rather than passing over an empty census.
-KNOWN_CRONS = frozenset(
+# No task installs a cron since H7.34 moved the full etcd drill, the last one, into a package
+# timer (1 after H7.35 and H7.37, 11 before them). The checks below still guard a cron a task
+# adds. So the census cannot pass over a glob that stops matching, it names cron tasks that
+# remove a job: the reader must still find those.
+KNOWN_CRON_TASKS = frozenset(
     {
-        "Full etcd restore drill in a throwaway guest",  # setup/hypervisor/tasks/etcd_drill.yml
+        "TLS cert-expiry watch",  # setup/initial_setup/tasks/crons.yml
+        "Clear ansible log file",  # setup/initial_setup/tasks/crons.yml
     }
 )
-# 1 after H7.35 and H7.37 moved setup/k3s's and fake_remux's crons into package timers, 12
-# after D6.17 removed the release-staleness cron (13 after the initial_setup crons no host
-# ran were deleted, 20 after H2.2c moved the Longhorn
-# trim to a RecurringJob, 21 after H7.40 moved the artifacts node's two crons into package
-# timers, 23 before that, and 29 before H7.36).
-_CENSUS_FLOOR = 1
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 
@@ -111,10 +108,14 @@ def unrouted_stages(job: str) -> list[str]:
     return unrouted
 
 
-def test_the_census_reads_both_planes():
-    names = [name for name, _ in _cron_job_list()]
-    assert len(names) >= _CENSUS_FLOOR, len(names)
-    assert KNOWN_CRONS <= set(names), sorted(KNOWN_CRONS - set(names))
+def test_the_census_reads_the_cron_tasks():
+    names = {
+        str(task["ansible.builtin.cron"]["name"])
+        for path in task_files()
+        for task in walk_tasks(load_tasks(path))
+        if isinstance(task.get("ansible.builtin.cron"), dict)
+    }
+    assert KNOWN_CRON_TASKS <= names, sorted(KNOWN_CRON_TASKS - names)
 
 
 def test_no_two_installed_crons_share_a_name():

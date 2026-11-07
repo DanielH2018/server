@@ -17,10 +17,10 @@ import subprocess
 from lib import yaml_fast
 from lib.proc_testing import fake_bin
 
-from _helpers import ALL_VARS, HOST_VARS, ROLES
+from _helpers import ALL_VARS, HOST_VARS, REPO, ROLES
 from _shell_render import render_shell_script
 
-HYPERVISOR = ROLES / "setup" / "hypervisor"
+HYPERVISOR = REPO / "hosts" / "components" / "hypervisor"
 ORCHESTRATOR = HYPERVISOR / "templates" / "etcd-restore-drill-vm.sh.j2"
 # The orchestrator sources the check library (M6 batch B4) and writes a textfile verdict from
 # `report` and `report_fence`. A runner has no /usr/local/lib copy, and daniel-box does, so the
@@ -28,7 +28,7 @@ ORCHESTRATOR = HYPERVISOR / "templates" / "etcd-restore-drill-vm.sh.j2"
 # the second, a run on daniel-box would write the real collector directory. The harness asserts
 # on the literal first, the way _pi_health.py does, so a renamed library fails here instead of
 # quietly disarming the run under test.
-CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 ROLE_CHECK_LIB = ROLES / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 # The two lines the harness strips to make the orchestrator sourceable. Named so a rename fails
 # loudly rather than leaving the harness running `main` against a real libvirt.
@@ -139,7 +139,7 @@ def rendered_orchestrator():
     matter which way the leg under test should go.
     """
     return render_shell_script(
-        "setup",
+        "components",
         "hypervisor",
         ORCHESTRATOR.name,
         overrides={

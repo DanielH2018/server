@@ -160,16 +160,6 @@ def test_a_common_task_file_change_reaches_the_roles_importing_it():
     assert setup_tags_for([path]) == consumers
 
 
-def test_a_checkout_file_a_setup_role_copies_reaches_that_role():
-    """hypervisor copies the etcd drill script from the checkout, under no role's directory, so
-    an edit to it must name hypervisor (#6411)."""
-    drill = ["scripts/backup/etcd_restore_drill.sh"]
-    cs = services_from_changed_paths(drill)
-    assert cs.setup_roles == {"hypervisor"}
-    assert cs.broad_setup
-    assert setup_tags_for(drill) == {"hypervisor"}
-
-
 def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file():
     """`check_timer.yml` renders the kuma-check pair, so a template edit reaches a host
     only through that task file's importers (#3319). `common` is not recorded, so the alert

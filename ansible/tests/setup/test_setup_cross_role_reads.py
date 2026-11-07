@@ -197,13 +197,7 @@ def test_a_setup_role_naming_a_filter_only_in_a_comment_or_a_longer_word_is_clea
 
 # Word matches of a defaults key that are not reads of the variable, each with what the scan
 # matched instead. An exemption the scan no longer finds fails below.
-_DEFAULTS_READS_EXEMPT = {
-    ("ansible/roles/setup/k3s/defaults/main.yml", "hypervisor"): (
-        "etcd-restore-drill-vm.sh.j2 declares a bash local named k3s_version, filled from "
-        "`k3s --version` on the host, and staging-nwfilter.xml.j2 names k3s_agent_node_ips "
-        "only inside an XML comment"
-    ),
-}
+_DEFAULTS_READS_EXEMPT = {}
 
 
 def defaults_readers(

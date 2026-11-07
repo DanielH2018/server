@@ -174,6 +174,7 @@ def test_the_manifest_lists_nut_monitor_and_retires_the_ansible_entries(package)
     others = (
         "claude-code",
         "host-maintenance",
+        "hypervisor",
         "integrity-scans",
         "k3s-agent",
         "loki-route-witness",

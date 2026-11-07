@@ -1,7 +1,7 @@
-<!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
+<!-- hosts/components/hypervisor. -->
 <!-- The etcd restore drill's throwaway guest. TRANSIENT: the orchestrator brings it up with
      `virsh create` from this file and `virsh destroy`s it on the way out, so it is never a
-     defined domain and never in the way of teardown.yml. Shape follows staging-vm.xml.j2; the
+     defined domain. Shape follows staging-vm.xml.j2; the
      differences are sizing and that the disk is recreated from the base image every run. -->
 <domain type='kvm'>
   <name>{{ hypervisor_etcd_drill_vm_hostname }}</name>

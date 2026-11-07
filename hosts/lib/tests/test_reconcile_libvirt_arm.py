@@ -33,9 +33,12 @@ def declare(
             path = f"{DIR}/{kind}/{name}.xml"
             target = node.root / path.lstrip("/")
             target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(
-                f"<{root}><name>{name}</name><uuid>{UUID}</uuid>{body}</{root}>\n"
+            named = (
+                f"<filter name='{name}'>"
+                if kind == "nwfilters"
+                else f"<{root}><name>{name}</name>"
             )
+            target.write_text(f"{named}<uuid>{UUID}</uuid>{body}</{root}>\n")
             section[kind].append({"name": name, "path": path})
     node.manifest["reconcilers"] = ["libvirt"]
     node.manifest["libvirt"] = section

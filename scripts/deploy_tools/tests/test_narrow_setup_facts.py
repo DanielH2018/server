@@ -184,11 +184,10 @@ ROLES_WITHOUT_AN_ENTRY_POINT = frozenset({"common"})
 # actually measures them. Named rather than counted: every other setter in the tree refuses
 # for a reason older than this edge — untagged, or not statically imported from `tasks/main` —
 # and a regression that silenced these would leave `widened` empty and the census green.
-MEASURED_SETTERS = frozenset(
-    {
-        "hypervisor:tasks/network.yml",
-    }
-)
+# Empty since H7.34 deleted `hypervisor:tasks/network.yml`, the last one: the only `set_fact`
+# left in a setup role is `common`'s, which has no entry point. The census still measures a
+# setter a role adds.
+MEASURED_SETTERS: frozenset[str] = frozenset()
 
 
 def test_the_fact_edge_widens_no_real_setup_role_today():

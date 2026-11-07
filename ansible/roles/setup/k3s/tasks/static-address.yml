@@ -1,8 +1,9 @@
 ---
 # Pin the node's LAN address statically, so k3s does not depend on the gateway's DHCP server
-# to start. One importer: k3s-bringup.yml's agent-address play for daniel-server (#3891), because
-# daniel-box's pin is its package's since H7.35 (hosts/components/k3s-server). That play runs ON the agent, not through the join play's
-# SSH session, because `netplan apply` reconfigures the link such a session rides on.
+# to start. Two importers: main.yml for the server node, and k3s-bringup.yml's agent-address
+# play. Neither writes anything: daniel-box's pin is its package's since H7.35
+# (hosts/components/k3s-server), and daniel-server's since H7.34 (hosts/components/k3s-agent).
+# Every task reads `k3s_packaged_hosts` for that.
 # templates/netplan-static-address.yaml.j2 has the incident (#3882) and why DHCPv4 is switched
 # off rather than kept alongside.
 #

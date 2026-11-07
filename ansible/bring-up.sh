@@ -150,9 +150,8 @@ if [[ "$CONTINUE" == true ]]; then
     uv run ansible-playbook ansible/k3s-bringup.yml -e target="$HOST"
   else
     echo ">> skipping k3s-bringup: '$HOST' is not in k3s_server_hosts."
-    echo "   Narrow on purpose — an AGENT node is joined by k3s-bringup.yml's opt-in join"
-    echo "   plays, which run FROM the server node over SSH, so run this there:"
-    echo "       uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=$HOST"
+    echo "   Narrow on purpose — an AGENT node joins through its bootstrap, run ON the agent:"
+    echo "       K3S_URL=<url> K3S_TOKEN=<token> hosts/bootstrap-host.sh $HOST"
   fi
   # deploy.sh, not `ansible-playbook deploy.yml`: the playbook alone takes none of the locks
   # the other tree-lock holders take (docs/deploying.md#who-holds-the-tree-lock), so a bring-up

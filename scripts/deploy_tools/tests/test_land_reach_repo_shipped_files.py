@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
-"""A repo file a setup role ships from the checkout reaches that role's hosts .
+"""A repo file a setup role ships from the checkout reaches that role's hosts.
 
 `remaining_setup_hosts_note` must hand `setup_file_hosts` more than the paths under the role's
 own directory: a repo file a task ships from the checkout reaches the one host that runs that
-task. daniel-server is the one host with `has_hypervisor: true`, so it is the one host that runs
-`install.yml`, and `scripts/backup/etcd_restore_drill.sh` is what that half installs from the
-checkout. Without the repo-file arm the changed script contributes nothing and the union comes
-from `tasks/teardown.yml` alone (`not has_hypervisor`: daniel-box and daniel-pi), so an operator
-following the note applies the teardown half to the Pi and leaves daniel-server on the old
-script. The cases below drive the file list of a PR that changed that script and the role's own
-files.
+task. `gitops_deploy` runs on daniel-box alone, and `hosts/lib/ci_verdict.py` is what its
+`tasks/code.yml` installs from the checkout, so a landing on another host owes daniel-box the
+apply.
 
-The reject half is `scripts/dev/pytest_shard_weights.json`, from the same PR: no task ships
-it, so it must contribute nothing. Without that half the fix would "pass" by widening every
-changed role to every host it reaches, which is the failure `setup_repo_file_hosts` returns
-the empty set on absent evidence to avoid.
+The reject half is `scripts/dev/pytest_shard_weights.json`: no task ships it, so it must
+contribute nothing. Without that half the fix would "pass" by widening every changed role to
+every host it reaches, which is the failure `setup_repo_file_hosts` returns the empty set on
+absent evidence to avoid.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_repo_shipped_files.py
 """
@@ -23,25 +19,14 @@ import pytest
 
 from deployer_lib import deploy_cross_role
 from deploy_tools.land_lib import land_reach
-from deploy_tools.land_lib import land_tags
 
 from lib.repo_paths import REPO as REPO_ROOT
 from deploy_tools.setup_lib.setup_role_chains import task_gates_shipping_repo_path
 
-_ROLE = "hypervisor"
-_SHIPPED = "scripts/backup/etcd_restore_drill.sh"
+_ROLE = "gitops_deploy"
+_SHIPPED = "hosts/lib/ci_verdict.py"
 _NOT_SHIPPED = "scripts/dev/pytest_shard_weights.json"
-_INSTALL = "ansible/roles/setup/hypervisor/tasks/etcd_drill.yml"
-_PR_2792_SHA = "66ed500637abd09effe00c6bafde538c851914a9"
-# A PR's file list (`gh pr view <n> --json files`), with its retired paths replaced: the
-# shipped script by `_SHIPPED` above, and the deleted test by the module that replaced it.
-_PR_2792_PATHS = [
-    "ansible/roles/setup/hypervisor/CLAUDE.md",
-    "ansible/roles/setup/hypervisor/tasks/teardown.yml",
-    "ansible/tests/staging/test_etcd_drill_vm.py",
-    _SHIPPED,
-    _NOT_SHIPPED,
-]
+_INSTALL = "ansible/roles/setup/gitops_deploy/tasks/code.yml"
 
 
 def test_the_out_of_tree_ship_site_still_exists():
@@ -50,8 +35,7 @@ def test_the_out_of_tree_ship_site_still_exists():
     `setup_repo_file_hosts` finds its subject by matching the path literal in a task, so
     every case below returns the empty set -- and passes -- once that literal moves.
     """
-    missing = [p for p in _PR_2792_PATHS if not (REPO_ROOT / p).exists()]
-    assert not missing, f"paths moved, so these cases check nothing: {missing}"
+    assert (REPO_ROOT / _SHIPPED).exists()
     install = (REPO_ROOT / _INSTALL).read_text()
     assert f'src: "{{{{ playbook_dir }}}}/../{_SHIPPED}"' in install, (
         f"{_INSTALL} no longer ships {_SHIPPED} by that path literal"
@@ -59,9 +43,9 @@ def test_the_out_of_tree_ship_site_still_exists():
 
 
 def test_a_shipped_repo_file_reaches_the_installing_host():
-    """The accept half: only daniel-server runs `install.yml`, so only it owes the apply."""
+    """The accept half: only daniel-box runs the role, so only it owes the apply."""
     assert land_reach.setup_repo_file_hosts(_ROLE, _SHIPPED) == frozenset(
-        {"daniel-server"}
+        {"daniel-box"}
     )
 
 
@@ -71,50 +55,14 @@ def test_a_repo_file_no_task_ships_reaches_no_host():
 
 
 def test_another_role_does_not_claim_a_file_it_does_not_ship():
-    """Evidence is per role: gitops_deploy ships no etcd restore drill."""
-    assert land_reach.setup_repo_file_hosts("gitops_deploy", _SHIPPED) == frozenset()
-
-
-def test_the_note_for_pr_2792_names_both_owed_hosts():
-    """daniel-server for the runner it installs, daniel-pi for the teardown half it changed."""
-    note = land_reach.remaining_setup_hosts_note(_PR_2792_PATHS, "daniel-box")
-    assert "daniel-server" in note, note
-    assert "daniel-pi" in note, note
-    assert (
-        'ssh daniel-server "cd /home/ubuntu/server && git pull --ff-only && '
-        'uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor"' in note
-    ), note
-
-
-def test_the_note_drops_daniel_server_without_the_shipped_script():
-    """The same PR minus the one file that lands there owes daniel-server nothing."""
-    note = land_reach.remaining_setup_hosts_note(
-        [p for p in _PR_2792_PATHS if p != _SHIPPED], "daniel-box"
-    )
-    assert "daniel-server" not in note, note
-    assert "daniel-pi" in note, note
-
-
-def test_the_note_survives_the_quiet_set_land_sh_passes():
-    """`land_tags.py` calls this with a computed `quiet`, and `repo_files` filters through it.
-
-    Every other case here leaves `quiet` empty, so a `quiet_paths` classification that dropped
-    the shipped script would leave them green and the landing unfixed. The quiet set for that
-    PR's own range is its `CLAUDE.md` alone.
-    """
-    quiet = land_tags.quiet_paths(_PR_2792_PATHS, f"{_PR_2792_SHA}~1..{_PR_2792_SHA}")
-    assert quiet == {"ansible/roles/setup/hypervisor/CLAUDE.md"}, quiet
-    note = land_reach.remaining_setup_hosts_note(
-        _PR_2792_PATHS, "daniel-box", quiet=quiet
-    )
-    assert "daniel-server" in note, note
+    """Evidence is per role: k3s ships no CI verdict reader."""
+    assert land_reach.setup_repo_file_hosts("k3s", _SHIPPED) == frozenset()
 
 
 # --- A PR that puts no role in the change set at all -------------------------
 #
-# The deployer's table names hypervisor for `_SHIPPED` since #6411, so a PR changing it alone
-# puts hypervisor in the change set. These cases adopt a table without that row: the arm they
-# hold is the backstop for a checkout copy the table lacks, such as one whose `src:` is
+# These cases adopt a deployer table without a row for `_SHIPPED`, so a PR changing it alone puts
+# no role in the change set. The arm they hold is the backstop for a checkout copy the table lacks, such as one whose `src:` is
 # templated and so escapes `test_setup_cross_role_files.py`'s census.
 
 
@@ -134,13 +82,13 @@ def table_without_the_row():
 
 
 def test_a_repo_file_only_pr_names_the_installing_host(table_without_the_row):
-    """The accept half: no path under `ansible/roles/setup/hypervisor/` at all.
+    """The accept half: no path under the role's directory at all.
 
     `cs.setup_roles` is built by path classification, so this PR leaves it empty and the
     self-applied loop has nothing to iterate. The role is reached through the file it ships.
     """
-    note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box")
-    assert "daniel-server" in note, note
+    note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-server")
+    assert "daniel-box" in note, note
     assert "ships a changed repo file" in note, note
 
 
@@ -154,23 +102,16 @@ def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone(
 ):
     """No `- {local_host}` here: with no role path in the PR the tick applied the role nowhere.
 
-    Landing the same PR ON daniel-server must still name daniel-server, and with the plain
-    local command rather than an ssh hop to the machine already running it.
+    Landing the same PR ON daniel-box must still name daniel-box, and with the plain local
+    command rather than an ssh hop to the machine already running it.
     """
-    note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-server")
-    assert "daniel-server" in note, note
-    assert "ssh daniel-server" not in note, note
-    assert (
-        "`uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor`" in note
-    ), note
-
-
-def test_the_tables_row_puts_hypervisor_in_the_change_set_and_still_names_daniel_server():
-    """With the row (#6411) the tick applies hypervisor on its own host, which installs nothing
-    there, so the note must still send a hand to daniel-server."""
-    assert land_tags.self_applied([_SHIPPED])
     note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box")
-    assert "`hypervisor` also reaches daniel-server" in note, note
+    assert "daniel-box" in note, note
+    assert "ssh daniel-box" not in note, note
+    assert (
+        "`uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy`"
+        in note
+    ), note
 
 
 # --- A task NAME that mentions a repo path ships nothing (#6538) -------------

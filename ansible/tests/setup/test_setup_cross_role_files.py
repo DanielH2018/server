@@ -72,8 +72,6 @@ KNOWN_EDGES = {
         "gitops_deploy",
         "initial_setup",
     },
-    # Copied from the checkout by a literal `src:`.
-    "scripts/backup/etcd_restore_drill.sh": {"hypervisor"},
 }
 # A module the setup roles ship that sits outside the setup tree since H7.2e: the shared
 # `hosts/lib/` modules and the `scripts/lib/longhorn_lib/` package. No role owns them, so every

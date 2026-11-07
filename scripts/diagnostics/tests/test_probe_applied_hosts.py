@@ -84,11 +84,8 @@ def test_the_k3s_agent_walk_holds_none_of_the_server_crons():
     ctx = applied.context(K3S, "daniel-server")
     wants, _ = applied_tasks.expected(K3S, "daniel-server", ctx, tuple(files))
     paths = {w.path for w in wants}
-    # The pin play's file: the agent's registries.yaml is its host package's since H6.5a.
-    assert "/etc/netplan/90-homelab-static-address.yaml" in paths
-    assert "/etc/rancher/k3s/registries.yaml" not in paths
-    assert not {p for p in paths if p.startswith("/opt/longhorn-backup-health")}
-    assert "/etc/rancher/k3s/kuma-push.env" not in paths
+    # daniel-server's k3s half, the pin play's file included, is its host package's since H7.34.
+    assert paths == set()
 
 
 def test_a_host_whose_files_write_nothing_is_not_read_and_not_a_gap(tmp_path):

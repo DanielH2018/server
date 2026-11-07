@@ -293,7 +293,8 @@ def maximal_apply_warning(role: str, tags) -> str:
 # `agent_join_cmds`: an agent-only row prints the join alone. The whole-role tag still gets
 # both commands, because a refusal says nothing about which half the change reached. Pinned by
 # test_deploy_remediation_agent.py::test_an_agent_only_change_narrows_to_the_join_alone.
-AGENT_JOIN_TAGS: dict[str, str] = {"k3s": "k3s_agent"}
+# Empty since H7.34: bootstrap-host.sh and the host package own the agent half.
+AGENT_JOIN_TAGS: dict[str, str] = {}
 
 
 def server_tags(role: str, tags) -> frozenset[str]:
@@ -347,7 +348,8 @@ def agent_join_cmds(role: str, playbook: str, tags, agent_hosts) -> list[str]:
 # it `ansible_connection=local`, and its preamble refuses one run from another machine. Every
 # printer therefore names the host to run it on. Pinned by
 # test_deploy_remediation_agent.py::test_a_static_address_change_prints_the_pin_play_beside_the_server.
-AGENT_PIN_TAGS: dict[str, str] = {"k3s": "node-address"}
+# Empty since H7.34: daniel-server's package owns its pin, so no agent owes the pin play.
+AGENT_PIN_TAGS: dict[str, str] = {}
 
 
 def agent_pin_cmds(

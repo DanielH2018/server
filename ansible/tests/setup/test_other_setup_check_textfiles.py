@@ -69,7 +69,7 @@ def kuma_push_markers(body: str) -> list[str]:
 def test_no_b4_producer_pushes_to_kuma(producer):
     # RED if a push, its library, its token or its env file returns: the tiles are gone, so a
     # push would be refused (`by=kuma`) every run.
-    plane = "components" if producer[0] == "fake-remux" else "setup"
+    plane = "components" if producer[0] in {"fake-remux", "hypervisor"} else "setup"
     body = render_shell_script(plane, *producer, OVERRIDES)
     # Non-vacuity: the render is the real script, which still records its verdict.
     assert PRODUCERS[producer] in body
@@ -213,7 +213,7 @@ def _run_drill_reports(tmp_path):
     `logger` records each call, so the run's order of status lines and textfiles is readable.
     """
     body = render_shell_script(
-        "setup", "hypervisor", "etcd-restore-drill-vm.sh.j2", OVERRIDES
+        "components", "hypervisor", "etcd-restore-drill-vm.sh.j2", OVERRIDES
     )
     lifted = []
     for name in ("write_verdict", "report", "report_fence"):

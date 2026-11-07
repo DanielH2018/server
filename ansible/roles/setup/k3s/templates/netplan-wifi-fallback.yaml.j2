@@ -16,7 +16,7 @@
 network:
   version: 2
   # A loop over at most one link, as in netplan-static-address.yaml.j2, so the empty default
-  # renders `wifis:` with no links (static-address.yml removes the file then anyway).
+  # renders `wifis:` with no links, and the file's owner removes it then.
   wifis:
 {% for link in [k3s_node_wifi_link] | select %}
     {{ link }}:

@@ -46,7 +46,9 @@ lists.
 - `homelab-daniel-pi` ships reconcile, the secrets unit and the Pi's heartbeats.
 - `homelab-daniel-server` ships reconcile, the secrets unit, the
   UPS shutdown chain and the `k3s-gates` component, whose `/usr/lib/homelab/k3s_gates.py` the
-  k3s-agent Plan's `prepare` runs (#6413).
+  k3s-agent Plan's `prepare` runs (#6413). Since H7.34 it also ships the k3s agent's whole host
+  half (`hosts/components/k3s-agent/`) and the hypervisor with its monthly etcd restore drill
+  (`hosts/components/hypervisor/`).
 - `homelab-daniel-box` ships reconcile (H6.2), and since H6.3b the secrets unit and the
   `k3s-restart` component, with the `k3s-gates` component that ships the script the restart
   imports. Its one credential is `k3s_readonly_token`, which
@@ -620,15 +622,10 @@ this section is **operator-only**, and the guest drill below has not run yet. Th
 
 ### What the packages do not hold yet
 
-`homelab-daniel-box` holds the server's whole host half since H7.35. `homelab-daniel-server` does
-not until H7.34 lands. A daniel-server rebuilt from its package alone lacks:
-
-- the UFW rules for k3s's join ports. The UFW arm of reconcile enables UFW on a rebuilt host, so
-  daniel-box cannot reach a rebuilt agent's VXLAN, kubelet or metrics ports until the rules exist;
-- the Longhorn host prerequisites and the `multipathd` blacklist;
-- the static LAN address.
-
-Until that slice lands, a daniel-server rebuilt from this section is not a working node.
+`homelab-daniel-box` holds the server's whole host half since H7.35. `homelab-daniel-server`
+holds the agent's join rules, the Longhorn host prerequisites, the `multipathd` blacklist and
+the static LAN address since H7.34. A rebuilt daniel-server lacks only its LVM volumes, which
+`bootstrap-host.sh` step 4 does not create yet.
 [The break-glass doc](break-glass.md), *Scenario: daniel-server is dead, daniel-box survives*, says
 what completes a daniel-server rebuild during an outage.
 

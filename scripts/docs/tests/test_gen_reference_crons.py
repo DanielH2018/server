@@ -219,8 +219,9 @@ def test_a_timer_whose_command_names_a_mutating_word_is_flagged():
     assert g._timer_changes_state(service) == "yes (rotate)"
 
 
-def test_the_live_page_lists_both_a_packaged_timer_and_a_role_cron(tmp_path):
-    """Named members: an empty read of either source fails here."""
+def test_the_live_page_lists_a_packaged_timer(tmp_path):
+    """A named member: an empty read of the packages fails here. No setup role installs a cron
+    since H7.34, so the role-cron source has no member to name."""
     out = tmp_path / "crons.md"
     assert g.main(["--out", str(out)]) == 0
     page = out.read_text()
@@ -228,7 +229,6 @@ def test_the_live_page_lists_both_a_packaged_timer_and_a_role_cron(tmp_path):
         "| homelab-docs-refresh.timer | `OnCalendar=*-*-* 06,18:17:00` | daniel-box |"
         in page
     )
-    assert "| Full etcd restore drill in a throwaway guest |" in page
 
 
 def test_hosts_that_differ_on_a_timers_schedule_get_a_row_each():

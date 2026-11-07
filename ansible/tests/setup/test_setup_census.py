@@ -77,7 +77,7 @@ def real_tree() -> dict[str, list[Item]]:
 
 NAMED_MEMBERS = [
     ("template", "Pin the node's LAN address in netplan"),
-    ("sysctl", "Raise the inotify instance limit for pod log tailing"),
+    ("sysctl", "Stop routing over the pinned link while it has no carrier"),
 ]
 
 
@@ -95,7 +95,7 @@ def test_the_census_finds_each_named_member(real_tree, kind, name):
 def test_a_shipped_file_and_a_target_are_both_searchable(real_tree):
     items = [i for items in real_tree.values() for i in items]
     assert any(i.mentions("k3s/tasks/static-address.yml") for i in items)
-    assert any(i.mentions("fs.inotify.max_user_instances") for i in items)
+    assert any(i.mentions("ignore_routes_with_linkdown") for i in items)
 
 
 # --- what an item is --------------------------------------------------------------------------

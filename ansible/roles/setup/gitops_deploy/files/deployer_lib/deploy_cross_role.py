@@ -52,10 +52,6 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/templates/check-timer.service.j2": _CHECK_TIMER,
     f"{_COMMON}/templates/check-timer.timer.j2": _CHECK_TIMER,
     f"{_COMMON}/templates/check-timer-boot.service.j2": _CHECK_TIMER,
-    # A repo file a setup task copies from the checkout by `src: "{{ playbook_dir }}/../<path>"`.
-    # It sits under no role, so without a row it maps to no role and the tick fast-forwards it
-    # with nothing applied: daniel-server kept the pre-49c90e3be drill script (#6411).
-    "scripts/backup/etcd_restore_drill.sh": frozenset({"hypervisor"}),
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
     f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(

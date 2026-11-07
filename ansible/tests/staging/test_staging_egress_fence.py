@@ -43,19 +43,18 @@ from _fence_probe import (
     dialled_addresses,
     rendered_orchestrator,
 )
-from _helpers import ALL_VARS, HOST_VARS, ROLES
+from _helpers import ALL_VARS, HOST_VARS, REPO
 from lib.repo_paths import K8S_ROLES
 from renderer.renderer_lib import host as host_mode
 from _setup_render import rendered_setup_text
 
 COREDNS_DEFAULTS = K8S_ROLES / "coredns" / "defaults" / "main.yml"
 
-HYPERVISOR = ROLES / "setup" / "hypervisor"
+HYPERVISOR = REPO / "hosts" / "components" / "hypervisor"
 NWFILTER_TEMPLATE = HYPERVISOR / "templates" / "staging-nwfilter.xml.j2"
 NETWORK_TEMPLATE = HYPERVISOR / "templates" / "staging-network.xml.j2"
 DOMAIN_TEMPLATE = HYPERVISOR / "templates" / "etcd-drill-vm.xml.j2"
 HYPERVISOR_DEFAULTS = HYPERVISOR / "defaults" / "main.yml"
-NETWORK_TASKS = HYPERVISOR / "tasks" / "network.yml"
 
 CIDR_VAR = "staging_net_cidr"
 LAN_VAR = "lan_subnet"
@@ -294,18 +293,11 @@ def test_the_guest_interface_references_the_fence():
         )
 
 
-def test_the_filter_is_defined_before_the_guest_that_references_it():
+def test_the_package_declares_the_filter_the_guest_references():
     """libvirt refuses to start a domain whose <filterref> names a filter it does not know."""
-    defines = [
-        t
-        for t in yaml_fast.safe_load(NETWORK_TASKS.read_text())
-        if "nwfilter-define" in str(t.get("ansible.builtin.command", ""))
-    ]
-    assert defines, (
-        f"no `virsh nwfilter-define` in {NETWORK_TASKS}. network.yml runs before etcd_drill.yml "
-        f"(roles/setup/hypervisor/tasks/install.yml), which is the ordering the domain's "
-        f"<filterref> depends on; moving the define later breaks a cold build."
-    )
+    package = host_mode.render_host("daniel-server")
+    assert [o["name"] for o in package.libvirt["nwfilters"]] == [_filter_name()]
+    assert [o["name"] for o in package.libvirt["networks"]] == ["staging"]
 
 
 def _routed_rules(rules: list[dict]) -> list[str]:

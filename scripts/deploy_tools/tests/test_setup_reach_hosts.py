@@ -44,12 +44,6 @@ def test_an_empty_range_names_no_role(capsys):
     assert _reach(capsys, _HYPERVISOR, _HYPERVISOR) == {}
 
 
-def test_the_drill_script_commit_names_daniel_server(capsys):
-    """49c90e3be changed the script hypervisor copies, and no file under its role (#6411)."""
-    reach = _reach(capsys, "49c90e3be~1", "49c90e3be")
-    assert "daniel-server" in reach["hypervisor"]
-
-
 def test_a_moved_group_vars_key_names_every_host_its_reader_runs_on(capsys):
     """#6968: the range's changed paths reached daniel-server only; the key reaches daniel-pi."""
     reach = _reach(capsys, f"{_PYTHON_PIN}~1", _PYTHON_PIN)

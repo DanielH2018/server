@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # etcd-restore-drill-vm — run the FULL etcd restore drill in a throwaway guest, unattended.
-# Rendered by roles/setup/hypervisor onto daniel-server; scheduled by the cron in etcd_drill.yml.
+# Shipped by daniel-server's hypervisor component; homelab-etcd-restore-drill.timer runs it.
 #
 # Usage: etcd-restore-drill-vm.sh [-h|--help]
 #        etcd-restore-drill-vm.sh --rehearse-suc --repo DIR --rendered DIR --expect upgrade|red
 #                                 [--guest-version VERSION] [--plan NAME]
-# With no arguments it is the monthly drill. Root cron job "Full etcd restore drill in a throwaway guest" (cron file
-# etcd-restore-drill-vm, schedule etcd_drill_full_cron) runs it on daniel-server and appends its
-# output to cron.log in the drill log directory. Running it by hand starts a real guest and a real
+# With no arguments it is the monthly drill. homelab-etcd-restore-drill.service (schedule
+# etcd_drill_full_cron) runs it as root on daniel-server, and its output goes to the journal.
+# Running it by hand starts a real guest and a real
 # restore. Exit 0 = the drill passed; the evidence of each run is under LOG_ROOT/<utc-run-id>/.
 #
 # The drill itself is scripts/backup/etcd_restore_drill.sh, which restores the newest off-box
@@ -67,12 +67,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 # shellcheck source=/dev/null
-source /usr/local/lib/homelab-check-lib.sh || {
-  logger -t etcd-restore-drill-vm "homelab-check-lib.sh missing — run initial_setup on this host"
+source /usr/lib/homelab/homelab-check-lib.sh || {
+  logger -t etcd-restore-drill-vm "homelab-check-lib.sh missing — the check-lib component ships it"
   exit 1
 }
 
-# Cron's PATH omits /usr/local/bin, where k3s lives; the same trap as every other cron here.
+# systemd's default PATH covers /usr/local/bin, where k3s lives, and a hand run may not.
 export PATH="/usr/local/bin:${PATH}"
 
 ARMED="{{ 1 if hypervisor_etcd_drill_armed else 0 }}"
@@ -90,7 +90,7 @@ GUEST_HOSTKEY_PUB="{{ hypervisor_etcd_drill_vm_hostkey }}.pub"
 IDENTITY="/home/{{ sys_user }}/.ssh/id_ed25519"
 BOOT_TIMEOUT="{{ hypervisor_etcd_drill_vm_boot_timeout }}"
 S3_ENV="{{ hypervisor_etcd_drill_s3_env }}"
-# K3S_TOKEN lives here since the agent join (roles/setup/k3s/tasks/agent.yml). k3s writes the same
+# K3S_TOKEN lives here since the agent join (hosts/bootstrap-host.sh). k3s writes the same
 # value to server/token and server/node-token when no --agent-token is set, so this IS the token
 # a rebuilt server would need; a mismatch fails the restore stage loudly rather than passing.
 AGENT_ENV=/etc/systemd/system/k3s-agent.service.env
@@ -111,7 +111,7 @@ LOCK="{{ hypervisor_etcd_drill_lock }}"
 # boot at BOOT_TIMEOUT; this catches a hung ssh or a download that never finishes.
 RUN_TIMEOUT=1800
 # The egress-fence leg's own bounds. It sits OUTSIDE RUN_TIMEOUT (that deadline starts once the
-# drill is launched), so without one of its own a wedged dial would hang the monthly cron. A
+# drill is launched), so without one of its own a wedged dial would hang the monthly run. A
 # dropped packet burns the whole per-target timeout, so the deadline is sized for every target
 # timing out at once with ssh setup on top.
 FENCE_PROBE_TIMEOUT="{{ hypervisor_etcd_drill_fence_probe_timeout }}"
@@ -132,7 +132,7 @@ DEADLINE_S={{ etcd_drill_full_kuma_interval_s }}
 TEXTFILE_DIR=${TEXTFILE_DIR:-/var/lib/node-exporter-textfile}
 
 # DECIDED: a rehearsal writes no textfile verdict and no stamp. Both verdicts and the stamp answer
-# "did the MONTHLY drill run", and a rehearsal that refreshed them would hide a month the cron
+# "did the MONTHLY drill run", and a rehearsal that refreshed them would hide a month the timer
 # skipped. Its syslog lines carry their own tag for the same reason.
 if [[ "$REHEARSE" == 1 ]]; then
   TAG=etcd-drill-suc-rehearsal
@@ -412,7 +412,7 @@ is stale, and a moved address is not worth a skipped restore drill."
 from neither the guest nor daniel-server, so refusal from the guest proves nothing about their \
 range and the fence is unproven there. The restore drill itself continues and is unaffected. \
 Fix the probe, not the fence: re-read the target's live address (Longhorn's ClusterIP, or a pod \
-on this host's cni0 bridge) in $fence_log, then correct it in roles/setup/hypervisor."
+on this host's cni0 bridge) in $fence_log, then correct it in hosts/components/hypervisor."
   else
     FENCE_VERDICT=hold
     report_fence up "egress fence holds: every fenced range refused from inside guest $NAME, \
@@ -431,7 +431,7 @@ boot_guest() {
   log "starting transient guest $NAME"
   "${VIRSH[@]}" create "$XML" >/dev/null || fail "virsh create $XML failed"
 
-  # The pinned host key: one line, this address, the public half ansible generated. Anything else
+  # The pinned host key: one line, this address, the public half etcd-drill-prepare generated. Anything else
   # answering at GUEST_IP is refused, which is the whole point of pinning.
   KNOWN_HOSTS="$(mktemp)"
   printf '%s %s\n' "$GUEST_IP" "$(cut -d' ' -f1,2 < "$GUEST_HOSTKEY_PUB")" > "$KNOWN_HOSTS"
@@ -547,7 +547,7 @@ rehearse_suc() {
 }
 
 main() {
-  # The flag is the cron's switch. The rehearsal is run by hand and uses no R2 credential, so a
+  # The flag is the timer's switch. The rehearsal is run by hand and uses no R2 credential, so a
   # disarmed drill does not block it.
   if [[ "$ARMED" != "1" && "$REHEARSE" != 1 ]]; then
     logger -t "$TAG" "disarmed (hypervisor_etcd_drill_armed=false); nothing run"
@@ -561,7 +561,7 @@ main() {
   # token and the R2 env never leave the guest), and a run is diagnosed from a non-root shell.
   install -d -m 750 -g "{{ sys_user }}" "$LOG_DIR"
   # From here on the orchestrator's own lines go into the run's evidence dir, so they are pruned
-  # with it. cron.log (the cron's redirect) then holds only what escapes before this point.
+  # with it. The journal then holds only what escapes before this point.
   exec >>"$LOG_DIR/orchestrator.log" 2>&1
   prune_old_evidence
 

@@ -639,7 +639,7 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
   - `CI_CONTEXTS` holds GitHub check-run **names**, which must match `ci.yml`'s `name:` exactly.
     An empty list or repo **disarms** the gate with a log line rather than passing everything.
     Set `gitops_deploy_require_ci: false` to turn it off.
-- **The tick does not consult staging.** `roles/setup/hypervisor` stays for the monthly etcd
+- **The tick does not consult staging.** `hosts/components/hypervisor` holds the monthly etcd
   restore drill's throwaway guest; `docs/archive/staging-phase-c.md` and
   `docs/archive/staging-cluster.md` record the removed staging arm.
 - Read-only against the repo (no push), and no apply arm rolls back.

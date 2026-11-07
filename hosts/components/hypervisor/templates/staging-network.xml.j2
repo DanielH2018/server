@@ -1,9 +1,8 @@
-<!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
+<!-- hosts/components/hypervisor. The libvirt arm defines the network from this file. -->
 <network>
   <name>{{ hypervisor_staging_net_name }}</name>
-  <!-- Pinned so a re-define replaces this network instead of colliding on its name; the
-       task that sets the value carries the reasoning (network.yml, "Pin the staging
-       network's UUID"). -->
+  <!-- Pinned so a re-define replaces this network instead of colliding on its name;
+       hypervisor_staging_net_uuid carries the reasoning. -->
   <uuid>{{ hypervisor_staging_net_uuid }}</uuid>
   <forward mode='nat'>
     <!-- Bounded explicitly rather than left to libvirt's default, so the masquerade port
@@ -16,7 +15,7 @@
   <ip address='{{ hypervisor_staging_net_gateway }}' netmask='{{ hypervisor_staging_net_netmask }}'>
     <dhcp>
       <range start='{{ hypervisor_staging_net_dhcp_start }}' end='{{ hypervisor_staging_net_dhcp_end }}'/>
-      <!-- The etcd restore drill's throwaway guest (etcd_drill.yml), and the only reservation
+      <!-- The etcd restore drill's throwaway guest (etcd-drill-prepare), and the only reservation
            left since daniel-stage was retired (#2941). Reserved rather than left to a lease
            because the orchestrator waits for ssh at a fixed address and pins its host key. It
            deliberately sits OUTSIDE the dynamic range above. -->

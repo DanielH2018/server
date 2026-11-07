@@ -161,6 +161,9 @@ files:
     dst: /usr/lib/systemd/system/user-996.slice.d/homelab-claude-caps.conf
     when: claude_code_login_caps_enabled and claude_code_agent_user_enabled
 legacy:
+  # The hypervisor role's teardown half kept this host free of the network source directory until
+  # H7.34 emptied the role. Nothing recreates it, so the entry stays a no-op on a clean host.
+  - {path: /etc/libvirt/declared-networks}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
   # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's

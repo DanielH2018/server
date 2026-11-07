@@ -485,6 +485,10 @@ if ! id -nG "$SYS_USER" | tr ' ' '\n' | grep -qx ssh-users; then
 fi
 
 if [ -n "$k3s_mode" ]; then
+    # k3s brings its own containerd, and its iptables rules would land on top of Docker's chains.
+    if [ -e "$ROOT/usr/bin/docker" ]; then
+        die "Docker is installed on $host, and k3s must be the only container runtime. Purge it first."
+    fi
     installed=no
     if [ -x "$ROOT$K3S_BIN" ] && [ -e "$ROOT$SYSTEMD_DIR/$k3s_unit" ] &&
         "$ROOT$K3S_BIN" --version 2> /dev/null | grep -qF "$K3S_VERSION"; then

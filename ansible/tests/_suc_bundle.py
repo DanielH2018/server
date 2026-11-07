@@ -3,7 +3,7 @@
 The role does not exist on master when the rehearsal mode lands (H6.1b is a parallel PR), so the
 tests build the tree `homelab_render.py cluster --role flux --role system-upgrade` would write
 from the H6 plan's description of it. Used by
-ansible/roles/setup/hypervisor/tests/test_suc_rehearsal.py and
+hosts/components/hypervisor/tests/test_suc_rehearsal.py and
 ansible/tests/staging/test_suc_rehearsal_mode.py.
 """
 

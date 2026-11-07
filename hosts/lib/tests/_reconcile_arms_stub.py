@@ -59,7 +59,11 @@ def virsh(state: dict, args: list[str]) -> int:
     kind = "nwfilters" if verb.startswith("nwfilter") else "networks"
     objects = model.setdefault(kind, {})
     if verb.endswith("-define"):
-        name = re.findall(r"<name>(.*?)</name>", Path(rest[0]).read_text())[0]
+        xml = Path(rest[0]).read_text()
+        pattern = (
+            r"<filter name='(.*?)'" if kind == "nwfilters" else r"<name>(.*?)</name>"
+        )
+        name = re.findall(pattern, xml)[0]
         objects.setdefault(name, {"active": False, "autostart": False})
         return 0
     name = rest[0]

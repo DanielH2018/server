@@ -13,6 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from diagnostics.probe_lib import landing_blockers as landing
 from lib.repo_paths import REPO
 
+
 PORCELAIN = """worktree /home/ubuntu/server
 HEAD aaa
 branch refs/heads/master

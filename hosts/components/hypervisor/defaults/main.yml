@@ -1,30 +1,9 @@
 ---
-# The KVM/libvirt toolchain. qemu-system-x86 is the emulator, libvirt-daemon-system brings
-# libvirtd and its systemd units, libvirt-clients brings virsh, and virtinst brings
-# virt-install — the guest is defined with it in a later slice, and pulling it in here keeps
-# the package set to one task rather than two.
-#
-# Deliberately NOT here: ovmf (the guest is a BIOS-boot cloud image, not UEFI) and
-# cloud-image-utils (the cloud-init seed belongs with the guest definition, not with the
-# hypervisor). Add them in the slice that needs them, so this role stays "a host that can
-# run VMs" rather than "a host with one particular VM's dependencies".
-hypervisor_packages:
-  - qemu-system-x86
-  - qemu-utils
-  - libvirt-daemon-system
-  - libvirt-clients
-  - virtinst
-
 # Groups that let sys_user reach qemu:///system without sudo. Both are needed: libvirt for
 # the daemon socket, kvm for /dev/kvm itself.
 hypervisor_user_groups:
   - libvirt
   - kvm
-
-# Where the rendered network XML lives. Our own path, not /etc/libvirt/qemu/networks —
-# that is libvirt's internal store, written by net-define and not meant to be edited
-# underneath it.
-hypervisor_net_source_dir: /etc/libvirt/declared-networks
 
 # The staging NAT network.
 #
@@ -36,6 +15,11 @@ hypervisor_net_source_dir: /etc/libvirt/declared-networks
 # future k3s or Docker range cannot grow into it.
 # ENFORCED by ansible/tests/staging/test_staging_network.py, which re-checks the overlap.
 hypervisor_staging_net_name: staging
+# DECIDED: the live network's UUID (`virsh net-uuid staging`, 2026-11-07). `net-define` replaces an
+# existing network only when the UUIDs match, and libvirt refuses a same-name define under any other
+# UUID even after net-undefine, which failed the apply on 2026-09-11 (#1175). A rebuilt host takes
+# the same value.
+hypervisor_staging_net_uuid: 255b2bc3-f6fa-4a2f-9d0c-8c14507eb82a
 hypervisor_staging_net_bridge: virbr-stage
 # The egress fence attached to the guest's interface. Named rather than inlined because two
 # places must agree on the string: the filter definition and the domain's <filterref>.
@@ -73,9 +57,7 @@ hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.
 # look like a k3s server node whose k3s is stopped — binary, token file, R2 env file at the paths
 # the script already reads — which is exactly the rebuilt-host shape a real restore would face.
 #
-# DECIDED: transient domain (`virsh create`), never `virsh define`. teardown.yml refuses while any
-# guest is DEFINED and nothing in this role undefines one, so a second persistent domain would
-# silently break hypervisor teardown. A transient domain vanishes when it is destroyed, and its
+# DECIDED: transient domain (`virsh create`), never `virsh define`. A transient domain vanishes when it is destroyed, and its
 # disk is recreated from the base image on every run and deleted on every exit, pass or fail. That
 # is the answer to the issue's cleanup constraint: no restored etcd database, token copy or R2
 # credential outlives the run anywhere. What persists is under hypervisor_etcd_drill_log_dir —
@@ -86,6 +68,8 @@ hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.
 # nothing else — no kubelet, no CNI, no pods. Measured on daniel-box at 6 s of CPU for
 # the restore stage. 2 GiB / 2 vCPU / 20 G is generous; the cloud image itself needs ~2.5 G.
 hypervisor_etcd_drill_armed: true
+# The drill's files, under a directory the package owns.
+hypervisor_etcd_drill_share_dir: /usr/lib/homelab/etcd-drill
 # The cadence (`etcd_drill_full_cron`) and the deadline derived from it
 # (`etcd_drill_full_kuma_interval_s`, named for the Kuma tile it sized until M6 batch B4) live in
 # group_vars/all.yml. The orchestrator renders the deadline as its textfile's DEADLINE_S.
@@ -101,9 +85,9 @@ hypervisor_etcd_drill_vm_memory_mib: 2048
 hypervisor_etcd_drill_vm_vcpus: 2
 hypervisor_etcd_drill_vm_disk_size: 20G
 # Built from hypervisor_base_image_path, the one pinned cloud image on this host. The disk is the
-# per-run copy; the orchestrator creates and deletes it, ansible never touches it.
+# per-run copy; the orchestrator creates and deletes it.
 hypervisor_etcd_drill_vm_disk: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}.qcow2
-hypervisor_etcd_drill_vm_xml: "{{ hypervisor_net_source_dir }}/{{ hypervisor_etcd_drill_vm_hostname }}.xml"
+hypervisor_etcd_drill_vm_xml: "{{ hypervisor_etcd_drill_share_dir }}/{{ hypervisor_etcd_drill_vm_hostname }}.xml"
 hypervisor_etcd_drill_vm_seed_dir: /var/lib/libvirt/seed/{{ hypervisor_etcd_drill_vm_hostname }}
 hypervisor_etcd_drill_vm_seed: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}-seed.iso
 # The guest's ssh HOST key is generated once here and seeded through cloud-init, so the
@@ -112,19 +96,22 @@ hypervisor_etcd_drill_vm_seed: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_
 # on this bridge could then answer for this address and be handed the cluster token and the R2
 # credentials. Pinning closes that.
 hypervisor_etcd_drill_vm_hostkey: "{{ hypervisor_etcd_drill_vm_seed_dir }}/ssh_host_ed25519_key"
+# What the rendered user-data carries in place of the three keys only the host holds.
+# etcd-drill-prepare swaps each for the host's value.
+hypervisor_etcd_drill_vm_ssh_key: "@OPERATOR_PUBLIC_KEY@"
+hypervisor_etcd_drill_vm_hostkey_private: "@GUEST_HOST_KEY_PRIVATE@"
+hypervisor_etcd_drill_vm_hostkey_public: "@GUEST_HOST_KEY_PUBLIC@"
 hypervisor_etcd_drill_vm_boot_timeout: 300
 
 # Where the orchestrator lives and what it writes.
-hypervisor_etcd_drill_runner_path: /usr/local/bin/etcd-restore-drill-vm
+hypervisor_etcd_drill_runner_path: /usr/lib/homelab/etcd-restore-drill-vm
+hypervisor_etcd_drill_prepare_path: /usr/lib/homelab/etcd-drill-prepare
 # The guest-side half, a plain file copied into the guest beside the drill script; its header
 # says why the snapshot is fetched with curl and drilled as a local file.
-hypervisor_etcd_drill_guest_script_path: /usr/local/lib/etcd-drill-guest-run.sh
-# scripts/backup/etcd_restore_drill.sh, installed by the role from the checkout it runs from.
-# Reading it straight out of /home/<user>/server would make the cron depend on whatever that
-# checkout holds, and a hand run from a worktree would drill the OLD script. Installing it makes
-# the apply the one thing that changes what the drill runs, the same as every other file the
-# role ships.
-hypervisor_etcd_drill_script_path: /usr/local/lib/etcd-restore-drill.sh
+hypervisor_etcd_drill_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/etcd-drill-guest-run.sh"
+# scripts/backup/etcd_restore_drill.sh, which the package ships. Reading it straight out of
+# /home/<user>/server would make the timer depend on whatever that checkout holds.
+hypervisor_etcd_drill_script_path: "{{ hypervisor_etcd_drill_share_dir }}/etcd-restore-drill.sh"
 # Read by the orchestrator, copied INTO the guest as /etc/rancher/k3s/etcd-s3.env for the drill's
 # run, and deleted with the guest. 0600 root: these are the R2 write credentials for the bucket
 # that also holds every Longhorn backup — the same residency daniel-box already carries in
@@ -160,7 +147,7 @@ hypervisor_etcd_drill_lock: /var/lock/etcd-restore-drill-vm.lock
 hypervisor_etcd_drill_fence_probe_timeout: 6
 # Whole-leg ceiling, covering one ssh session that dials every target. Sized for all six timing
 # out at once (6 x 6 s) with ssh setup on top, because the leg runs outside the orchestrator's
-# RUN_TIMEOUT and a wedged dial would otherwise hang the monthly cron.
+# RUN_TIMEOUT and a wedged dial would otherwise hang the monthly timer.
 hypervisor_etcd_drill_fence_deadline: 90
 # The Service-CIDR target: Longhorn's frontend Service, the thing known to be exposed from
 # the guest — answering unauthenticated on this ClusterIP with a mutating
@@ -179,6 +166,6 @@ hypervisor_etcd_drill_fence_longhorn_url: http://10.43.152.244/v1/nodes
 # reads the pins from a checkout and judges the guest, and the guest-side script is copied into
 # the guest for the run. The deadline is how long the Plan may take to reach its verdict after
 # the bundle is published: a server upgrade is about ten minutes, plus the pulls and the restart.
-hypervisor_suc_rehearsal_helper_path: /usr/local/lib/suc_rehearsal.py
-hypervisor_suc_rehearsal_guest_script_path: /usr/local/lib/suc-rehearsal-guest-run.sh
+hypervisor_suc_rehearsal_helper_path: "{{ hypervisor_etcd_drill_share_dir }}/suc_rehearsal.py"
+hypervisor_suc_rehearsal_guest_script_path: "{{ hypervisor_etcd_drill_share_dir }}/suc-rehearsal-guest-run.sh"
 hypervisor_suc_rehearsal_deadline: 2400
