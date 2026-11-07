@@ -7,6 +7,7 @@ ConditionPathExists=/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.ya
 
 [Service]
 Type=oneshot
+SyslogLevel=notice
 RemainAfterExit=yes
 ExecStart=/usr/lib/homelab/homelab-netplan-wifi
 

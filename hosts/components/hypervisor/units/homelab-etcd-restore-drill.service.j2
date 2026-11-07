@@ -7,5 +7,6 @@ Wants=libvirtd.service network-online.target
 
 [Service]
 Type=oneshot
+SyslogLevel=notice
 ExecStartPre={{ hypervisor_etcd_drill_prepare_path }}
 ExecStart={{ hypervisor_etcd_drill_runner_path }}
