@@ -84,7 +84,7 @@ def test_root_uv_tasks_point_uv_at_the_user_interpreters():
 def test_root_uv_task_with_the_install_dir_is_clean():
     task = {
         "ansible.builtin.command": {
-            "argv": ["/usr/local/bin/uv", "run", "--python", "3.14.6"]
+            "argv": ["/usr/bin/uv", "run", "--python", "3.14.6"]
         },
         "become": True,
         "environment": {_ROOT_UV_ENV: "/home/ubuntu/.local/share/uv/python"},
@@ -95,7 +95,7 @@ def test_root_uv_task_with_the_install_dir_is_clean():
 def test_root_uv_task_without_the_install_dir_is_flagged():
     task = {
         "ansible.builtin.command": {
-            "argv": ["/usr/local/bin/uv", "run", "--python", "3.14.6"]
+            "argv": ["/usr/bin/uv", "run", "--python", "3.14.6"]
         },
         "become": True,
     }
@@ -275,15 +275,11 @@ def test_the_pin_is_enforced_everywhere_except_the_deploy_pipeline():
 
 
 def test_the_hooks_use_the_uv_that_exists_without_the_tooling_tag():
-    """There are exactly two correct absolute uv paths, and picking the wrong one fails silently.
+    """The Claude hooks avoid the stale `/usr/local/bin/uv` copy.
 
-    `/usr/local/bin/uv` is a copy the `tooling` tag of `initial_setup` publishes on daniel-box, and
-    `/usr/bin/uv` is the `uv` component's wrapper. The Claude hooks avoid both. They
-    must also work on a host that never ran the `tooling` tag, and `/home/<user>/.local/bin/uv`
-    exists wherever uv is installed without depending on a `become: true` copy task having
-    run. It is what their sibling hooks already use. The hooks route stderr to /dev/null and
-    exit 0 by design, so the wrong path there is invisible — this test is the only thing that
-    would notice.
+    `/home/<user>/.local/bin/uv` exists wherever the dotfiles ran, and it is what their sibling
+    hooks already use. The hooks route stderr to /dev/null and exit 0 by design, so the wrong
+    path there is invisible; this test is the only thing that would notice.
     """
     offenders = [
         f"{p.name}:{n}: {line.strip()[:100]}"
@@ -292,9 +288,8 @@ def test_the_hooks_use_the_uv_that_exists_without_the_tooling_tag():
         if "/usr/local/bin/uv" in line and not line.strip().startswith("#")
     ]
     assert not offenders, (
-        "the Claude hooks must work on a host that never ran the `tooling` tag, which is what "
-        "creates /usr/local/bin/uv. Use /home/<user>/.local/bin/uv:\n  "
-        + "\n  ".join(offenders)
+        "the Claude hooks must not name the stale /usr/local/bin/uv copy, which no task writes. "
+        "Use /home/<user>/.local/bin/uv:\n  " + "\n  ".join(offenders)
     )
 
 
@@ -360,7 +355,7 @@ def test_no_installed_script_runs_by_its_shebang():
     ]
     assert not offenders, (
         "these run an installed role script by path, so its shebang picks the host's system "
-        "Python. Run it through `/usr/local/bin/uv run --no-project --no-python-downloads "
+        "Python. Run it through `/usr/bin/uv run --no-project --no-python-downloads "
         "--python {{ host_python_version }} <path>`:\n  " + "\n  ".join(offenders)
     )
 
@@ -373,7 +368,7 @@ def test_a_script_run_by_path_is_flagged():
 def test_a_script_run_through_uv_is_clean():
     folded = (
         "    cmd: >-\n"
-        "      /usr/local/bin/uv run --no-project --no-python-downloads --python 3.14.6\n"
+        "      /usr/bin/uv run --no-project --no-python-downloads --python 3.14.6\n"
         "      /usr/local/bin/x.py\n"
     )
     assert _shebang_runs(folded, ["/usr/local/bin/x.py"]) == []
@@ -426,7 +421,7 @@ def test_no_host_invocation_runs_a_bare_python3():
     assert not offenders, (
         "these run `python3` by name, which resolves to the host's system Python (Ubuntu "
         "24.04's 3.12) under cron's PATH. Ship the code as a `.py` in the role's `files/` and "
-        "run it by path through `/usr/local/bin/uv run --no-project --no-python-downloads "
+        "run it by path through `/usr/bin/uv run --no-project --no-python-downloads "
         "--python {{ host_python_version }} /opt/<dir>/<name>.py`. An inline `python -c` "
         "fails the stdlib-only census (scripts/lib/role_installs.py):\n  "
         + "\n  ".join(offenders)
@@ -457,7 +452,7 @@ def test_a_bare_python3_call_is_flagged(line):
 @pytest.mark.parametrize(
     "line",
     [
-        "  elif ! V6_OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads "
+        "  elif ! V6_OUT=$(/usr/bin/uv run --no-project --no-python-downloads "
         "--python 3.14.6 python -c 'import ipaddress' \"$CURRENT_IP6\" 2>&1); then",
         "    - python3-venv",
         "# python3 -c 1",

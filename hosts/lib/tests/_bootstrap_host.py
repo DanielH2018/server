@@ -55,7 +55,7 @@ case "$mode" in
     agent) : > "$HOMELAB_ROOT/etc/systemd/system/k3s-agent.service" ;;
 esac
 """
-K3S_BINARY = "#!/bin/sh\necho 'k3s version v1.37.1+k3s1'\n"
+K3S_BINARY = "#!/bin/sh\necho 'k3s version v1.37.2+k3s1'\n"
 # `uv run ... render --out DIR` writes the three packages at the paths the renderer uses, with
 # homelab-tools under its architecture; the anchor call exits ANCHOR_EXIT; the first
 # VENV_FAILURES `python --version` calls fail; `fetch-tools` lists its cache in tools-cache.listing.

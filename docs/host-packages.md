@@ -638,11 +638,12 @@ what completes a daniel-server rebuild during an outage.
 ### Preparing the installer on either node
 
 1. To set up the installer's inputs, set the hostname to the node's inventory name, because step
-   1 refuses any other. Then install what steps 2 and 3 read before any package exists:
+   1 refuses any other. Then install what the next step and step 2 read before any package
+   exists. Step 3 installs `age` itself:
 
     ```bash
     sudo apt-get update
-    sudo apt-get install -y age git gnupg curl
+    sudo apt-get install -y git gnupg curl
     ```
 
 1. To give the root volume the whole disk, extend it. The Ubuntu installer creates the one LVM
@@ -731,6 +732,37 @@ daniel-box serves the repository, so it builds its own packages from the clone.
 
     ```bash
     sudo k3s kubectl -n flux-system get kustomization cluster-vars
+    ```
+
+1. As the operator, apply the dotfiles. They install the per-user uv, `prek` and the pinned Python,
+   which the host's `uv` units read because they run with `--no-python-downloads`. The chezmoi
+   binary comes from `homelab-tools`, and the `homelab-daniel-box` package depends on the distro
+   packages the dotfiles scripts want. The role's own record says the prompt flags did not stop
+   `init` prompting on chezmoi v2.71.1, so run this from a terminal and answer `work = false`,
+   `agent = false` and `profile = server` if it asks:
+
+    ```bash
+    /usr/lib/homelab/bin/chezmoi init --apply --promptBool work=false,agent=false \
+        --promptString profile=server DanielH2018/dotfiles
+    ~/.local/bin/uv python list --only-installed
+    ```
+
+1. To let the deployer's CI gate and `renovate_agent` read an authenticated token, log in to GitHub,
+   then apply the dotfiles once more. The `.gitconfig` template selects the `gh` credential helper
+   only when `gh` is on PATH as chezmoi renders it, and a host whose first apply ran before `gh` was
+   there holds the fallback:
+
+    ```bash
+    gh auth login
+    /usr/lib/homelab/bin/chezmoi apply
+    ```
+
+1. To commit from the host, clone the repo and install its git hooks. No package or role runs this:
+
+    ```bash
+    git clone https://github.com/DanielH2018/server.git ~/server
+    cd ~/server
+    ~/.local/bin/prek install
     ```
 
 ### Rebuilding daniel-server

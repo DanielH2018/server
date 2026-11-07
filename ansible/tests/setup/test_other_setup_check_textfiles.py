@@ -132,7 +132,7 @@ def _run_ups(tmp_path, unit_state="active"):
         assert literal in body, (
             f"ups-secondary-health.sh no longer references {literal}"
         )
-    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
+    body = body.replace(PACKAGED_CHECK_LIB_PATH, str(CHECK_LIB)).replace(
         "/etc/nut/upsmon.conf", str(upsmon)
     )
     textfile_dir, env = _env(
@@ -176,10 +176,10 @@ def _run_fake_remux(tmp_path):
     )
     uv = tmp_path / "uv"
     write_exec(uv, STATE_PUSH)
-    for literal in (PACKAGED_CHECK_LIB_PATH, "/usr/local/bin/uv"):
+    for literal in (PACKAGED_CHECK_LIB_PATH, "/usr/bin/uv"):
         assert literal in body, f"fake-remux-health.sh no longer references {literal}"
     body = body.replace(PACKAGED_CHECK_LIB_PATH, str(CHECK_LIB)).replace(
-        "/usr/local/bin/uv", str(uv)
+        "/usr/bin/uv", str(uv)
     )
     textfile_dir, env = _env(tmp_path, "unused")
     run(["bash", str(write_exec(tmp_path / "fr.sh", body))], env=env, check=True)

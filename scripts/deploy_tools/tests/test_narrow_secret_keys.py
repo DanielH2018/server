@@ -158,7 +158,7 @@ SHIPPED_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 
 
 def _ship_k3s_defaults(tree: Tree, deploy_ui_reads: str) -> None:
-    """k3s's defaults build one key from a secret, and deploy_ui reads the file.
+    """k3s's defaults build one key from a secret, and deploy_ui ships the file.
 
     The shape is the real tree's row in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` (#4303), which
     this reads unpatched: a change to that row changes what these tests exercise.
@@ -176,7 +176,7 @@ def _ship_k3s_defaults(tree: Tree, deploy_ui_reads: str) -> None:
 
 
 def test_a_shipper_reading_none_of_the_secrets_keys_is_unread(tree: Tree, capsys):
-    """deploy_ui reads k3s's defaults for one plain key, so a secret skips it."""
+    """deploy_ui ships k3s's defaults for one plain key, so a secret skips it."""
     _ship_k3s_defaults(tree, "setup_plain")
     rc, out = _setup_readers(tree, capsys)
     assert rc == 0 and out["unread"] == {SHIPPED_DEFAULTS: ["deploy_ui"]}

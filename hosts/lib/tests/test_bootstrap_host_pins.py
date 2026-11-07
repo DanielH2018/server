@@ -88,7 +88,7 @@ def test_the_embedded_k3s_pin_equals_the_system_upgrade_defaults():
 
 
 def test_a_k3s_bump_the_script_did_not_follow_is_flagged():
-    bumped = DEFAULTS.replace("k3s_version: v1.37.1+k3s1", "k3s_version: v1.37.2+k3s1")
+    bumped = DEFAULTS.replace("k3s_version: v1.37.2+k3s1", "k3s_version: v1.37.3+k3s1")
 
     assert script_k3s(SCRIPT) != k3s_pins(bumped)
 

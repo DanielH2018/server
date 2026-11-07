@@ -49,5 +49,5 @@ ExecStartPre=/bin/sh -c 'echo "VERDICT: none (the lander did not get its lock)" 
 # is short because the session lands one PR at a time and blocks on each, so only a hand-started
 # unit queues here, and a longer wait would come out of the landing's share of TimeoutStartSec.
 ExecStart=/usr/bin/flock -w 180 /var/lock/renovate-agent-land.lock \
-  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   /usr/lib/homelab/renovate-agent/land_renovate_pr.py %i

@@ -18,5 +18,5 @@ SyslogIdentifier=mkv-attachment-repair
 # deletes and swaps the same mkv files this rewrites the header of, and mkvpropedit rewriting a
 # header mid-swap corrupts the file it was called to fix. The lock costs a wait.
 ExecStart=/usr/bin/flock -w 600 {{ fake_remux_lock }} \
-  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   {{ fake_remux_opt_dir }}/mkv_attachment_repair.py

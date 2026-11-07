@@ -16,5 +16,5 @@ User={{ sys_user }}
 SyslogIdentifier=fake-remux-scan
 # ONE lock with the reconcile and the repair: the scan seeds the ledger the reconcile acts on.
 ExecStart=/usr/bin/flock -w 600 {{ fake_remux_lock }} \
-  /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
+  /usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} \
   {{ fake_remux_opt_dir }}/fake_remux.py scan

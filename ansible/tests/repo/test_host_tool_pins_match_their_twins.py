@@ -1,13 +1,12 @@
 """The uv tools the hosts install are pinned, and each pin equals its twin elsewhere in the tree.
 
-`roles/setup/initial_setup/tasks/host-basics.yml` installs ansible-core, ansible-lint and prek
+`roles/setup/initial_setup/tasks/host-basics.yml` installs ansible-core and ansible-lint
 as uv tools. Each tool names an exact version, so the ansible that runs every deploy is not
 whatever PyPI served on provisioning day, and each version is already chosen somewhere else:
 
 - ansible-core: pyproject.toml's dev group (`ansible-core==`), the env the tests and
   `uv run ansible-playbook` resolve;
-- ansible-lint: prek.toml's `ansible/ansible-lint` rev, the hook's own version;
-- prek: the CI setup action's `pip install prek==`, the runner's copy.
+- ansible-lint: prek.toml's `ansible/ansible-lint` rev, the hook's own version.
 
 Two copies is the failure class `test_vale_matches_the_ci_pin.py` records: a Renovate bump that
 rewrites one copy leaves the other behind, and both a green CI and a green host are consistent
@@ -29,7 +28,6 @@ HOST_REL = "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
 TWINS = (
     ("ansible-core", "pyproject.toml", r'"ansible-core==([\w.]+)"'),
     ("ansible-lint", "prek.toml", r'ansible/ansible-lint"\s+rev\s*=\s*"v([\d.]+)"'),
-    ("prek", ".github/actions/setup/action.yml", r"pip install prek==([\d.]+)"),
 )
 
 

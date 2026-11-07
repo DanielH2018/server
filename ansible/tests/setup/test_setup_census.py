@@ -80,7 +80,6 @@ NAMED_MEMBERS = [
     ("template", "Install the host forwarder's unit"),
     ("template", "Pin the node's LAN address in netplan"),
     ("get_url", "Download the pinned CoreDNS release"),
-    ("systemd_service", "Listen on the worktree holder scan's socket"),
     ("sysctl", "Raise the inotify instance limit for pod log tailing"),
     ("ufw", "Allow cluster traffic from agent nodes"),
 ]

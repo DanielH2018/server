@@ -1,7 +1,7 @@
 """Guards on `dev_tooling_hosts` — which hosts `initial_setup --tags tooling` provisions.
 
-The tag installs uv, the uv-managed CLI tools, the pinned host Python, the /usr/local/bin/uv
-symlink and the pinned Vale binary. Those tasks gate on the list, not on `has_repo_checkout`:
+The tag installs ansible-core and ansible-lint as uv tools. Those tasks gate on the list, not on
+`has_repo_checkout`:
 daniel-pi sets `has_repo_checkout: true`, and the tag must not imply work on a 512 MB Zero 2 W
 that nobody intends to apply. The Pi is excluded.
 
@@ -28,22 +28,15 @@ TASKS_DIR = ANSIBLE / "roles" / "setup" / "initial_setup" / "tasks"
 GATE = f"inventory_hostname in {VAR}"
 
 # The one `tooling`-tagged task that is deliberately ungated: it registers the connecting user's
-# home directory, which the `git-hooks` task reads too, so a tag-scoped run of either needs it.
-# It installs nothing.
+# home directory and installs nothing.
 SHARED_FACT_TASK = "Resolve the deploy user's home directory"
 
 # The census must find these. Named rather than counted, so a rename fails with the member that
 # went missing instead of leaving an assertion to pass over an empty set.
 KNOWN_TOOLING_TASKS = frozenset(
     {
-        "Install uv (per-user; PEP 668-safe on 24.04+)",
+        "Read the uv tools this host already has",
         "Install Python CLI tooling as uv tools",
-        "Install prek as a uv tool",
-        "Install the pinned host Python",
-        "Publish uv at a stable path for systemd and cron",
-        "Pin the Vale version this host installs",
-        "Read the Vale version this host already has",
-        "Install the pinned Vale binary",
     }
 )
 
@@ -141,59 +134,3 @@ def test_the_shared_fact_task_is_still_the_only_exemption():
         f"{SHARED_FACT_TASK!r} is exempt from the gate because it only registers a fact. It now "
         "reports changes, so it does something to the target — gate it or drop the exemption."
     )
-    assert sorted(task.get("tags") or []) == ["git-hooks", "tooling"], (
-        "the exemption exists because `git-hooks` needs this fact too; if that is no longer "
-        "true, gate the task."
-    )
-
-
-def test_the_git_hooks_task_gates_on_the_allowlist():
-    """`prek install` needs prek, which arrives with this tooling. Gating the two differently
-    leaves daniel-pi with a task that can only fail."""
-    tasks = yaml_fast.safe_load((TASKS_DIR / "system-tuning.yml").read_text())
-    task = next(t for t in tasks if t.get("name") == "Install Git hooks")
-    assert _gated_on_the_allowlist(task.get("when")), (
-        f"Install Git hooks runs `prek install` but is not gated on {VAR}, which is what "
-        f"installs prek. Its `when` is {task.get('when')!r}."
-    )
-
-
-PUBLISH_UV = "Publish uv at a stable path for systemd and cron"
-REMOVE_UV_LINK = "Remove the old uv symlink so a real copy can replace it"
-
-
-def published_uv_problems(task_list: list[dict]) -> list[str]:
-    """Why /usr/local/bin/uv would not run for a uid other than the connecting user's.
-
-    A link into that user's 0750 home dangles for everyone else, the claude agent included
-    (#4203). `copy` checksums through an existing link at dest, so the link has to go first.
-    """
-    names = [t.get("name") for t in task_list]
-    publish = next((t for t in task_list if t.get("name") == PUBLISH_UV), {})
-    copy = publish.get("ansible.builtin.copy") or {}
-    problems = []
-    if not copy:
-        problems.append("not a copy")
-    elif (copy.get("owner"), copy.get("mode")) != ("root", "0755"):
-        problems.append(f"owner/mode {copy.get('owner')}/{copy.get('mode')}")
-    if REMOVE_UV_LINK not in names or names.index(REMOVE_UV_LINK) > names.index(
-        PUBLISH_UV
-    ):
-        problems.append("no link removal before the copy")
-    return problems
-
-
-def test_uv_is_published_as_a_copy_every_user_can_run():
-    tasks = yaml_fast.safe_load((TASKS_DIR / "host-basics.yml").read_text())
-    assert published_uv_problems(tasks) == []
-
-
-def test_uv_published_as_a_link_into_the_home_is_flagged():
-    link = {
-        "name": PUBLISH_UV,
-        "ansible.builtin.file": {"src": "/home/u/.local/bin/uv", "state": "link"},
-    }
-    assert published_uv_problems([link]) == [
-        "not a copy",
-        "no link removal before the copy",
-    ]
