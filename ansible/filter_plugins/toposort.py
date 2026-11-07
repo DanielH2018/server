@@ -8,7 +8,10 @@ deploy from `compose_services` in its package.
 
 import heapq
 import os
-from ansible.errors import AnsibleFilterError
+
+
+class DependencyCycle(ValueError):
+    """Entries whose dependencies form a cycle, so no order exists."""
 
 
 def toposort_containers(containers_list, deps_map):
@@ -16,7 +19,7 @@ def toposort_containers(containers_list, deps_map):
 
     Stable: ties within a topological level preserve the original list order.
     Deps not present in containers_list are silently ignored.
-    Raises AnsibleFilterError if a dependency cycle is detected.
+    Raises DependencyCycle if a dependency cycle is detected.
     """
     name_to_idx = {c["name"]: i for i, c in enumerate(containers_list)}
     name_to_obj = {c["name"]: c for c in containers_list}
@@ -43,7 +46,7 @@ def toposort_containers(containers_list, deps_map):
 
     if len(result) != len(names):
         cycled = [n for n in names if name_to_obj[n] not in result]
-        raise AnsibleFilterError(f"Dependency cycle detected in containers: {cycled}")
+        raise DependencyCycle(f"Dependency cycle detected in containers: {cycled}")
     return result
 
 
