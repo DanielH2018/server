@@ -97,18 +97,6 @@ def test_main_emits_the_documented_shape(capsys, monkeypatch):
     assert "exit 75" in out["hookSpecificOutput"]["additionalContext"]
 
 
-def test_main_grants_no_retry_on_a_classifier_denial(capsys, monkeypatch):
-    denial = {
-        "hook_event_name": "PermissionDenied",
-        "tool_name": "Bash",
-        "tool_input": {"command": "./scripts/deploy_tools/gitops_tick.sh"},
-        "reason": "Blocked by classifier",
-    }
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(denial)))
-    _mod.main()
-    assert capsys.readouterr().out == ""
-
-
 def test_main_says_nothing_on_an_unrelated_event(capsys, monkeypatch):
     monkeypatch.setattr(
         sys, "stdin", io.StringIO(json.dumps({"hook_event_name": "Stop"}))

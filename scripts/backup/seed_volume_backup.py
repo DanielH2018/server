@@ -213,36 +213,50 @@ class Seed:
     def create(self, plan: dict) -> None:
         """Create the Snapshot, wait for it, create the Backup, and wait for that.
 
+        A failed read polls again until its wait runs out, because Longhorn keeps uploading
+        whether or not this script is watching.
+
         Raises:
             SeedFailed: a wait ran out, or the Backup ended in Error.
         """
         name = plan["name"]
         self._apply(snapshot_manifest(name, plan["volume"], plan["job"]))
+        unread = ""
         for _ in range(SNAPSHOT_RETRIES):
-            snapshot = self._get("snapshots.longhorn.io", name)
-            if (snapshot.get("status") or {}).get("readyToUse") is True:
-                break
+            try:
+                snapshot = self._get("snapshots.longhorn.io", name)
+            except KubectlFailed as err:
+                unread = f" Its last read failed: {err}."
+            else:
+                unread = ""
+                if (snapshot.get("status") or {}).get("readyToUse") is True:
+                    break
             self.sleep(SNAPSHOT_DELAY_S)
         else:
             raise SeedFailed(
                 f"snapshot {name} was not ready after "
-                f"{SNAPSHOT_RETRIES * SNAPSHOT_DELAY_S}s. No Backup was requested."
+                f"{SNAPSHOT_RETRIES * SNAPSHOT_DELAY_S}s.{unread} No Backup was requested."
             )
         self._apply(backup_manifest(name, plan["volume"], plan["target"], plan["job"]))
         for _ in range(BACKUP_TIMEOUT_S // BACKUP_DELAY_S):
-            status = self._get("backups.longhorn.io", name).get("status") or {}
-            if status.get("state") == "Completed":
-                return
-            if status.get("state") == "Error":
-                raise SeedFailed(
-                    f"the seed backup for {plan['claim']} ended in Error: "
-                    f"{status.get('error', '')}. The Backup CR {name} is still present. "
-                    "Delete it before retrying, or the apply adopts the failed one."
-                )
+            try:
+                status = self._get("backups.longhorn.io", name).get("status") or {}
+            except KubectlFailed as err:
+                unread = f" Its last read failed: {err}."
+            else:
+                unread = ""
+                if status.get("state") == "Completed":
+                    return
+                if status.get("state") == "Error":
+                    raise SeedFailed(
+                        f"the seed backup for {plan['claim']} ended in Error: "
+                        f"{status.get('error', '')}. The Backup CR {name} is still present. "
+                        "Delete it before retrying, or the apply adopts the failed one."
+                    )
             self.sleep(BACKUP_DELAY_S)
         raise SeedFailed(
-            f"the Backup CR {name} did not finish within {BACKUP_TIMEOUT_S}s. It is still "
-            "present and may yet complete."
+            f"the Backup CR {name} did not finish within {BACKUP_TIMEOUT_S}s.{unread} It is "
+            "still present and may yet complete."
         )
 
 

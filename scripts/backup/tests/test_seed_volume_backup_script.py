@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import pytest
 import seed_volume_backup as seed
 from lib.exit_codes import FAILED, OK
+from lib.operator_kubectl import KubectlFailed
 
 NOW = datetime(2026, 11, 7, 12, 0, 0, tzinfo=timezone.utc)
 GROUP_LABEL = "recurring-job-group.longhorn.io/weekly-backup-d3"
@@ -31,6 +32,7 @@ class Cluster:
         ]
         self.backup_state = {"state": "Completed"}
         self.ready = True
+        self.failed_reads = {}
         self.applied = []
         self.__dict__.update(over)
 
@@ -42,6 +44,9 @@ class Cluster:
             return self.pv
         kind = args[3]
         named = len(args) > 6
+        if named and self.failed_reads.get(kind, 0) > 0:
+            self.failed_reads[kind] -= 1
+            raise KubectlFailed("connection refused")
         if kind == "volumes.longhorn.io":
             return json.dumps(
                 {
@@ -163,6 +168,20 @@ def test_a_backup_that_never_finishes_fails(capsys):
     cluster = Cluster(backup_state={"state": "InProgress"})
     assert run(cluster, [*ARGS, "--apply"]) == FAILED
     assert "did not finish" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("kind", ["snapshots.longhorn.io", "backups.longhorn.io"])
+def test_a_read_that_fails_once_does_not_end_the_wait(kind):
+    cluster = Cluster(failed_reads={kind: 1})
+    assert run(cluster, [*ARGS, "--apply"]) == OK
+    assert [m["kind"] for m in cluster.applied] == ["Snapshot", "Backup"]
+
+
+def test_backup_reads_that_keep_failing_say_the_cr_is_still_present(capsys):
+    cluster = Cluster(failed_reads={"backups.longhorn.io": 1000})
+    assert run(cluster, [*ARGS, "--apply"]) == FAILED
+    err = capsys.readouterr().err
+    assert "connection refused" in err and "still present" in err
 
 
 def test_the_daily_tier_resolves_through_the_job_not_the_group_name():

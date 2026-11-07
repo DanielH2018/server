@@ -12,8 +12,8 @@ import subprocess
 
 from lib.repo_paths import REPO
 
-# 13574 once H7.34 named the drill script and daniel-server's k3s inputs to the host renderer.
-LINE_CEILING = 13574
+# 13652 once #7586 split the soak Job's reads into soak_reads.py and retried a transient API error.
+LINE_CEILING = 13652
 # Exit 6's command, `git ls-files 'scripts/renderer/*.py' | grep -v /tests/ | xargs cat | wc -l`.
 PATHSPEC = "scripts/renderer/*.py"
 

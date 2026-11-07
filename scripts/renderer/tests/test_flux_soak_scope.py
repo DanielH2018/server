@@ -14,7 +14,7 @@ import threading
 import pytest
 
 import flux_soak
-from _soak_world import OTHER, R, T0, W, World, alert, iso, run
+from _soak_world import OTHER, R, T0, W, World, alert, answered, iso, run
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
     PRECHECK_SUFFIX,
@@ -155,6 +155,16 @@ class _Runtimeinfo(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass
+
+
+@pytest.mark.parametrize(
+    ("answer", "is_transient"), [("503", True), ("reset", True), ("403", False)]
+)
+def test_only_a_5xx_or_a_dropped_connection_reads_as_transient(
+    tmp_path, answer, is_transient
+):
+    error = answered(tmp_path, answer)
+    assert isinstance(error, flux_soak.TransientError) is is_transient
 
 
 @pytest.mark.parametrize(("named", "code"), [(R, 0), (OTHER, 1)])

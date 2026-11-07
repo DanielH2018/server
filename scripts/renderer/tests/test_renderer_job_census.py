@@ -378,6 +378,7 @@ def _soak(changed_set: str | None = None) -> dict:
     """The soak Job over the real script and its siblings; `changed_set=""` leaves one out."""
     data = {
         "flux_soak.py": SOAK_SCRIPT.read_text(),
+        "soak_reads.py": SIBLINGS["soak_reads.py"].read_text(),
         "changed_set.py": changed_set or SIBLINGS["changed_set.py"].read_text(),
     }
     if changed_set == "":

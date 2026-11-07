@@ -326,11 +326,13 @@ Steps:
 4. Verify with `probe.py targets` and `probe.py health <svc>` for each service you brought back.
 5. To replace a daniel-server that cannot come back, follow
    [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
-   `docs/host-packages.md`. Until H7.34 lands, that procedure leaves out the agent's firewall rules
-   and Longhorn prerequisites, so also run the agent join that `docs/k3s-etcd-restore.md` names.
-   No drill has run that combination. Once daniel-server is back, Longhorn rebuilds its replicas from
-   daniel-box. Bring back each
-   shed service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, then resumes
+   `docs/host-packages.md`. `homelab-daniel-server` ships the agent's firewall rules, its Longhorn
+   prerequisites and the static LAN address, and *Rebuilding daniel-server* reboots before it starts
+   the agent so that the address is live. The Ubuntu installer creates the node's one LVM volume,
+   and *Preparing the installer on either node* grows it. Do not run `k3s-bringup.yml`'s agent
+   join: its agent task refuses since H7.34. No drill has run this procedure on hardware. Once
+   daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Bring back each shed
+   service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, then resumes
    each flux-owned service. The rescheduled pods stay on daniel-box until their next rollout.
 
 ### Scenario: daniel-pi must be rebuilt from a blank SD card
