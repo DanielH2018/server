@@ -73,9 +73,8 @@ _CENSUS_SKIP_SUFFIXES = (".md",)
 def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
     """Every censusable file under `ansible/`, read once — (text, role, plane) per file.
 
-    The two parametrized tests in `ansible/tests/k8s/test_secret_consumer_census.py` run over
-    all ~180 names in `sops_names()`. Reading the tree once and matching every name against the
-    one corpus costs a fraction of the I/O of walking ~1600 files per name.
+    A caller that asks about many secrets in one process matches each against the one corpus,
+    a fraction of the I/O of walking ~1600 files per name.
 
     Only files that belong to a role on a known plane are kept: a hit anywhere else cannot
     name a consumer, so carrying its text would cost memory for a match that is discarded.
@@ -204,7 +203,7 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
     deploy_roles = sorted(r for r, plane in consumers.items() if plane == "deploy")
     setup_roles = sorted(r for r, plane in consumers.items() if plane == "setup")
     host_packages = sorted(r for r, plane in consumers.items() if plane == HOST_PLANE)
-    # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by two crons, and
+    # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by a cron, and
     # `reference/scripts.py` classifies a script as `scheduled` when a scheduled script's
     # text invokes it — so a bare `scripts/secrets_mgmt/host_secrets.py ...` literal here would
     # reclassify that script as cron-driven in the generated reference. That resolver already
