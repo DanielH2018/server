@@ -25,7 +25,7 @@ MUST_FIND = frozenset(
         "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
         "roles/setup/common/templates/resolv.conf.j2",
         "roles/setup/nut_host/templates/host-upsmon.conf.j2",
-        "roles/setup/hypervisor/templates/staging-nwfilter.xml.j2",
+        "hosts/components/hypervisor/templates/staging-nwfilter.xml.j2",
         "hosts/components/claude-code/templates/claude-rootq.sudoers.j2",
     }
 )

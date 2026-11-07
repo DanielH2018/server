@@ -30,6 +30,8 @@ from renderer.renderer_lib.environment import strict_env
 # allowlist rather than a path, so a component cannot copy any other file of the repo.
 SHARED_FILES = {
     "homelab-check-lib.sh": "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    # The k3s role still installs it on daniel-box for the weekly list-only drill (H7.35).
+    "etcd_restore_drill.sh": "scripts/backup/etcd_restore_drill.sh",
 }
 
 # The setup roles whose defaults and templates a component may render with `role:` (H4, *NUT on

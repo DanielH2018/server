@@ -87,7 +87,8 @@ def not_reporting_rules(text: str) -> dict[tuple[str, str], str]:
 def producer_text(producer: str) -> str:
     if producer in SHELL:
         role, template = SHELL[producer]
-        return render_shell_script("setup", role, template, OVERRIDES)
+        plane = "components" if role == "hypervisor" else "setup"
+        return render_shell_script(plane, role, template, OVERRIDES)
     role, template, overrides = UNITS[producer]
     return render_setup_text(role, template, overrides)
 

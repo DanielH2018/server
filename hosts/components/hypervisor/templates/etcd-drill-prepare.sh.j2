@@ -1,0 +1,99 @@
+#!/bin/bash
+#
+# etcd-drill-prepare: make what the drill guest needs and a package cannot ship.
+#
+# Runs as root before each drill, and an operator runs it before a hand `--rehearse-suc`. Each step
+# reads the state first, so a run that finds everything in place changes nothing. HOMELAB_ROOT
+# prefixes every path it writes, for the tests.
+set -euo pipefail
+
+for arg in "$@"; do
+    case "$arg" in
+        -h | --help)
+            awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"
+            exit 0
+            ;;
+    esac
+done
+
+root="${HOMELAB_ROOT:-}"
+base_image="$root{{ hypervisor_base_image_path }}"
+seed_dir="$root{{ hypervisor_etcd_drill_vm_seed_dir }}"
+seed="$root{{ hypervisor_etcd_drill_vm_seed }}"
+hostkey="$root{{ hypervisor_etcd_drill_vm_hostkey }}"
+template_dir="$root{{ hypervisor_etcd_drill_share_dir }}"
+operator_pubkey="$root/home/{{ sys_user }}/.ssh/id_ed25519.pub"
+virsh=(virsh --connect qemu:///system)
+
+# libvirt's own network, which nothing declared, stays stopped.
+if "${virsh[@]}" net-info default 2> /dev/null | grep -qE 'Active:\s+yes'; then
+    "${virsh[@]}" net-destroy default
+fi
+
+# Group membership reaches qemu:///system and /dev/kvm without sudo, at the user's next login.
+for group in {{ hypervisor_user_groups | join(' ') }}; do
+    if ! id -nG {{ sys_user }} | tr ' ' '\n' | grep -qx "$group"; then
+        usermod -aG "$group" {{ sys_user }}
+    fi
+done
+
+# DECIDED: pin the checksum even though `current` rotates, so a guest is never built from an image
+# nobody reviewed. A host with no copy fails here once upstream rotates: re-pin it then.
+if ! echo "{{ hypervisor_base_image_sha256 }}  $base_image" | sha256sum --check --status 2> /dev/null; then
+    download="$base_image.download"
+    install -d "$(dirname "$base_image")"
+    curl -fsSL --max-time 900 -o "$download" "{{ hypervisor_base_image_url }}"
+    if ! echo "{{ hypervisor_base_image_sha256 }}  $download" | sha256sum --check --status; then
+        rm -f "$download"
+        echo "etcd-drill-prepare: the base image's checksum differs from the pin" >&2
+        exit 1
+    fi
+    chmod 0644 "$download"
+    mv "$download" "$base_image"
+fi
+
+install -d -m 0700 "$seed_dir"
+# Once. The guest boots from a fresh disk every run, so a guest-generated host key could not be
+# pinned, and anything on this bridge could answer for the address and be handed the cluster token.
+if [[ ! -e "$hostkey" ]]; then
+    ssh-keygen -q -t ed25519 -N "" -C "{{ hypervisor_etcd_drill_vm_hostname }} host key" -f "$hostkey"
+fi
+
+user_data="$seed_dir/user-data.new"
+touch "$user_data"
+chmod 0600 "$user_data"
+awk -v operator_key="$(cat "$operator_pubkey")" -v host_public="$(cat "$hostkey.pub")" -v keyfile="$hostkey" '
+    function swap(text, marker, value, at) {
+        at = index(text, marker)
+        return at ? substr(text, 1, at - 1) value substr(text, at + length(marker)) : text
+    }
+    index($0, "{{ hypervisor_etcd_drill_vm_hostkey_private }}") {
+        while ((getline key < keyfile) > 0) {
+            print "    " key
+        }
+        next
+    }
+    {
+        line = swap($0, "{{ hypervisor_etcd_drill_vm_ssh_key }}", operator_key)
+        print swap(line, "{{ hypervisor_etcd_drill_vm_hostkey_public }}", host_public)
+    }
+' "$template_dir/user-data.in" > "$user_data"
+meta_data="$template_dir/meta-data"
+
+# xorriso rather than cloud-localds, which would add a package. The volume id MUST be `cidata`:
+# that string is how cloud-init's NoCloud datasource finds the disk.
+if [[ ! -e "$seed" ]] || ! cmp -s "$user_data" "$seed_dir/user-data" || ! cmp -s "$meta_data" "$seed_dir/meta-data"; then
+    mv "$user_data" "$seed_dir/user-data"
+    install -m 0600 "$meta_data" "$seed_dir/meta-data"
+    rm -f "$seed"
+    xorriso -as mkisofs -output "$seed" -volid cidata -joliet -rock \
+        "$seed_dir/user-data" "$seed_dir/meta-data"
+else
+    rm -f "$user_data"
+fi
+# The ISO carries the private host key. libvirt relabels the file to its qemu user at domain start,
+# so the guest can still read it.
+chgrp kvm "$seed"
+chmod 0640 "$seed"
+
+install -d -m 0755 "$root{{ hypervisor_etcd_drill_stamp_dir }}" "$root{{ hypervisor_etcd_drill_log_dir }}"

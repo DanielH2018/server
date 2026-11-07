@@ -1,0 +1,11 @@
+# Shipped by the host package's hypervisor component. Root: virsh against qemu:///system, the agent
+# env file and the R2 env are all root-only. Each stage of the orchestrator bounds itself.
+[Unit]
+Description=Full etcd restore drill in a throwaway guest
+After=libvirtd.service network-online.target homelab-secrets.service
+Wants=libvirtd.service network-online.target
+
+[Service]
+Type=oneshot
+ExecStartPre={{ hypervisor_etcd_drill_prepare_path }}
+ExecStart={{ hypervisor_etcd_drill_runner_path }}

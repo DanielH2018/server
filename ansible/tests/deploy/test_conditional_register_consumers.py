@@ -91,7 +91,6 @@ _KNOWN_TASK_FILES = frozenset(
         # entries in SKIP_MISSING or through a when-gated producer under the check-mode rule.
         "k8s/headlamp/tasks/main.yml",
         "k8s/prowlarr/tasks/main.yml",
-        "setup/hypervisor/tasks/teardown.yml",
     }
 )
 

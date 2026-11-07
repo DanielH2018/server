@@ -48,7 +48,7 @@ component: claude-code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, hypervisor, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:

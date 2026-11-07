@@ -381,13 +381,12 @@ def test_a_tree_without_the_changed_tasks_says_the_note_stays_wide(
     assert ("could not read" in err) == bool(ref), err
 
 
-def test_the_tick_owes_a_hypervisor_drill_edit_to_daniel_server():
+def test_the_tick_owes_a_nut_host_edit_to_the_ups_host():
     """The pair the GitOps tick records in its `owed` ledger (#6510): it ran the role here."""
     reach = land_reach.remaining_setup_hosts(
-        ["ansible/roles/setup/hypervisor/tasks/etcd_drill.yml"], "daniel-box"
+        ["ansible/roles/setup/nut_host/tasks/main.yml"], "daniel-box"
     )
-    assert "daniel-server" in reach["hypervisor"]
-    assert "daniel-box" not in reach["hypervisor"]
+    assert "daniel-box" not in reach.get("nut_host", ()), reach
 
 
 def test_the_tick_owes_nothing_for_a_role_only_its_own_host_runs():

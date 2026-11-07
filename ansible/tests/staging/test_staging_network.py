@@ -28,10 +28,10 @@ import pytest
 from lib import yaml_fast
 from jinja2 import Undefined
 from lib.ansible_jinja_env import template_env
-from _helpers import ANSIBLE
+from _helpers import REPO
 
 
-ROLE = ANSIBLE / "roles" / "setup" / "hypervisor"
+ROLE = REPO / "hosts" / "components" / "hypervisor"
 TEMPLATE = "staging-network.xml.j2"
 
 # Ranges daniel-server routes, or that libvirt itself defines. Sources, in order: lan_subnet

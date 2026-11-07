@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Which hosts beyond the tick's own a setup-role change over a range still reaches (#6510).
 
-THE PROBLEM. The GitOps tick applies a setup role only on its own host. `hypervisor` routes
-`on_tick_host: true`, so the tick runs it on daniel-box, where only its teardown half applies,
-and records nothing for daniel-server, which runs the install half. `land.sh` printed the one
+THE PROBLEM. The GitOps tick applies a setup role only on its own host. `hypervisor` routed
+`on_tick_host: true`, so the tick ran it on daniel-box, where only its teardown half applied,
+and recorded nothing for daniel-server, which ran the install half. `land.sh` printed the one
 line naming daniel-server, and a session that missed it left the host stale for four days
 (#6411).
 

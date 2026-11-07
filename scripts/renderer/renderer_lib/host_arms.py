@@ -239,10 +239,12 @@ def _checked_xml(directory: Path, kind: str, name: str, xml: str) -> None:
     except ElementTree.ParseError as exc:
         raise RenderRefused(f"{directory}: libvirt {name} is not XML: {exc}") from exc
     uuid = (root.findtext("uuid") or "").strip()
-    if root.tag != LIBVIRT_ROOTS[kind] or root.findtext("name") != name:
+    # libvirt holds a network's name in a child element and an nwfilter's in an attribute of the root.
+    found = root.get("name") if kind == "nwfilters" else root.findtext("name")
+    if root.tag != LIBVIRT_ROOTS[kind] or found != name:
         raise RenderRefused(
             f"{directory}: libvirt {kind} {name}: the XML root must be "
-            f"<{LIBVIRT_ROOTS[kind]}> with the declared <name>"
+            f"<{LIBVIRT_ROOTS[kind]}> with the declared name"
         )
     if not UUID.fullmatch(uuid):
         raise RenderRefused(

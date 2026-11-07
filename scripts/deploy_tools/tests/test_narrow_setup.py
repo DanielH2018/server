@@ -246,7 +246,7 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
 
 # The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
 # gives. Before them, `crons.yml` refused on its `always` preamble, three roles had one untagged
-# `main.yml`, and `gitops_deploy` and `hypervisor` reached their task files only through
+# `main.yml`, and `gitops_deploy` reached its task files only through
 # `include_tasks`, so every change to them applied the whole role.
 NARROWED_SETUP_FILES = {
     ("deploy_ui", "tasks/code.yml"): {"deploy-ui-code"},
@@ -262,9 +262,6 @@ NARROWED_SETUP_FILES = {
         "gitops-deploy-github-checks",
     },
     ("gitops_deploy", "tasks/teardown.yml"): {"gitops-deploy-teardown"},
-    ("hypervisor", "tasks/network.yml"): {"hypervisor-network"},
-    ("hypervisor", "tasks/etcd_drill.yml"): {"hypervisor-etcd-drill"},
-    ("hypervisor", "tasks/teardown.yml"): {"hypervisor-teardown"},
 }
 
 

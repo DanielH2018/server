@@ -73,7 +73,7 @@
 # Item 5 cannot be diagnosed from daniel-box, because a live k3s explains it away. Throughout
 # every failure the live cluster stays Ready and every write lands in /var/tmp.
 #
-# THE FULL DRILL RUNS IN A THROWAWAY GUEST. roles/setup/hypervisor
+# THE FULL DRILL RUNS IN A THROWAWAY GUEST. hosts/components/hypervisor
 # installs `etcd-restore-drill-vm` on daniel-server: a monthly root cron that builds a transient
 # libvirt guest from the reviewed cloud image, copies in the k3s binary, the cluster token and the
 # R2 env file at the paths this script reads, runs THIS script there unmodified (through
