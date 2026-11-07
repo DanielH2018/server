@@ -2260,19 +2260,24 @@ the `manual_plane` clearing, and *Rollback*'s
     - **`accounting.yml`.** `/etc/issue` and `/etc/issue.net` are conffiles of `base-files`
       (`dpkg-query -W -f='${Conffiles}' base-files` on the Pi and daniel-box, 2026-11-07), so
       the banners go through the line arm, one declaration per line. No tracked sshd
-      configuration sets `Banner`. If H7.58's `sshd -T` reads `banner none`, no SSH login shows
-      `/etc/issue.net`, and that file's lines are deleted with that reason.
+      configuration sets `Banner`, and an SSH login to the Pi printed no banner on 2026-11-07, so
+      `/etc/issue.net` has no lines. The first banner line's regexp also matches base-files'
+      `Ubuntu <version>` line, so a rebuilt host's console shows no release string.
     - **`audit-and-kernel.yml`.** `auditd` is a `Depends`, and its unit is enabled in the
       package. The component ships `/etc/audit/rules.d/hardening.rules` with
-      `try-restart:auditd.service`, the module blacklist and
-      `/etc/modules-load.d/wireguard.conf`. A `tmpfiles.d` `z` line per path replaces
+      `try-restart:auditd.service` and `/etc/modules-load.d/wireguard.conf`. The module blacklist
+      goes through the line arm, because `/etc/modprobe.d/blacklist-rare-network.conf` is a
+      conffile of `kmod` (`dpkg -S` on the Pi, 2026-11-07), and dpkg refuses to unpack a path
+      another package owns. A `tmpfiles.d` `z` line per path replaces
       `Restrict sensitive file permissions`. H7.59 ships `/etc/modprobe.d/i915.conf` under
       `has_igpu`, which only daniel-server sets, and the cluster-node procedure runs
       `update-initramfs -u` on a rebuilt host (**operator-only**).
     - **`integrity.yml`.** The component ships `coredump.conf.d/disable.conf`. Bootstrap step 4
       masks `networkd-dispatcher.service` on all three hosts, and the mask persists on the live
       hosts.
-    - **`system-tuning.yml`.** A new `rsyslog-filter` component ships the filter, with
+    - **`system-tuning.yml`.** Every task but the git hooks already reads false on the Pi, through
+      `has_rsyslog` and the host literals, so H7.58 lists no subject here. A new
+      `rsyslog-filter` component ships the filter, with
       `try-restart:rsyslog.service`. H7.59 lists it on daniel-server and H7.60 on daniel-box,
       because `host-tuning` is shared, so a file added there would reach daniel-box with
       H7.59. The journald cap and the filter are one change, so
@@ -2288,15 +2293,22 @@ the `manual_plane` clearing, and *Rollback*'s
       `unzip`, `update-notifier-common`, `unattended-upgrades`, `libpam-tmpdir`, `debsums` and
       `jq`. `fail2ban` is already the `fail2ban` component's.
     - **Deleted from `host-basics.yml`, with the reason.** `Update and upgrade system
-      packages` goes, because a package cannot run a dist-upgrade. `unattended-upgrades` keeps
-      applying what its origins allow, and every other package update waits for the operator
-      (**operator-only**: H7.58's PR asks for this ruling). The watchdog stop and its handler
+      packages` goes, because a package cannot run a dist-upgrade. `unattended-upgrades` applies
+      the release's regular updates pocket as well as security: the operator ruled "widen it" on
+      2026-11-07, so no Ubuntu update waits for a hand run. The `unattended-upgrades` component
+      has shipped that pocket since [#398](https://github.com/DanielH2018/server/pull/398), so
+      `host-hardening` adds the `Depends`. It also ships `--force-confold` in `apt.conf.d`. Without a
+      force-conf option `unattended-upgrade` skips a package whose conffile would prompt, and the
+      line arm edits conffiles of `base-files` and `kmod`, so those would wait for a hand run once
+      the dist-upgrade goes. Docker's and the homelab repository's origins stay
+      out. The watchdog stop and its handler
       guard only that dist-upgrade, so they go with it. The Docker hold goes for the same
       reason, because `homelab-docker-engine.service` sets the hold when it installs the
       packages. Both `apt-show-versions` tasks go, because no tracked file reads its output.
     - **The absent arms of `crons.yml`.** The worktree holder's removal, its old sudoers rule,
       the secret-rotation wrappers, `cert-expiry-webhook.env` and the two Kuma push credential
-      files become legacy entries on each host they applied to. H7.48 handles the cron arms.
+      files become legacy entries on each host they applied to. The Pi held neither Kuma file on
+      2026-11-07, so its package lists neither. H7.48 handles the cron arms.
       The two `ansible.log` tasks are deleted, because
       [#6217](https://github.com/DanielH2018/server/issues/6217) stopped writing that log; each
       PR body quotes a `find` that returns nothing.

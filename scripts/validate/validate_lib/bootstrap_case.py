@@ -79,6 +79,7 @@ if [ "$1" = install ]; then
 fi
 exec /usr/bin/apt-get "$@"
 """
+SWAPON_SHIM = "/usr/local/sbin/swapon"
 COPY = "/root/bootstrap"
 TOOLS_SEED = "/srv/tools-seed"
 # A join address and token for the agent, which the installer writes and nothing contacts.
@@ -260,9 +261,13 @@ def red_clone(clone: Path, out: Path) -> Path:
 
 
 def install_apt_shim(c: Container) -> None:
-    """Put APT_SHIM ahead of the real apt-get on the container's PATH."""
+    """Put APT_SHIM ahead of the real apt-get, and a stand-in swapon ahead of the real one.
+
+    The image's overlay filesystem holds no swap file, so a real swapon fails in every case.
+    """
     c.ok(f"cat > /usr/local/sbin/apt-get << 'EOF'\n{APT_SHIM}EOF\n")
-    c.ok("chmod 0755 /usr/local/sbin/apt-get")
+    c.ok(f"printf '#!/bin/sh\\nexit 0\\n' > {SWAPON_SHIM}")
+    c.ok(f"chmod 0755 /usr/local/sbin/apt-get {SWAPON_SHIM}")
 
 
 def seed_kit(cases, kit: Path) -> Path:
@@ -406,6 +411,23 @@ class Bootstrap:
                 problems.append(f"{unit} is {state}, not {want}")
         return problems
 
+    def baseline_problems(self) -> list[str]:
+        """What step 4 left wrong, read from a clean image: sshd admits only `ssh-users`."""
+        c = self.container
+        problems = []
+        if "ssh-users" not in c.ok("id -nG ubuntu").split():
+            problems.append("ubuntu is not in the ssh-users group after step 4")
+        if (
+            c.ok("systemctl is-enabled networkd-dispatcher.service || true").strip()
+            != "masked"
+        ):
+            problems.append("networkd-dispatcher.service is not masked after step 4")
+        if self.host == "daniel-pi" and "/swapfile none swap sw 0 0" not in c.read(
+            "/etc/fstab"
+        ):
+            problems.append("/etc/fstab holds no swap line after step 4")
+        return problems
+
 
 def _report(cases, name: str, label: str, body) -> None:
     try:
@@ -448,7 +470,11 @@ def _expect_green(run: Bootstrap, marker: str, absent: str | None = None) -> Non
         )
         expect(not problems, "; ".join(problems))
         calls = run.container.read(APT_CALLS)
-        problems = apt_problems(run.host, calls, result.stdout) + run.unit_problems()
+        problems = (
+            apt_problems(run.host, calls, result.stdout)
+            + run.unit_problems()
+            + run.baseline_problems()
+        )
         expect(not problems, "; ".join(problems))
     finally:
         run.container.remove()

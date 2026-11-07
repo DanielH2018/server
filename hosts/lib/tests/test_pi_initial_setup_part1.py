@@ -238,6 +238,7 @@ def seeded_pi(package: host_mode.Package, tmp_path: Path) -> Node:
         "ssh.service",
         "systemd-journald.service",
         "auditd.service",
+        "systemd-modules-load.service",
         "fail2ban.service",
         "postfix.service",
         "sysstat.service",

@@ -112,9 +112,9 @@ the name:
   back twenty tasks later.
 - **The credential cache is what stops every `!` command re-prompting.**
   `/etc/sudoers.d/10-timestamp` sets `timestamp_type=global` with a 60-minute timeout, so one
-  authentication covers every pane and every tty-less shell. It is written with
-  `validate: visudo -cf %s`, because a malformed drop-in locks the escalation path out, and
-  that path is the only write path to the cluster.
+  authentication covers every pane and every tty-less shell. Ansible writes it with
+  `validate: visudo -cf %s` on the cluster nodes, and a test runs the same check on the
+  `host-hardening` component's copy, because a malformed drop-in locks the escalation path out.
 
 ## Unattended upgrades: two traps
 
@@ -170,10 +170,9 @@ extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-o
   `sshd_config` sets `PermitRootLogin`, because rkhunter reads no drop-in.
 - **Postfix binds `inet_interfaces = loopback-only`** and needs `notify: Restart Postfix`: a
   reload does not rebind the socket, so the `0.0.0.0:25` listener would survive it.
-- **The Pi's swap file is bring-up, not tuning.** It is gated on `has_low_memory_board` and the
-  hardware watchdog is stopped around it, because heavy apt on a 512 MB Zero 2 W OOMs without
-  disk swap. Pi-only packages gate on `has_raspi_kernel` instead — the board and its memory are
-  two separate facts.
+- **The Pi's swap file is bring-up, not tuning.** Step 4 of `hosts/bootstrap-host.sh` creates
+  it, ahead of its first heavy apt, because heavy apt on a 512 MB Zero 2 W OOMs without disk
+  swap. The Pi's package depends on `linux-raspi` and `wireguard`.
 - **The AIDE exclusions deploy as `/etc/aide/aide.conf.d/98_aide_local`, with no dot.**
   Debian's `aide.conf` includes that directory with the name pattern `^[a-zA-Z0-9_-]+$`, so a
   dotted name is skipped silently and `aide --config-check` still passes. The file was
