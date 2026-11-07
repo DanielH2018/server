@@ -128,8 +128,6 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_every_other_roles_rules(
     )
     node.state["users"] = {u["name"]: u["uid"] for u in manifest["users"]["users"]}
     lan = context["lan_subnet"]
-    agent = "192.0.2.10"
-    deploy_ui = "deploy-ui from the k3s cluster"
     k3s = [
         r
         for r in manifest["ufw"]["rules"]
@@ -138,15 +136,11 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_every_other_roles_rules(
     builder = [
         [r["spec"], f"homelab:{r['id']}"]
         for r in manifest["ufw"]["rules"]
-        if r["id"].startswith("apt-repo-")
+        if r["id"].startswith(("apt-repo-", "deploy-ui-"))
     ]
     # The live rules in `ufw status` order: the k3s join rules and coredns-host metrics allows
-    # carry no comment, and setup/deploy_ui labels its allows with its own comment.
-    others = [
-        ["allow from 10.42.0.0/16 to any port 8790 proto tcp", deploy_ui],
-        [f"allow from {agent} to any port 8790 proto tcp", deploy_ui],
-        ["allow from 192.0.2.20 to any port 8790 proto tcp", deploy_ui],
-    ] + builder
+    # carry no comment.
+    others = builder
     node.state["ufw"] = {
         "active": True,
         "rules": [[LAN.format(lan=lan), ""], ["limit 22/tcp", ""]]

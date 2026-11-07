@@ -20,9 +20,6 @@
 # `initial_setup_packaged_hosts`. The scans and the reboot read one more credential,
 # `healthchecks_ping_key` (`host_secrets.py sync daniel-box`, operator-only).
 #
-# The deploy-ui allows are the one live ufw rule set the package does not declare: `setup/deploy_ui`
-# still writes them, with no `homelab:` label, so the arm leaves them.
-#
 # H7.35 moves the k3s server's host half here: `k3s-server` gains Longhorn's packages, the read-only
 # kubeconfig, the inotify key, the join rules declared `keep` and the address pin, whose wifi half
 # reads `wifi_ssid` and `wifi_password`. `k3s-host-dns` holds the resolver and the host forwarder, and
@@ -32,7 +29,9 @@
 # Since H7.37 it ships the Renovate pair, fake_remux and the two GitHub checks (their components).
 # They read four more keys: renovate_agent_gh_token, renovate_agent_claude_oauth_token,
 # sonarr_api_key and arr_discord_webhook_url (`host_secrets.py sync daniel-box`, operator-only).
-# deploy_ui is not packaged: H7.11 keeps it with the deployer, and #7419 holds that question.
+#
+# H7.50 re-homes the deploy UI daemon with its in-flight panel (hosts/components/deploy-ui), which
+# declares the port's three ufw allows. It reads no credential.
 #
 # The builder and the repository moved in H7.41b (hosts/components/builder). Other timers stay with
 # Ansible until H7. H6.4a adds the k3s-server component, whose first k3s.service drop-in lets the
@@ -90,6 +89,7 @@ components:
   - renovate-agent
   - fake-remux
   - github-checks
+  - deploy-ui
   # H7.61: this package's own units name /usr/bin/uv. initial_setup keeps writing
   # /usr/local/bin/uv here until this host's own move, H7.62, for the setup roles still reading it.
   - uv

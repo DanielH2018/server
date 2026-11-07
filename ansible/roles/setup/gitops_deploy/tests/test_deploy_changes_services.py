@@ -107,26 +107,22 @@ def test_role_of_is_none_for_a_path_in_no_role_directory(path):
     assert role_of(path) is None
 
 
-def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
-    """deploy_ui installs the deployer's `gitops_markers.py` by path (#3306), so it re-applies
-    beside its owner. Another deployer module does not reach it."""
+def test_the_state_modules_the_packages_ship_reach_only_their_owner():
+    """deploy-ui and renovate-agent ship `gitops_markers.py` in daniel-box's package (H7.37,
+    H7.50), so no other setup role re-applies for it; the builder publishes the package."""
     markers = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
-    roles = {"gitops_deploy", "deploy_ui"}
-    assert services_from_changed_paths(markers).setup_roles == roles
-    assert setup_tags_for(markers) == roles
+    assert services_from_changed_paths(markers).setup_roles == {"gitops_deploy"}
+    assert setup_tags_for(markers) == {"gitops_deploy"}
     other = ["ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py"]
     assert services_from_changed_paths(other).setup_roles == {"gitops_deploy"}
     assert setup_tags_for(other) == {"gitops_deploy"}
 
 
 def test_a_host_lib_change_reaches_its_consumers_and_not_common():
-    """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The five
-    initial_setup consumers apply on the tick, and `common` is named nowhere. A `common` file no role ships still names `common`."""
+    """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The
+    initial_setup consumer applies on the tick, and `common` is named nowhere. A `common` file no role ships still names `common`."""
     host_lib = ["hosts/lib/host_lib.py"]
-    consumers = {
-        "deploy_ui",
-        "gitops_deploy",
-    }
+    consumers = {"gitops_deploy"}
     assert services_from_changed_paths(host_lib).setup_roles == consumers
     assert setup_tags_for(host_lib) == consumers
     resolv = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
@@ -150,12 +146,9 @@ def test_a_table_holding_only_the_old_host_lib_key_routes_the_moved_file_nowhere
 def test_a_common_task_file_change_reaches_the_roles_importing_it():
     """An `import_tasks` of a `common/tasks/` file is static, so the imported tasks run under
     each importer's tags and only re-applying the importers applies the change (#3317). The
-    same five initial_setup roles apply on the tick."""
+    initial_setup consumer applies on the tick."""
     path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
-    consumers = {
-        "deploy_ui",
-        "gitops_deploy",
-    }
+    consumers = {"gitops_deploy"}
     assert setup_roles_for(path) == consumers
     assert setup_tags_for([path]) == consumers
 
