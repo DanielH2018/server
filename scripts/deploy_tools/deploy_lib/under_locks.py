@@ -83,8 +83,8 @@ REAP_MAX_PER_RUN_DEFAULT = 20
 # census in test_gitops_deploy_timeout_budgets.py is the list a new waiter joins.
 TREE_LOCK_HOLDERS = (
     "  A deploy is already running. Likely holders: gitops-deploy.service",
-    "  (systemctl status gitops-deploy.service), the weekly secret-rotate cron, the",
-    "  docs-refresh cron, the weekly eval-run cron, or another deploy.sh from a Claude",
+    "  (systemctl status gitops-deploy.service), the docs-refresh cron, the weekly",
+    "  eval-run cron, or another deploy.sh from a Claude",
     "  session (uv run python scripts/dev/prune_worktrees.py).",
 )
 

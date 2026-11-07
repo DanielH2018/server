@@ -253,7 +253,6 @@ def _lan() -> tuple[str, list[str]]:
 def _secrets() -> tuple[str, list[str]]:
     return render_secret_tiers(
         module_constant(SECRET_ROTATION, "TIER_DAYS"),
-        module_constant(SECRET_ROTATION, "ROTATE_LEAD_DAYS"),
         registry_counts(SECRET_REGISTRY),
     ), ["scripts/secrets_mgmt/secret_rotation.py", "ansible/secret_rotation.yml"]
 

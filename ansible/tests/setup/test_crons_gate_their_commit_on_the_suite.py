@@ -12,10 +12,8 @@ import pytest
 from _helpers import REPO
 
 TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
-# The crons that must gate their own commit on the suite.
+# The crons that reach publish_pr.py, each of which must gate its own commit on the suite.
 GATED_CRONS = ("docs-refresh.sh.j2", "eval-run.sh.j2")
-# Every cron that reaches publish_pr.py.
-PUBLISHING_CRONS = (*GATED_CRONS, "secret-rotate.sh.j2")
 
 SUITE_RUN = "python -m pytest"
 
@@ -59,6 +57,6 @@ def test_no_cron_still_carries_the_retired_deselect():
     """The reject half. A leftover `PYTEST_ADDOPTS` that deselects the retired weights ratchet
     names a node id pytest cannot find."""
     stale = [
-        name for name in PUBLISHING_CRONS if "PYTEST_ADDOPTS" in _path(name).read_text()
+        name for name in GATED_CRONS if "PYTEST_ADDOPTS" in _path(name).read_text()
     ]
     assert not stale, f"{stale} still set PYTEST_ADDOPTS; the ratchet went with #2830"

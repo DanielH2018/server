@@ -36,8 +36,9 @@ ever BLOCK; it never approves.
 import os
 import re
 import sys
+from pathlib import Path
 
-from _hook_common import emit_pretooluse_decision, read_payload
+from _hook_common import emit_pretooluse_decision, read_payload, repo_root
 
 
 _SOPS_MAC_RE = re.compile(r'(?m)^\s*"?mac"?:\s*"?ENC\[AES256_GCM,')
@@ -144,18 +145,9 @@ def classify(file_path, repo_root):
 
 
 def find_repo_root(target, default):
-    """Return the checkout that owns target: nearest ancestor holding a `.git`.
-
-    A worktree's `.git` is a file rather than a directory, so both forms count.
-    """
-    current = os.path.dirname(os.path.abspath(target))
-    while True:
-        if os.path.exists(os.path.join(current, ".git")):
-            return current
-        parent = os.path.dirname(current)
-        if parent == current:
-            return default
-        current = parent
+    """Return the checkout that owns target as a str, or `default` when none does."""
+    root = repo_root(Path(os.path.abspath(target)).parent)
+    return str(root) if root else default
 
 
 def main():

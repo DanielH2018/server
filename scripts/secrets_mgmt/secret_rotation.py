@@ -209,12 +209,9 @@ def cmd_audit(args, tools: RotationTools) -> int:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
     summary = audit_summary(res, missing, stale)
-    # An externally-detected fault the caller wants folded in. ADDITIVE, deliberately: the
-    # caller could short-circuit to its own sticky DOWN instead (the two arms above it in
-    # secret-rotation-audit.sh.j2 do exactly that), but those describe a registry that cannot
-    # be trusted, whereas an unlanded rotation branch says nothing about the other secrets.
-    # Short-circuiting there would silence overdue reporting for all of them until a human
-    # cleared the branch. Forcing DOWN while still enumerating the audit keeps both signals.
+    # An externally-detected fault the caller wants folded in, such as a revoked `gh` token.
+    # ADDITIVE, deliberately: the fault says nothing about the secrets, so forcing DOWN while
+    # still enumerating the audit keeps overdue reporting alive until a human clears it.
     extra_down = getattr(args, "extra_down", None)
     if extra_down:
         summary = f"{extra_down}; {summary}"

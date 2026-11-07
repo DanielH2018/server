@@ -43,13 +43,11 @@ KUMA_PUSH_MARKERS = (
     "PUSH_TOKEN",
     "kuma-push.env",
 )
-# Every B2 shell producer this module covers, with the check its textfile names. secret-rotate
-# writes no textfile, and the daily audit reports what it leaves behind.
+# Every B2 shell producer this module covers, with the check its textfile names.
 PRODUCERS = {
     "docs-refresh.sh.j2": "docs-refresh",
     "eval-run.sh.j2": "eval-run",
     "secret-rotation-audit.sh.j2": "secret-rotation-audit",
-    "secret-rotate.sh.j2": None,
     "setup-drift-check.sh.j2": "setup-drift-check",
 }
 
@@ -73,12 +71,8 @@ def test_no_b2_producer_pushes_to_kuma(template):
     # RED if a push, its library, its token or its credential returns: the tiles are gone, so a
     # push would be refused (`by=kuma`) every run.
     body = _render(template)
-    check = PRODUCERS[template]
     # Non-vacuity: the render is the real script, which still records its verdict.
-    if check:
-        assert f"write_check_textfile {check}" in body
-    else:
-        assert 'logger -t secret-rotate "status=down $1"' in body
+    assert f"write_check_textfile {PRODUCERS[template]}" in body
     assert kuma_push_markers(body) == []
 
 
@@ -226,7 +220,7 @@ def test_setup_drift_writes_success_zero_on_drift_and_exits_one_for_the_timer(tm
 # --- secret-rotation-audit: the audit's exit code is the verdict ------------------------------
 
 
-def _run_audit(tmp_path, audit_rc=0, dirty=False):
+def _run_audit(tmp_path, audit_rc=0):
     """Run the rendered wrapper in a scratch checkout with `uv` standing in for the audit.
 
     The stub records its argv, so a case can read which flag the wrapper asked for.
@@ -258,20 +252,9 @@ def _run_audit(tmp_path, audit_rc=0, dirty=False):
     textfile_dir, env = _env(
         tmp_path, STUB_AUDIT_RC=str(audit_rc), UV_ARGV=str(tmp_path / "uv-argv")
     )
-    # `gh` answers the token check, and `git` reports a dirty tree or a clean one.
-    stubs = fake_bin(
-        tmp_path / "bin",
-        gh="exit 0\n",
-        git=(
-            'case "$1" in\n'
-            '  status) echo "$STUB_GIT_STATUS" ;;\n'
-            "  rev-list) echo 0 ;;\n"
-            "  *) exit 1 ;;\n"
-            "esac\n"
-        ),
-    )
+    # `gh` answers the token check.
+    stubs = fake_bin(tmp_path / "bin", gh="exit 0\n")
     env["PATH"] = path_with(stubs)
-    env["STUB_GIT_STATUS"] = " M ansible/vars/secrets.yml" if dirty else ""
     result = run([str(script)], env=env, check=False)
     return textfile_dir, result.returncode
 
@@ -301,17 +284,4 @@ def test_a_failed_audit_writes_success_zero_and_keeps_its_exit_code_for_the_time
         ]
         == "0"
     )
-    assert code == 1
-
-
-def test_a_dirty_tree_short_circuit_writes_success_zero_and_logs_its_reason(tmp_path):
-    textfile_dir, code = _run_audit(tmp_path, dirty=True)
-
-    assert (
-        _series(textfile_dir, "secret-rotation-audit")[
-            'homelab_check_success{check="secret-rotation-audit"}'
-        ]
-        == "0"
-    )
-    assert "status=down secret-rotate left uncommitted changes" in _logged(tmp_path)
     assert code == 1

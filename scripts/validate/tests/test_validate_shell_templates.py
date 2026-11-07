@@ -69,7 +69,6 @@ def test_discover_templates_finds_the_known_set():
         "claude-agent-browser.sh.j2",
         "renovate-agent-setup.sh.j2",
         "claude-agent-home.sh.j2",
-        "secret-rotate.sh.j2",
         "secret-rotation-audit.sh.j2",
         "ups-secondary-health.sh.j2",
         "setup-drift-check.sh.j2",

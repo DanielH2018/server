@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-07 15:38 UTC
-generated_sha: d24d139426
+generated_at: 2026-11-07 17:03 UTC
+generated_sha: 4fc8127b37
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: d24d139426
 
 # Decisions
 
-849 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+847 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -26,7 +26,7 @@ generated_sha: d24d139426
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:613`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1135`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1134`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/monitor-bridge-checks.md:480`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:348`
@@ -230,29 +230,29 @@ generated_sha: d24d139426
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:613`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1135`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1134`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1135`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1134`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:613`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1135`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1134`
     * `docs/archive/post-merge-automation.md:268` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/gitops-pipeline.md:613` and `docs/gitops-pipeline.md:1135`
+    * `docs/gitops-pipeline.md:613` and `docs/gitops-pipeline.md:1134`
     * `docs/gitops-pipeline.md:613` and `docs/monitor-bridge-checks.md:480`
     * `docs/gitops-pipeline.md:613` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/gitops-pipeline.md:613` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/gitops-pipeline.md:1135` and `docs/monitor-bridge-checks.md:480`
-    * `docs/gitops-pipeline.md:1135` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:1135` and `scripts/diagnostics/tests/test_probe_health.py:348`
+    * `docs/gitops-pipeline.md:1134` and `docs/monitor-bridge-checks.md:480`
+    * `docs/gitops-pipeline.md:1134` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1134` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/monitor-bridge-checks.md:480` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/monitor-bridge-checks.md:480` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/target-architecture/contracts.md:333` and `docs/target-architecture/deploy/d2-first-leaf.md:747`
@@ -833,10 +833,10 @@ generated_sha: d24d139426
 | git evidence beats the seed even though it can overstate freshness for a credential minted before this file's first commit (2026-01-17) — such a secret dates to when it was committed, not when it was created. The seed it replaces is not a better reading: `seed_last_rotated` backdates by a hash of the NAME, so it is fiction for every secret nobody has rotated since registration. That fiction is what aged calendar_1 into a false OVERDUE and took the monitor down on 2026-08-25. | `scripts/secrets_mgmt/git_dates.py:423` | 2026-09-05 |
 | `email` was the first candidate for this set (#1183) and went to the registry's `ignore` tier instead, because it is an address rather than a credential — it renders as an ACME contact, a git commit author, an Authelia user's email and an SMTP username, and the value that authenticates that SMTP session is `smtp_notify_app_password`, tracked separately. That is the precedent NON_SECRET_TIERS below states: when the registry can say a name is not a credential, it says it, and this derivation reads it. GENERIC_NAMES stays for the case the registry CANNOT express — a name that really is a credential but whose word is too common to match on. A registry comment could not have carried this: `rotation_tools.save_registry` rewrites the file with `yaml.safe_dump`, so the weekly rotate cron drops any comment added there. | `scripts/secrets_mgmt/secret_bearing_host_paths.py:56` | 2026-09-05 |
 | 0700` marker for the same reason, and until | `scripts/secrets_mgmt/secret_bearing_host_paths.py:180` | 2026-09-17 |
-| the render decides which rotated keys the cluster reads, not `.source`, so a key a template newly references is written too. The cost: once the cluster file exists, a broken k8s template render stops every rotation, host-only keys included, and it stops before the deploy. Any failure counts, not only `RenderError`. The render is in placeholder mode and holds no value, so its message is safe to print. | `scripts/secrets_mgmt/secret_rotation.py:271` | 2026-10-15 |
+| the render decides which rotated keys the cluster reads, not `.source`, so a key a template newly references is written too. The cost: once the cluster file exists, a broken k8s template render stops every rotation, host-only keys included, and it stops before the deploy. Any failure counts, not only `RenderError`. The render is in placeholder mode and holds no value, so its message is safe to print. | `scripts/secrets_mgmt/secret_rotation.py:268` | 2026-10-15 |
 | the registry tracks SOPS keys only; a hand-added non-SOPS name reads as stale, fails cmd_audit and every secrets PR, and no tier value rescues it. | `scripts/secrets_mgmt/secrets_lib/secret_registry.py:123` | 2026-09-30 |
 | 0700` marker for it and twelve did not, and three of those | `scripts/secrets_mgmt/tests/test_secret_bearing_host_scripts_are_not_world_readable.py:5` | 2026-09-17 |
-| no test here asserts a cross-host token is not badly overdue. 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no code change. Overdue is runtime state: SecretRotationAuditFailed pages the daily audit for any overdue token, cross-host ones included, and `cmd_audit --check` deliberately ignores it. `test_no_test_file_reads_the_live_clock` refuses the bare `today()` call it was built on. | `scripts/secrets_mgmt/tests/test_secret_consumers.py:50` | 2026-10-25 |
+| no test here asserts a cross-host token is not badly overdue. 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no code change. Overdue is runtime state: SecretRotationAuditFailed pages the daily audit for any overdue token, cross-host ones included, and `cmd_audit --check` deliberately ignores it. `test_no_test_file_reads_the_live_clock` refuses the bare `today()` call it was built on. | `scripts/secrets_mgmt/tests/test_secret_consumers.py:34` | 2026-10-25 |
 | no fourth rule for Popen. reaches `wait`/`communicate` with no `timeout=` and no preceding `kill()`. The 2026-10-01 census found seven `Popen` call sites in test modules, and that shape sorts them badly. | `scripts/tests/_test_module_rules.py:135` | 2026-10-03 |
 | ` at probe_lib/ha.py:581 and at ha_state_model.py's `cmd_refresh` (the deferred `from diagnostics.probe_lib import core`/`ha`). | `scripts/tests/test_scripts_import_direction.py:107` | 2026-09-05 |
 | ` at ha_state_checks.py's `from ha_state_model import (...)` and at ha_state_model.py's `main()` (the deferred `from ha_state_checks import check_errors`). | `scripts/tests/test_scripts_import_direction.py:112` | 2026-09-05 |
@@ -903,7 +903,7 @@ generated_sha: d24d139426
 | ` marker. | `docs/gitops-pipeline.md:613` | 2026-10-24 |
 | ` marker and the measurement. | `docs/gitops-pipeline.md:702` | 2026-10-10 |
 | ` at that task says why the | `docs/gitops-pipeline.md:888` | 2026-10-10 |
-| ` marker | `docs/gitops-pipeline.md:1135` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1134` | 2026-10-10 |
 | ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:153` | 2026-09-29 |
 | ` the names stay generated, and a label sits beside them. | `docs/issue-claiming-and-fanout.md:251` | 2026-10-11 |
 | ` marker on `PACE_MASTER_RUNS` in | `docs/landing.md:100` | 2026-10-29 |
@@ -1122,8 +1122,6 @@ generated_sha: d24d139426
 | the install script is fetched unpinned, as the operator's install is. itself afterwards, so a pinned checksum would only hold back the first install. | `hosts/components/renovate-agent/templates/renovate-agent-setup.sh.j2:56` | 2026-11-07 |
 | a grouped row takes the DIGEST soak. the shape is recognised, and only its type is erased. The cost is that a grouped VERSION bump (`code-server build pins` is a live one) pages four days early, against every grouped digest bump paging four days late today; a grouped bump is manual-merge by construction, so four days early nudges someone who already owes the merge. Rejected alternative: put `{{updateType}}` into each group's `commitMessageTopic` so the title carries the type again — it cannot be verified from this host (Renovate runs as the Mend hosted app), and it edits the title/branch machinery #2620/#2641/#2646 settled. | `hosts/components/renovate-notify/files/pending_logic.py:114` | 2026-09-28 |
 | the churn allowance is three times the item's own soak + grace, not a flat day count. Three consecutive full allowances elapsed with the item never once leaving the section says the stall is the branch's, not this digest's — one allowance could be a single unlucky re-push landing mid-soak. Keeping it a multiple of the per-item allowance preserves `PENDING_GRACE_DAYS`'s rule that the threshold derives from the soak that applies: 24 days for an `nginx:alpine` row, 30 for an ordinary digest row, 42 for a version row. Rejected alternative: page as soon as the branch clock passes soak + grace, which is just the pre-#3076 over-report back again under a new name. | `hosts/components/renovate-notify/files/pending_logic.py:379` | 2026-10-01 |
-| a plain tail, not eval-run's and docs-refresh's prek-hook filter. reports `git commit --no-verify` below, so no pre-commit hook runs and the log can never name one; the filter would never match and always fall back to this same tail. Drop --no-verify and this must take the filtered body from eval-run.sh.j2. ENFORCED by ansible/tests/setup/test_eval_run_failure_path.py::test_secret_rotate_keeps_its_plain_tail_only_while_it_skips_hooks. | `hosts/components/secret-rotation/templates/secret-rotate.sh.j2:90` | 2026-10-03 |
-| the author email is `secret-rotate@<domain>`, not the `email` secret the Ansible-era script rendered. The renderer withholds every secret from a package, and an author address on a --no-verify, auto-merged rotation commit names the job, not a person. | `hosts/components/secret-rotation/templates/secret-rotate.sh.j2:185` | 2026-10-25 |
 | a wrapper in a host component, not a symlink in homelab-tools. installs nothing on PATH (scripts/renderer/renderer_lib/host_tools.py), and a component file needs no renderer change. /usr/local/bin precedes /usr/bin on PATH, so each host package lists the sops_setup role's /usr/local/bin/sops as a legacy entry beside this component. | `hosts/components/sops/component.yml:6` | 2026-10-30 |
 | the LAN is exempt from SSH rate-limiting, and `lan-ssh` must sort ABOVE `ssh-limit`. ufw takes the first matching rule, so an allow below the limit rule does nothing. The arm checks the `before:` relation and fails the run, holding the host, rather than deleting a keep rule to repair it. | `hosts/components/ssh-firewall/component.yml:8` | 2026-10-31 |
 | a copy of the agent users the host packages declare, not a read of the claude-code component's defaults (#6831). Each host's list copies the `users:` entry of that host's package.yml; a clone is `<home>/server`. Dropping an agent here revokes its scan at the next package version, though it keeps the group: the service refuses a uid the map does not name. | `hosts/components/worktree-holders/component.yml:23` | 2026-11-07 |
@@ -1143,7 +1141,7 @@ generated_sha: d24d139426
 | docs/archive stays; size was never the concern, and a PR number is not greppable offline the way the linked record is. Deleting the archive in favour of PR numbers was re-examined on 2026-09-28 (#2808) and kept. | `mkdocs.yml:116` | 2026-09-30 |
 | ` marker in ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting. It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on it -- and it writes unconditionally, never running the suite first, which is what keeps it out of the #1799 repair deadlock. | `prek.toml:502` | 2026-09-28 |
 | ` marker in a template, and the doc fragments read role defaults, inventory and the fail2ban template. The shard partition test reads ci.yml and pyproject.toml's `testpaths`. test_role_claude_md reads every role's CLAUDE.md beside its tasks and templates. The census rows read tracked `.py` files, and four more kinds of path: - every workflow under .github/workflows/, for the runner-pin and shared-fetch rows; - any file under a role's templates/, defaults/ or files/, for the row that refuses a literal uptime-kuma port, because a `.sh` or `.conf` there can dial it; - Markdown and JSON under .claude/skills/, .claude/agents/ and evals/cases/, for the rows on the review surfaces' standing-list slug and the agents' inline re-flag list; - a compiled module (`.pyc`, `.so`, anything under __pycache__/), for the row that refuses a tracked one. The macro row reads every Markdown doc under docs/ and .claude/ and every CLAUDE.md, and only the CLAUDE.md files, the skills and the agents are gated. A docs/ page or a .claude/rules/ file that names a deleted macro goes red in CI instead. Gating all Markdown would charge every docs-only commit the cost above, and the edit that usually breaks the row deletes a macro template, which `.j2` already gates. | `prek.toml:586` | 2026-10-05 |
-| never widen this hook to docs/reference/; the docs-refresh cron commits those paths with hooks running, so a strict failure stops every refresh. A style error there aborts the commit and alerts on every run until someone fixes the generator. ENFORCED by the same test. | `prek.toml:941` | 2026-09-30 |
-| the generated fragments under docs/assets/generated/fragments/ are linted here, although the docs-refresh cron commits them with hooks running. The operator chose this on 2026-09-30 (#3008) so that a generator's prose is gated in CI and not only by a hand `vale docs` run, where #3006 was found. The cost is accepted: a Vale error in a fragment aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out. | `prek.toml:963` | 2026-09-30 |
+| never widen this hook to docs/reference/; the docs-refresh cron commits those paths with hooks running, so a strict failure stops every refresh. A style error there aborts the commit and alerts on every run until someone fixes the generator. ENFORCED by the same test. | `prek.toml:940` | 2026-09-30 |
+| the generated fragments under docs/assets/generated/fragments/ are linted here, although the docs-refresh cron commits them with hooks running. The operator chose this on 2026-09-30 (#3008) so that a generator's prose is gated in CI and not only by a hand `vale docs` run, where #3006 was found. The cost is accepted: a Vale error in a fragment aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out. | `prek.toml:962` | 2026-09-30 |
 | compile at sync, as the syncing user, so a root importer finds fresh bytecode and writes no root-owned __pycache__ a session cannot delete. Costs ~0.4s per cold sync on 16 cores and ~1.2s on 2 (measured in #6984). | `pyproject.toml:8` | 2026-11-03 |
 | Markdown stays out of ruff's scope. blocks inside .md, which pulled every prose file in the repo into a gate whose stated job is first-party Python — and its output mangles the plan docs, exploding readable two-element dict keys across four lines. Excluding *.md holds the gate to the same Python files ruff 0.15 covered; `uv run ruff format --check` prints the count, so don't restate one here. `ansible/collections` is the vendored third-party tree, never linted or formatted. | `pyproject.toml:195` | 2026-08-23 |

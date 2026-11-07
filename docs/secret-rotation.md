@@ -11,7 +11,7 @@ no verdict has arrived for 25 hours.
 Due dates are **staggered** by a deterministic per-name offset, so the registered secrets
 come due a few at a time across the year — never all on one day. The offset lives in the
 due-date calculation rather than in `last_rotated`, which is what makes it survive a
-rotation: `rotate --commit` stamps the same date on every secret in a batch, and a batch
+rotation: a batch rotated in one commit carries one date, and a batch
 that shared its stamp would otherwise share its next due date too. The offset only ever
 pulls a due date **earlier** than the tier cadence below, never later. The
 [Secrets reference](reference/secrets.md) lists them, with each one's tier and due date.
@@ -21,8 +21,6 @@ pulls a due date **earlier** than the tier cadence below, never later. The
 ```bash
 uv run python scripts/secrets_mgmt/secret_rotation.py sync     # after adding/removing a secret — registers it
 uv run python scripts/secrets_mgmt/secret_rotation.py audit    # what's due / overdue, by tier
-uv run python scripts/secrets_mgmt/secret_rotation.py rotate            # dry-run: due auto-tier secrets
-uv run python scripts/secrets_mgmt/secret_rotation.py rotate --commit   # actually rotate due auto secrets
 ```
 
 `sync` edits the (git-tracked) registry — **commit it**. The audit cron never writes the
@@ -70,8 +68,7 @@ derives from `secrets.yml`:
   `secrets.yml`. It is evidence that the copies are fresh, not a store.
 
 Only `scripts/secrets_mgmt/cluster_vars.py write` writes these files. It decrypts, so the
-operator runs it (**operator-only**). The weekly rotation cron also runs it in process for
-each key it rotates. A hand edit breaks the file's SOPS MAC. CI's `cluster_vars.py check`
+operator runs it (**operator-only**). A hand edit breaks the file's SOPS MAC. CI's `cluster_vars.py check`
 refuses a hand-edited file, and a `.source` hash that no longer matches `secrets.yml`. A
 value changed with `sops set` therefore reaches the cluster only after `write` runs.
 
@@ -91,11 +88,6 @@ peanut, and a setup role or host package can read it too. Every step that handle
 4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
    `cluster-vars` Kustomization and on every Kustomization that depends on it.
 5. Run any setup-role or host-package command from step 3.
-
-The weekly cron needs no `write` step: `rotate --commit` runs it in process. `rotate` runs no
-deploy. It prints that Flux applies each `owner: flux` consumer's value once the commit lands,
-and it exits 1 before writing anything on a consumer that carries no `owner: flux`, because no
-other path applies a k8s consumer since `ansible/deploy.yml` lost its roles.
 
 ### Rotating the cluster key
 
@@ -160,17 +152,15 @@ cd /home/ubuntu/server && uv run python scripts/secrets_mgmt/host_secrets.py syn
 PR as the change that needs it: a PR that adds a key to a host's tree, or one that rotates a
 key a host file carries. No cron calls `sync`.
 
-`uv run python scripts/secrets_mgmt/host_secrets.py check` lists what is out of step. A key
-that a host file carries is also skipped by the unattended `rotate --commit`, which prints
-`skip (manual: a host file carries it)`. Rotate such a key by hand, then run `sync`.
+`uv run python scripts/secrets_mgmt/host_secrets.py check` lists what is out of step.
 
 ## Tiers
 
 <!-- Cadences and counts are generated from TIER_DAYS and the registry; edit those. -->
 --8<-- "assets/generated/fragments/secret-tiers.md"
 
-- `auto` — locally generated push tokens with no external coupling. `rotate --commit`, then
-  land the commit.
+- `auto` — has no member, and no job rotates a secret unattended. A future locally generated
+  secret brings the tier and its weekly job back in its own change.
 - `assisted` — app passwords, API keys and OIDC secrets. An app-side step, below.
 - `external` — provider-managed (Cloudflare, Discord, Mullvad, SMTP, LLM). Mint in the
   provider console.
@@ -182,35 +172,8 @@ that a host file carries is also skipped by the unattended `rotate --commit`, wh
 
 `sync` gives a newly registered key its tier from one name rule in
 `scripts/secrets_mgmt/secrets_lib/secret_classify.py`: `*_user` and `*_username` are `ignore`,
-and every other key is `assisted`. An `auto`, `external` or `pinned` key gets its tier by an edit
+and every other key is `assisted`. An `external` or `pinned` key gets its tier by an edit
 to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
-
-## `auto` — automated
-
-`rotate --commit` generates a new 32-char token, writes it via `sops set`, and records the
-date. Then every reader must render again. A reader Flux applies, such as monitor-bridge, takes
-the value once the commit lands, and `deploy.sh` exits 5 on its tag.
-Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
-one weekly cron interval, so a token rotates the Sunday *before* it goes overdue and the
-daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.
-
-### Auto-rotate contract (the weekly cron changes secrets unattended)
-The `rotate --commit` weekly cron is autonomous and state-changing — its authority, bounded
-(harness-engineering's versioned-contract pattern for a change-producing role):
-- **Scope / exclusions:** only `auto`-tier, locally generated push tokens with **no external
-  coupling**, and only those **coming due** within `ROTATE_LEAD_DAYS` (8). `assisted` / `external` /
-  `pinned` are **never** touched by the cron — a `pinned` swap loses data (see below).
-- **Mode:** change-producing — writes via `sops set` and commits the registry, and Flux applies
-  the value once the commit lands. Not report-only; there is no dry-run cron (the bare `rotate` is the dry run,
-  run by hand).
-- **Required evidence:** the daily audit's verdict (`SecretRotationAuditFailed`) must stay quiet
-  after a rotation.
-  An `auto`-tier secret still overdue after a cron window means the **cron broke** — investigate it,
-  don't hand-rotate around it.
-- **Host-file keys:** the cron skips every key a per-host SOPS file carries, because the copy
-  needs an operator-only `sync` in the same commit (*Per-host SOPS files*, above).
-- **Abort/escalation:** the cron only ever *narrows* to coming-due `auto` secrets; anything it can't
-  classify stays untouched and surfaces in `audit`, never a blind rotate.
 
 ## `assisted` — app-issued (regenerate in the app, then update SOPS)
 
@@ -222,8 +185,7 @@ run `host_secrets.py sync <host>` (**operator-only**) for each host file that ca
 (*Per-host SOPS files*, above), then
 redeploy the app **and** every consumer (for example, Homepage, monitor-bridge, configarr). A
 date left behind is not fatal: `audit` and `rotate` both advance it to the commit that changed
-the ciphertext before deciding what is due, so an undated hand rotation of an `auto` token is
-not rotated again by the weekly cron. Examples:
+the ciphertext before deciding what is due. Examples:
 - `*_api_key` (sonarr/radarr/jellyfin/prowlarr): Settings → General → regenerate API key.
   **Bazarr is a consumer of `sonarr_api_key` and `radarr_api_key` that no deploy reaches.** It
   stores both in its own config on the `bazarr-config` PVC, entered through its UI, so there is

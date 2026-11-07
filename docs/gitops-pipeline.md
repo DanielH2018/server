@@ -1109,12 +1109,11 @@ all fire (2700 s) or when a second holder takes the lock first, because flock do
 fairly. An operator who sees exit 75 should check whether `gitops-deploy` is mid-apply before
 assuming the lock is stuck.
 
-**Four waiters on the tree lock are pinned as a census.** `deploy.sh`, secret-rotate, docs-refresh
-and eval-run each wait 2400 s, and `_LOCK_WAITERS` and `_longest_tick_hold()` in
+**Three waiters on the tree lock are pinned as a census.** `deploy.sh`, docs-refresh and eval-run
+each wait 2400 s, and `_LOCK_WAITERS` and `_longest_tick_hold()` in
 `tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's ceiling. The
 census models the deployer alone. docs-refresh's longest path stays outside it because a run
-measures 7-11 minutes, its 06:17 start sits 2 h 43 min before secret-rotate's one weekly slot, and
-`deploy.sh` can retry after exit 75. A
+measures 7-11 minutes and `deploy.sh` can retry after exit 75. A
 per-consumer test covers only the consumers someone wrote one for, so the census plus
 `test_the_lock_waiter_census_is_non_vacuous` makes a new waiter fail instead of passing silently.
 A raise that pushes `TimeoutStartSec` past a waiter's wait fails those tests rather than shortening
@@ -1230,10 +1229,10 @@ rollback budget stacks on top.
 - The unit's worst case is the flock wait plus that budget, which
   `test_the_deployers_hold_survives_max_flock_contention` holds inside `TimeoutStartSec` in
   `gitops-deploy.service.j2`.
-- A raise of `TimeoutStartSec` past the four waiters' 2400 s moves them too, in the same change,
+- A raise of `TimeoutStartSec` past the three waiters' 2400 s moves them too, in the same change,
   because `test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold` fails otherwise.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
-  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 2400 s, and
+  `deploy.sh`, docs-refresh and eval-run each wait 2400 s, and
   `deploy_locks.locked_budget` spends the phase's own budget on a service-lock wait. An overrun
   never produces a second concurrent run, because the timer coalesces the new start into the
   activation in flight.

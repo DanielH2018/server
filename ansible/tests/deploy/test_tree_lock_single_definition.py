@@ -25,11 +25,10 @@ def test_the_template_var_and_the_python_constant_agree_is_clean():
 # The host crons that take the git-tree lock, and the one macro they all take it through (#3722).
 # Named rather than discovered, so a caller that stops importing the macro fails here by name.
 # The macro lives in the shared template directory, which the host renderer's loader also
-# searches. The three callers ship in their host components since H7.10.
+# searches. The two callers ship in their host components since H7.10.
 _LOCK_MACRO = REPO / "ansible/templates/git-tree-lock.j2"
 _COMPONENTS = REPO / "hosts/components"
 _LOCK_CALLERS = (
-    _COMPONENTS / "secret-rotation/templates/secret-rotate.sh.j2",
     _COMPONENTS / "docs-refresh/templates/docs-refresh.sh.j2",
     _COMPONENTS / "eval-sweep/templates/eval-run.sh.j2",
 )

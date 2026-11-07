@@ -19,6 +19,7 @@ import sys
 import tempfile
 from collections.abc import Callable
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -196,37 +197,15 @@ def git_invocation(argv: list[str]):
     return invocation(argv)
 
 
-def short_flags(stage: list[str]) -> set[str]:
-    """Every single-letter flag in `stage`, unbundled.
+def repo_root(start: Path) -> Path | None:
+    """The nearest directory at or above `start` holding a `.git` entry, or None.
 
-    `-lZ` is `-l` and `-Z`, and a hook that only compared whole arguments to `-Z` would miss
-    the bundled form.
+    A worktree's `.git` is a file rather than a directory, so both forms count.
     """
-    letters: set[str] = set()
-    for word in stage:
-        if word.startswith("-") and not word.startswith("--") and len(word) > 1:
-            letters.update(word[1:])
-    return letters
-
-
-def emit_permissionrequest_allow() -> None:
-    """Print the Claude Code PermissionRequest decision that answers a pending prompt.
-
-    Separate from the PreToolUse decision below because the two events sit at different points
-    in the permission pipeline. Claude Code evaluates ``ask`` rules regardless of what a
-    PreToolUse hook returns, so a command covered by one (``Bash(ssh:*)``) is only ever
-    resolved by a hook on this event, which runs as part of that prompt.
-    """
-    print(
-        json.dumps(
-            {
-                "hookSpecificOutput": {
-                    "hookEventName": "PermissionRequest",
-                    "decision": {"behavior": "allow"},
-                }
-            }
-        )
-    )
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
 
 
 def emit_pretooluse_decision(decision: str, reason: str) -> None:

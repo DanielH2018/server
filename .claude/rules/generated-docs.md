@@ -51,6 +51,5 @@ A fragment is spliced into someone else's prose and carries no stamp a reader ca
 nothing but `test_every_committed_fragment_matches_what_the_generator_writes_now` would catch
 it drifting. The asymmetry is the point, not an oversight.
 
-Two paths are safe and stay safe: the weekly secret-rotate cron commits `--no-verify`, and a
-rotation moves `last_rotated` rather than a tier count, so the fragment does not move either
-way; the docs-refresh cron regenerates before it commits, so its own hooks pass.
+One path is safe and stays safe: the docs-refresh cron regenerates before it commits, so its
+own hooks pass.
