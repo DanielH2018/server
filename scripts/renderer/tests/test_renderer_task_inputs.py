@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from _image_builder_tag import templar_content_tag
-from lib.k8s_roles import refuse_moved_keys_in_tasks, role_dirs
+from lib.k8s_roles import role_dirs
 from lib.repo_paths import K8S_ROLES
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster, derived, task_inputs
@@ -122,77 +122,3 @@ def test_a_role_with_no_defaults_file_raises(tmp_path):
         task_inputs.include_vars(role)
     with pytest.raises(ValueError, match=r"has no defaults/main\.yml"):
         task_inputs.image_builder_sites(role)
-
-
-@pytest.mark.parametrize(
-    "key",
-    [
-        "manifests_deferred_files: [a.yaml]",
-        "image_builder_name: demo",
-        "manifests_rollout_timeout: 900s",
-    ],
-)
-def test_a_moved_key_in_tasks_raises(tmp_path, key):
-    role = _role(tmp_path, tasks=BARE_INCLUDE + f"  vars:\n    {key}\n")
-    moved = key.split(":")[0]
-    with pytest.raises(ValueError, match=rf"{moved}.*tasks/main\.yml"):
-        task_inputs.include_vars(role)
-    with pytest.raises(ValueError, match=rf"{moved}.*tasks/main\.yml"):
-        task_inputs.image_builder_sites(role)
-
-
-@pytest.mark.parametrize(
-    "vars_text",
-    ["  vars: {manifests_rollout: x}\n", '  vars:\n    "manifests_rollout": x\n'],
-)
-def test_a_moved_key_in_flow_style_or_quoted_raises(tmp_path, vars_text):
-    role = _role(tmp_path, tasks=BARE_INCLUDE + vars_text)
-    with pytest.raises(ValueError, match=r"manifests_rollout.*tasks/main\.yml"):
-        task_inputs.include_vars(role)
-
-
-def test_any_image_builder_var_on_its_include_raises(tmp_path):
-    include = BARE_INCLUDE.replace("k8s/manifests", "k8s/image-builder")
-    role = _role(
-        tmp_path, tasks=include + "  vars:\n    image_builder_context_files: {a: b}\n"
-    )
-    with pytest.raises(ValueError, match="image_builder_context_files"):
-        task_inputs.image_builder_sites(role)
-
-
-def test_an_image_builder_fact_outside_its_include_passes(tmp_path):
-    """image-builder's own tasks set facts under this prefix."""
-    role = _role(
-        tmp_path,
-        tasks="- ansible.builtin.set_fact:\n    image_builder_content_tag: sha-1\n",
-    )
-    assert task_inputs.image_builder_sites(role) == []
-
-
-def test_a_moved_key_is_refused_only_while_flux_owns_the_role(tmp_path):
-    role = _role(tmp_path, tasks=BARE_INCLUDE + "  vars:\n    manifests_prune: false\n")
-    refuse_moved_keys_in_tasks(role, {"name": "role"})
-    with pytest.raises(ValueError, match="manifests_prune"):
-        refuse_moved_keys_in_tasks(role, {"name": "role", "owner": "flux"})
-
-
-def test_an_ansible_only_key_in_tasks_passes(tmp_path):
-    """A comment naming a moved key passes too, as coredns's tasks file has one."""
-    role = _role(
-        tmp_path,
-        "manifests_rollout: demo\n",
-        "# `manifests_rollout: ''` names no restart target\n"
-        + BARE_INCLUDE
-        + "  vars:\n    manifests_rollout_kind: daemonset\n",
-    )
-    assert task_inputs.include_vars(role) == {"manifests_rollout": "demo"}
-
-
-def test_no_role_keeps_a_moved_key_in_its_tasks_is_clean():
-    roles = role_dirs()
-    assert {K8S_ROLES / "pihole", K8S_ROLES / "n8n"} <= set(roles)
-    for role in roles:
-        refuse_moved_keys_in_tasks(role)
-    pihole = task_inputs.include_vars(K8S_ROLES / "pihole")
-    assert pihole["manifests_deferred_files"] == ["deployment-2.yaml"]
-    assert pihole["manifests_deferred_dir_name"] == "pihole-instance-2"

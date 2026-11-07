@@ -1,9 +1,0 @@
----
-# Flux applies mosquitto (D5.20), and no Ansible path reaches this file; it stays until R4 deletes
-# it. Its two asserts have successors: `cluster_vars.py write` refuses a `:` in
-# mqtt_password_hash, and observability's MosquittoLanAddressNotPinned rule fires when
-# mosquitto-lan does not hold the pinned address.
-# The claim is `k8s_claims` in defaults/main.yml; k8s/manifests renders and applies it.
-- name: Deploy mosquitto to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests

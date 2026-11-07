@@ -5,7 +5,7 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
 — merging would give the verbatim-prompts store this role's LAN route, which it must not have.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=loki-homelab` with exit 5
 - **Images:** `grafana/loki` (`loki_homelab_k8s_image`), `grafana/alloy`
@@ -21,24 +21,22 @@ separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-
   LogQL checks. A broken apply blinds the LogQL checks without paging. The host crons'
   `status=` lines land here too, as the local record of each verdict.
 - **Flux applies it, not Ansible** (D5.8, Wave A'). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. traefik stays
   Ansible-owned, so the Kustomization
   records it in its `homelab/ansible-owned-deps` annotation, not in `dependsOn`. The Loki
   Deployment is `Recreate`, so a change that rolls it takes log queries, pushes and the ruler
   down briefly.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its default `manifests_rollout:
+- **Where the task went.** Its default `manifests_rollout:
   loki-homelab`
   and the `alloy` entry in `manifests_extra_rollouts` name the two workloads for the
   stabilisation gate and the shared restart. The Kustomization's `wait` replaces the gate, and
   the restart checksum the renderer stamps replaces the restart. `k8s_autodeploy: false` no longer
   gates an apply, because the deployer skips the tag. It still stops Renovate automerging the
   image bump.
-- **Flux prunes the cluster-scoped RBAC.** The task's comment says the namespaced prune
-  allowlist in `k8s/manifests` never selects the Alloy ClusterRole and ClusterRoleBinding.
-  Flux prunes by its own inventory instead, and that inventory holds both, so dropping one
+- **Flux prunes the cluster-scoped RBAC.** Flux prunes by its own inventory, which holds the Alloy ClusterRole and
+  ClusterRoleBinding, so dropping one
   from `alloy-daemonset.yaml.j2` deletes it live at the next promotion.
   Deleting the Kustomization deletes them too, because the tag takes the default deletion policy.
 

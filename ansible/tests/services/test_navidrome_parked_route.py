@@ -12,6 +12,7 @@ leaves the live IngressRoute serving unless the role arms `manifests_prune`, sin
 
 from _helpers import ANSIBLE
 from lib import yaml_fast
+from lib.k8s_roles import MANIFESTS_PRUNE_DEFAULT
 from lib.render_context import render_context
 from renderer.renderer_lib.task_inputs import include_vars
 
@@ -71,10 +72,4 @@ def test_the_route_is_listed_only_while_navidrome_has_a_pod():
 
 def test_the_role_arms_the_prune_that_deletes_the_parked_route():
     """Dropping a name from manifests_files deletes nothing unless the prune is armed."""
-    # An include that omits the flag takes the k8s/manifests default, which is armed.
-    defaults = yaml_fast.safe_load(
-        (ANSIBLE / "roles/k8s/manifests/defaults/main.yml").read_text()
-    )
-    assert (
-        include_vars(ROLE).get("manifests_prune", defaults["manifests_prune"]) is True
-    )
+    assert include_vars(ROLE).get("manifests_prune", MANIFESTS_PRUNE_DEFAULT) is True

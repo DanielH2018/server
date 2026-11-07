@@ -73,7 +73,7 @@ ADMITTED = {
     ordering.PRECHECK_SUFFIX: frozenset({"precheck"}),
     ordering.VERIFY_SUFFIX: frozenset({"verify", "mutation"}),
 }
-HELPER = REPO / "ansible/roles/k8s/manifests/files/flux_job_connect.py"
+HELPER = REPO / "scripts/renderer/job_files/flux_job_connect.py"
 # Modules a script may import, each carried beside it (`IMPORTS`) as a byte-identical copy.
 CHANGED_SET = REPO / "scripts/deploy_tools/changed_set.py"
 SIBLINGS = {HELPER.name: HELPER, CHANGED_SET.name: CHANGED_SET}

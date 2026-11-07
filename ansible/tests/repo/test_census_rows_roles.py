@@ -15,12 +15,10 @@ from _helpers import walk_tasks
 from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
 from _flux_ownership_row import (
-    FLUX_OWNERSHIP,
     K8S_ENTRIES_ARE_FLUX_OWNED,
     K8S_ROLES_ARE_REACHABLE,
 )
 from _host_script_row import HOST_SCRIPT_WRITES
-from _host_write_rows import HOST_WRITES
 from _k3s_write_verbs_row import K3S_WRITE_VERBS
 from _out_of_render_row import OUT_OF_RENDER
 from _retired_cron_row import RETIRED_CRON_ARMS
@@ -231,7 +229,7 @@ ROWS = (
                 "- ansible.builtin.copy:\n    src: ~/control-side\n    dest: /x\n",
             ),
         ),
-        min_matches=100,
+        min_matches=60,
         must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/access.yml"}),
     ),
     Census(
@@ -410,11 +408,9 @@ ROWS = (
             }
         ),
     ),
-    HOST_WRITES,
     HOST_SCRIPT_WRITES,
     OUT_OF_RENDER,
     K3S_WRITE_VERBS,
-    FLUX_OWNERSHIP,
     K8S_ENTRIES_ARE_FLUX_OWNED,
     K8S_ROLES_ARE_REACHABLE,
     FLUX_BORN_KEYS,

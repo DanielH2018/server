@@ -21,7 +21,6 @@ worth writing the day one exists again.
 import re
 from pathlib import Path
 
-from _helpers import REPO
 from _role_census import role_dirs, role_task_files
 from _k8s_guards import (
     _GUARD_FACT,
@@ -29,8 +28,6 @@ from _k8s_guards import (
     _role_with_tasks,
 )
 from lib import yaml_fast
-
-_K8S_ROLES = REPO / "ansible/roles/k8s"
 
 
 _HOST_WRITE_MODULES = (
@@ -55,16 +52,6 @@ _HOST_REDIRECT = re.compile(r">>?\s*/(?:etc|opt|usr|var|srv)/")
 # roles/k8s/manifests renders into a throwaway directory under the flag (test_k8s_dry_run.py
 # pins that), and the rule scopes itself to writes "outside roles/k8s/manifests".
 _HOST_WRITE_EXEMPT = frozenset({"manifests"})
-
-# Non-vacuity. This census globs for its subjects, so a rename or a directory move would empty
-# it and `assert not offenders` would pass over nothing (.claude/rules/python-layout.md). These
-# roles each carry at least one host write today; if one stops appearing, the census broke
-# rather than the role getting clean — check before editing the list.
-_ROLES_THAT_WRITE_THE_HOST = frozenset(
-    {
-        "image-builder",
-    }
-)
 
 
 def _iter_tasks(tasks: object):
@@ -128,22 +115,6 @@ def test_every_host_write_outside_manifests_is_guarded() -> None:
         f"`when: not k8s_dry_run | bool`, as roles/k8s/artifacts does. `--check` needs no "
         "guard — template/copy/file/cron skip their own writes there, and guarding on "
         "k8s_no_mutate would throw away the would-change diff that makes --check useful."
-    )
-
-
-def test_the_host_write_census_is_not_empty() -> None:
-    found = {
-        role.name
-        for role in _roles_with_host_writes()
-        for task_file in role_task_files(role)
-        for task in _iter_tasks(yaml_fast.safe_load(task_file.read_text()))
-        if _writes_the_host(task)
-    }
-    missing = sorted(_ROLES_THAT_WRITE_THE_HOST - found)
-    assert not missing, (
-        f"the census no longer sees a host write in {missing}. Either the role really lost its "
-        "host plane — then drop it from _ROLES_THAT_WRITE_THE_HOST — or the glob stopped "
-        "matching and every assertion above is now passing over an empty set."
     )
 
 

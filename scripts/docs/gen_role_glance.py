@@ -135,7 +135,7 @@ def begin_marker(sources: str) -> str:
 
 
 BEGIN = begin_marker(
-    "defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in "
+    "defaults, templates or containers_list entry, or the Longhorn tier lists in "
     "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml"
 )
 BEGIN_SETUP = begin_marker(

@@ -260,7 +260,7 @@ def main(argv: Sequence[str] = ()) -> int:
             )
             failures += 1
             continue
-        # A manifest `k8s/manifests` renders from ansible/templates/ because this role ships
+        # A manifest the renderer renders from ansible/templates/ because this role ships
         # none of its own. Rendered here under the role's own context, exactly as the
         # deploy renders it -- 25 roles' Service manifests left the tree with their template
         # and would otherwise leave this validator's corpus with it, taking the schema check

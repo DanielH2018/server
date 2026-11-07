@@ -7,7 +7,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 `/etc/cron.d/longhorn-restore-drill` was gone.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=longhorn-restore-drill` with exit 5
 - **Images:** `alpine/k8s` (`longhorn_restore_drill_runner_image`), `busybox`
@@ -17,8 +17,7 @@ ServiceAccount and the RBAC. The CronJob shipped `suspend: true` at H2.3d, and H
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible.** Its `containers_list` entry carries `owner: flux` and
-  `depends_on: [longhorn]` from its first commit. `tasks/main.yml` holds the include of
-  `k8s/manifests` and no Flux path runs it.
+  `depends_on: [longhorn]` from its first commit.
 - **It is a tag of its own, not part of `longhorn`.** The drill's objects live in `homelab`.
   H1's DR order waits on `longhorn` at step 6, and nothing creates `homelab` until step 8, so a
   `homelab` object in `longhorn` would stall step 6.

@@ -7,7 +7,7 @@ scrapes it through observability's `blackbox-ingress` job, one target per routed
 conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=blackbox-exporter` with exit 5
 - **Image:** `prom/blackbox-exporter` (`blackbox_exporter_k8s_image`)
@@ -35,12 +35,11 @@ conventions.
   entry sits above `netpol-baseline` in `containers_list` only because that role must stay
   last.
 - **Flux applies it, not Ansible** (D5, Wave A's last PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Kustomization's `wait` replaces
   the rollout gate, and the restart checksum the renderer stamps on the Deployment replaces
-  the shared restart. `tasks/main.yml` holds one task, the include of `k8s/manifests`, and no
-  Flux path runs it. It stays until R4 deletes it.
+  the shared restart.
 - **Renovate does not automerge its image bumps** (`k8s_autodeploy: false`), because this role
   is the ingress pager. `/-/healthy` proves the process answers, not that a module still probes correctly.
   The PR is reviewed and merged by hand, and `promote` applies it after the merge.

@@ -1,8 +1,0 @@
----
-# Subtitles. Mounts /data/media only — it never imports.
-#
-
-
-- name: Deploy bazarr to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests

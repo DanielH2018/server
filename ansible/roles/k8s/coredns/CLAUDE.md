@@ -5,7 +5,7 @@ ConfigMap. Every pod resolves names through it, and so do Flux's own controllers
 the bundle from GHCR. A bad apply here stops name resolution, and host probes stay green.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=coredns`
   with exit 5
 - **Image:** `rancher/mirrored-coredns-coredns` (`coredns_image`)
@@ -14,8 +14,7 @@ the bundle from GHCR. A bad apply here stops name resolution, and host probes st
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (H1.4). Its `containers_list` entry carries `owner: flux`
-  from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
-  runs it. The host half stays in `roles/setup/k3s/tasks/coredns.yml`: a bounded read of
+  from its first commit. The host half stays in `roles/setup/k3s/tasks/coredns.yml`: a bounded read of
   Deployment `coredns`. The `.skip` marker that stops k3s reconciling its addon is the
   `homelab-daniel-box` package's since H6.4a (`hosts/components/k3s-server/`).
 - **The templates are derived, not vendored.** They come from k3s's `manifests/coredns.yaml`

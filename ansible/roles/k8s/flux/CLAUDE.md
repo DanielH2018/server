@@ -4,14 +4,14 @@ Flux's source-controller, kustomize-controller and notification-controller, in t
 `flux-system` namespace. They follow the promoted artifact `prod`, and Flux applies this role
 too, as `flux bootstrap` would arrange (D5 step 29): the `flux` Kustomization applies the
 components, and `flux-deferred` applies the sync objects, the root among them. The root
-applies `flux-deferred` in turn. `sops-age` stays operator-created bootstrap material. No
-Ansible path runs `tasks/main.yml`, and a rebuilt cluster gets Flux from
-`docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*. That page is the
+applies `flux-deferred` in turn. `sops-age` stays operator-created bootstrap material. A rebuilt
+cluster gets Flux from `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*.
+That page is the
 operator's view; the slice plans are `docs/target-architecture/deploy/d1-flux-installed.md`
 and `d5-bulk-move.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=flux`
   with exit 5
 - **Image:** `python` (`flux_job_image`)
@@ -95,8 +95,7 @@ egress rule changes nothing. A change that adds a Receiver adds its fence with i
 ## Rollouts
 
 **Under Flux**, the `flux` Kustomization's `wait: true` health check on the three Deployments
-and the soak replace the waits below, which ran only while Ansible applied this role. R4's
-PR 1 maps each task in `tasks/main.yml` to that successor, and R4 deletes the file.
+and the soak replace the waits below, which ran only while Ansible applied this role.
 
 `manifests_rollout: ''` skips the shared wait. The role waits on each controller itself and
 hands them to the end-of-play stabilisation gate, as observability does. Every
@@ -183,8 +182,7 @@ unsigned tag that a `verify_drill` dispatch of `promote` pushes. It must read Re
 a verification error. The `deploy-errors` Alert does not name it, so it posts nothing to
 Discord. The way out is the lever set back to `false`: the render drops the document, and
 `flux-deferred`'s prune deletes `ocirepository/verify-drill` at its next reconcile after the
-promotion. That prune succeeds the task in `tasks/main.yml` that deleted it by name while
-Ansible applied this role.
+promotion.
 
 **The drill ran on 2026-10-13.** The first dispatch was a false green: `verify-drill` read
 Ready=True with its signature verified (#4820). `publish` pushes with `--reproducible`, and
