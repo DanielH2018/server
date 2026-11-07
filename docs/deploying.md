@@ -24,19 +24,16 @@ package. This page says which path applies a change, and what the wrapper still 
 
 ## What the wrapper still does
 
-The wrapper runs `ansible/deploy.yml` and no other playbook. That playbook's first play runs no
-role on any host, because no `containers_list` entry is `platform: docker`. Its second play
-runs no role either, because every entry carries `owner: flux` and `ansible_owned` drops each one.
-What each form does follows from that:
+The wrapper runs `ansible/deploy.yml` and no other playbook. That playbook holds one play, which
+runs no role on any host, because no `containers_list` entry is `platform: docker`. What each form
+does follows from that:
 
 - **A k8s tag in `--tags`:** exit 5, under `--check` and `--dry-run` too
   (`scripts/deploy_tools/deploy_lib/owners.py:refuse_k8s_tags`).
 - **`--changed [<ref>]`:** a read of what a branch owes by hand. A broad range exits 3 and prints
   the setup or bring-up command. Any other range derives no tag and ends with the verdict
   `nothing-to-deploy`.
-- **No `--tags`:** takes the locks, cuts the snapshot and runs `deploy.yml`. Its one remaining
-  effect on daniel-box is `ansible/tasks/k8s_retire.yml`, once for each name in
-  `k8s_retired_services`. A run that finds nothing left reports `ok`.
+- **No `--tags`:** takes the locks, cuts the snapshot and runs `deploy.yml`, which runs no role.
 - **`-e target=daniel-pi`:** runs the secrets preamble against the Pi and no role, so it deploys
   nothing. `wg-easy` passes the tag check because daniel-box's list carries it too, and any other
   Pi service name is a tag miss (exit 2).
@@ -176,9 +173,7 @@ So exercise the thing you actually changed as well.
 ## Retiring a k8s service
 
 To retire a k8s service, follow
-[*Retiring a flux-owned service*](flux-deploy-plane.md#retiring-a-flux-owned-service). Arm 4 of
-the render-diff gates refuses a flux-owned name in `k8s_retired_services`, and every entry is
-flux-owned, so that list only keeps the service retired before the move to Flux.
+[*Retiring a flux-owned service*](flux-deploy-plane.md#retiring-a-flux-owned-service).
 
 Retiring a service does not delete the volume's existing Longhorn backups. Once the volume is gone,
 no RecurringJob selects it, so no `retain` ever prunes them. To finish the retirement, read

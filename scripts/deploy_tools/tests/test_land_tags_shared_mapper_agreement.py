@@ -35,7 +35,7 @@ CORPUS = (
     "ansible/roles/k8s/sonarr/tasks/main.yml",
     # The shared k3s plane. A role with no containers_list entry, so `tag_for` drops it
     # while `role_for` and the shared mapper both still name it.
-    "ansible/roles/k8s/manifests/tasks/main.yml",
+    "ansible/roles/k8s/volume-snapshot/tasks/main.yml",
     # A second service role, so the named half does not rest on one role's two paths.
     "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2",
     # The setup plane: no deploy tag exists for it at all.
@@ -45,10 +45,10 @@ CORPUS = (
     "ansible/inventory/group_vars/all.yml",
     # A role's own document. Both mappers must answer "no role": the deployer's has carried
     # `and not p.endswith(".md")` since it learned about k8s roles, and `role_for` did not --
-    # so `shared_roles` named `manifests` for a CLAUDE.md edit and land.sh asked for a full
+    # so `shared_roles` named a role for a CLAUDE.md edit and land.sh asked for a full
     # `ansible/deploy.yml` to apply prose. The corpus had no `.md` under a role,
     # which is why the agreement test passed throughout.
-    "ansible/roles/k8s/manifests/CLAUDE.md",
+    "ansible/roles/k8s/volume-snapshot/CLAUDE.md",
     "ansible/roles/k8s/wg-easy/CLAUDE.md",
     # A `.md` a role SHIPS, under files/. The deployer treats it as a document like any other,
     # so this mapper does too: one suffix rule, no location exception to keep in step.
@@ -94,7 +94,7 @@ def test_the_corpus_still_carries_a_document_inside_a_role_directory():
     which one went missing instead of re-opening the gap quietly.
     """
     required = {
-        "ansible/roles/k8s/manifests/CLAUDE.md",
+        "ansible/roles/k8s/volume-snapshot/CLAUDE.md",
         "ansible/roles/k8s/wg-easy/CLAUDE.md",
     }
     assert required <= set(CORPUS)
@@ -110,11 +110,11 @@ def test_the_agreement_check_would_catch_a_disagreement():
 
 
 def test_tag_for_is_narrower_than_role_for_and_that_is_the_reason_derive_keeps_it():
-    """`manifests` is a real role and NOT a deploy tag; `--tags manifests` refuses the list."""
-    shared = "ansible/roles/k8s/manifests/tasks/main.yml"
-    assert land_tags.role_for(shared) == "manifests"
+    """`volume-snapshot` is a real role and NOT a deploy tag; `--tags volume-snapshot` refuses the list."""
+    shared = "ansible/roles/k8s/volume-snapshot/tasks/main.yml"
+    assert land_tags.role_for(shared) == "volume-snapshot"
     assert reach.tag_for(shared, land_tags.declared_tags()) is None
-    assert _shared_roles(shared) == {"manifests"}
+    assert _shared_roles(shared) == {"volume-snapshot"}
 
 
 def test_the_landing_drops_a_k8s_role_whose_directory_is_gone(tmp_path):
@@ -124,7 +124,7 @@ def test_the_landing_drops_a_k8s_role_whose_directory_is_gone(tmp_path):
     filters on the role directory on disk. The deployer's own filter went with its k8s ledger
     writer in D6.12. The tree here holds `manifests` and not `volume-claim`.
     """
-    present, deleted = "manifests", "volume-claim"
+    present, deleted = "volume-snapshot", "volume-claim"
     (tmp_path / "k8s" / present).mkdir(parents=True)
     paths = [
         f"ansible/roles/k8s/{present}/tasks/main.yml",

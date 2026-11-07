@@ -1,8 +1,8 @@
 """Steps 1 and 1½: the merge commit, and what this PR reaches -- read BEFORE any wait.
 
-A PR that reaches no service tag, no plane a hand applies and nothing the tick applies
-itself has nothing to wait for: the deployer fast-forwards it on its own tick, and CI on
-the merge commit is the deployer's gate, not this landing's.
+A PR that reaches no service tag, no plane a hand applies, no host package and no path that may
+move the bundle has nothing to wait for, and CI on the merge commit is not this landing's gate.
+The deployer's timer applies a setup role on its own; this landing does not watch it.
 """
 
 import sys as _sys
@@ -21,7 +21,6 @@ from renderer.renderer_lib.host_inputs import HOST_INPUTS
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 from deployer_lib import deploy_cross_role
-from deployer_lib.deploy_narrow import NARROWED_TO_NOTHING
 
 
 def _classified[**P, R](
@@ -122,52 +121,13 @@ def adopt_cross_role_tables(ln: Landing) -> None:
 
 
 def classify(ln: Landing) -> None:
-    """Tags, the plane a hand must apply, and whether the tick applies part of this PR.
-
-    Computed whether or not tags were derived: a PR can touch a deployable role AND a
-    plane, and then the landing settles while half the change is unapplied.
-
-    `--tags` skips the DERIVATION only. The self-applied half is classified on that path too,
-    because `tick_is_the_apply` decides whether step 4 awaits the tick and an override that
-    left it False landed a mixed PR on the fast path: the tick's own half was never graded, and the landing printed `settled` over an unapplied setup role.
-    `--tags` is the form CLAUDE.md prescribes for scoping to your own services, so it is the
-    common way to land, not an escape hatch.
-    """
-    t, c = ln.tools, ln.classifier
+    """Tags and the plane a hand must apply."""
+    c = ln.classifier
     adopt_cross_role_tables(ln)
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
     recorded = pr_range(ln)
     quiet = c.quiet_paths(paths, recorded)
-    self_applied = _classified(
-        ln, "self-applied classification", c.self_applied, paths, quiet=quiet
-    )
-    # The command a hand runs if the tick turns out NOT to have applied its own half —
-    # derived over the same paths `self_applied` reads, so the two cannot name different work.
-    self_applied_command = _classified(
-        ln,
-        "self-applied-command classification",
-        c.self_applied_command,
-        paths,
-        quiet=quiet,
-    )
-    # What a self-applied setup role still needs beyond the host the tick runs on.
-    # initial_setup.yml applies to ONE target per run, so a role with no `when:` gate reaches
-    # every host the playbook is ever run on, and the tick converging here says nothing about
-    # the others.
-    remaining_setup = _classified(
-        ln,
-        "remaining-setup-hosts classification",
-        c.remaining_setup_hosts,
-        paths,
-        t.hostname(),
-        quiet=quiet,
-        pr_range=recorded,
-        ref=ln.merge_sha,
-        repo=ln.opts.primary,
-        key_readers=c.key_readers(recorded, ln.opts.primary),
-        read_host=t.read_host,
-    )
     # `--tags` named the services, so the plane is left unread: the operator's list wins over
     # a derivation, and `plane` is what a HAND applies rather than an input to any wait this
     # landing takes. Leaving it unread keeps the override's meaning -- deploy exactly these
@@ -185,9 +145,6 @@ def classify(ln: Landing) -> None:
         quiet=frozenset(quiet),
         declared=None if declared is None else frozenset(declared),
         plane=plane,
-        self_applied=self_applied,
-        self_applied_command=self_applied_command,
-        remaining_setup=remaining_setup,
     )
     if ln.resolved_tags:
         return
@@ -209,54 +166,29 @@ def classify(ln: Landing) -> None:
                 "PR file list was truncated and no --since was given — rerun with --since <pre-merge-sha>",
                 LAND_BAD_ARGS,
             )
-        # The diff derivation reads `<since>...HEAD` in the primary checkout, which the tick
-        # has not fast-forwarded yet. Derived in step 5, after the tick.
         ln.needs_diff = True
         say(
-            f"file list truncated; deriving from the diff since {ln.opts.since} after the tick"
+            f"file list truncated; deriving from the diff since {ln.opts.since} in step 4"
         )
 
 
-def narrow_plane(ln: Landing, awaited: bool = True) -> None:
+def narrow_plane(ln: Landing) -> None:
     """Render the plane note again with the narrow tags this PR's setup-role change needs.
 
-    Step 1 renders the note before the tick has crossed this PR's range, so it names the
-    whole-role tag. The narrow tags are the one input that does not exist yet, and it is
-    passed in explicitly: every other input is the frozen `Classification`, so both renders
-    read the same paths, declared tags and quiet paths. After an `awaited` tick the tags come
-    from the deployer's receipt for the tick that crossed the merge commit (#3391), whose
-    `manual` half holds the narrowest tags each role needs over that tick's range alone. The
-    range contains this PR, so the row is quoted as it stands.
-
-    A landing on the fast path never awaits the tick (`awaited=False`), so
-    no receipt exists for its range. It renders the PR's own derivation instead.
+    Step 1 renders the note with the whole-role tag. The narrow tags come from the PR's own
+    derivation, passed in explicitly: every other input is the frozen `Classification`, so
+    both renders read the same paths, declared tags and quiet paths.
 
     Every failure leaves `narrowed_plane` None, so `Landing.plane` stays step 1's note with
-    the whole-role tag: no receipt (a deployer that has not shipped the writer, or a tick
-    that recorded nothing), a role the receipt could not narrow, no PR range on the fast
-    path, a derivation that refuses or raises. The render is INSIDE the try because a raise
-    here would end `land.py` in a traceback instead of a verdict, which is a worse answer
-    than the role tag.
+    the whole-role tag: no PR range, a derivation that refuses or raises. The render is
+    INSIDE the try because a raise here would end `land.py` in a traceback instead of a
+    verdict, which is a worse answer than the role tag.
     """
     cl = ln.classification
-    if not cl.plane or (not awaited and not cl.pr_range):
+    if not cl.plane or not cl.pr_range:
         return
     try:
-        if awaited:
-            receipt = ln.receipt_for(ln.merge_sha)
-            # `narrowed-to-nothing` is the tick's answer that the range needs nothing from
-            # the role, and it recorded no `manual_plane` line for it (#4408). The empty set
-            # is how `plane_note` takes that answer. An empty row is a refusal and is dropped,
-            # so the note keeps the whole-role tag.
-            narrow = {
-                t: frozenset() if tags == {NARROWED_TO_NOTHING} else tags
-                for t, tags in (receipt.manual if receipt else {}).items()
-                if tags
-            }
-        else:
-            narrow = ln.tools.own_narrowing(
-                list(cl.pr_paths), cl.pr_range, ln.opts.primary
-            )
+        narrow = ln.tools.own_narrowing(list(cl.pr_paths), cl.pr_range, ln.opts.primary)
         if narrow:
             ln.narrowed_plane = ln.classifier.plane_note(
                 list(cl.pr_paths),
@@ -285,16 +217,15 @@ def reaches_host_inputs(ln: Landing) -> bool:
 
 
 def shortcut_if_nothing(ln: Landing) -> None:
-    """A PR reaching no tag, no plane, no host candidate and nothing self-applied has nothing to wait for.
+    """A PR reaching no tag, no plane and no host candidate has nothing to wait for.
 
     A PR whose paths may move the bundle reaches none of them and still waits on a promotion
-    (`promotion.moves_the_bundle`), whose changed set names its tags (D6.12).
+    (`promotion.moves_the_bundle`), whose changed set names its tags (D6.12). A setup role is such a path, so it waits too.
     """
     cl = ln.classification
     if not (
         ln.resolved_tags
         or ln.plane
-        or cl.self_applied
         or ln.needs_diff
         or ln.host_candidate
         or moves_the_bundle(cl.pr_paths)
@@ -302,5 +233,5 @@ def shortcut_if_nothing(ln: Landing) -> None:
         ln.finish(
             Verdict.NOTHING_TO_DEPLOY,
             0,
-            f"PR #{ln.opts.pr} touched no service; the deployer fast-forwards it on its next tick",
+            f"PR #{ln.opts.pr} touched no service",
         )

@@ -142,7 +142,7 @@ def test_accept_a_command_naming_a_role_file_injects_its_docs(
     sandbox, monkeypatch, capsys
 ):
     out = dispatch(
-        "cat ansible/roles/k8s/home-assistant/tasks/main.yml",
+        "cat ansible/roles/k8s/home-assistant/defaults/main.yml",
         sandbox,
         monkeypatch,
         capsys,
@@ -177,7 +177,7 @@ def test_a_deny_still_carries_the_context_arm_s_injection(sandbox, monkeypatch, 
     """A denied command still gets its docs. One
     object carries both keys; dropping the context on a deny would be a silent loss."""
     out = dispatch(
-        "ssh daniel-server 'git log -1 ansible/roles/k8s/home-assistant/tasks/main.yml'",
+        "ssh daniel-server 'git log -1 ansible/roles/k8s/home-assistant/defaults/main.yml'",
         sandbox,
         monkeypatch,
         capsys,

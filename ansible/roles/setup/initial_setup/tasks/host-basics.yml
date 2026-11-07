@@ -18,7 +18,9 @@
 - name: Gather service facts
   tags: [pi-swap]
   ansible.builtin.service_facts:
-  when: has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - has_low_memory_board
 
 - name: Stop the hardware watchdog during provisioning (Pi)
   tags: [pi-swap]
@@ -29,6 +31,7 @@
   changed_when: true
   notify: Start Watchdog after provisioning
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
     - has_low_memory_board
     - "'watchdog.service' in (ansible_facts.services | default({}))"
 
@@ -39,7 +42,9 @@
     creates: "{{ pi_swapfile_path }}"
   become: true
   register: initial_setup_swapfile_create
-  when: has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - has_low_memory_board
 
 - name: Secure swap file permissions (Pi)
   tags: [pi-swap]
@@ -49,7 +54,9 @@
     group: root
     mode: "0600"
   become: true
-  when: has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - has_low_memory_board
 
 - name: Format swap file (Pi)
   tags: [pi-swap]
@@ -58,6 +65,7 @@
   become: true
   changed_when: true
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
     - has_low_memory_board
     - initial_setup_swapfile_create is changed
 
@@ -70,7 +78,9 @@
     opts: sw
     state: present
   become: true
-  when: has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - has_low_memory_board
 
 - name: Activate swap file (Pi)
   tags: [pi-swap]
@@ -79,6 +89,7 @@
   become: true
   changed_when: true
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
     - has_low_memory_board
     - initial_setup_swapfile_create is changed
 
@@ -91,7 +102,9 @@
   ansible.builtin.stat:
     path: /usr/bin/dockerd
   register: initial_setup_dockerd_binary
-  when: has_docker
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - has_docker
 
 - name: Hold the Docker engine packages (Docker hosts)
   tags: [apt-upgrade]
@@ -111,6 +124,7 @@
   loop: "{{ docker_engine_packages }}"
   become: true
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
     - has_docker
     - initial_setup_dockerd_binary.stat.exists
 
@@ -120,6 +134,7 @@
     update_cache: true
     upgrade: dist
   become: true
+  when: inventory_hostname not in initial_setup_packaged_hosts['host_basics']
 
 - name: Install Raspberry Pi-specific packages
   # openvswitch-switch-dpdk is deliberately absent from this list: it is never
@@ -133,7 +148,9 @@
       - wireguard
     state: present
   become: true
-  when: has_raspi_kernel
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - has_raspi_kernel
 
 # apt-show-versions hooks EVERY apt invocation with a full cache rebuild — 10-30 min
 # of swap-thrash on the 512 MB Pi. The Pi
@@ -147,7 +164,9 @@
     state: absent
     purge: true
   become: true
-  when: has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - has_low_memory_board
   tags: [packages]
 
 - name: Install required packages
@@ -163,6 +182,7 @@
     state: present
   become: true
   tags: [packages]
+  when: inventory_hostname not in initial_setup_packaged_hosts['host_basics']
 
 - name: Install apt-show-versions (roomy hosts only)
   # The inverse of the removal above, on the same fact: the apt-hook cache rebuild is the
@@ -171,7 +191,9 @@
     name: apt-show-versions
     state: present
   become: true
-  when: not has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - not has_low_memory_board
   tags: [packages]
 
 - name: Resolve the deploy user's home directory
@@ -199,7 +221,9 @@
     state: directory
     mode: "0755"
   become: false
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
 
 - name: Download the pinned uv installer
   tags: [tooling]
@@ -214,7 +238,9 @@
     mode: "0755"
     checksum: "sha256:{{ initial_setup_uv_installer_sha256 }}"
   become: false
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
 
 - name: Read the uv version this host already has
   tags: [tooling]
@@ -225,7 +251,9 @@
   changed_when: false
   failed_when: false
   become: false
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
 
 - name: Install uv (per-user; PEP 668-safe on 24.04+)
   tags: [tooling]
@@ -239,6 +267,7 @@
   changed_when: true
   become: false
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
     - inventory_hostname in dev_tooling_hosts
     - (initial_setup_uv_installed.stdout | default('')).split()[1:2] != [initial_setup_uv_version]
 
@@ -248,7 +277,13 @@
   # below compares its pins against. A `creates:` guard on the tool directory would be
   # satisfied by any version, so a pin here would never reach a host that already has the
   # tool.
-  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool list"
+  vars:
+    # A rebuilt host whose package owns dev_tooling gets ~/.local/bin/uv from the dotfiles repo,
+    # which need not have run yet, and the package ships this path.
+    initial_setup_tool_uv: >-
+      {{ '/usr/bin/uv' if inventory_hostname in initial_setup_packaged_hosts['dev_tooling']
+         else initial_setup_user_home.stdout ~ '/.local/bin/uv' }}
+  ansible.builtin.command: "{{ initial_setup_tool_uv }} tool list"
   register: initial_setup_uv_tools
   changed_when: false
   failed_when: false
@@ -259,24 +294,41 @@
   tags: [tooling]
   # uv manages global CLI tools in isolated venvs (~/.local/share/uv/tools), exposing
   # shims in ~/.local/bin — the pipx replacement. Pinned to Python 3.15 to match the
-  # repo's .python-version (the test/validate `uv run` hooks). Per-user, so `prek install`
-  # (below) finds prek on ~/.local/bin.
+  # repo's .python-version (the test/validate `uv run` hooks).
   #
   # Every tool is pinned, and each pin has a twin elsewhere in the tree that
   # ansible/tests/repo/test_host_tool_pins_match_their_twins.py holds it equal to:
   #   ansible-core  == pyproject.toml's dev-group pin -- the ansible that runs deploys is the
   #                    one the tests and `uv run ansible-playbook` resolve.
   #   ansible-lint  == prek.toml's ansible/ansible-lint rev (the hook's own version).
-  #   prek          == the CI setup action's `pip install prek==` pin (.github/actions/setup).
   # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
-  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.15 {{ item }}"
+  vars:
+    # The same choice as the read above.
+    initial_setup_tool_uv: >-
+      {{ '/usr/bin/uv' if inventory_hostname in initial_setup_packaged_hosts['dev_tooling']
+         else initial_setup_user_home.stdout ~ '/.local/bin/uv' }}
+  ansible.builtin.command: "{{ initial_setup_tool_uv }} tool install --python 3.15 {{ item }}"
   loop:
     - ansible-core==2.22.0rc2
     - ansible-lint==26.10.1
+  become: false
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - (item | replace('==', ' v')) not in (initial_setup_uv_tools.stdout_lines | default([]))
+
+- name: Install prek as a uv tool
+  tags: [tooling]
+  # Per-user, so `prek install` (below) finds prek on ~/.local/bin. Its own task because a host
+  # whose package owns dev_tooling gets prek from the dotfiles repo and keeps the two tools above.
+  # The pin's twin is the CI setup action's `pip install prek==` (.github/actions/setup), which
+  # ansible/tests/repo/test_host_tool_pins_match_their_twins.py holds equal.
+  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.15 {{ item }}"
+  loop:
     - prek==0.5.9
   become: false
   when:
     - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
     - (item | replace('==', ' v')) not in (initial_setup_uv_tools.stdout_lines | default([]))
 
 - name: Install the pinned host Python
@@ -288,14 +340,18 @@
   register: initial_setup_host_python
   changed_when: "'Installed' in initial_setup_host_python.stdout"
   become: false
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
 
 - name: Look for the old uv symlink at the stable path
   tags: [tooling]
   ansible.builtin.stat:
     path: /usr/local/bin/uv
   register: initial_setup_uv_published
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
 
 # Until #4203 /usr/local/bin/uv was a symlink into the connecting user's 0750 home, so it
 # dangled for every other uid, the claude agent user included. `copy` checksums THROUGH a link
@@ -307,6 +363,7 @@
     state: absent
   become: true
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
     - inventory_hostname in dev_tooling_hosts
     - initial_setup_uv_published.stat.islnk | default(false)
 
@@ -330,7 +387,9 @@
     group: root
     mode: "0755"
   become: true
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
 
 - name: Pin the Vale version this host installs
   tags: [tooling]
@@ -345,7 +404,9 @@
   # ansible/tests/repo/test_vale_matches_the_ci_pin.py.
   ansible.builtin.set_fact:
     initial_setup_vale_version: "3.25.1"
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['vale']
 
 - name: Read the Vale version this host already has
   tags: [tooling]
@@ -361,7 +422,9 @@
   changed_when: false
   failed_when: false
   become: false
-  when: inventory_hostname in dev_tooling_hosts
+  when:
+    - inventory_hostname in dev_tooling_hosts
+    - inventory_hostname not in initial_setup_packaged_hosts['vale']
 
 - name: Install the pinned Vale binary
   tags: [tooling]
@@ -387,6 +450,7 @@
     vale_asset_arch: "{{ '64-bit' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
   become: true
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['vale']
     - inventory_hostname in dev_tooling_hosts
     - initial_setup_vale_version not in (initial_setup_vale_installed.stdout | default('')).split()
 

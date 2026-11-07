@@ -1,9 +1,0 @@
----
-# autofix-bridge on k8s: the containerized *arr remediation sidecar. The two fake-remux
-# timers live in hosts/components/fake-remux.
-
-# The script ConfigMap is templates/script-configmap.yaml.j2, rendered and applied with the
-# rest of the manifests, so a module edit rolls the pod through the shared role's restart.
-- name: Deploy autofix-bridge to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests

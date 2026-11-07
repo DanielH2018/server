@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 from deploy_tools.land_lib import land_probe, outcome
-from deploy_tools.land_lib.outcome import ABANDONED_WATCH_NOTE, PROMOTE_TIMEOUT_NOTE
+from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE
 
 _SHIM = Path(__file__).resolve().parents[3] / ".claude" / "wait-sources" / "land"
 
@@ -51,22 +51,12 @@ def test_a_landing_that_gave_up_ends_the_wait_with_3_not_75(tmp_path):
 
 
 def test_a_plain_deferral_ends_the_wait_as_deferred_not_gave_up(tmp_path):
-    """`deferred` is not a resume point: the next tick applies the PR (issue #3932)."""
+    """A `deferred` carrying no give-up note is not a resume point (issue #3932)."""
     log = landing(
         tmp_path, "VERDICT: deferred (PR #939 — landed, not yet applied)\n", rc=75
     )
     assert land_probe.read(log)["state"] == "deferred"
     assert land_probe.TERMINAL["deferred"] == 4
-
-
-def test_a_deferral_that_abandoned_a_mid_apply_tick_still_gave_up(tmp_path):
-    """The abandoned-watch note means a hold cannot be ruled out: re-run land.sh."""
-    log = landing(
-        tmp_path,
-        f"VERDICT: deferred (PR #939 — landed, not yet applied)\n{ABANDONED_WATCH_NOTE}\n",
-        rc=75,
-    )
-    assert land_probe.read(log)["state"] == "gave-up"
 
 
 def test_a_deferral_no_promotion_covered_still_gave_up(tmp_path):

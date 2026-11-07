@@ -14,8 +14,12 @@
 #   2  install the keyring once it carries the pinned key and nothing else, then homelab.sources
 #      (--local-build installs the keyring only, because no repository is running yet)
 #   3  create /etc/homelab/age.key when missing, and print its public key
-#   4  the one-time host steps: the Pi's debloat purge, its rsyslog and wpa_supplicant masks and
-#      the removal of rsyslog's text logs; on a cluster node, the k3s binary
+#   4  the one-time host steps: the Pi's swap file, its debloat purge, its rsyslog and wpa_supplicant
+#      masks and the removal of rsyslog's text logs; daniel-server's LXD snap and its bases; on every
+#      host, the networkd-dispatcher mask, the ssh-users group and the sys user's membership; on a
+#      cluster node, the k3s binary, with its unit neither enabled nor started, because the operator
+#      starts it after the restores.
+#      daniel-server's one LVM volume comes from the Ubuntu installer, not from this script
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them);
 #      on the Pi, then log2ram from the Azlux source its package ships
@@ -64,6 +68,11 @@ ARCHIVE_FINGERPRINT=83B57416B342DDE1CBA0752D435D139ADFD6F016
 AGE_KEY=/etc/homelab/age.key
 HOSTS="daniel-box daniel-server daniel-pi"
 GITHUB_REPO=DanielH2018/server
+# sys_user in group_vars/all.yml, and pi_swapfile_path and pi_swapfile_size in the Pi's host_vars
+# (hosts/lib/tests/test_bootstrap_host_pins.py).
+SYS_USER=ubuntu
+PI_SWAPFILE=/swapfile
+PI_SWAPFILE_SIZE=1G
 
 # The k3s pin equals `k3s_version`, `k3s_install_script_url` and `k3s_install_script_sha256` in
 # ansible/roles/k8s/system-upgrade/defaults/main.yml, so a rebuilt node never installs an older
@@ -360,8 +369,42 @@ run_k3s_installer() {
     fi
 }
 
+# mask_unit <unit>: disable, mask and stop a unit, each behind a read of its state.
+# A mask leaves the unit's Alias= and WantedBy= links in place, so the disable comes first. The mask
+# comes before the stop, so an activating socket cannot start the unit again.
+mask_unit() {
+    if [ "$(systemctl is-enabled "$1" 2> /dev/null)" = enabled ]; then
+        systemctl disable "$1" || die "cannot disable $1"
+    fi
+    if [ "$(systemctl is-enabled "$1" 2> /dev/null)" != masked ]; then
+        systemctl mask "$1" || die "cannot mask $1"
+        echo "bootstrap-host: masked $1"
+    fi
+    if systemctl is-active --quiet "$1"; then
+        systemctl stop "$1" || die "cannot stop $1"
+    fi
+}
+
 # Step 4: the one-time host steps, each behind a guard that reads the state first.
 if [ "$host" = daniel-pi ]; then
+    # Heavy apt OOM-kills dpkg on the 512 MB board without disk-backed swap, so this precedes the
+    # purge below and step 5's install. The file gets its final name only once it is formatted.
+    if [ ! -e "$ROOT$PI_SWAPFILE" ]; then
+        rm -f "$ROOT$PI_SWAPFILE.tmp"
+        fallocate -l "$PI_SWAPFILE_SIZE" "$ROOT$PI_SWAPFILE.tmp" ||
+            die "cannot create $PI_SWAPFILE"
+        chmod 0600 "$ROOT$PI_SWAPFILE.tmp"
+        mkswap "$ROOT$PI_SWAPFILE.tmp" > /dev/null || die "cannot format $PI_SWAPFILE"
+        mv "$ROOT$PI_SWAPFILE.tmp" "$ROOT$PI_SWAPFILE"
+        echo "bootstrap-host: created $PI_SWAPFILE"
+    fi
+    if ! grep -qs "^${PI_SWAPFILE}[[:space:]]" "$ROOT/etc/fstab"; then
+        mkdir -p "$ROOT/etc"
+        echo "$PI_SWAPFILE none swap sw 0 0" >> "$ROOT/etc/fstab"
+    fi
+    if ! swapon --show=NAME --noheadings | grep -qxF "$ROOT$PI_SWAPFILE"; then
+        swapon "$ROOT$PI_SWAPFILE" || die "cannot activate $PI_SWAPFILE"
+    fi
     purge=""
     # appstream's apt hook thrashes the 512 MB board for an hour on every apt-get update
     # (#7163, docs/pi-host-tuning-record.md).
@@ -381,24 +424,35 @@ if [ "$host" = daniel-pi ]; then
             systemctl reset-failed "$unit"
         fi
     done
-    # A mask leaves the unit's Alias= and WantedBy= links in place, so the disable comes first.
-    # The mask comes before the stop, so syslog.socket cannot start rsyslog again.
-    for unit in rsyslog.service wpa_supplicant.service; do
-        if [ "$(systemctl is-enabled "$unit" 2> /dev/null)" = enabled ]; then
-            systemctl disable "$unit" || die "cannot disable $unit"
-        fi
-        if [ "$(systemctl is-enabled "$unit" 2> /dev/null)" != masked ]; then
-            systemctl mask "$unit" || die "cannot mask $unit"
-            echo "bootstrap-host: masked $unit"
-        fi
-        if systemctl is-active --quiet "$unit"; then
-            systemctl stop "$unit" || die "cannot stop $unit"
-        fi
-    done
+    mask_unit rsyslog.service
+    mask_unit wpa_supplicant.service
     # rsyslog ran from first boot, and log2ram would copy these into its RAM-backed /var/log.
     rm -f "$ROOT"/var/log/syslog* "$ROOT"/var/log/kern.log* "$ROOT"/var/log/auth.log* \
         "$ROOT"/var/log/daemon.log* "$ROOT"/var/log/user.log* "$ROOT"/var/log/messages* \
         "$ROOT"/var/log/debug*
+fi
+
+if [ "$host" = daniel-server ]; then
+    # The Ubuntu Server installer seeded these on this one machine. lxd goes before the bases it
+    # uses, and snapd itself stays.
+    for snap in lxd core20 core22; do
+        if snap list "$snap" > /dev/null 2>&1; then
+            snap remove "$snap" || die "cannot remove the $snap snap"
+            echo "bootstrap-host: removed the $snap snap"
+        fi
+    done
+fi
+
+mask_unit networkd-dispatcher.service
+
+# The sshd component's AllowGroups admits only this group, so both exist before step 5 installs it.
+id "$SYS_USER" > /dev/null 2>&1 || die "this host has no user $SYS_USER, whom sshd must admit"
+if ! getent group ssh-users > /dev/null; then
+    groupadd ssh-users || die "cannot create the ssh-users group"
+fi
+if ! id -nG "$SYS_USER" | tr ' ' '\n' | grep -qx ssh-users; then
+    usermod -aG ssh-users "$SYS_USER" || die "cannot add $SYS_USER to the ssh-users group"
+    echo "bootstrap-host: added $SYS_USER to the ssh-users group"
 fi
 
 if [ -n "$k3s_mode" ]; then
@@ -548,6 +602,9 @@ else
 fi
 systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"
+if [ -n "$k3s_unit" ]; then
+    echo "bootstrap-host: $k3s_unit stays stopped until the operator starts it, as docs/host-packages.md, Rebuilding a cluster node, says"
+fi
 # The package ships Azlux's source, so log2ram cannot be one of its Depends. Reconcile starts as
 # the install above ends, holds dpkg's lock briefly and may write /etc/log2ram.conf first. dpkg
 # would stop at a conffile prompt on that file, and upstream's copy already holds the arm's values.

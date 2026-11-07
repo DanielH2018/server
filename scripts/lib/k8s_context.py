@@ -4,8 +4,8 @@
 These are the pieces that decide what a manifest renders WITH — the recursive expansion Ansible
 does on a variable's value, and a role's resolved defaults. The layering of those into one
 render context, in Ansible's precedence, is `lib.render_context`. The `bool` filter that expansion registers is
-`lib.ansible_jinja_env.ansible_bool`, that module's light-tier copy, rather than the real
-filters its `register_ansible_filters` gives every render guard.
+`lib.ansible_jinja_env.ansible_bool`, the one its `register_ansible_filters` gives every render
+guard.
 """
 
 import sys as _sys
@@ -32,15 +32,15 @@ __all__ = [
 
 # The heavy-tier filters a role's DEFAULTS call, which `resolve_vars` must evaluate. The three
 # Longhorn tier lists: `longhorn-reconcile`'s defaults derive them from `containers_list`
-# (H1.7a). ansible-core's `basename` and `dirname`: k3s's `k3s_host_coredns_tarball` is a
+# (H1.7a). `basename` and `dirname`: k3s's `k3s_host_coredns_tarball` is a
 # `dirname`, and it rendered as STUB, with a warning, on every `probe.py applied k3s` (#6475).
-# ansible-core's `combine`: flux's and observability's `manifests_self_rollouts` add each
+# `combine`: flux's and observability's `manifests_self_rollouts` add each
 # workload's namespace with it.
 #
 # DECIDED: lazy, not registered with `register_ansible_filters` at the top of this module. The
-# heavy tier imports ansible-core, and this module stays light for `probe.py monitors` (the
-# `DECIDED:` marker in `resolve_vars` below gives the measurement). A wrapper here costs nothing
-# until a default calls the filter, and then the call builds the heavy environment once.
+# heavy tier imports every filter plugin, and this module stays light for `probe.py monitors`.
+# A wrapper here costs nothing until a default calls the filter, and then the call builds the
+# heavy environment once.
 _DEFAULTS_PLUGIN_FILTERS = (
     "tier_backup_claims",
     "longhorn_weekly_claims",
@@ -112,17 +112,8 @@ def resolve_vars(
     env.keep_trailing_newline = False
     # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
     # here as "No filter named 'bool'" — a render failure pointing at a variable that is
-    # perfectly valid under Ansible. Every render guard registers the real filter through
-    # `register_ansible_filters`; this module is the one caller that cannot, for the reason below.
-    #
-    # DECIDED: the shim is `ansible_jinja_env.ansible_bool`, not ansible-core's `to_bool`
-    # that `lib.ansible_jinja_env.register_ansible_filters` binds for every render guard.
-    # `to_bool` would make the two paths agree by identity, but importing
-    # `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/health.py` imports this
-    # module — `probe.py health` reaches no ansible-core module today (measured 2026-11-01,
-    # `sys.modules` after the import). The shim copies `to_bool`'s tables and fallback, and
-    # `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy to the real filter,
-    # so the two paths agree by test rather than by identity (#2074).
+    # perfectly valid under Ansible. `ansible_bool` is the filter `register_ansible_filters`
+    # gives every render guard, and importing it costs this module nothing.
     env.filters["bool"] = ansible_bool
     for name in _DEFAULTS_PLUGIN_FILTERS:
         env.filters[name] = _lazy_plugin_filter(name)

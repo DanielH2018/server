@@ -9,7 +9,7 @@
   renderer's `checksum/restart` hashes every ConfigMap the pod's projected volume names.
   scripts/renderer/tests/test_renderer_monitor_bridge_script.py holds both halves.
 
-  One per module, not one for all: k8s/manifests applies client-side, which copies each object
+  One per module, not one for all: a client-side apply copies each object
   into a `last-applied-configuration` annotation capped at 262144 bytes. The modules total about
   700 KB as JSON and the largest package about 200 KB, so neither one ConfigMap nor one per
   package stays clear of the cap as the bridge grows. One module stays far under it, because

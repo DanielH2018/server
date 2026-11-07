@@ -50,7 +50,6 @@ MUST_INCLUDE = frozenset(
         "hosts/components/fake-remux/files/fake_remux.py",
         "hosts/components/fake-remux/files/mkv_attachment_repair.py",
         "hosts/components/fake-remux/files/state_push.py",
-        "ansible/roles/k8s/manifests/files/secret_hmac.py",
         "scripts/deploy_tools/prune_releases.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_toolbox.py",
     }
@@ -388,6 +387,15 @@ def test_a_role_command_no_copy_installs_is_flagged():
     template = GITOPS_UNIT
     with pytest.raises(ValueError, match="no copy task"):
         role_installs.role_entry("/opt/gitops-deploy/never_shipped.py", template)
+
+
+def test_an_unrendered_template_still_exists_and_no_task_renders_it():
+    # Goes red when #7561 deletes the file or a task renders it again, so the skip retires too.
+    for name in role_installs.UNRENDERED_TEMPLATES:
+        template = role_installs.ROLES / name
+        assert template.is_file(), name
+        tasks = template.parents[1] / "tasks"
+        assert not [t for t in tasks.glob("*.yml") if template.name in t.read_text()]
 
 
 def test_an_import_guarded_by_import_error_is_clean(tmp_path):

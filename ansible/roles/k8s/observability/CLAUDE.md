@@ -10,8 +10,7 @@ Claude Code runs on the **host**, not in a container, and exports to `127.0.0.1:
 and Tempo carry the same `hostIP` pin on 3100/9090/3200 for `otelq`, another host process.
 Tempo's otlp-grpc 4317 skips the pin: two hostPorts on one number wedge a pod in `Pending`.
 
-Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
-include of `k8s/manifests` alone.
+Flux applies the role (`owner: flux`).
 
 The `observability-verify` Job reads the pin back from the live DaemonSet and fails without it.
 It lives in `templates/verify/` and runs `files/observability_verify.py` with `get` on the
@@ -22,7 +21,7 @@ Job census and fails it on the collector render with its `hostIP` removed.
 The working-out lives in `docs/observability-dashboards.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=observability` with exit 5
 - **Images:** `otel/opentelemetry-collector-contrib` (`observability_k8s_collector_image`),
@@ -300,8 +299,7 @@ server-side, which the 262144-byte annotation cap on a client-side apply of the 
 folder needs. `ansible/tests/services/test_dashboard_configmaps.py` renders the bundle and holds
 every ConfigMap under the 1 MiB object cap.
 
-**Flux applies every key of a dashboard ConfigMap.** The Ansible task that deleted a key no
-listed board justified went with `tasks/dashboards.yml`. A board dropped from
+**Flux applies every key of a dashboard ConfigMap.** A board dropped from
 `observability_dashboard_folders` leaves the ConfigMap at the next Flux apply, because Flux
 applies the whole object.
 

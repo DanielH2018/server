@@ -14,9 +14,9 @@ WHAT THIS KEEPS, and why the reject halves below are `tasks/` cases. Dropping a 
 which puts that role's own example in the REPORTED set.
 
 THE VERDICT IS ASSERTED for the tests-only half, not just `plane_note`, for the reason
-`test_land_doc_change_reaches_a_verdict.py` asserts it: `no_tag_outcome` reads `plane_note`
-together with `self_applied`, and only their combination decides between `nothing-to-deploy`
-(exit 0) and `needs-manual-apply` (exit 1).
+`test_land_doc_change_reaches_a_verdict.py` asserts it: `no_tag_outcome` reads `plane_note`,
+and only its answer decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply`
+(exit 1).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_role_tests_reach_no_cluster.py
 """
@@ -35,8 +35,8 @@ from deploy_tools.land_lib.landing import Classification
 
 _ROLE_TESTS = "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py"
 _ROLE_FILES = "ansible/roles/k8s/arr-notification/files/seed_arr_notification.py"
-_ROLE_TASKS = "ansible/roles/k8s/arr-notification/tasks/main.yml"
-_BUILD_TASKS = "ansible/roles/k8s/image-builder/tasks/main.yml"
+_ROLE_TASKS = "ansible/roles/k8s/volume-revert/tasks/main.yml"
+_BUILD_TASKS = "ansible/roles/k8s/longhorn-api/tasks/main.yml"
 
 
 def test_the_paths_under_test_still_exist():
@@ -75,12 +75,12 @@ def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
 def test_a_role_task_file_is_flagged():
     """The reject half: tasks/ is the role's code, not its suite."""
     assert land_tags.is_role_test_path(_ROLE_TASKS) is False
-    assert land_tags.shared_roles([_ROLE_TASKS]) == ["arr-notification"]
+    assert land_tags.shared_roles([_ROLE_TASKS]) == ["volume-revert"]
 
 
 def test_a_shared_build_role_task_file_is_flagged():
     """image-builder ships templates/, so it supplies applied bytes."""
-    assert land_tags.shared_roles([_BUILD_TASKS]) == ["image-builder"]
+    assert land_tags.shared_roles([_BUILD_TASKS]) == ["longhorn-api"]
 
 
 def test_a_deleted_shared_role_owes_nothing(tmp_path):
@@ -115,9 +115,6 @@ def _verdict(landing, files: list[str]) -> Outcome:
     quiet = land_tags.quiet_paths(files, "")
     ln.classification = Classification(
         plane=land_tags.plane_note(files, quiet=quiet),
-        self_applied=land_tags.self_applied(files, quiet=quiet),
-        self_applied_command=land_tags.self_applied_command(files, quiet=quiet),
-        remaining_setup="",
     )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)

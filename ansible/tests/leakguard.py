@@ -180,9 +180,6 @@ _LIVE_API_TESTS = frozenset(
     {
         "ansible/tests/longhorn/test_longhorn_api.py::test_the_resolve_returns_a_pod_ip_on_this_node",
         "ansible/tests/longhorn/test_volume_revert.py::test_the_listing_jsonpath_parses",
-        "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_fields_exist_on_a_real_snapshot",
-        "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_jsonpath_parses",
-        "ansible/tests/longhorn/test_volume_snapshot_cap_headroom.py::test_the_gates_reads_parse_and_return_the_field_it_sums",
         # Not a cluster read: it starts and stops a real systemd user unit, because issue #3160
         # is about what that stop kills. Skipped where no user manager answers.
         "scripts/deploy_tools/tests/test_land_detach.py::test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict",

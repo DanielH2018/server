@@ -1,11 +1,9 @@
-# The homelab-render shadow renderer
+# The homelab-render renderer
 
-`homelab-render` renders the k8s manifests from the git tree alone, as a shadow of the
-Ansible manifests role. Target slice R1 builds it and proves it byte-identical to Ansible for
-the same stub inputs. Target slice R2 adds placeholder mode, which renders each secret
-reference as Flux's `${<key>}`. Target slice H3 adds host and package modes, which render
-the host packages (*Render a host package*). Ansible stays the only writer to the cluster: the
-renderer writes only to the directory it is given.
+`homelab-render` renders the k8s manifests from the git tree alone. Placeholder mode renders
+each secret reference as Flux's `${<key>}`, and stub mode renders each as a stub. Host and
+package modes render the host packages (*Render a host package*). The renderer writes only to
+the directory it is given. `promote` and Flux carry a published bundle to the cluster.
 
 The plans are [R1, shadow render with zero diff](target-architecture/render/r1-shadow-render.md)
 and [R2, secret placeholders](target-architecture/render/r2-secret-placeholders.md). C1 in
@@ -16,29 +14,25 @@ steps, and this page describes each piece once its PR has merged.
 
 - `ansible/filter_plugins/secret_stubs.py` holds the stub form. It is the one definition
   that R1's renderer and its playbook checks are built to share, so neither restates it.
-- `scripts/renderer/shadow_diff.py stubs` writes the stub file both halves of the shadow
-  render take.
+- `scripts/renderer/shadow_diff.py stubs` writes the stub file a stub-mode render takes.
 - The renderer pins no live fact, because no value a template reads comes from live state
   (*The renderer pins nothing*).
-- `scripts/renderer/homelab_render.py cluster` renders in stub mode into the C1 layout. It
-  applies the manifests role's file rules (*The file rules*), and renders every k8s render
-  target of daniel-box.
-- `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see in
-  the deploy play, and `renderer_lib/cluster.py` renders each tag and writes its directories.
+- `scripts/renderer/homelab_render.py cluster` renders into the C1 layout. It applies the file
+  rules (*The file rules*), and renders every k8s render target of daniel-box.
+- `scripts/renderer/renderer_lib/context.py` builds the variables a role's templates see,
+  and `renderer_lib/cluster.py` renders each tag and writes its directories.
 - `scripts/renderer/renderer_lib/task_inputs.py:include_vars` reads each role's render
   metadata from its `defaults/main.yml` (*Where render metadata lives*).
 - `scripts/renderer/renderer_lib/derived.py:content_tag` computes each built image's tag
   (*Derived values*), and `scripts/renderer/renderer_lib/targets.py:render_targets` lists the
   tags a host renders.
-- `ansible/roles/k8s/manifests/defaults/main.yml:manifests_shadow_dir` keeps the Ansible
-  render of a stubbed dry run (*Keep the Ansible render of a stubbed dry run*).
-- `scripts/renderer/shadow_diff.py compare`, `stubcheck` and `digest` compare the two halves
-  and hash a render (*Compare the two halves*). `scripts/renderer/renderer_lib/shadow.py`
-  holds their library.
+- `scripts/renderer/renderer_lib/jinja_filters.py` holds the Ansible-dialect filters, so the renderer
+  imports no ansible-core. `scripts/renderer/tests/test_renderer_filters.py` compares each with
+  ansible-core's while it is installed.
+- `scripts/renderer/shadow_diff.py digest` hashes a render (*Hash a render tree*).
+  `scripts/renderer/renderer_lib/shadow.py` holds its library.
 - Four determinism modules in `scripts/renderer/tests/` render every tag twice under an audit
   hook (*The render is deterministic and reads only the repo*).
-- A census row names every role task file that writes a cluster object itself, which the
-  render does not cover (*What the render does not cover*).
 - `scripts/renderer/renderer_lib/placeholders.py` holds placeholder mode: the mode call, the
   three passes and the per-directory key sets (*Placeholder mode*).
 - `scripts/renderer/shadow_diff.py roundtrip` builds the placeholder render and the stub render
@@ -49,14 +43,14 @@ steps, and this page describes each piece once its PR has merged.
   secret*).
 - The standalone-value guard: `placeholders.py`'s standalone key sets,
   `scripts/renderer/standalone_map.py` and the map it commits, the resolver in
-  `scripts/lib/plain_scalar.py`, `ansible/filter_plugins/standalone_guard.py`, and two tasks
-  in the shared `k8s/manifests` role (*The standalone-value guard*).
+  `scripts/lib/plain_scalar.py`, and the check in `scripts/secrets_mgmt/cluster_vars.py`
+  (*The standalone-value guard*).
 - `scripts/renderer/renderer_lib/host.py` holds host and package modes, which
   `homelab_render.py host` and `package` run (*Render a host package*).
 
 ## The stub form
 
-A shadow render never reads a secret. Every key of `ansible/vars/secrets.yml` renders as its
+A stub render never reads a secret. Every key of `ansible/vars/secrets.yml` renders as its
 stub instead, which the filter `homelab_secret_stub` builds:
 
 - A key `K` becomes `stub-` plus `K` with underscores turned to hyphens, such as
@@ -85,8 +79,7 @@ whose value is not exactly its stub. It returns names only, never a value.
   uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r2-render
   ```
 
-- With `--secret-stubs FILE`, the render is in stub mode, R1's shadow mode. Every R1 command
-  on this page passes it, so each still renders stubs.
+- With `--secret-stubs FILE`, the render is in stub mode.
 
 To render the tags in stub mode, write a stub file for the commit and pass it to `cluster`:
 
@@ -151,9 +144,8 @@ stamp the same value. `docs/flux-deploy-plane.md`'s *Restart triggers* has the r
 Every render, in either mode, also labels each PersistentVolumeClaim and Namespace of a
 flux-owned tag `kustomize.toolkit.fluxcd.io/prune: disabled`, so Flux leaves the
 object in place when it leaves the render (C3 *Prune exemptions*). The label is
-inserted as text and moves no other byte. Only a flux-owned tag is labelled, so every other
-tag's render stays byte-equal to Ansible's for `shadow_diff.py compare`.
-`scripts/renderer/renderer_lib/prune_label.py` holds the rule.
+inserted as text and moves no other byte. `scripts/renderer/renderer_lib/prune_label.py` holds
+the rule.
 
 `cluster --out DIR --shared-only` writes the shared kinds, a root listing them and
 `digests.json`, and renders no tag. The publish job calls it when no tag is flux-owned, with
@@ -187,18 +179,18 @@ image context holds a secret's sentinel, a rendered ref names a built image with
 than `DIR/images/tags.json`'s, or a Kustomization path reaches `DIR/images/`. It exits 64
 on a usage error. `scripts/lib/exit_codes.py` holds the four codes as its `RENDER_*` family.
 
-### The play-time context
+### The render context
 
-A role's templates render with the variables they see in the k8s play on daniel-box:
+A role's templates render with these variables, resolved for daniel-box:
 
 - role defaults, `group_vars/all.yml` and daniel-box's host_vars, in Ansible's precedence,
-  with the stub file's variables over all of them as `-e @FILE` puts them;
-- `containers_list` as the play holds it: the k8s entries only, in the dependency order of
-  `toposort_containers`. `ansible/deploy.yml` builds it with the same two filters from
+  with the stub file's variables over all of them;
+- `containers_list`: the k8s entries only, in the dependency order of `toposort_containers`.
+  `scripts/renderer/renderer_lib/context.py` builds it with two filters from
   `ansible/filter_plugins/toposort.py`, and templates read that order;
-- `container_item`, the tag's own entry from that list, as the play's loop sets it;
+- `container_item`, the tag's own entry from that list;
 - `hostvars` for every host in `ansible/inventory/hosts.ini`. daniel-box's entry is the
-  rendered context, so `hostvars[k8s_primary_node].containers_list` is the play's view.
+  rendered context, so `hostvars[k8s_primary_node].containers_list` is that same list.
   Another host's entry holds its `hosts.ini` inline variables under its own host_vars,
   resolved against that host's own variables. daniel-pi's `ansible_host`, the Jinja
   `{{ server_ip }}`, therefore resolves to daniel-pi's address, not daniel-box's.
@@ -207,36 +199,40 @@ The render is strict. A name that no layer supplies stops the render with an err
 The render guards under `scripts/validate/` print `STUB` instead, and lay stub values such as
 `k8s_built_image_tags` under every layer. The renderer does neither: it derives
 `k8s_built_image_tags` (*Derived values*). An undefined attribute
-still takes its `| default(...)`, as it does under Ansible.
+still takes its `| default(...)`.
 
 The same rule holds one level down. A variable whose value names an undefined variable, such
 as `x: "{{ no_such_name }}"`, is left undefined rather than resolved to `STUB` or `None`, so a
-template that reads `x` stops the render. One that nothing reads costs nothing, as under
-Ansible's lazy evaluation. That matters because three `group_vars/all.yml` values name
+template that reads `x` stops the render. One that nothing reads costs nothing. That matters because three `group_vars/all.yml` values name
 variables that only setup roles or Ansible itself define. Another host's `hostvars` entry is
 stricter: a value there that does not resolve stops the render at once.
 
 ### The file rules
 
-The renderer writes the files the Ansible manifests role writes for a tag, by the rules of
-its render tasks in `ansible/roles/k8s/manifests/tasks/main.yml`:
+The renderer writes a tag's files by these rules:
 
 - **The file lists.** `scripts/lib/k8s_roles.py:resolved_manifest_files` derives them from
-  the role's templates and its `containers_list` entry. A role whose defaults set
-  `manifests_files` or `manifests_secret_files` gets that list instead, resolved against the
-  play-time context. navidrome's list, for one, names `ingressroute.yaml` only while it has
+  the role's templates and its `containers_list` entry. A top-level template whose basename
+  says `secret` is a secret file. The rest are files, with a shared `service.yaml` for an entry
+  with a `port` and a shared `ingressroute.yaml` for one with a `hostname`, less any `-job.yaml`,
+  the role's `manifests_deferred_files` and its `manifests_exclude_files`. A role whose defaults
+  set `manifests_files` or `manifests_secret_files` gets that list instead, resolved against the
+  render context. navidrome's list, for one, names `ingressroute.yaml` only while it has
   replicas.
 - **The shared defaults.** A listed `service.yaml` or `ingressroute.yaml` that the role ships
   no template for renders from `service-default.yaml.j2` or `ingressroute-default.yaml.j2`
-  in `ansible/templates/`. A listed name with no template stops the render.
+  in `ansible/templates/`, so a role whose Service or route fits the shared shape writes no
+  template (#2872, #3043). Such a route leaves no string in the role, so
+  `ansible/filter_plugins/toposort.py` derives the traefik edge from the entry's `hostname`.
+  A listed name with no template stops the render.
 - **The claims.** Each `k8s_claims` entry renders `claim-default.yaml.j2` to
   `claim-<name>.yaml`, with the entry as `manifests_claim`.
 - **The labelling wrapper.** A role that arms `manifests_prune`, the default, renders its
   files, its secret files and its claims through `role-labelled.yaml.j2`. The wrapper stamps
   `homelab/role: <tag>` on every document. authelia and nut opt out in their defaults.
 - **The deferred files.** `manifests_deferred_files` render from the role's own templates,
-  unlabelled, into `DIR/cluster/<tag>-deferred/`. Ansible stages them in a subdirectory
-  named by `manifests_deferred_dir_name`. pihole, headlamp and netpol-baseline defer files.
+  unlabelled, into `DIR/cluster/<tag>-deferred/`. pihole, headlamp and netpol-baseline defer
+  files.
 
 ### Where render metadata lives
 
@@ -244,26 +240,18 @@ A role sets the keys of `scripts/lib/k8s_roles.py:RENDER_KEYS` in its
 `defaults/main.yml`, and `image_builder_builds` lists the images it builds. Each key in
 defaults carries `# noqa var-naming[no-role-prefix]`. `include_vars`, `image_builder_sites` and
 `scripts/lib/k8s_roles.py:resolved_manifest_files` read `defaults/main.yml` only, and each raises
-on a role without that file. A `manifests_*` key outside `RENDER_KEYS`, such as
-`manifests_rollout_kind`, is read only by the Ansible path and stays on the include.
+on a role without that file.
 
-The render takes no value from a role's `tasks/`, so it renders the same bytes with those
-directories gone, and `scripts/renderer/tests/test_renderer_reads_no_task_file.py` holds that.
-Its one read there is `scripts/lib/k8s_roles.py:refuse_moved_keys_in_tasks`. That function parses
-the files and raises on a `RENDER_KEYS` key, `image_builder_builds`, `manifests_rollout_timeout`
-or an `image_builder_*` var on a `k8s/image-builder` include, because the renderer would otherwise
-drop the value without a word. A role whose entry is not `owner: flux` is exempt, because Flux
-applies nothing of its render.
+The render reads no role's `tasks/`. The only task files under `ansible/roles/k8s/` are the
+revert runbook's, and `scripts/renderer/tests/test_renderer_runbook_allowlist.py` holds that set.
 
 The renderer resolves only the five keys it renders with: the
 two file lists, the deferred pair and `manifests_prune`. The others stay strings until a
 reader such as `restart.py` resolves them. Role defaults still enter the template context,
 so a template must not name one of these keys for any other purpose.
 
-The renderer holds the manifests role's two defaults it needs as constants:
-`scripts/lib/k8s_roles.py:MANIFESTS_PRUNE_DEFAULT` and `ROLLOUT_TIMEOUT_DEFAULT`. The play still reads the role's own file, and
-`ansible/tests/k8s/test_shared_manifest_defaults.py` holds the two equal until R4.7 deletes the
-play.
+The renderer holds two defaults as constants:
+`scripts/lib/k8s_roles.py:MANIFESTS_PRUNE_DEFAULT` and `ROLLOUT_TIMEOUT_DEFAULT`.
 
 **The test harness reads this render.** `ansible/tests/_k8s_render.py:rendered_docs` and
 `rendered_texts` read `render_tag`'s files and deferred files in stub mode, so a fleet guard
@@ -271,7 +259,8 @@ reads the labelled bytes. They stop before the restart stamp and placeholder mod
 `render_role_template` renders one template unlabelled with `role_context`'s variables, for a
 guard that sets a value the inventory does not hold. A top-level template out of the file
 lists, such as pihole's macro file, is in neither walk. A guard that reads one names it in its
-own fallback table.
+own fallback table. `scripts/validate/k8s_manifests.py` validates the same stub-mode files, and
+the files each tag renders from its `templates/verify/` and `templates/precheck/` too.
 
 ## The Jinja dialect the renderer accepts
 
@@ -283,8 +272,7 @@ render with an error naming the construct. To add a construct, add it to the lit
 table and a case in `scripts/renderer/tests/_dialect_cases.py`, in one PR.
 
 `scripts/renderer/tests/test_renderer_dialect.py` compares each construct with its literal, and
-holds every template, variable value and `k8s/manifests` include value of the k8s roles to the
-list. Host and package modes
+holds every template, variable value and render-key value of the k8s roles to the list. Host and package modes
 render through `strict_env`, which the subset does not bind.
 
 A template census in `scripts/renderer/tests/` parses every template of the k8s roles and
@@ -305,7 +293,7 @@ its content tag:
 - Each `image_builder_builds` entry's variables are image-builder's defaults under the calling
   role's context, with the entry's vars over both and `playbook_dir` resolving to `ansible/`.
 - An entry whose `when:` is false adds no tag, as valheim's does without mods. Every role reads
-  the map as `{}` when it builds nothing, as `ansible/deploy.yml` resets it.
+  the map as `{}` when it builds nothing.
 
 A role default that reads the map, such as `nut_k8s_image`, resolves in a second pass of the
 context with the map as an override, the precedence `set_fact` has over every file layer.
@@ -314,23 +302,16 @@ Tests hold each content tag equal to the value ansible-core's `Templar` computes
 image-builder's expression with the same variables, which `ansible/tests/_image_builder_tag.py`
 holds as a literal.
 
-`lookup('template')` keeps the render's trailing newlines, as ansible-core's lookup does. The
-content tag hashes those bytes, so a lookup that stripped them gave every build a tag Ansible
-would not compute. `scripts/lib/k8s_yaml.py:make_lookup`, which the render guards under
-`scripts/validate/` read through, follows the same rules, so a guard checks the bytes a deploy
-writes.
-
-The render is not yet proven byte-identical to Ansible's. `shadow_diff.py compare` reports
-each difference (*Compare the two halves*), and each class of difference then gets its own
-renderer fix.
+`lookup('template')` keeps the render's trailing newlines. The content tag hashes those bytes,
+so a lookup that stripped them would move every content tag.
+`scripts/lib/k8s_yaml.py:make_lookup`, which the render guards under `scripts/validate/` read
+through, follows the same rules, so a guard checks the bytes the renderer writes.
 
 ## Placeholder mode
 
-Target slice R2 adds placeholder mode, the mode a later publish job runs (C1 *Only
-placeholder mode publishes*). `cluster` without `--secret-stubs` renders every secret
-reference as `${<key>}`, where `<key>` is the key name in `ansible/vars/secrets.yml`. Flux
-substitutes the real values at apply time. Nothing publishes a render yet: target slice D2
-adds the publish job, and it waits on R2's PR 2 as well.
+Placeholder mode is the mode the publish job runs (C1 *Only placeholder mode publishes*).
+`cluster` without `--secret-stubs` renders every secret reference as `${<key>}`, where `<key>`
+is the key name in `ansible/vars/secrets.yml`. Flux substitutes the real values at apply time.
 
 `scripts/renderer/renderer_lib/placeholders.py` renders in three passes, because the escape
 would also escape a placeholder emitted before it:
@@ -472,8 +453,7 @@ Secret of its own, which D3 ships as a SOPS-encrypted manifest. The role lists t
 manifest in the defaults variable
 `render_sops_manifests`, and placeholder mode emits no document for it. It drops the file
 before pass 2 and rebuilds the directory's `kustomization.yaml` without it, so its key counts
-in no key set and in no standalone set. Stub mode still renders it, and Ansible renders and
-applies it like any other secret file.
+in no key set and in no standalone set. Stub mode still renders it.
 
 | Role | Entry | Secret | Key |
 |---|---|---|---|
@@ -589,7 +569,7 @@ That proves the second pass still sees a standalone use the map does not cover:
 
 ```bash
 jq 'map_values(map(select(. != "email")))' \
-  ansible/roles/k8s/manifests/files/standalone_secret_keys.json > /tmp/guard-map-without-email.json
+  scripts/renderer/job_files/standalone_secret_keys.json > /tmp/guard-map-without-email.json
 uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip-map \
   --role traefik --guard-map /tmp/guard-map-without-email.json
 ```
@@ -643,28 +623,27 @@ A *standalone use* is a placeholder that is the whole scalar of a field, such as
 quotes, so it types a standalone value by its text (*What the pinned flux CLI does*). A value
 such as `0123`, `yes`, `1e3`, `null` or `2001-12-14` stops being the same string. In a
 Secret's `stringData` the apply then fails, and elsewhere the object changes meaning. No
-template shape fixes it, so the guard checks the values where they are decrypted.
+template shape fixes it, so the guard checks the values where the cluster file is written.
 
 - **The renderer names each key's standalone uses.** After pass 3, `placeholders.py` parses
   every document of a directory that substitutes. A key joins the directory's standalone key
   set when its `${K}` is the entire parsed value of a scalar, in any quote or block style.
   `x-${K}`, or a placeholder inside a block that holds more text, is not standalone.
-- **The deploy path reads a committed projection.** `standalone_map.py` writes
-  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, which maps each deploy tag
-  to the sorted keys standing alone in its directories, every one of them. To regenerate it,
-  run `uv run python scripts/renderer/standalone_map.py` and commit the file.
-- **The shared `k8s/manifests` role runs the guard before every render.** Its first task,
-  under `no_log`, collects the names of the service's mapped keys whose value the resolver
-  refuses, or which the loaded secrets do not define. Its second task is an assert that fails
-  the deploy unless that list is empty. The assert prints key names and never a value. A
-  map that is missing or does not parse fails the first task, so the guard fails closed.
+- **The map is the round trip's list of guarded keys.** `standalone_map.py` writes
+  `scripts/renderer/job_files/standalone_secret_keys.json`, which maps each deploy tag to the
+  sorted keys standing alone in its directories, every one of them. `shadow_diff.py roundtrip`
+  reads it in its second pass, where a key the map names keeps its R1 stub (*The round trip*).
+  To regenerate it, run `uv run python scripts/renderer/standalone_map.py` and commit the file.
+- **`cluster_vars.py write` checks the values.** It reads the standalone key sets from a
+  placeholder render, not from the map, and refuses a referenced key whose value the resolver
+  refuses. It prints key names and never a value.
 - **The resolver** is `scripts/lib/plain_scalar.py:refused`. It refuses a value when either of
   two readers takes its bare text for anything but the same string. The first is PyYAML's
   `safe_load`, a YAML 1.1 reader, which types timestamps and sexagesimal numbers, and which
   changes or rejects any text that is no valid plain scalar. The second is a port of the
   plain-scalar resolver of go-yaml v2.4.4, the version the pinned CLI carries. It types
   `1e3`, `08`, `0o17` and `y`, which PyYAML reads as strings. The flux probe holds both to
-  the pinned CLI. D3's `cluster_vars.py write` imports the same function.
+  the pinned CLI.
 - **The guard is enforced with no exemption list.** Every key with a standalone use is in
   the map. R2's PR 9 deleted `GUARD_DEFERRED`, the set of keys the guard skipped. Its last
   member was `mullvad_account`, whose real value is all digits, until R2's PR 7b moved that
@@ -675,11 +654,11 @@ template shape fixes it, so the guard checks the values where they are decrypted
   mapped key absent from `ansible/vars/secrets.yml`. Its named members are `email` and
   `wireguard_interface_private_key`, mapped under `traefik` and `qbittorrent`.
 
-When the assert refuses a key, the deploy stops before anything renders or applies, so the
-live objects keep their old values. R2's Open question 13 records the operator's ruling of
+When `cluster_vars.py write` refuses a key, it writes nothing, so the cluster file and the live
+objects keep their old values. R2's Open question 13 records the operator's ruling of
 2026-10-13: rotate the value to one that stays a string (**operator-only**), or move the key
-into a dedicated SOPS-encrypted Secret, as PR 7b did for `mullvad_account`. Then deploy
-again.
+into a dedicated SOPS-encrypted Secret, as PR 7b did for `mullvad_account`. Then write the
+cluster file again.
 
 ## The renderer pins nothing
 
@@ -694,7 +673,7 @@ Two tests hold this:
 - `scripts/renderer/tests/test_renderer_stub_file.py` requires the stub file's key set to be
   the secret keys plus the sentinel. A stub writer that adds one other key fails it.
 - The live-read census, `scripts/renderer/tests/test_renderer_live_read_census.py`, walks
-  every task file the k8s play in `ansible/deploy.yml` reaches. It fails when a name a task
+  every task file a render target's `tasks/main.yml` reaches. It fails when a name a task
   sets reaches a template the render reads, directly or through a role default, an
   inventory value, an `include_role` var or a `set_fact`, unless the renderer derives that
   name from the tree. It also fails on a lookup whose reads it cannot name: any plugin but
@@ -725,8 +704,8 @@ SOPS leaves in plaintext, and decrypts nothing.
 uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
 ```
 
-The file holds every stub and the sentinel `homelab_secret_stubs: true`. Pass it only to a k8s dry run or to the renderer, never to a run that applies
-anything.
+The file holds every stub and the sentinel `homelab_secret_stubs: true`. Pass it only to the
+renderer, never to a run that applies anything.
 
 A stub file goes stale when a secret key is added or removed, so write a fresh one for each
 commit you render.
@@ -742,94 +721,19 @@ key before the load, so neither assert fires.
 
 - "Refuse a secret stub file outside a k8s dry run" requires `k8s_dry_run`, the play
   variable `load_secrets_stubs_allowed` and the sentinel. A stub file stripped of its sentinel
-  is refused even in an allowed dry run, because sonarr's API reads skip on the sentinel
-  alone. Only `ansible/deploy.yml` sets that variable. Its
-  k8s play sets it to true. Its Docker play sets it to true only where the host's
-  `containers_list` holds no Docker entry, so a stubbed run aimed at a host with a Docker entry
-  stops before any role. A stub file passed to any other playbook stops at its preamble, dry run or
-  not.
+  is refused even in an allowed dry run. Only `ansible/deploy.yml` sets that variable. Its
+  Docker play sets it to true only where the host's `containers_list` holds no Docker entry,
+  so a stubbed run aimed at a host with a Docker entry stops before any role. A stub file passed
+  to any other playbook stops at its preamble, dry run or not.
 - "Refuse a stub file that does not stub every key" reads the key names from the ciphertext
   `secrets.yml` and names each key that does not hold exactly its stub. A stub file written
   before a secret was added fails here and names the new key. To fix it, write a fresh stub
   file from the same tree.
 
-A census in `ansible/tests/k8s/test_secret_key_task_census.py` covers the tasks that would
-act on a stub under an allowed run. It reads every task of a k8s role whose body names a secret
-key, or a variable derived from one. A derived variable is a role default or inventory var
-built from a secret key, or a `set_fact` key or `register:` name whose task in any k8s role
-names one. Each such task must be skipped under a stubbed dry run, use a
-side-effect-free module, or carry a per-task exemption with a reason. An `assert` or a `fail`
-can refuse a stub value, so the census credits only the `homelab_secret_stubs` guard on it.
-sonarr's API reads, and its two asserts on the reads' registers, passed on that guard until
-sonarr's Flux flip deleted them. The census no longer runs over the real tree (#5886): every task
-it selected sat in a flux-owned role or in arr-notification's `tasks/`, which nothing includes.
-Its fixture pairs stay, so the census can still go red.
+## Hash a render tree
 
-The same module checks that a task which fails on a stub value, as uptime-kuma's push-token
-format check did, carries the `homelab_secret_stubs` guard itself. That check predates the
-census's assert rule and backs it up; it too runs only on fixtures since the flips.
-
-From this change on, the preamble names the stub filters, so the deployer cannot narrow an
-edit to `ansible/filter_plugins/secret_stubs.py` to a service. Each such edit defers every
-declared service, and `land.sh` reports `needs-manual-apply`.
-
-## Keep the Ansible render of a stubbed dry run
-
-The manifests role variable `manifests_shadow_dir` keeps what a k8s dry run renders. Passed
-with `-e` beside the stub file, it renders each service into `<dir>/<service>` and keeps it,
-owned by `sys_user`. Unset, which is the default, the dry run renders into a temporary
-directory and discards it, as before. This tree is the Ansible half of the shadow pair, which
-R1's comparison reads against `homelab_render.py cluster`'s output.
-
-The role's first task refuses the variable unless the run is a k8s dry run and every secret
-key still holds its stub. It runs after the SOPS load, so a key the stub file did not cover
-holds its real value there and is named. It recomputes the check with
-`homelab_unstubbed_keys`, so no sentinel or flag passed as an extra var can stand in for it.
-
-The run is **operator-only**, because the play decrypts SOPS and escalates with `become`. The
-plan's *Verification* section has the commands.
-
-## Compare the two halves
-
-`shadow_diff.py compare` reads two render trees and reports how they differ. Either side is
-an Ansible shadow tree, with one directory per service as `manifests_shadow_dir` keeps it, or
-a C1 tree, with `cluster/` at the top as `homelab_render.py cluster` writes it. It keys both
-by the C1 path. An Ansible service's deferred subdirectory, such as
-`pihole/pihole-instance-2/`, maps to `cluster/pihole-deferred/`. `kustomization.yaml` is
-ignored, because Ansible writes none.
-
-- **The expected tags.** When either side is an Ansible tree, the set is the render targets
-  of daniel-box less the entries that carry `owner: flux` (C4 in
-  [the contracts](target-architecture/contracts.md)). A C1 side's flux-owned directories are
-  ignored, and an Ansible directory for a tag outside the set is reported as extra. Two C1
-  trees compare over every render target.
-- **The verdict.** It exits 0 and prints `<t> tags, <n> files, 0 differences` only when the
-  trees match. `<t>` is the expected tag count and `<n>` the number of files compared. It
-  exits 1 on any missing, extra or differing file, and on an expected tag that neither side
-  rendered.
-- **The refusals.** It exits 2 when the expected set is empty, when neither tree holds a file
-  for an expected tag, or when either side lacks one of three named members:
-  `traefik/deployment.yaml`, pihole's deferred directory `pihole-instance-2`, and a
-  `claim-*.yaml` file. A named member whose tag is flux-owned is dropped from that check, and
-  `compare` prints which. A file where neither layout puts one is refused as well.
-- **The report.** It groups the differences by class: present on one side only, an expected
-  tag on neither side, trailing newlines only, whitespace only, content, and a file lacking a
-  stub token. The report is meant for posting, so it prints no stub or secret value. A file
-  that fails `stubcheck`'s rule is named and its content withheld. A file holding a `kind:
-  Secret` document is named without a hunk, because its `data` is base64 that redaction
-  cannot read. A file that differs on a line where the C1 render holds a stub token is named
-  without a hunk too, because the Ansible line beside it sits at a stub site. Every other hunk
-  carries each stub token as `<stub>`.
-
-`shadow_diff.py stubcheck ANSIBLE C1` checks the Ansible tree's stub values against the C1
-render. For each file both trees hold, every stub token in the C1 file must appear in the
-Ansible file at least as often, with the `data` of each Secret decoded on both sides. The
-count matters: a file that keeps a token at one site and holds another value at a second
-site fails. A stub token is `stub-` followed by lower-case letters, digits and hyphens, and
-tokens compare whole. It
-names each failing file with the tokens it lacks, never the file's content, and exits 1. A
-file only one side holds, or one whose C1 render holds no token, passes unchecked: the
-manifests role's shadow-dir assert is its guard.
+The render-diff job's `compare` holds two complete C1 trees to each other (*The render-diff
+gate*), so nothing compares a render with a per-service tree.
 
 `shadow_diff.py digest DIR` prints one line per directory under `DIR/cluster/`, as
 `<directory> sha256:<hex>`, then a `total` line over every file under `DIR`. Each hash covers
@@ -838,62 +742,8 @@ no line depends on the absolute directory or the locale. A render of some tags g
 lines for those tags as a render of all of them. `digest_line` and `directory_digests` in
 `scripts/renderer/renderer_lib/shadow.py` build the same lines for R1's determinism tests.
 
-All three exit 64 on a usage error. `scripts/lib/exit_codes.py` holds the codes as its
-`SHADOW_*` family.
-
-### Run the shadow pair
-
-The shadow pair is **operator-only**. Its Ansible half decrypts SOPS and escalates with
-`become`, so it runs on daniel-box as `ubuntu`, from a clean worktree of the operator's
-checkout at a merged master SHA X. Both halves then read the same commit. `deploy.sh
---dry-run` renders the working tree, which must be clean. Ansible refuses non-blocking stdio,
-so the dry run redirects all three streams. `deploy.sh` exits 5 on a Flux-owned tag, and every
-k8s entry on daniel-box carries `owner`, so the Ansible half has no tag to run until a role
-is handed back.
-
-```bash
-# Operator-only: as ubuntu, in a clean worktree of the operator's checkout at master SHA X.
-mkdir -p /var/tmp/homelab-shadow/X
-uv run python scripts/renderer/shadow_diff.py stubs \
-  --out /var/tmp/homelab-shadow/X/stubs.yml
-# <tags> is a comma list of the k8s tags Ansible still owns.
-./scripts/deploy.sh --dry-run --skip-staleness-check --tags "<tags>" \
-  -e @/var/tmp/homelab-shadow/X/stubs.yml \
-  -e manifests_shadow_dir=/var/tmp/homelab-shadow/X/ansible \
-  > /var/tmp/homelab-shadow/X/play.log 2>&1 < /dev/null
-uv run python scripts/renderer/homelab_render.py cluster \
-  --out /var/tmp/homelab-shadow/X/render \
-  --secret-stubs /var/tmp/homelab-shadow/X/stubs.yml
-uv run python scripts/renderer/shadow_diff.py compare \
-  /var/tmp/homelab-shadow/X/ansible /var/tmp/homelab-shadow/X/render
-```
-
-The operator posts `compare`'s output on the issue or PR that tracks the run.
-
-To hand the agent a reference tree, the operator first runs `stubcheck`. The copy goes ahead
-only when the dry run exited 0 and `stubcheck` exits 0. A file that fails `stubcheck` holds
-no stub where the C1 render holds one. The operator inspects that file locally and never
-copies or posts it.
-
-```bash
-# Operator-only: check the Ansible tree's stub tokens, then copy it into the agent's home.
-uv run python scripts/renderer/shadow_diff.py stubcheck \
-  /var/tmp/homelab-shadow/X/ansible /var/tmp/homelab-shadow/X/render
-sudo install -d -o claude -g claude -m 0700 /var/lib/claude/shadow
-sudo cp -r /var/tmp/homelab-shadow/X/ansible /var/lib/claude/shadow/X
-sudo chown -R claude:claude /var/lib/claude/shadow/X
-```
-
-The agent then renders and compares a branch based on X that changes only
-`scripts/renderer/`. Ansible's render of X is the same for every such branch, so one operator
-run serves them all:
-
-```bash
-uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
-uv run python scripts/renderer/homelab_render.py cluster --out /tmp/r1-render \
-  --secret-stubs /tmp/r1-stubs.yml
-uv run python scripts/renderer/shadow_diff.py compare /var/lib/claude/shadow/X /tmp/r1-render
-```
+It exits 64 on a usage error. `scripts/lib/exit_codes.py` holds the codes as its `SHADOW_*`
+family.
 
 ## The render is deterministic and reads only the repo
 
@@ -912,19 +762,17 @@ it means adding or removing modules to match.
 
 Each subprocess runs `scripts/renderer/tests/_render_audit_child.py`, which installs an audit
 hook before it imports the renderer. The hook ends the process on any file open outside the
-repo, the output directory, the stub file, ansible-core's local temp directory and the
-interpreter's prefixes, and on any `socket.connect`. `/dev/null` is the one device it allows.
-It also ends the process on any program start but two: `ip link` and `ldconfig -p`, which
-ansible-core's import runs to read a MAC address for `uuid.getnode` and to find the C library.
-A child process reads the host without an `open` in the process the hook watches, so the hook
-names these two in `scripts/renderer/tests/_render_audit_child.py:IMPORT_PROBES` and refuses
-the rest. No template reads either result, and a rendered byte that depended on one would
-differ between the CI runner's digest lines and daniel-box's. The test points
-`ANSIBLE_LOCAL_TEMP` into its own directory, because ansible-core creates that directory on
-import and its default is under the user's home. The hook lives in a subprocess because Python
-cannot remove an audit hook, and one installed in an xdist worker would outlive the test. The
-CLI sets `ANSIBLE_LOCAL_TEMP` to the system temp directory when the caller has not set it, so
-`homelab_render.py cluster` writes nothing under the home directory either.
+repo, the output directory, the stub file and the interpreter's prefixes, and on any
+`socket.connect`. `/dev/null` is the one device it allows. It also ends the process on any
+program start, because a child process reads the host without an `open` in the process the hook
+watches. The hook lives in a subprocess because Python cannot remove an audit hook, and one
+installed in an xdist worker would outlive the test.
+
+The same subprocess sets `sys.modules['ansible'] = None`, so `import ansible` raises wherever the
+renderer reaches for it, and the four modules together render every tag that way.
+`scripts/renderer/tests/test_renderer_ansible_free.py`
+holds the validator and a host package to the same condition, and proves the condition can fail:
+a shim that makes `renderer_lib/jinja_filters.py` import `ansible` ends the render.
 
 In CI, each module writes one `digest_line` per directory it rendered to two places. The job
 log carries each as a line `render digest at <sha> (position <k> of 4): <line>`, which
@@ -1006,26 +854,9 @@ To reproduce a verdict by hand, follow *Exit 3* under *Verification* in
 
 ## What the render does not cover
 
-Zero diff covers what the manifests role renders: each role's applied directory, its deferred
-directory and its claim files. Two channels stay outside it:
-
-- objects that role tasks apply, create, patch, run or write through `exec` themselves, such
-  as `--from-file` ConfigMaps, probe and gate Jobs and `kubectl run` pods;
-- files that nine roles write to hosts, which belong to the host plane.
-
-The `homelab` Namespace and its LimitRange are not a channel of their own. The shared kind
-`homelab-namespace` renders both into the bundle, and `ansible/deploy.yml` applies neither
-(D5 step 30).
-
-The first channel is a census. The `render-does-not-cover-role-writes` row of
-`ansible/tests/repo/test_census_rows_roles.py` reads every task file under
-`ansible/roles/k8s/*/tasks/` except the manifests role's. A task writes when
-`ansible/tests/_k8s_guards.py:_chunk_mutates` matches it, the rule the dry-run guard census in
-`ansible/tests/deploy/test_k8s_dry_run.py` also reads. The row's `allow` map, in
-`ansible/tests/repo/_out_of_render_row.py`, names each writing file with the slice that owns
-its move. A writing file outside the map fails the row until a reviewer adds it with its owner.
-A file in the map that no longer writes fails the row too, so the map stays the list of what
-the render still leaves out.
+A cluster render covers each role's applied directory, its deferred directory and its claim
+files, and the shared kinds such as `homelab-namespace`. Files on a host are outside it, and
+they belong to the host plane (*Render a host package*).
 
 ## Render a host package
 
@@ -1091,8 +922,9 @@ the manifest `hosts/lib/homelab-reconcile` reads, in the schema that script's do
 documents. `units` lists every unit the host package and `homelab-updater` install, and every
 unit the host package drops a `50-homelab.conf` into, each with its policy or `{}`.
 `enable_links` lists each unit the host package's `enable:` maps link from a
-`/usr/lib/systemd/system/<target>.wants/` directory. `legacy` holds the rendered entries, and
-`reconcilers` is empty until H4. A spec file entry may not install the manifest's path.
+`/usr/lib/systemd/system/<target>.wants/` directory. `legacy` holds the rendered entries.
+`handoffs` pairs each spec's legacy entries with the units that spec ships, and reconcile keeps
+an entry while one of those units failed to start. `reconcilers` is empty until H4. A spec file entry may not install the manifest's path.
 The render refuses any manifest that `homelab-reconcile:parse_manifest` would refuse: an enable
 link for a unit no package installs or drops in on, or a drop-in on a unit that is not a
 service, timer, socket or path.

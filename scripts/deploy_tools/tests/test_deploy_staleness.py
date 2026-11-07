@@ -123,7 +123,7 @@ def test_refusal_names_the_count_and_the_fix(repos):
 SONARR = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
 RADARR = "ansible/roles/k8s/radarr/templates/deployment.yaml.j2"
 INVENTORY = "ansible/inventory/host_vars/daniel-box.yml"
-SHARED_K8S = "ansible/roles/k8s/manifests/tasks/main.yml"
+SHARED_K8S = "ansible/roles/k8s/volume-snapshot/tasks/main.yml"
 SECRETS = "ansible/vars/secrets.yml"
 
 

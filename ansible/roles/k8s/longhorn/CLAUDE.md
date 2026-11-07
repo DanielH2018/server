@@ -6,7 +6,7 @@ cluster binds through it. A bad apply here detaches volumes under every stateful
 host probes stay green.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=longhorn` with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
@@ -14,8 +14,7 @@ host probes stay green.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (H1.5a). Its `containers_list` entry carries `owner: flux`
-  from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
-  runs it. A rebuilt cluster gets it from the `longhorn` Kustomization at step 6 of
+  from its first commit. A rebuilt cluster gets it from the `longhorn` Kustomization at step 6 of
   `docs/flux-deploy-plane.md`'s *Bootstrapping Flux on a rebuilt cluster*. The `longhorn-backup` Kustomization
   depends on it and creates the backup targets once it reads `Ready`.
 - **The workloads are `files/upstream/longhorn.yaml`**, upstream's file byte for byte, pinned by

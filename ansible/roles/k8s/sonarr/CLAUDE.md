@@ -5,7 +5,7 @@ RWX volume with the rest of the \*arr stack. See repo-root `CLAUDE.md` for share
 conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=sonarr`
   with exit 5
 - **Images:** `lscr.io/linuxserver/sonarr` (`sonarr_k8s_image`), `ghcr.io/onedr0p/exportarr`
@@ -18,8 +18,7 @@ conventions.
 - **`sonarr-config`** (2Gi, `longhorn`, backed up) holds the library DB and absolute
   root-folder paths; `media-data` is the shared claim (mounted, not owned).
 - **Flux applies it, not Ansible** (D5.20, a Wave D PR with radarr and mosquitto). Its
-  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
-  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its image-bump PRs therefore draw no `land-wait` and no `probe.py
   health` run. authelia, media-volume and traefik stay Ansible-owned, so the Kustomization records
   them in
@@ -36,10 +35,9 @@ conventions.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). A
   revert can desync import/rename history from files left in place, recoverable by a library
   rescan.
-- **Where the tasks went.** `tasks/main.yml` holds one include, `k8s/manifests`, and no Flux
-  path runs it. It stays until R4 deletes it. The pre-apply snapshot through `k8s/volume-snapshot`
+- **Where the tasks went.** The pre-apply snapshot through `k8s/volume-snapshot`
   became the `sonarr-snapshot` Job, and the Kustomization's `wait` replaces the rollout wait.
-  The library reads of `tasks/verify.yml`, deleted here, became the `sonarr-verify` Job.
+  The library reads became the `sonarr-verify` Job.
   arr-notification's seed Job beside it declares the Discord notification (*Notable*). Its
   `k8s/arr-notification` include went in #5561. The seed Job's `lookup()`s are what make sonarr a
   caller of arr-notification in

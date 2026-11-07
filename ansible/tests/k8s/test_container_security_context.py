@@ -52,8 +52,6 @@ _PRIVILEGED = {
 # must name one that exists: test_uncovered_roles_justifications_resolve.py checks every
 # `*.j2` and `test_*.py` token in this block against the tree.
 _UNCOVERED_ROLES = {
-    # Renders no manifests of its own — it is the shared apply/rollout machinery.
-    "manifests",
     # Builds images in-cluster; its Job carries reasoned Unconfined seccomp/AppArmor for
     # rootless BuildKit (build-job.yaml.j2). That reason covers only the two profiles, where
     # exemption here also waives uid, privileged, capabilities.add, hostPath and host
@@ -142,7 +140,7 @@ def test_every_container_drops_all_capabilities():
 
 def test_the_corpus_covers_every_role_except_a_named_set():
     """Coverage is asserted, not assumed — see _UNCOVERED_ROLES."""
-    all_roles = {p.parent.parent.name for p in K8S_ROLES.glob("*/tasks/main.yml")}
+    all_roles = {p.parent.parent.name for p in K8S_ROLES.glob("*/defaults/main.yml")}
     covered = {role for role, _, _ in rendered_docs()}
     unexpected = (all_roles - covered) - _UNCOVERED_ROLES
     assert not unexpected, (

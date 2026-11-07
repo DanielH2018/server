@@ -411,15 +411,15 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             LAND_FAILED,
             "LAND_FAILED",
-            "CI red or unproven, a change needing a hand, a tag no k8s entry declares, a failed tick "
-            "or promotion, a failed health gate, or a PR closed, conflicting or with red CI.",
+            "CI red or unproven, a change needing a hand, a tag no k8s entry declares, "
+            "a held or failed promotion, a failed health gate, or a PR closed, conflicting or with red CI.",
         ),
         _c(LAND_BAD_ARGS, "LAND_BAD_ARGS", "the command line is wrong."),
         _c(
             LAND_GAVE_UP,
             "LAND_GAVE_UP",
-            "gave up waiting — a budget elapsed, the tick was skipped for lock contention every "
-            "time, the tick has not yet crossed origin, no promotion covered the merge in time, "
+            "gave up waiting — a budget elapsed, no promotion covered the merge in time, "
+            "the health gate could not read its store, "
             "or no host package containing the merge is published.",
         ),
     ),
@@ -683,8 +683,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             SECRET_ROTATION_FAILED,
             "SECRET_ROTATION_FAILED",
-            "the registry is out of sync under --check, --push pushed down, or a --deploy "
-            "redeploy failed after the new tokens were written.",
+            "the registry is out of sync under --check, --push pushed down, or rotate found a "
+            "consumer with no owner: flux, before writing anything.",
         ),
         _c(
             SECRET_ROTATION_SOPS_FAILED,
@@ -795,14 +795,12 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             SHADOW_DIFFERENT,
             "SHADOW_DIFFERENT",
-            "a difference, a file lacking a stub token, or a failed fluxprobe case.",
-            "Never copy or post a tree stubcheck fails.",
+            "a round-trip difference or a failed fluxprobe case.",
         ),
         _c(
             SHADOW_REFUSED,
             "SHADOW_REFUSED",
-            "refused: an empty set, a missing named member or file, a busy --out, no flux.",
-            "Render every tag on both sides, then compare again.",
+            "refused: a tree with no cluster/, a busy --out, no flux, or a failed render.",
         ),
         _c(SHADOW_BAD_ARGS, "SHADOW_BAD_ARGS", "the command line is wrong."),
     ),

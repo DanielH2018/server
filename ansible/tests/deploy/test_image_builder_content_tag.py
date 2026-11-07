@@ -22,11 +22,7 @@ import shutil
 from typing import cast
 
 import pytest
-from lib import yaml_fast
-from ansible.parsing.dataloader import DataLoader
-from ansible.template import Templar, trust_as_template
 from _helpers import ANSIBLE
-from _helpers import load_tasks
 from _image_builder_tag import (
     CONTEXT_DATA_EXPRESSION,
     templar_content_tag,
@@ -37,7 +33,6 @@ from renderer.renderer_lib.derived import content_tag
 
 
 ROLE = ANSIBLE / "roles" / "k8s" / "image-builder"
-TASKS = ROLE / "tasks" / "main.yml"
 CONTEXT_TPL = ROLE / "templates" / "context-configmap.yaml.j2"
 BUILD_JOB_TPL = "build-job.yaml.j2"
 
@@ -183,30 +178,6 @@ def test_the_image_name_does_not_move_the_tag(dockerfile):
 # --- ordering and the push -------------------------------------------------------------------
 
 
-def _task_index(prefix: str) -> int:
-    for i, task in enumerate(load_tasks(TASKS)):
-        if task.get("name", "").startswith(prefix):
-            return i
-    pytest.fail(f"no task named {prefix!r} in {TASKS}")
-
-
-def test_the_tag_is_computed_before_the_context_is_rendered():
-    """build-job.yaml.j2 names the tag, so the fact has to exist before the render task runs."""
-    assert _task_index("Compute the content tag") < _task_index(
-        "Render the build context and job"
-    ), (
-        "the content tag is computed after the render, so build-job.yaml renders with an "
-        "undefined tag and the build pushes a name nothing can reference."
-    )
-
-
-def test_the_tag_is_published_before_the_context_is_rendered():
-    """A consumer reads the published map while rendering its own manifests, later in the play."""
-    assert _task_index("Publish the content tag") < _task_index(
-        "Render the build context and job"
-    )
-
-
 def test_the_build_pushes_both_names():
     """One exporter, two names — so both tags resolve to one digest.
 
@@ -244,74 +215,3 @@ def test_the_build_pushes_both_names():
 
 
 # --- the checks around the push ---------------------------------------------------------------
-
-
-def _confirm_failed_when() -> str:
-    for task in load_tasks(TASKS):
-        if task.get("name", "").startswith("Confirm the registry now serves"):
-            return str(task["failed_when"])
-    pytest.fail(f"no confirm task in {TASKS}")
-
-
-def _confirms_ok(tags, *, no_mutate=False) -> bool:
-    """True when the confirm step passes for a registry serving `tags`."""
-    templar = Templar(
-        loader=DataLoader(),
-        variables={
-            "k8s_no_mutate": no_mutate,
-            "image_builder_tag": "latest",
-            "image_builder_content_tag": "sha-abcdef012345",
-            "image_builder_tags": {"json": {"tags": list(tags)}},
-        },
-    )
-    rendered = templar.template(
-        trust_as_template("{{ " + _confirm_failed_when() + " }}")
-    )
-    return str(rendered) == "False"
-
-
-def test_the_confirm_step_passes_when_both_names_were_pushed():
-    assert _confirms_ok(["latest", "sha-abcdef012345", "buildcache"])
-
-
-def test_the_confirm_step_fails_when_only_the_mutable_tag_was_pushed():
-    """The red-proof half: a `--output` that stopped emitting the second name must be caught.
-
-    Without this the build reports success, `:latest` moves, and the content tag every consumer
-    references is absent — which surfaces as an ImagePullBackOff on the next pod, not here.
-    """
-    assert not _confirms_ok(["latest", "buildcache"])
-
-
-def test_the_confirm_step_still_fails_when_the_mutable_tag_is_missing():
-    """The `:latest` push is unchanged: every unconverted consumer pulls it."""
-    assert not _confirms_ok(["sha-abcdef012345"])
-
-
-def test_a_dry_run_of_an_edited_context_does_not_fail_the_confirm_step():
-    """Nothing pushed under --check, so a changed context legitimately has no content tag yet.
-
-    Requiring it there would fail every dry run of an image edit — the one workflow a dry run of
-    an image edit exists for.
-    """
-    assert _confirms_ok(["latest"], no_mutate=True)
-
-
-def test_the_play_resets_the_published_tag_map():
-    """Facts persist across plays and resumed runs, and this one names a registry tag.
-
-    A leftover entry from an earlier play names a tag the registry may no longer serve. A
-    `--tags` run that skips the building role would render it into a consumer's manifest and
-    fail to pull, where an empty map falls back to the mutable alias.
-    """
-    play = yaml_fast.safe_load((ANSIBLE / "deploy.yml").read_text())
-    resets = [
-        t["ansible.builtin.set_fact"]
-        for p in play
-        for t in p.get("pre_tasks", [])
-        if isinstance(t, dict) and "ansible.builtin.set_fact" in t
-    ]
-    assert any("k8s_built_image_tags" in facts for facts in resets), (
-        "deploy.yml must reset k8s_built_image_tags in pre_tasks, alongside k8s_built_images. "
-        "Without it a --tags run inherits content tags this play never pushed."
-    )

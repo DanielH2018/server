@@ -40,6 +40,11 @@ RECORDED = {
     "fake-remux": {("render", "fake-remux"), ("deployed", "fake-remux")},
     # 3b3e4abb1:ansible/roles/setup/gitops_deploy/tasks/github_checks.yml
     "github-checks": {("render", "gitops-deploy-github-checks")},
+    # cb61ae0d9:ansible/roles/setup/initial_setup/tasks/crons.yml
+    "loki-route-witness": {
+        ("render", "loki-route-witness"),
+        ("deployed", "loki-route-health"),
+    },
     # 39f4bd5c4^:ansible/roles/setup/initial_setup/tasks/crons.yml
     "docs-refresh": {("render", "docs-refresh")},
     "eval-sweep": {("render", "eval-run")},
@@ -67,7 +72,7 @@ RECORDED = {
 # A component whose Ansible tasks still run on another host; its row comes from those tasks, as
 # (task file, tag) pairs.
 DERIVED = {
-    "loki-route-witness": ((CRONS, "loki_route_witness"),),
+    "worktree-holders": ((CRONS, "worktree-sweep"),),
 }
 
 
@@ -115,13 +120,6 @@ def expected() -> dict[str, set[tuple[str, str]]]:
         for name, sources in DERIVED.items()
     }
     return RECORDED | derived
-
-
-def test_the_loki_witness_tasks_stamp_two_differently_named_fragments():
-    assert stamped_fragments(*DERIVED["loki-route-witness"][0]) == {
-        ("render", "loki-route-witness"),
-        ("deployed", "loki-route-health"),
-    }
 
 
 def test_every_component_retires_exactly_the_fragments_its_task_stamped():

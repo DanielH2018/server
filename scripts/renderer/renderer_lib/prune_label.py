@@ -76,14 +76,10 @@ def label(text: str, where: str) -> str:
 def label_tags(rendered: list[RenderedTag], owned: Iterable[str]) -> list[RenderedTag]:
     """`rendered` with the prune label stamped into every directory of each flux-owned tag.
 
-    DECIDED: only a flux-owned tag is labelled, as only one gets `checksum/restart`. R1's
-    `shadow_diff.py compare` holds every other tag's render byte-equal to Ansible's, and the
-    label means nothing to `kubectl apply`, so labelling those would turn the comparison red
-    on every claim role for no effect. `compare` skips the flux-owned tags, the labelled
-    ones, and holds the unlabelled rest to Ansible's bytes. Both render modes label, so the
-    round trip compares labelled with labelled. The flip PR that marks a tag `owner: flux`
-    is the first to publish it, so the tag has no earlier `own` digest for the label to
-    move. That PR also adds `checksum/restart`, so its render was never byte-neutral. Before
+    DECIDED: only a flux-owned tag is labelled, as only one gets `checksum/restart`. Both
+    render modes label, so the round trip compares labelled with labelled. The flip PR that
+    marks a tag `owner: flux` is the first to publish it, so the tag has no earlier `own`
+    digest for the label to move. That PR also adds `checksum/restart`, so its render was never byte-neutral. Before
     the flip, `homelab_render.cluster` with `flux_owned` naming the tag shows the labelled
     form, as `tests/test_renderer_prune_label.py` renders observability and sonarr.
     """

@@ -96,17 +96,6 @@ def offenders(docs) -> list[str]:
     ]
 
 
-def builder_include_is_too_late(tasks: str) -> bool:
-    """Does this role include k8s/manifests before k8s/image-builder?
-
-    Pure over the task file's text so the red proof below can hand it a reversed copy. `False`
-    for a role carrying only one of the two.
-    """
-    builder = tasks.find("name: k8s/image-builder")
-    manifests = tasks.find("name: k8s/manifests")
-    return builder >= 0 and manifests >= 0 and manifests < builder
-
-
 def test_the_render_context_seeds_every_built_image():
     assert BASE_CONTEXT.get("k8s_built_image_tags") is BUILT_IMAGE_TAG_STUBS, (
         "BASE_CONTEXT no longer carries the stub map, so every render below falls back to "
@@ -143,46 +132,6 @@ def test_every_built_image_pin_names_the_content_tag():
         "tag instead, so the Deployment spec names the bytes the pod runs: "
         "`{{ k8s_registry_pull_host }}/<name>:{{ k8s_built_image_tags.get('<name>', "
         "'latest') }}`. Offending pins: " + ", ".join(bad)
-    )
-
-
-def test_every_builder_include_precedes_the_manifests_include():
-    """The pin resolves when the manifests render, so the fact has to exist by then.
-
-    `k8s_built_image_tags` is a play fact, and a role that includes k8s/manifests first renders
-    its Deployment before k8s/image-builder has published — the play dies on an undefined
-    variable, or renders `:latest` if something else defined it.
-    """
-    checked, late = [], []
-    for role in sorted(KNOWN_BUILT_IMAGES):
-        tasks = ANSIBLE / "roles" / "k8s" / role / "tasks" / "main.yml"
-        if not tasks.is_file():
-            continue
-        body = tasks.read_text()
-        if "name: k8s/image-builder" not in body:
-            continue
-        checked.append(role)
-        if builder_include_is_too_late(body):
-            late.append(role)
-    assert len(checked) >= 6, (
-        f"only {checked} include k8s/image-builder directly — the guard stopped seeing the "
-        "roles it covers"
-    )
-    assert not late, (
-        "these roles include k8s/manifests before k8s/image-builder, so their image pin reads "
-        f"k8s_built_image_tags before it is published: {late}"
-    )
-
-
-def test_a_role_including_the_builder_after_its_manifests_is_flagged():
-    assert builder_include_is_too_late(
-        "- include_role:\n    name: k8s/manifests\n- include_role:\n    name: k8s/image-builder\n"
-    )
-
-
-def test_a_role_including_the_builder_first_is_clean():
-    assert not builder_include_is_too_late(
-        "- include_role:\n    name: k8s/image-builder\n- include_role:\n    name: k8s/manifests\n"
     )
 
 

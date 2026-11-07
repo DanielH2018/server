@@ -8,10 +8,8 @@ a missing directory surfaces only when a pod waits in ContainerCreating on its h
 `EXPECTED_ROWS` in `_k8s_host_files_expected.py` names each moved row by task file and task
 name, with the module and the whole argument map it must keep: path, state, owner, group and
 mode. A looped row's path reads `item`, so `EXPECTED_LOOPS` pins its loop too. Each conversion
-PR adds its rows in the same commit as the move. The other
-direction, a row coming back to its k8s role, is the host-write census's
-(`ansible/tests/repo/_host_write_rows.py`): the move drops the role's `allow` entry, so a host
-write there fails `k8s-role-tasks-write-no-host`.
+PR adds its rows in the same commit as the move. A row coming back to its k8s role has no
+task file to live in: `test_renderer_runbook_allowlist.py` refuses one.
 
 No row writes daniel-pi any more: crowdsec's edge probe rows left for the Pi package in H5.14,
 and pi-peer-backup's wrapper and key in H7.25. The play runs on daniel-box, so
@@ -82,13 +80,7 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "observability.yml: Remove the retired dashboard staging trees",
         "qbittorrent.yml: Remove the retired qbittorrent prefs drift check cron",
         "qbittorrent.yml: Remove the retired qbittorrent prefs-check script from the host",
-        "registry.yml: Create the registry garbage-collection state directory",
-        "registry.yml: Create the registry job manifest directory",
-        "registry.yml: Deploy the registry garbage-collection script",
         "registry.yml: Remove the retired push store's garbage-collection job manifest",
-        "registry.yml: Render the dockerhub-mirror garbage-collection job",
-        "registry.yml: Render the ghcr-mirror garbage-collection job",
-        "registry.yml: Schedule the registry garbage collection",
         "traefik.yml: Remove the Cloudflare IP drift cron",
         "traefik.yml: Remove the Cloudflare IP drift script",
     ]

@@ -26,13 +26,11 @@ import re
 
 import chained_timeout
 import pytest
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 
-from _helpers import ALL_VARS, ROLES, load_defaults, render_expr
+from _helpers import ALL_VARS, ROLES, load_defaults
 from lib import yaml_fast
 from _k8s_render import rendered_docs
-from _release_expectation import rollouts
-from renderer.renderer_lib.task_inputs import include_vars
 from flux_components import FilterModule
 from test_volume_names_descriptive import volume_names
 
@@ -196,46 +194,6 @@ def test_all_namespace_peers_is_flagged_on_the_unfiltered_install():
 # --- A changed Secret render rolls no controller ----------------------------------------
 
 
-def _declared_self_rollouts(entries: list[dict]) -> list[dict]:
-    """The include's `manifests_self_rollouts`, rendered over the role's defaults."""
-    declared = include_vars(FLUX)["manifests_self_rollouts"]
-    return render_expr(declared, **{**load_defaults(FLUX), "flux_controllers": entries})
-
-
-def _flux_rollouts(entries: list[dict]) -> dict:
-    return rollouts(
-        manifests_service="flux",
-        manifests_rollout="",
-        manifests_extra_rollouts=[],
-        manifests_self_rollouts=_declared_self_rollouts(entries),
-        manifests_render={"changed": True},
-        manifests_secret_render={"changed": True},
-        manifests_apply={"changed": False, "stdout": ""},
-    )
-
-
-def test_a_changed_secret_render_expects_no_controller_to_roll():
-    entries = load_defaults(FLUX)["flux_controllers"]
-    # The fingerprints read each workload in its declared namespace, which defaults to
-    # k8s_namespace; read there, every controller would read "not rolled".
-    declared = _declared_self_rollouts(entries)
-    assert {e["namespace"] for e in declared} == {"flux-system"}, declared
-    recorded = _flux_rollouts(entries)
-    assert set(recorded) == CONTROLLERS, recorded
-    assert not any(r["restart"] for r in recorded.values()), recorded
-
-
-def test_without_restart_on_a_changed_secret_render_expects_every_controller_to_roll():
-    """The red half: the shared default `[config, secret, image]` stamps all three, and no
-    task restarts them, so the record would owe each one a restart nothing issues."""
-    entries = [
-        {k: v for k, v in e.items() if k != "restart_on"}
-        for e in load_defaults(FLUX)["flux_controllers"]
-    ]
-    recorded = _flux_rollouts(entries)
-    assert all(r["restart"] for r in recorded.values()), recorded
-
-
 # --- The filter refuses what it cannot fit ----------------------------------------------
 
 _DEPLOYMENT = """
@@ -259,9 +217,8 @@ spec:
     ids=["unnamed-volume", "no-deployment"],
 )
 def test_flux_components_refuses_an_install_it_cannot_fit(text):
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         FilterModule().filters()["flux_components"](text, {}, "homelab-critical", {})
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith("flux_components: "), str(caught.value)
 
 
@@ -311,7 +268,7 @@ def test_a_controller_flag_replaces_upstreams_value_for_it():
 
 
 def test_a_flag_for_a_deployment_the_install_lacks_is_refused():
-    with pytest.raises(AnsibleFilterError, match="kustomize-controller"):
+    with pytest.raises(FilterError, match="kustomize-controller"):
         FilterModule().filters()["flux_components"](
             _DEPLOYMENT,
             {},
@@ -360,7 +317,7 @@ def test_a_controller_resources_patch_replaces_only_the_keys_it_names():
 
 
 def test_resources_for_a_deployment_the_install_lacks_are_refused():
-    with pytest.raises(AnsibleFilterError, match="kustomize-controller"):
+    with pytest.raises(FilterError, match="kustomize-controller"):
         FilterModule().filters()["flux_components"](
             _DEPLOYMENT,
             {},
@@ -406,8 +363,8 @@ def _rendered_secret_names() -> set[str]:
 
 
 def test_no_controller_reads_the_notification_secrets_through_its_pod_spec():
-    """`secret.yaml.j2` moves the secret render on every rotation, and `restart_on: []` then
-    expects no roll. That holds only while no controller pod reads these Secrets, because
+    """`secret.yaml.j2` moves the secret render on every rotation, and no controller rolls for
+    it. That holds only while no controller pod reads these Secrets, because
     notification-controller reads them through the API on each event."""
     secrets = _rendered_secret_names()
     assert secrets == {
@@ -418,8 +375,6 @@ def test_no_controller_reads_the_notification_secrets_through_its_pod_spec():
     refs = pod_secret_refs(_flux_docs())
     assert set(refs) == CONTROLLERS, refs
     assert not any(names & secrets for names in refs.values()), refs
-    recorded = _flux_rollouts(load_defaults(FLUX)["flux_controllers"])
-    assert not any(r["restart"] for r in recorded.values()), recorded
 
 
 def test_pod_secret_refs_is_flagged_on_an_envfrom_secret():

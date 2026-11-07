@@ -146,7 +146,7 @@ _PROSE_HOLDERS = {
             "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2",
             "ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2",
             "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
-            "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2",
+            "hosts/components/registry-gc/templates/registry-gc.sh.j2",
             "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
             "hosts/components/renovate-agent/files/renovate_agent.py",
             "scripts/deploy_tools/prune_releases.py",

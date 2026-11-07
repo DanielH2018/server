@@ -1,15 +1,17 @@
 """Ansible filter plugin for ordering and splitting containers_list.
 
-`toposort_containers` orders the k8s play by the map `build_k8s_dep_map` derives from each
-role's templates and entry, and `filter_by_platform` splits the list between the Docker and k8s
-plays. `ansible_owned` drops the entries another deployer owns from the k8s play's batch loop.
-The Docker play runs no role: every entry is `platform: k8s`, and the Pi's services deploy from
-`compose_services` in its package.
+`toposort_containers` orders the renderer's entries by the map `build_k8s_dep_map` derives from
+each role's templates and entry, and `filter_by_platform` selects one platform's entries.
+deploy.yml's Docker play runs no role: every entry is `platform: k8s`, and the Pi's services
+deploy from `compose_services` in its package.
 """
 
 import heapq
 import os
-from ansible.errors import AnsibleFilterError
+
+
+class DependencyCycle(ValueError):
+    """Entries whose dependencies form a cycle, so no order exists."""
 
 
 def toposort_containers(containers_list, deps_map):
@@ -17,7 +19,7 @@ def toposort_containers(containers_list, deps_map):
 
     Stable: ties within a topological level preserve the original list order.
     Deps not present in containers_list are silently ignored.
-    Raises AnsibleFilterError if a dependency cycle is detected.
+    Raises DependencyCycle if a dependency cycle is detected.
     """
     name_to_idx = {c["name"]: i for i, c in enumerate(containers_list)}
     name_to_obj = {c["name"]: c for c in containers_list}
@@ -44,7 +46,7 @@ def toposort_containers(containers_list, deps_map):
 
     if len(result) != len(names):
         cycled = [n for n in names if name_to_obj[n] not in result]
-        raise AnsibleFilterError(f"Dependency cycle detected in containers: {cycled}")
+        raise DependencyCycle(f"Dependency cycle detected in containers: {cycled}")
     return result
 
 
@@ -173,41 +175,17 @@ def build_k8s_dep_map(containers_list, playbook_dir, applies_last=None):
     return dep_map
 
 
-# DECIDED: deploy.yml's Docker play and this filter's `docker` default stay until R4 or H7 deletes
-# that file's last play. The play runs no role, and its snapshot pre_task feeds the k8s play.
+# DECIDED: deploy.yml's Docker play and this filter's `docker` default stay until H7 deletes
+# that file's last play. The play runs no role.
 # Long form: docs/target-architecture/host/h5-pi-compose.md, H5-R1-06.
 def filter_by_platform(containers_list, platform="docker"):
     """Select containers_list entries targeting a given deploy platform.
 
     A missing `platform` key means "docker", as it does in `entry_fields`.
     `scripts/validate/compose_templates.py` refuses such an entry, so the
-    k8s play never drops a service that omitted the key.
+    renderer never drops a service that omitted the key.
     """
     return [c for c in containers_list if c.get("platform", "docker") == platform]
-
-
-# The values a containers_list entry's `owner` takes. `flux`: Flux applies the tag. The twin of
-# `scripts/lib/k8s_roles.py:OWNER_VALUES`, which a filter plugin cannot import. The plan is
-# docs/target-architecture/deploy/d2-first-leaf.md, *The ownership flag and its three readers*.
-OWNER_VALUES = frozenset({"flux"})
-
-
-def ansible_owned(containers_list):
-    """Select the containers_list entries Ansible deploys: those without an `owner` key.
-
-    The predicate is the key's presence, not its value. An `owner` value outside
-    OWNER_VALUES, a bare `owner:` included, raises AnsibleFilterError rather than reading as
-    Ansible-owned: a misspelt owner would otherwise hand the tag to two deployers at once.
-    Order is preserved, and the input list is not mutated.
-    """
-    for c in containers_list:
-        owner = c.get("owner")
-        if "owner" in c and (not isinstance(owner, str) or owner not in OWNER_VALUES):
-            raise AnsibleFilterError(
-                f"containers_list entry {c.get('name')!r} has owner {owner!r}, "
-                f"not one of {sorted(OWNER_VALUES)}"
-            )
-    return [c for c in containers_list if "owner" not in c]
 
 
 class FilterModule:
@@ -218,5 +196,4 @@ class FilterModule:
             "build_k8s_dep_map": build_k8s_dep_map,
             "toposort_containers": toposort_containers,
             "filter_by_platform": filter_by_platform,
-            "ansible_owned": ansible_owned,
         }

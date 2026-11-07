@@ -214,5 +214,5 @@ groups:
           description: >-
             No registry-gc verdict newer than 612000s reached Prometheus from daniel-box's
             textfile collector, so nothing confirms the mirrors' weekly GC still runs. Read
-            /etc/cron.d/registry-gc and `journalctl -t registry-gc` on daniel-box, then
+            homelab-registry-gc.timer and `journalctl -t registry-gc` on daniel-box, then
             /var/lib/node-exporter-textfile/registry-gc.prom on the host.

@@ -1,7 +1,8 @@
 """A fake host for `hosts/bootstrap-host.sh`: stub commands, a HOMELAB_ROOT and an offline kit.
 
 The script runs under stub `hostname`, `apt-get`, `dpkg`, `dpkg-query`, `systemctl`,
-`systemd-tmpfiles`, `rkhunter`, `aideinit` and `curl`, and the real `gpg`, `age-keygen`, `git`, `tar` and coreutils. Its
+`systemd-tmpfiles`, `fallocate`, `mkswap`, `swapon`, `id`, `getent`, `groupadd`, `usermod`, `snap`,
+`rkhunter`, `aideinit` and `curl`, and the real `gpg`, `age-keygen`, `git`, `tar` and coreutils. Its
 pins name production digests, so `pin` rewrites a digest in the scratch COPY of the script to the
 fixture's own. A case that wants the production pin to refuse leaves it alone.
 """
@@ -125,6 +126,19 @@ class FakeHost:
         self._stub("dpkg-query", "exit 1")
         self._stub("systemctl", f'echo "systemctl $*" >> {self.log}')
         self._stub("systemd-tmpfiles", f'echo "tmpfiles $*" >> {self.log}')
+        self._stub("fallocate", f'echo "fallocate $*" >> {self.log}; : > "$3"')
+        self._stub("mkswap", f'echo "mkswap $*" >> {self.log}')
+        self._stub(
+            "swapon", f'[ "$1" = --show=NAME ] || echo "swapon $*" >> {self.log}'
+        )
+        self._stub("id", "echo ubuntu")
+        self._stub("getent", "exit 2")
+        self._stub("groupadd", f'echo "groupadd $*" >> {self.log}')
+        self._stub("usermod", f'echo "usermod $*" >> {self.log}')
+        self._stub(
+            "snap",
+            f'if [ "$1" = list ]; then exit 1; else echo "snap $*" >> {self.log}; fi',
+        )
         self._stub("rkhunter", f'echo "rkhunter $*" >> {self.log}')
         self._stub("aideinit", f'echo "aideinit $*" >> {self.log}')
         self._stub(

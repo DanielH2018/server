@@ -75,6 +75,23 @@ tools:
       sha256: 6663c154755b732f43dc993d72321f71c2fc1ff0bcb94b2696e0a8638fa562b4
       url: https://github.com/fluxcd/flux2/releases/download/{version}/flux_{bare}_linux_arm64.tar.gz
       member: flux
+  # H7.61: the Vale the prek hook runs, at the version CI installs
+  # (ansible/tests/repo/test_vale_matches_the_ci_pin.py holds the copies equal). Both digests come
+  # from the release's checksums file:
+  # https://github.com/vale-cli/vale/releases/download/v3.25.1/vale_3.25.1_checksums.txt
+  vale:
+    amd64:
+      # renovate: datasource=github-release-attachments depName=vale-cli/vale
+      version: v3.25.1
+      sha256: 4bf5c5176b682b1da0830f471584d3494f1c2e27ee3029e1ad6f6661d4962182
+      url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_64-bit.tar.gz
+      member: vale
+    arm64:
+      # renovate: datasource=github-release-attachments depName=vale-cli/vale
+      version: v3.25.1
+      sha256: 2a69755b68118c612c455fc0c5ea1b9438519aa1c852e3fb303b3ad97141bbb0
+      url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_arm64.tar.gz
+      member: vale
   # nfpm and uv stay the last two blocks: hosts/bootstrap-host.sh embeds this tail byte for byte.
   # H7.24a: daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
   # Both digests come from the release's checksums.txt:
@@ -92,7 +109,8 @@ tools:
       sha256: a9a75213763783b7669719e505474c748c5ad7dc66591a195619deb50f85c2f4
       url: https://github.com/goreleaser/nfpm/releases/download/{version}/nfpm_{bare}_Linux_arm64.tar.gz
       member: nfpm
-  # H7.41a: daniel-box's builder runs uv, at the version `initial_setup_uv_version` pins. uv ships
+  # H7.41a: daniel-box's builder runs uv, at the version `initial_setup_uv_version` pins. The uv
+  # component puts it on PATH as /usr/bin/uv for the units and scripts that name it. uv ships
   # tarballs only, with the binary one directory down. Both digests come from the release's
   # uv-<arch>-unknown-linux-gnu.tar.gz.sha256 files.
   uv:

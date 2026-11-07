@@ -133,7 +133,7 @@ observability_grafana_storage: 1Gi
 # costs only those two, and the cost is one re-sent notification per open alert.
 observability_alertmanager_storage: 1Gi
 
-# The role's claims, rendered by k8s/manifests (#3387). Each names `namespace` because the claims
+# The role's claims, which the renderer renders (#3387). Each names `namespace` because the claims
 # live beside their workloads in k8s_observability_namespace, not in the shared k8s_namespace.
 # No `k8s_autodeploy_snapshot_pvcs` here, so the claims are applied by the directory apply,
 # after 00-namespace.yaml creates the namespace on a fresh cluster.
@@ -261,7 +261,7 @@ observability_loki_homelab_uid: bf4q19tuivta8e
 # cheaper than parsing every syslog line in the window.
 observability_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
 # A Flux promotion's deploy line comes from the soak Job, which prints it on stdout when it
-# passes (ansible/roles/k8s/manifests/files/flux_soak.py:main), so Alloy ships it under the
+# passes (scripts/renderer/job_files/flux_soak.py:main), so Alloy ships it under the
 # cluster pods' job. A LogQL log query has one stream selector, so this is a second annotation
 # query rather than a widening of the one above. The renderer names the Job's one container
 # `soak`, and the selector scopes a dashboard load to the soak's own lines.

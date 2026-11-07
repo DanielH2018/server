@@ -621,7 +621,9 @@ If your own working machine is what's gone, the lab itself needs nothing done to
    guard denies it (`docs/claude-shell-permissions.md`, *Inspecting a secret without
    decrypting it*).
 3. From there, operate normally — `land.sh`, `probe.py`, etc., per the repo-root CLAUDE.md
-   command tables.
+   command tables. The cluster changes only through Flux's promotion: merge the change, and
+   `land.sh` follows it. [Deploying by hand](deploying.md) says which path applies a setup role
+   or a Pi change.
 
 ### Scenario: `systemctl restart k3s` never returns after an API-server flag change
 

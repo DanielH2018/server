@@ -6,6 +6,7 @@ Run: uv run pytest hosts/lib/tests/test_bootstrap_host_k3s.py
 
 import pytest
 from _bootstrap_host import AGENT_ENV, FakeHost, stocked_server
+from renderer.renderer_lib import host as host_mode
 
 
 def test_the_agent_installs_k3s_in_agent_mode_and_never_prints_the_token(tmp_path):
@@ -70,6 +71,29 @@ def test_the_server_installs_in_server_mode_even_with_agent_variables_exported(
     assert args.strip().endswith("url=unset token=")
 
 
+def test_the_script_leaves_the_unit_stopped_and_says_the_operator_starts_it(tmp_path):
+    host = stocked_server(tmp_path)
+
+    result = host.run("daniel-server", "--offline", str(host.kit), **AGENT_ENV)
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "k3s-agent.service stays stopped until the operator starts it" in result.stdout
+    )
+    assert not [c for c in host.commands() if c.startswith("systemctl") and "k3s" in c]
+
+
+@pytest.mark.parametrize(
+    ("node", "unit"),
+    [("daniel-box", "k3s.service"), ("daniel-server", "k3s-agent.service")],
+)
+def test_no_cluster_package_ships_an_enable_link_for_its_k3s_unit(node, unit):
+    links = host_mode.render_host(node).enable_links()
+
+    assert "homelab-updater.timer" in links, "this reads some other list of links"
+    assert unit not in links
+
+
 @pytest.mark.parametrize(
     ("hostname", "env"),
     [("daniel-server", AGENT_ENV), ("daniel-box", {})],
@@ -110,7 +134,7 @@ def test_an_installer_that_fails_once_is_run_again_and_the_bootstrap_continues(
 
     assert result.returncode == 0, result.stderr
     assert (host.root / "installer.runs").read_text().splitlines() == ["run", "run"]
-    assert host.commands() == ["sleep 30"]
+    assert [c for c in host.commands() if c.startswith("sleep")] == ["sleep 30"]
     assert (host.root / "etc/systemd/system" / unit).exists()
     assert "stopped after step 4" in result.stdout
 
@@ -135,7 +159,7 @@ def test_an_installer_that_stalls_is_killed_at_its_bound_and_run_again(
 
     assert result.returncode == 0, result.stderr
     assert (host.root / "installer.runs").read_text().splitlines() == ["run", "run"]
-    assert host.commands() == ["sleep 30"]
+    assert [c for c in host.commands() if c.startswith("sleep")] == ["sleep 30"]
 
 
 def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
@@ -149,5 +173,5 @@ def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
     assert result.returncode == 1
     assert "bootstrap-host: the k3s installer failed\n" in result.stderr
     assert (host.root / "installer.runs").read_text().splitlines() == ["run"] * 13
-    assert host.commands() == ["sleep 30"] * 12
+    assert [c for c in host.commands() if c.startswith("sleep")] == ["sleep 30"] * 12
     assert host.apt_calls() == []

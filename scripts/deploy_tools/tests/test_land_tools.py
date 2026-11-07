@@ -61,13 +61,6 @@ def test_deploy_tags_is_the_relative_path_in_the_primary_checkout(monkeypatch):
     assert seen["cwd"] == Path("/primary")
 
 
-def test_the_tick_runs_from_beside_land_py(monkeypatch):
-    seen = _capture(monkeypatch)
-    tools.run_tick()
-    assert seen["argv"] == [str(tools.HERE / "gitops_tick.sh")]
-    assert (tools.HERE / "land.py").exists() or (tools.HERE / "land.sh").exists()
-
-
 def test_helpers_whose_code_must_match_are_imported_from_beside_land_py():
     """A helper this script passes new flags to must be the same release."""
     assert Path(tools.await_ci.__file__).resolve().parent == tools.HERE
@@ -85,7 +78,7 @@ def test_read_state_is_empty_for_a_missing_or_blank_marker(tmp_path):
 
 
 def test_a_readable_hold_survives_a_torn_behind_marker(tmp_path):
-    """`tick_state` relies on a readable hold reading as HELD whatever `behind_since` holds."""
+    """A readable hold stays readable whatever `behind_since` holds."""
     (tmp_path / "hold_sha").write_text("abc\n")
     (tmp_path / "behind_since").write_bytes(b"\xff\n")
     assert tools.read_state(tmp_path, "hold_sha") == "abc"
@@ -96,135 +89,6 @@ def test_the_syslog_tag_is_the_one_the_board_expects(monkeypatch):
     seen = _capture(monkeypatch)
     tools.syslog("event=landing pr=1")
     assert seen["argv"][:3] == ["logger", "-t", "landing-annotation"]
-
-
-def _fake_fuser_then_ps(monkeypatch, fuser_stdout: str, ps_stdout: str = ""):
-    calls = []
-
-    def run(argv, **kw):
-        calls.append(argv)
-        if argv[0] == "fuser":
-            return subprocess.CompletedProcess(argv, 0, fuser_stdout, "")
-        return subprocess.CompletedProcess(argv, 0, ps_stdout, "")
-
-    monkeypatch.setattr(tools.subprocess, "run", run)
-    return calls
-
-
-def test_lock_holder_names_the_pid_alongside_etimes_and_command(monkeypatch):
-    """The printed `lock held by pid $pid (etimes, command): ...` line names the pid
-    together with the etimes+command ps read; this single string is the only value
-    callers get, so the pid must be folded in here rather than dropped."""
-    _fake_fuser_then_ps(monkeypatch, "12345", "42 ansible-playbook --tags sonarr")
-    assert (
-        tools.lock_holder()
-        == "pid 12345 (etimes, command): 42 ansible-playbook --tags sonarr"
-    )
-
-
-def test_lock_holder_is_empty_when_nobody_holds_the_lock(monkeypatch):
-    _fake_fuser_then_ps(monkeypatch, "")
-    assert tools.lock_holder() == ""
-
-
-# -- the in-flock wait gitops_tick.sh reports on its own stderr --------------------------
-#
-# `retry_while_locked` books a wait only when an attempt EXITS 75. gitops_tick.sh joins a tick
-# already in flight and returns 0, so that wait reaches the ledger only through this line. Each
-# rule below has both halves: a line that books and a line that does not.
-
-
-def test_the_joined_tick_line_books_the_wait_and_not_the_run_before_it():
-    """`N` is how long the tick had already run; only `M` is time THIS landing waited.
-
-    Booking `N` would push `lock` above `tick`, breaking the sub-part invariant the ledger
-    docstring states.
-    """
-    assert (
-        tools.in_flock_wait(
-            "gitops_tick.sh: joined a tick already 300s in flight; waited 47s for it\n"
-        )
-        == 47
-    )
-
-
-@pytest.mark.parametrize(
-    "line",
-    [
-        "deploy.sh: lock acquired after 5s (holder was: pid 8)\n",
-        "deploy.sh: service lock sonarr acquired after 4s\n",
-    ],
-)
-def test_a_deploy_sh_lock_line_books_nothing(line):
-    """land.sh runs no `deploy.sh`, so a line like this reaches it from nothing it waited on."""
-    assert tools.in_flock_wait(line) is None
-
-
-def test_a_self_started_tick_wait_line_books_nothing():
-    """The half that must NOT book: those seconds are the tick's own work.
-
-    When the unit's own `flock -w` gives up, gitops_tick.sh exits 3 and
-    `retry_while_locked` books the wait already. Booking this line too would double it.
-    """
-    assert tools.in_flock_wait("gitops_tick.sh: waited 240s\n") is None
-
-
-def test_an_ordinary_stderr_line_books_nothing():
-    assert tools.in_flock_wait("TASK [k8s/sonarr : render manifests] ****\n") is None
-
-
-def test_every_stderr_line_is_echoed_through_unchanged(tmp_path, capsys):
-    """The landing log must read exactly as it did when the child owned the handle.
-
-    The payload carries a `%`, a double quote and a bare `\\r` progress line, which are what
-    text-mode translation or a format string would mangle.
-    """
-    payload = 'TASK [x] ***\nok: 50% "done"\rok: 100% "done"\nno trailing newline'
-    written = tmp_path / "stderr.txt"
-    written.write_text(payload)
-    rc = tools.stream_stderr(
-        ["sh", "-c", 'cat "$0" >&2; exit 7', str(written)], tmp_path, None
-    )
-    assert rc == 7
-    assert capsys.readouterr().err == payload
-
-
-def test_a_watched_stderr_line_reaches_the_observer(tmp_path, capsys):
-    booked: list[int] = []
-    tools.stream_stderr(
-        [
-            "sh",
-            "-c",
-            "printf 'TASK [x]\\n"
-            "gitops_tick.sh: joined a tick already 3s in flight; waited 5s for it\\n' >&2",
-        ],
-        tmp_path,
-        booked.append,
-    )
-    assert booked == [5]
-    assert "TASK [x]" in capsys.readouterr().err
-
-
-def test_a_joined_line_books_its_wait_even_when_the_in_flight_seconds_are_missing():
-    """The in-flight seconds are NOT booked, so an unreadable one must not cost the one that is.
-
-    gitops_tick.sh derives that number from /proc/uptime and renders `already s in flight` if
-    the read comes back empty. A parser that required it to be a number stopped matching and
-    silently restored `lock=0`.
-    """
-    assert (
-        tools.in_flock_wait(
-            "gitops_tick.sh: joined a tick already s in flight; waited 47s for it\n"
-        )
-        == 47
-    )
-
-
-def test_a_kicked_tick_passes_no_wait(monkeypatch):
-    """The landing waits on a promotion, so it starts the tick and moves on."""
-    seen = _capture(monkeypatch)
-    tools.run_tick(wait=False)
-    assert seen["argv"] == [str(tools.HERE / "gitops_tick.sh"), "--no-wait"]
 
 
 def _commit(repo: Path, name: str) -> str:
@@ -350,19 +214,6 @@ def test_the_gate_snapshot_lands_in_the_pinned_root_its_docstring_names(
     assert f"rm -rf {tools.GATE_TMP_ROOT}/land-gate-*" in (
         tools.gate_snapshot.__doc__ or ""
     )
-
-
-def test_the_watched_tick_inherits_the_working_directory(monkeypatch):
-    """`cwd=None`, not `HERE`.
-
-    The SCRIPT comes from beside land.py, but pinning the working directory is
-    the re-aiming tools.py's own docstring warns about -- deploy.sh renders from its cwd and
-    deploy_tags reads ranges relative to it.
-    """
-    seen = _capture(monkeypatch)
-    tools.run_tick(observe=lambda *_: None)
-    assert seen["argv"] == [str(tools.HERE / "gitops_tick.sh")]
-    assert seen["cwd"] is None
 
 
 def _wait_args(timeout_s, token):

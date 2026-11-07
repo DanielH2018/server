@@ -19,16 +19,15 @@ from deploy_tools.setup_lib.deployed_copies import DeployedCopies
 from diagnostics.probe_lib import core
 from lib.repo_paths import ALL_VARS, HOST_VARS, REPO
 
-WITNESS = "ansible/roles/setup/initial_setup/files/loki_route_health.py"
-WITNESS_LIVE = "/opt/loki-route-health/loki_route_health.py"
+COPY = "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
+COPY_LIVE = "/usr/local/lib/setup-drift-lib.sh"
+CHECK_LIB = "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 # The second path PR #7295 changed. No setup role ships it, so it owes nothing either way.
 COMPONENT_COPY = "hosts/components/loki-route-witness/loki_route_health.py"
 CRONS = "ansible/roles/setup/initial_setup/tasks/crons.yml"
-DRIFT_LIB = "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
-WITNESS_SHA = hashlib.sha256((REPO / WITNESS).read_bytes()).hexdigest()
-TEMPLATE = "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2"
+COPY_SHA = hashlib.sha256((REPO / COPY).read_bytes()).hexdigest()
+TEMPLATE = "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
 TEMPLATE_SHA = hashlib.sha256((REPO / TEMPLATE).read_bytes()).hexdigest()
-FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/loki-route-witness"
 DRIFT_FRAGMENT = "/var/lib/homelab/setup-render-manifest.d/setup-drift-check"
 CHECK_TIMER_TEMPLATES = (
     "ansible/roles/setup/common/templates/check-timer.service.j2",
@@ -45,13 +44,13 @@ def _reader(row, reads=None):
     def read_host(plan, host):
         if reads is not None:
             reads.append((plan, host))
-        return {"stat": {WITNESS_LIVE: row}, "files": {}}
+        return {"stat": {COPY_LIVE: row}, "files": {}}
 
     return read_host
 
 
 def _fragment_reader(row):
-    return lambda plan, host: {"stat": {}, "files": {FRAGMENT: row}}
+    return lambda plan, host: {"stat": {}, "files": {DRIFT_FRAGMENT: row}}
 
 
 def _note(files, read_host):
@@ -61,58 +60,48 @@ def _note(files, read_host):
 
 
 def test_a_host_holding_the_merge_commits_bytes_is_owed_nothing():
-    row = {"status": "ok", "sha256": WITNESS_SHA}
-    assert _note([WITNESS, COMPONENT_COPY], _reader(row)) == ""
+    row = {"status": "ok", "sha256": COPY_SHA}
+    assert _note([COPY, COMPONENT_COPY], _reader(row)) == ""
 
 
 def test_a_copy_only_rootq_could_compare_counts_as_held():
     row = {"status": "ok", "sha256": None, "via": "rootq", "match": True}
-    assert _note([WITNESS], _reader(row)) == ""
+    assert _note([COPY], _reader(row)) == ""
 
 
 def test_a_copy_with_other_bytes_keeps_the_host_owed():
     row = {"status": "ok", "sha256": "0" * 64}
-    assert "`initial_setup` also reaches daniel-server" in _note(
-        [WITNESS], _reader(row)
-    )
+    assert "`initial_setup` also reaches daniel-server" in _note([COPY], _reader(row))
 
 
 def test_a_missing_copy_keeps_the_host_owed():
-    assert "daniel-server" in _note([WITNESS], _reader({"status": "absent"}))
+    assert "daniel-server" in _note([COPY], _reader({"status": "absent"}))
 
 
 def test_a_host_that_cannot_be_read_stays_owed(capsys):
     def read_host(plan, host):
         raise core.Unreadable(f"could not read {host}: exit 255")
 
-    assert "daniel-server" in _note([WITNESS], read_host)
+    assert "daniel-server" in _note([COPY], read_host)
     assert "could not read what daniel-server holds" in capsys.readouterr().err
 
 
 def test_a_changed_sibling_with_no_stamped_copy_keeps_the_host_owed():
-    row = {"status": "ok", "sha256": WITNESS_SHA}
-    assert "daniel-server" in _note([WITNESS, CRONS], _reader(row))
+    row = {"status": "ok", "sha256": COPY_SHA}
+    assert "daniel-server" in _note([COPY, CRONS], _reader(row))
 
 
 def test_the_read_asks_for_the_merge_commits_hash():
     reads = []
-    _note([WITNESS, COMPONENT_COPY], _reader({"status": "absent"}, reads))
-    assert reads == [
-        (
-            {
-                "stat": [WITNESS_LIVE],
-                "rootq": {WITNESS_LIVE: WITNESS_SHA},
-                "files": [],
-            },
-            "daniel-server",
-        )
-    ]
+    _note([COPY, COMPONENT_COPY], _reader({"status": "absent"}, reads))
+    plan = {"stat": [COPY_LIVE], "rootq": {COPY_LIVE: COPY_SHA}, "files": []}
+    assert (plan, "daniel-server") in reads
 
 
 def test_two_stamped_files_read_each_host_once():
     """`ufw limit ssh` refuses a sixth connection in 30 seconds."""
     reads = []
-    _note([WITNESS, DRIFT_LIB], _reader({"status": "absent"}, reads))
+    _note([COPY, CHECK_LIB], _reader({"status": "absent"}, reads))
     hosts = [host for _, host in reads]
     assert "daniel-server" in hosts
     assert len(hosts) == len(set(hosts))
@@ -132,61 +121,41 @@ def test_a_missing_render_fragment_keeps_the_host_owed():
     assert "daniel-server" in _note([TEMPLATE], _fragment_reader({"status": "absent"}))
 
 
-def _holds_check_timer(template, witness_text, drift_text, host="daniel-server"):
-    """Does `initial_setup` read as held on a host with these two render fragments?
+def _holds_check_timer(template, drift_text, host="daniel-server"):
+    """Does `initial_setup` read as held on a host with this setup-drift render fragment?
 
     `holds` over the working tree's roles, because `_note` reads the `ansible/` tree at `ref`. A
     text of None is a fragment the host does not have.
     """
-    files = {
-        path: {"status": "ok", "text": text} if text else {"status": "absent"}
-        for path, text in ((FRAGMENT, witness_text), (DRIFT_FRAGMENT, drift_text))
-    }
+    row = {"status": "ok", "text": drift_text} if drift_text else {"status": "absent"}
     return DeployedCopies(
         [template],
         REPO / "ansible/roles/setup",
         ref="HEAD",
         repo=REPO,
-        read_host=lambda plan, host: {"stat": {}, "files": files},
+        read_host=lambda plan, host: {"stat": {}, "files": {DRIFT_FRAGMENT: row}},
     ).holds("initial_setup", template, host)
 
 
-def test_a_host_the_witness_stamp_skips_holds_on_the_drift_fragment_alone():
-    template = CHECK_TIMER_TEMPLATES[0]
-    line = f"{template} {_sha(template)}\n"
-    assert _holds_check_timer(template, None, line, host="daniel-box")
-
-
-def test_a_host_the_witness_stamp_skips_stays_owed_on_a_stale_drift_fragment():
-    template = CHECK_TIMER_TEMPLATES[0]
-    line = f"{template} {'0' * 64}\n"
-    assert not _holds_check_timer(template, None, line, host="daniel-box")
-
-
 @pytest.mark.parametrize("template", CHECK_TIMER_TEMPLATES)
-def test_a_check_timer_template_both_fragments_show_is_held(template):
-    line = f"{template} {_sha(template)}\n"
-    assert _holds_check_timer(template, line, line)
+def test_a_check_timer_template_the_drift_fragment_shows_is_held(template):
+    assert _holds_check_timer(template, f"{template} {_sha(template)}\n")
 
 
 @pytest.mark.parametrize(
-    "witness_line, drift_line",
+    "drift_line",
     [
-        pytest.param("current", "other", id="the-drift-fragment-is-stale"),
-        pytest.param("other", "current", id="the-witness-fragment-is-stale"),
-        pytest.param("current", "", id="the-drift-fragment-predates-the-listing"),
+        pytest.param("other", id="the-drift-fragment-is-stale"),
+        pytest.param("", id="the-drift-fragment-predates-the-listing"),
     ],
 )
-def test_a_check_timer_template_one_fragment_does_not_show_stays_owed(
-    witness_line, drift_line
-):
+def test_a_check_timer_template_the_drift_fragment_does_not_show_stays_owed(drift_line):
     template = CHECK_TIMER_TEMPLATES[0]
     lines = {
-        "current": f"{template} {_sha(template)}\n",
         "other": f"{template} {'0' * 64}\n",
         "": f"{TEMPLATE} {TEMPLATE_SHA}\n",
     }
-    assert not _holds_check_timer(template, lines[witness_line], lines[drift_line])
+    assert not _holds_check_timer(template, lines[drift_line])
 
 
 def _owed_from_daniel_server(template, files):
@@ -218,7 +187,7 @@ def test_a_landing_from_daniel_server_names_no_host_after_an_apply_on_daniel_box
     template,
 ):
     row = {"status": "ok", "text": f"{template} {_sha(template)}\n"}
-    files = dict.fromkeys((FRAGMENT, DRIFT_FRAGMENT), row)
+    files = dict.fromkeys((DRIFT_FRAGMENT,), row)
     assert _owed_from_daniel_server(template, files) == ({}, {})
 
 
@@ -245,7 +214,7 @@ def _stamp(*tags, when="True"):
 """
 
 
-def _render(*tags, src="loki-read-route-health.sh.j2", when="True"):
+def _render(*tags, src="setup-drift-check.sh.j2", when="True"):
     return f"""
 - name: Render
   tags: {list(tags)}

@@ -26,6 +26,7 @@ from jinja2.runtime import Context
 from lib.ansible_jinja_env import template_env
 from lib.k8s_yaml import make_lookup
 from lib.render_guard import StrictChainableUndefined, pad_to_source_newlines
+from renderer.renderer_lib import jinja_filters as filters
 from renderer.renderer_lib.dialect import FILTERS, LOOKUPS, TESTS
 
 
@@ -43,6 +44,7 @@ def strict_env(templates: Path) -> jinja2.Environment:
     """
     env = template_env(templates, undefined_cls=StrictChainableUndefined)
     env.keep_trailing_newline = False
+    env.filters["to_json"] = filters.to_json
     return env
 
 

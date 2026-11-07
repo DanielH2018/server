@@ -46,15 +46,14 @@ TASKS = COMMON / "tasks" / "check_timer.yml"
 # which one went missing.
 KNOWN_CHECKS = frozenset(
     {
-        "loki-read-route",
         "setup-drift",
     }
 )
 
 # The line a shell producer ends on. The oracle for the textual guard below: the Loki witness
-# test drives its script and proves the line does what it says; this pins that every other
-# shell producer wired through the task file carries the same line, so a producer converted
-# without it cannot read as done.
+# test drives its script and proves the line does what it says; this pins that every shell
+# producer wired through the task file carries the same line, so a producer converted without it
+# cannot read as done.
 EXIT_CONTRACT = '[[ "$STATUS" == up ]] || exit 1'
 
 BASE_VARS = {
@@ -361,9 +360,10 @@ def test_every_wired_shell_producer_exits_nonzero_after_a_down_push() -> None:
         checked += 1
     # Lower it only for a deliberate retirement. H7.36 moved the secret-rotation audit to a
     # component (COMPONENT_CHECKS), which took the floor from 6 to 5. D6.17 disarmed
-    # manifest-prune-check, which took it to 4. H7.37 moved the two GitHub checks to a component,
-    # which took it to 2.
-    assert checked >= 2, (
+    # manifest-prune-check, which took it to 4. H7.59 moved daniel-server's Loki witness, the last
+    # wired copy, to a component, which took it to 3. H7.37 moved the two GitHub checks to a
+    # component, which took it to 1.
+    assert checked >= 1, (
         f"only {checked} shell producers checked; the census has shrunk"
     )
 

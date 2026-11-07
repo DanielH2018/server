@@ -8,7 +8,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
 `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=registry` with exit 5
 - **Images:** `registry` (`registry_k8s_image`), `python` (`registry_k8s_ghcr_resume_image`),
@@ -57,9 +57,9 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     `registries.yaml` mirror covers the whole host. Its store is therefore its own claim,
     `registry_k8s_ghcr_mirror_claim` (30Gi, `longhorn-nobackup`).
   - The TTL is zero, so only the weekly GC reclaims the store (#5541). A proxy refuses
-    manifest DELETE, so `ansible/roles/setup/k8s_host_files/templates/ghcr-mirror-gc-job.yaml.j2`'s Job, `registry-gc-ghcr-mirror`, edits
+    manifest DELETE, so `hosts/components/registry-gc/templates/ghcr-mirror-gc-job.yaml.j2`'s Job, `registry-gc-ghcr-mirror`, edits
     the store offline. `registry-gc.sh` runs it with only `deploy/ghcr-mirror` scaled to zero.
-    Its `prune` initContainer runs `ansible/roles/setup/k8s_host_files/files/ghcr-mirror-prune.sh`, and its
+    Its `prune` initContainer runs `hosts/components/registry-gc/files/ghcr-mirror-prune.sh`, and its
     `gc` container then runs plain `garbage-collect`.
   - The prune's unit is a manifest revision, not a tag. A third-party ghcr.io image is pinned
     by digest, and the proxy caches a digest pull with no tag, so `--delete-untagged` on this
@@ -103,16 +103,16 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     back to `ghcr.io` during a GC, while GHCR is at its normal rate rather than when a cold
     start needs them. A cached blob streams from the store and costs no WAN. On 2026-10-24 a
     cold warm fetched 354 blobs (6.2 GB) in 133s, and a second pass took 49s.
-    `k8s_host_files_ghcr_mirror_warm_budget_s` (1800s) bounds the phase. A blob that fails to
+    `registry_gc_ghcr_mirror_warm_budget_s` (1800s) bounds the phase. A blob that fails to
     warm is named in the `registry-gc` journal and the run's message, and leaves the run up.
-    `ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2:DECIDED: a blob that fails to warm`
+    `hosts/components/registry-gc/templates/registry-gc.sh.j2:DECIDED: a blob that fails to warm`
     has why.
   - containerd falls back to `ghcr.io` while the GC scales the mirror to zero. No build writes
     the mirror's store, so the GC does not wait for builds.
   - **Nothing but `registry-gc.sh` writes the mirror's `spec.replicas`**, so the operator
     accepted it as an exception to contract C4 on field ownership (#5732). #6536 extends the
-    exception to the dockerhub-mirror's `spec.replicas`. The script stays a host cron after
-    the flip.
+    exception to the dockerhub-mirror's `spec.replicas`. The script stays a host script after
+    the flip, in the `registry-gc` host component.
   - **No deploy restores the mirror.** Until the flip, a deploy task restored a mirror a
     stopped GC left at zero, under the script's flock (#5736). Flux owns the role now and
     renders no `replicas:` for the mirror, so nothing but `registry-gc.sh` writes the count
@@ -146,7 +146,7 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
     down through the next run's ghcr-mirror phase. Its own phase restores it, or the run's exit
     path does when the ghcr-mirror phase leaves its own stamp. The phase is the ghcr-mirror's with its own names: the
     `registry-gc-dockerhub-mirror` Job from
-    `ansible/roles/setup/k8s_host_files/templates/dockerhub-mirror-gc-job.yaml.j2`, the
+    `hosts/components/registry-gc/templates/dockerhub-mirror-gc-job.yaml.j2`, the
     `registry-gc-dockerhub-mirror-keep` ConfigMap, the stamp
     `/var/lib/registry-gc/dockerhub-mirror-down`, and
     `registry_k8s_dockerhub_mirror_keep_revisions` (3) kept per repository. Its Deployment
@@ -200,18 +200,17 @@ pi-peer-backup, code-server, terraria, valheim and karakeep before they moved. S
   - Both rules are `warning`, the deleted tile's channel mix. Their deadline is the script's
     `DEADLINE_S`, which equals the deleted tile's interval.
 - **The job manifests stage in `/etc/rancher/k3s/manifests/registry-jobs/`, not in this
-  role's own manifest directory** (#1669). `k8s/manifests` prunes every file in
-  `manifests/registry/` outside the role's file list, which deleted them on every deploy.
-  Their `-job.yaml` suffix keeps them out of the derived list. The two mirror GC manifests are
-  the ones that mattered: `registry-gc.sh` reads them at cron time, so the prune left a window in
-  which GC failed on a missing manifest. That manifest, the script, `/var/lib/registry-gc` and
-  the cron now install from `ansible/roles/setup/k8s_host_files/tasks/registry.yml`, because
-  a Flux-owned role runs no tasks. The same file holds the retired push store's `gc-job.yaml`
-  absent arm. `registry_k8s_manage_gc: false` skips that whole block and removes nothing.
-  The setup role keeps copies of the GC's variables in its `defaults/main.yml`, and
-  `ansible/tests/setup/test_k8s_host_files_pairs.py` holds them equal to this role's.
+  role's own manifest directory** (#1669). Their `-job.yaml` suffix keeps them out of the derived list. The two mirror GC manifests are
+  the ones that mattered: `registry-gc.sh` reads them at run time, so the prune left a window in
+  which GC failed on a missing manifest. daniel-box's package ships them, the script, the state
+  directory and the timer from `hosts/components/registry-gc/`, because a Flux-owned role runs
+  no tasks. `registry_k8s_manage_gc: false` in host_vars drops all of it from that host's next
+  package version. The component keeps copies of the GC's variables in its
+  `defaults/main.yml`, and
+  `hosts/components/registry-gc/tests/test_registry_gc_component.py` holds them equal to this
+  role's.
 - **Flux owns registry (D5, Wave D).** `promote` applies it, and no Ansible run reaches
-  `tasks/main.yml`, which keeps only the `k8s/manifests` include until R4 deletes it. The self-tests
+  the role. The self-tests
   and the netpol probe are the `registry-verify`
   Jobs in `templates/verify/`, which the renderer emits once the `registry` Kustomization
   reads Ready. `files/registry_verify.py` runs one check per Job:

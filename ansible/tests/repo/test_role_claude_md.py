@@ -48,7 +48,7 @@ PLANES = [
         "k8s",
         K8S_ROLES,
         floor=60,
-        members=frozenset({"pihole", "traefik", "manifests"}),
+        members=frozenset({"pihole", "traefik", "flux"}),
         deploy_tag=True,
     ),
     Plane(

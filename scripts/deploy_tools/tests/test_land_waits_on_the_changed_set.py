@@ -56,7 +56,6 @@ def _land(land_run_main, paths: list[str], sim: Sim, changed_files=None, **kwarg
             }
         },
         derived=tuple(land_tags.derive(paths, changed_files)),
-        self_applied=land_tags.self_applied(paths),
         plane=land_tags.plane_note(paths),
         owners={MERGE_SHA: dict.fromkeys(FLUX, "flux")},
         gate=(True, []),
@@ -195,7 +194,7 @@ def test_a_manifests_only_pr_reaches_land_wait_and_gates_the_changed_set(
         },
     )
     rc, out, calls = _land(
-        land_run_main, ["ansible/roles/k8s/manifests/tasks/main.yml"], sim
+        land_run_main, ["ansible/roles/k8s/volume-snapshot/tasks/main.yml"], sim
     )
     assert "VERDICT: settled" in out, out
     assert rc == 0

@@ -7,7 +7,7 @@ how the gate was measured, LinuxServer's modcache behaviour line by line, the cr
 finding and why the prefs plane is shaped this way.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=qbittorrent` with exit 5
 - **Images:** `lscr.io/linuxserver/qbittorrent` (`qbittorrent_k8s_image`),
@@ -23,7 +23,7 @@ finding and why the prefs plane is shaped this way.
   shared claim — mounted here, owned elsewhere.
 
 - **Flux applies it, not Ansible** (D5, Wave D). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.
@@ -120,7 +120,7 @@ the docs page has why.
 - **It was a daniel-box host cron until H2.5d.** The absent arms for the cron,
   `/usr/local/bin/qbittorrent-prefs-check.sh` and `/opt/qbittorrent-prefs-check` sit in
   `ansible/roles/setup/k8s_host_files/tasks/qbittorrent.yml`, which the setup plane applies
-  through `initial_setup.yml`. D5's conversion PR moved them there from `tasks/main.yml`.
+  through `initial_setup.yml`. D5's conversion PR moved them there from the role's tasks.
 
 ### The login trap
 qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty

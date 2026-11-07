@@ -129,8 +129,6 @@ class Options:
     merge_timeout: int = CI_TIMEOUT_S
     merge_poll: int = MERGE_POLL_S
     pace_master_runs: int = PACE_MASTER_RUNS
-    lock_retries: int = 5
-    lock_backoff: int = 60
     primary: Path = PRIMARY_CHECKOUT
     deployer_state: Path = Path(STATE_DIR)
     # `--detach` forks the landing into a logfile this script names and returns; `cc-wait land

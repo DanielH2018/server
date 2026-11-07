@@ -6,8 +6,8 @@ role renders into a cron or timer script. A template runs as rendered, so the te
 through `_shell_render`, the render `validate/shell_templates.py` lints, and runs that.
 
 THE CONVENTION. `-h` or `--help` anywhere in argv prints the script's header comment block and
-exits 0, before any lock, network call or write. `scripts/deploy_tools/gitops_tick.sh` is the
-model: one `awk` over `$0` prints the comment lines under the shebang.
+exits 0, before any lock, network call or write. The usual form is
+one `awk` over `$0` printing the comment lines under the shebang.
 
 WHY THE TEXT IS CHECKED BEFORE THE RUN. A script that has no help path does its real work when
 this test runs it, and these are cron jobs: `docs-refresh` pushes a branch and `registry-gc`
@@ -42,7 +42,7 @@ MUST_FIND = frozenset(
         "hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh",
         ".claude/hooks/run-hook.sh",
         "setup/k3s/longhorn-backup-health.sh.j2",
-        "setup/k8s_host_files/registry-gc.sh.j2",
+        "components/registry-gc/registry-gc.sh.j2",
         "components/docs-refresh/docs-refresh.sh.j2",
     }
 )

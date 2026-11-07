@@ -1463,7 +1463,10 @@ deployer route of its paths, measured with `services_from_changed_paths` at its 
 8. **Delete the k8s play and the manifests role** (deletion PR).
     - Delete the play, the batch and retire task files, the two post_tasks, and every
       `tasks/` directory under `ansible/roles/k8s/` outside the runbook allowlist. Delete
-      the manifests role whole: PR 7c moved every default the renderer read from it.
+      the manifests role whole: PR 7c moved every default the renderer read from it, and
+      R4.7 moves `flux_soak.py`, `flux_snapshot.py`, `flux_job_connect.py` and
+      `standalone_secret_keys.json` out of its `files/` to `scripts/renderer/job_files/`
+      (#7435).
     - Delete only the `tasks/` of `image-builder`, `arr-notification` and
       `volume-snapshot`. `cronjob-gate` went whole in #5716, once it had no caller. A utility role goes whole only when a grep of `scripts/renderer/`
       and `scripts/lib/` for the role's directory, and for each of its template, file and

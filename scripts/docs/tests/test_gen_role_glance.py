@@ -194,7 +194,6 @@ def test_timer_units_finds_the_initial_setup_roles_named_timers():
     units = {unit for unit, _ in f.timer_units(K3S_ROLE.parent / "initial_setup")}
     assert {
         "kuma-check-setup-drift.timer",
-        "kuma-check-loki-read-route.timer",
     } <= units, sorted(units)
 
 

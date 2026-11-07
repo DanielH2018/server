@@ -22,7 +22,7 @@ broad plane — which applies every role reading the key with no denylist check.
 safe in this rule only while every `_image:` pin in group_vars belongs to denied roles, so the
 census below reads each pin's Jinja readers out of the role trees and asserts they are all
 denied. A pin no role reads fails too: an unmappable pin must not pass as "not eligible".
-`setup/k8s_host_files` defaults are the other: they copy registry's pins, and
+The `registry-gc` component's defaults are the other: they copy registry's pins, and
 `scripts/tests/test_renovate_host_file_copies.py` holds each copy resolving like its source.
 
 A second rule carries the same marker for a denied role's BASE image. The
@@ -76,7 +76,7 @@ FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX = "crowdsec bouncer plugin (manual"
 # The manual paths that are not a denied role's defaults. Fixed here rather than tolerated
 # as "any extra": another path added by hand has to be argued for the way these were.
 ALL_VARS_REL = ALL_VARS.relative_to(REPO).as_posix()
-HOST_FILES_REL = "ansible/roles/setup/k8s_host_files/defaults/main.yml"
+HOST_FILES_REL = "hosts/components/registry-gc/defaults/main.yml"
 _K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 
 # The pin the census must find, so a group_vars with no `_image:` key (renamed, moved back to
@@ -256,30 +256,6 @@ def test_the_landers_denylist_output_is_the_list_this_rule_reads(
 ) -> None:
     assert k8s_autodeploy_counts.main(["--denylist"]) == 0
     assert set(capsys.readouterr().out.strip().split(",")) == _denylist()
-
-
-def _fixture_role(ansible: Path, name: str, stance: str) -> None:
-    (ansible / "roles" / "k8s" / name / "defaults").mkdir(parents=True)
-    (ansible / "roles" / "k8s" / name / "defaults" / "main.yml").write_text(
-        f'k8s_autodeploy: {stance}\nk8s_autodeploy_reason: "because"\n'
-    )
-
-
-def test_the_landers_denylist_output_names_a_role_whose_stance_flips(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    (tmp_path / "roles" / "k8s" / "manifests").mkdir(parents=True)
-    _fixture_role(tmp_path, "denied", "false")
-    _fixture_role(tmp_path, "flips", "true")
-    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 0
-    assert capsys.readouterr().out == "denied\n"
-
-    (tmp_path / "roles" / "k8s" / "flips" / "defaults" / "main.yml").write_text(
-        'k8s_autodeploy: false\nk8s_autodeploy_reason: "because"\n'
-    )
-    assert k8s_autodeploy_counts.print_denylist(tmp_path) == 0
-    assert capsys.readouterr().out == "denied,flips\n"
 
 
 def test_the_landers_denylist_output_is_empty_when_the_derivation_raises(

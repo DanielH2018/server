@@ -277,9 +277,8 @@ def test_the_pin_is_enforced_everywhere_except_the_deploy_pipeline():
 def test_the_hooks_use_the_uv_that_exists_without_the_tooling_tag():
     """There are exactly two correct absolute uv paths, and picking the wrong one fails silently.
 
-    `/usr/local/bin/uv` is a copy the `tooling` tag of `initial_setup` publishes, gated on
-    `dev_tooling_hosts` (daniel-box and daniel-server, `group_vars/all.yml`). It exists on both
-    prod nodes, copied from `/home/ubuntu/.local/bin/uv`. The Claude hooks avoid it anyway. They
+    `/usr/local/bin/uv` is a copy the `tooling` tag of `initial_setup` publishes on daniel-box, and
+    `/usr/bin/uv` is the `uv` component's wrapper. The Claude hooks avoid both. They
     must also work on a host that never ran the `tooling` tag, and `/home/<user>/.local/bin/uv`
     exists wherever uv is installed without depending on a `become: true` copy task having
     run. It is what their sibling hooks already use. The hooks route stderr to /dev/null and
@@ -387,7 +386,7 @@ def test_a_script_run_through_uv_is_clean():
 # of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag
 # name (`python3-venv`, `--python 3.14.6`) do not match.
 _BARE_PYTHON3 = re.compile(r"(?<![\w./@-])python3(?:\.\d+)?(?![\w./:@-])")
-_REGISTRY_GC = _REPO / "ansible/roles/setup/k8s_host_files/templates/registry-gc.sh.j2"
+_REGISTRY_GC = _REPO / "hosts/components/registry-gc/templates/registry-gc.sh.j2"
 _K8S = ROLES / "k8s"
 
 

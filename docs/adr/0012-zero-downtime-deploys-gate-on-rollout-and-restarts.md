@@ -87,8 +87,8 @@ most of the deploy.
 
 The operator approved [ADR-0020](0020-flux-applies-the-cluster-from-a-promoted-artifact.md) and
 this note on 2026-11-06. The decision text above stays as accepted. ADR-0020 overtakes the
-statements below, because every k8s `containers_list` entry is Flux-owned and no Ansible k8s
-play applies one (`ansible/deploy.yml` drops them through `ansible_owned`).
+statements below, because every k8s `containers_list` entry is Flux-owned and
+`ansible/deploy.yml` holds no k8s play.
 
 - *Consequences*, "denylisted from auto-deploy": the `k8s_autodeploy: false` flag only stops
   Renovate from merging an image bump for that role unattended. `promote` and Flux apply every merged
@@ -99,9 +99,10 @@ play applies one (`ansible/deploy.yml` drops them through `ansible_owned`).
   `restart_on` names `config` or `secret`.
 - *Consequences*, "`--detach` returning is not a verified deploy": `--detach` applies to the
   setup plane and the Pi only, because `deploy.sh` refuses a k8s tag with exit 5.
-- *Governs*, the Ansible gate in the shared rollout tasks: those tasks (`drain.yml` and
-  `post_tasks/k8s_stabilise_gate.yml`) gate no k8s deploy. `probe.py health` stays the gate
-  that `land.sh` runs after a promotion.
+- *Governs*, the Ansible gate in the shared rollout tasks: R4.7 deleted those tasks.
+  `probe.py health` stays the gate that `land.sh` runs after a promotion.
+- *Governs*, the Flux gate's path: the soak Job's script is
+  `scripts/renderer/job_files/flux_soak.py`.
 
 ## Governs
 

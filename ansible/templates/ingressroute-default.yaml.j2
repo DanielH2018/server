@@ -1,4 +1,4 @@
-{# Not a macro — a whole manifest. `k8s/manifests` renders this file as `ingressroute.yaml`
+{# Not a macro — a whole manifest. The renderer renders this file as `ingressroute.yaml`
    for every role that resolves `ingressroute.yaml` into its `manifests_files` and ships no
    `templates/ingressroute.yaml.j2` of its own. A role resolves it when its containers_list
    entry carries a `hostname` and its include does not exclude it (`manifests_shared_defaults` in that role's

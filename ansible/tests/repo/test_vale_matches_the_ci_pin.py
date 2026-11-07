@@ -2,17 +2,19 @@
 
 The prek `vale` hook is `language = "system"`: it runs whatever binary sits on PATH. CI installs
 one itself (`.github/workflows/ci.yml`), so a host without it fails the hook at commit time with
-exit 127 while CI stays green. `roles/setup/initial_setup/tasks/host-basics.yml` installs it,
-which makes the version a fact stored in two places.
+exit 127 while CI stays green. `hosts/packages/homelab-tools/package.yml` pins the binary the
+`vale` component puts on PATH, and `roles/setup/initial_setup/tasks/host-basics.yml` installs it
+on a host whose package does not list that component, which makes the version a fact stored in
+three places.
 
-Two places is the failure class `test_ci_tool_pins_do_not_move_backwards.py` records: a Renovate bump that rewrites one copy leaves
-the other behind, and both a green CI and a green local hook are consistent with the two running
+Several places is the failure class `test_ci_tool_pins_do_not_move_backwards.py` records: a Renovate bump that rewrites one copy leaves
+the others behind, and both a green CI and a green local hook are consistent with the copies running
 DIFFERENT rule sets, because a style package's rules change between releases. renovate.json's
-Vale manager names both files so one PR carries both; this guard is what fails when they
+`{{depName}}` group puts every manager's Vale bump in one PR; this guard is what fails when they
 disagree anyway.
 
 Sibling to `test_ci_tool_pins_do_not_move_backwards.py`, which owns the copies WITHIN ci.yml and
-the never-move-backwards rule. This module owns the one copy outside it.
+the never-move-backwards rule. This module owns the copies outside it.
 
 Run: uv run pytest ansible/tests/repo/test_vale_matches_the_ci_pin.py
 """
@@ -22,9 +24,11 @@ import re
 import pytest
 
 from _helpers import REPO
+from lib import yaml_fast
 
 CI_REL = ".github/workflows/ci.yml"
 HOST_REL = "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
+TOOLS_REL = "hosts/packages/homelab-tools/package.yml"
 
 # The CI patterns are `test_ci_tool_pins_do_not_move_backwards.py`'s, deliberately: this guard
 # reads the same two copies that one does, so a rename there that this file did not follow shows
@@ -38,6 +42,12 @@ HOST_PATTERN = r'initial_setup_vale_version:\s*"([\d.]+)"'
 
 def versions_in(text: str, patterns: tuple[str, ...]) -> set[str]:
     return {match for pattern in patterns for match in re.findall(pattern, text)}
+
+
+def tool_versions() -> set[str]:
+    """Each architecture's pin of the `vale` tool, without its `v`."""
+    tools = yaml_fast.safe_load((REPO / TOOLS_REL).read_text())["tools"]
+    return {pin["version"].removeprefix("v") for pin in tools["vale"].values()}
 
 
 def pins_agree(ci: set[str], host: set[str]) -> bool:
@@ -87,4 +97,12 @@ def test_the_host_installs_the_version_ci_installs():
         f"Vale is pinned to {sorted(ci)} in {CI_REL} and {sorted(host)} in {HOST_REL}. The hook "
         f'is `language = "system"`, so CI and a workstation would lint with different rules. '
         f"Bump both in one PR"
+    )
+
+
+def test_the_homelab_tools_pin_is_the_version_ci_installs():
+    ci = versions_in((REPO / CI_REL).read_text(), CI_PATTERNS)
+    assert pins_agree(ci, tool_versions()), (
+        f"Vale is pinned to {sorted(ci)} in {CI_REL} and {sorted(tool_versions())} in "
+        f"{TOOLS_REL}. Bump both in one PR, with each architecture's digest"
     )

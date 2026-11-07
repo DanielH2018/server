@@ -1,7 +1,7 @@
 # Rendered apart from rbac.yaml.j2 because it lives in the observability namespace. The
 # armed shared apply passes `-n homelab`, and kubectl refuses a document placed anywhere else
-# (#3575), so k8s/manifests renders this file into the deferred `headlamp-observability/`
-# directory and tasks/main.yml applies it there. The header of rbac.yaml.j2 explains the
+# (#3575), so the renderer puts this file in the deferred `headlamp-observability/`
+# directory and Flux applies it there. The header of rbac.yaml.j2 explains the
 # second subject on the binding below.
 #
 # The Prometheus plugin (headlamp_k8s_plugins, defaults/main.yml) does not talk to Prometheus

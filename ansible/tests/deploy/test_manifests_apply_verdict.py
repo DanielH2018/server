@@ -1,63 +1,7 @@
-"""Guards on what counts as a changed apply in `roles/k8s/manifests`.
-
-The shared restart fires when the render AND the apply both changed (#3115). The apply's
-verdict is its own `changed_when`, read from `kubectl apply` stdout, and since #4339 it skips
-`secret/` lines. A `stringData` Secret prints `configured` on every client-side apply, so
-counting it made the conjunction fire on rendered bytes alone. The second guard pins the
-assumption that makes skipping them safe.
-"""
+"""Every rendered Secret document comes from a file the renderer treats as secret."""
 
 from lib.k8s_roles import resolved_manifest_files
-from _helpers import REPO as _REPO
-from _helpers import load_tasks as _tasks
-from _helpers import render_expr as _render
 from _k8s_render import rendered_docs
-
-
-_MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
-
-
-def _apply_changed(stdout: str) -> bool:
-    """The apply task's own `changed_when`, rendered against one `kubectl apply` stdout."""
-    (apply,) = [
-        t
-        for t in _tasks(_MANIFESTS)
-        if str(t.get("name", "")).startswith("Apply manifests")
-    ]
-    expr = "{{ " + str(apply["changed_when"]) + " }}"
-    return _render(expr, k8s_dry_run=False, manifests_apply={"stdout": stdout})
-
-
-def test_a_stringdata_secret_alone_does_not_mark_the_apply_changed() -> None:
-    """#4339: client-side apply prints `configured` for a `stringData` Secret on every run.
-
-    Counted, it made the apply `changed` on every authelia deploy, so the render-AND-apply
-    restart fell back to the render alone and a YAML-comment edit restarted the SSO portal.
-    The stdout is shaped like that deploy's: authelia's three Secrets `configured`, and every
-    other object in its directory `unchanged`, as their managedFields showed on 2026-10-10.
-    """
-    authelia = "\n".join(
-        [
-            "persistentvolumeclaim/authelia-config unchanged",
-            "secret/authelia-config configured",
-            "secret/authelia-crowdsec configured",
-            "secret/authelia-redis configured",
-            "service/authelia unchanged",
-            "service/authelia-redis unchanged",
-            "deployment.apps/authelia unchanged",
-            "deployment.apps/authelia-redis unchanged",
-            "middleware.traefik.io/authelia unchanged",
-            "middleware.traefik.io/authelia-forwardauth unchanged",
-            "middleware.traefik.io/authelia-strip-forwarded-target unchanged",
-            "ingressroute.traefik.io/authelia unchanged",
-            "ingressroute.traefik.io/authelia-public unchanged",
-            "networkpolicy.networking.k8s.io/authelia-redis unchanged",
-        ]
-    )
-    assert _apply_changed(authelia) is False
-    # RED-proof on the other side: any non-Secret object that moved still counts.
-    assert _apply_changed(authelia + "\nconfigmap/x configured") is True
-    assert _apply_changed("deployment.apps/authelia created") is True
 
 
 def test_every_secret_document_renders_as_a_secret_file() -> None:

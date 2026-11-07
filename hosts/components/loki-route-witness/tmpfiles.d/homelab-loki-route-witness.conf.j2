@@ -1,0 +1,6 @@
+# The node_exporter textfile directory the witness writes its verdict into. The kubelet creates it
+# root 0755 for node-exporter's hostPath, and the witness runs as {{ sys_user }}. M3's owner contract
+# (docs/target-architecture/monitoring/m3-textfile-timer.md) is root, group {{ sys_user }}, mode 2775:
+# the group lets the witness in, and setgid keeps that group on new files.
+#Type Path                        Mode User Group
+d /var/lib/node-exporter-textfile 2775 root {{ sys_user }} -

@@ -1,8 +1,8 @@
 {#
-  One entry of a role's `k8s_claims`, rendered by k8s/manifests as `claim-<name>.yaml` in the
+  One entry of a role's `k8s_claims`, rendered as `claim-<name>.yaml` in the
   role's own manifest directory. This is the only template that renders a PersistentVolumeClaim
   (#3387). `manifests_claim` is the loop variable that task sets; it is
-  `{name, size, storage_class}`, every key required (k8s/manifests asserts the shape first),
+  `{name, size, storage_class}`, every key required (the renderer asserts the shape first),
   plus two optional keys:
 
     access_modes   defaults to `['ReadWriteOnce']`. media-volume's `media-data` passes

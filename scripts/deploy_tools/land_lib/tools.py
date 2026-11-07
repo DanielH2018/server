@@ -6,29 +6,25 @@ implementations, defined here so the phase modules never import subprocess.
 WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags, deploy_lib/detach_notify and
 land_flux's promote_lib.wait are imported from land.py's checkout, so they are the same release as
 it: a PR adding a flag to one and its call site must pass its own landing, though the primary
-checkout holds the previous release. gitops_tick.sh is run from beside land.py for that reason.
-deploy_tags.py is run as a subprocess with the PRIMARY checkout as cwd, because its question
+checkout holds the previous release. deploy_tags.py is run as a subprocess with the PRIMARY checkout as cwd, because its question
 IS the primary checkout: `blockers` reads `HEAD..origin/master` and `changed` reads
 `<since>...HEAD`. Moving it to this file's checkout would silently re-aim it at the worktree's
 HEAD. WHAT IS NOT
-HERE. Five path-list decisions -- `plane_note`, `self_applied`, `remaining_setup_hosts`,
-`derive`, `quiet_paths` -- are NOT on `Tools`. They are pure functions of a file list, so a
-fake of them would leave no pipeline test running the real derivation. They live on the frozen
-`Classifier` the Landing holds beside `Tools`, so a test takes the real ones and fake boundaries.
-`remaining_setup_hosts` also reads a host through the `read_host` boundary it is handed.
+HERE. Three path-list decisions -- `plane_note`, `derive`, `quiet_paths` -- are NOT on
+`Tools`. They are pure functions of a file list, so a fake of them would leave no pipeline
+test running the real derivation. They live on the frozen `Classifier` the Landing holds
+beside `Tools`, so a test takes the real ones and fake boundaries.
 """
 
 import contextlib
 import os
-import re
 import shutil
 import signal
 import socket
 import subprocess
-import sys
 import tempfile
 import time
-from collections.abc import Callable, Iterable, Generator, Sequence
+from collections.abc import Callable, Iterable, Generator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, NamedTuple, Protocol
@@ -45,23 +41,19 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # The deployer's own modules import each other bare (`import deploy_locks`), so the directory
 # has to be on the path for the names this module reads from it.
 _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
-from deployer_lib.deploy_locks import TREE_LOCK as LOCK
 from gitops_hold import DeployerSnapshot, read_field
 from gitops_markers import MARKERS
 from deploy_tools import await_ci
-from deploy_tools.land_lib import land_reach
 from deploy_tools.land_lib import land_flux, land_tags, land_tested_base
 from deploy_tools.land_lib import verdict_log
-from deploy_tools.land_lib.key_readers import KeyReader, readable_key_readers
 from deploy_tools.deploy_lib.detach_notify import GateResult, gate as health_gate
-from diagnostics.probe_lib.host_reader import read_host
 from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_lib.land_tags import Derivation
 from lib.gh import gh, gh_json
 from lib.json_types import JsonValue
 from lib.git import git
 
-# scripts/deploy_tools -- where land.py, gitops_tick.sh and the imported helpers live.
+# scripts/deploy_tools -- where land.py and the imported helpers live.
 HERE = _Path(__file__).resolve().parents[1]
 # What `uv run` reads to find an existing venv instead of building one where it stands.
 UV_PROJECT_ENVIRONMENT = "UV_PROJECT_ENVIRONMENT"
@@ -70,85 +62,6 @@ DEPLOY_TAGS_ARGV = ("uv", "run", "python", "scripts/deploy_tools/deploy_tags.py"
 # The parent a gate snapshot is made in, and the env var that moves it for a test.
 GATE_TMP_ROOT = "/tmp"
 GATE_TMP_ROOT_ENV = "LAND_GATE_TMPDIR"
-
-
-# The wrapper line that reports a wait ending in a JOIN -- a wait `retry_while_locked`
-# structurally cannot see, because it books only an attempt that exits 75 and this one exits 0.
-# `gitops_tick.sh: waited <M>s` (a tick this landing started) is absent: those seconds are the
-# tick's own work, and the path that makes them long ends at exit 3, which `retry_while_locked`
-# books.
-# `[^;]*` rather than `\d+` for the in-flight seconds: that number is NOT booked, and
-# gitops_tick.sh renders `already s in flight` when its /proc/uptime read comes back empty,
-# which `\d+` would refuse, silently restoring `lock=0` -- the failure this parser exists to
-# end. Bounded at the `;` so it cannot run into the seconds that ARE booked.
-_JOINED = re.compile(
-    r"gitops_tick\.sh: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
-)
-
-
-def in_flock_wait(line: str) -> int | None:
-    """The seconds a landing waited on a tick it joined, or None for any other line.
-
-    The joined-tick line carries two numbers and only the second is booked: the first is how
-    long the tick had run BEFORE this landing arrived, which is time that elapsed outside the
-    landing. Booking it would push `lock` above `tick`, and `lock` is a sub-part of `tick`
-    and `deploy` rather than a fifth phase.
-    """
-    if m := _JOINED.search(line):
-        return int(m[1])
-    return None
-
-
-def stream_stderr(
-    argv: list[str], cwd: Path | None, observe: Callable[[int], None] | None
-) -> int:
-    """Run `argv`, echo its stderr through line by line, report waits; its exit code.
-
-    `cwd` is None to INHERIT this process's working directory, which is not the same as
-    passing any particular path: deploy_tags reads ranges relative to it, so re-aiming it is a
-    silent change of which checkout it reads (this module's own docstring). A caller that does not need a specific cwd must
-    pass None rather than a plausible-looking one.
-
-    stdout stays this process's own handle and stderr becomes a pipe. Both are BLOCKING file
-    handles, which is what Ansible requires; `land.py` clears O_NONBLOCK on the handle this
-    echo writes to.
-
-    Every line is written out exactly as it arrived, so the landing log reads as it did when
-    the child owned the handle. The pipe is read as BYTES and decoded here rather than through
-    `text=True`, which turns on universal-newline translation: ansible writes bare `\r`
-    progress output, and translating it would rewrite the log this echo exists to preserve.
-    """
-    proc = subprocess.Popen(argv, cwd=cwd, stderr=subprocess.PIPE)
-    with proc:
-        for chunk in proc.stderr or ():
-            line = chunk.decode("utf-8", "replace")
-            sys.stderr.write(line)
-            sys.stderr.flush()
-            if observe and (waited := in_flock_wait(line)) is not None:
-                observe(waited)
-    return proc.returncode
-
-
-def run_tick(observe: Callable[[int], None] | None = None, wait: bool = True) -> int:
-    """Run gitops_tick.sh from beside land.py; its exit code.
-
-    `observe` is given the seconds of a wait the wrapper reports on its own stderr.
-    Without one the child simply inherits stdio: the pipe is the more fragile
-    arrangement, so it is taken only when a caller is booking what it reads.
-
-    `wait=False` passes `--no-wait`: the tick is started and this returns as soon as systemd
-    has the request -- or exits `TICK_JOINED` having started none, because a run was already
-    in flight. A landing that waits on a promotion needs the primary checkout to converge
-    eventually, not first, and the tick's own 10-min timer converges it regardless.
-
-    The SCRIPT comes from beside land.py but the working directory is inherited
-    either way. Pinning it to `HERE` would have aimed the tick at this checkout's
-    scripts/deploy_tools, which is the re-aiming this module's docstring warns about.
-    """
-    argv = [str(HERE / "gitops_tick.sh")] + ([] if wait else ["--no-wait"])
-    if observe is None:
-        return subprocess.run(argv, check=False).returncode
-    return stream_stderr(argv, None, observe)
 
 
 def run_deploy_tags(primary: Path, args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -339,35 +252,6 @@ def follow_journal(unit: str, since: float) -> subprocess.Popen[str]:
     )
 
 
-def lock_holder() -> str:
-    """The tree lock's holder as `pid <pid> (etimes, command): <etimes> <command>`, or ''.
-
-    fuser prints the PIDs on stdout and the path on stderr; the lowest PID is the flock
-    parent, its children inherit the descriptor. The pid is folded into this string, which
-    also feeds the `holder="..."` annotation field, because this single return value is the
-    only thing callers have. 200 characters rather than 120: an `ansible-playbook` command
-    line is long enough that the tags -- the part that says which landing holds the lock --
-    would fall off the end.
-    """
-    with contextlib.suppress(
-        OSError, subprocess.SubprocessError, ValueError, StopIteration
-    ):
-        out = subprocess.run(
-            ["fuser", LOCK], capture_output=True, text=True, timeout=5, check=False
-        ).stdout
-        pid = next(tok for tok in out.split() if tok.isdigit())
-        ps = subprocess.run(
-            ["ps", "-o", "etimes=,args=", "-p", pid],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        ).stdout
-        etimes_command = " ".join(ps.split()).replace('"', "")
-        return f"pid {pid} (etimes, command): {etimes_command}"[:200]
-    return ""
-
-
 def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
     """The service tags `containers_list` declares at `ref`, or None when unreadable.
 
@@ -400,9 +284,9 @@ def read_state(deployer_state: Path, name: str) -> str | None:
     a readable hold into None. Any other basename (`receipts.jsonl`) is read raw.
 
     ABSENT AND UNREADABLE ARE DIFFERENT ANSWERS. A missing marker means the deployer is not
-    holding and is not behind, the ordinary case. Collapsing the two made
-    `Landing.tick_state` report `converged` for a state directory it never saw. Callers must
-    fail closed on None; `tick_state` does.
+    holding and is not behind, the ordinary case. Collapsing the two reads a hold the landing
+    never saw as absent. Callers must fail
+    closed on None.
     """
     field_name = _SNAPSHOT_FIELDS.get(name)
     try:
@@ -431,36 +315,6 @@ class PlaneNote(Protocol):
     ) -> str: ...
 
 
-class SelfApplied(Protocol):
-    """`land_tags.self_applied`: whether the tick applies part of this PR itself."""
-
-    def __call__(self, files: list[str], /, *, quiet: Iterable[str] = ()) -> bool: ...
-
-
-class SelfAppliedCommand(Protocol):
-    """`land_tags.self_applied_command`: what applies the tick's own half by hand, or ""."""
-
-    def __call__(self, files: list[str], /, *, quiet: Iterable[str] = ()) -> str: ...
-
-
-class RemainingSetupHosts(Protocol):
-    """`land_reach.remaining_setup_hosts_note`: the hosts a self-applied role still owes."""
-
-    def __call__(
-        self,
-        files: list[str],
-        local_host: str,
-        /,
-        *,
-        quiet: Iterable[str] = (),
-        pr_range: str = "",
-        ref: str = "",
-        repo: Path = ...,
-        key_readers: Sequence[KeyReader] = (),
-        read_host: Callable[[dict, str], dict] | None = None,
-    ) -> str: ...
-
-
 class Derive(Protocol):
     """`land_tags.derive`: a PR's deploy tags. `declared` pins the tag set, for a test."""
 
@@ -483,10 +337,6 @@ class Tools:
     # Above `await_ci:`, whose field name shadows the module for the rest of this class body.
     await_ci: Callable[[str, int], CiVerdict] = await_ci_verdict
     tested_base: Callable[[str], str | None] = land_tested_base.tested_base
-    # What a host holds, which `remaining_setup_hosts` reads only for a host it would name.
-    read_host: Callable[[dict, str], dict] = read_host
-    # `...`, not the argument list: both take an optional `observe` callback, passed by keyword.
-    tick: Callable[..., int] = run_tick
     deploy_tags: Callable[[Path, list[str]], subprocess.CompletedProcess[str]] = (
         run_deploy_tags
     )
@@ -501,12 +351,11 @@ class Tools:
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     read_state: Callable[[Path, str], str | None] = read_state
     flux: land_flux.FluxReads = field(default_factory=land_flux.FluxReads)
-    # The PR's own narrowing, for a landing that never awaits the tick and so has no receipt
-    # to read. It runs git over the PR's range, so it is a boundary; `classify.narrow_plane` calls it.
+    # The PR's own narrowing. It runs git over the PR's range, so it is a boundary;
+    # `classify.narrow_plane` calls it.
     own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
         land_tags.own_narrow_tags
     )
-    lock_holder: Callable[[], str] = lock_holder
     # `handoff.land_through_unit`'s one boundary: starts the lander unit, reads its exit code.
     systemctl: Callable[..., subprocess.CompletedProcess[str]] = systemctl
     # Its other boundary: follows the unit's journal, so its phase lines reach the handoff's log.
@@ -530,17 +379,9 @@ class Classifier:
 
     Every one is a function of a changed-file list and nothing else: no subprocess, no
     network, no clock. Keeping them here is what lets a pipeline test drive the REAL
-    derivation over a fixed path list while every boundary in `Tools` stays fake. The two
-    exceptions are `key_readers`, which reads git, and `remaining_setup_hosts`, which reads
-    a host through the `Tools.read_host` a caller hands it.
+    derivation over a fixed path list while every boundary in `Tools` stays fake.
     """
 
     plane_note: PlaneNote = land_tags.plane_note
-    self_applied: SelfApplied = land_tags.self_applied
-    self_applied_command: SelfAppliedCommand = land_tags.self_applied_command
-    remaining_setup_hosts: RemainingSetupHosts = land_reach.remaining_setup_hosts_note
-    # The setup files reading a key the PR range moved, which `remaining_setup_hosts` adds to
-    # the paths' reach as the tick does (#6968). It reads git, unlike the rest of this class.
-    key_readers: Callable[[str, Path], list[KeyReader]] = readable_key_readers
     derive: Derive = land_tags.derive
     quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths

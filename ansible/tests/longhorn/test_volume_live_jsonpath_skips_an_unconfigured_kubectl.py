@@ -73,18 +73,6 @@ def unconfigured_kubectl(tmp_path) -> Path:
     )
 
 
-def test_the_snapshot_listing_seam_skips_an_unreadable_kubeconfig(
-    unconfigured_kubectl, tmp_path
-) -> None:
-    _assert_skipped(
-        _seam_outcome(
-            "ansible/tests/longhorn/test_volume_snapshot.py::test_the_listing_jsonpath_parses",
-            unconfigured_kubectl,
-            tmp_path,
-        )
-    )
-
-
 def test_the_revert_listing_seam_skips_an_unreadable_kubeconfig(
     unconfigured_kubectl, tmp_path
 ) -> None:

@@ -42,10 +42,8 @@ HOST_INPUTS = (
     # The resolver template the Pi's pi-resolver component renders through `role: common` (H7.25),
     # shared with the k3s role until H7.20a moves it.
     "ansible/roles/setup/common/templates/resolv.conf.j2",
-    # Past the plan's list, found by the audit test: ansible-core reads `ansible.cfg` from the
-    # render's working directory, and `homelab_render.py` imports the other two at load, for
+    # Past the plan's list, found by the audit test: `homelab_render.py` imports it at load, for
     # cluster mode.
-    "ansible.cfg",
     "scripts/secrets_mgmt/cluster_vars_check.py",
     # `host_lib.py` and `longhorn_lib/longhorn_backups.py`, which the filter
     # plugins and `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since

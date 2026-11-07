@@ -1,23 +1,14 @@
 #!/usr/bin/env python3
-"""Shadow-render tooling beside `homelab-render`: the stub file, and the comparison of two renders.
+"""Shadow-render tooling beside `homelab-render`: the stub file, a tree's digest, the round trip.
 
-Target slice R1 compares the renderer with the Ansible manifests role for identical inputs.
-Those inputs are stub values, never secrets, so the comparison needs no age key on either
-side.
+Stub values are never secrets, so a stub render needs no age key.
 
-- `stubs` writes them as an Ansible extra-vars file: every secret key's stub and the
+- `stubs` writes them as an extra-vars file: every secret key's stub and the
   sentinel `homelab_secret_stubs: true`, and nothing else. No template reads a live fact, so
   the file pins none. The file is a function of the git tree alone, so an agent, CI and the
   operator write the same bytes for one commit. It reads only the key NAMES of
   `ansible/vars/secrets.yml`. SOPS leaves them in plaintext, so nothing is decrypted, and no
   value of that file reaches the output.
-- `compare A B` compares two render trees file by file. Either side is an Ansible shadow tree,
-  one directory per service as `manifests_shadow_dir` keeps it, or a C1 tree, with `cluster/`
-  at the top as `homelab_render.py cluster` writes it. It exits 0 only when every expected
-  tag's files match, and it refuses an empty set and a missing named member.
-- `stubcheck ANSIBLE C1` names each file whose Ansible render lacks a stub token that the C1
-  render of the same file holds. It gates the operator's copy of the Ansible tree, and
-  `compare` withholds the content of every file that fails it.
 - `digest DIR` prints one sha256 line per directory under `DIR/cluster/`, then a `total` line.
   R1's determinism tests write the same lines in CI with `renderer_lib/shadow.py`'s
   functions.
@@ -32,19 +23,14 @@ side.
   comes back as the round trip relies on. Its library is `renderer_lib/flux_probe.py`.
 
 `roundtrip` is the one subcommand that renders, through the renderer's own library, and it
-and `fluxprobe` need the pinned flux CLI on `PATH`. `compare`'s report is for posting, so it
-prints no stub or secret value: it names files, and the diff hunks it prints carry every stub
-token as `<stub>`. `stubcheck` names the stub tokens a file lacks, never the file's content.
-The three comparison subcommands live in `renderer_lib/shadow.py`. `docs/homelab-render.md`
-is the operator's page.
+and `fluxprobe` need the pinned flux CLI on `PATH`. `digest` lives in `renderer_lib/shadow.py`.
+`docs/homelab-render.md` is the operator's page.
 
-Exit codes: 0 done, with no difference; 1 a difference, a file lacking a stub, or a failed
-probe case; 2 refused, for an empty set, a missing named member, a tree of the wrong layout,
-an occupied --out, no flux on PATH, or a round trip whose render failed or holds no
-directory that substitutes; 64 a usage error.
+Exit codes: 0 done, with no difference; 1 a round-trip difference or a failed probe case;
+2 refused, for a tree with no `cluster/`, an occupied --out, no flux on PATH, or a round trip
+whose render failed or holds no directory that substitutes; 64 a usage error.
 
 Run: uv run python scripts/renderer/shadow_diff.py stubs --out /tmp/r1-stubs.yml
-     uv run python scripts/renderer/shadow_diff.py compare ANSIBLE_DIR RENDER_DIR
      uv run python scripts/renderer/shadow_diff.py digest RENDER_DIR
      uv run python scripts/renderer/shadow_diff.py fluxprobe --out /tmp/r2-probe
      uv run python scripts/renderer/shadow_diff.py roundtrip --out /tmp/r2-roundtrip \\
@@ -64,16 +50,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import yaml
 
-from renderer.renderer_lib.targets import render_targets
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST
 from lib.cli_help import ArgumentParser
-from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, HOST_VARS
-from lib.exit_codes import SHADOW_DIFFERENT, SHADOW_OK, SHADOW_REFUSED
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS
+from lib.exit_codes import SHADOW_OK, SHADOW_REFUSED
 from renderer.renderer_lib.cluster import (
     RenderError,
     RenderRefused,
-    flux_owned_tags,
     select_tags,
 )
 from renderer.renderer_lib.flux_probe import probe
@@ -88,13 +71,7 @@ from renderer.renderer_lib.roundtrip import (
     render_sides,
     stub_passes,
 )
-from renderer.renderer_lib.shadow import (
-    TreeRefused,
-    compare,
-    digest_lines,
-    load_tree,
-    stubcheck,
-)
+from renderer.renderer_lib.shadow import TreeRefused, digest_lines
 
 # Ansible loads a filter plugin by file path; a script reaches it through this insert.
 if str(FILTER_PLUGINS) not in _sys.path:
@@ -103,8 +80,6 @@ if str(FILTER_PLUGINS) not in _sys.path:
 from secret_stubs import homelab_secret_stub, homelab_stub_keys
 
 SECRETS = ANSIBLE / "vars" / "secrets.yml"
-# The render targets, and those of them that are flux-owned.
-TagSets = tuple[list[str], set[str]]
 SENTINEL = "homelab_secret_stubs"
 
 _HEADER = (
@@ -142,48 +117,12 @@ def stub_file_text(secrets: Path = SECRETS) -> str:
     return _HEADER + body
 
 
-def tag_sets(host: str = K8S_HOST, host_vars: Path = HOST_VARS) -> TagSets:
-    """`host`'s render targets, and those of them whose entry carries `owner: flux` (C4)."""
-    targets = render_targets(host, host_vars=host_vars)
-    return targets, flux_owned_tags(host, host_vars) & set(targets)
-
-
 # -- the CLI ------------------------------------------------------------------------------
 
 
 def _refused(command: str, reason: str) -> int:
     print(f"shadow_diff {command}: refused: {reason}", file=sys.stderr)
     return SHADOW_REFUSED
-
-
-def _compare(first: Path, second: Path, tags: Callable[[], TagSets]) -> int:
-    try:
-        trees = load_tree(first), load_tree(second)
-    except TreeRefused as exc:
-        return _refused("compare", str(exc))
-    targets, flux = tags()
-    report = compare(*trees, targets, flux)
-    print("\n".join(report.lines()))
-    return report.exit_code()
-
-
-def _stubcheck(ansible_dir: Path, c1_dir: Path) -> int:
-    try:
-        ansible, c1 = load_tree(ansible_dir), load_tree(c1_dir)
-    except TreeRefused as exc:
-        return _refused("stubcheck", str(exc))
-    if not ansible.ansible or c1.ansible:
-        return _refused(
-            "stubcheck", "pass an Ansible shadow tree first and a C1 tree second"
-        )
-    paired = ansible.files.keys() & c1.files.keys()
-    if not paired:
-        return _refused("stubcheck", "the two trees share no file")
-    failing = stubcheck(ansible, c1)
-    for key, lacking in failing.items():
-        print(f"{key}: lacks {', '.join(lacking)}")
-    print(f"{len(paired)} paired files, {len(failing)} lacking a stub token")
-    return SHADOW_DIFFERENT if failing else SHADOW_OK
 
 
 def _digest(root: Path) -> int:
@@ -266,7 +205,6 @@ def _fluxprobe(out: Path, red_proof: bool) -> int:
 
 def main(
     argv: list[str] | None = None,
-    tags: Callable[[], TagSets] = tag_sets,
     render: Callable[
         [Path, list[str], list[str], list[StubPass]], Sides
     ] = render_sides,
@@ -275,8 +213,6 @@ def main(
 
     Args:
         argv: The command line, or `sys.argv[1:]` when None.
-        tags: Returns the render targets and the flux-owned ones `compare` reads. The
-            default reads the inventory; a test passes fixture sets.
         render: `roundtrip`'s `render_sides`. A test passes one that reuses a tag's renders
             across its tests, which a fresh process never could.
     """
@@ -286,16 +222,6 @@ def main(
         "stubs", help="write the stub extra-vars file for a shadow render"
     )
     stubs.add_argument("--out", type=Path, required=True, help="the file to write")
-    cmp = commands.add_parser(
-        "compare", help="compare two render trees over the expected tag set"
-    )
-    cmp.add_argument("first", type=Path, help="an Ansible shadow tree or a C1 tree")
-    cmp.add_argument("second", type=Path, help="an Ansible shadow tree or a C1 tree")
-    check = commands.add_parser(
-        "stubcheck", help="name each Ansible file lacking a stub its C1 render holds"
-    )
-    check.add_argument("ansible", type=Path, help="the Ansible shadow tree")
-    check.add_argument("c1", type=Path, help="the C1 tree homelab_render.py wrote")
     dig = commands.add_parser(
         "digest", help="print a sha256 per directory under DIR/cluster/, then a total"
     )
@@ -342,10 +268,6 @@ def main(
     )
     args = parser.parse_args(argv)
 
-    if args.command == "compare":
-        return _compare(args.first, args.second, tags)
-    if args.command == "stubcheck":
-        return _stubcheck(args.ansible, args.c1)
     if args.command == "digest":
         return _digest(args.dir)
     if args.command == "roundtrip":

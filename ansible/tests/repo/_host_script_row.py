@@ -1,22 +1,16 @@
-"""The second host-write census row of target slice D5.1c: no host script writes a cluster
-object.
+"""The host-write census row of target slice D5.1c: no host script writes a cluster object.
 
-It reads the scripts and modules that `_host_write_rows.py`'s host-write tasks install, and the
-`templates/` and `files/` of `roles/setup/k8s_host_files/` once D5.1h creates that role. A
-`kubectl` write there is a second writer beside Flux (contract C4). It sits apart from the
-first row because together they pass the cap for a module. The plan names only the
-`k8s_host_files` files. The derived half covers the same scripts before they move, so the row
-has a subject from the day it lands and loses none of it at the move.
+It reads the `templates/` and `files/` of `roles/setup/k8s_host_files/`. A `kubectl` write there
+is a second writer beside Flux (contract C4).
 """
 
 import ast
 import re
 
-from _helpers import REPO
-from _host_write_rows import _flippable_task_files, _host_write_tasks
 from _row_table import Census, Subject, tracked
 
 _HOST_FILES_ROLE = "ansible/roles/setup/k8s_host_files/"
+_REGISTRY_GC_SCRIPT = "hosts/components/registry-gc/templates/registry-gc.sh.j2"
 
 # ── No host script writes a cluster object ────────────────────────────────────────────
 
@@ -156,40 +150,10 @@ def kubectl_writes(subject: Subject) -> list[str]:
     return _shell_writes(subject.text)
 
 
-def _installed_sources(task_file: str) -> list[str]:
-    """The role files the host-write `copy` and `template` tasks in `task_file` install.
-
-    A `src` resolves against the role's `templates/` or `files/`, or through `{{ role_path }}`,
-    with `{{ item }}` expanded over a literal `loop`. A src left templated after that names no
-    one file and is skipped.
-    """
-    role = "/".join(task_file.split("/")[:4])
-    found = []
-    for task, module, args in _host_write_tasks(Subject(task_file)):
-        if module not in ("copy", "template") or not isinstance(args, dict):
-            continue
-        src = str(args.get("src", "")).replace("{{ role_path }}", role)
-        loop = task.get("loop")
-        items = loop if isinstance(loop, list) and "{{ item }}" in src else [None]
-        for item in items:
-            path = src if item is None else src.replace("{{ item }}", str(item))
-            if "{{" in path or not path:
-                continue
-            if not path.startswith(role):
-                path = (
-                    f"{role}/{'templates' if module == 'template' else 'files'}/{path}"
-                )
-            found.append(path)
-    return found
-
-
 def _host_scripts() -> list[str]:
-    installed = {
-        path for rel in _flippable_task_files() for path in _installed_sources(rel)
-    }
     return sorted(
-        {rel for rel in installed if (REPO / rel).is_file()}
-        | set(tracked(_HOST_FILES_ROLE + "templates/*", _HOST_FILES_ROLE + "files/*"))
+        set(tracked(_HOST_FILES_ROLE + "templates/*", _HOST_FILES_ROLE + "files/*"))
+        | {_REGISTRY_GC_SCRIPT}
     )
 
 
@@ -243,9 +207,9 @@ HOST_SCRIPT_WRITES = Census(
     # move most of them to setup roles, so the floor and the member are the one only D5 moves.
     # pi-peer-backup's forced-command wrapper, the other, moved to `k8s_host_files` at its flip.
     min_matches=1,
-    must_find=frozenset({_HOST_FILES_ROLE + "templates/registry-gc.sh.j2"}),
+    must_find=frozenset({_REGISTRY_GC_SCRIPT}),
     allow={
-        _HOST_FILES_ROLE + "templates/registry-gc.sh.j2": (
+        _REGISTRY_GC_SCRIPT: (
             "The script scales only deploy/ghcr-mirror and deploy/dockerhub-mirror, since D5 "
             "retired the push store's GC phase. Neither mirror template renders `replicas:`, "
             "so Flux's server-side apply does not own `spec.replicas`, the one field the "

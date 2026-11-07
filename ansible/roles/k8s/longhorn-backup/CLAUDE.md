@@ -2,13 +2,13 @@
 
 The Longhorn backup plane: the credential Secrets `longhorn-b2` and `longhorn-r2`, the
 BackupTargets `default` (B2) and `r2`, and the RecurringJobs `daily-backup` and
-`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob (H2.2a). It replaced `tasks/longhorn-backup.yml` in
+`weekly-backup-d0` to `weekly-backup-d6`, and the `trim` RecurringJob (H2.2a). It replaced the target tasks in
 `setup/k3s` (H1.7b). Which target a volume uses is `longhorn-reconcile`'s decision (H1.7a), and
 this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-config` in
 `kube-system`, the Secret k3s reads for its native etcd snapshot uploads to R2 (H2.8a).
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=longhorn-backup` with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
@@ -17,8 +17,7 @@ this role only declares the targets. It also renders `k3s-etcd-snapshot-s3-confi
 
 - **Flux applies it, not Ansible** (H1.7b). Its `containers_list` entry carries `owner: flux` and
   `depends_on: [longhorn]`, because `longhorn`'s vendored file defines the BackupTarget and
-  RecurringJob CRDs. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path runs
-  it. While `longhorn` is not Ready, this tag applies nothing, so a disarm PR promotes and does
+  RecurringJob CRDs. While `longhorn` is not Ready, this tag applies nothing, so a disarm PR promotes and does
   not reach the cluster. The BackupTarget break-glass below is the lever for that state.
 - **The tag is forward-only and never pruned.** `flux_forward_only: true` makes a failed
   revision hold and leave `prod`, because a reset to a revision before a disarm would re-arm B2.

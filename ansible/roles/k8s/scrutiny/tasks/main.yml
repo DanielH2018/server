@@ -1,6 +1,0 @@
----
-# Both claims are `k8s_claims` in defaults/main.yml, which k8s/manifests renders and applies
-# ahead of the workload (#3387).
-- name: Deploy scrutiny to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests

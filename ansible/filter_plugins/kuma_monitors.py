@@ -8,7 +8,7 @@ plugin once D6 has removed the narrowing, which refuses a deleted plugin.
 `push_token` is not 32 letters and digits (#3985).
 
 `FilterModule` registers each filter through `_as_filter`, so a refusal reaches the operator as
-`AnsibleFilterError("<filter>: ...")` (#4505).
+`FilterError("<filter>: ...")` (#4505).
 """
 
 import re
