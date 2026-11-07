@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Secret rotation registry: audit + staggered rotation for ansible/vars/secrets.yml.
+"""Secret rotation registry: audit + staggered due dates for ansible/vars/secrets.yml.
 
-Five subcommands:
+Four subcommands:
   consumers — list every role that references one secret, measured from the tree, with the
            exact commands that make a rotation take effect. Answers the question a rotation
            poses and `audit` does not: who is still holding the old value? Setup-plane roles
-           are called out separately because `deploy.sh` cannot reach them.
+           and host packages are called out separately, each with its own apply command.
   sync   — reconcile the registry (ansible/secret_rotation.yml) with the live secret
            names. New secrets are classified into a tier and given a STAGGERED seed
            date so their rotations never all fall due on the same day. Removed secrets
@@ -15,17 +15,10 @@ Five subcommands:
            come from the registry, advanced to the date git shows the secret's ciphertext
            last changed — an app-side rotation that `sync` cannot date is otherwise
            invisible and ages into a false OVERDUE. Nothing is written: the registry is
-           adjusted in memory only, so git stays the source of truth. With
-           --verdict, exit 1 when the audit reads down, which the daily audit wrapper turns
-           into its textfile verdict.
-  rotate — rotate `auto`-tier secrets coming due (locally-generated push tokens — no
-           external coupling). Dry-run by default; --commit writes new values via
-           `sops set` and records the new date. What is due is decided the way `audit`
-           decides it — registry dates advanced to git's — on a copy of the registry,
-           so a hand-rotated token is not rotated twice and only the secrets this run
-           rotates get a new date. The unattended path picks up anything due within
-           ROTATE_LEAD_DAYS so a token rotates BEFORE it goes overdue (see the constant's
-           comment), and it skips every key a per-host SOPS file carries.
+           adjusted in memory only, so git stays the source of truth. A row whose tier
+           has no cadence (an unknown or retired tier) reads down: nothing would ever audit
+           it. With --verdict, exit 1 when the audit reads down, which the daily audit
+           wrapper turns into its textfile verdict; --check fails on drift and unknown tiers.
   record — set one row's `last_rotated` to a date only the operator knows, and save. The
            carry-over after a SOPS rename (`git` cannot date a renamed key past its rename)
            and the date of an app-side rotation nothing in the tree performed. `sync` never
@@ -40,10 +33,9 @@ changed) and `rotation_tools` (every process boundary, injectable).
 
 Secret NAMES are read straight from the encrypted secrets.yml — SOPS encrypts values but
 leaves keys in plaintext — so `sync` and `audit` run without an age key and are safe in CI.
-`rotate --commit` needs the key (it shells out to `sops set`).
+No subcommand writes a secret's value: a rotation is the runbook in docs/secret-rotation.md.
 
 Tiers (and default rotation cadence):
-  auto     180d  locally-generated, no external coupling — this tool can rotate it
   assisted 365d  app-issued / coupled (app password, API key, OIDC secret) — needs an
                  app-side step; the audit reminds, rotation is a documented runbook
   external 365d  provider-managed (Cloudflare/Discord/Mullvad/SMTP/LLM keys) — mint in
@@ -54,11 +46,7 @@ Tiers (and default rotation cadence):
 """
 
 import argparse
-import copy
 import datetime as dt
-import secrets as pysecrets
-import subprocess
-from collections.abc import Callable, Iterable, Mapping
 import sys
 from pathlib import Path
 
@@ -68,8 +56,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import SECRET_ROTATION_BAD_ARGS
-from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
-from secrets_mgmt.consumers import flux_applies_line
+from secrets_mgmt.consumers import consumer_commands, tree_consumers
 from secrets_mgmt.git_dates import (
     RENAMED_FROM,
     advance_last_rotated,
@@ -77,10 +64,9 @@ from secrets_mgmt.git_dates import (
 )
 from secrets_mgmt.secrets_lib.secret_registry import (
     audit,
-    is_record,
-    record_refusal,
     registry_drift,
     sync,
+    unknown_tiers,
 )
 from secrets_mgmt.rotation_tools import RotationTools
 
@@ -89,22 +75,12 @@ from secrets_mgmt.rotation_tools import RotationTools
 # path for nothing) to build the published tier table. `rotation_tools.DEFAULT_TIER_DAYS`
 # holds the same table for `secret_registry.py`, which may not import this file.
 TIER_DAYS = {
-    "auto": 180,
     "assisted": 365,
     "external": 365,
     "external-90d": 90,
     "pinned": 730,
     "ignore": None,
 }
-
-# The unattended rotate timer is WEEKLY (Sunday 09:00, homelab-secret-rotation.timer). Rotating only
-# already-overdue tokens would leave each one overdue up to 6 days first — with the daily
-# 08:30 audit paging SecretRotationAuditFailed the whole time for a rotation
-# that was always going to happen anyway. Anything due within one cron interval (+1 day
-# margin) rotates the run BEFORE its due date instead, so a working cron never lets an
-# auto token go overdue — an auto-tier OVERDUE in the audit genuinely means the weekly
-# cron is broken, not that it hasn't come around yet.
-ROTATE_LEAD_DAYS = 8
 
 
 def cmd_consumers(args) -> int:
@@ -128,7 +104,7 @@ def cmd_consumers(args) -> int:
         note = {
             "deploy": "",
             "host": "   [host package — operator-only host_secrets.py sync]",
-        }.get(plane, "   [setup plane — deploy.sh cannot reach it]")
+        }.get(plane, "   [setup plane — its playbook applies it]")
         print("  %-22s %s%s" % (role, plane, note))
     print("\nTo make a rotation take effect:")
     for command in consumer_commands(args.name):
@@ -149,13 +125,14 @@ def cmd_sync(args, tools: RotationTools) -> int:
     return 0
 
 
-def audit_summary(res: dict, missing: list, stale: list) -> str:
+def audit_summary(
+    res: dict, missing: list, stale: list, unknown: list | None = None
+) -> str:
     """The one-line status the audit prints last, which the daily wrapper's journal keeps.
 
-    NAMES the overdue secrets (most-overdue first, capped) — a bare count reads identically whether
-    a genuine cron break stranded a rotatable token or one of the consumer-less known-manual auto
-    tokens (secret_rotation/pi_sd_health/pi_recovery push tokens, which the weekly cron deliberately
-    skips) merely came due, and the operator would have to SSH in to tell the two apart.
+    NAMES the overdue secrets (most-overdue first, capped), so the operator can tell which
+    credential came due without SSHing in to read the full report. `unknown` is the rows whose
+    tier has no cadence, which `audit` cannot date at all.
     """
     n_over = len(res["overdue"])
     parts = ["%d %s" % (c, t) for t, c in sorted(res["by_tier"].items())]
@@ -174,13 +151,19 @@ def audit_summary(res: dict, missing: list, stale: list) -> str:
             len(stale),
             "y" if len(stale) == 1 else "ies",
         )
+    if unknown:
+        summary += "; %d row(s) with no tier cadence: %s" % (
+            len(unknown),
+            ", ".join(unknown),
+        )
     return summary
 
 
 def cmd_audit(args, tools: RotationTools) -> int:
     """Print each secret's rotation status and its summary line, and gate on drift.
 
-    Exits 1 when `--check` is given and the registry is out of sync with secrets.yml, and 1
+    Exits 1 when `--check` is given and the registry is out of sync with secrets.yml or a row
+    carries a tier `tier_days` has no entry for (`unknown_tiers`), and 1
     when `--verdict` is given and the audit reads down — the daily audit runs under a systemd
     timer whose `Restart=on-failure` reruns it every 30 min until it exits 0
     (homelab-secret-rotation-audit.service), and its wrapper writes the exit code as
@@ -208,7 +191,13 @@ def cmd_audit(args, tools: RotationTools) -> int:
     for name, tier, d, days_left in res["all"]:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
-    summary = audit_summary(res, missing, stale)
+    unknown = unknown_tiers(reg, tools.tier_days)
+    for name in unknown:
+        print(
+            "  UNKNOWN %-40s %-9s no cadence: nothing audits this tier"
+            % (name, reg["entries"][name].get("tier"))
+        )
+    summary = audit_summary(res, missing, stale, unknown)
     # An externally-detected fault the caller wants folded in, such as a revoked `gh` token.
     # ADDITIVE, deliberately: the fault says nothing about the secrets, so forcing DOWN while
     # still enumerating the audit keeps overdue reporting alive until a human clears it.
@@ -219,220 +208,25 @@ def cmd_audit(args, tools: RotationTools) -> int:
     # `stale` too (a registry row for a since-removed secret), so the daily verdict and the CI
     # `--check` gate below agree on registry drift — otherwise a `stale`-only drift fails CI
     # while the daily verdict stays up.
-    ok = n_over == 0 and not missing and not stale and not extra_down
+    ok = n_over == 0 and not missing and not stale and not unknown and not extra_down
     print("audit: verdict=%s %s" % ("up" if ok else "down", summary))
     if getattr(args, "verdict", False) and not ok:
         return 1
-    # --check: a CI/PR gate that the registry is in sync with secrets.yml. Fails ONLY on drift,
-    # NOT on overdue (a time-based runtime state the daily verdict owns — blocking an unrelated
-    # commit on a due-for-rotation secret would be wrong). Read-only (no decrypt), CI-safe.
+    # --check: a CI/PR gate that the registry is in sync with secrets.yml and every tier has a
+    # cadence. NOT on overdue (a time-based runtime state the daily verdict owns — blocking an
+    # unrelated commit on a due-for-rotation secret would be wrong). Read-only (no decrypt).
     if getattr(args, "check", False) and (missing or stale):
         error(
             "registry out of sync with secrets.yml — run "
             "`uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit."
         )
         return 1
-    return 0
-
-
-def unattended_due(rows: list, rotate_all: bool = False) -> list:
-    """Auto-tier rows the unattended weekly cron should rotate.
-
-    Those due within ROTATE_LEAD_DAYS, or everything auto-tier when `rotate_all`. Rows are
-    audit() tuples (name, tier, due_date, days_left).
-    """
-    return [
-        r for r in rows if r[1] == "auto" and (rotate_all or r[3] < ROTATE_LEAD_DAYS)
-    ]
-
-
-REVERT_PATHS = ["ansible/vars/secrets.yml", "ansible/secret_rotation.yml"]
-# What `cluster_vars.py write` may change, as `secret-rotate.sh.j2`'s TRACKED names them.
-CLUSTER_PATHS = [
-    "ansible/vars/cluster-vars.sops.env",
-    "ansible/vars/cluster-vars.source",
-    "ansible/vars/cluster-manifests",
-]
-
-
-def sync_cluster_files(rotated: list[str], tools: RotationTools) -> list[str] | None:
-    """Rewrite the cluster files for the rotated keys a cluster render reads; None on failure.
-
-    Returns the keys it rewrote the files for, [] for a no-op: the cluster file is absent (the
-    tree before D3.2c) or no rotated key is cluster-referenced. Otherwise it runs `write` and
-    then `check --no-render --base HEAD`, both in process, and fails when either does.
-    """
-    tree = tools.cluster_tree()
-    if not rotated or not tree.cluster_file.is_file():
-        return []
-    # DECIDED: the render decides which rotated keys the cluster reads, not `.source`, so a
-    # key a template newly references is written too. The cost: once the cluster file exists,
-    # a broken k8s template render stops every rotation, host-only keys included, and it
-    # stops before the deploy. Any failure counts, not only `RenderError`. The render is in
-    # placeholder mode and holds no value, so its message is safe to print.
-    try:
-        expected = tools.cluster_expected()
-    except Exception as exc:
-        error("cluster render failed (%s): %s" % (type(exc).__name__, exc))
-        return None
-    # `expected.keys` leaves out the keys the SOPS manifests carry, so both sets count.
-    referenced = expected.keys.union(*(entry.keys for entry in expected.manifests))
-    hit = sorted(set(rotated) & referenced)
-    if not hit:
-        return []
-    print("  cluster files: rewriting for %s" % ", ".join(hit))
-    if tools.cluster_write(tree, expected) != 0:
-        return None
-    return hit if tools.cluster_check(tree) == 0 else None
-
-
-def unapplied_tags(
-    names: Iterable[str],
-    owners: Mapping[str, str],
-    tags_of: Callable[[str], tuple[str, ...]] = consumer_tags,
-) -> list[str]:
-    """The consumer tags of `names` that `owners` leaves out, sorted: nothing applies these."""
-    return sorted({tag for name in names for tag in tags_of(name)} - owners.keys())
-
-
-def cmd_rotate(args, tools: RotationTools) -> int:
-    """Rotate `args.name`, or every coming-due auto-tier secret.
-
-    Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
-    the registry dates advanced to git's (skipped with `--no-derive`). Flux applies an
-    `owner: flux` consumer once the commit lands, so this runs no deploy and names each one.
-
-    Exits 64 when `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times
-    out partway through the batch or the cluster files fail to follow it (`sync_cluster_files`),
-    1 before anything is written when a consumer carries no `owner: flux`, because nothing
-    would apply its new value, and 0 otherwise.
-    """
-    reg = tools.load_registry()
-    now = tools.today()
-    # Decide what is due from the same dates `audit` reads: the registry, advanced to the
-    # date git shows each ciphertext last changed. A token rotated by hand and committed
-    # without its `last_rotated` moved would otherwise read as due here and be rotated
-    # again. The advance lands on a COPY: `save_registry` below writes `reg`, and
-    # the only dates that may move on disk are those of the secrets this run rotates —
-    # git stays the source of truth for the rest, exactly as it does for `audit`.
-    selection = copy.deepcopy(reg)
-    if not args.no_derive:
-        for name, old, new in advance_last_rotated(
-            selection, derived_rotation_dates(tools)
-        ):
-            print("  rotated in git, date advanced: %-30s %s -> %s" % (name, old, new))
-    res = audit(selection, now, tools.tier_days)
-    if args.name:
-        if is_record(reg, args.name):
-            error(record_refusal(args.name))
-            return SECRET_ROTATION_BAD_ARGS
-        targets = [r for r in res["all"] if r[0] == args.name]
-        if targets and targets[0][1] != "auto":
-            error("%s is tier '%s', not auto-rotatable" % (args.name, targets[0][1]))
-            return SECRET_ROTATION_BAD_ARGS
-    else:
-        # Unattended path: auto-tier, coming due (unless --all), AND with a single-redeploy
-        # consumer. Tokens with no consumer_tag (cross-host / self-referential) are reported
-        # but skipped, as is a key a per-host SOPS file carries (its `sync` is operator-only).
-        due_auto = unattended_due(res["all"], args.all)
-        held = tools.host_file_keys()
-        # A record key tiered `auto` by a registry edit would be `sops set` here with no refusal,
-        # so the batch filters it the same way `--name` does.
-        targets = [
-            r
-            for r in due_auto
-            if consumer_tags(r[0]) and not is_record(reg, r[0]) and r[0] not in held
-        ]
-        for name, _t, _d, _dl in due_auto:
-            if is_record(reg, name):
-                print("  skip (record: the app holds the source) %s" % name)
-            elif name in held:
-                print("  skip (manual: a host file carries it) %s" % name)
-            elif not consumer_tags(name):
-                print("  skip (manual: cross-host consumer) %s" % name)
-    if not targets:
-        print(
-            "rotate: nothing to rotate in the auto tier"
-            + ("" if args.all else " today")
-        )
-        return 0
-
-    owners = tools.owners()
-    unapplied = unapplied_tags([target[0] for target in targets], owners)
-    if unapplied:
+    if getattr(args, "check", False) and unknown:
         error(
-            "NO DEPLOY PATH for tags %s — Flux applies only a consumer carrying owner: flux, "
-            "and no playbook applies any other. Nothing was written."
-            % ",".join(unapplied)
+            "registry rows %s carry a tier with no cadence; the tiers are %s"
+            % (", ".join(unknown), ", ".join(tools.tier_days))
         )
         return 1
-
-    tags = set()
-    written: list[str] = []
-    for name, _tier, _d, days_left in targets:
-        if not args.commit:
-            print(
-                "  DRY-RUN would rotate %-40s -> %s (due %+d d)"
-                % (name, ",".join(consumer_tags(name)) or "?", days_left)
-            )
-            continue
-        new = pysecrets.token_hex(16)  # 32 hex chars — the format push tokens require
-        try:
-            tools.sops_set(name, new)
-        except (
-            subprocess.CalledProcessError,
-            OSError,
-            subprocess.TimeoutExpired,
-        ) as exc:
-            # Each `sops set` writes secrets.yml on its own, so a failure partway leaves the
-            # file holding NEW values for the names already done while their dates were only
-            # updated in memory. Save the registry first: the two files then agree about what
-            # moved, and secret-rotate.sh reverts both together. Do NOT deploy — the tokens
-            # that landed are about to be reverted, so deploying them would leave the cluster
-            # on values nothing records. A TimeoutExpired arrives here too: a hang is the
-            # same half-state as a crash.
-            # `exc` is safe to print: the argv `sops_set` builds carries the secret's NAME and
-            # never its value, which is what
-            # `test_rotate_commit_sends_new_token_on_stdin_not_argv` pins. TimeoutExpired
-            # renders that same argv, and its `.stdout`/`.stderr` are None here because
-            # `sops_set` captures neither.
-            if written:
-                tools.save_registry(reg)
-            error(
-                "ROTATION FAILED writing %s (%s). Already written to secrets.yml: %s. "
-                "Consumers were NOT deployed — revert the working tree (`git checkout -- "
-                "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
-                % (name, exc, ", ".join(written) or "nothing")
-            )
-            return 3
-        reg["entries"][name]["last_rotated"] = now.isoformat()
-        written.append(name)
-        tags.update(consumer_tags(name))
-        print("  rotated %s" % name)
-    if not args.commit:
-        return 0
-
-    tools.save_registry(reg)
-    # The cron commits with --no-verify, so this `check` is that path's only guard on the
-    # cluster files.
-    synced = sync_cluster_files(written, tools)
-    if synced is None:
-        error(
-            "CLUSTER FILES NOT UPDATED for %s. Consumers were NOT deployed — revert the "
-            "working tree (`git checkout -- %s`) or finish by hand."
-            % (", ".join(written), " ".join(REVERT_PATHS + CLUSTER_PATHS))
-        )
-        return 3
-    for tag in sorted(tags):
-        print(flux_applies_line(tag))
-    # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
-    files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
-    files = ", ".join(files[:-1]) + " and " + files[-1]
-    print(
-        "\nNext: commit "
-        + files
-        + ", then land the commit: `promote` and Flux apply it"
-    )
     return 0
 
 
@@ -520,19 +314,6 @@ def build_parser() -> ArgumentParser:
         help="trust last_rotated as recorded; skip reading rotation dates out of git",
     )
     pa.set_defaults(func=cmd_audit)
-    pr = sub.add_parser("rotate")
-    pr.add_argument(
-        "--commit", action="store_true", help="actually write (default: dry-run)"
-    )
-    pr.add_argument("--all", action="store_true", help="all auto secrets, not only due")
-    pr.add_argument("--name", help="rotate one named auto secret")
-    pr.add_argument(
-        "--no-derive",
-        action="store_true",
-        help="trust last_rotated as recorded when picking what is due; skip reading "
-        "rotation dates out of git",
-    )
-    pr.set_defaults(func=cmd_rotate)
     prec = sub.add_parser(
         "record",
         help="set one row's last_rotated to a date only the operator knows (a rename's "

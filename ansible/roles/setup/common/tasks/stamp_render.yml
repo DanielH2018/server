@@ -11,8 +11,8 @@
 # the truth the check exists to report.
 #
 # WHY REPO-RELATIVE PATHS. Joining each bare filename onto a hardcoded `roles/setup/k3s/templates`
-# makes the check structurally incapable of seeing any other role's artifacts, such as
-# secret-rotate.sh, a weekly state-changing cron that commits and pushes. Each entry carries its
+# makes the check structurally incapable of seeing any other role's artifacts, such as a
+# state-changing cron that commits and pushes. Each entry carries its
 # own path from the repo root, so a role stamps its own templates and the check needs to know
 # about none of them.
 #

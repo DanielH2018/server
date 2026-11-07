@@ -219,11 +219,10 @@ RUNBOOK_GATES_BAD_ARGS = USAGE_ERROR
 RUNBOOK_GATES_UNAVAILABLE = 69
 
 # -- scripts/secrets_mgmt/secret_rotation.py --------------------------------------------
-# A refused argument (a record-tier name for `rotate`, a future date for `record`, a key the
-# registry lacks) was 2 until #4443, and is usage.
+# A refused argument (a future date for `record`, a key the registry lacks) was 2 until #4443,
+# and is usage.
 SECRET_ROTATION_OK = OK
 SECRET_ROTATION_FAILED = FAILED
-SECRET_ROTATION_SOPS_FAILED = 3
 SECRET_ROTATION_BAD_ARGS = USAGE_ERROR
 
 # -- scripts/backup/b2_drain.py ---------------------------------------------------------
@@ -683,13 +682,8 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             SECRET_ROTATION_FAILED,
             "SECRET_ROTATION_FAILED",
-            "the registry is out of sync under --check, --push pushed down, or rotate found a "
-            "consumer with no owner: flux, before writing anything.",
-        ),
-        _c(
-            SECRET_ROTATION_SOPS_FAILED,
-            "SECRET_ROTATION_SOPS_FAILED",
-            "a `sops set` failed or timed out partway through the rotate batch.",
+            "the registry is out of sync or a row carries a tier with no cadence under "
+            "--check, or the audit reads down under --verdict.",
         ),
         _c(
             SECRET_ROTATION_BAD_ARGS,

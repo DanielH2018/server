@@ -8,16 +8,9 @@ as `__main__`, a second copy of the module under a second name. **This module na
 other module in the package can import. The one fact both files hold is the tier table, and
 each spells the literal out; `DEFAULT_TIER_DAYS` below says why, and which test holds the two
 equal.
-
-WHY THE REAL IMPLEMENTATIONS TAKE A `run` KEYWORD. `sops_set` builds an argv whose exact
-shape is the security property: a freshly minted token travels on stdin,
-never in `/proc/<pid>/cmdline`. A test that replaces the whole field with a fake stops
-checking that argv. Injecting the runner instead lets a test drive the REAL builder and keep
-asserting what it hands the process.
 """
 
 import datetime as dt
-import glob
 import os
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
@@ -35,16 +28,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from lib import yaml_fast
 from lib.git import git
-from lib.repo_paths import REPO as _REPO_PATH
-from secrets_mgmt.cluster_vars import fleet_expected
-from secrets_mgmt.cluster_vars import main as cluster_vars_main
-from secrets_mgmt.cluster_vars import write as cluster_vars_write
-from secrets_mgmt.cluster_vars_check import Expected, Tree
-from secrets_mgmt.sops_io import REPO, SECRETS_FILE, sops_set
+from secrets_mgmt.sops_io import REPO, SECRETS_FILE
 
 REGISTRY_FILE = os.path.join(REPO, "ansible", "secret_rotation.yml")
-# The per-host SOPS files (slice H4), one `<host>.sops.yaml` each.
-HOSTS_DIR = os.path.join(REPO, "ansible", "vars", "hosts")
 
 
 def run_git(*args: str) -> str:
@@ -69,19 +55,6 @@ def sops_names(path: str = SECRETS_FILE) -> list[str]:
     return sorted(k for k in data if k != "sops")
 
 
-def host_file_keys(directory: str = HOSTS_DIR) -> frozenset[str]:
-    """Every key a per-host SOPS file carries, by name. Nothing is decrypted.
-
-    The unattended rotation skips these: `host_secrets.py sync`, which is operator-only,
-    must copy a rotated value into the host file in the same commit.
-    """
-    return frozenset(
-        key
-        for path in sorted(glob.glob(os.path.join(directory, "*.sops.yaml")))
-        for key in sops_names(path)
-    )
-
-
 def load_registry(path: str = REGISTRY_FILE) -> dict:
     """The rotation registry as parsed YAML; an empty skeleton when the file is absent."""
     if not os.path.exists(path):
@@ -95,14 +68,14 @@ _HEADER = """\
 # Plaintext on purpose (names + dates + tiers only, never values); lives outside vars/ so
 # SOPS does not encrypt it. Run `secret_rotation.py sync` after adding/removing a secret.
 # You MAY edit a `tier` to override classification (sync preserves it); don't hand-edit
-# `last_rotated` — `rotate` updates it, `record` sets it to a date only the operator knows
-# (a rename's carry-over, an app-side rotation), and `audit` reads the real date out of the
-# git history of secrets.yml when a value changed later than this file records.
-# Tiers: auto|assisted|external|pinned|ignore.
+# `last_rotated` — `record` sets it to a date only the operator knows (a rename's
+# carry-over, an app-side rotation), and `audit` reads the real date out of the git history
+# of secrets.yml when a value changed later than this file records.
+# Tiers: assisted|external|external-90d|pinned|ignore. `audit --check` refuses any other.
 # `source: record` marks a key whose value SOPS only RECORDS — the app holds the credential and
 # nothing in the tree writes it there, so `sops set` alone rotates nothing and the deploy reads
-# green either way. `rotate` refuses these; change the credential in the app first, then record
-# it here. docs/secret-rotation.md names each key's mechanism. sync preserves the field.
+# green either way. Change the credential in the app first, then record it here.
+# docs/secret-rotation.md names each key's mechanism. sync preserves the field.
 """
 
 
@@ -114,37 +87,6 @@ def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
         fh.write(body)
 
 
-def tree_owners() -> dict[str, str]:
-    """Each k8s deploy tag whose `containers_list` entry carries `owner`, to that value.
-
-    No Ansible path may deploy such a tag: Flux applies it.
-    """
-    from lib.k8s_roles import tag_owners
-
-    return tag_owners()
-
-
-# The cluster files' boundaries (slice D3).
-def cluster_tree() -> Tree:
-    """The live tree's cluster file paths."""
-    return Tree(_REPO_PATH)
-
-
-def cluster_expected() -> Expected:
-    """The placeholder render's `Expected`. Raises `RenderError` when a template fails."""
-    return fleet_expected()
-
-
-def cluster_write(tree: Tree, expected: Expected) -> int:
-    """`cluster_vars.py write`, in process; returns its exit code."""
-    return cluster_vars_write(tree, expected)
-
-
-def cluster_check(tree: Tree) -> int:
-    """`cluster_vars.py check --no-render --base HEAD`, in process; returns its exit code."""
-    return cluster_vars_main(["check", "--no-render", "--base", "HEAD"], tree)
-
-
 # The rotation cadence per tier, and the default `secret_registry.py` seeds, syncs and audits with.
 # `secret_rotation.py` assigns the same table AS A LITERAL, because
 # `scripts/docs/gen_doc_fragments.py` reads it out of THAT file with `ast.literal_eval` and a
@@ -153,7 +95,6 @@ def cluster_check(tree: Tree) -> int:
 # than a dict, because a dataclass rejects a mutable default and this object is frozen.
 DEFAULT_TIER_DAYS = MappingProxyType(
     {
-        "auto": 180,
         "assisted": 365,
         "external": 365,
         "external-90d": 90,
@@ -172,11 +113,4 @@ class RotationTools:
     load_registry: Callable[..., dict] = load_registry
     save_registry: Callable[..., None] = save_registry
     sops_names: Callable[..., list[str]] = sops_names
-    host_file_keys: Callable[[], frozenset[str]] = host_file_keys
-    sops_set: Callable[[str, str], None] = sops_set
-    owners: Callable[[], Mapping[str, str]] = tree_owners
-    cluster_tree: Callable[[], Tree] = cluster_tree
-    cluster_expected: Callable[[], Expected] = cluster_expected
-    cluster_write: Callable[[Tree, Expected], int] = cluster_write
-    cluster_check: Callable[[Tree], int] = cluster_check
     tier_days: Mapping[str, int | None] = DEFAULT_TIER_DAYS

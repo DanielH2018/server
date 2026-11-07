@@ -10,19 +10,15 @@ Run: uv run pytest scripts/secrets_mgmt/tests/test_host_secrets.py
 
 import json
 import subprocess
-from dataclasses import replace
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 import yaml
 
-from _rotation_fakes import Fakes, build_tools, process_calls
 from lib import yaml_fast
 from lib.git_testing import commit, git, init_repo
 from lib.repo_paths import REPO
 from secrets_mgmt import host_secrets as hs
-from secrets_mgmt import secret_rotation as sr
 from secrets_mgmt.git_dates import (
     ciphertext_rotation_commits,
     ciphertext_rotation_dates,
@@ -141,7 +137,9 @@ def test_a_sync_after_the_rotation_clears_the_flag(repo):
 def test_a_lagging_registry_date_does_not_flag_a_synced_copy(repo):
     """The check reads git, not `last_rotated`, so a registry behind git changes nothing."""
     seed(repo)
-    registry = {"entries": {"tok_a": {"tier": "auto", "last_rotated": "2025-01-01"}}}
+    registry = {
+        "entries": {"tok_a": {"tier": "assisted", "last_rotated": "2025-01-01"}}
+    }
     commit(
         repo, "registry", **{"ansible/secret_rotation.yml": yaml.safe_dump(registry)}
     )
@@ -322,29 +320,3 @@ def test_sync_refuses_a_host_whose_tree_names_no_key_and_a_non_plain_name(tree, 
     assert hs.sync(tree, "bare", stub_sops([])) == 1
     assert hs.sync(tree, "../etc", stub_sops([])) == 1
     assert not (tree / "ansible").exists()
-
-
-# ── the unattended rotation skips every key a host file carries ─────────────
-def _rotate_args():
-    return SimpleNamespace(name=None, all=True, commit=True, no_derive=False)
-
-
-NAME = "monitor_bridge_test_token"  # a name consumer_tags() resolves, so only host_keys differs
-
-
-def _fixture(**overrides) -> Fakes:
-    registry = {"entries": {NAME: {"tier": "auto", "last_rotated": "2026-01-01"}}}
-    return replace(Fakes(registry=registry), **overrides)
-
-
-def test_unattended_rotate_skips_a_key_a_host_file_carries_and_says_so(capsys):
-    tools, recorded = build_tools(_fixture(host_keys=frozenset({NAME})))
-    assert sr.cmd_rotate(_rotate_args(), tools) == 0
-    assert process_calls(recorded) == [], "a host-file key must never reach `sops set`"
-    assert "skip (manual: a host file carries it) %s" % NAME in capsys.readouterr().out
-
-
-def test_unattended_rotate_still_rotates_the_same_key_when_no_host_file_carries_it():
-    tools, recorded = build_tools(_fixture())
-    assert sr.cmd_rotate(_rotate_args(), tools) == 0
-    assert len(process_calls(recorded)) == 1
