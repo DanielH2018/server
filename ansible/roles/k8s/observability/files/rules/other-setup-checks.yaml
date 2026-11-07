@@ -230,9 +230,10 @@ groups:
           description: >-
             No etcd-restore-drill-vm verdict newer than 35 days (35 days) reached Prometheus
             from daniel-server's textfile collector, so no drill has run since the last
-            1st-of-month cron slot plus four days of slack. Read the `Full etcd restore drill in
-            a throwaway guest` cron on daniel-server, cron.log under /var/log/etcd-restore-drill,
-            then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom on the host.
+            1st-of-month timer slot plus four days of slack. Read
+            homelab-etcd-restore-drill.timer and the journal of homelab-etcd-restore-drill.service
+            on daniel-server, then /var/lib/node-exporter-textfile/etcd-restore-drill-vm.prom on
+            the host.
       # Replaced the "etcd Restore Drill (egress fence)" tile.
       - alert: EtcdRestoreDrillEgressFenceFailed
         expr: homelab_check_success{check="etcd-restore-drill-egress-fence",origin="daniel-server"} == 0

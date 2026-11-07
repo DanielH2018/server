@@ -8,17 +8,24 @@ Every failure here is silent until that start: a drop-in that leaves stdout in t
 a crash loop's reason, and a file with no activation is never reported pending.
 """
 
+import dataclasses
 import os
+import shutil
+import types
 
 import pytest
 from _helpers import load_tasks, load_yaml
+from _setup_render import render_setup_text
 from gitops_markers import agent_join_cmds, agent_pin_cmds
 from lib import yaml_fast
+from lib.estate import REPO_INVENTORY
 from lib.proc_testing import run, write_exec
 from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
+WIFI_FILE = "/etc/netplan/80-homelab-wifi-fallback.yaml"
+WIFI_RENDERED = "/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml"
 UNIT = "k3s-agent.service"
 DROPIN = "/usr/lib/systemd/system/k3s-agent.service.d/50-homelab.conf"
 CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
@@ -146,6 +153,7 @@ def test_the_wifi_secrets_reach_netplan_only_through_the_guarded_copy(package):
     assert fallback not in package.links and fallback not in package.files
     (output,) = [o for o in package.outputs if "wifi_password" in o["keys"]]
     assert output["persist"] is True
+    assert output["format"] == "json"
     assert output["dependents"] == ["homelab-netplan-wifi.service"]
     unit = text(package, "/usr/lib/systemd/system/homelab-netplan-wifi.service")
     assert (
@@ -204,3 +212,57 @@ def test_no_printer_names_an_agent_play_for_the_k3s_role():
         agent_pin_cmds("k3s", "ansible/k3s-bringup.yml", {"k3s"}, ["daniel-server"])
         == []
     )
+
+
+def _wifi_file(package, ssid: str, password: str) -> dict:
+    """The installed wifi file as netplan parses it, through homelab-secrets' own substitution."""
+    script = REPO / "hosts" / "lib" / "homelab-secrets"
+    secrets = types.ModuleType("homelab_secrets")
+    exec(compile(script.read_text(), str(script), "exec"), secrets.__dict__)
+    (output,) = [o for o in package.outputs if "wifi_password" in o["keys"]]
+    rendered = secrets.substitute(
+        text(package, f"/usr/lib/homelab/secret-templates{WIFI_FILE}"),
+        set(output["keys"]),
+        {"wifi_ssid": ssid, "wifi_password": password},
+        output.get("format"),
+    )
+    return yaml_fast.safe_load(rendered)
+
+
+@pytest.mark.parametrize("password", ['pa"ss', "ab\\tc", "plain"])
+def test_a_password_reaches_netplan_unchanged(package, password):
+    file = _wifi_file(package, 'home "net"', password)
+    assert file["network"]["wifis"]["wlo1"]["access-points"] == {
+        'home "net"': {"password": password}
+    }
+
+
+def test_the_json_wifi_file_equals_the_roles_yaml_template(package):
+    role = render_setup_text(
+        "k3s",
+        "netplan-wifi-fallback.yaml.j2",
+        {"k3s_node_wifi_link": "wlo1", "wifi_ssid": "home", "wifi_password": "pw"},
+    )
+    assert _wifi_file(package, "home", "pw") == yaml_fast.safe_load(role)
+
+
+def test_emptying_the_wifi_link_drops_the_units_and_retires_both_copies(tmp_path):
+    """netplan refuses an empty `wifis:`, so the output must go rather than render empty."""
+    host_vars = tmp_path / "host_vars"
+    shutil.copytree(REPO_INVENTORY.host_vars, host_vars)
+    server = host_vars / "daniel-server.yml"
+    named = "k3s_node_wifi_link: wlo1"
+    assert named in server.read_text()
+    server.write_text(server.read_text().replace(named, 'k3s_node_wifi_link: ""'))
+    package = host_mode.render_host(
+        "daniel-server",
+        inventory=dataclasses.replace(REPO_INVENTORY, host_vars=host_vars),
+    )
+    assert not [o for o in package.outputs if "wifi_password" in o["keys"]]
+    assert "/usr/lib/homelab/homelab-netplan-wifi" not in package.files
+    assert "/usr/lib/systemd/system/homelab-netplan-wifi.service" not in package.files
+    assert {WIFI_FILE, WIFI_RENDERED} <= {e.get("path") for e in package.legacy}
+
+
+def test_a_named_wifi_link_retires_neither_copy(package):
+    assert not {WIFI_FILE, WIFI_RENDERED} & {e.get("path") for e in package.legacy}

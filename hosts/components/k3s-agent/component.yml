@@ -23,7 +23,10 @@
 # DECIDED: the wifi fallback reaches /etc/netplan through a copy, never an output's symlink.
 # `netplan generate` fails on a dangling link in that directory (measured 2026-11-07), so a
 # missing SOPS key would take every link down at the next boot. `homelab-netplan-wifi` installs
-# the rendered file only after it passes the generator, and leaves the old file otherwise.
+# the rendered file only after it passes the generator, and leaves the old file otherwise. The
+# copy has no owner in dpkg, so emptying `k3s_node_wifi_link` is the way back: the next package
+# drops the output and the units, and the `legacy:` entries retire both copies. Do that before
+# dropping this component, which would leave the installed file behind.
 #
 # Both netplan files carry `manual:systemd-networkd.service`: `netplan apply` reconfigures the
 # link an SSH session rides on, so a change goes live at the next boot.
@@ -70,10 +73,10 @@ files:
   - {src: templates/multipath-longhorn.conf, dst: /etc/multipath/conf.d/50-homelab-longhorn.conf, activate: "reload:multipathd.service"}
   - {src: "role:netplan-static-address.yaml.j2", dst: /etc/netplan/90-homelab-static-address.yaml, mode: "0600", activate: "manual:systemd-networkd.service", when: "k3s_node_static_link | length > 0"}
   - {src: templates/static-link-sysctl.conf.j2, dst: /etc/sysctl.d/90-homelab-static-link.conf, activate: sysctl, when: "k3s_node_static_link | length > 0"}
-  - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755"}
-  - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service}
+  - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
+  - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}
 outputs:
-  - src: "role:netplan-wifi-fallback.yaml.j2"
+  - src: templates/netplan-wifi-fallback.json.j2
     path: /etc/netplan/80-homelab-wifi-fallback.yaml
     destination: netplan/80-homelab-wifi-fallback.yaml
     owner: root
@@ -83,8 +86,10 @@ outputs:
     persist: true
     link: false
     dependents: [homelab-netplan-wifi.service]
+    format: json   # homelab-secrets escapes each value, and JSON is YAML to netplan
+    when: "k3s_node_wifi_link | length > 0"
 enable:
-  homelab-netplan-wifi.service: multi-user.target
+  homelab-netplan-wifi.service: {target: multi-user.target, when: "k3s_node_wifi_link | length > 0"}
 legacy:
   # Ansible's logging drop-in. Its lines equal the package's, so both apply harmlessly until
   # reconcile removes it.
@@ -95,6 +100,9 @@ legacy:
   # the path Ansible wrote. The link's live value stays until the next reboot, which is harmless.
   - {path: /etc/netplan/90-homelab-static-address.yaml, when: "k3s_node_static_link | length == 0"}
   - {path: /etc/sysctl.d/90-homelab-static-link.conf, when: "k3s_node_static_link | length == 0"}
+  # Both copies of the wifi credentials.
+  - {path: /etc/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
+  - {path: /var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml, when: "k3s_node_wifi_link | length == 0"}
 lines:
   # kubelet's log watchers and every root-uid container share the per-uid default of 128.
   - {path: /etc/sysctl.conf, line: fs.inotify.max_user_instances=1024, regexp: '^\s*fs\.inotify\.max_user_instances\s*=', activate: sysctl}
