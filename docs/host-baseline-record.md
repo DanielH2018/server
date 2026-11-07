@@ -40,7 +40,7 @@ the name:
   component ships the root-run holder scan, and the dotfiles repo installs the per-user uv, prek and
   Python. The role keeps only `ansible-core` and `ansible-lint` until H7.63, which `/usr/bin/uv`
   installs. A stale `/usr/local/bin/uv` stays on both hosts with no writer: daniel-server's Loki
-  witness reads it until H7.59, and a filed follow-up retires daniel-box's copy after the k3s apply
+  witness reads it until H7.59, and [#7566](https://github.com/DanielH2018/server/issues/7566) retires daniel-box's copy after the k3s apply
   that repoints that role's last reader.
 - **The two tools this role installs are pinned, and each equals a twin** (#2148).
   `ansible-core` and `ansible-lint` equal `pyproject.toml` and `prek.toml`

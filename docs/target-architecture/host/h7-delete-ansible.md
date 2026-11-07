@@ -2349,7 +2349,7 @@ the `manual_plane` clearing, and *Rollback*'s
       **Amended at H7.62:** the PR repoints daniel-box's readers and does not list the path. The
       k3s health script only reaches a host through a hand apply of `k3s-bringup.yml`, and a package
       install waits on no such apply, so a legacy entry here could delete the binary under a live
-      script, or under the deployer's own unit if a tick is parked. A follow-up lists the path once
+      script, or under the deployer's own unit if a tick is parked. [#7566](https://github.com/DanielH2018/server/issues/7566) lists the path once
       `rootq` shows no live unit or script naming it.
     - **Amended at H7.62: `initial_setup_uv_version` goes too.** Its only other reader was
       `agent_user.yml`'s assert that the operator's uv equals the pin. The dotfiles repo writes that
