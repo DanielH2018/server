@@ -326,9 +326,7 @@ def test_sync_refuses_a_host_whose_tree_names_no_key_and_a_non_plain_name(tree, 
 
 # ── the unattended rotation skips every key a host file carries ─────────────
 def _rotate_args():
-    return SimpleNamespace(
-        name=None, all=True, commit=True, deploy=False, no_derive=False
-    )
+    return SimpleNamespace(name=None, all=True, commit=True, no_derive=False)
 
 
 NAME = "monitor_bridge_test_token"  # a name consumer_tags() resolves, so only host_keys differs

@@ -5,7 +5,7 @@
 # credential.
 #
 # - homelab-secret-rotation, Sunday 09:00: rotates the coming-due auto-tier push tokens, commits
-#   and publishes through a PR (scripts/secrets_mgmt/secret_rotation.py rotate --commit --deploy,
+#   and publishes through a PR (scripts/secrets_mgmt/secret_rotation.py rotate --commit,
 #   then scripts/deploy_tools/publish_pr.py).
 # - homelab-secret-rotation-audit, daily 08:30: scripts/secrets_mgmt/secret_rotation.py audit
 #   --verdict. It exits 1 after a `down` verdict, so Restart=on-failure reruns it every 30 minutes

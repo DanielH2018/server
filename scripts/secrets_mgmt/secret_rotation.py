@@ -58,6 +58,7 @@ import copy
 import datetime as dt
 import secrets as pysecrets
 import subprocess
+from collections.abc import Callable, Iterable, Mapping
 import sys
 from pathlib import Path
 
@@ -288,15 +289,26 @@ def sync_cluster_files(rotated: list[str], tools: RotationTools) -> list[str] | 
     return hit if tools.cluster_check(tree) == 0 else None
 
 
+def unapplied_tags(
+    names: Iterable[str],
+    owners: Mapping[str, str],
+    tags_of: Callable[[str], tuple[str, ...]] = consumer_tags,
+) -> list[str]:
+    """The consumer tags of `names` that `owners` leaves out, sorted: nothing applies these."""
+    return sorted({tag for name in names for tag in tags_of(name)} - owners.keys())
+
+
 def cmd_rotate(args, tools: RotationTools) -> int:
-    """Rotate `args.name`, or every coming-due auto-tier secret, and optionally redeploy.
+    """Rotate `args.name`, or every coming-due auto-tier secret.
 
     Dry-run by default; `--commit` writes new values via `sops set`. Due-ness is judged from
-    the registry dates advanced to git's (skipped with `--no-derive`). Exits 64 when
-    `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times out partway
-    through the batch or the cluster files fail to follow it (`sync_cluster_files`), 1 when `--deploy` is given and a consumer carries no `owner: flux` (the
-    new tokens are written, and no path would apply them), 0 otherwise. Flux applies an `owner: flux`
-    consumer once the commit lands, so this runs no deploy of its own and names each one.
+    the registry dates advanced to git's (skipped with `--no-derive`). Flux applies an
+    `owner: flux` consumer once the commit lands, so this runs no deploy and names each one.
+
+    Exits 64 when `args.name` names a non-auto-tier secret, 3 when a `sops set` fails or times
+    out partway through the batch or the cluster files fail to follow it (`sync_cluster_files`),
+    1 before anything is written when a consumer carries no `owner: flux`, because nothing
+    would apply its new value, and 0 otherwise.
     """
     reg = tools.load_registry()
     now = tools.today()
@@ -348,6 +360,16 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         )
         return 0
 
+    owners = tools.owners()
+    unapplied = unapplied_tags([target[0] for target in targets], owners)
+    if unapplied:
+        error(
+            "NO DEPLOY PATH for tags %s — Flux applies only a consumer carrying owner: flux, "
+            "and no playbook applies any other. Nothing was written."
+            % ",".join(unapplied)
+        )
+        return 1
+
     tags = set()
     written: list[str] = []
     for name, _tier, _d, days_left in targets:
@@ -394,8 +416,8 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         return 0
 
     tools.save_registry(reg)
-    # Before the deploy, so a failure leaves no rotated value live. The cron commits with
-    # --no-verify, so this `check` is that path's only guard on the cluster files.
+    # The cron commits with --no-verify, so this `check` is that path's only guard on the
+    # cluster files.
     synced = sync_cluster_files(written, tools)
     if synced is None:
         error(
@@ -404,29 +426,16 @@ def cmd_rotate(args, tools: RotationTools) -> int:
             % (", ".join(written), " ".join(REVERT_PATHS + CLUSTER_PATHS))
         )
         return 3
-    owners = tools.owners()
-    left_out = tags & owners.keys()
-    for tag in sorted(left_out):
+    for tag in sorted(tags):
         print(left_out_line(tag))
-    unapplied = sorted(tags - left_out)
-    if args.deploy and unapplied:
-        error(
-            "NO DEPLOY PATH for tags %s — Flux applies only a consumer carrying owner: flux, "
-            "and no playbook applies any other. New tokens are written to secrets.yml but "
-            "these consumers are NOT updated. Revert the working tree (`git checkout -- "
-            "ansible/vars/secrets.yml ansible/secret_rotation.yml`) or finish by hand."
-            % ",".join(unapplied)
-        )
-        return 1
-    if not args.deploy:
-        # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
-        files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
-        files = ", ".join(files[:-1]) + " and " + files[-1]
-        print(
-            "\nNext: commit "
-            + files
-            + ", then land the commit: `promote` and Flux apply it"
-        )
+    # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
+    files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
+    files = ", ".join(files[:-1]) + " and " + files[-1]
+    print(
+        "\nNext: commit "
+        + files
+        + ", then land the commit: `promote` and Flux apply it"
+    )
     return 0
 
 
@@ -520,11 +529,6 @@ def main(argv=None) -> int:
     )
     pr.add_argument("--all", action="store_true", help="all auto secrets, not only due")
     pr.add_argument("--name", help="rotate one named auto secret")
-    pr.add_argument(
-        "--deploy",
-        action="store_true",
-        help="exit 1 when a consumer carries no owner: flux; Flux applies the rest once the commit lands",
-    )
     pr.add_argument(
         "--no-derive",
         action="store_true",

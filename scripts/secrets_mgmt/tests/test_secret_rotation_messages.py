@@ -17,9 +17,7 @@ def _reg(name: str, tier: str = "auto", **extra) -> dict:
 
 
 def _rotate(name: str) -> SimpleNamespace:
-    return SimpleNamespace(
-        name=name, all=False, commit=True, deploy=True, no_derive=True
-    )
+    return SimpleNamespace(name=name, all=False, commit=True, no_derive=True)
 
 
 def _record(key: str, last_rotated: str) -> SimpleNamespace:
@@ -61,7 +59,7 @@ def _deploys(calls) -> list[list[str]]:
     return [argv for argv, _ in process_calls(calls) if "ansible-playbook" in argv]
 
 
-def test_rotate_deploy_of_a_flux_owned_consumer_is_flagged(capsys):
+def test_rotate_of_a_flux_owned_consumer_is_clean(capsys):
     tools, calls = build_tools(
         Fakes(registry=_reg(_TOKEN), owners={"monitor-bridge": "flux"})
     )
@@ -74,13 +72,12 @@ def test_rotate_deploy_of_a_flux_owned_consumer_is_flagged(capsys):
 
 
 def test_rotate_next_line_leaves_out_a_flux_owned_consumer(capsys):
-    """Without `--deploy` the hint must not name a tag `deploy.sh` refuses with exit 5, and
+    """The hint must not name a tag `deploy.sh` refuses with exit 5, and
     must still say to commit: Flux reaches the rotated value only through a committed tree."""
     tools, _ = build_tools(
         Fakes(registry=_reg(_TOKEN), owners={"monitor-bridge": "flux"})
     )
     args = _rotate(_TOKEN)
-    args.deploy = False
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
     assert "deploy.sh --tags" not in out, out

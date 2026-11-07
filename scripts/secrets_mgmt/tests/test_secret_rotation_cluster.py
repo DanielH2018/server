@@ -21,9 +21,7 @@ NAME = "monitor_bridge_test_token"
 
 
 def _args() -> SimpleNamespace:
-    return SimpleNamespace(
-        name=NAME, all=False, commit=True, deploy=True, no_derive=False
-    )
+    return SimpleNamespace(name=NAME, all=False, commit=True, no_derive=False)
 
 
 def _cluster_tree(root: Path) -> Path:
@@ -114,7 +112,6 @@ def test_the_next_line_names_the_cluster_files_write_rewrote(tmp_path, capsys):
         )
     )
     args = _args()
-    args.deploy = False
     assert sr.cmd_rotate(args, tools) == 0
     next_line = next(
         line

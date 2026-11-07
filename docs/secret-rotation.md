@@ -78,27 +78,24 @@ value changed with `sops set` therefore reaches the cluster only after `write` r
 `docs/target-architecture/deploy/d3-secrets.md`, *What one secret costs*, lists every store a
 secret can touch.
 
-### Rotating a value read by both planes
+### Rotating a value the cluster reads
 
-A value can have an Ansible-owned consumer and a consumer Flux applies, as `peanut_password`
-does for homepage and peanut. Every step that handles the value is **operator-only**.
+Flux applies every k8s consumer, as it does for `peanut_password`'s homepage and peanut. Every
+step that handles the value is **operator-only**.
 
 1. Set the new value with `sops set` (**operator-only**).
 2. Run `uv run python scripts/secrets_mgmt/cluster_vars.py write` (**operator-only**). Commit
    `secrets.yml`, the cluster files it rewrote and the registry together, then open the PR.
-3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints a
-   `deploy.sh` line for the Ansible-owned consumers. For each `owner: flux` consumer it
-   prints the Flux path instead, because `deploy.sh` exits 5 on such a tag and deploys none
-   of the others.
+3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints the
+   Flux path for each `owner: flux` consumer, and the command for each setup role and host
+   package.
 4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
-   `cluster-vars` Kustomization and on every Kustomization that depends on it, then ends
-   `needs-manual-apply` naming the Ansible half.
-5. Run the `deploy.sh` line from step 3.
+   `cluster-vars` Kustomization and on every Kustomization that depends on it.
 
-The weekly cron needs no `write` step: `rotate --commit` runs it in process. `rotate` prints
-that Flux applies each `owner: flux` consumer's value once the commit lands. With `--deploy`, it
-runs no deploy and exits 1 on a consumer that carries no `owner: flux`, because no other path
-applies a k8s consumer since `ansible/deploy.yml` lost its roles.
+The weekly cron needs no `write` step: `rotate --commit` runs it in process. `rotate` runs no
+deploy. It prints that Flux applies each `owner: flux` consumer's value once the commit lands,
+and it exits 1 before writing anything on a consumer that carries no `owner: flux`, because no
+other path applies a k8s consumer since `ansible/deploy.yml` lost its roles.
 
 ### Rotating the cluster key
 
@@ -404,7 +401,7 @@ SOPS name.
 4. Run `land.sh` without `--tags`. Flux owns authelia, and `deploy.sh` exits 5 on a
    flux-owned tag. The PR changes the cluster file, so `land.sh` waits on the `cluster-vars`
    Kustomization and on every Kustomization that depends on it, as step 4 of *Rotating a
-   value read by both planes* describes. The renderer stamps a `checksum/restart` annotation
+   value the cluster reads* describes. The renderer stamps a `checksum/restart` annotation
    on the authelia pod, which hashes the `.source` line of each key its Secret references.
    The portal therefore rolls in the revision that carries the new value. D3's exit
    criterion 3 showed the same path for peanut
