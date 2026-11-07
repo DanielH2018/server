@@ -14,7 +14,7 @@ import threading
 import pytest
 
 import flux_soak
-from _soak_world import OTHER, R, T0, W, World, alert, iso, run
+from _soak_world import OTHER, R, T0, W, World, alert, answered, iso, run
 from renderer.renderer_lib.ordering import (
     DEFERRED_SUFFIX,
     PRECHECK_SUFFIX,
@@ -157,38 +157,14 @@ class _Runtimeinfo(http.server.BaseHTTPRequestHandler):
         pass
 
 
-class _Answers(http.server.BaseHTTPRequestHandler):
-    """Answers with the status the path names, or drops the connection at `/reset`."""
-
-    def do_GET(self):
-        if self.path == "/reset/api/v1/status/runtimeinfo":
-            self.close_connection = True
-            return
-        self.send_response(int(self.path.split("/")[1]))
-        self.send_header("Content-Length", "0")
-        self.end_headers()
-
-    def log_message(self, format, *args):
-        pass
-
-
 @pytest.mark.parametrize(
     ("answer", "is_transient"), [("503", True), ("reset", True), ("403", False)]
 )
 def test_only_a_5xx_or_a_dropped_connection_reads_as_transient(
     tmp_path, answer, is_transient
 ):
-    server = http.server.HTTPServer(("127.0.0.1", 0), _Answers)
-    threading.Thread(target=server.handle_request, daemon=True).start()
-    token = tmp_path / "token"
-    token.write_text("t")
-    url = f"http://127.0.0.1:{server.server_port}/{answer}"
-    try:
-        with pytest.raises(flux_soak.SoakError) as raised:
-            flux_soak.live_reads(url, str(token)).prometheus_start()
-    finally:
-        server.server_close()
-    assert isinstance(raised.value, flux_soak.TransientError) is is_transient
+    error = answered(tmp_path, answer)
+    assert isinstance(error, flux_soak.TransientError) is is_transient
 
 
 @pytest.mark.parametrize(("named", "code"), [(R, 0), (OTHER, 1)])

@@ -14,7 +14,18 @@ import pytest
 import flux_soak
 import host_lib
 from lib.repo_paths import REPO as _REPO
-from _soak_world import OTHER, T0, W, R, World, kustomization, pod, restart, run
+from _soak_world import (
+    OTHER,
+    T0,
+    W,
+    R,
+    World,
+    answered,
+    kustomization,
+    pod,
+    restart,
+    run,
+)
 
 
 @pytest.fixture
@@ -187,25 +198,28 @@ def _api_error_while_waiting(world, error):
 
 
 def test_a_503_while_waiting_reads_as_not_ready_and_the_wait_passes(world, tmp_path):
-    _api_error_while_waiting(
-        world, flux_soak.TransientError(f"{flux_soak.KUSTOMIZATIONS}: HTTP 503")
-    )
+    _api_error_while_waiting(world, answered(tmp_path, "503"))
     assert run(world, tmp_path) == (0, "")
     assert world.sleeps[:2] == [flux_soak.POLL_SECONDS] * 2
 
 
 def test_a_403_while_waiting_still_fails(world, tmp_path):
-    _api_error_while_waiting(
-        world, flux_soak.SoakError(f"{flux_soak.KUSTOMIZATIONS}: HTTP 403")
-    )
+    # The error comes from a real 403 answer, so a 403 classed as transient retries and passes.
+    _api_error_while_waiting(world, answered(tmp_path, "403"))
     code, message = run(world, tmp_path)
     assert code == 1
     assert "HTTP 403" in message
 
 
+def test_a_503_on_a_pod_read_after_the_wait_is_retried(world, tmp_path):
+    world.api_errors["/api/v1/namespaces/authelia/pods"] = [answered(tmp_path, "503")]
+    assert run(world, tmp_path) == (0, "")
+    assert flux_soak.POLL_SECONDS in world.sleeps
+
+
 def test_a_503_that_outlasts_the_deadline_fails_naming_it(world, tmp_path):
     world.api_errors[flux_soak.KUSTOMIZATIONS] = [
-        flux_soak.TransientError("HTTP 503") for _ in range(10)
+        answered(tmp_path, "503") for _ in range(10)
     ]
     code, message = run(world, tmp_path, wait_seconds=60)
     assert code == 1

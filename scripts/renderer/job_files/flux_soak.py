@@ -18,7 +18,8 @@ notification-controller posts as `flux/soak`. In order, it:
    and pruned R's Kustomizations. Each poll re-runs step 1's check, so the Job exits 1 once
    `homelab` stops holding R. Until the deadline, steps 1 to 3 read a 5xx or a dropped
    connection from the API server as "not ready yet" and retry it, because a k3s upgrade
-   restarts the API server under the soak; a 4xx still fails;
+   restarts the API server under the soak, and step 4's pod reads retry it for as long; a
+   4xx still fails;
 4. waits W past the latest first Ready among the pods R created, then fails on a restart after
    a pod's first Ready, on a pod it cannot map or order, and on a critical or `verify="true"`
    alert activated after T0.
@@ -297,11 +298,20 @@ def _controller(obj: Mapping) -> Mapping:
 def workload_pods(
     reads: Reads, inputs: Inputs, namespaces: Iterable[str], t0: float
 ) -> dict:
-    """Each pod created after T0 whose owner chain ends in a Deployment, DaemonSet or StatefulSet."""
+    """Each pod created after T0 whose owner chain ends in a Deployment, DaemonSet or StatefulSet.
+
+    A transient read is retried for up to `inputs.wait_seconds`, because a k3s upgrade's API
+    server restart can land after its Kustomization reads Ready.
+    """
+    deadline = reads.clock() + inputs.wait_seconds
+
+    def api(path: str) -> dict:
+        return retry_transient(reads, deadline, lambda: reads.api(path))
+
     owners: dict[str, str] = {}
     pods = {}
     for namespace in sorted(namespaces):
-        for pod in reads.api(f"/api/v1/namespaces/{namespace}/pods")["items"]:
+        for pod in api(f"/api/v1/namespaces/{namespace}/pods")["items"]:
             meta = pod["metadata"]
             if (
                 meta["name"] == inputs.own_pod
@@ -317,7 +327,7 @@ def workload_pods(
                 if path not in owners:
                     # A refused read exits through SoakError rather than dropping every
                     # Deployment pod from the restart leg.
-                    owners[path] = _controller(reads.api(path)).get("kind", "")
+                    owners[path] = _controller(api(path)).get("kind", "")
                 kind = owners[path]
             if kind in WORKLOADS:
                 pods[(namespace, meta["name"])] = pod
