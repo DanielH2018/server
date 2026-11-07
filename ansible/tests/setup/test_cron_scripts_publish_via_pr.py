@@ -147,19 +147,6 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
     )
 
 
-def test_the_audit_watches_for_an_unlanded_rotation_branch():
-    """The weekly gate refuses to stack, but nothing would REPORT the stuck state between Sundays.
-
-    The daily audit is the sticky signal, and its two existing arms read only local state -- a clean
-    tree and an unrotated registry are exactly what the failure looks like.
-    """
-    text = read(ROTATION_AUDIT)
-    assert "git ls-remote --heads origin" in text, (
-        "the daily audit cannot see an unlanded rotation branch, so a failed `gh pr create` "
-        "goes unreported until the next Sunday's gate happens to trip"
-    )
-
-
 # --- Every variable a cron reads is one it can see ------------------------------------------
 #
 # All three scripts run under `set -uo pipefail`, so reading an unset variable aborts the script
@@ -186,7 +173,7 @@ _CRON_ENV = {
 _READ_CENSUS_MUST_FIND = {
     DOCS_REFRESH: frozenset({"PUSH_STATUS", "PUSH_MSG", "PUB_MSG", "UV", "REPO"}),
     EVAL_RUN: frozenset({"PUSH_STATUS", "PUB_MSG", "UNLANDED_RC", "REPO", "TREND_RC"}),
-    ROTATION_AUDIT: frozenset({"AUDIT_RC", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
+    ROTATION_AUDIT: frozenset({"AUDIT_RC", "EXTRA_DOWN", "UV"}),
 }
 
 # `${NAME` plus the operator that follows, when there is one.
@@ -452,9 +439,9 @@ def test_the_push_corpus_never_shrinks():
 
 
 def test_the_audit_watches_the_gh_token_both_crons_depend_on():
-    """Both publishing crons authenticate with one `gh` OAuth token that is not in
-    secrets.yml and not in the rotation registry, so nothing watched it. Revoked, they both
-    keep running, both fail at `gh pr create`, and both stop publishing silently."""
+    """docs-refresh and eval-run authenticate with one `gh` OAuth token that is not in
+    secrets.yml and not in the rotation registry, so nothing else watches it. Revoked, they
+    both keep running, both fail at `gh pr create`, and both stop publishing silently."""
     text = read(ROTATION_AUDIT)
     assert "gh auth status" in text, (
         "nothing checks the credential docs-refresh and eval-run publish with"
@@ -466,57 +453,4 @@ def test_the_audit_watches_the_gh_token_both_crons_depend_on():
     )
     assert "if !" in line, (
         f"the gh check must branch on its exit status, not on its output: {line!r}"
-    )
-
-
-def test_the_audit_branch_arm_is_additive_not_a_short_circuit():
-    """The two arms above it exit 0 before the auditor runs, which is right for a registry
-    that cannot be trusted. A stray branch says nothing about the OTHER secrets, so
-    short-circuiting there would silence every overdue secret until a human cleared it.
-    """
-    text = read(ROTATION_AUDIT)
-    arm = text.split("git ls-remote --heads origin", 1)[1]
-    # Up to the auditor invocation: the arm must reach it, not exit ahead of it.
-    before_audit = arm.split("secret_rotation.py audit", 1)[0]
-    assert "exit 0" not in before_audit, (
-        "the stray-branch arm short-circuits past the auditor, suppressing overdue "
-        "reporting for every other secret while the branch sits there"
-    )
-    assert "--extra-down" in arm, (
-        "the arm does not force the monitor DOWN; the auditor would push UP and mask it"
-    )
-
-
-def test_the_two_audit_arms_accumulate_rather_than_suppress_each_other():
-    """A revoked `gh` token is what makes `gh pr create` fail and strand the branch, so the
-    two faults are causally linked and the compound case is the one that matters. Gating the
-    branch arm on the token arm reports the cause and hides the consequence -- a live rotated
-    credential, unpublished on origin.
-
-    `git ls-remote` authenticates over git's own credential path, not through `gh`, so the
-    branch arm still works with a dead token and has no reason to be skipped.
-    """
-    text = read(ROTATION_AUDIT)
-    lines = [line for line in code_lines(ROTATION_AUDIT) if "EXTRA_DOWN" in line]
-
-    # The branch arm's condition must not read EXTRA_DOWN -- that is the short-circuit.
-    branch_arm = text.split("# Runs even when the arm above fired", 1)
-    assert len(branch_arm) == 2, "the stray-branch arm lost its ordering comment"
-    # "; then", not "then": the prose above the arm contains "au-then-ticates", and a split on
-    # the bare word truncates ahead of the condition, passing the mutation it exists to catch.
-    condition = branch_arm[1].split("; then", 1)[0]
-    assert "EXTRA_DOWN" not in condition, (
-        "the stray-branch arm is gated on the gh-token arm, so a revoked token silences the "
-        f"unpublished-credential report it causes: {condition!r}"
-    )
-
-    # Both arms must go through the accumulator, and the accumulator must concatenate.
-    assert text.count("add_down ") >= 2, (
-        "an arm assigns EXTRA_DOWN directly instead of accumulating, so a second fault "
-        "overwrites the first"
-    )
-    concat = [line for line in lines if 'EXTRA_DOWN="$EXTRA_DOWN' in line]
-    assert concat, (
-        "add_down replaces rather than appends; the compound fault reports one reason: "
-        f"{lines!r}"
     )

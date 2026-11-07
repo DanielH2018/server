@@ -12,15 +12,14 @@
 # Autonomous-role contract (the audit only reads and reports; it changes no credential).
 #
 # - Scope / exclusions: the audit reads `ansible/secret_rotation.yml`, the key list of
-#   `ansible/vars/secrets.yml`, the working tree's state for those two files, and the `gh` token's
-#   auth status. It writes only its journal line and its textfile, and stages nothing.
+#   `ansible/vars/secrets.yml`, those files' git history, and the `gh` token's auth status. It writes only its journal line and its textfile, and stages nothing.
 # - Mode (explicit and reversible): the timer's and the boot unit's enable links in this package
 #   arm them. Dropping a link from a package version, or reverting this component, stops that unit
 #   on the install that drops it (reconcile's step 1).
 #   `systemctl stop homelab-secret-rotation-audit.timer` on daniel-box stops the audit until the
 #   next package install.
 # - Authoritative sources: `ansible/secret_rotation.yml` and the key list of
-#   `ansible/vars/secrets.yml` in the primary checkout, and `origin` for the stale-branch check.
+#   `ansible/vars/secrets.yml` in the primary checkout.
 # - Abort valves: a run that cannot source the check library or enter the checkout exits 1
 #   before it reads anything. The audit changes no state, so it holds no lock.
 # - Required evidence, every run: a `status=<up|down>` line tagged secret-rotation-audit in the

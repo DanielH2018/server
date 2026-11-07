@@ -27,8 +27,8 @@ tree is in:
   1  the branch never reached origin -- the commit is still local on HEAD. Nothing to
      clean up on origin; the next run refuses on the dirty/ahead tree
   2  the branch IS on origin but the PR could not be opened or its landing could not be
-     started -- and the local commit is already gone. A branch with no PR is the
-     state the secret-rotation audit's ``git ls-remote`` arm sees for its own prefix. Also covers the
+     started -- and the local commit is already gone. The caller's next run sees the
+     branch through ``unlanded`` and refuses. Also covers the
      rarer case where ``reset --hard HEAD~1`` itself failed after the push: the branch is
      on origin, but the local commit is NOT gone -- master is still one commit ahead of
      origin, named as such in the message, and the run stops before attempting a PR
