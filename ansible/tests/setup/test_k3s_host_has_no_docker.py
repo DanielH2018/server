@@ -23,13 +23,9 @@ already on the host. `has_docker` is the half that stops it landing in the first
 place; relying on a remembered `--tags` is what lets it happen.
 
 THE ROLE LAYER. The install-time guard lives in tasks/server.yml, carrying a comment that
-names the hazard exactly. tasks/agent.yml must carry the same assert: an agent without it
-can run a second container runtime next to k3s while every repo-side check reads green,
-because the only host the guard covers is the one that never had Docker.
-
-A guard on one of two symmetric paths is not a guard. The last two tests assert both
-node roles carry it, so removing either one fails the suite instead of quietly halving
-the coverage.
+names the hazard exactly. hosts/bootstrap-host.sh carries the same refusal for an agent:
+hosts/lib/tests/test_bootstrap_host_k3s.py holds that half. An agent without it can run a
+second container runtime next to k3s while every repo-side check reads green.
 
 Run: uv run pytest ansible/tests/setup/test_k3s_host_has_no_docker.py
 """
@@ -53,7 +49,7 @@ K3S_TASKS = K3S_ROLE / "tasks"
 # The two node roles. Named explicitly rather than globbed: a new tasks file in this role
 # is not automatically a node-install path, and globbing would make this test fail for
 # reasons that have nothing to do with the guard.
-NODE_TASK_FILES = ["server.yml", "agent.yml"]
+NODE_TASK_FILES = ["server.yml"]
 
 
 def _load(path: Path):

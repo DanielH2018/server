@@ -8,10 +8,14 @@ Every failure here is silent until that start: a drop-in that leaves stdout in t
 a crash loop's reason, and a file with no activation is never reported pending.
 """
 
+import os
+
 import pytest
-from _helpers import load_tasks
+from _helpers import load_tasks, load_yaml
+from gitops_markers import agent_join_cmds, agent_pin_cmds
 from lib import yaml_fast
-from lib.repo_paths import K3S_ROLE, REPO
+from lib.proc_testing import run, write_exec
+from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE, REPO
 from renderer.renderer_lib import host as host_mode
 
 COMPONENT = REPO / "hosts" / "components" / "k3s-agent"
@@ -21,7 +25,6 @@ CONFIG = "/etc/rancher/k3s/config.yaml.d/50-homelab.yaml"
 STARTUP_FILES = {DROPIN, CONFIG, "/etc/rancher/k3s/registries.yaml"}
 LOGROTATE = "/etc/logrotate.d/k3s-agent"
 TMPFILES = "/usr/lib/tmpfiles.d/homelab-k3s-agent.conf"
-INSTALLER = "/usr/local/bin/k3s-install.sh"
 
 
 @pytest.fixture(scope="module")
@@ -99,35 +102,105 @@ def test_the_legacy_entry_retires_ansibles_drop_in(package):
     assert legacy in package.legacy
 
 
-def asserted_before_install(tasks: list[dict]) -> set[str]:
-    """The paths a `stat` reads and an `assert` requires before the task that runs the installer."""
-    stats: dict[str, str] = {}
-    found: set[str] = set()
-    for task in tasks:
-        if (task.get("ansible.builtin.command") or {}).get("cmd") == INSTALLER:
-            return found
-        stat = task.get("ansible.builtin.stat")
-        if stat and task.get("register"):
-            stats[task["register"]] = stat["path"]
-        that = (task.get("ansible.builtin.assert") or {}).get("that", "")
-        found |= {path for reg, path in stats.items() if that == f"{reg}.stat.exists"}
-    return set()
+def test_the_join_rules_are_kept_and_match_the_ports_the_server_side_mirrors(package):
+    server = "10.0.0.215"
+    want = {
+        f"allow from {server} to any port {p['port']} proto {p['proto']}"
+        for p in load_yaml(K3S_DEFAULTS)["k3s_join_agent_ports"]
+    }
+    join = [r for r in package.ufw_rules if r["id"].startswith("k3s-join-")]
+    assert {r["spec"] for r in join} == want
+    assert all(r["keep"] for r in join)
+    assert {r["spec"] for r in package.ufw_legacy} >= want
 
 
-def test_the_join_refuses_an_agent_whose_package_is_not_installed(package):
-    """A fresh agent that joins before its package starts with no registries.yaml."""
-    guarded = asserted_before_install(load_tasks(K3S_ROLE / "tasks" / "agent.yml"))
-    assert guarded & STARTUP_FILES, guarded
-    assert CONFIG in guarded, (
-        "a bare `agent` started without the flags autodetects its node IP"
+def test_the_longhorn_packages_and_the_inotify_key_ship_in_the_package(package):
+    assert {"open-iscsi", "nfs-common", "multipath-tools"} <= set(package.depends)
+    assert {
+        "path": "/etc/sysctl.conf",
+        "line": "fs.inotify.max_user_instances=1024",
+        "regexp": r"^\s*fs\.inotify\.max_user_instances\s*=",
+    }.items() <= next(
+        edit for edit in package.lines if edit.get("line", "").startswith("fs.inotify")
+    ).items()
+    assert (
+        package.activations["/etc/multipath/conf.d/50-homelab-longhorn.conf"]
+        == "reload:multipathd.service"
     )
-    assert guarded <= set(package.files)
 
 
-def test_an_assert_after_the_installer_is_not_a_guard():
-    tasks = [
-        {"ansible.builtin.stat": {"path": "/x"}, "register": "x"},
-        {"ansible.builtin.command": {"cmd": INSTALLER}},
-        {"ansible.builtin.assert": {"that": "x.stat.exists"}},
-    ]
-    assert asserted_before_install(tasks) == set()
+def test_the_pin_ships_with_its_linkdown_keys_and_never_applies_itself(package):
+    assert (
+        package.activations["/etc/netplan/90-homelab-static-address.yaml"]
+        == "manual:systemd-networkd.service"
+    )
+    assert "enp88s0:" in text(package, "/etc/netplan/90-homelab-static-address.yaml")
+    keys = text(package, "/etc/sysctl.d/90-homelab-static-link.conf")
+    for family in ("ipv4", "ipv6"):
+        assert f"net.{family}.conf.enp88s0.ignore_routes_with_linkdown=1" in keys
+
+
+def test_the_wifi_secrets_reach_netplan_only_through_the_guarded_copy(package):
+    """A symlink in /etc/netplan would fail `netplan generate` while the output is missing."""
+    fallback = "/etc/netplan/80-homelab-wifi-fallback.yaml"
+    assert fallback not in package.links and fallback not in package.files
+    (output,) = [o for o in package.outputs if "wifi_password" in o["keys"]]
+    assert output["persist"] is True
+    assert output["dependents"] == ["homelab-netplan-wifi.service"]
+    unit = text(package, "/usr/lib/systemd/system/homelab-netplan-wifi.service")
+    assert (
+        f"ConditionPathExists=/var/lib/homelab-secrets/{output['destination']}" in unit
+    )
+
+
+def _run_wifi_copy(tmp_path, generate_rc: int):
+    rendered = (
+        tmp_path / "var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml"
+    )
+    rendered.parent.mkdir(parents=True)
+    rendered.write_text("rendered\n")
+    (tmp_path / "etc/netplan").mkdir(parents=True)
+    (tmp_path / "etc/netplan/80-homelab-wifi-fallback.yaml").write_text("old\n")
+    generate = tmp_path / "generate"
+    write_exec(generate, f"#!/bin/sh\nexit {generate_rc}\n")
+    return run(
+        [str(COMPONENT / "files" / "homelab-netplan-wifi")],
+        env={
+            **os.environ,
+            "HOMELAB_ROOT": str(tmp_path),
+            "NETPLAN_GENERATE": str(generate),
+        },
+    )
+
+
+def test_a_rendered_file_netplan_accepts_replaces_the_old_one(tmp_path):
+    assert _run_wifi_copy(tmp_path, 0).returncode == 0
+    installed = tmp_path / "etc/netplan/80-homelab-wifi-fallback.yaml"
+    assert installed.read_text() == "rendered\n"
+    assert installed.stat().st_mode & 0o777 == 0o600
+
+
+def test_a_rendered_file_netplan_refuses_leaves_the_old_one(tmp_path):
+    result = _run_wifi_copy(tmp_path, 1)
+    assert result.returncode == 1
+    assert "netplan refuses" in result.stderr
+    assert (
+        tmp_path / "etc/netplan/80-homelab-wifi-fallback.yaml"
+    ).read_text() == "old\n"
+
+
+def test_the_join_task_file_refuses_and_names_the_bootstrap():
+    (task,) = load_tasks(K3S_ROLE / "tasks" / "agent.yml")
+    assert "bootstrap-host.sh" in task["ansible.builtin.fail"]["msg"]
+
+
+def test_no_printer_names_an_agent_play_for_the_k3s_role():
+    """The package owns the agent half, so a `manual_plane` line owes that host nothing."""
+    assert (
+        agent_join_cmds("k3s", "ansible/k3s-bringup.yml", {"k3s"}, ["daniel-server"])
+        == []
+    )
+    assert (
+        agent_pin_cmds("k3s", "ansible/k3s-bringup.yml", {"k3s"}, ["daniel-server"])
+        == []
+    )

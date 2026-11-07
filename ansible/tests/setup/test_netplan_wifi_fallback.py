@@ -111,8 +111,10 @@ def test_emptying_the_wifi_link_removes_the_file_and_reapplies() -> None:
     assert len(removal) == 1, (
         "no task removes the fallback when k3s_node_wifi_link is empty"
     )
-    assert removal[0]["when"] == "k3s_node_wifi_link | length == 0"
+    assert removal[0]["when"][-1] == "k3s_node_wifi_link | length == 0"
     flag = f"{removal[0]['register']}.changed"
     commands = [t for t in tasks if "ansible.builtin.command" in t]
     assert len(commands) == 2
-    assert all(flag in t["when"] for t in commands), "removal does not trigger netplan"
+    assert all(flag in t["when"][-1] for t in commands), (
+        "removal does not trigger netplan"
+    )

@@ -359,8 +359,9 @@ sudo rm -rf /var/lib/rancher/k3s/agent/client-*.crt /var/lib/rancher/k3s/agent/c
 sudo systemctl start k3s-agent
 ```
 
-If it does not rejoin, re-run the documented join:
-`uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server`.
+If it does not rejoin, run the join on daniel-server, with the server token from
+`docs/break-glass.md` item 2:
+`K3S_URL=https://<daniel-box>:6443 K3S_TOKEN=<token> sudo -E hosts/bootstrap-host.sh daniel-server`.
 
 [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
 `docs/host-packages.md` covers a replacement host on the package path, either node.

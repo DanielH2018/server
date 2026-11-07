@@ -4,7 +4,7 @@
 #
 # The k3s pin (`k3s_version`, `k3s_install_script_url`, `k3s_install_script_sha256`) is the
 # `system-upgrade` role's (roles/k8s/system-upgrade/defaults/main.yml, H6.1b), because that role
-# drives the SUC Plans that upgrade k3s. tasks/server.yml and tasks/agent.yml read it with
+# drives the SUC Plans that upgrade k3s. tasks/server.yml reads it with
 # `include_vars` for the fresh-host install.
 # The Longhorn pin, k3s_longhorn_version, is the `longhorn` role's (roles/k8s/longhorn/defaults/main.yml).
 
@@ -120,10 +120,11 @@ k3s_secrets_encryption: true
 #
 # The flag is `kubelet-arg` in `k3s_server_config` (hosts/components/k3s-server/component.yml).
 
-# Whether joined agent nodes participate in Longhorn replica scheduling, so daniel-server holds
-# the second replica of every volume. The join window keeps it off: agent_verify patches
-# allowScheduling:false and asserts zero replicas landed.
-k3s_agent_longhorn_scheduling: true
+# The subjects of this role a host's package owns, by the hosts it owns them on (H7's *Moving one
+# host at a time*). Each subject's tasks skip those hosts. Here because an `inventory/` edit is a
+# deploy-plane change.
+k3s_packaged_hosts:
+  node-address: [daniel-server]
 
 # The restore drill itself is the `longhorn-restore-drill` Flux role's (H2.3d): its schedule, its
 # volume pin, its size cap, its content floor, its timeout, its probe image and its empty-volume
@@ -521,7 +522,7 @@ k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
 
 # The agent's flags are `k3s_agent_config` in hosts/components/k3s-agent/component.yml since
 # H6.5b. The package renders them into /etc/rancher/k3s/config.yaml.d/50-homelab.yaml, and they
-# take effect at the agent's next start. tasks/agent.yml passes the installer a bare `agent`.
+# take effect at the agent's next start. bootstrap-host.sh passes the installer a bare `agent`.
 
 # The `template:`-rendered scripts this role puts in /usr/local/bin, checksummed at render time
 # into /var/lib/homelab/setup-render-manifest.d/ so setup-drift-check.sh can tell whether this

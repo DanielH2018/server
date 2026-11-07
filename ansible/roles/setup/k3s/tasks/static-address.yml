@@ -1,8 +1,8 @@
 ---
 # Pin the node's LAN address statically, so k3s does not depend on the gateway's DHCP server
 # to start. Two importers: main.yml for the server node, and k3s-bringup.yml's agent-address
-# play for daniel-server (#3891). That play runs ON the agent, not through the join play's
-# SSH session, because `netplan apply` reconfigures the link such a session rides on.
+# play, which writes nothing since daniel-server's package took the pin over (H7.34,
+# hosts/components/k3s-agent). Every task reads `k3s_packaged_hosts` for that.
 # templates/netplan-static-address.yaml.j2 has the incident (#3882) and why DHCPv4 is switched
 # off rather than kept alongside.
 #
@@ -19,7 +19,9 @@
     owner: root
     group: root
   become: true
-  when: k3s_node_static_link | length > 0
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - k3s_node_static_link | length > 0
   register: k3s_node_static_netplan
 
 - name: Remove the pinned address when no link is named
@@ -28,7 +30,9 @@
     path: /etc/netplan/90-homelab-static-address.yaml
     state: absent
   become: true
-  when: k3s_node_static_link | length == 0
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - k3s_node_static_link | length == 0
   register: k3s_node_static_netplan_removed
 
 # The template's `ignore-carrier: true` keeps the pinned default routes installed with the cable
@@ -52,7 +56,9 @@
     reload: true
   loop: [ipv4, ipv6]
   become: true
-  when: k3s_node_static_link | length > 0
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - k3s_node_static_link | length > 0
 
 # The link's name is gone by the time this runs, so the live value stays 1 until the next
 # reboot. That is harmless: back on DHCP, networkd drops the link's routes on carrier loss.
@@ -62,7 +68,9 @@
     path: /etc/sysctl.d/90-homelab-static-link.conf
     state: absent
   become: true
-  when: k3s_node_static_link | length == 0
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - k3s_node_static_link | length == 0
 
 # The WiFi fallback uplink. It sits here, under the same tag, because the fallback only works
 # alongside the pin's ignore_routes_with_linkdown above, and because both plays that pin an
@@ -78,7 +86,9 @@
       k3s_node_wifi_link is {{ k3s_node_wifi_link }}, but ansible/vars/secrets.yml holds no
       wifi_ssid or no wifi_password. Add both with sops before applying, or empty the link.
     quiet: true
-  when: k3s_node_wifi_link | length > 0
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - k3s_node_wifi_link | length > 0
 
 - name: Join the WiFi as a fallback uplink in netplan
   tags: [node-address]
@@ -91,7 +101,9 @@
   become: true
   no_log: true
   diff: false
-  when: k3s_node_wifi_link | length > 0
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - k3s_node_wifi_link | length > 0
   register: k3s_node_wifi_netplan
 
 - name: Remove the WiFi fallback when no WiFi link is named
@@ -100,7 +112,9 @@
     path: /etc/netplan/80-homelab-wifi-fallback.yaml
     state: absent
   become: true
-  when: k3s_node_wifi_link | length == 0
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - k3s_node_wifi_link | length == 0
   register: k3s_node_wifi_netplan_removed
 
 # Split from the apply for the reason node.yml splits the DNS override's: `generate` parses
@@ -112,9 +126,11 @@
     cmd: netplan generate
   become: true
   changed_when: false
-  when: >-
-    k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
-    or k3s_node_wifi_netplan.changed or k3s_node_wifi_netplan_removed.changed
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - >-
+      k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
+      or k3s_node_wifi_netplan.changed or k3s_node_wifi_netplan_removed.changed
 
 - name: Apply the pinned address and WiFi fallback, or their removal # noqa no-handler
   tags: [node-address]
@@ -122,6 +138,8 @@
     cmd: netplan apply
   become: true
   changed_when: true
-  when: >-
-    k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
-    or k3s_node_wifi_netplan.changed or k3s_node_wifi_netplan_removed.changed
+  when:
+    - inventory_hostname not in k3s_packaged_hosts['node-address']
+    - >-
+      k3s_node_static_netplan.changed or k3s_node_static_netplan_removed.changed
+      or k3s_node_wifi_netplan.changed or k3s_node_wifi_netplan_removed.changed

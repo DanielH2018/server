@@ -17,6 +17,15 @@ import pytest
 import checks.gitops
 from _fake_sources import FakeSources
 from gitops_markers import HOLD_CLEAR_CMD
+import gitops_markers
+
+
+@pytest.fixture(autouse=True)
+def _agent_tables_hold_k3s(monkeypatch):
+    """The printers' tables are empty since H7.34, and H7.53 deletes the printers with the deployer."""
+    monkeypatch.setitem(gitops_markers.AGENT_JOIN_TAGS, "k3s", "k3s_agent")
+    monkeypatch.setitem(gitops_markers.AGENT_PIN_TAGS, "k3s", "node-address")
+
 
 _LATE = 1000.0 + 7 * 3600
 

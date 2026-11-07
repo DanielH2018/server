@@ -225,7 +225,7 @@ def imported_task_files(role: Path) -> list[Path]:
     """The task files a role's `tasks/main.yml` imports, in import order.
 
     Follows `ansible.builtin.import_tasks` only — never a glob over `tasks/`. The k3s role's
-    directory holds `agent.yml`, `agent_verify.yml` and `storage_smoke.yml`, which main.yml
+    directory holds `agent.yml` and `storage_smoke.yml`, which main.yml
     does not import and which a server-side assertion is not about; a glob would fold them in
     and put every ordering assertion one file off. A `when:` on an import is ignored: the file
     is expanded whether or not the deploy would run it, so an assertion here is about what the

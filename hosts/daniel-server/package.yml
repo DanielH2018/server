@@ -37,8 +37,10 @@
 # nothing else cleared its 42 worktrees, 1173 loose objects or stale gc.log. The sweep pings
 # `daniel-server-worktree-sweep` with the `healthchecks_ping_key` credential listed below.
 #
-# The package declares no ufw rule of its own. The k3s agent's join rules stay `setup/k3s`
-# rules until H7.34 declares them `keep`; they carry no `homelab:` label, so the arm leaves them.
+# H7.34 adds the rest of the k3s agent's host half to `k3s-agent` (the join rules declared `keep`,
+# the multipath drop-in, the inotify key and the address pin, whose wifi half reads `wifi_ssid` and
+# `wifi_password`) and the `hypervisor` component, the monthly etcd restore drill and its libvirt
+# state (`r2_*`, `host_secrets.py sync daniel-server`, operator-only).
 description: daniel-server's homelab host package
 # The claude-code component's agent user. Its uid differs per host, so the users entry and the
 # agent's login-slice cap sit here; `component: claude-code` reaches only these files (H7.40).

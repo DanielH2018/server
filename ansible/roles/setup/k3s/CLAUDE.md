@@ -1,9 +1,9 @@
 # `setup/k3s` — the cluster's host plane: k3s itself, Longhorn, and the backup crons
 
 The role that turns a host into a k3s node and declares the cluster's own plumbing: the server
-install, the agent join, the packages Longhorn needs on the node, the read-only kubeconfig, the
+install, the packages Longhorn needs on the node, the read-only kubeconfig, the
 marker that releases k3s's CoreDNS addon, and the host crons that watch and exercise backups.
-`daniel-box` is the server and `daniel-server` an agent (`tasks/agent.yml`). The CoreDNS objects
+`daniel-box` is the server, and `daniel-server` an agent whose half is its host package's. The CoreDNS objects
 belong to the k8s `coredns` role and the Longhorn install to the k8s `longhorn` role, and Flux
 applies both. The Longhorn backup targets, their credentials and the RecurringJobs are the
 `longhorn-backup` role's (H1.7b).
@@ -19,25 +19,14 @@ of those, such as `--tags kubeconfig` (`ansible/roles/setup/k3s/tasks/kubeconfig
 deployer prints this warning beside the command it suggests, from
 `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:maximal_tag_warning`.
 
-**`--tags k3s` never reaches an agent node.** `tasks/agent.yml` runs only from the opt-in join
-plays, so a change to it also needs
-`uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent`
-before the role's `manual_plane` line is cleared. The deployer prints that command for each
-host in `k3s_agent_hosts` (`ansible/inventory/group_vars/all.yml`), from
-`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`. It prints it beside
-the whole-role tag, and for any narrowed row holding `k3s_agent`. `narrow_setup.py` reads the
-join play's `include_role`, so `tasks/agent.yml` alone narrows to `k3s_agent` and prints the join
-with no server command. The deployer records the hosts on the line as `agent_hosts`, so the
-SessionStart banner, `probe.py gitops` and monitor-bridge print the same commands from the row.
-
-**`--tags node-address` pins daniel-box alone.** `tasks/static-address.yml` also runs from the
-opt-in pin play, which matches no host without `-e pin_agent_address=<host>` and runs ON the
-agent. So a change reaching that file, and the whole-role tag, also print
-`uv run ansible-playbook ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address`
-for each agent host, with the host to run it on. The server command keeps `node-address`,
-because `tasks/main.yml` imports the same file. The data is
-`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:AGENT_PIN_TAGS`, and the commands
-come from `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_pin_cmds`.
+**`--tags k3s` never reaches an agent node, and nothing here needs to.** daniel-server's agent
+half is its package's since H7.34: `hosts/components/k3s-agent/` ships the Longhorn packages, the
+multipath drop-in, the inotify key, the join rules and the address pin, and
+`hosts/bootstrap-host.sh` installs and joins k3s. `tasks/agent.yml` is one task that refuses,
+because `k3s-bringup.yml`'s join play names it until H7.20a. `tasks/static-address.yml` is
+daniel-box's pin, and each of its tasks skips `k3s_packaged_hosts`'s hosts. The deployer's join
+and pin printers (`ansible/roles/setup/gitops_deploy/files/gitops_markers.py:agent_join_cmds`) therefore name no
+agent command for this role.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -63,10 +52,9 @@ some carrying a `DECIDED` marker. `files/` holds the Python the crons run, teste
 **The k3s pin is not in this role's defaults.** `k3s_version`, `k3s_install_script_url` and
 `k3s_install_script_sha256` live in `ansible/roles/k8s/system-upgrade/defaults/main.yml`
 since H6.1b, so a pin change routes to the Flux-owned `system-upgrade` tag and writes no
-`manual_plane` line for this role. `tasks/server.yml` and `tasks/agent.yml` read the file with
+`manual_plane` line for this role. `tasks/server.yml` reads the file with
 `include_vars`. `SYSTEM_UPGRADE_DEFAULTS` in `scripts/lib/repo_paths.py` is the Python readers' path.
-The server's install task runs only for a missing binary (since H6.4b), and so does the
-agent's (since H6.5b). SUC's `k3s-server` and `k3s-agent` Plans
+The server's install task runs only for a missing binary (since H6.4b). SUC's `k3s-server` and `k3s-agent` Plans
 are the only writers of each node's version.
 
 Backup tiering, restoring a volume, restoring etcd and the two upgrade runbooks each have a
@@ -123,8 +111,7 @@ holds that schedule.
 - **The agent's same-path files are the `homelab-daniel-server` package's since H6.5a**:
   `registries.yaml`, the logging drop-in, its logrotate file and the log file's `tmpfiles.d`
   entry, in `hosts/components/k3s-agent/`. daniel-server's package lists no `k3s-restart`, so a
-  change to them goes live at the agent's next start. `tasks/agent.yml` keeps the join, the
-  firewall, the Longhorn prerequisites and the installer.
+  change to them goes live at the agent's next start.
   `ansible/tests/setup/test_k3s_agent_component.py` holds the component.
 - **The server's flags are the same package's since H6.4b.** `k3s_server_config` in
   `hosts/components/k3s-server/component.yml` renders into
@@ -134,14 +121,14 @@ holds that schedule.
   `ansible/tests/setup/test_k3s_server_flags_migration.py` held the move to the old flags.
 - **The agent's flags are daniel-server's package's since H6.5b.** `k3s_agent_config` in
   `hosts/components/k3s-agent/component.yml` renders into the same config.yaml.d path on
-  daniel-server, and the agent's unit drop-in runs a bare `k3s agent`. `tasks/agent.yml` passes
-  the installer only `agent`, on a host with no binary. A flag change goes live at the agent's
+  daniel-server, and the agent's unit drop-in runs a bare `k3s agent`. `hosts/bootstrap-host.sh`
+  passes the installer only `agent`. A flag change goes live at the agent's
   next start, because daniel-server's package lists no `k3s-restart`.
   `ansible/tests/setup/test_k3s_agent_flags_migration.py` holds the move to the live flags.
 - **No task here writes an object Flux owns, and a new cluster writer is refused.** The
   `k3s-role-cluster-writes-are-counted` census row fails on a task that writes the cluster from
   any file outside `ansible/tests/repo/_k3s_write_verbs_row.py:K3S_WRITE_ALLOW`, which names
-  `storage_smoke.yml` and `agent_verify.yml` only. Hand the objects to a Flux tag instead.
+  `storage_smoke.yml` only. Hand the objects to a Flux tag instead.
   The stale-checkout guard that H1 ran beside it was retired in #5957 once H1.7b had removed its
   last row. A checkout older than H1.7b still carries its own guard, so this tree's empty copy
   protected nothing. To revive it, take it from #5316 in git history.

@@ -204,9 +204,8 @@ Its `prepare` container runs the gates in `agent` mode, which first waits for th
 Plan to finish, and then the upgrade container replaces the binary. No Ansible command is part
 of the upgrade.
 
-Do not run `k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent` to upgrade. Its
-install guard has no version clause since H6.3d, and no argument clause since H6.5b, so it runs only
-for a missing binary. The agent's flags are daniel-server's package's since H6.5b: they live in
+Do not run `hosts/bootstrap-host.sh` to upgrade. It runs the installer only for a missing
+binary or a version other than its pin. The agent's flags are daniel-server's package's since H6.5b: they live in
 `hosts/components/k3s-agent/component.yml` and take effect at the agent's next start.
 
 The evidence is the node, as for the server: its `plan.upgrade.cattle.io/k3s-agent` label equals

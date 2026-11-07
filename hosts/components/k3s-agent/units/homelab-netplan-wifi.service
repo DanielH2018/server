@@ -1,0 +1,14 @@
+# Shipped by the host package's k3s-agent component. Installs the wifi fallback homelab-secrets
+# renders, because a package symlink in /etc/netplan would dangle while the output is missing.
+[Unit]
+Description=Install the wifi fallback's netplan file
+After=homelab-secrets.service
+ConditionPathExists=/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/lib/homelab/homelab-netplan-wifi
+
+[Install]
+WantedBy=multi-user.target

@@ -37,8 +37,9 @@ SHARED_FILES = {
 # renders it in place and a copy under `hosts/` would fork it. A named allowlist, like
 # SHARED_FILES, so a component cannot read any other role. `initial_setup` joined in H7.30, which
 # moved the Pi's fail2ban group, maintenance jobs and ufw. H7.31 moved daniel-server's and H7.32
-# daniel-box's; the role still applies its other subjects on daniel-box.
-ROLE_SOURCES = frozenset({"common", "initial_setup", "nut_host"})
+# daniel-box's; the role still applies its other subjects on daniel-box. `k3s` joined in H7.34:
+# daniel-box still applies the address pin's templates that daniel-server's package renders.
+ROLE_SOURCES = frozenset({"common", "initial_setup", "k3s", "nut_host"})
 # The components a host's package.yml may borrow sources from with `component:`. claude-code's
 # agent user and its per-uid slice cap sit in each host's package.yml, because the uid differs
 # per host, and they render the component's defaults and templates (#6773). A named allowlist,

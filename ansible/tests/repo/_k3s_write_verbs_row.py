@@ -20,10 +20,6 @@ from _row_table import Census, Subject, tracked
 _TASKS = "ansible/roles/setup/k3s/tasks/"
 
 K3S_WRITE_ALLOW = {
-    _TASKS + "agent_verify.yml": (
-        "stays: it patches the joining node's own Longhorn Node CR, which longhorn-manager "
-        "creates at runtime and no Flux tag declares"
-    ),
     _TASKS + "storage_smoke.yml": (
         "stays: the opt-in smoke test creates and deletes a throwaway PVC, which no Flux tag "
         "declares"
@@ -126,9 +122,9 @@ K3S_WRITE_VERBS = Census(
             "    url: https://127.0.0.1:6443/api/v1/namespaces\n"
         ),
     ),
-    # The three writers H1 keeps: storage_smoke.yml's two and agent_verify.yml's one.
-    min_matches=3,
-    must_find=frozenset({_TASKS + "storage_smoke.yml", _TASKS + "agent_verify.yml"}),
+    # The two writers H1 keeps, both storage_smoke.yml's.
+    min_matches=2,
+    must_find=frozenset({_TASKS + "storage_smoke.yml"}),
     allow=K3S_WRITE_ALLOW,
     count=lambda subject: len(cluster_writes(subject)),
 )

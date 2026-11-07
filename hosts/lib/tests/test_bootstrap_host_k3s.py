@@ -151,3 +151,16 @@ def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
     assert (host.root / "installer.runs").read_text().splitlines() == ["run"] * 13
     assert host.commands() == ["sleep 30"] * 12
     assert host.apt_calls() == []
+
+
+def test_an_agent_with_docker_installed_is_refused_before_the_installer_runs(tmp_path):
+    host = stocked_server(tmp_path)
+    docker = host.root / "usr/bin/docker"
+    docker.parent.mkdir(parents=True, exist_ok=True)
+    docker.write_text("")
+
+    result = host.run("daniel-server", "--offline", str(host.kit), **AGENT_ENV)
+
+    assert result.returncode != 0
+    assert "Docker is installed" in result.stderr
+    assert not (host.root / "installer.runs").exists()
