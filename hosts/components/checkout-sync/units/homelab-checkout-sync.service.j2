@@ -1,0 +1,30 @@
+# Shipped by homelab-daniel-box. homelab-checkout-sync.timer starts it every 10 minutes.
+[Unit]
+Description=Fast-forward the primary checkout to the newest green master commit
+After=network-online.target homelab-secrets.service
+Wants=network-online.target homelab-secrets.service
+OnFailure=homelab-alert@%n.service
+
+[Service]
+Type=oneshot
+User={{ sys_user }}
+WorkingDirectory=/home/{{ sys_user }}/server
+# Holds state.json (the last refusal, so a repeat pages once) and success.json.
+StateDirectory=homelab-checkout-sync
+StateDirectoryMode=0700
+# The builder's read-only token. Without it the run refuses with reason="token" and asks nothing.
+LoadCredential=github_token:/run/credstore/homelab_builder_github_token
+Environment=GITHUB_REPO={{ checkout_sync_github_repo }}
+Environment="CI_CONTEXTS={{ ci_required_contexts | join(',') }}"
+Environment=CI_ANCESTOR_WALK_MAX={{ ci_ancestor_walk_max }}
+Environment=PYTHONDONTWRITEBYTECODE=1
+# This host's journald stores notice and above (MaxLevelStore=notice).
+SyslogLevel=notice
+SyslogIdentifier=homelab-checkout-sync
+# Well under the deployer's 180s lock wait, so a slow walk cannot hold the tree from a tick.
+TimeoutStartSec=150
+# -n: a run that finds the tree lock held skips with 75 rather than waiting, and the next run
+# 10 minutes later tries again. The deployer and the tree jobs take the same lock.
+ExecStart=/usr/bin/flock -n -E 75 {{ server_git_tree_lock }} /usr/bin/uv run --no-project --python {{ host_python_version }} /usr/lib/homelab/checkout-sync/checkout_sync.py
+SuccessExitStatus=75
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "homelab-checkout-sync: skipped, {{ server_git_tree_lock }} was held" || true'

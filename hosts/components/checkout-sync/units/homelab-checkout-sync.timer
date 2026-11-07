@@ -1,0 +1,11 @@
+# Shipped by homelab-daniel-box with its enable link. Every 10 minutes, as the deployer's tick.
+[Unit]
+Description=Fast-forward the primary checkout every 10 minutes
+
+[Timer]
+OnBootSec=10min
+# Counted from the last start. A run still going when it elapses is not started a second time.
+OnUnitActiveSec=10min
+
+[Install]
+WantedBy=timers.target
