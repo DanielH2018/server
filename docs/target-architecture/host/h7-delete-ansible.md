@@ -3349,7 +3349,8 @@ progress.
   once-per-condition record, plus the fingerprint script's two cases. `docs/host-packages.md`
   names the `ExecStartPre=` script as the fingerprint file's writer.
 - **H7.15b and H7.15c:**
-    - `docs/break-glass.md` gains the Pi runbook and the cluster-node procedure, and item 2
+    - `docs/break-glass.md` gains the Pi runbook, `docs/host-packages.md` gains the cluster-node
+      procedure, and item 2
       names the agent's env file as where the token goes on a daniel-server rebuild;
     - the cluster-node procedure links R4 PR 7b's *Bootstrapping Flux on a rebuilt
       cluster* and restates none of its steps;
@@ -3418,7 +3419,7 @@ progress.
       with the role;
     - H7.15a: the offline container case and its two red fixtures, and the kit's offline
       file list in `docs/break-glass.md`;
-    - H7.15c: the cluster-node procedure in `docs/break-glass.md` gains the offline branch;
+    - H7.15c: the cluster-node procedure in `docs/host-packages.md` gains the offline branch;
     - H7.15d: `docs/host-packages.md` gains the host-addition walkthrough, and the host census
       joins `hosts/lib/tests/`;
     - H7.15e: `docs/host-packages.md` gains the release-upgrade procedure.
