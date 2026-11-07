@@ -47,7 +47,12 @@ the name:
   (`ansible/tests/repo/test_host_tool_pins_match_their_twins.py`), and the install is version-gated
   rather than `creates:`-gated, so a bump replaces the tool. Vale's copies are in `homelab-tools`
   and CI (`ansible/tests/repo/test_vale_matches_the_ci_pin.py`). The dotfiles repo's `tools.toml`
-  pins uv, prek and Python, and this repo holds no twin of them.
+  pins uv, prek and Python, and this repo holds no twin of uv or prek.
+- **`host_python_version` names an interpreter only the dotfiles repo installs.** Units run `uv` with
+  `--no-python-downloads`, so a bump merged first leaves every unit naming the pin without a Python.
+  To bump it, land the dotfiles' `python` pin, run `chezmoi apply` on daniel-box and daniel-server,
+  read `~/.local/bin/uv python list --only-installed` on each, and then merge this repo's bump. No
+  test can hold the two equal, because the dotfiles repo is not in this tree.
 - **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413).
   `ansible/tests/setup/test_ssh_dir_paths_are_absolute.py` pins the fix, and the
   `role-tasks-write-no-home-relative-path` row of `ansible/tests/repo/test_census_rows_roles.py`
