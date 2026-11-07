@@ -14,6 +14,7 @@ This page holds the procedures an operator runs when the pipeline stops or must 
 - the three stop levers: a host's timer, the builder hold, and the disarm;
 - rolling a host back;
 - rotating the archive key, or recovering from a revoked one;
+- rebuilding a cluster node, adding a host, and upgrading a host's Ubuntu release;
 - clearing a deployer park that the role's `initial_setup.yml` entry caused;
 - the signer's pages, and the five builder pages.
 
@@ -596,6 +597,321 @@ key. Every step is **operator-only**, and each host step runs from a LAN session
     ```
 
 A host whose `HostUpdateStale` still fires after the last step has not recovered.
+
+## Rebuilding a cluster node
+
+`hosts/bootstrap-host.sh` puts a stock Ubuntu install back on the package path. Every step in
+this section is **operator-only**, and the guest drill below has not run yet. The design is
+[H7](target-architecture/host/h7-delete-ansible.md), *The cluster-node bring-up*.
+
+### What the packages do not hold yet
+
+The two packages do not rebuild a whole node until H7.34 (daniel-server) and H7.35 (daniel-box)
+land. A node rebuilt from them alone lacks:
+
+- the UFW rules for k3s's join ports and for Prometheus's scrapes. The UFW arm of reconcile enables
+  UFW on a rebuilt host, so daniel-box cannot reach a rebuilt agent's VXLAN, kubelet or metrics
+  ports until the rules exist;
+- the Longhorn host prerequisites and the `multipathd` blacklist;
+- the static LAN address, the host CoreDNS forwarder and the read-only kubeconfig;
+- `/etc/rancher/k3s/etcd-s3.env`, which *Restoring* in [the etcd restore doc](k3s-etcd-restore.md)
+  sources;
+- daniel-server's LVM volumes, which `bootstrap-host.sh` step 4 does not create yet.
+
+Until those two slices land, a node rebuilt from this section is not a working node.
+[The break-glass doc](break-glass.md), *Scenario: daniel-server is dead, daniel-box survives*, says
+what completes a daniel-server rebuild during an outage.
+
+### Preparing the installer on either node
+
+1. To set up the installer's inputs, set the hostname to the node's inventory name, because step
+   1 refuses any other. Then install what steps 2 and 3 read before any package exists:
+
+    ```bash
+    sudo apt-get update
+    sudo apt-get install -y age git gnupg curl
+    ```
+
+1. Clone the repository from GitHub, or from the kit's repo bundle
+   ([the break-glass doc](break-glass.md), item 8). Copy the script and the keyring into one
+   directory, because the script reads the keyring beside itself:
+
+    ```bash
+    git clone https://github.com/DanielH2018/server.git <clone>
+    mkdir <dir>
+    cp <clone>/hosts/bootstrap-host.sh <clone>/hosts/keys/homelab-archive-keyring.gpg <dir>/
+    cd <dir>
+    ```
+
+1. To keep the node's existing age recipient, restore its key to `/etc/homelab/age.key` (root,
+   mode 0600) before the first run. Otherwise step 3 creates a fresh key, and the host decrypts
+   nothing until the recipient steps in the header of `ansible/.sops.yaml` have run.
+
+### Rebuilding daniel-box
+
+daniel-box serves the repository, so it builds its own packages from the clone.
+
+1. Install the k3s binary. The installer neither enables nor starts the unit:
+
+    ```bash
+    sudo ./bootstrap-host.sh daniel-box --until 4 --local-build <clone>
+    ```
+
+1. Restore the server token, from [the break-glass doc](break-glass.md), item 2. Package files do
+   not hold it. [The etcd restore doc](k3s-etcd-restore.md) says why it must survive:
+
+    ```bash
+    sudo install -D -m 0600 <token copy> /var/lib/rancher/k3s/server/token
+    ```
+
+1. Run the script to the end. `<clone>` must be a clone whose `HEAD` is a green first-parent
+   commit of master:
+
+    ```bash
+    sudo ./bootstrap-host.sh daniel-box --local-build <clone>
+    ```
+
+1. Restore the archive signing key, which needs the `homelab-signer` user the package declares.
+   Until the import, each builder run refuses with `reason="keyring"`, which is the intended
+   state for a builder with no key. The next builder run writes
+   `/etc/homelab-builder/archive-key.fpr`.
+
+    ```bash
+    sudo -u homelab-signer gpg --homedir /var/lib/homelab-signer/gnupg --batch --import <key copy>
+    sudo -u homelab-signer gpgconf --homedir /var/lib/homelab-signer/gnupg --kill gpg-agent
+    ```
+
+1. To restore etcd as well, do it now, while k3s is still stopped. A new disk holds no local
+   snapshot, so the restore reads R2, and no package writes the file holding R2's credentials.
+   Create `/etc/rancher/k3s/etcd-s3.env` (root, mode 0600) by hand. It sets `AWS_ACCESS_KEY_ID`,
+   `AWS_SECRET_ACCESS_KEY`, `ETCD_S3_BUCKET` and `ETCD_S3_ENDPOINT`, from the `r2_access_key_id`,
+   `r2_secret_access_key` and `r2_bucket` keys of `ansible/vars/secrets.yml`, with the endpoint
+   `<r2_account_id>.r2.cloudflarestorage.com`. Then follow *Restoring* in
+   [the etcd restore doc](k3s-etcd-restore.md), which also reads the config the package installed.
+1. Start k3s. No package enable link names `k3s.service`, and reconcile never starts a `windowed`
+   unit, so this hand command is the only start on the package path:
+
+    ```bash
+    sudo systemctl enable --now k3s.service
+    sudo k3s kubectl get node daniel-box
+    ```
+
+1. Bring up Flux:
+    - **On a new cluster**, follow [Bootstrapping Flux on a rebuilt
+      cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The steps above stand
+      in for that section's first command, which installs k3s. This page restates none of its
+      steps.
+    - **On a cluster restored from etcd**, the snapshot already holds `sops-age` and the Flux
+      objects, so skip the bootstrap and read the Kustomization. Nobody creates
+      `homelab-cluster-vars` by hand. When the Kustomization does not read Ready, replace `sops-age`
+      with the current cluster key ([the break-glass doc](break-glass.md), item 10).
+
+    ```bash
+    sudo k3s kubectl -n flux-system get kustomization cluster-vars
+    ```
+
+### Rebuilding daniel-server
+
+daniel-server installs from daniel-box's repository, so daniel-box and the repository must be up.
+
+1. Read the token from [the break-glass doc](break-glass.md), item 2, without echoing it, and run
+   the script. The installer writes both values to the agent's env file,
+   `/etc/systemd/system/k3s-agent.service.env`, and the script never prints the token. A rerun that
+   finds k3s installed skips the installer, so it never rewrites that file.
+
+    ```bash
+    export K3S_URL=https://<daniel-box server_ip>:6443
+    read -rs K3S_TOKEN
+    export K3S_TOKEN
+    sudo --preserve-env=K3S_URL,K3S_TOKEN ./bootstrap-host.sh daniel-server
+    ```
+
+1. Start the agent, for the same reason as on daniel-box, and read the node from daniel-box:
+
+    ```bash
+    sudo systemctl enable --now k3s-agent.service
+    ```
+
+    ```bash
+    sudo k3s kubectl get node daniel-server
+    ```
+
+Until H7.34 lands, the node this section builds lacks the items that *What the packages do not hold
+yet* lists, so it does not yet serve the cluster.
+
+The agent keeps the server token, because k3s documents no switch to an agent-scoped token for an
+agent that has already joined.
+
+### Rebuilding with GitHub or GHCR unreachable
+
+To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
+
+- Clone from the kit's repo bundle: `git clone <bundle> <clone>`.
+- Add `--offline <kit-dir>` to each `bootstrap-host.sh` run. The script checks each file against
+  the pin the download path checks, and it refuses on a missing file or a mismatch, naming the
+  file. [The break-glass doc](break-glass.md), item 8, lists the directory's files. The script
+  also skips both GitHub reads, so it prints that the clone is unchecked.
+- For the Flux images and the cluster artifact, follow *Scenario: GitHub, GHCR or Sigstore is
+  unreachable* in [the break-glass doc](break-glass.md).
+
+### The guest drill
+
+The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
+upgrade. No script in the tree runs it yet, so the operator cannot run it from this page until
+[#7515](https://github.com/DanielH2018/server/issues/7515) adds the runner. *The proofs* in
+[H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its identity and its three
+guest-local deviations.
+
+- **What it runs.** A transient guest on the `staging` network plays daniel-box, with the clone
+  fetched from GitHub. The drill skips the token and key restores, so the guest holds no production
+  credential. The deviations go in before the install, and k3s starts by hand:
+    1. `bootstrap-host.sh daniel-box --until 4 --local-build <clone>`;
+    1. the three guest-local deviations;
+    1. `bootstrap-host.sh daniel-box --local-build <clone>`;
+    1. `systemctl enable --now k3s.service`.
+- **What passes.** The guest has `homelab-tools`, `homelab-updater` and `homelab-daniel-box`
+  installed, `k3s.service` is the only k3s unit, and `k3s kubectl get node daniel-box` reads Ready.
+- **Blast radius.** The drill creates one transient domain and its disk on daniel-server, and it
+  takes CPU and memory from the agent node for one run. It uses the existing `staging` network and
+  its fence. Every service keeps serving, because the guest reaches no LAN address. The rollback
+  is the drill's own teardown.
+
+## Adding a host
+
+Steps 1 and 3 to 5 go in the host's first PR. The design is
+[H7](target-architecture/host/h7-delete-ansible.md), *Adding a host*. A host on another
+architecture first needs `homelab-tools` built for it, and `bootstrap-host.sh` pins amd64 and
+arm64 only.
+
+1. Add `hosts/<host>/package.yml`. The renderer writes the host's `nfpm.yaml` from this file, so
+   no spec is written by hand. Add a `units:` entry only for a unit that a process other than
+   reconcile restarts, such as `{policy: windowed}`.
+
+    ```yaml
+    description: <host>'s homelab host package
+    components: [reconcile]
+    maintainer_scripts: [preinst, postinst, prerm]
+    enable:
+      homelab-updater.timer: timers.target
+    ```
+
+    In the same step, name the host in two more places. The renderer reads the inventory, and
+    `bootstrap-host.sh` refuses a host that `HOSTS` does not list:
+    - add the host to `ansible/inventory/hosts.ini`, and copy
+      `ansible/inventory/host_vars/_example.yml` to `<host>.yml`;
+    - add the host to `HOSTS` in `hosts/bootstrap-host.sh`.
+1. **Operator-only:** create the age key and read its public key. Run the script from the PR
+   branch's copy, with the keyring beside it, as *Preparing the installer on either node* describes:
+
+    ```bash
+    sudo ./bootstrap-host.sh <host> --until 3
+    ```
+
+1. In `ansible/.sops.yaml`, add the creation rule for `vars/hosts/<host>\.sops\.yaml$` ahead of the
+   generic rule. Its keys are the host's printed key, daniel-box's key and the recovery key, in that
+   order. Adding a recipient is **operator-only**.
+1. **Operator-only**, when the tree names a credential for the host: write its SOPS file, and commit
+   the file. A host whose tree names no key needs no file.
+
+    ```bash
+    cd /home/ubuntu/server && uv run python scripts/secrets_mgmt/host_secrets.py sync <host>
+    ```
+
+1. Add the host to every other set that names hosts:
+    - `NAMED` in `scripts/validate/validate_lib/package_roots.py`, as `homelab-<host>`, which both
+      `host_packages` scans read;
+    - `CANARY_ORDER` in `hosts/lib/builder_rollout_gate.py`;
+    - a third `apt-repo-<host>` rule under `ufw:` in `hosts/components/builder/component.yml`, or
+      daniel-box's firewall refuses the host's `apt-get update` in step 6;
+    - one `HostReconcileFailed` rule in
+      `ansible/roles/k8s/observability/files/rules/host-checks.yaml`, because
+      `ansible/tests/services/test_host_plane_rule_literals.py` fails a `hosts.ini` host without one.
+
+    `host_secrets.py check` finds the host from `hosts/<host>/package.yml`, so it takes no edit.
+
+    A host outside the cluster also needs its metrics to reach Prometheus, because the updater's
+    series are textfile metrics:
+    - ship a node exporter, as `hosts/components/pi-node-exporter/` does for daniel-pi;
+    - add a scrape job like `node-pi` to
+      `ansible/roles/k8s/observability/templates/prometheus.yaml.j2`, with `origin: <host>`;
+    - add `<host>: {job: <scrape job>, limit_seconds: <seconds>}` to `observability_expected_hosts` in
+      `ansible/roles/k8s/observability/defaults/main.yml`, with the limit above the host's longest
+      updater gap;
+    - add the host's `HostUpdateStale` rule to `host-checks.yaml`. The test above prints the rule.
+
+    A new cluster node instead needs a k3s mode in `hosts/bootstrap-host.sh` and an entry in `NODES`
+    in `hosts/lib/k3s_gates.py`.
+1. **Operator-only**, after the merge: once the builder has published the package, run the script
+   to the end.
+
+    ```bash
+    sudo ./bootstrap-host.sh <host>
+    ```
+
+## Upgrading a host's Ubuntu release
+
+No package depends on one Ubuntu release, and the `host_packages` container suite runs on every
+release the fleet runs or is moving to. One host moves at a time, in the canary order: daniel-server,
+then daniel-pi, then daniel-box. Each step is **operator-only**, apart from the matrix PR.
+
+1. To make the host's package one the suite has tested on the target, merge a PR that adds the
+   release to the `host_packages` matrix in `.github/workflows/ci.yml`, with the suite green. The
+   PR makes the same edit to `.github/workflows/host-test-image-cache.yml`, which
+   `ansible/tests/repo/test_host_test_image_cache.py` holds equal to `ci.yml`. Skip this step when
+   the matrix already lists the release.
+1. Stop updates on the host, as *Stopping updates on one host* describes, so no package installs
+   during the upgrade. `HostUpdateStale` can fire while the timer stays masked, which is expected.
+1. On a cluster node, pause system-upgrade-controller and check the cluster, both from daniel-box.
+   The label stops a promoted k3s bump from starting a Job on the node. Go on only when the gate
+   exits 0. daniel-box's restart runs at `k3s_restart_window` in
+   `ansible/inventory/host_vars/daniel-box.yml`, so pick a quiet slot outside that window.
+
+    ```bash
+    sudo k3s kubectl label node <node> homelab/k3s-upgrade-paused=true
+    sudo python3 /usr/lib/homelab/k3s_gates.py host --server https://127.0.0.1:6443 \
+      --token-file /run/credstore/k3s_readonly_token \
+      --ca-file /var/lib/rancher/k3s/agent/server-ca.crt
+    ```
+
+1. Upgrade the host and reboot it:
+
+    ```bash
+    sudo do-release-upgrade
+    sudo reboot
+    ```
+
+1. Verify the host against the release. `lsb_release -rs` prints the target release, `dpkg --verify`
+   prints nothing, and the reconcile start exits 0.
+
+    ```bash
+    lsb_release -rs
+    dpkg --verify homelab-tools homelab-updater homelab-<host>
+    sudo systemctl start homelab-reconcile.service
+    ```
+
+1. Resume updates as *Stopping updates on one host* describes, then run the updater once. Only the
+   updater writes the two metrics the next step reads, so until this run they hold their
+   pre-upgrade values. The run also installs whatever master published meanwhile.
+
+    ```bash
+    sudo systemctl start homelab-updater.service
+    dpkg-query -W homelab-<host>
+    ```
+
+1. Read Prometheus. `homelab_host_reconcile_ok{host="<host>"}` reads 1, and
+   `homelab_host_applied_info{host="<host>"}` carries the version `dpkg-query` printed.
+1. On a cluster node, remove the label from daniel-box. system-upgrade-controller resumes on the
+   node.
+
+    ```bash
+    sudo k3s kubectl label node <node> homelab/k3s-upgrade-paused-
+    ```
+
+A host that fails the verify step stays stopped, with its updater timer masked. A host that fails
+the Prometheus read holds, so mask its timer again. Either host keeps its pause label. Its rollback
+is a
+rebuild on the previous release with `bootstrap-host.sh`. A cluster node follows *Rebuilding a
+cluster node*, and the Pi takes `sudo ./bootstrap-host.sh daniel-pi`.
 
 ## Clearing a park caused by the role's `initial_setup.yml` entry
 

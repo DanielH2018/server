@@ -1421,9 +1421,11 @@ card's key.
 
 ### The cluster-node bring-up
 
-`docs/break-glass.md` gains the cluster-node procedure in H7.15c, and
-`docs/longhorn-disaster-recovery.md` step 2 and `docs/k3s-etcd-restore.md` point at it in
-the same PR. Its steps are:
+`docs/host-packages.md` gains the cluster-node procedure in H7.15c (#7508), and
+`docs/break-glass.md`, `docs/longhorn-disaster-recovery.md` and `docs/k3s-etcd-restore.md`
+point at it in the same PR. The procedure takes the archive signing key after step 3, because
+the package creates the user that imports it, and it starts k3s by hand, because no package
+enable link names the unit. Its steps are:
 
 1. Run `bootstrap-host.sh` with `--until 4`, which installs k3s in the declared mode. On
    daniel-server the operator supplies `K3S_URL` and `K3S_TOKEN`, the token from
@@ -1509,7 +1511,9 @@ halves (exit 4).
       fence check passes before anything is copied into the guest.
     - *Identity.* The guest plays daniel-box. A lone guest can only be a server, because an
       agent could not reach daniel-box through the fence.
-    - *What it runs.* `bootstrap-host.sh daniel-box --local-build <clone>`, with the clone
+    - *What it runs.* `bootstrap-host.sh daniel-box --until 4 --local-build <clone>`, the
+      deviations below, the same command without `--until`, and a hand `systemctl enable --now
+      k3s.service`, with the clone
       fetched from GitHub over the guest's internet egress. No copy of the production repo
       is staged, so the drill takes the path a real rebuild takes.
     - *Two guest-local deviations.* The packaged k3s config sets `--node-ip` and
@@ -1569,11 +1573,11 @@ One host moves at a time, in H3's canary order, and each step is **operator-only
    reboot.
 4. Verify against the matrix release. `lsb_release -rs` prints the target release, and
    `dpkg --verify` reports nothing for the `homelab-*` packages. `systemctl start
-   homelab-reconcile` exits 0. Prometheus reads `homelab_host_reconcile_ok` at 1 and
-   `homelab_host_applied_info` at the version the suite tested.
-5. Release the hold with the same runbook, and on a cluster node remove the label. The
-   next updater run installs whatever master published meanwhile, and SUC resumes on the
-   node.
+   homelab-reconcile` exits 0.
+5. Release the hold with the same runbook and run `homelab-updater.service` once, which installs
+   whatever master published meanwhile. Only the updater writes the metrics, so Prometheus then
+   reads `homelab_host_reconcile_ok` at 1 and `homelab_host_applied_info` at the installed
+   version. On a cluster node, remove the label, and SUC resumes on the node.
 
 A host that fails step 4 stays held. Its rollback is a rebuild on the previous release with
 `bootstrap-host.sh`, as the Pi runbook and the cluster-node procedure describe.
@@ -3351,7 +3355,8 @@ progress.
   once-per-condition record, plus the fingerprint script's two cases. `docs/host-packages.md`
   names the `ExecStartPre=` script as the fingerprint file's writer.
 - **H7.15b and H7.15c:**
-    - `docs/break-glass.md` gains the Pi runbook and the cluster-node procedure, and item 2
+    - `docs/break-glass.md` gains the Pi runbook, `docs/host-packages.md` gains the cluster-node
+      procedure, and item 2
       names the agent's env file as where the token goes on a daniel-server rebuild;
     - the cluster-node procedure links R4 PR 7b's *Bootstrapping Flux on a rebuilt
       cluster* and restates none of its steps;
@@ -3420,7 +3425,7 @@ progress.
       with the role;
     - H7.15a: the offline container case and its two red fixtures, and the kit's offline
       file list in `docs/break-glass.md`;
-    - H7.15c: the cluster-node procedure in `docs/break-glass.md` gains the offline branch;
+    - H7.15c: the cluster-node procedure in `docs/host-packages.md` gains the offline branch;
     - H7.15d: `docs/host-packages.md` gains the host-addition walkthrough, and the host census
       joins `hosts/lib/tests/`;
     - H7.15e: `docs/host-packages.md` gains the release-upgrade procedure.
