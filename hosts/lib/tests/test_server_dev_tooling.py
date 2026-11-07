@@ -41,10 +41,9 @@ def _wrapper_execs(package: host_mode.Package, tool: str) -> bool:
     return mode == 0o755 and f'exec /usr/lib/homelab/bin/{tool} "$@"' in body.decode()
 
 
-def test_uv_reaches_both_hosts_and_daniel_box_keeps_the_old_copy(server, box):
+def test_uv_reaches_both_hosts(server, box):
     assert _wrapper_execs(server, "uv")
     assert _wrapper_execs(box, "uv")
-    assert "/usr/local/bin/uv" not in _legacy_paths(box)
     assert "homelab-tools" in server.depends and "homelab-tools" in box.depends
 
 

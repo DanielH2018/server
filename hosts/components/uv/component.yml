@@ -5,7 +5,7 @@
 # reaches every caller.
 #
 # Both cluster hosts list this component. Their units, packaged or rendered by a setup role, name
-# /usr/bin/uv, except daniel-server's Ansible-era Loki witness. /usr/local/bin precedes /usr/bin on PATH, so a host
+# /usr/bin/uv. /usr/local/bin precedes /usr/bin on PATH, so a host
 # package that stops writing /usr/local/bin/uv lists it as a legacy entry beside this component. The
 # per-user uv under ~/.local/bin is the dotfiles repo's.
 #
