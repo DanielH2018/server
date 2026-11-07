@@ -240,14 +240,50 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
 
 # ── what `cmd_rotate` tells the operator to do next ─────────────────────────
 def test_rotate_says_commit_then_land(capsys):
-    """Flux reads only a landed commit, and deploy.sh refuses every k8s tag."""
+    """Flux reaches a rotated value only through a landed commit, so the Next: line says so."""
     name = "monitor_bridge_test_token"
     tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01"))))
     args = SimpleNamespace(name=name, all=False, commit=True, no_derive=False)
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
-    assert "Next: commit " in out and "land.sh" in out, out
-    assert "deploy.sh" not in out and "ansible-playbook" not in out, out
+    assert "Next: commit " in out and "then land the commit" in out, out
+    assert "deploy.sh" not in out, out
+
+
+def test_rotate_refuses_a_consumer_flux_does_not_apply_before_writing(capsys):
+    """Nothing applies a tag Flux does not own, so its token must never be minted."""
+    name = "monitor_bridge_test_token"
+    tools, calls = build_tools(
+        Fakes(registry=_reg((name, "auto", "2026-01-01")), owners={})
+    )
+    args = SimpleNamespace(name=name, all=False, commit=True, no_derive=False)
+    assert sr.cmd_rotate(args, tools) == 1
+    captured = capsys.readouterr()
+    assert "NO DEPLOY PATH for tags monitor-bridge" in captured.err, captured.err
+    assert "Nothing was written" in captured.err, captured.err
+    assert "Next: commit" not in captured.out, captured.out
+    assert process_calls(calls) == [], "a refused rotation reached `sops set`"
+    assert "save_registry" not in named_calls(calls)
+
+
+def test_a_mixed_batch_names_only_the_tag_flux_does_not_own():
+    """One flux-owned consumer must not carry a batch past the one that has no path."""
+    tags = {"alpha": ("monitor-bridge",), "beta": ("widget",)}
+    assert sr.unapplied_tags(
+        ["alpha", "beta"], {"monitor-bridge": "flux"}, tags.__getitem__
+    ) == ["widget"]
+
+
+def test_a_dry_run_reports_the_same_refusal(capsys):
+    """The bare `rotate` is the dry run, so it must show what `--commit` would refuse."""
+    name = "monitor_bridge_test_token"
+    tools, calls = build_tools(
+        Fakes(registry=_reg((name, "auto", "2026-01-01")), owners={})
+    )
+    args = SimpleNamespace(name=name, all=False, commit=False, no_derive=False)
+    assert sr.cmd_rotate(args, tools) == 1
+    assert "NO DEPLOY PATH" in capsys.readouterr().err
+    assert process_calls(calls) == []
 
 
 # ── `source: record` keys ─────────────────────────────────────

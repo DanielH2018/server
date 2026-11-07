@@ -11,7 +11,7 @@ import json
 from typing import Any
 
 import pytest
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 
 import grafana_dashboards as gd
 
@@ -76,9 +76,8 @@ def test_the_output_is_a_pure_function_of_the_input():
 )
 def test_a_board_that_is_not_a_json_object_fails_the_render(text):
     """A broken board fails the render task, named for the filter, rather than reaching Grafana."""
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         gd.FilterModule().filters()["grafana_deploy_annotated"](
             text, UID, EXPR, FLUX_EXPR
         )
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith("grafana_deploy_annotated: ")

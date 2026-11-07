@@ -114,6 +114,16 @@ def save_registry(reg: dict, path: str = REGISTRY_FILE) -> None:
         fh.write(body)
 
 
+def tree_owners() -> dict[str, str]:
+    """Each k8s deploy tag whose `containers_list` entry carries `owner`, to that value.
+
+    No Ansible path may deploy such a tag: Flux applies it.
+    """
+    from lib.k8s_roles import tag_owners
+
+    return tag_owners()
+
+
 # The cluster files' boundaries (slice D3).
 def cluster_tree() -> Tree:
     """The live tree's cluster file paths."""
@@ -164,6 +174,7 @@ class RotationTools:
     sops_names: Callable[..., list[str]] = sops_names
     host_file_keys: Callable[[], frozenset[str]] = host_file_keys
     sops_set: Callable[[str, str], None] = sops_set
+    owners: Callable[[], Mapping[str, str]] = tree_owners
     cluster_tree: Callable[[], Tree] = cluster_tree
     cluster_expected: Callable[[], Expected] = cluster_expected
     cluster_write: Callable[[Tree, Expected], int] = cluster_write

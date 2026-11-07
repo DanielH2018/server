@@ -33,7 +33,7 @@ def test_consumer_tags_routes_the_bridge_prefix_to_the_bridge():
 
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # Registry-driven guard: a new `auto` key must resolve a consumer_tag, so the unattended
-    # weekly `rotate --commit --deploy` cron actually rotates it. Without this, a token whose
+    # weekly `rotate --commit` cron actually rotates it. Without this, a token whose
     # consumer_tag falls through to () silently drops out of rotation and only surfaces months
     # later as an OVERDUE page — exactly how arr_autoblock_push_token slipped in when
     # autofix-bridge landed. The tier has no row until someone registers a new `auto` key, so
@@ -60,7 +60,7 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
 # fix's scope. Routing every `monitor_bridge_*` name to monitor-bridge by prefix is wrong
 # when such a token is pushed from another role's health script entirely —
 # the prefix is a Kuma monitor-history artefact, kept so renaming the monitor would not lose
-# its history. For those, `rotate --deploy` would write a new value, deploy a role that renders
+# its history. For those, `rotate --commit` would write a new value, deploy a role that renders
 # the token nowhere, leave the real pusher on the old one, and stamp `last_rotated` green.
 # `ansible/tests/k8s/test_secret_consumer_census.py` proves each tag's role references the
 # token, measured by `tree_consumers`, which also credits a role that renders it out of another

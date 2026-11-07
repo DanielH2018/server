@@ -1,4 +1,4 @@
-"""`rotate --commit` keeps the cluster files in step before it deploys (slice D3.2b).
+"""`rotate --commit` keeps the cluster files in step (slice D3.2b).
 
 Every tree here is built in `tmp_path`, and `write`, `check` and the render are fakes from
 `_rotation_fakes.py`: no test runs the real `cluster_vars.py write` or decrypts anything.
@@ -16,7 +16,7 @@ from secrets_mgmt import secret_rotation as sr
 from _rotation_fakes import Fakes, build_tools, named_calls
 from secrets_mgmt.cluster_vars_check import Expected, ManifestEntry, Tree
 
-# Auto tier with a single-redeploy consumer, so `rotate` writes it.
+# Auto tier with a single consumer, which `Fakes` marks flux-owned.
 NAME = "monitor_bridge_test_token"
 
 
@@ -111,7 +111,8 @@ def test_the_next_line_names_the_cluster_files_write_rewrote(tmp_path, capsys):
             registry=registry, cluster_root=_cluster_tree(tmp_path), expected=REFERENCED
         )
     )
-    assert sr.cmd_rotate(_args(), tools) == 0
+    args = _args()
+    assert sr.cmd_rotate(args, tools) == 0
     next_line = next(
         line
         for line in capsys.readouterr().out.splitlines()

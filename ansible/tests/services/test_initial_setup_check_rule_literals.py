@@ -45,7 +45,7 @@ PRODUCERS = {
         ["daniel-box", "daniel-server"],
     ),
     "LokiReadRoute": (
-        ("setup", "initial_setup", "loki-read-route-health.sh.j2"),
+        ("components", "loki-route-witness", "loki-read-route-health.sh.j2"),
         "loki-read-route-health",
         ["daniel-box", "daniel-server"],
     ),
@@ -134,12 +134,3 @@ def test_every_producer_names_the_check_label_its_rule_reads(prefix):
     assert re.search(rf"write_check_textfile {re.escape(check)} ", body), (
         f"{template[-1]} does not write the {check} textfile its rules read"
     )
-
-
-def test_the_packaged_loki_witness_renders_the_deadline_the_rules_pin():
-    """daniel-box's witness is a component since H7.36 and daniel-server's stays the role's
-    template, so the shared rule's literals have to hold for both copies."""
-    packaged = rendered_deadline(
-        ("components", "loki-route-witness", "loki-read-route-health.sh.j2")
-    )
-    assert packaged == rendered_deadline(PRODUCERS["LokiReadRoute"][0])

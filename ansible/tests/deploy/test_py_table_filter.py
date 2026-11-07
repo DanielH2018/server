@@ -12,7 +12,7 @@ Run: uv run pytest ansible/tests/deploy/test_py_table_filter.py
 
 import pytest
 
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 from py_table import FilterModule, py_table
 
 SOURCE = """
@@ -59,9 +59,8 @@ def test_an_element_that_is_not_a_call_is_flagged():
     ["ROWS = 1\n", "ROWS = (1,)\n", "ROWS = (Row(1),)\n"],
     ids=["no-table", "not-a-call", "positional"],
 )
-def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(source):
+def test_a_refusal_is_a_filter_error_named_for_its_filter(source):
     """A render failure names the filter that refused, through the filter Ansible calls."""
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         FilterModule().filters()["py_table"](source, "ROWS")
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith("py_table: "), str(caught.value)

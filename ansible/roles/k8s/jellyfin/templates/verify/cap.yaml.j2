@@ -12,7 +12,7 @@
   the claim Bound, so it sits with the verify Job.
 
   DECIDED: under Flux the cap runs in `jellyfin-verify`, after the claim applies, as the
-  Ansible tasks run after k8s/manifests (#3387). The gap #3387 accepted closes here: the
+  Ansible tasks ran after the render (#3387). The gap #3387 accepted closes here: the
   `jellyfin-snapshot` Job skips a claim that does not exist yet, so a new claim's first
   snapshot is the next revision's, and the cap has landed by then. The spec embeds a digest of
   jellyfin's rendered Deployment, so the cap is re-checked on every revision that rolls

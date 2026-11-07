@@ -3,7 +3,7 @@
   Python puts the scheduler's own directory on sys.path, so the files sit flat at the mount.
 
   The crowdsec-home-ips CronJob mounts two keys of it too (home-ips-cronjob.yaml.j2): its
-  module, home_ips_discover.py, and flux_job_connect.py from k8s/manifests, which that module
+  module, home_ips_discover.py, and flux_job_connect.py from the renderer's job files, which that module
   imports for every connection it opens.
 
   No secret goes in here, and the sidecar takes none from a Secret: M6 batch B6b's Cutover-2

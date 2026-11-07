@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""The Jinja environment every render guard uses, carrying ansible-core's own filters.
+"""The Jinja environment every render guard uses, carrying the Ansible-dialect filters.
 
 Each guard used to build its own environment over ``render_guard.make_env`` and register a
 different subset: the compose guard had ``hash``, the shell guard had ``search`` and a
@@ -8,20 +8,15 @@ hand-written ``bool``, the setup guard had the real ``bool``/``comment``/``to_uu
 plugins, and the unit and config guards had none. A template rendered clean under one guard
 and failed under another for no reason a reader could derive from the template (#2408).
 
-This module registers ONE set, and every filter but ``to_json`` is the implementation
-ansible-core or this repo's ``filter_plugins/`` ships, so a guard agrees with a deploy by
-identity rather than by a shim's fidelity. ``to_json`` is ``k8s_yaml.to_json_stub``:
-ansible-core's raises on the ``StubUndefined`` a guard renders secrets as, which would abort
-the render this module exists to complete.
+This module registers ONE set: ``renderer_lib/jinja_filters.py``'s reimplementations and this repo's
+``filter_plugins/``. ``to_json`` is ``k8s_yaml.to_json_stub``, because a guard renders secrets
+as ``StubUndefined``, and plain-data JSON would abort the render this module exists to
+complete. The renderer's own environment replaces it with ``filters.to_json``.
 
-Importing ``ansible.plugins.filter.core`` costs 100-365 ms (``python -X importtime``, warm
-and cold runs on 2026-10-09), so the module has two tiers. Its TOP LEVEL is the
-light tier: it loads no ansible-core, and carries ``ansible_bool``, a copy of ``to_bool`` for
-``lib.k8s_context``. That module cannot pay the import, for the reason its own ``DECIDED:``
-marker gives: ``probe_lib/health.py`` reaches it and ``probe.py health`` loads no
-ansible-core. ``register_ansible_filters`` is the heavy tier, and imports ansible-core and the
-repo's filter plugins when it is first called. ``test_the_light_tier_loads_no_ansible_core``
-pins the split.
+The module has two tiers. Its TOP LEVEL is the light tier, and carries ``ansible_bool``
+for ``lib.k8s_context``. ``register_ansible_filters`` is the heavy tier, and imports the
+filter modules when it is first called. Nothing here loads ansible-core.
+``test_the_light_tier_loads_no_ansible_core`` pins that.
 
 Imported as ``from lib.ansible_jinja_env import ...`` after the caller's own ``sys.path``
 bootstrap puts ``scripts/`` on the path (``.claude/rules/python-layout.md``).
@@ -32,10 +27,6 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-import os
-import tempfile
-from collections.abc import Generator
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
@@ -54,7 +45,6 @@ __all__ = [
     "BOOLEANS_FALSE",
     "BOOLEANS_TRUE",
     "ansible_bool",
-    "ansible_local_temp",
     "file_lookup",
     "make_ansible_env",
     "register_ansible_filters",
@@ -63,9 +53,7 @@ __all__ = [
 ]
 
 
-# `ansible.plugins.filter.core._valid_bool_true` / `_valid_bool_false`, copied rather than
-# imported so the light tier loads no ansible-core.
-# `test_ansible_bool_agrees_with_ansible_core_to_bool` pins the copy.
+# `test_ansible_bool_tables_are_to_bool_tables` holds these to ansible-core's while it is installed.
 BOOLEANS_TRUE = frozenset({"yes", "true", "1", "on"})
 BOOLEANS_FALSE = frozenset({"no", "false", "0", "off"})
 
@@ -73,8 +61,7 @@ BOOLEANS_FALSE = frozenset({"no", "false", "0", "off"})
 def ansible_bool(value) -> bool:
     """Mirror Ansible's `bool` Jinja filter, `ansible.plugins.filter.core.to_bool`.
 
-    The light-tier copy, for ``lib.k8s_context`` only; every render guard gets the real
-    ``to_bool`` from ``register_ansible_filters``. Faithfulness matters more than convenience:
+    The filter every environment registers. Faithfulness matters more than convenience:
     the reason templates use `| bool` at all is that `-e var=false` arrives as the STRING
     "false", which plain Jinja truthiness reads as True. A stub that just called Python's
     bool() would agree with Ansible on real booleans and disagree on exactly the inputs the
@@ -104,40 +91,17 @@ def ansible_bool(value) -> bool:
         return False
 
 
-@contextmanager
-def ansible_local_temp() -> Generator[None]:
-    """Point ansible-core's local temp directory at the system temp directory for the block.
-
-    ansible-core creates its local temp directory when a process first imports its
-    constants, under `~/.ansible/tmp` by default. The system temp directory keeps the home
-    directory untouched, and ansible-core removes its own subdirectory at exit. A value the
-    caller already set is left alone. The block restores the environment on exit, so an
-    in-process caller such as a pytest worker does not hand the variable to every later
-    test and subprocess (#5002). A process killed by a signal skips the atexit handler, so
-    its directory stays behind; under the system temp directory it is the system's to
-    clean rather than a leak in the home directory (#5904).
-    """
-    if "ANSIBLE_LOCAL_TEMP" in os.environ:
-        yield
-        return
-    os.environ["ANSIBLE_LOCAL_TEMP"] = tempfile.gettempdir()
-    try:
-        yield
-    finally:
-        os.environ.pop("ANSIBLE_LOCAL_TEMP", None)
-
-
 def register_ansible_filters(env: Environment) -> Environment:
     """Register on ``env`` the Ansible filters and tests this repo's templates reach for.
 
-    ``bool`` is ansible-core's ``to_bool`` rather than Python's ``bool()``: ``bool("false")``
-    is True, and ``-e var=false`` arrives as the string, so a hand-rolled shim would render
+    ``bool`` is ``ansible_bool`` rather than Python's ``bool()``: ``bool("false")`` is True,
+    and ``-e var=false`` arrives as the string, so Python's would render
     ``{% if x | bool %}`` the opposite way from a deploy — the exact divergence ``| bool``
     is written in a template to prevent.
 
     ``to_uuid`` is a deterministic UUIDv5, so a stub would render a different file each run.
-    ``mandatory`` raises only on Ansible's own UndefinedMarker, so a guard's tracking
-    Undefined passes through it and is judged by name as usual.
+    ``mandatory`` returns its input, so a guard's tracking Undefined passes through it and is
+    judged by name as usual.
 
     ``filter_by_platform``, ``authelia_service_rules`` and ``tier_priority_class`` are this
     repo's own filter plugins: ``deploy.yml`` splits each host's entries by platform through the
@@ -174,15 +138,14 @@ def register_ansible_filters(env: Environment) -> Environment:
 
     ``homelab_role_label`` is the filter ``ansible/templates/role-labelled.yaml.j2`` stamps
     ``homelab/role`` with, for every role that arms the manifests role's prune.
-    ``from_json`` is ansible-core's, which home-assistant's ``templates/config/secrets.yaml.j2``
-    parses a service-account key with. ``homelab-render`` renders both templates, and its
-    template census holds every filter and test name the k8s templates use to this set.
-    ``from_yaml`` and ``regex_replace`` are ansible-core's too, for the role task expressions
-    ``homelab-render`` evaluates: image-builder's content tag parses its context render with
-    the first. ``combine`` is ansible-core's too:
-    observability's ``manifests_self_rollouts`` adds each workload's namespace with it, and
-    ``homelab-render`` evaluates that list to stamp ``checksum/restart`` on those workloads.
-    ``basename`` and ``dirname`` are ansible-core's for the setup-role task expressions
+    ``from_json`` is what home-assistant's ``templates/config/secrets.yaml.j2`` parses a
+    service-account key with. ``homelab-render`` renders both templates, and its template
+    census holds every filter and test name the k8s templates use to this set.
+    ``from_yaml`` and ``regex_replace`` serve the role task expressions ``homelab-render``
+    evaluates: image-builder's content tag parses its context render with the first.
+    ``combine``: observability's ``manifests_self_rollouts`` adds each workload's namespace
+    with it, and ``homelab-render`` evaluates that list to stamp ``checksum/restart`` on those
+    workloads. ``basename`` and ``dirname`` serve the setup-role task expressions
     ``probe.py applied`` reads: claude_code's slice-cap prune gates on a ``basename``, and its
     homelab-ui and memory-store directories are a ``dirname`` (#6407, #6409).
 
@@ -192,8 +155,8 @@ def register_ansible_filters(env: Environment) -> Environment:
     Returns:
         ``env``, so a caller can build and register in one expression.
     """
-    # The heavy tier: imported here rather than at the top so the light tier above stays
-    # free of ansible-core (see the module docstring).
+    # The heavy tier: imported here rather than at the top, so the light tier above loads no
+    # filter module and no renderer module.
     if str(FILTER_PLUGINS) not in _sys.path:
         _sys.path.insert(0, str(FILTER_PLUGINS))
     from authelia_access import authelia_service_rules
@@ -210,38 +173,22 @@ def register_ansible_filters(env: Environment) -> Environment:
     import service_tier
     import updater_lag_grace
     from toposort import filter_by_platform
+    from renderer.renderer_lib import jinja_filters as filters
 
-    # The first ansible-core import creates its local temp directory (#5904).
-    with ansible_local_temp():
-        from ansible.plugins.filter.core import (
-            b64encode,
-            combine,
-            comment,
-            from_json,
-            from_yaml,
-            get_hash,
-            mandatory,
-            regex_replace,
-            to_bool,
-            to_uuid,
-        )
-        from ansible.plugins.test.core import search
-
-        # Not module-level names: ansible-core builds them in its FilterModule.
-        from ansible.plugins.filter.core import FilterModule as CoreFilters
-
-    env.filters["b64encode"] = b64encode
-    env.filters["bool"] = to_bool
-    env.filters["combine"] = combine
-    env.filters["comment"] = comment
-    env.filters["from_json"] = from_json
-    env.filters["from_yaml"] = from_yaml
-    env.filters["regex_replace"] = regex_replace
-    # ansible-core's `zip` filter is the builtin.
+    env.filters["b64encode"] = filters.b64encode
+    env.filters["basename"] = filters.basename
+    env.filters["bool"] = ansible_bool
+    env.filters["combine"] = filters.combine
+    env.filters["comment"] = filters.comment
+    env.filters["dirname"] = filters.dirname
+    env.filters["from_json"] = filters.from_json
+    env.filters["from_yaml"] = filters.from_yaml
+    env.filters["regex_replace"] = filters.regex_replace
+    # Ansible's `zip` filter is the builtin.
     env.filters["zip"] = zip
-    env.filters["hash"] = get_hash
-    env.filters["mandatory"] = mandatory
-    env.filters["to_uuid"] = to_uuid
+    env.filters["hash"] = filters.hash_text
+    env.filters["mandatory"] = filters.mandatory
+    env.filters["to_uuid"] = filters.to_uuid
     env.filters["to_json"] = to_json_stub
     env.filters["filter_by_platform"] = filter_by_platform
     env.filters["authelia_service_rules"] = authelia_service_rules
@@ -292,10 +239,7 @@ def register_ansible_filters(env: Environment) -> Environment:
         "longhorn_nobackup_claims",
     ):
         env.filters[name] = longhorn_filters[name]
-    core_filters = CoreFilters().filters()
-    for name in ("basename", "dirname"):
-        env.filters[name] = core_filters[name]
-    env.tests["search"] = search
+    env.tests["search"] = filters.search
     return env
 
 

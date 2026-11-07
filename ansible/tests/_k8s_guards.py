@@ -1,10 +1,7 @@
 """Shared scanners for the k8s guard checks — `when:` coverage, read off the role sources.
 
-Two test modules read the same role tree and ask the same question of it: does the guard sit
-on the task, or on the include that pulled its whole file in. `test_k8s_dry_run.py` asks it of
-the cluster writes and `test_k8s_dry_run_host_writes.py` of the node writes, so the scanner
-lives here rather than in either. Each rule's reasoning stays with the function that carries
-it; both callers' module docstrings say what they are for.
+`test_k8s_dry_run.py` asks of the role tree whether the guard sits on the task, or on the include
+that pulled its whole file in. Each rule's reasoning stays with the function that carries it.
 
 The cluster-write rule, `_chunk_mutates`, has two callers too. `test_k8s_dry_run.py` asks
 whether each write is guarded, and the `render-does-not-cover-role-writes` census row in

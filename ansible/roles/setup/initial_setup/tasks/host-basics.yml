@@ -191,7 +191,9 @@
     name: apt-show-versions
     state: present
   become: true
-  when: not has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - not has_low_memory_board
   tags: [packages]
 
 - name: Resolve the deploy user's home directory
