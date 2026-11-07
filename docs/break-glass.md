@@ -368,9 +368,10 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     sudo groupadd -f ssh-users
     sudo usermod -aG ssh-users ubuntu
     hostname -I
+    ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
     ```
 
-    The address must equal `server_ip` in `ansible/inventory/host_vars/daniel-pi.yml`. No package
+    Write down the fingerprint the last line prints, because step 6 compares it. The address must equal `server_ip` in `ansible/inventory/host_vars/daniel-pi.yml`. No package
     pins the address, so correct the router's DHCP reservation if it differs.
 4. To create the age key and run the one-time host steps, run the script through `sh`, because
     the boot partition is FAT. It prints the new public key.
@@ -400,10 +401,14 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     sudo install -d -o root -g root -m 0755 /home/ubuntu/server/containers/wg-easy/config
     ```
 
+    Then trust the Pi's new SSH host key on daniel-box, because the copy sends client private
+    keys over this connection. `ssh` refuses the new key until `ssh-keygen -R` removes the old
+    entry, so run that once for `daniel-pi` and once for the inventory's `server_ip`. Then run
+    `ssh daniel-pi true`, and answer `yes` only when the `ED25519` fingerprint it shows equals
+    the one from step 3. If they differ, stop: something other than the rebuilt Pi answered.
+
     Then copy `wg0.conf` and `wg0.json` from daniel-box, outside the 23:00 window of the
-    `pi-peer-backup` CronJob. The pipe writes no client private key to daniel-box's disk. The
-    Pi's new SSH host key makes `ssh` refuse until `ssh-keygen -R` removes the old entry, so run
-    that once for `daniel-pi` and once for the inventory's `server_ip`.
+    `pi-peer-backup` CronJob. The pipe writes no client private key to daniel-box's disk.
 
     ```bash
     image=$(sudo k3s kubectl -n homelab get cronjob pi-peer-backup \
@@ -456,8 +461,7 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
 
     `findmnt` shows a tmpfs, `systemctl is-enabled` prints `masked`, `systemctl is-active` prints
     `active`, and `docker ps` lists `wg-easy`, `alloy`, `autoheal` and `docker-proxy` running.
-9. To re-pin the host key, compare the key `ssh` shows with `ssh-keygen -lf
-    /etc/ssh/ssh_host_ed25519_key.pub` at the console. Then write the output of
+9. To re-pin the host key, write the output of
     `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
     `ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
     PR. `promote` applies the new `pi-peer-backup-ssh` Secret. Each other account that has the
