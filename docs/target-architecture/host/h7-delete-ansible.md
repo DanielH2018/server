@@ -1507,7 +1507,9 @@ halves (exit 4).
       fence check passes before anything is copied into the guest.
     - *Identity.* The guest plays daniel-box. A lone guest can only be a server, because an
       agent could not reach daniel-box through the fence.
-    - *What it runs.* `bootstrap-host.sh daniel-box --local-build <clone>`, with the clone
+    - *What it runs.* `bootstrap-host.sh daniel-box --until 4 --local-build <clone>`, the
+      deviations below, the same command without `--until`, and a hand `systemctl enable --now
+      k3s.service`, with the clone
       fetched from GitHub over the guest's internet egress. No copy of the production repo
       is staged, so the drill takes the path a real rebuild takes.
     - *Two guest-local deviations.* The packaged k3s config sets `--node-ip` and
@@ -1567,11 +1569,11 @@ One host moves at a time, in H3's canary order, and each step is **operator-only
    reboot.
 4. Verify against the matrix release. `lsb_release -rs` prints the target release, and
    `dpkg --verify` reports nothing for the `homelab-*` packages. `systemctl start
-   homelab-reconcile` exits 0. Prometheus reads `homelab_host_reconcile_ok` at 1 and
-   `homelab_host_applied_info` at the version the suite tested.
-5. Release the hold with the same runbook, and on a cluster node remove the label. The
-   next updater run installs whatever master published meanwhile, and SUC resumes on the
-   node.
+   homelab-reconcile` exits 0.
+5. Release the hold with the same runbook and run `homelab-updater.service` once, which installs
+   whatever master published meanwhile. Only the updater writes the metrics, so Prometheus then
+   reads `homelab_host_reconcile_ok` at 1 and `homelab_host_applied_info` at the installed
+   version. On a cluster node, remove the label, and SUC resumes on the node.
 
 A host that fails step 4 stays held. Its rollback is a rebuild on the previous release with
 `bootstrap-host.sh`, as the Pi runbook and the cluster-node procedure describe.
