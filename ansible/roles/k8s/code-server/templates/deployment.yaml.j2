@@ -38,7 +38,7 @@ spec:
         - name: seed-workspace-claim
           image: {{ code_server_k8s_image }}
           # Under Flux the renderer rewrites this ref to GHCR's content tag with IfNotPresent
-          # (scripts/renderer/renderer_lib/images.py:ghcr_refs); `Always` holds after a handback.
+          # (scripts/renderer/renderer_lib/images.py:ghcr_refs), so `Always` never reaches the cluster.
           imagePullPolicy: Always
           command:
             - /bin/sh

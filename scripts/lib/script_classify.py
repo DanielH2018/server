@@ -149,7 +149,7 @@ def _argv_references(nodes: list[ast.AST]) -> set[str]:
     string it prints, and reading that as an invocation would put a deploy gate behind a session hook.
 
     A dict key is skipped too. It names a file as data, never as an argv element: the
-    deployer's `K8S_BUILD_CONTEXT_FILES` is keyed by `obs_api.py`'s path (#4840).
+    deployer's `SETUP_FILES_SHIPPED_BY_OTHER_ROLES` is keyed by module paths.
     """
     keys = {key for node in nodes if isinstance(node, ast.Dict) for key in node.keys}
     docstrings = {

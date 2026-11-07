@@ -11,7 +11,7 @@ import pytest
 from dataclasses import replace
 
 from _land_fakes import MERGE_SHA, Fakes, receipt
-from deploy_tools.land_lib import promotion
+from deploy_tools.land_lib import land_tags, promotion
 from deploy_tools.land_lib.outcome import PROMOTE_TIMEOUT_NOTE
 from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.promote_lib.wait import WaitResult
@@ -46,6 +46,23 @@ def test_a_pr_whose_only_tag_is_flux_owned_never_reaches_deploy_sh(land_run):
     # The gate runs on the changed set's tag, from the merge commit's snapshot.
     assert [c[1] for c in calls if c[0] == "gate"] == [(["bento-pdf"],)]
     assert "tags=bento-pdf" in logline
+
+
+@pytest.mark.parametrize(
+    "declared, named", [({"bento-pdf"}, True), (set(), False)], ids=["clean", "flagged"]
+)
+def test_a_bento_pdf_template_path_derives_the_tag_the_landing_names(
+    land_run, declared, named
+):
+    """`land_tags.derive` runs for real, so the path alone decides what the landing names."""
+    path = "ansible/roles/k8s/bento-pdf/templates/deployment.yaml.j2"
+    derived = land_tags.derive([path], changed_files=1, declared=declared)
+    fakes = _fakes(
+        gh_views={"files,changedFiles": {"files": [{"path": path}], "changedFiles": 1}},
+        derived=(derived.tags, derived.source),
+    )
+    _, out, err, _, _ = land_run([], fakes)
+    assert ("bento-pdf: named by this PR's paths" in out + err) is named
 
 
 def test_a_tags_override_hands_its_flux_owned_tag_to_land_wait(land_run):

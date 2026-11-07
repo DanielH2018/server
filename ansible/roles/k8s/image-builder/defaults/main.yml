@@ -48,6 +48,5 @@ image_builder_timeout: 900
 # This flag reaches only an Ansible-owned caller, and every caller is `owner: flux`, so no deploy
 # passes it. promote's `images` job builds those images, and only a moved content tag rebuilds one.
 # A refresh that no pin moves is a hand PR that changes the context
-# (docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*). The flag stays
-# for a caller handed back to Ansible.
+# (docs/target-architecture/deploy/d5-bulk-move.md, *Images built by CI (D5.4)*).
 image_builder_force: false

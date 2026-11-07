@@ -31,15 +31,6 @@ A repo file a setup task copies from the checkout by a literal `src: "{{ playboo
 it to nothing. `checkout_files` finds it; a copy in a `common/tasks/` file maps to that file's
 importers, since `common` is applied only through them.
 
-The k8s roles importing a setup file are a second table, `K8S_ROLES_IMPORTING_SETUP_FILES`
-(#3320). Their import spelling climbs one more level (`{{ role_path }}/../../setup/<owner>/`),
-and the deployer defer-and-alerts them rather than re-applying them.
-
-A file outside `ansible/roles/k8s/` that a k8s role's image embeds is a third table,
-`K8S_BUILD_CONTEXT_FILES` (#4840). The scan reads each `image_builder_context_files` and
-`image_builder_context` key in a k8s role's tasks and defaults, resolves `{{ playbook_dir }}` to `ansible`,
-and keeps a source outside the role itself.
-
 The setup roles calling a filter plugin's filters, `SETUP_ROLES_CALLING_FILTER_PLUGINS`, and
 the setup roles reading another's `defaults/` variable have their own census in
 `test_setup_cross_role_reads.py`.
@@ -48,28 +39,19 @@ Run: uv run pytest ansible/tests/setup/test_setup_cross_role_files.py
 """
 
 import fnmatch
-import posixpath
 import re
 
 from _helpers import ROLES
 from _role_census import role_dirs, role_task_files
 
-from lib import yaml_fast
 
 from deployer_lib.deploy_cross_role import (
-    K8S_BUILD_CONTEXT_FILES,
-    K8S_ROLES_IMPORTING_SETUP_FILES,
     SETUP_FILES_ROUTED_TO_OWNER,
     SETUP_FILES_SHIPPED_BY_OTHER_ROLES,
 )
 
 _REFERENCE = re.compile(
     r"(?:roles/setup/|\{\{ role_path \}\}/\.\./)([a-z0-9_]+)/(files|tasks|templates)/([\w./-]*\w)"
-)
-# A k8s role reaches a setup role's file one directory further up. `{{ role_path }}/../<x>/`
-# from a k8s role names a k8s sibling, so the setup-only `_REFERENCE` alternative must not match.
-_K8S_REFERENCE = re.compile(
-    r"(?:roles/setup/|\{\{ role_path \}\}/\.\./\.\./setup/)([a-z0-9_]+)/(files|tasks|templates)/([\w./-]*\w)"
 )
 # Named members, so a scan that stops matching fails by name rather than agreeing with an
 # empty table.
@@ -103,51 +85,6 @@ KNOWN_EDGES = {
     "scripts/backup/etcd_restore_drill.sh": {"hypervisor"},
     "scripts/deploy_tools/prune_releases.py": {"k3s"},
 }
-KNOWN_K8S_EDGES = {
-    "hosts/lib/host_lib.py": {"configarr", "janitorr"},
-}
-
-KNOWN_BUILD_CONTEXT_EDGES = {
-    "scripts/diagnostics/probe_lib/obs_api.py": {"homelab-mcp"},
-}
-_CONTEXT_VARS = ("image_builder_context", "image_builder_context_files")
-
-
-def _context_sources(node):
-    """Every key of an `image_builder_context*` mapping anywhere inside parsed role YAML."""
-    if isinstance(node, dict):
-        for key, value in node.items():
-            if key in _CONTEXT_VARS and isinstance(value, dict):
-                yield from value
-            else:
-                yield from _context_sources(value)
-    elif isinstance(node, list):
-        for item in node:
-            yield from _context_sources(item)
-
-
-def build_context_files(task_docs: dict[str, object]) -> dict[str, frozenset[str]]:
-    """Each repo path a k8s role's image build context names outside that role, mapped to the roles."""
-    edges: dict[str, set[str]] = {}
-    for role, doc in task_docs.items():
-        for src in _context_sources(doc):
-            path = posixpath.normpath(src.replace("{{ playbook_dir }}", "ansible"))
-            if not path.startswith(f"ansible/roles/k8s/{role}/"):
-                edges.setdefault(path, set()).add(role)
-    return {path: frozenset(roles) for path, roles in edges.items()}
-
-
-def _k8s_task_docs() -> dict[str, object]:
-    return {
-        role_dir.name: [
-            yaml_fast.safe_load(p.read_text())
-            for p in (*role_task_files(role_dir), role_dir / "defaults" / "main.yml")
-            if p.is_file()
-        ]
-        for role_dir in role_dirs(ROLES / "k8s")
-    }
-
-
 # A module the setup roles ship that sits outside the setup tree since H7.2e: the shared
 # `hosts/lib/` modules and the `scripts/lib/longhorn_lib/` package. No role owns them, so every
 # role naming one is a shipper. The lookbehind keeps `old_hosts/lib/x.py`-shaped words out.
@@ -156,9 +93,7 @@ _SHARED_FILE = re.compile(
 )
 
 
-def cross_role_files(
-    task_texts: dict[str, str], pattern: re.Pattern = _REFERENCE
-) -> dict[str, frozenset[str]]:
+def cross_role_files(task_texts: dict[str, str]) -> dict[str, frozenset[str]]:
     """Each path a role's task text ships from outside itself, mapped to those roles.
 
     That is a setup-role path named under ANOTHER role, and a shared module under `hosts/lib/`
@@ -166,7 +101,7 @@ def cross_role_files(
     """
     edges: dict[str, set[str]] = {}
     for role, text in task_texts.items():
-        for owner, kind, rel in pattern.findall(text):
+        for owner, kind, rel in _REFERENCE.findall(text):
             if owner == role:
                 continue
             edges.setdefault(f"ansible/roles/setup/{owner}/{kind}/{rel}", set()).add(
@@ -218,30 +153,6 @@ def _task_texts(plane: str) -> dict[str, str]:
     for role_dir in role_dirs(ROLES / plane):
         tasks = role_task_files(role_dir)
         texts[role_dir.name] = "\n".join(p.read_text() for p in tasks)
-    return texts
-
-
-def _k8s_task_texts() -> dict[str, str]:
-    # Comment lines dropped: k8s roles cite setup files in prose (game-stats explains why it
-    # does NOT use host_lib.py), and no k8s comment ships a file.
-    texts = {
-        role: "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#"))
-        for role, text in _task_texts("k8s").items()
-    }
-    # A k8s role also ships a setup file from a ship list in defaults/ or a `lookup('file')` in
-    # a template, as a pod-side role stages kuma_push.py (#3745). Only lines
-    # naming `playbook_dir` count: template prose cites setup paths too, and ships nothing.
-    for role_dir in role_dirs(ROLES / "k8s"):
-        shipped = [
-            line
-            for sub in ("defaults", "templates")
-            for path in sorted((role_dir / sub).rglob("*"))
-            if path.is_file()
-            for line in path.read_text().splitlines()
-            if "playbook_dir" in line and not line.lstrip().startswith("#")
-        ]
-        if shipped:
-            texts[role_dir.name] = "\n".join([texts.get(role_dir.name, ""), *shipped])
     return texts
 
 
@@ -325,41 +236,6 @@ def test_the_owner_routed_template_names_the_roles_that_render_it():
         assert direct.get(path) == roles, path
 
 
-def test_the_k8s_importers_table_equals_the_tree():
-    found = cross_role_files(_k8s_task_texts(), _K8S_REFERENCE)
-    assert found == K8S_ROLES_IMPORTING_SETUP_FILES
-    for path, roles in KNOWN_K8S_EDGES.items():
-        assert found.get(path) == roles, path
-
-
-def test_the_build_context_table_equals_the_tree():
-    found = build_context_files(_k8s_task_docs())
-    assert found == K8S_BUILD_CONTEXT_FILES
-    for path, roles in KNOWN_BUILD_CONTEXT_EDGES.items():
-        assert found.get(path) == roles, path
-
-
-def test_a_build_context_file_outside_the_role_is_flagged():
-    task = [
-        {
-            "include_role": {"name": "k8s/image-builder"},
-            "vars": {
-                "image_builder_context_files": {
-                    "{{ playbook_dir }}/roles/k8s/svc/files/app.py": "app.py",
-                    "{{ playbook_dir }}/../scripts/lib/shared.py": "shared.py",
-                },
-                "image_builder_context": {
-                    "{{ playbook_dir }}/roles/k8s/other/templates/x.j2": "x",
-                },
-            },
-        }
-    ]
-    assert build_context_files({"svc": task}) == {
-        "scripts/lib/shared.py": frozenset({"svc"}),
-        "ansible/roles/k8s/other/templates/x.j2": frozenset({"svc"}),
-    }
-
-
 def test_a_role_shipping_another_roles_file_is_flagged():
     task = 'src: "{{ playbook_dir }}/roles/setup/owner/files/shared.py"\n'
     loop = '- "{{ role_path }}/../owner/files/other.py"\n'
@@ -409,15 +285,6 @@ def test_a_task_file_naming_no_template_adds_no_edge():
         with_rendered_templates(edges, lambda _: "- debug: msg=hi\n", lambda _: names)
         == edges
     )
-
-
-def test_a_k8s_role_importing_a_setup_task_file_is_flagged():
-    task = 'import_tasks: "{{ role_path }}/../../setup/common/tasks/shared.yml"\n'
-    # A k8s sibling one level up is not a setup role's file.
-    sibling = 'import_tasks: "{{ role_path }}/../manifests/tasks/render.yml"\n'
-    assert cross_role_files({"svc": task + sibling}, _K8S_REFERENCE) == {
-        "ansible/roles/setup/common/tasks/shared.yml": frozenset({"svc"})
-    }
 
 
 def test_a_role_shipping_a_shared_module_from_outside_the_setup_tree_is_flagged():

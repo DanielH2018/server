@@ -21,7 +21,7 @@ from deployer_lib.deploy_changes import (
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)
-    assert cs.k8s == set()
+    assert cs.flux == set()
     assert cs.broad is False
 
 
@@ -35,7 +35,7 @@ def test_unrelated_path_ignored():
 def test_secrets_only_change_flags_secrets_not_broad():
     cs = services_from_changed_paths(["ansible/vars/secrets.yml"])
     assert cs.secrets is True
-    assert cs.k8s == set()
+    assert cs.flux == set()
     assert cs.broad is False
 
 
@@ -44,19 +44,19 @@ def test_secret_rotation_registry_only_is_not_secrets():
     # ff is correct, so it must NOT trip the secrets flag.
     cs = services_from_changed_paths(["ansible/secret_rotation.yml"])
     assert cs.secrets is False
-    assert cs.k8s == set()
+    assert cs.flux == set()
     assert cs.broad is False
 
 
 # k8s roles (ansible/roles/k8s/<role>/...) once matched NONE of the role regexes (all
 # containers/-scoped), so services_from_changed_paths returned an EMPTY ChangeSet and main()
-# took it as a plain docs-only ff-merge — silent, on every has_gitops host. Maps to cs.k8s
-# (defer-and-alert): this deployer never auto-deploys a k8s role's manifest change.
-def test_k8s_role_change_flags_k8s():
+# took it as a plain docs-only ff-merge — silent, on every has_gitops host. Maps to cs.flux:
+# this deployer never auto-deploys a k8s role's manifest change.
+def test_k8s_role_change_flags_flux():
     cs = services_from_changed_paths(
         ["ansible/roles/k8s/authelia/templates/deployment.yaml.j2"]
     )
-    assert cs.k8s == {"authelia"}
+    assert cs.flux == {"authelia"}
     assert cs.broad is False
 
 
@@ -65,12 +65,12 @@ def test_k8s_role_matches_any_subdir_not_just_templates():
     # auto-deploy path for any of its subdirs to scope against — the whole role dir shares one
     # channel.
     cs = services_from_changed_paths(["ansible/roles/k8s/authelia/tasks/main.yml"])
-    assert cs.k8s == {"authelia"}
+    assert cs.flux == {"authelia"}
 
 
 def test_k8s_role_docs_stay_silent():
     cs = services_from_changed_paths(["ansible/roles/k8s/authelia/CLAUDE.md"])
-    assert cs.k8s == set()
+    assert cs.flux == set()
     assert cs.broad is False
 
 
@@ -209,29 +209,3 @@ def test_an_initial_setup_defaults_change_reaches_its_readers():
     }
     tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
     assert setup_roles_for(tasks) == {"initial_setup"}
-
-
-def test_a_host_lib_change_defers_the_k8s_roles_importing_it():
-    """configarr and janitorr stage `host_lib.py` into their health CronJobs' ConfigMaps
-    (H2.5b, H2.5c). The deployer applies no k8s role for this change, so each lands in `cs.k8s`
-    and defer-alerts. A `common` file no k8s role imports names none, and since H2.5c no k8s
-    role imports the two host-copy task files."""
-    lib = ["hosts/lib/host_lib.py"]
-    assert services_from_changed_paths(lib).k8s == {"configarr", "janitorr"}
-    for path in (
-        "ansible/roles/setup/common/tasks/install_host_lib.yml",
-        "ansible/roles/setup/common/tasks/stamp_deployed.yml",
-    ):
-        assert services_from_changed_paths([path]).k8s == set()
-    timer = ["ansible/roles/setup/common/tasks/check_timer.yml"]
-    assert services_from_changed_paths(timer).k8s == set()
-
-
-def test_a_build_context_file_outside_every_role_defers_the_role_embedding_it():
-    """homelab-mcp's image embeds `obs_api.py` from `scripts/` (#4840). The edit moves the
-    image's content tag, so the role lands in `cs.k8s` and earns a `k8s_unapplied` line, as an
-    edit under the role would. A sibling under `probe_lib/` that no image embeds names none."""
-    obs = ["scripts/diagnostics/probe_lib/obs_api.py"]
-    assert services_from_changed_paths(obs).k8s == {"homelab-mcp"}
-    sibling = ["scripts/diagnostics/probe_lib/releases.py"]
-    assert services_from_changed_paths(sibling).k8s == set()

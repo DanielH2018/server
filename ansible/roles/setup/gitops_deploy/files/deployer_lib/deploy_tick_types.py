@@ -17,7 +17,7 @@ the entry module. The class object is this one; the re-export is a second name f
 This is a leaf: `deploy_changes` for the `ChangeSet` type, the standard library, nothing else.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from deployer_lib.deploy_changes import ChangeSet
 
@@ -81,15 +81,12 @@ class TickPlan:
     """What the incoming range means for this host, once classified.
 
     Attributes:
-        cs: the ChangeSet, after the Flux-owned k8s roles moved into `cs.flux`.
+        cs: the ChangeSet.
         paths: the changed paths, minus any comment-only broad change dropped as quiet.
-        owners: each tag whose entry sets `owner` at the commit being applied, to that value
-            (`deploy_inventory.service_owners`).
     """
 
     cs: ChangeSet
     paths: list[str]
-    owners: dict[str, str] = field(default_factory=dict)
 
 
 class NotTheDeployerHost(Exception):

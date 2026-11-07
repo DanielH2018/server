@@ -78,11 +78,7 @@ from deployer_lib.deploy_health import (  # noqa: F401
     apply_send_result,
     cap_pending,
 )
-from deployer_lib.deploy_inventory import (  # noqa: F401
-    _DECLARED_ENTRY,
-    _ENTRY_PLATFORM,
-    declares_no_gitops,
-)
+from deployer_lib.deploy_inventory import declares_no_gitops  # noqa: F401
 from deployer_lib.deploy_remediation import (  # noqa: F401
     BRANCH_DEFAULT,
     BROAD_BUDGET_MARGIN_S,
@@ -90,7 +86,6 @@ from deployer_lib.deploy_remediation import (  # noqa: F401
     _setup_commands,
     broad_budget_ok,
     broad_remediation,
-    k8s_remediation,
     manual_plane_clear_for,
     manual_plane_remediation,
 )

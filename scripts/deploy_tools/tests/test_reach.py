@@ -17,7 +17,7 @@ def test_a_quiet_path_is_dropped_before_the_mapper_reads_it():
     """A playbook named for three edited comments has nothing to apply."""
     r = reach([_SERVICE, _BRINGUP], quiet=[_BRINGUP])
     assert r.manual == []
-    assert r.changes.k8s == {"sonarr"}
+    assert r.changes.flux == {"sonarr"}
     assert r.loud == [_SERVICE]
 
 
@@ -26,11 +26,11 @@ def test_a_loud_bring_up_playbook_is_reported_as_manual():
     assert reach([_SERVICE, _BRINGUP]).manual == [_BRINGUP]
 
 
-def test_changes_expands_a_copied_file_and_tags_does_not():
+def test_a_copied_file_names_no_k8s_role_that_holds_a_copy():
     """The landing gates the promotion's changed set, so a path names only its own role."""
     r = reach([_COPIED])
-    assert {"configarr", "janitorr"} <= r.changes.k8s
-    assert {"configarr", "janitorr"} <= r.touched()
+    assert r.changes.flux == set()
+    assert {"configarr", "janitorr"}.isdisjoint(r.touched())
     assert r.tags({"configarr", "janitorr"}) == set()
 
 

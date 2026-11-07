@@ -1,7 +1,7 @@
-"""`ChangeSet.services` and `ChangeSet.tasks` are gone, with every reader of them (#6980).
+"""`ChangeSet.services`, `.tasks` and `.k8s` are gone, with every reader of them (#6980, #7469).
 
-H5.13 deleted the containers arm that was the only writer of both fields, so each reader below
-guards a state no changed path can produce.
+H5.13 deleted the containers arm that wrote the first two, and every k8s role path routes to
+`cs.flux`, so a reader of any of them guards a state no changed path can produce.
 """
 
 import dataclasses
@@ -14,7 +14,9 @@ from lib.repo_paths import REPO
 
 ROLE_DIR = "ansible/roles/setup/gitops_deploy"
 # Split so this file does not match its own census.
-READER_PATTERN = re.compile(r"cs\.(?:services|tasks)" + "|deferred_service" + "_alerts")
+READER_PATTERN = re.compile(
+    r"cs\.(?:services|tasks|k8s)" + "|deferred_service" + "_alerts"
+)
 
 
 def _tracked_files(prefix: str) -> list[str]:
@@ -49,8 +51,8 @@ def test_no_file_in_the_role_reads_the_deleted_fields():
     assert _reader_hits(ROLE_DIR) == []
 
 
-def test_changeset_declares_neither_services_nor_tasks():
+def test_changeset_declares_none_of_the_deleted_fields():
     deploy_changes = importlib.import_module("deployer_lib.deploy_changes")
     names = {f.name for f in dataclasses.fields(deploy_changes.ChangeSet)}
-    assert "k8s" in names
-    assert names.isdisjoint({"services", "tasks"})
+    assert "flux" in names
+    assert names.isdisjoint({"services", "tasks", "k8s"})

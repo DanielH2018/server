@@ -127,8 +127,8 @@ def test_a_lost_cluster_scoped_object(world, monkeypatch, capsys, message, verdi
 
 
 def test_a_dropped_kustomization_with_no_trailer_is_refused(world, monkeypatch, capsys):
-    """Removing the entry is the handback's shape, and the default policy deletes its objects."""
-    target = _promote_from(world, {"bento-pdf": WITH_ROUTE}, {}, "Hand bento-pdf back")
+    """Removing the entry drops the Kustomization, and the default policy deletes its objects."""
+    target = _promote_from(world, {"bento-pdf": WITH_ROUTE}, {}, "Remove bento-pdf")
     result = world.decide(monkeypatch, capsys)
     assert result.outputs["verdict"] == "current"
     assert f"skip {target}: it loses Deployment/homelab/bento-pdf" in result.stderr
