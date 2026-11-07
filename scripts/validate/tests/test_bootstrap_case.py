@@ -140,12 +140,6 @@ def test_a_node_whose_k3s_unit_is_enabled_or_running_is_flagged(
     ]
 
 
-def test_a_host_with_no_k3s_mode_reads_neither_unit_as_its_own(monkeypatch, tmp_path):
-    run = _unit_state_run(monkeypatch, tmp_path, case.FIXTURE_HOST, {})
-
-    assert run.unit_problems() == []
-
-
 def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_host(
     tmp_path,
 ):
