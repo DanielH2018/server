@@ -2,16 +2,10 @@
 """Tests for the auto-mode-bridge hook.
 
 Two events, two contracts:
-  1. PermissionDenied — retry the gitops tick's known classifier flake, at most twice, and only
-     when the classifier actually reached a verdict.
-  2. PostToolUseFailure — decode deploy.sh's resume-point exit codes, which all mean nothing was
+  1. PostToolUseFailure — decode deploy.sh's resume-point exit codes, which all mean nothing was
      deployed and each of which has a different next step.
-  3. PostToolUseFailure and PostToolUse on a `git push` — name the probe behind a ruleset
+  2. PostToolUseFailure and PostToolUse on a `git push` — name the probe behind a ruleset
      refusal, and call a bypass notice a push that landed.
-
-The retry ledger writes a per-session file in the system temp dir, so every test that can grant a retry points
-`ledger_path` at a tmp_path instead — otherwise the suite's own runs would spend the cap and the
-later cases would pass for the wrong reason.
 
 Run: uv run pytest .claude/hooks
 """
@@ -32,18 +26,6 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-TICK = "./scripts/deploy_tools/gitops_tick.sh"
-
-
-def denial(command=TICK, reason="Blocked by classifier", tool="Bash"):
-    return {
-        "hook_event_name": "PermissionDenied",
-        "tool_name": tool,
-        "tool_input": {"command": command},
-        "reason": reason,
-        "session_id": "test-session",
-    }
-
 
 def failure(
     command="./scripts/deploy.sh --tags freshrss", error="Exit code 75\nlocked"
@@ -54,73 +36,6 @@ def failure(
         "tool_input": {"command": command},
         "error": error,
     }
-
-
-@pytest.fixture
-def ledger(tmp_path, monkeypatch):
-    """Point the retry ledger at a tmp file, and hand back its path."""
-    path = str(tmp_path / "retries.json")
-    monkeypatch.setattr(_mod, "ledger_path", lambda _session: path)
-    return path
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        TICK,
-        "scripts/deploy_tools/gitops_tick.sh",
-        "/home/ubuntu/server/scripts/deploy_tools/gitops_tick.sh",
-        "cd /home/ubuntu/server && ./scripts/deploy_tools/gitops_tick.sh",
-        f"{TICK}  ",
-    ],
-)
-def test_retries_the_tick_however_it_is_spelled(command, ledger):
-    assert _mod.should_retry(denial(command=command)) is True
-
-
-@pytest.mark.parametrize(
-    "command",
-    [
-        # The classifier judged the WHOLE line, and the half it objected to may be the other
-        # one — so a tick riding along in a compound command gets no free retry.
-        f"{TICK} && ./scripts/deploy.sh --tags freshrss",
-        f"rm -rf /srv/data; {TICK}",
-        f"{TICK} | tee /tmp/tick.log",
-        "./scripts/deploy.sh --changed HEAD~1",
-    ],
-)
-def test_does_not_retry_anything_else(command, ledger):
-    assert _mod.should_retry(denial(command=command)) is False
-
-
-@pytest.mark.parametrize(
-    "reason",
-    [
-        "Auto mode could not evaluate this action and is blocking it for safety",
-        "Classifier unavailable",
-    ],
-)
-def test_does_not_retry_a_denial_the_classifier_never_adjudicated(reason, ledger):
-    assert _mod.should_retry(denial(reason=reason)) is False
-    # ...and the refusal costs nothing, so a later real denial still has its full budget.
-    assert _mod.retries_used(ledger) == 0
-
-
-def test_a_non_bash_denial_is_not_ours(ledger):
-    assert _mod.should_retry(denial(tool="Agent")) is False
-
-
-def test_the_cap_stops_a_retry_loop(ledger):
-    granted = [_mod.should_retry(denial()) for _ in range(4)]
-    assert granted == [True, True, False, False]
-    assert _mod.retries_used(ledger) == _mod.MAX_RETRIES_PER_SESSION
-
-
-def test_a_malformed_ledger_reads_as_zero_rather_than_disabling_the_hook(ledger):
-    with open(ledger, "w", encoding="utf-8") as fh:
-        fh.write("{not json")
-    assert _mod.retries_used(ledger) == 0
-    assert _mod.should_retry(denial()) is True
 
 
 @pytest.mark.parametrize(
@@ -174,13 +89,24 @@ def test_the_deploy_note_survives_a_compound_invocation():
     assert note is not None
 
 
-def test_main_emits_the_documented_shape(capsys, ledger, monkeypatch):
-    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(denial())))
+def test_main_emits_the_documented_shape(capsys, monkeypatch):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(failure())))
     _mod.main()
     out = json.loads(capsys.readouterr().out)
-    assert out == {
-        "hookSpecificOutput": {"hookEventName": "PermissionDenied", "retry": True}
+    assert out["hookSpecificOutput"]["hookEventName"] == "PostToolUseFailure"
+    assert "exit 75" in out["hookSpecificOutput"]["additionalContext"]
+
+
+def test_main_grants_no_retry_on_a_classifier_denial(capsys, monkeypatch):
+    denial = {
+        "hook_event_name": "PermissionDenied",
+        "tool_name": "Bash",
+        "tool_input": {"command": "./scripts/deploy_tools/gitops_tick.sh"},
+        "reason": "Blocked by classifier",
     }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(denial)))
+    _mod.main()
+    assert capsys.readouterr().out == ""
 
 
 def test_main_says_nothing_on_an_unrelated_event(capsys, monkeypatch):

@@ -68,18 +68,6 @@
         ]
       }
     ],
-    "PermissionDenied": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/run-hook.sh auto-mode-bridge --project",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
     "InstructionsLoaded": [
       {
         "hooks": [
