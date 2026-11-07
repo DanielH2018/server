@@ -13,9 +13,9 @@ it is a second destination for the handful of jobs whose silence actually matter
 
 | Check slug | Source | Pings `/fail` when |
 |---|---|---|
-| `longhorn-backup-health` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | target unavailable, backups stale/missing/errored, the daily count exceeds the B2 budget, or k3s's newest S3 etcd snapshot is stale, missing or disarmed |
-| `daniel-box-disk-health` | `roles/setup/k3s/templates/disk-health.sh.j2` | `/` over the headroom threshold, or `df` fails |
-| `etcd-snapshot-offbox` | `roles/setup/k3s/templates/etcd-token-drift.sh.j2` | the cluster token changed since the off-box copy was stamped, or the token or its stamp cannot be read |
+| `longhorn-backup-health` | `hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2` | target unavailable, backups stale/missing/errored, the daily count exceeds the B2 budget, or k3s's newest S3 etcd snapshot is stale, missing or disarmed |
+| `daniel-box-disk-health` | `hosts/components/k3s-host-checks/templates/disk-health.sh.j2` | `/` over the headroom threshold, or `df` fails |
+| `etcd-snapshot-offbox` | `hosts/components/k3s-host-checks/templates/etcd-token-drift.sh.j2` | the cluster token changed since the off-box copy was stamped, or the token or its stamp cannot be read |
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `hosts/components/registry-gc/templates/registry-gc.sh.j2` | a mirror's GC job exceeded its deadline, a mirror pod would not terminate, the job manifest failed to apply, the Deployment did not come back afterwards, the keep set could not be built, or another run held the lock |
 | `alertmanager-watchdog` | the `healthchecks` receiver in `roles/k8s/observability/templates/alertmanager-secret.yaml.j2`, fed by the `Watchdog` rule in `roles/k8s/observability/files/rules/alerting-meta.yaml` | never: Alertmanager sends no resolved notification, and silence is the failure — see *Alertmanager's watcher* below |
@@ -158,12 +158,9 @@ state, list checks, or manage anything. Leaking it therefore does not disclose d
 someone hold your checks green, suppressing the alerts this mechanism exists to deliver. That
 is why it is not inlined into the heartbeat scripts.
 
-The `{{ sys_user }}`-run scripts are `0755` (their crons must execute them), so anything inlined
-in them is readable by every local account on daniel-box. The ping key spoofs every check in the
-project, so it lives in
-`/etc/healthchecks/ping.env` at `0640 root:{{ sys_user }}` and is sourced at runtime. That
-covers every caller: `etcd-token-drift` runs as root, the other two as
-`{{ sys_user }}`. Same shape as `/etc/renovate-notify/config.env`.
+The checks' scripts are `0755`, so anything inlined in them is readable by every local account
+on daniel-box. The ping key spoofs every check in the project, so each unit takes it as the
+credential `healthchecks_ping_key`, which only that unit's process can read.
 
 `registry-gc.sh` is `0700 root:root` and reads the key from its unit's
 `healthchecks_ping_key` credential instead. Its unit uses `ImportCredential=`, so a missing key
@@ -255,7 +252,7 @@ cron or a grace, change the variable, this table and the list in the same PR.
 The `/10`-minute checks report within ten minutes of the deploy. To force the daily ones:
 
 ```bash
-sudo /usr/local/bin/etcd-token-drift.sh   # compares the token with its stamp, changes nothing
+sudo systemctl start homelab-etcd-token-drift.service   # compares the token with its stamp, changes nothing
 sudo k3s kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup
 sudo systemctl start homelab-registry-gc.service   # scales each mirror down for the duration — see below
 ```

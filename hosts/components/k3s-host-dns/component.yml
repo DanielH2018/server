@@ -1,0 +1,58 @@
+# The node's resolver and its host CoreDNS forwarder on the k3s server (H7.35,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.35 setup/k3s's node.yml wrote them.
+#
+# /etc/resolv.conf names 127.0.0.1 and nothing else, so a dead forwarder takes the node's DNS with
+# it, and the seconds of a restart are seconds with no DNS. The file is the shared setup/common
+# template, the one pi-resolver renders: `role: common` loads it in place.
+#
+# A rebuilt host starts with the systemd-resolved stub symlink. dpkg replaces the link with the file
+# in step 5 of hosts/bootstrap-host.sh, the unit starts in the same step, and step 6 refuses to stop
+# systemd-resolved until the forwarder answers. Existing pods keep the old file: kubelet copies the
+# node's resolv.conf into a pod at creation, and no restart is forced, because restarting the
+# MetalLB speaker blacks out the ETP-Local VIPs it announces.
+#
+# The Corefile reloads with SIGUSR1, which costs no gap. A new binary needs an exec, and
+# `homelab-tools` is a shared package that activates nothing. DECIDED: a CoreDNS bump goes live at
+# the unit's next start, which the weekly reboot bounds, rather than at a restart nothing would
+# gate on the forwarder answering. The running process keeps the old inode until then.
+#
+# 99-homelab-dns.yaml carries `manual:systemd-networkd.service`, because `netplan apply` reconfigures
+# the link an SSH session rides on. A change goes live at the next boot.
+#
+# ENFORCED: hosts/lib/tests/test_box_k3s_host_half.py, ansible/tests/setup/test_node_resolv_order.py
+# and ansible/tests/setup/test_netplan_dns_overrides.py.
+role: common
+files:
+  - {src: "role:resolv.conf.j2", dst: /etc/resolv.conf}
+  - {src: templates/host-corefile.j2, dst: /etc/coredns/Corefile, activate: "reload:coredns-host.service"}
+  - {src: units/coredns-host.service.j2, dst: /usr/lib/systemd/system/coredns-host.service}
+  - {src: templates/netplan-dns.yaml.j2, dst: /etc/netplan/99-homelab-dns.yaml, mode: "0600", activate: "manual:systemd-networkd.service"}
+enable:
+  coredns-host.service: multi-user.target
+defaults:
+  common_resolver_nameservers: "{{ k3s_node_dns_upstreams }}"
+  common_resolver_options: "{{ k3s_node_dns_options }}"
+  common_resolver_timeout: "{{ k3s_node_dns_timeout }}"
+# Reconcile removes the /etc copy of the unit, reloads systemd and restarts the unit on the packaged
+# file, whose ExecStart names the homelab-tools binary. The old tree stays until that restart has
+# run, because the entries retire in this order within one run.
+legacy:
+  - {path: /etc/systemd/system/coredns-host.service}
+  - {path: /etc/systemd/system/multi-user.target.wants/coredns-host.service}
+  - {path: /etc/systemd/resolved.conf.d/50-homelab-upstream.conf}
+  - {path: /usr/local/lib/coredns/coredns}
+  - {path: /usr/local/lib/coredns/1.14.7/coredns}
+  - {path: /usr/local/lib/coredns/1.14.7/coredns_1.14.7_linux_amd64.tgz}
+  - {path: /usr/local/lib/coredns/1.14.7}
+  - {path: /usr/local/lib/coredns}
+# Pod-to-host traffic terminates in a host process, so it meets UFW's default-deny INPUT. The second
+# rule admits a scrape from the other node: flannel masquerades a pod's traffic to any address outside
+# the pod CIDR, and Prometheus lands wherever the scheduler puts it. The live rules carry no comment,
+# so the arm adopts each by appending it again, which relabels it in place.
+ufw:
+  rules:
+    - {id: coredns-host-metrics-pods, spec: "allow from {{ k3s_pod_cidr }} to any port {{ k3s_host_dns_metrics_port }} proto tcp"}
+    - {id: coredns-host-metrics-agent, spec: "allow from {{ k3s_agent_node_ips[0] }} to any port {{ k3s_host_dns_metrics_port }} proto tcp"}
+  legacy:
+    - {spec: "allow from {{ k3s_pod_cidr }} to any port {{ k3s_host_dns_metrics_port }} proto tcp", comment: "", replaced_by: coredns-host-metrics-pods}
+    - {spec: "allow from {{ k3s_agent_node_ips[0] }} to any port {{ k3s_host_dns_metrics_port }} proto tcp", comment: "", replaced_by: coredns-host-metrics-agent}

@@ -95,7 +95,7 @@ SHIMMED_PATHS = Census(
     min_matches=500,
     must_find=frozenset(
         {
-            "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
+            "hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2",
             "hosts/components/claude-code/files/homelab_rootq.py",
             "hosts/lib/homelab-secrets",
             "hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh",

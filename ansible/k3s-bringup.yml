@@ -94,9 +94,9 @@
 # its OWN plays, wrong for driving the join from daniel-box), and play-level connection
 # vars POISON every delegated task — a delegate_to inherits them and ssh-dials the wrong
 # box. So anything that must run on daniel-box (token read, secrets load, verification)
-# lives in its own daniel-box play, handing facts across via hostvars. Deploy the
-# server-side firewall allows first:
-#   uv run ansible-playbook ansible/k3s-bringup.yml --tags join-firewall
+# lives in its own daniel-box play, handing facts across via hostvars. daniel-box's
+# package holds the server-side firewall allows, so confirm they are live first:
+#   sudo ufw status | grep k3s-join
 #   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent
 - name: Read the join credentials on the server node
   hosts: "{{ join_agent | default([]) is truthy | ternary('daniel-box', []) }}"

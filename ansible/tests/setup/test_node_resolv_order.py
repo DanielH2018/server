@@ -33,7 +33,7 @@ import re
 
 from _helpers import ROLES as _ROLES
 from _setup_render import rendered_setup_text, role_context
-from lib.repo_paths import K3S_ROLE
+from lib.repo_paths import K3S_HOST_DNS
 from renderer.renderer_lib import host as host_mode
 
 _TEMPLATE = "resolv.conf.j2"
@@ -186,7 +186,7 @@ def forward_problems(upstreams: list[str], corefile: str, vip: str) -> list[str]
 
 
 def test_the_live_corefile_keeps_pihole_first() -> None:
-    rendered = rendered_setup_text("k3s", _COREFILE)
+    rendered = rendered_setup_text("k3s-host-dns", _COREFILE)
     problems = forward_problems(forward_upstreams(rendered), rendered, _vip())
     assert not problems, (
         "daniel-box's forward order is the whole failover mechanism (see "
@@ -196,7 +196,7 @@ def test_the_live_corefile_keeps_pihole_first() -> None:
 
 def test_the_node_points_only_at_its_own_forwarder() -> None:
     """A second nameserver here makes a dead forwarder degrade silently to unfiltered DNS."""
-    values = role_context(K3S_ROLE)
+    values = role_context(K3S_HOST_DNS)
     assert values["k3s_node_dns_upstreams"] == ["127.0.0.1"], (
         "daniel-box resolves through its host forwarder and nothing else; a fallback entry "
         "here turns a dead forwarder from a loud outage into silent unfiltered DNS"

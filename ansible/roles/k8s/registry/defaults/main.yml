@@ -76,7 +76,7 @@ k8s_claims:  # noqa var-naming[no-role-prefix]
 # each key here that it reads. False for a cluster whose alerting should not hear about this
 # registry — registry-gc.sh writes its result to the registry-gc textfile and pings
 # healthchecks.io, so leaving it on elsewhere reports a foreign registry's health to a real
-# operator, which is what k3s_manage_health_crons exists to prevent.
+# operator.
 #
 # False in a host's host_vars drops the component's files and timer from that host's next
 # package version.

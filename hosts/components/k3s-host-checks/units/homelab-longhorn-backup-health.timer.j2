@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-host-checks component with its enable link.
+[Unit]
+Description=Read the Longhorn backup plane every 10 minutes
+
+[Timer]
+OnCalendar=*:{{ k3s_longhorn_backup_health_cron_minute | replace('*/', '00/') }}
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

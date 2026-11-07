@@ -44,7 +44,6 @@ EXPECTED_CONSUMERS = frozenset(
     {
         "deploy_ui",
         "gitops_deploy",
-        "k3s",
     }
 )
 

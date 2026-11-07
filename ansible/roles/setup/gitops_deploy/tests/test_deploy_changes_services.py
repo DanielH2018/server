@@ -121,14 +121,13 @@ def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
 
 def test_a_host_lib_change_reaches_its_consumers_and_not_common():
     """`common` reaches a host only through the roles copying `host_lib.py` (#3312). The five
-    initial_setup consumers apply on the tick, `k3s` is the one role left to record, and
-    `common` is named nowhere. A `common` file no role ships still names `common`."""
+    initial_setup consumers apply on the tick, and `common` is named nowhere. A `common` file no role ships still names `common`."""
     host_lib = ["hosts/lib/host_lib.py"]
     consumers = {
         "deploy_ui",
         "gitops_deploy",
     }
-    assert services_from_changed_paths(host_lib).setup_roles == consumers | {"k3s"}
+    assert services_from_changed_paths(host_lib).setup_roles == consumers
     assert setup_tags_for(host_lib) == consumers
     resolv = ["ansible/roles/setup/common/templates/resolv.conf.j2"]
     assert services_from_changed_paths(resolv).setup_roles == {"common"}
@@ -151,28 +150,24 @@ def test_a_table_holding_only_the_old_host_lib_key_routes_the_moved_file_nowhere
 def test_a_common_task_file_change_reaches_the_roles_importing_it():
     """An `import_tasks` of a `common/tasks/` file is static, so the imported tasks run under
     each importer's tags and only re-applying the importers applies the change (#3317). The
-    same five initial_setup roles apply on the tick, and `k3s` is the one left to record."""
+    same five initial_setup roles apply on the tick."""
     path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
     consumers = {
         "deploy_ui",
         "gitops_deploy",
     }
-    assert setup_roles_for(path) == consumers | {"k3s"}
+    assert setup_roles_for(path) == consumers
     assert setup_tags_for([path]) == consumers
 
 
 def test_a_checkout_file_a_setup_role_copies_reaches_that_role():
     """hypervisor copies the etcd drill script from the checkout, under no role's directory, so
-    an edit to it must name hypervisor (#6411). k3s gets `prune_releases.py` through
-    `common/tasks/release_bin.yml`, and only `k3s-bringup.yml` runs k3s, so no tag applies it."""
+    an edit to it must name hypervisor (#6411)."""
     drill = ["scripts/backup/etcd_restore_drill.sh"]
     cs = services_from_changed_paths(drill)
     assert cs.setup_roles == {"hypervisor"}
     assert cs.broad_setup
     assert setup_tags_for(drill) == {"hypervisor"}
-    pruner = ["scripts/deploy_tools/prune_releases.py"]
-    assert setup_tags_for(pruner) == set()
-    assert services_from_changed_paths(pruner).setup_roles == {"k3s"}
 
 
 def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file():

@@ -14,7 +14,7 @@ import yaml
 
 import checks.service
 from _fake_sources import FakeSources
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 
 
 # Stamps are dated against this epoch and the check reads the same one, so "1.0 days ago"
@@ -113,7 +113,7 @@ def test_etcd_drill_grace_is_derived_from_the_cron(cfg):
     week; a window at twice it silently tolerates a whole missed run, which is the miss this
     check exists to catch.
     """
-    defaults = yaml.safe_load(K3S_DEFAULTS.read_text())
+    defaults = yaml.safe_load(K3S_HOST_CHECKS_DEFAULTS.read_text())
     _minute, _hour, dom, month, dow = defaults["k3s_etcd_restore_drill_cron"].split()
     assert (dom, month) == ("*", "*") and dow != "*", (
         "this window is derived from a WEEKLY cadence; if the cron stops being weekly, "

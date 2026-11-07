@@ -221,15 +221,13 @@ def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
 # ── the real tree: the case #2307 names, so the scan cannot go vacuous ─────────────────
 
 
-def test_the_real_k3s_role_still_maps_readonly_rbac_to_kubeconfig():
-    """The identity's own template and CRD-group key moved to `cluster-base` in H1.2, so the pair
-    this case holds is the kubeconfig's: `readonly-kubeconfig.j2` and the server key it reads,
-    both read only under the `kubeconfig` tag."""
+def test_the_real_k3s_role_still_maps_the_address_pin_to_its_tag():
+    """A template and a key each read only under the `node-address` tag."""
     index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
-    assert index.readers_of("readonly-kubeconfig.j2") == frozenset({"kubeconfig"})
-    assert index.key_readers("k3s_readonly_kubeconfig_server") == frozenset(
-        {"kubeconfig"}
+    assert index.readers_of("netplan-static-address.yaml.j2") == frozenset(
+        {"node-address"}
     )
+    assert index.key_readers("k3s_node_static_link") == frozenset({"node-address"})
 
 
 def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
@@ -393,7 +391,7 @@ def test_the_real_k3s_roles_reachable_task_files_are_named_as_such():
     reachable = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO)).reachable
     assert {
         "tasks/server.yml",
-        "tasks/kubeconfig.yml",
+        "tasks/static-address.yml",
         "tasks/coredns.yml",
     } <= reachable
     assert not reachable & {

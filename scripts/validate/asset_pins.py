@@ -95,7 +95,6 @@ KNOWN_PINS = frozenset(
         "jellyfin_k8s_anisync",
         "jellyfin_k8s_introskipper",
         "k3s_install_script",
-        "k3s_host_coredns",
         "code_server_k8s_node",
         "claude_code_agent_node",
         "valheim_k8s_mods[Server_devcommands]",

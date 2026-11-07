@@ -986,6 +986,13 @@
       "automerge": false
     },
     {
+      "description": "The host forwarder's CoreDNS in hosts/packages/homelab-tools/package.yml. coredns/coredns carries stray tags `v002` ... `v011`, which Renovate once ranked above 1.14.7 and proposed as a PR whose URL 404s (#3087), so the version is held to three components.",
+      "matchPackageNames": [
+        "coredns/coredns"
+      ],
+      "allowedVersions": "/^v\\d+\\.\\d+\\.\\d+$/"
+    },
+    {
       "description": "No Renovate PR for `coredns_image` (H1-R1-19). H1.4 moves the CoreDNS image into a k8s role's defaults, where the k8s image manager matches every `_image:` key, but the pin must equal the image the bundled k3s manifest names, which `test_coredns_image_follows_bundled_manifest.py` holds. So the image moves only with `k3s_version`, by the person finishing a k3s upgrade, and a standalone bump could only open a PR that test keeps red. Scoped to the docker datasource under roles/k8s, so the `coredns/coredns` release annotation the annotated-pin rule tracks is untouched.",
       "matchManagers": [
         "custom.regex"

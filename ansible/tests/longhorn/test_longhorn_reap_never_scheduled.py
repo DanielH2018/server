@@ -29,6 +29,8 @@ from _role_census import task_files
 from _setup_render import rendered_setup_texts
 import json
 
+from lib.repo_paths import K3S_HOST_CHECKS
+
 SETUP = ANSIBLE / "roles" / "setup"
 BACKUP_SCRIPTS = REPO / "scripts" / "backup"
 # Both reapers are subcommands of one entry point since #4345, so its name covers either.
@@ -145,13 +147,13 @@ def test_both_reapers_exist_in_scripts_backup() -> None:
 def test_census_finds_the_scheduled_heartbeat() -> None:
     """Non-vacuity: the scanner must see a real schedule before its silence means anything.
 
-    The backup-plane heartbeat is a `cron:` task in `k3s/tasks/health-crons.yml`, and the kuma-check
-    timers reach the census through their `check_timer_exec` var; both surfaces have to be read
-    for a silent scan to mean "nothing schedules a reaper".
+    The hypervisor's etcd drill is a `cron:` task, and the kuma-check timers reach the census
+    through their `check_timer_exec` var; both surfaces have to be read for a silent scan to mean
+    "nothing schedules a reaper".
     """
     texts = scheduled_texts(SETUP)
-    assert any("longhorn-backup-health.sh" in t for t in texts.values()), (
-        "the cron census no longer sees the backup-health heartbeat — the scanner is reading nothing"
+    assert any("hypervisor_etcd_drill_runner_path" in t for t in texts.values()), (
+        "the cron census no longer sees the etcd drill cron — the scanner is reading nothing"
     )
     assert any("check_timer_exec" in t for t in texts.values()), (
         "the census no longer sees a check_timer.yml import's vars"
@@ -163,11 +165,17 @@ def test_census_finds_the_scheduled_heartbeat() -> None:
 
 def test_no_setup_role_schedules_a_reaper() -> None:
     """The contract itself: no cron, timer import or unit template names either reaper."""
-    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     assert scheduled_reapers(SETUP) == [], (
         "a reaper is scheduled; they are operator-invoked only (Never a cron, "
-        "roles/setup/k3s/CLAUDE.md)"
+        "hosts/components/k3s-host-checks/component.yml)"
     )
+
+
+def test_no_host_check_unit_runs_a_reaper() -> None:
+    """The k3s-host-checks timers carry the same contract, and their units live outside SETUP."""
+    units = sorted((K3S_HOST_CHECKS / "units").glob("*.j2"))
+    assert any(u.name == "homelab-longhorn-backup-health.service.j2" for u in units)
+    assert [u.name for u in units if "longhorn_reap" in u.read_text()] == []
 
 
 def test_a_scratch_cron_naming_a_reaper_is_flagged(tmp_path: Path) -> None:

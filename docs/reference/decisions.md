@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-11-07 17:03 UTC
-generated_sha: 4fc8127b37
+generated_at: 2026-11-07 18:13 UTC
+generated_sha: b5d48e0895
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 4fc8127b37
 
 # Decisions
 
-847 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
+867 `DECIDED:` marker(s) found across the tree. A marker is a settled trade-off recorded as a comment at the line it governs, per `docs/adr/index.md` — written so a reviewer trips over the reasoning before re-opening a decision that already has one. A reviewer brief greps the literal marker text before flagging something as new; this page exists so a human can browse the same set instead of guessing a phrase to grep.
 
 !!! warning "Possible duplicates"
     Two markers below have a near-identical first sentence once case and whitespace are normalised — usually the same trade-off decided twice, or a marker copied and never specialised. Worth a look, not a verdict.
@@ -20,13 +20,13 @@ generated_sha: 4fc8127b37
     * `.claude/agents/homelab-cicd-reviewer.md:47` and `.claude/hooks/tests/test_hook_shim_fail_open.py:14`
     * `.claude/agents/homelab-cicd-reviewer.md:47` and `ansible/roles/setup/gitops_deploy/CLAUDE.md:85`
     * `.claude/agents/homelab-cicd-reviewer.md:47` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
-    * `.claude/agents/homelab-cicd-reviewer.md:47` and `docs/gitops-pipeline.md:613`
+    * `.claude/agents/homelab-cicd-reviewer.md:47` and `docs/gitops-pipeline.md:612`
     * `.claude/hooks/_claude_guard.py:19` and `scripts/lib/_claude_worktree.py:11`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `ansible/roles/setup/gitops_deploy/CLAUDE.md:85`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/archive/post-merge-automation.md:268`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:613`
-    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1134`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:612`
+    * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/gitops-pipeline.md:1133`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `docs/monitor-bridge-checks.md:480`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `.claude/hooks/tests/test_hook_shim_fail_open.py:14` and `scripts/diagnostics/tests/test_probe_health.py:348`
@@ -34,7 +34,9 @@ generated_sha: 4fc8127b37
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/k8s/wg-easy/CLAUDE.md:80`
-    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:28`
+    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/roles/setup/common/CLAUDE.md:27`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `ansible/tests/_ratchet.py:33`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
     * `.claude/skills/worktree-cleanup/SKILL.md:52` and `prek.toml:502`
@@ -78,7 +80,9 @@ generated_sha: 4fc8127b37
     * `ansible/roles/k8s/longhorn/defaults/main.yml:177` and `ansible/roles/k8s/traefik-crds/defaults/main.yml:17`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `ansible/roles/k8s/wg-easy/CLAUDE.md:80`
-    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `ansible/roles/setup/common/CLAUDE.md:28`
+    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `ansible/roles/setup/common/CLAUDE.md:27`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `ansible/tests/_ratchet.py:33`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
     * `ansible/roles/k8s/longhorn-backup/CLAUDE.md:99` and `prek.toml:502`
@@ -97,7 +101,9 @@ generated_sha: 4fc8127b37
     * `ansible/roles/k8s/nut/templates/service.yaml.j2:13` and `ansible/roles/k8s/sonarr/templates/service.yaml.j2:9`
     * `ansible/roles/k8s/observability/CLAUDE.md:105` and `ansible/roles/k8s/observability/templates/prometheus.yaml.j2:1056`
     * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/roles/k8s/wg-easy/CLAUDE.md:80`
-    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/roles/setup/common/CLAUDE.md:28`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/roles/setup/common/CLAUDE.md:27`
     * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `ansible/tests/_ratchet.py:33`
     * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
     * `ansible/roles/k8s/observability/files/rules/pi-checks.yaml:23` and `prek.toml:502`
@@ -117,7 +123,9 @@ generated_sha: 4fc8127b37
     * `ansible/roles/k8s/radarr/templates/verify/notification.yaml.j2:10` and `ansible/roles/k8s/sonarr/templates/verify/notification.yaml.j2:10`
     * `ansible/roles/k8s/radarr/templates/verify/notification.yaml.j2:16` and `ansible/roles/k8s/sonarr/templates/verify/notification.yaml.j2:16`
     * `ansible/roles/k8s/terraria/templates/deployment.yaml.j2:27` and `ansible/roles/k8s/traefik/templates/deployment.yaml.j2:28`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:80` and `ansible/roles/setup/common/CLAUDE.md:28`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:80` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:80` and `ansible/roles/setup/common/CLAUDE.md:27`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:80` and `ansible/roles/setup/common/CLAUDE.md:27`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:80` and `ansible/tests/_ratchet.py:33`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:80` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:80` and `prek.toml:502`
@@ -140,9 +148,42 @@ generated_sha: 4fc8127b37
     * `ansible/roles/setup/claude_code/tasks/main.yml:6` and `ansible/roles/setup/renovate_agent/tasks/main.yml:5`
     * `ansible/roles/setup/claude_code/tasks/main.yml:6` and `ansible/roles/setup/renovate_notify/tasks/main.yml:5`
     * `ansible/roles/setup/claude_code/tasks/main.yml:6` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
-    * `ansible/roles/setup/common/CLAUDE.md:28` and `ansible/tests/_ratchet.py:33`
-    * `ansible/roles/setup/common/CLAUDE.md:28` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
-    * `ansible/roles/setup/common/CLAUDE.md:28` and `prek.toml:502`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `ansible/tests/_ratchet.py:33`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `prek.toml:502`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:34`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:34`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:40` and `ansible/roles/setup/common/CLAUDE.md:34`
+    * `ansible/roles/setup/common/CLAUDE.md:40` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:40` and `ansible/roles/setup/common/CLAUDE.md:34`
+    * `ansible/roles/setup/common/CLAUDE.md:40` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `ansible/tests/_ratchet.py:33`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `prek.toml:502`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:34`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:40` and `ansible/roles/setup/common/CLAUDE.md:34`
+    * `ansible/roles/setup/common/CLAUDE.md:40` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `ansible/tests/_ratchet.py:33`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `docs/target-architecture/monitoring/m6-status/b5.md:42`
+    * `ansible/roles/setup/common/CLAUDE.md:27` and `prek.toml:502`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:37`
+    * `ansible/roles/setup/common/CLAUDE.md:34` and `ansible/roles/setup/common/CLAUDE.md:40`
+    * `ansible/roles/setup/common/CLAUDE.md:37` and `ansible/roles/setup/common/CLAUDE.md:40`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/fake_remux/tasks/main.yml:5`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/github_cli/tasks/main.yml:6`
     * `ansible/roles/setup/config_files/tasks/main.yml:7` and `ansible/roles/setup/homelab_builder/tasks/main.yml:7`
@@ -165,7 +206,7 @@ generated_sha: 4fc8127b37
     * `ansible/roles/setup/github_cli/tasks/main.yml:6` and `ansible/roles/setup/renovate_notify/tasks/main.yml:5`
     * `ansible/roles/setup/github_cli/tasks/main.yml:6` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
     * `ansible/roles/setup/gitops_deploy/CLAUDE.md:85` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329`
-    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:85` and `docs/gitops-pipeline.md:613`
+    * `ansible/roles/setup/gitops_deploy/CLAUDE.md:85` and `docs/gitops-pipeline.md:612`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py:25`
     * `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` and `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15`
@@ -197,7 +238,6 @@ generated_sha: 4fc8127b37
     * `ansible/roles/setup/homelab_builder/tasks/main.yml:7` and `ansible/roles/setup/renovate_agent/tasks/main.yml:5`
     * `ansible/roles/setup/homelab_builder/tasks/main.yml:7` and `ansible/roles/setup/renovate_notify/tasks/main.yml:5`
     * `ansible/roles/setup/homelab_builder/tasks/main.yml:7` and `ansible/roles/setup/sops_setup/tasks/main.yml:7`
-    * `ansible/roles/setup/k3s/files/longhorn_backup_health.py:476` and `scripts/lib/longhorn_lib/longhorn_skipped_volumes_logic.py:65`
     * `ansible/roles/setup/nut_host/tasks/main.yml:7` and `ansible/roles/setup/optimize_pi/tasks/main.yml:8`
     * `ansible/roles/setup/nut_host/tasks/main.yml:7` and `ansible/roles/setup/renovate_agent/tasks/main.yml:5`
     * `ansible/roles/setup/nut_host/tasks/main.yml:7` and `ansible/roles/setup/renovate_notify/tasks/main.yml:5`
@@ -216,8 +256,10 @@ generated_sha: 4fc8127b37
     * `ansible/tests/repo/test_adr_links.py:12` and `docs/archive/docs-ui-and-adrs/design.md:27`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/tests/repo/test_adr_links.py:12` and `scripts/lib/b2.py:21`
-    * `ansible/tests/repo/test_adr_links.py:34` and `ansible/tests/repo/test_census_rows_roles.py:256`
-    * `ansible/tests/setup/test_aide_check.py:13` and `docs/gitops-pipeline.md:702`
+    * `ansible/tests/repo/test_adr_links.py:34` and `ansible/tests/repo/test_census_rows_roles.py:255`
+    * `ansible/tests/repo/test_adr_links.py:34` and `ansible/tests/repo/test_census_rows_roles.py:255`
+    * `ansible/tests/repo/test_adr_links.py:34` and `ansible/tests/repo/test_census_rows_roles.py:255`
+    * `ansible/tests/setup/test_aide_check.py:13` and `docs/gitops-pipeline.md:701`
     * `ansible/tests/setup/test_initial_setup_host_gates.py:14` and `docs/archive/docs-ui-and-adrs/design.md:27`
     * `ansible/tests/setup/test_initial_setup_host_gates.py:14` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `ansible/tests/setup/test_initial_setup_host_gates.py:14` and `scripts/lib/b2.py:21`
@@ -227,38 +269,39 @@ generated_sha: 4fc8127b37
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:162` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:344`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:7`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:613`
+    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:612`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1134`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/gitops-pipeline.md:1133`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/diagnostics/tests/test_probe_could_not_read_exits.py:4`
     * `docs/archive/docs-ui-and-adrs/design.md:27` and `scripts/lib/b2.py:21`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
-    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1134`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/gitops-pipeline.md:1133`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:613`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1134`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:612`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:1133`
     * `docs/archive/post-merge-automation.md:268` and `docs/monitor-bridge-checks.md:480`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/gitops-pipeline.md:613` and `docs/gitops-pipeline.md:1134`
-    * `docs/gitops-pipeline.md:613` and `docs/monitor-bridge-checks.md:480`
-    * `docs/gitops-pipeline.md:613` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:613` and `scripts/diagnostics/tests/test_probe_health.py:348`
-    * `docs/gitops-pipeline.md:1134` and `docs/monitor-bridge-checks.md:480`
-    * `docs/gitops-pipeline.md:1134` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:1134` and `scripts/diagnostics/tests/test_probe_health.py:348`
+    * `docs/gitops-pipeline.md:612` and `docs/gitops-pipeline.md:1133`
+    * `docs/gitops-pipeline.md:612` and `docs/monitor-bridge-checks.md:480`
+    * `docs/gitops-pipeline.md:612` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:612` and `scripts/diagnostics/tests/test_probe_health.py:348`
+    * `docs/gitops-pipeline.md:1133` and `docs/monitor-bridge-checks.md:480`
+    * `docs/gitops-pipeline.md:1133` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:1133` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/monitor-bridge-checks.md:480` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/monitor-bridge-checks.md:480` and `scripts/diagnostics/tests/test_probe_health.py:348`
     * `docs/target-architecture/contracts.md:333` and `docs/target-architecture/deploy/d2-first-leaf.md:747`
     * `docs/target-architecture/monitoring/m6-status/a1.md:134` and `hosts/components/builder/CLAUDE.md:110`
     * `docs/target-architecture/monitoring/m6-status/b5.md:42` and `prek.toml:502`
     * `hosts/components/claude-code/templates/claude-triage-poll.service.j2:20` and `hosts/components/claude-code/templates/claude-triage@.service.j2:40`
+    * `hosts/components/k3s-host-checks/files/longhorn_backup_health.py:476` and `scripts/lib/longhorn_lib/longhorn_skipped_volumes_logic.py:65`
     * `scripts/deploy_tools/tests/test_chained_timeout.py:279` and `scripts/deploy_tools/tests/test_chained_timeout.py:289`
     * `scripts/dev/fanout_lib/brief.py:340` and `scripts/dev/findings_lib/history_cli.py:200`
     * `scripts/dev/findings_lib/claim_cli.py:30` and `scripts/dev/findings_lib/export_cli.py:37`
@@ -538,8 +581,18 @@ generated_sha: 4fc8127b37
 |---|---|---|
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/chezmoi_setup/tasks/main.yml:7` | 2026-11-07 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. The role's templates, files and defaults stay in the role directory because hosts/components/claude-code renders them (`role: claude_code`) until H7.20a moves them. | `ansible/roles/setup/claude_code/tasks/main.yml:6` | 2026-10-31 |
-| ` marker in | `ansible/roles/setup/common/CLAUDE.md:28` | 2026-11-06 |
-| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:34` | 2026-10-09 |
+| ` marker in | `ansible/roles/setup/common/CLAUDE.md:27` | 2026-11-06 |
+| ` marker in | `ansible/roles/setup/common/CLAUDE.md:27` | 2026-11-06 |
+| ` marker in | `ansible/roles/setup/common/CLAUDE.md:27` | 2026-11-06 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:34` | 2026-11-07 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:34` | 2026-11-07 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:34` | 2026-11-07 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:37` | 2026-10-09 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:37` | 2026-10-09 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:37` | 2026-10-09 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:40` | 2026-11-07 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:40` | 2026-11-07 |
+| ` marker at each says why): `ansible/roles/setup/common/tasks/release_bin.yml:DECIDED: repo content only` (#3728). | `ansible/roles/setup/common/CLAUDE.md:40` | 2026-11-07 |
 | the units keep the `kuma-check-` prefix, by the operator's ruling in ADR 0026. | `ansible/roles/setup/common/tasks/check_timer.yml:28` | 2026-11-04 |
 | repo content only, never an upstream download. controller's commit, which is true provenance only for bytes that commit holds. A pinned upstream artifact (sops, an installer script, an APT key, a release tarball) is versioned by its own pin. Filing it under a repo SHA would claim a provenance it lacks, and a rollback that swings `current` would not change which upstream bytes are on disk. Those downloads stay plain `get_url` tasks in their own roles. #3728 classified every one of them and found none that fits here. This marker says nothing about how each download is verified. Most carry a `checksum:`, but the two claude.ai/install.sh fetches (claude_code, agent_user.yml) carry no checksum, for the reason the decision marker at each of those tasks gives. | `ansible/roles/setup/common/tasks/release_bin.yml:43` | 2026-10-09 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/config_files/tasks/main.yml:7` | 2026-10-25 |
@@ -552,8 +605,9 @@ generated_sha: 4fc8127b37
 | every `.md` in this repo is prose no playbook applies, with no carve-out for one under a role's `files/` or `templates/` directory (issue #2810). There were two answers before: this function's rule, and `scripts/deploy_tools/narrow_paths.is_prose`, which read a `.md` under those two directories as shippable because a task CAN copy or render one. Nothing does — the three that exist (`configarr/files/baseline/README.md` and two under `home-assistant/files/`) are named by no task, no template and no file list, because the roles that own them ship a NAMED list rather than a directory (issue #1715). So the carve-out cost a whole `ansible/deploy.yml` for a README nobody deploys, and bought nothing. the `no-role-ships-a-markdown-file` row of `ansible/tests/repo/test_census_rows_roles.py` is what makes it safe to assert rather than derive: a task that starts shipping a `.md` fails that guard instead of silently landing a file the deployer skipped. `narrow_lib/paths.py:is_prose` calls this, so there is one definition. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:444` | 2026-09-30 |
 | `common` is not named beside its file's shippers (#3312); see its CLAUDE.md. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_changes.py:545` | 2026-10-03 |
 | ` | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_config.py:16` | 2026-10-03 |
-| `common/templates/resolv.conf.j2` stays out of the table above and records `common` (#3319). `k3s` renders it directly, and it is not the tick's to apply: it runs only from `k3s-bringup.yml`. `optimize_pi` rendered it too until H7.25 moved the Pi's resolver into the `pi-resolver` component, which the host package builder renders on its own. Recording `common` prints the remediation in `deploy_remediation._setup_commands` as one line. The value names the roles that render the file. `_setup_commands` builds `common`'s command from them and the routing (#4316), so neither a host nor a playbook is written down twice. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:88` | 2026-10-03 |
-| parse the copy rather than exec it. BEFORE it waits on master CI, so running it would execute code no gate has passed. The tables use set unions, `frozenset()` and f-strings, which `ast.literal_eval` refuses, so `_value` evaluates exactly those node types and none that can call out. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:132` | 2026-10-09 |
+| parse the copy rather than exec it. BEFORE it waits on master CI, so running it would execute code no gate has passed. The tables use set unions, `frozenset()` and f-strings, which `ast.literal_eval` refuses, so `_value` evaluates exactly those node types and none that can call out. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:112` | 2026-10-09 |
+| parse the copy rather than exec it. BEFORE it waits on master CI, so running it would execute code no gate has passed. The tables use set unions, `frozenset()` and f-strings, which `ast.literal_eval` refuses, so `_value` evaluates exactly those node types and none that can call out. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:112` | 2026-10-09 |
+| parse the copy rather than exec it. BEFORE it waits on master CI, so running it would execute code no gate has passed. The tables use set unions, `frozenset()` and f-strings, which `ast.literal_eval` refuses, so `_value` evaluates exactly those node types and none that can call out. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_cross_role.py:112` | 2026-10-09 |
 | an unapplyable setup ROLE no longer parks the tick, with one exception: a | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_defer.py:23` | 2026-10-10 |
 | ` | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_failtext.py:13` | 2026-10-03 |
 | a bring-up playbook (and a setup path naming no role) still parks; a setup ROLE this deployer cannot apply no longer does — it fast-forwards and leaves the durable `manual_plane` marker instead. Parking held every other session's landing behind work only a hand could do. `deploy_defer`'s module docstring carries the measurement. One exception narrows this (#4326): a range carrying a setup role parks while the routing derivation failed or timed out, because that is transient and the next tick retries. A deleted role is dropped and an unplaced one is recorded; neither parks. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_handlers.py:119` | 2026-09-11 |
@@ -564,7 +618,7 @@ generated_sha: 4fc8127b37
 | this index stays, and its callers keep importing `deploy_logic` rather than the leaf modules (issue #2810 asked whether a pure re-export facade should be dissolved). It IS a pure facade — `ansible/tests/deploy/test_gitops_deploy_imports.py` holds it at zero definitions — and that is the design rather than an accident. Three things pay for its 105 lines. The table above is the only place the deployer's decisions are listed by the question each one answers, and a reader who starts at `gitops_deploy.py` reaches it through the single import that module makes. About 120 places name `deploy_logic.<symbol>` — docs prose, this role's CLAUDE.md, the test suites, and monitor-bridge's copy of `gitops_markers.py` — so dissolving the index rewrites every one of them to name whichever leaf a symbol lives in today, which is exactly the churn the index absorbs when a symbol moves between leaves. The monkeypatch trap in the docstring is the third: a test that patches `deploy_logic.<name>` rebinds a re-export no function reads and passes against unpatched code, so this file defining nothing is what keeps the injected `DeployTools` the only seam. Contradict this with a measurement that the index cost something, not with a line count. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py:23` | 2026-09-30 |
 | the whole-role tag on any doubt. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_narrow.py:227` | 2026-11-06 |
 | the arm stays forward-only whatever the ceiling reads. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:61` | 2026-11-06 |
-| ` marker at `AGENT_JOIN_TAGS` says. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:377` | 2026-10-22 |
+| ` marker at `AGENT_JOIN_TAGS` says. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_remediation.py:375` | 2026-10-22 |
 | ` | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:15` | 2026-10-03 |
 | one class, over the 600-line cap, rather than three mixins. slots were split out only because this module stood at the cap (#2663), and each mixin read and wrote through `read`/`write`, which only this class defines and they must not. A piece that cannot be read without its parent adds an interface and hides nothing, so they folded back in #3661; the allowlist entry carries the reason. | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:50` | 2026-11-06 |
 | subtract-and-keep, with no guard on the origin SHA the command was printed for. A second range that needs a tag ALREADY in the row (PR-B also needs `kubeconfig`) leaves the row unchanged, so an operator who applied `kubeconfig` before PR-B fast-forwarded clears PR-B's pending work with their own. Closing that needs the printed command to carry a token of what the row was, which widens the clear command's grammar. Accepted in #2349 (PR #2364). | `ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_state.py:433` | 2026-09-24 |
@@ -599,19 +653,7 @@ generated_sha: 4fc8127b37
 | /boot/grub/grubenv is exempt from the dpkg.log requirement. boot, and the weekly reboot made it differ every week with no package run: on daniel-box its mtime was 2026-11-01 07:38, the weekly reboot, and the dpkg log held no GRUB or kernel entry then. Only the exact path is exempt, and only as a regular file; the rest of /boot/grub/ is not. | `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2:131` | 2026-11-02 |
 | page on a difference no package explains, and advance the baseline after every run that has none (#4599, replacing #4594's "differences push UP"). Package upgrades land every week, so the classifier rather than the exit code decides: measured on daniel-server's 2026-11-02 report, all 18,556 changed package-owned files under /usr, /lib and /boot matched their dpkg digests, and its complete /boot and /etc entries were packages, triggers, Longhorn's /etc/iscsi and libvirt profiles. Advancing makes each report cover one week instead of growing from the first baseline. A DOWN does not advance: the change stays in every report until a human reads it and runs `aide-check --accept`, so one missed page does not bury it. aide.db dates from the last advance, and dpkg.log entries after it (less the slack) are the package runs that could explain DERIVED output. Without a baseline nothing is explained. | `ansible/roles/setup/initial_setup/templates/aide-check.sh.j2:365` | 2026-11-02 |
 | any warning, any suspect file and any possible rootkit pushes DOWN (#4638). 2026-10-12 over daniel-server's journal (18 weekly runs) and the rotated logs on all three hosts, the warnings fell into three classes. Two hidden files under /etc appeared on every host in every run, and daniel-pi reported PermitRootLogin unset in every run. Both classes are allowlisted in /etc/rkhunter.conf.local (rkhunter.conf.local.j2), which leaves a healthy week with no warnings at all. The third class is a passwd or group change: daniel-server had one in 5 of its 18 weeks, and daniel-box and daniel-pi one week each, every one a package or the operator adding an account. It pages, because a new account is what this scan exists to catch. rkhunter stores its copy of passwd and group on every run, so running this script again by hand acknowledges the change and clears the alert. Suspect files read 0 in every log kept, because APT_AUTOGEN refreshes the baseline after package upgrades, so a suspect file is a binary that changed outside apt. | `ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2:69` | 2026-10-12 |
-| a modeled proxy (B2-destined backups per 24h), not a metered count; B2's per-class counters are Partner-tier only, so never publish a log-derived Class-B figure as a cap fraction. | `ansible/roles/setup/k3s/defaults/main.yml:279` | 2026-09-30 |
-| `--list-only`, weekly, and NOT the full restore. end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass on daniel-box at all — five structural failures listed in scripts/backup/etcd_restore_drill.sh's header, under `It does NOT pass beside a live k3s` — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the `install -d "$SCRATCH"` that creates the directory at all, so however often it fails it writes nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not ON THIS HOST. The full drill IS scheduled since #1175 — monthly, in a throwaway guest on daniel-server (`etcd_drill_full_cron` in group_vars, mechanism in roles/setup/hypervisor), where the guest's disk is deleted after every run and so nothing accumulates anywhere. | `ansible/roles/setup/k3s/defaults/main.yml:336` | 2026-08-28 |
-| `when:` on the existing `import_tasks`, not a switch to `include_tasks`. is static, so each task keeps its own tags and `--tags backup-health` still selects; a dynamic include would hide those tags from selection and break the tag-based deploys. | `ansible/roles/setup/k3s/defaults/main.yml:620` | 2026-08-27 |
-| a kubectl fetch that fails is a DOWN with a reason, not an empty result. this was ported from sent every one of these reads to `2>/dev/null` (`git show 62c488dd^:ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2`, lines 144, 176, 218, 344, 395, 412 and 443) and let the empty capture flow into the checks; the first Python port kept that shape as `... if rc == 0 else []`. Both read an API-server timeout, a 500 or RBAC drift as "nothing errored, nothing is stale, this tier has no volumes" — a green light over data nobody looked at, on the deadman for the Longhorn backup plane. Parity with the bash was the wrong target here, so this departs from it: a reader that cannot see the cluster says so. Issue #1061 has the per-line analysis. | `ansible/roles/setup/k3s/files/longhorn_backup_health.py:163` | 2026-09-04 |
-| a failed list, or a list that lacks a target, is a rank-1 problem and never a | `ansible/roles/setup/k3s/files/longhorn_backup_health.py:218` | 2026-10-22 |
-| only weekly-tier volumes are checked` in longhorn_skipped_volumes_logic.py. | `ansible/roles/setup/k3s/files/longhorn_backup_health.py:476` | 2026-10-09 |
-| a kubectl fetch that fails is a DOWN with a reason` above for one pod's log only, whose lines go unseen for that tick; a failed call as a whole still exits nonzero and is reported. | `ansible/roles/setup/k3s/files/longhorn_backup_health.py:553` | 2026-11-02 |
-| this agent-side mirror is tagged k3s_agent, not join-firewall, so --tags join-firewall applies only the server half; change a port on both halves together. | `ansible/roles/setup/k3s/tasks/agent.yml:51` | 2026-09-30 |
-| the fix for a sub-tag that renders without stamping is to DROP the sub-tag, never to add it here. `--tags restore-drill` used to render 1 of this group's 5 templates and stamp none, which reads as drift on 1 script — a false RED. Adding `restore-drill` to this task's tags restamps all 5, declaring the 4 it never rendered to be current: a false GREEN, and the exact defect the 2026-08-23b review's M6 was raised for. A false RED costs an investigation; a false GREEN costs the guarantee. Two reviewers proposed the additive fix on 2026-08-24 and both were wrong; the sub-tag is gone entirely — the deploy task above is now a single loop over all 5 backup-health scripts (including the restore drill), so there is no per-script tag left to add one to. Contradict this only with a stamp mechanism that can record a PARTIAL group. | `ansible/roles/setup/k3s/tasks/health-crons.yml:505` | 2026-08-24 |
-| the wildcard, rather than the node's own routable address. interpolated `server_ip` until 2026-09-10, and a bind to a specific address depends on that address already being assigned when CoreDNS starts. On the 2026-09-09 boot it was not: CoreDNS came up, served DNS on `bind 127.0.0.1` above, bound no metrics listener, and systemd reported the unit healthy with NRestarts=0 throughout — `ss -lnt` counted zero sockets on the metrics port for the rest of the day, and the only thing that went red was a Prometheus target several layers away, naming a connection refusal rather than a bind failure (GitHub issue #1476). A wildcard bind cannot fail that way, because it depends on no address being assigned first. The exposure is unchanged: UFW's INPUT is default-deny and node.yml opens this port only to the pod CIDR and the agent nodes. | `ansible/roles/setup/k3s/templates/host-corefile.j2:33` | 2026-09-10 |
-| a host cron, not a monitor-bridge check (#3287). daniel-box, and checks 9-10 have an in-cluster path: Alloy ships daniel-box's /var/log/syslog to loki-homelab, where the `logger` lines check 9 matches are queryable (measured 2026-10-03), and /etc/cron.d is reachable over a hostPath. What a fold would cost: - Checks 1-8 read Longhorn CRs through kubectl. The bridge has no ServiceAccount or RBAC and never calls the Kubernetes API, so a fold adds a cluster-read grant to the alerting pod and a stdlib API client. - Check 9 on LogQL adds Alloy and Loki to the evidence path, and the bridge's Loki gate would suppress it during a Loki outage. - This script's hc-ping is the backup plane's off-site channel, independent of the bridge. A bridge outage would blind backup monitoring too. The shim is 258 lines, and the reader and logic module would move and be rewritten rather than shrink. Revisit if the bridge gains Kubernetes API access for another check. | `ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2:25` | 2026-10-03 |
-| only weekly-tier volumes are | `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py:476` | 2026-10-09 |
-| the copies sit in task vars, not in this role's defaults. play-wide in initial_setup.yml, so a defaults copy becomes a cross-role read for any setup role that names the key (#5472). puid and pgid are group_vars keys copied for routing: a change to group_vars routes to the deploy plane only, which never re-applies this task. test_k8s_host_files_pairs.py holds each copy equal to its source. | `ansible/roles/setup/k8s_host_files/tasks/media-volume.yml:23` | 2026-10-18 |
+| this agent-side mirror is tagged k3s_agent, and daniel-box's package holds the server half; change a port on both halves together. | `ansible/roles/setup/k3s/tasks/agent.yml:51` | 2026-11-07 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. The role's templates and defaults stay in the role directory because hosts/components/nut-secondary renders them (`role: nut_host`) until H7.20a moves them. | `ansible/roles/setup/nut_host/tasks/main.yml:7` | 2026-10-24 |
 | FINALDELAY stays 5 on every host, and is deliberately NOT parameterised to stagger the two poweroffs. The tempting design is to let daniel-box shut down before daniel-server, whose pod hosts upsd, so it cannot be stranded when upsd disappears. It is unnecessary: a secondary needs upsd only to OBSERVE FSD, not to complete SHUTDOWNCMD, and both hosts observe it within one POLLFREQALERT (5 s) of the pod's `upsmon -c fsd` — long before daniel-server's poweroff reaches containerd. Staggering would also rest on FINALDELAY applying in secondary mode, which upsmon.conf(5) documents for primary mode only. Full reasoning in roles/k8s/nut/CLAUDE.md. | `ansible/roles/setup/nut_host/templates/host-upsmon.conf.j2:30` | 2026-08-28 |
 | this role is emptied, never deleted, until H7.20a. fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role keeps the playbook line, and the tick applies the role on daniel-box as a no-op. setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count the role as empty on every host. | `ansible/roles/setup/optimize_pi/tasks/main.yml:8` | 2026-10-25 |
@@ -634,7 +676,7 @@ generated_sha: 4fc8127b37
 
 | Marker | File | Decided |
 |---|---|---|
-| the stamp is read, and both halves are shipped. `--list-only` weekly under the `etcd-snapshot` tag (k3s_etcd_restore_drill_cron, Monday 10:20), run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py, since PR #535: it reads `last-success-list-only` from this STAMP_DIR, monitor-bridge serves the verdict as `homelab_check_success{check="etcd_restore_drill"}`, and the `EtcdRestoreDrillFailing` rule in observability's bridge-exporter.yaml pages on it. | `scripts/backup/etcd_restore_drill.sh:160` | 2026-09-02 |
+| the stamp is read, and both halves are shipped. `--list-only` weekly (k3s_etcd_restore_drill_cron, Monday 10:20), run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py, since PR #535: it reads `last-success-list-only` from this STAMP_DIR, monitor-bridge serves the verdict as `homelab_check_success{check="etcd_restore_drill"}`, and the `EtcdRestoreDrillFailing` rule in observability's bridge-exporter.yaml pages on it. | `scripts/backup/etcd_restore_drill.sh:160` | 2026-11-07 |
 | the nearest finished descendant's verdict stands in for a merge commit GitHub never ran CI for. That descendant's run tested a tree that contains every change in the merge commit, which is the rule the tick already deploys by (it fast-forwards to the newest green ancestor of the tip). What it does not prove is the merge commit's own tree, the one the landing gates. Nothing can prove that once the push event is gone, and the alternative is a landing no re-run converges (#4621). A RED one ends the walk rather than being stepped over: a later green commit may hold the fix the merge commit lacks, so its green says nothing about the tree deployed. Neither verdict changes once both exist, so `wait` ends that case on CI_UNPROVEN, not on CI_RED: CI_RED's resume is a re-run, and every re-run reads the same red (#4649). `green_after` finds the later green, and the CI_UNPROVEN line says to promote the tip. While a later one has no verdict yet, `wait` keeps polling rather than ending red. | `scripts/deploy_tools/await_ci.py:326` | 2026-10-12 |
 | the clamp stands although the published bundle's all-changed chain is past it (#5868: 36396s with 118 Kustomizations, against 19800s; it was 35646s until #6095 added `traefik-precheck`, which traefik waits on and which waits on traefik's own edges, 33246s until H6.1b added `system-upgrade`, whose 100m `flux_timeout` is the longest of any tag, 33126s until #5875 added `observability-prepull`, which observability waits on, 33006s until H2.3b added `longhorn-restore-drill`, which waits on `homelab-namespace` and `longhorn`, 32256s until D5 step 30 added `homelab-namespace`, which every tag rendering into `homelab` depends on, 32016s until D5 step 29 added `flux` and `flux-deferred`, and 31920s until Longhorn v1.13.0 raised the `longhorn` timeout from 2m to 10m, #5972). `verify`'s own wait is the same `promote_timeout`, so it stops at this cap too. Lifting only the soak's rendered wait would let the soak outlast a `verify` that has already written `failed=<names>`, and would pass no promotion. The soak's wait cannot shrink to the chain of what changed either: the render cannot know R's changed set (renderer_lib/soak.py). A narrow revision stays well under the cap. A revision that changes every tag at once, such as a renderer change, can fail at the cap, and the hold names the Kustomizations that had not settled. The remedy is a `verify` that re-enters rather than holding one runner, which is d4-ordering.md's Open question 14. | `scripts/deploy_tools/chained_timeout.py:45` | 2026-10-22 |
 | the read-back requires that GHCR serves the tag, not that it serves the build metadata's digest. The job builds on the runner's default `docker` driver, whose `containerimage.digest` can be the config digest rather than the manifest digest GHCR serves. docker/setup-buildx-action would move the build cache out of reach of the `docker system prune` that lets ten builds fit on one runner. | `scripts/deploy_tools/ci_images.py:279` | 2026-10-17 |
@@ -680,7 +722,7 @@ generated_sha: 4fc8127b37
 | ` marker above VERIFY_CAP_S records why the clamp stands" | `scripts/deploy_tools/tests/test_chained_timeout.py:289` | 2026-10-22 |
 | ` at VERIFY_CAP_S records the all-changed chain it accepts (#5868). | `scripts/deploy_tools/tests/test_chained_timeout.py:296` | 2026-10-22 |
 | ` at VERIFY_CAP_S accepted; re-decide the clamp and record the new figure" | `scripts/deploy_tools/tests/test_chained_timeout.py:314` | 2026-10-22 |
-| these two drive `narrow_setup.main` with the argv `deploy_narrow.narrow_setup_argv` builds, and that function is the capability — there is no earlier signature to separate the defect from (#2363). The defect they name is a flag mismatch across the subprocess boundary, and they catch it: spelling `--role-tag` as `--role-tags` in the builder fails both with argparse's `unrecognized arguments`, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup.py:466` | 2026-09-24 |
+| these two drive `narrow_setup.main` with the argv `deploy_narrow.narrow_setup_argv` builds, and that function is the capability — there is no earlier signature to separate the defect from (#2363). The defect they name is a flag mismatch across the subprocess boundary, and they catch it: spelling `--role-tag` as `--role-tags` in the builder fails both with argparse's `unrecognized arguments`, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup.py:464` | 2026-09-24 |
 | `role_tags`' `playbook` argument IS the capability under test, so no input separates this rule from the signature (#2363). `foreign_tags` needs the playbook to know which other roles are in scope; a `role_tags` without it cannot refuse a shared tag at all. Today's behaviour is what the pair below holds, and it does: making `role_tags` intersect against an empty set instead of `foreign_tags(...)` fails `test_a_tag_another_role_in_the_playbook_declares_is_flagged` with DID NOT RAISE and leaves its accepting half green, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup_edges.py:365` | 2026-09-24 |
 | pace is 2 landings started per run (#5526: CI demand already exceeds the 20-runner | `scripts/dev/fanout_lib/autoland.py:37` | 2026-10-18 |
 | a daniel-server that cannot be read is a logged line and exit 0, not a failure. | `scripts/dev/fanout_lib/autoland.py:40` | 2026-10-18 |
@@ -900,10 +942,10 @@ generated_sha: 4fc8127b37
 | ` marker on that tolerance in | `docs/crowdsec-waf-record.md:226` | 2026-10-10 |
 | ` at `chained_timeout.py:VERIFY_CAP_S` records | `docs/flux-deploy-plane.md:1293` | 2026-10-22 |
 | ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:213` | 2026-10-10 |
-| ` marker. | `docs/gitops-pipeline.md:613` | 2026-10-24 |
-| ` marker and the measurement. | `docs/gitops-pipeline.md:702` | 2026-10-10 |
-| ` at that task says why the | `docs/gitops-pipeline.md:888` | 2026-10-10 |
-| ` marker | `docs/gitops-pipeline.md:1134` | 2026-10-10 |
+| ` marker. | `docs/gitops-pipeline.md:612` | 2026-10-24 |
+| ` marker and the measurement. | `docs/gitops-pipeline.md:701` | 2026-10-10 |
+| ` at that task says why the | `docs/gitops-pipeline.md:887` | 2026-10-10 |
+| ` marker | `docs/gitops-pipeline.md:1133` | 2026-10-10 |
 | ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:153` | 2026-09-29 |
 | ` the names stay generated, and a label sits beside them. | `docs/issue-claiming-and-fanout.md:251` | 2026-10-11 |
 | ` marker on `PACE_MASTER_RUNS` in | `docs/landing.md:100` | 2026-10-29 |
@@ -1021,10 +1063,18 @@ generated_sha: 4fc8127b37
 | alpha holds. | `ansible/tests/repo/test_adr_links.py:272` | 2026-09-12 |
 | alpha and beta. | `ansible/tests/repo/test_adr_links.py:275` | 2026-09-12 |
 | host-shipped `ansible/roles/*/*/files/*.py` (and, since H7.2e, `hosts/lib/` and `scripts/lib/longhorn_lib/`) is EXEMPT, and the exemption is not cosmetic. Those programs run under the hosts' own interpreter, not the repo's uv env: `python3 -V` on daniel-server and daniel-pi both report 3.12.3 (measured 2026-09-05), and the k8s `files/*.py` run under whatever python their pod image ships. Below 3.14 there is no PEP 649, so annotations evaluate EAGERLY at def/class time and the import is load-bearing insurance against a forward reference — `def merge(self, other: Foo) -> Foo:` inside `class Foo` raises NameError without it. The repo suite cannot observe that: it runs on 3.14, where every such annotation is lazy either way. So the exemption is what keeps a green suite from authorising a cron-time NameError on a host. | `ansible/tests/repo/test_census_rows_python.py:47` | 2026-10-24 |
-| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py:241` | 2026-10-09 |
-| ") | `ansible/tests/repo/test_census_rows_roles.py:256` | 2026-10-09 |
-| marker"] | `ansible/tests/repo/test_census_rows_roles.py:257` | 2026-10-09 |
-| x. | `ansible/tests/repo/test_census_rows_roles.py:260` | 2026-10-09 |
+| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py:240` | 2026-10-09 |
+| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py:240` | 2026-10-09 |
+| ` says which (#3701). | `ansible/tests/repo/test_census_rows_roles.py:240` | 2026-10-09 |
+| ") | `ansible/tests/repo/test_census_rows_roles.py:255` | 2026-10-09 |
+| ") | `ansible/tests/repo/test_census_rows_roles.py:255` | 2026-10-09 |
+| ") | `ansible/tests/repo/test_census_rows_roles.py:255` | 2026-10-09 |
+| marker"] | `ansible/tests/repo/test_census_rows_roles.py:256` | 2026-10-09 |
+| marker"] | `ansible/tests/repo/test_census_rows_roles.py:256` | 2026-10-09 |
+| marker"] | `ansible/tests/repo/test_census_rows_roles.py:256` | 2026-10-09 |
+| x. | `ansible/tests/repo/test_census_rows_roles.py:259` | 2026-10-09 |
+| x. | `ansible/tests/repo/test_census_rows_roles.py:259` | 2026-10-09 |
+| x. | `ansible/tests/repo/test_census_rows_roles.py:259` | 2026-10-09 |
 | `git ls-files`, not an `rglob` plus a skip list. to be on disk, and this repo grows untracked trees during ordinary work: `.venv`, `ansible/collections/` (vendored per worktree), `__pycache__`, and `styles/`, which `vale sync` creates and which carries `.txt` and `.json` files the repo itself does not have. That last one moves `_REPO_EXTENSIONS` below, so the same citation would be checked on a synced checkout and skipped on a fresh one. A guard whose verdict depends on whether someone has run `vale sync` has the defect this module rejected `.claude/worktrees/` for. | `ansible/tests/repo/test_documented_paths_exist.py:59` | 2026-10-03 |
 | minus `go` -- the only Go here is the traefik role's local plugin (files/cloudflare-realip/), while the docs cite UPSTREAM Go by basename (`docs/longhorn-backup-tiering.md`: Longhorn's `deltablock.go:117`, `s3.go:88`), which counting the plugin would turn into missing-file failures. | `ansible/tests/repo/test_documented_paths_exist.py:69` | 2026-09-24 |
 | a suffix, never a bare basename. | `ansible/tests/repo/test_documented_paths_exist.py:83` | 2026-08-27 |
@@ -1058,9 +1108,9 @@ generated_sha: 4fc8127b37
 | match the word, not a command position. an env assignment, `sudo`, `env`, a cron user field and Ansible's `shell:`/`cmd:`, and a list of shell grammar stays one shape short. A path (`/usr/bin/python3`) and a package or flag name (`python3-venv`, `--python 3.14.6`) do not match. | `ansible/tests/setup/test_host_python_invocations.py:379` | 2026-10-12 |
 | ` | `ansible/tests/setup/test_initial_setup_host_gates.py:14` | 2026-11-07 |
 | ` comment in its file. | `ansible/tests/setup/test_initial_setup_host_gates.py:66` | 2026-09-29 |
-| strict, and deliberately constraining. | `ansible/tests/setup/test_k3s_stage_gates.py:63` | 2026-08-27 |
-| `domain` is exempt. (ansible/secret_rotation.yml:108-110) because it is a hostname, not a credential — leaking it costs nothing, and every script that builds a URL names it. Left in, it flags 6 of the 9 candidate scripts plus one already converted, so the guard would refuse every group and be turned off rather than obeyed. Exempting the name is right; loosening the whole-word regex that finds it would not be. | `ansible/tests/setup/test_release_bin_groups_have_no_secrets.py:41` | 2026-08-29 |
 | ` marker has the evidence. | `ansible/tests/setup/test_rkhunter_check.py:14` | 2026-10-12 |
+| ` marker in `deploy_cross_role` says why `resolv.conf.j2` records | `ansible/tests/setup/test_setup_cross_role_files.py:26` | 2026-10-03 |
+| ` marker in `deploy_cross_role` says why `resolv.conf.j2` records | `ansible/tests/setup/test_setup_cross_role_files.py:26` | 2026-10-03 |
 | ` marker in `deploy_cross_role` says why `resolv.conf.j2` records | `ansible/tests/setup/test_setup_cross_role_files.py:26` | 2026-10-03 |
 | the LAN is exempt` marker in `hosts/components/ssh-firewall/component.yml` | `ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py:7` | 2026-10-31 |
 | ` marker in `ansible/roles/k8s/observability/defaults/main.yml` records it.\n- [operator] Keep PeaNUT, although nut-exporter and the Grafana UPS board cover the same data. | `evals/cases/homelab-review/002-drop-settled.json:5` | 2026-10-22 |
@@ -1111,6 +1161,19 @@ generated_sha: 4fc8127b37
 | this script RECONCILES, where its sibling github-ruleset-drift.sh only alerts. ruleset is a setting a human changes on purpose, and reconciling it would undo that change with no signal. The limit is not: the only way it changes without a human is by expiring, and re-applying an expired setting is restoring the declared state, not overriding a decision. A human who wants it off changes `gitops_deploy_interaction_limit` in defaults/main.yml — this script applies whatever that declares, and `none` disarms it by way of a DELETE. | `hosts/components/github-checks/templates/github-interaction-limit.sh.j2:28` | 2026-09-06 |
 | bootstrap, never a `ConditionPathExists=!` oneshot in this package (#6674). A oneshot would rebaseline any host whose database went missing, so a deleted aide.db would turn into a fresh, trusted one instead of a DOWN push. Bootstrap refuses the same case: a missing database on a host whose rkhunter or aideinit log survives needs `--rebaseline`, unless bootstrap's own `.pending` marker shows the log is its unfinished first init. - The mask on the aide package's dailyaidecheck.timer, which would run a second, nightly full scan. A mask is a symlink in /etc/systemd/system, outside what a package owns. | `hosts/components/integrity-scans/component.yml:14` | 2026-11-01 |
 | no `rkhunter --update` (#6964). the distribution's /etc/rkhunter.conf sets `UPDATE_MIRRORS=0`, `MIRRORS_MODE=1` and `WEB_CMD="/bin/false"`, which rkhunter 1.4.6 rejects as a relative pathname, so an update can only fail. Setting a working `WEB_CMD` would let rkhunter fetch as root on every host. | `hosts/components/integrity-scans/component.yml:22` | 2026-11-03 |
+| a modeled proxy (B2-destined backups per 24h), not a metered count; B2's per-class counters are Partner-tier only, so never publish a log-derived Class-B figure as a cap fraction. | `hosts/components/k3s-host-checks/defaults/main.yml:140` | 2026-11-07 |
+| `--list-only`, weekly, and NOT the full restore. end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass on daniel-box at all — five structural failures listed in scripts/backup/etcd_restore_drill.sh's header, under `It does NOT pass beside a live k3s` — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the `install -d "$SCRATCH"` that creates the directory at all, so however often it fails it writes nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not ON THIS HOST. The full drill IS scheduled since #1175 — monthly, in a throwaway guest on daniel-server (`etcd_drill_full_cron` in group_vars, mechanism in the hypervisor's host half), where the guest's disk is deleted after every run and so nothing accumulates anywhere. | `hosts/components/k3s-host-checks/defaults/main.yml:197` | 2026-11-07 |
+| a kubectl fetch that fails is a DOWN with a reason, not an empty result. this was ported from sent every one of these reads to `2>/dev/null` (the shim at the parent of 62c488dd, lines 144, 176, 218, 344, 395, 412 and 443) and let the empty capture flow into the checks; the first Python port kept that shape as `... if rc == 0 else []`. Both read an API-server timeout, a 500 or RBAC drift as "nothing errored, nothing is stale, this tier has no volumes" — a green light over data nobody looked at, on the deadman for the Longhorn backup plane. Parity with the bash was the wrong target here, so this departs from it: a reader that cannot see the cluster says so. Issue #1061 has the per-line analysis. | `hosts/components/k3s-host-checks/files/longhorn_backup_health.py:163` | 2026-09-04 |
+| a failed list, or a list that lacks a target, is a rank-1 problem and never a | `hosts/components/k3s-host-checks/files/longhorn_backup_health.py:218` | 2026-10-22 |
+| only weekly-tier volumes are checked` in longhorn_skipped_volumes_logic.py. | `hosts/components/k3s-host-checks/files/longhorn_backup_health.py:476` | 2026-10-09 |
+| a kubectl fetch that fails is a DOWN with a reason` above for one pod's log only, whose lines go unseen for that tick; a failed call as a whole still exits nonzero and is reported. | `hosts/components/k3s-host-checks/files/longhorn_backup_health.py:553` | 2026-11-02 |
+| a host cron, not a monitor-bridge check (#3287). daniel-box, and checks 9-10 have an in-cluster path: Alloy ships daniel-box's /var/log/syslog to loki-homelab, where the `logger` lines check 9 matches are queryable (measured 2026-10-03), and /etc/cron.d is reachable over a hostPath. What a fold would cost: - Checks 1-8 read Longhorn CRs through kubectl. The bridge has no ServiceAccount or RBAC and never calls the Kubernetes API, so a fold adds a cluster-read grant to the alerting pod and a stdlib API client. - Check 9 on LogQL adds Alloy and Loki to the evidence path, and the bridge's Loki gate would suppress it during a Loki outage. - This script's hc-ping is the backup plane's off-site channel, independent of the bridge. A bridge outage would blind backup monitoring too. The shim is 258 lines, and the reader and logic module would move and be rewritten rather than shrink. Revisit if the bridge gains Kubernetes API access for another check. | `hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2:25` | 2026-10-03 |
+| a host cron, not a monitor-bridge check (#3287). daniel-box, and checks 9-10 have an in-cluster path: Alloy ships daniel-box's /var/log/syslog to loki-homelab, where the `logger` lines check 9 matches are queryable (measured 2026-10-03), and /etc/cron.d is reachable over a hostPath. What a fold would cost: - Checks 1-8 read Longhorn CRs through kubectl. The bridge has no ServiceAccount or RBAC and never calls the Kubernetes API, so a fold adds a cluster-read grant to the alerting pod and a stdlib API client. - Check 9 on LogQL adds Alloy and Loki to the evidence path, and the bridge's Loki gate would suppress it during a Loki outage. - This script's hc-ping is the backup plane's off-site channel, independent of the bridge. A bridge outage would blind backup monitoring too. The shim is 258 lines, and the reader and logic module would move and be rewritten rather than shrink. Revisit if the bridge gains Kubernetes API access for another check. | `hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2:25` | 2026-10-03 |
+| a host cron, not a monitor-bridge check (#3287). daniel-box, and checks 9-10 have an in-cluster path: Alloy ships daniel-box's /var/log/syslog to loki-homelab, where the `logger` lines check 9 matches are queryable (measured 2026-10-03), and /etc/cron.d is reachable over a hostPath. What a fold would cost: - Checks 1-8 read Longhorn CRs through kubectl. The bridge has no ServiceAccount or RBAC and never calls the Kubernetes API, so a fold adds a cluster-read grant to the alerting pod and a stdlib API client. - Check 9 on LogQL adds Alloy and Loki to the evidence path, and the bridge's Loki gate would suppress it during a Loki outage. - This script's hc-ping is the backup plane's off-site channel, independent of the bridge. A bridge outage would blind backup monitoring too. The shim is 258 lines, and the reader and logic module would move and be rewritten rather than shrink. Revisit if the bridge gains Kubernetes API access for another check. | `hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2:25` | 2026-10-03 |
+| only weekly-tier volumes are | `hosts/components/k3s-host-checks/tests/test_longhorn_backup_health_reader.py:476` | 2026-10-09 |
+| a CoreDNS bump goes live at the unit's next start, which the weekly reboot bounds, rather than at a restart nothing would gate on the forwarder answering. The running process keeps the old inode until then. | `hosts/components/k3s-host-dns/component.yml:15` | 2026-11-07 |
+| the wildcard, rather than the node's own routable address. interpolated `server_ip` until 2026-09-10, and a bind to a specific address depends on that address already being assigned when CoreDNS starts. On the 2026-09-09 boot it was not: CoreDNS came up, served DNS on `bind 127.0.0.1` above, bound no metrics listener, and systemd reported the unit healthy with NRestarts=0 throughout — `ss -lnt` counted zero sockets on the metrics port for the rest of the day, and the only thing that went red was a Prometheus target several layers away, naming a connection refusal rather than a bind failure (GitHub issue #1476). A wildcard bind cannot fail that way, because it depends on no address being assigned first. The exposure is unchanged: UFW's INPUT is default-deny and component.yml opens this port only to the pod CIDR and the agent nodes. | `hosts/components/k3s-host-dns/templates/host-corefile.j2:33` | 2026-09-10 |
+| the wifi fallback reaches /etc/netplan through a copy, never an output's symlink. `netplan generate` fails on a dangling link in that directory, so a missing SOPS key would take every link down at the next boot. `homelab-netplan-wifi` installs the rendered file only after it passes the generator, and leaves the old file otherwise. The copy has no owner in dpkg, so emptying `k3s_node_wifi_link` is the way back: the next package retires both copies. | `hosts/components/k3s-server/component.yml:26` | 2026-11-07 |
 | `config` runs here only as `--services`, which prints names. interpolated model, which holds every secret value in compose.env. | `hosts/components/pi-compose/compose-adopt:10` | 2026-10-24 |
 | the engine never moves through the updater (#1961, H7-R1-02). no `depends:` on docker-ce, containerd.io or the plugins, and ships no apt preferences pin for them, because a pin above priority 1000 forces a version change on the next apt run. The packages stay held, and homelab-docker-engine.service is the one path that installs or moves them. Reconcile never starts it (`policy: manual`, no enable link on the service). An operator starts it from a LAN session, or homelab-docker-engine.timer starts it at 00:30 UTC, the Pi's quiet window (operator ruling 2026-10-30). The unit does nothing while every package sits at its pin, so the timer acts only after a pin moved. hosts/lib/tests/test_pi_docker_component.py holds these rules. | `hosts/components/pi-docker/component.yml:10` | 2026-10-30 |
 | 00:30 UTC (the Pi's clock is UTC), operator ruling 2026-10-30 on H7 Open question 8. The slot is chosen against the Pi's own schedule, each entry in UTC: - homelab-updater.timer (hosts/daniel-pi/units/homelab-updater.timer.conf) fires once a day at 03:05, after this unit's 90-minute worst case, and the unit masks the timer and waits out a running updater regardless. - The midnight cluster runs 23:55 to 00:10: log2ram's sync, logrotate, dpkg-db-backup and sysstat. 00:30 follows it. - man-db runs 01:00 to 03:00, and the rotated-log sweep at 01:40. Both come after 00:30. - The other gap, 04:00 to 05:59, is not usable: pi-peer-backup pulls the wg-easy configs from the Pi at 23:00 America/Chicago, which is 04:00 UTC under CDT and 05:00 UTC under CST, and the Pi's apt timers run at 04:20 and 05:20 plus up to 10 minutes. The upgrade recreates wg-easy and takes the dpkg lock, so it must not meet either. The unit's apt run takes minutes. The unit masks the updater timer before it stops anything, so an upgrade that outlasts 03:05 still meets no updater run. | `hosts/components/pi-docker/units/homelab-docker-engine.timer:6` | 2026-10-30 |

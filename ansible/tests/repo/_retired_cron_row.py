@@ -38,15 +38,11 @@ H2_CRONS = {
     "configarr sync health": ("k8s/configarr",),
     "janitorr error health": ("k8s/janitorr",),
     "qbittorrent prefs drift check": ("k8s/qbittorrent",),
-    "Longhorn filesystem trim": ("setup/k3s",),
-    "Longhorn restore drill": ("setup/k3s",),
-    "Off-box etcd snapshot": ("setup/k3s",),
 }
 # `stamp_deployed_name` -> the roles that may hold its import or its absent arm.
 H2_FRAGMENTS = {
     "configarr": ("k8s/configarr",),
     "janitorr": ("k8s/janitorr",),
-    "k3s-longhorn-reap": ("setup/k3s",),
 }
 # The names already retired: only a `state: absent` task passes for these.
 RETIRED = frozenset(
@@ -61,9 +57,6 @@ RETIRED = frozenset(
         "janitorr error health",
         "janitorr",
         "k3s-longhorn-reap",
-        "Longhorn filesystem trim",
-        "Longhorn restore drill",
-        "Off-box etcd snapshot",
         "qbittorrent prefs drift check",
     }
 )
@@ -223,7 +216,6 @@ RETIRED_CRON_ARMS = Census(
     must_find=frozenset(
         {
             "ansible/roles/k8s/traefik#cron:Cloudflare IP drift",
-            "ansible/roles/setup/k3s#fragment:k3s-longhorn-reap",
         }
     ),
 )

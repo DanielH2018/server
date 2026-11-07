@@ -66,7 +66,9 @@ def overrides_missing_use_dns_false(text: str) -> list[str]:
 
 
 def test_the_live_template_suppresses_all_three_resolver_sources() -> None:
-    missing = overrides_missing_use_dns_false(rendered_setup_text("k3s", _TEMPLATE))
+    missing = overrides_missing_use_dns_false(
+        rendered_setup_text("k3s-host-dns", _TEMPLATE)
+    )
     assert not missing, (
         f"{_TEMPLATE} must set `use-dns: false` under every override that can feed a "
         "resolver, or the node's resolv.conf goes back over the 3-nameserver pod cap and "

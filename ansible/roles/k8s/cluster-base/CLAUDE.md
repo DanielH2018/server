@@ -2,8 +2,8 @@
 
 The four workload-tier PriorityClasses, and the `homelab-readonly` ServiceAccount with its
 ClusterRole, bindings and token Secret. Two objects here are needed before Flux can run. Flux's
-own controllers name `homelab-critical`, and `setup/k3s`'s `kubeconfig.yml` reads the token
-Secret.
+own controllers name `homelab-critical`, and the read-only kubeconfig carries the token this
+Secret holds.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->

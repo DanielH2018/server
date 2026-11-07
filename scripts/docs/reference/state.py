@@ -66,7 +66,7 @@ from lib import yaml_fast
 from docs.catalog_lib import package_timers
 from docs.reference import crons as crons_mod
 from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K8S_ROLES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_HOST_CHECKS_DEFAULTS, K8S_ROLES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -240,7 +240,7 @@ def etcd_restore_drill_run(
 ) -> LoopRun:
     """The weekly etcd list-only restore drill.
 
-    Cadence: k3s_etcd_restore_drill_cron (roles/setup/k3s/defaults/main.yml, resolved
+    Cadence: k3s_etcd_restore_drill_cron (hosts/components/k3s-host-checks/defaults/main.yml, resolved
     directly -- see the module docstring).
     """
     if not state_dir.is_dir():
@@ -263,8 +263,10 @@ def etcd_restore_drill_run(
 DRILL_DEFAULTS = K8S_ROLES / "longhorn-restore-drill" / "defaults" / "main.yml"
 
 
-def _k3s_default_var(name: str, defaults_path: Path = K3S_DEFAULTS) -> str | None:
-    """A single scalar default from roles/setup/k3s/defaults/main.yml, or the path given."""
+def _k3s_default_var(
+    name: str, defaults_path: Path = K3S_HOST_CHECKS_DEFAULTS
+) -> str | None:
+    """A single scalar default from the k3s-host-checks component's defaults, or the path given."""
     try:
         data = yaml_fast.safe_load(defaults_path.read_text())
     except OSError, yaml.YAMLError:

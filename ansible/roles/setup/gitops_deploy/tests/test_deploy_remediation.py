@@ -64,12 +64,10 @@ def test_broad_remediation_uses_the_roles_real_tag():
 
 
 def test_broad_remediation_for_a_role_no_playbook_includes_names_its_consumers():
-    """setup/common is applied by no playbook of its own; k3s renders its resolver since H7.25."""
+    """setup/common is applied by no playbook of its own, and packages render its resolver."""
     cmd = broad_remediation(False, True, {"common"})
     assert "applied by no playbook of its own" in cmd
-    assert (
-        "`uv run ansible-playbook ansible/k3s-bringup.yml --tags k3s` (WARNING:" in cmd
-    )
+    assert "ansible/k3s-bringup.yml" not in cmd
     assert "optimize_pi" not in cmd
 
 
@@ -320,13 +318,13 @@ def test_every_narrower_tag_the_warning_names_exists_in_the_role():
     import re
 
     task_files = sorted(_K3S_TASKS.glob("*.yml"))
-    assert len(task_files) >= 10, f"only {len(task_files)} k3s task files found"
+    assert len(task_files) >= 5, f"only {len(task_files)} k3s task files found"
     declared = set()
     for path in task_files:
         for block in re.findall(r"tags:\s*\[([^\]]*)\]", path.read_text()):
             declared.update(x.strip() for x in block.split(",") if x.strip())
-    assert "kubeconfig" in declared, (
-        "the k3s role no longer declares a `kubeconfig` tag"
+    assert "k3s_server" in declared, (
+        "the k3s role no longer declares a `k3s_server` tag"
     )
 
     offered = set(deploy_remediation._K3S_NARROWER_TAGS)

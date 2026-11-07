@@ -50,18 +50,6 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
         ),
     },
     "crowdsec.yml": CROWDSEC_ARMS,
-    # No mode, on purpose: the library keeps the directory modes it came with.
-    "media-volume.yml": {
-        "Create the media volume directories on the node": (
-            "ansible.builtin.file",
-            {
-                "path": "{{ item }}",
-                "state": "directory",
-                "owner": "{{ puid }}",
-                "group": "{{ pgid }}",
-            },
-        ),
-    },
     # An absent arm, so it carries no owner or mode.
     "observability.yml": {
         "Remove the retired dashboard staging trees": (
@@ -134,18 +122,12 @@ EXPECTED_ROWS: dict[str, dict[str, tuple[str, dict[str, str | bool]]]] = {
 }
 
 # {(task file, task name): its `loop`} for every looped row. A row absent here must not loop.
-# media-volume's hardlink probe links between media/ and torrents/, so both must exist.
 # configarr's arm removes three host paths.
 EXPECTED_LOOPS: dict[tuple[str, str], object] = {
     ("configarr.yml", "Remove the retired configarr health reader from the host"): [
         "/usr/local/bin/configarr-health.sh",
         "/opt/configarr-health",
         "/var/lib/homelab/setup-deployed-manifest.d/configarr",
-    ],
-    ("media-volume.yml", "Create the media volume directories on the node"): [
-        "{{ media_volume_host_path }}",
-        "{{ media_volume_host_path }}/media",
-        "{{ media_volume_host_path }}/torrents",
     ],
     ("observability.yml", "Remove the retired dashboard staging trees"): [
         "/etc/rancher/k3s/dashboards",

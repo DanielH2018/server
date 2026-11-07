@@ -135,6 +135,7 @@ class FakeHost:
         self._stub("getent", "exit 2")
         self._stub("groupadd", f'echo "groupadd $*" >> {self.log}')
         self._stub("usermod", f'echo "usermod $*" >> {self.log}')
+        self._stub("dig", "echo 192.0.2.1")
         self._stub(
             "snap",
             f'if [ "$1" = list ]; then exit 1; else echo "snap $*" >> {self.log}; fi',

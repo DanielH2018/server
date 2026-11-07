@@ -33,17 +33,6 @@ EXEMPT: dict[str, str] = {
         "writes /var/lib/gitops-deploy/last_run every tick, which monitor-bridge's GitOps-Alive "
         "check reads, and gitops_tick_metrics.py counts each tick by outcome"
     ),
-    "k3s: cron `B2 deletion accounting`": (
-        "touches a cron-fired stamp that longhorn-backup-health.sh reads into its own "
-        "textfile verdict"
-    ),
-    "k3s: cron `B2 backup budget listing`": (
-        "a read-only listing of the bucket for the journal; it changes no state"
-    ),
-    "k3s: cron `etcd restore drill`": (
-        "runs the drill with --list-only, a read-only listing of the snapshots; the full "
-        "drill is the hypervisor role's cron"
-    ),
 }
 
 
@@ -176,14 +165,14 @@ def test_every_exemption_names_a_member_that_still_writes_none():
 
 
 def test_census_resolves_each_route_a_writer_takes():
-    """Non-vacuity: a script cron, a renamed install and a template timer."""
+    """Non-vacuity: a script cron, a template timer and a timer that writes none."""
     found = census()
-    writers = {
-        "k3s: cron `Longhorn backup health`",
-    }
-    assert {key for key in writers if found.get(key)} == writers
+    assert (
+        found.get("hypervisor: cron `Full etcd restore drill in a throwaway guest`")
+        is True
+    )
     assert found.get("initial_setup: timer `kuma-check-setup-drift`") is True
-    assert found.get("k3s: cron `B2 backup budget listing`") is False
+    assert found.get("gitops_deploy: timer `gitops-deploy`") is False
 
 
 # ── Fixture pairs ─────────────────────────────────────────────────────────────────────

@@ -264,8 +264,7 @@ def check_deletion_evidence(
     return []
 
 
-# One period of the cron. `health-crons.yml` schedules it with an hour and a minute and NO
-# `weekday`, so it fires once a day. If it gains a weekday, this constant and the window guard
+# One period of the timer. Its `OnCalendar=` has an hour and a minute and NO weekday, so it fires once a day. If it gains a weekday, this constant and the window guard
 # in `check_deletion_liveness` change together — a weekly cron is legitimately silent for six
 # days and the guard would have to compare against its own period instead.
 _CRON_PERIOD_S = 86400

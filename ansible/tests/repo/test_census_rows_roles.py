@@ -147,12 +147,11 @@ ROWS = (
             Subject("a.yml", "- ansible.builtin.copy:\n    src: deploy_logic.py\n"),
             Subject("b.yml", "# src: test_commented.py is not a ship\n"),
         ),
-        # 83 ship lines across 15 files when the row landed (2026-10-03); H7.37 and H7.62 moved roles out.
-        min_matches=48,
+        # 83 ship lines across 15 files when the row landed (2026-10-03); H7.35, H7.37 and H7.62 moved roles out.
+        min_matches=37,
         must_find=frozenset(
             {
                 "ansible/roles/setup/gitops_deploy/tasks/code.yml",
-                "ansible/roles/setup/k3s/tasks/health-crons.yml",
                 "ansible/roles/setup/deploy_ui/tasks/code.yml",
             }
         ),

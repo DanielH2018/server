@@ -26,6 +26,9 @@ HOST_INPUTS = (
     "ansible/vars/hosts/",
     # `host_sources.SHARED_FILES`, which M6 B5 copies into the Pi's package.
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
+    # What daniel-box's k3s-server component renders through `role: k3s` (H7.35).
+    "ansible/roles/setup/k3s/defaults/main.yml",
+    "ansible/roles/setup/k3s/templates/netplan-static-address.yaml.j2",
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
     "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
     "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",

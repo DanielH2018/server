@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-host-checks component with its enable link.
+[Unit]
+Description=Compare the cluster token with the operator's stamp daily
+
+[Timer]
+OnCalendar=*-*-* {{ k3s_etcd_s3_cron_hour }}:{{ k3s_etcd_s3_cron_minute }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,215 @@
+# The tunables of the backup-health, disk-health and token-drift checks. The renderer loads this
+# file beneath component.yml's own defaults.
+
+# The restore drill itself is the `longhorn-restore-drill` Flux role's (H2.3d): its schedule, its
+# volume pin, its size cap, its content floor, its timeout, its probe image and its empty-volume
+# waiver are that role's defaults, and no `setup/` file reads them. What stays here is what a host
+# reader reads: the namespace and the two bounds of backup health's checks
+# 7 and 8 further down.
+#
+# The namespace the drill's stamp ConfigMap, `longhorn-restore-drill-stamps`, lives in. Backup
+# health's checks 7 and 8, the Longhorn upgrade gate and the docs state page read the ConfigMap in
+# this namespace. It mirrors the role's `longhorn_drill_namespace`, which the drill itself reads,
+# and ansible/tests/k8s/test_restore_drill_stamps.py holds the pair equal.
+k3s_longhorn_restore_drill_namespace: homelab
+
+# Where the B2-accounting cron line touches a stamp before its work runs, owned by sys_user so
+# that cron can write it and longhorn-backup-health can read it. Check 10 reads the stamp to tell "the cron fired and its run failed" from "the cron stopped firing",
+# which the /etc/cron.d stat cannot: initial_setup hardens that directory to 0700 root (#3677).
+k3s_cron_fired_stamp_dir: /var/lib/longhorn-cron-fired
+# How stale the drill's last success may be before the heartbeat calls it out. Nightly cadence, so
+# this allows two consecutive failed or skipped nights — short enough that a drill which has
+# silently stopped is noticed within the week, long enough not to page on a single bad night.
+# Cadence and this number move TOGETHER: check 7's stamp age is the drill's only alert path
+# (`logger` and stderr reach nobody), so raising the cadence without lowering this buys nothing.
+k3s_longhorn_restore_drill_max_age_days: 3
+# Coverage slack, on top of one full rotation cycle. Check 8 derives the window as
+# (candidate count + this) days, so it tracks the fleet automatically instead of going stale each
+# time a volume joins the backup set. A volume that fails every time it comes up stays invisible
+# to check 7 — the global stamp goes green on the other 24 — and this is what catches it.
+# It also absorbs the drill's retry: a failed attempt is re-drilled the next night, and
+# that night is one the rotation does not advance on, so a cycle runs (candidate count + volumes
+# currently failing) nights. At 5 the window stays correct until 5 volumes fail at once — a
+# state check 8 is already paging about on its own terms.
+k3s_longhorn_restore_drill_coverage_slack_days: 5
+
+# How far back checks 9 and 10 of longhorn-backup-health.sh read the `b2-deletions` journal tag.
+# The cron runs daily, so 26h holds the last run under either DST offset with a couple of hours of
+# jitter to spare. It is also how long a reported fault stays RED: an UNPRICED deletion — a
+# permanent event, not a state — ages out after this window. The trim's arms read Longhorn's
+# `trim` CronJob and its newest Job instead, and take their cadence from its schedule.
+#
+# Check 10 makes the window load-bearing twice over. It alarms when the window holds NO
+# line from the cron, which is only a fault because 26h exceeds one 24h cron period — below one
+# period the check disables that arm rather than page on normal silence. The same 26h is the
+# grace for a freshly installed cron, so there is no second tunable to keep in step.
+k3s_longhorn_cron_evidence_window_hours: 26
+
+# The R2 (daily) and weekly volume lists, `k3s_longhorn_r2_volumes` and
+# `k3s_longhorn_weekly_volumes`, live in the `longhorn-reconcile` role's defaults since H1.7a.
+# That job is their only reader that applies them to the cluster.
+
+# Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). A host cron writes a check
+# textfile that a Prometheus rule reads; that template's DECIDED marker says why it is not a
+# monitor-bridge check.
+#
+# 30h against a 03:30 daily job: one full day plus 6h of slack, so a single late or slow run
+# does not page, while a genuinely missed day does — ~26.5h after the fact. Deliberately looser
+# than the interval, because the failure worth catching is "the job stopped", not "the job ran
+# 40 minutes late".
+k3s_longhorn_backup_max_age_hours: 30
+
+# How far back the Error-state check looks. An Error Backup object is immortal once the job that
+# created it is gone: Longhorn's `retain: N` prunes only Completed backups owned by a live job,
+# and the reaper skips every state that is not Completed. Unbounded, one bad night pins the
+# backup monitor red permanently, reported on every 10-minute tick with no way to clear it. 24h
+# is one full daily cycle, so a real
+# failure pages through its own retry window and then clears itself.
+k3s_longhorn_backup_error_max_age_hours: 24
+
+# The weekly tier's equivalent bound, for the volumes in k3s_longhorn_weekly_volumes. Same
+# reasoning scaled to a weekly 04:30 job: 8 days plus 6h, so one late or skipped run pages while
+# a normal ~7-day-old backup does not. Without a second bound these volumes would be walked by
+# nothing — the daily 30h could never apply to them, so they would simply be left out of the coverage
+# loop and could stop backing up indefinitely with the check green. The bound is per-volume, so
+# the weekday sharding (each volume still backed up every 7 days) leaves it unchanged.
+k3s_longhorn_weekly_backup_max_age_hours: 198
+
+# */10 rather than the Pi crons' */5: this queries the k8s API rather than reading a local file,
+# and nothing here changes faster than the daily backup it watches. The script derives DEADLINE_S
+# from this value, and LonghornBackupHealthNotReporting's literal must follow it
+# (ansible/tests/services/test_b1_rule_literals.py).
+k3s_longhorn_backup_health_cron_minute: "*/10"
+
+# The B2 deletion ledger's two crons (units/homelab-b2-*.timer.j2). 07:10 charges the day's completed
+# deletions, 07:20 re-lists the block tree so tomorrow's charges have a price. That ORDER is the
+# constraint, not the hour: a deletion can only be priced by a listing taken before it, because
+# afterwards the tree is smaller than the one the deletion walked. Both sit after the 06:10 trim
+# and clear of both prune windows, and both land on the same UTC day as those windows under
+# either DST offset — the ledger is keyed on the UTC day B2's counters reset on.
+k3s_b2_deletion_accounting_cron_hour: "7"
+k3s_b2_deletion_accounting_cron_minute: "10"
+k3s_b2_budget_cron_hour: "7"
+k3s_b2_budget_cron_minute: "20"
+
+# Daily-backup-volume budget. B2 exposes no cap-headroom API, so nothing can measure the
+# remaining allowance directly; what CAN be watched is the input that grows, the count of
+# Longhorn's daily backups against the free tier's 2500-transaction Class B/C ceiling.
+#
+# A PROXY, and the health script says so in its message: it counts Longhorn's own daily backups,
+# and cannot see the b2-usage rclone's share of the same account-wide cap. So the
+# budget is deliberately well under what Longhorn alone could consume — the headroom left over is
+# for the other consumer.
+#
+# Raising it is NOT silencing the warning — this arm counts backups, not what they cost, so a
+# threshold below the normal count fires every morning on a condition deliberately created, and
+# a monitor that pages daily for an expected reason is one nobody reads. What detects the thing
+# actually feared — the cap firing — is **B2 Reachable**, which probes b2_authorize_account and
+# reports B2's own `transaction_cap_exceeded`. This arm stays a growth tripwire, set above the
+# normal count.
+#
+# A tripwire on GROWTH, not a derived ceiling: the threshold sits just above the normal count
+# rather than coming from a per-backup cost model.
+#
+# 16: every backed-up volume uses 16 MiB blocks, so block count per volume fell about 8.6x
+# (sonarr 200 -> 23, prowlarr 216 -> 25) and with it the prune cost each backup carries.
+# `probe.py b2-budget` prices a stored block at ~2 Class C, matching the two shards it could
+# price (d4: 50 blocks / 101 C, d6: 35 / 70 C). The worst projected shard is ~220 Class C
+# against the 2100 budget, where d2 alone was 1359 at 2 MiB blocks.
+#
+# Deliberately 16 rather than the ~24 the arithmetic allows. All 21 volumes backing up on one day
+# would cost roughly 790 Class C, so cost is not the binding constraint and the count is —
+# which is exactly when a growth tripwire has to stay tight. 16 sits just above what a
+# migration-sized night produced (12) rather than at the ceiling.
+#
+# PROMOTING TO 24. Elapsed time is not the gate; these three are:
+#
+#   1. Every shard has been priced. `probe.py b2-budget` can only cost a shard whose volumes
+#      already hold backups, so while a weekday's volumes have none yet (after a rebuild, say)
+#      the ~220 worst-shard figure above is a projection. Promote on the measured number.
+#   2. That measured worst shard is not materially above ~220 Class C. If it is, the ~2 C/block
+#      model is wrong and the arithmetic behind 24 goes with it.
+#   3. The arm has not fired at 16 on a day with no deliberate burst. A tripwire already firing
+#      on ordinary traffic is one to investigate, not one to loosen.
+#
+# b2-budget models cost, it does not measure it — B2 publishes no usage API, so the console's
+# Caps & Alerts page stays the only ground truth for what was actually spent.
+#
+# Raise it only together with a decision about the cap itself, never to silence the warning.
+#
+# DECIDED: a modeled proxy (B2-destined backups per 24h), not a metered count; B2's per-class
+# counters are Partner-tier only, so never publish a log-derived Class-B figure as a cap
+# fraction.
+k3s_longhorn_daily_backup_budget: 16
+
+# Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's
+# storageMinimalAvailablePercentage=25 stops replica scheduling once the disk passes 75% used, so
+# this pages at the line where the storage plane starts degrading, not after. Same */10 cron and
+# derived textfile deadline as the backup heartbeat above.
+k3s_disk_max_pct: 75
+k3s_disk_health_cron_minute: "*/10"
+
+# Boot grace for the */10 health crons (boot_grace_active in homelab-check-lib.sh). A cron firing
+# seconds after boot evaluates a half-started cluster and sends a healthchecks.io `/fail`, which
+# alerts immediately — the check's own grace cannot absorb it. A boot is the worked example:
+# daniel-box booted at 07:39:48, the */10 crons ran at 07:40:00, and the last pod
+# reached Ready at 07:45:06, so `longhorn-backup-health` paged.
+#
+# DERIVED, not chosen. Two bounds, and the value is the only round number between them:
+#   LOWER  — must exceed the worst observed boot-to-Ready, 5m18s (07:39:48 boot, 07:45:06
+#            last pod Ready). Anything shorter lets the cron run against a cluster that
+#            is still coming up, which is the bug.
+#   UPPER  — must stay STRICTLY BELOW the 600s cron interval, so at most one slot is ever skipped
+#            whatever minute the host boots on. That single-miss bound is what lets the dead-men
+#            keep a grace of period + one slot instead of an open-ended one.
+# 420 < 600 satisfies the upper bound with 3 minutes of margin, and clears the lower by 102s.
+# Raising this past 599 breaks the arithmetic in docs/healthchecks-io-deadman.md — the guard test
+# in ansible/tests/setup/test_health_cron_boot_grace.py enforces the bound rather than the number.
+#
+# NOT applied to the daily etcd-token-drift cron (02:45). For it a skipped slot is a skipped DAY,
+# which is a worse trade than the rare boot landing inside its one-minute window; its 1-hour
+# grace already covers a late run.
+k3s_health_cron_boot_grace_s: 420
+
+# The longest legitimate gap between two textfile writes of the once-a-day etcd-token-drift check:
+# a day plus an hour. The textfile rule carries it as a literal, pinned to this value by
+# ansible/tests/services/test_b1_rule_literals.py. Move the schedule and this together.
+k3s_daily_check_deadline_s: 90000
+
+# ── Cluster-token drift check (templates/etcd-token-drift.sh.j2) ─────────────────────────────
+# k3s's own schedule writes the etcd snapshots and uploads them to R2: the `etcd-s3` and
+# `etcd-snapshot-*` keys of `k3s_server_config` in hosts/components/k3s-server/component.yml. H6's
+# windowed unit applies a change to them with one gated restart. Their folder is R2's
+# `etcd-snapshots`, not the `longhorn` prefix the orphaned-backup reaper walks, and not B2, whose
+# Class-B cap is the scarce axis. Backup health's check 12 reads the upload's freshness.
+#
+# This script compares the live cluster token with the operator's stamp. Its schedule keys keep
+# the names they had when the script also uploaded, so the Healthchecks.io cadence is unchanged.
+k3s_etcd_s3_cron_hour: "2"
+k3s_etcd_s3_cron_minute: "45"
+
+# The restore side of the same tier. The snapshot above is taken, uploaded and alarmed; without
+# a schedule nothing proves it comes BACK, and an off-box copy verified once by hand drifts. The
+# Longhorn plane applies the same rule — its drill is scheduled and its stamp is read
+# fail-closed — and etcd is the tier that carries the Backup CRs needed to FIND the Longhorn
+# backups, so it is the worse one to leave unproven.
+#
+# DECIDED: `--list-only`, weekly, and NOT the full restore. --list-only proves the off-box leg
+# end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass
+# on daniel-box at all — five structural failures listed in scripts/backup/etcd_restore_drill.sh's
+# header, under `It does NOT pass beside a live k3s` — and scheduling it would be strictly harmful: cleanup() sets KEEP=1 on ANY non-zero exit and
+# scratch dirs are swept only at +30 days, so a monthly failing full drill holds one to two
+# restored etcd databases plus cluster-token copies in /var/tmp as a steady state. The scheduled
+# list-only arm has no such cost: it exits at the drill's `--list-only` branch, BEFORE the
+# `install -d "$SCRATCH"` that creates the directory at all, so however often it fails it writes
+# nothing to /var/tmp. That asymmetry is why one mode is scheduled and the other is not ON THIS
+# HOST. The full drill IS scheduled since #1175 — monthly, in a throwaway guest on daniel-server
+# (`etcd_drill_full_cron` in group_vars, mechanism in the hypervisor's host half), where the guest's
+# disk is deleted after every run and so nothing accumulates anywhere.
+#
+# Monday 10:20: clear of every backup window (02:45 snapshot, 03:30/04:30 Longhorn, 04:10 drill),
+# clear of the 06:10 trim, and in an hour nothing else uses. Daytime
+# is deliberate for a read-only drill — --list-only downloads ~8 MB and decompresses it, so there
+# is no restore stage to wedge, and a failure is visible on a day someone is around.
+k3s_etcd_restore_drill_armed: true
+k3s_etcd_restore_drill_cron: "20 10 * * 1"

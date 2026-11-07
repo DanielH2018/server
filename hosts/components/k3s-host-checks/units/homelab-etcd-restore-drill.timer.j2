@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-host-checks component with its enable link.
+[Unit]
+Description=List the off-box etcd snapshots weekly
+
+[Timer]
+OnCalendar={{ ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][k3s_etcd_restore_drill_cron.split()[4] | int] }} *-*-* {{ k3s_etcd_restore_drill_cron.split()[1] }}:{{ k3s_etcd_restore_drill_cron.split()[0] }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

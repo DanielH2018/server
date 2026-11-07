@@ -76,7 +76,7 @@ _CENSUS_SKIP_FILES = {
 # claim consumers that hold no copy — and sends the operator to redeploy a role that cannot
 # help. Measured across all 149 secrets: 5 secrets gained 11 doc-only roles, and
 # `r2_access_key_id` is the clearest — monitor-bridge's CLAUDE.md discusses it while the only
-# renderers are setup/k3s's longhorn-r2-secret.yaml.j2 and health-crons.yml.
+# renderers are setup/k3s's longhorn-r2-secret.yaml.j2 and the k3s-host-checks output.
 #
 # Checked in the direction that matters before making the change: excluding docs creates ZERO
 # new phantom tags, so no real consumer is only discoverable through prose.

@@ -43,7 +43,6 @@ CONTROLLER_SIDE = frozenset({"src", "content", "fail_msg", "msg", "that"})
 KNOWN_HITS = frozenset(
     {
         "Install pinned Ansible collections from requirements.yml",
-        "Schedule the etcd restore drill",
     }
 )
 

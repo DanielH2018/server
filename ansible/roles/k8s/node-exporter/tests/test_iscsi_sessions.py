@@ -142,7 +142,7 @@ PRODUCERS = frozenset(
         "ansible/roles/k8s/node-exporter/files/ghcr-mirror-pull.sh",
         "ansible/roles/k8s/node-exporter/files/iscsi-sessions.sh",
         "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
-        "ansible/roles/setup/k3s/templates/disk-health.sh.j2",
+        "hosts/components/k3s-host-checks/templates/disk-health.sh.j2",
     }
 )
 

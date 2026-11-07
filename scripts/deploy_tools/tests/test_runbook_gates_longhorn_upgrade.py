@@ -147,7 +147,7 @@ def test_an_unparseable_stamp_is_flagged():
 
 def test_the_window_is_the_k3s_roles_own_number():
     # One source for the threshold: the same default monitor-bridge's check 7 is rendered from.
-    defaults = yaml_fast.safe_load(gates.K3S_DEFAULTS.read_text())
+    defaults = yaml_fast.safe_load(gates.K3S_HOST_CHECKS_DEFAULTS.read_text())
     assert gates.restore_drill_max_age_s() == defaults[gates.MAX_AGE_KEY] * DAY > 0
 
 

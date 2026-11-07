@@ -369,7 +369,7 @@ extra-paths = [
   "ansible/roles/k8s/crowdsec/files",
   "ansible/roles/k8s/traefik/files",
   "ansible/roles/k8s/artifacts/files",
-  "ansible/roles/setup/k3s/files",
+  "hosts/components/k3s-host-checks/files",
   "ansible/roles/setup/hypervisor/files",
   "hosts/components/renovate-notify/files",
   "hosts/components/renovate-agent/files",

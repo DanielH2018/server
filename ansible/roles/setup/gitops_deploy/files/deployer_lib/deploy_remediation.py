@@ -260,10 +260,8 @@ def manual_plane_clear_for(
 # role's own `tasks/` — a tag that matches nothing makes Ansible exit 0 having applied
 # nothing, which is the silent-success failure `setup_tags_for` also guards against.
 _K3S_NARROWER_TAGS = (
-    "kubeconfig",
+    "k3s_server",
     "coredns",
-    "node-dns",
-    "backup-health",
 )
 
 # The gates that decide whether `--tags k3s` actually takes the control plane down. Each is a
@@ -284,8 +282,8 @@ _K3S_GATED_TASKS = (
 
 _MAXIMAL_ROLE_TAGS: dict[str, str] = {
     "k3s": (
-        "that tag is the WHOLE role. It reapplies Longhorn, the backup targets, the "
-        f"crons, CoreDNS and the node config, and arms {_K3S_GATED_TASKS}. Narrower tags, "
+        "that tag is the WHOLE role. It reapplies the server install and CoreDNS's marker, "
+        f"and arms {_K3S_GATED_TASKS}. Narrower tags, "
         "one per task file: "
         + ", ".join(f"`{t}`" for t in _K3S_NARROWER_TAGS)
         + "; `--list-tasks` shows what one selects"

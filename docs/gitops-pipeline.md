@@ -325,12 +325,12 @@ uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
 **After a NARROWED apply, pass `--applied` naming the tags you ran.** A bare clear drops the
 role's whole line, and the row can grow between the moment a surface printed the command and
 the moment you run it — a second PR touching the same role widens it to
-`coredns,kubeconfig`, and the bare form takes `coredns` with yours. That change is then
+`coredns,node-address`, and the bare form takes `coredns` with yours. That change is then
 merged, unapplied, and recorded nowhere:
 
 ```bash
-ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
-uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s --applied kubeconfig
+ansible-playbook ansible/k3s-bringup.yml --tags node-address
+uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s --applied node-address
 ```
 
 The clear then keeps the line and prints what is still pending. Every surface that prints a
@@ -403,9 +403,9 @@ range changed in it, because the task naming the key need not be one the range e
 
 #### The tag the remediation prints is derived, not the role tag
 
-`--tags k3s` is the whole `setup/k3s` role: it reapplies Longhorn, the backup targets,
-the crons, CoreDNS and the node config, and arms two gated control-plane tasks. A three-line
-edit to `templates/readonly-kubeconfig.j2` needs only `--tags kubeconfig`. The printed command
+`--tags k3s` is the whole `setup/k3s` role: it reapplies the server install and CoreDNS's
+marker, and arms two gated control-plane tasks. A change to the marker's task needs only
+`--tags coredns`. The printed command
 therefore names the narrowest tags the change reaches.
 
 **One derivation, four surfaces.** `deploy_defer.record` asks
@@ -444,8 +444,7 @@ the tags of the tasks that read it:
   variable that an unchanged task sets under another tag.
 - `templates/<f>` or `files/<f>` maps to the tags of every task file naming `<f>`, following a
   template another template includes or imports. A host script's template is usually named in a
-  `defaults/` data structure rather than a task's `src:` (`setup/k3s` collects them in
-  `k3s_render_stamp_groups` and hands the group to `common/tasks/release_bin.yml`), so a name found
+  `defaults/` data structure rather than a task's `src:`, so a name found
   only there maps to the tags of whatever reads that KEY.
 - `defaults/main.yml` or `vars/<f>.yml` maps to the top-level keys whose value changed between the
   two refs, then the tags of every task file and template naming one of those keys.

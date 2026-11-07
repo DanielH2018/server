@@ -20,8 +20,9 @@ media_volume_claim: media-data
 # provisioner answer the claim with an empty volume somewhere else entirely.
 media_volume_storage_class: media-local
 # Its MODE is inherited from daniel-server's containers/data (0755, owner {{ puid }}) and is
-# deliberately not enforced. The setup role k8s_host_files creates the directories from a copy
-# of this key (its tasks/media-volume.yml), and test_k8s_host_files_pairs.py holds the copy equal.
+# deliberately not enforced. daniel-box's package creates the directories from a copy of this
+# key (hosts/daniel-box/tmpfiles.d/), and hosts/lib/tests/test_box_k3s_host_half.py holds the copy
+# equal.
 media_volume_host_path: /srv/media
 
 # ADVISORY ONLY. This is a directory on the node's ext4 root with no quota behind it, so

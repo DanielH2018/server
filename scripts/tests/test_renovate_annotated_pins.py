@@ -41,7 +41,6 @@ DEP_TYPE = ANNOTATION_MANAGER["depTypeTemplate"]
 KNOWN_ANNOTATED = frozenset(
     {
         "k3s-io/k3s",
-        "coredns/coredns",
         "docker-ce",
         "maxlerebourg/crowdsec-bouncer-traefik-plugin",
         "node",
@@ -151,7 +150,6 @@ def test_every_version_a_pin_renders_from_is_tracked():
     pins, _ = discover_pins()
     with_versions = [p for p in pins if any(k.endswith("_version") for k in p.inputs)]
     assert {
-        "k3s_host_coredns",
         "k3s_install_script",
     } <= {p.name for p in with_versions}
     problems = untracked_pin_versions(

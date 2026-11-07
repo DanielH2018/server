@@ -187,7 +187,7 @@ def test_the_legacy_entry_retires_ansibles_drop_in(package):
     legacy = {"path": "/etc/systemd/system/k3s.service.d/10-log-to-file.conf"}
     assert legacy in package.legacy
     spec = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
-    assert spec["legacy"] == [legacy]
+    assert spec["legacy"][0] == legacy
 
 
 def test_the_coredns_marker_ships_empty(package):

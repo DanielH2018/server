@@ -155,13 +155,15 @@ def claude_hook_files(repo: Path = REPO) -> list[Path]:
 def systemd_exec_lines(repo: Path = REPO) -> list[tuple[str, str]]:
     """(location, line text) for every `ExecStart*=` line in a systemd `*.service.j2`.
 
-    No unit execs a `scripts/...` path directly: every `ExecStart` that reaches this repo's
-    tooling runs a copy already staged to `/opt`. Kept live rather than removed so the day a
-    unit DOES call into `scripts/` directly, this catches it instead of staying silently zero
-    forever.
+    Covers the setup roles and the host components, whose units run some tooling from the
+    checkout (`homelab-etcd-restore-drill.service`).
     """
     out = []
-    for svc in sorted(repo.glob("ansible/roles/**/*.service.j2")):
+    units = [
+        *repo.glob("ansible/roles/**/*.service.j2"),
+        *repo.glob("hosts/components/**/*.service.j2"),
+    ]
+    for svc in sorted(units):
         for lineno, line in enumerate(svc.read_text().splitlines(), start=1):
             if line.strip().startswith("ExecStart"):
                 out.append((f"{svc.relative_to(repo)}:{lineno}", line))

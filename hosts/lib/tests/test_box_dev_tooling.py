@@ -39,7 +39,7 @@ OLD_UV_READERS = {
 # Readers the census must have moved, so a narrowed grep cannot pass over nothing.
 MOVED_UV_READERS = (
     "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
-    "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
+    "hosts/components/k3s-host-checks/templates/longhorn-backup-health.sh.j2",
     "ansible/roles/setup/common/tasks/release_bin.yml",
 )
 

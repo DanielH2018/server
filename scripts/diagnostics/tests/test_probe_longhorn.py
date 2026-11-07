@@ -413,13 +413,11 @@ def test_the_b2_budget_parser_default_is_none_so_the_live_read_decides():
     )
 
 
-def test_the_b2_budget_cron_passes_no_retain():
-    """The cron bakes no weekly retain, so the key can leave `setup/k3s` in H1.7b."""
-    from lib import yaml_fast
-    from lib.repo_paths import K3S_ROLE
+def test_the_b2_budget_timer_passes_no_retain():
+    """The unit bakes no weekly retain, so the key can stay out of the host checks' defaults."""
+    from lib.repo_paths import K3S_HOST_CHECKS
 
-    tasks = yaml_fast.safe_load((K3S_ROLE / "tasks" / "health-crons.yml").read_text())
-    (task,) = [t for t in tasks if "b2-budget" in str(t.get("ansible.builtin.cron"))]
-    job = " ".join(task["ansible.builtin.cron"]["job"].split())
-    assert "probe.py b2-budget 2>&1 | logger -t b2-budget" in job
-    assert "--retain" not in job
+    unit = K3S_HOST_CHECKS / "units" / "homelab-b2-budget-listing.service.j2"
+    text = unit.read_text()
+    assert "scripts/diagnostics/probe.py b2-budget\n" in text
+    assert "--retain" not in text
