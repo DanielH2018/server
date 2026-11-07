@@ -9,7 +9,7 @@ OnFailure=homelab-alert@%n.service
 Type=oneshot
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
-# Holds state.json (the last refusal, so a repeat pages once) and success.json.
+# Holds success.json, the time of the last run that refused nothing.
 StateDirectory=homelab-checkout-sync
 StateDirectoryMode=0700
 # The builder's read-only token. Without it the run refuses with reason="token" and asks nothing.

@@ -13,14 +13,16 @@ checkout-sync replaces its fast-forward* (H7.51). The run:
   3. fetches `origin master`, and refuses a checkout whose HEAD is not an ancestor of the tip
      (reason `ancestry`), because only a fast-forward is allowed;
   4. grades the tip with `ci_verdict`. When it is not green it grades the first-parent commits
-     below it, newest first, up to the bound, and stops at the first green one;
+     below it, newest first, up to the bound, and stops at the first green one. A walk past
+     `WALK_BUDGET_S` stops grading, so a slow GitHub cannot run into the unit's timeout;
   5. merges the chosen commit with `git merge --ff-only`. With no green commit it merges nothing,
      and the next run tries again.
 
 It writes `checkout_sync.prom` in the node-exporter textfile directory: the plan's
 `homelab_checkout_*` series and M3's four `homelab_check_*` series for check `checkout-sync`.
-A refusal exits 1 the first time it meets a reason on a HEAD, so the unit's
-`OnFailure=homelab-alert@%n.service` pages once per condition, and exits 0 while it repeats.
+A refusal exits 0 with `homelab_check_success` 0, which CheckoutSyncFailed pages on for as long
+as it lasts. A run that crashes exits 1, and the unit's `OnFailure=homelab-alert@%n.service`
+pages that.
 
 Run: uv run --no-project --python <host_python_version> checkout_sync.py
 `--help` prints this text and exits 0.
@@ -53,6 +55,8 @@ PROM = "checkout_sync.prom"
 # its whole run does not read as a stopped sync.
 DEADLINE_S = 7200
 REASONS = ("dirty", "branch", "ci", "token", "ancestry")
+# Seconds of grading before the walk stops, under the unit's TimeoutStartSec=150.
+WALK_BUDGET_S = 100
 
 
 class Refused(Exception):
@@ -126,14 +130,13 @@ class CheckoutSync:
         except Refused as exc:
             log(f"refused ({exc.reason}): {exc}")
             self.write_prom(exc.reason, dirty)
-            return self.record(exc.reason)
+            return 0
         except RuntimeError as exc:
             # A git error, most often a fetch GitHub did not answer. No verdict is written, so
             # a failure that persists ages out the check's deadline instead of paging every run.
             log(f"no verdict: {exc}", err=True)
             return 0
         self.write_prom(None, dirty)
-        self.record(None)
         return 0
 
     def settings(self) -> tuple[frozenset[str], int, str]:
@@ -177,6 +180,9 @@ class CheckoutSync:
         revs = self.git("rev-list", "--first-parent", f"{head}..{tip}").split()
         candidates = [(0, tip), *ci_walk_candidates(revs, None, bound)]
         for distance, sha in candidates:
+            if self.now() - self.started > WALK_BUDGET_S:
+                log(f"ci: walk stopped after {WALK_BUDGET_S}s, before {sha[:12]}")
+                break
             verdict = self.verdict(sha, contexts, token)
             if verdict == "pass":
                 self.git("merge", "--ff-only", "--quiet", sha)
@@ -217,26 +223,6 @@ class CheckoutSync:
             log(f"ci: {sha[:12]} unreadable, read as pending: {exc}")
             return "pending"
         return ci_verdict(runs, contexts, lambda: read("check-suites", "check_suites"))
-
-    def record(self, reason: str | None) -> int:
-        """Save this run's refusal, and return 1 only when it differs from the last run's."""
-        path = self.state_dir / "state.json"
-        try:
-            last = json.loads(path.read_text()).get("refused")
-        except OSError, ValueError, AttributeError:
-            last = None
-        head = None
-        if reason is not None:
-            try:
-                head = self.git("rev-parse", "HEAD")
-            except RuntimeError:
-                pass
-        current = None if reason is None else {"reason": reason, "head": head}
-        try:
-            write_textfile(path, json.dumps({"refused": current}), 0o600)
-        except OSError as exc:
-            log(f"could not write {path}: {exc}", err=True)
-        return 0 if current is None or current == last else 1
 
     def write_prom(self, reason: str | None, dirty: bool | None) -> None:
         now = self.now()

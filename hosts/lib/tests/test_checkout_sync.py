@@ -159,29 +159,27 @@ def test_a_non_fast_forward_is_refused(lab):
     git(lab.checkout, "commit", "--quiet", "-m", "local")
     local = lab.head()
     sync = lab.sync()
-    assert sync.main() == 1
+    assert sync.main() == 0
     assert lab.head() == local
     assert sync.requests == 0
     assert lab.metric('homelab_checkout_sync_refused{reason="ancestry"}') == "1"
 
 
-def test_an_untracked_file_is_refused_and_pages_once(lab):
+def test_an_untracked_file_is_refused(lab):
     tip = lab.push("a")
     lab.ci[tip] = GREEN
     (lab.checkout / "stray").write_text("stray")
-    assert lab.sync().main() == 1
+    assert lab.sync().main() == 0
     assert lab.head() == lab.base
     assert lab.metric("homelab_checkout_dirty") == "1"
     assert lab.metric('homelab_check_success{check="checkout-sync"}') == "0"
-    assert lab.sync().main() == 0, "the same refusal on the same HEAD pages once"
-    assert lab.head() == lab.base
 
 
 def test_another_branch_is_refused(lab):
     tip = lab.push("a")
     lab.ci[tip] = GREEN
     git(lab.checkout, "checkout", "--quiet", "-b", "work")
-    assert lab.sync().main() == 1
+    assert lab.sync().main() == 0
     assert lab.head() == lab.base
     assert lab.metric('homelab_checkout_sync_refused{reason="branch"}') == "1"
 
@@ -199,7 +197,7 @@ def test_a_disarmed_gate_or_a_missing_token_asks_github_nothing(lab, env, reason
     tip = lab.push("a")
     lab.ci[tip] = GREEN
     sync = lab.sync(**env)
-    assert sync.main() == 1
+    assert sync.main() == 0
     assert sync.requests == 0
     assert lab.head() == lab.base
     assert lab.metric(f'homelab_checkout_sync_refused{{reason="{reason}"}}') == "1"
@@ -218,6 +216,18 @@ def test_a_refused_token_reads_token(lab):
 
     sync = lab.sync()
     sync.opener = refusing
-    assert sync.main() == 1
+    assert sync.main() == 0
     assert lab.head() == lab.base
     assert lab.metric('homelab_checkout_sync_refused{reason="token"}') == "1"
+
+
+def test_a_walk_past_its_budget_stops_grading(lab):
+    green = lab.push("a")
+    tip = lab.push("b")
+    lab.ci.update({green: GREEN, tip: RED})
+    clock = iter([0.0, 0.0, cs.WALK_BUDGET_S + 1.0, cs.WALK_BUDGET_S + 2.0])
+    sync = lab.sync()
+    sync.now = lambda: next(clock)
+    assert sync.main() == 0
+    assert sync.requests == 1, "only the tip was graded"
+    assert lab.head() == lab.base

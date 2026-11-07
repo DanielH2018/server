@@ -1,8 +1,8 @@
 {#
 The one way a host cron in this role takes the shared git-tree lock (#3722).
 
-secret-rotate, docs-refresh and eval-run each mutate the primary checkout, and so does
-gitops-deploy.service. The lock makes those mutations mutually exclusive; fd 9 is held for the
+secret-rotate, docs-refresh and eval-run each mutate the primary checkout, and so do
+gitops-deploy.service and homelab-checkout-sync.service, whose units wrap `flock` themselves. The lock makes those mutations mutually exclusive; fd 9 is held for the
 calling script's whole life, so the lock releases only when the script exits.
 
 THE WAIT must clear the DEPLOYER's worst-case hold, not a round number. gitops-deploy.service

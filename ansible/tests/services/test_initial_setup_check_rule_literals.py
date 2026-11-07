@@ -7,12 +7,14 @@ without its rule would page on every healthy gap, while one moved faster would l
 slower to page than the producer's cadence calls for (M1 convention 1).
 
 The Loki witness renders one script that both nodes run, so one DEADLINE_S pins both of its rules.
+checkout-sync is Python, so its DEADLINE_S is the module constant rather than a render.
 
 Run: uv run pytest ansible/tests/services/test_initial_setup_check_rule_literals.py
 """
 
 import re
 
+import checkout_sync
 import pytest
 from _helpers import K8S_ROLES
 from _shell_render import render_shell_script
@@ -50,6 +52,10 @@ PRODUCERS = {
         ["daniel-box", "daniel-server"],
     ),
 }
+# Alert prefix -> (DEADLINE_S, the `check` label, the hosts) for a producer written in Python.
+PYTHON_PRODUCERS = {
+    "CheckoutSync": (checkout_sync.DEADLINE_S, checkout_sync.CHECK, ["daniel-box"]),
+}
 
 
 def rendered_deadline(template: tuple[str, str, str]) -> int:
@@ -75,7 +81,7 @@ def not_reporting_rules(text: str) -> dict[tuple[str, str], str]:
 def literal_problems(rules: dict[tuple[str, str], str], deadlines: dict[str, int]):
     """Why a rule's deadline literals differ from its producer's DEADLINE_S, or nothing."""
     problems = []
-    for prefix, (_, check, hosts) in PRODUCERS.items():
+    for prefix, (_, check, hosts) in (PRODUCERS | PYTHON_PRODUCERS).items():
         for host in hosts:
             expr = rules.get((prefix, host))
             if expr is None:
@@ -100,15 +106,18 @@ def literal_problems(rules: dict[tuple[str, str], str], deadlines: dict[str, int
 
 
 def shipped_deadlines() -> dict[str, int]:
-    return {prefix: rendered_deadline(spec[0]) for prefix, spec in PRODUCERS.items()}
+    rendered = {
+        prefix: rendered_deadline(spec[0]) for prefix, spec in PRODUCERS.items()
+    }
+    return rendered | {prefix: spec[0] for prefix, spec in PYTHON_PRODUCERS.items()}
 
 
 def test_literal_problems_is_clean_on_the_shipped_rules():
     deadlines = shipped_deadlines()
-    # Non-vacuity: the pin found all five producers, and the rules cover seven host/check pairs.
-    assert set(deadlines) == set(PRODUCERS)
+    # Non-vacuity: the pin found all six producers, and the rules cover eight host/check pairs.
+    assert set(deadlines) == set(PRODUCERS) | set(PYTHON_PRODUCERS)
     rules = not_reporting_rules(RULES.read_text())
-    assert len(rules) == 7
+    assert len(rules) == 8
     assert literal_problems(rules, deadlines) == []
 
 
@@ -134,3 +143,10 @@ def test_every_producer_names_the_check_label_its_rule_reads(prefix):
     assert re.search(rf"write_check_textfile {re.escape(check)} ", body), (
         f"{template[-1]} does not write the {check} textfile its rules read"
     )
+
+
+def test_literal_problems_is_flagged_when_checkout_syncs_deadline_moves_without_its_rule():
+    deadlines = shipped_deadlines() | {"CheckoutSync": 3600}
+    problems = literal_problems(not_reporting_rules(RULES.read_text()), deadlines)
+    assert len(problems) == 2
+    assert all(p.startswith("CheckoutSyncNotReporting on daniel-box") for p in problems)
