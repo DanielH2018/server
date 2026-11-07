@@ -2014,8 +2014,9 @@ the `manual_plane` clearing, and *Rollback*'s
     **Amended 2026-11-07.** `homelab-tools` ships CoreDNS, as *Architecture-specific binaries*
     has it. `/etc/resolv.conf` names only the forwarder on daniel-box, so `bootstrap-host.sh`
     step 6 also stops `systemd-resolved` there, once the forwarder answers. The kubeconfig
-    oneshot takes the token from the `k3s_readonly_token` credential and the CA from k3s's admin
-    kubeconfig, so it reads no cluster. The drill stays in place in the checkout, as old H7.13's
+    oneshot takes the token from the `k3s/readonly-token` output, whose dependent it is, and the CA
+    from k3s's admin kubeconfig, so it reads no cluster. On a new cluster the operator refreshes the
+    token in SOPS (`docs/host-packages.md`). The drill stays in place in the checkout, as old H7.13's
     daniel-server half does not.
 12. **H7.36.** All three steps move daniel-box timers that read the primary checkout, and
     each keeps its `## Autonomous-role contract` in its component. It carries the docs site

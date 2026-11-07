@@ -172,7 +172,7 @@ if ! ERR_FILE=$(mktemp /tmp/longhorn-backup-health.XXXXXX); then
   MSG="longhorn backup health reader failed: mktemp could not create a stderr capture file"
   logger -t longhorn-backup-health "status=${STATUS} ${MSG}"
 else
-  OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/longhorn-backup-health/longhorn_backup_health.py 2>"$ERR_FILE")
+  OUT=$(/usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/longhorn-backup-health/longhorn_backup_health.py 2>"$ERR_FILE")
   RC=$?
   ERR=$(cat "$ERR_FILE" 2>/dev/null || true)
   rm -f "$ERR_FILE"

@@ -227,6 +227,8 @@ def test_the_inotify_key_and_the_zshenv_block_use_the_line_arm(package):
     # The Ansible task's marker, so the first run adopts its block and adds no second copy.
     assert block["marker"] == "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
     assert ". /etc/profile.d/k3s-kubeconfig.sh" in block["block"]
+    # The arm creates a missing /etc/zsh 0700, so zsh has to install the file first.
+    assert "zsh" in package.depends
 
 
 def _run_kubeconfig(package, tmp_path, admin: str | None):
@@ -276,6 +278,16 @@ def test_the_kubeconfig_oneshot_refuses_an_admin_file_with_no_ca(package, tmp_pa
     assert result.returncode == 1
     assert "no certificate-authority-data" in result.stderr
     assert not list(tmp_path.glob("home/*/.kube/config"))
+
+
+def test_a_rotated_token_restarts_the_kubeconfig_oneshot(package):
+    (output,) = [o for o in package.outputs if o["keys"] == ["k3s_readonly_token"]]
+    assert output["dependents"] == ["homelab-k3s-kubeconfig.service"]
+    unit = text(package, f"{SYSTEM}homelab-k3s-kubeconfig.service")
+    assert (
+        f"LoadCredential=k3s_readonly_token:/run/homelab-secrets/{output['destination']}\n"
+        in unit
+    )
 
 
 def test_the_kubeconfig_oneshot_waits_for_k3s_rather_than_failing(package):

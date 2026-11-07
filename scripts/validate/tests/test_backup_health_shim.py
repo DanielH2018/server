@@ -170,7 +170,7 @@ def _run_rendered_shim(
     script = script.replace("${CREDENTIALS_DIRECTORY:-/nonexistent}", str(credentials))
     script = script.replace("$CREDENTIALS_DIRECTORY", str(credentials))
     reader_invocation = re.search(
-        r"/usr/local/bin/uv run --no-project --no-python-downloads --python \S+ "
+        r"/usr/bin/uv run --no-project --no-python-downloads --python \S+ "
         r"/usr/lib/homelab/longhorn-backup-health/longhorn_backup_health\.py",
         script,
     )

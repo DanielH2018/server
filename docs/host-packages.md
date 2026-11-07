@@ -697,6 +697,12 @@ daniel-box serves the repository, so it builds its own packages from the clone.
       cluster](flux-deploy-plane.md#bootstrapping-flux-on-a-rebuilt-cluster). The steps above stand
       in for that section's first command, which installs k3s. This page restates none of its
       steps.
+    - **Then, on a new cluster only, refresh `k3s_readonly_token`.** A new cluster issues a new token
+      for the read-only ServiceAccount, so the SOPS value belongs to the old cluster. Until this step
+      lands, `kubectl` and the backup-health reader get 401, and `homelab-k3s-restart` cannot read the
+      API. Once Flux has applied `cluster-base`, follow [the token's entry](secret-rotation.md) from
+      reading the recreated value onward, skipping the deletion (**operator-only**). Reconcile then
+      rewrites `~/.kube/config`.
     - **On a cluster restored from etcd**, the snapshot already holds `sops-age` and the Flux
       objects, so skip the bootstrap and read the Kustomization. Nobody creates
       `homelab-cluster-vars` by hand. When the Kustomization does not read Ready, replace `sops-age`

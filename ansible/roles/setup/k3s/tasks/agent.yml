@@ -2,8 +2,8 @@
 # Join THIS host to the existing cluster as an agent.
 # Invoked by the "Join an agent node" play in k3s-bringup.yml, which supplies
 # k3s_join_token (read on daniel-box by the preceding play — no delegation here, see the
-# playbook's three-play comment). The server-side firewall allows (k3s_agent_node_ips +
-# the join-firewall tag) must be deployed on daniel-box first: the agent's registration
+# playbook's three-play comment). The server-side firewall allows (k3s_agent_node_ips, in
+# daniel-box's package as the k3s-join-* ufw rules) must be live first: the agent's registration
 # dials 6443 before anything else. Post-join verification is agent_verify.yml, run from
 # the server side.
 #
@@ -48,8 +48,8 @@
       land on top of Docker's chains. Run initial_setup.yml --tags docker_install to let
       the teardown purge it, then re-run this.
 
-# DECIDED: this agent-side mirror is tagged k3s_agent, not join-firewall, so --tags
-# join-firewall applies only the server half; change a port on both halves together.
+# DECIDED: this agent-side mirror is tagged k3s_agent, and daniel-box's package holds the
+# server half; change a port on both halves together.
 - name: Allow cluster traffic from the server node
   tags: [k3s_agent]
   community.general.ufw:

@@ -177,7 +177,7 @@ k3s_coredns_read_delay: 10
 # ── Agent join ─────────────────────────────────────────────────────────────
 # daniel-server joins as an AGENT, not a second server (a two-member etcd halves
 # availability rather than doubling it). Run via:
-#   uv run ansible-playbook ansible/k3s-bringup.yml --tags join-firewall   # on daniel-box first
+#   sudo ufw status | grep k3s-join   # on daniel-box first; its package holds these rules
 #   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
 k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
 

@@ -44,6 +44,7 @@ depends:
   - open-iscsi
   - nfs-common
   - multipath-tools
+  - zsh
 defaults:
   # The log file k3s writes. The k3s-agent component carries the same path, because Alloy tails
   # one literal on every node; ansible/tests/k8s/test_alloy_ships_k3s_log.py holds all three equal.
@@ -201,6 +202,18 @@ files:
   - {src: files/homelab-netplan-wifi, dst: /usr/lib/homelab/homelab-netplan-wifi, mode: "0755", when: "k3s_node_wifi_link | length > 0"}
   - {src: units/homelab-netplan-wifi.service, dst: /usr/lib/systemd/system/homelab-netplan-wifi.service, when: "k3s_node_wifi_link | length > 0"}
 outputs:
+  # An output rather than the /run/credstore credential, because only an output has dependents: a
+  # rotated token has to reach ~/.kube/config without waiting for a boot.
+  - src: templates/k3s-readonly-token.j2
+    path: /etc/rancher/k3s/readonly-token
+    destination: k3s/readonly-token
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [k3s_readonly_token]
+    persist: false
+    link: false
+    dependents: [homelab-k3s-kubeconfig.service]
   - src: templates/netplan-wifi-fallback.json.j2
     path: /etc/netplan/80-homelab-wifi-fallback.yaml
     destination: netplan/80-homelab-wifi-fallback.yaml
@@ -245,6 +258,8 @@ lines:
   # crowdsec agent sidecar is the kind of process that exhausts it.
   - {path: /etc/sysctl.conf, line: fs.inotify.max_user_instances=1024, regexp: '^\s*fs\.inotify\.max_user_instances\s*=', activate: sysctl}
   # zsh does not read /etc/profile.d, and zshenv is the one startup file every invocation reads.
+  # `depends: zsh` installs the file first. The arm would create a missing /etc/zsh 0700, which
+  # hides the file from every user.
   - path: /etc/zsh/zshenv
     marker: "# {mark} ANSIBLE MANAGED — k3s kubeconfig"
     block: |
