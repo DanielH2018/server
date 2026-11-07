@@ -20,7 +20,8 @@
 # at the next boot, through the tmpfiles.d line.
 #
 # Keep the sudoers file valid: a malformed drop-in locks sudo out. `visudo -cf` in
-# hosts/lib/tests/test_pi_initial_setup_part3.py holds it.
+# hosts/lib/tests/test_pi_initial_setup_part3.py holds it where classic sudo is installed, which
+# excludes the ubuntu-26.04 runner. That runner's visudo rejects `timestamp_type`.
 #
 # unattended-upgrades is a Depends here. Its origin policy is the `unattended-upgrades` component's.
 # 53homelab-keep-conffiles sets `--force-confold` for every apt run on the host. Without a force-conf

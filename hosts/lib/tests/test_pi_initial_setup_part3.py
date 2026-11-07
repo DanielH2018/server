@@ -86,12 +86,16 @@ def test_each_shipped_file_holds_the_bytes_and_mode_its_task_wrote(
     assert shipped_mode == mode
 
 
-@pytest.mark.skipif(
-    not (shutil.which("visudo") or Path("/usr/sbin/visudo").exists()),
-    reason="needs sudo's visudo",
-)
 def test_visudo_accepts_the_sudoers_file_and_rejects_a_broken_copy(package, tmp_path):
     visudo = shutil.which("visudo") or "/usr/sbin/visudo"
+    if not Path(visudo).exists():
+        pytest.skip("needs a visudo")
+    version = subprocess.run(
+        [visudo, "--version"], capture_output=True, text=True, check=False
+    ).stdout
+    # The hosts run classic sudo. The ubuntu-26.04 runner's visudo rejects `timestamp_type`.
+    if not version.startswith("visudo version"):
+        pytest.skip(f"the hosts' classic visudo is not here: {version.strip()!r}")
     good = tmp_path / "10-timestamp"
     good.write_bytes(package.files[SUDOERS][0])
     good.chmod(0o440)
