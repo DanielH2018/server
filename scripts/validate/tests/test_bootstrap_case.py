@@ -10,6 +10,7 @@ Run: uv run pytest scripts/validate/tests/test_bootstrap_case.py
 import email.message
 import hashlib
 import io
+import shutil
 import subprocess
 import time
 import urllib.error
@@ -22,6 +23,8 @@ from lib.git import git
 from validate import host_package_cases
 from validate.validate_lib import bootstrap_case as case
 from validate.validate_lib import bootstrap_repo_case as repo_case
+from validate.validate_lib import fixture_host_case as fixture_case
+from validate.validate_lib import scratch_clones as clones
 from validate.validate_lib import host_fixtures
 from validate.validate_lib.host_container import CaseFailed, Container
 
@@ -75,9 +78,10 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
         ("red-k3s", False),
         ("red-nfpm_2.48.0_Linux_x86_64.tar.gz", False),
         ("green", False),
+        ("green", True),
     ]
     assert not (offline[1][1] / "k3s").exists()
-    assert [p.name for p, _ in offline[1:]] == [
+    assert [p.name for p, _ in offline[1:4]] == [
         "refuse a kit whose k3s is missing",
         "refuse a kit whose nfpm_2.48.0_Linux_x86_64.tar.gz does not match its pin",
         "refuse a local build whose homelab-daniel-box Depends on homelab-daniel-server",
@@ -85,35 +89,113 @@ def test_the_plan_runs_every_host_online_then_offline_with_three_reds(tmp_path):
     depends = offline[3][0]
     assert (depends.clone, depends.refusal) == ("red-depends", case.INSTALL_REFUSED)
     assert depends.apt_says == "Depends: homelab-daniel-server"
-    assert {p.clone for p in planned[:-1]} == {"green"}
+    fixture = offline[4][0]
+    assert (fixture.clone, fixture.host) == ("fixture-host", case.FIXTURE_HOST)
+    assert fixture.marker == case.UNCHECKED
+    assert {p.clone for p in planned[:-2]} == {"green"}
+
+
+def _unit_state_run(monkeypatch, tmp_path, host, answers):
+    """A Bootstrap for `host` whose container answers `systemctl show` from `answers`."""
+    cases = SimpleNamespace(image="img", work=tmp_path, python="3.12")
+    run = case.Bootstrap(cases, host, tmp_path, None, "unit")
+
+    def ok(command):
+        if not command.startswith("systemctl show"):
+            return ""
+        prop, unit = command.split()[-2:]
+        return answers[prop] if unit == case.UNITS.get(host) else "not-found"
+
+    monkeypatch.setattr(run.container, "ok", ok)
+    return run
+
+
+LEFT_STOPPED = {
+    "LoadState": "loaded",
+    "UnitFileState": "disabled",
+    "ActiveState": "inactive",
+}
+
+
+def test_a_node_whose_k3s_unit_is_left_disabled_and_stopped_is_clean(
+    monkeypatch, tmp_path
+):
+    run = _unit_state_run(monkeypatch, tmp_path, "daniel-box", LEFT_STOPPED)
+
+    assert run.unit_problems() == []
+
+
+@pytest.mark.parametrize(
+    ("prop", "value"), [("UnitFileState", "enabled"), ("ActiveState", "active")]
+)
+def test_a_node_whose_k3s_unit_is_enabled_or_running_is_flagged(
+    monkeypatch, tmp_path, prop, value
+):
+    run = _unit_state_run(
+        monkeypatch, tmp_path, "daniel-server", LEFT_STOPPED | {prop: value}
+    )
+
+    assert run.unit_problems() == [
+        f"k3s-agent.service's {prop} is {value}, not {LEFT_STOPPED[prop]}"
+    ]
+
+
+def test_a_host_with_no_k3s_mode_reads_neither_unit_as_its_own(monkeypatch, tmp_path):
+    run = _unit_state_run(monkeypatch, tmp_path, case.FIXTURE_HOST, {})
+
+    assert run.unit_problems() == []
+
+
+def test_the_fixture_clone_is_one_commit_past_the_green_one_and_builds_a_new_host(
+    tmp_path,
+):
+    green = tmp_path / "green"
+    for relative in (
+        fixture_case.WALKTHROUGH,
+        fixture_case.HOSTS_INI,
+        fixture_case.EXAMPLE_VARS,
+        fixture_case.SCRIPT,
+    ):
+        (green / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(case.REPO / relative, green / relative)
+    clones.case_git("init", "-q", cwd=green)
+    clones.case_git("add", "-A", "-f", cwd=green)
+    clones.case_git("commit", "-q", "-m", "base", cwd=green)
+
+    out = clones.fixture_clone(green, tmp_path / "fixture")
+
+    assert git("rev-list", "--count", "HEAD", cwd=out).stdout.strip() == "2"
+    assert (out / "hosts" / case.FIXTURE_HOST / "package.yml").is_file()
 
 
 def test_a_depends_entry_added_to_daniel_box_s_spec_is_clean():
-    spec = (case.REPO / case.BOX_SPEC).read_text()
-    changed = case.add_depends(spec, "homelab-only")
+    spec = (case.REPO / clones.BOX_SPEC).read_text()
+    changed = clones.add_depends(spec, "homelab-only")
     assert "depends:\n  - homelab-tools\n  - libyaml-dev\n  - homelab-only\n" in changed
     assert changed.replace("  - homelab-only\n", "", 1) == spec
 
 
 def test_a_spec_with_no_depends_list_is_flagged():
     with pytest.raises(CaseFailed, match="holds 0 depends: lists"):
-        case.add_depends("description: x\ncomponents:\n  - reconcile\n", "homelab-only")
+        clones.add_depends(
+            "description: x\ncomponents:\n  - reconcile\n", "homelab-only"
+        )
 
 
 def test_the_red_clone_is_one_commit_past_the_green_one(tmp_path):
     green = tmp_path / "green"
     (green / "hosts" / "daniel-box").mkdir(parents=True)
-    (green / case.BOX_SPEC).write_text("depends:\n  - homelab-tools\nfiles: []\n")
-    case._git("init", "-q", cwd=green)
-    case._git("add", "-A", cwd=green)
-    case._git("commit", "-q", "-m", "green", cwd=green)
+    (green / clones.BOX_SPEC).write_text("depends:\n  - homelab-tools\nfiles: []\n")
+    clones.case_git("init", "-q", cwd=green)
+    clones.case_git("add", "-A", cwd=green)
+    clones.case_git("commit", "-q", "-m", "green", cwd=green)
 
-    red = case.red_clone(green, tmp_path / "red")
+    red = clones.red_clone(green, tmp_path / "red")
 
     log = git("log", "--format=%s", cwd=red).stdout.split("\n")
     assert log[:2] == ["bootstrap case: depend on homelab-daniel-server", "green"]
-    assert "  - homelab-daniel-server\n" in (red / case.BOX_SPEC).read_text()
-    assert "homelab-daniel-server" not in (green / case.BOX_SPEC).read_text()
+    assert "  - homelab-daniel-server\n" in (red / clones.BOX_SPEC).read_text()
+    assert "homelab-daniel-server" not in (green / clones.BOX_SPEC).read_text()
 
 
 def test_a_green_run_that_prints_its_marker_and_exits_0_is_clean():

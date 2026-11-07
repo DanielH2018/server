@@ -615,8 +615,7 @@ land. A node rebuilt from them alone lacks:
 - the Longhorn host prerequisites and the `multipathd` blacklist;
 - the static LAN address, the host CoreDNS forwarder and the read-only kubeconfig;
 - `/etc/rancher/k3s/etcd-s3.env`, which *Restoring* in [the etcd restore doc](k3s-etcd-restore.md)
-  sources;
-- daniel-server's LVM volumes, which `bootstrap-host.sh` step 4 does not create yet.
+  sources.
 
 Until those two slices land, a node rebuilt from this section is not a working node.
 [The break-glass doc](break-glass.md), *Scenario: daniel-server is dead, daniel-box survives*, says
@@ -630,6 +629,15 @@ what completes a daniel-server rebuild during an outage.
     ```bash
     sudo apt-get update
     sudo apt-get install -y age git gnupg curl
+    ```
+
+1. To give the root volume the whole disk, extend it. The Ubuntu installer creates the one LVM
+   volume a node uses, `ubuntu-vg/ubuntu-lv`, and leaves it at about half the disk. Neither
+   `bootstrap-host.sh` nor a package changes it. Skip this when `sudo vgs` shows no free space:
+
+    ```bash
+    sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+    sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
     ```
 
 1. Clone the repository from GitHub, or from the kit's repo bundle
@@ -689,7 +697,8 @@ daniel-box serves the repository, so it builds its own packages from the clone.
    `<r2_account_id>.r2.cloudflarestorage.com`. Then follow *Restoring* in
    [the etcd restore doc](k3s-etcd-restore.md), which also reads the config the package installed.
 1. Start k3s. No package enable link names `k3s.service`, and reconcile never starts a `windowed`
-   unit, so this hand command is the only start on the package path:
+   unit, so this hand command is the only start on the package path. A link would start k3s at any
+   reboot before the restores above, and this command also writes the link every later boot reads:
 
     ```bash
     sudo systemctl enable --now k3s.service
@@ -776,7 +785,7 @@ To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
 
 The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
 upgrade. No script in the tree runs it yet, so the operator cannot run it from this page until
-[#7515](https://github.com/DanielH2018/server/issues/7515) adds the runner. *The proofs* in
+[#7554](https://github.com/DanielH2018/server/issues/7554) adds the runner. *The proofs* in
 [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its identity and its three
 guest-local deviations.
 
@@ -865,6 +874,10 @@ arm64 only.
     ```bash
     sudo ./bootstrap-host.sh <host>
     ```
+
+`hosts/lib/tests/test_host_census.py` fails when a directory under `hosts/` is missing from `NAMED`,
+`CANARY_ORDER` or `HOSTS`, or has no creation rule of its own. It names the set. The `host_packages`
+job builds a fixture host from step 1's file list, so the YAML block above stays one that renders.
 
 ## Upgrading a host's Ubuntu release
 
