@@ -863,7 +863,7 @@ guest-local deviations.
 
 ## Adding a host
 
-Steps 1 and 3 to 5 go in the host's first PR. The design is
+Steps 1 and 3 to 5 go in the host's first PR, and step 7 is a second PR. The design is
 [H7](target-architecture/host/h7-delete-ansible.md), *Adding a host*. A host on another
 architecture first needs `homelab-tools` built for it, and `bootstrap-host.sh` pins amd64 and
 arm64 only.
@@ -905,12 +905,12 @@ arm64 only.
 1. Add the host to every other set that names hosts:
     - `NAMED` in `scripts/validate/validate_lib/package_roots.py`, as `homelab-<host>`, which both
       `host_packages` scans read;
-    - `CANARY_ORDER` in `hosts/lib/builder_rollout_gate.py`, after daniel-box. This PR changes
-      both `hosts/<host>` and `hosts/daniel-box`, and the rollout gate stages only the first of
-      them in `CANARY_ORDER`. With daniel-box first, daniel-box installs the rule below before the
-      builder publishes `homelab-<host>`. With the new host first, its package publishes while
-      daniel-box's firewall still refuses it, and the gate waits on a host that cannot install;
-
+    - `CANARY_ORDER` in `hosts/lib/builder_rollout_gate.py`, after daniel-box, for this PR only.
+      This PR changes both `hosts/<host>` and `hosts/daniel-box`, and the rollout gate stages only
+      the first of them in `CANARY_ORDER`. With daniel-box first, daniel-box installs the rule
+      below before the builder publishes `homelab-<host>`. With the new host first, its package
+      publishes while daniel-box's firewall still refuses it, and the gate waits on a host that
+      cannot install. Step 7 moves the host ahead of daniel-box;
     - a third `apt-repo-<host>` rule under `ufw:` in `hosts/components/builder/component.yml`, or
       daniel-box's firewall refuses the host's `apt-get update` in step 6;
     - one `HostReconcileFailed` rule in
@@ -944,6 +944,12 @@ arm64 only.
     ```bash
     sudo ./bootstrap-host.sh <host>
     ```
+
+1. Once Prometheus reports `homelab_host_applied_info` for the host, open a second PR that moves
+   the host ahead of daniel-box in `CANARY_ORDER`. daniel-box runs the builder, the signer and the repository, so it always
+   comes last otherwise: a package that breaks daniel-box can stop the publish of its own fix
+   (`docs/target-architecture/host/h3-pi-pilot.md`, *Staged rollout (C5)*). Until this PR merges,
+   any run that changes daniel-box's and the new host's packages makes daniel-box the canary.
 
 `hosts/lib/tests/test_host_census.py` fails when a directory under `hosts/` is missing from `NAMED`,
 `CANARY_ORDER` or `HOSTS`, or has no creation rule of its own. It names the set. The `host_packages`
