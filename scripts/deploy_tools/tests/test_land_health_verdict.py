@@ -8,16 +8,11 @@ from pathlib import Path
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes, receipt
+from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.deploy_lib.detach_notify import GateResult
 from deploy_tools.land_lib import health_verdict, outcome
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
-
-
-# The deployer's record of a broad apply that CONTAINS this PR. A self-applied landing needs
-# it before it may settle: `behind_since` empty proves only that local == origin.
-APPLIED = receipt({"ansible/initial_setup.yml": ["renovate_agent"]})
 
 
 def _deployed(landing, fakes=None):
@@ -25,9 +20,6 @@ def _deployed(landing, fakes=None):
     ln.merge_sha, ln.flux_tags = MERGE_SHA, ["sonarr"]
     ln.classification = Classification(
         plane=(fakes or Fakes()).plane,
-        self_applied=(fakes or Fakes()).self_applied,
-        self_applied_command=(fakes or Fakes()).self_applied_command,
-        remaining_setup=(fakes or Fakes()).remaining_setup,
     )
     return ln, calls
 
@@ -40,18 +32,6 @@ def test_settled_after_a_healthy_deploy(landing, capsys):
     assert exc.value.detail == f"PR #999, {MERGE_SHA}, tags: sonarr"
     assert next(c for c in calls if c[0] == "gate")[1] == (["sonarr"],)
     assert "sonarr: healthy" in capsys.readouterr().out
-
-
-def test_a_joined_kick_is_asked_again_after_the_gate_before_any_verdict(landing):
-    """The gate is the wait that lets the joined run end, so the second request
-    goes out after it and before the verdict -- on the unhealthy exit as well."""
-    ln, calls = _deployed(landing, Fakes(gate=(False, ["sonarr: unhealthy"]), tick=[0]))
-    ln.ledger.kick = "joined"
-    with pytest.raises(Outcome):
-        health_verdict.health(ln)
-    names = [c[0] for c in calls]
-    assert names.index("gate") < names.index("tick")
-    assert ln.ledger.kick == "rearmed"
 
 
 def test_unhealthy_when_the_gate_fails(landing):
@@ -87,145 +67,6 @@ def test_needs_manual_apply_when_a_plane_remains(landing, capsys):
         health_verdict.health(ln)
     assert exc.value.verdict == "needs-manual-apply"
     assert "STILL UNAPPLIED" in capsys.readouterr().out
-
-
-@pytest.mark.parametrize(
-    "state, verdict, code, cause",
-    [
-        ({"hold_sha": "abc"}, "deploy-failed", 1, "tick-held"),
-        ({"behind_since": "x"}, "deferred", 75, ""),
-        (APPLIED, "settled", 0, ""),
-    ],
-)
-def test_a_self_applied_half_reads_the_deployers_state(
-    landing, state, verdict, code, cause
-):
-    ln, _ = _deployed(landing, Fakes(self_applied=True, state=state))
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (code, verdict)
-    assert ln.ledger.cause == cause
-
-
-def test_a_held_tick_names_the_clear_command_with_the_full_sha(landing, capsys):
-    held = "deadbeef" * 5
-    ln, _ = _deployed(landing, Fakes(self_applied=True, state={"hold_sha": held}))
-    with pytest.raises(Outcome):
-        health_verdict.health(ln)
-    assert f"gitops_state.py clear-hold {held}`" in capsys.readouterr().out
-
-
-def test_an_ordinary_service_pr_ignores_the_deployers_state(landing):
-    """behind_since is somebody else's pending merge when the tick does not apply this PR."""
-    ln, _ = _deployed(landing, Fakes(state={"behind_since": "x"}))
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert exc.value.verdict == "settled"
-
-
-def test_a_self_applied_role_that_reaches_other_hosts_is_not_settled(landing, capsys):
-    """The services are live, the tick converged, and two hosts are still owed."""
-    ln, _ = _deployed(
-        landing,
-        Fakes(
-            self_applied=True,
-            remaining_setup="daniel-server, daniel-pi",
-            state=APPLIED,
-        ),
-    )
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "other hosts still need it" in exc.value.detail
-    assert (
-        "services deployed, and STILL UNAPPLIED on the hosts this tick never touched: "
-        "daniel-server, daniel-pi" in capsys.readouterr().out
-    )
-
-
-def test_no_remaining_hosts_still_settles(landing):
-    """The reject half: the tick's host is the only one reached."""
-    ln, _ = _deployed(
-        landing, Fakes(self_applied=True, remaining_setup="", state=APPLIED)
-    )
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (0, "settled")
-
-
-# ── converged is not applied ────────────────────────────────────────────────
-
-
-def test_a_converged_tick_that_recorded_no_apply_is_not_settled(landing, capsys):
-    """Something else fast-forwarded the checkout, so the tick applied
-    nothing and will never see the range again — and every marker land.sh reads is in
-    the settled state."""
-    ln, _ = _deployed(landing, Fakes(self_applied=True, state={}))
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    out = capsys.readouterr().out
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "recorded no broad apply covering this PR" in out
-    assert "never see this range again" in out
-    assert "`ansible-playbook ansible/initial_setup.yml --tags x`" in out
-
-
-def test_a_tick_still_behind_origin_is_not_told_it_will_never_return(landing, capsys):
-    """A tick that landed at a green ancestor has a range left to cross, so say so.
-
-    It crossed this PR's merge commit — which is why the landing is not BEHIND — but it is
-    still behind the tip, and a later tick can still record the apply. The stranded wording
-    of the test above is false here.
-    """
-    ln, _ = _deployed(
-        landing,
-        Fakes(
-            self_applied=True, state={"behind_since": "abc123 1.0"}, merge_applied_rc=0
-        ),
-    )
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    out = capsys.readouterr().out
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "a later tick may yet apply this range" in out
-    assert "never see this range again" not in out
-
-
-def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
-    """A receipt exists but for an EARLIER range — coverage, not presence, decides."""
-    ln, _ = _deployed(
-        landing,
-        Fakes(
-            self_applied=True,
-            state=receipt({"ansible/deploy.yml": []}),
-            is_ancestor_rc=1,
-        ),
-    )
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-
-
-def test_an_unrecorded_apply_read_mid_tick_is_deferred_not_owed_to_a_hand(
-    landing, capsys
-):
-    """A tick that already ff-merged this PR answers CONVERGED, never BEHIND, so the
-    abandoned-watch arm above cannot catch it — and the receipt's `applied` is written only
-    once the apply returns."""
-    ln, _ = _deployed(landing, Fakes(self_applied=True, state={}, merge_applied_rc=0))
-    ln.tick_watch_abandoned = True
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
-    assert "stopped watching a tick that was still applying" in capsys.readouterr().out
-
-
-def test_an_ordinary_service_pr_never_asks_about_a_broad_apply(landing):
-    """The receipt speaks to a landing only when the tick applies part of THIS PR."""
-    ln, _ = _deployed(landing, Fakes(self_applied=False, state={}))
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (0, "settled")
 
 
 def test_the_gate_renders_the_tree_that_was_deployed(landing):
@@ -288,16 +129,6 @@ def test_a_snapshot_that_failed_over_a_primary_that_has_the_commit_gates_there(
     # The primary itself, not land.sh's own checkout, which may predate the commit (#5744).
     assert next(c for c in calls if c[0] == "gate")[2] == {"cwd": ln.opts.primary}
     assert "already carries it" in capsys.readouterr().out
-
-
-def test_an_unreadable_deployer_state_is_not_settled(landing, capsys):
-    """Finding 13's rejecting half at step 6: services live, the tick's own half unknown."""
-    ln, _ = _deployed(landing, Fakes(self_applied=True))
-    ln.tools.read_state = lambda root, name: None
-    with pytest.raises(Outcome) as exc:
-        health_verdict.health(ln)
-    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
-    assert "could not be read" in capsys.readouterr().out
 
 
 def test_a_failed_snapshot_asks_whether_the_primary_carries_the_retargeted_commit(

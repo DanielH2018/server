@@ -20,15 +20,13 @@ exits 75 for "gave up waiting; re-run land.sh", but cc-wait keeps 75 for "re-run
 a landing that gave up ends the wait with 3 instead, and its verdict line says which give-up it
 was.
 
-DEFERRED IS NOT A GIVE-UP (issue #3932). land.sh also exits 75 for `deferred`: the tick applies
-this PR itself and has not crossed it yet, so nothing is wrong and re-running land.sh achieves
-nothing the next tick does not. That ends the wait as `deferred`, exit 4, so a caller can tell
-it from a resume point without reading the verdict text. A `deferred` whose log also carries
-`outcome.ABANDONED_WATCH_NOTE` stays `gave-up`: that run stopped watching a tick mid-apply, a
-hold cannot be ruled out, and the remedy is to re-run land.sh. So does one carrying
-`outcome.PROMOTE_TIMEOUT_NOTE`: no promotion covered a tag Flux applies, and a publish refusal
-does not clear on its own. So does one carrying `outcome.UNREADABLE_GATE_NOTE`: the health gate
-could not read its store, and no tick gates health again (#5543).
+DEFERRED IS NOT A GIVE-UP (issue #3932). land.sh also exits 75 for `deferred` on a host whose
+updater has yet to apply its package, where nothing is wrong and re-running land.sh achieves
+nothing the updater does not. That ends the wait as `deferred`, exit 4, so a caller can tell it
+from a resume point without reading the verdict text. A `deferred` whose log carries
+`outcome.PROMOTE_TIMEOUT_NOTE` stays `gave-up`: no promotion covered a tag Flux applies, and a
+publish refusal does not clear on its own. So does one carrying `outcome.UNREADABLE_GATE_NOTE`:
+the health gate could not read its store, and nothing gates health again (#5543).
 """
 
 import json
@@ -39,7 +37,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib import detach
 from deploy_tools.land_lib.outcome import (
-    ABANDONED_WATCH_NOTE,
     PROMOTE_TIMEOUT_NOTE,
     UNREADABLE_GATE_NOTE,
     Verdict,
@@ -62,7 +59,6 @@ TERMINAL = {
 
 _VERDICT_TOKEN = re.compile(r"^VERDICT: (\S+)")
 # The note's first line is enough to find it, and survives a rewrap of the rest.
-_ABANDONED_WATCH = ABANDONED_WATCH_NOTE.splitlines()[0].strip()
 _PROMOTE_TIMEOUT = PROMOTE_TIMEOUT_NOTE.splitlines()[0].strip()
 _UNREADABLE_GATE = UNREADABLE_GATE_NOTE.splitlines()[0].strip()
 
@@ -145,9 +141,7 @@ def _is_plain_deferral(log: Path, verdict: str) -> bool:
     if not token or token.group(1) != Verdict.DEFERRED:
         return False
     text = log.read_text(errors="replace")
-    return not any(
-        note in text for note in (_ABANDONED_WATCH, _PROMOTE_TIMEOUT, _UNREADABLE_GATE)
-    )
+    return not any(note in text for note in (_PROMOTE_TIMEOUT, _UNREADABLE_GATE))
 
 
 def main(argv: list[str] | None = None) -> int:

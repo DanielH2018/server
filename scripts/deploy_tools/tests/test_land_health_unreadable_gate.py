@@ -26,9 +26,7 @@ def _unreadable_landing(landing):
     """A landing of homelab-mcp whose every probe.py health run exits 75."""
     ln, _ = landing()
     ln.merge_sha, ln.flux_tags = MERGE_SHA, ["homelab-mcp"]
-    ln.classification = Classification(
-        plane="", self_applied=False, self_applied_command="", remaining_setup=""
-    )
+    ln.classification = Classification(plane="")
 
     def run(argv, **kwargs):
         return SimpleNamespace(

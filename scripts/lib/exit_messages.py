@@ -30,16 +30,14 @@ from lib.exit_codes import contract
 # `land.sh` prints `VERDICT: <verdict> (<detail>)` as its last line. `fanout_status.py` and the
 # `land-after-merge` wait both find a landing's outcome by grepping `^VERDICT:`.
 #
-# DECIDED: deploy.sh and the tick print that same shape under their OWN prefix rather than
-# under `VERDICT:`. A landing runs the tick as a subprocess with stdout INHERITED
-# (`land_lib/tools.py:run_tick`), so its lines reach the landing's own logfile ABOVE its
-# verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report the tick's
-# outcome as the landing's on every landing, with nothing failing. One format, three prefixes,
-# one renderer. Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it
-# carries the measurement.
+# DECIDED: deploy.sh and probe.py print that same shape under their OWN prefix rather than
+# under `VERDICT:`. A landing's logfile can carry their lines ABOVE its verdict -- and
+# `grep -m1 '^VERDICT:'` takes the FIRST match, which would report theirs as the landing's
+# on every landing, with nothing failing. One format, three prefixes, one renderer. Issue
+# #2853 asked for a bare `VERDICT:` from all three; the PR that closed it carries the
+# measurement.
 VERDICT_PREFIXES = {
     "scripts/deploy.sh": "DEPLOY-VERDICT",
-    "scripts/deploy_tools/gitops_tick.sh": "TICK-VERDICT",
     "scripts/deploy_tools/land.sh": "VERDICT",
     # A landing runs `probe.py health` and its stdout can reach the landing's log, so the probe
     # takes its own prefix for the reason the DECIDED note above gives.

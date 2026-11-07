@@ -290,7 +290,6 @@ trim.
 `contention_since`, and the `owed` ledger's `manual_plane` lines. Each set marker carries what discharges it and the command that clears it after. The
 hold's command is `gitops_state.py clear-hold <sha>` with the held SHA filled in.
 `hold_plane` lines with no `hold_sha` print as orphaned, with `clear-hold --orphaned`.
-`gitops_tick.sh` prints this same view after every tick.
 
 It reads `/var/lib/gitops-deploy` directly, so it answers only on daniel-box as the deploy
 user. Elsewhere it says there is no state directory. A marker that exists and cannot be read is
@@ -967,7 +966,7 @@ A headless `claude -p` batch runs without isolation and draws none of these refu
 The two places auto mode and this repo have to talk (`PermissionDenied` + `PostToolUseFailure`,
 both Bash).
 
-On a **denial**, it retries `gitops_tick.sh` and nothing else: the tick is allow-listed and still
+On a **denial**, it retries `gitops_tick.sh` and nothing else. H7.49a deleted that script, so the arm matches nothing until [#7536](https://github.com/DanielH2018/server/issues/7536) removes it. The tick was allow-listed and still
 denied about 1 run in 7 on identical text, which is classifier variance rather than a rule, so
 `retry: true` reissues the call and the classifier judges it again. Two retries per session, and
 a compound command that merely contains the tick gets none — the classifier judged the whole line.

@@ -169,13 +169,15 @@ def _issue_block(issue: Issue) -> str:
 APPLY_OWED = """### A verdict that leaves a host apply owed
 `needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
 `land.sh` has already printed the exact command — the playbook line, the `deploy.sh --tags`
-line, the remaining-hosts note, and any `gitops_state.py clear-owed manual_plane <role>`. Read the
-deployer's own markers for what is still pending:
+line, and any `gitops_state.py clear-owed manual_plane <role>`. `land.sh` starts no GitOps tick
+and reads no deployer marker, so a PR that changes a setup role ends `nothing-to-deploy` whether
+or not the deployer applied it. Read what is still pending:
 ```bash
-cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/owed.jsonl
+uv run python scripts/diagnostics/probe.py landing
 ```
-A non-empty `hold_sha`, or an `owed.jsonl` line of class `manual_plane` naming your role, is
-CLAUDE.md *When to wait*.
+A `DEPLOY_HOLD` other than `none`, a held setup apply, or a `manual_plane` line naming your role
+is CLAUDE.md *When to wait*. A host package the landing deferred on is the host wait's `deferred`
+(exit 4): the host's updater applies it, and re-running `land.sh` checks it.
 Do exactly one of these two things, never neither:
 - Apply the change and verify it, where *When to wait* leaves it to you — the marker is this
   PR's own work, no bring-up playbook sits in the range, and no other session owns it.
@@ -215,7 +217,7 @@ end your turn on it: `cc-wait` prints the landing's `VERDICT:` line and exits wi
 own code. It waits at most 570s. Exit 75 means the landing is still running: re-run ONLY
 `cc-wait land <n> --log-dir "{log_dir}"`, never `land.sh`, which would start a second landing.
 State `gave-up` (exit 3) is land.sh's own give-up, a resume point: re-run the whole command.
-State `deferred` (exit 4) is not: the PR landed, and the next tick applies it.
+State `deferred` (exit 4) is not: the PR landed, and a host's updater applies its package.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
 `--accepted` are operator-only.

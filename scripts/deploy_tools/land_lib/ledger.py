@@ -1,22 +1,10 @@
 """What the Landings board reads: one logfmt line per landing, from a Ledger of stamps.
 
 This is the only record of where a landing's time goes: how long the merge took to arrive,
-how long master CI took after it, the tick, the deploy. `lock` is seconds the landing spent
-waiting on the tree lock -- part of `tick`, not a fifth phase.
+how long master CI took after it, the tick, the deploy.
 
-`lock` has two sources. An attempt that LOST the lock and exited 75 is booked by
-`landing.retry_while_locked`, backoff included. A wait a wrapper rode out INSIDE its own
-flock and then reported on its stderr is booked by `landing.note_in_flock_wait`:
-gitops_tick.sh watching a tick another actor started. That exits 0, so without the report the
-seconds would land in `tick` and every row would read `lock=0`. The two sources cannot double-count: the wrapper reports only a wait that
-ended in a join, never one that ended in contention.
-
-`kick` is what became of the tick a fast-path landing kicks in step 5: `started`
-(a tick of its own, which converges the primary while the gate runs), `rearmed` (the first
-request joined a run already in flight and the second, after the gate, started one), `joined`
-(both requests joined; nothing this landing did converges the primary, the timer does),
-`failed` (systemd refused the request), and empty for a landing that kicked none. The joined
-tick fetched before the merge, so it does not carry the landing's commit.
+`tick`, `lock`, `holder` and `kick` stay on the line so the Landings board keeps its columns,
+but land.sh runs no tick: `tick` reads 0, `lock` reads 0, and `holder` and `kick` are empty.
 
 `cause` is a one-token reason beside a `deploy-failed` verdict. One exit-75 verdict carries one
 too: `deferred` with `promote-timeout`, the wait on a promotion that no promotion covered in

@@ -11,7 +11,7 @@ from _land_fakes import MERGE_SHA, PRIMARY, Fakes, build_tools
 from deploy_tools.land_lib.tools import Classifier
 from deploy_tools.promote_lib.wait import WaitResult
 
-_ORDERED = ("await_ci", "tick", "land_wait", "gate")
+_ORDERED = ("await_ci", "land_wait", "gate")
 
 
 def _names(calls):
@@ -291,90 +291,19 @@ def test_settled_end_to_end(land_run):
     assert rc == 0 and out.rstrip().endswith(
         f"VERDICT: settled (PR #999, {MERGE_SHA}, tags: sonarr)"
     )
-    assert [c[0] for c in calls if c[0] in _ORDERED] == [
-        "await_ci",
-        "tick",
-        "land_wait",
-        "gate",
-    ]
+    assert [c[0] for c in calls if c[0] in _ORDERED] == list(_ORDERED)
     assert "verdict=settled cause= exit=0" in logline and "tags=sonarr" in logline
-    for k in ("wait_merge", "wait_ci", "tick", "deploy"):
+    for k in ("wait_merge", "wait_ci", "deploy"):
         assert f"{k}=" in logline and f"{k}= " not in logline
-
-
-def test_a_tagged_landing_kicks_the_tick_and_books_no_tick_time(land_run):
-    """Step 4 is a kick, not a wait: step 5 waits on the promotion that applies the merge.
-
-    `tick=0` on the board therefore means NO TICK WAS AWAITED, not a tick that took no time.
-    """
-    _rc, _out, _err, calls, logline = land_run([], Fakes())
-    assert next(c for c in calls if c[0] == "tick")[2] == {"wait": False}
     assert "tick=0 " in logline
 
 
-def test_a_landing_with_tags_and_a_self_applied_plane_awaits_the_tick(land_run):
-    """The FLAGGED half of the fast path: tags alone are not enough to skip the tick wait.
-
-    A PR touching a service role AND a setup role `initial_setup.yml` includes carries both
-    classifications, and step 6 grades the second half from the deployer's markers. Taking the
-    fast path there kicks a tick and reads its markers seconds later, so `broad_applied` still
-    names an older origin SHA and the landing prints `needs-manual-apply` (or `deferred`, with
-    `behind_since` set) for work the kicked tick applies a minute afterwards.
-    """
-    _rc, _out, _err, calls, _logline = land_run([], _sonarr_settled(self_applied=True))
-    assert [c[0] for c in calls if c[0] in _ORDERED] == [
-        "await_ci",
-        "tick",
-        "land_wait",
-        "gate",
-    ]
-    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
-
-
-@pytest.mark.parametrize("self_applied", [False, True])
-def test_a_tags_override_takes_the_same_two_paths_as_a_derived_landing(
-    land_run, self_applied
-):
-    """`--tags` skips the derivation, not the decision about which path this landing takes.
-
-    Both halves matter. The FLAGGED one is `self_applied=True`: `classify` must not return at
-    its first statement when `opts.tags` has populated `resolved_tags`, or the predicate reads
-    False and a mixed PR prints a verdict that never read the deployer's markers. The CLEAN one
-    is the tags-only override, which must keep the
-    fast path -- classifying on this path must not turn into awaiting a tick for everyone.
-    """
-    _rc, _out, _err, calls, _logline = land_run(
-        ["--tags", "sonarr"], Fakes(self_applied=self_applied)
-    )
-    assert [c[0] for c in calls if c[0] in _ORDERED] == [
-        "await_ci",
-        "tick",
-        "land_wait",
-        "gate",
-    ]
-    tick_kwargs = next(c for c in calls if c[0] == "tick")[2]
-    assert (list(tick_kwargs) == ["observe"]) is self_applied
-
-
-def test_a_landing_with_no_service_tag_still_waits_for_the_tick(land_run):
-    """The rejecting half: there the tick IS the apply, and the verdict reads its markers."""
-    _rc, out, _err, calls, _logline = land_run(
-        [], Fakes(derived=([], "pr"), self_applied=True, state={"behind_since": "x"})
-    )
-    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
-    assert "VERDICT: deferred" in out
-
-
-def test_the_diff_fallback_reaches_the_tick_before_deriving(land_run):
+def test_the_diff_fallback_derives_between_the_ci_wait_and_the_promotion_wait(land_run):
     _, _, _, calls, _ = land_run(
         ["--since", "abc"], Fakes(derived=([], "fallback"), changed="sonarr")
     )
     names = [c[1][0] if c[0] == "deploy_tags" else c[0] for c in calls]
-    assert names.index("tick") < names.index("changed") < names.index("land_wait")
-    # And it AWAITS that tick. The derivation reads `<since>...HEAD` in the primary checkout,
-    # so this is the one tagged path the kick would break: an empty fallback tag list is what
-    # routes it away from the kick, and ordering alone would not notice if that changed.
-    assert list(next(c for c in calls if c[0] == "tick")[2]) == ["observe"]
+    assert names.index("await_ci") < names.index("changed") < names.index("land_wait")
 
 
 def test_a_missing_primary_checkout_is_named_before_any_phase_runs(land_run):
@@ -495,6 +424,29 @@ def test_the_real_classifier_derives_nothing_from_a_docs_only_path(land_run):
     rc, out, _, calls, _ = land_run([], fakes, classifier=Classifier())
     assert rc == 0 and "VERDICT: nothing-to-deploy" in out
     assert "gate" not in _names(calls)
+
+
+def test_a_setup_role_only_pr_ends_nothing_to_deploy_without_a_tick(land_run):
+    """H7.49a: the deployer's timer applies the role, and the landing neither starts nor awaits it.
+
+    The real `Classifier` runs over a real setup-role path. Before H7.49a this PR was
+    `self_applied`, so the landing awaited a tick and graded the deployer's markers.
+    """
+    fakes = Fakes(
+        pull_ref_rc=1,
+        gh_views={
+            "files,changedFiles": {
+                "files": [
+                    {
+                        "path": "ansible/roles/setup/renovate_agent/files/renovate_agent.py"
+                    }
+                ],
+                "changedFiles": 1,
+            }
+        },
+    )
+    rc, out, *_ = land_run([], fakes, classifier=Classifier())
+    assert rc == 0 and "VERDICT: nothing-to-deploy" in out
 
 
 def test_every_numbered_step_header_uses_the_same_denominator(land_run):

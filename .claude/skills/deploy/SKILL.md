@@ -85,8 +85,9 @@ gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
 
 ## Applying a setup role
 
-The GitOps deployer applies a setup role on the tick after the merge, and the `gitops-tick` skill
-triggers a tick by hand. A role the tick cannot apply becomes a `manual_plane` line in `owed.jsonl`.
+The GitOps deployer applies a setup role on its own 10-minute timer after the merge. `land.sh`
+neither starts nor watches that tick, and the `gitops-tick` skill triggers one by hand. A role
+the deployer cannot apply becomes a `manual_plane` line in `owed.jsonl`.
 
 A playbook goes through `uv run`, because bare `ansible-playbook` (the uv-tool shim) lacks the
 module deps and fails. A setup play aimed at the Pi takes `-e target=daniel-pi`, because the
@@ -104,10 +105,6 @@ uv run python scripts/deploy_tools/owed_run.py <role>
 
 # Apply one setup role by hand, with the playbook and tag its Applied by: line names
 uv run ansible-playbook ansible/<playbook> --tags <tag>
-
-# Trigger a GitOps tick now instead of waiting for the 10-min timer (daniel-box only).
-# Runs the identical code path the timer runs — there is no dry-run mode.
-./scripts/deploy_tools/gitops_tick.sh
 
 # Initial server setup. The first-host bring-up ORDER (uv -> SOPS onboarding -> this) is in
 # ansible/README.md
