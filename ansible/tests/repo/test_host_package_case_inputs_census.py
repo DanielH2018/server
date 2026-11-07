@@ -28,6 +28,13 @@ IMAGE_STEP = "Build the test image for this release"
 # The script `validate_lib/bootstrap_case.py` runs in the containers. No package renders it, so a
 # PR that changes only the script changes no render (H7.15a).
 BOOTSTRAP_SCRIPT = "hosts/bootstrap-host.sh"
+# What `validate_lib/fixture_host_case.py` edits or reads to make its host. No real render reads
+# the walkthrough or the example, and a moved line in the inventory can leave every render unchanged.
+FIXTURE_HOST_FILES = (
+    "docs/host-packages.md",
+    "ansible/inventory/hosts.ini",
+    "ansible/inventory/host_vars/_example.yml",
+)
 # The package whose modules are inputs of the cases alone. The renderer is a render input, which
 # the render diff already sees, and `lib` is shared by every script in the repository.
 _CASE_PACKAGES = ("validate",)
@@ -88,6 +95,7 @@ def _case_input_members() -> set[str]:
     return {
         CASES_SCRIPT,
         BOOTSTRAP_SCRIPT,
+        *FIXTURE_HOST_FILES,
         *_imported_modules(REPO / CASES_SCRIPT),
         *git_out(REPO, "ls-files", context).splitlines(),
     }
