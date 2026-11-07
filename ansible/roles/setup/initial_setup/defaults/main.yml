@@ -42,9 +42,10 @@ initial_setup_worktree_sweep_cron_hour: 4
 initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
 
 # The group whose members may connect to the worktree holder scan's socket,
-# /run/worktree-holders.sock (tasks/crons.yml, #4297). initial_setup adds sys_user to it, and
-# claude_code's agent_access.yml adds each present agent user, because that task's group list
-# is exact and would strip a membership granted anywhere else.
+# /run/worktree-holders.sock (tasks/crons.yml, #4297). initial_setup or the worktree-holders
+# component adds sys_user to it, and the claude-code component's claude-agent-setup adds each
+# present agent user, because that script's group list is exact and would strip a membership
+# granted anywhere else.
 initial_setup_worktree_holders_group: worktree-holders
 
 # The hosts whose package owns a subject (docs/target-architecture/host/h7-delete-ansible.md,
@@ -58,7 +59,13 @@ initial_setup_worktree_holders_group: worktree-holders
 #   access, accounting, audit_and_kernel, integrity, host_basics: the `host-hardening` component
 #           and bootstrap step 4 own them on a listed host (H7.58). host_basics covers the swap,
 #           apt and package tasks of host-basics.yml, and leaves its tooling tasks.
-#   worktree_holders: the Pi's package retires the scan's paths as legacy entries (H7.58).
+#   dev_tooling: the per-user uv, prek and Python, the /usr/local/bin/uv copy and the git hooks.
+#           The dotfiles repo installs the per-user tools, the uv component ships /usr/bin/uv and
+#           the cluster-node procedure runs `prek install`. ansible-core and ansible-lint stay on
+#           every dev_tooling_hosts member until H7.63.
+#   vale: /usr/local/bin/vale. The vale component ships /usr/bin/vale.
+#   worktree_holders: the worktree holder scan. The worktree-holders component ships it on
+#           daniel-server (H7.61), and the Pi's package retires its paths as legacy entries (H7.58).
 initial_setup_packaged_hosts:
   loki_route_witness: [daniel-box]
   access: [daniel-pi]
@@ -66,7 +73,9 @@ initial_setup_packaged_hosts:
   audit_and_kernel: [daniel-pi]
   integrity: [daniel-pi]
   host_basics: [daniel-pi]
-  worktree_holders: [daniel-pi]
+  dev_tooling: [daniel-server]
+  vale: [daniel-server]
+  worktree_holders: [daniel-pi, daniel-server]
 
 # Where the rkhunter and AIDE scripts source homelab-check-lib.sh from. crons.yml installs it
 # under /usr/local/lib; the integrity-scans host component sets /usr/lib/homelab, where the

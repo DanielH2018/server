@@ -2340,6 +2340,12 @@ the `manual_plane` clearing, and *Rollback*'s
       render, so `/usr/bin/uv` must arrive on both in that PR, and this one step takes no
       canary. It only adds a path, and daniel-box's `/usr/local/bin/uv` stays. Each PR lists
       `/usr/local/bin/uv` as a legacy entry on its own host.
+      **Amended at H7.61:** the PR repoints only the packaged readers, which ship with the
+      wrapper. The GitOps tick re-renders a setup role within ten minutes of a merge, and
+      daniel-box's package waits on the rollout gate, so daniel-box's Ansible readers stay on the
+      old path and H7.62 repoints them. daniel-server's Ansible-era witness still runs the old
+      path and no tick re-renders it there, so H7.59 lists `/usr/local/bin/uv` as that host's
+      legacy entry when it moves the witness.
     - **Vale** takes the same shape, as *The component checklist and the setup census* states.
       `homelab-tools` pins it, a `vale` component ships `/usr/bin/vale`,
       `/usr/local/bin/vale` becomes a legacy entry, and `test_vale_matches_the_ci_pin.py`

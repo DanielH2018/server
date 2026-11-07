@@ -7,7 +7,9 @@ jobs, the integrity scans and the firewall), and this role keeps no task for the
 the `host-hardening` component and step 4 of `hosts/bootstrap-host.sh` also own the base packages,
 the sudo cache, auditd and the kernel modules, so
 `ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_packaged_hosts` skips those
-tasks there, and no setup apply upgrades the Pi's packages.
+tasks there, and no setup apply upgrades the Pi's packages. daniel-server's package also owns the
+dev tooling, Vale and the worktree holder scan, so the same map skips those three subjects there,
+and the role still writes them on daniel-box.
 **Not a container role** — a host-setup role under `ansible/roles/setup/`, run by
 `initial_setup.yml`, not `deploy.yml`. It is a large setup role, so **`--check` first** and scope
 with `--tags` when iterating. `docs/host-baseline-record.md` carries the per-block traps, the two

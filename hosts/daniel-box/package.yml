@@ -71,6 +71,9 @@ components:
   - k3s-server
   - claude-code
   - sops
+  # H7.61: this package's own units name /usr/bin/uv. initial_setup keeps writing
+  # /usr/local/bin/uv here until this host's own move, H7.62, for the setup roles still reading it.
+  - uv
 units:
   k3s.service: {policy: windowed}
 credentials:

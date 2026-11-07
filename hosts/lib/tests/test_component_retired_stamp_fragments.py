@@ -60,6 +60,7 @@ RECORDED = {
 # (task file, tag) pairs.
 DERIVED = {
     "loki-route-witness": ((CRONS, "loki_route_witness"),),
+    "worktree-holders": ((CRONS, "worktree-sweep"),),
 }
 
 
