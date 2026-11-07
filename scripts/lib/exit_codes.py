@@ -17,7 +17,8 @@ terms of them rather than restating the integer.
 
 THE FAMILIES ARE STILL DISJOINT VOCABULARIES OVER THE SAME SMALL INTEGERS, outside the spine.
 2 means "a tag matched no service" to deploy.sh and "the branch is on origin with no PR" to
-publish_pr.py. The prefixes are what let a reader tell which contract a value belongs to, so they are
+publish_pr.py; 3 means "the change is broad" to deploy.sh and "the tree lock was held" to the
+tick. The prefixes are what let a reader tell which contract a value belongs to, so they are
 not decoration: `publish_pr.py` in particular defines two groups of its own that both start
 at 0 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
 
@@ -98,6 +99,23 @@ DEPLOY_SH_NO_VERDICT = frozenset(
         DEPLOY_LOCK_PLAN_FAILED,
     }
 )
+
+# -- scripts/deploy_tools/gitops_tick.sh ------------------------------------------------
+# 3 = the tick was skipped because the tree lock was held, so it fast-forwarded NOTHING.
+# 4 = `--no-wait` joined a tick already in flight and started none. That tick fetched before
+#     the request, so a commit merged since is not in it. Never seen with a wait
+#     budget: there the wrapper watches the joined run and, when it ends cleanly, starts a
+#     fresh run on the same budget and exits by THAT run's outcome.
+# 75 = the wrapper stopped watching a run still in flight, which is not a failure.
+TICK_OK = OK
+TICK_FAILED = FAILED
+# The unit is not installed on this host -- the deployer runs only where `has_gitops` is true.
+# Its own code because the remedy is a different host, not a different command line.
+TICK_NOT_INSTALLED = 2
+TICK_LOCK_CONTENTION = 3
+TICK_JOINED = 4
+TICK_BAD_ARGS = USAGE_ERROR
+TICK_STILL_RUNNING = TEMP_FAIL
 
 # -- scripts/deploy_tools/await_ci.py ---------------------------------------------------
 # `land_lib.tools.await_ci_verdict` maps await_ci's own CLI contract onto these.
@@ -403,6 +421,61 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "gave up waiting — a budget elapsed, no promotion covered the merge in time, "
             "the health gate could not read its store, "
             "or no host package containing the merge is published.",
+        ),
+    ),
+    "scripts/deploy_tools/gitops_tick.sh": (
+        _c(
+            TICK_OK,
+            "TICK_OK",
+            "the tick ran to completion; read its journal for what it did. A noop, a deferral "
+            "and a real deploy all complete successfully.",
+            verdict="ticked",
+        ),
+        _c(
+            TICK_FAILED,
+            "TICK_FAILED",
+            "the unit failed, or it could not be started at all.",
+            "gitops-deploy-alert.service has already posted to Discord via OnFailure. An "
+            "`Interactive authentication required` on the start means the polkit rule is "
+            "missing: apply it with `initial_setup.yml --tags gitops_deploy`.",
+            verdict="failed",
+        ),
+        _c(
+            TICK_NOT_INSTALLED,
+            "TICK_NOT_INSTALLED",
+            "gitops-deploy.service is not installed on this host.",
+            "The deployer runs only where `has_gitops` is true (daniel-box). Run it there.",
+            verdict="not-installed",
+        ),
+        _c(
+            TICK_LOCK_CONTENTION,
+            "TICK_LOCK_CONTENTION",
+            "the tick was skipped for lock contention, so nothing deployed and nothing alerted.",
+            "Re-run once the tree-lock holder finishes (docs/deploying.md lists them); "
+            "`last_run` is untouched, and no alert fires for this.",
+            verdict="contention",
+        ),
+        _c(
+            TICK_JOINED,
+            "TICK_JOINED",
+            "--no-wait joined a run already in flight and started none. That run fetched "
+            "before this request, so a commit merged since is not in it.",
+            "Re-run once it ends, or wait for the timer.",
+            verdict="joined",
+        ),
+        _c(
+            TICK_BAD_ARGS,
+            "TICK_BAD_ARGS",
+            "the command line is wrong.",
+            "`--wait <seconds>` and `--no-wait` are the only flags.",
+            verdict="bad-args",
+        ),
+        _c(
+            TICK_STILL_RUNNING,
+            "TICK_STILL_RUNNING",
+            "the wait budget elapsed and the wrapper stopped watching a run still in flight.",
+            "The run itself is fine. Follow it with `journalctl -u gitops-deploy.service`.",
+            verdict="still-running",
         ),
     ),
     "scripts/deploy_tools/await_ci.py": (
