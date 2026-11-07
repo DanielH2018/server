@@ -9,6 +9,9 @@ PR the old list planned. Its 20 numbered items name 48 steps, and the canary tri
 and H7.7, the two host PRs of H7.12c and the five PRs of H7.19a count once per PR. The
 re-sliced PRs are numbered from H7.21, so no re-sliced ID equals an old one. No step has
 landed when the slice was re-sliced on 2026-10-17; the Status line records what has merged since.
+An audit of *Steps, as PRs* against the tree on 2026-11-07
+([#7506](https://github.com/DanielH2018/server/issues/7506)) added H7.58 to H7.63, split H7.49
+and narrowed the H2 edges.
 
 Related issues: [#4561](https://github.com/DanielH2018/server/issues/4561), daniel-server's IPv6 default route. Its netplan file moves into the
 host package.
@@ -454,7 +457,7 @@ The exit criterion is seven observations:
 
 | Owner at `70591c307` | daniel-pi | daniel-server | daniel-box | Not a package |
 |---|---|---|---|---|
-| `initial_setup` | apt and unattended-upgrades config, sshd drop-ins, sysctl keys in `/etc/sysctl.conf` through the line arm, fail2ban, journald caps, rkhunter, AIDE, postfix, accounting, the weekly reboot and maintenance timers, ufw | same | same, plus the checkout timers (docs refresh, eval sweep, infra map, secret rotation, git repair) and two kuma-check timers | `Clear ansible log file` and `kuma-check-setup-drift` are deleted |
+| `initial_setup` | apt and unattended-upgrades config, sshd drop-ins, sysctl keys in `/etc/sysctl.conf` through the line arm, fail2ban, journald caps, rkhunter, AIDE, postfix, accounting, the weekly reboot and maintenance timers, ufw; H7.58's baseline: auditd, login banners, the sudo cache, SSH directory hardening, module blacklists, core dumps, base packages | same, plus the rsyslog filter, the i915 option and the Loki witness (H7.59), and the worktree holder scan, uv and Vale (H7.61) | same, plus the checkout timers (docs refresh, eval sweep, infra map, secret rotation, git repair) and two kuma-check timers; the rsyslog filter (H7.60); the worktree holder scan, uv and Vale (H7.62) | `Clear ansible log file` and `kuma-check-setup-drift` are deleted; the Pi swap, the networkd-dispatcher mask and daniel-server's LXD removal are bootstrap step 4; uv, Python and prek are the dotfiles repo's |
 | `optimize_pi` | zram, Log2Ram, watchdog, earlyoom, apt-timer drop-ins, node exporter unit, resolver and hosts files | — | — | the debloat `apt purge` becomes a one-time bootstrap step |
 | `docker_install` | Docker source in the `apt-docker` component; `homelab-docker-engine.service` with the pins; `daemon.json`; Go-runtime drop-ins; the Compose unit creates the external `proxy` and `lifecycle` networks | — | — | the networks stay `external: true` (H7.5) |
 | `sops_setup` | `homelab-tools` (sops), `Depends: age` | same | same | key generation is bootstrap step 3; collections are deleted |
@@ -464,7 +467,7 @@ The exit criterion is seven observations:
 | `common` | the alert unit, resolver template | the alert unit | the alert unit, resolver template | `host_lib.py` and `kuma_push.py` move to `hosts/lib/`; `stamp_*` and `release_bin` are deleted |
 | `claude_code`, `renovate_agent`, `renovate_notify`, `fake_remux`, `deploy_ui`, `homelab_builder` | — | `claude_code` units and the agent users | all of them | per-user tooling goes to chezmoi, except the agent's homelab-ui browser toolchain (pinned Node, `@playwright/mcp`, its Chromium and the MCP registration), which is a `claude-code` component oneshot run as the agent (ruled 2026-10-30) |
 | `config_files` | `/etc/profile.d/homelab.sh` | — | — | the Pi's tracked `~/.bashrc` reverts to Ubuntu's |
-| `github_cli`, `chezmoi_setup` | — | — | — | chezmoi, which bootstrap step 5 installs |
+| `github_cli`, `chezmoi_setup` | — | `gh`, as a `Depends` of `apt-github-cli` (H7.62) | `gh`, as a `Depends` of `apt-github-cli`, and `chezmoi_setup`'s distro packages (H7.62) | chezmoi, which bootstrap step 5 installs |
 | `gitops_deploy` | — | — | the two GitHub check timers; `homelab-checkout-sync` replaces the fast-forward | H7.19a retires the deployer and empties the role; H7.20a deletes the role |
 | `render_records` | — | — | — | R4 deletes it |
 | `k8s_host_files` (added by D5) | pi-peer-backup's forced-command wrapper, and its authorized key through the line arm (H7.4) | — | `tmpfiles.d` lines for the docs site directory (H7.10a), media-volume's three directories under `/srv/media` (H7.9b), and artifacts' local, per-peer and star list directories (H7.12c) | the absent arms become legacy entries, H7.18c empties the role and H7.20a deletes it; the crowdsec probe timer and the Alloy stage are H5's or D5's, not H7's |
@@ -1217,11 +1220,12 @@ checkout within 10 minutes, and no landing step reads the checkout after the mer
   call sites go too: `pipeline.py:_step_tick`, `deploy.py:deploy_phase`'s `kick_tick` and
   the `run_tick` on its stale retry, and `health_verdict.py:health`'s `rearm_tick`.
 - The part of land.sh's setup arm that reads the tick's markers. `classify.py` no longer
-  sets `self_applied`, `self_applied_command` or `remaining_setup`. Every daniel-box setup
-  role is empty by the end of H7.14 except `gitops_deploy`, and the only PR that changes
-  that role before H7.19b is the fifth, which empties it. `deploy.py:no_tag_outcome`
-  loses its `tick_state` and `tick_applied` arms, so a PR that reaches only an emptied
-  setup role ends `nothing-to-deploy`. H7.19b deletes the rest of the setup arm.
+  sets `self_applied`, `self_applied_command` or `remaining_setup`. `deploy.py:no_tag_outcome`
+  loses its `tick_state` and `tick_applied` arms, so a PR that reaches only a setup role
+  ends `nothing-to-deploy`. H7.19b deletes the rest of the setup arm. H7.49a may merge
+  while daniel-box's `initial_setup`, `k3s` or `gitops_deploy` tasks remain. Until H7.52,
+  the timer's tick still applies such a PR within 10 minutes, and land.sh no longer waits
+  on that tick, so the PR's author reads the changed state on the host.
 - `gitops_tick.sh` itself, with its wrapper test and the land tests whose subject is the
   tick. The PR derives that list from `git grep -l -E
   'gitops_tick|run_tick|kick_tick|rearm_tick|tick_state|tick_applied'` at its base, and
@@ -1755,7 +1759,9 @@ This step lasts until H7.19b deletes the ledger.
 
 ### The re-sliced PRs
 
-The 65 planned PRs merge into the 37 below. The re-slicing changes no design. Each re-sliced
+The 65 planned PRs merged into 37. Later rulings split H7.24, H7.41 and H7.49, and the audit
+of 2026-11-07 added H7.58 to H7.63, whose *Old steps* cell reads `new`. The re-slicing changes
+no design. Each re-sliced
 PR carries the full text of every old step it absorbs, from the collapsed list under *The old
 step list*, with that step's verification, rollback note, operator-only gate and share of the
 exit criterion. *Design*, *Verification*, *Rollback*, *Risks*, *Tests and docs* and the H3 to
@@ -1784,8 +1790,33 @@ of a predecessor it reads. The edges that H7 reached only through those four bec
 H3 and H4 through H5 and H6, and D1, D5 and D6 through R4. Each host's package bounds its
 PRs: H3 created `homelab-daniel-pi`, H4 creates `homelab-daniel-server`, and H6.2 creates
 `homelab-daniel-box`. Nothing waits on H7, so no narrowing can form a cycle. Two cited H2 IDs
-are absent from H2's step list. H2.6 appears only as a condition that H7.2e handles either
-way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits on all of H2.
+are absent from H2's step list. H2 dropped H2.6, which appears only as a condition that H7.2e
+handles either way, so it adds no edge. H2.10 never existed. Old H7.13 cites it for the S3
+folder the drill reads, and H2.8a settled that folder as `etcd-snapshots`.
+
+**The H2 edges name PRs, not the slice (2026-11-07).** Each row names the H2 PRs that edit its
+files or that it reads, from the file lists of the PRs H2's Status line names:
+
+- H7.34 moves no file an H2 PR edits, and it reads the folder and object names H2.8a set.
+- H7.35 moves `k3s/tasks/health-crons.yml`, which H2.3d
+  ([#6105](https://github.com/DanielH2018/server/pull/6105)), H2.2c and H2.3f
+  ([#7008](https://github.com/DanielH2018/server/pull/7008)) and H2.8b
+  ([#7176](https://github.com/DanielH2018/server/pull/7176)) edit.
+- H7.48 turns the absent arms in that file into legacy entries, and it empties
+  `k8s_host_files`, whose rows H2.4c
+  ([#5753](https://github.com/DanielH2018/server/pull/5753)) and the *arr PRs
+  ([#5619](https://github.com/DanielH2018/server/pull/5619),
+  [#5706](https://github.com/DanielH2018/server/pull/5706) and
+  [#5678](https://github.com/DanielH2018/server/pull/5678)) edit.
+
+All of these PRs have merged. **H2.8c ([#7175](https://github.com/DanielH2018/server/issues/7175))
+constrains none of the three rows.** It edits `docs/k3s-etcd-restore.md` and no task file, and
+it places no absent arm. Its conditional operator step deletes only the script's old `offbox-*`
+objects. Native snapshots keep the `offbox-` name (H2, *etcd-s3*), and
+`scripts/backup/etcd_restore_drill.sh` picks the newest `offbox-*` object, so both drills read
+the same folder and find a snapshot under either outcome. That step reads
+`/etc/rancher/k3s/etcd-s3.env`. If H7.35 changes that path first, H7.35's PR changes it in the
+runbook too, and H2.8c's step follows the runbook.
 
 | PR | Old steps | Written ahead? | Waits on |
 |---|---|---|---|
@@ -1803,31 +1834,60 @@ way, so it adds no edge. H2.10 names the S3 folder in old H7.13, so H7.34 waits 
 | H7.31 daniel-server: `initial_setup`, part 2 | H7.7b, H7.7e, H7.7h | yes, with H7.30 | H7.30 live, H4 |
 | H7.32 daniel-box: `initial_setup`, part 2 | H7.7c, H7.7f, H7.7i | yes, with H7.30 | H7.31 live, H6.2 |
 | H7.33 daniel-box: NUT secondary | H7.8 | yes | H4, H6.2 |
-| H7.34 daniel-server: the `k3s` agent half and `hypervisor` | H7.9a, H7.13 | yes | H7.31, H6.1b2, H6.5b, H2 |
-| H7.35 daniel-box: the `k3s` host half | H7.9b | no: H6.4a, H6.4b and H2's `setup/k3s` PRs edit the same task files, so it starts once they merge | H7.32, H6.4a, H6.4b, H2, D5's media-volume row |
+| H7.34 daniel-server: the `k3s` agent half and `hypervisor` | H7.9a, H7.13 | yes | H7.31, H6.1b2, H6.5b, H2.8a |
+| H7.35 daniel-box: the `k3s` host half | H7.9b | no: H6.4a, H6.4b and the H2 PRs it names edit the same task files, so it starts once they merge | H7.32, H6.4a, H6.4b, H2.2c, H2.3d, H2.3f, H2.8b, D5's media-volume row |
 | H7.36 daniel-box: the checkout timers | H7.10a, H7.10b, H7.10c | yes | H6.2, D5's docs row |
 | H7.37 daniel-box: Renovate and `fake_remux` | H7.11 | yes; D6.15's review picks the deploy_ui branch | H6.2, D6 |
 | H7.38 Per-user tooling in `DanielH2018/dotfiles` | H7.12a | yes | none |
-| H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | yes | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
+| H7.39 The agent users and daniel-server's `claude_code` | H7.12b, H7.12c's daniel-server PR | landed as [#6593](https://github.com/DanielH2018/server/pull/6593); H7.61 and H7.62 own what it left (item 15) | H7.38, H7.22, H4, H6.2, the H6 PR that lands the window test |
 | H7.40 daniel-box: `claude_code` | H7.12c's daniel-box PR | yes, with H7.39 | H7.39 live, D5's artifacts row |
 | H7.41a daniel-box: the builder's tooling | H7.14, first half | yes | H3, H6.2, H7.24a |
 | H7.41b daniel-box: the builder hosts itself | H7.14, second half | no: it waits for H7.41a live on daniel-box | H7.41a live, H3, H6.2, H7.24a |
 | H7.42 `bootstrap-host.sh`, complete | H7.15a | yes | H7.24a, H6.1b, H6.2 |
-| H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H5, all live |
-| H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6 |
+| H7.43 The Pi runbook and the Pi rebuild | H7.15b | the runbook yes; the rebuild no, because it needs every Pi PR live | H7.25, H7.26, H7.27, H7.30, H7.42, H7.58, H5, all live |
+| H7.44 The cluster-node procedure, adding a host and release upgrades | H7.15c, H7.15d, H7.15e | yes; the guest drill needs H6 live | H7.42, R4 PR 7b, H6, H7.34, H7.35, H7.60, H7.62 |
 | H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | yes | R4 |
 | H7.46 The last Ansible imports | H7.17 | yes | R4, D6.13 |
 | H7.47 Closing the readers | H7.18a, H7.18b, H7.18d | yes | H7.36, H7.40, H5 |
-| H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H2, D5 |
-| H7.49 monitor-bridge's gitops checks go, and land.sh stops running the tick | H7.19a's first and third PRs | yes | H7.41, D6 |
+| H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H2.2c, H2.3d, H2.3f, H2.4c, H2.5b to H2.5d, H2.8b, D5 |
+| H7.49a land.sh stops running the tick | H7.19a's third PR | yes | H7.41, D6 |
+| H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes; it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
 | H7.50 deploy_ui retires | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
-| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H6 |
-| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.48, H7.50 |
+| H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
+| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.63 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43, H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
 | H7.57 The ADR | H7.20c | yes | H7.55 |
+| H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
+| H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H4 |
+| H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
+| H7.61 daniel-server: dev tooling and the worktree holder scan | new | yes | H7.38, H7.39, H7.41a |
+| H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |
+| H7.63 The last setup tasks: the setup-drift check, the collections install and `common/tasks/` | new | no: it deletes what H7.52's timer retirement and every importer of `common/tasks/` leave | H7.35, H7.37, H7.48, H7.50, H7.52 live, H7.60, H7.62 |
+
+### The task files each row owns
+
+This index reads the tree on 2026-11-07. A row named against part of a file owns that part, and
+the task file goes when the last of its rows merges. `uv run python
+scripts/deploy_tools/setup_lib/setup_census.py --host <host>` stays the list of record for the
+items inside each file. Every path sits under `ansible/roles/setup/`.
+
+| Row | Task files |
+|---|---|
+| H7.34 | `hypervisor/tasks/etcd_drill.yml`, `hypervisor/tasks/install.yml`, `hypervisor/tasks/main.yml`, `hypervisor/tasks/network.yml`, `hypervisor/tasks/teardown.yml`, `k3s/tasks/agent.yml`, `k3s/tasks/agent_verify.yml`; daniel-server's part of `k3s/tasks/node.yml` and `k3s/tasks/static-address.yml` |
+| H7.35 | `k3s/tasks/health-crons.yml`, `k3s/tasks/kubeconfig.yml`, `k3s/tasks/longhorn-host.yml`, `k8s_host_files/tasks/media-volume.yml`; daniel-box's part of `k3s/tasks/node.yml` and `k3s/tasks/static-address.yml` |
+| H7.37 | `fake_remux/tasks/main.yml`, `gitops_deploy/tasks/github_checks.yml`, `renovate_agent/tasks/code.yml`, `renovate_agent/tasks/main.yml`, `renovate_agent/tasks/service.yml`, `renovate_notify/tasks/code.yml`, `renovate_notify/tasks/main.yml`, `renovate_notify/tasks/service.yml` |
+| H7.44 | `k3s/tasks/coredns.yml`, `k3s/tasks/main.yml`, `k3s/tasks/server.yml` |
+| H7.45 | `k3s/tasks/storage_smoke.yml` |
+| H7.48 | `docker_install/tasks/main.yml`, `docker_install/tasks/teardown.yml`, `k8s_host_files/tasks/configarr.yml`, `k8s_host_files/tasks/crowdsec.yml`, `k8s_host_files/tasks/janitorr.yml`, `k8s_host_files/tasks/main.yml`, `k8s_host_files/tasks/observability.yml`, `k8s_host_files/tasks/qbittorrent.yml`, `k8s_host_files/tasks/registry.yml`, `k8s_host_files/tasks/traefik.yml`; the cron absent arms of `initial_setup/tasks/crons.yml` and `k3s/tasks/health-crons.yml` |
+| H7.50 | `deploy_ui/tasks/code.yml`, `deploy_ui/tasks/firewall.yml`, `deploy_ui/tasks/main.yml`, `deploy_ui/tasks/service.yml` |
+| H7.52 | `gitops_deploy/tasks/code.yml`, `gitops_deploy/tasks/install.yml`, `gitops_deploy/tasks/main.yml`, `gitops_deploy/tasks/service.yml`, `gitops_deploy/tasks/teardown.yml` |
+| H7.55, which deletes these `end_role` stubs with their roles | `claude_code/tasks/main.yml`, `config_files/tasks/main.yml`, `homelab_builder/tasks/main.yml`, `nut_host/tasks/main.yml`, `optimize_pi/tasks/main.yml`, `sops_setup/tasks/main.yml` |
+| H7.58 to H7.60 | `initial_setup/tasks/access.yml`, `initial_setup/tasks/accounting.yml`, `initial_setup/tasks/audit-and-kernel.yml`, `initial_setup/tasks/integrity.yml`; `initial_setup/tasks/system-tuning.yml` without its git hooks; the swap, apt and package tasks of `initial_setup/tasks/host-basics.yml`; the witness, the file absent arms and the `ansible.log` tasks of `initial_setup/tasks/crons.yml` |
+| H7.61 and H7.62 | `chezmoi_setup/tasks/main.yml` and `github_cli/tasks/main.yml` (H7.62); the tooling tasks of `initial_setup/tasks/host-basics.yml`, the git hooks of `initial_setup/tasks/system-tuning.yml` and the worktree holder tasks of `initial_setup/tasks/crons.yml` |
+| H7.63 | `common/tasks/agent_user.yml`, `common/tasks/alert_unit.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml`, `common/tasks/release_bin.yml`, `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
 
 ### What each re-sliced PR carries
 
@@ -1923,17 +1983,29 @@ the `manual_plane` clearing, and *Rollback*'s
 10. **H7.34.** Both steps are daniel-server's last roles, and exit observation 3 reads both:
     the hypervisor's drill takes its token from the agent's installer env file. It carries
     the agent ufw rules declared `keep`, the `manual_plane` line for `k3s`, the S3 folder the
-    drill reads after H2, and the drill run once by hand, then from its timer.
-11. **H7.35** stays alone, because it edits the task files that H6.4a, H6.4b and H2 edit. It
-    carries the netplan `manual:` activation, the media-volume `tmpfiles.d` lines and the
-    `manual_plane` line for `k3s`.
+    drill reads (`etcd-snapshots`, from H2.8a), and the drill run once by hand, then from its
+    timer. `hypervisor/tasks/teardown.yml`'s removals become legacy entries in the packages of
+    the hosts it applied to.
+11. **H7.35** stays alone, because it edits the task files that H6.4a, H6.4b and the H2 PRs it
+    names edit. It carries the netplan `manual:` activation, the media-volume `tmpfiles.d`
+    lines and the `manual_plane` line for `k3s`. Old H7.9b names disk health and the etcd list
+    drill out of `k3s/tasks/health-crons.yml`, and this row owns the rest of that file too:
+    the backup health reader, the B2 accounting and listing crons, the root-disk heartbeat, the
+    cluster-token drift check, the Healthchecks.io key and the etcd restore credentials.
+    `k3s/tasks/longhorn-host.yml`'s packages and multipath drop-in move here as well.
 12. **H7.36.** All three steps move daniel-box timers that read the primary checkout, and
     each keeps its `## Autonomous-role contract` in its component. It carries the docs site
     directory's `tmpfiles.d` line and the docs role's `CLAUDE.md` edit.
 13. **H7.37** stays alone. Its three roles hold 61 files at `70591c307`.
 14. **H7.38** stays alone. It lands in `DanielH2018/dotfiles` under that repo's `bin/gate`,
     before H7.39 deletes the tasks.
-15. **H7.39.** The agent users and the units that run as them come up together on the first
+15. **H7.39 landed as [#6593](https://github.com/DanielH2018/server/pull/6593), and left the
+    per-user tooling.** The PR moved the agent user and every `claude_code` subject on
+    daniel-server into `homelab-daniel-server`. It deleted no task of
+    `initial_setup/tasks/host-basics.yml`. Old H7.12a's text assigned the uv, Python and prek
+    tasks to H7.39, and those tasks and `Install Git hooks` still run on `dev_tooling_hosts`.
+    H7.61 and H7.62 own them.
+    The agent users and the units that run as them come up together on the first
     host. It carries the `meta: end_role` guard naming daniel-server. Old H7.12c names the
     `homelab-*` rename, the four window-test entries and the `claude-land@` callers once for
     both host PRs. Old H7.12c's text decides which of H7.39 and H7.40 carries them, and that
@@ -2089,7 +2161,10 @@ the `manual_plane` clearing, and *Rollback*'s
     `docs/break-glass.md` and `docs/host-packages.md`, and H7.15d's host census is their one
     test. It carries R4 PR 7b's kind drill run on this PR, the guest drill with its blast
     radius (**operator-only**, exit observation 4), and the D6 case that Open question 14
-    asks for. It merges before H7.55.
+    asks for. It merges before H7.53. H7.42 merged with `k3s`'s tasks still in place, so
+    old H7.9's fallback no longer names a PR. This PR deletes `k3s/tasks/server.yml` and
+    `k3s/tasks/coredns.yml` and empties the role, because the procedure it writes replaces
+    them, gates included. The procedure also gains H7.60's and H7.62's steps.
 21. **H7.45.** Both steps replace an operator playbook or runbook role with a script. The
     operator drills the snapshot command once (**operator-only**).
 22. **H7.46** stays alone. It carries the renders-without-ansible-core proof and lands the
@@ -2099,10 +2174,20 @@ the `manual_plane` clearing, and *Rollback*'s
     carries the generators' named members, the contract census and the empty cluster
     `diff -r`.
 24. **H7.48** stays alone. It carries the retired-crons census and empties `k8s_host_files`.
-25. **H7.49.** Both PRs remove a consumer of the running tick outside the deployer's role,
-    and both must precede H7.52. The deployer runs unwatched from this merge until H7.52's.
-    It carries the no-gitops-hostPath and land.sh-without-a-tick proofs. Its revert restores
-    the checks, which need `/var/lib/gitops-deploy`.
+    It also turns the rest of `docker_install/tasks/teardown.yml`, the role's last work, into
+    legacy entries on the cluster nodes.
+25. **H7.49 splits in two, ruled on 2026-11-07.** Both halves remove a consumer of the running
+    tick outside the deployer's role, and both precede H7.52. Only monitor-bridge's half opens
+    a gap, so land.sh's half no longer waits for it.
+    - **H7.49a** carries the land.sh-without-a-tick proof. It leaves the deployer watched, and
+      it may merge at any time after its edges. *land.sh stops running the tick* says what a
+      setup-role PR's author reads after it.
+    - **H7.49b** carries the no-gitops-hostPath proof. It merges immediately before H7.52, and
+      H7.52 waits for it to be live. The checks must go before the timer, because
+      `check_gitops_alive` pages on a stale `last_run`, and Flux and the package apply
+      independently, so one PR could not fix that order. The deployer runs unwatched only for
+      the gap between the two merges. Its revert restores the checks, which need
+      `/var/lib/gitops-deploy`.
 26. **H7.50** stays alone, a deletion of about 2,300 lines. Its revert needs the operator's
     `--tags deploy_ui` re-apply ON daniel-box (**operator-only**).
 27. **H7.51** stays alone, because it must be live and fast-forwarding before H7.52 removes
@@ -2125,6 +2210,118 @@ the `manual_plane` clearing, and *Rollback*'s
 33. **H7.57** stays alone, so the deletions land while the operator reviews it. Approving the
     ADR is **operator-only** (exit observation 6), and so is deciding whether ADR-0001,
     ADR-0011 and ADR-0017 need an amendment.
+34. **H7.58 to H7.60 land one host baseline in canary order.** H7.58 and H7.59 add their host
+    to `initial_setup_packaged_hosts`, and H7.60 deletes the subjects' tasks. A new
+    `host-hardening` component ships the paths below with the bytes the tasks wrote, so dpkg
+    takes each path over. Each PR carries the rendered files' `visudo -cf` and
+    `rsyslogd -N1` proofs, and a read-only live check for each subject.
+    - **`access.yml`.** The component ships `/etc/sudoers.d/10-timestamp`. A `tmpfiles.d` `Z`
+      line with mode `~0700` holds the sys user's `.ssh`. A `sysusers.d` file declares
+      `ssh-users` and the sys user's membership, which replaces the note in the `sshd`
+      component's header. `10-homelab.conf` sets `AllowGroups ssh-users`, so this subject can
+      lock a host out. Each PR reads `id <sys_user>` and opens a new SSH session before it
+      merges. `Give root back its own SSH directory` is deleted, because it repairs damage the
+      pinned path stopped; each PR body quotes the owner of `/root/.ssh`.
+    - **`accounting.yml`.** `/etc/issue` and `/etc/issue.net` are conffiles of `base-files`,
+      so the banners go through the line arm, one declaration per line.
+    - **`audit-and-kernel.yml`.** `auditd` is a `Depends`, and its unit is enabled in the
+      package. The component ships `/etc/audit/rules.d/hardening.rules` with
+      `try-restart:auditd.service`, the module blacklist and
+      `/etc/modules-load.d/wireguard.conf`. A `tmpfiles.d` `z` line per path replaces
+      `Restrict sensitive file permissions`. H7.59 ships `/etc/modprobe.d/i915.conf` under
+      `has_igpu`, which only daniel-server sets, and the cluster-node procedure runs
+      `update-initramfs -u` on a rebuilt host (**operator-only**).
+    - **`integrity.yml`.** The component ships `coredump.conf.d/disable.conf`. Bootstrap step 4
+      masks `networkd-dispatcher.service` on all three hosts, and the mask persists on the live
+      hosts.
+    - **`system-tuning.yml`.** The `host-tuning` component ships the rsyslog filter under
+      `has_rsyslog`, with `try-restart:rsyslog.service`, because the journald cap and the
+      filter are one change. `test_journald_syslog_forwarding.py` retargets. H7.59 deletes the
+      governor tasks and the LXD removal, which read host history. Both had converged on
+      2026-11-07: daniel-server has no `cpu-governor-performance.service`, its live governor
+      reads `powersave`, and `snap list` shows only snapd. Bootstrap step 4 removes those three
+      snaps on a rebuilt daniel-server.
+    - **`host-basics.yml`.** Bootstrap step 4 creates the Pi's swap file, formats it, adds its
+      fstab line and activates it, before step 5's apt. A live Pi keeps its swap. The Pi's
+      package gains `Depends` on `linux-raspi` and `wireguard`, and `host-hardening` gains
+      `unzip`, `update-notifier-common`, `unattended-upgrades`, `libpam-tmpdir`, `debsums` and
+      `jq`. `fail2ban` is already the `fail2ban` component's.
+    - **Deleted from `host-basics.yml`, with the reason.** `Update and upgrade system
+      packages` goes, because a package cannot run a dist-upgrade. `unattended-upgrades` keeps
+      applying what its origins allow, and every other package update waits for the operator
+      (**operator-only**: H7.58's PR asks for this ruling). The watchdog stop and its handler
+      guard only that dist-upgrade, so they go with it. The Docker hold goes for the same
+      reason, because `homelab-docker-engine.service` sets the hold when it installs the
+      packages. Both `apt-show-versions` tasks go, because no tracked file reads its output.
+    - **The absent arms of `crons.yml`.** The worktree holder's removal, its old sudoers rule,
+      the secret-rotation wrappers, `cert-expiry-webhook.env` and the two Kuma push credential
+      files become legacy entries on each host they applied to. H7.48 handles the cron arms.
+      The two `ansible.log` tasks are deleted, because
+      [#6217](https://github.com/DanielH2018/server/issues/6217) stopped writing that log; each
+      PR body quotes a `find` that returns nothing.
+    - **daniel-server's witness.** H7.59 lists `loki-route-witness` in
+      `homelab-daniel-server`, as H7.36 did on daniel-box, and adds the Ansible-era timer and
+      paths as legacy entries. That empties the `loki_route_witness` subject, so H7.59 deletes
+      its tasks. Reverting any of the three rows follows *Rollback*'s per-host order.
+35. **H7.61 and H7.62 land the dev tooling and the worktree holder scan in canary order.**
+    Only `dev_tooling_hosts` and the `has_claude_code` hosts run these tasks, and both lists
+    name daniel-server and daniel-box. H7.62 deletes the tasks.
+    - **Deleted, because the dotfiles repo owns them.** [DanielH2018/dotfiles#997](https://github.com/DanielH2018/dotfiles/pull/997)
+      merged on 2026-10-26, and its `tools.toml` holds uv, prek and Python at this repo's pins.
+      The per-user uv install, `prek` in `Install Python CLI tooling` and `Install the pinned
+      host Python` go. Each PR body quotes `uv python list` for the sys user, because units
+      run `uv` with `--no-python-downloads`. Bumps stop landing in both repos at H7.62's merge,
+      and the `tools.toml` comment naming H7.39 changes in a dotfiles PR then. The twin test
+      `test_host_tool_pins_match_their_twins.py` and `asset_pins.py` retarget.
+    - **`/usr/local/bin/uv` has readers, so it gets a replacement.** The readers include
+      `hosts/components/claude-code/`, `hosts/components/loki-route-witness/`,
+      `scripts/backup/etcd_restore_drill.sh`, `k8s/manifests/tasks/release_digest.yml` and setup
+      role templates. H7.61 adds a `uv` component on `hosts/components/sops/`'s pattern to both
+      hosts: `/usr/bin/uv` is an exec of `/usr/lib/homelab/bin/uv`. H7.61 repoints every reader
+      `git grep -l /usr/local/bin/uv` prints. Each PR lists `/usr/local/bin/uv` as a legacy
+      entry on its host.
+    - **Vale** takes the same shape, as *The component checklist and the setup census* states.
+      `homelab-tools` pins it, a `vale` component ships `/usr/bin/vale`,
+      `/usr/local/bin/vale` becomes a legacy entry, and `test_vale_matches_the_ci_pin.py`
+      and Renovate's Vale manager read the new pin.
+    - **`Install Git hooks`** leaves no live state to manage, because its `creates:` guard
+      makes it a once-per-clone step. `docs/break-glass.md`'s cluster-node procedure runs `prek
+      install` after the clone.
+    - **The worktree holder scan** moves into `claude-code`, as the `worktree-sweep` component
+      header says. The script ships at `/usr/lib/homelab/worktree-holders`, because dpkg ships
+      nothing under `/usr/local`, and the unit reads that path. `/etc/worktree-holders.json`,
+      `worktree-holders.socket` and `worktree-holders@.service` keep their names, so
+      `/run/worktree-holders.sock` does not change. A `sysusers.d` file declares the group and
+      the sys user's membership, `netcat-openbsd` is a `Depends`, and *Ruling 3* hands the
+      `/etc/systemd/system` copies to the package. `test_worktree_holders_install.py` retargets.
+    - **H7.62 alone takes `chezmoi_setup` and `github_cli`**, which `has_chezmoi` and
+      `has_github_cli` set only on daniel-box. Each role empties to the `end_role` stub.
+        - `apt-github-cli` gains `Depends: gh`, which also covers daniel-server's hand install.
+          The dotfiles repo sets the credential helper. `gh auth login` stays a hand step in the
+          cluster-node procedure (**operator-only**).
+        - `homelab-daniel-box` gains `chezmoi_setup_distro_packages` as `Depends`. Bootstrap
+          step 5 installs the binary. The cluster-node procedure runs `chezmoi init --apply`
+          with H7.38's three prompt flags (**operator-only**). The seed and the agent-prompt
+          tasks lose their purpose with it. The PR body says what keeps daniel-box's dotfiles
+          source current once the role stops applying it.
+    - **What stays until H7.63:** `Resolve the deploy user's home directory` and `Install
+      Python CLI tooling`, narrowed to `ansible-core` and `ansible-lint`.
+36. **H7.63 lands after the deployer's timer, as one PR.** It deletes read-only checks and tasks
+    that apply nothing a host depends on, so it needs no canary. `initial_setup` empties to the
+    `end_role` stub, and H7.53's strict census then passes.
+    - **The setup-drift check and its library** lose their purpose once the deployer stops
+      rendering setup templates. Old H7.10c assigned this deletion to H7.36, and H7.36 left the
+      check running, because the setup plane still rendered then. The timer, its service, the
+      script, the `.prom` file and `/usr/local/lib/setup-drift-lib.sh` become legacy entries on
+      daniel-box and daniel-server, and `setup_drift_check_hosts` and its rule go.
+    - **`/usr/local/lib/homelab-check-lib.sh`** becomes a legacy entry on all three hosts,
+      after its last Ansible-era reader has moved. `check-lib` and `pi-heartbeats` keep
+      shipping `/usr/lib/homelab/homelab-check-lib.sh`.
+    - **The collections install** goes, as item 4 states, with the two `ansible-*` uv tools.
+      Installed collections and tools stay until H7.56, and the operator then runs `uv tool
+      uninstall` for the two tools (**operator-only**).
+    - **`common/tasks/`** empties, because H7.35, H7.37, H7.50, H7.52 and this PR remove every
+      importer. H7.53's census reads that directory on every host, so these files must go first.
 
 ### The old step list
 
@@ -2363,14 +2560,15 @@ the `manual_plane` clearing, and *Rollback*'s
       1. **Pins.** The dotfiles repo moves to Ansible's pins: uv `0.13.4`
          (`initial_setup_uv_version`), prek `0.5.5` and Python `3.14.6` (`host_python_version`).
          Both installers write the same `~/.local/bin`, so a differing pin made each apply undo
-         the other. Ansible does not change. Until H7.39 deletes its tasks, a bump of one of the
+         the other. Ansible does not change. Until H7.62 deletes its tasks, a bump of one of the
          three lands in both repos together.
       2. **Agent apply.** An `agent = true` apply installs uv, the pinned Python, prek and
          Claude Code as the agent user, so the dotfiles repo lifts the `is-agent` gate on its
          python-tools script. `claude_guard` and `claude_worktree` deploy to the agent from the
          dotfiles repo, not as copies of the operator's. Each installer leaves a tool alone
          when it is already at the pin, so it changes nothing on a home that
-         `common/tasks/agent_user.yml` has filled, and that task keeps running until H7.39.
+         `common/tasks/agent_user.yml` has filled. Since H7.40 only `renovate_agent` imports
+         that task, until H7.37.
       3. **Hosts.** The sets mirror Ansible's `has_chezmoi`, `has_github_cli` and
          `dev_tooling_hosts`. An agent apply installs the tooling only on `dev_tooling_hosts`
          (daniel-box and daniel-server). The other two sets name daniel-box alone, and the
