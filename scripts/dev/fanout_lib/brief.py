@@ -168,8 +168,8 @@ def _issue_block(issue: Issue) -> str:
 # review batch's implementer with.
 APPLY_OWED = """### A verdict that leaves a host apply owed
 `needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
-`land.sh` has already printed the exact command — the playbook line, the `deploy.sh --tags`
-line, and any `gitops_state.py clear-owed manual_plane <role>`. `land.sh` starts no GitOps tick
+`land.sh` has already printed the exact command — the playbook line and any
+`gitops_state.py clear-owed manual_plane <role>`. `land.sh` starts no GitOps tick
 and reads no deployer marker, so a PR that changes a setup role ends `nothing-to-deploy` whether
 or not the deployer applied it. Read what is still pending:
 ```bash
