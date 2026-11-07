@@ -81,8 +81,7 @@ def render_autodeploy_coverage(
     Args:
         eligible: role names declaring `k8s_autodeploy: true`.
         denied: role names declaring `k8s_autodeploy: false` — the denylist.
-        not_declaring: role names declaring no stance (`SHARED_ROLES`, which deploys no
-            service of its own).
+        not_declaring: role names declaring no stance.
     """
     lines = [
         "| Renovate automerge stance | Roles |",

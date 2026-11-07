@@ -60,7 +60,7 @@ def tree(tmp_path) -> Tree:
         "T={{ setup_only_token }}\nN={{ new_setup_token | default('') }}\n",
     )
     t.write(
-        "ansible/roles/k8s/manifests/files/standalone_secret_keys.json",
+        "scripts/renderer/job_files/standalone_secret_keys.json",
         '["guard_only_key", "new_guard_key"]\n',
     )
     t.commit("secrets")

@@ -2,9 +2,7 @@
 
 This page holds two things. The first is the revert runbook for a flux-owned snapshot role,
 which the operator follows when `promote` holds a failed revision without resetting `prod`.
-The second is the measurements behind `k8s/volume-snapshot`, and the traps its
-`kubectl` calls and Ansible registers are written around. The operating rules — what the role
-does on each path, what fails a deploy, what a caller can and cannot override — are in
+The second is the measurements behind the `<tag>-snapshot` Job. The operating rules are in
 `ansible/roles/k8s/volume-snapshot/CLAUDE.md`, which is the file a session loads before touching
 the role. The measurements are kept out of that file so the rule stays
 short and the evidence stays findable (the same split `docs/monitor-bridge-checks.md` makes for
@@ -12,8 +10,8 @@ monitor-bridge, #2699).
 
 A text test reads the runbook:
 `ansible/tests/longhorn/test_volume_revert_runbook_text.py`. Nothing tests the measurements.
-`ansible/roles/k8s/volume-snapshot/tasks/claim.yml` is the authority on what the role does;
-where a paragraph here disagrees with it, the task file is right.
+`scripts/renderer/job_files/flux_snapshot.py` is the authority on what the Job does; where a
+paragraph here disagrees with it, the script is right.
 
 ## The revert runbook
 
@@ -129,8 +127,8 @@ after confirming that each changed snapshot role's data still suits `last-good`'
 ### Branch 3: a snapshot Job failed on a full cap
 
 The role never applied R, so its data is unchanged. The Job's failure names the cap, the
-space in use and the headroom. Delete that volume's older snapshots by hand, as the comment
-on the cap gate in `ansible/roles/k8s/volume-snapshot/tasks/claim.yml` describes. Then delete
+space in use and the headroom. `scripts/renderer/job_files/flux_snapshot.py:check_cap` holds
+the check. Delete that volume's older snapshots by hand. Then delete
 the failed Job so that Flux creates it again. Both are `kubectl` writes. Then clear the hold
 with `gh variable set DEPLOY_HOLD --body none -R DanielH2018/server` and dispatch `promote`
 for R.
@@ -156,8 +154,7 @@ uv run ansible-playbook ansible/volume-revert.yml -e volume_revert_service=<s> \
 - **Nothing runs it unattended.** The deployer routes the path to no plane, so a change to
   the playbook merges and applies nothing.
   `ansible/tests/deploy/test_volume_revert_playbook_applies_nothing_from_a_tick.py` holds that.
-- **`--check` and `-e k8s_dry_run=true` skip the role**, as the manifests role's call site
-  does. A silent dry run proves nothing about whether a snapshot exists.
+- **`--check` and `-e k8s_dry_run=true` skip the role.** A silent dry run proves nothing about whether a snapshot exists.
 - H7 replaces the playbook with a task-free tool before it deletes Ansible.
 
 ### The drill
@@ -217,52 +214,14 @@ volume reaches the role detached. The measurements stay as the evidence for the 
   with it. A real first deploy is unaffected, because the pod attaches the volume within the
   run.
 
-After #2740 a detached claim takes the ordinary path, and an unready snapshot fails the deploy
-whatever the volume's state. The change also removed the `faulted` / `attaching` / `detaching`
-ambiguity the old block carried, because it read those states as detached.
+A detached claim takes the Job's ordinary path, and a snapshot that never reads ready fails the
+Job whatever the volume's state.
 
 ## Things measured rather than assumed
 
-- **A skipped task still sets the variable it registers to** — to a result carrying
-  `skipped: true` and no `stdout` at all. Two tasks here may not share a register name unless
-  both always run. The retake wait shared `volume_snapshot_ready` with the first wait, and on
-  the ordinary attached path — where the retake is skipped — it erased the first wait's real
-  reading, so the deploy failed on a snapshot that was healthy and `readyToUse`. Measured
-  2026-08-21 on `speedtest-config`. #2740 removed the retake, so one wait now writes that
-  register and nothing can clobber it; the rule stands for any register a future task adds.
-  `test_the_attached_path_completes_against_a_ready_snapshot` runs the role end to end and pins
-  the path that bug broke. Note that only a behavioural test can: the bug lived in when Ansible
-  assigns a register, not in any expression's text, and a source-text test asserted the broken
-  design and passed.
-- `kubectl`'s `jsonpath` has **no `&&`** — `unrecognized character in action: U+0026`, verified
-  2026-08-21. The snapshot listing therefore filters on `spec.volume` alone and does the rest in
-  Jinja. Do not "simplify" it into a compound filter expression.
-- The retention filter treats anything other than the literal `true` for `status.markRemoved` as
-  not-removed — an absent or unpopulated field (a snapshot read moments after creation) counts as
-  live, not as removed. Every live Snapshot CR measured on 2026-08-21 carried the field explicitly
-  (28 `false` / 17 `true`), but the filter no longer depends on that being universal.
-- `argv:`, not a folded `cmd:` string, on every `kubectl` call here. `ansible.builtin.command`
-  shlex-splits a `cmd`, so a `jsonpath` is only safe there while it happens to contain no spaces,
-  and the listing's `{range .items[?(...)]}` does not. Slice 4 shipped that bug and made a whole
-  branch dead code for a round.
-- `git rev-parse` uses `chdir`, **not** `git -C`. `git -C` does not override `GIT_DIR`, and a
-  stray `GIT_DIR` has already made a check in this repo operate on the wrong repository. It also
-  runs without `become`, because git refuses a repository it considers to have dubious ownership
-  when a different user reads it.
-- It carries `delegate_to: localhost`, added 2026-08-28. The SHA is a property of the
-  **controller's** checkout — it names the commit whose templates the run is rendering — and
-  reading it on the target only ever coincided with that, because `hosts.ini` pins both cluster
-  nodes to `ansible_connection=local`. `daniel-stage` — the staging guest, retired 2026-09-29
-  (#2941) — was the first genuinely remote target in this repo; it had no checkout, and the
-  task failed there with "Unable to change directory before execution" for all thirteen
-  callers. ENFORCED by
-  `ansible/tests/longhorn/test_volume_snapshot_reads_the_controller_checkout.py`, whose rejecting half is
-  the pre-fix task verbatim.
-- Ansible role-defaults precedence for a same-named variable across an `include_role` chain: the
-  innermost (most recently loaded) role's own default wins over an ancestor's, confirmed
-  2026-08-21 with a throwaway three-level play matching this repo's real call structure. See "How
-  a role opts in" in the role doc for what that means for
-  `volume_snapshot_retain`/`volume_snapshot_timeout`.
+- The prune treats anything other than a truthy `status.markRemoved` as not-removed. An absent
+  or unpopulated field (a snapshot read moments after creation) counts as live. Every live
+  Snapshot CR measured on 2026-08-21 carried the field explicitly (28 `false` / 17 `true`).
 
 ## What is unverified
 
@@ -282,30 +241,7 @@ Longhorn's webhook for exactly those objects (#2734). *The 13 over-long CRs the 
 
 - **`readyToUse` timing** against the 120s ceiling has not been measured.
 
-## Moved off the role doc by #2997
-
-The derivations below left `ansible/roles/k8s/volume-snapshot/CLAUDE.md` when it went back under
-the inject hook budget. The role doc keeps each one as a rule; this page keeps why it is that way.
-
-`roles/k8s/manifests` passes through only `volume_snapshot_claims` and `volume_snapshot_service`
-as call-site `vars:` (the `vars:` of the `Snapshot the stateful volumes` task in
-`ansible/roles/k8s/manifests/tasks/main.yml`); `volume_snapshot_retain` and
-`volume_snapshot_timeout` are not wired there. **Measured, not assumed: a caller CANNOT change
-them by declaring same-named defaults of its own.** `k8s/volume-snapshot`'s own
-`defaults/main.yml` sets both, and it is the role actually executing when they're read — in a
-three-level `include_role` chain (caller → `k8s/manifests` → `k8s/volume-snapshot`) built to
-match this repo's real call structure, the innermost role's own default won a same-named
-collision against an ancestor's, every time, confirmed 2026-08-21 with a throwaway play. This is
-why `k8s_autodeploy_snapshot_pvcs` reaches the include cleanly — `k8s/volume-snapshot` never
-declares that name itself, so there is no collision to lose — while `volume_snapshot_retain`
-would silently stay at this role's own default even if a caller set it as its own role default.
-`group_vars`, `host_vars` and `-e` all outrank a role default in Ansible's precedence order, so
-each of those DOES override `volume_snapshot_retain`/`volume_snapshot_timeout` — the thing a
-caller role's own `defaults/main.yml` cannot do is set them. The floor clamp described below holds
-regardless of which of those set the value, including `-e volume_snapshot_retain=0`. The two knobs
-stay at `volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a caller genuinely needs
-something else, at which point the fix is adding them to the `vars:` block of that
-`Snapshot the stateful volumes` task, not a role default.
+## The Job's opt-in and retention
 
 ### Which roles opt in
 
@@ -318,62 +254,37 @@ in it.
 
 The opt-in set follows the auto-deploy promotion criteria, not a data-migration survey. The
 roles with the `Recreate` + rendered-RWO-claim shape that did not opt in carry the same
-manual-deploy migration risk. Widening was deferred until the create path had run live, and
-it has since; see *What is unverified* above.
+migration risk. Widening was deferred until the create path had run live, and it has since; see
+*What is unverified* above.
 
 ### The revert needs two, not one
 
-A floor of 1 was the original design and was wrong: it protects against the wrong run. **A
-rollback redeploy takes its OWN snapshot before it prunes, and prunes BEFORE `k8s/volume-revert`
-reads the chain** — `roles/k8s/manifests/tasks/main.yml` runs "Snapshot the stateful volumes"
-(which includes this role, prune and all) immediately before "Revert the stateful volumes"
-(`k8s/volume-revert`), in that order, every time a claim is declared, whether or not
-`k8s_restore_snapshot_sha` is set. So at the moment THIS run's prune executes, the chain holds
-two snapshots that both matter: the one just taken of the current (already-migrated) data, and
-the earlier pre-deploy snapshot the revert step right after it is about to need. A floor of 1
-keeps only the newest — this run's own — and deletes the recovery point out from under the
-revert that immediately follows it in the same play. The floor is 2 so both always survive one
-run's own prune, regardless of what `volume_snapshot_retain` is set to.
+`scripts/renderer/job_files/flux_snapshot.py:RETAIN_FLOOR` holds a floor of 2, whatever
+`volume_snapshot_retain` says. A rollback takes its own snapshot and prunes before the revert
+reads the chain. At that prune, the chain holds two snapshots that both matter: the one just
+taken, and the earlier snapshot the revert needs. A floor of 1 keeps only the newest and deletes
+the recovery point.
 
-**The retention window holds the 3 most recent deploy runs, not the 3 most recent distinct
-commits.** The per-run token (see "The snapshot name is deterministic" in the role doc) gives every run its
-own snapshot, so redeploying the same commit three times fills the window with three snapshots of
-that one commit and prunes out whatever came before it — including a pre-migration snapshot that
-was the actual recovery point this role exists to hold. An operator who redeploys the same
-commit after a migration, to pick up an unrelated config change, loses that recovery point on the
-third redeploy without touching a different commit at all.
-
-**This is not hypothetical for a rollback specifically.** `gitops-deploy`'s hold only skips the
-exact held SHA (`skip_hold` matches `origin_head == hold_sha`); redeploying that same failed
-commit again — including a hand-run redeploy of the commit while an operator
-debugs a partial revert per `docs/volume-revert-drill-and-sizing.md`'s recovery steps — takes another fresh
-snapshot of it under the same commit's tag. A third such redeploy of the SAME failed SHA (at the
-default `retain: 3`) prunes the ORIGINAL pre-deploy snapshot out of the window, and any further
-automated rollback of that commit then finds no snapshot to revert to — the fail-closed "no
-snapshot matches" error in `k8s/volume-revert` is correct in that case, not a bug, but it means
-the recovery point is gone for good, not merely unreachable this run.
-
-The trade was made deliberately, not overlooked: without the token, redeploying the same commit
-named the exact same CR its own earlier deploy already created, and `apply` against a CR that
-could be `markRemoved`-but-not-gone either silently reused a stale recovery point or failed the
-deploy outright. The token fixes the collision, but a window counted in runs rather than commits
-is the cost of fixing it this way.
+**The retention window holds the 3 most recent Job runs, not the 3 most recent distinct
+revisions.** The per-run token gives every run its own snapshot, so three runs at one role
+`digest8` fill the window and prune whatever came before them. Without the token, a second run
+at one digest would name the same CR as the first, which could be `markRemoved`-but-not-gone.
+`create` never adopts such a CR. The token fixes that collision, and a window counted in runs is
+its cost.
 
 **Known cost, not fixed here: renaming a service strands its old snapshots permanently.** The
-prune selects on `autodeploy-<service>-`, and `scripts/backup/longhorn_reap.py snapshots` — the
+prune selects on `autodeploy-<tag>-`, and `scripts/backup/longhorn_reap.py snapshots` — the
 cluster-wide orphan reaper — skips any snapshot carrying no `RecurringJob` label, which every
 `autodeploy-*` snapshot does by construction. Rename a service and its snapshots under the old
-name become invisible to both this role's own prefix filter and the reaper: nothing prunes them,
-nothing reaps them, and they pin their blocks against `filesystem trim` forever. Not touched in
-this slice.
+name become invisible to both the Job's prefix filter and the reaper: nothing prunes them,
+nothing reaps them, and they pin their blocks against `filesystem trim` forever.
 
 ### The 13 over-long CRs the prune retries and Longhorn refuses, removed by hand 2026-09-27
 
 **They are gone.** The operator removed all thirteen on 2026-09-27 (#2734), bypassing the webhook
-for exactly those objects; *How they were removed* below has the method. Nothing refused remains,
-so the prune's tolerated-rejection branch and the `Report snapshots Longhorn refuses to delete`
-task have no live target. The rest of this section records why they could not be deleted
-through any supported route, which still holds for any future over-long name.
+for exactly those objects; *How they were removed* below has the method. The rest of this section
+records why they could not be deleted through any supported route, which holds for any over-long
+name.
 
 Thirteen `autodeploy-*` Snapshot CRs created on 2026-08-22 across four volumes
 (`code-server-config`, `code-server-workspace`, `home-assistant-config`, `qbittorrent-config`)
@@ -386,16 +297,6 @@ error. The other two, both `code-server-workspace`, carried `markRemoved: true`.
 **The cause is the 63-byte name ceiling, and these CRs predate its fix by hours.** `0c0317a77`
 (2026-08-22) dropped the redundant `<service>-` from the claim segment. Before it those four
 claims rendered names of 65, 68, 71 and 65 bytes; after it, 53, 56, 56 and 53.
-
-**The prune selected them on every deploy.** It filters the live listing on `markRemoved` and
-the `autodeploy-<service>-` prefix — never on `readyToUse` — so an error-state CR with
-`markRemoved` unset is in `volume_snapshot_live`, sorts oldest under the newest-first order, and
-lands in the slice past `volume_snapshot_retain`. The `kubectl delete` is issued, the webhook
-denies it, and the prune's `failed_when` tolerates exactly that one message. Retention stayed
-intact — the thirteen consumed no slot in the window — which is why this stayed invisible: the
-only signal was the `Report snapshots Longhorn refuses to delete` debug line, and under the
-GitOps deployer the play output reaches nobody. The two `markRemoved: true` CRs left the
-candidate set instead, so the prune never retried those two.
 
 **Teaching the orphan reaper the `autodeploy-` prefix would not have helped.** It skipped them
 for the reason the rename bullet above gives, and it deletes through `kubectl` as well, so it
@@ -411,14 +312,14 @@ Read from the `longhorn-manager` v1.12.1 source on 2026-09-27:
   denies every DELETE, whatever client sends it.
 - The manager API's `snapshotDelete` action (`VolumeManager.DeleteSnapshot`) deletes from the
   engine's chain and never touches the CR. The engine no longer held these snapshots, so it had
-  nothing to delete. The UI's per-volume delete makes the same call. The refused-delete report in
-  `claim.yml` still names this route; #2733 corrects it.
+  nothing to delete. The UI's per-volume delete makes the same call.
 - The manager API's `snapshotCRDelete` action goes through `DeleteSnapshotCR`, which is a
   Kubernetes DELETE and hits the same webhook.
 - The controller sets the lost-track error and nothing else. It never removes such a CR itself.
 
 Upstream master still builds the selector from the raw name, so an upgrade does not fix this
-either. `claim.yml`'s name-length assert is what keeps new snapshots under the ceiling.
+either. `scripts/renderer/job_files/flux_snapshot.py:NAME_LIMIT` keeps new snapshots under the
+ceiling.
 
 **They pinned no blocks.** Measured 2026-09-27, before the removal: none of the thirteen names
 appeared in `status.snapshots` of any of the four volumes' running engines. The controller sets
@@ -441,16 +342,3 @@ The webhook configuration is applied by longhorn-manager through wrangler's `obj
 not on a short loop, so nothing raced the patch and the restore was the play's job. Two runs, both
 `failed=0` with nothing left afterwards: the eleven lost-track CRs, then the two `markRemoved`
 ones.
-
-### The internal `k8s_no_mutate` guards are defence in depth
-
-The internal `k8s_no_mutate` guards on every task inside this role (the apply, the wait, the
-prune, and the two reads' own `check_mode: false`) are defence in depth for a future call site
-that includes this role unconditionally — they are not exercised by anything in this repo today,
-because the one call site that exists already keeps this role from starting under `--check` or
-`--dry-run`.
-
-This role is reached as a dependency rather than named on the command line, so a tag-keyed
-refusal could never have covered it — which is why it guards itself. `volume-claim`,
-`image-builder` and `volume-revert` are all in the same position. The `k8s_dry_run_unsupported`
-list that once held the alternative was deleted empty in #2876.

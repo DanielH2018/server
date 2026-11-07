@@ -5,7 +5,7 @@ the render writes `DIR/cluster/<tag>-snapshot/` (target slice D5, *Snapshots as 
 revision (D5.2a)*). It holds:
 
 - the Job `snapshot-<tag>-<spec digest8>` in `flux-system`, which runs
-  `ansible/roles/k8s/manifests/files/flux_snapshot.py`. Its spec carries the role's `digest8`,
+  `scripts/renderer/job_files/flux_snapshot.py`. Its spec carries the role's `digest8`,
   the first eight hex characters of `digests.json`'s `own` for `<tag>`, and the claims, so a
   change to the role's content renames the Job and Flux runs it again;
 - the ConfigMap `snapshot-<tag>-<content digest8>` with the script and a byte copy of
@@ -37,7 +37,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.k8s_roles import snapshot_claims
-from lib.repo_paths import K8S_ROLES
+from lib.repo_paths import JOB_FILES, K8S_ROLES
 from renderer.renderer_lib.bundle import (
     CLUSTER_DIR,
     FLUX_NAMESPACE,
@@ -49,7 +49,7 @@ from renderer.renderer_lib.cluster import RenderedTag
 from renderer.renderer_lib.digest8 import configmap_digest8, job_spec_digest8
 from renderer.renderer_lib.environment import RenderError
 
-FILES = K8S_ROLES / "manifests" / "files"
+FILES = JOB_FILES
 SCRIPT = FILES / "flux_snapshot.py"
 HELPER = FILES / "flux_job_connect.py"
 SNAPSHOT_DEFAULTS = K8S_ROLES / "volume-snapshot" / "defaults" / "main.yml"

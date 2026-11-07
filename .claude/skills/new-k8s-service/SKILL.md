@@ -28,7 +28,7 @@ that narration is dated — littlelink's Deployment cited a Compose template tha
 since 2026-08-14. Read the generated files before you extend them; the TODOs in the CLAUDE.md
 are the parts only you can write.
 
-**No `service.yaml.j2` is written, and none is needed.** `k8s/manifests` renders
+**No `service.yaml.j2` is written, and none is needed.** The renderer renders
 `ansible/templates/service-default.yaml.j2` for a role that ships none (#2872), reading the
 name and port off the `containers_list` entry. A Service needing a named port or a sidecar's
 port says so on the entry, with `service_port_name` or `service_extra_ports`. Anything beyond
@@ -36,7 +36,7 @@ that — a selector that differs from the name, a LoadBalancer, a pinned cluster
 writing the role its own `templates/service.yaml.j2`, which always wins over the default.
 `ansible/templates/service.yml.j2`'s header lists every disqualifier and the role behind it.
 
-**No `ingressroute.yaml.j2` is written either** (#3043). `k8s/manifests` renders
+**No `ingressroute.yaml.j2` is written either** (#3043). The renderer renders
 `ansible/templates/ingressroute-default.yaml.j2` the same way, reading the name, `hostname`,
 `port` and `use_authelia` off the entry. A route needing anything the entry does not carry —
 an extra middleware, a second hostname, `public=false`, a bypass prefix, a render condition —
@@ -44,11 +44,11 @@ means writing the role its own `templates/ingressroute.yaml.j2`; the macro heade
 `ansible/templates/ingressroute.yml.j2` lists every parameter.
 
 **The scaffolder writes no PVC, Secret or NetworkPolicy.** Each is a decision about the
-service, so add the template by hand. The role passes no file list: `k8s/manifests` renders
+service, so add the template by hand. The role passes no file list: the renderer renders
 every top-level `templates/*.yaml.j2` it finds, so a new template ships by existing. Name a
-Secret's template with `secret` in its basename (`secret.yaml.j2`), or it renders 0644
-outside `no_log`, which `ansible/tests/k8s/test_derived_manifest_files.py` refuses. A one-off
-Job's template ends `-job.yaml.j2` and stays out of the directory apply.
+Secret's template with `secret` in its basename (`secret.yaml.j2`), which
+`ansible/tests/k8s/test_derived_manifest_files.py` requires. A one-off Job's template ends
+`-job.yaml.j2` and stays out of the render's file list.
 
 **Two censuses a new role always joins**, which `prek` does not run and CI does — the
 scaffolder names both when it finishes:
@@ -120,11 +120,9 @@ the sources it reads.
 The scaffolder appends the entry to `containers_list` in
 `ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s` and `owner: flux`, at the end
 of the list but ahead of netpol-baseline. **The entry is born owned by Flux** (D5.5 of
-`docs/target-architecture/deploy/d5-bulk-move.md`): every Ansible path skips it from its first
-commit, so it never needs a flip PR. Delete the `owner` line only for a service that must stay
-on Ansible until D5 moves it, and say why in the comment above the entry. netpol-baseline is ordered after every other entry, because it
+`docs/target-architecture/deploy/d5-bulk-move.md`), because Flux applies every k8s entry. netpol-baseline is ordered after every other entry, because it
 is in `K8S_APPLIES_LAST`, and `test_derived_order_matches_todays_hand_ordered_list` holds the
-list to the sorted order. Otherwise, where in the list doesn't matter: the k8s play toposorts
+list to the sorted order. Otherwise, where in the list doesn't matter: the renderer toposorts
 on `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and
 three edges are derived automatically —
 

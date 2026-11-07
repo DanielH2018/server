@@ -12,9 +12,7 @@ debugs a mod (#2989).
 the DLL out; the `mods` initContainer copies them in. A boot-time download would mean a
 Thunderstore outage brings the server up vanilla with the pod Ready either way.
 
-**The built image is named `valheim`, not `valheim-mods`.** `k8s/manifests` keys
-`k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes a new image that no
-pod ever runs — the recorded `n8n-runners` failure. It contains no server.
+**The built image is named `valheim`, not `valheim-mods`.** It contains no server.
 
 **The initContainer writes two directories, and neither is redundant.**
 `/config/bepinex/plugins/homelab` is the image's sanctioned drop point, which a BepInEx or

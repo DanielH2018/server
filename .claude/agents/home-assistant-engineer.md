@@ -37,7 +37,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 - **`templates/` (role root) — k8s manifests ONLY.** `configmap.yaml.j2`, `deployment.yaml.j2`,
   `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/k8s_manifests.py` renders
   and YAML-parses every `*.j2` it finds here, so HA config must never land in this directory.
-  The Service is not here: `k8s/manifests` renders the shared
+  The Service is not here: the renderer renders the shared
   `ansible/templates/service-default.yaml.j2` for it, and the named port HA needs comes from
   `service_port_name` on its containers_list entry.
 - **`files/` — every HA config file, shipped VERBATIM.** `configuration.yaml`, `customize.yaml`,
@@ -58,11 +58,10 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   Add a new `files/*.yaml` or `*.jinja` without adding both lines — and its `!include` — and
   the deploy is green while the pod never sees it. This replaces the old Docker-era
   `common_config_changed` wiring; there are no bind mounts and no `register:` chain any more.
-- **Rollout is automatic when the manifests change.** `tasks/main.yml` passes
-  `manifests_rollout: home-assistant` to `k8s/manifests`, whose central rollout-restart task
-  (`roles/k8s/manifests/tasks/main.yml`, the `rollout restart deploy/…` step) fires when the
-  applied manifests changed. Since the config is embedded *in* the ConfigMap, a config edit
-  changes a manifest and does roll the pod.
+- **Rollout is automatic when the manifests change.** `defaults/main.yml` sets
+  `manifests_rollout: home-assistant`, so the renderer stamps `checksum/restart` on that
+  Deployment's pod template (`scripts/renderer/renderer_lib/restart.py`). Since the config is
+  embedded *in* the ConfigMap, a config edit moves the stamp and does roll the pod.
 - **`state/` — the derived state model.** `derived_state.yml` + `STATE.md` are **generated**
   (`scripts/home_assistant/ha_state_model.py generate`, offline); `external_entities.yml` is a snapshot of the
   *live* instance and only `refresh` rewrites it (needs HA reachable + the SOPS key). Never

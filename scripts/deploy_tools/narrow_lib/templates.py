@@ -8,13 +8,13 @@ edges carried the fleet, and both were text the grep matched rather than a rende
     `container-resources.yml.j2`'s names `pvc.yml.j2`, so the scan walked from the claim
     template to every role that sets container resources. `real_mentions` drops a `.j2` hit
     whose only mention sits inside `{# ... #}`.
-  - The claim template's one renderer. `k8s/manifests` renders it once per entry of the
-    CALLER's `k8s_claims`, so a hit in `manifests` reaches the roles that declare that key, not
-    every caller of `manifests`. `rendering_roles` swaps the one for the other.
+  - The claim template's one renderer. The renderer renders it once per entry of a role's
+    `k8s_claims`, and no file under `ansible/` names it, so `rendering_roles` adds the roles
+    that declare that key.
 
 Both refuse on doubt, like every rule `role_reads` applies: a template carrying `{% raw %}`
-keeps every hit, and a `k8s_claims` mention anywhere but a role's `defaults/main.yml`, the
-renderer's own tasks or a comment raises `CannotNarrow`.
+keeps every hit, and a `k8s_claims` mention anywhere but a role's `defaults/main.yml` or a
+comment raises `CannotNarrow`.
 
 A third rule (#3459) asks whether the changed template renders differently at all.
 `comment_only` lexes it at both refs with Jinja's own lexer and compares the token streams
@@ -43,13 +43,9 @@ _JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.DOTALL)
 _JINJA_RAW = re.compile(r"\{%-?\s*raw\s*-?%\}")
 _YAML_COMMENT_LINE = re.compile(r"^\s*#.*$", re.MULTILINE)
 
-# The shared template `k8s/manifests` renders per entry of a caller's `k8s_claims`, the key,
-# and the role that renders it. `test_narrow_claim_template.py` pins the renderer's use of the
-# template to that one gated task.
+# The shared template the renderer renders per entry of a role's `k8s_claims`, and the key.
 CLAIM_TEMPLATE = "claim-default.yaml.j2"
 CLAIM_KEY = "k8s_claims"
-CLAIM_RENDERER = "manifests"
-_RENDERER_TASKS = f"ansible/roles/k8s/{CLAIM_RENDERER}/tasks/"
 _DECLARATION = re.compile(r"^ansible/roles/k8s/([^/]+)/defaults/main\.ya?ml$")
 
 
@@ -174,11 +170,7 @@ def claim_declarers(ref: str, cwd: Path) -> set[str]:
         declared = _DECLARATION.match(path)
         if declared:
             declarers.add(declared.group(1))
-        elif (
-            path.endswith(".md")
-            or "/tests/" in path
-            or path.startswith(_RENDERER_TASKS)
-        ):
+        elif path.endswith(".md") or "/tests/" in path:
             continue
         elif not _mentioned_in_code(show_at(ref, path, cwd), path):
             continue
@@ -201,12 +193,12 @@ def _mentioned_in_code(text: str | None, path: str) -> bool:
 def rendering_roles(
     name: str, roles: set[str], ref: str, cwd: Path, explain: Callable[[str], None]
 ) -> set[str]:
-    """`roles`, with the claim template's renderer replaced by the roles it renders it for."""
-    if name != CLAIM_TEMPLATE or CLAIM_RENDERER not in roles:
+    """`roles`, with the roles the renderer renders the claim template for."""
+    if name != CLAIM_TEMPLATE:
         return set(roles)
     declarers = claim_declarers(ref, cwd)
     explain(
-        f"narrow: {name} -> {CLAIM_RENDERER} renders it per {CLAIM_KEY}, declared by "
+        f"narrow: {name} -> the renderer renders it per {CLAIM_KEY}, declared by "
         f"{','.join(sorted(declarers)) or '(nothing)'}"
     )
-    return (roles - {CLAIM_RENDERER}) | declarers
+    return set(roles) | declarers

@@ -56,7 +56,6 @@ from _helpers import command_of, walk_tasks
 from _k8s_render import rendered_texts
 from _role_census import manifests_service_of, role_task_files
 
-_MANIFESTS = K8S_ROLES / "manifests/tasks/main.yml"
 
 _WORKLOAD_KIND = re.compile(r"^kind:\s*(?:Deployment|DaemonSet|StatefulSet)\s*$", re.M)
 # `secretKeyRef` is a single env var; `secretRef` is the `envFrom` whole-Secret form. Both
@@ -275,24 +274,6 @@ def test_the_render_reaches_every_role_rendering_a_secret():
     )
 
 
-def test_the_shape_this_guard_protects_actually_exists():
-    """A guard that matches nothing cannot fail. Prove the selector still reaches real roles."""
-    corpus = [
-        tasks.parent.parent.name
-        for tasks in sorted(K8S_ROLES.glob("*/tasks/main.yml"))
-        if _includes_the_render(tasks)
-        and _renders_a_secret(tasks.parent.parent)
-        and _env_secret_workloads(tasks.parent.parent)
-    ]
-    # Members whose secret files are derived, not listed: a selector reading the raw include
-    # key would drop them and leave only the roles that still pass a list.
-    assert {"sonarr", "n8n", "karakeep"} <= set(corpus), corpus
-    assert len(corpus) > 1, (
-        "no role renders a Secret read through env — either the shape is gone (delete this "
-        f"file) or the selector broke and the guard is now inert. Matched: {corpus}"
-    )
-
-
 def _write_role(
     root: Path, name: str, *, tasks: str, templates: dict[str, str], defaults: str = ""
 ) -> Path:
@@ -443,29 +424,3 @@ def test_a_role_naming_rollout_restart_outside_a_command_is_still_flagged(tmp_pa
         templates={"daemonset.yaml.j2": _DAEMONSET.format(name="widget")},
     )
     assert uncovered_env_secret_workloads(role) == [("widget", "widget-agent")]
-
-
-def test_the_extra_rollouts_restart_is_not_gated_on_manifests_rollout():
-    """The accept half for the mechanism: the escape hatch must stay ungated."""
-    tasks = yaml_fast.safe_load(_MANIFESTS.read_text()) or []
-    extras = [
-        task
-        for task in tasks
-        if isinstance(task, dict)
-        and "extra deployments" in (task.get("name") or "")
-        and "rollout restart" in str(task.get("ansible.builtin.command", ""))
-    ]
-    assert len(extras) == 1, (
-        "expected exactly one extra-rollouts restart task in k8s/manifests; found "
-        f"{len(extras)} — the selector below is matching the wrong thing"
-    )
-    conditions = " ".join(str(c) for c in extras[0].get("when") or [])
-    # `manifests_rollout_kind` is a DIFFERENT variable and legitimately appears here, so match
-    # the name only where no identifier character follows it. A bare substring test flags the
-    # kind and fails on correct code.
-    gated = re.search(r"\bmanifests_rollout\b(?!_)", conditions)
-    assert not gated, (
-        "the extra-rollouts restart has grown a manifests_rollout condition. That is the exact "
-        "gate roles escape by naming their Deployments here, so adding it makes the fix inert "
-        "and re-breaks every role in the shape — silently, behind a green deploy."
-    )

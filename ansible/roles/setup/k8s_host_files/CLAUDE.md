@@ -104,8 +104,8 @@ Two tests in `ansible/tests/setup/` hold those rules:
 A third test, `ansible/tests/setup/test_k8s_host_files_rows.py`, names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
 its path, owner, group or mode changes, and pins a looped row's `loop`. Each
-conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
-census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
+conversion PR adds its rows there. A row cannot move back to its k8s role, because
+`scripts/renderer/tests/test_renderer_runbook_allowlist.py` refuses the role a task file.
 
 `ansible/roles/setup/k8s_host_files/tests/test_ghcr_mirror_prune.py` runs the Jobs' prune
 script against a store tree built in `tmp_path`. Both mirrors' Jobs run that one script.

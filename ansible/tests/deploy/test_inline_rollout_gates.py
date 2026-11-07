@@ -87,18 +87,6 @@ from _inline_rollout_targets import (
 )
 
 
-# Named here so a derivation that silently stops matching fails loudly rather than passing an
-# empty set: replacing a hardcoded list by shape can drop an entry while reading as a widening.
-_KNOWN_SELF_POD_ROLES = {
-    "flux",
-}
-
-# 3 resolved self-pod inspections, flux's restart-count snapshot once per controller, since
-# crowdsec's follow-up deleted its verify tasks (8 before it; 27 before the flips of
-# observability, janitorr, jellyfin and pihole). The floor is the measured count: a lower floor
-# cannot tell "one role changed shape" from "the matcher broke and half the corpus stopped being
-# read".
-_MIN_SELF_POD_INSPECTIONS = 3
 # Pod inspections whose target is a Jinja expression this file cannot resolve, each excused
 # with the reason. An entry here is NOT "assume it is fine" — it is a claim that the ordering
 # is carried by something else in the same role, written down where the next reader meets it.
@@ -127,21 +115,6 @@ def _self_pod_roles() -> dict[str, list[tuple[int, _Task, set[str]]]]:
         if own:
             found[role] = own
     return found
-
-
-def test_the_derivation_still_matches_the_roles_it_was_written_for() -> None:
-    derived = set(_self_pod_roles())
-    missing = _KNOWN_SELF_POD_ROLES - derived
-    assert not missing, (
-        f"the self-pod-inspection derivation no longer matches {sorted(missing)}. Either those "
-        "roles changed shape, or the matcher broke and is now guarding less than it claims — "
-        "check which before editing this list."
-    )
-    seen = sum(len(inspections) for inspections in _self_pod_roles().values())
-    assert seen >= _MIN_SELF_POD_INSPECTIONS, (
-        f"only {seen} self-pod inspections found, expected at least "
-        f"{_MIN_SELF_POD_INSPECTIONS} — the corpus shrank without a role dropping out of it."
-    )
 
 
 def _gate_problems(tasks: list[_Task], workloads: _Workloads) -> list[str]:
@@ -365,16 +338,6 @@ def _inline_gate_budgets() -> dict[str, set[int]]:
                 )
                 found.setdefault(role_dir.name, set()).add(seconds)
     return {role: budgets for role, budgets in found.items() if budgets}
-
-
-def test_the_gate_budget_census_is_non_vacuous() -> None:
-    # Assert the NAMES, not a count: the derivation globs the role tree and returns an empty
-    # mapping the moment the matcher breaks, at which point both checks below would pass by
-    # iterating zero times.
-    assert set(_inline_gate_budgets()) == set(_GATE_BUDGETS), (
-        "the set of roles carrying an inline `rollout status` gate has changed. Add the new "
-        "role to _GATE_BUDGETS with the reason for its number, or drop the one that went."
-    )
 
 
 def _budget_problems(

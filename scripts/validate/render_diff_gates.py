@@ -2,10 +2,11 @@
 """Refuse a PR whose render diff Flux would apply unsafely (D4.4, D5.1d, D5.1f, D6.12).
 
 This gate renders the cluster at the PR's base and head with `homelab-render cluster` and
-refuses five shapes. It was `cross_plane_order.py` until D6.12, when every k8s role was
+refuses four shapes. It was `cross_plane_order.py` until D6.12, when every k8s role was
 flux-owned and its arm 1, the order between a flux-owned and an Ansible-owned tag along one
-dependency edge, lost its subject. The numbers of the arms that stay are kept, because docs,
-commit messages and `ansible/deploy.yml` cite them. A tag counts for arm 2 whenever its
+dependency edge, lost its subject. R4.7 deleted arm 4, the retirement arm, with the play's
+teardown. The numbers of the arms that stay are kept, because docs and commit messages cite
+them. A tag counts for arm 2 whenever its
 `cluster/<tag>/` or `cluster/<tag>-deferred/` output moves; the image-pin exception went with
 arm 1 (docs/target-architecture/deploy/d6-delete-old-path.md, *The render-diff gates
 after D6*).
@@ -21,10 +22,6 @@ after D6*).
   renderer's trailing `-<digest8>` removed, still render in the head. So does an object
   labelled or annotated `kustomize.toolkit.fluxcd.io/prune: disabled`, which prune never
   deletes. `decide` judges the same drop (`object_loss.py`).
-- **Arm 4, a flux-owned retirement (D5.1f).** A name joins `k8s_retired_services` whose
-  entry carries `owner: flux` on the base. The play's teardown deletes the last render
-  Ansible staged, and Flux at the old `prod` re-creates it. Such a service retires by removing
-  its entry and role instead (docs/flux-deploy-plane.md, *Retiring a flux-owned service*).
 - **Arm 5, a suspended tag's render (D5.1d).** A tag that `digests.json` marks `suspended` at
   both ends has a different `own` digest, its `cluster/<tag>/` output alone. A suspended tag
   applies nothing until its resume, so the change would sit merged and unapplied. The same
@@ -121,7 +118,6 @@ class Snapshot:
             `<kind>/<namespace>/<name>`; a per-tag kind's directory counts for `<tag>`.
         unpruned: The objects labelled or annotated `kustomize.toolkit.fluxcd.io/prune:
             disabled`.
-        retired: The names `k8s_retired_services` lists.
         digests: The render's parsed `digests.json`, or empty when no tag is flux-owned.
         tags: The deploy tags the render's `flux/` publishes.
         role_names: The role directories in the tree.
@@ -134,13 +130,9 @@ class Snapshot:
     namespace_roles: Mapping[str, str] = field(default_factory=dict)
     objects: Mapping[str, Iterable[str]] = field(default_factory=dict)
     unpruned: Iterable[str] = ()
-    retired: Iterable[str] = ()
     digests: Mapping[str, Mapping[str, object]] = field(default_factory=dict)
     tags: Collection[str] = ()
     role_names: Collection[str] = ()
-
-    def plane(self, tag: str) -> str:
-        return self.owners.get(tag, ANSIBLE_PLANE)
 
     def flux_owned(self) -> frozenset[str]:
         return frozenset(t for t, p in self.owners.items() if p == FLUX_PLANE)
@@ -215,15 +207,6 @@ def removal_problems(
                 f"Kustomization reads Ready. If the removal is meant, add the line "
                 f"`Removes-Object: {ident}` to one of the PR's commits "
                 f"(docs/flux-deploy-plane.md, *Removing an object on purpose*)."
-            )
-    for name in sorted(set(head.retired) - set(base.retired)):
-        if base.plane(name) == FLUX_PLANE:
-            found.append(
-                f"arm 4: {name} joins k8s_retired_services while its base entry carries "
-                f"owner: flux, so the play's teardown deletes a stale staged render that Flux "
-                f"at the old prod re-creates. Retire it by removing its entry and its role "
-                f"(docs/flux-deploy-plane.md, *Retiring a flux-owned "
-                f"service*)."
             )
     return found
 
@@ -375,9 +358,6 @@ def snapshot(
         },
         objects=objects,
         unpruned=unpruned,
-        retired=frozenset(
-            str(e["name"]) for e in group.get("k8s_retired_services") or []
-        ),
         digests=digests if isinstance(digests, dict) else {},
         tags=tags,
         role_names=frozenset(path.name for path in role_dirs(tree / K8S_ROLES)),

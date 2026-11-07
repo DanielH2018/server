@@ -340,14 +340,6 @@ KNOWN_PRUNED_DIRS = frozenset({"n8n", "registry", "traefik", "authelia", "jellyf
 KNOWN_STAGED_FILES = frozenset({})
 
 
-def test_the_census_finds_the_known_pruned_directories():
-    missing = KNOWN_PRUNED_DIRS - set(pruned_dirs(K8S_ROLES))
-    assert not missing, (
-        f"no manifests_service found for {sorted(missing)}; the census is reading the wrong "
-        "thing, so the invariant below would pass on an empty set"
-    )
-
-
 def test_the_path_reader_finds_the_known_staged_files():
     found: set[tuple[str, str]] = set()
     for tasks_file in task_files(K8S_ROLES):

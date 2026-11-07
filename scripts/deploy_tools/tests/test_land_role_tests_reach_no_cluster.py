@@ -35,8 +35,8 @@ from deploy_tools.land_lib.landing import Classification
 
 _ROLE_TESTS = "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py"
 _ROLE_FILES = "ansible/roles/k8s/arr-notification/files/seed_arr_notification.py"
-_ROLE_TASKS = "ansible/roles/k8s/arr-notification/tasks/main.yml"
-_BUILD_TASKS = "ansible/roles/k8s/image-builder/tasks/main.yml"
+_ROLE_TASKS = "ansible/roles/k8s/volume-revert/tasks/main.yml"
+_BUILD_TASKS = "ansible/roles/k8s/longhorn-api/tasks/main.yml"
 
 
 def test_the_paths_under_test_still_exist():
@@ -75,12 +75,12 @@ def test_a_test_module_beside_a_roles_code_maps_to_no_tag_on_either_side():
 def test_a_role_task_file_is_flagged():
     """The reject half: tasks/ is the role's code, not its suite."""
     assert land_tags.is_role_test_path(_ROLE_TASKS) is False
-    assert land_tags.shared_roles([_ROLE_TASKS]) == ["arr-notification"]
+    assert land_tags.shared_roles([_ROLE_TASKS]) == ["volume-revert"]
 
 
 def test_a_shared_build_role_task_file_is_flagged():
     """image-builder ships templates/, so it supplies applied bytes."""
-    assert land_tags.shared_roles([_BUILD_TASKS]) == ["image-builder"]
+    assert land_tags.shared_roles([_BUILD_TASKS]) == ["longhorn-api"]
 
 
 def test_a_deleted_shared_role_owes_nothing(tmp_path):

@@ -40,11 +40,8 @@ and the failure message says so.
     volume_revert_sha: 1a2b3c4d            # the deploy tag the snapshot was named with
 ```
 
-Two call sites pass these. `roles/k8s/manifests` includes the role from
-`k8s_autodeploy_snapshot_pvcs`, `manifests_service` and `k8s_restore_snapshot_sha`, and nothing
-sets that last variable since D6.12 deleted the tick's rollback redeploy.
-`ansible/volume-revert.yml` is the operator-only entry point for a flux-owned role, and takes all
-three as `-e` inputs: the hold post prints one command per changed
+`ansible/volume-revert.yml` is the role's one caller, an operator-only entry point, and takes
+all three as `-e` inputs: the hold post prints one command per changed
 snapshot role, with that role's `digest8` as the SHA. The runbook that runs it is *The revert
 runbook* in `docs/volume-snapshot-drills.md`. The playbook includes this role alone, never runs
 `deploy.yml`, and gathers facts through the shared preamble, because `k8s/longhorn-api` reads
@@ -104,13 +101,11 @@ page has the reasoning.
 ## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` reaches this role
 
 Steps 1 and 2 are reads and carry `check_mode: false`, but that only matters if the role starts at
-all. `roles/k8s/manifests/tasks/main.yml` gates the whole `include_role: k8s/volume-revert` on
-`when: not (k8s_no_mutate | bool)`, which is `ansible_check_mode or (k8s_dry_run | bool)`, and
-`ansible/volume-revert.yml` gates its include the same way. So
+all. `ansible/volume-revert.yml` gates the whole `include_role: k8s/volume-revert` on
+`when: not (k8s_no_mutate | bool)`, which is `ansible_check_mode or (k8s_dry_run | bool)`. So
 under `--check` or `--dry-run` the role never starts — not the PVC lookup, not the snapshot
 listing, not the `Fail when no snapshot matches this deploy` task. **Running a dry run and getting
-silence proves nothing about whether a snapshot exists.** `k8s/volume-snapshot`'s CLAUDE.md
-documents the identical trap for its own call site.
+silence proves nothing about whether a snapshot exists.**
 
 The role keeps its own per-task guards anyway, as defence in depth for a future call site that
 includes it unconditionally. Guarding on either half of `k8s_no_mutate` alone is the bug the guard

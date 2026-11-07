@@ -8,8 +8,6 @@ declares two claims. Each render reads the real tree and a fresh stub file.
 Run: uv run pytest scripts/renderer/tests/test_renderer_file_rules.py
 """
 
-import re
-
 import pytest
 
 from renderer.renderer_lib.targets import render_targets
@@ -18,9 +16,7 @@ from lib.ansible_inventory import K8S_HOST
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
-from _helpers import walk_tasks
-from lib.render_guard import SHARED_TPL
-from renderer.renderer_lib.task_inputs import BUILT_IMAGE_TAGS, include_vars
+from renderer.renderer_lib.task_inputs import include_vars
 
 ROLE_LABEL = "homelab/role"
 
@@ -100,42 +96,6 @@ def test_a_role_with_two_claims_writes_two_labelled_claim_files(stubs):
 def test_a_listed_file_with_no_template_is_flagged(tmp_path):
     with pytest.raises(cluster.RenderError, match="has no template"):
         cluster._sources("littlelink", {"no-such-file.yaml"}, False)
-
-
-def _set_fact_names() -> set[str]:
-    """Every name a `set_fact` or a `register` in a k8s role's tasks sets."""
-    names = set()
-    for path in cluster.K8S_ROLES.glob("*/tasks/*.yml"):
-        for task in walk_tasks(yaml_fast.safe_load(path.read_text()) or []):
-            names |= set(task.get("ansible.builtin.set_fact") or {})
-            if isinstance(task.get("register"), str):
-                names.add(task["register"])
-    return {n for n in names if not n.startswith("manifests_")}
-
-
-def test_the_built_image_tags_are_the_only_fact_a_template_or_default_reads():
-    """`==`, so a fact a template starts reading fails here rather than in a render.
-
-    No template reads a live fact, so every name here is one the renderer computes. A line
-    that opens with `#` is a comment, in YAML and in a Dockerfile alike, and reads nothing.
-    """
-    files = [*SHARED_TPL.glob("**/*.j2")]
-    for tag in render_targets(K8S_HOST):
-        role = cluster.K8S_ROLES / tag
-        files += [*role.glob("templates/**/*"), *role.glob("defaults/*.yml")]
-    text = "\n".join(
-        line
-        for p in files
-        if p.is_file()
-        for line in p.read_text().splitlines()
-        if not line.lstrip().startswith("#")
-    )
-    read = {
-        name
-        for name in _set_fact_names()
-        if re.search(rf"(?<!\w){re.escape(name)}(?!\w)", text)
-    }
-    assert read == {BUILT_IMAGE_TAGS}
 
 
 @pytest.mark.parametrize("tag", cluster.select_tags(None))

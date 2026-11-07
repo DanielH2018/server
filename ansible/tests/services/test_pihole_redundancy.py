@@ -24,11 +24,7 @@ ansible/roles/k8s/pihole/tests/test_pihole_gravity.py checks, and the sibling gu
 from lib.k8s_roles import resolved_manifest_files
 
 from _k8s_render import rendered_docs
-from _helpers import REPO as _REPO
-from _helpers import load_tasks, render_expr, task_named
 
-
-_MANIFESTS_TASKS = _REPO / "ansible/roles/k8s/manifests/tasks"
 
 INSTANCES = {"pihole", "pihole-2"}
 CLAIM_BY_INSTANCE = {"pihole": "pihole-etc", "pihole-2": "pihole-etc-2"}
@@ -140,8 +136,6 @@ def test_only_the_web_service_is_pinned_to_one_instance():
 
 # ── the APPLY is sequenced, not only the restart ─────────────────────────────────────────────
 
-MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
-
 
 def _deployment_source() -> dict[str, str]:
     """Deployment name -> the template it is rendered from."""
@@ -176,46 +170,3 @@ def test_the_shared_apply_carries_instance_one_only():
         "instance 2 must not be staged in the directory the shared role applies — "
         "`kubectl apply -f <dir>/` would roll both instances in one request again"
     )
-
-
-def test_instance_twos_bytes_reach_the_release_digest():
-    """The point of rendering through the shared role: the deferred file is stat'd
-    into `manifests_release_files`, so `manifests_digest` covers it. A render alone would not
-    have done that — the digest loops a list, not a directory."""
-    checksum = task_named(
-        load_tasks(_MANIFESTS_TASKS / "release_digest.yml"),
-        "Checksum the rendered deferred manifests",
-    )
-    assert checksum["loop"].strip() == "{{ manifests_deferred_files | default([]) }}"
-    assert "manifests_deferred_dir" in checksum["ansible.builtin.stat"]["path"]
-
-    files = task_named(
-        load_tasks(_MANIFESTS_TASKS / "release_digest.yml"),
-        "Digest the rendered manifests",
-    )["ansible.builtin.set_fact"]["manifests_release_files"]
-    stat_result = {
-        "results": [{"item": "deployment-2.yaml", "stat": {"checksum": "beef"}}]
-    }
-    rendered = render_expr(
-        files,
-        manifests_release_stat={
-            "results": [{"item": "deployment.yaml", "stat": {"checksum": "cafe"}}]
-        },
-        manifests_release_deferred_stat=stat_result,
-        manifests_deferred_dir_name="pihole-instance-2",
-    )
-    # Keyed by directory, so instance 2's `deployment-2.yaml` can never collide with a file of
-    # the same name in the shared directory — a collision that would read as a match.
-    assert rendered == {
-        "deployment.yaml": "cafe",
-        "pihole-instance-2/deployment-2.yaml": "beef",
-    }, rendered
-    # The reject half: a role that defers nothing digests exactly what it did before.
-    assert render_expr(
-        files,
-        manifests_release_stat={
-            "results": [{"item": "deployment.yaml", "stat": {"checksum": "cafe"}}]
-        },
-        manifests_release_deferred_stat={"results": []},
-        manifests_deferred_dir_name="",
-    ) == {"deployment.yaml": "cafe"}

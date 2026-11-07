@@ -310,7 +310,11 @@ USAGE_IS_64 = Census(
         "result (#4443). Build parsers with `lib.cli_help.ArgumentParser`, which exits 64, and "
         "return a named `lib.exit_codes` constant rather than a literal 2."
     ),
-    files=lambda: [rel for rel in tracked("scripts/*.py") if "/tests/" not in rel],
+    files=lambda: [
+        rel
+        for rel in tracked("scripts/*.py")
+        if "/tests/" not in rel and "/job_files/" not in rel
+    ],
     offence=_usage_two_offence,
     red=(
         Subject("a.py", "import argparse\np = argparse.ArgumentParser()\n"),

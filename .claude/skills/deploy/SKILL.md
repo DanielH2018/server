@@ -133,7 +133,7 @@ check or the staleness check.
 # Every valid tag, with each k8s tag named on stderr
 ./scripts/deploy.sh --list-services
 
-# The locks, the snapshot and the k8s_retired_services teardown, and no role.
+# The locks and the snapshot, and no role.
 # It refuses any commit behind origin/master.
 ./scripts/deploy.sh
 ```

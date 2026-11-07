@@ -4,7 +4,7 @@ Web UI for the NUT UPS daemon. Reads `upsd` over the in-cluster `nut` Service â€
 UPS state of its own; the physical UPS is USB-attached to daniel-server via the `nut` role.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=peanut`
   with exit 5
 - **Images:** `brandawg93/peanut` (`peanut_k8s_image`), `alpine` (`peanut_k8s_init_image`)
@@ -17,8 +17,7 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
 - **Port:** 8080
 - **No PVC** â€” `/config` and `/app/config` are `emptyDir`, seeded at boot.
 - **Flux applies it, not Ansible** (D3.6, the first Flux role with a Secret). Its
-  `containers_list` entry carries `owner: flux`, so `deploy.sh`, the play and the GitOps
-  deployer all skip it, and a merged change reaches the cluster when `promote` publishes and
+  `containers_list` entry carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged change reaches the cluster when `promote` publishes and
   verifies the next bundle. Its digest-bump PRs therefore draw no `land-wait` and no
   `probe.py health` run.
 - **Secrets:** `peanut_username`, `peanut_password` (web UI login), `nut_ha_password`

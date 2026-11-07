@@ -21,8 +21,8 @@ from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 from deploy_tools.land_lib.landing import Classification
 
-_DOC = "ansible/roles/k8s/manifests/CLAUDE.md"
-_TASKS = "ansible/roles/k8s/manifests/tasks/main.yml"
+_DOC = "ansible/roles/k8s/volume-revert/CLAUDE.md"
+_TASKS = "ansible/roles/k8s/volume-revert/tasks/main.yml"
 _SETUP_DOC = "ansible/roles/setup/k3s/CLAUDE.md"
 _SETUP_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 
@@ -37,13 +37,13 @@ def test_a_role_document_is_clean():
 
 def test_a_role_task_file_is_flagged():
     """The reject half: the same role's tasks/ is code."""
-    assert land_tags.role_for(_TASKS) == "manifests"
-    assert land_tags.shared_roles([_TASKS]) == ["manifests"]
+    assert land_tags.role_for(_TASKS) == "volume-revert"
+    assert land_tags.shared_roles([_TASKS]) == ["volume-revert"]
 
 
 def test_a_document_beside_a_real_change_does_not_excuse_it():
     """One quiet document must not take the role change it documents with it."""
-    assert land_tags.shared_roles([_DOC, _TASKS]) == ["manifests"]
+    assert land_tags.shared_roles([_DOC, _TASKS]) == ["volume-revert"]
 
 
 def test_a_setup_role_document_is_clean_whatever_the_range():
