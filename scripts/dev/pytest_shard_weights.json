@@ -848,7 +848,7 @@
  "hosts/components/claude-code/tests/test_takeover_check_flux_selection.py": 0.24,
  "hosts/components/claude-code/tests/test_takeover_check_install.py": 0.02,
  "hosts/components/registry-gc/tests/test_ghcr_mirror_prune.py": 0.33,
- "hosts/components/registry-gc/tests/test_registry_gc_component.py": 1.42,
+ "hosts/components/registry-gc/tests/test_registry_gc_component.py": 1.55,
  "hosts/lib/tests/test_bootstrap_anchor.py": 0.0,
  "hosts/lib/tests/test_bootstrap_host.py": 0.15,
  "hosts/lib/tests/test_bootstrap_host_k3s.py": 0.3,

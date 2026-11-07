@@ -49,8 +49,8 @@ files:
   - {src: tmpfiles.d/homelab-registry-gc.conf, dst: /usr/lib/tmpfiles.d/homelab-registry-gc.conf, when: registry_k8s_manage_gc}
   - {src: units/homelab-registry-gc.service, dst: /usr/lib/systemd/system/homelab-registry-gc.service, when: registry_k8s_manage_gc}
   - {src: units/homelab-registry-gc.timer, dst: /usr/lib/systemd/system/homelab-registry-gc.timer, when: registry_k8s_manage_gc}
-# Manual, because a restart's SIGTERM ends bash without its EXIT trap, which leaves a mirror at
-# zero until the next run. Reconcile otherwise restarts a changed unit that is active.
+# Manual, because reconcile otherwise restarts a changed unit that is active, which would abandon
+# a collection partway through.
 units:
   homelab-registry-gc.service: {policy: manual, when: registry_k8s_manage_gc}
 enable:

@@ -6,6 +6,7 @@ the toggle, the copies of the registry role's keys, and the legacy entries.
 """
 
 import dataclasses
+import re
 
 import pytest
 import yaml
@@ -64,6 +65,19 @@ def test_the_service_runs_the_script_as_root_and_loads_the_ping_key(package):
     )
     assert "healthchecks_ping_key" in package.credentials
     assert f"--create {TMPFILES}\n" in service
+
+
+def test_a_stop_leaves_the_exit_trap_time_to_restore_the_mirror(package):
+    script = _text(package, SCRIPT)
+    assert "trap scale_up_and_report EXIT" in script
+    job_delete = re.search(
+        r'delete job "\$MIRROR_JOB"[^\n]*\\\n[^\n]*--timeout=(\d+)s', script
+    )
+    rollout = re.search(r"rollout status [^\n]*--timeout=(\d+)s", script)
+    assert job_delete and rollout
+    service = _text(package, f"{UNITS}/homelab-registry-gc.service")
+    (stop,) = re.findall(r"^TimeoutStopSec=(\d+)s$", service, re.MULTILINE)
+    assert int(stop) > int(job_delete[1]) + int(rollout[1])
 
 
 def test_the_script_reads_the_credential_and_the_packaged_check_lib(package):

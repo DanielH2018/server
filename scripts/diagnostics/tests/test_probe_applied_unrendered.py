@@ -1,7 +1,6 @@
 """Tests for `probe.py applied` comparing the content of files the tree holds no render for (#6913).
 
-Two kinds of row read `ok-meta` without a content comparison: a `/etc/cron.d` file that
-`ansible.builtin.cron` writes, and a template whose render at HEAD holds a `STUB`. Each test
+A `/etc/cron.d` file that `ansible.builtin.cron` writes has no render to compare. Each test
 runs `run_applied` with a fake host read. The read answers `stat` with the want's own declared
 metadata and the SHA-256 of the live text the test gives, and it answers a `rootq` hash the
 probe asks about with `match`, the way `rootq matches PATH HEX` does.

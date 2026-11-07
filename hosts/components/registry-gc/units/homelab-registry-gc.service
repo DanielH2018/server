@@ -10,5 +10,8 @@ Type=oneshot
 ExecStartPre=/usr/bin/systemd-tmpfiles --create /usr/lib/tmpfiles.d/homelab-registry-gc.conf
 ExecStart=/usr/lib/homelab/registry-gc.sh
 SyslogIdentifier=registry-gc
+# SIGTERM runs the script's EXIT trap, which restores the mirror: up to 120s to delete the Job and
+# 180s for the rollout. The default 90s would SIGKILL it partway and strand the mirror at zero.
+TimeoutStopSec=360s
 # The Healthchecks.io key. The script reads it from $CREDENTIALS_DIRECTORY.
 LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key
