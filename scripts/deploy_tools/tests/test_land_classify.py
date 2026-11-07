@@ -15,7 +15,6 @@ from deployer_lib.deploy_changes import setup_roles_for
 from lib.repo_paths import REPO
 from deploy_tools.land_lib import land_tags
 from deploy_tools.land_lib import classify
-from deploy_tools.land_lib.key_readers import KeyReader
 from deploy_tools.land_lib.landing import Classification
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -52,20 +51,18 @@ def test_an_unreadable_range_is_empty_and_says_so(landing, capsys):
     assert "every broad path stays owed to a hand" in capsys.readouterr().out
 
 
-def test_classify_fills_tags_plane_and_self_applied(landing):
+def test_classify_fills_tags_and_plane(landing):
     ln, _ = landing(
         Fakes(
             plane="initial_setup.yml --tags k3s",
-            self_applied=True,
             derived=(["sonarr", "radarr"], "pr"),
         )
     )
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert (ln.tags_csv, ln.plane, ln.classification.self_applied, ln.needs_diff) == (
+    assert (ln.tags_csv, ln.plane, ln.needs_diff) == (
         "sonarr,radarr",
         "initial_setup.yml --tags k3s",
-        True,
         False,
     )
 
@@ -153,51 +150,12 @@ def _role_pr(role: str) -> dict:
     }
 
 
-def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
-    """The tick runs on ONE host, so `self_applied` alone leaves the rest silent."""
-    ln, calls = landing(
-        Fakes(
-            self_applied=True, remaining_setup="`initial_setup` also reaches daniel-pi"
-        )
-    )
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    assert ln.classification.remaining_setup == "`initial_setup` also reaches daniel-pi"
-    call = next(c for c in calls if c[0] == "remaining_setup_hosts")
-    # the host the tick ran on, read from the boundary rather than hardcoded
-    assert call[1] == ("daniel-box",)
-    # the merge commit's tree in the primary checkout, not this checkout's own (#4080)
-    assert call[2] == {
-        "ref": MERGE_SHA,
-        "repo": PRIMARY,
-        "key_readers": [],
-        "read_host": ln.tools.read_host,
-    }
-
-
-def test_classify_hands_the_key_readers_to_the_note(landing):
-    """#6968: the note adds a moved key's readers, as the tick's `setup_reach_hosts.py` does."""
-    reader = KeyReader(
-        "ansible/roles/setup/initial_setup/tasks/host-basics.yml", frozenset()
-    )
-    ln, calls = landing(Fakes(self_applied=True, key_readers=(reader,)))
-    ln.merge_sha = MERGE_SHA
-    classify.classify(ln)
-    call = next(c for c in calls if c[0] == "remaining_setup_hosts")
-    assert call[2]["key_readers"] == [reader]
-
-
-def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):
-    """`--tags` overrides the derivation; it does not opt out of the plane classification.
-
-    The file list is read either way, so the derivation being skipped is asserted by its
-    ANSWER not landing: `derived` names radarr and the override's sonarr survives.
-    """
-    ln, _ = landing(Fakes(derived=(["radarr"], "pr"), self_applied=True), tags="sonarr")
+def test_explicit_tags_skip_derivation(landing):
+    """`--tags` overrides the derivation; the override's sonarr survives `derived`'s radarr."""
+    ln, _ = landing(Fakes(derived=(["radarr"], "pr")), tags="sonarr")
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.tags_csv == "sonarr"
-    assert ln.classification.self_applied and ln.tick_is_the_apply
 
 
 def test_a_truncated_file_list_without_since_is_a_usage_error(landing):
@@ -215,7 +173,7 @@ def test_a_truncated_file_list_with_since_defers_derivation(landing, capsys):
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.needs_diff and ln.resolved_tags == []
-    assert "deriving from the diff since abc after the tick" in capsys.readouterr().out
+    assert "deriving from the diff since abc in step 4" in capsys.readouterr().out
 
 
 def test_nothing_to_deploy_when_nothing_is_reached(landing):
@@ -230,7 +188,6 @@ def test_nothing_to_deploy_when_nothing_is_reached(landing):
     [
         ("resolved_tags", ["x"]),
         ("plane", "x"),
-        ("self_applied", True),
         ("needs_diff", True),
     ],
 )
@@ -247,7 +204,6 @@ def test_any_reach_disables_the_shortcut(landing, attr, value):
     "attr, label",
     [
         ("plane_note", "plane classification failed"),
-        ("self_applied", "self-applied classification failed"),
         ("derive", "tag derivation failed"),
     ],
 )
@@ -266,24 +222,6 @@ def test_a_crashing_classification_helper_dies_named_rather_than_traces(
     with pytest.raises(Outcome) as exc:
         classify.classify(ln)
     assert exc.value.rc == 1 and label in exc.value.error
-
-
-def test_remaining_setup_hosts_crashing_dies_named(landing):
-    """Separate from the parametrized case: this helper takes `local_host` as a positional
-    argument, so it needs `self_applied=True` reached first before it is ever called."""
-    ln, _ = landing(Fakes(self_applied=True))
-    ln.merge_sha = MERGE_SHA
-
-    def boom(*a, **k):
-        raise yaml.YAMLError("bad host_vars")
-
-    ln.classifier = dataclasses.replace(ln.classifier, remaining_setup_hosts=boom)
-    with pytest.raises(Outcome) as exc:
-        classify.classify(ln)
-    assert (
-        exc.value.rc == 1
-        and "remaining-setup-hosts classification failed" in exc.value.error
-    )
 
 
 def test_a_classification_helper_calling_die_itself_is_not_relabelled(landing):

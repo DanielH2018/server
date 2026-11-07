@@ -92,7 +92,7 @@ LISTED = [
     "/etc/cron.d/backup",
     "/etc/ufw/user.rules",
     "/etc/ufw/user6.rules",
-    "/usr/local/bin/registry-gc.sh",
+    "/usr/lib/homelab/registry-gc.sh",
     "/etc/systemd/system/claude-rc.service",
     "/etc/systemd/system/claude-rc-restart.timer",
 ]
@@ -418,7 +418,7 @@ def test_stat_prints_metadata_and_no_content(rig, capsys) -> None:
 
 
 def test_matches_compares_the_hash_and_prints_no_content(rig, capsys) -> None:
-    path = rig.file("/usr/local/bin/registry-gc.sh", "#!/bin/sh\necho sentinel\n")
+    path = rig.file("/usr/lib/homelab/registry-gc.sh", "#!/bin/sh\necho sentinel\n")
     same = hashlib.sha256(b"#!/bin/sh\necho sentinel\n").hexdigest()
     assert run(rig, capsys, "matches", path, same) == (0, "match\n", "")
     assert run(rig, capsys, "matches", path, HEX) == (1, "differ\n", "")

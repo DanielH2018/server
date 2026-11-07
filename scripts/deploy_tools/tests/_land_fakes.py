@@ -11,7 +11,6 @@ that wants the REAL derivation passes `Classifier()` and keeps the fake boundari
 
 import atexit
 import contextlib
-import json
 import subprocess
 import tempfile
 from dataclasses import dataclass, field
@@ -29,33 +28,12 @@ from deploy_tools.land_lib.pin_reads import PinReads
 from validate.cluster_pins import Pin
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
 from deploy_tools.land_lib.land_tags import Derivation, DeriveSource
-from diagnostics.probe_lib import core
-from gitops_markers import MARKERS
 
 MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
-# The receipt marker's basename on disk, which is the name `read_state` is asked for.
-RECEIPTS = MARKERS["receipts"]
-# The base of the range a `receipt()` covers. `Fakes.is_ancestor_of` answers non-zero for it
-# by default, so the merge commit reads as inside `base..origin` unless a test says otherwise.
-RECEIPT_BASE = "b" * 40
 # The commit `last-good` names unless a test says otherwise.
 LAST_GOOD = "1" * 40
 # Where every faked pin lives; the gate reads only the value.
 PIN_FILE = "ansible/roles/setup/k3s/defaults/main.yml"
-
-
-def receipt(applied: dict[str, list[str]], manual=None, origin: str = "f" * 40) -> dict:
-    """A `state` holding the receipt of the tick that crossed the merge commit.
-
-    Args:
-        applied: playbook -> the tags the tick applied it with, `[]` for the whole play.
-        manual: setup role tag -> its narrowest tags, for each role left to a hand.
-        origin: the SHA the tick crossed to; `Fakes.is_ancestor_rc` decides whether it
-            contains the merge commit.
-    """
-    line = {"origin": origin, "base": RECEIPT_BASE, "applied": applied}
-    line |= {"manual": manual or {}}
-    return {RECEIPTS: json.dumps(line)}
 
 
 # A real directory, because the pipeline refuses a primary checkout that is not one. Made
@@ -97,7 +75,6 @@ class Fakes:
     pull_ref_rc: int = 0
     tip: str = MERGE_SHA
     await_ci: list[tuple[int, str]] = field(default_factory=lambda: [(0, "CI green")])
-    tick: list[int] = field(default_factory=lambda: [0])
     blockers: list[int] = field(default_factory=lambda: [0])
     changed: str = ""
     changed_rc: int = 0
@@ -108,10 +85,6 @@ class Fakes:
     # that could not be (the tree lock busy, the worktree add failed).
     gate_snapshot: Path | None = Path("/snap")
     plane: str = ""
-    self_applied: bool = False
-    self_applied_command: str = "`ansible-playbook ansible/initial_setup.yml --tags x`"
-    remaining_setup: str = ""
-    key_readers: tuple = ()
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.
@@ -121,10 +94,9 @@ class Fakes:
     is_ancestor_rc: int = 0
     # Per-ref overrides of `is_ancestor_rc`, keyed by the ref the query asks about (the last
     # argument), for a test that needs one SHA's ancestry to differ from another's.
-    is_ancestor_of: dict[str, int] = field(default_factory=lambda: {RECEIPT_BASE: 1})
-    # The same query against HEAD — `Landing.merge_applied`, which asks whether the primary
-    # checkout already carries this PR. Non-zero by default so `behind_since` alone still
-    # answers BEHIND unless a test says the tick crossed the merge commit.
+    is_ancestor_of: dict[str, int] = field(default_factory=dict)
+    # The same query against HEAD: whether the primary checkout already carries the merge
+    # commit, which `health_verdict` asks when a gate snapshot could not be taken.
     merge_applied_rc: int = 1
     # A marker's value; None is a read that failed, which `Landing.state` passes on as None.
     # Mapping, not dict: a dict is invariant in its values, so the many `dict[str, str]`
@@ -134,7 +106,6 @@ class Fakes:
     own_narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     # `git show <ref>:<path>` text by ref. An absent ref answers as a missing file.
     show_at: dict[str, str] = field(default_factory=dict)
-    lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
     # The forward-only pins `tools.pins.pins_at` answers, by SHA: pin key -> value. A SHA absent
     # here holds neither pin, so a PR whose base and head are both absent bumps nothing.
@@ -228,51 +199,13 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
     `calls` is the list `build_tools` returned, so a classifier call lands in the same
     ordering record as a boundary call.
     """
-    record = calls if calls is not None else []
-
-    def remaining_setup_hosts(
-        paths,
-        local_host,
-        quiet=(),
-        pr_range="",
-        ref="",
-        repo=None,
-        key_readers=(),
-        read_host=None,
-    ):
-        # local_host is recorded: the phase must pass `tools.hostname()`, not a constant.
-        # ref and repo are recorded: without them the note reads this checkout's own tree,
-        # the pre-merge-checkout bug #4080 fixed.
-        record.append(
-            (
-                "remaining_setup_hosts",
-                (local_host,),
-                {
-                    "ref": ref,
-                    "repo": repo,
-                    "key_readers": list(key_readers),
-                    "read_host": read_host,
-                },
-            )
-        )
-        return f.remaining_setup
-
     return Classifier(
         plane_note=lambda paths, quiet=(), narrow_tags=None: f.plane,
-        self_applied=lambda paths, quiet=(): f.self_applied,
-        self_applied_command=lambda paths, quiet=(): f.self_applied_command,
-        remaining_setup_hosts=remaining_setup_hosts,
-        key_readers=lambda pr_range, repo: list(f.key_readers),
         derive=lambda files, changed_files, declared=None, quiet=(): Derivation(
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
     )
-
-
-def _no_host_read(plan, host):
-    """A pipeline test with the real classifier reaches no host, so every copy stays owed."""
-    raise core.Unreadable(f"this test reads no host, and {host} was asked")
 
 
 def build_tools(f: Fakes) -> tuple[Tools, list]:
@@ -458,7 +391,6 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         git=git_run,
         await_ci=await_ci,
         tested_base=lambda head: f.tested_base.get(head),
-        tick=_seq(f.tick, calls, "tick"),
         deploy_tags=deploy_tags,
         gate=gate,
         snapshot=snapshot,
@@ -467,9 +399,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         flux=FluxReads(owners_at, land_wait, pins, k8s_tags_at),
         own_narrowing=own_narrowing,
         **host_fakes(f, calls),
-        lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,
-        read_host=_no_host_read,
         logger=lambda line: calls.append(("logger", (line,), {})),
         sleep=lambda s: calls.append(("sleep", (s,), {})),
         clock=clock,

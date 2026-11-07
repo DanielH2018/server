@@ -11,7 +11,7 @@ from dataclasses import replace
 
 import pytest
 
-from _land_fakes import MERGE_SHA, Fakes, receipt
+from _land_fakes import MERGE_SHA, Fakes
 from deploy_tools.land_lib import health_verdict, promotion
 from deploy_tools.land_lib.host_wait import HostTarget
 from deploy_tools.land_lib.landing import Classification
@@ -27,11 +27,10 @@ SUSPENDED = WaitResult(
     tags=("bento-pdf",),
 )
 
-# The two ways a suspended wait goes on to the health step: `wait_on_promotion` returns for a
-# changed host package and for a PR the tick applies part of.
+# The way a suspended wait goes on to the health step: `wait_on_promotion` returns for a
+# changed host package.
 _REACHES_THE_GATE = [
     pytest.param(Classification(), [HostTarget("daniel-pi", armed=True)], id="host"),
-    pytest.param(Classification(self_applied=True), [], id="tick-half"),
 ]
 
 
@@ -43,7 +42,6 @@ def _suspended_landing(
         Fakes(
             owners={MERGE_SHA: {"bento-pdf": "flux"}},
             land_wait=[SUSPENDED],
-            state=receipt({"ansible/initial_setup.yml": ["renovate_agent"]}),
         )
     )
     ln.merge_sha = MERGE_SHA

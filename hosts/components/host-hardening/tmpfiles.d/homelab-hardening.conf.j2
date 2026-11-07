@@ -1,0 +1,15 @@
+# The ownership and modes of the sys user's SSH directory and the sensitive system files.
+# systemd-tmpfiles-setup.service applies this file at boot.
+#
+# `~0700` keeps the execute bits off a file that has none, so keys and known_hosts stay 0600 while
+# directories stay searchable. A numeric recursive 0700 would mark every key executable.
+#Type Path                  Mode  User           Group
+Z /home/{{ sys_user }}/.ssh ~0700 {{ sys_user }} {{ sys_user }} -
+z /etc/ssh/sshd_config      0600  -              -              -
+z /etc/crontab              0600  -              -              -
+z /boot/grub/grub.cfg       0600  -              -              -
+z /etc/cron.d               0700  -              -              -
+z /etc/cron.daily           0700  -              -              -
+z /etc/cron.hourly          0700  -              -              -
+z /etc/cron.weekly          0700  -              -              -
+z /etc/cron.monthly         0700  -              -              -

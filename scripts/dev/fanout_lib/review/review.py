@@ -163,7 +163,7 @@ OWN_COPY = Path(".fanout") / "stop-hook"
 REVIEW_BUDGET_USD = 15
 # A finding the fix round acts on. The reviewer reports everything, as the user-level
 # `## Code review` rule asks; this is the separate filtering pass.
-# `land.sh` waits up to about an hour for CI and the tick. A landing started with less than
+# `land.sh` waits up to about an hour for CI and the promotion. A landing started with less than
 # this left on the unit's `RuntimeMaxSec` would outlive the wait on it, so it is skipped.
 LAND_MARGIN_S = 90 * 60
 GATES = Gates()

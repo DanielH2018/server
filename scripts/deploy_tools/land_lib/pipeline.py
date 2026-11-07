@@ -21,17 +21,16 @@ and frozen; `plane` is a read-only property over it and `narrowed_plane`:
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll`, `opts.pace_master_runs`, the head's pins (the pin gate) | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.merged_at`, `ledger.t_merged`, `ledger.merge_sha` |
 | `closing_refs.close_stranded` | `opts.pr` | `warnings` |
-| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary`, what each host the note would name holds (`deployed_copies`) | `classification` (frozen: the plane note, the self-applied half and their inputs), `resolved_tags`, `needs_diff` |
+| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary`, what each host the note would name holds (`deployed_copies`) | `classification` (frozen: the plane note and its inputs), `resolved_tags`, `needs_diff` |
 | `classify.reaches_host_inputs` (in step 1) | `classification`, `needs_diff` | `host_candidate` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `classification`, `needs_diff`, `host_candidate` | -- |
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `host_wait.host_targets` (in step 3, only when `host_candidate`) | `host_candidate`, `merge_sha`, `opts.primary` | `host_targets`, and `host_candidate` cleared when none differ |
-| `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
-| `classify.narrow_plane` (after step 4's tick, or in its place on the fast path) | `classification`, `merge_sha`, the `receipts` marker | `narrowed_plane` |
-| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_deploy` |
+| `classify.narrow_plane` (in step 3, after the CI wait) | `classification`, `opts.primary` | `narrowed_plane` |
+| `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `host_targets`, `classification`, `opts.since`, `merge_sha` | `resolved_tags`, `flux_tags`, `suspended_tags`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.t_deploy` |
 | `host_wait.wait_for_hosts` (step 6) | `host_targets`, `merge_sha`, `ledger.merged_at`, `opts.pr`, `opts.primary` | -- |
-| `health_verdict.health` | `resolved_tags`, `host_targets`, `flux_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
+| `health_verdict.health` | `resolved_tags`, `host_targets`, `flux_tags`, `suspended_tags`, `deployed_at`, `plane`, `classification` | `ledger.cause` |
 
 Every phase may end the landing by raising an `Outcome`, and the last one always does.
 """
@@ -50,7 +49,6 @@ from deploy_tools.land_lib import (
     health_verdict,
     host_wait,
     merge,
-    tick,
 )
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
@@ -74,6 +72,8 @@ def _step_ci(ln: Landing) -> None:
     """
     ci.wait_master_ci(ln, ln.merge_sha)
     ln.ledger.t_ci = ln.tools.clock()
+    ln.ledger.t_tick = ln.ledger.t_ci  # the board's `tick` column stays, at zero
+    classify.narrow_plane(ln)
     if not ln.host_candidate:
         return
     render = ln.tools.host_targets or host_wait.host_targets
@@ -93,51 +93,6 @@ def _step_hosts(ln: Landing) -> None:
     wait(ln, ln.host_targets, ln.merge_sha, ln.ledger.merged_at)
 
 
-def _step_tick(ln: Landing) -> None:
-    """Run the GitOps tick and stamp when it finished — or skip it here and stamp nothing.
-
-    A PR reaching service tags and NOTHING THE TICK APPLIES ITSELF lands through the promotion,
-    so it needs the tick only to converge the primary checkout eventually. Step 5 kicks it.
-    Nothing is awaited here and `tick=0` on the board says so.
-
-    Every other shape keeps waiting, because there the tick is the apply: a PR with no service
-    tag, whose verdict `no_tag_outcome` reads off the deployer's markers, and a PR that
-    reaches tags AND something the tick applies itself, which the DECIDED note below covers.
-    """
-    # DECIDED: the fast path is skipped when THE TICK IS THE APPLY for part of this range --
-    # `tick_is_the_apply`, which is `self_applied or remaining_setup`. It is not skipped for
-    # every broad prefix: a `Landing.plane` that is not self-applied is by definition what a
-    # HAND applies, so no tick can settle it and a tags-plus-plane PR keeps the fast path.
-    # A landing the predicate catches awaits the tick here.
-    #
-    # Because for that half the TICK is the apply, and step 7 grades it from the deployer's own
-    # markers (`tick_state`, `tick_applied`). Kicking a tick and reading those markers seconds
-    # later grades a tick that has not run: no receipt covers the merge commit yet, so
-    # `tick_applied` is False and the landing prints `needs-manual-apply` with
-    # a hand-run remedy the kicked tick performs a minute later -- or `deferred` (exit 75) when
-    # a concurrent tick has left `behind_since` set. Neither is recoverable by re-reading: the
-    # verdict has already been printed and the exit code returned.
-    #
-    # The alternative -- keep the fast path and await the kicked tick inside step 7 -- buys
-    # seconds back and costs the landing a second place that knows about tick timing,
-    # in the phase whose whole job is to report. The latency this gives up is bounded to the
-    # PRs that touch a service role and a setup role together.
-    if ln.resolved_tags and not ln.tick_is_the_apply:
-        say(
-            "this landing waits on a promotion, so the tick is not awaited; step 5 kicks it "
-            "to converge the primary checkout"
-        )
-        ln.ledger.t_tick = ln.ledger.t_ci
-        # No receipt for this range exists yet, so the PR's own derivation narrows the note.
-        classify.narrow_plane(ln, awaited=False)
-        return
-    tick.run_tick(ln)
-    ln.ledger.t_tick = ln.tools.clock()
-    # Only here, after an awaited tick: before it, no receipt covers this PR's merge commit.
-    # The fast path above narrows from the PR's own derivation instead.
-    classify.narrow_plane(ln)
-
-
 # The numbered steps, in order. The label is formatted with `pr=`; the number and the
 # denominator both come from this list, so `== 3/7` cannot outlive a eighth step.
 # The callables are bound HERE at import: a test that monkeypatches `ci.preflight` on its
@@ -146,7 +101,6 @@ _STEPS: tuple[tuple[str, Callable[[Landing], None]], ...] = (
     ("resolving PR #{pr}", _step_resolve),
     ("pre-flight: can the tick cross what is incoming?", ci.preflight),
     ("waiting for master CI", _step_ci),
-    ("GitOps tick (fetch, ff-merge, deploy what is eligible)", _step_tick),
     ("waiting on the promotion", deploy.deploy_phase),
     ("waiting for hosts to apply", _step_hosts),
     ("health verdict", health_verdict.health),

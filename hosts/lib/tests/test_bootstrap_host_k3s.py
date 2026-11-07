@@ -110,7 +110,7 @@ def test_an_installer_that_fails_once_is_run_again_and_the_bootstrap_continues(
 
     assert result.returncode == 0, result.stderr
     assert (host.root / "installer.runs").read_text().splitlines() == ["run", "run"]
-    assert host.commands() == ["sleep 30"]
+    assert [c for c in host.commands() if c.startswith("sleep")] == ["sleep 30"]
     assert (host.root / "etc/systemd/system" / unit).exists()
     assert "stopped after step 4" in result.stdout
 
@@ -135,7 +135,7 @@ def test_an_installer_that_stalls_is_killed_at_its_bound_and_run_again(
 
     assert result.returncode == 0, result.stderr
     assert (host.root / "installer.runs").read_text().splitlines() == ["run", "run"]
-    assert host.commands() == ["sleep 30"]
+    assert [c for c in host.commands() if c.startswith("sleep")] == ["sleep 30"]
 
 
 def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
@@ -149,5 +149,5 @@ def test_an_installer_that_always_fails_dies_after_the_last_attempt(tmp_path):
     assert result.returncode == 1
     assert "bootstrap-host: the k3s installer failed\n" in result.stderr
     assert (host.root / "installer.runs").read_text().splitlines() == ["run"] * 13
-    assert host.commands() == ["sleep 30"] * 12
+    assert [c for c in host.commands() if c.startswith("sleep")] == ["sleep 30"] * 12
     assert host.apt_calls() == []

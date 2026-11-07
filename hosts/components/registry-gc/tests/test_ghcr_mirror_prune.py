@@ -10,12 +10,9 @@ import json
 import os
 from pathlib import Path
 
-from _helpers import ANSIBLE
 from lib.proc_testing import run
 
-SCRIPT = (
-    ANSIBLE / "roles" / "setup" / "k8s_host_files" / "files" / "ghcr-mirror-prune.sh"
-)
+SCRIPT = Path(__file__).resolve().parents[1] / "files" / "ghcr-mirror-prune.sh"
 REPO = "danielh2018/nut"
 
 

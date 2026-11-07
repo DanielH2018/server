@@ -56,7 +56,6 @@ class Verdict(StrEnum):
     # converges on its own, so this is not a resume point. The detail names the tip and the
     # way out. See `await_ci.wait` (#4641, #4649).
     CI_UNPROVEN = "ci-unproven"
-    LOCK_BUSY = "lock-busy"
     # The landing stopped on a refusal or an error of its own before it reached any other
     # verdict: the landing policy, a PR closed unmerged or with changes requested, a read
     # that failed. `Outcome` gives every exit-1 end this verdict when its site named none,
@@ -159,23 +158,9 @@ def say(text: str) -> None:
     print(f"  {text}")
 
 
-# What a `behind` read means when this landing stopped watching a tick that was still
-# applying. The ordinary `behind` prose says "the next tick crosses it", which
-# is FALSE of a deployer parked on a failed apply -- no later tick crosses a hold -- and that
-# is exactly the state the abandoned watch cannot rule out, because `hold_sha` is written
-# after the apply returns. One string, printed by both verdict sites, so the two cannot drift.
-ABANDONED_WATCH_NOTE = (
-    "  This run stopped watching a tick that was still applying, so the markers above were "
-    "read mid-apply: an apply that fails writes hold_sha only when it returns.\n"
-    "  This is NOT the ordinary deferral. A later tick does not clear a hold, and a hold "
-    "blocks every session's deploy. Re-run land.sh once the tick has settled."
-)
-
-
 # What a `deferred` with cause `promote-timeout` means, printed by `promotion.wait_on_promotion`.
-# The ordinary deferral is a tick that will cross the PR on its own. This one may not end on its
-# own: a publish refusal leaves no `sha-<commit>` tag to promote. `land_probe` reads the note and
-# reports the landing as `gave-up`, a resume point, as it does for ABANDONED_WATCH_NOTE.
+# This deferral may not end on its own: a publish refusal leaves no `sha-<commit>` tag to
+# promote. `land_probe` reads the note and reports the landing as `gave-up`, a resume point.
 PROMOTE_TIMEOUT_NOTE = (
     "  No promotion covered this merge commit in time. This is NOT the ordinary deferral: a "
     "publish refusal leaves no sha-<commit> tag to promote.\n"
@@ -183,57 +168,16 @@ PROMOTE_TIMEOUT_NOTE = (
 )
 
 
-# What a `deferred` from step 7 means, printed by `health_verdict.health` when `probe.py health`
-# could not read its store for a tag and found no other tag unhealthy (#5543). No tick re-gates
+# What a `deferred` from step 6 means, printed by `health_verdict.health` when `probe.py health`
+# could not read its store for a tag and found no other tag unhealthy (#5543). Nothing re-gates
 # health, so this deferral never ends on its own: `land_probe` reads the note and reports the
 # landing as `gave-up`, a resume point, as it does for PROMOTE_TIMEOUT_NOTE.
 UNREADABLE_GATE_NOTE = (
     "  The health gate could not read its store, so the deployed workloads were not graded. "
-    "This is NOT the ordinary deferral: no tick gates health.\n"
+    "This is NOT the ordinary deferral: nothing gates health again.\n"
     "  Re-run land.sh to gate again once the store answers; Prometheus rolling is the usual "
     "cause."
 )
-
-
-def unrecorded_apply_note(behind_since: str | None) -> str:
-    """What "no broad apply covers this PR" means, given whether the tick is still behind.
-
-    Two states reach this note, and only one of them is stranded. With `behind_since`
-    empty the tick is level with origin and `next_action()` answers `noop` for every later
-    tick, so nothing will ever apply this range. With it set the tick
-    fast-forwarded only as far as a green ancestor of the tip — it crossed this PR's merge
-    commit, which is why the landing is not BEHIND — and it has a range left to cross, so a
-    later tick can still record the apply. One string, printed by both verdict sites, so the
-    two cannot drift.
-
-    Args:
-      behind_since: the deployer's `behind_since` marker, as `Landing.state` returns it.
-    """
-    if behind_since:
-        return (
-            "  The tick fast-forwarded only as far as a green ancestor of the tip and is "
-            "still behind origin, so a later tick may yet apply this range. Apply it by hand "
-            "if you would rather not wait."
-        )
-    return (
-        "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
-        "never see this range again."
-    )
-
-
-def remaining_hosts_note(remaining: str) -> str:
-    """The remaining-hosts remediation, printed BESIDE a plane the same PR owes a hand.
-
-    Both `needs-manual-apply` sites end at their plane arm before reaching the branch that
-    owns the remaining-hosts verdict, so a PR carrying both halves printed only the plane's
-    command.
-
-    It claims nothing about the tick, unlike the wording the remaining-hosts verdict itself
-    prints: the plane arm ends the landing before the tick's own state is read, so whether
-    the tick applied the role on this host is unknown here. The hosts below are owed the
-    role either way. One string, printed by both verdict sites, so the two cannot drift.
-    """
-    return f"  STILL UNAPPLIED on the hosts this tick never touched: {remaining}"
 
 
 def disarmed(where: str, consequence: str) -> str:

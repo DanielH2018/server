@@ -146,8 +146,8 @@
   # the service runs it. On a file that carries an ACL, the group bits of the mode are the ACL
   # mask, so 0700 leaves any `user:claude` entry the sudo grant added with no permission.
   when:
-    - has_claude_code
     - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
+    - has_claude_code
   ansible.builtin.copy:
     src: worktree_holders.py
     dest: /usr/local/libexec/worktree-holders
@@ -212,8 +212,8 @@
   # World-readable, because lib.worktrees.holder_root reads it as the caller, to ask only about
   # a tree inside the root the service scans.
   when:
-    - has_claude_code
     - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
+    - has_claude_code
   ansible.builtin.copy:
     dest: /etc/worktree-holders.json
     content: >-
@@ -256,8 +256,8 @@
   # The operator ruled on 2026-10-10 that a socket replaces the sudo grant (#4297): sudo cannot
   # gain root under claude-rc.service's NoNewPrivileges=yes, and a socket needs no setuid.
   when:
-    - has_claude_code
     - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
+    - has_claude_code
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"

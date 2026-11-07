@@ -312,10 +312,9 @@ def make_ansible_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
 
 
 def file_lookup(kind: str, path: str, **_kwargs) -> str:
-    """Ansible's ``lookup('file', path)``, the one lookup a setup-plane template calls.
+    """Ansible's ``lookup('file', path)``, the one lookup a setup-plane template may call.
 
-    ``k8s_host_files``' GC Job template inlines its prune script this way. ``k8s_yaml.make_lookup``
-    covers the k8s guards' wider set, and replaces this global in the k8s render.
+    ``k8s_yaml.make_lookup`` covers the k8s guards' wider set, and replaces this global in the k8s render.
 
     Raises:
         ValueError: ``kind`` is not ``file``, since a stand-in for another plugin would render

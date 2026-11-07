@@ -246,8 +246,8 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         "that package, where "
         "`test_<family>_<name>.py` also counts: `land_lib/ci.py` is tested by "
         "`test_land_ci.py`. A script "
-        "with an empty cell may still be exercised elsewhere: `gitops_tick.sh` has five tests "
-        "in `test_gitops_manual_trigger.py`, and a module split out of a facade is run by the "
+        "with an empty cell may still be exercised elsewhere: a module split out of a facade "
+        "is run by the "
         "facade's suite. The column says where a script's own suite lives, not whether "
         "anything reaches it.\n"
     )

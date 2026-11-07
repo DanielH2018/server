@@ -56,7 +56,6 @@ def _land(land_run_main, paths: list[str], sim: Sim, changed_files=None, **kwarg
             }
         },
         derived=tuple(land_tags.derive(paths, changed_files)),
-        self_applied=land_tags.self_applied(paths),
         plane=land_tags.plane_note(paths),
         owners={MERGE_SHA: dict.fromkeys(FLUX, "flux")},
         gate=(True, []),
