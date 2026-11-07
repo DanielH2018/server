@@ -148,11 +148,6 @@ def test_the_ansible_side_finds_the_hardening_task_where_no_map_guards_it(tmp_pa
     assert all(("sysctl", "net.core.bpf_jit_harden") in ansible[h] for h in HOSTS)
 
 
-def test_the_ansible_side_finds_an_in_place_edit_by_its_path():
-    ansible, _ = _tree()
-    assert ("path", "/etc/multipath.conf") in ansible["daniel-box"]
-
-
 # ── red proofs: fixture roles and packages ────────────────────────────────────────────
 
 

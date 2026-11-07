@@ -165,12 +165,9 @@ def test_every_exemption_names_a_member_that_still_writes_none():
 
 
 def test_census_resolves_each_route_a_writer_takes():
-    """Non-vacuity: a script cron, a template timer and a timer that writes none."""
+    """Non-vacuity: a template timer and a timer that writes none. No setup task installs a cron
+    since H7.34, so the fixture pairs below hold the cron route."""
     found = census()
-    assert (
-        found.get("hypervisor: cron `Full etcd restore drill in a throwaway guest`")
-        is True
-    )
     assert found.get("initial_setup: timer `kuma-check-setup-drift`") is True
     assert found.get("gitops_deploy: timer `gitops-deploy`") is False
 

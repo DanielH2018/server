@@ -139,7 +139,8 @@ def test_runtime_vars_reads_both_set_fact_spellings():
     """
     names = v.runtime_vars()
     assert "common_release_sha" in names  # ansible.builtin.set_fact
-    assert len(names) >= 91
+    # 62 once H7.34 deleted hypervisor's tasks and k3s's agent tasks (91 before).
+    assert len(names) >= 62
 
 
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():

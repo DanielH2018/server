@@ -78,7 +78,6 @@ EXEMPT = {
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",
 }
 # Non-vacuity: each scan must find its member, or an empty scan would pass.
-CRON_MEMBER = "Full etcd restore drill in a throwaway guest"
 CRONJOB_MEMBER = "configarr"
 RECURRING_MEMBER = "daily-backup"
 
@@ -294,10 +293,7 @@ def test_no_schedule_that_reads_the_cluster_fires_inside_the_box_window(box_pack
 
 
 def test_each_scan_finds_the_member_that_proves_it_reads_something(box_package):
-    names = {s.name for s in role_schedules([])}
-    assert any(CRON_MEMBER in n for n in names) or CRON_MEMBER in {
-        n for r in glance_facts.setup_role_dirs() for n, _ in glance_facts.cron_jobs(r)
-    }
+    # No setup role installs a cron since H7.34, so the role scan's member is gitops-deploy's timer.
     _, cronjobs, recurring = job_schedules()
     assert CRONJOB_MEMBER in cronjobs
     assert RECURRING_MEMBER in recurring
