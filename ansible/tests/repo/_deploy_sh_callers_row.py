@@ -39,10 +39,6 @@ DEPLOY_SH_EXEMPT = {
         "runs a full deploy with no --tags, so no tag reaches the refusal; the play's "
         "`ansible_owned` batch loop skips the entry instead"
     ),
-    "ansible/post_tasks/k8s_image_drift_gate.yml": (
-        "the line is a command an operator reads in a `fail_msg` block scalar, not one the "
-        "play runs"
-    ),
 }
 
 

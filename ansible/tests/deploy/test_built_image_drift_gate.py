@@ -274,9 +274,10 @@ def test_the_failure_names_both_causes_and_their_different_fixes():
     """
     msg = _fail_msg()
 
-    assert "image_builder_force=true" in msg, (
-        "the message no longer names the forced rebuild, which is the fix for the "
-        "no-rollout-was-queued cause"
+    assert "rebuild_stamp" in msg and "deploy.sh" not in msg, (
+        "the message no longer names the context bump that moves the content tag, which is the "
+        "fix for the no-rollout-was-queued cause, or it names deploy.sh, which refuses every k8s "
+        "tag"
     )
     assert "imagePullPolicy" in msg and "Always" in msg, (
         "the message no longer names the cached-tag cause. A pod that rolled and reused its "

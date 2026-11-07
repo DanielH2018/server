@@ -254,8 +254,8 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
 
 
 # ── what `cmd_rotate` tells the operator to do next ─────────────────────────
-def test_rotate_without_deploy_says_commit_then_deploy_sh(capsys):
-    """deploy.sh deploys HEAD, so the Next: line must say to commit before it deploys."""
+def test_rotate_without_deploy_says_commit_then_land(capsys):
+    """Flux reads only a landed commit, and deploy.sh refuses every k8s tag."""
     name = "monitor_bridge_test_token"
     tools, _ = build_tools(Fakes(registry=_reg((name, "auto", "2026-01-01"))))
     args = SimpleNamespace(
@@ -263,8 +263,8 @@ def test_rotate_without_deploy_says_commit_then_deploy_sh(capsys):
     )
     assert sr.cmd_rotate(args, tools) == 0
     out = capsys.readouterr().out
-    assert "Next: commit " in out and "./scripts/deploy.sh --tags " in out, out
-    assert "ansible-playbook" not in out, out
+    assert "Next: commit " in out and "land.sh" in out, out
+    assert "deploy.sh" not in out and "ansible-playbook" not in out, out
 
 
 def test_rotate_deploy_failure_names_the_revert_command_and_tags(capsys):

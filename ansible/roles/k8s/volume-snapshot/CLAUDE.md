@@ -14,8 +14,8 @@ the stabilisation soak sees that, because a migration looks exactly like a healt
 drill records, the traps the `kubectl` calls are written around, the variable-precedence
 measurement and the 13 over-long CRs Longhorn refused. Read it before editing `tasks/claim.yml`.
 
-**No standalone deploy tag.** The include fires for an opted-in caller, so
-`deploy.sh --tags volume-snapshot` deploys most of the fleet (#2704).
+**No standalone deploy tag.** No `containers_list` entry names it, so `--tags volume-snapshot`
+selects nothing of its own. The include fires only for an opted-in caller (#2704).
 
 ## How a role opts in
 

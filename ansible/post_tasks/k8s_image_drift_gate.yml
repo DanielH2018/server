@@ -110,11 +110,11 @@
       leaves the Deployment spec unchanged too, and there are TWO ways that ends here, with
       different fixes.
       (1) NO ROLLOUT WAS QUEUED: the new image sits in the registry unused while every other check
-      reads green. Roll it with:
-      ./scripts/deploy.sh --tags <role> -e image_builder_force=true
+      reads green. Roll it by merging a PR that bumps a `rebuild_stamp` data key in the image's
+      context, which moves the content tag; `promote` then builds the image and Flux rolls the pod.
       (2) THE POD ROLLED AND REUSED A CACHED TAG: check `imagePullPolicy` on the container below.
       Under IfNotPresent the node answers `already present on machine` and starts the old bytes, so
-      a forced rebuild changes NOTHING — it pushes the same digest the node is refusing to fetch.
+      a rebuild under the same tag changes NOTHING — it pushes the digest the node refuses to fetch.
       The fix is `imagePullPolicy: Always` in the role's template, which the
       `built-images-pull-always` row of ansible/tests/k8s/_workload_property_rows.py requires; the API server defaults this
       field only at CREATE time, so a Deployment first created with an upstream `@sha256:` pin

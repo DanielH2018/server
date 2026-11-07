@@ -80,23 +80,20 @@ secret can touch.
 
 ### Rotating a value read by both planes
 
-A value can have an Ansible-owned consumer and a consumer Flux applies, as `peanut_password`
-does for homepage and peanut. Every step that handles the value is **operator-only**.
+A value can have several consumers Flux applies, as `peanut_password` does for homepage and
+peanut, and a setup role or host package can read it too. Every step that handles the value is **operator-only**.
 
 1. Set the new value with `sops set` (**operator-only**).
 2. Run `uv run python scripts/secrets_mgmt/cluster_vars.py write` (**operator-only**). Commit
    `secrets.yml`, the cluster files it rewrote and the registry together, then open the PR.
-3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints a
-   `deploy.sh` line for the Ansible-owned consumers. For each `owner: flux` consumer it
-   prints the Flux path instead, because `deploy.sh` exits 5 on such a tag and deploys none
-   of the others.
+3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints the
+   Flux path for each k8s consumer, and a command for each setup role and host package.
 4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
-   `cluster-vars` Kustomization and on every Kustomization that depends on it, then ends
-   `needs-manual-apply` naming the Ansible half.
-5. Run the `deploy.sh` line from step 3.
+   `cluster-vars` Kustomization and on every Kustomization that depends on it.
+5. Run any setup-role or host-package command from step 3.
 
-The weekly cron needs no `write` step: `rotate --commit` runs it before it deploys. For an
-`owner: flux` consumer, `rotate` prints that Flux applies the value once the commit lands.
+The weekly cron needs no `write` step: `rotate --commit` runs it first, and `rotate` prints that
+Flux applies the value once the commit lands.
 
 ### Rotating the cluster key
 
@@ -189,9 +186,8 @@ to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
 ## `auto` — automated
 
 `rotate --commit` generates a new 32-char token, writes it via `sops set`, and records the
-date. Then every reader must render again. `secret_rotation.py consumers <key>` prints the
-`deploy.sh` line for an Ansible-owned reader. A Flux-owned reader, such as monitor-bridge,
-takes the value once the commit lands, and `deploy.sh` exits 5 on its tag.
+date. Then every reader must render again. A reader Flux applies, such as monitor-bridge, takes
+the value once the commit lands, and `deploy.sh` exits 5 on its tag.
 Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
 one weekly cron interval, so a token rotates the Sunday *before* it goes overdue and the
 daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.
@@ -202,8 +198,8 @@ The `rotate --commit` weekly cron is autonomous and state-changing — its autho
 - **Scope / exclusions:** only `auto`-tier, locally generated push tokens with **no external
   coupling**, and only those **coming due** within `ROTATE_LEAD_DAYS` (8). `assisted` / `external` /
   `pinned` are **never** touched by the cron — a `pinned` swap loses data (see below).
-- **Mode:** change-producing — writes via `sops set`, commits the registry, and the operator
-  redeploys the consumer. Not report-only; there is no dry-run cron (the bare `rotate` is the dry run,
+- **Mode:** change-producing — writes via `sops set`, commits the registry, and Flux applies the
+  value to the consumer once the commit lands. Not report-only; there is no dry-run cron (the bare `rotate` is the dry run,
   run by hand).
 - **Required evidence:** the daily audit's verdict (`SecretRotationAuditFailed`) must stay quiet
   after a rotation.

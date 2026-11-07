@@ -22,8 +22,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))  # scripts/
 
 from secrets_mgmt.rotation_tools import REPO
 from lib import yaml_fast
-from lib.ansible_inventory import K8S_HOST, host_vars_file
-from lib.k8s_roles import tag_owners
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -231,40 +229,23 @@ def left_out_line(tag: str) -> str:
 
 
 def consumer_commands(name: str, repo: str = REPO) -> list[str]:
-    """The exact commands that make a rotated `name` take effect everywhere, deploy plane first.
+    """The exact commands that make a rotated `name` take effect everywhere.
 
-    Setup-plane roles are listed with their own playbook because `deploy.sh` cannot reach them
-    and exits 2 rather than failing loudly at the role.
-
-    A deploy tag whose `containers_list` entry carries `owner` is left off the `deploy.sh`
-    line and named on a line of its own. `deploy.sh` exits 5 on such a tag, and exit 5 refuses
-    the whole run, so one owned tag on the line would deploy none of the other consumers. The
-    owners are read from `repo`'s own host_vars, the same tree the census read. An
-    `owner: flux` tag's line is the Flux path, `FLUX_PATH`.
+    Setup-plane roles are listed with their own playbook, host packages with the SOPS file they
+    carry, and each k8s consumer with the Flux path, `FLUX_PATH`.
     """
     consumers = tree_consumers(name, repo=repo)
     deploy_roles = sorted(r for r, plane in consumers.items() if plane == "deploy")
-    owners = (
-        tag_owners(
-            host_vars_file(K8S_HOST, _Path(repo) / "ansible/inventory/host_vars")
-        )
-        if deploy_roles
-        else {}
-    )
-    deploy_tags = [r for r in deploy_roles if r not in owners]
-    owned_tags = [r for r in deploy_roles if r in owners]
     setup_roles = sorted(r for r, plane in consumers.items() if plane == "setup")
     host_packages = sorted(r for r, plane in consumers.items() if plane == HOST_PLANE)
     # BACKTICKS ARE LOAD-BEARING, not decoration. This module is reached by two crons, and
     # `reference/scripts.py` classifies a script as `scheduled` when a scheduled script's
-    # text invokes it — so a bare `./scripts/deploy.sh ...` literal here would reclassify the
-    # interactive deploy path as cron-driven in the generated reference. That resolver already
+    # text invokes it — so a bare `scripts/secrets_mgmt/host_secrets.py ...` literal here would
+    # reclassify that script as cron-driven in the generated reference. That resolver already
     # draws the distinction this needs (`_invoked_in`, reference/scripts.py:102): a line
     # carrying a backtick is prose CITING a command rather than running one, which is exactly
     # what these strings are. Quoting them says so in the one way the tree can read.
     commands = []
-    if deploy_tags:
-        commands.append('`./scripts/deploy.sh --tags "%s"`' % ",".join(deploy_tags))
     for role in setup_roles:
         commands.append(
             "`uv run ansible-playbook ansible/initial_setup.yml --tags %s`" % role
@@ -275,5 +256,5 @@ def consumer_commands(name: str, repo: str = REPO) -> list[str]:
             "it decrypts) rewrites the SOPS file that the package `hosts/%s/package.yml` "
             "carries" % (host, host)
         )
-    commands.extend(FLUX_PATH % tag for tag in owned_tags)
+    commands.extend(FLUX_PATH % tag for tag in deploy_roles)
     return commands

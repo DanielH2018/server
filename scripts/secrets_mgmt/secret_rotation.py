@@ -404,7 +404,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
             % (", ".join(written), " ".join(REVERT_PATHS + CLUSTER_PATHS))
         )
         return 3
-    # Before both the redeploy and the Next: line, so neither names a tag `deploy.sh` refuses.
+    # Before the redeploy, which must not run a tag Flux applies.
     owners = tools.owners()
     left_out = tags & owners.keys()
     for tag in sorted(left_out):
@@ -423,18 +423,13 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         if left_out:
             print("  deployed nothing: no consumer is left for Ansible to deploy")
     else:
-        # deploy.sh deploys HEAD, not the working tree, so no consumer sees a rotated value
-        # until it is committed. A Flux consumer needs the commit too, so that half stays.
-        redeploy = (
-            ", then redeploy the consumer(s): `./scripts/deploy.sh --tags %s`"
-            % ",".join(sorted(tags))
-            if tags
-            else ""
-        )
         # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
         files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
         files = ", ".join(files[:-1]) + " and " + files[-1]
-        print("\nNext: commit " + files + redeploy)
+        print(
+            "\nNext: commit " + files + ", then land the PR with "
+            "`./scripts/deploy_tools/land.sh`, so Flux applies the rotated value"
+        )
     return 0
 
 
