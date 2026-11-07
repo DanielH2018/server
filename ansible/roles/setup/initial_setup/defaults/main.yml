@@ -55,8 +55,18 @@ initial_setup_worktree_holders_group: worktree-holders
 # tasks and its entry.
 #   loki_route_witness: daniel-box's witness is the loki-route-witness component since H7.36;
 #           daniel-server keeps the Ansible-era timer until its package moves it.
+#   access, accounting, audit_and_kernel, integrity, host_basics: the `host-hardening` component
+#           and bootstrap step 4 own them on a listed host (H7.58). host_basics covers the swap,
+#           apt and package tasks of host-basics.yml, and leaves its tooling tasks.
+#   worktree_holders: the Pi's package retires the scan's paths as legacy entries (H7.58).
 initial_setup_packaged_hosts:
   loki_route_witness: [daniel-box]
+  access: [daniel-pi]
+  accounting: [daniel-pi]
+  audit_and_kernel: [daniel-pi]
+  integrity: [daniel-pi]
+  host_basics: [daniel-pi]
+  worktree_holders: [daniel-pi]
 
 # Where the rkhunter and AIDE scripts source homelab-check-lib.sh from. crons.yml installs it
 # under /usr/local/lib; the integrity-scans host component sets /usr/lib/homelab, where the

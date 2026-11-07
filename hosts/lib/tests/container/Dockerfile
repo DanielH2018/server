@@ -36,7 +36,8 @@ ENV container=docker
 # also Depends on fail2ban, sysstat, acct, rkhunter, aide and aide-common (H7.30); aide-common
 # pulls in postfix as its mail transport agent. The Pi cases unmount /etc/resolv.conf before the
 # install (`pi_host_seed`), so the container has no DNS and an apt that needs a fetch retries
-# until the case's 900 second timeout (run 41153975441). `age` generates the throwaway key the
+# until the case's 900 second timeout (run 41153975441). It also Depends on auditd, debsums, jq,
+# libpam-tmpdir, unattended-upgrades, unzip and update-notifier-common (H7.58). `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a). `gcc`,
 # `libc6-dev` and `libyaml-dev` build PyYAML's C extension for the repo venv. They are
@@ -60,7 +61,25 @@ RUN --mount=type=secret,id=runner-ca,target=/run/runner-ca.crt,mode=0444 \
         systemd systemd-sysv python3 ca-certificates age git gnupg curl \
         gcc libc6-dev libyaml-dev; \
     apt-get install -y --download-only tree zram-tools watchdog earlyoom \
-        fail2ban sysstat acct rkhunter aide aide-common
+        fail2ban sysstat acct rkhunter aide aide-common \
+        auditd debsums jq libpam-tmpdir unattended-upgrades unzip update-notifier-common
+
+# The Pi package Depends on linux-raspi, which has no amd64 candidate, and on wireguard, which pulls
+# a kernel into the image through wireguard-modules (H7.58). An empty package stands in for each,
+# because no case boots the kernel or loads the module.
+RUN set -eu; \
+    for package in linux-raspi wireguard; do \
+        mkdir -p "/tmp/$package/DEBIAN"; \
+        printf '%s\n' "Package: $package" 'Version: 99' 'Architecture: all' \
+            'Maintainer: homelab test image' 'Description: stand-in for the Pi package Depends' \
+            > "/tmp/$package/DEBIAN/control"; \
+        dpkg-deb --build "/tmp/$package" "/tmp/$package.deb"; \
+        dpkg -i "/tmp/$package.deb"; \
+        rm -rf "/tmp/$package" "/tmp/$package.deb"; \
+    done
+
+# bootstrap-host.sh step 4 adds the sys user to `ssh-users`, and refuses a host without that user.
+RUN id ubuntu > /dev/null 2>&1 || useradd --create-home ubuntu
 
 # Units that would take dpkg's lock mid-case, or reach the runner's devices through
 # --privileged, never start. The updater's own timer is left alone: neither the fixture nor the

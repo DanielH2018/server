@@ -66,6 +66,41 @@ def test_var_is_defined():
     )
 
 
+def matches(pattern: str, release: dict[str, str]) -> bool:
+    """Whether every token of `pattern` matches `release`, as match_whitelist_string reads it."""
+    filled = pattern.replace("${distro_id}", "Ubuntu").replace(
+        "${distro_codename}", "noble"
+    )
+    return all(
+        release.get(key) == value
+        for key, value in (token.split("=", 1) for token in filled.split(","))
+    )
+
+
+def test_the_operators_widening_reaches_the_regular_updates_pocket():
+    release = {"origin": "Ubuntu", "archive": "noble-updates"}
+    assert any(matches(pattern, release) for pattern in patterns())
+
+
+# The fields `apt-cache policy` prints for these repositories on daniel-pi, 2026-11-07.
+@pytest.mark.parametrize(
+    "name, release",
+    [
+        ("Docker", {"origin": "Docker", "archive": "noble", "codename": ""}),
+        ("homelab", {"origin": "homelab", "archive": "homelab", "codename": "homelab"}),
+    ],
+)
+def test_no_pattern_reaches_docker_or_the_homelab_repository(name, release):
+    # An unattended engine swap took the Pi down (#1961), and the updater alone moves homelab-*.
+    assert not any(matches(pattern, release) for pattern in patterns()), name
+
+
+def test_the_match_reader_can_find_docker_when_a_pattern_names_it():
+    assert matches(
+        "origin=Docker,archive=noble", {"origin": "Docker", "archive": "noble"}
+    )
+
+
 @pytest.mark.parametrize("pattern", patterns())
 def test_pattern_uses_key_value_form(pattern: str):
     """No bare `origin:archive` entries — that is the legacy form that silently under-matches."""

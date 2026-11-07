@@ -3,7 +3,11 @@
 The host-bring-up role: base packages, per-user Python tooling, the sudo credential cache,
 auditd and kernel-module hardening, and the two host checks. The host packages own the rest of
 the baseline (sshd, fail2ban, unattended upgrades, sysctls, the journald cap, the maintenance
-jobs, the integrity scans and the firewall), and this role keeps no task for them.
+jobs, the integrity scans and the firewall), and this role keeps no task for them. On daniel-pi
+the `host-hardening` component and step 4 of `hosts/bootstrap-host.sh` also own the base packages,
+the sudo cache, auditd and the kernel modules, so
+`ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_packaged_hosts` skips those
+tasks there, and no setup apply upgrades the Pi's packages.
 **Not a container role** — a host-setup role under `ansible/roles/setup/`, run by
 `initial_setup.yml`, not `deploy.yml`. It is a large setup role, so **`--check` first** and scope
 with `--tags` when iterating. `docs/host-baseline-record.md` carries the per-block traps, the two

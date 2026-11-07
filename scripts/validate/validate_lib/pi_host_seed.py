@@ -21,6 +21,9 @@ the ufw 0.36.2-6 behaviour docs/host-packages.md records. The real ufw would not
 it in the container broke the container's DNS, and every later apt fetch failed to resolve (run
 41147933421). The package also edits /etc/postfix/main.cf and restarts postfix, which the
 container lacks, so a stub unit and an empty main.cf stand in.
+
+H7.58 adds one. The package's wireguard.conf restarts systemd-modules-load.service, which the image
+masks so that no case loads a module into the runner's kernel. A stub unit replaces the mask.
 """
 
 import base64
@@ -31,6 +34,7 @@ SSHD = "/usr/sbin/sshd"
 UFW_STOCK = "net/ipv4/conf/default/log_martians=0\\nnet/ipv4/conf/all/log_martians=0\\n"
 AUDITD_STUB = "[Service]\\nType=oneshot\\nRemainAfterExit=yes\\nExecStart=/bin/true\\n"
 EXPORTER_DROPIN = "[Service]\\nExecStart=\\nExecStart=/bin/sleep infinity\\n"
+MODULES_UNIT = "/etc/systemd/system/systemd-modules-load.service"
 UFW_STUB = "/usr/local/sbin/ufw"
 IPTABLES_STUB = "/usr/local/sbin/iptables"
 # The stand-in ufw. Appending an existing spec relabels it, `insert` of an existing spec skips
@@ -111,5 +115,6 @@ def seed_pi_host(c) -> None:
         f"printf '{EXPORTER_DROPIN}' > /etc/systemd/system/node_exporter.service.d/10-test.conf"
     )
     c.ok(f"printf '{AUDITD_STUB}' > /etc/systemd/system/postfix.service")
+    c.ok(f"rm -f {MODULES_UNIT} && printf '{AUDITD_STUB}' > {MODULES_UNIT}")
     c.ok("mkdir -p /etc/postfix && touch /etc/postfix/main.cf")
     c.ok("systemctl daemon-reload")
