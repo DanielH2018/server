@@ -13,6 +13,7 @@ Run: uv run pytest hosts/lib/tests/test_server_initial_setup_part2.py
 import json
 
 import pytest
+from _reconcile_arms import live_unit
 from test_pi_initial_setup_part1 import seeded_pi
 from test_pi_initial_setup_part2 import (
     LAN,
@@ -118,6 +119,8 @@ def test_reconcile_adopts_the_ssh_rules_and_leaves_the_k3s_and_hand_added_rules(
         "homelab-daniel-pi"
     )
     node.state["users"] = {"claude": 995}
+    # H7.59's filter restarts rsyslog, which the Pi fixture masks.
+    live_unit(node, "rsyslog.service")
     lan = context["lan_subnet"]
     server = "192.0.2.10"
     # The live rules in `ufw status` order (2026-10-31): the k3s agent's five join rules carry no

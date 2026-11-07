@@ -88,17 +88,9 @@ def _wrapper_execs(package: host_mode.Package, tool: str) -> bool:
     return mode == 0o755 and f'exec /usr/lib/homelab/bin/{tool} "$@"' in body.decode()
 
 
-def test_uv_reaches_both_hosts_and_the_old_copy_outlives_its_ansible_readers(
-    server, box
-):
+def test_uv_reaches_both_hosts_and_daniel_box_keeps_the_old_copy(server, box):
     assert _wrapper_execs(server, "uv")
     assert _wrapper_execs(box, "uv")
-    # daniel-server's Loki witness is the role's script until H7.59, and no tick re-renders it.
-    assert (
-        "/usr/local/bin/uv"
-        in (ROLE / "templates/loki-read-route-health.sh.j2").read_text()
-    )
-    assert "/usr/local/bin/uv" not in _legacy_paths(server)
     assert "/usr/local/bin/uv" not in _legacy_paths(box)
     assert "homelab-tools" in server.depends and "homelab-tools" in box.depends
 

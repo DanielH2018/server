@@ -350,19 +350,6 @@ loki_streams:
     job: syslog
     machine: daniel-pi
 
-# Hosts that witness the Loki read route, one check timer each. That route's only
-# caller is `probe.py loki-labels` / `loki-query` running as a HOST process, and its guard is a
-# ClientIP set of node-owned addresses — so a pod cannot witness it, and a single host cannot
-# either: which address a host arrives as depends on where the traefik pod sits, so the route
-# can be dead from one node and reachable from the other.
-#
-# Both prod cluster nodes and nothing else. daniel-pi is not in the ClientIP set at all. An
-# allowlist for the same reason as k3s_server_hosts above. ENFORCED by
-# ansible/tests/setup/test_loki_route_witness.py.
-loki_route_witness_hosts:
-  - daniel-box
-  - daniel-server
-
 # The endpoints the host crons probe to tell "this house's link is gone" from "the source I asked
 # refused me". Read by `wan_reachable` in homelab-check-lib.sh, which is the host-side
 # peer of monitor-bridge's `wan_reachable` gate — that gate runs in the bridge's loop and cannot

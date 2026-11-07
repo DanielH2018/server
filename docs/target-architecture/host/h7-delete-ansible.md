@@ -2316,6 +2316,14 @@ the `manual_plane` clearing, and *Rollback*'s
       `homelab-daniel-server`, as H7.36 did on daniel-box, and adds the Ansible-era timer and
       paths as legacy entries. That empties the `loki_route_witness` subject, so H7.59 deletes
       its tasks. Reverting any of the three rows follows *Rollback*'s per-host order.
+      **Amended at H7.59:** four facts the row did not state. The deleted task was the only
+      thing that made `/var/lib/node-exporter-textfile` writable by the sys user here, so the
+      component gains a `tmpfiles.d` line, which also holds it on a rebuilt host. The
+      `rsyslog-filter` component lists `rsyslog` as a `Depends`, and reconcile runs
+      `rsyslogd -N1` before its try-restart, which replaces the role's parse check. The role's
+      copies of the witness script and reader go with its tasks, and
+      `loki_route_witness_hosts` goes with them. daniel-server held neither Kuma file on
+      2026-11-07, so as on the Pi its package lists neither.
 35. **H7.61 and H7.62 land the dev tooling and the worktree holder scan in canary order.**
     Only `dev_tooling_hosts` and the `has_claude_code` hosts run these tasks, and both lists
     name daniel-server and daniel-box. H7.61 adds daniel-server to

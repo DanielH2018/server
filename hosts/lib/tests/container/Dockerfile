@@ -37,7 +37,8 @@ ENV container=docker
 # pulls in postfix as its mail transport agent. The Pi cases unmount /etc/resolv.conf before the
 # install (`pi_host_seed`), so the container has no DNS and an apt that needs a fetch retries
 # until the case's 900 second timeout (run 41153975441). It also Depends on auditd, debsums, jq,
-# libpam-tmpdir, unattended-upgrades, unzip and update-notifier-common (H7.58). `age` generates the throwaway key the
+# libpam-tmpdir, unattended-upgrades, unzip and update-notifier-common (H7.58), and daniel-server's
+# on rsyslog (H7.59). `age` generates the throwaway key the
 # secrets-unit case encrypts to (H4.1c). `git`, `gnupg` and `curl` are on an Ubuntu server
 # install, and bootstrap-host.sh calls each before it installs anything (H7.15a). `gcc`,
 # `libc6-dev` and `libyaml-dev` build PyYAML's C extension for the repo venv. They are
@@ -62,7 +63,7 @@ RUN --mount=type=secret,id=runner-ca,target=/run/runner-ca.crt,mode=0444 \
         gcc libc6-dev libyaml-dev; \
     apt-get install -y --download-only tree zram-tools watchdog earlyoom \
         fail2ban sysstat acct rkhunter aide aide-common \
-        auditd debsums jq libpam-tmpdir unattended-upgrades unzip update-notifier-common
+        auditd debsums jq libpam-tmpdir unattended-upgrades unzip update-notifier-common rsyslog
 
 # The Pi package Depends on linux-raspi, which has no amd64 candidate, and on wireguard, which pulls
 # a kernel into the image through wireguard-modules (H7.58). An empty package stands in for each,

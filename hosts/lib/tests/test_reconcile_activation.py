@@ -44,6 +44,14 @@ def settled(node: Node) -> None:
             id="try-restart",
         ),
         pytest.param(
+            "try-restart:rsyslog.service",
+            [
+                ["rsyslogd", "-N1"],
+                ["systemctl", "try-restart", "rsyslog.service"],
+            ],
+            id="try-restart-rsyslog",
+        ),
+        pytest.param(
             "reload:ssh.service",
             [["sshd", "-t"], ["systemctl", "reload", "ssh.service"]],
             id="reload",
@@ -60,6 +68,7 @@ def test_a_changed_file_runs_its_action_and_an_unchanged_one_runs_nothing(
 ):
     live_unit(node, "ssh.service")
     live_unit(node, "fail2ban.service")
+    live_unit(node, "rsyslog.service")
     live_unit(node, "systemd-modules-load.service")
     path = SYSCTL_FILE if action == "sysctl" else SSHD_FILE
     ship(node, path, "kernel.sysrq = 0\n", action)

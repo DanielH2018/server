@@ -16,14 +16,17 @@ import pytest
 from lib import yaml_fast
 from _helpers import ALL_VARS, HOST_VARS, SETUP_ROLES
 from _host_packages import HOSTS, shipped_text
+from lib.repo_paths import REPO
 
 ROLE = SETUP_ROLES / "initial_setup"
 SYSTEM_TUNING = ROLE / "tasks" / "system-tuning.yml"
 
-# The host-tuning component ships the journald drop-in in every host package. The rsyslog
-# filter below stays an initial_setup task, gated on has_rsyslog.
+# The host-tuning component ships the journald drop-in in every host package. The rsyslog-filter
+# component ships the filter below on the hosts that list it, and initial_setup writes it on the
+# other has_rsyslog hosts.
 JOURNALD_DEST = "/etc/systemd/journald.conf.d/50-homelab.conf"
 FILTER_DEST = "/etc/rsyslog.d/49-homelab-info-filter.conf"
+FILTER_COMPONENT = "rsyslog-filter"
 
 # Facilities that must never be discarded by the filter. auth and authpriv carry the records
 # the whole change exists to deliver. kern and mail do NOT arrive through journald -- rsyslog
@@ -49,6 +52,29 @@ def copy_content(path: Path, dest: str) -> str:
         if isinstance(copy, dict) and copy.get("dest") == dest:
             return copy.get("content", "")
     return ""
+
+
+def lists_the_filter(host: str) -> bool:
+    spec = yaml_fast.safe_load((REPO / "hosts" / host / "package.yml").read_text())
+    return FILTER_COMPONENT in spec["components"]
+
+
+def filter_text(host: str) -> str:
+    """The filter `host` takes from its package, or else the role's copy."""
+    if lists_the_filter(host):
+        return shipped_text(host, FILTER_DEST)
+    return copy_content(SYSTEM_TUNING, FILTER_DEST)
+
+
+def has_rsyslog(host: str) -> bool:
+    flag = yaml_fast.safe_load((HOST_VARS / f"{host}.yml").read_text()).get(
+        "has_rsyslog"
+    )
+    return (
+        yaml_fast.safe_load(ALL_VARS.read_text())["has_rsyslog"]
+        if flag is None
+        else flag
+    )
 
 
 def setting(content: str, key: str) -> str | None:
@@ -92,7 +118,7 @@ def test_raising_the_forwarding_level_requires_the_syslog_filter(host: str):
     # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Rules the task files do not state
     if setting(shipped_text(host, JOURNALD_DEST), "MaxLevelSyslog") != "info":
         pytest.skip("forwarding is not raised, so the filter is not required")
-    content = copy_content(SYSTEM_TUNING, FILTER_DEST)
+    content = filter_text(host)
     assert content, (
         f"MaxLevelSyslog=info but nothing renders {FILTER_DEST}, so every info line on the "
         'host reaches /var/log/syslog and ships to Loki as {job="syslog"} -- a measured '
@@ -101,10 +127,9 @@ def test_raising_the_forwarding_level_requires_the_syslog_filter(host: str):
     assert "stop" in content, f"{FILTER_DEST} discards nothing"
 
 
-def test_filter_exempts_every_facility_that_bypasses_journald():
-    missing = MUST_BE_EXEMPT - exempted_facilities(
-        copy_content(SYSTEM_TUNING, FILTER_DEST)
-    )
+@pytest.mark.parametrize("host", HOSTS)
+def test_filter_exempts_every_facility_that_bypasses_journald(host: str):
+    missing = MUST_BE_EXEMPT - exempted_facilities(filter_text(host))
     assert not missing, (
         f"the filter would discard info for {sorted(missing)}. auth/authpriv carry the records "
         "this exists to deliver; kern and mail reach rsyslog directly (imklog, postfix's own "
@@ -133,7 +158,7 @@ def test_the_filter_is_gated_on_has_rsyslog():
     gate is a declared host flag, not a live check of
     the unit, so the play never renders config for a logger the host has retired.
     """
-    assert filter_block_when(SYSTEM_TUNING) == "has_rsyslog", (
+    assert "has_rsyslog" in filter_block_when(SYSTEM_TUNING), (
         "the block rendering the rsyslog filter is not `when: has_rsyslog`, so it runs on "
         "daniel-pi, notifies Restart rsyslog, and fails the play on the masked unit"
     )
@@ -145,6 +170,19 @@ def test_the_filter_is_gated_on_has_rsyslog():
     assert pi.get("has_rsyslog") is False, (
         "daniel-pi does not set has_rsyslog: false, so the filter block runs on the one host "
         "whose rsyslog is masked"
+    )
+
+
+def test_the_filter_component_lists_only_on_hosts_with_rsyslog():
+    """A masked rsyslog has no use for the filter, and `rsyslogd -N1` would hold the host."""
+    assert lists_the_filter("daniel-server")
+    assert not lists_the_filter("daniel-pi")
+    assert not [h for h in HOSTS if lists_the_filter(h) and not has_rsyslog(h)]
+
+
+def test_the_component_ships_the_bytes_the_role_writes():
+    assert shipped_text("daniel-server", FILTER_DEST) == copy_content(
+        SYSTEM_TUNING, FILTER_DEST
     )
 
 

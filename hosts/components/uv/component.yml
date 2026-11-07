@@ -12,7 +12,7 @@
 # DECIDED: the setup roles keep naming /usr/local/bin/uv until their host's own move. On daniel-box
 # the GitOps tick re-renders them within ten minutes of a merge, while the package waits on the
 # rollout gate, so a repoint there would run a path that does not exist yet. On daniel-server no tick
-# re-renders the Loki witness, so retiring the path there waits for H7.59, which moves the witness.
+# re-rendered the Ansible-era Loki witness, so H7.59 retired the path there when it moved the witness.
 depends:
   - homelab-tools
 files:

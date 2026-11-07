@@ -1,0 +1,22 @@
+# The rsyslog info filter (H7.59, docs/target-architecture/host/h7-delete-ansible.md, step 34). It
+# is the other half of the `host-tuning` component's MaxLevelSyslog=info, and each host lists it in
+# its own PR, because `host-tuning` is shared and a file added there would reach every host at once.
+# A host with `has_rsyslog: false` never lists it: its rsyslog is masked, so the try-restart has
+# nothing to restart and forwarding reaches nothing.
+# ansible/tests/setup/test_journald_syslog_forwarding.py holds the listing to has_rsyslog.
+#
+# Without the filter every info line on the host lands in /var/log/syslog, which Alloy ships to Loki
+# as {job="syslog"}: +7 MB/day/host against 1.33 MB/day with it. The name sorts before
+# 50-default.conf, because `stop` only keeps a message from the rules that run after it.
+#
+# The exemptions decide what survives. auth and authpriv carry the records MaxLevelSyslog=info
+# exists to deliver. kern and mail do not arrive through journald: rsyslog reads kernel messages
+# through imklog, and postfix writes to its own listen socket, so discarding their info here deletes
+# lines from kern.log and mail.log.
+#
+# Reconcile runs `rsyslogd -N1` before the try-restart, so a fragment that does not parse holds the
+# host and never reaches the running daemon.
+depends:
+  - rsyslog
+files:
+  - {src: templates/49-homelab-info-filter.conf, dst: /etc/rsyslog.d/49-homelab-info-filter.conf, activate: "try-restart:rsyslog.service"}

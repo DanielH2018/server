@@ -144,7 +144,6 @@ _PROSE_HOLDERS = {
             "ansible/roles/setup/hypervisor/tasks/etcd_drill.yml",
             "ansible/roles/setup/initial_setup/tasks/crons.yml",
             "ansible/roles/setup/initial_setup/templates/aide-check.sh.j2",
-            "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2",
             "ansible/roles/setup/initial_setup/templates/rkhunter-check.sh.j2",
             "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
             "hosts/components/registry-gc/templates/registry-gc.sh.j2",

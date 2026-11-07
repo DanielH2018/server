@@ -54,11 +54,10 @@ initial_setup_worktree_holders_group: worktree-holders
 # the subject only on the hosts the map does not list. The map sits here, never in `host_vars`,
 # because an `inventory/` edit is a deploy-plane change. The last host's PR deletes the subject's
 # tasks and its entry.
-#   loki_route_witness: daniel-box's witness is the loki-route-witness component since H7.36;
-#           daniel-server keeps the Ansible-era timer until its package moves it.
 #   access, accounting, audit_and_kernel, integrity, host_basics: the `host-hardening` component
-#           and bootstrap step 4 own them on a listed host (H7.58). host_basics covers the swap,
-#           apt and package tasks of host-basics.yml, and leaves its tooling tasks.
+#           and bootstrap step 4 own them on a listed host (H7.58, H7.59). host_basics covers the
+#           swap, apt and package tasks of host-basics.yml, and leaves its tooling tasks.
+#   rsyslog_filter: the rsyslog info filter. The rsyslog-filter component ships it (H7.59).
 #   dev_tooling: the per-user uv, prek and Python, the /usr/local/bin/uv copy and the git hooks.
 #           The dotfiles repo installs the per-user tools, the uv component ships /usr/bin/uv and
 #           the cluster-node procedure runs `prek install`. ansible-core and ansible-lint stay on
@@ -67,12 +66,12 @@ initial_setup_worktree_holders_group: worktree-holders
 #   worktree_holders: the worktree holder scan. The worktree-holders component ships it on
 #           daniel-server (H7.61), and the Pi's package retires its paths as legacy entries (H7.58).
 initial_setup_packaged_hosts:
-  loki_route_witness: [daniel-box]
-  access: [daniel-pi]
-  accounting: [daniel-pi]
-  audit_and_kernel: [daniel-pi]
-  integrity: [daniel-pi]
-  host_basics: [daniel-pi]
+  access: [daniel-pi, daniel-server]
+  accounting: [daniel-pi, daniel-server]
+  audit_and_kernel: [daniel-pi, daniel-server]
+  integrity: [daniel-pi, daniel-server]
+  host_basics: [daniel-pi, daniel-server]
+  rsyslog_filter: [daniel-server]
   dev_tooling: [daniel-server]
   vale: [daniel-server]
   worktree_holders: [daniel-pi, daniel-server]

@@ -736,6 +736,15 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     sudo k3s kubectl get node daniel-server
     ```
 
+1. To load the i915 option the package ships, rebuild the initramfs and reboot. i915 loads from the
+   initramfs, so `/etc/modprobe.d/i915.conf` reaches it only then, and QuickSync needs the GuC
+   firmware the option enables:
+
+    ```bash
+    sudo update-initramfs -u
+    sudo reboot
+    ```
+
 1. As the operator, apply the dotfiles. They install the per-user uv, `prek` and the pinned Python,
    which the host's `uv` units read because they run with `--no-python-downloads`. The chezmoi
    binary comes from `homelab-tools`:
