@@ -35,7 +35,7 @@ stateful hold. It posts to the deployer's Discord channel:
   - when `soak` failed, the soak Job's name and the read-only command that prints the
     services it named;
   - for each changed snapshot role, its `digest8`, each claim's snapshot prefix, and a command
-    block in Branch 1's order: classify, two suspends, the `volume-revert.yml` run, two
+    block in Branch 1's order: classify, two suspends, the `volume_revert.py` run, two
     resumes. Beside the classify command it prints `prod@sha256:<digest>`, the string a role
     that attempted R reads in `.status.lastAttemptedRevision`. CI cannot read the cluster, so
     there is a block for EVERY changed snapshot role, and the classify step picks which to
@@ -44,7 +44,7 @@ Discord refuses a message over `forge.DISCORD_MAX` characters, so the header tak
 messages as its listings need, which a revision that changes every tag does, and then each
 changed snapshot role takes one message, or two when its prefixes and its block together pass
 the limit. No line and no block is cut. Each block runs the revert once per claim namespace,
-and the header says when the revert playbook is not in the tree yet. Any failed send
+and the header says when the revert script is not in the tree. Any failed send
 exits 1, so GitHub shows a red run.
 
 THE SUSPENDED-CHANGED POST (D5.1d). `decide` writes `<R> suspended-changed=<tags>` itself, in
@@ -91,8 +91,8 @@ SUSPENDED = "suspended-changed="
 WEBHOOK_ENV = "DEPLOY_DISCORD_WEBHOOK"
 SOAK = "soak"
 RUNBOOK = "docs/volume-snapshot-drills.md"
-# The revert entry point each block runs. D5.2c adds it, so the post says when it is absent.
-PLAYBOOK = "ansible/volume-revert.yml"
+# The revert entry point each block runs. The post says when the checkout lacks it.
+REVERT_SCRIPT = "scripts/backup/volume_revert.py"
 # The longest line a header listing takes, so a list of every tag splits across lines that
 # each fit a message beside the marker.
 _LISTING_MAX = 1500
@@ -283,12 +283,12 @@ def block(tag: str, role: dict, digest: str) -> str:
     namespaces: dict[str, list[str]] = {}
     for claim in role["claims"]:
         namespaces.setdefault(claim["namespace"], []).append(claim["name"])
-    # One run per namespace, because the role reverts every claim in `k8s_namespace`.
+    # One run per namespace, because the script reverts every claim in its `--namespace`.
     reverts = [
-        f"uv run ansible-playbook {PLAYBOOK} -e volume_revert_service={tag} "
-        f"-e k8s_namespace={namespace} "
-        f"""-e '{{"volume_revert_claims": {json.dumps(names)}}}' """
-        f"-e volume_revert_sha={role['digest8']}"
+        f"sudo .venv/bin/python -B {REVERT_SCRIPT} --service {tag} "
+        f"--namespace {namespace} --sha {role['digest8']} "
+        + " ".join(f"--claim {name}" for name in names)
+        + " --apply"
         for namespace, names in sorted(namespaces.items())
     ]
     lines = [
@@ -354,7 +354,7 @@ def messages(
     verdict: str,
     failed: list[str],
     found: dict,
-    playbook_present: bool = True,
+    script_present: bool = True,
 ) -> list[str]:
     """The post: the header, then one message per changed snapshot role.
 
@@ -368,7 +368,7 @@ def messages(
         verdict: `verify`'s verdict, `failed` or anything else for no verdict.
         failed: the names `verify` printed as failed or timed out.
         found: the record `decide` wrote (`read`).
-        playbook_present: whether PLAYBOOK is in the checkout; the header says when not.
+        script_present: whether REVERT_SCRIPT is in the checkout; the header says when not.
     """
     snapshot = set(found["snapshot_roles"])
     stateful = found["stateful"]
@@ -386,10 +386,10 @@ def messages(
         *_listing("Changed tags", changed),
         *_listing("Failed or timed out", failing),
     ]
-    if not playbook_present:
+    if not script_present:
         header.append(
-            f"{PLAYBOOK} is not in this checkout yet (D5.2c adds it), so step 3 of each "
-            "block cannot run until it lands. Suspend, then wait for it before any reset."
+            f"{REVERT_SCRIPT} is not in this checkout, so step 3 of each block cannot run "
+            "until it lands. Suspend, then wait for it before any reset."
         )
     if SOAK in failed:
         job = found.get("soak_job") or ""
@@ -497,7 +497,7 @@ def run(args: argparse.Namespace, post: Callable[[str], None]) -> int:
     except ValueError as err:
         error(f"hold: {err}")
         return FAILED
-    present = (REPO / PLAYBOOK).is_file()
+    present = (REPO / REVERT_SCRIPT).is_file()
     posts = messages(args.target, args.hold, args.verdict, failed, found, present)
     return _send(args.target, posts, post)
 

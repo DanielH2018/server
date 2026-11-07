@@ -154,6 +154,11 @@ def find_tool(name: str) -> str | None:
     return shutil.which(name, path=os.pathsep.join(TOOL_DIRS))
 
 
+def find_kubectl() -> str | None:
+    """The kubectl binary by absolute path, or None on a host without one."""
+    return find_tool("kubectl")
+
+
 def find_kubeconfig(user: Path | None = None, k3s: Path | None = None) -> Path | None:
     """Pick a kubeconfig this process can actually read.
 

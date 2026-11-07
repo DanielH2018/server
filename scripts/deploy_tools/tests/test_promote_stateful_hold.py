@@ -166,9 +166,9 @@ def test_two_changed_snapshot_roles_each_get_a_whole_block_and_the_failed_one_is
         f"promote hold {T[:8]}: snapshot role sonarr (changed), digest8 {SONARR}",
     ]
     radarr, sonarr = roles
-    assert "volume_revert_sha=2222bbbb" in radarr and "radarr-backups" in radarr
-    assert "volume_revert_service=sonarr" in sonarr
-    assert "volume_revert_sha=1111aaaa" in sonarr and "radarr" not in sonarr
+    assert "--sha 2222bbbb" in radarr and "--claim radarr-backups" in radarr
+    assert "--service sonarr" in sonarr
+    assert "--sha 1111aaaa" in sonarr and "radarr" not in sonarr
     assert (
         "radarr (snapshot role)" in header and "traefik (not a snapshot role)" in header
     )
@@ -304,12 +304,12 @@ def test_a_header_listing_every_tag_splits_across_messages_that_each_fit(tmp_pat
     assert sum("1. classify" in m for m in sent) == 1
 
 
-def test_the_header_says_when_the_revert_playbook_is_absent(tmp_path):
+def test_the_header_says_when_the_revert_script_is_absent(tmp_path):
     found = _record(tmp_path)
     absent = stateful.messages(T, f"{T} stateful=x", "failed", ["sonarr"], found, False)
     present = stateful.messages(T, f"{T} stateful=x", "failed", ["sonarr"], found, True)
-    assert f"{stateful.PLAYBOOK} is not in this checkout yet" in absent[0]
-    assert stateful.PLAYBOOK + " is not" not in present[0]
+    assert f"{stateful.REVERT_SCRIPT} is not in this checkout" in absent[0]
+    assert stateful.REVERT_SCRIPT + " is not" not in present[0]
 
 
 def test_each_claim_namespace_gets_its_own_revert_run():
@@ -323,8 +323,9 @@ def test_each_claim_namespace_gets_its_own_revert_run():
     reverts = [
         line
         for line in stateful.block("app", role, DIGEST).splitlines()
-        if "volume-revert.yml" in line
+        if "volume_revert.py" in line
     ]
     assert len(reverts) == 2
-    assert "-e k8s_namespace=apps" in reverts[0] and '["app-data"]' in reverts[0]
-    assert "-e k8s_namespace=cache" in reverts[1] and '["app-cache"]' in reverts[1]
+    assert "--namespace apps" in reverts[0] and "--claim app-data" in reverts[0]
+    assert "--namespace cache" in reverts[1] and "--claim app-cache" in reverts[1]
+    assert all(line.endswith(" --apply") for line in reverts)

@@ -13,7 +13,7 @@ headers inside this process, so no argv exists for `ps` to show — the property
 was chosen for, without the subprocess.
 
 CREDENTIALS stay with the caller. The drain reads them from the environment because
-`ansible/prune_backups.yml` decrypts them and hands them over; the probe decrypts them itself
+`scripts/backup/prune_backups.py` decrypts them and hands them over; the probe decrypts them itself
 with `sops`. This module never reads either source.
 
 NOT THE BRIDGE. monitor-bridge authorizes against B2 with its own client in

@@ -281,6 +281,8 @@ KNOWN_CALLERS = frozenset(
         "diagnostics/probe_lib/vip_placement.py",
         "infra_map/live.py",
         "grafana/export_grafana_dashboards.py",
+        "backup/prune_backups.py",
+        "lib/operator_kubectl.py",
     }
 )
 

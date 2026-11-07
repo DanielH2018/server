@@ -29,9 +29,9 @@ WHY THE OPERATOR MODES ARE NOT THE STRAYS MODE. The strays mode is all-or-nothin
 every stray it finds, and at the per-block cost below the full backlog from a 20-volume
 migration is roughly 13,900 Class C against a 2,100/day budget -- the transaction-cap event the
 migration exists to prevent. The migrated-chain mode deletes one claim's chain, so the spend can
-be paced. For a weekly-tier (B2) backlog too large to pace, use `ansible/prune_backups.yml -e
-prune_mode=b2-drain` instead: it deletes the objects through the B2 API, and Longhorn's
-backup-target sync then drops the dangling Backup CRs. b2-drain cannot reach R2, so a daily-tier
+be paced. For a weekly-tier (B2) backlog too large to pace, use
+`scripts/backup/prune_backups.py` instead: it deletes the objects through the B2 API, and Longhorn's
+backup-target sync then drops the dangling Backup CRs. the drain cannot reach R2, so a daily-tier
 volume's chain still goes through migrated-chain, one claim at a time.
 
 WHY A SEED NEEDS RETIRING AT ALL. A seed carries no RecurringJob label, so no job's `retain`
