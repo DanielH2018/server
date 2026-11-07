@@ -8,7 +8,7 @@ near the cap for a test module. `table_rows` reads D2's entry-point table for th
 
 `secret_rotation.py --deploy` has a row in that table but no entry here.
 `rotation_tools.run_deploy` runs `ansible-playbook ansible/deploy.yml` itself, never the
-wrapper, so D2.1d's `ansible_owned` batch loop governs it instead (#4960).
+wrapper, and `deploy.yml` applies no k8s role.
 """
 
 import re
@@ -36,12 +36,8 @@ TABLE_HEADING = "### What each entry point does with a tag that is not Ansible-o
 
 DEPLOY_SH_EXEMPT = {
     "ansible/bring-up.sh": (
-        "runs a full deploy with no --tags, so no tag reaches the refusal; the play's "
-        "`ansible_owned` batch loop skips the entry instead"
-    ),
-    "ansible/post_tasks/k8s_image_drift_gate.yml": (
-        "the line is a command an operator reads in a `fail_msg` block scalar, not one the "
-        "play runs"
+        "runs a full deploy with no --tags, so no tag reaches the refusal, and `deploy.yml` "
+        "applies no k8s role"
     ),
 }
 

@@ -788,7 +788,7 @@ Then repeat R1's shadow pair with a fresh `shadow_diff.py stubs` file. `compare`
       flagged case moves to `authelia` and `authelia_password_hash`.
     - Retire `test_n8n_image_stamp.py` in `ansible/tests/services/`, whose subject is gone.
     - `test_a_dry_run_records_the_digest_n8n_stamps_and_the_gate_skips_it` in
-      `ansible/tests/deploy/test_built_image_drift_gate.py` loses its reason. Keep its second
+      `test_built_image_drift_gate.py` loses its reason. Keep its second
       half, that every drift-gate task reading `k8s_built_images` skips on a dry run, under a
       name that does not mention n8n. Drop the first half, which held the record unguarded
       only for n8n's render.

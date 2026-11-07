@@ -26,13 +26,13 @@ from lib.repo_paths import ANSIBLE, K8S_ROLES
 
 from lib import yaml_fast
 from lib.cli_help import answer_help
-from lib.k8s_roles import SHARED_ROLES, k8s_autodeploy_denylist, role_dirs
+from lib.k8s_roles import k8s_autodeploy_denylist, role_dirs
 
 
 def eligible_roles() -> list[str]:
     """Role names declaring `k8s_autodeploy: true` — mirrors the guard test's `_auto_deployable`."""
     names = []
-    for entry in role_dirs(K8S_ROLES, exclude=SHARED_ROLES):
+    for entry in role_dirs(K8S_ROLES):
         defaults = entry / "defaults" / "main.yml"
         if not defaults.is_file():
             continue
@@ -52,8 +52,8 @@ def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:
 
     Eligible and denied come from `eligible_roles()` and `k8s_autodeploy_denylist()`, which
     `test_every_role_is_either_denied_or_declares_itself_deployable` asserts partition every
-    role that declares a stance. Not-declaring is the remainder — `SHARED_ROLES`, which is
-    exempt because it deploys no service of its own.
+    role that declares a stance. Not-declaring is the remainder, which `k8s_autodeploy_denylist`
+    refuses, so it reads empty on the tree.
 
     Returns:
         `(eligible, denied, not_declaring)`, each sorted.

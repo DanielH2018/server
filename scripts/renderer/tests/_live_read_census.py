@@ -1,12 +1,12 @@
-"""R3's live-read census: no name a k8s-play task sets reaches a template the render reads.
+"""R3's live-read census: no name a render target's task sets reaches a template it reads.
 
 Target slice R3's exit check 3 (`docs/target-architecture/render/r3-remove-live-reads.md`,
 *The census*). The census computes three sets from the tree:
 
-- **Set by tasks:** every `set_fact` key and `register` name in every task file the k8s play
-  in `ansible/deploy.yml` reaches. The walk follows `import_tasks`, `include_tasks`,
-  `import_role` and `include_role`, nested blocks included, and expands the batch loop's
-  `k8s/{{ container_item.name }}` to every render target.
+- **Set by tasks:** every `set_fact` key and `register` name in every task file a render
+  target's `tasks/main.yml` reaches. No render target holds one on the tree, because
+  `test_renderer_runbook_allowlist.py` refuses it. The walk follows `import_tasks`,
+  `include_tasks`, `import_role` and `include_role`, nested blocks included.
 - **Derived:** the names the renderer computes from the tree. The caller supplies them, as
   `derived_names` computes them for the real tree.
 - **Reached:** the names read by the templates the render reads, then, until nothing is
@@ -51,8 +51,6 @@ from renderer.renderer_lib.task_inputs import (
 )
 from toposort import filter_by_platform
 
-K8S_PLAY = "Deploy k8s workloads"
-ROLE_LOOP = "k8s/{{ container_item.name }}"
 IMAGE_BUILDER = "k8s/image-builder"
 # The image-builder template the build context renders from. Its sibling `build-job.yaml.j2`
 # is a one-off Job image-builder's own task applies, so the render never reads it.
@@ -88,8 +86,8 @@ class Tree:
     """The Ansible tree the census reads: the repo's, or a test fixture's.
 
     Attributes:
-        ansible: The playbook directory, which holds `deploy.yml`, `roles/` and `inventory/`.
-        host: The inventory host the k8s play runs on.
+        ansible: The playbook directory, which holds `roles/` and `inventory/`.
+        host: The inventory host of the k8s entries.
         shared: The shared templates directory a role's templates import from.
         always: Templates every tag's render reads, whatever its file list.
     """
@@ -195,7 +193,7 @@ def _include_file(tree: Tree, current: Path, target: str) -> Path:
 
 def _role_tasks(tree: Tree, current: Path, args: dict, tags: list[str]) -> list[Path]:
     name = str(args.get("name", ""))
-    names = [f"k8s/{tag}" for tag in tags] if name == ROLE_LOOP else [name]
+    names = [name]
     if any("{{" in n for n in names):
         raise CensusError(f"{_rel(tree, current)}: cannot resolve role {name!r}")
     tasks_from = str(args.get("tasks_from") or "main")
@@ -247,41 +245,31 @@ def _walk_tasks(
                 _walk_file(tree, tasks_file, tags, walk)
 
 
-def walk_play(tree: Tree, tags: list[str]) -> _Walk:
-    """Every task file the k8s play reaches, and what its tasks set.
+def walk_roles(tree: Tree, tags: list[str]) -> _Walk:
+    """Every task file a render target's `tasks/main.yml` reaches, and what its tasks set.
 
     Raises:
-        CensusError: `deploy.yml` holds no k8s play, or an include names no file.
+        CensusError: An include names no file.
     """
-    deploy = tree.ansible / "deploy.yml"
-    plays = [
-        p for p in yaml_fast.safe_load(deploy.read_text()) if p.get("name") == K8S_PLAY
-    ]
-    if len(plays) != 1:
-        raise CensusError(f"{deploy} holds {len(plays)} plays named {K8S_PLAY!r}")
     walk = _Walk()
-    for section in ("pre_tasks", "tasks", "post_tasks"):
-        _walk_tasks(tree, deploy, plays[0].get(section) or [], tags, walk)
+    for tag in tags:
+        walk.roles.add(tree.roles / "k8s" / tag)
+        main = tree.roles / "k8s" / tag / "tasks" / "main.yml"
+        if main.is_file():
+            _walk_file(tree, main, tags, walk)
     _read_builds(tree, walk)
     return walk
 
 
 def _read_builds(tree: Tree, walk: _Walk) -> None:
-    """Replace each image-builder include's vars with the builds the renderer reads for its role.
-
-    A role's include is bare once its builds sit in `image_builder_builds`, so the vars on the
-    include name no Dockerfile or context template.
-    """
-    builder = tree.roles / IMAGE_BUILDER
-    sites = walk.include_vars.get(builder)
-    if sites is None:
-        return
-    callers = sorted({caller for caller, _ in sites if caller is not None})
-    walk.include_vars[builder] = [
-        (caller, site.vars)
-        for caller in callers
-        for site in image_builder_sites(caller)
+    """Record each build the renderer reads from a walked role's defaults."""
+    sites: list[tuple[Path | None, dict]] = [
+        (role, site.vars)
+        for role in sorted(walk.roles)
+        for site in image_builder_sites(role)
     ]
+    if sites:
+        walk.include_vars[tree.roles / IMAGE_BUILDER] = sites
 
 
 def _values(value: object) -> Iterator[str]:
@@ -395,7 +383,7 @@ def census(
     Raises:
         CensusError: The play walk cannot resolve an include.
     """
-    walk = walk_play(tree, tags)
+    walk = walk_roles(tree, tags)
     result = Census(set_by_tasks=walk.set_by_tasks, derived=derived)
     host_vars = _mapping(tree.ansible / "inventory" / "host_vars" / f"{tree.host}.yml")
     containers = filter_by_platform(host_vars.get("containers_list") or [], "k8s")

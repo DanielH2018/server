@@ -55,6 +55,14 @@ _ROLE_LOOKUP = re.compile(
     r"'/roles/k8s/([^/']+)/[^']+'\s*(?:,[^)]*)?\)"
 )
 
+# The third edge: a key in a role's defaults makes the renderer read a helper role for it.
+# `image_builder_builds` reads image-builder's context template, and
+# `k8s_autodeploy_snapshot_pvcs` reads volume-snapshot's defaults for the role's snapshot Job.
+_DEFAULTS_KEY_ROLES = {
+    "image_builder_builds": "image-builder",
+    "k8s_autodeploy_snapshot_pvcs": "volume-snapshot",
+}
+
 
 def _callees(node) -> set[str]:
     """Every k8s role the tasks under `node` reach. Walks blocks, which nest tasks."""
@@ -87,12 +95,25 @@ def _looked_up(role_dir: Path) -> set[str]:
     return found
 
 
+def _read_through_defaults(role_dir: Path) -> set[str]:
+    """Every helper role the renderer reads for a key `role_dir`'s defaults set."""
+    defaults = role_dir / "defaults" / "main.yml"
+    if not defaults.is_file():
+        return set()
+    text = defaults.read_text(errors="ignore")
+    return {
+        role
+        for key, role in _DEFAULTS_KEY_ROLES.items()
+        if re.search(rf"^{key}:", text, re.MULTILINE)
+    }
+
+
 def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
-    """For each k8s role another role includes or `lookup()`s, the roles that do.
+    """For each k8s role another role includes, `lookup()`s or reads through its defaults, those roles.
 
     A helper role has no `containers_list` entry and so no deploy tag of its own, but a
     caller's deploy applies it: an include runs its tasks under the caller's tag, and a lookup
-    renders its file into the caller's manifests. A change to it is therefore applied by
+    or a defaults key renders its file into the caller's manifests. A change to it is therefore applied by
     deploying its callers — which is what `scripts/deploy_tools/land_lib/land_tags.py` asks
     this to decide, so that landing a helper-role change alongside all of its callers stops
     reading as `needs-manual-apply`.
@@ -118,10 +139,10 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
     # landing, the deployer, the broad narrowing and the `--tags` expansion stop at a declared
     # role, so they never read such an edge. `releases_consumers._closure` does not stop, and
     # it reads the edge only for a census role whose closure passes through crowdsec or
-    # monitor-bridge. `manifests` is the one such role, and that reader skips it by name.
+    # monitor-bridge.
     for role_dir in sorted(p for p in roles_dir.iterdir() if p.is_dir()):
         caller = role_dir.name
-        reached = _looked_up(role_dir)
+        reached = _looked_up(role_dir) | _read_through_defaults(role_dir)
         for task_file in sorted(role_dir.glob("tasks/*.yml")):
             try:
                 reached |= _callees(yaml_fast.parse_yaml(task_file.read_text()))

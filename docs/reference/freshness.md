@@ -154,7 +154,6 @@ generated_sha: bb59748cd0
 | [host-baseline-record.md](../host-baseline-record.md) | 2026-11-06 | 45 | 0 | — |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-11-06 | 13 | 0 | — |
 | [k3s-node-plane-crons-and-incidents.md](../k3s-node-plane-crons-and-incidents.md) | 2026-11-06 | 21 | 0 | — |
-| [k8s-manifest-cycle-record.md](../k8s-manifest-cycle-record.md) | 2026-11-06 | 34 | 0 | — |
 | [landing.md](../landing.md) | 2026-11-06 | 51 | 0 | — |
 | [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-11-06 | 48 | 0 | — |
 | [monitor-bridge-internals.md](../monitor-bridge-internals.md) | 2026-11-06 | 31 | 0 | — |

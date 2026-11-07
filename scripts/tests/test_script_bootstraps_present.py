@@ -310,7 +310,8 @@ def find_bootstrap_gaps(
     missing: list[tuple[Path, int, str, set[Path]]] = []
     unresolvable: list[tuple[Path, int, str]] = []
     for file in sorted(SCRIPTS.rglob("*.py")):
-        if is_pytest_only(file.relative_to(REPO)):
+        # A Job's ConfigMap carries a `job_files` module flat beside what it imports.
+        if is_pytest_only(file.relative_to(REPO)) or "job_files" in file.parts:
             continue
         tree = _parsed(file)
         own_dir = file.parent.resolve()

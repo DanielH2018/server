@@ -4,7 +4,7 @@ Bazarr pulls subtitles for the media Sonarr/Radarr manage. See repo-root `CLAUDE
 shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=bazarr`
   with exit 5
 - **Image:** `lscr.io/linuxserver/bazarr` (`bazarr_k8s_image`)
@@ -18,7 +18,7 @@ shared conventions.
   Also mounts the shared `media-data` claim (read/write, via subPath) for the files
   themselves.
 - **Flux applies it, not Ansible** (D5.9, the first Wave B PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. authelia, media-volume
   and traefik stay
@@ -36,8 +36,7 @@ shared conventions.
 - **`media-data` is neither snapshotted nor reverted** (`k8s_autodeploy_unreverted_claims`). It
   is a shared claim other roles also write; a revert can forget a subtitle file bazarr already
   wrote there, which is self-healing because bazarr checks existence before re-downloading.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
+- **Where the task went.** Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `bazarr-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait.
 

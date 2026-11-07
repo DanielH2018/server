@@ -20,11 +20,9 @@ from _autodeploy import (
     _template_texts,
 )
 from _autodeploy_rollout import (
-    _MANIFEST_KIND_TO_ROLLOUT_KIND,
     _deployment_docs,
     _deployments_missing_readiness_probe,
     _gated_names,
-    _primary_rollout_kind,
     _primary_rollout_name,
     _rollout_gate_offender,
     _sets_empty_rollout,
@@ -62,41 +60,6 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
         "manifests_extra_rollouts, or set k8s_autodeploy: false with a k8s_autodeploy_reason "
         "in the role's own defaults/main.yml (the denylist is derived from that "
         "declaration):\n" + "\n".join(offenders)
-    )
-
-
-def test_auto_deployable_roles_gate_the_right_kind() -> None:
-    """Name-only gating passes a role whose rollout kind is wrong.
-
-    `_gated_names` compares names and nothing else, so a role setting
-    `manifests_rollout: node-exporter` without `manifests_rollout_kind: daemonset` reports zero
-    offenders while the shared role runs `rollout status deploy/node-exporter` against a
-    Deployment that does not exist. kubectl fails loudly at deploy time; CI stays green, which
-    is the failure this file exists to prevent.
-    """
-    offenders = []
-    for role in _roles():
-        if not _auto_deployable(role):
-            continue
-        primary = _primary_rollout_name(role)
-        if not primary:
-            continue
-        declared = _primary_rollout_kind(role)
-        texts = _template_texts(role)
-        for name in _deployment_templates(role):
-            for kind, rendered_name in _deployment_docs(texts[name]):
-                if rendered_name != primary:
-                    continue
-                expected = _MANIFEST_KIND_TO_ROLLOUT_KIND[kind]
-                if expected != declared:
-                    offenders.append(
-                        f"{role.name}: {name} renders a {kind}, so the rollout gate "
-                        f"needs manifests_rollout_kind: {expected}, but the role declares "
-                        f"{declared!r}"
-                    )
-    assert not offenders, (
-        "Auto-deployable role(s) whose rollout gate names the wrong kind — `rollout status` "
-        "would target a workload that does not exist:\n" + "\n".join(offenders)
     )
 
 

@@ -23,7 +23,7 @@ import crowdsec_verify as cv
 from _k8s_render import render_role_template
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES
-from lib.repo_paths import ANSIBLE, HOST_LIB_FILES
+from lib.repo_paths import ANSIBLE, HOST_LIB_FILES, SCRIPTS
 from renderer import shadow_diff
 from renderer.renderer_lib import cluster
 from renderer.renderer_lib.context import load_stubs
@@ -217,10 +217,10 @@ def _render_tree_copy(tmp_path, stubs, edit=None) -> cluster.RenderedTag:
     tree = tmp_path / "ansible"
     role = tree / "roles" / "k8s" / TAG
     shutil.copytree(K8S_ROLES / TAG, role)
-    # The jobs ConfigMap ships k8s/manifests' helper.
     (tree / "roles" / "setup").symlink_to(ANSIBLE / "roles" / "setup")
     (tmp_path / "hosts").symlink_to(HOST_LIB_FILES.parent)  # playbook_dir/../hosts/lib
-    (tree / "roles" / "k8s" / "manifests").symlink_to(K8S_ROLES / "manifests")
+    # The jobs ConfigMap ships the renderer's helper, playbook_dir/../scripts/renderer.
+    (tmp_path / "scripts").symlink_to(SCRIPTS)
     (tree / "vars").mkdir()
     shutil.copy(ANSIBLE / "vars" / "cluster-vars.source", tree / "vars")
     if edit:

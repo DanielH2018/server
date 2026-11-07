@@ -40,7 +40,7 @@ _EMITTERS = (_DEPLOY_PLAYBOOK, _PROMOTE)
 # The two host emitters build the line with `host_lib.deploy_event` (#6164), so the literal the
 # query filters on is that function's, and each emitter must call it.
 # The soak Job prints the cluster's line, which a second query reads from its pod log.
-_SOAK = _REPO / "ansible/roles/k8s/manifests/files/flux_soak.py"
+_SOAK = _REPO / "scripts/renderer/job_files/flux_soak.py"
 
 
 def test_the_query_matches_what_the_deployers_actually_log():

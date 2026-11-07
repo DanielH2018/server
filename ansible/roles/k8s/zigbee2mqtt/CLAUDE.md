@@ -4,7 +4,7 @@ Zigbee2MQTT 2.x bridging the network-attached SLZB-06M coordinator into MQTT/Hom
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=zigbee2mqtt` with exit 5
 - **Images:** `ghcr.io/koenkk/zigbee2mqtt` (`zigbee2mqtt_k8s_image`), `alpine`
@@ -19,7 +19,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **Port:** 8080 · reaches the coordinator at `tcp://{{ slzb_ip }}:6638`, broker at the
   in-cluster `mosquitto` Service name
 - **Flux applies it, not Ansible** (D5.10, an own-window flip). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. mosquitto
   is Flux-owned too, so the
   Kustomization depends on it. The Deployment is `Recreate` and the SLZB-06M coordinator
@@ -38,8 +38,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   `zigbee_network_key`, `mqtt_username` and `mqtt_password` are `${<key>}` placeholders in the
   published render. Flux substitutes the values from the `homelab-cluster-vars` Secret. A
   rotation reaches the cluster only through `cluster_vars.py write`.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its pre-apply snapshot through
+- **Where the task went.** Its pre-apply snapshot through
   `k8s/volume-snapshot` became the `zigbee2mqtt-snapshot` Job, and the Kustomization's `wait`
   replaces the rollout wait.
 

@@ -25,6 +25,7 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
      "enable_links": ["<unit>", ...],
      "legacy": [{"path": "/abs/path"}, {"cron": "<name>", "user": "<user>"},
                 {"cron_file": "<name under /etc/cron.d>"}, {"unit": "<Ansible-era unit>"}],
+     "handoffs": [{"units": ["<unit>", ...], "legacy": [<legacy entry>, ...]}, ...],
      "reconcilers": [] | ["libvirt", "lines", "ufw", "users"],
      "activations": {"<packaged path>": "<action>"},
      "ufw": {"rules": [...], "legacy": [...]}, "libvirt": {...}, "users": {...},
@@ -33,7 +34,9 @@ The manifest, /usr/lib/homelab/manifest.json, which the host package ships:
 
 `units` names every unit reconcile manages, another homelab package's and another package's
 drop-in target included. `enable_links` names each unit whose enable link the manifest's
-packages ship. `reconcilers` lists the arms the manifest carries state for. The four arms are in
+packages ship. `handoffs` pairs each spec's legacy entries with the units that spec ships, and
+step 4 keeps an entry while one of those units failed to start in this run. `reconcilers` lists
+the arms the manifest carries state for. The four arms are in
 ARMS, and each section's schema is the docstring of its reconcile_lib module, so a manifest
 listing another kind fails the run here. The udev arm (H4.3b1) is not one of them: it hashes the
 package's /usr/lib/udev/rules.d/NN-homelab-*.rules files, as reconcile_lib/udev.py says.
@@ -194,6 +197,9 @@ def parse_manifest(text: str) -> dict:
         raise ManifestError(
             f"{MANIFEST}: legacy {legacy!r} holds an entry of no known kind"
         )
+    handoffs = manifest.get("handoffs", [])
+    if not isinstance(handoffs, list) or not all(map(valid_handoff, handoffs)):
+        raise ManifestError(f"{MANIFEST}: handoffs {handoffs!r} is malformed")
     if not isinstance(reconcilers, list):
         raise ManifestError(f"{MANIFEST}: reconcilers is not a list")
     activations = manifest.get("activations", {})
@@ -211,6 +217,7 @@ def parse_manifest(text: str) -> dict:
         "units": units,
         "enable_links": links,
         "legacy": legacy,
+        "handoffs": handoffs,
         "reconcilers": [name for name in reconcilers if name not in ARMS],
         "activations": activations,
         "arms": {name: manifest.get(name) for name in ARMS},
@@ -244,6 +251,18 @@ def valid_legacy(entry: object) -> bool:
             UNIT_NAME.fullmatch(entry["unit"])
         )
     return False
+
+
+def valid_handoff(group: object) -> bool:
+    if not isinstance(group, dict) or set(group) != {"units", "legacy"}:
+        return False
+    units, legacy = group["units"], group["legacy"]
+    return (
+        isinstance(units, list)
+        and all(isinstance(unit, str) and UNIT_NAME.fullmatch(unit) for unit in units)
+        and isinstance(legacy, list)
+        and all(map(valid_legacy, legacy))
+    )
 
 
 def read_under_lock(packages: list[str]) -> tuple[str | None, dict, dict]:
@@ -490,6 +509,17 @@ def legacy_key(entry: dict) -> str:
     return json.dumps(entry, sort_keys=True)
 
 
+def replacement_failed(handoffs: list[dict], not_started: set[str]) -> dict[str, str]:
+    """Each legacy key mapped to a unit of its spec that did not start in this run."""
+    return {
+        legacy_key(entry): unit
+        for group in handoffs
+        for unit in group["units"]
+        if unit in not_started
+        for entry in group["legacy"]
+    }
+
+
 # The restart queue and the secrets outputs (H4, *The restart contract*).
 
 
@@ -711,12 +741,15 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
 
     # Step 2: start every enabled unit outside the set that is not active, never a masked or a
     # windowed one.
+    start_failed = set()
     for unit in sorted(links - set(restart_set)):
         if units.get(unit, {}).get("policy") == "windowed":
             continue
         if is_active(unit) or load_state(unit) == "masked":
             continue
-        ok = bring_up(unit, "start", outputs, queued, started) and ok
+        if not bring_up(unit, "start", outputs, queued, started):
+            start_failed.add(unit)
+            ok = False
 
     # Step 3: restart the set. A failed or skipped unit keeps its old hash, so it stays changed.
     failed = {
@@ -752,7 +785,7 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
     prev_retired = set(prev.get("retired") or [])
     retired = []
     waiting = None
-    removed, handed = False, set()
+    removed, handed, plain = False, set(), []
     for entry in manifest["legacy"]:
         key = legacy_key(entry)
         if key not in prev_retired and digest and waiting is None:
@@ -760,8 +793,8 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         shadow = shadow_path(entry, units)
         # An Ansible-era copy under /etc shadows the packaged unit of the same name, or that
         # unit's packaged drop-in: remove it (one daemon-reload and the restarts follow the
-        # loop). With no packaged unit of that name, the file is the only copy, so it stays
-        # and counts as drift.
+        # loop), whatever the unit's start did, because the copy may be why it failed. With no
+        # packaged unit of that name, the file is the only copy, so it stays and counts as drift.
         if shadow and key not in prev_retired and not waiting:
             unit = shadowed(shadow)[0]
             if unit not in units:
@@ -774,7 +807,26 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
                 removed |= result[0]
                 if result[1]:
                     handed.add(unit)
-            continue
+        else:
+            plain.append(entry)
+
+    # Step 4b: one daemon-reload after every removal under /etc/systemd/system, then each
+    # packaged unit whose fragment changed, in the order step 3 uses.
+    if removed and systemctl("daemon-reload").returncode != 0:
+        log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
+        ok = False
+    for unit in sorted(handed):
+        if not left_alone(unit, units, links, manual) and not bring_up(
+            unit, "restart", outputs, queued, started
+        ):
+            start_failed.add(unit)
+            ok = False
+
+    # Step 4c: the other entries. One stays while a unit of its spec failed to start in this run.
+    kept_for = replacement_failed(manifest["handoffs"], start_failed | failed)
+    removed = False
+    for entry in plain:
+        key = legacy_key(entry)
         # A running service is never stopped to retire it: the entry stays and counts as drift.
         if key not in prev_retired and not waiting and running_service(entry):
             drift["legacy"] += 1
@@ -784,6 +836,8 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
         elif waiting:
             log(f"keeping {key}: the secrets do not all exist yet")
             ok = False
+        elif key in kept_for:
+            log(f"keeping {key}: {kept_for[key]} failed to start")
         else:
             # A drop-in removed from under /etc/systemd/system stays in force until a reload.
             unit_file = unit_dir_file(entry)
@@ -793,14 +847,9 @@ def act(manifest: dict, prev: dict) -> tuple[bool, dict]:
             else:
                 ok = False
 
-    # Step 4b: one daemon-reload after every removal under /etc/systemd/system, then each
-    # packaged unit whose fragment changed, in the order step 3 uses.
     if removed and systemctl("daemon-reload").returncode != 0:
         log("daemon-reload failed after removing a file under /etc/systemd/system", ERR)
         ok = False
-    for unit in sorted(handed):
-        if not left_alone(unit, units, links, manual):
-            ok = bring_up(unit, "restart", outputs, queued, started) and ok
 
     # Step 5: the per-kind reconcilers. The manifest's other kinds are ones this version lacks.
     for name in manifest["reconcilers"]:

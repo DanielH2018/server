@@ -13,7 +13,7 @@ import longhorn_reconcile as lr
 from _helpers import load_defaults
 from _k8s_render import render_role_template
 from lib import yaml_fast
-from lib.repo_paths import K3S_ROLE, K8S_ROLES
+from lib.repo_paths import JOB_FILES, K3S_ROLE, K8S_ROLES
 from lib.service_tiers import resolved_tier_lists
 
 ROLE = K8S_ROLES / "longhorn-reconcile"
@@ -69,8 +69,7 @@ def test_the_configmap_ships_the_script_and_the_connection_module_byte_for_byte(
         == (ROLE / "files/longhorn_reconcile.py").read_text()
     )
     assert (
-        data["flux_job_connect.py"]
-        == (K8S_ROLES / "manifests/files/flux_job_connect.py").read_text()
+        data["flux_job_connect.py"] == (JOB_FILES / "flux_job_connect.py").read_text()
     )
 
 

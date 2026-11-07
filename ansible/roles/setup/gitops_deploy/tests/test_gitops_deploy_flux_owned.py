@@ -31,7 +31,9 @@ def _sonarr_image_bump(tick) -> None:
 
 def test_every_k8s_role_path_lands_in_flux_and_no_other_set_is_flagged():
     roles = {
-        p.name for p in (REPO / "ansible/roles/k8s").iterdir() if (p / "tasks").is_dir()
+        p.name
+        for p in (REPO / "ansible/roles/k8s").iterdir()
+        if (p / "defaults").is_dir()
     }
     assert "bento-pdf" in roles and len(roles) >= 50
     for role in sorted(roles):

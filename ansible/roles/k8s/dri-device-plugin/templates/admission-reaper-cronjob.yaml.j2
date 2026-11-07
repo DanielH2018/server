@@ -31,7 +31,7 @@ data:
   dri_admission_reaper.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/dri-device-plugin/files/dri_admission_reaper.py') | indent(4, true) }}
   flux_job_connect.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/manifests/files/flux_job_connect.py') | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/../scripts/renderer/job_files/flux_job_connect.py') | indent(4, true) }}
 ---
 apiVersion: batch/v1
 kind: CronJob

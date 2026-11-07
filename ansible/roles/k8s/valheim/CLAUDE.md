@@ -5,7 +5,7 @@ compose role and its reactivation recipe (deleted in #2385) describe a topology 
 longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses `--tags=valheim`
   with exit 5
 - **Images:** `ghcr.io/community-valheim-tools/valheim-server` (`valheim_k8s_image`),
@@ -36,7 +36,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
 - **Auth:** none possible — a raw UDP game protocol reaches no Traefik, Authelia or CrowdSec
   chain, so the join password is the only access control.
 - **Flux applies it, not Ansible** (D5.15, Wave C). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a merged
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a merged
   change reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy:
   false` still stops Renovate's
   automerge of the wrapper bump. The Deployment is `Recreate`, so a change that rolls it takes
@@ -51,8 +51,7 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   reconciles. A rotation reaches the cluster only through `cluster_vars.py write`, which the
   operator runs after a hand rotation. The renderer stamps a restart checksum on the
   Deployment, so a changed value rolls the pod.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, `k8s/image-builder` and
-  `k8s/manifests`, and no Flux path runs either. They stay until R4 deletes them. The mods build
+- **Where the tasks went.** The mods build
   became the `images` job (D5.4), which pushes `ghcr.io/danielh2018/valheim:<content tag>`. The
   defaults name `<k8s_registry_pull_host>/valheim`; the renderer rewrites the `mods`
   initContainer's ref to the GHCR one with `imagePullPolicy: IfNotPresent`
@@ -96,8 +95,7 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
 
 - **The plugins are baked into an image, not downloaded at boot,** so a Thunderstore outage
   cannot bring the server up vanilla with the pod Ready anyway. That image is named `valheim`,
-  not `valheim-mods`: `k8s/manifests` keys `k8s_rebuilt_images` on `manifests_service`, and a
-  mismatched name pushes an image no pod runs.
+  not `valheim-mods`: a mismatched name pushes an image no pod runs.
 - **`valheim_k8s_bepinex` is DERIVED from the mod list, never set by hand.** Either drift is
   silent: mods with BepInEx off is a vanilla server that still reports every plugin copied
   into place, and BepInEx on with an empty list is a modded launch carrying nothing.

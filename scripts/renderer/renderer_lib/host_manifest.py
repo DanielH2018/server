@@ -8,6 +8,8 @@ A host package installs `/usr/lib/homelab/manifest.json` (H3, *Shared names*), i
 - `enable_links` lists each unit the host package links from a `<target>.wants/`
   directory;
 - `legacy` holds the host package's legacy entries, each value rendered;
+- `handoffs` pairs the legacy entries of each spec with the units that spec ships, so reconcile
+  keeps an entry while one of those units failed to start;
 - `reconcilers` lists each arm the package declares state for (H7.2b to H7.2d);
 - `activations` maps each file with an `activate:` field to its action (H7.2a), and the
   updater's files join the host package's;
@@ -86,6 +88,7 @@ class Package(Protocol):
     links: dict[str, str]
     policies: dict[str, str]
     legacy: list[dict[str, str]]
+    handoffs: list[dict]
     secrets_inputs_sha256: str | None
     activations: dict[str, str]
     ufw_rules: list[dict]
@@ -140,6 +143,7 @@ def manifest(package: Package, updater: Package | None) -> dict:
         },
         "enable_links": links,
         "legacy": package.legacy,
+        "handoffs": package.handoffs,
         # Reconcile fails a run that lists a reconciler kind it does not have.
         "reconcilers": list(sections),
         **sections,

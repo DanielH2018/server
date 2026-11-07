@@ -65,5 +65,9 @@ legacy:
   # Root's crontab, not sys_user's: the task named `ansible_facts.user_id`, which the escalated fact
   # gather (ansible/pre_tasks/load_secrets.yml) resolves to root.
   - {cron: "Clean unused Docker images", user: root}
-# The firmware cron's legacy entry sits in each `has_fwupd` host's package.yml, because a legacy
-# entry carries no `when:`, and a cron the role never wrote is not legacy anywhere else.
+  - {cron: "Weekly firmware update", user: root, when: has_fwupd}
+  # What the crons above ran and sourced. They sit here so a kept cron keeps them too. daniel-box
+  # keeps the key file because its k3s health crons and worktree sweep read it.
+  - {path: /usr/local/bin/host-maintenance.sh}
+  - {path: /etc/healthchecks/ping.env, when: "inventory_hostname != 'daniel-box'"}
+  - {path: /etc/healthchecks, when: "inventory_hostname != 'daniel-box'"}
