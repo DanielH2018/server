@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-host-checks component with its enable link.
+[Unit]
+Description=List the B2 block tree ten minutes after the accounting
+
+[Timer]
+OnCalendar=*-*-* {{ k3s_b2_budget_cron_hour }}:{{ k3s_b2_budget_cron_minute }}:00
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

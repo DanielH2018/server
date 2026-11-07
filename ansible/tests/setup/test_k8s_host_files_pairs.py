@@ -12,9 +12,9 @@ setup role names becomes a cross-role read.
 
 The pairs are DERIVED: every copied key that a `roles/k8s/*` defaults file or
 `group_vars/all.yml` also defines. `EXPECTED_PAIRS` names them, so a new pair joins the census
-by name. media-volume's conversion PR added `media_volume_host_path` with the `group_vars` keys `puid` and `pgid`,
-and pi-peer-backup's flip added `pi_peer_backup_src_dir`, which H7.25 moved into the Pi package;
+by name. pi-peer-backup's flip added `pi_peer_backup_src_dir`, which H7.25 moved into the Pi package;
 hosts/lib/tests/test_pi_tuning_component.py holds that copy equal to the k8s default.
+hosts/lib/tests/test_box_k3s_host_half.py holds media-volume's three copies since H7.35 moved them.
 
 The registry-gc component's copies of registry's keys are held equal by
 `hosts/components/registry-gc/tests/test_registry_gc_component.py` since H7.64 moved the collector
@@ -46,13 +46,7 @@ from lib.repo_paths import ALL_VARS
 ROLE = SETUP_ROLES / "k8s_host_files"
 
 # Each shared key the role copies, added by the conversion PR that moves its row.
-EXPECTED_PAIRS: frozenset[str] = frozenset(
-    {
-        "media_volume_host_path",
-        "pgid",
-        "puid",
-    }
-)
+EXPECTED_PAIRS: frozenset[str] = frozenset()
 
 
 def shared_pairs(

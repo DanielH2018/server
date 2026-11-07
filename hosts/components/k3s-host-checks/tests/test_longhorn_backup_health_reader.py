@@ -1,0 +1,489 @@
+#!/usr/bin/env python3
+"""The Longhorn backup-health reader run as a real subprocess, against stub `kubectl` scripts.
+
+Split out of `test_longhorn_backup_health.py`, which keeps the pure decision arms. What only a
+subprocess run can pin: env parsing, the argv shape host_lib.kubectl_runner builds, the
+up/down<TAB>msg contract the shim's branches depend on, and the reader's own syslog line. The
+stubs and the required-env builder are shared with the grace-cron suite in
+`_longhorn_reader_stubs.py`.
+
+`conftest.py` in this directory puts a stubbed `logger` first on PATH; the `logger_calls`
+fixture is the file it appends to.
+
+Run: uv run pytest hosts/components/k3s-host-checks/tests/test_longhorn_backup_health_reader.py
+"""
+
+import subprocess
+
+import pytest
+
+from lib.proc_testing import write_exec
+from _longhorn_reader_stubs import (
+    NOW,
+    _green_path_stub_kubectl,
+    _reader_env,
+    _rfc3339,
+    etcd_snapshots_body,
+    _run_reader_against,
+    fresh_drill_cm,
+    reader_argv,
+)
+
+
+def test_reader_pins_the_transport(tmp_path):
+    """Runs longhorn_backup_health.py as a real subprocess against a stub kubectl.
+
+    The stub fails every call with a distinguishing marker, so this proves the reader shells out
+    correctly (LONGHORN_BACKUP_KUBECTL, the namespace flag, env parsing) and still emits the
+    up/down<TAB>msg contract the shim depends on — the part no pure-function test can see.
+
+    LONGHORN_BACKUP_KUBECTL is given the stub's ABSOLUTE path rather than a bare name on PATH:
+    host_lib.kubectl_runner prepends /usr/local/bin ahead of the caller's PATH, so a same-named
+    stub elsewhere on PATH would be shadowed by a real kubectl on a host that has one.
+    """
+    stub = write_exec(
+        tmp_path / "stub-kubectl",
+        "#!/usr/bin/env bash\necho 'STUB_KUBECTL_MARKER' >&2\nexit 1\n",
+    )
+
+    env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL=str(stub))
+
+    proc = subprocess.run(
+        reader_argv(),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t")
+    assert "STUB_KUBECTL_MARKER" in proc.stdout
+
+
+def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
+    """Check 9's B2 arm shells out to journalctl correctly, which no pure-function test can see.
+
+    The stub asserts the argv the reader builds — the `-t <tag>` selector, the `--since -Nh`
+    window from LONGHORN_CRON_EVIDENCE_WINDOW_HOURS, and `--output=cat`, which is what makes each
+    stdout line one journal message. Get any of those wrong against the real journalctl and the
+    read still exits 0 with output the parse silently finds nothing in, so this is the seam.
+    """
+    stub = write_exec(
+        tmp_path / "stub-journalctl",
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" | grep -q -- "--since -26h" || exit 64\n'
+        'printf "%s\\n" "$*" | grep -q -- "--output=cat" || exit 64\n'
+        'case "$*" in\n'
+        '  *"-t b2-deletions"*) echo "UNPRICED — backup-abc123" ;;\n'
+        "  *) exit 64 ;;\n"
+        "esac\n",
+    )
+
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL="/bin/false",
+        LONGHORN_JOURNALCTL=str(stub),
+    )
+
+    proc = subprocess.run(
+        reader_argv(), capture_output=True, text=True, env=env, timeout=30
+    )
+    assert proc.returncode == 0, proc.stderr
+    # The rank-1 kubectl failures win the push slot, so the B2 verdict is in the FULL message
+    # the reader logs rather than on stdout. That is where to read it, and its presence there is
+    # what proves the journal read reached a verdict rather than being dropped.
+    assert "b2-deletions reported UNPRICED" in logger_calls.read_text()
+
+
+def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):
+    """The reader's own `logger` call reaches the conftest stub, not the host's syslog.
+
+    This is the non-vacuity half of the autouse `_no_syslog` fixture: an empty `logger_calls`
+    would mean either that the reader stopped logging its verdict, or that the real `logger`
+    took the call — which ships fixture verdicts (`STUB_KUBECTL_MARKER`, pytest tmp paths)
+    through Promtail into the Alert History board beside real ones.
+    """
+    env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL="/bin/false")
+
+    proc = subprocess.run(
+        reader_argv(),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    lines = logger_calls.read_text().splitlines()
+    assert any(
+        line.startswith("-t longhorn-backup-health status=down") for line in lines
+    ), lines
+
+
+def test_reader_exits_nonzero_naming_a_missing_env_var(tmp_path):
+    """A shim that stops exporting a var must be LOUD, not silently fall back to a stale constant.
+
+    Every LONGHORN_* var is required. This drops one from the
+    otherwise-complete env and asserts the reader exits nonzero and names it — which is exactly
+    what the shim's `if ! OUT=$(...)` / `[[ $RC -ne 0 ]]` branch turns into a `reader failed`
+    push, rather than a wrong-but-plausible verdict computed from a hardcoded fallback.
+    """
+    env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL="/bin/false")
+    del env["LONGHORN_DAILY_BACKUP_BUDGET"]
+
+    proc = subprocess.run(
+        reader_argv(),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode != 0
+    assert "LONGHORN_DAILY_BACKUP_BUDGET" in proc.stderr
+
+
+def test_reader_treats_a_clean_bool_env_normally(tmp_path):
+    """The clean half of the pair below: a recognized "False" is read as False."""
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL="/bin/false",
+        LONGHORN_B2_DELETIONS_CRON_EXPECTED="False",
+    )
+    proc = subprocess.run(
+        reader_argv(),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
+    """An expected-cron flag must REFUSE an unrecognized value, not fold it into False.
+
+    `_require_bool_env` backs LONGHORN_B2_DELETIONS_CRON_EXPECTED, and False there means a
+    missing cron goes unreported. A typo'd or truncated export must fail loudly the way a
+    missing var does, not fold silently into "not expected".
+    """
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL="/bin/false",
+        LONGHORN_B2_DELETIONS_CRON_EXPECTED="maybe",
+    )
+    proc = subprocess.run(
+        reader_argv(),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode != 0
+    assert "LONGHORN_B2_DELETIONS_CRON_EXPECTED" in proc.stderr
+    assert "maybe" in proc.stderr
+
+
+def test_reader_green_path_pins_the_transport(tmp_path):
+    """The clean half of test_reader_pins_the_transport: every query answered, verdict is UP.
+
+    The red-path test above stubs kubectl to fail every call, which exercises the shell-out and
+    the down<TAB>msg contract but never the eight checks' happy path — the jsonpath literals,
+    the backup and volume row readers, or the up<TAB>msg contract the shim's success branch depends on. This
+    runs the reader against fixtures shaped to leave every one of the eight checks clean.
+    """
+    now = NOW
+    snapshot_ts = _rfc3339(now - 60)
+
+    stub = _green_path_stub_kubectl(tmp_path, snapshot_ts)
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+    )
+
+    proc = subprocess.run(
+        reader_argv(now=NOW),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+    assert "backup target(s) default r2 available" in proc.stdout
+    assert "2 backed-up volume(s) covered across daily+weekly" in proc.stdout
+    assert "2 B2 backup(s)/24h (budget 16)" in proc.stdout
+    assert "newest S3 etcd snapshot 1h old" in proc.stdout
+
+
+def test_reader_derives_the_snapshot_bound_from_the_installed_drop_in(tmp_path):
+    """A snapshot 20h old is stale on the 12-hour schedule and fresh on a 24-hour one."""
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    snapshots = etcd_snapshots_body(("s3://b/offbox", NOW - 20 * 3600, True))
+    stale = _run_reader_against(stub, tmp_path, STUB_ETCD_SNAPSHOTS=snapshots)
+    assert stale.stdout.startswith("down\t"), stale.stdout
+    assert "newest S3 etcd snapshot is 20h old (limit 14h" in stale.stdout
+
+    drop_in = tmp_path / "daily.yaml"
+    drop_in.write_text('etcd-s3: true\netcd-snapshot-schedule-cron: "0 0 * * *"\n')
+    fresh = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_ETCD_SNAPSHOTS=snapshots,
+        LONGHORN_ETCD_DROP_IN=str(drop_in),
+    )
+    assert fresh.stdout.startswith("up\t"), fresh.stdout
+
+
+def test_reader_pages_on_a_missing_drop_in_without_listing_snapshots(tmp_path):
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_FAIL_BRANCH="etcd-snapshots",
+        LONGHORN_ETCD_DROP_IN=str(tmp_path / "absent" / "50-homelab.yaml"),
+    )
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "etcd snapshot drop-in missing" in proc.stdout
+    assert "etcd snapshot list" not in proc.stdout
+
+
+def test_reader_pages_when_the_trim_cronjob_is_gone(tmp_path):
+    """Check 10 through the real wiring: the CronJob read reaches the verdict.
+
+    The green path above proves the logic stays quiet; this proves the reader actually reads
+    the trim CronJob, rather than the arm being unreachable in production.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_TRIM_CRONJOB="")
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "the trim RecurringJob has no CronJob" in proc.stdout, proc.stdout
+
+
+def test_reader_pages_naming_a_volume_the_trim_failed_on(tmp_path):
+    """Check 9 through the real pod-log read, which the trim arm shares with check 11."""
+    failed = (
+        f'[pod/trim-1-abcde/trim] time="{_rfc3339(NOW - 30)}" level=error '
+        'msg="Failed to run volume job" job=trim volume=pvc-web-data\n'
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=failed)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "the trim job failed on 1 volume(s)" in proc.stdout, proc.stdout
+    assert "pvc-web-data" in proc.stdout, proc.stdout
+
+
+def test_reader_argv_hands_now_to_main(tmp_path):
+    """The red half of the green path: the same fixture, judged from 40 days later, is stale.
+
+    NOW sits months ahead of the real clock, so a shim that silently ran the reader against
+    `time.time()` would read every NOW-dated fixture as fresh and the green path would pass
+    for the wrong reason. Moving `now` alone, with the fixture fixed, is what proves the
+    argument reached main().
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+    )
+
+    proc = subprocess.run(
+        reader_argv(now=NOW + 40 * 86400),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "960h old (limit 30h)" in proc.stdout, proc.stdout
+
+
+# ── fetch failures: the deadman must go DOWN with a reason, never quietly UP ────
+#
+# test_reader_green_path_pins_the_transport above is the CLEAN half of every pair below: the same
+# fixture, no knob set, verdict UP. Each test here turns exactly one fetch red and asserts the
+# verdict flips and names that fetch — so a helper that stopped appending its problem, or one
+# that started firing on a healthy answer, fails a test rather than reading green forever.
+#
+# The reader's OWN syslog line carries the full unranked problem list; stdout carries only the
+# top-ranked one plus a count, so the fetch name is asserted against `logger_calls`.
+
+
+@pytest.mark.parametrize(
+    ("branch", "named"),
+    [
+        ("targets", "backup target list fetch failed (rc=124)"),
+        ("jobs", "recurring job list fetch failed (rc=124)"),
+        ("backups", "backup list fetch failed (rc=124)"),
+        ("tier-default", "daily tier volumes fetch failed (rc=124)"),
+        ("r2", "r2 volume set fetch failed (rc=124)"),
+        ("failed-jobs", "failed-jobs fetch failed (rc=124)"),
+        ("pod-logs", "recurring-job pod logs fetch failed (rc=124)"),
+        ("drill-stamps", "restore-drill stamp ConfigMap fetch failed (rc=124)"),
+        ("trim-cronjob", "could not read the trim CronJob"),
+        ("etcd-snapshots", "etcd snapshot list fetch failed (rc=124)"),
+    ],
+)
+def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, named):
+    """rc 124 is host_lib's timeout code — the case that must not read as an empty result.
+
+    None of these fetches may turn a nonzero rc into `[]`/`set()`: a check that reads
+    empty as clean ("nothing errored", "no failed jobs", or a tier silently dropped from the
+    coverage count) would leave the whole verdict UP with a quietly smaller number in it after
+    a 30s API-server timeout on one call.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH=branch)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    logged = logger_calls.read_text()
+    assert named in logged, logged
+
+
+@pytest.mark.parametrize(
+    ("branch", "named"),
+    [
+        ("targets", "backup target list fetch returned an unparseable body"),
+        ("jobs", "recurring job list fetch returned an unparseable body"),
+        ("backups", "backup list fetch returned an unparseable body"),
+        ("failed-jobs", "failed-jobs fetch returned an unparseable body"),
+        (
+            "drill-stamps",
+            "restore-drill stamp ConfigMap fetch returned an unparseable body",
+        ),
+        ("trim-cronjob", "could not read the trim CronJob"),
+        ("etcd-snapshots", "etcd snapshot list fetch returned an unparseable body"),
+    ],
+)
+def test_an_unparseable_json_body_is_flagged_by_name(
+    tmp_path, logger_calls, branch, named
+):
+    """A `null` body parses cleanly and carries no `items` — kubectl's answer on a truncated read.
+
+    `json.loads("null")` returns None rather than raising, so the reader's old `except ValueError`
+    never saw this one: it reached `.get("items")` as an AttributeError. Only the two `-o json`
+    fetches are covered — for the jsonpath fetches a garbage body is indistinguishable from
+    data, and a malformed jsonpath makes kubectl exit nonzero, which the rc pair above covers.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_NULL_BRANCH=branch)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    logged = logger_calls.read_text()
+    assert named in logged, logged
+
+
+def test_a_failed_backup_list_fetch_does_not_cascade_into_the_tier_loop(
+    tmp_path, logger_calls
+):
+    """One unread fetch reports one problem, not ten.
+
+    Every tier is matched against the coverage rows, so passing the loop an empty list on a
+    failed backup list fetch would report all nine tiers' volumes as stale or missing — burying the
+    one thing that actually happened under nine consequences of it.
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH="backups")
+
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    logged = logger_calls.read_text()
+    assert "backup list fetch failed" in logged, logged
+    assert "tier volumes fetch failed" not in logged, logged
+    assert "stale or missing" not in logged, logged
+
+
+def test_reader_is_up_with_an_empty_excluded_oversize_file(tmp_path):
+    """Control for the pair below: the drill writes an empty key when the cap excludes nothing."""
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(
+        stub, tmp_path, STUB_DRILL_CM=fresh_drill_cm(excluded_oversize="")
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+
+
+def test_reader_pages_naming_a_volume_the_drill_excluded_as_oversize(tmp_path):
+    """The reader reads the drill's `excluded_oversize` key, which no logic test can see."""
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(
+        stub,
+        tmp_path,
+        STUB_DRILL_CM=fresh_drill_cm(
+            excluded_oversize=f"jellyfin-config\t{5 * 2**30}\n"
+        ),
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "jellyfin-config (5.00 GiB)" in proc.stdout, proc.stdout
+
+
+def test_reader_is_up_with_an_empty_excluded_nopvc_file(tmp_path):
+    """Control for the pair below: the drill writes an empty key when every volume has a PVC."""
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(
+        stub, tmp_path, STUB_DRILL_CM=fresh_drill_cm(excluded_nopvc="")
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+
+
+def test_reader_pages_naming_a_volume_the_drill_excluded_for_no_pvc(tmp_path):
+    """The reader reads the drill's `excluded_nopvc` key, which no logic test can see."""
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(
+        stub, tmp_path, STUB_DRILL_CM=fresh_drill_cm(excluded_nopvc="pvc-released\n")
+    )
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "no bound PVC" in proc.stdout and "pvc-released" in proc.stdout, proc.stdout
+
+
+def test_reader_pages_naming_a_weekly_volume_its_job_skipped(tmp_path):
+    """Check 11 through the real log read: a skip after the volume's last backup goes DOWN.
+
+    The green path is the clean half: the same fixture with no skip line in the pod logs is UP.
+    """
+    skip = (
+        "[pod/weekly-backup-d4-1-abcde/weekly-backup-d4] "
+        f'time="{_rfc3339(NOW - 30)}" level=warning '
+        'msg="Cannot create job for pvc-weekly-data volume in state attached"\n'
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=skip)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "default/weekly-data (weekly-backup-d4" in proc.stdout, proc.stdout
+
+
+def test_reader_ignores_a_daily_volume_its_job_skipped(tmp_path):
+    """The reader builds check 11's scope from the weekly shards only, so a daily skip stays UP.
+
+    The next night's run closes a daily skip; see `DECIDED: only weekly-tier volumes are
+    checked` in longhorn_skipped_volumes_logic.py.
+    """
+    skip = (
+        "[pod/daily-backup-1-abcde/daily-backup] "
+        f'time="{_rfc3339(NOW - 30)}" level=warning '
+        'msg="Cannot create job for pvc-web-data volume in state attached"\n'
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path, STUB_POD_LOGS=skip)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout

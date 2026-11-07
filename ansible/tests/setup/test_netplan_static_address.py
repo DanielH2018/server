@@ -12,7 +12,7 @@ from lib import yaml_fast
 from _setup_render import render_setup_text
 
 _TEMPLATE = "netplan-static-address.yaml.j2"
-# daniel-server's package owns its pin, so each task of the file skips it.
+# Each node's package owns its pin, so each task of the file skips both.
 PACKAGED_GUARD = "inventory_hostname not in k3s_packaged_hosts['node-address']"
 # Both k3s nodes. daniel-box's pin runs from k3s-bringup.yml's server play, daniel-server's
 # from its agent-address play (#3891).

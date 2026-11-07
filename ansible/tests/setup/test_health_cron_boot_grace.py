@@ -20,12 +20,12 @@ import re
 
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from lib.repo_paths import K3S_DEFAULTS
+from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 from _shell_render import rendered_names_for, rendered_shell_text
 from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/homelab-check-lib.sh"
-K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
+K3S_DEFAULT_VALUES = yaml_fast.safe_load(K3S_HOST_CHECKS_DEFAULTS.read_text())
 
 GRACE_S = K3S_DEFAULT_VALUES["k3s_health_cron_boot_grace_s"]
 
@@ -100,13 +100,13 @@ def test_every_named_script_is_one_the_harness_renders():
     """
     named = set(FREQUENT_SCRIPTS + DAILY_SCRIPTS)
     assert len(named) == 3, "the two script lists overlap or one has been emptied"
-    missing = sorted(named - rendered_names_for("setup", "k3s"))
-    assert missing == [], f"setup/k3s no longer ships: {missing}"
+    missing = sorted(named - rendered_names_for("components", "k3s-host-checks"))
+    assert missing == [], f"k3s-host-checks no longer ships: {missing}"
 
 
 def test_the_frequent_crons_call_the_guard():
     for name in FREQUENT_SCRIPTS:
-        text = rendered_shell_text("setup", "k3s", name)
+        text = rendered_shell_text("components", "k3s-host-checks", name)
         assert f"boot_grace_active {GRACE_S}" in text, (
             f"{name} feeds a /fail dead-man but does not skip its first post-boot run"
         )
@@ -117,7 +117,7 @@ def test_the_frequent_crons_skip_with_no_push_and_exit_clean():
     # since M6's B1 Cutover-2), so a skipped run has no heartbeat to keep. It must exit 0 and the
     # script must not push anywhere. The previous textfile stays and DEADLINE_S covers the slot.
     for name in FREQUENT_SCRIPTS:
-        text = rendered_shell_text("setup", "k3s", name)
+        text = rendered_shell_text("components", "k3s-host-checks", name)
         guard = text.index(f"if boot_grace_active {GRACE_S}")
         skip_block = text[guard : text.index("\nfi\n", guard)]
         assert "exit 0" in skip_block, name
@@ -131,7 +131,7 @@ def test_a_skipped_run_pings_no_healthchecks_slug():
     # a run that did not happen holds the check green on no evidence — the failure the dead-man
     # exists to catch. Silence is correct here; the grace covers it.
     for name in FREQUENT_SCRIPTS:
-        text = rendered_shell_text("setup", "k3s", name)
+        text = rendered_shell_text("components", "k3s-host-checks", name)
         guard = text.index("if boot_grace_active")
         skip_block = text[guard : text.index("\nfi\n", guard)]
         assert "hc-ping" not in skip_block and "HC_" not in skip_block, (
@@ -143,7 +143,7 @@ def test_the_daily_crons_do_not():
     # Deliberate, and the reject half of the wiring pair: for a daily cron a skipped slot is a
     # skipped DAY. Their 1-hour graces already tolerate a late run.
     for name in DAILY_SCRIPTS:
-        text = rendered_shell_text("setup", "k3s", name)
+        text = rendered_shell_text("components", "k3s-host-checks", name)
         assert "boot_grace_active" not in text, (
             f"{name} runs daily — a boot skip costs a whole day of coverage"
         )

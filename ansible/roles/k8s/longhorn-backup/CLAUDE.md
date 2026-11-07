@@ -99,11 +99,11 @@ in the loop, and the contract is written here so a later edit cannot quietly wid
   a backup tier to the restore drill and the reapers, and the `DECIDED:` marker in
   `templates/longhorn-recurringjob.yaml.j2` says why. It deletes no backup. It replaced the host
   trim cron at H2.2c. Its abort valve is longhorn-manager itself: the job runs inside the
-  manager, so a manager that is not ready runs no trim. Checks 9 and 10 of `setup/k3s`'s
-  backup health read its pod log and its CronJob.
-- **Arming.** `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` blank one target each. The
-  retired `k3s_manage_backup_targets` flag existed for a cluster with no real credentials. No
-  host set it, and staging, the one such cluster, was retired on 2026-09-29.
+  manager, so a manager that is not ready runs no trim. Checks 9 and 10 of the
+  `k3s-host-checks` backup health read its pod log and its CronJob.
+- **Arming.** `k3s_longhorn_backup_armed` and `k3s_longhorn_r2_armed` blank one target each. A
+  retired flag existed for a cluster with no real credentials. No host set it, and staging, the
+  one such cluster, was retired on 2026-09-29.
 - **Abort valve.** The weekly tier is sharded across weekdays, so no day's deletions reach the
   B2 transaction cap (`docs/longhorn-backup-tiering.md`).
 - **Next-run review.** `probe.py b2-budget` recomputes the projected spend from the live

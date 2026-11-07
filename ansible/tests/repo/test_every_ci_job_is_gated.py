@@ -16,7 +16,7 @@ CHECKED: the step exits 0 on the names it does read, the required context passes
 goes through with that job red. So a job counts as gated through `prek` only when the step's own
 expressions name it.
 
-The context list is read from `roles/setup/gitops_deploy/defaults/main.yml`, the repo's committed
+The context list is read from `hosts/components/github-checks/defaults/main.yml`, the repo's committed
 copy of ruleset 20912512. `github-ruleset-drift.sh` compares that copy against the live ruleset
 daily, so this guard needs no network and still tracks the real gate.
 
@@ -103,7 +103,7 @@ def _ruleset_contexts() -> set[str]:
     """The merge gate, read from the YAML defaults as a literal list -- the same regex shape the
     sibling guard uses for the deployer's role defaults."""
     text = (
-        REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
+        REPO / "hosts" / "components" / "github-checks" / "defaults" / "main.yml"
     ).read_text()
     block = re.search(
         r"^gitops_deploy_expected_ruleset_contexts:\s*\n((?:\s*-\s.+\n)+)", text, re.M

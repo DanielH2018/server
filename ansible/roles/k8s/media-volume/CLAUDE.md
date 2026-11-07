@@ -25,11 +25,11 @@ route — infra role, no Deployment of its own.
   (`/srv/media`, 400Gi advisory only — no quota behind it), deliberately not a dynamic
   `local-path` PVC — see `defaults/main.yml` for the three reasons (naming, reclaim policy,
   `WaitForFirstConsumer` chicken-and-egg).
-- **The host directories belong to the setup plane.** `/srv/media` and its `media/` and
-  `torrents/` subdirectories are created by `setup/k8s_host_files` (`tasks/media-volume.yml`
-  there), which the GitOps tick applies through `initial_setup.yml`. That task holds a copy of
-  `media_volume_host_path`, and `ansible/tests/setup/test_k8s_host_files_pairs.py` holds the
-  copy equal to this role's default.
+- **The host directories belong to daniel-box's package.** `/srv/media` and its `media/` and
+  `torrents/` subdirectories are `tmpfiles.d` lines in
+  `hosts/daniel-box/tmpfiles.d/homelab-media-volume.conf.j2`, created at boot and by
+  `bootstrap-host.sh`. `hosts/daniel-box/package.yml` holds a copy of `media_volume_host_path`,
+  and `hosts/lib/tests/test_box_k3s_host_half.py` holds the copy equal to this role's default.
 - **HISTORY —** the library was seeded once, at the 2026-08 migration, by an opt-in rsync from
   daniel-server's `containers/data`. That directory no longer exists, so D5 deleted the seeding
   tasks rather than move them. Nothing backs the library up.

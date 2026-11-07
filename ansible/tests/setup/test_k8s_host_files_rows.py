@@ -76,7 +76,6 @@ def test_a_task_file_main_no_longer_imports_is_flagged(tmp_path):
         "crowdsec.yml: Remove the retired remote-allowlist cron",
         "janitorr.yml: Remove the retired janitorr error heartbeat cron",
         "janitorr.yml: Remove the retired janitorr health reader from the host",
-        "media-volume.yml: Create the media volume directories on the node",
         "observability.yml: Remove the retired dashboard staging trees",
         "qbittorrent.yml: Remove the retired qbittorrent prefs drift check cron",
         "qbittorrent.yml: Remove the retired qbittorrent prefs-check script from the host",
@@ -106,18 +105,6 @@ def test_a_configarr_cron_arm_that_turns_present_is_flagged(tmp_path):
     )
     assert missing_rows(role_dir) == [
         "configarr.yml: Remove the retired configarr sync heartbeat cron"
-    ]
-
-
-def test_a_media_volume_row_that_drops_a_directory_from_its_loop_is_flagged(tmp_path):
-    """The path reads `item`, so only the loop says torrents/ is still created."""
-    role_dir = _fixture_role(tmp_path)
-    media = role_dir / "tasks" / "media-volume.yml"
-    line = '    - "{{ media_volume_host_path }}/torrents"\n'
-    assert line in media.read_text()
-    media.write_text(media.read_text().replace(line, ""))
-    assert missing_rows(role_dir) == [
-        "media-volume.yml: Create the media volume directories on the node"
     ]
 
 

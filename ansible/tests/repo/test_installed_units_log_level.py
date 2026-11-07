@@ -76,7 +76,7 @@ SYSLOG_LEVEL_ROW = Census(
     must_find=frozenset(
         {
             "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
-            "ansible/roles/setup/renovate_notify/templates/renovate-notify.service.j2",
+            "hosts/components/renovate-notify/templates/homelab-renovate-notify.service.j2",
             "hosts/packages/homelab-updater/units/homelab-updater.service",
             "hosts/components/reconcile/units/homelab-reconcile.service",
         }

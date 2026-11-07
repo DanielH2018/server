@@ -103,6 +103,7 @@ from lib.ansible_inventory import (
 from lib.estate import Estate
 from lib.repo_paths import (
     ALL_VARS,
+    K3S_HOST_CHECKS,
     K3S_ROLE,
     K8S_ROLES,
     LONGHORN_BACKUP_ROLE,
@@ -143,8 +144,13 @@ def header(sources: list[str]) -> str:
 
 def _longhorn() -> tuple[str, list[str]]:
     estate = Estate()
-    # The arm flags and schedules are `longhorn-backup`'s since H1.7b, the host cron keys `setup/k3s`'s.
-    merged = {**estate.role_vars(K3S_ROLE), **estate.role_vars(LONGHORN_BACKUP_ROLE)}
+    # The arm flags and schedules are `longhorn-backup`'s since H1.7b, the host check keys
+    # the k3s-host-checks component's.
+    merged = {
+        **estate.role_vars(K3S_ROLE),
+        **estate.role_vars(K3S_HOST_CHECKS),
+        **estate.role_vars(LONGHORN_BACKUP_ROLE),
+    }
     return render_longhorn_tiers(resolved_tier_lists(merged)), [
         "ansible/roles/k8s/longhorn-backup/defaults/main.yml",
         "ansible/roles/k8s/longhorn-reconcile/defaults/main.yml",
@@ -202,7 +208,7 @@ def deadman_inputs(
     """
     estate = estate or Estate()
     return (
-        estate.role_vars(K3S_ROLE),
+        estate.role_vars(K3S_HOST_CHECKS),
         estate.role_vars(PI_PEER_ROLE),
         estate.role_vars(REGISTRY_ROLE),
         estate.group_vars,
@@ -215,7 +221,7 @@ def deadman_inputs(
 
 def _deadman() -> tuple[str, list[str]]:
     return render_deadman_cadences(*deadman_inputs()), [
-        "ansible/roles/setup/k3s/defaults/main.yml",
+        "hosts/components/k3s-host-checks/defaults/main.yml",
         "ansible/roles/k8s/pi-peer-backup/defaults/main.yml",
         "ansible/roles/k8s/registry/defaults/main.yml",
         "ansible/roles/k8s/observability/defaults/main.yml",
@@ -253,7 +259,6 @@ def _lan() -> tuple[str, list[str]]:
 def _secrets() -> tuple[str, list[str]]:
     return render_secret_tiers(
         module_constant(SECRET_ROTATION, "TIER_DAYS"),
-        module_constant(SECRET_ROTATION, "ROTATE_LEAD_DAYS"),
         registry_counts(SECRET_REGISTRY),
     ), ["scripts/secrets_mgmt/secret_rotation.py", "ansible/secret_rotation.yml"]
 

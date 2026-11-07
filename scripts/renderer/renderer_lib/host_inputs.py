@@ -28,9 +28,12 @@ HOST_INPUTS = (
     "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh",
     # The drill script daniel-server's hypervisor component ships.
     "scripts/backup/etcd_restore_drill.sh",
-    # What daniel-server's k3s-agent component renders through `role: k3s` (H7.34).
+    # What both nodes' k3s components render through `role: k3s` (H7.34, H7.35).
     "ansible/roles/setup/k3s/defaults/main.yml",
     "ansible/roles/setup/k3s/templates/netplan-static-address.yaml.j2",
+    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
+    "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
+    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",
     # What a component's `role:` renders (`host_sources.ROLE_SOURCES`): the role's defaults and
     # the two templates daniel-server's package renders in place (H4.3a, H4.3c).
     "ansible/roles/setup/nut_host/defaults/main.yml",

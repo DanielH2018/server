@@ -16,7 +16,7 @@ from _k8s_render import render_role_template
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_roles import tag_owners
-from lib.repo_paths import K3S_ROLE, K8S_ROLES
+from lib.repo_paths import K3S_HOST_CHECKS, K8S_ROLES
 from renderer import homelab_render
 from renderer.renderer_lib.bundle import kustomization_text
 
@@ -43,9 +43,9 @@ def test_the_stamp_configmap_renders_empty_with_both_annotations():
 
 
 def test_the_stamp_namespace_equals_the_host_drills():
-    """A mirrored pair: the host drill still reads the `setup/k3s` key until H2.3f."""
+    """A mirrored pair: the host drill reads the `k3s-host-checks` key until H2.3f."""
     drill = load_defaults(ROLE)["longhorn_drill_namespace"]
-    host = load_defaults(K3S_ROLE)["k3s_longhorn_restore_drill_namespace"]
+    host = load_defaults(K3S_HOST_CHECKS)["k3s_longhorn_restore_drill_namespace"]
     assert drill == host == _stamps()["metadata"]["namespace"]
 
 

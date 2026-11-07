@@ -65,9 +65,8 @@ from lib import yaml_fast
 
 from docs.catalog_lib import package_timers
 from docs.reference import crons as crons_mod
-from lib.git import git
 from lib.kubectl import DEFAULT_TOOLS, MissingKubectl, Tools, WrongCluster, kubectl
-from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_DEFAULTS, K8S_ROLES, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, K3S_HOST_CHECKS_DEFAULTS, K8S_ROLES
 
 # The deployer's own marker module, read from its role's files/ rather than a copy (#3275).
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -149,8 +148,8 @@ def gitops_deploy_run(state_dir: Path = Path(STATE_DIR)) -> LoopRun:
 def renovate_agent_run(state_dir: Path = Path("/var/lib/renovate-agent")) -> LoopRun:
     """The daily Renovate PR triage session.
 
-    Cadence: renovate_agent.timer's OnCalendar, from renovate_agent_oncalendar
-    (roles/setup/renovate_agent/defaults/main.yml:47 = daily 15:00).
+    Cadence: homelab-renovate-agent.timer's OnCalendar, from renovate_agent_oncalendar
+    (hosts/components/renovate-agent/defaults/main.yml).
     """
     return _epoch_marker(state_dir, "last_run", "session completed")
 
@@ -158,8 +157,8 @@ def renovate_agent_run(state_dir: Path = Path("/var/lib/renovate-agent")) -> Loo
 def renovate_notify_run(state_dir: Path = Path("/var/lib/renovate-notify")) -> LoopRun:
     """The daily Renovate dashboard digest.
 
-    Cadence: renovate-notify.timer's OnCalendar is fixed at daily 13:00
-    (roles/setup/renovate_notify/templates/renovate-notify.timer.j2).
+    Cadence: homelab-renovate-notify.timer's OnCalendar is fixed at daily 13:00
+    (hosts/components/renovate-notify/units/homelab-renovate-notify.timer).
     """
     base = _epoch_marker(state_dir, "last_run", "checked, nothing new to notify")
     if base.last_run is None:
@@ -188,44 +187,6 @@ def docs_refresh_run(build_info: Path = _DOCS_SITE_BUILD_INFO) -> LoopRun:
     except OSError, json.JSONDecodeError, KeyError, ValueError:
         return LoopRun(None, "build-info.json content did not parse", unreadable=True)
     return LoopRun(built_at, f"generators: {generators}")
-
-
-def secret_rotate_run(repo: Path = REPO) -> LoopRun:
-    """The weekly secret rotation.
-
-    Cadence: `homelab-secret-rotation.timer`.
-
-    No local state file -- this is the last commit that touched the plaintext rotation
-    registry, which also moves on a manual `secret_rotation.py rotate`, not only the cron. A
-    proxy, not the cron's own liveness signal; the docstring on the task names this trade.
-    """
-    target = repo / "ansible" / "secret_rotation.yml"
-    if not target.is_file():
-        return LoopRun(
-            None,
-            "ansible/secret_rotation.yml not found in this checkout",
-            unreadable=True,
-        )
-    result = git(
-        "log",
-        "-1",
-        "--format=%cI%n%s",
-        "--",
-        "ansible/secret_rotation.yml",
-        cwd=repo,
-        check=False,
-        timeout=10,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        return LoopRun(
-            None, "no commit history for the rotation registry", unreadable=True
-        )
-    when_line, _, subject = result.stdout.strip().partition("\n")
-    try:
-        when = dt.datetime.fromisoformat(when_line)
-    except ValueError:
-        return LoopRun(None, "commit date did not parse", unreadable=True)
-    return LoopRun(when, f"last touched by: {subject or '(no subject)'}")
 
 
 def longhorn_restore_drill_run(
@@ -279,7 +240,7 @@ def etcd_restore_drill_run(
 ) -> LoopRun:
     """The weekly etcd list-only restore drill.
 
-    Cadence: k3s_etcd_restore_drill_cron (roles/setup/k3s/defaults/main.yml, resolved
+    Cadence: k3s_etcd_restore_drill_cron (hosts/components/k3s-host-checks/defaults/main.yml, resolved
     directly -- see the module docstring).
     """
     if not state_dir.is_dir():
@@ -302,8 +263,10 @@ def etcd_restore_drill_run(
 DRILL_DEFAULTS = K8S_ROLES / "longhorn-restore-drill" / "defaults" / "main.yml"
 
 
-def _k3s_default_var(name: str, defaults_path: Path = K3S_DEFAULTS) -> str | None:
-    """A single scalar default from roles/setup/k3s/defaults/main.yml, or the path given."""
+def _k3s_default_var(
+    name: str, defaults_path: Path = K3S_HOST_CHECKS_DEFAULTS
+) -> str | None:
+    """A single scalar default from the k3s-host-checks component's defaults, or the path given."""
     try:
         data = yaml_fast.safe_load(defaults_path.read_text())
     except OSError, yaml.YAMLError:
@@ -343,11 +306,6 @@ def _loops(tools: Tools = DEFAULT_TOOLS) -> list[tuple[str, LoopRun, float | Non
             "docs-refresh",
             docs_refresh_run(),
             _timer_cadence("homelab-docs-refresh.timer"),
-        ),
-        (
-            "secret-rotate",
-            secret_rotate_run(),
-            _timer_cadence("homelab-secret-rotation.timer"),
         ),
         (
             "longhorn-restore-drill",

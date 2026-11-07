@@ -230,7 +230,7 @@
     # ansible/tests/setup/test_host_python_invocations.py, which caught exactly that here.
     # `--no-project` because the prune script is stdlib-only and must not drag in the repo venv.
     argv:
-      - /usr/local/bin/uv
+      - /usr/bin/uv
       - run
       - --no-project
       - --no-python-downloads

@@ -166,12 +166,9 @@ def test_every_invoked_script_path_resolves():
     )
 
 
-# Verified by hand: no `*.service.j2` unit currently execs a `scripts/...` path --
-# every ExecStart that reaches this repo's tooling runs a copy already staged to /opt (e.g.
-# gitops-deploy.service.j2 execs /opt/gitops-deploy/gitops_deploy.py, not the scripts/ source
-# tree). Exempted here rather than deleted: the extractor stays live for the day a unit does
-# call into scripts/ directly, and that day it must be caught, not silently zero forever.
-_EXPECTED_EMPTY_SOURCES = {"systemd ExecStart*="}
+# The setup roles hold no cron task that names a `scripts/...` path. The extractor stays live so
+# a role that adds one is caught.
+_EXPECTED_EMPTY_SOURCES = {"crons.yml job:"}
 
 
 def test_each_source_is_reachable():

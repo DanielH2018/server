@@ -203,7 +203,7 @@ def test_imported_tasks_keeps_a_non_import_entry_in_place(tmp_path):
 
 def test_imported_tasks_reaches_the_k3s_role():
     # Non-vacuity against the real tree: a role whose main.yml is imports only.
-    assert len(imported_task_files(K3S_ROLE)) >= 5
+    assert len(imported_task_files(K3S_ROLE)) >= 2
     assert imported_tasks(K3S_ROLE)
 
 

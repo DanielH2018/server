@@ -21,13 +21,13 @@ from jinja2 import StrictUndefined
 
 from lib.ansible_jinja_env import template_env
 from lib.render_guard import render_or_error
-from lib.repo_paths import K3S_ROLE, ROLES
+from lib.repo_paths import K3S_HOST_CHECKS, ROLES
 from _shell_render import render_shell_script, shell_template_path
 from lib.estate import role_defaults
 from validate.shell_templates import template_context
 
-TEMPLATE = ("setup", "k3s", "disk-health.sh.j2")
-K3S = role_defaults(K3S_ROLE)
+TEMPLATE = ("components", "k3s-host-checks", "disk-health.sh.j2")
+K3S = role_defaults(K3S_HOST_CHECKS)
 BRIDGE = role_defaults(ROLES / "k8s" / "monitor-bridge")
 SLUG = "daniel-box-disk-health"
 MINUTE_VAR = "k3s_disk_health_cron_minute"

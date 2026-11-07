@@ -32,6 +32,16 @@ KINDS = {
 RECORDED = {
     # 94d0fb13a^:ansible/roles/setup/homelab_builder/tasks/builder.yml
     "builder": {("deployed", "homelab-builder"), ("render", "homelab-builder")},
+    # 3b3e4abb1:ansible/roles/setup/renovate_notify/tasks/{service,code}.yml
+    "renovate-notify": {("render", "renovate-notify"), ("deployed", "renovate-notify")},
+    # 3b3e4abb1:ansible/roles/setup/renovate_agent/tasks/{service,code}.yml
+    "renovate-agent": {("render", "renovate-agent"), ("deployed", "renovate-agent")},
+    # 3b3e4abb1:ansible/roles/setup/fake_remux/tasks/main.yml
+    "fake-remux": {("render", "fake-remux"), ("deployed", "fake-remux")},
+    # 3b3e4abb1:ansible/roles/setup/gitops_deploy/tasks/github_checks.yml
+    "github-checks": {("render", "gitops-deploy-github-checks")},
+    # cb61ae0d94:ansible/roles/setup/initial_setup/tasks/crons.yml
+    "worktree-holders": {("deployed", "worktree-holders")},
     # cb61ae0d9:ansible/roles/setup/initial_setup/tasks/crons.yml
     "loki-route-witness": {
         ("render", "loki-route-witness"),
@@ -41,6 +51,14 @@ RECORDED = {
     "docs-refresh": {("render", "docs-refresh")},
     "eval-sweep": {("render", "eval-run")},
     "secret-rotation": {("render", "secret-rotation")},
+    # c1d338364:ansible/roles/setup/k3s/tasks/health-crons.yml, and #2978 retired the reap one.
+    "k3s-host-checks": {
+        ("render", "k3s-backup-health"),
+        ("render", "k3s-disk-health"),
+        ("render", "k3s-etcd-snapshot"),
+        ("deployed", "k3s-longhorn-backup-health-reader"),
+        ("deployed", "k3s-longhorn-reap"),
+    },
     # a2bed5696^:ansible/roles/setup/nut_host/tasks/main.yml
     "nut-secondary": {("render", "nut-host")},
     # 84bb0bbf0a:ansible/roles/setup/initial_setup/tasks/integrity.yml
@@ -63,9 +81,7 @@ RECORDED = {
 }
 # A component whose Ansible tasks still run on another host; its row comes from those tasks, as
 # (task file, tag) pairs.
-DERIVED = {
-    "worktree-holders": ((CRONS, "worktree-sweep"),),
-}
+DERIVED = {}
 
 
 def retired_fragments(spec: dict) -> set[tuple[str, str]]:

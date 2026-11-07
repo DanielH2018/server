@@ -8,7 +8,7 @@ k3s_node_static_link: eno1
 # tasks/static-address.yml).
 k3s_node_wifi_link: wlp4s0
 # daniel-server's node-to-node traffic (6443/8472/10250, k3s_join_server_ports) is
-# UFW-allowed here via the k3s role's join-firewall tag. Derived from daniel-server's one
+# UFW-allowed here by the k3s-server component's k3s-join-* rules. Derived from daniel-server's one
 # literal (#4063).
 k3s_agent_node_ips:
   - "{{ hostvars['daniel-server'].server_ip }}"
@@ -1240,7 +1240,7 @@ render_gid: 993
 # is what re-checks it afterwards, every 10 minutes via ups-secondary-health.sh.
 nut_host_secondary_armed: true
 
-# The unattended Renovate agent (roles/setup/renovate_agent). The timer fires at 06:00
+# The unattended Renovate agent (hosts/components/renovate-agent). The timer fires at 06:00
 # America/Chicago daily and spends one headless session over the open Renovate PRs, landing up
 # to renovate_agent_max_prs of them through the renovate-agent-land@ lander. Setting this back
 # to false stops and disables the timer; that is the rollback.

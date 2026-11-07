@@ -221,10 +221,9 @@ def test_cadence_twice_daily_from_a_comma_hour_list():
     assert crons.cadence_minutes("17 6,18 * * *") == 720.0
 
 
-def test_the_docs_refresh_and_rotation_cadences_come_from_their_packaged_timers():
-    """Named members: each loop's cron left the roles, so a cron lookup reads unknown."""
+def test_the_docs_refresh_cadence_comes_from_its_packaged_timer():
+    """Named member: the loop's cron left the roles, so a cron lookup reads unknown."""
     assert g._timer_cadence("homelab-docs-refresh.timer") == 720.0
-    assert g._timer_cadence("homelab-secret-rotation.timer") == 10080.0
 
 
 def test_a_loop_naming_a_timer_no_package_ships_fails_rather_than_reading_unknown():
@@ -255,20 +254,6 @@ def test_cadence_unknown_for_all_wildcards():
 # --- non-vacuity: the real cron jobs state.py matches by name must still exist -------------
 
 
-def test_live_crons_still_carry_the_jobs_state_matches_by_name():
-    """A rename of any of these silently drops that loop's cadence to 'unknown'.
-
-    Guards against the failure class this repo has paid for repeatedly: a name-matching
-    lookup returning an empty/None result reads as a legitimate 'unknown cadence' rather
-    than as the job having moved or been renamed.
-    """
-    names = {row["name"] for row in crons.build_rows()}
-    required = {
-        "etcd restore drill",
-    }
-    assert required <= names
-
-
 def test_live_defaults_still_carry_the_drill_cron_vars():
     assert (
         g._k3s_default_var("k3s_longhorn_restore_drill_cron", g.DRILL_DEFAULTS)
@@ -286,7 +271,6 @@ def test_build_rows_on_the_live_tree_yields_at_least_six_named_loops():
         "renovate-agent",
         "renovate-notify",
         "docs-refresh",
-        "secret-rotate",
         "longhorn-restore-drill",
         "etcd-restore-drill",
     }

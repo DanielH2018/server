@@ -19,8 +19,8 @@ from validate import setup_templates as v
 # outside the k3s role, and a template a role-shaped host component holds.
 MUST_FIND = frozenset(
     {
-        "roles/setup/k3s/templates/netplan-dns.yaml.j2",
-        "roles/setup/k3s/templates/host-corefile.j2",
+        "hosts/components/k3s-host-dns/templates/netplan-dns.yaml.j2",
+        "hosts/components/k3s-host-dns/templates/host-corefile.j2",
         "roles/setup/gitops_deploy/templates/config.env.j2",
         "roles/setup/gitops_deploy/templates/gitops-deploy.service.j2",
         "roles/setup/common/templates/resolv.conf.j2",
@@ -49,7 +49,7 @@ def test_the_census_finds_the_named_setup_templates():
     """Non-vacuity: the glob must return these by name, not merely return something."""
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
-    assert len(found) >= 109
+    assert len(found) >= 104
 
 
 def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
@@ -134,15 +134,12 @@ def test_a_jinja_syntax_error_is_flagged(tmp_path, ctx, known):
 def test_runtime_vars_reads_both_set_fact_spellings():
     """`ansible.builtin.set_fact` is what this repo writes; matching the bare name found none.
 
-    Both names in the assertion: this is a derivation replacing no list, so the way it fails is
-    by returning a set narrower than the tree, which only a named member catches.
+    A named member in the assertion: this is a derivation replacing no list, so the way it fails
+    is by returning a set narrower than the tree, which only a named member catches.
     """
     names = v.runtime_vars()
     assert "common_release_sha" in names  # ansible.builtin.set_fact
-    assert (
-        "common_resolver_nameservers" in names
-    )  # ansible.builtin.set_fact, another role
-    assert len(names) >= 100
+    assert len(names) >= 91
 
 
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():

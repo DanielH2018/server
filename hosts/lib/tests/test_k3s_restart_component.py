@@ -36,6 +36,16 @@ _KEYS = (
     "claude_code_triage_claude_oauth_token: x\n"
     "authelia_agent_password: x\n"
     "healthchecks_ping_key: x\n"
+    "r2_access_key_id: x\n"
+    "r2_secret_access_key: x\n"
+    "r2_bucket: x\n"
+    "r2_account_id: x\n"
+    "wifi_ssid: x\n"
+    "wifi_password: x\n"
+    "renovate_agent_claude_oauth_token: x\n"
+    "renovate_agent_gh_token: x\n"
+    "arr_discord_webhook_url: x\n"
+    "sonarr_api_key: x\n"
 )
 
 COMPONENT = REPO / "hosts/components/k3s-restart"

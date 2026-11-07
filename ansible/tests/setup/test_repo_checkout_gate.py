@@ -42,9 +42,7 @@ CONTROLLER_SIDE = frozenset({"src", "content", "fail_msg", "msg", "that"})
 # with the member that went missing, and an assertion over an empty census passes vacuously.
 KNOWN_HITS = frozenset(
     {
-        "Install Git hooks",
         "Install pinned Ansible collections from requirements.yml",
-        "Schedule the etcd restore drill",
     }
 )
 
@@ -247,8 +245,8 @@ def test_the_gate_is_accepted_in_both_when_forms():
 
 
 def test_a_pinned_host_allowlist_counts_as_a_gate():
-    """`Install Git hooks` is gated on `dev_tooling_hosts`. Both members hold a
-    checkout, so the task cannot reach a host that has none."""
+    """Both members of `dev_tooling_hosts` hold a checkout, so a task gated on the list cannot
+    reach a host that has none."""
     assert _gated("inventory_hostname in dev_tooling_hosts")
 
 

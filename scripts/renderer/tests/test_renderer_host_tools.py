@@ -22,7 +22,16 @@ from lib.repo_paths import REPO
 NAMED_MEMBERS = frozenset(
     {
         f"{BIN_DIR}/{t}"
-        for t in ("sops", "chezmoi", "nfpm", "node-exporter", "uv", "flux", "vale")
+        for t in (
+            "sops",
+            "chezmoi",
+            "nfpm",
+            "node-exporter",
+            "uv",
+            "flux",
+            "vale",
+            "coredns",
+        )
     }
 )
 # nfpm and uv name the amd64 build x86_64, Vale names it 64-bit, and uv names the arm64 build
@@ -77,6 +86,7 @@ def test_a_package_that_moves_sops_is_missing_a_named_member(hosts):
                 "uv": dict.fromkeys(ARCHES, pin()),
                 "flux": dict.fromkeys(ARCHES, pin()),
                 "vale": dict.fromkeys(ARCHES, pin()),
+                "coredns": dict.fromkeys(ARCHES, pin()),
                 "sops-old": dict.fromkeys(ARCHES, pin()),
             }
         },
@@ -102,6 +112,7 @@ def test_a_render_writes_one_tree_per_architecture_with_its_own_pins(tmp_path):
             "uv",
             "flux",
             "vale",
+            "coredns",
         }
         assert all(
             arch in p["url"] or any(a in p["url"] for a in UPSTREAM_ARCH[arch])
@@ -241,7 +252,9 @@ def test_a_file_entry_cannot_install_over_a_tool(hosts):
 
 RELEASE_TAG = re.compile(r"^https://github\.com/[^/]+/[^/]+/releases/download/([^/]+)/")
 # Every tool the spec fetches from a GitHub release; the census below must find each one.
-RELEASE_TOOLS = frozenset({"sops", "chezmoi", "node-exporter", "flux", "nfpm", "uv"})
+RELEASE_TOOLS = frozenset(
+    {"sops", "chezmoi", "node-exporter", "flux", "coredns", "nfpm", "uv"}
+)
 
 
 def release_tag_problem(url: str) -> str | None:

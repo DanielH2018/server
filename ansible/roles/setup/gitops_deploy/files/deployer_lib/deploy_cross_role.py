@@ -32,80 +32,45 @@ _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset(
     {
         "deploy_ui",
-        "fake_remux",
         "gitops_deploy",
-        "k3s",
-        "renovate_agent",
-        "renovate_notify",
     }
 )
-_K3S = frozenset({"k3s"})
-_LH = "scripts/lib/longhorn_lib"
 _STAMPED = _HOST_LIB | {"initial_setup"}
 _CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup"})
-_ALERT_UNIT = frozenset({"gitops_deploy", "renovate_agent", "renovate_notify"})
+_ALERT_UNIT = frozenset({"gitops_deploy"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
     f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
     f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
-    f"{_COMMON}/tasks/agent_user.yml": frozenset({"renovate_agent"}),
     # `hosts/lib/` since H7.2e: the packages ship it, and the Ansible consumers below still copy
     # it beside their scripts until their own PRs move them. `ci_verdict.py` is the deployer's
-    # alone (`gitops_deploy/tasks/code.yml` copies it), and the longhorn_lib modules are the
-    # k3s role's backup-health reader's (`k3s/tasks/health-crons.yml` copies them).
+    # alone (`gitops_deploy/tasks/code.yml` copies it).
     "hosts/lib/host_lib.py": _HOST_LIB,
     "hosts/lib/ci_verdict.py": frozenset({"gitops_deploy"}),
-    f"{_LH}/longhorn_backup_health_logic.py": _K3S,
-    f"{_LH}/longhorn_backups.py": _K3S,
-    f"{_LH}/longhorn_cluster_state.py": _K3S,
-    f"{_LH}/longhorn_cron_evidence_logic.py": _K3S,
-    f"{_LH}/longhorn_etcd_s3_logic.py": _K3S,
-    f"{_LH}/longhorn_restore_drill_stamps.py": _K3S,
-    f"{_LH}/longhorn_skipped_volumes_logic.py": _K3S,
     f"{_COMMON}/tasks/install_host_lib.yml": _HOST_LIB,
     f"{_COMMON}/tasks/check_timer.yml": _CHECK_TIMER,
     f"{_COMMON}/templates/check-timer.service.j2": _CHECK_TIMER,
     f"{_COMMON}/templates/check-timer.timer.j2": _CHECK_TIMER,
     f"{_COMMON}/templates/check-timer-boot.service.j2": _CHECK_TIMER,
-    f"{_COMMON}/tasks/release_bin.yml": frozenset({"k3s"}),
-    # A repo file a setup task copies from the checkout by `src: "{{ playbook_dir }}/../<path>"`.
-    # It sits under no role, so without a row it maps to no role and the tick fast-forwards it
-    # with nothing applied (#6411).
-    # `prune_releases.py` is copied by `release_bin.yml`, so it reaches that file's importers.
-    "scripts/deploy_tools/prune_releases.py": frozenset({"k3s"}),
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
     f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
-        {"deploy_ui", "renovate_agent"}
+        {"deploy_ui"}
     ),
     "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py": frozenset(
-        {"deploy_ui", "renovate_agent"}
+        {"deploy_ui"}
     ),
-    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset(
-        {"deploy_ui", "renovate_agent"}
-    ),
-    # A `defaults/` file whose variable another role reads. renovate_agent copies the uv binary
-    # `initial_setup_uv_version` pins, and names that key where it checks the copy, so a uv bump
-    # re-applies it after initial_setup (#5945).
-    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
-        {"renovate_agent"}
-    ),
+    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset({"deploy_ui"}),
     # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
     # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
     "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),
 }
 
 
-# DECIDED: `common/templates/resolv.conf.j2` stays out of the table above and records `common`
-# (#3319). `k3s` renders it directly, and it is not the tick's to apply: it runs only from
-# `k3s-bringup.yml`. `optimize_pi` rendered it too until H7.25 moved the Pi's resolver into the
-# `pi-resolver` component, which the host package builder renders on its own. Recording `common`
-# prints the remediation in `deploy_remediation._setup_commands` as one line.
-# The value names the roles that render the file. `_setup_commands` builds `common`'s command
-# from them and the routing (#4316), so neither a host nor a playbook is written down twice.
-SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {
-    f"{_COMMON}/templates/resolv.conf.j2": frozenset({"k3s"}),
-}
+# A setup-tree template that no setup role imports and one role renders by path, mapped to the
+# roles that render it. Empty since H7.35: the host package builder renders
+# `common/templates/resolv.conf.j2`, through the `pi-resolver` and `k3s-host-dns` components.
+SETUP_FILES_ROUTED_TO_OWNER: dict[str, frozenset[str]] = {}
 
 # A filter plugin mapped to the setup roles whose rendered state calls one of its filters
 # (#3874). `ansible/deploy.yml` runs no setup role, so no deploy-plane apply, narrowed or

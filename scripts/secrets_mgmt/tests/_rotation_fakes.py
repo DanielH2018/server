@@ -3,11 +3,10 @@
 Every fake appends `(name, args, kwargs)` to a shared `calls` list, which is how a test proves
 "the registry was saved after the value was written" without reading source.
 
-THE SUBPROCESS BOUNDARIES KEEP THEIR REAL IMPLEMENTATIONS. `sops_set` and `deploy` are
-`rotation_tools`' own functions with a recording `run` injected, not lambdas. Replacing them
-wholesale would retire the argv assertions that are the point of `sops_set` — the token must
-reach the process on stdin, never in argv. `process_calls` returns exactly what those two
-handed the runner.
+THE SUBPROCESS BOUNDARY KEEPS ITS REAL IMPLEMENTATION. `sops_set` is `rotation_tools`' own
+function with a recording `run` injected, not a lambda. Replacing it wholesale would retire the
+argv assertions that are its point — the token must reach the process on stdin, never in argv.
+`process_calls` returns exactly what it handed the runner.
 """
 
 import datetime as dt

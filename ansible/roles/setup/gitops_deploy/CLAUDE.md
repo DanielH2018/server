@@ -15,9 +15,7 @@ and the trade-offs.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "gitops_deploy"`
-- **Timers (3):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec=10min`),
-  `kuma-check-github-ruleset-drift.timer` (`OnCalendar=*-*-* 06:40:00`),
-  `kuma-check-github-interaction-limit.timer` (`OnCalendar=*-*-* 06:50:00`)
+- **Timer:** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec=10min`)
 <!-- /generated_from -->
 
 ## A host with `has_gitops: false` is reaped, and the code refuses on its own
@@ -57,18 +55,10 @@ D6.12: `promote` publishes the bundle and Flux applies it.
   `GitOpsTickStale` and `GitOpsTickOutcomeRepeating`. The "Containers and system monitoring"
   board plots the duration and the outcomes.
 
-**The two GitHub timers record a journal line and a textfile, and push to nothing (M6 batch B3).**
-The ruleset-drift and interaction-limit scripts call `write_check_textfile` from
-`ansible/roles/setup/initial_setup/files/homelab-check-lib.sh` in `push()`, with a `DEADLINE_S` of
-90000. The four GitHub rules in
-`ansible/roles/k8s/observability/files/rules/gitops-checks.yaml` read the files and page.
-ENFORCED: `ansible/tests/services/test_gitops_check_rule_literals.py` pins each rule's deadline
-literals to the rendered `DEADLINE_S`. Both scripts source the check
-library with `|| exit 1`, so a host that lacks the library fails its timer unit instead of
-skipping the file. The timers keep their `kuma-check-` names, because a rename would orphan the
-installed units. The checks stamp their own render fragment, `gitops-deploy-github-checks`,
-under the tag of their renders: `scripts/deploy_tools/setup_lib/deployed_copies.py:_every_render_stamped`
-counts a fragment only when its stamp's tags are a subset of each render's tags.
+**The two GitHub checks left this role in H7.37.** `hosts/components/github-checks/` ships the
+ruleset-drift and interaction-limit timers in `homelab-daniel-box`, and its `defaults/main.yml`
+holds the rulesets' declarations. `tasks/teardown.yml` still removes the Ansible-era timers from a
+host with `has_gitops: false`.
 
 ## Safety
 

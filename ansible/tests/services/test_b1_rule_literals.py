@@ -43,7 +43,9 @@ def rule_expr(alert: str, rules: str | None = None) -> str:
 
 def rendered_deadline(template: str, overrides: dict | None = None) -> int:
     """DEADLINE_S as the producer renders it, at the role default or under `overrides`."""
-    body = render_shell_script("setup", "k3s", template, overrides=overrides)
+    body = render_shell_script(
+        "components", "k3s-host-checks", template, overrides=overrides
+    )
     [deadline] = re.findall(r"^DEADLINE_S=(\d+)$", body, re.M)
     return int(deadline)
 

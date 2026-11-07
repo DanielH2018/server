@@ -31,13 +31,13 @@ before trusting the bare-`error` branch.
 
 ## The host plane, and the prune that has no successor
 
-The two fake-remux crons run on daniel-box from `ansible/roles/setup/fake_remux`, whose `CLAUDE.md` owns their schedule, lock and contract. The disk-autoprune cron retired on 2026-08-14 with no successor: nothing prunes disk on the cluster nodes, so monitor-bridge's Root Disk pager is alerting without remediation, deliberately.
+The two fake-remux timers run on daniel-box from `hosts/components/fake-remux`, whose `CLAUDE.md` owns their schedule, lock and contract. The disk-autoprune cron retired on 2026-08-14 with no successor: nothing prunes disk on the cluster nodes, so monitor-bridge's Root Disk pager is alerting without remediation, deliberately.
 
 ## fake-remux scan: what counts as fake
 
-`fake_remux.py scan`, whose shell is `ansible/roles/setup/fake_remux/files/fake_remux_lib/fake_remux_scan.py`
+`fake_remux.py scan`, whose shell is `hosts/components/fake-remux/files/fake_remux_lib/fake_remux_scan.py`
 and whose pure core is `fake_remux_logic.py` beside it, deployed to
-`/opt/autofix-fake-remux/`, daily at `04:45`, configured from
+`/usr/lib/homelab/fake-remux/`, daily at `04:45`, configured from
 `/etc/autofix-fake-remux/config.env` (0600). It is ffprobe-backed detection of files whose
 quality claims a **Remux** but whose video stream is a re-encode, by either of two tells:
 
@@ -89,13 +89,13 @@ The state dir `/var/lib/autofix-fake-remux` is created `sys_user`-owned. Both cr
 shared `host_lib.py`, which the role installs beside the scripts from `roles/setup/common`, and
 run via `uv run --no-project --python <pin>`, the `host_python_version` pin in
 `ansible/inventory/group_vars/all.yml`. monitor-bridge no longer reads these state files, so no
-deploy order applies between `autofix-bridge` and `monitor-bridge`: `fake-remux-health.sh` reads
+deploy order applies between `autofix-bridge` and `monitor-bridge`: `fake-remux-health` reads
 the state files itself and writes the three textfile verdicts that the `other-setup-checks` rules
 read.
 
 ## Running either cron by hand
 
-The two fake-remux crons live in `ansible/roles/setup/fake_remux/files/`; the paths below are
+The two fake-remux crons live in `hosts/components/fake-remux/files/`; the paths below are
 relative to that role.
 
 Scan, live but report-only:
@@ -103,7 +103,7 @@ Scan, live but report-only:
 ```bash
 SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json \
   PYTHONPATH=hosts/lib \
-  /usr/local/bin/uv run --no-project --python 3.15.2 files/fake_remux.py scan
+  /usr/bin/uv run --no-project --python 3.15.2 files/fake_remux.py scan
 ```
 
 Reconcile, in shadow so it has no side effects:
@@ -112,11 +112,11 @@ Reconcile, in shadow so it has no side effects:
 FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json \
   REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl \
   PYTHONPATH=hosts/lib \
-  /usr/local/bin/uv run --no-project --python 3.15.2 files/fake_remux.py replace
+  /usr/bin/uv run --no-project --python 3.15.2 files/fake_remux.py replace
 ```
 
 Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` for the sidecar, and `uv run
-pytest ansible/roles/setup/fake_remux/tests` for the fake-remux logic suites.
+pytest hosts/components/fake-remux/tests` for the fake-remux logic suites.
 
 ## The survey that decided what this role does NOT fix
 
@@ -130,7 +130,7 @@ configarr. Do not re-propose these.
 
 `autofix_fake_remux_gop_max_s` and `autofix_fake_remux_max_per_scan` bound detection. No
 inventory file sets them, so the `default(5)` in
-`ansible/roles/setup/fake_remux/templates/fake-remux.config.env.j2` applies to both.
+`hosts/components/fake-remux/templates/fake-remux.config.env.j2` applies to both.
 `autofix_fake_remux_replace_mode` (off/shadow/live) gates the reconciler, and
 `ansible/inventory/host_vars/daniel-box.yml` sets it. `autofix_fake_remux_policy`, also in that
 host_vars file, is the git-tracked selection-policy dict rendered to `policy.json`.

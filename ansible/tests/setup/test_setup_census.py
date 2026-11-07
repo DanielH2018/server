@@ -76,13 +76,8 @@ def real_tree() -> dict[str, list[Item]]:
 
 
 NAMED_MEMBERS = [
-    ("cron", "Longhorn backup health"),
-    ("template", "Install the host forwarder's unit"),
     ("template", "Pin the node's LAN address in netplan"),
-    ("get_url", "Download the pinned CoreDNS release"),
-    ("systemd_service", "Listen on the worktree holder scan's socket"),
     ("sysctl", "Raise the inotify instance limit for pod log tailing"),
-    ("ufw", "Allow cluster traffic from agent nodes"),
 ]
 
 
@@ -99,7 +94,6 @@ def test_the_census_finds_each_named_member(real_tree, kind, name):
 
 def test_a_shipped_file_and_a_target_are_both_searchable(real_tree):
     items = [i for items in real_tree.values() for i in items]
-    assert any(i.mentions("host-corefile.j2") for i in items)
     assert any(i.mentions("k3s/tasks/static-address.yml") for i in items)
     assert any(i.mentions("fs.inotify.max_user_instances") for i in items)
 

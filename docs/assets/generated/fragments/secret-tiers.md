@@ -8,4 +8,4 @@
 | `pinned` | 730 d | 2 |
 | `ignore` | — | 10 |
 
-109 secrets are registered. The weekly `auto` rotation takes anything due within `ROTATE_LEAD_DAYS` = 8 days.
+109 secrets are registered.

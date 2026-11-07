@@ -1344,8 +1344,9 @@ steps are:
     - The local `homelab-updater` ships `homelab.sources`, and `homelab-daniel-box` starts
       the signer, the builder and the repo. The next updater run moves the host onto the
       signed repo, at the same version or a newer one.
-6. On the Pi only, stop and disable `systemd-resolved`, then start
-   `homelab-docker-engine.service` once. The disable waits for this step because step 5's
+6. On the Pi and daniel-box, stop and disable `systemd-resolved`. On daniel-box the step
+   first proves the forwarder answers, because `/etc/resolv.conf` names only it. On the Pi it
+   then starts `homelab-docker-engine.service` once. The disable waits for this step because step 5's
    `apt-get` reaches Ubuntu's archive through the stub resolver, and `/etc/resolv.conf` links
    to that stub until the package replaces the link. The step refuses if the link is still
    there. The package shipped the engine unit in
@@ -1391,8 +1392,7 @@ for a wrong hostname, a missing host var and a missing key.
 ### The Pi rebuild runbook
 
 `docs/break-glass.md` gains the Pi runbook in H7.15b, and that page is the procedure to
-follow. It adds the steps a stock image needs (`age`, the `ssh-users` group, the updater's
-hand start), and it moves the recipient commit ahead of the package install, because
+follow. It adds the step a stock image needs (the updater's hand start), and it moves the recipient commit ahead of the package install, because
 `compose-run` refuses to start without the file `homelab-secrets` decrypts. The plan's
 steps are:
 
@@ -2038,6 +2038,13 @@ the `manual_plane` clearing, and *Rollback*'s
     the backup health reader, the B2 accounting and listing crons, the root-disk heartbeat, the
     cluster-token drift check, the Healthchecks.io key and the etcd restore credentials.
     `k3s/tasks/longhorn-host.yml`'s packages and multipath drop-in move here as well.
+    **Amended 2026-11-07.** `homelab-tools` ships CoreDNS, as *Architecture-specific binaries*
+    has it. `/etc/resolv.conf` names only the forwarder on daniel-box, so `bootstrap-host.sh`
+    step 6 also stops `systemd-resolved` there, once the forwarder answers. The kubeconfig
+    oneshot takes the token from the `k3s/readonly-token` output, whose dependent it is, and the CA
+    from k3s's admin kubeconfig, so it reads no cluster. On a new cluster the operator refreshes the
+    token in SOPS (`docs/host-packages.md`). The drill stays in place in the checkout, as old H7.13's
+    daniel-server half does not.
 12. **H7.36.** All three steps move daniel-box timers that read the primary checkout, and
     each keeps its `## Autonomous-role contract` in its component. It carries the docs site
     directory's `tmpfiles.d` line and the docs role's `CLAUDE.md` edit.
@@ -2387,6 +2394,16 @@ the `manual_plane` clearing, and *Rollback*'s
       old path and H7.62 repoints them. daniel-server's Ansible-era witness still runs the old
       path and no tick re-renders it there, so H7.59 lists `/usr/local/bin/uv` as that host's
       legacy entry when it moves the witness.
+      **Amended at H7.62:** the PR repoints daniel-box's readers and does not list the path. The
+      k3s health script only reaches a host through a hand apply of `k3s-bringup.yml`, and a package
+      install waits on no such apply, so a legacy entry here could delete the binary under a live
+      script, or under the deployer's own unit if a tick is parked. [#7566](https://github.com/DanielH2018/server/issues/7566) lists the path once
+      `rootq` shows no live unit or script naming it.
+    - **Amended at H7.62: `initial_setup_uv_version` goes too.** Its only other reader was
+      `agent_user.yml`'s assert that the operator's uv equals the pin. The dotfiles repo writes that
+      binary after this row, so the next Renovate bump would have failed `renovate_agent`'s apply and
+      written a `hold_sha`. The assert goes with it, and the agent copies the operator's uv as it
+      stands.
     - **Vale** takes the same shape, as *The component checklist and the setup census* states.
       `homelab-tools` pins it, a `vale` component ships `/usr/bin/vale`,
       `/usr/local/bin/vale` becomes a legacy entry, and `test_vale_matches_the_ci_pin.py`
@@ -2414,7 +2431,9 @@ the `manual_plane` clearing, and *Rollback*'s
           step 5 installs the binary. The cluster-node procedure runs `chezmoi init --apply`
           with H7.38's three prompt flags (**operator-only**). The seed and the agent-prompt
           tasks lose their purpose with it. The PR body says what keeps daniel-box's dotfiles
-          source current once the role stops applying it.
+          source current once the role stops applying it. **Amended at H7.62:**
+          `claude-agent-setup` takes the agent's chezmoi from `/usr/lib/homelab/bin/chezmoi`,
+          because nothing installs `~/.local/bin/chezmoi` on a rebuilt host once the role stops.
     - **What stays until H7.63:** `Resolve the deploy user's home directory` and `Install
       Python CLI tooling`, narrowed to `ansible-core` and `ansible-lint`.
 36. **H7.63 lands after the deployer's timer, as one PR.** It deletes read-only checks and tasks
@@ -2680,6 +2699,13 @@ the `manual_plane` clearing, and *Rollback*'s
       onto C2's `DEPLOY_HOLD`. That one is packaged here, and H7.19b deletes its remaining
       deployer reads in `deploy_ui.py`, `deploy_ui_reads.py` and `deploy_ui_writes.py`.
       The deployer-import census covers it in both cases.
+    - **What H7.37 did (#7504).** D6.15's review recorded no move onto `DEPLOY_HOLD`, so
+      deploy_ui took the first branch and has no line in the package. #7419 holds the rest.
+      The three roles are emptied, as *Roles are emptied before H7.20a, never deleted*
+      requires, and four components hold their content: `renovate-notify`,
+      `renovate-agent`, `fake-remux` and `github-checks`. A package cannot resolve a
+      ClusterIP, so the Sonarr Service gains a pin at its live address, as H7.8 did for
+      `nut`. `renovate-agent-setup` is the agent's tooling unit H7.12b describes.
 12. **H7.12 Claude Code.**
     - **H7.12a** The paired PR in `DanielH2018/dotfiles` adds the per-user tooling: uv, the
       pinned Python, Claude Code, `claude_guard`, `claude_worktree`, prek, `github_cli` and

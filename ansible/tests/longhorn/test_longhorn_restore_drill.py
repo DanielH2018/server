@@ -37,11 +37,10 @@ from _k8s_render import render_role_template
 from _restore_drill import DRILL_DEFAULTS, DRILL_TEMPLATE, harness, selected
 from _shell_render import rendered_shell_text
 from lib import yaml_fast
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
+from lib.repo_paths import K3S_HOST_CHECKS_DEFAULTS
 
 
 DRILL = DRILL_TEMPLATE
-CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 
 from longhorn_lib import longhorn_backup_health_logic as logic  # noqa: E402
 
@@ -211,26 +210,6 @@ def test_the_drill_writes_no_host_file_for_the_checker_to_read() -> None:
     )
 
 
-def test_reader_is_installed_before_the_shim_that_invokes_it() -> None:
-    """The shim's cron fires every 10 minutes and calls the reader by absolute path immediately.
-
-    If the shim's release install ran first, a cron tick landing in the window between that task
-    and the reader's `copy:` tasks below would call a reader that does not exist yet on a fresh
-    install — a spurious page, not a real one (2026-09-04 review finding #5).
-    """
-    tasks = _tasks()
-    names = [t.get("name") for t in tasks]
-    reader_scripts_idx = names.index(
-        "Install the Longhorn backup health reader scripts"
-    )
-    shim_release_idx = names.index(
-        "Deploy the backup-health scripts as a versioned release"
-    )
-    assert reader_scripts_idx < shim_release_idx, (
-        "the reader's files must land before the shim that invokes them by absolute path"
-    )
-
-
 def test_check_seven_fails_closed_when_the_drill_never_ran() -> None:
     """The never-run state is the one most in need of reporting. See the module docstring."""
     problem = logic.check_restore_drill(
@@ -273,11 +252,6 @@ def test_check_seven_pages_below_backup_failure_severity() -> None:
         )
 
 
-def _tasks():
-    docs = load_yaml(CRONS)
-    return docs if isinstance(docs, list) else []
-
-
 def test_drill_runs_as_its_own_serviceaccount_with_write_grants() -> None:
     """It creates and deletes cluster objects; the read-only SA is Forbidden on all of it."""
     cronjob = next(yaml_fast.safe_load_all(render_role_template(*CRONJOB)))
@@ -298,23 +272,6 @@ def test_drill_runs_as_its_own_serviceaccount_with_write_grants() -> None:
     )
 
 
-def test_the_host_cron_and_script_are_absent_arms_with_no_schedule() -> None:
-    """The host copies are retired by absent arms, and an absent arm names no schedule key."""
-    tasks = {t.get("name"): t for t in _tasks()}
-    cron = tasks["Retire the host Longhorn restore drill cron"]["ansible.builtin.cron"]
-    assert cron["state"] == "absent" and cron["cron_file"] == "longhorn-restore-drill"
-    assert not {"minute", "hour", "day", "job"} & set(cron), (
-        "an absent arm that names a schedule field reads a key that left this role's defaults"
-    )
-    script = tasks["Retire the host Longhorn restore drill script"][
-        "ansible.builtin.file"
-    ]
-    assert script == {
-        "path": "/usr/local/bin/longhorn-restore-drill.sh",
-        "state": "absent",
-    }
-
-
 def test_drill_runs_daily() -> None:
     """A monthly drill leaves a broken restore path undetected for weeks."""
     defaults = load_yaml(DRILL_DEFAULTS)
@@ -333,7 +290,7 @@ def test_cadence_and_staleness_window_move_together() -> None:
     Raising the cadence without lowering the window buys zero detection latency, which is the
     trap this pairing exists to prevent.
     """
-    defaults = load_yaml(K3S_DEFAULTS)
+    defaults = load_yaml(K3S_HOST_CHECKS_DEFAULTS)
     max_age = defaults["k3s_longhorn_restore_drill_max_age_days"]
     assert 2 <= max_age <= 7, (
         f"max_age_days is {max_age}: a nightly drill should tolerate a couple of bad nights, "

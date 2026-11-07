@@ -8,9 +8,8 @@
 #
 # Each architecture block carries its own annotation, version and digest, because the Renovate
 # manager in renovate.json moves one version and one digest per match. The two blocks of a tool
-# pin one version, which the renderer enforces. Renovate bumps these pins apart from the
-# chezmoi_setup defaults, which install the same chezmoi on a fresh host. The sops component
-# puts this package's sops on PATH as /usr/bin/sops.
+# pin one version, which the renderer enforces. The sops component puts this package's sops on
+# PATH as /usr/bin/sops.
 #
 # DECIDED: chezmoi is pinned as its .tar.gz. Upstream publishes a bare binary for amd64 only,
 # and `member` names the file the builder installs from inside the archive.
@@ -92,6 +91,23 @@ tools:
       sha256: 2a69755b68118c612c455fc0c5ea1b9438519aa1c852e3fb303b3ad97141bbb0
       url: https://github.com/vale-cli/vale/releases/download/{version}/vale_{bare}_Linux_arm64.tar.gz
       member: vale
+  # The host DNS forwarder on daniel-box (k3s-host-dns). The arm64 block exists because the renderer
+  # holds every tool to both architectures. Each digest is the release's coredns_<ver>_linux_<arch>.tgz
+  # digest. renovate.json's packageRules hold the version to three components: coredns/coredns
+  # carries stray tags `v002` ... `v011`, which Renovate once ranked above 1.14.7 (#3087).
+  coredns:
+    amd64:
+      # renovate: datasource=github-release-attachments depName=coredns/coredns
+      version: v1.14.7
+      sha256: 9a09356438c6d9591cb80011a2a7a52f87fc3a113f6690e41f243f98b98faac9
+      url: https://github.com/coredns/coredns/releases/download/{version}/coredns_{bare}_linux_amd64.tgz
+      member: coredns
+    arm64:
+      # renovate: datasource=github-release-attachments depName=coredns/coredns
+      version: v1.14.7
+      sha256: bf26782d19b5340e3e6cb50f1ed6df72f58e4a30932c79d167f0f0a8b1e92e16
+      url: https://github.com/coredns/coredns/releases/download/{version}/coredns_{bare}_linux_arm64.tgz
+      member: coredns
   # nfpm and uv stay the last two blocks: hosts/bootstrap-host.sh embeds this tail byte for byte.
   # H7.24a: daniel-box builds the host packages itself, so it needs nfpm at the builder's pin.
   # Both digests come from the release's checksums.txt:
@@ -109,7 +125,7 @@ tools:
       sha256: a9a75213763783b7669719e505474c748c5ad7dc66591a195619deb50f85c2f4
       url: https://github.com/goreleaser/nfpm/releases/download/{version}/nfpm_{bare}_Linux_arm64.tar.gz
       member: nfpm
-  # H7.41a: daniel-box's builder runs uv, at the version `initial_setup_uv_version` pins. The uv
+  # H7.41a: daniel-box's builder runs uv. The uv
   # component puts it on PATH as /usr/bin/uv for the units and scripts that name it. uv ships
   # tarballs only, with the binary one directory down. Both digests come from the release's
   # uv-<arch>-unknown-linux-gnu.tar.gz.sha256 files.

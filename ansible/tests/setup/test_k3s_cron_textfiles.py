@@ -17,15 +17,13 @@ import re
 
 import pytest
 from _shell_render import render_shell_script
-from deploy_tools.narrow_lib.task_walk import file_tags
 from lib.proc_testing import fake_bin, run, write_exec
-from lib.repo_paths import K3S_ROLE, REPO
+from lib.repo_paths import REPO
 
-CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
-CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 HC_ENV = "/etc/healthchecks/ping.env"
-UV = "/usr/local/bin/uv"
+UV = "/usr/bin/uv"
 SHELL_PRODUCERS = {
     "longhorn-backup-health": "longhorn-backup-health.sh.j2",
     "etcd-snapshot-offbox": "etcd-token-drift.sh.j2",
@@ -53,21 +51,15 @@ def _run(
     `host_paths` maps a path the script names to the stand-in the case created.
     """
     body = render_shell_script(
-        "setup", "k3s", SHELL_PRODUCERS[tag], overrides=overrides
+        "components", "k3s-host-checks", SHELL_PRODUCERS[tag], overrides=overrides
     )
     check_lib = tmp_path / "check-lib.sh"
     check_lib.write_text(CHECK_LIB_STUB)
-    hc_env = tmp_path / "ping.env"
-    hc_env.write_text("")
     uv = tmp_path / "uv"
     textfile_dir = tmp_path / "textfile"
     textfile_dir.mkdir()
     assert CHECK_LIB in body, f"{SHELL_PRODUCERS[tag]} no longer references {CHECK_LIB}"
-    body = (
-        body.replace(CHECK_LIB, str(check_lib))
-        .replace(HC_ENV, str(hc_env))
-        .replace(UV, str(uv))
-    )
+    body = body.replace(CHECK_LIB, str(check_lib)).replace(UV, str(uv))
     for host_path, stand_in in (host_paths or {}).items():
         assert host_path in body, f"{SHELL_PRODUCERS[tag]} no longer reads {host_path}"
         body = body.replace(host_path, str(stand_in))
@@ -101,9 +93,9 @@ def _series(textfile_dir, tag) -> dict[str, str]:
 def test_a_producer_sources_the_library_with_a_guard_that_exits_and_writes_for_its_own_check(
     tag,
 ):
-    body = render_shell_script("setup", "k3s", SHELL_PRODUCERS[tag])
+    body = render_shell_script("components", "k3s-host-checks", SHELL_PRODUCERS[tag])
     assert re.search(
-        r"source /usr/local/lib/homelab-check-lib\.sh \|\| \{\n[^}]*exit 1\n\}", body
+        r"source /usr/lib/homelab/homelab-check-lib\.sh \|\| \{\n[^}]*exit 1\n\}", body
     )
     assert f'write_check_textfile {tag} "$SUCCESS"' in body or (
         f'write_check_textfile {tag} "$success"' in body
@@ -114,7 +106,7 @@ def test_a_producer_sources_the_library_with_a_guard_that_exits_and_writes_for_i
 def test_a_producer_has_no_kuma_push_left(tag):
     # RED if a push, its library, its credential file or its token returns: the tiles are gone,
     # so a push would be refused (`by=kuma`) every run.
-    body = render_shell_script("setup", "k3s", SHELL_PRODUCERS[tag])
+    body = render_shell_script("components", "k3s-host-checks", SHELL_PRODUCERS[tag])
     for leftover in (
         "kuma_push",
         "kuma-push",
@@ -174,7 +166,9 @@ def test_a_token_fault_is_flagged(tmp_path, token, stamp, named):
 
 
 def test_the_token_drift_script_takes_no_snapshot_and_reads_no_s3_credential():
-    body = render_shell_script("setup", "k3s", SHELL_PRODUCERS["etcd-snapshot-offbox"])
+    body = render_shell_script(
+        "components", "k3s-host-checks", SHELL_PRODUCERS["etcd-snapshot-offbox"]
+    )
     assert "etcd-snapshot save" not in body
     assert "etcd-s3" not in body
     assert "AWS_" not in body
@@ -195,12 +189,3 @@ def test_a_reader_verdict_is_written_and_a_boot_grace_run_writes_nothing(tmp_pat
         skipped, "longhorn-backup-health", uv_body=reader, env={"BOOT_GRACE": "1"}
     )
     assert list(textfile_dir.iterdir()) == []
-
-
-def test_the_task_file_narrows_to_the_three_tags_the_hand_apply_names():
-    # An untagged task returns None here, and the tick then records the maximal `--tags k3s`.
-    assert file_tags(CRONS.read_text()) == {
-        "backup-health",
-        "disk-health",
-        "etcd-snapshot",
-    }

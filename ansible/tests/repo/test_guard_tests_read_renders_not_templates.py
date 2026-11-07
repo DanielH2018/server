@@ -119,10 +119,6 @@ TEMPLATE_SOURCE_READERS = {
         "needs `no_log`; a render replaces every secret with the same `STUB` and drops the "
         "name that identified it"
     ),
-    "services/test_healthchecks_pings.py": (
-        "the control that keeps its render honest asserts a template CARRIES `{{`, which is "
-        "the one claim a render erases; the census itself renders (#3190)"
-    ),
     "deploy/_autodeploy.py": (
         "the fallback for a role no render reaches: the synthetic `widget_role` trees under "
         "`tmp_path` the derivation's unit tests build, and the caller-rendered roles "
@@ -237,7 +233,6 @@ KNOWN_MEMBERS = frozenset(
         "services/_homepage_config.py",
         "services/_jellyfin_plugins.py",
         "services/test_authelia_access_tiers.py",
-        "services/test_healthchecks_pings.py",
         "services/test_monitor_bridge_modules.py",
         "services/test_smtp_wiring.py",
         "services/test_strangler_bridge.py",

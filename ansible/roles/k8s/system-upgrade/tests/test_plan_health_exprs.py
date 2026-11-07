@@ -19,8 +19,8 @@ from _mini_cel import CelError, evaluate
 from lib import yaml_fast
 from lib.k8s_roles import K8S_ROLES, role_fields
 
-PIN = "v1.37.1+k3s1"
-STORED = "v1.37.1-k3s1"
+PIN = "v1.37.2+k3s1"
+STORED = "v1.37.2-k3s1"
 STALE = "v1.36.9-k3s1"
 
 
@@ -75,7 +75,7 @@ def test_complete_in_sucs_munged_form_reads_current():
 
 
 def test_the_unmunged_pin_never_matches_what_suc_stores():
-    # SUC stores v1.37.1-k3s1. A literal built from the pin's own spelling would never be
+    # SUC stores v1.37.2-k3s1. A literal built from the pin's own spelling would never be
     # Current, so every apply would time out red.
     assert _state(_exprs(), _plan(PIN, [COMPLETE_TRUE])) == "InProgress"
 
@@ -120,11 +120,11 @@ def test_the_literal_follows_the_pin(tmp_path):
     text = defaults.read_text()
     assert f"k3s_version: {PIN}" in text
     defaults.write_text(
-        text.replace(f"k3s_version: {PIN}", "k3s_version: v1.37.2+k3s1")
+        text.replace(f"k3s_version: {PIN}", "k3s_version: v1.37.3+k3s1")
     )
     check = _exprs(roles)
-    assert "v1.37.2-k3s1" in check["current"] and STORED not in check["current"]
-    assert _state(check, _plan("v1.37.2-k3s1", [COMPLETE_TRUE])) == "Current"
+    assert "v1.37.3-k3s1" in check["current"] and STORED not in check["current"]
+    assert _state(check, _plan("v1.37.3-k3s1", [COMPLETE_TRUE])) == "Current"
     assert _state(check, _plan(STORED, [COMPLETE_TRUE])) == "InProgress"
 
 

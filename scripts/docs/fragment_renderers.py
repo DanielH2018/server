@@ -134,12 +134,11 @@ def render_traefik_ports(http_port: int, https_port: int) -> str:
     )
 
 
-def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int]) -> str:
+def render_secret_tiers(tier_days: dict, counts: dict[str, int]) -> str:
     """Renders the secret-rotation tier table fragment.
 
     Args:
         tier_days: tier name to rotation cadence in days, or None for no cadence.
-        lead_days: `ROTATE_LEAD_DAYS`, the window the weekly auto rotation takes.
         counts: tier name to registered secret count.
     """
     lines = ["| Tier | Cadence | Registered |", "|---|---|---|"]
@@ -147,11 +146,7 @@ def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int])
         cadence = f"{days} d" if days is not None else "—"
         lines.append(f"| `{tier}` | {cadence} | {counts.get(tier, 0)} |")
     total = sum(counts.values())
-    lines += [
-        "",
-        f"{total} secrets are registered. The weekly `auto` rotation takes anything due within "
-        f"`ROTATE_LEAD_DAYS` = {lead_days} days.",
-    ]
+    lines += ["", f"{total} secrets are registered."]
     return "\n".join(lines) + "\n"
 
 

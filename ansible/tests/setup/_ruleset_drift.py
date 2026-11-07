@@ -16,8 +16,8 @@ from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.repo_paths import REPO as REPO_ROOT
 from _shell_render import render_shell_script
 
-TEMPLATE = ("setup", "gitops_deploy", "github-ruleset-drift.sh.j2")
-CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
+TEMPLATE = ("components", "github-checks", "github-ruleset-drift.sh.j2")
+CHECK_LIB = "/usr/lib/homelab/homelab-check-lib.sh"
 # The role's copy of the check library, so a runner that never ran initial_setup still sources it
 # and the textfile the script writes lands in TEXTFILE_DIR under tmp_path, never on the host.
 REAL_CHECK_LIB = (
@@ -33,7 +33,6 @@ DECLARED = [
     "pull + boot changed images",
     "renovate config validator",
     "flux-deletion-drill",
-    "render-diff",
 ]
 
 # The check library the script sources, with `reachout_verdict` stubbed to the WAN-reachable

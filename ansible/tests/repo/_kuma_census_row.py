@@ -64,7 +64,6 @@ _INERT_LABEL = (
     "The inert `org.homelab.kuma-docker-monitor` label: a label change recreates the container, "
     "so these go in the next Pi compose change (the plan's open question 7)."
 )
-_K3S_COMMENT = "A setup/k3s comment that names Kuma as a check's reader (#7147, #6882)."
 _LIVE_NAME = (
     "A live name or matcher, such as `etcd_drill_full_kuma_interval_s` or the "
     "webhook labelled Kuma: renaming it touches its readers (#7194)."
@@ -76,6 +75,9 @@ _SHIPPED_COMMENT = (
 _UNIT_FAMILY = "Names the `kuma-check` unit family without the prefix: ADR 0026 keeps the units (#7194)."
 
 _PROSE_HOLDERS = {
+    "hosts/components/k3s-host-checks/component.yml": (
+        "`legacy:` removes the retired `kuma-push.env` from the host, so it names the path."
+    ),
     **dict.fromkeys(
         (
             "hosts/components/pi-compose/services/alloy/compose.yaml.j2",
@@ -84,10 +86,6 @@ _PROSE_HOLDERS = {
             "hosts/components/pi-compose/services/wg-easy/compose.yaml.j2",
         ),
         _INERT_LABEL,
-    ),
-    **dict.fromkeys(
-        ("ansible/roles/setup/k3s/tasks/health-crons.yml",),
-        _K3S_COMMENT,
     ),
     **dict.fromkeys(
         (
@@ -137,10 +135,9 @@ _PROSE_HOLDERS = {
             "ansible/roles/k8s/pi-peer-backup/files/pull-pi-peers.sh",
             "ansible/roles/k8s/qbittorrent/files/prefs_check.py",
             "ansible/roles/k8s/qbittorrent/templates/deployment.yaml.j2",
-            "ansible/roles/setup/fake_remux/tasks/main.yml",
-            "ansible/roles/setup/fake_remux/templates/fake-remux-health.sh.j2",
-            "ansible/roles/setup/gitops_deploy/templates/github-interaction-limit.sh.j2",
-            "ansible/roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2",
+            "hosts/components/fake-remux/templates/fake-remux-health.sh.j2",
+            "hosts/components/github-checks/templates/github-interaction-limit.sh.j2",
+            "hosts/components/github-checks/templates/github-ruleset-drift.sh.j2",
             "ansible/roles/setup/initial_setup/tasks/crons.yml",
             "ansible/roles/setup/initial_setup/templates/aide-check.sh.j2",
             "ansible/roles/setup/initial_setup/templates/loki-read-route-health.sh.j2",
@@ -148,7 +145,7 @@ _PROSE_HOLDERS = {
             "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2",
             "hosts/components/registry-gc/templates/registry-gc.sh.j2",
             "ansible/roles/setup/nut_host/templates/ups-secondary-health.sh.j2",
-            "ansible/roles/setup/renovate_agent/files/renovate_agent.py",
+            "hosts/components/renovate-agent/files/renovate_agent.py",
             "scripts/deploy_tools/prune_releases.py",
         ),
         _SHIPPED_COMMENT,

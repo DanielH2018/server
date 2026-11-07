@@ -20,6 +20,7 @@ PERSISTED = {
     # unit could render a tmpfs copy.
     "homelab-daniel-server:/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml",
     "homelab-daniel-box:/var/lib/homelab-secrets/etc/nut/upsmon.conf",
+    "homelab-daniel-box:/var/lib/homelab-secrets/netplan/80-homelab-wifi-fallback.yaml",
 }
 # Packages the census must find, so a glob that stops matching cannot empty it.
 MEMBERS = {

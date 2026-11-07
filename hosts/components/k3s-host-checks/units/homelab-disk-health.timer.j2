@@ -1,0 +1,10 @@
+# Shipped by the host package's k3s-host-checks component with its enable link.
+[Unit]
+Description=Check the root disk's headroom every 10 minutes
+
+[Timer]
+OnCalendar=*:{{ k3s_disk_health_cron_minute | replace('*/', '00/') }}
+AccuracySec=1s
+
+[Install]
+WantedBy=timers.target

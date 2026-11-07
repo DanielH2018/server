@@ -1,0 +1,9 @@
+# Shipped by the fake-remux component with its enable link.
+[Unit]
+Description=Run the fake-remux heartbeats on their minute schedule
+
+[Timer]
+OnCalendar=*:{{ fake_remux_health_cron_minute | replace('*/', '0/') }}:00
+
+[Install]
+WantedBy=timers.target

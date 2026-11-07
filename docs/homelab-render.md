@@ -732,9 +732,6 @@ key before the load, so neither assert fires.
 
 ## Hash a render tree
 
-The render-diff job's `compare` holds two complete C1 trees to each other (*The render-diff
-gate*), so nothing compares a render with a per-service tree.
-
 `shadow_diff.py digest DIR` prints one line per directory under `DIR/cluster/`, as
 `<directory> sha256:<hex>`, then a `total` line over every file under `DIR`. Each hash covers
 every file's path relative to its directory and the file's bytes, with paths sorted by byte, so
@@ -744,6 +741,17 @@ lines for those tags as a render of all of them. `digest_line` and `directory_di
 
 It exits 64 on a usage error. `scripts/lib/exit_codes.py` holds the codes as its `SHADOW_*`
 family.
+
+## The advisory render-diff job
+
+`.github/workflows/render-diff.yml` renders the merge base and the PR head with one
+`--revision`, prints `diff -r` of the two trees, and prints the head's digest. The job sets
+`continue-on-error: true` and no ruleset requires it, so it blocks nothing. A reviewer reads
+the printed diff before merging a change to the renderer or to a package it imports.
+`renovate.json` disables automerge for `jinja2`, `pyyaml` and `markupsafe`, the dependency
+closure of the renderer, so a bump of one waits for that read.
+`scripts/tests/test_renovate_renderer_closure_no_automerge.py` holds the rule to the imports
+of the renderer and to `uv.lock`. R4 Open question 12 records the ruling.
 
 ## The render is deterministic and reads only the repo
 
@@ -804,53 +812,6 @@ diff /tmp/r1-ci.txt /tmp/r1-box.txt
 ```
 
 The `diff` must print nothing, and both files must hold one line per directory.
-
-## The render-diff gate
-
-The required `render-diff` job proves that a PR moved no rendered byte, or only the files it
-named. R4 needs that proof because its refactors must leave the render alone, and R4.9
-removes the job. It is not `scripts/validate/render_diff_gates.py`, whose arms refuse an
-unsafe edge or removal.
-
-`.github/workflows/render-diff.yml` calls `scripts/validate/render_diff_job.py` twice:
-
-- `render` renders the PR's merge base and its head, each from its own checkout, tag list and
-  lockfile, as the publish job does.
-- `compare` compares the two complete trees and reads the PR body's `Render-diff:` line.
-
-**Both renders take one commit value.** The `soak` Job embeds the commit it judges, so two
-renders of two commits always differ under `cluster/soak/`. The job passes the PR head's SHA
-to both renders as `--revision` (C1 *Modes*), so a remaining difference comes from the tree.
-
-**The line has two forms.** `Render-diff: none` allows no difference. A list such as
-`Render-diff: flux/x.yaml, cluster/x/y.yaml` must equal the differing files, except
-`digests.json`, which moves with any file it digests. A line inside a code fence or an HTML
-comment does not count.
-
-**The line is mandatory on the hazard paths.** A PR with no line fails when it touches
-`ansible/roles/k8s/*/tasks/`, `scripts/renderer/`, `scripts/lib/k8s_roles.py`,
-`scripts/lib/ansible_jinja_env.py` or `ansible/filter_plugins/`, or deletes a file under
-`ansible/roles/k8s/`. On any other PR with no line, the job prints the difference and passes,
-because most PRs change render output on purpose.
-
-**A renderer dependency bump needs the line too.** The job reads the closure of
-`scripts/validate/render_diff_job.py:RENDERER_DEPENDENCIES` from `uv.lock`, and compares each
-entry between the merge base and the head, with its `pyproject.toml` requirement. A moved entry
-makes the line mandatory, so Renovate cannot automerge a bump that changes the render. A bump
-of any other package needs no line. A census test,
-`scripts/renderer/tests/test_renderer_dependency_pins.py`, holds the literal to the third-party
-modules the renderer imports.
-
-**Both trees must clear a floor.** `flux/pihole.yaml`, `flux/traefik.yaml` and
-`cluster/pihole-deferred/` must exist, and `flux/` must hold at least `FLUX_FLOOR` files. A PR
-that retires a tag lowers `FLUX_FLOOR` in its own diff and lists the tag's `flux/<tag>.yaml`.
-Each listed retired tag lowers the head's floor by one.
-
-**The merge base's copy of the job runs.** A change to `render_diff_job.py` takes effect once it
-has merged, and its PR carries the line, because the module is a hazard path.
-
-To reproduce a verdict by hand, follow *Exit 3* under *Verification* in
-`docs/target-architecture/render/r4-delete-k8s-ansible-path.md`.
 
 ## What the render does not cover
 

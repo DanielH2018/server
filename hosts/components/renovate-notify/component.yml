@@ -1,0 +1,54 @@
+# The Renovate reporting half on daniel-box as a packaged timer (H7.37, H7.11,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.37 the renovate_notify role
+# installed it as renovate-notify.timer. CLAUDE.md beside this file holds the rules.
+#
+# The notifier merges, closes and edits nothing, so it owes no Autonomous-role contract beyond the
+# fields below: it reads GitHub and posts to Discord.
+#
+# Autonomous-role contract (the timer posts a digest to Discord with no human in the loop).
+#
+# - Scope / exclusions: reads the repo's open Renovate PRs and the dependency dashboard, and posts a
+#   Discord digest when what needs a human changes. It writes only /var/lib/renovate-notify.
+# - Mode (explicit and reversible): the timer's enable link in this package arms it. Dropping the
+#   link from a package version, or reverting this component, stops the timer on the install that
+#   drops it.
+# - Authoritative sources: GitHub's REST API, as host_lib.github_get reads it.
+# - Abort valves: the fingerprint gate, which keeps a standing problem to one page, and reconcile's
+#   `hold_sha`.
+# - Required evidence, every run: renovate-notify.prom in node_exporter's textfile directory, which
+#   RenovateNotifyNotReporting reads, and a page from homelab-alert@ on a crash.
+# - Next-run review: `journalctl -u homelab-renovate-notify` before you change a threshold.
+#
+# ENFORCED: this component's tests/ and hosts/lib/tests/test_h737_box_components.py.
+files:
+  - {src: files/renovate_notify.py, dst: /usr/lib/homelab/renovate-notify/renovate_notify.py, mode: "0755"}
+  - {src: files/notify_logic.py, dst: /usr/lib/homelab/renovate-notify/notify_logic.py}
+  - {src: files/pending_logic.py, dst: /usr/lib/homelab/renovate-notify/pending_logic.py}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/renovate-notify/host_lib.py}
+  - {src: templates/homelab-renovate-notify.service.j2, dst: /usr/lib/systemd/system/homelab-renovate-notify.service}
+  - {src: units/homelab-renovate-notify.timer, dst: /usr/lib/systemd/system/homelab-renovate-notify.timer}
+outputs:
+  - src: templates/config.env.j2
+    path: /etc/renovate-notify/config.env
+    owner: ubuntu
+    group: ubuntu
+    mode: "0600"
+    keys: [gitops_deploy_discord_webhook]
+    persist: false
+    link: true
+enable:
+  homelab-renovate-notify.timer: timers.target
+# What the renovate_notify role installed before H7.37. Reconcile retires each once the timer above
+# has started. /var/lib/renovate-notify stays: it holds the digest's state, and monitor-bridge reads
+# it.
+legacy:
+  - {unit: renovate-notify.timer}
+  - {unit: renovate-notify.service}
+  - {unit: renovate-notify-alert.service}
+  - {path: /etc/renovate-notify/alert-webhook.env}
+  - {path: /opt/renovate-notify/renovate_notify.py}
+  - {path: /opt/renovate-notify/notify_logic.py}
+  - {path: /opt/renovate-notify/pending_logic.py}
+  - {path: /opt/renovate-notify/host_lib.py}
+  - {path: /var/lib/homelab/setup-render-manifest.d/renovate-notify}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/renovate-notify}

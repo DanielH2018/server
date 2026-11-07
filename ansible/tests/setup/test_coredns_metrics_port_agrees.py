@@ -16,7 +16,7 @@ and the alert cannot say WHY the target is down. This test can.
 """
 
 from lib import yaml_fast
-from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_DEFAULTS
+from lib.repo_paths import ALL_VARS, HOST_VARS, K3S_HOST_DNS
 from _k8s_render import rendered_k8s_text
 
 
@@ -35,7 +35,9 @@ def ports_disagree(publisher: int, scraper: int) -> str | None:
 
 
 def test_the_live_ports_agree() -> None:
-    publisher = yaml_fast.safe_load(K3S_DEFAULTS.read_text())[_PUBLISHER_VAR]
+    publisher = yaml_fast.safe_load(
+        (K3S_HOST_DNS / "defaults" / "main.yml").read_text()
+    )[_PUBLISHER_VAR]
     scraper = yaml_fast.safe_load(ALL_VARS.read_text())[_SCRAPER_VAR]
     problem = ports_disagree(publisher, scraper)
     assert problem is None, problem

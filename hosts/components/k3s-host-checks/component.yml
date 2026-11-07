@@ -1,0 +1,109 @@
+# The host checks that watch the backup plane and the root disk on the k3s server (H7.35,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.35 setup/k3s installed them as
+# crons. Now one timer starts each oneshot, on the same schedule, and each logs to the journal
+# under the tag its cron gave `logger`, which the reader's checks 9 and 10 and Loki match.
+#
+# A package that lists this component also lists `check-lib`, whose library each script sources,
+# `secrets-unit`, and the credential `healthchecks_ping_key`. The drill and the two B2 timers run
+# from the primary checkout, so the host must hold one.
+#
+# Autonomous-role contract (timers that read the cluster and report, with no human in the loop).
+#
+# - Scope / exclusions: each check reads and reports. None changes the cluster or a backup store.
+#   `etcd-token-drift.sh` compares the cluster token with the operator's stamp and writes neither.
+#   The two reapers delete stranded objects, operator-invoked and dry-run by default. Scheduling
+#   either is out of contract, and they run from the checkout, so this component ships nothing of
+#   theirs (ansible/tests/longhorn/test_longhorn_reap_never_scheduled.py).
+# - Mode (explicit and reversible): each timer's enable link arms it. Dropping the component stops
+#   the timers on the install that drops it. `k3s_etcd_restore_drill_armed` arms the weekly drill,
+#   which runs `--list-only` here. `systemctl stop <timer>` stops one until the next install.
+# - Authoritative sources: the Longhorn objects through the read-only kubeconfig, the journal, the
+#   installed etcd drop-in, the root filesystem and the cluster token file.
+# - Abort valves: the boot grace in the two */10 checks, and the reader's own per-call deadlines.
+# - Required evidence, every run: a check textfile that a Prometheus rule reads, and a
+#   Healthchecks.io ping. Checks 9 and 10 read the B2 accounting's journal lines AS WRITTEN;
+#   docs/k3s-node-plane-crons-and-incidents.md names the regex and the file to edit together.
+# - Next-run review: read the B2 ledger before widening scope.
+#
+# ENFORCED: hosts/lib/tests/test_box_k3s_host_half.py, and the tests in this component's `tests/`.
+files:
+  - {src: templates/longhorn-backup-health.sh.j2, dst: /usr/lib/homelab/longhorn-backup-health.sh, mode: "0755"}
+  - {src: templates/disk-health.sh.j2, dst: /usr/lib/homelab/disk-health.sh, mode: "0755"}
+  - {src: templates/etcd-token-drift.sh.j2, dst: /usr/lib/homelab/etcd-token-drift.sh, mode: "0755"}
+  # The reader and its libraries. No cron window here: dpkg unpacks the whole set before the next
+  # timer can fire, and the timer's unit waits for no file of its own.
+  - {src: files/longhorn_backup_health.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_backup_health.py, mode: "0755"}
+  - {lib: host_lib.py, dst: /usr/lib/homelab/longhorn-backup-health/host_lib.py, mode: "0755"}
+  - {shared: longhorn_backup_health_logic.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_lib/longhorn_backup_health_logic.py, mode: "0755"}
+  - {shared: longhorn_backups.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_lib/longhorn_backups.py, mode: "0755"}
+  - {shared: longhorn_cluster_state.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_lib/longhorn_cluster_state.py, mode: "0755"}
+  - {shared: longhorn_cron_evidence_logic.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_lib/longhorn_cron_evidence_logic.py, mode: "0755"}
+  - {shared: longhorn_etcd_s3_logic.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_lib/longhorn_etcd_s3_logic.py, mode: "0755"}
+  - {shared: longhorn_restore_drill_stamps.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_lib/longhorn_restore_drill_stamps.py, mode: "0755"}
+  - {shared: longhorn_skipped_volumes_logic.py, dst: /usr/lib/homelab/longhorn-backup-health/longhorn_lib/longhorn_skipped_volumes_logic.py, mode: "0755"}
+  - {src: tmpfiles.d/homelab-k3s-host-checks.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-host-checks.conf}
+  - {src: units/homelab-longhorn-backup-health.service.j2, dst: /usr/lib/systemd/system/homelab-longhorn-backup-health.service}
+  - {src: units/homelab-longhorn-backup-health.timer.j2, dst: /usr/lib/systemd/system/homelab-longhorn-backup-health.timer}
+  - {src: units/homelab-disk-health.service.j2, dst: /usr/lib/systemd/system/homelab-disk-health.service}
+  - {src: units/homelab-disk-health.timer.j2, dst: /usr/lib/systemd/system/homelab-disk-health.timer}
+  - {src: units/homelab-etcd-token-drift.service.j2, dst: /usr/lib/systemd/system/homelab-etcd-token-drift.service}
+  - {src: units/homelab-etcd-token-drift.timer.j2, dst: /usr/lib/systemd/system/homelab-etcd-token-drift.timer}
+  - {src: units/homelab-b2-deletion-accounting.service.j2, dst: /usr/lib/systemd/system/homelab-b2-deletion-accounting.service}
+  - {src: units/homelab-b2-deletion-accounting.timer.j2, dst: /usr/lib/systemd/system/homelab-b2-deletion-accounting.timer}
+  - {src: units/homelab-b2-budget-listing.service.j2, dst: /usr/lib/systemd/system/homelab-b2-budget-listing.service}
+  - {src: units/homelab-b2-budget-listing.timer.j2, dst: /usr/lib/systemd/system/homelab-b2-budget-listing.timer}
+  - {src: units/homelab-etcd-restore-drill.service.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.service, when: k3s_etcd_restore_drill_armed}
+  - {src: units/homelab-etcd-restore-drill.timer.j2, dst: /usr/lib/systemd/system/homelab-etcd-restore-drill.timer, when: k3s_etcd_restore_drill_armed}
+# What the restore runbook and the drill source. 0600 root: these are the R2 write credentials for
+# the bucket that also holds every Longhorn backup. k3s's own schedule uploads with the Secret
+# `longhorn-backup` renders, which a restore cannot use because the API may be gone.
+outputs:
+  - src: templates/etcd-s3.env.j2
+    path: /etc/rancher/k3s/etcd-s3.env
+    owner: root
+    group: root
+    mode: "0600"
+    keys: [r2_access_key_id, r2_secret_access_key, r2_bucket, r2_account_id]
+    persist: false
+    link: true
+enable:
+  homelab-longhorn-backup-health.timer: timers.target
+  homelab-disk-health.timer: timers.target
+  homelab-etcd-token-drift.timer: timers.target
+  homelab-b2-deletion-accounting.timer: timers.target
+  homelab-b2-budget-listing.timer: timers.target
+  homelab-etcd-restore-drill.timer: {target: timers.target, when: k3s_etcd_restore_drill_armed}
+# What setup/k3s installed before H7.35. Reconcile retires each once the timers above have started,
+# so no check runs twice or not at all. Two kinds of path stay for the operator, because reconcile
+# never removes a non-empty directory: /opt/homelab/releases/k3s-*, which holds one directory per
+# release, and /opt/longhorn-backup-health, which holds a __pycache__ of no fixed name.
+legacy:
+  - {cron_file: longhorn-backup-health}
+  - {cron_file: b2-deletion-accounting}
+  - {cron_file: b2-budget-listing}
+  - {cron_file: disk-health}
+  - {cron_file: etcd-token-drift}
+  - {cron_file: etcd-restore-drill}
+  - {cron_file: longhorn-trim}
+  - {cron_file: longhorn-restore-drill}
+  - {cron_file: etcd-snapshot-offbox}
+  - {path: /usr/local/bin/longhorn-backup-health.sh}
+  - {path: /usr/local/bin/disk-health.sh}
+  - {path: /usr/local/bin/etcd-token-drift.sh}
+  - {path: /usr/local/bin/longhorn-trim-volumes.sh}
+  - {path: /usr/local/bin/longhorn-restore-drill.sh}
+  - {path: /usr/local/bin/etcd-snapshot-offbox.sh}
+  - {path: /usr/local/bin/longhorn-reap-orphan-backups.sh}
+  - {path: /usr/local/bin/longhorn-reap-orphan-snapshots.sh}
+  - {path: /opt/homelab/current/k3s-backup-health}
+  - {path: /opt/homelab/current/k3s-disk-health}
+  - {path: /opt/homelab/current/k3s-etcd-snapshot}
+  - {path: /etc/rancher/k3s/kuma-push.env}
+  - {path: /var/lib/homelab/setup-render-manifest.d/k3s-backup-health}
+  - {path: /var/lib/homelab/setup-render-manifest.d/k3s-disk-health}
+  - {path: /var/lib/homelab/setup-render-manifest.d/k3s-etcd-snapshot}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/k3s-longhorn-backup-health-reader}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/k3s-longhorn-reap}
+  - {path: /etc/healthchecks/ping.env}
+  - {path: /etc/healthchecks}
+  - {path: /var/lib/longhorn-cron-fired/longhorn-trim}

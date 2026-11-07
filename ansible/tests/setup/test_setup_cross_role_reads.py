@@ -239,9 +239,7 @@ def test_the_defaults_rows_equal_the_trees_cross_role_reads():
         if "/defaults/" in path
     }
     assert {path: roles for path, roles in kept.items() if roles} == recorded
-    assert recorded.get("ansible/roles/setup/initial_setup/defaults/main.yml") == {
-        "renovate_agent"
-    }
+    assert recorded.get("ansible/roles/setup/k3s/defaults/main.yml") == {"deploy_ui"}
 
 
 def test_every_defaults_exemption_is_still_matched():

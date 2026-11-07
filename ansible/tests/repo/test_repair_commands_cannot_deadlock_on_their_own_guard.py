@@ -34,8 +34,6 @@ guard reads the pre-repair state. Every other order is safe.
 - The eval-run cron (`eval-run.sh.j2`). Writes `evals/history.json`, then runs the suite and
   commits. No test reads the committed `evals/history.json` (the ones that name it build
   their own under `tmp_path`). Not deadlocked.
-- The secret-rotate cron (`secret-rotate.sh.j2`). Commits `--no-verify`, so it has no
-  precondition at all; CI validates the push server-side. Not deadlocked.
 
 The guard: a first-party script that runs pytest as a subprocess must appear in `RULINGS`
 above-by-name, so a NEW repair command cannot land without someone writing down why it cannot

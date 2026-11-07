@@ -158,7 +158,7 @@ reproduce: objects that exist live but are not declared, and anything created ou
   false` in `k3s_server_config`. Each is named `offbox-<node>-<unix-timestamp>.zip`. It is
   compressed, and the extension is literally `.zip`. The name matters: it is what
   `--cluster-reset-restore-path` takes, and it takes it as a NAME, never a path (see below).
-- Credentials for a restore: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), rendered
+- Credentials for a restore: `/etc/rancher/k3s/etcd-s3.env` on daniel-box (0600 root), a package link to the file `homelab-secrets` renders
   by the k3s role from the `r2_*` SOPS secrets. The Secret cannot serve a restore, because a
   restore runs when the API may be gone.
 

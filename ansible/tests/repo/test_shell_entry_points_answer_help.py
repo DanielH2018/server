@@ -41,7 +41,7 @@ MUST_FIND = frozenset(
     {
         "hosts/components/pi-peer-backup-target/pi-peer-backup-shell.sh",
         ".claude/hooks/run-hook.sh",
-        "setup/k3s/longhorn-backup-health.sh.j2",
+        "components/k3s-host-checks/longhorn-backup-health.sh.j2",
         "components/registry-gc/registry-gc.sh.j2",
         "components/docs-refresh/docs-refresh.sh.j2",
     }

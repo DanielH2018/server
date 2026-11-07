@@ -19,7 +19,7 @@ import re
 
 import pytest
 from _helpers import K8S_ROLES
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from _shell_render import render_shell_script
 from lib import yaml_fast
 
@@ -36,12 +36,12 @@ OVERRIDES = {
 }
 SHELL = {
     "ups": ("nut_host", "ups-secondary-health.sh.j2"),
-    "fake-remux": ("fake_remux", "fake-remux-health.sh.j2"),
+    "fake-remux": ("fake-remux", "fake-remux-health.sh.j2"),
     "drill": ("hypervisor", "etcd-restore-drill-vm.sh.j2"),
 }
 UNITS = {
-    "renovate-notify": ("renovate_notify", "renovate-notify.service.j2", {}),
-    "renovate-agent": ("renovate_agent", "renovate-agent.service.j2", {}),
+    "renovate-notify": ("renovate-notify", "homelab-renovate-notify.service.j2", {}),
+    "renovate-agent": ("renovate-agent", "homelab-renovate-agent.service.j2", {}),
 }
 # (alert, origin) -> (the check label its expression reads, the producer that writes it).
 PRODUCERS = {
@@ -87,10 +87,10 @@ def not_reporting_rules(text: str) -> dict[tuple[str, str], str]:
 def producer_text(producer: str) -> str:
     if producer in SHELL:
         role, template = SHELL[producer]
-        plane = "components" if role == "hypervisor" else "setup"
+        plane = "components" if role in {"fake-remux", "hypervisor"} else "setup"
         return render_shell_script(plane, role, template, OVERRIDES)
     role, template, overrides = UNITS[producer]
-    return render_setup_text(role, template, overrides)
+    return render_component_text(role, template, overrides)
 
 
 def rendered_deadline(producer: str, check: str) -> int:

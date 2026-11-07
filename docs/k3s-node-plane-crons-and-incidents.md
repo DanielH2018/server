@@ -207,9 +207,9 @@ default route via `lan_router_ip`, sets `ignore-carrier`, and leaves IPv6 router
 advertisements alone. DNS never came from the lease, because this role renders
 `/etc/resolv.conf`. The template says why DHCPv4 is off rather than running alongside. The
 gateway must keep the address out of its DHCP pool, since with DHCPv4 off nothing renews a
-lease on it. To apply it, run `k3s-bringup.yml --tags node-address` on daniel-box.
-To back the pin out, empty `k3s_node_static_link` and run the same tag. That run removes the
-file and re-applies netplan, so the link returns to the installer's DHCP.
+lease on it. `hosts/components/k3s-server/` ships it with `manual:systemd-networkd.service`, so
+a change goes live at the next boot. To back the pin out, empty `k3s_node_static_link`. The next
+package retires the file, and the link returns to the installer's DHCP at the next boot.
 
 daniel-server pins its address too (#3891), on `enp88s0`. The gateway reserves 10.0.0.161 for
 that NIC, and wlo1's DHCP route at metric 600 stays as the fallback. `ignore-carrier` keeps
@@ -314,9 +314,8 @@ control plane down rather than always doing so:
 
 To see what a candidate tag selects before running it, add `--list-tasks`. A backup-target change
 is a PR to the `longhorn-backup` role, which Flux applies, and the BackupTarget break-glass in
-`docs/break-glass.md` covers the cases a PR cannot reach; the read-only identity wants
-`--tags kubeconfig`, applied
-2026-09-22 with ok=15 changed=2.
+`docs/break-glass.md` covers the cases a PR cannot reach; the read-only kubeconfig is
+`homelab-k3s-kubeconfig.service`'s, in daniel-box's package.
 
 The weekly `etcd restore drill` cron is gated on `k3s_etcd_restore_drill_armed` and runs
 `--list-only` on this host, because a full etcd restore cannot pass beside a live k3s. Its

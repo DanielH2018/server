@@ -1,5 +1,5 @@
 ---
-# The rsyslog info filter and the repo's git hooks.
+# The rsyslog info filter.
 
 - name: Keep the info-level forwarding out of /var/log/syslog
   become: true
@@ -77,32 +77,3 @@
           rsyslogd rejected the config after 49-homelab-info-filter.conf was written, so the
           file has been removed and rsyslog was left running its previous config.
           rsyslogd -N1 said: {{ initial_setup_rsyslog_parse.stderr | default('(no output)') }}
-
-- name: Install Git hooks
-  tags: [git-hooks]
-  # `chdir` runs on the TARGET, so this needs the repo to be there. On a host Ansible drives
-  # over ssh with no checkout it fails the run outright.
-  #
-  # The gate is `dev_tooling_hosts` rather than `has_repo_checkout`, because the command is
-  # `prek install` and prek arrives with that same tooling. daniel-pi holds a checkout and no
-  # prek, so `has_repo_checkout` would admit a host where this task can only fail — and
-  # installing hooks is meaningful only on a host somebody commits from anyway
-  # (docs/archive/staging-cluster.md).
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-  ansible.builtin.command: prek install
-  args:
-    chdir: "{{ playbook_dir }}"
-    # Only run this if the hook doesn't exist yet. NB: .git lives at the REPO root,
-    # one level above playbook_dir (ansible/) — a `{{ playbook_dir }}/.git/...`
-    # path never exists, so prek install would re-run on every play. prek installs only the
-    # pre-commit shim: prek.toml has no pre-push hook since the `pytest` one was removed
-    # (2026-10-02). A pre-push shim left from before runs no hooks, because prek.toml pins
-    # every hook to the pre-commit stage (#4018).
-    creates: "{{ playbook_dir }}/../.git/hooks/pre-commit"
-  # Run as the connecting user (not the play's become: true) so the hooks are owned
-  # by the repo owner, and pick up the user's uv-managed ~/.local/bin where prek lives.
-  become: false
-  environment:
-    PATH: "{{ initial_setup_user_home.stdout }}/.local/bin:{{ ansible_facts.env.PATH }}"

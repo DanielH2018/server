@@ -433,7 +433,7 @@ pass_filenames = false
 files = "^(ansible/vars/cluster-|ansible/filter_plugins/[^/]+\\.py$|hosts/lib/host_lib\\.py$|scripts/(lib|renderer|secrets_mgmt)/.+\\.py$|scripts/deploy_tools/(chained_timeout|changed_set|kustomizations)\\.py$)"
 
 # Assert uv.lock stays consistent with pyproject.toml. Every unattended production path
-# (gitops_deploy, secret-rotate, secret-rotation-audit) runs `uv run --frozen`, which installs
+# (gitops_deploy, secret-rotation-audit) runs `uv run --frozen`, which installs
 # the committed lock AS-IS and never re-resolves — so a pyproject edit merged without a refreshed
 # lock reaches the host as an environment missing the dependency it needs, surfacing later as a
 # confusing import failure (a deploy rollback+hold, or the Secret Rotation Kuma going stale).
@@ -606,8 +606,7 @@ exclude = "^(docs/assets/generated/|scripts/dev/pytest_shard_weights\\.json$|eva
 # That job's checkout is not shallow (`fetch-depth: 0`), so the ratchet's allowlist comparison
 # runs there too, against the merge base with origin/master (#4009). docs-refresh
 # stages scripts/dev/pytest_shard_weights.json, so this fires on that cron's commit, which
-# runs the whole suite green first. eval-run stages nothing this matches, and secret-rotate
-# commits with --no-verify. To commit past it, `SKIP=static-ratchet-tests git commit`.
+# runs the whole suite green first. eval-run stages nothing this matches. To commit past it, `SKIP=static-ratchet-tests git commit`.
 # The shell, `hosts/` and wait-source paths are the scripts the shimmed-path census row reads.
 [[repos.hooks]]
 id = "static-ratchet-tests"

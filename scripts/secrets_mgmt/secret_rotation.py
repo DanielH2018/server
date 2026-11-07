@@ -69,7 +69,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.cli_help import ArgumentParser, error
 from lib.exit_codes import SECRET_ROTATION_BAD_ARGS
 from secrets_mgmt.consumers import consumer_commands, consumer_tags, tree_consumers
-from secrets_mgmt.consumers import left_out_line
+from secrets_mgmt.consumers import flux_applies_line
 from secrets_mgmt.git_dates import (
     RENAMED_FROM,
     advance_last_rotated,
@@ -209,12 +209,9 @@ def cmd_audit(args, tools: RotationTools) -> int:
         flag = "OVERDUE" if days_left < 0 else ("soon" if days_left <= 14 else "ok")
         print("  %-7s %-40s %-9s due %s (%+d d)" % (flag, name, tier, d, days_left))
     summary = audit_summary(res, missing, stale)
-    # An externally-detected fault the caller wants folded in. ADDITIVE, deliberately: the
-    # caller could short-circuit to its own sticky DOWN instead (the two arms above it in
-    # secret-rotation-audit.sh.j2 do exactly that), but those describe a registry that cannot
-    # be trusted, whereas an unlanded rotation branch says nothing about the other secrets.
-    # Short-circuiting there would silence overdue reporting for all of them until a human
-    # cleared the branch. Forcing DOWN while still enumerating the audit keeps both signals.
+    # An externally-detected fault the caller wants folded in, such as a revoked `gh` token.
+    # ADDITIVE, deliberately: the fault says nothing about the secrets, so forcing DOWN while
+    # still enumerating the audit keeps overdue reporting alive until a human clears it.
     extra_down = getattr(args, "extra_down", None)
     if extra_down:
         summary = f"{extra_down}; {summary}"
@@ -427,7 +424,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
         )
         return 3
     for tag in sorted(tags):
-        print(left_out_line(tag))
+        print(flux_applies_line(tag))
     # Once `write` rewrote them, CI's `cluster_vars.py check` fails a commit without them.
     files = ["secrets.yml", "secret_rotation.yml"] + (synced and CLUSTER_PATHS)
     files = ", ".join(files[:-1]) + " and " + files[-1]
@@ -487,8 +484,8 @@ def cmd_record(args, tools: RotationTools) -> int:
     return 0
 
 
-def main(argv=None) -> int:
-    """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
+def build_parser() -> ArgumentParser:
+    """The command line: one subparser per subcommand, each naming its function as `func`."""
     p = ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -552,7 +549,12 @@ def main(argv=None) -> int:
         help="the date the credential was last rotated; may be earlier than what is recorded",
     )
     prec.set_defaults(func=cmd_record)
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv=None) -> int:
+    """Dispatch to the `sync`/`consumers`/`audit`/`rotate`/`record` subcommand and return its exit code."""
+    args = build_parser().parse_args(argv)
     # One `RotationTools` per run, built here and threaded down: every git call, sops call,
     # registry read or write and clock read a subcommand makes goes through it.
     return args.func(args, RotationTools())

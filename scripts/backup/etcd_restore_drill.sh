@@ -157,8 +157,8 @@ RESTORE_TIMEOUT=600
 die() { echo "etcd-restore-drill: $*" >&2; exit 1; }
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
-# DECIDED: the stamp is read, and both halves are shipped. health-crons.yml schedules
-# `--list-only` weekly under the `etcd-snapshot` tag (k3s_etcd_restore_drill_cron, Monday 10:20),
+# DECIDED: the stamp is read, and both halves are shipped. homelab-etcd-restore-drill.timer runs
+# `--list-only` weekly (k3s_etcd_restore_drill_cron, Monday 10:20),
 # run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness
 # reader is `check_etcd_restore_drill` in monitor-bridge/files/checks/service.py, since PR #535:
 # it reads `last-success-list-only` from this STAMP_DIR, monitor-bridge serves the verdict as
@@ -203,7 +203,7 @@ stamp_success() {
 }
 
 # Where this script sits in the checkout it runs from, so the gate below can be found without a
-# hardcoded home directory. The weekly cron runs the drill in place (health-crons.yml), and the
+# hardcoded home directory. The weekly timer runs the drill in place (k3s-host-checks), and the
 # guest that runs the FULL drill has no checkout at all — which is why the gate is called only on
 # the --list-only path.
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -258,7 +258,7 @@ if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
   GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" etcd-restore --gate 3)
 else
   GATE_CMD=(
-    /usr/local/bin/uv run --no-project --no-python-downloads
+    /usr/bin/uv run --no-project --no-python-downloads
     --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
     "$GATE_SCRIPT" etcd-restore --gate 3
   )

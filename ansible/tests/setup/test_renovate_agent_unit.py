@@ -24,22 +24,20 @@ import re
 import pytest
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from _role_census import role_task_files
-from _setup_render import render_setup_text
+from _setup_render import COMPONENTS, render_component_text
 
-ROLE_NAME = "renovate_agent"
-ROLE = ANSIBLE / "roles" / "setup" / ROLE_NAME
-TEMPLATES = ROLE / "templates"
-UNIT = "renovate-agent.service.j2"
-TIMER = "renovate-agent.timer.j2"
+NAME = "renovate-agent"
+COMPONENT = COMPONENTS / NAME
+UNIT = "homelab-renovate-agent.service.j2"
+TIMER = "homelab-renovate-agent.timer.j2"
 PROMPT = "prompt.txt.j2"
-TASKS = ROLE / "tasks" / "service.yml"
-DEFAULTS = ROLE / "defaults" / "main.yml"
+SPEC = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
+DEFAULTS = COMPONENT / "defaults" / "main.yml"
 
 
 def render(template: str, overrides: dict | None = None) -> str:
-    """One of this role's templates rendered at inventory values, `overrides` on top."""
-    return render_setup_text(ROLE_NAME, template, overrides)
+    """One of this component's templates rendered at inventory values, `overrides` on top."""
+    return render_component_text(NAME, template, overrides)
 
 
 def directive(unit_text: str, key: str) -> list[str]:
@@ -75,7 +73,7 @@ def test_execstart_serializes_with_a_nonblocking_lock(unit: str) -> None:
 def test_execstart_runs_the_wrapper_not_claude_directly(unit: str) -> None:
     """The wrapper is what gates the tick, measures the delta and posts the digest."""
     joined = " ".join(directive(unit, "ExecStart"))
-    assert "/opt/renovate-agent/renovate_agent.py" in joined
+    assert "/usr/lib/homelab/renovate-agent/renovate_agent.py" in joined
 
 
 def test_path_carries_the_user_local_bin(unit: str) -> None:
@@ -92,22 +90,22 @@ def test_the_lander_pins_land_sh_to_renovates_prs() -> None:
     check, and by `land.sh --arm-merge`, which reads LAND_REQUIRE_AUTHOR from the lander's
     unit. The login must be the one the wrapper's own census filters on (`RENOVATE_AUTHOR`),
     read from its source rather than typed here."""
-    # fact: ansible/roles/setup/renovate_agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
+    # fact: hosts/components/renovate-agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
     envs = directive(render("renovate-agent-land@.service.j2"), "Environment")
     required = [e for e in envs if e.startswith("LAND_REQUIRE_AUTHOR=")]
     assert required, "the unit sets no LAND_REQUIRE_AUTHOR"
-    wrapper = (ROLE / "files" / "renovate_agent.py").read_text()
+    wrapper = (COMPONENT / "files" / "renovate_agent.py").read_text()
     census = re.search(r'^RENOVATE_AUTHOR = "([^"]+)"', wrapper, re.MULTILINE)
     assert census, "the wrapper's RENOVATE_AUTHOR census filter is gone"
     assert required[-1] == f"LAND_REQUIRE_AUTHOR={census.group(1)}"
-    lander = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    lander = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     assert f'\nAUTHOR = "{census.group(1)}"\n' in lander, (
         "the lander's own author check must name the login the census keys on"
     )
 
 
 def test_onfailure_pages(unit: str) -> None:
-    assert "renovate-agent-alert.service" in directive(unit, "OnFailure")
+    assert "homelab-alert@%n.service" in directive(unit, "OnFailure")
 
 
 def test_the_unit_holds_no_webhook(unit: str) -> None:
@@ -131,22 +129,14 @@ def test_unit_timeout_sits_above_the_wrapper_timeout(defaults: dict) -> None:
 
 def test_arming_is_wired_in_both_directions() -> None:
     """A switch that only turns on is a one-way door."""
-    tasks = yaml_fast.safe_load(TASKS.read_text())
-    enable = [
-        t for t in tasks if t.get("name", "").startswith("Enable and start the timer")
-    ]
-    assert len(enable) == 1, "expected exactly one arming task"
-    systemd = enable[0]["ansible.builtin.systemd"]
-    assert "renovate_agent_enabled" in str(systemd["enabled"])
-    assert "stopped" in str(systemd["state"]), (
-        "state must fall back to stopped when renovate_agent_enabled is false"
-    )
+    link = SPEC["enable"]["homelab-renovate-agent.timer"]
+    assert link == {"target": "timers.target", "when": "renovate_agent_enabled"}
 
 
 def test_the_disarmed_marker_follows_the_arm_flag_both_ways() -> None:
     """RenovateAgentNotReporting goes quiet on the marker, so the marker must track the flag.
 
-    Disarming writes the series the rule's `unless` reads; arming removes it.
+    Disarming ships the series the rule's `unless` reads; arming drops the file from the package.
     """
     rules = ANSIBLE / "roles/k8s/observability/files/rules/other-setup-checks.yaml"
     [group] = yaml_fast.safe_load(rules.read_text())["groups"]
@@ -155,32 +145,24 @@ def test_the_disarmed_marker_follows_the_arm_flag_both_ways() -> None:
         r'unless on \(origin\) \((\w+)\{check="([^"]+)",origin="daniel-box"\} == 1\)',
         rule["expr"],
     )
-    tasks = yaml_fast.safe_load(TASKS.read_text())
-    textfile = "/var/lib/node-exporter-textfile/"
-    by_path = {}
-    for task in tasks:
-        module = task.get("ansible.builtin.copy") or task.get("ansible.builtin.file")
-        path = module and (module.get("dest") or module.get("path"))
-        if path and path.startswith(textfile):
-            by_path[(path.removeprefix(textfile), module.get("state", "present"))] = (
-                task.get("when"),
-                module.get("content", ""),
-            )
-    when, content = by_path[("renovate-agent-disarmed.prom", "present")]
-    assert when == "not renovate_agent_enabled"
+    [entry] = [
+        f
+        for f in SPEC["files"]
+        if f["dst"].startswith("/var/lib/node-exporter-textfile/")
+    ]
+    assert entry["dst"].endswith("/renovate-agent-disarmed.prom")
+    assert entry["when"] == "not renovate_agent_enabled"
+    content = (COMPONENT / entry["src"]).read_text()
     assert re.search(rf'^{metric}\{{check="{check}"\}} 1$', content, re.M)
-    assert by_path[("renovate-agent-disarmed.prom", "absent")][0] == (
-        "renovate_agent_enabled"
-    )
 
 
-def test_the_role_kicks_no_run_on_config_change() -> None:
-    """A config edit must not spend a session as a side effect — unlike renovate_notify."""
-    text = "".join(p.read_text() for p in role_task_files(ROLE))
-    assert "Install agent Python files" in text, (
-        "the task-file glob read the wrong files"
-    )
-    assert "Run renovate-agent once" not in text
+def test_reconcile_never_restarts_a_session() -> None:
+    """A package install must not kill a landing or spend a session as a side effect."""
+    assert SPEC["units"]["homelab-renovate-agent.service"] == {"policy": "manual"}
+    activates = [
+        f for f in SPEC["files"] if "homelab-renovate-agent" in f.get("activate", "")
+    ]
+    assert activates == []
 
 
 def test_the_prompt_quotes_the_caps_it_is_given(defaults: dict) -> None:
@@ -234,13 +216,14 @@ def test_the_unit_and_its_config_make_no_kuma_push(unit: str) -> None:
 
 
 def test_config_env_stays_root_owned_and_group_read_only() -> None:
-    tasks = TASKS.read_text()
-    assert re.search(
-        r"dest: /etc/renovate-agent/config\.env\n\s+owner: root\n\s+group:.*\n\s+mode: \"0640\"",
-        tasks,
-    ), (
-        "config.env must stay root-owned and group-read only: it holds the Discord webhook, "
-        "and the session must not be able to rewrite it"
+    """It holds the Discord webhook, and the session must not be able to rewrite it."""
+    [output] = [
+        o for o in SPEC["outputs"] if o["path"] == "/etc/renovate-agent/config.env"
+    ]
+    assert (output["owner"], output["group"], output["mode"]) == (
+        "root",
+        "renovate-agent",
+        "0640",
     )
 
 

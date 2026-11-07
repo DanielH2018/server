@@ -121,5 +121,7 @@ def test_the_shim_still_calls_the_ported_reader() -> None:
     Read off the RENDER rather than the template: the shim's path to the reader is built from
     role defaults, so a source-text search would match `{{ ... }}` and pass over nothing (#3186).
     """
-    text = rendered_shell_text("setup", "k3s", "longhorn-backup-health.sh.j2")
+    text = rendered_shell_text(
+        "components", "k3s-host-checks", "longhorn-backup-health.sh.j2"
+    )
     assert "longhorn_backup_health.py" in text

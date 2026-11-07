@@ -20,16 +20,11 @@ else would report, so it fails here instead.
 """
 
 import re
-from pathlib import Path
 
-from lib import yaml_fast
 from _helpers import REPO
-from _shell_render import rendered_names_for, rendered_shell_text
-from lib.repo_paths import K3S_DEFAULTS, K3S_ROLE
+from _shell_render import rendered_shell_text
 
 _REPO = REPO
-_TEMPLATES = K3S_ROLE / "templates"
-_HEALTH_CRONS = K3S_ROLE / "tasks/health-crons.yml"
 _MANIFEST_DIR = "/var/lib/homelab/setup-render-manifest.d"
 # Arms 2 and 3 live in a library setup-drift-check.sh.j2 sources.
 # The guards below assert against the file that literally holds the loops — a guard pointed at a wrapper asserts nothing
@@ -50,105 +45,6 @@ _NOT_STANDALONE_SCRIPTS: set[str] = set()
 # Group name -> the tag family whose `template:` tasks render its members. The stamp task for a
 # group must carry exactly this tag, or the group is restamped by runs that did not render it
 # (too broad) or never restamped at all (too narrow).
-_GROUP_TAGS = {
-    "k3s-backup-health": "backup-health",
-    "k3s-disk-health": "disk-health",
-    "k3s-etcd-snapshot": "etcd-snapshot",
-}
-
-
-def _groups() -> list[dict]:
-    defaults = yaml_fast.safe_load(K3S_DEFAULTS.read_text())
-    return defaults["k3s_render_stamp_groups"]
-
-
-def _declared_paths() -> set[str]:
-    return {tpl for group in _groups() for tpl in group["templates"]}
-
-
-def _declared_names() -> set[str]:
-    return {Path(tpl).name for tpl in _declared_paths()}
-
-
-def test_every_rendered_shell_template_is_in_the_manifest():
-    on_disk = rendered_names_for("setup", "k3s") - _NOT_STANDALONE_SCRIPTS
-    missing = on_disk - _declared_names()
-    assert not missing, (
-        "these shell templates are rendered onto the host but are not checksummed into "
-        f"{_MANIFEST_DIR}, so a stale render of them is undetectable: "
-        + ", ".join(sorted(missing))
-    )
-
-
-def test_the_manifest_names_no_template_that_stopped_existing():
-    stale = {tpl for tpl in _declared_paths() if not (_REPO / tpl).is_file()}
-    assert not stale, (
-        "k3s_render_stamp_groups names templates that no longer exist, which would make the "
-        "check page forever: " + ", ".join(sorted(stale))
-    )
-
-
-def test_declared_paths_are_repo_relative_and_resolve():
-    """An entry carries its own path.
-
-    The check joins nothing onto a hardcoded role directory. A bare filename here would silently
-    stop resolving.
-    """
-    for tpl in sorted(_declared_paths()):
-        assert tpl.startswith("ansible/roles/"), (
-            f"{tpl!r} is not a repo-relative path. The check resolves entries against the repo "
-            f"root, so a bare filename resolves to nothing and reads as 'template gone'."
-        )
-
-
-def test_no_template_is_stamped_by_two_groups():
-    """A template in two groups is restamped by either family's run, which restamps its members from a run that did not render them."""
-    seen: dict[str, str] = {}
-    for group in _groups():
-        for tpl in group["templates"]:
-            assert tpl not in seen, (
-                f"{tpl} is stamped by both {seen[tpl]} and {group['name']}; either run would "
-                f"declare it current, which is the partial-run false green M6 closed."
-            )
-            seen[tpl] = group["name"]
-
-
-def test_each_stamp_task_carries_exactly_its_groups_tag_family():
-    """The per-family stamp guard.
-
-    A single stamp carrying several families' tags while checksumming every script would let
-    each family restamp scripts it never rendered, and `--tags etcd-snapshot` skip the stamp
-    entirely. Membership and tags have to agree, and only a test can hold them there.
-    """
-    # Parsed as YAML, not matched with a regex: the tasks ARE structured data, and a pattern
-    # spanning task boundaries is both fragile and quadratic.
-    tasks = yaml_fast.safe_load(_HEALTH_CRONS.read_text())
-    by_group = {
-        task["vars"]["stamp_render_name"]: task
-        for task in tasks
-        if isinstance(task, dict) and "stamp_render_name" in (task.get("vars") or {})
-    }
-    for name, expected_tag in _GROUP_TAGS.items():
-        assert name in by_group, (
-            f"no stamp task in health-crons.yml sets stamp_render_name: {name}"
-        )
-        actual = set(by_group[name].get("tags") or [])
-        assert actual == {expected_tag}, (
-            f"the stamp task for {name} carries {sorted(actual)}, expected [{expected_tag}]. "
-            f"Broader tags restamp templates this run did not render; narrower tags leave the "
-            f"group unstamped by the run that did."
-        )
-
-
-def test_every_group_has_a_declared_tag_family():
-    """Guards the mapping above against a new group being added with no tag expectation, which
-    would let it into the defaults without any of the checks in this file applying to it."""
-    declared = {group["name"] for group in _groups()}
-    unmapped = declared - set(_GROUP_TAGS)
-    assert not unmapped, (
-        f"k3s_render_stamp_groups has {sorted(unmapped)} with no entry in _GROUP_TAGS. Add the "
-        f"tag family it is rendered under, so the stamp/tag agreement is actually asserted."
-    )
 
 
 def test_the_check_reads_the_manifest_it_is_given():
@@ -194,8 +90,6 @@ def test_other_setup_roles_stamp_their_own_artifacts():
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/service.yml",
-        "ansible/roles/setup/renovate_notify/tasks/service.yml",
-        "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
         # THIS LIST IS AN ENUMERATION: it cannot see the next new role. Deriving it means
         # asserting that every `src:`-referenced .j2 under roles/setup/ is stamped, which would
@@ -249,10 +143,7 @@ def test_every_role_that_deploys_code_declares_its_pairs():
     """
     expected = {
         "ansible/roles/setup/gitops_deploy/tasks/code.yml",
-        "ansible/roles/setup/renovate_notify/tasks/code.yml",
-        "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
-        "ansible/roles/setup/k3s/tasks/health-crons.yml",
     }
     for rel in sorted(expected):
         text = (_REPO / rel).read_text()
@@ -300,7 +191,9 @@ def test_the_two_halves_hash_the_same_bytes():
     import hashlib
 
     # A genuine byte-level subject, not a render stand-in -- #3178 doesn't apply here.
-    sample = _TEMPLATES / "disk-health.sh.j2"
+    sample = (
+        _REPO / "ansible/roles/setup/initial_setup/templates/setup-drift-check.sh.j2"
+    )
     raw = sample.read_bytes()
     assert raw.endswith(b"\n"), (
         f"{sample} no longer ends in a newline; pick another sample"
@@ -312,93 +205,8 @@ def test_the_two_halves_hash_the_same_bytes():
     )
 
 
-def test_every_exemption_is_real():
-    """An exemption naming a template that does not exist excuses nothing and misleads everyone.
-
-    An exemption for `kuma-push-lib.sh.j2` would never fire: that library lives in another
-    role's files directory as a plain .sh, outside this glob, and the exemption would read as
-    precedent for exempting the next script that came along. Same shape as the stale-exemption guard in the k3s join-port symmetry test.
-    """
-    on_disk = rendered_names_for("setup", "k3s")
-    stale = _NOT_STANDALONE_SCRIPTS - on_disk
-    assert not stale, (
-        f"_NOT_STANDALONE_SCRIPTS exempts {sorted(stale)}, which is not in {_TEMPLATES}. Remove "
-        f"the entry — an exemption for a file that does not exist quietly widens what this "
-        f"check tolerates and reads as precedent for the next one."
-    )
-
-
-def test_the_tag_scoping_actually_selects_one_stamp_per_family():
-    """The behavioural half of the per-family stamp guard, and the reason it is here rather than
-    left to the YAML check above: reading the tag off the task proves the tag is written, not
-    that Ansible selects on it.
-
-    `--tags <family>` must reach exactly that family's stamp task and no other; a stamp
-    restamped by a run that did not render its templates is the defect.
-
-    `--list-tasks` executes nothing and needs no cluster, secrets or become password. The k3s role
-    is reached from k3s-bringup.yml, NOT initial_setup.yml — the four other roles' stamps live in
-    the latter and are covered by test_other_setup_roles_stamp_their_own_artifacts.
-    """
-    import os
-    import shutil
-    import subprocess
-    import sys
-
-    if shutil.which("ansible-playbook") is None:
-        import pytest
-
-        pytest.skip("ansible-playbook not on PATH")
-
-    # --list-tasks discovers no interpreter, so the pin only keeps this spawn in step with the
-    # longhorn tests' real plays.
-    env = dict(os.environ)
-    env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
-    playbook = _REPO / "ansible/k3s-bringup.yml"
-    for _name, tag in sorted(_GROUP_TAGS.items()):
-        result = subprocess.run(
-            ["ansible-playbook", str(playbook), "--tags", tag, "--list-tasks"],
-            cwd=_REPO,
-            env=env,
-            capture_output=True,
-            text=True,
-            timeout=180,
-        )
-        assert result.returncode == 0, (
-            f"--list-tasks failed for --tags {tag}: {result.stderr[-800:]}"
-        )
-        selected = [
-            line.split(":", 1)[1].split("\t")[0].strip()
-            for line in result.stdout.splitlines()
-            if "Stamp the" in line
-        ]
-        assert len(selected) == 1, (
-            f"--tags {tag} selects {len(selected)} stamp tasks ({selected}); exactly one group "
-            f"is rendered by that family, so exactly one may be restamped by it."
-        )
-        # It must be the task that WRITES the fragment, not a wrapper that pulls it in. That
-        # distinction is the whole test: with `include_tasks` the wrapper is selected and its
-        # children are not, so `--tags disk-health` prints `included: .../stamp_render.yml`,
-        # reports changed=0, and writes no fragment. A test that matches the wrapper's own name
-        # passes throughout.
-        #
-        # `import_tasks` is static, so --list-tasks prints the imported task's name before
-        # `stamp_render_name` is resolved. Every group therefore shows the same literal, and the
-        # group it belongs to is established by the count plus _GROUP_TAGS above, not by parsing
-        # a name out of this line.
-        wanted = "Stamp the rendered sources for {{ stamp_render_name }}"
-        assert selected[0] == wanted, (
-            f"--tags {tag} selects {selected[0]!r}, expected the copy: task inside "
-            f"stamp_render.yml ({wanted!r}). A wrapper name here means the stamp went back to "
-            f"include_tasks, and a tag-scoped run writes no fragment at all."
-        )
-
-
 _STAMP_SITES = (
-    "ansible/roles/setup/k3s/tasks/health-crons.yml",
     "ansible/roles/setup/gitops_deploy/tasks/service.yml",
-    "ansible/roles/setup/renovate_notify/tasks/service.yml",
-    "ansible/roles/setup/fake_remux/tasks/main.yml",
     "ansible/roles/setup/initial_setup/tasks/crons.yml",
 )
 _STAMP_REF = '"{{ role_path }}/../common/tasks/stamp_render.yml"'
@@ -413,8 +221,8 @@ def test_every_stamp_site_imports_rather_than_includes():
     filtered out, and the run reports changed=0 with no fragment on disk. `import_tasks` is
     static — the tags are attached to the imported tasks at parse time, so they are selected too.
 
-    The four other roles do not show it. Their stamps sit under a ROLE-level tag
-    (`gitops_deploy`, `renovate_notify`, `fake_remux`), which does reach a dynamic include's
+    The other roles do not show it. Their stamps sit under a ROLE-level tag
+    (`gitops_deploy`), which does reach a dynamic include's
     children.
     """
     for rel in _STAMP_SITES:

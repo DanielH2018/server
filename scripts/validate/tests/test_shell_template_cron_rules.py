@@ -9,31 +9,16 @@ root-only).
 The cron rules read the SOURCE on purpose: a rule's second argument IS the template text, so
 the tree-wide runs below hand it exactly what `shell_templates.py` hands it in production.
 
-The module-scoped `cron_map` fixture is why these four guards stay in ONE file: pytest runs
-with `--dist loadscope`, so a module-scoped fixture is re-evaluated once per module, and
-splitting its consumers would pay the ~0.6s tree walk again per file.
+No setup role installs a cron that runs a template since H7.35 and H7.37 moved the last ones into
+host packages, so the path rule has only fixture subjects here.
 
 Run: uv run pytest scripts/validate/tests/test_shell_template_cron_rules.py
 """
 
 from pathlib import Path
 
-import pytest
-from validate import shell_templates as v
 from validate.validate_lib import cron_checks as cc
 from validate.validate_lib import cron_targets as ct
-from validate.validate_lib import shell_lint as sl
-
-
-@pytest.fixture(scope="module")
-def cron_map():
-    """Every cron-installed shell template in the real tree, resolved once.
-
-    The resolver walks every role's tasks and crons to map template -> installing task file,
-    which costs ~0.6s. Four guards below read the same mapping and none mutates it, so they
-    share one. A test that needs a different roles dir calls ct.cron_job_scripts(roots) itself.
-    """
-    return ct.cron_job_scripts()
 
 
 def _fixture_role(roles: Path, role_dir: str) -> Path:
@@ -140,25 +125,6 @@ def test_cron_path_error_passes_when_the_crontab_sets_path(tmp_path):
     )
     rendered = '#!/bin/bash\nKUBECTL="k3s kubectl -n foo"\n$KUBECTL get pods\n'
     assert cc.cron_path_error(template, rendered, {template: task_file}) is None
-
-
-def test_no_cron_job_template_in_the_tree_violates_the_path_rule(cron_map):
-    # The rule shipped with two real offenders (telemetry-health, longhorn-backup-health);
-    # both were fixed in the same change, so there is no allowlist. Asserting zero against
-    # the real tree keeps that true without a list to go stale.
-    assert cron_map, (
-        "cron_job_scripts() found no cron-installed templates — resolver broke"
-    )
-    offenders = {
-        str(template.relative_to(v.ROLES))
-        for template, task_file in cron_map.items()
-        if cc.cron_path_error(
-            template,
-            sl.render_template(template, v.template_context(template)),
-            {template: task_file},
-        )
-    }
-    assert offenders == set()
 
 
 # ── cron_kubeconfig_error (cron inherits no KUBECONFIG, and k3s.yaml is root-only) ──
@@ -315,14 +281,6 @@ def test_cron_targets_resolve_a_job_line_carrying_jinja_with_spaces(tmp_path):
     assert cc.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
 
 
-def test_the_widened_resolver_covers_the_scripts_it_was_written_for(cron_map):
-    # Pin the one script the `| logger` suffix fix still brings in (docs-refresh.sh left for a
-    # systemd unit, H7.10a, and the trim for a Longhorn RecurringJob, H2.2c), so a later narrowing
-    # shows up here rather than as a guard quietly covering less than it claims.
-    names = {t.name for t in cron_map}
-    assert "longhorn-backup-health.sh.j2" in names
-
-
 def test_the_real_tree_has_no_kubeconfig_violation():
     # Zero today, and this is the assertion that says so out loud: the rule ships preventive,
     # not as a fix. A future non-root cron wrapper that reads the cluster fails here first.
@@ -340,7 +298,7 @@ def test_the_real_tree_has_no_kubeconfig_violation():
 
 UV_PINNED = (
     "#!/bin/bash\n"
-    "OUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python 3.14.6 /opt/x/x.py)\n"
+    "OUT=$(/usr/bin/uv run --no-project --no-python-downloads --python 3.14.6 /opt/x/x.py)\n"
 )
 UV_EXPORT = 'export UV_PYTHON_INSTALL_DIR="/home/ubuntu/.local/share/uv/python"\n'
 
@@ -370,19 +328,3 @@ def test_uv_interpreter_passes_the_connection_user(tmp_path):
     # The interpreter lives under that user's HOME, so its own uv finds it unaided.
     tpl = _cron_role(tmp_path, user="ubuntu")
     assert cc.cron_uv_interpreter_error(tpl, UV_PINNED, roles=tmp_path) is None
-
-
-def test_the_real_tree_has_no_uv_interpreter_violation():
-    offenders = []
-    root_crons = set()
-    for tpl, _task_file, cron, _env in ct.iter_cron_targets():
-        if str(cron.get("user", "")) == "root":
-            root_crons.add(tpl.name)
-        if not tpl.exists():
-            continue
-        # Source text, deliberately — the rule's own second argument, as above.
-        if cc.cron_uv_interpreter_error(tpl, tpl.read_text()):
-            offenders.append(tpl.name)
-    assert offenders == [], offenders
-    # Non-vacuity: the rule must be examining the root cron it was written for.
-    assert "etcd-token-drift.sh.j2" in root_crons

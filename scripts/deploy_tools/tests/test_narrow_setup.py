@@ -191,10 +191,10 @@ def test_a_shipped_row_adopted_with_use_tables_is_the_one_read(tree):
 
 @pytest.mark.parametrize(
     ("role", "tag"),
-    [("deploy_ui", "deploy-ui-code"), ("renovate_agent", "renovate-agent-code")],
+    [("deploy_ui", "deploy-ui-code")],
 )
 def test_the_real_consumers_of_gitops_markers_narrow_to_their_code_tag(role, tag):
-    """The two roles #3275 points at the deployer's file, read from the real tree."""
+    """The role #3275 points at the deployer's file, read from the real tree."""
     index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
     assert index.readers_of("gitops_markers.py") == frozenset({tag})
 
@@ -203,7 +203,6 @@ def test_the_real_consumers_of_gitops_markers_narrow_to_their_code_tag(role, tag
     ("role", "tags"),
     [
         ("gitops_deploy", {"gitops-deploy-code"}),
-        ("renovate_notify", {"renovate-notify-code"}),
     ],
 )
 def test_a_common_task_file_narrows_to_the_tags_importing_it(role, tags):
@@ -222,15 +221,13 @@ def test_a_shipped_file_no_task_of_the_role_names_is_flagged(ships):
 # ── the real tree: the case #2307 names, so the scan cannot go vacuous ─────────────────
 
 
-def test_the_real_k3s_role_still_maps_readonly_rbac_to_kubeconfig():
-    """The identity's own template and CRD-group key moved to `cluster-base` in H1.2, so the pair
-    this case holds is the kubeconfig's: `readonly-kubeconfig.j2` and the server key it reads,
-    both read only under the `kubeconfig` tag."""
+def test_the_real_k3s_role_still_maps_the_address_pin_to_its_tag():
+    """A template and a key each read only under the `node-address` tag."""
     index = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO))
-    assert index.readers_of("readonly-kubeconfig.j2") == frozenset({"kubeconfig"})
-    assert index.key_readers("k3s_readonly_kubeconfig_server") == frozenset(
-        {"kubeconfig"}
+    assert index.readers_of("netplan-static-address.yaml.j2") == frozenset(
+        {"node-address"}
     )
+    assert index.key_readers("k3s_node_static_link") == frozenset({"node-address"})
 
 
 def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
@@ -251,16 +248,8 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
 NARROWED_SETUP_FILES = {
     ("deploy_ui", "tasks/code.yml"): {"deploy-ui-code"},
     ("deploy_ui", "tasks/service.yml"): {"deploy-ui-service"},
-    ("renovate_agent", "tasks/code.yml"): {"renovate-agent-code"},
-    ("renovate_agent", "tasks/service.yml"): {"renovate-agent-service"},
-    ("renovate_notify", "tasks/code.yml"): {"renovate-notify-code"},
-    ("renovate_notify", "tasks/service.yml"): {"renovate-notify-service"},
     ("gitops_deploy", "tasks/code.yml"): {"gitops-deploy-code"},
     ("gitops_deploy", "tasks/service.yml"): {"gitops-deploy-service"},
-    ("gitops_deploy", "tasks/github_checks.yml"): {
-        "cron",
-        "gitops-deploy-github-checks",
-    },
     ("gitops_deploy", "tasks/teardown.yml"): {"gitops-deploy-teardown"},
 }
 
@@ -399,7 +388,7 @@ def test_the_real_k3s_roles_reachable_task_files_are_named_as_such():
     reachable = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO)).reachable
     assert {
         "tasks/server.yml",
-        "tasks/kubeconfig.yml",
+        "tasks/static-address.yml",
         "tasks/coredns.yml",
     } <= reachable
     assert not reachable & {

@@ -1,8 +1,9 @@
 ---
 # Pin the node's LAN address statically, so k3s does not depend on the gateway's DHCP server
 # to start. Two importers: main.yml for the server node, and k3s-bringup.yml's agent-address
-# play, which writes nothing since daniel-server's package took the pin over (H7.34,
-# hosts/components/k3s-agent). Every task reads `k3s_packaged_hosts` for that.
+# play. Neither writes anything: daniel-box's pin is its package's since H7.35
+# (hosts/components/k3s-server), and daniel-server's since H7.34 (hosts/components/k3s-agent).
+# Every task reads `k3s_packaged_hosts` for that.
 # templates/netplan-static-address.yaml.j2 has the incident (#3882) and why DHCPv4 is switched
 # off rather than kept alongside.
 #

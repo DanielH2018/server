@@ -10,34 +10,9 @@ Run: uv run pytest ansible/tests/setup/test_agent_user_dev_tools.py
 """
 
 from _agent_package import agent_setup_script
-from _helpers import ANSIBLE
 from _setup_render import CLAUDE_CODE, render_component_text
-from lib import yaml_fast
 
-SETUP = ANSIBLE / "roles" / "setup"
-SHARED = SETUP / "common" / "tasks" / "agent_user.yml"
 CLONE_SYNC = CLAUDE_CODE / "files" / "claude-clone-sync.sh"
-PREK_COPY = "Give the agent user the operator's pinned prek"
-
-
-def tasks(path) -> list[dict]:
-    return yaml_fast.safe_load(path.read_text())
-
-
-def named(task_list: list[dict], name: str) -> dict:
-    found = [t for t in task_list if t.get("name") == name]
-    assert len(found) == 1, f"expected one task named {name!r}, found {len(found)}"
-    return found[0]
-
-
-def test_the_agent_gets_the_operators_prek_binary_not_its_symlink() -> None:
-    """~/.local/bin/prek is a symlink into the operator's uv tools; a copy of it dangles."""
-    shared = tasks(SHARED)
-    copy = named(shared, PREK_COPY)["ansible.builtin.copy"]
-    assert copy["src"] == "/home/{{ sys_user }}/.local/share/uv/tools/prek/bin/prek"
-    assert copy["dest"] == "{{ agent_user_home }}/.local/bin/prek"
-    uv = named(shared, "Give the agent user the operator's pinned uv and uvx")
-    assert uv["loop"] == ["uv", "uvx"]
 
 
 def test_the_agents_clone_gets_hooks_from_its_own_prek(tmp_path) -> None:
@@ -48,11 +23,6 @@ def test_the_agents_clone_gets_hooks_from_its_own_prek(tmp_path) -> None:
         '  (cd "$clone" && as_agent "$home/.local/bin/prek" install)\n'
     ) in setup
     # renovate_agent imports the shared file; only claude_code's agent gets the hooks.
-    shared_argvs = [
-        (t.get("ansible.builtin.command") or {}).get("argv") or []
-        for t in tasks(SHARED)
-    ]
-    assert not [a for a in shared_argvs if a[-2:-1] and a[-2].endswith("/prek")]
 
 
 def collections_path_problems(profile: str, clone: str) -> list[str]:

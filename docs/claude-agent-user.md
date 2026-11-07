@@ -65,14 +65,13 @@ such as the deploy itself, falls under the root chain above.
 
 ## The template: `renovate-agent`
 
-The repo already ran one Claude agent as a separate user. The `renovate_agent` setup role
+The repo already ran one Claude agent as a separate user. The `renovate-agent` component
 creates `renovate-agent` with its own home under `/var/lib`, its own clone, its own copies of
 `uv` and `claude_guard`, a hardened unit, and a GitHub token that cannot push. A polkit rule lets
 it start one lander unit, which runs root-owned code as `ubuntu` and re-checks the PR.
 
-The `claude` agent reuses that shape. The identity tasks live in the shared
-`ansible/roles/setup/common/tasks/agent_user.yml`, which both agents call, and the `claude`
-agent gets a lander of the same shape.
+The `claude` agent reuses that shape: its own identity script in
+`hosts/components/claude-code/`, and a lander of the same shape.
 
 ## Rules the design follows
 
@@ -94,15 +93,14 @@ agent gets a lander of the same shape.
   the sudo grant it first used (#4297). Under `NoNewPrivileges=yes`, sudo cannot gain root, so
   no `claude-rc.service` session could use that grant. `worktree-holders.socket` listens on
   `/run/worktree-holders.sock`, mode 0660, group `worktree-holders`. For each connection
-  systemd runs the helper as root: `/usr/lib/homelab/worktree-holders` on daniel-server, from the
-  `worktree-holders` component, and `/usr/local/libexec/worktree-holders` on daniel-box. The helper reads the caller's uid
+  systemd runs the helper as root: `/usr/lib/homelab/worktree-holders`, from the
+  `worktree-holders` component. The helper reads the caller's uid
   from `SO_PEERCRED` and reports only under that user's root in `/etc/worktree-holders.json`.
   For the agent, that root is its own clone, so a worktree removal in `/var/lib/claude/server`
-  sees an `ubuntu` process inside the tree. The `worktree-holders` component on daniel-server and
-  initial_setup's `worktree-sweep` tag on daniel-box render the map from a per-host copy of the
-  agent users that host's package declares under `users:` (#4295, #6831), and the helper refuses a
-  uid the map does not name. Adding or removing a host's agent edits that host's list in
-  `hosts/components/worktree-holders/component.yml` and `tasks/crons.yml` too, and
+  sees an `ubuntu` process inside the tree. The `worktree-holders` component renders the map from a
+  per-host copy of the agent users that host's package declares under `users:` (#4295, #6831), and
+  the helper refuses a uid the map does not name. Adding or removing a host's agent edits that host's
+  list in `hosts/components/worktree-holders/component.yml` too, and
   `ansible/tests/setup/test_worktree_holders_install.py` fails while the two differ. The `claude_code` role's `agent_access.yml` puts each present agent in
   the group. A session started before its user joined the group falls back to the
   unprivileged scan until it restarts. `sudo -n true` still fails.
@@ -139,8 +137,8 @@ authorized key.
   script is `hosts/components/claude-code/files/claude-clone-sync.sh`, and it re-syncs the
   `.venv` and the collections when a pull moves their lock files. The hook shim and the
   homelab-ui launcher run from that clone, so a stale clone breaks both.
-- **The agent has commit hooks.** The shared `agent_user.yml` copies the operator's pinned `prek`
-  and `uvx` beside `uv`. The `claude_code` role runs `prek install` in the clone, which covers
+- **The agent has commit hooks.** The agent's setup installs a pinned `prek` and `uvx` beside
+  `uv`. The `claude_code` role runs `prek install` in the clone, which covers
   every worktree made from it, so the agent's commits run gitleaks and the commit-time ratchets.
   The role installs the pinned Ansible collections into the clone, and the `.profile` sets
   `ANSIBLE_COLLECTIONS_PATH` so a worktree falls back to them. `renovate-agent` gets the binary
@@ -254,7 +252,7 @@ lander. The checks and the merge live in `land.sh`, and the lander does not re-i
 ### The approval floor
 
 The approval list is a floor. It keeps the explicit grant points and the gate itself. The agent's
-own roles (`claude_code`, `renovate_agent`), the deployer (`gitops_deploy`), `agent_user.yml`,
+own components (`claude-code`, `renovate-agent`), the deployer (`gitops_deploy`),
 `host_lib.py` and `ansible/inventory/` are not on it, so a PR changing them lands without the
 operator.
 
@@ -748,9 +746,7 @@ A further agent's account is two entries:
 1. A `users:` entry in the host's `package.yml`, with the uid the host gives it. The users
    arm creates the account.
 1. The same name and its clone directory in `worktree_holders_agents_by_host` in
-   `hosts/components/worktree-holders/component.yml` and
-   `initial_setup_worktree_holders_agents_by_host` in
-   `ansible/roles/setup/initial_setup/tasks/crons.yml`, so the worktree holder scan answers
+   `hosts/components/worktree-holders/component.yml`, so the worktree holder scan answers
    it. `ansible/tests/setup/test_worktree_holders_install.py` fails while a host's
    `users:` names an agent its list does not.
 

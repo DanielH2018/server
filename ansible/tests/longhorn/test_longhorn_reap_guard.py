@@ -41,7 +41,7 @@ GUARDED_TEMPLATES = frozenset({"longhorn-backup-health.sh.j2"})
 
 
 def _k3s_shell_scripts() -> dict[str, str]:
-    """Every `setup/k3s` shell script as the host runs it, by template name.
+    """Every k3s-host-checks shell script as the host runs it, by template name.
 
     Rendered rather than read: a jsonpath expression assembled from a role default would reach
     bash whole and read as `{{ ... }}` in the source, which is a guard over nothing (#3186).
@@ -49,10 +49,10 @@ def _k3s_shell_scripts() -> dict[str, str]:
     found = {
         name: text
         for plane, role, name, text in rendered_shell_texts()
-        if (plane, role) == ("setup", "k3s")
+        if (plane, role) == ("components", "k3s-host-checks")
     }
     missing = GUARDED_TEMPLATES - set(found)
-    assert not missing, f"the setup/k3s render no longer holds: {sorted(missing)}"
+    assert not missing, f"the k3s-host-checks render no longer holds: {sorted(missing)}"
     return found
 
 

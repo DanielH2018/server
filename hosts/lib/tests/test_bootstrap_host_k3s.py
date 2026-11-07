@@ -16,7 +16,7 @@ def test_the_agent_installs_k3s_in_agent_mode_and_never_prints_the_token(tmp_pat
 
     assert result.returncode == 0, result.stderr
     args = (host.root / "installer.args").read_text()
-    assert args.startswith("agent v1.37.1+k3s1 skipenable=true skipstart=true")
+    assert args.startswith("agent v1.37.2+k3s1 skipenable=true skipstart=true")
     assert "url=https://server.invalid:6443 token=set" in args
     assert AGENT_ENV["K3S_TOKEN"] not in result.stdout + result.stderr
     assert (host.root / "etc/systemd/system/k3s-agent.service").exists()
@@ -67,7 +67,7 @@ def test_the_server_installs_in_server_mode_even_with_agent_variables_exported(
 
     assert result.returncode == 0, result.stderr
     args = (host.root / "installer.args").read_text()
-    assert args.startswith("server v1.37.1+k3s1")
+    assert args.startswith("server v1.37.2+k3s1")
     assert args.strip().endswith("url=unset token=")
 
 
@@ -188,3 +188,38 @@ def test_an_agent_with_docker_installed_is_refused_before_the_installer_runs(tmp
     assert result.returncode != 0
     assert "Docker is installed" in result.stderr
     assert not (host.root / "installer.runs").exists()
+
+
+def _box_with_resolved_enabled(tmp_path) -> tuple[FakeHost, list[str]]:
+    host = FakeHost(tmp_path, hostname="daniel-box")
+    host.stock_kit()
+    host._stub(
+        "systemctl",
+        f'echo "systemctl $*" >> {host.log}\n'
+        "case $1 in is-enabled) echo enabled ;; is-active) exit 0 ;; is-failed) exit 1 ;; esac",
+    )
+    clone = host.clone(tmp_path)
+    args = ["daniel-box", "--local-build", str(clone), "--offline", str(host.kit)]
+    return host, args + ["--until", "6"]
+
+
+def test_the_server_stops_resolved_once_the_forwarder_answers(tmp_path):
+    host, args = _box_with_resolved_enabled(tmp_path)
+
+    result = host.run(*args)
+
+    assert result.returncode == 0, result.stderr
+    commands = host.commands()
+    assert "systemctl disable systemd-resolved.service" in commands
+    assert "systemctl stop systemd-resolved.service" in commands
+
+
+def test_a_forwarder_that_never_answers_leaves_resolved_running(tmp_path):
+    host, args = _box_with_resolved_enabled(tmp_path)
+    host._stub("dig", "exit 0")
+
+    result = host.run(*args, BOOTSTRAP_DNS_RETRY_DELAY="0")
+
+    assert result.returncode != 0
+    assert "coredns-host.service does not answer" in result.stderr
+    assert "systemctl stop systemd-resolved.service" not in host.commands()

@@ -152,8 +152,8 @@ A setup role the deployer cannot apply is a fourth case. `k3s` lives in `k3s-bri
 fast-forwards and records the role instead of parking; see *A role only a hand can apply is
 recorded, not parked* below.
 
-A setup role can ship another setup role's file by path. The `deploy_ui` and `renovate_agent`
-roles install the deployer's `files/gitops_markers.py` and `files/gitops_ledger.py` that way.
+A setup role can ship another setup role's file by path. The `deploy_ui`
+role installs the deployer's `files/gitops_markers.py` and `files/gitops_ledger.py` that way.
 `deploy_changes.setup_roles_for` maps a change to such a file to its owner AND every role listed
 for it in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. `ChangeSet.setup_roles` and `setup_tags_for` both
 read the table, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage
@@ -325,12 +325,12 @@ uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s
 **After a NARROWED apply, pass `--applied` naming the tags you ran.** A bare clear drops the
 role's whole line, and the row can grow between the moment a surface printed the command and
 the moment you run it — a second PR touching the same role widens it to
-`coredns,kubeconfig`, and the bare form takes `coredns` with yours. That change is then
+`coredns,node-address`, and the bare form takes `coredns` with yours. That change is then
 merged, unapplied, and recorded nowhere:
 
 ```bash
-ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
-uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s --applied kubeconfig
+ansible-playbook ansible/k3s-bringup.yml --tags node-address
+uv run python scripts/deploy_tools/gitops_state.py clear-owed manual_plane k3s --applied node-address
 ```
 
 The clear then keeps the line and prints what is still pending. Every surface that prints a
@@ -403,9 +403,9 @@ range changed in it, because the task naming the key need not be one the range e
 
 #### The tag the remediation prints is derived, not the role tag
 
-`--tags k3s` is the whole `setup/k3s` role: it reapplies Longhorn, the backup targets,
-the crons, CoreDNS and the node config, and arms two gated control-plane tasks. A three-line
-edit to `templates/readonly-kubeconfig.j2` needs only `--tags kubeconfig`. The printed command
+`--tags k3s` is the whole `setup/k3s` role: it reapplies the server install and CoreDNS's
+marker, and arms two gated control-plane tasks. A change to the marker's task needs only
+`--tags coredns`. The printed command
 therefore names the narrowest tags the change reaches.
 
 **One derivation, four surfaces.** `deploy_defer.record` asks
@@ -444,8 +444,7 @@ the tags of the tasks that read it:
   variable that an unchanged task sets under another tag.
 - `templates/<f>` or `files/<f>` maps to the tags of every task file naming `<f>`, following a
   template another template includes or imports. A host script's template is usually named in a
-  `defaults/` data structure rather than a task's `src:` (`setup/k3s` collects them in
-  `k3s_render_stamp_groups` and hands the group to `common/tasks/release_bin.yml`), so a name found
+  `defaults/` data structure rather than a task's `src:`, so a name found
   only there maps to the tags of whatever reads that KEY.
 - `defaults/main.yml` or `vars/<f>.yml` maps to the top-level keys whose value changed between the
   two refs, then the tags of every task file and template naming one of those keys.
@@ -902,14 +901,14 @@ the tick applies it on daniel-box, and daniel-server and daniel-pi need
 `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` (with `-e
 target=daniel-pi` for the Pi) run by an operator.
 
-**The two GitHub crons** are daily kuma-check timers on the deploy host (`check_timer.yml`
-in the `common` role). Each writes its verdict through `write_check_textfile`, which the rules
+**The two GitHub checks** are daily timers of the `github-checks` component on the deploy host, which keep the contract of
+`check_timer.yml` in the `common` role. Each writes its verdict through `write_check_textfile`, which the rules
 in `gitops-checks.yaml` read, and pushes to nothing. Each exits 1 on a down verdict, and
 `Restart=on-failure` reruns it every 30 minutes until it exits 0. Both
 authenticate with the deploy user's `gh auth token`, and without it both are red, because GitHub
 shows a ruleset's bypass list only to an admin. The timers are `Persistent=true`, so a slot missed
-inside an outage runs at boot. `teardown.yml` imports the same names absent, which reaps the
-units on a non-deployer host. One alerts and the other reconciles:
+inside an outage runs at boot. `teardown.yml` imports their Ansible-era names absent, which reaps
+the old units on a non-deployer host. One alerts and the other reconciles:
 
 - **`github-ruleset-drift.sh`** reads four ruleset definitions from GitHub and alerts on drift in
   any of them. It never writes: a ruleset changes because a human changed it, and reconciling
@@ -1109,12 +1108,11 @@ all fire (2700 s) or when a second holder takes the lock first, because flock do
 fairly. An operator who sees exit 75 should check whether `gitops-deploy` is mid-apply before
 assuming the lock is stuck.
 
-**Four waiters on the tree lock are pinned as a census.** `deploy.sh`, secret-rotate, docs-refresh
-and eval-run each wait 2400 s, and `_LOCK_WAITERS` and `_longest_tick_hold()` in
+**Three waiters on the tree lock are pinned as a census.** `deploy.sh`, docs-refresh and eval-run
+each wait 2400 s, and `_LOCK_WAITERS` and `_longest_tick_hold()` in
 `tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's ceiling. The
 census models the deployer alone. docs-refresh's longest path stays outside it because a run
-measures 7-11 minutes, its 06:17 start sits 2 h 43 min before secret-rotate's one weekly slot, and
-`deploy.sh` can retry after exit 75. A
+measures 7-11 minutes and `deploy.sh` can retry after exit 75. A
 per-consumer test covers only the consumers someone wrote one for, so the census plus
 `test_the_lock_waiter_census_is_non_vacuous` makes a new waiter fail instead of passing silently.
 A raise that pushes `TimeoutStartSec` past a waiter's wait fails those tests rather than shortening
@@ -1230,10 +1228,10 @@ rollback budget stacks on top.
 - The unit's worst case is the flock wait plus that budget, which
   `test_the_deployers_hold_survives_max_flock_contention` holds inside `TimeoutStartSec` in
   `gitops-deploy.service.j2`.
-- A raise of `TimeoutStartSec` past the four waiters' 2400 s moves them too, in the same change,
+- A raise of `TimeoutStartSec` past the three waiters' 2400 s moves them too, in the same change,
   because `test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold` fails otherwise.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
-  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 2400 s, and
+  `deploy.sh`, docs-refresh and eval-run each wait 2400 s, and
   `deploy_locks.locked_budget` spends the phase's own budget on a service-lock wait. An overrun
   never produces a second concurrent run, because the timer coalesces the new start into the
   activation in flight.

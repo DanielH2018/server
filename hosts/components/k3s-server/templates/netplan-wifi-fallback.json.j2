@@ -1,0 +1,22 @@
+{#- The role's netplan-wifi-fallback.yaml.j2 as JSON, which netplan's YAML parser reads. A `format:
+    json` output is the only form in which homelab-secrets escapes each value for its string, so
+    a quote or backslash in the password cannot change the file's meaning. No comment can survive
+    in JSON: that template has the routing argument, and test_box_k3s_host_half.py holds the
+    two equal. -#}
+{
+  "network": {
+    "version": 2,
+    "wifis": {
+      "{{ k3s_node_wifi_link }}": {
+        "dhcp4": true,
+        "optional": true,
+        "dhcp4-overrides": {"route-metric": 600, "use-dns": false},
+        "dhcp6-overrides": {"use-dns": false},
+        "ra-overrides": {"use-dns": false},
+        "access-points": {
+          "{{ wifi_ssid }}": {"password": "{{ wifi_password }}"}
+        }
+      }
+    }
+  }
+}

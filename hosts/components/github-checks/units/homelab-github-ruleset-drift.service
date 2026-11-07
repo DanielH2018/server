@@ -1,0 +1,24 @@
+# Shipped by the github-checks component. Started by homelab-github-ruleset-drift.timer.
+#
+# THE CONTRACT IS THE EXIT CODE. The check writes its verdict to a textfile a Prometheus rule reads,
+# then exits non-zero after `down` and 0 after `up`. Restart=on-failure reruns it every RestartSec
+# until it exits 0, so a failing verdict clears as soon as the fault is fixed.
+[Unit]
+Description=GitHub ruleset drift check (textfile verdict)
+After=network-online.target
+Wants=network-online.target
+# No OnFailure= alert, deliberately. A down verdict is a unit failure by this contract, and the
+# alert units page on a unit that broke. The rule already pages the verdict.
+
+[Service]
+SyslogLevel=notice
+Type=oneshot
+User=root
+ExecStart=/usr/lib/homelab/github-ruleset-drift
+SyslogIdentifier=github-ruleset-drift
+# Only Restart=always and Restart=on-success are refused for Type=oneshot (systemd 255).
+Restart=on-failure
+RestartSec=30min
+# The restart loop lives in memory, so a reboot ends it. This marker survives the reboot and gates
+# homelab-github-ruleset-drift-boot.service (#4495). `$$` hands the variable to the shell.
+ExecStopPost=+/bin/sh -c 'if [ "$$SERVICE_RESULT" = success ]; then rm -f /var/lib/kuma-check/github-ruleset-drift.down; else mkdir -p /var/lib/kuma-check && touch /var/lib/kuma-check/github-ruleset-drift.down; fi'

@@ -52,9 +52,8 @@ def test_the_census_finds_every_known_pin():
 
 
 def test_the_census_names_the_annotated_depname_behind_each_pin():
-    """`--refresh twpayne/chezmoi` selects the installer pin through the annotation."""
+    """`--refresh k3s-io/k3s` selects the installer pin through the annotation."""
     by_name = {pin.name: pin for pin in discover_pins()[0]}
-    assert by_name["chezmoi_setup_installer"].dep_names == {"twpayne/chezmoi"}
     assert by_name["k3s_install_script"].dep_names == {"k3s-io/k3s"}
     # A host component's `defaults:` map, where the agent's Node pin moved in H7.40.
     node = by_name["claude_code_agent_node"]

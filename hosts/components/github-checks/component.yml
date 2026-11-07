@@ -1,0 +1,66 @@
+# daniel-box's two GitHub repository checks as packaged timers (H7.37, H7.11's check half,
+# docs/target-architecture/host/h7-delete-ansible.md). Until H7.37 the gitops_deploy role installed
+# them as the Ansible-era `kuma-check-github-*` timers.
+#
+# - homelab-github-ruleset-drift, daily 06:40: compares the live rulesets and the repo's visibility
+#   with the declarations in defaults/main.yml. It writes github-ruleset-drift.prom and never
+#   writes the rulesets.
+# - homelab-github-interaction-limit, daily 06:50: re-applies the declared interaction limit, which
+#   GitHub lets lapse after six months, and writes github-interaction-limit.prom.
+#
+# Each script exits 1 after a `down` verdict, so Restart=on-failure reruns it every 30 minutes until
+# it exits 0, and its boot unit reruns it once at boot while the last verdict was not up (#4495).
+# Both run as root, and read the deploy user's GitHub login through `sudo -u <sys_user> gh auth
+# token`. Neither loads a credential.
+#
+# Autonomous-role contract (the interaction-limit check writes a repository setting with no human
+# in the loop; the ruleset check only reads and reports).
+#
+# - Scope / exclusions: one GitHub setting, the interaction limit of `gitops_deploy_github_repo`,
+#   re-applied to the declared value. The ruleset check changes nothing, because a ruleset is a
+#   setting a human changes on purpose (the script's DECIDED marker).
+# - Mode (explicit and reversible): the timers' enable links in this package arm them. Dropping a
+#   link from a package version, or reverting this component, stops that timer on the install that
+#   drops it. `gitops_deploy_interaction_limit: none` makes the check clear the limit instead.
+# - Authoritative sources: defaults/main.yml for what should hold, and GitHub's REST API for what
+#   does.
+# - Abort valves: a reachout gate before each read, and no token means a `down` verdict with
+#   nothing written. Reconcile's `hold_sha` holds a package that would change either script.
+# - Required evidence, every run: a `status=<up|down>` line tagged github-ruleset-drift or
+#   github-interaction-limit in the journal, and each check's .prom in node_exporter's textfile
+#   directory, which the GitHub rules in observability's gitops-checks.yaml read.
+# - Next-run review: a `down` that survives one rerun means the setting moved. Read the status line
+#   before you change defaults/main.yml: the declaration is reconciled only when the change on
+#   GitHub was deliberate.
+#
+# ENFORCED: ansible/tests/setup/test_github_ruleset_drift.py and
+# ansible/tests/setup/test_github_interaction_limit.py (each script against stubs), and
+# hosts/lib/tests/test_h737_box_components.py (the units and the legacy entries).
+files:
+  - {src: templates/github-ruleset-drift.sh.j2, dst: /usr/lib/homelab/github-ruleset-drift, mode: "0750"}
+  - {src: templates/github-interaction-limit.sh.j2, dst: /usr/lib/homelab/github-interaction-limit, mode: "0750"}
+  - {src: units/homelab-github-ruleset-drift.service, dst: /usr/lib/systemd/system/homelab-github-ruleset-drift.service}
+  - {src: units/homelab-github-ruleset-drift.timer.j2, dst: /usr/lib/systemd/system/homelab-github-ruleset-drift.timer}
+  - {src: units/homelab-github-ruleset-drift-boot.service, dst: /usr/lib/systemd/system/homelab-github-ruleset-drift-boot.service}
+  - {src: units/homelab-github-interaction-limit.service, dst: /usr/lib/systemd/system/homelab-github-interaction-limit.service}
+  - {src: units/homelab-github-interaction-limit.timer.j2, dst: /usr/lib/systemd/system/homelab-github-interaction-limit.timer}
+  - {src: units/homelab-github-interaction-limit-boot.service, dst: /usr/lib/systemd/system/homelab-github-interaction-limit-boot.service}
+enable:
+  homelab-github-ruleset-drift.timer: timers.target
+  homelab-github-ruleset-drift-boot.service: multi-user.target
+  homelab-github-interaction-limit.timer: timers.target
+  homelab-github-interaction-limit-boot.service: multi-user.target
+# What the gitops_deploy role installed before H7.37. Reconcile retires each once the timers above
+# have started, so neither check runs twice or not at all.
+legacy:
+  - {unit: kuma-check-github-ruleset-drift.timer}
+  - {unit: kuma-check-github-ruleset-drift.service}
+  - {unit: kuma-check-github-ruleset-drift-boot.service}
+  - {unit: kuma-check-github-interaction-limit.timer}
+  - {unit: kuma-check-github-interaction-limit.service}
+  - {unit: kuma-check-github-interaction-limit-boot.service}
+  - {path: /usr/local/bin/github-ruleset-drift.sh}
+  - {path: /usr/local/bin/github-interaction-limit.sh}
+  - {path: /var/lib/kuma-check/github-ruleset-drift.down}
+  - {path: /var/lib/kuma-check/github-interaction-limit.down}
+  - {path: /var/lib/homelab/setup-render-manifest.d/gitops-deploy-github-checks}

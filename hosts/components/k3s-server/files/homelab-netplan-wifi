@@ -1,0 +1,27 @@
+#!/bin/bash
+# homelab-netplan-wifi: install the rendered wifi fallback into /etc/netplan once it passes netplan.
+#
+# A file netplan cannot parse takes every link down at the next boot, so the generator reads the
+# rendered file in a scratch root first, and a refusal leaves the installed file as it is.
+# HOMELAB_ROOT prefixes the two paths, and NETPLAN_GENERATE names the generator, for the tests.
+set -euo pipefail
+
+name=80-homelab-wifi-fallback.yaml
+rendered="${HOMELAB_ROOT:-}/var/lib/homelab-secrets/netplan/$name"
+installed="${HOMELAB_ROOT:-}/etc/netplan/$name"
+generate="${NETPLAN_GENERATE:-/usr/libexec/netplan/generate}"
+
+scratch="$(mktemp -d)"
+trap 'rm -rf "$scratch"' EXIT
+install -d -m 0700 "$scratch/etc/netplan"
+install -m 0600 "$rendered" "$scratch/etc/netplan/$name"
+if ! "$generate" --root-dir "$scratch" > /dev/null; then
+    echo "homelab-netplan-wifi: netplan refuses the rendered file, so $installed stays" >&2
+    exit 1
+fi
+
+if cmp -s "$rendered" "$installed"; then
+    exit 0
+fi
+install -m 0600 -T "$rendered" "$installed"
+echo "homelab-netplan-wifi: installed $installed; it goes live at the next boot"

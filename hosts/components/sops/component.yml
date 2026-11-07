@@ -8,8 +8,9 @@
 # needs no renderer change. /usr/local/bin precedes /usr/bin on PATH, so each host package lists
 # the sops_setup role's /usr/local/bin/sops as a legacy entry beside this component.
 #
-# age is a Depends because bootstrap-host.sh's step 3 runs age-keygen, as sops_setup's apt task
-# installed it.
+# age is a Depends so every host carries age-keygen, which the age key runbooks in
+# docs/break-glass.md run. bootstrap-host.sh's step 3 runs before this package installs, so that
+# step installs age itself.
 depends:
   - homelab-tools
   - age

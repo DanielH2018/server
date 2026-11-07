@@ -28,6 +28,9 @@ cloudflare_ips:
 # drift apart with nothing asking for either. Eighteen host scripts run on this and must be the
 # same interpreter on both machines. The minor must track
 # .python-version — ansible/tests/setup/test_host_python_pin.py enforces both halves.
+# Bump order: the dotfiles repo's `python` in tools.toml installs this interpreter, and units run
+# with --no-python-downloads. Land that bump and run `chezmoi apply` on both cluster hosts first,
+# or every unit naming this pin fails to find a Python. No check in this repo can see the other.
 host_python_version: "3.15.2"
 
 # The git-tree lock (ADR-0011, ADR-0017): every job that mutates or snapshots the primary
@@ -352,16 +355,13 @@ wan_probe_urls:
 # would report the route down while Traefik was still starting.
 loki_route_witness_boot_grace_s: 600
 
-# Hosts that get the developer tooling `initial_setup --tags tooling` installs: uv, the uv-
-# managed CLI tools (ansible-core, ansible-lint, prek), the pinned host Python, the
-# /usr/local/bin/uv copy, and the pinned Vale binary the prek `vale` hook runs. The same list gates
-# `Install Git hooks`, because prek is what that task runs. A member whose package owns a subject
-# skips it through `initial_setup_packaged_hosts` (roles/setup/initial_setup/defaults/main.yml).
+# Hosts that get the uv-managed tools `initial_setup --tags tooling` installs: ansible-core and
+# ansible-lint.
 #
 # The predicate is "somebody commits from this host", not "this host holds a checkout".
 # daniel-pi is deliberately absent: it holds a checkout, but it is driven remotely over ssh and
-# nobody commits from it. The Pi has neither uv nor vale and runs the distro's Python 3.12, and
-# provisioning a pinned Python 3.14 on a 512 MB Zero 2 W is not wanted.
+# nobody commits from it. The Pi runs the distro's Python 3.12, and provisioning a pinned Python on
+# a 512 MB Zero 2 W is not wanted.
 #
 # An allowlist for the same reason as k3s_server_hosts above — a host nobody thought about is
 # refused rather than provisioned. ENFORCED by ansible/tests/setup/test_dev_tooling_hosts.py.
@@ -572,7 +572,7 @@ k8s_pi_client_ip: "{{ hostvars['daniel-pi'].server_ip }}"
 # (deploy-ui.service) rather than a pod.
 k8s_node_client_ip: "{{ hostvars['daniel-box'].server_ip }}"
 # The port daniel-box's host CoreDNS publishes its Prometheus endpoint on. DUPLICATED FROM
-# `k3s_host_dns_metrics_port` in roles/setup/k3s/defaults/main.yml, deliberately: role
+# `k3s_host_dns_metrics_port` in hosts/components/k3s-host-dns/defaults/main.yml, deliberately: role
 # defaults are only in scope while that role runs, and the k8s play never includes it, so a
 # reference across the boundary is undefined rather than shared. The two are kept equal by
 # ansible/tests/setup/test_coredns_metrics_port_agrees.py — a drift would leave this job scraping
@@ -789,12 +789,8 @@ etcd_drill_full_cron: "20 11 1 * *"
 # ENFORCED by ansible/tests/staging/test_etcd_drill_vm.py, which pins it between the cron's
 # period and twice it.
 etcd_drill_full_kuma_interval_s: 3024000
-# Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
-# Claude Code. Both default OFF and are opted into per host — daniel-server already has both
-# installed by hand and shouldn't have them re-provisioned underneath it, and the Pi
-# (512 MB Zero 2 W) can carry neither. has_chezmoi needs no credential of its own: the
-# dotfiles repo is public, so chezmoi clones it anonymously. has_github_cli still runs
-# first where a host sets both, for the reason initial_setup.yml gives at its entry.
+# Read by the playbook lines of the emptied github_cli and chezmoi_setup roles, which stay until
+# H7.20a, and by has_claude_code's component `when:`s. Each defaults OFF and is opted into per host.
 has_github_cli: false
 has_chezmoi: false
 has_claude_code: false

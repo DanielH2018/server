@@ -47,9 +47,9 @@ MUST_INCLUDE = frozenset(
         "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_io.py",
         "ansible/roles/setup/deploy_ui/files/deploy_ui.py",
-        "ansible/roles/setup/fake_remux/files/fake_remux.py",
-        "ansible/roles/setup/fake_remux/files/mkv_attachment_repair.py",
-        "ansible/roles/setup/fake_remux/files/state_push.py",
+        "hosts/components/fake-remux/files/fake_remux.py",
+        "hosts/components/fake-remux/files/mkv_attachment_repair.py",
+        "hosts/components/fake-remux/files/state_push.py",
         "scripts/deploy_tools/prune_releases.py",
         "ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_toolbox.py",
     }
@@ -299,7 +299,7 @@ def _uv_gate_leg(drill: str) -> str:
     A slice from the first `--no-project` would start at the comment above the `if`, so it
     would also hold the `.venv` leg, whose argv then satisfies an assertion meant for this one.
     """
-    leg = drill[drill.index("/usr/local/bin/uv run --no-project") :]
+    leg = drill[drill.index("/usr/bin/uv run --no-project") :]
     return leg[: leg.index("\n  )")]
 
 
@@ -353,12 +353,12 @@ def test_an_install_directory_resolves_only_what_its_role_ships(tmp_path):
     checker = _checker()
     module = tmp_path / "importer.py"
     module.write_text("import notify_logic\nimport host_lib\n", encoding="utf-8")
-    assert checker.walk(module, [_install("/opt/renovate-notify")]) == []
+    assert checker.walk(module, [_install("/usr/lib/homelab/renovate-notify")]) == []
     unshipped = tmp_path / "unshipped.py"
     unshipped.write_text(
         "from configarr_lib import configarr_status\n", encoding="utf-8"
     )
-    assert checker.walk(unshipped, [_install("/opt/renovate-notify")]) == [
+    assert checker.walk(unshipped, [_install("/usr/lib/homelab/renovate-notify")]) == [
         "configarr_lib"
     ]
 
@@ -366,9 +366,9 @@ def test_an_install_directory_resolves_only_what_its_role_ships(tmp_path):
 def test_a_staged_copy_is_checked_against_its_own_install_only():
     # host_lib.py ships to a dozen install directories; a union would resolve through siblings.
     checker = _checker()
-    staged = _install("/opt/renovate-notify") / "host_lib.py"
+    staged = _install("/usr/lib/homelab/renovate-notify") / "host_lib.py"
     dirs = dict(checker.members())[staged]
-    assert dirs == [_install("/opt/renovate-notify")]
+    assert dirs == [_install("/usr/lib/homelab/renovate-notify")]
 
 
 GITOPS_UNIT = (

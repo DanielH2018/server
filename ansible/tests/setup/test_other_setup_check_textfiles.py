@@ -25,7 +25,7 @@ import shlex
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import render_component_text
 from _shell_render import render_shell_script
 from lib.proc_testing import fake_bin, path_with, run, write_exec
 
@@ -33,6 +33,7 @@ CHECK_LIB = (
     ANSIBLE / "roles" / "setup" / "initial_setup" / "files" / "homelab-check-lib.sh"
 )
 CHECK_LIB_PATH = "/usr/local/lib/homelab-check-lib.sh"
+PACKAGED_CHECK_LIB_PATH = "/usr/lib/homelab/homelab-check-lib.sh"
 EPOCH = 1760000000
 OVERRIDES = {
     "domain": "example.test",
@@ -54,7 +55,7 @@ PRODUCERS = {
         "nut_host",
         "ups-secondary-health.sh.j2",
     ): "write_check_textfile ups-secondary-health ",
-    ("fake_remux", "fake-remux-health.sh.j2"): 'write_check_textfile "${CHECKS[$i]}" ',
+    ("fake-remux", "fake-remux-health.sh.j2"): 'write_check_textfile "${CHECKS[$i]}" ',
     ("hypervisor", "etcd-restore-drill-vm.sh.j2"): 'write_check_textfile "$check" ',
 }
 
@@ -68,7 +69,7 @@ def kuma_push_markers(body: str) -> list[str]:
 def test_no_b4_producer_pushes_to_kuma(producer):
     # RED if a push, its library, its token or its env file returns: the tiles are gone, so a
     # push would be refused (`by=kuma`) every run.
-    plane = "components" if producer[0] == "hypervisor" else "setup"
+    plane = "components" if producer[0] in {"fake-remux", "hypervisor"} else "setup"
     body = render_shell_script(plane, *producer, OVERRIDES)
     # Non-vacuity: the render is the real script, which still records its verdict.
     assert PRODUCERS[producer] in body
@@ -171,14 +172,14 @@ STATE_PUSH = "printf 'up\\tscan ok\\ndown\\treplace failed\\nup\\tmkv ok\\n'\n"
 
 def _run_fake_remux(tmp_path):
     body = render_shell_script(
-        "setup", "fake_remux", "fake-remux-health.sh.j2", OVERRIDES
+        "components", "fake-remux", "fake-remux-health.sh.j2", OVERRIDES
     )
     uv = tmp_path / "uv"
     write_exec(uv, STATE_PUSH)
-    for literal in (CHECK_LIB_PATH, "/usr/local/bin/uv"):
+    for literal in (PACKAGED_CHECK_LIB_PATH, "/usr/bin/uv"):
         assert literal in body, f"fake-remux-health.sh no longer references {literal}"
-    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
-        "/usr/local/bin/uv", str(uv)
+    body = body.replace(PACKAGED_CHECK_LIB_PATH, str(CHECK_LIB)).replace(
+        "/usr/bin/uv", str(uv)
     )
     textfile_dir, env = _env(tmp_path, "unused")
     run(["bash", str(write_exec(tmp_path / "fr.sh", body))], env=env, check=True)
@@ -262,8 +263,8 @@ def test_the_drill_and_its_fence_leg_write_separate_verdicts(tmp_path):
 # --- the renovate units' ExecStartPost -------------------------------------------------------
 
 UNITS = {
-    "renovate-notify": ("renovate_notify", "renovate-notify.service.j2", {}),
-    "renovate-agent": ("renovate_agent", "renovate-agent.service.j2", {}),
+    "renovate-notify": ("renovate-notify", "homelab-renovate-notify.service.j2", {}),
+    "renovate-agent": ("renovate-agent", "homelab-renovate-agent.service.j2", {}),
 }
 
 
@@ -283,7 +284,7 @@ def _textfile_argv(unit_text) -> list[str]:
 def _run_unit_line(tmp_path, check, lib, bin_dir_env):
     """Run the unit's textfile line with `lib` as the check library and stubs ahead of PATH."""
     role, template, overrides = UNITS[check]
-    argv = _textfile_argv(render_setup_text(role, template, overrides))
+    argv = _textfile_argv(render_component_text(role, template, overrides))
     # The pin is what keeps the agent's user-writable ~/.local/bin out of a root command.
     assert argv[:3] == PINNED_ENV
     assert argv[3:5] == ["/bin/bash", "-c"]
@@ -295,7 +296,7 @@ def _run_unit_line(tmp_path, check, lib, bin_dir_env):
         f"TEXTFILE_DIR={bin_dir_env['TEXTFILE_DIR']}",
         f"LOGGED={bin_dir_env['LOGGED']}",
         *argv[3:-1],
-        argv[-1].replace(CHECK_LIB_PATH, str(lib)),
+        argv[-1].replace(PACKAGED_CHECK_LIB_PATH, str(lib)),
     ]
     return run(argv, env=bin_dir_env)
 
@@ -337,7 +338,7 @@ def test_a_renovate_units_only_post_step_is_its_textfile_write(check):
     on every run and page through `OnFailure`.
     """
     role, template, overrides = UNITS[check]
-    unit = render_setup_text(role, template, overrides)
+    unit = render_component_text(role, template, overrides)
     posts = [line for line in unit.splitlines() if line.startswith("ExecStartPost=")]
 
     assert len(posts) == 1
