@@ -259,7 +259,8 @@ reads the labelled bytes. They stop before the restart stamp and placeholder mod
 `render_role_template` renders one template unlabelled with `role_context`'s variables, for a
 guard that sets a value the inventory does not hold. A top-level template out of the file
 lists, such as pihole's macro file, is in neither walk. A guard that reads one names it in its
-own fallback table.
+own fallback table. `scripts/validate/k8s_manifests.py` validates the same stub-mode files, and
+the files each tag renders from its `templates/verify/` and `templates/precheck/` too.
 
 ## The Jinja dialect the renderer accepts
 
