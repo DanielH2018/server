@@ -258,12 +258,11 @@ def test_registering_the_filters_keeps_ansible_temp_out_of_the_home_directory(tm
 )
 def test_a_guard_refusal_names_its_filter_as_a_deploy_does(name: str, args: tuple):
     """The guard env registers the FilterModule versions, so its refusal reads as a deploy's (#4505)."""
-    from ansible.errors import AnsibleFilterError
+    from filter_errors import FilterError
 
     env = aje.make_ansible_env([SHARED_TPL])
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         env.filters[name](*args)
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)
 
 

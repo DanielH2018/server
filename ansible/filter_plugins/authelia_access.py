@@ -9,7 +9,10 @@ render — here, in `validate/k8s_manifests.py`, and in a real deploy alike — 
 has no representation.
 """
 
-from ansible.errors import AnsibleFilterError
+
+class AccessRuleError(ValueError):
+    """A `containers_list` entry whose Authelia declaration no access rule can carry."""
+
 
 # The policies a service can declare, in the order their rules render (first match wins, so
 # the stricter tier goes first). `bypass` is deliberately absent: a scoped bypass
@@ -36,7 +39,7 @@ def authelia_service_rules(containers_list, domain, one_factor_networks):
         Authelia. A tier with no member renders no rule.
 
     Raises:
-        AnsibleFilterError: a `use_authelia: true` entry without `auth_tier` or `hostname`, an
+        AccessRuleError: a `use_authelia: true` entry without `auth_tier` or `hostname`, an
             `auth_tier` outside AUTH_TIERS, or an `auth_tier` on an entry that does not attach
             the middleware — that declaration would gate nothing.
     """
@@ -46,24 +49,24 @@ def authelia_service_rules(containers_list, domain, one_factor_networks):
         tier = entry.get("auth_tier")
         if not entry.get("use_authelia"):
             if tier is not None:
-                raise AnsibleFilterError(
+                raise AccessRuleError(
                     f"containers_list entry {name!r} declares auth_tier: {tier} but not "
                     f"use_authelia: true — the tier gates nothing without the middleware"
                 )
             continue
         if tier is None:
-            raise AnsibleFilterError(
+            raise AccessRuleError(
                 f"containers_list entry {name!r} has use_authelia: true but no auth_tier — "
                 f"declare one of {list(AUTH_TIERS)} beside its hostname"
             )
         if tier not in AUTH_TIERS:
-            raise AnsibleFilterError(
+            raise AccessRuleError(
                 f"containers_list entry {name!r} declares auth_tier: {tier!r}; "
                 f"expected one of {list(AUTH_TIERS)}"
             )
         hostname = entry.get("hostname")
         if not hostname:
-            raise AnsibleFilterError(
+            raise AccessRuleError(
                 f"containers_list entry {name!r} has use_authelia: true but no hostname — "
                 f"there is no route for an access_control rule to name"
             )

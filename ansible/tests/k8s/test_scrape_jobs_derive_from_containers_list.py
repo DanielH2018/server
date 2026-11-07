@@ -12,7 +12,7 @@ Run: uv run pytest ansible/tests/k8s/test_scrape_jobs_derive_from_containers_lis
 import copy
 
 import pytest
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 
 from _k8s_render import host_context, render_pod_env, render_role_template
 from lib import yaml_fast
@@ -246,8 +246,8 @@ def test_entry_port_is_flagged_on_an_unknown_entry_or_one_with_no_port():
     ],
     ids=["entry-missing", "job-missing", "metrics-malformed"],
 )
-def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
     """A render failure names the filter that refused, through the filter Ansible calls (#4480)."""
-    with pytest.raises(AnsibleFilterError) as caught:
+    with pytest.raises(FilterError) as caught:
         FilterModule().filters()[name](*args)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)
