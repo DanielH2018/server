@@ -216,12 +216,13 @@ otherwise; none of the values below are secrets themselves, only names and locat
     `ansible/.sops.yaml`, beside daniel-box's key and the recovery key (item 1), and in no
     other rule. The file arrived with H4.5. Since then the key decrypts the two push tokens that
     the Pi's heartbeats load from `/run/credstore`, so a lost key costs those two values.
-    - **To restore it** onto a rebuilt Pi, run `sudo hosts/bootstrap-host.sh daniel-pi`. Its
-      step 3 creates a fresh key at the same path and prints the public key. No copy of the
-      old key exists to restore. Replace the Pi's public key in the Pi's creation rule. Then,
-      on daniel-box or any host holding the recovery key (item 1), run
-      `sops updatekeys vars/hosts/daniel-pi.sops.yaml` from `ansible/` and commit the result.
-      The recovery key and daniel-box's key are recipients of the file, so either one
+    - **To replace it** on a rebuilt Pi, follow *Scenario: daniel-pi must be rebuilt from a blank
+      SD card*. `hosts/bootstrap-host.sh` step 3 creates a fresh key at the same path and prints
+      the public key. No copy of the old key exists to restore. Add the new public key to the
+      Pi's creation rule, and keep the old one until the rebuild is accepted, because the old
+      SD card is the rollback. Then, on daniel-box or any host holding the recovery key (item
+      1), run `sops updatekeys vars/hosts/daniel-pi.sops.yaml` from `ansible/` and commit the
+      result. The recovery key and daniel-box's key are recipients of the file, so either one
       decrypts it while the Pi has no working key.
     - **A lost SD card is a lost host key**, and a lost or exposed key means rotating every
       value the Pi's key decrypts. A re-key protects future revisions. Git history and every
@@ -320,6 +321,182 @@ Steps:
 5. Once daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Bring back each
    shed service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, then resumes
    each flux-owned service. The rescheduled pods stay on daniel-box until their next rollout.
+
+### Scenario: daniel-pi must be rebuilt from a blank SD card
+
+Every step is **operator-only**, except that an agent can run the reads in step 11. The operator
+works at the Pi's console and on daniel-box. These steps have never run on hardware (*Documented
+vs drilled*). The break-glass kit holds no copy of the Pi's SSH host keys or age key (item 12),
+so the rebuild creates both and the repo gains two commits: the recipient and the host-key pin.
+
+Check these before you start:
+
+- A client connects from outside the LAN through the cluster's wg-easy on `51820/udp` (item 6).
+  The Pi's wg-easy is down for the whole rebuild.
+- The old SD card is out of the Pi and kept unchanged, because it is the rollback.
+- daniel-box's host-package repository answers. Script step 5 installs from it and exits 1 when
+  it cannot. A rerun continues, because each script step is idempotent.
+- `pi-peer-backup-data` is on the cluster. After a cluster loss, restore it first by
+  `docs/longhorn-disaster-recovery.md`.
+
+While the Pi is down, `pi-peer-backup`'s nightly run reports down, and a promotion that changes
+that role fails its `pi-peer-backup-verify` gate. A builder run that changes only the Pi's and
+daniel-box's packages stages the Pi as the canary, so its gate stays open until step 10.
+
+1. To name the host, flash stock Ubuntu 24.04 for Raspberry Pi and edit `user-data` on the card's
+   boot partition before first boot. The script refuses the image's default hostname, `ubuntu`.
+   The script's step 5 also turns off SSH passwords, so add the operator's key here.
+
+   ```yaml
+   hostname: daniel-pi
+   ssh_authorized_keys:
+     - <the operator's public key>
+   ```
+
+2. Copy `hosts/bootstrap-host.sh` and `hosts/keys/homelab-archive-keyring.gpg` from a clone or
+   the item 8 bundle onto the boot partition. Both files are public.
+3. Boot the Pi and log in at the console. Install `age`, because script step 3 runs `age-keygen`
+   before the package that depends on `age` installs. Create the `ssh-users` group and add
+   `ubuntu`, because the package's `AllowGroups ssh-users` otherwise locks out `ubuntu` and
+   `pi-peer-backup`.
+
+   ```bash
+   cloud-init status --wait
+   sudo apt-get update
+   sudo apt-get install -y age
+   sudo groupadd -f ssh-users
+   sudo usermod -aG ssh-users ubuntu
+   hostname -I
+   ```
+
+   The address must equal `server_ip` in `ansible/inventory/host_vars/daniel-pi.yml`. The tree
+   declares no address for the Pi, so correct the router's lease if it differs.
+4. To create the age key and run the one-time host steps, run the script through `sh`, because
+   the boot partition is FAT. It prints the new public key.
+
+   ```bash
+   sudo sh /boot/firmware/bootstrap-host.sh daniel-pi --until 4
+   ```
+
+5. To let the first package decrypt its secrets, add the new key to the
+   `vars/hosts/daniel-pi\.sops\.yaml$` rule in `ansible/.sops.yaml`, **without removing the old
+   key**. `compose-run` refuses to start the project without `compose.env`, and
+   `homelab-secrets` cannot write that file until the package carries ciphertext for this key.
+   On daniel-box, run the re-encrypt from `ansible/`, commit, and merge through a PR. The merged
+   PR's host wait does not settle until step 10.
+
+   ```bash
+   sops updatekeys vars/hosts/daniel-pi.sops.yaml
+   ```
+
+   Wait until `uv run python scripts/diagnostics/probe.py builder` lists a `homelab-daniel-pi`
+   version built from that merge.
+6. To restore the WireGuard keys, first create the directories on the Pi. The first line runs as
+   `ubuntu`, because `systemd-tmpfiles` refuses a parent that `ubuntu` does not own.
+
+   ```bash
+   install -d /home/ubuntu/server/containers/wg-easy
+   sudo install -d -o root -g root -m 0755 /home/ubuntu/server/containers/wg-easy/config
+   ```
+
+   Then copy `wg0.conf` and `wg0.json` from daniel-box, outside the 23:00 window of the
+   `pi-peer-backup` CronJob. The pipe writes no client private key to daniel-box's disk. The
+   Pi's new SSH host key makes `ssh` refuse until `ssh-keygen -R` removes the old entry, so run
+   that once for `daniel-pi` and once for the inventory's `server_ip`.
+
+   ```bash
+   image=$(sudo k3s kubectl -n homelab get cronjob pi-peer-backup \
+       -o jsonpath='{.spec.jobTemplate.spec.template.spec.containers[0].image}')
+   sudo k3s kubectl -n homelab apply -f - << EOF
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: wg-easy-restore
+   spec:
+     restartPolicy: Never
+     securityContext: {runAsUser: 1000, runAsGroup: 1000, fsGroup: 1000}
+     containers:
+       - name: restore
+         image: $image
+         command: [sleep, "3600"]
+         volumeMounts: [{name: data, mountPath: /data}]
+     volumes:
+       - name: data
+         persistentVolumeClaim: {claimName: pi-peer-backup-data}
+   EOF
+   sudo k3s kubectl -n homelab wait --for=condition=Ready pod/wg-easy-restore --timeout=300s
+   sudo k3s kubectl -n homelab exec wg-easy-restore -- \
+       tar -C /data/peers -cf - wg0.conf wg0.json |
+       ssh daniel-pi \
+       'sudo tar -C /home/ubuntu/server/containers/wg-easy/config --no-same-owner -xf -'
+   sudo k3s kubectl -n homelab delete pod wg-easy-restore
+   ```
+
+7. To install the packages and write the first integrity baselines, run the whole script. It
+   takes over an hour on this board. When it stops, read the reason on stderr, fix the cause, and
+   run the same command again. A rerun resumes an unfinished baseline.
+
+   ```bash
+   sudo sh /boot/firmware/bootstrap-host.sh daniel-pi
+   ```
+
+   Script step 5 prints a warning and continues when `packages.azlux.fr` does not answer. Rerun
+   the script once that host answers, or `/var/log` stays on the SD card.
+8. To start the Compose project and move `/var/log` to RAM, reboot the Pi. Script step 6 only
+   installs the Docker engine, and `log2ram` mounts only at boot. After the reboot, check each:
+
+   ```bash
+   findmnt /var/log
+   ls /var/lib/aide/aide.db /var/lib/rkhunter/db/rkhunter.dat
+   systemctl is-enabled dailyaidecheck.timer
+   systemctl is-active homelab-compose.service
+   sudo docker ps
+   ```
+
+   `findmnt` shows a tmpfs, `systemctl is-enabled` prints `masked`, `systemctl is-active` prints
+   `active`, and `docker ps` lists `wg-easy`, `alloy`, `autoheal` and `docker-proxy` running.
+9. To re-pin the host key, compare the key `ssh` shows with `ssh-keygen -lf
+   /etc/ssh/ssh_host_ed25519_key.pub` at the console. Then write the output of
+   `ssh daniel-pi cat /etc/ssh/ssh_host_ed25519_key.pub` to
+   `ansible/roles/k8s/pi-peer-backup/files/daniel-pi-ssh-host-ed25519.pub` and merge through a
+   PR. `promote` applies the new `pi-peer-backup-ssh` Secret. Each other account that has the
+   old key in its `known_hosts`, such as the agent user, needs the same `ssh-keygen -R`.
+10. To make the Pi report the applied version, start the updater on the Pi. Only the updater
+    writes `homelab_host_applied_info`, and its poll starts it only for a newer publish.
+
+    ```bash
+    sudo systemctl start homelab-updater.service
+    ```
+
+    When it fails or logs a hold, read `journalctl -u homelab-updater -u homelab-reconcile`, fix
+    the cause, and run `sudo /usr/lib/homelab/homelab-updater --clear-hold --install-newest`.
+11. To accept the rebuild, run these reads on daniel-box. An agent can run them.
+
+    ```bash
+    uv run python scripts/diagnostics/probe.py metric 'homelab_host_applied_info{host="daniel-pi"}'
+    uv run python scripts/diagnostics/probe.py metric 'node_textfile_scrape_error{job="node-pi"}'
+    uv run python scripts/diagnostics/probe.py targets --pi
+    ```
+
+    The first must name the version that `dpkg-query -W homelab-daniel-pi` prints on the Pi, and
+    the second must read 0. A landing's host wait reads the first series, so a Pi that cannot
+    write its textfile directory leaves every later host landing waiting.
+
+    Then prove the two remaining paths. To prove the peer backup, run
+    `sudo k3s kubectl -n homelab create job ppb-manual --from=cronjob/pi-peer-backup` on
+    daniel-box, and read its verdict with
+    `uv run python scripts/diagnostics/probe.py loki-query '{container="pi-peer-backup"}'`. Delete
+    the job afterwards. To prove WireGuard, follow steps 5 to 7 of *Access-path proof after the
+    install* in `docs/wireguard-private-homelab-access.md`, with a client config from before the
+    rebuild.
+12. To retire the old key after acceptance, remove it from the Pi's creation rule, run step 5's
+    `sops updatekeys`, and merge through a PR. Item 12 says when a lost or exposed card also
+    means rotating the file's values.
+
+To roll back at any step before step 12, put the old SD card back in the Pi and revert the
+host-key pin commit if step 9 merged one. The old age key stays a recipient until step 12, so the
+old card still decrypts the next package. Leave the recipient commit in place until the next
+rebuild.
 
 ### Scenario: one node is down and the survivor runs short of memory
 
@@ -556,6 +733,7 @@ what each source records — not what "should" have happened.
 | Longhorn volume restore | **Yes, and ongoing.** First attempt 2026-08-15 failed on a B2 cap (not the data); retry 2026-08-16 passed (`traefik-acme`, ~21s, verified real data). Scheduled nightly since 2026-08-19, rotating one volume per night over the full backup set since 2026-08-20. | `docs/longhorn-disaster-recovery.md`: "Assurance gap (known, narrowing)" |
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
 | SOPS onboarding (`age-keygen` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/README.md` §5; the `sops_setup` role created the key until H7.24b |
+| daniel-pi rebuild from a blank SD card (*daniel-pi must be rebuilt from a blank SD card*) | **No.** The operator's rebuild at the Pi's console is outstanding. CI's bootstrap cases run the script in a container against stub or simulated installs, so they cover neither the console steps nor the WireGuard restore. | `scripts/validate/validate_lib/bootstrap_repo_case.py` |
 | Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
