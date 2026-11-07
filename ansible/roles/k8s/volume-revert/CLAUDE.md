@@ -43,9 +43,9 @@ and the failure message says so.
 Two call sites pass these. `roles/k8s/manifests` includes the role from
 `k8s_autodeploy_snapshot_pvcs`, `manifests_service` and `k8s_restore_snapshot_sha`, and nothing
 sets that last variable since D6.12 deleted the tick's rollback redeploy.
-`ansible/volume-revert.yml` is the operator-only entry point for a flux-owned role, and takes all
-three as `-e` inputs: the hold post prints one command per changed
-snapshot role, with that role's `digest8` as the SHA. The runbook that runs it is *The revert
+`ansible/volume-revert.yml` is the fallback entry point for a flux-owned role until the snapshot
+drill passes through `scripts/backup/volume_revert.py`, the script the hold post prints, and takes
+all three as `-e` inputs. The runbook is *The revert
 runbook* in `docs/volume-snapshot-drills.md`. The playbook includes this role alone, never runs
 `deploy.yml`, and gathers facts through the shared preamble, because `k8s/longhorn-api` reads
 `ansible_hostname`.
@@ -62,8 +62,8 @@ would fail to match a nine-character name.
 
 A flux-owned role has no automated caller. Its snapshot Job names snapshots with the role's
 `digest8`, not a commit, so its revert passes `volume_revert_sha=<digest8>`. The stateful hold's
-Discord post prints that value and the claims in each changed role's command block, and the
-operator runs the block by hand (`docs/flux-deploy-plane.md`, *Snapshot roles hold without a
+Discord post prints that value and the claims in each changed role's command block, which calls
+the script, and the operator runs the block by hand (`docs/flux-deploy-plane.md`, *Snapshot roles hold without a
 reset*).
 
 ## The sequence, and why every step is there

@@ -262,11 +262,11 @@ Longhorn writes an empty `lastBackupAt`, not null, on a volume with no backup, a
 such a volume as `never`.
 
 Seed each one, one at a time. Before you seed more than a few, read the budget line in
-`journalctl -t longhorn-backup-health`, as the playbook's header says:
+`journalctl -t longhorn-backup-health`, as the script's `--help` says:
 
 ```bash
-uv run ansible-playbook ansible/seed_volume_backup.yml -i ansible/inventory/hosts.ini \
-  -e seed_claim=<pvc-name> -e seed_allow_existing=true
+sudo .venv/bin/python -B scripts/backup/seed_volume_backup.py --claim <pvc-name> \
+  --allow-existing --apply
 ```
 
 ## A stale iSCSI session blocks an attach

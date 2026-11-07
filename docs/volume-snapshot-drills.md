@@ -85,8 +85,8 @@ resumed `<s>` re-applies whatever `prod` names.
    `flux-deferred`. The root therefore needs no suspend of its own.
 2. **Revert the volumes, one run per role.** Run the revert line of each role's block in the
    post, exactly as printed. Each line carries that role's own `digest8` and claims, and the
-   playbook takes one service per run. Do not assemble the line by hand from another role's
-   block. *The entry point* below describes the playbook. It leaves each Deployment at zero
+   script takes one service per run. Do not assemble the line by hand from another role's
+   block. *The entry point* below describes the script. It leaves each Deployment at zero
    replicas.
 3. **Reset `prod`.** Dispatch the reset input:
    `gh workflow run promote.yml -R DanielH2018/server --ref master -f reset_to_last_good=true`.
@@ -137,28 +137,27 @@ for R.
 
 ### The entry point
 
-`ansible/volume-revert.yml` is a playbook on daniel-box. It includes `k8s/volume-revert`
-alone and never runs `deploy.yml`. It takes the three variables the role's input assert
-requires, `volume_revert_service`, `volume_revert_claims` (a list) and `volume_revert_sha`
-(the role's `digest8`). The hold post prints one line per role in this shape:
+`scripts/backup/volume_revert.py` runs on daniel-box and needs no Ansible. It takes
+`--service`, one `--claim` per PVC, `--sha` (the role's `digest8`) and `--namespace`. The hold
+post prints one line per role and namespace in this shape:
 
 ```bash
-uv run ansible-playbook ansible/volume-revert.yml -e volume_revert_service=<s> \
-  -e '{"volume_revert_claims": [<claims>]}' -e volume_revert_sha=<digest8>
+sudo .venv/bin/python -B scripts/backup/volume_revert.py --service <s> --namespace <ns> \
+  --sha <digest8> --claim <claim> --apply
 ```
 
 - **It reads the `<tag>-snapshot` Job's snapshots unchanged.** The Job names each one
-  `autodeploy-<tag>-<digest8>-<claim>-<token>`, the shape `volume-snapshot` uses, so the
-  role's prefix and its `^[0-9a-f]{8,}$` check accept `<digest8>` as the SHA.
-- **It gathers facts through the shared preamble.** `k8s/longhorn-api/tasks/resolve.yml`
-  reads `ansible_hostname`, so a copy of the header that opts out of the preamble's gather
-  would run the revert with that fact undefined.
-- **Nothing runs it unattended.** The deployer routes the path to no plane, so a change to
-  the playbook merges and applies nothing.
-  `ansible/tests/deploy/test_volume_revert_playbook_applies_nothing_from_a_tick.py` holds that.
-- **`--check` and `-e k8s_dry_run=true` skip the role**, as the manifests role's call site
-  does. A silent dry run proves nothing about whether a snapshot exists.
-- H7 replaces the playbook with a task-free tool before it deletes Ansible.
+  `autodeploy-<tag>-<digest8>-<claim>-<token>`, the shape `volume-snapshot` uses. The script
+  builds its prefix with `scripts/renderer/renderer_lib/snapshot.py:snapshot_name`, and
+  `--sha` takes eight or more lowercase hex digits verbatim.
+- **Its dry run answers whether a snapshot exists.** Drop `--apply` and run it as yourself with
+  `uv run python`. It resolves each claim and prints the snapshot a real run would revert to.
+- **It finds every claim's snapshot before it scales anything**, so a missing snapshot on a
+  second claim leaves the service up. A failure after the scale-down leaves the service at zero
+  replicas, and `docs/volume-revert-drill-and-sizing.md` has the hand recovery.
+- **Nothing runs it unattended.** No cron, unit or workflow calls it.
+- **`ansible/volume-revert.yml` stays as the fallback until the drill below passes through the
+  script.** H7.55 deletes the playbook.
 
 ### The drill
 

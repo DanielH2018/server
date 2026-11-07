@@ -16,7 +16,7 @@ volume's backup depends on.
 WHAT STOPS IT DELETING SOMETHING LIVE. Three things, in order:
   - The caller passes the live Longhorn volume list. An empty or unreadable list refuses
     everything rather than classifying everything as strandable — the same fail-closed shape as
-    the migrated-chain mode of ansible/prune_backups.yml, which learned it from a padded-column
+    the reaper's migrated-chain mode, which learned it from a padded-column
     bug that made every backup look like an orphan.
   - Any requested volume that still exists in that list is refused by name.
   - Nothing is deleted without --apply. Discovery proposes; the operator disposes.
@@ -33,8 +33,7 @@ With --listing-file the dry run saves the listing it paid for and the apply read
 it is younger than LISTING_MAX_AGE_SECONDS and matches the same prefix and bucket. The per-volume
 verification re-read after each delete is never skipped.
 
-Usage (credentials come from the environment; ansible/prune_backups.yml -e prune_mode=b2-drain
-supplies them):
+Usage (credentials come from the environment; scripts/backup/prune_backups.py supplies them):
     B2_KEY_ID=... B2_APP_KEY=... uv run python scripts/backup/b2_drain.py \
         --live-volumes-file /tmp/live.txt --volumes pvc-aaa,pvc-bbb [--apply]
 """

@@ -227,8 +227,8 @@ SECRET_ROTATION_SOPS_FAILED = 3
 SECRET_ROTATION_BAD_ARGS = USAGE_ERROR
 
 # -- scripts/backup/b2_drain.py ---------------------------------------------------------
-# `prune_backups/tasks/b2-drain.yml` fails the play on anything but 0 and 1, so a refused
-# volume reports while a usage error or a mid-run B2 failure stops the run.
+# `prune_backups.py` syncs the target only on 0 and 1, so a refused volume reports while a
+# usage error or a mid-run B2 failure stops the run.
 B2_DRAIN_OK = OK
 B2_DRAIN_REFUSED = FAILED
 B2_DRAIN_ERRORED = 2
