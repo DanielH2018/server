@@ -31,7 +31,10 @@ otherwise; none of the values below are secrets themselves, only names and locat
    2026-08-20 (`--secrets-encryption` armed), the etcd snapshot cannot decrypt Secrets, CA
    certs, or the service key without this token — restoring onto a *replacement* host is a
    no-op without it. Restoring onto daniel-box's own intact disk does not need it.
-   Source: `docs/k3s-etcd-restore.md` ("Since 2026-08-20…" section).
+   On a daniel-box rebuild the token goes to that path. On a daniel-server rebuild it goes to
+   the agent's env file, `/etc/systemd/system/k3s-agent.service.env`, which the installer writes.
+   Source: `docs/k3s-etcd-restore.md` ("Since 2026-08-20…" section) and *Rebuilding a cluster
+   node* in `docs/host-packages.md`.
 
 3. **The etcd snapshot.** Off-box copies land in `s3://<r2_bucket>/etcd-snapshots/`, named
    `offbox-<node>-<unix-timestamp>.zip`. k3s uploads one at 00:00 and 12:00 and keeps 28.
@@ -268,6 +271,8 @@ daniel-server keeps its own SOPS key, so decryption still works without the reco
 1. Follow `docs/longhorn-disaster-recovery.md` → *Procedure (fresh host, total loss)*, step 1:
    bring up a replacement daniel-box with `ansible/bootstrap.yml`, add its pubkey to
    `ansible/.sops.yaml`, `sops updatekeys` from daniel-server, commit, pull.
+   [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
+   `docs/host-packages.md` is the package path, and it lists what the packages do not hold yet.
 2. Decide whether cluster **objects** (Deployments, Secrets, PVC bindings) are also lost —
    if so, restore etcd first per `docs/k3s-etcd-restore.md` (needs item 2, the cluster
    token, if this is a genuinely new host rather than the same disk).
@@ -317,7 +322,10 @@ Steps:
    Kubernetes force-detaches the volume from the dead node. That wait is expected. Longhorn
    then attaches the volume on daniel-box from its local replica.
 4. Verify with `probe.py targets` and `probe.py health <svc>` for each service you brought back.
-5. Once daniel-server is back, Longhorn rebuilds its replicas from daniel-box. Bring back each
+5. To replace a daniel-server that cannot come back, follow
+   [Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
+   `docs/host-packages.md`. Once daniel-server is back, Longhorn rebuilds its replicas from
+   daniel-box. Bring back each
    shed service by the shed scenario's step 4, below: it reads `DEPLOY_HOLD` first, then resumes
    each flux-owned service. The rescheduled pods stay on daniel-box until their next rollout.
 
@@ -557,6 +565,7 @@ what each source records — not what "should" have happened.
 | SOPS decrypt with the recovery age key alone (no host key) | **No record found.** No drill of this specific path is recorded anywhere in the repo. | absence of any citation — see *Annual drill* below |
 | SOPS onboarding (`age-keygen` → `sops updatekeys` → onboard) | **Yes, routinely** — the standard way every host (daniel-pi, whose key was removed on 2026-10-03, and daniel-box) was onboarded. Never specifically exercised as a *total-loss* recovery (starting from the recovery key rather than a host's own fresh key). | `ansible/README.md` §5; the `sops_setup` role created the key until H7.24b |
 | Break-glass promotion (*GitHub, GHCR or Sigstore is unreachable*) | **Partly.** `flux-deletion-drill` verifies a bundle signed with a throwaway key through the flux role's break-glass source form on a kind cluster, and refuses one signed with another key. Not drilled: the runbook on production, source-controller's fetch through the registry's NetworkPolicy (kind enforces none), and the fresh-cluster steps. | `.github/workflows/flux-deletion-drill.yml`, cases `break-glass` and `break-glass-red` |
+| Rebuilding a cluster node on the package path (`docs/host-packages.md`) | **No.** Its guest drill is **operator-only** and waits for the k3s upgrade. CI runs `bootstrap-host.sh` only as far as a simulated install. | `docs/target-architecture/host/h7-delete-ansible.md`, *The proofs* |
 | Full total-loss sequence end to end (etcd + Longhorn + redeploy, in order, on hardware with nothing pre-existing) | **No.** Each piece above has partial or full drill coverage on its own; the sequence has not been run together. | inferred from the above — no doc claims otherwise |
 
 ## Annual drill (recommended — do not run this now)

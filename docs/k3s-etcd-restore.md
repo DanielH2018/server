@@ -362,6 +362,9 @@ sudo systemctl start k3s-agent
 If it does not rejoin, re-run the documented join:
 `uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server`.
 
+[Rebuilding a cluster node](host-packages.md#rebuilding-a-cluster-node) in
+`docs/host-packages.md` covers a replacement host on the package path, either node.
+
 ## After the restore
 
 1. `kubectl get nodes` — both nodes Ready.

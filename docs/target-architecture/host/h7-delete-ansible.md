@@ -1417,9 +1417,11 @@ card's key.
 
 ### The cluster-node bring-up
 
-`docs/break-glass.md` gains the cluster-node procedure in H7.15c, and
-`docs/longhorn-disaster-recovery.md` step 2 and `docs/k3s-etcd-restore.md` point at it in
-the same PR. Its steps are:
+`docs/host-packages.md` gains the cluster-node procedure in H7.15c (#7508), and
+`docs/break-glass.md`, `docs/longhorn-disaster-recovery.md` and `docs/k3s-etcd-restore.md`
+point at it in the same PR. The procedure takes the archive signing key after step 3, because
+the package creates the user that imports it, and it starts k3s by hand, because no package
+enable link names the unit. Its steps are:
 
 1. Run `bootstrap-host.sh` with `--until 4`, which installs k3s in the declared mode. On
    daniel-server the operator supplies `K3S_URL` and `K3S_TOKEN`, the token from
