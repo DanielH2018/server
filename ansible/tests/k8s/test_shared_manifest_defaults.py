@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""`k8s/manifests` renders a shared manifest for a role that ships none of its own.
+"""The renderer renders a shared manifest for a role that ships none of its own.
 
-WHY THIS EXISTS. `k8s/manifests` renders `ansible/templates/service-default.yaml.j2` and
+WHY THIS EXISTS. The renderer renders `ansible/templates/service-default.yaml.j2` and
 `ansible/templates/ingressroute-default.yaml.j2` for a role that ships no
 `templates/service.yaml.j2` or `templates/ingressroute.yaml.j2`. Three things have to stay true
 for that to keep working, and each fails silently on its own:
@@ -27,10 +27,7 @@ from collections import defaultdict
 
 import pytest
 
-from lib import yaml_fast
 from lib.k8s_roles import (
-    MANIFESTS_PRUNE_DEFAULT,
-    ROLLOUT_TIMEOUT_DEFAULT,
     SHARED_MANIFEST_DEFAULTS,
     shared_default_templates,
 )
@@ -38,7 +35,6 @@ from _helpers import ANSIBLE
 from _k8s_render import render_role_template
 from _role_census import role_dirs
 
-MANIFESTS = ANSIBLE / "roles" / "k8s" / "manifests"
 SHARED_TPL = ANSIBLE / "templates"
 
 # The roles whose Service the shared default renders. A census the tests below size themselves
@@ -66,7 +62,6 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
         "peanut",
         "prowlarr",
         "radarr",
-        "sonarr",
         "speedtest",
         "texbrain",
         "zigbee2mqtt",
@@ -107,29 +102,6 @@ SHARED_DEFAULT_CENSUS = {
         ROLES_WITH_A_DEFAULT_INGRESSROUTE,
     ),
 }
-
-
-def _manifests_defaults() -> dict:
-    return yaml_fast.safe_load((MANIFESTS / "defaults" / "main.yml").read_text()) or {}
-
-
-def test_the_two_maps_name_the_same_shared_templates():
-    """The deploy's `manifests_shared_defaults` and the harnesses' copy of it agree."""
-    assert (
-        _manifests_defaults()["manifests_shared_defaults"] == SHARED_MANIFEST_DEFAULTS
-    ), (
-        "manifests_shared_defaults (ansible/roles/k8s/manifests/defaults/main.yml) and "
-        "lib.k8s_roles.SHARED_MANIFEST_DEFAULTS have drifted. The deploy follows the first and "
-        "every offline render harness follows the second, so a mismatch drops manifests out of "
-        "the validator's corpus without failing anything."
-    )
-
-
-def test_the_renderer_constants_equal_the_role_defaults_they_mirror():
-    """The play reads the role's defaults and the renderer reads its constants; R4.7 ends the pair."""
-    defaults = _manifests_defaults()
-    assert defaults["manifests_prune"] is MANIFESTS_PRUNE_DEFAULT
-    assert defaults["manifests_rollout_timeout_default"] == ROLLOUT_TIMEOUT_DEFAULT
 
 
 def test_every_shared_default_template_exists():
@@ -188,26 +160,6 @@ def test_service_extra_ports_on_the_entry_adds_the_sidecar_port():
         "the primary port is unnamed beside a named sidecar port. Kubernetes rejects a Service "
         "mixing named and unnamed ports, and it rejects it at APPLY time — rendered:\n"
         f"{rendered}"
-    )
-
-
-def test_the_render_task_resolves_the_shared_source():
-    """The one task that reads the map. Nothing but a deploy runs it, so read its shape."""
-    tasks = yaml_fast.safe_load((MANIFESTS / "tasks" / "main.yml").read_text())
-    render = next(
-        t for t in tasks if t.get("name", "").startswith("Render manifests for ")
-    )
-    # An armed role's src is the labelling wrapper, which renders `manifests_label_src`; an
-    # unarmed role's src is `manifests_label_src` itself. Either way the source is chosen there.
-    src = render["vars"]["manifests_label_src"]
-    assert "manifests_label_src" in render["ansible.builtin.template"]["src"]
-    assert "manifests_shared_defaults[item]" in src, (
-        "the render task's src no longer consults manifests_shared_defaults, so every role "
-        f"relying on the fallback fails at the render. src is: {src!r}"
-    )
-    assert "manifests_own_src" in render["vars"], (
-        "the render task no longer defines manifests_own_src, the role's-own-template branch "
-        "of that src expression."
     )
 
 

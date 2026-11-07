@@ -58,21 +58,14 @@ _REFERENCE = re.compile(
 KNOWN_EDGES = {
     "ansible/roles/setup/common/tasks/install_host_lib.yml": {
         "deploy_ui",
-        "fake_remux",
         "gitops_deploy",
-        "renovate_agent",
-        "renovate_notify",
     },
     "hosts/lib/host_lib.py": {
         "deploy_ui",
-        "fake_remux",
         "gitops_deploy",
-        "renovate_agent",
-        "renovate_notify",
     },
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": {
         "deploy_ui",
-        "renovate_agent",
     },
     # Reached only through check_timer.yml, so this is the transitive edge.
     "ansible/roles/setup/common/templates/check-timer.timer.j2": {

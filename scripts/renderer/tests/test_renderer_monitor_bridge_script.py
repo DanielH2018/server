@@ -30,7 +30,7 @@ TAG = "monitor-bridge"
 ROLE = K8S_ROLES / TAG
 CONFIG_MAP_FILE = "script-configmap.yaml"
 ALL = frozenset({"ConfigMap", "Secret"})
-# k8s/manifests applies client-side, which copies each object into a
+# A client-side apply copies each object into a
 # `last-applied-configuration` annotation capped at 262144 bytes. Half of it leaves room for a
 # module to grow before the apply is refused, the budget game-stats' ConfigMaps keep too.
 ANNOTATION_CAP = 262144

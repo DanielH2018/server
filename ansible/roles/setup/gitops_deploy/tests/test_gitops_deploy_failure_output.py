@@ -39,7 +39,7 @@ def test_a_failure_reported_only_on_stdout_names_the_failing_task(
     assert "-> 2" in message
 
 
-TASK_HEADER = "TASK [k8s/manifests : Wait for the queued rollouts to finish] ****"
+TASK_HEADER = "TASK [k8s/volume-revert : Wait for the queued rollouts to finish] ****"
 RECAP = (
     "PLAY RECAP ****\n"
     "daniel-box : ok=1950 changed=254 unreachable=0 failed=1 skipped=1032 rescued=0 ignored=0"
@@ -51,7 +51,7 @@ def _timing_table(chars: int) -> str:
     rows = ["TASKS RECAP ****"]
     while len("\n".join(rows)) < chars:
         rows.append(
-            f"k8s/manifests : Render manifests for service-{len(rows)} ------- 9.40s"
+            f"k8s/volume-revert : Render manifests for service-{len(rows)} ------- 9.40s"
         )
     return "\n".join(rows)
 
@@ -126,7 +126,7 @@ def test_the_failing_task_drops_the_ok_items_of_a_loop_and_keeps_its_failed_ones
     gitops_deploy,
 ) -> None:
     text = (
-        "TASK [k8s/manifests : Apply each manifest] ****\n"
+        "TASK [k8s/volume-revert : Apply each manifest] ****\n"
         "ok: [daniel-box] => (item=a)\n"
         "ok: [daniel-box] => (item=b)\n"
         'failed: [daniel-box] (item=c) => {"msg": "c broke"}\n'
@@ -137,7 +137,7 @@ def test_the_failing_task_drops_the_ok_items_of_a_loop_and_keeps_its_failed_ones
     found = deploy_io.failing_task(text)
     assert found is not None
     task, _ = found
-    assert task.startswith("TASK [k8s/manifests : Apply each manifest]")
+    assert task.startswith("TASK [k8s/volume-revert : Apply each manifest]")
     assert "(item=c)" in task
     assert "One or more items failed" in task
     assert "(item=a)" not in task
@@ -293,7 +293,7 @@ def test_the_alert_excerpt_keeps_the_failing_task_ahead_of_a_long_stderr(
 # FIRST in a timeout's detail, the way the failing task does in a non-zero exit's. RED proof:
 # with `timeout_detail` emitting a plain tail of stdout, the header below sits ~2000 characters
 # past the excerpt window and this assertion fails while the journal-level test still passes.
-WEDGED_HEADER = "TASK [k8s/manifests : Apply the rendered manifests] ****"
+WEDGED_HEADER = "TASK [k8s/volume-revert : Apply the rendered manifests] ****"
 
 _WEDGED_WITH_CHATTER = f"""echo '{WEDGED_HEADER}'
 awk 'BEGIN {{ for (i = 0; i < 400; i++) print "changed: [daniel-box] => (item=manifest-" i ")" }}'

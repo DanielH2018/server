@@ -5,7 +5,7 @@ Meilisearch Deployment for search, and a `time-tagger` sidecar that calls the ap
 loop to auto-tag bookmarks.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=karakeep` with exit 5
 - **Images:** `ghcr.io/karakeep-app/karakeep` (`karakeep_k8s_image`),
@@ -17,7 +17,7 @@ loop to auto-tag bookmarks.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5652, Wave C). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. `k8s_autodeploy: false`
   still stops Renovate's
   automerge of a pin bump.
@@ -26,8 +26,7 @@ loop to auto-tag bookmarks.
   `karakeep-prepull` pulls all four Deployments' images onto their node beside it, and
   `karakeep` depends on both (#5778). `karakeep` waits up to its 1200s
   `manifests_rollout_timeout`. `karakeep-verify` then runs the archive
-  pruner's gate (below). `tasks/main.yml` keeps the image-builder and manifests includes until R4
-  deletes them, and no Flux path runs them.
+  pruner's gate (below).
 - **The Authelia bypass:** `/api/v1/`, `/api/trpc/` and `/api/assets`, deliberately public (Bearer-token auth; the
   browser extension and mobile app can't pass 2FA, and they speak tRPC, not the REST API).
   `/api/auth/*` (next-auth's password login) stays behind Authelia on both names: the bypass
@@ -101,8 +100,7 @@ loop to auto-tag bookmarks.
   MB in six layers. On 2026-10-18 its largest layer (28.2 MB) pulled from GHCR at 0.32-0.34
   MB/s, so a cold pull takes about 270-290s, inside the 1200s budget. `karakeep-prepull` pulls
   it before `karakeep` applies, so the `Recreate` pod is not down for that pull.
-  The image is named `karakeep`, not `karakeep-time-tagger`: `k8s/manifests` keys
-  `k8s_rebuilt_images` on `manifests_service`. The pod the rebuild has to roll is the tagger's,
+  The image is named `karakeep`, not `karakeep-time-tagger`. The pod the rebuild has to roll is the tagger's,
   which `manifests_extra_rollouts` already covers. The main pod's `wait-for-deps` initContainer
   runs this image too — it is the role's only image with a `python3` and no s6 init — so both
   init containers assert uid 1000 as well.

@@ -151,10 +151,14 @@ pythonpath = [
   "ansible/roles/k8s/crowdsec/files",
   # flux_job_connect.py is the one transport of every Job script Flux runs, and
   # arr-notification's seed imports it from here on the controller path too.
-  "ansible/roles/k8s/manifests/files",
+  "scripts/renderer/job_files",
   # The claude-code host component's scripts, which its tests import by bare name the way a
   # role's tests import its `files/` through ansible/roles/conftest.py.
   "hosts/components/claude-code/files",
+  # The same for the renovate-agent, renovate-notify and fake-remux components.
+  "hosts/components/renovate-agent/files",
+  "hosts/components/renovate-notify/files",
+  "hosts/components/fake-remux/files",
   # `scripts` resolves the cross-directory `from lib.docs_provenance import ...` form (a PEP 420
   # namespace package — the subdirectories deliberately have no __init__.py, which would change
   # how pytest names the test modules under them). Each remaining subdirectory is listed as well
@@ -358,8 +362,8 @@ extra-paths = [
   "ansible/roles/k8s/qbittorrent/files",
   "ansible/roles/k8s/pihole/files",
   "ansible/roles/k8s/arr-notification/files",
-  "ansible/roles/k8s/manifests/files",
-  "ansible/roles/setup/fake_remux/files",
+  "scripts/renderer/job_files",
+  "hosts/components/fake-remux/files",
   "ansible/roles/k8s/ical-proxy/files",
   "ansible/roles/k8s/homelab-mcp/files",
   "ansible/roles/k8s/crowdsec/files",
@@ -367,8 +371,8 @@ extra-paths = [
   "ansible/roles/k8s/artifacts/files",
   "hosts/components/k3s-host-checks/files",
   "ansible/roles/setup/hypervisor/files",
-  "ansible/roles/setup/renovate_notify/files",
-  "ansible/roles/setup/renovate_agent/files",
+  "hosts/components/renovate-notify/files",
+  "hosts/components/renovate-agent/files",
   "hosts/components/claude-code/files",
   "ansible/roles/k8s/home-assistant/files",
   "ansible/roles/k8s/tdarr/files",

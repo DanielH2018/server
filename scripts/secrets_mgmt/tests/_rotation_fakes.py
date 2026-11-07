@@ -3,11 +3,10 @@
 Every fake appends `(name, args, kwargs)` to a shared `calls` list, which is how a test proves
 "the registry was saved after the value was written" without reading source.
 
-THE SUBPROCESS BOUNDARIES KEEP THEIR REAL IMPLEMENTATIONS. `sops_set` and `deploy` are
-`rotation_tools`' own functions with a recording `run` injected, not lambdas. Replacing them
-wholesale would retire the argv assertions that are the point of `sops_set` — the token must
-reach the process on stdin, never in argv. `process_calls` returns exactly what those two
-handed the runner.
+THE SUBPROCESS BOUNDARY KEEPS ITS REAL IMPLEMENTATION. `sops_set` is `rotation_tools`' own
+function with a recording `run` injected, not a lambda. Replacing it wholesale would retire the
+argv assertions that are its point — the token must reach the process on stdin, never in argv.
+`process_calls` returns exactly what it handed the runner.
 """
 
 import datetime as dt
@@ -24,7 +23,6 @@ import yaml
 from secrets_mgmt.cluster_vars_check import Expected, Tree
 from secrets_mgmt.rotation_tools import (
     RotationTools,
-    run_deploy,
     sops_set,
 )
 
@@ -45,9 +43,9 @@ class Fakes:
     run_error: BaseException | None = None
     # A non-zero rc raises for a caller that passed `check=True`, the way subprocess does.
     run_rc: int = 0
-    # Deploy tag to `owner`, as `lib.k8s_roles.tag_owners` maps it. Empty is the live tree's
-    # answer until a service moves to Flux.
-    owners: dict[str, str] = field(default_factory=dict)
+    # Deploy tag to `owner`, as `lib.k8s_roles.tag_owners` maps it. The default is the live
+    # tree, where every consumer `consumer_tags` names is flux-owned.
+    owners: dict[str, str] = field(default_factory=lambda: {"monitor-bridge": "flux"})
     # The tree the cluster hook reads. The default holds no cluster file, so the hook is a
     # no-op and no test reaches the real `cluster_vars.py write`; a test that wants the hook
     # to run builds a tree in `tmp_path`.
@@ -89,8 +87,6 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
             raise f.run_error
         # `check=True` raises here for the same reason it does in subprocess. `sops_set`
         # passes it and reads the exception as "the rotation must not be recorded".
-        # `run_deploy` passes no `check` and reads `.returncode`, so a non-zero rc reaches
-        # it as a return value.
         if kwargs.get("check") and f.run_rc:
             raise subprocess.CalledProcessError(f.run_rc, cmd)
         return subprocess.CompletedProcess(cmd, f.run_rc, stdout="", stderr="")
@@ -130,7 +126,6 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         sops_names=sops_names,
         host_file_keys=lambda: f.host_keys,
         sops_set=partial(sops_set, run=run),
-        deploy=partial(run_deploy, run=run),
         owners=lambda: f.owners,
         cluster_tree=lambda: Tree(f.cluster_root),
         cluster_expected=cluster_expected,

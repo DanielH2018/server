@@ -10,10 +10,7 @@ Run: uv run pytest scripts/renderer/tests/test_renderer_live_read_census.py
 from pathlib import Path
 
 import pytest
-import yaml
 from _live_read_census import (
-    K8S_PLAY,
-    ROLE_LOOP,
     Census,
     CensusError,
     Tree,
@@ -23,7 +20,7 @@ from _live_read_census import (
 
 from lib.repo_paths import K8S_ROLES
 
-# What a fixture's renderer derives: one secret key and the play's containers_list view.
+# What a fixture's renderer derives: one secret key and the containers_list view.
 FIXTURE_DERIVED = frozenset({"alpha_token", "containers_list"})
 
 
@@ -31,31 +28,11 @@ def test_the_tree_feeds_no_live_read_to_a_rendered_template():
     assert real_census().offenders() == []
 
 
-# One name each task file sets, for the files the walk must enter: the play's preamble, the
-# two helper roles every k8s role includes, and the post_tasks.
-WALKED = {
-    "ansible_become_password": "pre_tasks/load_secrets.yml",
-    "k8s_built_image_tags": "roles/k8s/image-builder/tasks/main.yml",
-    "manifests_render": "roles/k8s/manifests/tasks/main.yml",
-    "k8s_image_drift_pods": "post_tasks/k8s_image_drift_gate.yml",
-}
-
-
-def test_the_task_walk_enters_every_file_the_play_reaches():
-    setters = real_census().set_by_tasks
-    missing = {
-        name: path
-        for name, path in WALKED.items()
-        if path not in setters.get(name, set())
-    }
-    assert missing == {}
-
-
 def test_the_census_finds_its_named_members():
     found = real_census()
-    # A task sets it, and the renderer derives it. Templates reach it only through role
-    # defaults, which proves the definition walk.
-    assert "k8s_built_image_tags" in found.set_by_tasks.keys() & found.derived
+    # The renderer derives it. Templates reach it only through role defaults, which proves the
+    # definition walk.
+    assert "k8s_built_image_tags" in found.derived
     readers = found.reached["k8s_built_image_tags"]
     assert readers and all("/defaults/" in reader for reader in readers)
     # The `vars` lookup source. The bridge's push tokens were the other until M6 batch A6's
@@ -90,18 +67,10 @@ def _census(
     defaults: str = "{}",
     files: dict[str, str] | None = None,
 ) -> Census:
-    """The census over a tree with one role, `widget`, that the k8s play's batch loop runs."""
+    """The census over a tree with one render target, `widget`."""
     ansible = tmp_path / "ansible"
     role = ansible / "roles" / "k8s" / "widget"
-    play = [
-        {
-            "name": K8S_PLAY,
-            "hosts": "all",
-            "tasks": [{"ansible.builtin.include_role": {"name": ROLE_LOOP}}],
-        }
-    ]
     written = {
-        ansible / "deploy.yml": yaml.safe_dump(play),
         ansible / "inventory" / "group_vars" / "all.yml": "{}\n",
         ansible / "inventory" / "host_vars" / "daniel-box.yml": "{}\n",
         role / "tasks" / "main.yml": tasks,

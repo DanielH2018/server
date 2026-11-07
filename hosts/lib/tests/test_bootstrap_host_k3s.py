@@ -6,6 +6,7 @@ Run: uv run pytest hosts/lib/tests/test_bootstrap_host_k3s.py
 
 import pytest
 from _bootstrap_host import AGENT_ENV, FakeHost, stocked_server
+from renderer.renderer_lib import host as host_mode
 
 
 def test_the_agent_installs_k3s_in_agent_mode_and_never_prints_the_token(tmp_path):
@@ -15,7 +16,7 @@ def test_the_agent_installs_k3s_in_agent_mode_and_never_prints_the_token(tmp_pat
 
     assert result.returncode == 0, result.stderr
     args = (host.root / "installer.args").read_text()
-    assert args.startswith("agent v1.37.1+k3s1 skipenable=true skipstart=true")
+    assert args.startswith("agent v1.37.2+k3s1 skipenable=true skipstart=true")
     assert "url=https://server.invalid:6443 token=set" in args
     assert AGENT_ENV["K3S_TOKEN"] not in result.stdout + result.stderr
     assert (host.root / "etc/systemd/system/k3s-agent.service").exists()
@@ -66,8 +67,31 @@ def test_the_server_installs_in_server_mode_even_with_agent_variables_exported(
 
     assert result.returncode == 0, result.stderr
     args = (host.root / "installer.args").read_text()
-    assert args.startswith("server v1.37.1+k3s1")
+    assert args.startswith("server v1.37.2+k3s1")
     assert args.strip().endswith("url=unset token=")
+
+
+def test_the_script_leaves_the_unit_stopped_and_says_the_operator_starts_it(tmp_path):
+    host = stocked_server(tmp_path)
+
+    result = host.run("daniel-server", "--offline", str(host.kit), **AGENT_ENV)
+
+    assert result.returncode == 0, result.stderr
+    assert (
+        "k3s-agent.service stays stopped until the operator starts it" in result.stdout
+    )
+    assert not [c for c in host.commands() if c.startswith("systemctl") and "k3s" in c]
+
+
+@pytest.mark.parametrize(
+    ("node", "unit"),
+    [("daniel-box", "k3s.service"), ("daniel-server", "k3s-agent.service")],
+)
+def test_no_cluster_package_ships_an_enable_link_for_its_k3s_unit(node, unit):
+    links = host_mode.render_host(node).enable_links()
+
+    assert "homelab-updater.timer" in links, "this reads some other list of links"
+    assert unit not in links
 
 
 @pytest.mark.parametrize(

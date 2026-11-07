@@ -191,10 +191,10 @@ def test_a_shipped_row_adopted_with_use_tables_is_the_one_read(tree):
 
 @pytest.mark.parametrize(
     ("role", "tag"),
-    [("deploy_ui", "deploy-ui-code"), ("renovate_agent", "renovate-agent-code")],
+    [("deploy_ui", "deploy-ui-code")],
 )
 def test_the_real_consumers_of_gitops_markers_narrow_to_their_code_tag(role, tag):
-    """The two roles #3275 points at the deployer's file, read from the real tree."""
+    """The role #3275 points at the deployer's file, read from the real tree."""
     index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
     assert index.readers_of("gitops_markers.py") == frozenset({tag})
 
@@ -203,7 +203,6 @@ def test_the_real_consumers_of_gitops_markers_narrow_to_their_code_tag(role, tag
     ("role", "tags"),
     [
         ("gitops_deploy", {"gitops-deploy-code"}),
-        ("renovate_notify", {"renovate-notify-code"}),
     ],
 )
 def test_a_common_task_file_narrows_to_the_tags_importing_it(role, tags):
@@ -249,16 +248,8 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
 NARROWED_SETUP_FILES = {
     ("deploy_ui", "tasks/code.yml"): {"deploy-ui-code"},
     ("deploy_ui", "tasks/service.yml"): {"deploy-ui-service"},
-    ("renovate_agent", "tasks/code.yml"): {"renovate-agent-code"},
-    ("renovate_agent", "tasks/service.yml"): {"renovate-agent-service"},
-    ("renovate_notify", "tasks/code.yml"): {"renovate-notify-code"},
-    ("renovate_notify", "tasks/service.yml"): {"renovate-notify-service"},
     ("gitops_deploy", "tasks/code.yml"): {"gitops-deploy-code"},
     ("gitops_deploy", "tasks/service.yml"): {"gitops-deploy-service"},
-    ("gitops_deploy", "tasks/github_checks.yml"): {
-        "cron",
-        "gitops-deploy-github-checks",
-    },
     ("gitops_deploy", "tasks/teardown.yml"): {"gitops-deploy-teardown"},
     ("hypervisor", "tasks/network.yml"): {"hypervisor-network"},
     ("hypervisor", "tasks/etcd_drill.yml"): {"hypervisor-etcd-drill"},

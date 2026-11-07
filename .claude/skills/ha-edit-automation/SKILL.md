@@ -58,7 +58,7 @@ Keep cross-cutting logic single-sourced: the lux gate lives **only** in
 ## 3. Carry a NEW config file into the ConfigMap
 
 Files that already exist redeploy automatically — the ConfigMap embeds them, so an edit changes
-the rendered manifest and `k8s/manifests` rolls the pod. But a **new** `files/*.yaml` or
+the rendered manifest and the renderer's restart stamp rolls the pod. But a **new** `files/*.yaml` or
 `custom_templates/*.jinja` needs its own `lookup('file', …)` line in
 `templates/configmap.yaml.j2` (and its install line in `deployment.yaml.j2`, plus an `!include`
 if HA must load it). Miss that and the deploy is green while the pod never sees the file.

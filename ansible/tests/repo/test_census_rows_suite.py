@@ -94,15 +94,10 @@ ROLE_DIRS_CALLERS = frozenset(
         "k8s/test_built_images_name_the_content_tag.py",
         "k8s/test_checksum_annotations_documented.py",
         "k8s/test_configmap_keys_not_absorbed.py",
-        "k8s/test_manifest_roles_include_the_shared_render.py",
         "deploy/test_cronjob_only_roles_include_the_gate.py",
-        "deploy/test_inline_rollout_gates.py",
         "deploy/test_k8s_autodeploy_guard.py",
         "deploy/test_k8s_dry_run.py",
-        "deploy/test_k8s_dry_run_host_writes.py",
-        "deploy/test_manifests_prune.py",
         "deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
-        "deploy/test_restart_on_narrows_the_restart_signals.py",
         "repo/test_role_claude_md.py",
         "services/test_bridge_patch_boundary.py",
         "setup/test_has_flag_roles_have_both_directions.py",
@@ -207,7 +202,6 @@ ROWS = (
         must_find=frozenset(
             {
                 "ansible/tests/_role_census.py",
-                "ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py",
             }
         ),
         allow={

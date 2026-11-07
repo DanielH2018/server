@@ -121,7 +121,7 @@ def test_the_branch_prefix_is_the_one_the_fence_lets_the_agent_push(
     monkeypatch,
 ) -> None:
     prefix = environment(unit())[options.REQUIRE_BRANCH_PREFIX_ENV]
-    fence = defaults(ANSIBLE / "roles" / "setup" / "gitops_deploy")[
+    fence = defaults(ANSIBLE.parent / "hosts" / "components" / "github-checks")[
         "gitops_deploy_fence_ruleset_exclude"
     ]
     # Master is excluded too, so the agent's account can merge a PR; the lander still lands

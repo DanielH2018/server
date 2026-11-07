@@ -21,6 +21,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 from lib.repo_paths import ANSIBLE, REPO, ROLES
+from renderer.renderer_lib.host_sources import SHARED_FILES
 
 # A role command running a script `--no-project`: the first `.py` path after the flag, in one
 # command. The scan stops at a blank line, a `-m` (a module run names no path) or the next
@@ -32,10 +33,18 @@ _ROLE_RUN = re.compile(
     r"((?:\{\{[^}]*\}\}|[^\s\"'{}])+\.py)\b"
 )
 _JINJA = re.compile(r"\{\{\s*([\w|. ]+?)\s*\}\}")
+COMPONENTS = REPO / "hosts" / "components"
+# Templates no task renders, so no host runs their commands. The setup-drift reader still compares
+# this one's bytes on a host that has not retired its fragment (#7561).
+UNRENDERED_TEMPLATES = frozenset(
+    {"setup/initial_setup/templates/loki-read-route-health.sh.j2"}
+)
 
 
 def _role_of(path: Path) -> Path:
-    """The role directory `path` sits in: `ansible/roles/<plane>/<name>`."""
+    """The role or component directory `path` sits in."""
+    if path.is_relative_to(COMPONENTS):
+        return COMPONENTS / path.relative_to(COMPONENTS).parts[0]
     plane, name = path.relative_to(ROLES).parts[:2]
     return ROLES / plane / name
 
@@ -134,20 +143,22 @@ def install_map() -> dict[str, tuple[Path, Path]]:
                             REPO / pair["src"],
                             task_file,
                         )
-    # A host component installs a role's script by its own `role-file:` entry, and a shared module
-    # beside it by a `lib:` entry, once the role's tasks no longer copy them (H7.40 emptied
-    # `claude_code`'s).
-    for component in sorted((REPO / "hosts" / "components").glob("*/component.yml")):
+    # A host component installs a script by a `src:` or `role-file:` entry, and a shared
+    # module beside it by a `lib:` or `shared:` entry.
+    for component in sorted(COMPONENTS.glob("*/component.yml")):
         data = yaml_fast.safe_load(component.read_text(encoding="utf-8")) or {}
         role_dirs = sorted(ROLES.glob(f"*/{data.get('role')}"))
-        if not role_dirs:
-            continue
         for entry in data.get("files") or []:
-            name = str(entry.get("src", "")).removeprefix("role-file:")
-            if name != entry.get("src"):
+            src = str(entry.get("src", ""))
+            if src.endswith(".py") and ":" not in src:
+                add(entry["dst"], component.parent / src, component)
+            name = src.removeprefix("role-file:")
+            if name != src and role_dirs:
                 add(entry["dst"], role_dirs[0] / "files" / name, component)
             if entry.get("lib"):
                 add(entry["dst"], REPO / "hosts" / "lib" / entry["lib"], component)
+            if entry.get("shared") in SHARED_FILES:
+                add(entry["dst"], REPO / SHARED_FILES[entry["shared"]], component)
     return found
 
 
@@ -209,16 +220,20 @@ def role_entry(spelled: str, holder: Path) -> Path:
 
 
 def role_entries() -> list[tuple[Path, tuple[str, ...]]]:
-    """Each script a role's task or template runs `--no-project`, run with no subcommand.
+    """Each script a role or a component runs `--no-project`, run with no subcommand.
 
     No subcommand means every call-time import of the entry counts, which over-covers a
     script with two subcommands rather than parsing which one each cron passes.
     """
     found = []
-    for path in sorted(ROLES.rglob("*")):
+    for path in sorted([*ROLES.rglob("*"), *COMPONENTS.rglob("*")]):
         if (
             path.suffix not in {".yml", ".yaml", ".j2"}
-            or "tests" in path.relative_to(ROLES).parts
+            or "tests" in path.parts
+            or (
+                path.is_relative_to(ROLES)
+                and path.relative_to(ROLES).as_posix() in UNRENDERED_TEMPLATES
+            )
             or not path.is_file()
         ):
             continue

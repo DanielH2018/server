@@ -1,6 +1,6 @@
 """`_as_filter` has one home, and every filter plugin that wraps its filters imports it (#4527).
 
-`_as_filter` re-raises a filter's `ValueError` as `AnsibleFilterError("<filter>: ...")`. After
+`_as_filter` re-raises a filter's `ValueError` as `FilterError("<filter>: ...")`. After
 #4480 and #4505 seven plugins carried their own verbatim copy, so a change to its contract had
 to be made seven times and nothing checked the copies agreed.
 
@@ -12,6 +12,9 @@ Run: uv run pytest ansible/tests/repo/test_filter_plugins_share_as_filter.py
 
 import ast
 import importlib
+
+import pytest
+from filter_errors import FilterError, _as_filter
 
 from _helpers import REPO
 from _row_table import tracked
@@ -103,6 +106,20 @@ def test_each_wrapping_plugin_imports_as_filter_and_keeps_a_literal_filters_dict
                 f"{rel}: the narrowing census no longer reads its filter names"
             )
     assert not problems, "\n".join(problems)
+
+
+def test_a_wrapped_filter_calling_a_wrapped_filter_names_only_the_one_that_refused():
+    """`FilterError` is a `ValueError`, so the outer wrapper must not prefix it a second time."""
+
+    def inner():
+        raise ValueError("refused")
+
+    def outer():
+        _as_filter(inner)()
+
+    with pytest.raises(FilterError) as caught:
+        _as_filter(outer)()
+    assert str(caught.value) == "inner: refused"
 
 
 def test_every_wrapping_plugin_runs_the_same_wrapper():

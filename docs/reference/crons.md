@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-11-07 04:45 UTC
-generated_sha: c1d338364
+generated_at: 2026-11-07 15:25 UTC
+generated_sha: 210d1d2707
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,21 +12,25 @@ generated_sha: c1d338364
 
 # Scheduled jobs
 
-49 job(s) scheduled by the roles' crons and the host packages' timers.
+48 job(s) scheduled by the roles' crons and the host packages' timers.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
 
 | Job | Schedule | Host | User | Changes state | Defined in |
 |---|---|---|---|---|---|
+| B2 backup budget listing | `20 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| B2 deletion accounting | `10 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Full etcd restore drill in a throwaway guest | `20 11 1 * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
+| Longhorn backup health | `*/10 * * * *` | every host in the play | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| daniel-box disk health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| etcd restore drill | `20 10 * * 1` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
+| etcd token drift | `45 2 * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | fake-remux health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux reconcile | `*/20 * * * *` | every host in the play | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux scan | `45 4 * * *` | every host in the play | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | homelab-aide-check.timer | `OnCalendar=Mon *-*-* 03:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-aide-check.timer` |
 | homelab-apt-autoremove.timer | `OnCalendar=Sun *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-apt-autoremove.timer` |
-| homelab-b2-budget-listing.timer | `OnCalendar=*-*-* 7:20:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-budget-listing.timer.j2` |
-| homelab-b2-deletion-accounting.timer | `OnCalendar=*-*-* 7:10:00` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-b2-deletion-accounting.timer.j2` |
 | homelab-builder.timer | `OnBootSec=2min, OnUnitActiveSec=2min` | daniel-box | `homelab-builder` | read the script | `hosts/components/builder/units/homelab-builder.timer` |
 | homelab-claude-agent-browser.timer | `OnBootSec=10min, OnUnitInactiveSec=6h` | daniel-box, daniel-server | `claude` | read the script | `hosts/components/claude-code/units/homelab-claude-agent-browser.timer` |
 | homelab-claude-cgroup-metrics.timer | `OnBootSec=30s, OnUnitActiveSec=30s` | daniel-box, daniel-server | `root` | read the script | `hosts/components/claude-code/templates/claude-cgroup-metrics.timer.j2` |
@@ -39,19 +43,15 @@ generated_sha: c1d338364
 | homelab-claude-rc-restart.timer | `OnCalendar=weekly` | daniel-box, daniel-server (no enable link) | `root` | yes (restart) | `hosts/components/claude-code/templates/claude-rc-restart.timer.j2` |
 | homelab-claude-triage-poll.timer | `OnBootSec=5min, OnUnitActiveSec=2min` | daniel-box | `claude` | read the script | `hosts/components/claude-code/templates/claude-triage-poll.timer.j2` |
 | homelab-crowdsec-probe.timer | `OnBootSec=1min, OnUnitActiveSec=1min` | daniel-pi | `ubuntu` | read the script | `hosts/components/crowdsec-probe/units/homelab-crowdsec-probe.timer` |
-| homelab-disk-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | read the script | `hosts/components/k3s-host-checks/units/homelab-disk-health.timer.j2` |
 | homelab-docker-engine.timer | `OnCalendar=*-*-* 00:30:00` | daniel-pi | `root` | yes (apply) | `hosts/components/pi-docker/units/homelab-docker-engine.timer` |
 | homelab-docker-prune.timer | `OnCalendar=*-*-* 06:30:00` | daniel-pi | `root` | yes (prune) | `hosts/components/host-maintenance/units/homelab-docker-prune.timer.j2` |
 | homelab-docs-refresh.timer | `OnCalendar=*-*-* 06,18:17:00` | daniel-box | `ubuntu` | read the script | `hosts/components/docs-refresh/units/homelab-docs-refresh.timer` |
 | homelab-dpkg-purge.timer | `OnCalendar=Sun *-*-* 02:15:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/host-maintenance/units/homelab-dpkg-purge.timer` |
-| homelab-etcd-restore-drill.timer | `OnCalendar=Mon *-*-* 10:20:00` | daniel-box | `root` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-etcd-restore-drill.timer.j2` |
-| homelab-etcd-token-drift.timer | `OnCalendar=*-*-* 2:45:00` | daniel-box | `root` | read the script | `hosts/components/k3s-host-checks/units/homelab-etcd-token-drift.timer.j2` |
 | homelab-eval-sweep.timer | `OnCalendar=Sun *-*-* 02:00:00` | daniel-box | `ubuntu` | read the script | `hosts/components/eval-sweep/units/homelab-eval-sweep.timer` |
 | homelab-firmware-update.timer | `OnCalendar=Sun *-*-* 07:00:00` | daniel-box | `root` | read the script | `hosts/components/host-maintenance/units/homelab-firmware-update.timer` |
 | homelab-infra-map.timer | `OnCalendar=*-*-* *:00,15,30,45:00` | daniel-box | `ubuntu` | read the script | `hosts/components/infra-map/units/homelab-infra-map.timer` |
 | homelab-k3s-restart.timer | `OnCalendar=Mon..Fri *-*-02..31 11:32:00` | daniel-box | `root` | yes (deploy, restart) | `hosts/components/k3s-restart/units/homelab-k3s-restart.timer.j2` |
-| homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
-| homelab-longhorn-backup-health.timer | `OnCalendar=*:00/10` | daniel-box | `ubuntu` | yes (backup) | `hosts/components/k3s-host-checks/units/homelab-longhorn-backup-health.timer.j2` |
+| homelab-loki-route-witness.timer | `OnCalendar=*-*-* *:23:00` | daniel-box, daniel-server | `ubuntu` | read the script | `hosts/components/loki-route-witness/units/homelab-loki-route-witness.timer` |
 | homelab-pi-gz-integrity.timer | `OnCalendar=*-*-* 01:40:00, OnActiveSec=1min` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-gz-integrity.timer` |
 | homelab-pi-recovery.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-recovery.timer` |
 | homelab-pi-sd-health.timer | `OnCalendar=*:0/5` | daniel-pi | `ubuntu` | read the script | `hosts/components/pi-heartbeats/units/homelab-pi-sd-health.timer` |
@@ -60,7 +60,6 @@ generated_sha: c1d338364
 | homelab-registry-gc.timer | `OnCalendar=Sun *-*-* 04:20:00` | daniel-box | `root` | read the script | `hosts/components/registry-gc/units/homelab-registry-gc.timer` |
 | homelab-rkhunter-check.timer | `OnCalendar=Wed *-*-* 02:00:00` | daniel-box, daniel-pi, daniel-server | `root` | read the script | `hosts/components/integrity-scans/units/homelab-rkhunter-check.timer` |
 | homelab-secret-rotation-audit.timer | `OnCalendar=*-*-* 08:30:00` | daniel-box | `ubuntu` | read the script | `hosts/components/secret-rotation/units/homelab-secret-rotation-audit.timer` |
-| homelab-secret-rotation.timer | `OnCalendar=Sun *-*-* 09:00:00` | daniel-box | `ubuntu` | yes (rotate) | `hosts/components/secret-rotation/units/homelab-secret-rotation.timer` |
 | homelab-sync-artifacts.timer | `OnCalendar=*-*-* *:00/5:00` | daniel-box | `ubuntu` | read the script | `hosts/components/claude-code/units/homelab-sync-artifacts.timer.j2` |
 | homelab-updater-poll.timer | `OnBootSec=15min, OnUnitActiveSec=15min` | daniel-pi | `root` | read the script | `hosts/components/pi-updater-poll/units/homelab-updater-poll.timer` |
 | homelab-updater.timer | `OnBootSec=5min, OnUnitActiveSec=5min` | daniel-box, daniel-server | `root` | read the script | `hosts/packages/homelab-updater/package.yml` |

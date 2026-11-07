@@ -76,9 +76,7 @@ ROWS = (
         must_find=frozenset(
             {
                 "ansible/tests/_ci_scoping.py",
-                "ansible/tests/longhorn/test_volume_snapshot_register.py",
                 ".claude/hooks/tests/test_rules_globs_match_a_tracked_file.py",
-                "ansible/roles/setup/renovate_agent/tests/test_prepare_worktree.py",
                 "scripts/deploy_tools/tests/_narrow_fixtures.py",
                 "scripts/deploy_tools/tests/test_deploy_staleness.py",
                 "scripts/deploy_tools/tests/test_land_tools.py",

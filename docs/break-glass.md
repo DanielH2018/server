@@ -107,7 +107,8 @@ otherwise; none of the values below are secrets themselves, only names and locat
     - **The offline bootstrap files.** `sudo hosts/bootstrap-host.sh <host> --offline <kit-dir>`
       reads every fetch from one directory and checks each file against the pin the download
       path checks. A file that is missing or differs from its pin stops the script and names
-      the file. The kit holds no `log2ram` package. On the Pi, step 5 installs it from
+      the file. The kit holds no `age` package, so step 3 installs it from Ubuntu's archive,
+      which step 5 also needs for the packages' Depends. The kit holds no `log2ram` package. On the Pi, step 5 installs it from
       `packages.azlux.fr`. If that host does not answer, the script prints a warning and goes on
       with `/var/log` on the SD card. To install the package, rerun the script once the host
       answers. The directory holds, for the node's architecture:
@@ -366,17 +367,11 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
 
 2. Copy `hosts/bootstrap-host.sh` and `hosts/keys/homelab-archive-keyring.gpg` from a clone or
     the item 8 bundle onto the boot partition. Both files are public.
-3. Boot the Pi and log in at the console. Install `age`, because script step 3 runs `age-keygen`
-    before the package that depends on `age` installs. Create the `ssh-users` group and add
-    `ubuntu`, because the package's `AllowGroups ssh-users` otherwise locks out `ubuntu` and
-    `pi-peer-backup`.
+3. Boot the Pi and log in at the console. Wait for cloud-init, because the script's `apt-get`
+    calls need the lock cloud-init holds on first boot.
 
     ```bash
     cloud-init status --wait
-    sudo apt-get update
-    sudo apt-get install -y age
-    sudo groupadd -f ssh-users
-    sudo usermod -aG ssh-users ubuntu
     hostname -I
     ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
     ```
@@ -389,6 +384,11 @@ daniel-box's packages stages the Pi as the canary, so its gate stays open until 
     ```bash
     sudo sh /boot/firmware/bootstrap-host.sh daniel-pi --until 4
     ```
+
+    Script step 3 installs `age`. Its `apt-get update` can take up to an hour on this board,
+    because `appstream`'s apt hook runs until script step 4 purges the package. Script step 4
+    also creates the `ssh-users` group and adds `ubuntu`, because the package's
+    `AllowGroups ssh-users` otherwise locks out `ubuntu` and `pi-peer-backup`.
 
 5. To let the first package decrypt its secrets, add the new key to the
     `vars/hosts/daniel-pi\.sops\.yaml$` rule in `ansible/.sops.yaml`, **without removing the old
@@ -621,7 +621,9 @@ If your own working machine is what's gone, the lab itself needs nothing done to
    guard denies it (`docs/claude-shell-permissions.md`, *Inspecting a secret without
    decrypting it*).
 3. From there, operate normally — `land.sh`, `probe.py`, etc., per the repo-root CLAUDE.md
-   command tables.
+   command tables. The cluster changes only through Flux's promotion: merge the change, and
+   `land.sh` follows it. [Deploying by hand](deploying.md) says which path applies a setup role
+   or a Pi change.
 
 ### Scenario: `systemctl restart k3s` never returns after an API-server flag change
 

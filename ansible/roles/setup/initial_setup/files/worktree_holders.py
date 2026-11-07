@@ -6,7 +6,7 @@ refuse that uid for another user's process. `lib.worktrees.processes_using` used
 another uid only inside the caller's own login slice (#3994), so a `claude` process started
 through `su`, `runuser -l` or `systemd-run --uid` could hold a worktree unseen (#4170).
 
-Installed root-owned at /usr/local/libexec/worktree-holders and run by
+Installed root-owned at /usr/lib/homelab/worktree-holders and run by
 `worktree-holders@.service`, one instance per connection to `worktree-holders.socket`
 (`Accept=yes`), with the connection on stdin. A socket needs no setuid, so a caller with
 `NoNewPrivileges=yes`, such as a claude-rc.service session, can ask it too (#4297). The

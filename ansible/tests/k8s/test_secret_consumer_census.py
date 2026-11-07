@@ -3,7 +3,7 @@
 
 `secret_rotation.py audit` answers "what is due"; this census answers "who is still holding
 the old one". A rotation that misses a consumer leaves it holding a dead credential: a missed
-Sonarr or Radarr API key makes exportarr 401 on every scrape. `setup/fake_remux` is
+Sonarr or Radarr API key makes exportarr 401 on every scrape. daniel-box's fake-remux component is
 the consumer `deploy.sh` structurally cannot reach.
 
 `tree_consumers()` measures the answer from the tree. These tests pin the two invariants that
@@ -32,7 +32,7 @@ from secrets_mgmt.rotation_tools import sops_names
 SONARR_KEY_CONSUMERS = {
     "autofix-bridge": "deploy",
     "configarr": "deploy",
-    "fake_remux": "setup",
+    "daniel-box": "host",
     "homepage": "deploy",
     "janitorr": "deploy",
     "monitor-bridge": "deploy",
@@ -55,7 +55,7 @@ def _phantom_tags(name: str, tags) -> list[str]:
     """Tags claiming a role that does not reference the secret.
 
     A `monitor_bridge_*` token routed by name prefix to a role that renders it NOWHERE makes
-    `rotate --deploy` write a new value, deploy the wrong role, leave the real pusher on the
+    `rotate --commit` write a new value, deploy the wrong role, leave the real pusher on the
     old token and stamp `last_rotated` green. This makes the `grep -rl` check repeatable.
     """
     census = _consumers(name)
@@ -63,7 +63,7 @@ def _phantom_tags(name: str, tags) -> list[str]:
 
 
 def _setup_plane_blind_spots(name: str, tags) -> list[str]:
-    """Setup-plane consumers of a secret that `rotate --deploy` believes it can finish.
+    """Setup-plane consumers of a secret that `rotate --commit` believes it can finish.
 
     A non-empty `consumer_tags()` means the unattended path will rotate, deploy those tags and
     record success. `deploy.sh` derives valid tags from `containers_list`, so a setup-plane
@@ -137,9 +137,10 @@ def test_the_repair_commands_give_the_operator_only_sync_and_the_package_path():
 def test_the_census_separates_the_plane_deploy_sh_cannot_reach():
     consumers = tree_consumers("sonarr_api_key")
 
-    assert consumers["fake_remux"] == "setup", (
-        "fake_remux is the consumer deploy.sh cannot reach; if it stops being classified as "
-        "setup-plane, the census stops warning about the exact trap it was written for"
+    assert consumers["daniel-box"] == "host", (
+        "daniel-box's fake-remux is the consumer deploy.sh cannot reach; if it stops being "
+        "classified as a host package, the census stops warning about the exact trap it was "
+        "written for"
     )
     assert consumers["sonarr"] == "deploy"
 
@@ -148,18 +149,18 @@ def test_the_repair_commands_route_each_plane_to_a_playbook_that_can_reach_it():
     commands = consumer_commands("sonarr_api_key")
 
     deploy_cmd = [c for c in commands if "deploy.sh" in c]
-    setup_cmd = [c for c in commands if "initial_setup.yml" in c]
+    host_cmd = [c for c in commands if "host_secrets.py sync" in c]
 
     flux_cmd = [c for c in commands if "carries owner: flux" in c]
 
     # Every deploy-plane consumer of this key is flux-owned, so no deploy.sh line remains: each
     # owned tag is named on a Flux-path line of its own instead.
-    assert len(setup_cmd) == 1
-    assert not any("fake_remux" in c for c in deploy_cmd), (
+    assert len(host_cmd) == 1
+    assert not any("daniel-box" in c for c in deploy_cmd), (
         "deploy.sh exits 2 on a tag that is not in containers_list, having deployed NOTHING — "
-        "putting a setup-plane role in this command is the silent half of the bug"
+        "putting a host package in this command is the silent half of the bug"
     )
-    assert "--tags fake_remux" in setup_cmd[0]
+    assert "sync daniel-box" in host_cmd[0]
     assert any(c.startswith("sonarr carries owner: flux") for c in flux_cmd)
     assert not any("sonarr" in c for c in deploy_cmd)
 
@@ -171,7 +172,7 @@ def test_no_declared_consumer_tag_names_a_role_that_never_references_the_secret(
 
     assert not phantom, (
         f"{name} routes to {phantom}, which reference it nowhere in ansible/roles/. "
-        "`rotate --deploy` would deploy that role, leave the real consumer on the old value, "
+        "`rotate --commit` would deploy that role, leave the real consumer on the old value, "
         "and stamp last_rotated green."
     )
 
@@ -201,9 +202,9 @@ def test_the_phantom_check_goes_red_on_a_tag_that_references_nothing():
 def test_the_setup_plane_check_goes_red_when_a_setup_consumer_is_claimed_deployable():
     """The reject half: a setup-plane consumer claimed auto-deployable must be flagged.
 
-    sonarr_api_key genuinely has a setup-plane consumer, so claiming it is auto-deployable must be
-    flagged.
+    gitops_deploy_discord_webhook genuinely has a setup-plane consumer, so claiming it is
+    auto-deployable must be flagged.
     """
-    blind = _setup_plane_blind_spots("sonarr_api_key", ("sonarr",))
+    blind = _setup_plane_blind_spots("gitops_deploy_discord_webhook", ("sonarr",))
 
-    assert blind == ["fake_remux"]
+    assert "gitops_deploy" in blind

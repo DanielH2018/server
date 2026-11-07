@@ -26,7 +26,7 @@
 # crash at once, and NotReporting is the rule that replaces the tile.
 #
 # A DISARMED AGENT IS SILENT, NOT LATE. With renovate_agent_enabled false the timer is stopped,
-# so the renovate_agent role writes renovate-agent-disarmed.prom (homelab_check_disarmed 1), and
+# so the renovate-agent component ships renovate-agent-disarmed.prom (homelab_check_disarmed 1), and
 # RenovateAgentNotReporting and host-checks.yaml's HostCheckOverdue both stay quiet on the check
 # while the marker reads 1. Re-arming removes the marker, and the absent arm then fires until the next 06:00 run
 # writes a verdict, so re-arm just before a run or expect that one warning.
@@ -119,7 +119,7 @@ groups:
         annotations:
           summary: The fake-remux scan on daniel-box reported a failure.
           description: >-
-            fake-remux-health.sh read the daily scan's state file and found a failure or a run
+            fake-remux-health read the daily scan's state file and found a failure or a run
             older than 26 hours. Read the `fake-remux scan` cron and state.json in
             /var/lib/autofix-fake-remux. The `fake-remux-health` syslog tag holds the message.
       - alert: FakeRemuxScanNotReporting
@@ -149,7 +149,7 @@ groups:
         annotations:
           summary: The fake-remux reconciler on daniel-box reported a failure.
           description: >-
-            fake-remux-health.sh read the reconciler's state file and found a failure or a run
+            fake-remux-health read the reconciler's state file and found a failure or a run
             older than 1.2 hours. Read the `fake-remux reconcile` cron and replace_state.json in
             /var/lib/autofix-fake-remux. The `fake-remux-health` syslog tag holds the message.
       - alert: FakeRemuxReplaceNotReporting
@@ -179,7 +179,7 @@ groups:
         annotations:
           summary: The mkv attachment repair on daniel-box reported a failure.
           description: >-
-            fake-remux-health.sh read the repair sweep's state file and found a failure or a run
+            fake-remux-health read the repair sweep's state file and found a failure or a run
             older than 1.2 hours. Read the `mkv attachment repair` cron and
             mkv_attachment_state.json in /var/lib/autofix-fake-remux. The `fake-remux-health`
             syslog tag holds the message.
@@ -283,7 +283,7 @@ groups:
             No renovate-notify verdict newer than 36 hours reached Prometheus from daniel-box's
             textfile collector: the daily 13:00 timer did not fire or the run failed, and
             OnFailure will also have posted to Discord. It says nothing about Renovate itself.
-            Read `systemctl status renovate-notify.timer` and `journalctl -u renovate-notify`.
+            Read `systemctl status homelab-renovate-notify.timer` and `journalctl -u homelab-renovate-notify`.
       # Replaced the "Renovate Agent — Alive" tile. No Failed rule: see the header.
       - alert: RenovateAgentNotReporting
         expr: |
@@ -302,5 +302,5 @@ groups:
           description: >-
             No renovate-agent verdict newer than 28 hours reached Prometheus from daniel-box's
             textfile collector: the daily 06:00 timer did not fire, the run crashed, or a
-            worktree-blocked tick skipped it. Read `systemctl status renovate-agent.timer` and
-            `journalctl -u renovate-agent`.
+            worktree-blocked tick skipped it. Read `systemctl status homelab-renovate-agent.timer` and
+            `journalctl -u homelab-renovate-agent`.

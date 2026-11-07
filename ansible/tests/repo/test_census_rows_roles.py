@@ -15,12 +15,10 @@ from _helpers import walk_tasks
 from _drill_keys_row import DRILL_KEYS
 from _flux_born_keys_row import FLUX_BORN_KEYS
 from _flux_ownership_row import (
-    FLUX_OWNERSHIP,
     K8S_ENTRIES_ARE_FLUX_OWNED,
     K8S_ROLES_ARE_REACHABLE,
 )
 from _host_script_row import HOST_SCRIPT_WRITES
-from _host_write_rows import HOST_WRITES
 from _k3s_write_verbs_row import K3S_WRITE_VERBS
 from _out_of_render_row import OUT_OF_RENDER
 from _retired_cron_row import RETIRED_CRON_ARMS
@@ -149,12 +147,12 @@ ROWS = (
             Subject("a.yml", "- ansible.builtin.copy:\n    src: deploy_logic.py\n"),
             Subject("b.yml", "# src: test_commented.py is not a ship\n"),
         ),
-        # 83 ship lines across 15 files when the row landed (2026-10-03).
-        min_matches=60,
+        # 83 ship lines across 15 files when the row landed (2026-10-03); H7.35, H7.37 and H7.62 moved roles out.
+        min_matches=37,
         must_find=frozenset(
             {
                 "ansible/roles/setup/gitops_deploy/tasks/code.yml",
-                "ansible/roles/setup/fake_remux/tasks/main.yml",
+                "ansible/roles/setup/deploy_ui/tasks/code.yml",
             }
         ),
     ),
@@ -230,7 +228,7 @@ ROWS = (
                 "- ansible.builtin.copy:\n    src: ~/control-side\n    dest: /x\n",
             ),
         ),
-        min_matches=100,
+        min_matches=60,
         must_find=frozenset({"ansible/roles/setup/initial_setup/tasks/access.yml"}),
     ),
     Census(
@@ -409,11 +407,9 @@ ROWS = (
             }
         ),
     ),
-    HOST_WRITES,
     HOST_SCRIPT_WRITES,
     OUT_OF_RENDER,
     K3S_WRITE_VERBS,
-    FLUX_OWNERSHIP,
     K8S_ENTRIES_ARE_FLUX_OWNED,
     K8S_ROLES_ARE_REACHABLE,
     FLUX_BORN_KEYS,

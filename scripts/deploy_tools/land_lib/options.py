@@ -88,7 +88,7 @@ def _require_author_from_env() -> str:
     """`LAND_REQUIRE_AUTHOR`: the only PR author `--arm-merge` may merge, or "" for any.
 
     renovate-agent-land@.service sets it, because that role's contract is "never a PR by another
-    author" (`ansible/roles/setup/renovate_agent/CLAUDE.md`) and nothing checked it.
+    author" (`hosts/components/renovate-agent/CLAUDE.md`) and nothing checked it.
     An interactive session leaves it unset, so a person's own PR arms as before; the agent's
     session inherits it from the unit and cannot arm a human's PR without `--any-author`.
     """

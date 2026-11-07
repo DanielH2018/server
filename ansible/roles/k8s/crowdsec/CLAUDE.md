@@ -8,7 +8,7 @@ rollout race, the stalled bouncer pull, the partial-line measurements, the remov
 dashboard and the dashboard findings.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=crowdsec` with exit 5
 - **Images:** `python` (`crowdsec_k8s_jobs_image`), `alpine/k8s`
@@ -18,7 +18,7 @@ dashboard and the dashboard findings.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5, crowdsec's own window). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged
   change reaches the cluster when `promote` publishes and verifies the next bundle.
 - **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
   that needs its credential.
@@ -201,8 +201,6 @@ operator confirmed its evidence channel on 2026-10-18 (D5 *Open questions* 9).
 - **A failed Job holds the revision.** The old gate reported a non-zero exit from the home-ips
   run and continued. Under Flux any non-zero exit fails `crowdsec-verify`, and the soak does
   not pass.
-- **`tasks/main.yml` holds only the `k8s/manifests` include.** No run reaches it, because Flux owns
-  the role.
 
 ## Traps
 

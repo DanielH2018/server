@@ -49,7 +49,7 @@ def test_the_census_finds_the_named_setup_templates():
     """Non-vacuity: the glob must return these by name, not merely return something."""
     found = {_rel(p) for p in v.discover_templates()}
     assert MUST_FIND <= found, f"discovery lost: {sorted(MUST_FIND - found)}"
-    assert len(found) >= 108
+    assert len(found) >= 104
 
 
 def test_every_real_setup_template_renders_with_no_unresolved_variable(known):
@@ -139,7 +139,7 @@ def test_runtime_vars_reads_both_set_fact_spellings():
     """
     names = v.runtime_vars()
     assert "hypervisor_staging_net_uuid" in names  # ansible.builtin.set_fact
-    assert len(names) >= 100
+    assert len(names) >= 91
 
 
 def test_an_ansible_magic_var_is_allowed_and_an_unknown_name_is_not():

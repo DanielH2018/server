@@ -77,7 +77,6 @@ def real_tree() -> dict[str, list[Item]]:
 
 NAMED_MEMBERS = [
     ("template", "Pin the node's LAN address in netplan"),
-    ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
     ("sysctl", "Raise the inotify instance limit for pod log tailing"),
 ]
 

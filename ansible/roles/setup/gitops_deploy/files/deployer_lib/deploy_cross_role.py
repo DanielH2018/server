@@ -32,20 +32,16 @@ _COMMON = "ansible/roles/setup/common"
 _HOST_LIB = frozenset(
     {
         "deploy_ui",
-        "fake_remux",
         "gitops_deploy",
-        "renovate_agent",
-        "renovate_notify",
     }
 )
 _STAMPED = _HOST_LIB | {"initial_setup"}
 _CHECK_TIMER = frozenset({"gitops_deploy", "initial_setup"})
-_ALERT_UNIT = frozenset({"gitops_deploy", "renovate_agent", "renovate_notify"})
+_ALERT_UNIT = frozenset({"gitops_deploy"})
 SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/alert_unit.yml": _ALERT_UNIT,
     f"{_COMMON}/templates/unit-failure-alert.service.j2": _ALERT_UNIT,
     f"{_COMMON}/templates/alert-webhook.env.j2": _ALERT_UNIT,
-    f"{_COMMON}/tasks/agent_user.yml": frozenset({"renovate_agent"}),
     # `hosts/lib/` since H7.2e: the packages ship it, and the Ansible consumers below still copy
     # it beside their scripts until their own PRs move them. `ci_verdict.py` is the deployer's
     # alone (`gitops_deploy/tasks/code.yml` copies it).
@@ -63,20 +59,12 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     f"{_COMMON}/tasks/stamp_deployed.yml": _STAMPED,
     f"{_COMMON}/tasks/stamp_render.yml": _STAMPED,
     "ansible/roles/setup/gitops_deploy/files/gitops_markers.py": frozenset(
-        {"deploy_ui", "renovate_agent"}
+        {"deploy_ui"}
     ),
     "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py": frozenset(
-        {"deploy_ui", "renovate_agent"}
+        {"deploy_ui"}
     ),
-    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset(
-        {"deploy_ui", "renovate_agent"}
-    ),
-    # A `defaults/` file whose variable another role reads. renovate_agent copies the uv binary
-    # `initial_setup_uv_version` pins, and names that key where it checks the copy, so a uv bump
-    # re-applies it after initial_setup (#5945).
-    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
-        {"renovate_agent"}
-    ),
+    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset({"deploy_ui"}),
     # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
     # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
     "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),

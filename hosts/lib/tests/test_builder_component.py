@@ -234,7 +234,7 @@ def test_the_settings_carry_the_deployers_ci_contexts_and_the_prometheus_cluster
     assert settings["PROMETHEUS_URLS"] == f"http://{ip}:9090"
 
 
-def test_the_nfpm_pin_is_ci_s_and_uv_matches_initial_setup():
+def test_the_nfpm_pin_is_ci_s():
     # fact: hosts/components/builder/CLAUDE.md#What the component installs
     ci = yaml_fast.safe_load((REPO / ".github/workflows/ci.yml").read_text())
     env = ci["jobs"]["host_packages_build"]["env"]
@@ -243,10 +243,6 @@ def test_the_nfpm_pin_is_ci_s_and_uv_matches_initial_setup():
     )["tools"]
     assert tools["nfpm"]["amd64"]["version"] == env["NFPM_VERSION"]
     assert tools["nfpm"]["amd64"]["sha256"] == env["NFPM_SHA256"]
-    defaults = yaml_fast.safe_load(
-        (REPO / "ansible/roles/setup/initial_setup/defaults/main.yml").read_text()
-    )
-    assert tools["uv"]["amd64"]["version"] == defaults["initial_setup_uv_version"]
 
 
 def test_the_alert_template_pages_with_the_instance_name_and_a_credential(package):

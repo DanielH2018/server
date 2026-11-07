@@ -148,14 +148,12 @@ def removal(base_objects, head_objects, declared=(), head_flux=("bento-pdf",), *
         deps={},
         objects={"bento-pdf": base_objects},
         unpruned=kw.get("unpruned", ()),
-        retired=kw.get("base_retired", ()),
     )
     head = gate.Snapshot(
         renders={},
         owners={t: "flux" for t in head_flux},
         deps={},
         objects={"bento-pdf": head_objects},
-        retired=kw.get("head_retired", ()),
     )
     return gate.removal_problems(base, head, declared)
 
@@ -294,29 +292,9 @@ def test_an_object_moved_to_another_flux_owned_tag_is_clean():
     assert gate.removal_problems(base, head, ()) == []
 
 
-def test_a_flux_owned_entry_moved_into_k8s_retired_services_is_flagged():
-    flagged = removal(BENTO, BENTO, head_flux=(), head_retired={"bento-pdf"})
-    assert len(flagged) == 1 and flagged[0].startswith("arm 4: bento-pdf joins")
-
-
-def test_retiring_an_ansible_owned_entry_is_clean():
-    base = gate.Snapshot(renders={}, owners={"authelia": "ansible"}, deps={})
-    head = gate.Snapshot(renders={}, owners={}, deps={}, retired={"authelia"})
-    assert gate.removal_problems(base, head, ()) == []
-
-
-def test_a_name_already_retired_on_the_base_is_clean():
-    retired = {"bento-pdf"}
-    assert removal(BENTO, BENTO, base_retired=retired, head_retired=retired) == []
-
-
 def test_the_snapshot_names_objects_as_decide_does(head_snapshot):
     """Arm 3's identities are the ones `promote.py decide` matches the trailer against."""
     assert "Deployment/homelab/bento-pdf" in head_snapshot.objects["bento-pdf"]
-    listed = gate.yaml_fast.safe_load((gate.REPO / gate.GROUP_VARS).read_text())
-    assert set(head_snapshot.retired) == {
-        e["name"] for e in listed.get("k8s_retired_services") or []
-    }
 
 
 def test_a_prune_disabled_label_or_annotation_is_read():

@@ -18,7 +18,7 @@ A URL may reference other keys of the same file (`{{ k3s_version }}`); it is ren
 file alone, and one that does not resolve is reported as a failure, never skipped. A digest key
 with no URL beside it (a `get_url` whose URL is inline in `tasks/`) is listed as unpaired so
 the gap is visible; it does not fail the run. The fix is to move the URL into defaults beside
-the digest, templated from the version key — `chezmoi_setup_installer_url` is the worked
+the digest, templated from the version key — `k3s_install_script_url` is the worked
 example.
 
 `KNOWN_PINS` names pins the census must find. A scanner that finds its subjects by pattern
@@ -95,8 +95,6 @@ KNOWN_PINS = frozenset(
         "jellyfin_k8s_anisync",
         "jellyfin_k8s_introskipper",
         "k3s_install_script",
-        "chezmoi_setup_installer",
-        "initial_setup_uv_installer",
         "code_server_k8s_node",
         "claude_code_agent_node",
         "valheim_k8s_mods[Server_devcommands]",

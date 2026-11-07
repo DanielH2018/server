@@ -13,10 +13,14 @@
 #   1  refuse a hostname other than <hostname>, or a host this script does not know
 #   2  install the keyring once it carries the pinned key and nothing else, then homelab.sources
 #      (--local-build installs the keyring only, because no repository is running yet)
-#   3  create /etc/homelab/age.key when missing, and print its public key
+#   3  install age when age-keygen is missing, create /etc/homelab/age.key when missing, and print
+#      its public key
 #   4  the one-time host steps: the Pi's swap file, its debloat purge, its rsyslog and wpa_supplicant
-#      masks and the removal of rsyslog's text logs; on every host, the networkd-dispatcher mask, the
-#      ssh-users group and the sys user's membership; on a cluster node, the k3s binary
+#      masks and the removal of rsyslog's text logs; daniel-server's LXD snap and its bases; on every
+#      host, the networkd-dispatcher mask, the ssh-users group and the sys user's membership; on a
+#      cluster node, the k3s binary, with its unit neither enabled nor started, because the operator
+#      starts it after the restores.
+#      daniel-server's one LVM volume comes from the Ubuntu installer, not from this script
 #   5  install homelab-tools, homelab-updater and homelab-<hostname>, then systemd-tmpfiles
 #      --create (--local-build builds the three .deb files from the clone, then installs them);
 #      on the Pi, then log2ram from the Azlux source its package ships
@@ -33,6 +37,7 @@
 # origin/master's first-parent chain with a green CI verdict (hosts/lib/bootstrap_anchor.py).
 # --offline <kit-dir> reads every fetch from the break-glass kit (docs/break-glass.md, item 8),
 # checks each file against the pin the download path checks, and makes neither GitHub read.
+# Ubuntu's archive stays a requirement, for age in step 3 and for the packages' Depends in step 5.
 # --tools-seed <dir> reads each pinned file <dir>/<sha256> holds instead of downloading it, and
 # downloads the rest. Each file is still checked against its pin. CI's bootstrap cases pass it.
 #
@@ -76,8 +81,8 @@ PI_SWAPFILE_SIZE=1G
 # ansible/roles/k8s/system-upgrade/defaults/main.yml, so a rebuilt node never installs an older
 # k3s than the SUC Plans target. Renovate bumps both files in one PR.
 # renovate: datasource=github-releases depName=k3s-io/k3s
-K3S_VERSION=v1.37.1+k3s1
-K3S_INSTALL_URL=https://raw.githubusercontent.com/k3s-io/k3s/v1.37.1+k3s1/install.sh
+K3S_VERSION=v1.37.2+k3s1
+K3S_INSTALL_URL=https://raw.githubusercontent.com/k3s-io/k3s/v1.37.2+k3s1/install.sh
 K3S_INSTALL_SHA256=ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba610956a4c78cc00b
 
 # The nfpm and uv pins are the blocks of hosts/packages/homelab-tools/package.yml, byte for byte,
@@ -270,11 +275,37 @@ EOF
 fi
 stop_after 2
 
-# Step 3: create the age key if missing, then print its public half. The key is written to a
-# temporary name under umask 077 and renamed, so a failed age-keygen leaves no partial key that
-# the next run would take for a real one. The private half is never printed.
+# update_all_sources: update every apt source. Offline, a source on a GitHub host is left out, and
+# the next online updater run reads it again.
+update_all_sources() {
+    update_dir=/etc/apt/sources.list.d
+    if [ -n "$kit" ]; then
+        update_dir=$(mktemp -d)
+        CLEAN="$CLEAN $update_dir"
+        for source in "$ROOT"/etc/apt/sources.list.d/*; do
+            [ -e "$source" ] || continue
+            case "${source##*/}" in
+                *github-cli*) ;;
+                *) cp "$source" "$update_dir/" ;;
+            esac
+        done
+    fi
+    apt-get update -o "Dir::Etc::sourceparts=$update_dir"
+}
+
+# Step 3: install age if missing, then create the age key if missing and print its public half.
+# A stock image carries no age and no package lists, and homelab-<hostname>'s Depends on age comes
+# too late at step 5. The key is written to a temporary name under umask 077 and renamed, so a
+# failed age-keygen leaves no partial key that the next run would take for a real one. The private
+# half is never printed.
+if ! command -v age-keygen > /dev/null; then
+    apt-get install -y --no-install-recommends age ||
+        { update_all_sources && apt-get install -y --no-install-recommends age; } ||
+        die "cannot install age, whose age-keygen creates and reads $AGE_KEY"
+    command -v age-keygen > /dev/null || die "the age package installed no age-keygen"
+    echo "bootstrap-host: installed age"
+fi
 if [ ! -s "$ROOT$AGE_KEY" ]; then
-    command -v age-keygen > /dev/null || die "age-keygen is not installed, so cannot create $AGE_KEY"
     install -d -m 0755 "$(dirname "$ROOT$AGE_KEY")"
     rm -f "$ROOT$AGE_KEY.tmp"
     (
@@ -430,6 +461,17 @@ if [ "$host" = daniel-pi ]; then
         "$ROOT"/var/log/debug*
 fi
 
+if [ "$host" = daniel-server ]; then
+    # The Ubuntu Server installer seeded these on this one machine. lxd goes before the bases it
+    # uses, and snapd itself stays.
+    for snap in lxd core20 core22; do
+        if snap list "$snap" > /dev/null 2>&1; then
+            snap remove "$snap" || die "cannot remove the $snap snap"
+            echo "bootstrap-host: removed the $snap snap"
+        fi
+    done
+fi
+
 mask_unit networkd-dispatcher.service
 
 # The sshd component's AllowGroups admits only this group, so both exist before step 5 installs it.
@@ -566,22 +608,8 @@ else
     done
 
     # The whole sources.list.d is read, so apt resolves the packages' Depends against Ubuntu's
-    # archive. Offline, a source on a GitHub host is left out, and the next online updater
-    # run reads it again.
-    update_dir=/etc/apt/sources.list.d
-    if [ -n "$kit" ]; then
-        update_dir=$work/sources.list.d
-        mkdir -p "$update_dir"
-        for source in "$ROOT"/etc/apt/sources.list.d/*; do
-            [ -e "$source" ] || continue
-            case "${source##*/}" in
-                *github-cli*) ;;
-                *) cp "$source" "$update_dir/" ;;
-            esac
-        done
-    fi
-    apt-get update -o "Dir::Etc::sourceparts=$update_dir" ||
-        die "apt-get update failed; the .deb Depends need Ubuntu's archive"
+    # archive.
+    update_all_sources || die "apt-get update failed; the .deb Depends need Ubuntu's archive"
     # One install, so apt resolves the three packages' Depends among themselves.
     set -- "$work"/debs/homelab-tools_*.deb "$work"/debs/homelab-updater_*.deb \
         "$work/debs/homelab-$host"_*.deb
@@ -589,6 +617,9 @@ else
 fi
 systemd-tmpfiles --create || die "systemd-tmpfiles --create failed"
 echo "bootstrap-host: installed homelab-tools, homelab-updater and homelab-$host"
+if [ -n "$k3s_unit" ]; then
+    echo "bootstrap-host: $k3s_unit stays stopped until the operator starts it, as docs/host-packages.md, Rebuilding a cluster node, says"
+fi
 # The package ships Azlux's source, so log2ram cannot be one of its Depends. Reconcile starts as
 # the install above ends, holds dpkg's lock briefly and may write /etc/log2ram.conf first. dpkg
 # would stop at a conffile prompt on that file, and upstream's copy already holds the arm's values.

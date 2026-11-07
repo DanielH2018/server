@@ -23,4 +23,4 @@ data:
   longhorn_reconcile.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/longhorn-reconcile/files/longhorn_reconcile.py') | indent(4, true) }}
   flux_job_connect.py: |
-{{ lookup('file', playbook_dir + '/roles/k8s/manifests/files/flux_job_connect.py') | indent(4, true) }}
+{{ lookup('file', playbook_dir + '/../scripts/renderer/job_files/flux_job_connect.py') | indent(4, true) }}

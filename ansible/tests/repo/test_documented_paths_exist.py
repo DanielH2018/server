@@ -77,7 +77,7 @@ def resolves(cited: str, doc: Path) -> bool:
     """Whether a cited path names a file that exists, the way a reader would resolve it.
 
     Doc-relative first, then repo-relative, then as a path SUFFIX of some real file -- which
-    is what makes a context-relative citation like `roles/k8s/manifests/tasks/main.yml:112`
+    is what makes a context-relative citation like `roles/k8s/volume-revert/tasks/main.yml:112`
     resolve without the `ansible/` prefix nobody writes.
 
     DECIDED: a suffix, never a bare basename. `scripts/gen_infra_map.py` is not a suffix of
@@ -132,8 +132,8 @@ def test_a_citation_of_upstream_go_is_not_extracted(line):
 def test_resolution_accepts_a_context_relative_citation():
     """The common shape: the docs cite from context, without the `ansible/` prefix."""
     doc = REPO / "CLAUDE.md"
-    assert resolves("roles/k8s/manifests/tasks/main.yml", doc)
-    assert resolves("ansible/roles/k8s/manifests/tasks/main.yml", doc)
+    assert resolves("roles/k8s/volume-revert/tasks/main.yml", doc)
+    assert resolves("ansible/roles/k8s/volume-revert/tasks/main.yml", doc)
 
 
 def test_resolution_rejects_a_path_that_moved():
@@ -258,7 +258,7 @@ def _runtime_modules() -> list[Path]:
 # always a second copy of one the source file carries -- and the source is never itself in
 # this corpus, since a role's `.yml`/`.j2` task file is neither a doc nor a runtime module.
 # Checking the copy caught a citation the source has carried, unchecked, since before this
-# page existed (`ansible/roles/k8s/netpol-baseline/tasks/main.yml` cites a test that moved to
+# page existed (a role's task file cited a test that moved to
 # `test_k8s_autodeploy_batch_gates.py`), and separately turned an identifier that wraps across
 # two comment lines in the source into two words once the generator joins them with a space,
 # which the citation pattern below then reads as a shorter, nonexistent name. Neither is a bug

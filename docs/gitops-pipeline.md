@@ -144,19 +144,16 @@ The setup/deploy split exists because `deploy.yml` is a `containers_list` loop a
 nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a
 no-op that leaves the change unapplied.
 
-That loop skips an entry that carries `owner`. The k8s play batches `containers_list |
-ansible_owned`, and `ansible_owned` in `ansible/filter_plugins/toposort.py` keeps only the
-entries without `owner`. Flux applies an entry with `owner: flux`. The `containers_list` fact keeps
-every entry, because templates read it. A `deploy.yml` or `toposort.py` change is still
-broad, so the deployer applies none of it.
+Flux applies an entry with `owner: flux`. A `deploy.yml` or `toposort.py` change is broad, so the
+deployer applies none of it.
 
 A setup role the deployer cannot apply is a fourth case. `k3s` lives in `k3s-bringup.yml` and
 `common` in no playbook, so `setup_tags_for` derives nothing for either. Such a range
 fast-forwards and records the role instead of parking; see *A role only a hand can apply is
 recorded, not parked* below.
 
-A setup role can ship another setup role's file by path. The `deploy_ui` and `renovate_agent`
-roles install the deployer's `files/gitops_markers.py` and `files/gitops_ledger.py` that way.
+A setup role can ship another setup role's file by path. The `deploy_ui`
+role installs the deployer's `files/gitops_markers.py` and `files/gitops_ledger.py` that way.
 `deploy_changes.setup_roles_for` maps a change to such a file to its owner AND every role listed
 for it in `SETUP_FILES_SHIPPED_BY_OTHER_ROLES`. `ChangeSet.setup_roles` and `setup_tags_for` both
 read the table, so the `manual_plane` ledger class, the narrowed apply, the `hold_plane` coverage
@@ -232,7 +229,7 @@ applied. D6.15 removed the `narrow` subcommand. The two rules below remain in
 
 - **A shared template maps to the roles that import it.** A name inside a Jinja `{# #}` comment is
   not an import. `claim-default.yaml.j2` maps to the roles whose `defaults/main.yml` declares
-  `k8s_claims`, not to every caller of `k8s/manifests`, and the derivation refuses if
+  `k8s_claims`, not to every k8s role, and the derivation refuses if
   `k8s_claims` is set anywhere but a role's defaults. An edit that changes only a shared
   template's Jinja comments maps to no tags: the rule compares the template's `jinja2` lexer
   token streams without comments, under both `trim_blocks` settings.
@@ -240,8 +237,8 @@ applied. D6.15 removed the `narrow` subcommand. The two rules below remain in
 - **A filter plugin maps to the roles that call its filters.** `ansible/filter_plugins/` is a
   play-level prefix, so without this rule every change under it refuses. The rule reads the names the
   plugin's `FilterModule.filters()` returns, at both refs, and greps the role trees, the shared
-  templates and the play's own trees for each one. A call from `deploy.yml`, `pre_tasks/`,
-  `tasks/` or `post_tasks/` still refuses, as do an inventory value that calls the filter, a
+  templates and the play's own trees for each one. A call from `deploy.yml` or `pre_tasks/`
+  still refuses, as do an inventory value that calls the filter, a
   `filters()` that is not a literal dict, a deleted plugin and a plugin another plugin imports.
   An edit to comments, docstrings or layout alone reaches no caller in either plane (#4412).
   `filters.comment_only` compares the module's parse tree, less its docstrings, at both refs.
@@ -271,9 +268,8 @@ A `containers_list` entry that sets `owner` is not Ansible-owned: with `owner: f
 applies the tag through `promote`. The tick skips such a tag, so the deployer never
 applies, defers, alerts on or owes it. D2's plan has the design:
 [The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
-`ansible/tests/deploy/test_owner_readers_agree.py` holds the two readers that remain equal,
-`scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each raises on an `owner`
-value other than `flux`.
+`scripts/lib/k8s_roles.py:tag_owners` reads the flag and raises on an `owner` value other than
+`flux`.
 
 ### Both apply arms are forward-only
 
@@ -905,14 +901,14 @@ the tick applies it on daniel-box, and daniel-server and daniel-pi need
 `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` (with `-e
 target=daniel-pi` for the Pi) run by an operator.
 
-**The two GitHub crons** are daily kuma-check timers on the deploy host (`check_timer.yml`
-in the `common` role). Each writes its verdict through `write_check_textfile`, which the rules
+**The two GitHub checks** are daily timers of the `github-checks` component on the deploy host, which keep the contract of
+`check_timer.yml` in the `common` role. Each writes its verdict through `write_check_textfile`, which the rules
 in `gitops-checks.yaml` read, and pushes to nothing. Each exits 1 on a down verdict, and
 `Restart=on-failure` reruns it every 30 minutes until it exits 0. Both
 authenticate with the deploy user's `gh auth token`, and without it both are red, because GitHub
 shows a ruleset's bypass list only to an admin. The timers are `Persistent=true`, so a slot missed
-inside an outage runs at boot. `teardown.yml` imports the same names absent, which reaps the
-units on a non-deployer host. One alerts and the other reconciles:
+inside an outage runs at boot. `teardown.yml` imports their Ansible-era names absent, which reaps
+the old units on a non-deployer host. One alerts and the other reconciles:
 
 - **`github-ruleset-drift.sh`** reads four ruleset definitions from GitHub and alerts on drift in
   any of them. It never writes: a ruleset changes because a human changed it, and reconciling
@@ -1112,12 +1108,11 @@ all fire (2700 s) or when a second holder takes the lock first, because flock do
 fairly. An operator who sees exit 75 should check whether `gitops-deploy` is mid-apply before
 assuming the lock is stuck.
 
-**Four waiters on the tree lock are pinned as a census.** `deploy.sh`, secret-rotate, docs-refresh
-and eval-run each wait 2400 s, and `_LOCK_WAITERS` and `_longest_tick_hold()` in
+**Three waiters on the tree lock are pinned as a census.** `deploy.sh`, docs-refresh and eval-run
+each wait 2400 s, and `_LOCK_WAITERS` and `_longest_tick_hold()` in
 `tests/test_gitops_deploy_timeout_budgets.py` hold each wait at or above the unit's ceiling. The
 census models the deployer alone. docs-refresh's longest path stays outside it because a run
-measures 7-11 minutes, its 06:17 start sits 2 h 43 min before secret-rotate's one weekly slot, and
-`deploy.sh` can retry after exit 75. A
+measures 7-11 minutes and `deploy.sh` can retry after exit 75. A
 per-consumer test covers only the consumers someone wrote one for, so the census plus
 `test_the_lock_waiter_census_is_non_vacuous` makes a new waiter fail instead of passing silently.
 A raise that pushes `TimeoutStartSec` past a waiter's wait fails those tests rather than shortening
@@ -1233,10 +1228,10 @@ rollback budget stacks on top.
 - The unit's worst case is the flock wait plus that budget, which
   `test_the_deployers_hold_survives_max_flock_contention` holds inside `TimeoutStartSec` in
   `gitops-deploy.service.j2`.
-- A raise of `TimeoutStartSec` past the four waiters' 2400 s moves them too, in the same change,
+- A raise of `TimeoutStartSec` past the three waiters' 2400 s moves them too, in the same change,
   because `test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold` fails otherwise.
 - **The lock waiters and the service-lock budget** are under *The rollback timeout, derived*:
-  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 2400 s, and
+  `deploy.sh`, docs-refresh and eval-run each wait 2400 s, and
   `deploy_locks.locked_budget` spends the phase's own budget on a service-lock wait. An overrun
   never produces a second concurrent run, because the timer coalesces the new start into the
   activation in flight.

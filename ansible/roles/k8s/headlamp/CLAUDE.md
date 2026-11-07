@@ -4,7 +4,7 @@ Headlamp, browsing the cluster with the built-in `view` ClusterRole plus a handf
 groups it doesn't cover. See repo-root `CLAUDE.md`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=headlamp` with exit 5
 - **Images:** `ghcr.io/headlamp-k8s/headlamp` (`headlamp_k8s_image`), `alpine`
@@ -23,7 +23,7 @@ groups it doesn't cover. See repo-root `CLAUDE.md`.
   Any other group missing from it degrades silently: the UI loads, that resource list is just
   empty.
 - **The observability-namespace Prometheus proxy grant is deferred** (#3575): the armed apply's
-  `-n homelab` refuses it, so `tasks/main.yml` applies `headlamp-observability/` itself. A
+  `-n homelab` refuses it, so `headlamp-observability/` needs its own apply. A
   `--dry-run` never shows it to the API server.
 
 ## Two identities, one grant
@@ -93,8 +93,7 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
   sample. Charts are off per browser too, in localStorage; no IaC can pre-enable them.
 
 ## Notable
-- Flux applies the role (`owner: flux`), and no Ansible path runs it. `tasks/main.yml` holds the
-  include of `k8s/manifests` alone.
+- Flux applies the role (`owner: flux`).
 - Ships a **negative** self-test: the `headlamp-verify` Job in `templates/verify/` must FAIL to
   reach headlamp from a non-traefik pod, proving `networkpolicy.yaml.j2` fences it. The Job runs
   `files/headlamp_verify.py`: traefik's port must answer, as the control, so a failure is
@@ -112,5 +111,4 @@ trust in Authelia (`hosts/components/k3s-server/`), the Authelia client, and the
 ## Editing
 - Manifests: everything under `templates/`. Three carry a rule of their own.
   `rbac.yaml.j2` holds the cluster identity, `rbac-observability.yaml.j2` holds the Prometheus
-  proxy Role, and `oidc-secret.yaml.j2` renders under `no_log` through the manifests role's
-  secret list.
+  proxy Role, and `oidc-secret.yaml.j2` holds the OIDC client secret.

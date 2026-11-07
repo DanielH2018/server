@@ -6,7 +6,7 @@ own controllers name `homelab-critical`, and the read-only kubeconfig carries th
 Secret holds.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=cluster-base` with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
@@ -14,8 +14,7 @@ Secret holds.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (H1.2). Its `containers_list` entry carries `owner: flux`
-  from its first commit. `tasks/main.yml` holds the include of `k8s/manifests` and no Flux path
-  runs it. A rebuilt cluster applies it by hand before it installs Flux, as step 2 of
+  from its first commit. A rebuilt cluster applies it by hand before it installs Flux, as step 2 of
   `docs/longhorn-disaster-recovery.md`'s *Procedure (fresh host, total loss)*.
 - **The tag renders `prune: false`** (`flux_prune: false`, with the `DECIDED:` marker beside it
   in `defaults/main.yml`). A render that drops a PriorityClass or the identity leaves it serving.

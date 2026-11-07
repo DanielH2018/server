@@ -48,6 +48,10 @@ _KEYS = (
     "r2_account_id: x\n"
     "wifi_ssid: x\n"
     "wifi_password: x\n"
+    "renovate_agent_gh_token: x\n"
+    "renovate_agent_claude_oauth_token: x\n"
+    "sonarr_api_key: x\n"
+    "arr_discord_webhook_url: x\n"
 )
 
 DEFAULT_ACCURACY_S = 60  # systemd's AccuracySec when a timer sets none
@@ -74,7 +78,7 @@ EXEMPT = {
     "CronJob sonarr */5 * * * *": "air-date guard; a run that cannot reach sonarr removes nothing",
 }
 # Non-vacuity: each scan must find its member, or an empty scan would pass.
-CRON_MEMBER = "fake-remux scan"
+CRON_MEMBER = "Full etcd restore drill in a throwaway guest"
 CRONJOB_MEMBER = "configarr"
 RECURRING_MEMBER = "daily-backup"
 

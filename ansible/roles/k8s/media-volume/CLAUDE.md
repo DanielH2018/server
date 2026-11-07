@@ -5,7 +5,7 @@ Declares `media-data`, the volume seven media-stack roles mount at `/data`. They
 route — infra role, no Deployment of its own.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=media-volume` with exit 5
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
@@ -13,7 +13,7 @@ route — infra role, no Deployment of its own.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (#5652, Wave D). Its `containers_list` entry carries
-  `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it. A merged change
+  `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it. A merged change
   reaches the cluster when `promote` publishes and verifies the next bundle. The claim carries
   `kustomize.toolkit.fluxcd.io/prune: disabled`, so neither a revert nor a removal from the
   bundle can delete it.
@@ -32,7 +32,7 @@ route — infra role, no Deployment of its own.
   and `hosts/lib/tests/test_box_k3s_host_half.py` holds the copy equal to this role's default.
 - **HISTORY —** the library was seeded once, at the 2026-08 migration, by an opt-in rsync from
   daniel-server's `containers/data`. That directory no longer exists, so D5 deleted the seeding
-  tasks (`tasks/sync.yml`) rather than move them. Nothing backs the library up.
+  tasks rather than move them. Nothing backs the library up.
 
 ## Notable
 - **The hardlink check is the Job in `media-volume-verify`.** The renderer emits

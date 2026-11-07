@@ -15,10 +15,9 @@ run prints nothing still prints when it fails, and that is the output worth keep
 
 The judge splits a job at top-level `;`, `&&` and `||`, so an unbraced chain is judged stage
 by stage rather than by its last pipe. It does not judge the stderr of a pipeline's earlier
-stages, which prints only on failure. A `>/dev/null 2>&1` stage passes it, so the crons that
-must keep their output are named in `JOURNAL_ROUTED` as well. The Healthchecks crons
-route curl's stderr away at both surfaces, and `ansible/tests/services/test_healthchecks_pings.py` holds
-the ping half.
+stages, which prints only on failure. A `>/dev/null 2>&1` stage passes it. The crons that had to
+keep their output in the journal moved into host packages in H7.35 and H7.37, and
+`ansible/tests/services/test_healthchecks_pings.py` holds the ping half.
 
 Run: uv run pytest ansible/tests/setup/test_cron_output_goes_to_the_journal.py
 """
@@ -28,27 +27,6 @@ import re
 import pytest
 from _helpers import load_tasks, walk_tasks
 from _role_census import task_files
-
-# The crons that mail a per-run success line, by `ansible.builtin.cron` name, and
-# the `logger` tag each must route to. Named rather than globbed: a census that finds its
-# subject by pattern reads empty the day a file moves, and every job then passes by default.
-# A rename fails `test_every_named_cron_still_exists` below rather than going quiet.
-JOURNAL_ROUTED = {
-    # The verdict crons: silent when healthy, but their failure stderr is the evidence.
-    "fake-remux health": "fake-remux-health",
-    # The fake-remux workers discarded both streams to /dev/null until #6162, which the
-    # every-cron judge below accepts, so naming them here is what holds them to the journal.
-    "fake-remux scan": "fake-remux-scan",
-    "fake-remux reconcile": "fake-remux-reconcile",
-    "mkv attachment repair": "mkv-attachment-repair",
-}
-
-
-# `2>&1 | logger -t <tag>`, allowing the shell's own spacing. Matched as written because the
-# redirect is the whole fix: `| logger` without `2>&1` leaves stderr mailing, which is what a
-# Python job whose only output is a `logging` line would do.
-def _routing(tag: str) -> re.Pattern[str]:
-    return re.compile(r"2>&1\s*\|\s*logger\s+-t\s+" + re.escape(tag) + r"\b")
 
 
 def _cron_job_list() -> list[tuple[str, str]]:
@@ -66,39 +44,21 @@ def _cron_jobs() -> dict[str, str]:
     return dict(_cron_job_list())
 
 
-def test_every_named_cron_still_exists():
-    """Every cron the census names is installed by the task files it reads."""
-    assert set(JOURNAL_ROUTED) <= set(_cron_jobs())
-
-
-@pytest.mark.parametrize(("name", "tag"), sorted(JOURNAL_ROUTED.items()))
-def test_the_cron_sends_both_streams_to_the_journal(name, tag):
-    job = _cron_jobs()[name]
-    assert _routing(tag).search(job), f"{name!r} still mails its output: {job}"
-
-
-def test_a_stdout_only_redirect_does_not_satisfy_the_check():
-    """The RED half: `| logger` without `2>&1` is the bug, not the fix."""
-    assert not _routing("worktree-sweep").search(
-        "uv run python scripts/dev/prune_worktrees.py | logger -t worktree-sweep"
-    )
-
-
 # ── every cron ───────────────────────────────────────────────────────────────
 
 # Named members from the files the census reads, so a glob that stops matching fails here
 # rather than passing over an empty census.
 KNOWN_CRONS = frozenset(
     {
-        "fake-remux scan",  # setup/fake_remux/tasks/main.yml
+        "Full etcd restore drill in a throwaway guest",  # setup/hypervisor/tasks/etcd_drill.yml
     }
 )
-# 6 after H7.35 moved setup/k3s's crons into package timers, 12 after D6.17 removed the
-# release-staleness cron (13 after the initial_setup crons no host
+# 1 after H7.35 and H7.37 moved setup/k3s's and fake_remux's crons into package timers, 12
+# after D6.17 removed the release-staleness cron (13 after the initial_setup crons no host
 # ran were deleted, 20 after H2.2c moved the Longhorn
 # trim to a RecurringJob, 21 after H7.40 moved the artifacts node's two crons into package
 # timers, 23 before that, and 29 before H7.36).
-_CENSUS_FLOOR = 5
+_CENSUS_FLOOR = 1
 
 _JINJA = re.compile(r"\{\{.*?\}\}")
 

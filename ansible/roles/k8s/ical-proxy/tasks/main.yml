@@ -1,8 +1,0 @@
----
-- name: Build the ical-proxy image
-  ansible.builtin.include_role:
-    name: k8s/image-builder
-
-- name: Deploy ical-proxy to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests

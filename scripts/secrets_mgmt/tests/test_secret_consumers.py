@@ -31,22 +31,6 @@ def test_consumer_tags_routes_the_bridge_prefix_to_the_bridge():
     assert consumer_tags("monitor_bridge_ha_token") == ("monitor-bridge",)
 
 
-def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
-    # Registry-driven guard: a new `auto` key must resolve a consumer_tag, so the unattended
-    # weekly `rotate --commit --deploy` cron actually rotates it. Without this, a token whose
-    # consumer_tag falls through to () silently drops out of rotation and only surfaces months
-    # later as an OVERDUE page — exactly how arr_autoblock_push_token slipped in when
-    # autofix-bridge landed. The tier has no row until someone registers a new `auto` key, so
-    # this passes on any consumer_tags until then.
-    reg = load_registry()
-    auto = [n for n, m in reg["entries"].items() if m.get("tier") == "auto"]
-    unrotatable = [n for n in auto if not consumer_tags(n)]
-    assert not unrotatable, (
-        "auto-tier tokens with no consumer_tags — they silently drop out of unattended "
-        "rotation: %s" % unrotatable
-    )
-
-
 # DECIDED: no test here asserts a cross-host token is not badly overdue. One did, and on
 # 2026-10-25 the calendar turned master and two unrelated PRs red in the same minute with no
 # code change. Overdue is runtime state: SecretRotationAuditFailed pages the daily audit for any
@@ -55,12 +39,12 @@ def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
 
 
 # ── consumer_tag correctness ────────────────────────────────────────────────
-# The guard above proves a token RESOLVES a tag. Nothing proved the tag was right, which is
+# Nothing else proves a token's consumer tag is right, which is
 # this estate's recurring guard-scope shape: a check written alongside a fix inherits the
 # fix's scope. Routing every `monitor_bridge_*` name to monitor-bridge by prefix is wrong
 # when such a token is pushed from another role's health script entirely —
 # the prefix is a Kuma monitor-history artefact, kept so renaming the monitor would not lose
-# its history. For those, `rotate --deploy` would write a new value, deploy a role that renders
+# its history. For those, `rotate --commit` would write a new value, deploy a role that renders
 # the token nowhere, leave the real pusher on the old one, and stamp `last_rotated` green.
 # `ansible/tests/k8s/test_secret_consumer_census.py` proves each tag's role references the
 # token, measured by `tree_consumers`, which also credits a role that renders it out of another
@@ -97,92 +81,27 @@ def test_every_consumer_tag_is_a_real_deploy_tag():
     )
 
 
-# ── consumer_commands leaves a Flux-owned tag off the deploy.sh line (#4983) ──
-# `deploy.sh` exits 5 on a tag whose containers_list entry carries `owner`, and exit 5 refuses
-# the WHOLE run, so one owned consumer on the printed line deploys none of the others. The
-# fixture is a whole repo, `ansible/` and all, because `consumer_commands` takes `repo` and the
-# owner it reads must come from that repo's containers_list rather than the live tree's.
+# ── the Flux path for a k8s consumer (D3.4) ──
+# d3-secrets.md, *Rotating a value read by both planes*: Flux substitutes the value from the
+# cluster file, so each k8s consumer's line names the operator's `write` and the landing. No line
+# names `deploy.sh`, which exits 5 on every k8s tag. The fixture is a whole repo because
+# `consumer_commands` takes `repo`.
 _FIXTURE_SECRET = "fixture_issue_4983_api_key"
 
 
-def _repo_with_a_flux_owned_consumer(tmp_path: Path, owner: str | None = "flux") -> str:
-    """A repo whose secret is rendered by `bento-pdf` (owner: `owner`) and `sonarr` (unowned)."""
+def _repo_with_two_k8s_consumers(tmp_path: Path) -> str:
+    """A repo whose secret is rendered by the k8s roles `bento-pdf` and `sonarr`."""
     for role in ("bento-pdf", "sonarr"):
         template = tmp_path / "ansible/roles/k8s" / role / "templates/secret.yaml.j2"
         template.parent.mkdir(parents=True)
         template.write_text(f"apiKey: {{{{ {_FIXTURE_SECRET} }}}}\n")
-    host_vars = tmp_path / "ansible/inventory/host_vars/daniel-box.yml"
-    host_vars.parent.mkdir(parents=True)
-    host_vars.write_text(
-        "containers_list:\n"
-        "  - name: bento-pdf\n"
-        "    platform: k8s\n"
-        + (f"    owner: {owner}\n" if owner else "")
-        + "  - name: sonarr\n"
-        "    platform: k8s\n"
-    )
     return str(tmp_path)
 
 
-def _deploy_lines(commands: list[str]) -> list[str]:
-    return [c for c in commands if "deploy.sh" in c]
-
-
-def test_consumer_commands_prints_no_deploy_line_naming_a_flux_owned_tag(tmp_path):
+def test_consumer_commands_prints_the_flux_path_for_every_k8s_consumer(tmp_path):
     commands = consumer_commands(
-        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
+        _FIXTURE_SECRET, repo=_repo_with_two_k8s_consumers(tmp_path)
     )
 
-    naming_owned = [c for c in _deploy_lines(commands) if "bento-pdf" in c]
-    assert naming_owned == [], (
-        f"deploy.sh exits 5 on the Flux-owned bento-pdf tag and so deploys nothing: {commands}"
-    )
-
-
-def test_consumer_commands_keeps_the_unowned_consumers_on_one_deploy_line(tmp_path):
-    commands = consumer_commands(
-        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
-    )
-
-    assert _deploy_lines(commands) == ['`./scripts/deploy.sh --tags "sonarr"`'], (
-        commands
-    )
-
-
-def test_consumer_commands_prints_one_line_naming_the_owner_of_each_dropped_tag(
-    tmp_path,
-):
-    commands = consumer_commands(
-        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
-    )
-
-    owner_lines = [
-        c for c in commands if "deploy.sh" not in c and "bento-pdf" in c and "flux" in c
-    ]
-    assert len(owner_lines) == 1, commands
-
-
-# ── the Flux path for a Flux-owned consumer (D3.4) ──
-# d3-secrets.md, *Rotating a value read by both planes*: Flux substitutes the value from the
-# cluster file, so the line for an `owner: flux` consumer names the operator's `write` and the
-# landing, and an Ansible-owned consumer keeps its `deploy.sh` line.
-
-
-def test_consumer_commands_prints_the_flux_path_for_a_flux_owned_consumer(tmp_path):
-    commands = consumer_commands(
-        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path)
-    )
-
-    assert commands == [
-        '`./scripts/deploy.sh --tags "sonarr"`',
-        FLUX_PATH % "bento-pdf",
-    ]
-    assert "`uv run python scripts/secrets_mgmt/cluster_vars.py write`" in commands[1]
-
-
-def test_consumer_commands_for_ansible_owned_consumers_prints_one_deploy_line(tmp_path):
-    commands = consumer_commands(
-        _FIXTURE_SECRET, repo=_repo_with_a_flux_owned_consumer(tmp_path, owner=None)
-    )
-
-    assert commands == ['`./scripts/deploy.sh --tags "bento-pdf,sonarr"`']
+    assert commands == [FLUX_PATH % "bento-pdf", FLUX_PATH % "sonarr"]
+    assert "`uv run python scripts/secrets_mgmt/cluster_vars.py write`" in commands[0]

@@ -14,7 +14,7 @@
 # The `+k3sN` suffix is semver build metadata, which Renovate ignores when comparing: an
 # upstream bump (v1.36.2 -> v1.37.0) is offered, a same-version re-tag (+k3s1 -> +k3s2) is not.
 # renovate: datasource=github-releases depName=k3s-io/k3s
-k3s_version: v1.37.1+k3s1  # noqa var-naming[no-role-prefix]
+k3s_version: v1.37.2+k3s1  # noqa var-naming[no-role-prefix]
 # The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
 # can differ from the tag's and moves with no signal, and the script runs as root on both
 # nodes. Renovate bumps k3s_version through the annotation above; the sha256 is a MANUAL
@@ -27,7 +27,7 @@ k3s_install_script_sha256: ed01f89fd977bf20ac1516bbebf8370bf3ddbaa55dac8aba61095
 # scripts/validate/k3s_binary_sum.py refuses a change to k3s_version that leaves it. Finish it on
 # the version-bump PR with the line from
 #   gh release download <k3s_version> -R k3s-io/k3s -p sha256sum-amd64.txt -D <empty dir>
-k3s_binary_sha256_amd64: 92b94582eb7b34a8cf532e6006842b9ed215a6783cf56a3dd6271fd35243b2c0  # noqa var-naming[no-role-prefix]
+k3s_binary_sha256_amd64: 265b3ee6a3198ef14033c63ef46cbb32370d83795199fb6d1b01f21575eddbda  # noqa var-naming[no-role-prefix]
 
 # The controller manifest and the Plan CRD are in-tree copies under files/upstream/, byte for
 # byte what each item's `url` serves. No render may fetch a URL (D5, C1), so the renderer

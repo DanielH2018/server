@@ -29,18 +29,6 @@ CHECK_TIMER = "check_timer.yml"
 _INSTALL_MODULES = ("ansible.builtin.copy", "ansible.builtin.template")
 
 EXEMPT: dict[str, str] = {
-    "fake_remux: cron `fake-remux scan`": (
-        "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
-        "fake-remux-scan textfile"
-    ),
-    "fake_remux: cron `fake-remux reconcile`": (
-        "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
-        "fake-remux-replace textfile"
-    ),
-    "fake_remux: cron `mkv attachment repair`": (
-        "fake-remux-health.sh reads this cron's state file and writes its verdict as the "
-        "mkv-attachment-repair textfile"
-    ),
     "gitops_deploy: timer `gitops-deploy`": (
         "writes /var/lib/gitops-deploy/last_run every tick, which monitor-bridge's GitOps-Alive "
         "check reads, and gitops_tick_metrics.py counts each tick by outcome"
@@ -177,15 +165,14 @@ def test_every_exemption_names_a_member_that_still_writes_none():
 
 
 def test_census_resolves_each_route_a_writer_takes():
-    """Non-vacuity: a script cron, a renamed install and a template timer."""
+    """Non-vacuity: a script cron, a template timer and a timer that writes none."""
     found = census()
-    writers = {
-        "fake_remux: cron `fake-remux health`",
-        "renovate_agent: timer `renovate-agent`",
-    }
-    assert {key for key in writers if found.get(key)} == writers
+    assert (
+        found.get("hypervisor: cron `Full etcd restore drill in a throwaway guest`")
+        is True
+    )
     assert found.get("initial_setup: timer `kuma-check-setup-drift`") is True
-    assert found.get("fake_remux: cron `mkv attachment repair`") is False
+    assert found.get("gitops_deploy: timer `gitops-deploy`") is False
 
 
 # ── Fixture pairs ─────────────────────────────────────────────────────────────────────

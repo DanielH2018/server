@@ -36,7 +36,6 @@ from pathlib import Path
 
 import jinja2
 import yaml
-from ansible.errors import AnsibleError
 
 from lib import yaml_fast
 from lib.ansible_inventory import K8S_HOST
@@ -105,7 +104,7 @@ def render_images(
         try:
             ctx = tag_context(K8S_ROLES / role, role, overrides, host)
             built = image_contexts(K8S_ROLES / role, ctx)
-        except (ValueError, jinja2.TemplateError, AnsibleError) as exc:
+        except (ValueError, jinja2.TemplateError) as exc:
             raise RenderError(f"{role}'s image context: {exc}") from exc
         for name, context in built.items():
             if name in images:

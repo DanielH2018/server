@@ -1,7 +1,7 @@
 """A fake host for `hosts/bootstrap-host.sh`: stub commands, a HOMELAB_ROOT and an offline kit.
 
 The script runs under stub `hostname`, `apt-get`, `dpkg`, `dpkg-query`, `systemctl`,
-`systemd-tmpfiles`, `fallocate`, `mkswap`, `swapon`, `id`, `getent`, `groupadd`, `usermod`,
+`systemd-tmpfiles`, `fallocate`, `mkswap`, `swapon`, `id`, `getent`, `groupadd`, `usermod`, `snap`,
 `rkhunter`, `aideinit` and `curl`, and the real `gpg`, `age-keygen`, `git`, `tar` and coreutils. Its
 pins name production digests, so `pin` rewrites a digest in the scratch COPY of the script to the
 fixture's own. A case that wants the production pin to refuse leaves it alone.
@@ -55,7 +55,7 @@ case "$mode" in
     agent) : > "$HOMELAB_ROOT/etc/systemd/system/k3s-agent.service" ;;
 esac
 """
-K3S_BINARY = "#!/bin/sh\necho 'k3s version v1.37.1+k3s1'\n"
+K3S_BINARY = "#!/bin/sh\necho 'k3s version v1.37.2+k3s1'\n"
 # `uv run ... render --out DIR` writes the three packages at the paths the renderer uses, with
 # homelab-tools under its architecture; the anchor call exits ANCHOR_EXIT; the first
 # VENV_FAILURES `python --version` calls fail; `fetch-tools` lists its cache in tools-cache.listing.
@@ -136,6 +136,10 @@ class FakeHost:
         self._stub("groupadd", f'echo "groupadd $*" >> {self.log}')
         self._stub("usermod", f'echo "usermod $*" >> {self.log}')
         self._stub("dig", "echo 192.0.2.1")
+        self._stub(
+            "snap",
+            f'if [ "$1" = list ]; then exit 1; else echo "snap $*" >> {self.log}; fi',
+        )
         self._stub("rkhunter", f'echo "rkhunter $*" >> {self.log}')
         self._stub("aideinit", f'echo "aideinit $*" >> {self.log}')
         self._stub(

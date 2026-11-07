@@ -348,12 +348,12 @@ claude_code_agent_operator_config_src: /home/{{ sys_user }}/.claude
 # Whether the agent user takes the operator's dotfiles through chezmoi, with the dotfiles
 # repo's `agent` flag on, in place of the subset above (tasks/agent_dotfiles.yml). The operator
 # chose it on 2026-10-10 (#4193-#4195): the agent then runs the operator's guard hooks, agents,
-# commands and CLIs. True in daniel-box's and daniel-server's host_vars. It needs the operator's chezmoi
-# (has_chezmoi) and a dotfiles source with the flag; a source without it is refused, and the
+# commands and CLIs. True in daniel-box's and daniel-server's host_vars. It needs homelab-tools' chezmoi
+# and a dotfiles source with the flag; a source without it is refused, and the
 # agent keeps what it had. False stops the sync and puts the subset back.
 claude_code_agent_dotfiles: false
 claude_code_agent_dotfiles_repo: https://github.com/DanielH2018/dotfiles.git
-# The dotfiles' `profile` answer: `server`, as chezmoi_setup gives the operator on these hosts.
+# The dotfiles' `profile` answer: `server`, as the operator's own config on these hosts holds.
 claude_code_agent_dotfiles_profile: server
 # How often <name>-dotfiles-sync.timer pulls the source and applies it. A dotfiles merge applies
 # no role here, so this bounds how long the agent runs the old hooks.

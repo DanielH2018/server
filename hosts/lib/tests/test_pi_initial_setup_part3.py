@@ -170,9 +170,9 @@ def test_the_package_depends_on_what_the_package_tasks_installed(package):
     assert {*required["name"], *raspi["name"], "auditd"} <= set(package.depends)
 
 
-@pytest.mark.parametrize("host", ["daniel-box", "daniel-server"])
-def test_a_cluster_node_stays_on_the_role_until_its_own_pr(host):
-    assert "/etc/audit/rules.d/hardening.rules" not in host_mode.render_host(host).files
+def test_daniel_box_stays_on_the_role_until_its_own_pr():
+    files = host_mode.render_host("daniel-box").files
+    assert "/etc/audit/rules.d/hardening.rules" not in files
 
 
 @pytest.mark.parametrize(
@@ -191,12 +191,16 @@ def test_each_whole_file_subject_skips_the_pi_at_its_import(import_file, subject
     )
     assert subject in entry["when"]
     hosts = ("daniel-pi", "daniel-box", "daniel-server")
-    assert packaged_guard_hosts([entry["when"]], hosts, ROLE) == {"daniel-pi"}
+    assert packaged_guard_hosts([entry["when"]], hosts, ROLE) == {
+        "daniel-pi",
+        "daniel-server",
+    }
 
 
 def test_the_setup_apply_runs_no_apt_upgrade_on_the_pi():
     upgrade = _task("host-basics.yml", "Update and upgrade system packages")
     hosts = ("daniel-pi", "daniel-box", "daniel-server")
-    assert packaged_guard_hosts([upgrade["when"]], hosts, ROLE) == {"daniel-pi"}
-    tooling = _task("host-basics.yml", "Install the pinned host Python")
-    assert packaged_guard_hosts(tooling["when"], hosts, ROLE) == {"daniel-server"}
+    assert packaged_guard_hosts([upgrade["when"]], hosts, ROLE) == {
+        "daniel-pi",
+        "daniel-server",
+    }

@@ -143,7 +143,7 @@ def test_discover_templates_finds_the_known_set():
         "deploy-ui.service.j2",
         "gitops-deploy.service.j2",
         "gitops-deploy.timer.j2",
-        "renovate-agent.timer.j2",
+        "homelab-renovate-agent.timer.j2",
         "renovate-agent-land@.service.j2",
         "claude-land@.service.j2",
         "claude-triage@.service.j2",
@@ -161,12 +161,10 @@ def test_discover_templates_finds_the_known_set():
         "check-timer-boot.service.j2",
         "check-timer.timer.j2",
         "unit-failure-alert.service.j2",
-        "worktree-holders.socket.j2",
-        "worktree-holders@.service.j2",
         "homelab-rootq.socket.j2",
         "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 37
+    assert len(names) == 34
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

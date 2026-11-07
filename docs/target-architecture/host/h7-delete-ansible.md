@@ -79,7 +79,7 @@ The exit criterion is seven observations:
       `system-upgrade` key. The guest holds no production
       credential: k3s generates a guest-only server token, and the guest's age key is no
       SOPS recipient.
-    - *The Flux half, on kind.* R4 PR 7b's `flux-bootstrap-drill.yml` runs green on the PR
+    - *The Flux half, on kind.* R4 PR 7b's `bootstrap-drill.yml` runs green on the PR
       that writes the cluster-node procedure. The procedure's Flux steps are R4's, so that
       run proves them: the operator creates only `sops-age`, and Flux's `cluster-vars`
       Kustomization reads Ready and produced `homelab-cluster-vars`.
@@ -413,7 +413,7 @@ The exit criterion is seven observations:
   `priorityClassName: homelab-critical` on Flux's controllers; apply the Flux components
   and sync objects; create `sops-age`; then apply the `OCIRepository` and the root
   Kustomization. R4 PR 7b writes it into `docs/flux-deploy-plane.md` as *Bootstrapping Flux
-  on a rebuilt cluster* and proves it on kind with `flux-bootstrap-drill.yml`, a fixture
+  on a rebuilt cluster* and proves it on kind with `bootstrap-drill.yml`, a fixture
   bundle and a throwaway key.
 - **Users.** `ansible/roles/setup/common/tasks/agent_user.yml` creates each Claude agent's
   Unix user and hands it its home, both as root. chezmoi applies as the operator, without
@@ -1285,7 +1285,6 @@ steps are:
    comes from the break-glass kit, the public key is unchanged, so no recipient commit is
    needed.
 4. Run the one-time host steps, each behind a guard that reads the state first:
-    - the LVM volumes, on daniel-server only;
     - the debloat purge, the rsyslog and `wpa_supplicant` masks and the removal of rsyslog's
       text logs, on the Pi only;
     - the k3s binary at `k3s_version`, from the release's `install.sh` checked against
@@ -1295,9 +1294,10 @@ steps are:
       `INSTALL_K3S_EXEC=server` on daniel-box or `INSTALL_K3S_EXEC=agent` on daniel-server,
       with `INSTALL_K3S_SKIP_ENABLE=true` and `INSTALL_K3S_SKIP_START=true`. It never relies
       on `K3S_URL` to pick the mode. It then asserts that exactly one of `k3s.service` and
-      `k3s-agent.service` exists, the one the host's role names. The package's enable link
-      and H6's `ExecStart` drop-in enable and configure that unit, so the installer's
-      default cannot start a second control plane.
+      `k3s-agent.service` exists, the one the host's role names. H6's `ExecStart` drop-in
+      configures that unit. No package enable link names it, and the operator enables and
+      starts it by hand (*The cluster-node bring-up*), so the installer's default cannot
+      start a second control plane.
     - On daniel-server, the installer also takes `K3S_URL` and `K3S_TOKEN`. The script
       reads both from its own environment, passed with `sudo --preserve-env`, and refuses
       when either is unset. `install.sh` writes them to
@@ -1309,6 +1309,10 @@ steps are:
     - Added by H7.58 to H7.60: the Pi's swap file, the `networkd-dispatcher.service` mask on
       all three hosts, the `ssh-users` group and the sys user's membership on all three
       hosts, and the removal of the LXD snaps on daniel-server.
+    - The script creates no LVM volume. The Ubuntu installer creates daniel-server's one
+      volume, `ubuntu-vg/ubuntu-lv`, which holds `/`, and nothing else in the tree or on the
+      host uses LVM. `docs/host-packages.md`, *Preparing the installer on either node*, holds
+      the operator's step that grows it to fill the disk.
 5. Install `chezmoi` from `homelab-tools`, then run `apt-get install homelab-updater
    homelab-<hostname>`, then `systemd-tmpfiles --create`, as boot does. That creates each
    directory a package declares in `tmpfiles.d`, the Pi's textfile directory (H7.4) among
@@ -1388,8 +1392,7 @@ for a wrong hostname, a missing host var and a missing key.
 ### The Pi rebuild runbook
 
 `docs/break-glass.md` gains the Pi runbook in H7.15b, and that page is the procedure to
-follow. It adds the steps a stock image needs (`age`, the `ssh-users` group, the updater's
-hand start), and it moves the recipient commit ahead of the package install, because
+follow. It adds the step a stock image needs (the updater's hand start), and it moves the recipient commit ahead of the package install, because
 `compose-run` refuses to start without the file `homelab-secrets` decrypts. The plan's
 steps are:
 
@@ -1434,7 +1437,17 @@ card's key.
 `docs/break-glass.md`, `docs/longhorn-disaster-recovery.md` and `docs/k3s-etcd-restore.md`
 point at it in the same PR. The procedure takes the archive signing key after step 3, because
 the package creates the user that imports it, and it starts k3s by hand, because no package
-enable link names the unit. Its steps are:
+enable link names the unit.
+
+**Why no enable link (#7513).** A link would act only at the node's next boot, because reconcile
+never starts a `windowed` unit, so the procedure would still need its hand start. The link would
+also add a hazard. daniel-box's first start must follow the server token and any etcd restore, so
+a reboot before the restore would start k3s from an empty datastore. H7.35 adds one such reboot,
+because its netplan file is `activate: manual` and a rebuilt box reboots to take `server_ip`. daniel-server takes the same hand
+start, so that one procedure covers both nodes. The hand `systemctl enable` also writes the
+link that starts the unit at every later boot.
+
+Its steps are:
 
 1. Run `bootstrap-host.sh` with `--until 4`, which installs k3s in the declared mode. On
    daniel-server the operator supplies `K3S_URL` and `K3S_TOKEN`, the token from
@@ -1451,8 +1464,8 @@ enable link names the unit. Its steps are:
       and every build refuses with `reason="keyring"`, which is the intended state for a
       builder with no signing key.
 3. Run the script to the end. On daniel-box use `--local-build <clone>`, with a clone from
-   GitHub or from the kit's repo bundle (item 8). On daniel-server the agent starts from
-   its env file and joins.
+   GitHub or from the kit's repo bundle (item 8). Then run `systemctl enable --now` on the
+   node's unit. On daniel-server the agent starts from its env file and joins.
 4. Bootstrap Flux by following *Bootstrapping Flux on a rebuilt cluster* in
    `docs/flux-deploy-plane.md`, which R4 PR 7b writes. H7 does not restate its steps or
    their order. That section applies the PriorityClasses Flux's own controllers need, then
@@ -1507,7 +1520,7 @@ file as its rollback.
 **The proofs.** H7.15c proves the procedure before H7.20a deletes `k3s-bringup.yml`, in two
 halves (exit 4).
 
-- **The Flux half, on kind.** R4 PR 7b's `flux-bootstrap-drill.yml` proves the section's
+- **The Flux half, on kind.** R4 PR 7b's `bootstrap-drill.yml` proves the section's
   steps on a throwaway kind cluster, with a fixture bundle and a throwaway key. That is C8's
   first substitute: the proof needs only the Kubernetes API, the pinned Flux controllers
   and a local-path volume. H7.15c's PR runs the workflow, by `workflow_dispatch` if its
@@ -1610,8 +1623,10 @@ on H4.2's and H6.2's step lists. Steps 1 and 3 to 5 go in the host's first PR:
    package roots, the hosts `host_secrets.py check` must find, and H3's canary order.
 6. After the merge, run `bootstrap-host.sh <host>` to the end (**operator-only**).
 
-A host census in `hosts/lib/tests/` fails when a directory under `hosts/` is missing from
-any of those named sets or has no creation rule, and it names the set.
+A host census, `hosts/lib/tests/test_host_census.py`, fails when a directory under `hosts/` is
+missing from `NAMED`, from `CANARY_ORDER` or from the script's `HOSTS`, or has no creation
+rule of its own, and it names the set. `host_secrets.py check` finds its hosts from
+`hosts/<host>/package.yml`, so it is not one of the sets.
 
 ### What the deletion touches
 
@@ -2186,7 +2201,10 @@ the `manual_plane` clearing, and *Rollback*'s
     `docs/break-glass.md` and `docs/host-packages.md`, and H7.15d's host census is their one
     test. It carries R4 PR 7b's kind drill run on this PR, the guest drill with its blast
     radius (**operator-only**, exit observation 4), and the D6 case that Open question 14
-    asks for. It merges before H7.53. H7.42 merged with `k3s`'s tasks still in place, so
+    asks for. The guest drill's runner waits for H7.34's move of the orchestrator
+    ([#7554](https://github.com/DanielH2018/server/issues/7554)), and the D6 case waits for a
+    hosted run ([#7555](https://github.com/DanielH2018/server/issues/7555)). It merges before
+    H7.53. H7.42 merged with `k3s`'s tasks still in place, so
     old H7.9's fallback no longer names a PR. This PR deletes `k3s/tasks/server.yml` and
     `k3s/tasks/coredns.yml` and empties the role, because the procedure it writes replaces
     the bring-up they run. Its body names where each of `server.yml`'s checks goes, the
@@ -2324,6 +2342,16 @@ the `manual_plane` clearing, and *Rollback*'s
       `homelab-daniel-server`, as H7.36 did on daniel-box, and adds the Ansible-era timer and
       paths as legacy entries. That empties the `loki_route_witness` subject, so H7.59 deletes
       its tasks. Reverting any of the three rows follows *Rollback*'s per-host order.
+      **Amended at H7.59:** four facts the row did not state. The deleted task was the only
+      thing that made `/var/lib/node-exporter-textfile` writable by the sys user here, so the
+      component gains a `tmpfiles.d` line, which also holds it on a rebuilt host. The
+      `rsyslog-filter` component lists `rsyslog` as a `Depends`, and reconcile runs
+      `rsyslogd -N1` before its try-restart, which replaces the role's parse check.
+      `loki_route_witness_hosts` goes with the tasks. The role's copies of the witness script
+      and reader stay until H7.60 with no task naming them: daniel-server's setup-drift reader
+      reports a missing source as drift until reconcile retires the two fragments that name
+      them. daniel-server held neither Kuma file on
+      2026-11-07, so as on the Pi its package lists neither.
 35. **H7.61 and H7.62 land the dev tooling and the worktree holder scan in canary order.**
     Only `dev_tooling_hosts` and the `has_claude_code` hosts run these tasks, and both lists
     name daniel-server and daniel-box. H7.61 adds daniel-server to
@@ -2354,6 +2382,16 @@ the `manual_plane` clearing, and *Rollback*'s
       old path and H7.62 repoints them. daniel-server's Ansible-era witness still runs the old
       path and no tick re-renders it there, so H7.59 lists `/usr/local/bin/uv` as that host's
       legacy entry when it moves the witness.
+      **Amended at H7.62:** the PR repoints daniel-box's readers and does not list the path. The
+      k3s health script only reaches a host through a hand apply of `k3s-bringup.yml`, and a package
+      install waits on no such apply, so a legacy entry here could delete the binary under a live
+      script, or under the deployer's own unit if a tick is parked. [#7566](https://github.com/DanielH2018/server/issues/7566) lists the path once
+      `rootq` shows no live unit or script naming it.
+    - **Amended at H7.62: `initial_setup_uv_version` goes too.** Its only other reader was
+      `agent_user.yml`'s assert that the operator's uv equals the pin. The dotfiles repo writes that
+      binary after this row, so the next Renovate bump would have failed `renovate_agent`'s apply and
+      written a `hold_sha`. The assert goes with it, and the agent copies the operator's uv as it
+      stands.
     - **Vale** takes the same shape, as *The component checklist and the setup census* states.
       `homelab-tools` pins it, a `vale` component ships `/usr/bin/vale`,
       `/usr/local/bin/vale` becomes a legacy entry, and `test_vale_matches_the_ci_pin.py`
@@ -2381,7 +2419,9 @@ the `manual_plane` clearing, and *Rollback*'s
           step 5 installs the binary. The cluster-node procedure runs `chezmoi init --apply`
           with H7.38's three prompt flags (**operator-only**). The seed and the agent-prompt
           tasks lose their purpose with it. The PR body says what keeps daniel-box's dotfiles
-          source current once the role stops applying it.
+          source current once the role stops applying it. **Amended at H7.62:**
+          `claude-agent-setup` takes the agent's chezmoi from `/usr/lib/homelab/bin/chezmoi`,
+          because nothing installs `~/.local/bin/chezmoi` on a rebuilt host once the role stops.
     - **What stays until H7.63:** `Resolve the deploy user's home directory` and `Install
       Python CLI tooling`, narrowed to `ansible-core` and `ansible-lint`.
 36. **H7.63 lands after the deployer's timer, as one PR.** It deletes read-only checks and tasks
@@ -2647,6 +2687,13 @@ the `manual_plane` clearing, and *Rollback*'s
       onto C2's `DEPLOY_HOLD`. That one is packaged here, and H7.19b deletes its remaining
       deployer reads in `deploy_ui.py`, `deploy_ui_reads.py` and `deploy_ui_writes.py`.
       The deployer-import census covers it in both cases.
+    - **What H7.37 did (#7504).** D6.15's review recorded no move onto `DEPLOY_HOLD`, so
+      deploy_ui took the first branch and has no line in the package. #7419 holds the rest.
+      The three roles are emptied, as *Roles are emptied before H7.20a, never deleted*
+      requires, and four components hold their content: `renovate-notify`,
+      `renovate-agent`, `fake-remux` and `github-checks`. A package cannot resolve a
+      ClusterIP, so the Sonarr Service gains a pin at its live address, as H7.8 did for
+      `nut`. `renovate-agent-setup` is the agent's tooling unit H7.12b describes.
 12. **H7.12 Claude Code.**
     - **H7.12a** The paired PR in `DanielH2018/dotfiles` adds the per-user tooling: uv, the
       pinned Python, Claude Code, `claude_guard`, `claude_worktree`, prek, `github_cli` and
@@ -2857,6 +2904,12 @@ the `manual_plane` clearing, and *Rollback*'s
           test repository and its throwaway key, and each rewrite must match exactly one line.
           The install is the shim's `--simulate`, as in the other bootstrap cases. H7.44's
           guest drill still owns the proof against the real archive key.
+      **Amended 2026-11-07 ([#7513](https://github.com/DanielH2018/server/issues/7513)):** step 4
+      no longer names an LVM step or a package enable link. `lsblk` on daniel-server shows
+      one volume, `ubuntu-vg/ubuntu-lv`, at `/`. *The cluster-node bring-up* says why no link
+      ships. The bootstrap cases read the unit as disabled and inactive after the run, and
+      `hosts/lib/tests/test_bootstrap_host_k3s.py` reads the rendered links, because a
+      simulated install lands no link.
     - **H7.15b** The Pi runbook, then the Pi rebuild, which is exit observation 2. The
       operator keeps the old SD card as the rollback. The cluster's wg-easy on 51820 is
       proven first, as in H5.5.
@@ -2867,6 +2920,13 @@ the `manual_plane` clearing, and *Rollback*'s
     - **H7.15d** The host-addition walkthrough in `docs/host-packages.md`, the host census and
       a fixture-host container case (about 150 lines). It merges before H7.20a (*Adding a
       host*).
+      **Amended 2026-11-07 ([#7515](https://github.com/DanielH2018/server/issues/7515)):** the
+      census is `hosts/lib/tests/test_host_census.py`. The case is
+      `scripts/validate/validate_lib/fixture_host_case.py`, a fourth offline run in
+      `bootstrap_case.py`, so `bootstrap-host.sh --local-build` itself renders and builds the
+      host. It reads the package spec from the walkthrough's own YAML block, so a walkthrough
+      whose file list stops building fails the case. Steps 3 to 5 stay with the census,
+      because nothing reads those sets while a host builds.
     - **H7.15e** The release-upgrade procedure in `docs/host-packages.md` (docs only, about
       60 lines) (*Ubuntu release upgrades*).
 16. **H7.16 Scripts for the operator playbooks.**
@@ -3079,7 +3139,7 @@ k3s kubectl get node daniel-box
 ufw status | head -n 1
 
 # Exit 4, Flux half: R4 PR 7b's kind drill, as run on H7.15c's PR.
-gh run list --workflow flux-bootstrap-drill.yml --limit 1
+gh run list --workflow bootstrap-drill.yml --limit 1
 
 # Exit 5, on daniel-box.
 systemctl list-unit-files 'gitops-deploy*'; systemctl is-active homelab-checkout-sync.timer

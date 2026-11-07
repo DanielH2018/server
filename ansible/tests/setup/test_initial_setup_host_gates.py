@@ -11,14 +11,12 @@ gate against `group_vars/all.yml` + `host_vars` only, and a name it cannot resol
 "every host" — an over-broad verdict. A flag moved into the role's
 `defaults/` would pass every assertion about the task files and still break the reach reader.
 
-NOT every literal became a flag. The governor-unit cleanup, the LXD-snap debloat and the
-stale-UFW-rule deletion read HOST HISTORY rather than hardware — what was once done to one
-machine — so they keep the literal behind a `DECIDED:` comment. This file pins that split: a
-new bare literal fails, and a deliberate one must carry its marker.
+A gate that reads HOST HISTORY rather than hardware may keep a literal behind a `DECIDED:`
+comment, and none does today. This file pins that split: a new bare literal fails until it is
+recorded here.
 
-THE CENSUS GLOBS FOR ITS OWN SUBJECT, so both `EXPECTED_FLAG_GATES` and
-`DELIBERATE_LITERALS` name members the census must find: a rename that emptied it would pass
-every assertion over nothing.
+THE CENSUS GLOBS FOR ITS OWN SUBJECT, so `EXPECTED_FLAG_GATES` names members the census must
+find: a rename that emptied it would pass every assertion over nothing.
 
 Run: uv run pytest ansible/tests/setup/test_initial_setup_host_gates.py
 """
@@ -66,16 +64,7 @@ EXPECTED_FLAG_GATES = {
 
 # The literals that stay, because they read host history rather than hardware. Each must sit
 # behind a `DECIDED:` comment in its file.
-DELIBERATE_LITERALS = frozenset(
-    {
-        "Check for the legacy performance-governor unit (daniel-server)",
-        "Disable the legacy performance-governor unit (daniel-server)",
-        "Remove the legacy performance-governor unit file (daniel-server)",
-        "Read the active CPU governor (daniel-server)",
-        "Revert the live CPU governor to powersave (daniel-server)",
-        "Remove the unused LXD snap and its orphaned bases (daniel-server)",
-    }
-)
+DELIBERATE_LITERALS: frozenset[str] = frozenset()
 
 
 def _when_text(task: dict) -> str:
@@ -123,13 +112,6 @@ def test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones():
         "host name hard-coded in a gate — give it a capability flag, or record the literal "
         f"as deliberate: {sorted(literals - DELIBERATE_LITERALS)}"
     )
-
-
-def test_each_deliberate_literal_group_records_why():
-    """A `DECIDED:` marker at the gate, so the next audit does not re-file #2975."""
-    for stem in ("system-tuning",):
-        text = (TASKS / f"{stem}.yml").read_text()
-        assert "DECIDED:" in text and "#2975" in text, stem
 
 
 def test_the_reach_reader_resolves_each_flag_to_the_same_hosts_as_the_literal():

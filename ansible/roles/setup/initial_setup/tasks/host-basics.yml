@@ -191,97 +191,30 @@
     name: apt-show-versions
     state: present
   become: true
-  when: not has_low_memory_board
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['host_basics']
+    - not has_low_memory_board
   tags: [packages]
 
 - name: Resolve the deploy user's home directory
-  # Dual-tagged: registers a fact consumed by BOTH the uv tasks (tooling) and the
-  # prek task (git-hooks); a tag-scoped run of either still needs it.
-  tags: [tooling, git-hooks]
-  # The play runs become:true, so gather_facts escalated and ansible_facts.env.HOME is
-  # /root. The uv/prek tasks below run become:false (per-user installs as the connecting
-  # user), so they need THAT user's home, not root's. Capture it explicitly here rather
-  # than re-gathering env facts globally (config_files/docker_install also read env facts).
+  tags: [tooling]
+  # The play runs become:true, so gather_facts escalated and ansible_facts.env.HOME is /root.
+  # H7.63 deletes this read with the two tool tasks below; no task reads the fact.
   ansible.builtin.shell: echo "$HOME"
   become: false
   changed_when: false
   register: initial_setup_user_home
-  # Read-only, so it runs under --check too. Skipped, its stdout is empty and every consumer
-  # renders a path under `/.local`.
+  # Read-only, so it runs under --check too.
   check_mode: false
-
-- name: Create the connecting user's installers directory
-  tags: [tooling]
-  # Fetched to a user-owned directory rather than /tmp: the script is executed, and /tmp is
-  # world-writable. Same directory chezmoi_setup uses for its installer.
-  ansible.builtin.file:
-    path: "{{ initial_setup_user_home.stdout }}/.local/share/installers"
-    state: directory
-    mode: "0755"
-  become: false
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-
-- name: Download the pinned uv installer
-  tags: [tooling]
-  # The versioned URL, not astral.sh/uv/install.sh: that one installs the newest release at
-  # run time, so two hosts provisioned a month apart get different uv. The checksum re-fetches a copy on the
-  # host that hashes differently and fails a fetch that does. The version, the URL and the
-  # sha256 are `defaults/main.yml`'s, beside each other, so `scripts/validate/asset_pins.py`
-  # can render the URL and check the hash without a raw curl.
-  ansible.builtin.get_url:
-    url: "{{ initial_setup_uv_installer_url }}"
-    dest: "{{ initial_setup_user_home.stdout }}/.local/share/installers/uv-install.sh"
-    mode: "0755"
-    checksum: "sha256:{{ initial_setup_uv_installer_sha256 }}"
-  become: false
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-
-- name: Read the uv version this host already has
-  tags: [tooling]
-  # `creates:` would be wrong here -- any uv satisfies it, so a version bump would never
-  # install. The absolute path, for the reason the Vale read below gives.
-  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv --version"
-  register: initial_setup_uv_installed
-  changed_when: false
-  failed_when: false
-  become: false
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-
-- name: Install uv (per-user; PEP 668-safe on 24.04+)
-  tags: [tooling]
-  # 24.04 / Python 3.12 marks the system environment externally-managed (PEP 668), so a
-  # global `pip install` errors. uv is a standalone binary (no system Python needed),
-  # installed per-user into ~/.local/bin via the pinned script above. Run as the connecting
-  # user (not the play's become: true) so it lands in the repo owner's home. The script
-  # replaces an older uv in place, so this is also how a pin bump reaches a host.
-  ansible.builtin.command:
-    cmd: "{{ initial_setup_user_home.stdout }}/.local/share/installers/uv-install.sh"
-  changed_when: true
-  become: false
-  when:
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-    - inventory_hostname in dev_tooling_hosts
-    - (initial_setup_uv_installed.stdout | default('')).split()[1:2] != [initial_setup_uv_version]
 
 - name: Read the uv tools this host already has
   tags: [tooling]
   # `uv tool list` prints one `<name> v<version>` line per tool, which is what the install
   # below compares its pins against. A `creates:` guard on the tool directory would be
   # satisfied by any version, so a pin here would never reach a host that already has the
-  # tool.
-  vars:
-    # A rebuilt host whose package owns dev_tooling gets ~/.local/bin/uv from the dotfiles repo,
-    # which need not have run yet, and the package ships this path.
-    initial_setup_tool_uv: >-
-      {{ '/usr/bin/uv' if inventory_hostname in initial_setup_packaged_hosts['dev_tooling']
-         else initial_setup_user_home.stdout ~ '/.local/bin/uv' }}
-  ansible.builtin.command: "{{ initial_setup_tool_uv }} tool list"
+  # tool. /usr/bin/uv is the package's: ~/.local/bin/uv is the dotfiles repo's, which need not
+  # have run yet on a rebuilt host.
+  ansible.builtin.command: /usr/bin/uv tool list
   register: initial_setup_uv_tools
   changed_when: false
   failed_when: false
@@ -300,12 +233,7 @@
   #                    one the tests and `uv run ansible-playbook` resolve.
   #   ansible-lint  == prek.toml's ansible/ansible-lint rev (the hook's own version).
   # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
-  vars:
-    # The same choice as the read above.
-    initial_setup_tool_uv: >-
-      {{ '/usr/bin/uv' if inventory_hostname in initial_setup_packaged_hosts['dev_tooling']
-         else initial_setup_user_home.stdout ~ '/.local/bin/uv' }}
-  ansible.builtin.command: "{{ initial_setup_tool_uv }} tool install --python 3.15 {{ item }}"
+  ansible.builtin.command: "/usr/bin/uv tool install --python 3.15 {{ item }}"
   loop:
     - ansible-core==2.22.0rc2
     - ansible-lint==26.10.1
@@ -313,144 +241,6 @@
   when:
     - inventory_hostname in dev_tooling_hosts
     - (item | replace('==', ' v')) not in (initial_setup_uv_tools.stdout_lines | default([]))
-
-- name: Install prek as a uv tool
-  tags: [tooling]
-  # Per-user, so `prek install` (below) finds prek on ~/.local/bin. Its own task because a host
-  # whose package owns dev_tooling gets prek from the dotfiles repo and keeps the two tools above.
-  # The pin's twin is the CI setup action's `pip install prek==` (.github/actions/setup), which
-  # ansible/tests/repo/test_host_tool_pins_match_their_twins.py holds equal.
-  ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.15 {{ item }}"
-  loop:
-    - prek==0.5.9
-  become: false
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-    - (item | replace('==', ' v')) not in (initial_setup_uv_tools.stdout_lines | default([]))
-
-- name: Install the pinned host Python
-  tags: [tooling]
-  # become: false to match how uv itself is installed above — uv keeps interpreters under the
-  # connecting user's data dir.
-  ansible.builtin.command:
-    cmd: "{{ initial_setup_user_home.stdout }}/.local/bin/uv python install {{ host_python_version }}"
-  register: initial_setup_host_python
-  changed_when: "'Installed' in initial_setup_host_python.stdout"
-  become: false
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-
-- name: Look for the old uv symlink at the stable path
-  tags: [tooling]
-  ansible.builtin.stat:
-    path: /usr/local/bin/uv
-  register: initial_setup_uv_published
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-
-# Until #4203 /usr/local/bin/uv was a symlink into the connecting user's 0750 home, so it
-# dangled for every other uid, the claude agent user included. `copy` checksums THROUGH a link
-# at dest, which here points at src, so it would report ok and leave the link. Remove it first.
-- name: Remove the old uv symlink so a real copy can replace it
-  tags: [tooling]
-  ansible.builtin.file:
-    path: /usr/local/bin/uv
-    state: absent
-  become: true
-  when:
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-    - inventory_hostname in dev_tooling_hosts
-    - initial_setup_uv_published.stat.islnk | default(false)
-
-- name: Publish uv at a stable path for systemd and cron
-  tags: [tooling]
-  # Host scripts run through `uv run`, so what needs a stable absolute path is UV, not a Python.
-  # systemd and cron inherit no useful PATH and cannot expand ~, and hardcoding the connecting
-  # user's home into unit files couples them to a path that is not guaranteed.
-  #
-  # A root-owned copy, not a symlink into that home, so every uid can run it (#4203). The copy
-  # follows the pinned per-user install above: a pin bump reinstalls that binary in this same
-  # tag, and this task copies the new bytes over.
-  #
-  # Deliberately NOT a python3.14 symlink: a second system-level interpreter would be a second
-  # way to run Python on these hosts, and the whole point is that there is one way — uv.
-  ansible.builtin.copy:
-    src: "{{ initial_setup_user_home.stdout }}/.local/bin/uv"
-    dest: /usr/local/bin/uv
-    remote_src: true
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['dev_tooling']
-
-- name: Pin the Vale version this host installs
-  tags: [tooling]
-  # The prek `vale` hook is `language = "system"`, so it runs whatever binary is on PATH and
-  # fails with exit 127 where there is none. .github/workflows/ci.yml installs the same version
-  # on the runner, so CI passes while a commit touching any top-level docs page dies on a
-  # workstation, and the way round it is a hand-fetched tarball or `--no-verify`.
-  #
-  # ONE copy of the version, set here rather than in group_vars: Renovate's Vale manager reads
-  # this file and ci.yml together, and a version in group_vars/all.yml would land in the k8s
-  # image group instead (renovate.json's matchFileNames). The two copies agreeing is ENFORCED by
-  # ansible/tests/repo/test_vale_matches_the_ci_pin.py.
-  ansible.builtin.set_fact:
-    initial_setup_vale_version: "3.25.1"
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['vale']
-
-- name: Read the Vale version this host already has
-  tags: [tooling]
-  # `creates:` would be wrong here — it is satisfied by ANY vale on the path, so a version bump
-  # would never install. Reading the version is what makes the bump take effect.
-  #
-  # The ABSOLUTE path, not a bare `vale`: a bare one resolves against the remote PATH, which on
-  # a host carrying a hand-installed ~/.local/bin/vale reports that copy's version. The task would then skip, /usr/local/bin/vale would never be
-  # written, and the role would report success having installed nothing. Remove a hand-installed
-  # copy once this has run — it shadows /usr/local/bin on an interactive PATH.
-  ansible.builtin.command: /usr/local/bin/vale --version
-  register: initial_setup_vale_installed
-  changed_when: false
-  failed_when: false
-  become: false
-  when:
-    - inventory_hostname in dev_tooling_hosts
-    - inventory_hostname not in initial_setup_packaged_hosts['vale']
-
-- name: Install the pinned Vale binary
-  tags: [tooling]
-  # Only on `dev_tooling_hosts`: this exists for the prek hook, and a host nobody commits from
-  # never runs one. `has_repo_checkout` is the wrong gate: it admits daniel-pi, which
-  # holds a checkout but is driven remotely over ssh.
-  #
-  # No checksum pin, unlike homelab-tools' sops. That one is the root of the secret-decryption
-  # trust chain; this is a prose linter for Markdown, and ci.yml fetches it unverified from the
-  # same release. Pinning a per-arch sha256 here would make every Renovate bump a manual finish
-  # for no trust gained over what CI already does.
-  ansible.builtin.unarchive:
-    src: >-
-      https://github.com/vale-cli/vale/releases/download/v{{ initial_setup_vale_version }}/vale_{{ initial_setup_vale_version }}_Linux_{{ vale_asset_arch }}.tar.gz
-    dest: /usr/local/bin
-    remote_src: true
-    include: [vale]
-    mode: "0755"
-    owner: root
-    group: root
-  vars:
-    # Vale's own asset naming, not Debian's: `64-bit` where apt would say `amd64`.
-    vale_asset_arch: "{{ '64-bit' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
-  become: true
-  when:
-    - inventory_hostname not in initial_setup_packaged_hosts['vale']
-    - inventory_hostname in dev_tooling_hosts
-    - initial_setup_vale_version not in (initial_setup_vale_installed.stdout | default('')).split()
 
 - name: Install pinned Ansible collections from requirements.yml
   tags: [collections]

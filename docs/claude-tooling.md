@@ -186,8 +186,7 @@ After a passing rollout verdict, the gate reads the alert plane (M6 B-1,
 `docs/target-architecture/contracts.md`, which D5's soak shares. A firing alert labelled
 `service="<tag>"` fails the gate when it is `critical` or carries `verify="true"`, is not a
 shadow rule or the Watchdog, and became active after the tag's reference time. That time is
-`applied_at` for an Ansible-owned tag. For an `owner: flux` tag it is when the tag's
-Kustomization first reported its current revision. Each ingress probe of the tag must then
+when the tag's Kustomization first reported its current revision. Each ingress probe of the tag must then
 report a `probe_success` of 1 sampled after the rollout. The gate waits up to 90s for that
 sample and re-reads a failing verdict once after 60s. A tag whose entry renders no ingress
 route skips the probe half. A routed tag with no series at all fails when Prometheus has
@@ -225,12 +224,11 @@ create a Job (the `view` ClusterRole it is bound to refuses it), so this only ev
 It reads the Jobs the CronJob owns and the gate Job Flux runs in `<tag>-verify`, which names no
 owner.
 
-What "the deploy" means depends on the role's owner. For an `owner: flux` role, the gate Job of
-the revision Flux applies is the one whose pod template's `homelab/role-digest8` equals the first
-eight characters of Kustomization `<tag>`'s `homelab/content-digest`. With no such gate Job the
-check fails, and otherwise it judges the newest Job, which is that gate or a later firing. For
-any other role the reference is the `release_stamp.yml` record's `applied_at`. When no Job has
-landed since then, the check falls back to the CronJob's own daily/weekly schedule: the
+"The deploy" is the revision Flux applies. Its gate Job is the one whose pod template's
+`homelab/role-digest8` equals the first eight characters of Kustomization `<tag>`'s
+`homelab/content-digest`. With no such gate Job the check fails, and otherwise it judges the
+newest Job, which is that gate or a later firing. When no Job has landed since that revision, the
+check falls back to the CronJob's own daily/weekly schedule: the
 previous run must have succeeded and not be more than twice its interval old. Any other
 schedule shape fails closed rather than guess an interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
 reports "declares no rollout-checkable workload," which the deploy notifier skips.
@@ -964,13 +962,12 @@ A headless `claude -p` batch runs without isolation and draws none of these refu
 
 ## `auto-mode-bridge` internals
 
-The two places auto mode and this repo have to talk (`PermissionDenied` + `PostToolUseFailure`,
-both Bash).
+The places auto mode and this repo have to talk (`PostToolUseFailure` and, for a `git push`,
+`PostToolUse`, both Bash).
 
-On a **denial**, it retries `gitops_tick.sh` and nothing else: the tick is allow-listed and still
-denied about 1 run in 7 on identical text, which is classifier variance rather than a rule, so
-`retry: true` reissues the call and the classifier judges it again. Two retries per session, and
-a compound command that merely contains the tick gets none — the classifier judged the whole line.
+It grants no retry on a classifier **denial**. A `PermissionDenied` branch used to retry
+`gitops_tick.sh`, which the classifier denied about 1 run in 7 on identical text in 2026-08. It
+was removed on 2026-11-07, after a week with no retry ledger in any session.
 
 On a **failure**, it names a `deploy.sh` exit a refusal rather than a playbook failure, and
 points at the wrapper's own last two lines for what it was. `deploy_lib/run.py:report` prints the name, the meaning and the remedy from

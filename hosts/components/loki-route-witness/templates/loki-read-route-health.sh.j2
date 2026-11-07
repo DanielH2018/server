@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
-# Witness for the Loki read route — shipped by the homelab-daniel-box package (loki-route-witness).
+# Witness for the Loki read route — shipped by each cluster node's package (loki-route-witness).
 #
 # Usage: loki-read-route-health [-h|--help]
 # Takes no arguments. systemd timer homelab-loki-route-witness.timer runs it as the deploy user at
-# minute 23 of every hour, and again every 15 minutes while the last run failed. daniel-server's
-# witness stays an Ansible-era timer until that host moves. Each run writes its verdict to
-# $TEXTFILE_DIR/loki-read-route-health.prom for node_exporter's textfile collector (default
-# /var/lib/node-exporter-textfile; a test points it elsewhere).
+# minute 23 of every hour, and again every 15 minutes while the last run failed. Each run writes
+# its verdict to $TEXTFILE_DIR/loki-read-route-health.prom for node_exporter's textfile collector
+# (default /var/lib/node-exporter-textfile; a test points it elsewhere).
 #
 # WHAT THIS WATCHES (issue #1712). loki-homelab's IngressRoute has exactly one caller —
 # `probe.py loki-query` / `loki-labels`, running as a host process — and nothing watched it. It
@@ -39,7 +38,7 @@ done
 
 # shellcheck source=/dev/null
 source /usr/lib/homelab/homelab-check-lib.sh || {
-  logger -t loki-read-route-health "homelab-check-lib.sh missing — the homelab-daniel-box package ships it"
+  logger -t loki-read-route-health "homelab-check-lib.sh missing — the check-lib component ships it"
   exit 1
 }
 
@@ -57,9 +56,10 @@ fi
 DEADLINE_S=7200
 
 REPO_DIR=/home/{{ sys_user }}/server
-# UV absolute-pathed: cron's PATH lacks ~/.local/bin. --frozen: never rewrite uv.lock on this
-# host — a rewrite would dirty the tree and wedge the GitOps deployer's dirty-skip.
-UV=/home/{{ sys_user }}/.local/bin/uv
+# The uv component's path: a rebuilt host has no per-user uv until the dotfiles step. --frozen: never
+# rewrite uv.lock on this host — a rewrite would dirty the tree and wedge the GitOps deployer's
+# dirty-skip.
+UV=/usr/bin/uv
 BODY="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py loki-labels 2>&1)"
 RC=$?
 

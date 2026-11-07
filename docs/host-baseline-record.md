@@ -21,51 +21,52 @@ the name:
   answers to a subject tag, so `--tags crons` is never the only way to reach it:
   `secret-rotation` (the removal of the old audit and rotation crons), `ansible-log`,
   `worktree-sweep`, `cert-expiry` (the retired TLS watch's removal), `infra-map`,
-  `setup_drift`, `loki_route_witness`, `docs` and `evals`.
+  `setup_drift`, `docs` and `evals`.
   `ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py` refuses a task whose only
   tag is `crons`.
-- `tuning` — the server's CPU governor.
-- `debloat` — the server's LXD-snap removal and the networkd-dispatcher mask on both hosts.
+- `debloat` — the networkd-dispatcher mask. Step 4 of `hosts/bootstrap-host.sh` removes
+  daniel-server's LXD snap and its bases on a rebuilt host.
 - `kernel-modules` — the blacklist plus WireGuard.
-- `igpu` — i915 GuC for QuickSync, on `has_igpu` hosts only.
+- `igpu` — i915 GuC for QuickSync. daniel-server, the one `has_igpu` host, takes it from the
+  `host-hardening` component, so this tag writes nothing on any host today.
 - `banners` — the login banners. `coredumps` — systemd-coredump suppression.
 
 ## Tooling, pins and the root HOME trap
 
-- **Every `tooling` and `git-hooks` task is gated on `dev_tooling_hosts`** (daniel-box and
-  daniel-server). daniel-pi holds a checkout but nobody commits from it, and the tag would put
-  uv and a pinned Python on a 512 MB Zero 2 W (#1726). Membership is enforced by
-  `ansible/tests/setup/test_dev_tooling_hosts.py`.
-- **daniel-server's package owns these subjects, so only daniel-box runs most of those tasks.**
-  `initial_setup_packaged_hosts` lists daniel-server under `dev_tooling`, `vale` and
-  `worktree_holders`. `/usr/bin/uv` and `/usr/bin/vale` are one-line execs of the `homelab-tools`
-  binaries, and the dotfiles repo installs the per-user uv, prek and Python. On daniel-server the
-  role keeps only `ansible-core` and `ansible-lint`, which `/usr/bin/uv` installs. The stale
-  `/usr/local/bin/uv` stays there, with no writer, for the Loki witness until H7.59 retires both.
-- **Every tool this role installs is pinned, and a bump needs its digest regenerated** (#2148).
-  uv's version, installer URL and sha256 sit together at
-  `initial_setup_uv_version` in the role's `defaults/main.yml`, so
-  `scripts/validate/asset_pins.py` can render the URL and produce the hash an unattended
-  renovate_agent run has no `curl` to produce — `--refresh astral-sh/uv` rewrites it, and
-  `--only initial_setup_uv_installer` checks it (#2301).
-  `ansible-core`, `ansible-lint`, `prek` and Vale each equal a twin in `pyproject.toml`,
-  `prek.toml` or CI (`ansible/tests/repo/test_host_tool_pins_match_their_twins.py`,
-  `ansible/tests/repo/test_vale_matches_the_ci_pin.py`), and every install is version-gated
-  rather than `creates:`-gated, so a bump replaces the tool.
+- **Every `tooling` task but the home-directory read is gated on `dev_tooling_hosts`** (daniel-box
+  and daniel-server). daniel-pi holds a checkout but nobody commits from it (#1726). Membership is
+  enforced by `ansible/tests/setup/test_dev_tooling_hosts.py`.
+- **The packages and the dotfiles repo own the dev tooling (H7.61, H7.62).** `/usr/bin/uv` and
+  `/usr/bin/vale` are one-line execs of the `homelab-tools` binaries, the `worktree-holders`
+  component ships the root-run holder scan, and the dotfiles repo installs the per-user uv, prek and
+  Python. The role keeps only `ansible-core` and `ansible-lint` until H7.63, which `/usr/bin/uv`
+  installs. daniel-server's package retires `/usr/local/bin/uv`. A stale copy stays on daniel-box
+  with no writer, and [#7566](https://github.com/DanielH2018/server/issues/7566) retires it after the k3s apply that repoints that role's
+  last reader.
+- **The two tools this role installs are pinned, and each equals a twin** (#2148).
+  `ansible-core` and `ansible-lint` equal `pyproject.toml` and `prek.toml`
+  (`ansible/tests/repo/test_host_tool_pins_match_their_twins.py`), and the install is version-gated
+  rather than `creates:`-gated, so a bump replaces the tool. Vale's copies are in `homelab-tools`
+  and CI (`ansible/tests/repo/test_vale_matches_the_ci_pin.py`). The dotfiles repo's `tools.toml`
+  pins uv, prek and Python, and this repo holds no twin of uv or prek.
+- **`host_python_version` names an interpreter only the dotfiles repo installs.** Units run `uv` with
+  `--no-python-downloads`, so a bump merged first leaves every unit naming the pin without a Python.
+  To bump it, land the dotfiles' `python` pin, run `chezmoi apply` on daniel-box and daniel-server,
+  read `~/.local/bin/uv python list --only-installed` on each, and then merge this repo's bump. No
+  test can hold the two equal, because the dotfiles repo is not in this tree.
 - **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413).
   `ansible/tests/setup/test_ssh_dir_paths_are_absolute.py` pins the fix, and the
   `role-tasks-write-no-home-relative-path` row of `ansible/tests/repo/test_census_rows_roles.py`
   ratchets the class. The home-dir resolver task
-  exists for the same reason, and its `register:` is why it carries every consumer's tag —
-  `[tooling, git-hooks]`, the shape the role doc's fact-dependency rule names. That rule is a
+  exists for the same reason. The role doc's fact-dependency rule says a `register:` carries
+  every consumer's tag. That rule is a
   check rather than prose since the GitOps deployer began deriving and applying narrow setup
   tags (#3120). ENFORCED:
   `ansible/tests/setup/test_register_producers_carry_consumer_tags.py::test_every_register_producer_carries_its_consumers_tags`,
   over every setup role rather than this one.
-- **`become` vs HOME:** the `Resolve the deploy user's home directory` task exists because
-  `ansible_facts.env.HOME` is root's under the play's `become: true`, while uv and the per-user
-  tooling must install for the unprivileged deploy user. Keep a new per-user task on the
-  resolver rather than on `env.HOME`.
+- **`become` vs HOME:** `ansible_facts.env.HOME` is root's under the play's `become: true`. The
+  `Resolve the deploy user's home directory` task registers the deploy user's home, and no task
+  reads it since H7.62. H7.63 deletes it.
 
 ## SSH, UFW and sudo
 
@@ -256,30 +257,23 @@ inert. That file EXECUTES the library against a fixture rather than grepping it,
 
 ## Loki read-route witness (`loki_route_witness` tag)
 
-`loki-read-route-health.sh` runs hourly on every host in `loki_route_witness_hosts`
-(`group_vars/all.yml` — both prod cluster nodes) and writes that host's own
-`loki-read-route-health.prom` verdict, which `LokiReadRouteFailed` and
-`LokiReadRouteNotReporting` read per host. It pushed a "Loki Read Route (<host>)" Kuma tile until
-M6 batch B2's Cutover-2.
+`/usr/lib/homelab/loki-read-route-health` runs hourly on both prod cluster nodes and writes that
+host's own `loki-read-route-health.prom` verdict, which `LokiReadRouteFailed` and
+`LokiReadRouteNotReporting` read per host. Each node's package lists the `loki-route-witness`
+component, and `hosts/components/loki-route-witness/component.yml` carries the contract.
+`daniel-pi` is not in the route's ClientIP set, so it never lists the component.
 
-**It is a systemd timer, `kuma-check-loki-read-route.timer`, not a cron, since 2026-09-19.**
-The `Schedule the Loki read-route witness` task imports the `common` role's
-`check_timer.yml`, whose service is `Restart=on-failure` with `RestartSec=15min`: the
-script exits 1 after a `down` verdict, so a red check reruns every 15 minutes until the route
-answers instead of sitting red until the next hourly slot. The timer is `Persistent=true`, so a
-slot missed inside an outage runs at boot; the script's boot-grace arm exits 1 without a verdict,
-and the restart carries the real verdict. `systemctl status kuma-check-loki-read-route` shows
-`auto-restart` while it is red, and `journalctl -u kuma-check-loki-read-route` holds the runs.
-The import removes the old `Loki read-route witness` cron on every host.
+**It is a systemd timer, `homelab-loki-route-witness.timer`.** Its service is
+`Restart=on-failure` with `RestartSec=15min`: the script exits 1 after a `down` verdict, so a red
+check reruns every 15 minutes until the route answers instead of sitting red until the next hourly
+slot. The timer is `Persistent=true`, so a slot missed inside an outage runs at boot; the script's
+boot-grace arm exits 1 without a verdict, and the restart carries the real verdict.
+`systemctl status homelab-loki-route-witness` shows `auto-restart` while it is red, and
+`journalctl -u homelab-loki-route-witness` holds the runs.
 
-**daniel-box's witness is packaged since H7.36.** The `loki-route-witness` component of
-`homelab-daniel-box` ships `homelab-loki-route-witness.timer` with the same `Restart=on-failure`,
-`RestartSec=15min`, boot-rerun and `Persistent=true` shape, and loads no credential. The role
-skips daniel-box through
-`initial_setup_packaged_hosts['loki_route_witness']` in `defaults/main.yml` and keeps the
-Ansible-era timer on daniel-server until that host's package moves it. Until then the two copies
-of `loki_route_health.py` and of the script stay in step by hand, and
-`ansible/tests/setup/test_loki_route_witness.py` holds the reader's code identical.
+**The witness needs the textfile directory group-writable.** It runs as `sys_user`, and the
+kubelet creates the directory root 0755 for node-exporter's hostPath. The component's tmpfiles.d
+line holds it at root, group `sys_user`, mode 2775.
 
 **Why it is a host check and not a monitor-bridge check.** `loki-homelab`'s read route is guarded
 by a ClientIP set of node-owned addresses, and its only caller is `probe.py loki-query` or
@@ -295,12 +289,11 @@ deadline.
 
 **The verdict is the response body, never the exit code.** `probe.py` builds its curl argv
 without `-f`, so a route Traefik refuses returns `404 page not found` with exit **0**.
-`files/loki_route_health.py` decides — valid JSON, `status: success`, non-empty `data` — and
-the role's `tests/test_loki_route_health.py` holds that 404 as a DOWN case.
+`hosts/components/loki-route-witness/loki_route_health.py` decides — valid JSON, `status: success`,
+non-empty `data` — and `hosts/lib/tests/test_loki_route_health.py` holds that 404 as a DOWN case.
 `ansible/tests/setup/test_loki_route_witness.py` guards the host list, the deadline against
-the timer period, the exit-code contract (a down verdict exits 1), the removal arm, and that
-neither copy pushes to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both
-tokens a week later.
+the timer period, the exit-code contract (a down verdict exits 1), and that the script does not
+push to Kuma, which M6 batch B2's Cutover-2 removed. B2's token PR retired both tokens a week later.
 
 ## The generated-docs refresh cron, in detail
 
@@ -417,7 +410,9 @@ their info would remove lines from `kern.log` and `mail.log` that are present to
 cost of the pair: +0.34 MB/day/host, against a +7 MB/day/host floor without the filter.
 **`validate:` cannot be used on the filter** — AppArmor confines `rsyslogd` to
 `/etc/rsyslog.conf` and `/etc/rsyslog.d/**`, and Ansible validates a candidate in a temp
-directory, so the config is checked in place afterwards and the write undone on failure.
+directory, so the role checks the config in place afterwards and undoes the write on failure.
+On daniel-server the `rsyslog-filter` component ships the file, and reconcile runs
+`rsyslogd -N1` before the try-restart, so a fragment that does not parse holds the host.
 
 **What the cap costs a forensic read, and how to read a boot in spite of it.** Priority-info
 lines are gone from the journal, and from `/var/log/syslog` for every facility except `kern`,
@@ -442,8 +437,10 @@ reset.
 
 ## The iGPU gate
 
-The `igpu` tag writes `/etc/modprobe.d/i915.conf` (`options i915 enable_guc=2`) and rebuilds the
-initramfs, but **never reboots** — unlike the Pi's `Reboot Pi` handler, this fires on the machine
+The `host-hardening` component ships `/etc/modprobe.d/i915.conf` (`options i915 enable_guc=2`)
+under `has_igpu`, and the rebuild procedure in `docs/host-packages.md` runs `update-initramfs -u`
+by hand. The role's `igpu` tag writes the same file and rebuilds the
+initramfs on a host the map does not list, but **never reboots** — unlike the Pi's `Reboot Pi` handler, this fires on the machine
 running the whole homelab, so it only prints a reboot reminder.
 
 It is gated on `has_igpu` AND `/sys/module/i915` existing. `has_igpu` alone is the wrong gate: it

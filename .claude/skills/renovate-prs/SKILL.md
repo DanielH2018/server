@@ -16,7 +16,7 @@ The rest is ordinary: triage by class, finish what needs finishing, then land ea
 `land-after-merge`.
 
 A daily timer runs this same skill unattended where it is armed —
-`ansible/roles/setup/renovate_agent/CLAUDE.md`.
+`hosts/components/renovate-agent/CLAUDE.md`.
 
 ## 0. An update with no PR is still an update
 
@@ -327,8 +327,6 @@ covering all of them costs one lock acquisition instead of three.
 - **An upstream version bump:** ask the app. `kubectl -n homelab logs deploy/<svc> | grep -i version`,
   or the service's own version endpoint.
 - **A built image** (`Dockerfile*.j2`): confirm the pod resolved the digest the registry serves.
-  A failure here reads `<svc> is stale: the registry serves sha256:… but at least one running
-  pod resolved something else` — the drift gate in `ansible/post_tasks/k8s_image_drift_gate.yml`.
   The `built-images-pull-always` row of `ansible/tests/k8s/_workload_property_rows.py` guards
   the usual cause.
 - **A plugin or extension:** confirm the host loaded it, not just that the file is on disk.

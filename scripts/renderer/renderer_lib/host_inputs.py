@@ -29,6 +29,9 @@ HOST_INPUTS = (
     # What daniel-box's k3s-server component renders through `role: k3s` (H7.35).
     "ansible/roles/setup/k3s/defaults/main.yml",
     "ansible/roles/setup/k3s/templates/netplan-static-address.yaml.j2",
+    "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
+    "ansible/roles/setup/gitops_deploy/files/gitops_ledger.py",
+    "ansible/roles/setup/gitops_deploy/files/gitops_hold.py",
     # What a component's `role:` renders (`host_sources.ROLE_SOURCES`): the role's defaults and
     # the two templates daniel-server's package renders in place (H4.3a, H4.3c).
     "ansible/roles/setup/nut_host/defaults/main.yml",
@@ -42,10 +45,8 @@ HOST_INPUTS = (
     # The resolver template the Pi's pi-resolver component renders through `role: common` (H7.25),
     # shared with the k3s role until H7.20a moves it.
     "ansible/roles/setup/common/templates/resolv.conf.j2",
-    # Past the plan's list, found by the audit test: ansible-core reads `ansible.cfg` from the
-    # render's working directory, and `homelab_render.py` imports the other two at load, for
+    # Past the plan's list, found by the audit test: `homelab_render.py` imports it at load, for
     # cluster mode.
-    "ansible.cfg",
     "scripts/secrets_mgmt/cluster_vars_check.py",
     # `host_lib.py` and `longhorn_lib/longhorn_backups.py`, which the filter
     # plugins and `scripts/lib/` import at load, sit under `hosts/` and `scripts/lib/` since

@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""Render every k8s manifest template with stubbed vars and assert each parses as valid YAML.
+"""Validate every file the renderer writes for a k8s tag, and assert each parses as valid YAML.
 
 The compose templates have the same guard (``validate/compose_templates.py``), and the k8s
 manifests need it for the same reason. A Jinja indentation bug is exactly the class
 ``check-yaml`` and ``ansible-lint`` miss — neither renders ``.j2`` — so it passes CI and first
-appears as ``error validating data`` partway through a ``kubectl apply``, with some objects
-already applied and some not.
+appears as ``error validating data`` partway through an apply, with some objects already applied
+and some not.
 
-Each role's ``container_item`` comes from daniel-box's real ``containers_list`` rather than a
-stub, so the port and hostname a manifest renders with are the ones a deploy would use.
+The files are ``render_tag``'s in stub mode, so what this checks is what Flux applies, with a
+stub in place of each secret.
 
 Every parsed object is then validated against the Kubernetes OpenAPI schema for
 ``K8S_SCHEMA_VERSION``, vendored from Kubernetes itself and made strict, so an undefined field is
@@ -16,7 +16,7 @@ an error. That is the check ``--dry-run`` makes against the live API server, mad
 instead: no cluster, and on a PR. A CRD is checked against its vendored catalog schema, and one
 with neither is reported as skipped rather than passed.
 
-Structural check only: secrets are stubbed (StubUndefined), so no SOPS access is needed. Run
+Structural check only: secrets are stubbed, so no SOPS access is needed. Run
 directly or via the ``validate-k8s-manifests`` prek hook. Exits non-zero on any render failure
 or invalid YAML.
 
@@ -32,12 +32,12 @@ rendered and which are exempt), ``k8s_context`` (Ansible's variable semantics), 
 only this validator imports sit in ``validate_lib/``: ``k8s_schema`` (the OpenAPI and
 vendored-CRD checks) and ``k8s_net_rules`` (the two semantic rules no schema can make). The
 filter registration every render guard shares is ``lib.ansible_jinja_env``. This module keeps
-the per-template render and ``main()``, and re-exports every moved name so an existing importer
-keeps working.
+``check_template``, the per-template render other guards call, and ``main()``, and re-exports
+every moved name so an existing importer keeps working.
 """
 
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -51,7 +51,7 @@ from validate.validate_lib.ok_lines import ok_printer
 from lib.cli_help import answer_help
 from lib.ansible_inventory import K8S_HOST_VARS
 from lib.k8s_context import resolve_vars
-from lib.render_context import UnresolvedVarsError, render_context
+from lib.render_context import render_context
 from validate.validate_lib.k8s_net_rules import (
     HTTPS_ENTRYPOINT,
     https_route_without_tls,
@@ -60,8 +60,6 @@ from validate.validate_lib.k8s_net_rules import (
     workload_container_ports,
 )
 from lib.k8s_roles import (
-    CLAIM_TEMPLATE,
-    claim_contexts,
     CALLER_RENDERED_ROLES,
     K8S_ROLES,
     NO_MANIFEST_ROLES,
@@ -139,6 +137,7 @@ __all__ = [
     "normalise_octal",
     "parse_docs",
     "register_ansible_filters",
+    "render_context",
     "render_or_error",
     "resolve_vars",
     "schema_error",
@@ -176,24 +175,49 @@ def role_names(k8s_roles: Path) -> list[str]:
     return [d.name for d in role_dirs(k8s_roles, exclude=SKIP_ROLES)]
 
 
-def main(argv: Sequence[str] = ()) -> int:
-    """Render every k8s role's manifest templates and validate them against the k3s schemas.
+def _manifests(rendered) -> list[tuple[str, str]]:
+    """Each file a `RenderedTag` holds, by name, less the `kustomization.yaml` of each directory."""
+    from renderer.renderer_lib.bundle import KUSTOMIZATION
 
-    Renders each role's `templates/*.j2` manifests with a real (unstubbed) group_vars/host_vars
-    context, checks the result is valid, duplicate-key-free YAML, schema-checks each object
+    return [
+        (name, text)
+        for files in (
+            rendered.files,
+            rendered.deferred,
+            rendered.verify,
+            rendered.precheck,
+        )
+        for name, text in files.items()
+        if name != KUSTOMIZATION
+    ]
+
+
+def main(argv: Sequence[str] = (), render: Callable | None = None) -> int:
+    """Validate what the renderer writes for every k8s role against the k3s schemas.
+
+    Reads each tag's stub-mode `render_tag` output, the bytes Flux would apply with a stub for
+    each secret. Checks each file is valid, duplicate-key-free YAML, schema-checks each object
     against `K8S_SCHEMA_VERSION` (or a vendored CRD schema), and cross-references every declared
     PersistentVolumeClaim against every `claimName` reference across all roles.
 
     Args:
         argv: The command-line arguments. `-v` or `--verbose` also lists each clean
             template as an `[ok]` line; by default only failures and the summary print.
+        render: Takes a tag and its stubs and returns its `RenderedTag`. The default is
+            `render_tag`; a test passes one that writes a file the validator must reject.
 
     Returns:
         0 if every template rendered, parsed and schema-checked clean; 1 otherwise.
     """
     answer_help(__doc__, list(argv))
+    # Function-level: the ~20 modules that import this one for its re-exports render nothing.
+    from renderer.renderer_lib.cluster import RenderError, render_tag
+    from renderer.shadow_diff import stub_vars
+
     ok = ok_printer(argv)
     entries = k8s_entries()
+    stubs = stub_vars()
+    render = render or render_tag
 
     roles = role_names(K8S_ROLES)
     checked = failures = 0
@@ -240,50 +264,34 @@ def main(argv: Sequence[str] = ()) -> int:
             failures += 1
             continue
 
-        # daniel-box's host_vars, over group_vars, over the role's defaults: Ansible's own
-        # precedence (`lib.render_context`). containers_list was already read from that host's
-        # file (k8s_entries) so that ports and hostnames render as a deploy would; the rest of
-        # the file has to come with it for the same reason. Without it a var defined only there
-        # renders as STUB — `render_gid: 993` reached jellyfin's and tdarr's
-        # securityContext.supplementalGroups as the string "STUB", which parses as valid YAML
-        # and is caught only by the schema check below. Strict, because a default that will not
-        # expand would render STUB into a manifest that may still schema-check.
-        try:
-            ctx = render_context(
-                templates[0], overrides={"container_item": entries[role]}, strict=True
-            )
-        except UnresolvedVarsError as exc:
-            print(
-                f"  [FAIL] {role}: a variable will not expand, so it would render as STUB: "
-                f"{exc}",
-                file=sys.stderr,
-            )
-            failures += 1
-            continue
-        # A manifest `k8s/manifests` renders from ansible/templates/ because this role ships
-        # none of its own. Rendered here under the role's own context, exactly as the
-        # deploy renders it -- 25 roles' Service manifests left the tree with their template
-        # and would otherwise leave this validator's corpus with it, taking the schema check
-        # and the Service-to-container port cross-reference with them.
-        templates = templates + shared_default_templates(role)
-        for tpl in templates:
-            checked += 1
-            rel = f"{role}/{tpl.name}"
-            # Placement, read off the source before rendering: an embedded app config that
-            # sits at templates/ top level is parsed as a manifest below and checked as
-            # nothing, since the schema pass skips a document with no `kind`.
+        # Placement, read off the source: an embedded app config that sits at templates/ top
+        # level is parsed as a manifest below and checked as nothing, since the schema pass
+        # skips a document with no `kind`.
+        for tpl in [*templates, *shared_default_templates(role)]:
             for target in misplaced_template_lookups(tpl.read_text()):
                 failures += 1
                 print(
-                    f"  [FAIL] {rel}: lookup('template') embeds templates/{target}, which "
-                    f"is app config at templates/ top level — move it to templates/config/",
+                    f"  [FAIL] {role}/{tpl.name}: lookup('template') embeds templates/{target}, "
+                    "which is app config at templates/ top level — move it to templates/config/",
                     file=sys.stderr,
                 )
-            err, docs = check_template(role, tpl, ctx)
+        try:
+            rendered = render(role, stubs)
+        except RenderError as exc:
+            failures += 1
+            print(f"  [FAIL] {role}: {exc}", file=sys.stderr)
+            continue
+        for name, text in _manifests(rendered):
+            checked += 1
+            rel = f"{role}/{name}"
+            err = yaml_error(text)
             if err:
+                print(f"\n----- rendered {rel} -----", file=sys.stderr)
+                dump_numbered(text)
                 failures += 1
                 print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
                 continue
+            docs = parse_docs(text)
             kindless = non_manifest_documents(docs)
             if kindless:
                 # The other half of the same placement rule, for a config nothing embeds by
@@ -295,21 +303,6 @@ def main(argv: Sequence[str] = ()) -> int:
                     "not a Kubernetes manifest; app config belongs in templates/config/",
                     file=sys.stderr,
                 )
-                continue
-            for doc in docs:
-                pvc_names.update(find_pvc_names(doc))
-            parsed_templates.append((rel, docs))
-            ok(f"  [ok]   {rel}")
-        # A role's `k8s_claims`: one shared template, rendered once per entry the way the
-        # deploy's render task loops it, so the claims reach the schema pass and the claimName
-        # cross-reference below like any template the role ships.
-        for claim_ctx in claim_contexts(ctx):
-            checked += 1
-            rel = f"{role}/{CLAIM_TEMPLATE.name}[{claim_ctx['manifests_claim'].get('name')}]"
-            err, docs = check_template(role, CLAIM_TEMPLATE, claim_ctx)
-            if err:
-                failures += 1
-                print(f"  [FAIL] {rel}: {err}", file=sys.stderr)
                 continue
             for doc in docs:
                 pvc_names.update(find_pvc_names(doc))

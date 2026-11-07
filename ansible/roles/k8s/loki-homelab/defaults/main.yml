@@ -41,8 +41,8 @@ loki_homelab_mem_limit: 1024Mi
 loki_homelab_cpu_request: "100m"
 loki_homelab_mem_request: 256Mi
 
-# The Alloy ClusterRole and ClusterRoleBinding are cluster-scoped, so the namespaced prune
-# allowlist in k8s/manifests never selects them; dropping one still leaves it live.
+# Flux prunes by its own inventory, which holds the Alloy ClusterRole and ClusterRoleBinding,
+# so dropping one deletes it live.
 manifests_rollout: loki-homelab  # noqa var-naming[no-role-prefix]
 
 # manifests_rollout names the loki-homelab DEPLOYMENT; the Alloy shipper reads the same

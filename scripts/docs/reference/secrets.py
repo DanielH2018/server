@@ -44,7 +44,7 @@ REGISTRY = ANSIBLE / "secret_rotation.yml"
 
 # What each tier means for an operator. The registry stores the tier name only.
 TIER_NOTES = {
-    "auto": "rotated unattended by the weekly secret-rotate cron",
+    "auto": "generated locally; `secret_rotation.py rotate --commit --name <key>` rotates one by hand",
     "assisted": "needs a human to mint the new value, then `secret_rotation.py rotate`",
     "external": "lives in a third-party system; rotate there first",
     "external-90d": "lives in a third-party system and expires after 90 days; rotate there "

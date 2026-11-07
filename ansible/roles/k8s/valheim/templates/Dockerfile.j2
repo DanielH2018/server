@@ -1,7 +1,7 @@
 # The BepInEx plugin DLLs, baked into an image so the game server never downloads a mod at boot.
 #
-# Named `valheim` rather than `valheim-mods` on purpose: k8s/manifests keys `k8s_rebuilt_images`
-# on `manifests_service`, so a rebuilt image rolls the workload only when the two names match.
+# Named `valheim` rather than `valheim-mods` on purpose: `k8s_built_image_tags` holds the
+# content tag under this name, and `valheim_k8s_mods_image` looks it up by the same one.
 # It holds NO server — the server is the upstream `valheim_k8s_image`, pulled as before. This
 # image is mounted only by the `mods` initContainer, which copies /mods into the plugins tree.
 #

@@ -108,10 +108,10 @@ def test_role_of_is_none_for_a_path_in_no_role_directory(path):
 
 
 def test_a_file_other_roles_ship_reaches_every_role_shipping_it():
-    """deploy_ui and renovate_agent install the deployer's `gitops_markers.py` by path (#3306),
-    so both re-apply beside its owner. Another deployer module reaches neither."""
+    """deploy_ui installs the deployer's `gitops_markers.py` by path (#3306), so it re-applies
+    beside its owner. Another deployer module does not reach it."""
     markers = ["ansible/roles/setup/gitops_deploy/files/gitops_markers.py"]
-    roles = {"gitops_deploy", "deploy_ui", "renovate_agent"}
+    roles = {"gitops_deploy", "deploy_ui"}
     assert services_from_changed_paths(markers).setup_roles == roles
     assert setup_tags_for(markers) == roles
     other = ["ansible/roles/setup/gitops_deploy/files/deployer_lib/deploy_logic.py"]
@@ -125,10 +125,7 @@ def test_a_host_lib_change_reaches_its_consumers_and_not_common():
     host_lib = ["hosts/lib/host_lib.py"]
     consumers = {
         "deploy_ui",
-        "fake_remux",
         "gitops_deploy",
-        "renovate_agent",
-        "renovate_notify",
     }
     assert services_from_changed_paths(host_lib).setup_roles == consumers
     assert setup_tags_for(host_lib) == consumers
@@ -157,10 +154,7 @@ def test_a_common_task_file_change_reaches_the_roles_importing_it():
     path = "ansible/roles/setup/common/tasks/install_host_lib.yml"
     consumers = {
         "deploy_ui",
-        "fake_remux",
         "gitops_deploy",
-        "renovate_agent",
-        "renovate_notify",
     }
     assert setup_roles_for(path) == consumers
     assert setup_tags_for([path]) == consumers
@@ -186,21 +180,10 @@ def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file
     assert setup_tags_for([path]) == consumers
 
 
-def test_an_initial_setup_defaults_change_reaches_its_readers():
-    """renovate_agent copies the uv `initial_setup_uv_version` pins, so a uv bump left its copy
-    on the old version (#5945)."""
+def test_an_initial_setup_defaults_change_reaches_only_its_own_role():
     path = "ansible/roles/setup/initial_setup/defaults/main.yml"
-    assert services_from_changed_paths([path]).setup_roles == {
-        "initial_setup",
-        "renovate_agent",
-    }
-    assert setup_roles_for(path) == {
-        "initial_setup",
-        "renovate_agent",
-    }
-    assert setup_tags_for([path]) == {
-        "initial_setup",
-        "renovate_agent",
-    }
+    assert services_from_changed_paths([path]).setup_roles == {"initial_setup"}
+    assert setup_roles_for(path) == {"initial_setup"}
+    assert setup_tags_for([path]) == {"initial_setup"}
     tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
     assert setup_roles_for(tasks) == {"initial_setup"}

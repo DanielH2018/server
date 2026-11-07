@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 # A container that crashlooped this recently is not healthy, however ready it reads right now.
 # Ansible's post-rollout gate soaks for 60s (k8s_rollout_stabilise_seconds) watching the restart
 # COUNT, because a pod that crashes and recovers within a second passes every readiness-derived
-# field — see roles/k8s/manifests/tasks/assert_stable.yml. probe.py takes ONE sample instead of
+# field. probe.py takes ONE sample instead of
 # soaking, so it reads the same signal from the other end: how long ago the last restart was.
 # Wider than the Ansible window, since a single sample can land anywhere in a crash cycle.
 RECENT_RESTART_SECONDS = 180

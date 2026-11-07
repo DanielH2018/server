@@ -20,7 +20,7 @@ a given name keeps it exactly as it is.
 
 No Ansible import at load time, so the tests call the same function the playbook runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
-`AnsibleFilterError("grafana_deploy_annotated: ...")` and fails the render task before any
+`FilterError("grafana_deploy_annotated: ...")` and fails the render task before any
 apply.
 """
 

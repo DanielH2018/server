@@ -5,7 +5,7 @@ read-only RBAC identity. Rehomed here from daniel-server (Phase E, 2026-08-13) â
 routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=homelab-mcp` with exit 5
 - **Image:** `ghcr.io/danielh2018/homelab-mcp` (`homelab_mcp_k8s_image`)
@@ -35,7 +35,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   secrets, no exec. Deliberately narrower than the shell's own read-only ServiceAccount.
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
 - **Flux applies it, not Ansible** (D5.14, the first Wave C PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. The
   Kustomization has no Ansible-owned
   dependency to record, because the role renders no route.
@@ -51,13 +51,11 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   same token in the `homelab-mcp-local` router's `Authorization` header, and traefik stays
   Ansible-owned. So the GitOps deployer applies the edge's copy and `promote` applies the
   pod's, each on its own schedule. Bearer calls fail until both have applied.
-- **Flux prunes the cluster-scoped RBAC.** The task's comment says the namespaced prune
-  allowlist in `k8s/manifests` never selects the `homelab-mcp-read` ClusterRole and
-  ClusterRoleBinding. Flux prunes by its own inventory instead, and that inventory holds both,
+- **Flux prunes the cluster-scoped RBAC.** Flux prunes by its own inventory, which holds the `homelab-mcp-read`
+  ClusterRole and ClusterRoleBinding,
   so dropping one from `rbac.yaml.j2` deletes it live at the next promotion.
   Deleting the Kustomization deletes them too, because the tag takes the default deletion policy.
-- **Where the tasks went.** `tasks/main.yml` holds two includes, and no Flux path runs either.
-  They stay until R4 deletes them. The `k8s/image-builder` include became promote's `images` job
+- **Where the tasks went.** The `k8s/image-builder` include became promote's `images` job
   (D5.4a2, `scripts/deploy_tools/ci_images.py`) and the GHCR ref (D5.4b): the renderer writes
   the build context to `DIR/images/homelab-mcp/` and its content tag to `DIR/images/tags.json`,
   and the Deployment's ref reads the same tag. The role's

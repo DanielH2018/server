@@ -1,30 +1,6 @@
 ---
 # Role defaults for initial_setup. Most of this role's tunables live in `group_vars/all.yml`,
-# because other roles read them; what lives here is the uv pin, which nothing outside this
-# role reads and which `scripts/validate/asset_pins.py` has to see.
-
-# The uv release this host installs, and the versioned installer it is fetched with.
-#
-# ONE copy of the version, here rather than in group_vars: the `# renovate:` annotation below
-# is read only from role defaults (github-releases, astral-sh/uv, no automerge). The role used
-# to fetch `astral.sh/uv/install.sh`, which installs the newest release at run time, so
-# daniel-box and daniel-server were provisioned onto 0.12.1 and 0.12.5 (#2148). The sha256 is
-# the installer script's, and a bump finishes it with `uv run python
-# scripts/validate/asset_pins.py --refresh astral-sh/uv`, which fetches the URL below and
-# rewrites the hash. Run `--only initial_setup_uv_installer` afterwards before you trust the
-# answer: astral.sh serves copies that have hashed differently, and the `get_url` on a host
-# re-fetches rather than reusing what CI saw.
-# That script embeds the sha256 of every release artifact it downloads and verifies the
-# tarball against it, so pinning the script's hash pins the binary too.
-#
-# The URL sits beside the digest rather than inline in `tasks/host-basics.yml` so that
-# `asset_pins.py` can render it: the checker reads `defaults/main.yml` alone, and an inline
-# URL leaves the digest unpaired — the finish an unattended renovate_agent run could not do
-# without a raw `curl` (#2301).
-# renovate: datasource=github-releases depName=astral-sh/uv
-initial_setup_uv_version: "0.13.6"
-initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
-initial_setup_uv_installer_sha256: f7a56e7afaec49a3bcbc3ac3cdbe917e7c6ce30e0d815308a12e531aa5ef23b7
+# because other roles read them.
 
 # When the daily Docker image prune runs, in the host's clock (UTC on every host). A variable
 # rather than a literal in `tasks/crons.yml` so that the healthchecks.io deadman-cadences fragment
@@ -42,8 +18,9 @@ initial_setup_worktree_sweep_cron_hour: 4
 initial_setup_worktree_sweep_cron_weekday: 0  # Sunday
 
 # The group whose members may connect to the worktree holder scan's socket,
-# /run/worktree-holders.sock (tasks/crons.yml, #4297). initial_setup or the worktree-holders
-# component adds sys_user to it, and the claude-code component's claude-agent-setup adds each
+# /run/worktree-holders.sock (#4297). The worktree-holders component adds sys_user to it, and
+# tasks/crons.yml removes it from a host with no Claude sessions. The claude-code component's
+# claude-agent-setup adds each
 # present agent user, because that script's group list is exact and would strip a membership
 # granted anywhere else.
 initial_setup_worktree_holders_group: worktree-holders
@@ -54,28 +31,20 @@ initial_setup_worktree_holders_group: worktree-holders
 # the subject only on the hosts the map does not list. The map sits here, never in `host_vars`,
 # because an `inventory/` edit is a deploy-plane change. The last host's PR deletes the subject's
 # tasks and its entry.
-#   loki_route_witness: daniel-box's witness is the loki-route-witness component since H7.36;
-#           daniel-server keeps the Ansible-era timer until its package moves it.
 #   access, accounting, audit_and_kernel, integrity, host_basics: the `host-hardening` component
-#           and bootstrap step 4 own them on a listed host (H7.58). host_basics covers the swap,
-#           apt and package tasks of host-basics.yml, and leaves its tooling tasks.
-#   dev_tooling: the per-user uv, prek and Python, the /usr/local/bin/uv copy and the git hooks.
-#           The dotfiles repo installs the per-user tools, the uv component ships /usr/bin/uv and
-#           the cluster-node procedure runs `prek install`. ansible-core and ansible-lint stay on
-#           every dev_tooling_hosts member until H7.63.
-#   vale: /usr/local/bin/vale. The vale component ships /usr/bin/vale.
-#   worktree_holders: the worktree holder scan. The worktree-holders component ships it on
-#           daniel-server (H7.61), and the Pi's package retires its paths as legacy entries (H7.58).
+#           and bootstrap step 4 own them on a listed host (H7.58, H7.59). host_basics covers the
+#           swap, apt and package tasks of host-basics.yml, and leaves the tasks that install `ansible-core` and `ansible-lint`.
+#   rsyslog_filter: the rsyslog info filter. The rsyslog-filter component ships it (H7.59).
+# No task names templates/loki-read-route-health.sh.j2 or files/loki_route_health.py. They stay
+# byte-identical until H7.60, because daniel-server's setup-drift reader compares them until
+# reconcile retires the two fragments that name them, and a missing source reads as drift.
 initial_setup_packaged_hosts:
-  loki_route_witness: [daniel-box]
-  access: [daniel-pi]
-  accounting: [daniel-pi]
-  audit_and_kernel: [daniel-pi]
-  integrity: [daniel-pi]
-  host_basics: [daniel-pi]
-  dev_tooling: [daniel-server]
-  vale: [daniel-server]
-  worktree_holders: [daniel-pi, daniel-server]
+  access: [daniel-pi, daniel-server]
+  accounting: [daniel-pi, daniel-server]
+  audit_and_kernel: [daniel-pi, daniel-server]
+  integrity: [daniel-pi, daniel-server]
+  host_basics: [daniel-pi, daniel-server]
+  rsyslog_filter: [daniel-server]
 
 # Where the rkhunter and AIDE scripts source homelab-check-lib.sh from. crons.yml installs it
 # under /usr/local/lib; the integrity-scans host component sets /usr/lib/homelab, where the

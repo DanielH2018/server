@@ -39,10 +39,12 @@ of the Pi package Depends on the pinned version (#6590; `validate_lib/engine_cas
 Another installs the three apt-source components over seeded copies of the files the roles
 wrote, with no conffile prompt (H7.24a; `validate_lib/repos_case.py`). The last cases run
 `hosts/bootstrap-host.sh --local-build` on a container named after each host, then the offline
-branch with a break-glass kit, the kit's two red fixtures and a local build whose Depends only
-the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`). The last runs the
+branch with a break-glass kit, the kit's two red fixtures, a local build whose Depends only
+the homelab repository satisfies (H7.15a; `validate_lib/bootstrap_case.py`) and a host made from
+the *Adding a host* walkthrough (H7.15d; `validate_lib/fixture_host_case.py`). The last runs the
 script without `--local-build` on daniel-pi, against the test repository with a rewritten copy of
-the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`).
+the script that pins its throwaway key (#6245; `validate_lib/bootstrap_repo_case.py`). A last
+case runs step 3 with real apt on an image holding no age (`validate_lib/bootstrap_age_case.py`).
 
 Every case that reaches step 3 asserts that the server log holds its `GET` of
 `dists/homelab/InRelease` or `dists/homelab/Release`. Every case asserts that `/var/lib/apt/lists/` holds a list for the test
@@ -93,7 +95,8 @@ from validate.validate_lib.host_container import (
     release_fetched,
     success_timestamp,
 )
-from validate.validate_lib import bootstrap_case, bootstrap_repo_case, engine_case
+from validate.validate_lib import bootstrap_age_case, bootstrap_case
+from validate.validate_lib import bootstrap_repo_case, engine_case
 from validate.validate_lib import conffile_case, repos_case, secrets_case, shadow_case
 from validate.validate_lib.host_fixtures import (
     DROPIN,
@@ -555,9 +558,7 @@ def main(argv: list[str] | None = None) -> int:
         required=True,
         help="the job's builds, holding base/ and head/",
     )
-    parser.add_argument(
-        "--work", type=Path, required=True, help="a scratch directory for the cases"
-    )
+    parser.add_argument("--work", type=Path, required=True, help="a scratch directory")
     parser.add_argument(
         "--tools-cache", type=Path, help="the build job's verified pin downloads"
     )
@@ -575,6 +576,7 @@ def main(argv: list[str] | None = None) -> int:
     repos_case.run(cases)
     bootstrap_case.run(cases)
     bootstrap_repo_case.run(cases)
+    bootstrap_age_case.run(cases)
     if cases.failed:
         print(
             f"[FAIL] {len(cases.failed)} cases failed: {cases.failed}", file=sys.stderr

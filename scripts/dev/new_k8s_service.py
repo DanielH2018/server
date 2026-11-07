@@ -26,7 +26,7 @@ A role carrying someone else's history is a worse starting point than one carryi
 
 WHAT IT DOES NOT WRITE, deliberately:
 
-* No `service.yaml.j2`. `k8s/manifests` renders `ansible/templates/service-default.yaml.j2`
+* No `service.yaml.j2`. The renderer renders `ansible/templates/service-default.yaml.j2`
   for a role that ships none (#2872), reading the name and port off the entry this script
   writes. A Service that needs more than that is a decision, so it stays a hand edit.
 * No PVC, no Secret, no NetworkPolicy, no probes beyond the readiness/liveness pair on the
@@ -180,7 +180,7 @@ def role_doc(name: str, route: bool) -> str:
 See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 <!-- /generated_from -->
 
 ## Notable
@@ -383,7 +383,7 @@ def next_steps(args, role: Path) -> str:
         f"publishes it: see the new-k8s-service skill.\n"
         f"{probe_step}"
         f"Secrets and NetworkPolicies are not scaffolded. Add each as a template under "
-        f"{(role / 'templates').relative_to(REPO)}; k8s/manifests renders every top-level "
+        f"{(role / 'templates').relative_to(REPO)}; the renderer renders every top-level "
         f"one, and a name containing `secret` renders 0600 under no_log. A PVC is a "
         f"`k8s_claims` entry in {(role / 'defaults' / 'main.yml').relative_to(REPO)}, not "
         f"a template.\n"

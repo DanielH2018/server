@@ -54,8 +54,3 @@
 - name: Install the deployer config, units and timer
   tags: [gitops-deploy-service]
   ansible.builtin.import_tasks: service.yml
-
-# `cron` is the repo-wide tag for scheduled checks, kept beside the subject tag.
-- name: Install the GitHub ruleset and interaction-limit checks
-  tags: [cron, gitops-deploy-github-checks]
-  ansible.builtin.import_tasks: github_checks.yml

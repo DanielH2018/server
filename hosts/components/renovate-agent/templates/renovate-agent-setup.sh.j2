@@ -1,0 +1,66 @@
+#!/bin/bash
+# Shipped by the renovate-agent component. homelab-renovate-agent.service runs it as root through
+# `ExecStartPre=+` before each session, so a pin bump or a rebuilt host converges on the next tick.
+#
+# Usage: renovate-agent-setup [-h|--help]
+# Takes no arguments. Running it by hand as root applies every step below.
+#
+# Gives {{ renovate_agent_user }} its home, the operator's pinned uv, uvx and prek, the operator's
+# claude_guard package and claude_worktree module, the pinned Python, Claude Code and its own clone.
+# Every step is idempotent. The agent runs every command that writes into its home, because the
+# session could have replaced any path there with a link. Root only reads the operator's copies,
+# which the agent cannot read, into a staging directory the agent then copies from.
+set -euo pipefail
+
+case "${1-}" in
+  -h | --help) awk 'NR > 1 && /^#/ { print; next } NR > 1 { exit }' "$0"; exit 0 ;;
+esac
+
+agent={{ renovate_agent_user }}
+home={{ renovate_agent_home }}
+clone={{ renovate_agent_clone_dir }}
+operator=/home/{{ sys_user }}
+
+as_agent() {
+  runuser -u "$agent" -- env HOME="$home" TMPDIR=/tmp PATH=/usr/bin:/bin "$@"
+}
+
+# Group sys_user and setgid, so the operator reads what the agent writes. /var/lib is root's, so the
+# agent cannot have replaced the home itself.
+install -d -o "$agent" -g {{ sys_user }} -m 2750 "$home"
+as_agent mkdir -p "$home/.local/bin" "$home/.local/share/claude-guard" "$home/.local/share/claude-worktree"
+
+stage=$(mktemp -d)
+trap 'rm -rf "$stage"' EXIT
+chmod 0755 "$stage"
+
+# Copies one operator file or tree to its destination in the agent's home, when it exists.
+copy_from_operator() {
+  local source="$1" destination="$2" name
+  [[ -e "$source" ]] || return 0
+  name=$(basename "$source")
+  cp -RL --no-preserve=ownership "$source" "$stage/$name"
+  chmod -R a+rX "$stage/$name"
+  as_agent cp -RT --remove-destination "$stage/$name" "$destination"
+  rm -rf "${stage:?}/$name"
+}
+
+copy_from_operator "$operator/.local/bin/uv" "$home/.local/bin/uv"
+copy_from_operator "$operator/.local/bin/uvx" "$home/.local/bin/uvx"
+copy_from_operator "$operator/.local/share/uv/tools/prek/bin/prek" "$home/.local/bin/prek"
+copy_from_operator "$operator/.local/share/claude-guard/claude_guard" "$home/.local/share/claude-guard/claude_guard"
+copy_from_operator "$operator/.local/share/claude-worktree/claude_worktree.py" "$home/.local/share/claude-worktree/claude_worktree.py"
+
+(cd "$home" && as_agent "$home/.local/bin/uv" python install {{ host_python_version }})
+
+# DECIDED: the install script is fetched unpinned, as the operator's install is. Claude Code updates
+# itself afterwards, so a pinned checksum would only hold back the first install.
+if [[ ! -x "$home/.local/bin/claude" ]]; then
+  curl -fsSL --retry 3 -o "$stage/claude-install.sh" https://claude.ai/install.sh
+  chmod 0644 "$stage/claude-install.sh"
+  (cd "$home" && as_agent env CLAUDE_INSTALL_ALLOW_SUDO=1 bash "$stage/claude-install.sh")
+fi
+
+if [[ ! -d "$clone/.git" ]]; then
+  as_agent git clone --quiet "https://github.com/{{ renovate_agent_repo }}.git" "$clone"
+fi

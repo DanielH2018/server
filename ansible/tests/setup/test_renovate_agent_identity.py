@@ -17,15 +17,14 @@ import sys
 
 import pytest
 from _helpers import ANSIBLE
-from _setup_render import render_setup_text
+from _setup_render import COMPONENTS, render_component_text
 from lib import yaml_fast
 from lib.proc_testing import run
-from lib.ansible_jinja_env import make_ansible_env
 
-ROLE_NAME = "renovate_agent"
-ROLE = ANSIBLE / "roles" / "setup" / ROLE_NAME
-SERVICE_TASKS = ROLE / "tasks" / "service.yml"
-UNIT = "renovate-agent.service.j2"
+NAME = "renovate-agent"
+COMPONENT = COMPONENTS / NAME
+SPEC = yaml_fast.safe_load((COMPONENT / "component.yml").read_text())
+UNIT = "homelab-renovate-agent.service.j2"
 LANDER = "renovate-agent-land@.service.j2"
 PROMPT = "prompt.txt.j2"
 CONFIG_ENV = "config.env.j2"
@@ -53,7 +52,7 @@ PR = "3337"
 
 
 def render(template: str, overrides: dict | None = None) -> str:
-    return render_setup_text(ROLE_NAME, template, overrides)
+    return render_component_text(NAME, template, overrides)
 
 
 def directive(unit_text: str, key: str) -> list[str]:
@@ -66,17 +65,16 @@ def directive(unit_text: str, key: str) -> list[str]:
     ]
 
 
-def task(prefix: str) -> dict:
-    tasks = yaml_fast.safe_load(SERVICE_TASKS.read_text())
-    found = [t for t in tasks if t.get("name", "").startswith(prefix)]
-    assert len(found) == 1, f"expected one task named {prefix!r}, found {len(found)}"
+def output(path: str) -> dict:
+    found = [o for o in SPEC["outputs"] if o["path"] == path]
+    assert len(found) == 1, f"expected one output at {path!r}, found {len(found)}"
     return found[0]
 
 
 def test_the_session_runs_as_its_own_user_in_its_own_clone() -> None:
     unit = render(UNIT, MOVED)
     assert directive(unit, "User") == [USER]
-    assert directive(unit, "WorkingDirectory") == [CLONE]
+    assert directive(unit, "WorkingDirectory") == [f"-{CLONE}"]
     envs = directive(unit, "Environment")
     assert f"HOME={HOME}" in envs
     assert any(e.startswith(f"PATH={HOME}/.local/bin:") for e in envs)
@@ -98,8 +96,8 @@ _REACHING = ("User", "WorkingDirectory", "Environment", "EnvironmentFile", "Exec
 def operator_reach(unit_text: str, operator: str) -> list[str]:
     """Every directive value naming the operator's user or home. Empty means none does.
 
-    `/usr/local/bin/uv` counts: it is the operator's uv install, which `initial_setup` copies
-    out of their home. The agent runs its own copy and Python under its own home.
+    `/usr/local/bin/uv` counts: it is a copy of the operator's uv install. The agent runs its own
+    copy and Python under its own home.
     """
     return [
         f"{key}={value}"
@@ -149,50 +147,23 @@ def test_the_tokens_reach_the_session_only_through_session_env() -> None:
     assert directive(render(UNIT), "EnvironmentFile") == [
         "/etc/renovate-agent/session.env"
     ]
-    written = task("Write the session's GitHub token")
-    tpl = written["ansible.builtin.template"]
-    assert (tpl["dest"], tpl["owner"], tpl["mode"]) == (
-        "/etc/renovate-agent/session.env",
+    written = output("/etc/renovate-agent/session.env")
+    assert (written["owner"], written["group"], written["mode"]) == (
+        "root",
         "root",
         "0600",
     )
-    assert written["no_log"] is True
+    assert sorted(written["keys"]) == sorted([GH, CLAUDE])
 
 
 def test_the_session_cannot_rewrite_its_own_config() -> None:
     """A steered session could raise its budget or swap PROMPT_FILE for the next run."""
-    tpl = task("Write agent config")["ansible.builtin.template"]
-    assert (tpl["owner"], tpl["group"], tpl["mode"]) == (
+    config = output("/etc/renovate-agent/config.env")
+    assert (config["owner"], config["group"], config["mode"]) == (
         "root",
-        "{{ renovate_agent_user }}",
+        "renovate-agent",
         "0640",
     )
-
-
-def arming_refused(secrets: dict) -> bool:
-    """Whether the role's arming assert fails with these secrets set."""
-    guard = task("Refuse to arm the agent")
-    assert guard["when"] == "renovate_agent_enabled", "the assert must gate arming only"
-    env = make_ansible_env()
-    return not all(
-        env.compile_expression(that)(**secrets)
-        for that in guard["ansible.builtin.assert"]["that"]
-    )
-
-
-def test_arming_with_both_credentials_passes() -> None:
-    assert not arming_refused({GH: "a", CLAUDE: "b"})
-
-
-@pytest.mark.parametrize("missing", [GH, CLAUDE])
-@pytest.mark.parametrize("how", ["unset", "empty"])
-def test_arming_without_either_credential_is_refused(missing: str, how: str) -> None:
-    secrets = {GH: "a", CLAUDE: "b"}
-    if how == "unset":
-        del secrets[missing]
-    else:
-        secrets[missing] = ""
-    assert arming_refused(secrets)
 
 
 def _seconds(span: str) -> int:
@@ -227,11 +198,11 @@ def test_the_prompt_lands_through_the_lander_the_polkit_rule_admits() -> None:
     commands = prompt_commands()
     unit = f"renovate-agent-land@{PR}.service"
     assert f"systemctl start {unit}" in commands, commands
-    assert (ROLE / "templates" / LANDER).is_file()
+    assert (COMPONENT / "templates" / LANDER).is_file()
     rule = render("50-renovate-agent-land.rules.j2")
     pattern = re.search(r"if \(!/(.+?)/\.test\(action\.lookup\(\"unit\"\)\)\)", rule)
     assert pattern and re.fullmatch(pattern.group(1).strip("^$"), unit)
-    lander = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    lander = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     results = re.search(r'^RESULTS_DIR = "([^"]+)"', lander, re.M)
     assert results and f"`{results.group(1)}/<n>.verdict`" in render(PROMPT)
     assert "findings.py open" not in render(PROMPT), (
@@ -267,19 +238,12 @@ def test_the_agent_gets_claude_guard_where_the_hook_looks_for_it() -> None:
         re.M,
     )
     assert lookup, "the hook no longer names its claude_guard directory"
-    shared = ANSIBLE / "roles" / "setup" / "common" / "tasks" / "agent_user.yml"
-    tasks = yaml_fast.safe_load(shared.read_text())
-    copies = [
-        t["ansible.builtin.copy"]
-        for t in tasks
-        if t.get("name", "").startswith(
-            "Give the agent user the operator's claude_guard"
-        )
-    ]
-    assert len(copies) == 1, "expected one claude_guard copy task"
     rel = lookup.group(1)
-    assert copies[0]["dest"].rstrip("/") == "{{ agent_user_home }}" + rel
-    assert copies[0]["src"] == "/home/{{ sys_user }}" + rel + "/claude_guard"
+    setup = render("renovate-agent-setup.sh.j2", MOVED)
+    assert (
+        f'copy_from_operator "$operator{rel}/claude_guard" "$home{rel}/claude_guard"'
+        in setup
+    )
 
 
 def guard_decision(command: str) -> str | None:
@@ -321,7 +285,7 @@ def test_land_sh_ends_its_landing_before_the_lander_script_kills_it() -> None:
     The reboot window can add LAND_WINDOW_GRACE to the promotion wait (#5457), so the script's
     kill covers both.
     """
-    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    script = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     (timeout,) = re.findall(r"^LAND_TIMEOUT_S = (\d+)$", script, re.MULTILINE)
     deadlines = [
         e.split("=", 1)[1]
@@ -352,7 +316,7 @@ def test_the_lock_wait_and_the_landing_both_fit_inside_the_units_timeout() -> No
         for e in directive(unit, "Environment")
         if e.startswith("LAND_DEADLINE=")
     ]
-    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    script = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     (land_timeout,) = re.findall(r"^LAND_TIMEOUT_S = (\d+)$", script, re.MULTILINE)
     landing = max(int(deadline), int(land_timeout))
     assert int(flock_wait) + landing + SCRIPT_OVERHEAD_S <= timeout
@@ -361,7 +325,7 @@ def test_the_lock_wait_and_the_landing_both_fit_inside_the_units_timeout() -> No
 def test_a_lock_wait_that_times_out_leaves_no_earlier_verdict(tmp_path) -> None:
     """The verdict file is overwritten before the flock wait, not only once the script runs."""
     unit = render(LANDER)
-    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    script = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     (results_dir,) = re.findall(r'^RESULTS_DIR = "([^"]+)"$', script, re.MULTILINE)
     (pre,) = directive(unit, "ExecStartPre")
     stale = tmp_path / f"{PR}.verdict"
@@ -377,7 +341,7 @@ def test_the_prompt_reads_how_the_lander_ended_before_trusting_its_file() -> Non
         f"systemctl show -p Result renovate-agent-land@{PR}.service"
         in prompt_commands()
     )
-    script = (ROLE / "files" / "land_renovate_pr.py").read_text()
+    script = (COMPONENT / "files" / "land_renovate_pr.py").read_text()
     (pending,) = re.findall(r'atomic_write\(result, "([A-Z]+)\\n"\)', script)
     # The bullet that reads the Result is the one that must name the placeholder: a mention
     # anywhere else in the prompt does not tell the session to treat it as no verdict.

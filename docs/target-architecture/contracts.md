@@ -109,8 +109,8 @@ C-4b waits on D6, but nothing from C-1 to C-7 waits on C-4b.
   - **The commit input** is `--revision SHA`, a 40-hex commit, and the `soak` kind's Job
     judges that commit. Without the flag the renderer reads `HOMELAB_RENDER_REVISION`, then
     the checkout's `git rev-parse HEAD`. The publish job passes no flag, because its
-    checkout's `HEAD` is the commit it publishes, R. The `render-diff` job passes the PR
-    head's SHA to both renders (R4 Open question 10).
+    checkout's `HEAD` is the commit it publishes, R. A base-and-head comparison passes one
+    commit to both renders, so the `soak` Job reads as no difference (R4 Open question 10).
   - `homelab-render host --host NAME --out DIR`
   - `homelab-render package --name PKG --out DIR`, for the shared packages of C5 (H3).
 - **Only placeholder mode publishes.** The publish job runs `cluster` without

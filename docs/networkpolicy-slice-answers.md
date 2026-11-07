@@ -100,7 +100,7 @@ right, so treat the list as the deliverable and the method as insufficient.
 
 Host → ClusterIP callers targeting a **fenced** pod:
 
-1. `roles/setup/fake_remux/tasks/main.yml` → sonarr, from daniel-box. sonarr's own Ansible
+1. `hosts/components/fake-remux` → sonarr, from daniel-box. sonarr's own Ansible
    verify tasks were a second caller until sonarr's Flux flip (D5.20) moved the reads in-cluster.
    It is same-node and stays that way: sonarr is pinned to daniel-box by the `media-data` PV's
    *required* `nodeAffinity` (`roles/k8s/media-volume/templates/pv.yaml.j2`).

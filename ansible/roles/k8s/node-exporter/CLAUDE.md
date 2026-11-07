@@ -4,7 +4,7 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 `node_*` coverage it never had while daniel-server's LAN-published 9100 retires.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=node-exporter` with exit 5
 - **Image:** `prom/node-exporter` (`node_exporter_k8s_image`)
@@ -18,11 +18,10 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 - **Mounts:** `/proc`, `/sys`, `/` (as `/rootfs`), all **read-only** `hostPath` — no write
   access despite `hostNetwork`/`hostPID`.
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Its `manifests_rollout:
+- **Where the task went.** Its `manifests_rollout:
   node-exporter` default and its include's `manifests_rollout_kind: daemonset` name the DaemonSet for the
   stabilisation gate. The Kustomization's `wait` replaces that gate: it reads the DaemonSet
   ready only when every scheduled pod is ready, so a node that goes NotReady mid-apply still

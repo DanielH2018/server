@@ -183,10 +183,10 @@ ROLES_WITHOUT_AN_ENTRY_POINT = frozenset({"common"})
 # The fact-setting task files that reach `tags_of` without refusing, so the census below
 # actually measures them. Named rather than counted: every other setter in the tree refuses
 # for a reason older than this edge — untagged, or not statically imported from `tasks/main` —
-# and a regression that silenced these five would leave `widened` empty and the census green.
+# and a regression that silenced these would leave `widened` empty and the census green.
 MEASURED_SETTERS = frozenset(
     {
-        "initial_setup:tasks/host-basics.yml",
+        "hypervisor:tasks/network.yml",
     }
 )
 

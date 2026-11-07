@@ -30,7 +30,7 @@ tests:
               description: >-
                 No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the merge gate matches the
-                repo. Read `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
+                repo. Read `systemctl status homelab-github-ruleset-drift` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
       - eval_time: 30h
         alertname: GitHubRulesetDrift
@@ -45,7 +45,7 @@ tests:
                 No github-interaction-limit verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the limit is being re-armed
                 before GitHub lets it lapse. Read `systemctl status
-                kuma-check-github-interaction-limit` on daniel-box, then
+                homelab-github-interaction-limit` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
       - eval_time: 30h
         alertname: GitHubInteractionLimitNotArmed
@@ -130,7 +130,7 @@ tests:
               description: >-
                 No github-ruleset-drift verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the merge gate matches the
-                repo. Read `systemctl status kuma-check-github-ruleset-drift` on daniel-box, then
+                repo. Read `systemctl status homelab-github-ruleset-drift` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-ruleset-drift.prom on the host.
   - interval: 1h
     input_series:
@@ -152,7 +152,7 @@ tests:
                 No github-interaction-limit verdict newer than 25 hours reached Prometheus from
                 daniel-box's textfile collector, so nothing confirms the limit is being re-armed
                 before GitHub lets it lapse. Read `systemctl status
-                kuma-check-github-interaction-limit` on daniel-box, then
+                homelab-github-interaction-limit` on daniel-box, then
                 /var/lib/node-exporter-textfile/github-interaction-limit.prom on the host.
 
   # A fresh timestamp keeps both rules quiet: the file is rewritten every hour here.

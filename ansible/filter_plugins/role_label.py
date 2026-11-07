@@ -1,6 +1,6 @@
 """Ansible filter plugin stamping `homelab/role: <service>` onto every object a render produced.
 
-`k8s/manifests` prunes an armed role's dropped objects with `kubectl apply --prune -l
+The manifests role pruned an armed role's dropped objects with `kubectl apply --prune -l
 homelab/role=<service>` (#3388). The selector does two jobs there. It decides which live
 objects the prune may delete, and it also FILTERS THE APPLY: kubectl applies only the
 documents in the directory that carry the label and skips the rest without a word. So every
@@ -20,7 +20,7 @@ rendered, so labelling a workload rolls no pods and touches no Service selector.
 
 No Ansible import at load time, so the tests call the same function the playbook runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
-`AnsibleFilterError("homelab_role_label: ...")` and fails the render task before any apply
+`FilterError("homelab_role_label: ...")` and fails the render task before any apply
 (#4505).
 """
 

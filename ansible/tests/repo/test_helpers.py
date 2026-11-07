@@ -134,7 +134,7 @@ def test_task_named_refuses_anything_but_one_match(fragment):
 
 
 def test_load_tasks_reads_a_real_role_and_returns_dicts():
-    tasks = load_tasks(K8S_ROLES / "manifests" / "tasks" / "main.yml")
+    tasks = load_tasks(K8S_ROLES / "volume-revert" / "tasks" / "main.yml")
     assert tasks and all(isinstance(t, dict) for t in tasks)
 
 

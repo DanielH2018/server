@@ -42,6 +42,10 @@ _KEYS = (
     "r2_account_id: x\n"
     "wifi_ssid: x\n"
     "wifi_password: x\n"
+    "renovate_agent_claude_oauth_token: x\n"
+    "renovate_agent_gh_token: x\n"
+    "arr_discord_webhook_url: x\n"
+    "sonarr_api_key: x\n"
 )
 
 COMPONENT = REPO / "hosts/components/k3s-restart"

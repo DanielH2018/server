@@ -73,8 +73,7 @@
 # `src` is repo-relative and interpolated onto {{ playbook_dir }}/.. rather than resolved by
 # Ansible's search path. A task file imported from another role resolves `template:` src against
 # the role that OWNS the file — this one — so a bare basename would look in
-# roles/setup/common/templates and miss the caller's entirely. roles/k8s/manifests/tasks/main.yml
-# carries the same absolute-path workaround and the same explanation.
+# roles/setup/common/templates and miss the caller's entirely.
 
 - name: Resolve the release paths for {{ release_bin_group }}
   # Set here rather than in defaults/main.yml because roles/setup/common is never RUN as a role
@@ -231,7 +230,7 @@
     # ansible/tests/setup/test_host_python_invocations.py, which caught exactly that here.
     # `--no-project` because the prune script is stdlib-only and must not drag in the repo venv.
     argv:
-      - /usr/local/bin/uv
+      - /usr/bin/uv
       - run
       - --no-project
       - --no-python-downloads

@@ -95,7 +95,7 @@ mod. The script says so itself: "If no other containers are using this mod you m
 
 ## The rollout-gate exposure was not unique to this role
 
-`roles/k8s/manifests` queues a rollout and runs `rollout status` for the whole batch afterwards, so a role's own `verify.yml` runs before its rollout finishes and `get pod -l app=<x>` returns the outgoing pod. qbittorrent's verify tasks gated on `rollout status` for that reason until its Flux flip replaced them with the `qbittorrent-verify` Job, which starts only once the `qbittorrent` Kustomization reads Ready. `wait --for=condition=Available`, `wait --for=condition=ready pod` and `--field-selector status.phase=Running` all return instantly mid-roll, because the old pod satisfies each of them.
+The `qbittorrent-verify` Job starts only once the `qbittorrent` Kustomization reads Ready, so `get pod -l app=<x>` cannot return the outgoing pod to it. `wait --for=condition=Available`, `wait --for=condition=ready pod` and `--field-selector status.phase=Running` all return instantly mid-roll, because the old pod satisfies each of them.
 
 ## The whole `apply_prefs.py` command
 
@@ -132,9 +132,8 @@ Five decisions inside it are deliberate:
   `homepage`'s widget already renders. They reach the pod from the `qbittorrent-prefs-check`
   Secret as one value, `QBT_CREDENTIALS`, the username and the password on two lines. One value
   rather than a key each, because a key whose whole value is one secret is a standalone Flux
-  placeholder. That would add both keys to
-  `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, and a change to that file fans
-  the landing's narrowed apply out to every `k8s/manifests` caller. The ConfigMap that stages the
+  placeholder, and Flux types its value by its text (`docs/homelab-render.md`, *The
+  standalone-value guard*). The ConfigMap that stages the
   code holds no secret (`ansible/tests/k8s/test_no_secret_in_a_moved_jobs_configmap.py`).
 - **The exit codes are a contract**: `EXIT_OK` (0), `EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2),
   `EXIT_DRIFT` (3, `--dry-run` only). Before 2026-08-27, `--dry-run` returned 0 whether or not

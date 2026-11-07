@@ -1,5 +1,5 @@
 {
-  "tag": "v1.37.1",
+  "tag": "v1.37.2",
   "upstream": "https://raw.githubusercontent.com/kubernetes/kubernetes/{tag}/api/openapi-spec/v3/{name}",
   "sha256": {
     "api__v1_openapi.json": "d09ab224a98fb9c0e7fd128b6f395f66b23d43b6635272109dcaaafc4a3dd9c9",

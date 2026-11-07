@@ -1,27 +1,19 @@
-"""`k8s_claims`: the PersistentVolumeClaims `k8s/manifests` renders from a role's defaults.
+"""`k8s_claims`: the PersistentVolumeClaims the renderer renders from a role's defaults.
 
-A role declares `k8s_claims: [{name, size, storage_class, access_modes?, namespace?}]` and `k8s/manifests` renders each
-entry from `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml` in the role's own
-directory. The offline harnesses (`_k8s_render`, `validate/k8s_manifests.py`) reach the same
-claims through `lib.k8s_roles.claim_contexts`, because one template rendered per entry is
-invisible to a walk over the templates a role ships. These tests hold the two paths together,
-name the claims they must find, and refuse a claim with two creators.
+A role declares `k8s_claims: [{name, size, storage_class, access_modes?, namespace?}]`, and each
+entry renders from `ansible/templates/claim-default.yaml.j2` to `claim-<name>.yaml`. The offline
+harnesses (`_k8s_render`, `validate/k8s_manifests.py`) reach the claims through
+`lib.k8s_roles.claim_contexts`. These tests name the claims they must find and refuse a claim
+with two creators.
 
 Run: uv run pytest ansible/tests/k8s/test_k8s_claims.py
 """
 
 from collections import Counter
 
-from _helpers import (
-    ANSIBLE,
-    load_tasks,
-    render_expr,
-    task_named,
-)
 from _k8s_render import rendered_docs
 from lib.k8s_roles import CLAIM_TEMPLATE
 
-MANIFESTS = ANSIBLE / "roles/k8s/manifests"
 
 # Named members, with the live spec each must keep: a claim's storage class is immutable and
 # its size can only grow, so a converted claim that renders differently fails its next apply.
@@ -88,33 +80,6 @@ def duplicate_claims(pvcs) -> dict[tuple[str | None, str | None], int]:
     """`(namespace, name)` -> count, for every claim rendered more than once."""
     counts = Counter(_key(doc) for _role, _name, doc in pvcs)
     return {key: n for key, n in counts.items() if n > 1}
-
-
-def test_the_render_task_renders_the_template_the_harnesses_render():
-    task = task_named(load_tasks(MANIFESTS / "tasks/main.yml"), "Render volume claims")
-    # The src is the labelling wrapper for an armed role, which renders `manifests_label_src`.
-    assert "manifests_label_src" in task["ansible.builtin.template"]["src"]
-    assert task["vars"]["manifests_label_src"].endswith(
-        f"/templates/{CLAIM_TEMPLATE.name}"
-    )
-    assert task["loop_control"]["loop_var"] == "manifests_claim"
-    assert task["ansible.builtin.template"]["dest"].endswith(
-        "/claim-{{ manifests_claim.name }}.yaml"
-    )
-
-
-def test_the_claim_file_list_names_what_the_render_task_writes():
-    """The prune keep-set and the digest read `manifests_claim_files`, not the render loop."""
-    task = task_named(
-        load_tasks(MANIFESTS / "tasks/main.yml"), "Name the volume claim files"
-    )
-    expr = task["ansible.builtin.set_fact"]["manifests_claim_files"]
-    claims = [{"name": "a-config"}, {"name": "b-data"}]
-    assert render_expr(expr, k8s_claims=claims) == [
-        "claim-a-config.yaml",
-        "claim-b-data.yaml",
-    ]
-    assert render_expr(expr) == []
 
 
 def test_known_claims_render_from_k8s_claims_with_their_live_spec():
@@ -194,63 +159,4 @@ def test_every_claim_renders_from_k8s_claims():
     assert not claims_from_other_templates(pvcs), (
         "these templates render a PersistentVolumeClaim; declare it in the role's "
         f"k8s_claims instead: {claims_from_other_templates(pvcs)}"
-    )
-
-
-def _early_applies(**context) -> bool:
-    """Whether "Apply the volume claims" runs ahead of the snapshot for this context."""
-    task = task_named(
-        load_tasks(MANIFESTS / "tasks/main.yml"), "Apply the volume claims"
-    )
-    context.setdefault("k8s_no_mutate", False)
-    return all(render_expr("{{ " + cond + " }}", **context) for cond in task["when"])
-
-
-def test_claims_apply_ahead_of_the_snapshot_only_for_a_role_that_snapshots():
-    """The snapshot is the early apply's only reader. A role that snapshots nothing gets its
-    claims from the directory apply, after the `00-namespace.yaml` observability's claims
-    need on a fresh cluster."""
-    claims = ["claim-a-config.yaml"]
-    assert _early_applies(
-        manifests_claim_files=claims, k8s_autodeploy_snapshot_pvcs=["a-config"]
-    )
-    assert not _early_applies(manifests_claim_files=claims)
-    assert not _early_applies(
-        manifests_claim_files=claims, k8s_autodeploy_snapshot_pvcs=[]
-    )
-
-
-def _sweep_task() -> dict:
-    return task_named(
-        load_tasks(MANIFESTS / "tasks/main.yml"),
-        "Remove the retired volume-claim staging directory",
-    )
-
-
-def _sweeps(**context) -> bool:
-    """Whether the sweep's `when:` holds for a real deploy of a role with this context."""
-    context.setdefault("k8s_no_mutate", False)
-    context.setdefault("manifests_claim_files", [])
-    return all(
-        render_expr("{{ " + cond + " }}", **context) for cond in _sweep_task()["when"]
-    )
-
-
-def test_the_sweep_removes_the_sibling_volume_claim_staged_into():
-    module = _sweep_task()["ansible.builtin.file"]
-    assert module["state"] == "absent"
-    # Under a real deploy manifests_dest_dir is /etc/rancher/k3s/manifests/<service>.
-    assert module["path"] == "{{ manifests_dest_dir }}-claims"
-
-
-def test_the_sweep_runs_for_a_role_with_k8s_claims_or_its_own_pvc():
-    assert _sweeps(manifests_claim_files=["claim-a-config.yaml"])
-    assert _sweeps(manifests_files_resolved=["pvc.yaml", "deployment.yaml"])
-
-
-def test_the_sweep_skips_a_role_with_neither_and_any_dry_run():
-    assert not _sweeps(manifests_files_resolved=["server-pvc.yaml", "deployment.yaml"])
-    assert not _sweeps()
-    assert not _sweeps(
-        manifests_claim_files=["claim-a-config.yaml"], k8s_no_mutate=True
     )

@@ -31,6 +31,6 @@ image_builder_builds:  # noqa var-naming[no-role-prefix]
       # moves the content tag, so promote rebuilds the image.
       "{{ playbook_dir }}/../scripts/diagnostics/probe_lib/obs_api.py": obs_api.py
 
-# The ClusterRole and ClusterRoleBinding in rbac.yaml are cluster-scoped, so the namespaced
-# prune allowlist in k8s/manifests never selects them; dropping one still leaves it live.
+# Flux prunes by its own inventory, which holds the ClusterRole and ClusterRoleBinding in
+# rbac.yaml, so dropping one deletes it live.
 manifests_rollout: homelab-mcp  # noqa var-naming[no-role-prefix]

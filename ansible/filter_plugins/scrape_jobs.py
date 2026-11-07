@@ -35,7 +35,7 @@ key raises rather than being ignored, so a `basic_auth:` written here fails the 
 rendering a job without it.
 
 No Ansible import, so the render harnesses register the same function the playbook runs.
-`FilterModule` re-raises a function's `ValueError` as `AnsibleFilterError` prefixed with the
+`FilterModule` re-raises a function's `ValueError` as `FilterError` prefixed with the
 filter's name.
 """
 

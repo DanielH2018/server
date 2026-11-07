@@ -9,7 +9,7 @@ Run: uv run pytest ansible/tests/deploy/test_updater_lag_grace_filter.py
 """
 
 import pytest
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 
 import updater_lag_grace as ulg
 from lib.repo_paths import REPO
@@ -63,5 +63,5 @@ def test_a_floor_above_the_schedule_s_need_wins():
     ],
 )
 def test_a_schedule_or_floor_the_filter_cannot_read_is_flagged(dropin, floor, message):
-    with pytest.raises(AnsibleFilterError, match=message):
+    with pytest.raises(FilterError, match=message):
         grace(dropin, floor)

@@ -75,6 +75,7 @@ from _hook_common import (
     gh_repo,
     invokes,
     read_payload,
+    repo_root,
     split_stages,
     strip_shell_keywords,
 )
@@ -376,14 +377,6 @@ def _flag_value(words: list[str], flags: tuple[str, ...]) -> str | None:
     return value
 
 
-def _repo_root(start: Path) -> Path | None:
-    """The nearest directory at or above `start` holding a `.git` entry, or None."""
-    for candidate in (start, *start.parents):
-        if (candidate / ".git").exists():
-            return candidate
-    return None
-
-
 def _names_another_repo(words: list[str]) -> bool:
     """True when the stage aims at a repo other than this one, by flag or by PR URL."""
     repo = gh_repo(words)
@@ -418,7 +411,7 @@ def pr_body_problem(stage: list[str], cwd: Path, command: str) -> str | None:
         return None
     if _names_another_repo(stage):
         return None
-    root = _repo_root(cwd)
+    root = repo_root(cwd)
     if root is None:
         return None
     headings = template_headings(root)

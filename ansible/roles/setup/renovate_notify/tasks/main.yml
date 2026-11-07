@@ -1,27 +1,10 @@
 ---
-# One task file per subject, each under its own tag, so the GitOps deployer can apply a change
-# to the code alone (`--tags renovate-notify-code`) or to the units alone (`--tags renovate-notify-service`)
-# rather than the whole role (#3135). `narrow_setup` reads a task file's OWN tags, so each task
-# in code.yml and service.yml carries its tag, and each import below repeats it so an edit to
-# this file narrows too. The directories serve both halves.
-- name: Create renovate-notify directories
-  tags: [renovate-notify-code, renovate-notify-service]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    owner: "{{ sys_user }}"
-    group: "{{ sys_user }}"
-    mode: "0750"
-  loop:
-    - /opt/renovate-notify       # notifier scripts
-    - /var/lib/renovate-notify   # state (last_notified, last_run, pending_seen.json) + monitor-bridge bind source
-    - /etc/renovate-notify       # config.env (0600 secret)
-  become: true
+# The Renovate reporting half is package-owned: hosts/components/renovate-notify ships it in
+# homelab-daniel-box (H7.37). docs/target-architecture/host/h7-delete-ansible.md.
 
-- name: Install the renovate-notify code
-  tags: [renovate-notify-code]
-  ansible.builtin.import_tasks: code.yml
-
-- name: Install and arm the renovate-notify units
-  tags: [renovate-notify-service]
-  ansible.builtin.import_tasks: service.yml
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line, and the tick applies the role on daniel-box as a no-op.
+- name: End the role, whose work the host package owns
+  ansible.builtin.meta: end_role
