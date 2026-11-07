@@ -1,0 +1,43 @@
+# The worktree holder scan as a packaged socket (H7.61,
+# docs/target-architecture/host/h7-delete-ansible.md, item 35). A worktree removal connects to
+# /run/worktree-holders.sock to ask root which processes hold a tree
+# (lib.worktrees.privileged_holders, fanout_lib.clean.live_process_scan). The sweep runs as
+# sys_user, and /proc refuses that uid another user's cwd and environ, so root does the scan.
+#
+# Each host package lists this component on its own, so the move reaches one host at a time.
+# daniel-server lists it since H7.61, and initial_setup skips the subject there through
+# `initial_setup_packaged_hosts['worktree_holders']`. The helper stays in the role's `files/`, and
+# `role: initial_setup` copies it in place while daniel-box still installs it through the role.
+#
+# The helper is root-owned and outside the checkout, because sys_user and every agent can write
+# the repo, and a root unit naming a file there is root for whoever edits it. fanout_lib.clean
+# connects with `nc -U` from a shell chain, so netcat-openbsd is a Depends.
+#
+# The units keep their Ansible-era names, so reconcile's shadow handoff removes the /etc copies,
+# reloads once and restarts the socket. /run/worktree-holders.sock does not change.
+role: initial_setup
+depends:
+  - netcat-openbsd
+defaults:
+  # DECIDED: a copy of the agent users the host packages declare, not a read of the claude-code
+  # component's defaults (#6831). Each host's list copies the `users:` entry of that host's
+  # package.yml; a clone is `<home>/server`. Dropping an agent here revokes its scan at the next
+  # package version, though it keeps the group: the service refuses a uid the map does not name.
+  worktree_holders_agents_by_host:
+    daniel-server:
+      - {name: claude, clone_dir: /var/lib/claude/server}
+files:
+  - {src: "role-file:worktree_holders.py", dst: /usr/lib/homelab/worktree-holders, mode: "0700"}
+  - {src: templates/worktree-holders.json.j2, dst: /etc/worktree-holders.json}
+  - {src: units/worktree-holders.socket.j2, dst: /usr/lib/systemd/system/worktree-holders.socket}
+  - {src: units/worktree-holders@.service, dst: /usr/lib/systemd/system/worktree-holders@.service}
+enable:
+  worktree-holders.socket: sockets.target
+# What initial_setup installed. The role's old sudoers rule stays its own task until the absent
+# arms of tasks/crons.yml move (H7.58 to H7.60).
+legacy:
+  - {path: /etc/systemd/system/worktree-holders.socket}
+  - {path: /etc/systemd/system/worktree-holders@.service}
+  - {path: /etc/systemd/system/sockets.target.wants/worktree-holders.socket}
+  - {path: /usr/local/libexec/worktree-holders}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/worktree-holders}

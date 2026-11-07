@@ -9,8 +9,8 @@
 # The service loads the Healthchecks.io ping key as the credential `healthchecks_ping_key`, so
 # every package listing this component lists that credential. daniel-server's package retires
 # /etc/healthchecks, the file the script read until #6815.
-# The worktree holder scan's socket (`worktree-holders.socket`) is not part of this component:
-# it moves with `claude_code` (H7.12).
+# The worktree holder scan's socket (`worktree-holders.socket`) is not part of this component.
+# It has its own `worktree-holders` component, which each host's package lists separately.
 #
 # Several Claude sessions branch, commit and retire worktrees in the primary checkout every day,
 # and each removal leaves that branch's objects unreachable. A worktree-isolated session's git

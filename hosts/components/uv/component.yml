@@ -1,0 +1,14 @@
+# The `uv` units and scripts run by absolute path (H7.61,
+# docs/target-architecture/host/h7-delete-ansible.md, item 35). homelab-tools installs the pinned
+# binary at /usr/lib/homelab/bin/uv, off PATH, so this component ships /usr/bin/uv, a one-line exec
+# of that path, as the sops component does. A Renovate bump of the homelab-tools pin therefore
+# reaches every caller.
+#
+# Every reader names /usr/bin/uv, and some of them render on both cluster hosts, so both packages
+# list this component. /usr/local/bin precedes /usr/bin on PATH, so a host package that stops
+# writing /usr/local/bin/uv lists it as a legacy entry beside this component. The per-user uv under
+# ~/.local/bin is the dotfiles repo's.
+depends:
+  - homelab-tools
+files:
+  - {src: uv, dst: /usr/bin/uv, mode: "0755"}

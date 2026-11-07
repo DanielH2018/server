@@ -742,6 +742,16 @@ yet* lists, so it does not yet serve the cluster.
 The agent keeps the server token, because k3s documents no switch to an agent-scoped token for an
 agent that has already joined.
 
+### Installing the git hooks after a rebuild
+
+To commit from a rebuilt daniel-server, install the git hooks once in the operator's clone. The
+dotfiles repo installs `prek`, and no package or role runs this step there:
+
+```bash
+cd ~/server
+prek install
+```
+
 ### Rebuilding with GitHub or GHCR unreachable
 
 To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:

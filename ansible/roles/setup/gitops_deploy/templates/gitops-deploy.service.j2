@@ -101,7 +101,7 @@ SuccessExitStatus=75
 # The price is the subprocess-plus-JSON derivations in deploy_narrow.py and the stdlib YAML
 # readers listed in docs/gitops-pipeline.md. A venv would remove them, but it puts a dependency
 # set in the way of the one process that ships the fix for that dependency set.
-ExecStart=/usr/bin/flock -w 180 -E 75 {{ server_git_tree_lock }} /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
+ExecStart=/usr/bin/flock -w 180 -E 75 {{ server_git_tree_lock }} /usr/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_deploy.py
 # SOPS age key is already in the user's home; filter plugins auto-load next to
 # ansible/deploy.yml, so no ANSIBLE_CONFIG is needed.
 
@@ -128,4 +128,4 @@ ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && echo "gitops-deploy: tick s
 # The same skip as a metric (#5676). gitops_deploy.py never ran, so it cannot count the tick
 # itself, and this adds one to gitops_tick_runs_total{outcome="skipped-lock"}. It is a second
 # line rather than a longer first one, so the marker line above stays the contract it is.
-ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && /usr/local/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_tick_metrics.py skipped-lock || true'
+ExecStopPost=/bin/sh -c 'test "$EXIT_STATUS" = 75 && /usr/bin/uv run --no-project --python {{ host_python_version }} /opt/gitops-deploy/gitops_tick_metrics.py skipped-lock || true'

@@ -149,7 +149,7 @@ def _run_witness(tmp_path, route_rc: int, copy=WITNESS) -> int:
     """
     body = _render(copy)
     check_lib = CHECK_LIBS[copy]
-    for needle in (check_lib, "/home/ubuntu/.local/bin/uv", "/usr/local/bin/uv"):
+    for needle in (check_lib, "/home/ubuntu/.local/bin/uv", "/usr/bin/uv"):
         assert needle in body, (
             f"{needle} is no longer in the witness; this harness repoints it"
         )
@@ -163,7 +163,7 @@ def _run_witness(tmp_path, route_rc: int, copy=WITNESS) -> int:
     body = (
         body.replace(check_lib, str(CHECK_LIB))
         .replace("/home/ubuntu/.local/bin/uv", str(uv))
-        .replace("/usr/local/bin/uv", str(uv))
+        .replace("/usr/bin/uv", str(uv))
     )
     script = write_exec(tmp_path / "loki-read-route-health.sh", body)
     (tmp_path / "textfile").mkdir()

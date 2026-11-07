@@ -37,6 +37,11 @@
 # nothing else cleared its 42 worktrees, 1173 loose objects or stale gc.log. The sweep pings
 # `daniel-server-worktree-sweep` with the `healthchecks_ping_key` credential listed below.
 #
+# H7.61 adds the dev tooling and the worktree holder scan. `uv` and `vale` put the homelab-tools
+# binaries on PATH as /usr/bin/uv and /usr/bin/vale, and `worktree-holders` ships the scan's socket.
+# initial_setup skips each subject on this host through `initial_setup_packaged_hosts`. The dotfiles
+# repo owns the per-user uv, prek and Python, and the cluster-node procedure runs `prek install`.
+#
 # The package declares no ufw rule of its own. The k3s agent's join rules stay `setup/k3s`
 # rules until H7.34 declares them `keep`; they carry no `homelab:` label, so the arm leaves them.
 description: daniel-server's homelab host package
@@ -46,7 +51,7 @@ component: claude-code
 users:
   # uid 995 is the live uid (`getent passwd claude` on daniel-server, 2026-10-29).
   - {name: claude, uid: 995, home: /var/lib/claude, shell: /bin/bash, comment: Claude agent}
-components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep]
+components: [reconcile, secrets-unit, nut-secondary, apt-github-cli, unattended-upgrades, sshd, host-tuning, k3s-gates, k3s-agent, failure-alert, claude-code, sops, check-lib, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, worktree-sweep, uv, vale, worktree-holders]
 units:
   k3s-agent.service: {policy: windowed}
 credentials:
@@ -69,6 +74,10 @@ legacy:
   - {path: /etc/apt/sources.list.d/github-cli.list}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
+  # H7.61: the copies initial_setup installed, which sit ahead of /usr/bin/uv and /usr/bin/vale on
+  # PATH.
+  - {path: /usr/local/bin/uv}
+  - {path: /usr/local/bin/vale}
   # H7.31: the maintenance wrapper the crons ran, and the Healthchecks.io key file the reboot cron
   # sourced. No other job on this host reads the key file.
   - {path: /usr/local/bin/host-maintenance.sh}

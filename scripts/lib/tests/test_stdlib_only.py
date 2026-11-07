@@ -300,7 +300,7 @@ def _uv_gate_leg(drill: str) -> str:
     A slice from the first `--no-project` would start at the comment above the `if`, so it
     would also hold the `.venv` leg, whose argv then satisfies an assertion meant for this one.
     """
-    leg = drill[drill.index("/usr/local/bin/uv run --no-project") :]
+    leg = drill[drill.index("/usr/bin/uv run --no-project") :]
     return leg[: leg.index("\n  )")]
 
 
