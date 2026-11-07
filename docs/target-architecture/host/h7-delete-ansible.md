@@ -1441,9 +1441,9 @@ enable link names the unit.
 
 **Why no enable link (#7513).** A link would act only at the node's next boot, because reconcile
 never starts a `windowed` unit, so the procedure would still need its hand start. The link would
-also add a hazard. daniel-box's first start must follow the server token and any etcd restore, and
-its netplan file is `activate: manual`, so a rebuilt box reboots to take `server_ip`. A reboot
-before the restore would start k3s from an empty datastore. daniel-server takes the same hand
+also add a hazard. daniel-box's first start must follow the server token and any etcd restore, so
+a reboot before the restore would start k3s from an empty datastore. H7.35 adds one such reboot,
+because its netplan file is `activate: manual` and a rebuilt box reboots to take `server_ip`. daniel-server takes the same hand
 start, so that one procedure covers both nodes. The hand `systemctl enable` also writes the
 link that starts the unit at every later boot.
 
