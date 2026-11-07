@@ -1386,7 +1386,11 @@ for a wrong hostname, a missing host var and a missing key.
 
 ### The Pi rebuild runbook
 
-`docs/break-glass.md` gains the Pi runbook in H7.15b. Its steps are:
+`docs/break-glass.md` gains the Pi runbook in H7.15b, and that page is the procedure to
+follow. It adds the steps a stock image needs (`age`, the `ssh-users` group, the updater's
+hand start), and it moves the recipient commit ahead of the package install, because
+`compose-run` refuses to start without the file `homelab-secrets` decrypts. The plan's
+steps are:
 
 1. Flash stock Ubuntu 24.04 for Raspberry Pi. Before first boot, set the hostname to
    `daniel-pi` in the boot partition's cloud-init `user-data`, because the image boots as
