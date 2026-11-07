@@ -289,7 +289,7 @@ installs it. Until that gate passes, the Pi's updater runs only when the operato
 - **The setup-role task walkers live in the test helpers.**
   `ansible/tests/_role_census.py:task_files_by_role` lists every plane's task files, setup
   included. `ansible/tests/setup/test_cron_output_goes_to_the_journal.py` pairs it with
-  `_helpers.walk_tasks` to read cron tasks. `ansible/tests/_role_tasks.py` reads only
+  `_helpers.walk_tasks` to read cron tasks. `_role_tasks.py`, since deleted, reads only
   `ansible/roles/k8s` (`_K8S_ROLES`).
 - **Port 8791 is free.** `git grep -n 8791` matches nothing. `deploy_ui_port` is 8790.
 - **A host address has one definition site.** `ansible/tests/repo/test_lan_facts_have_one_source.py`
@@ -2732,7 +2732,7 @@ reviewer's suggested remedy, the reason is given.
 - **H3-R1-12 (medium) Component variable resolution is unstated.** Fixed. The five defaults
   move into `component.yml` `defaults:`, layered beneath `group_vars` by a `render_context`
   keyword, never as `overrides`. A render test resolves each variable.
-- **H3-R1-13 (medium) `ansible/tests/_role_tasks.py` is k8s-only.** Fixed. The census uses
+- **H3-R1-13 (medium) `_role_tasks.py` is k8s-only.** Fixed. The census uses
   `_role_census.py:task_files_by_role` with `_helpers.walk_tasks`, and names the fields it
   extracts.
 - **H3-R1-14 (medium) The censuses assert members that do not exist yet.** Fixed. Named
