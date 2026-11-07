@@ -10,7 +10,7 @@ and H7.7, the two host PRs of H7.12c and the five PRs of H7.19a count once per P
 re-sliced PRs are numbered from H7.21, so no re-sliced ID equals an old one. No step has
 landed when the slice was re-sliced on 2026-10-17; the Status line records what has merged since.
 An audit of *Steps, as PRs* against the tree on 2026-11-07
-([#7506](https://github.com/DanielH2018/server/issues/7506)) added H7.58 to H7.63, split H7.49
+([#7506](https://github.com/DanielH2018/server/issues/7506)) added H7.58 to H7.64, split H7.49
 and narrowed the H2 edges.
 
 Related issues: [#4561](https://github.com/DanielH2018/server/issues/4561), daniel-server's IPv6 default route. Its netplan file moves into the
@@ -470,7 +470,7 @@ The exit criterion is seven observations:
 | `github_cli`, `chezmoi_setup` | — | `gh`, as a `Depends` of `apt-github-cli` (H7.62) | `gh`, as a `Depends` of `apt-github-cli`, and `chezmoi_setup`'s distro packages (H7.62) | chezmoi, which bootstrap step 5 installs |
 | `gitops_deploy` | — | — | the two GitHub check timers; `homelab-checkout-sync` replaces the fast-forward | H7.19a retires the deployer and empties the role; H7.20a deletes the role |
 | `render_records` | — | — | — | R4 deletes it |
-| `k8s_host_files` (added by D5) | pi-peer-backup's forced-command wrapper, and its authorized key through the line arm (H7.4) | — | `tmpfiles.d` lines for the docs site directory (H7.10a), media-volume's three directories under `/srv/media` (H7.9b), and artifacts' local, per-peer and star list directories (H7.12c) | the absent arms become legacy entries, H7.18c empties the role and H7.20a deletes it; the crowdsec probe timer and the Alloy stage are H5's or D5's, not H7's |
+| `k8s_host_files` (added by D5) | pi-peer-backup's forced-command wrapper, and its authorized key through the line arm (H7.4) | — | `tmpfiles.d` lines for the docs site directory (H7.10a), media-volume's three directories under `/srv/media` (H7.9b), and artifacts' local, per-peer and star list directories (H7.12c) | the mirrors' GC is H7.64's component; the absent arms become legacy entries, H7.18c empties the role and H7.20a deletes it; the crowdsec probe timer and the Alloy stage are H5's or D5's, not H7's |
 
 ### The component checklist and the setup census
 
@@ -1307,7 +1307,8 @@ steps are:
       binary is at `k3s_version` and the unit exists, so a rerun never rewrites the env
       file.
     - Added by H7.58 to H7.60: the Pi's swap file, the `networkd-dispatcher.service` mask on
-      all three hosts, and the removal of the LXD snaps on daniel-server.
+      all three hosts, the `ssh-users` group and the sys user's membership on all three
+      hosts, and the removal of the LXD snaps on daniel-server.
 5. Install `chezmoi` from `homelab-tools`, then run `apt-get install homelab-updater
    homelab-<hostname>`, then `systemd-tmpfiles --create`, as boot does. That creates each
    directory a package declares in `tmpfiles.d`, the Pi's textfile directory (H7.4) among
@@ -1763,7 +1764,7 @@ This step lasts until H7.19b deletes the ledger.
 ### The re-sliced PRs
 
 The 65 planned PRs merged into 37. Later rulings split H7.24, H7.41 and H7.49, and the audit
-of 2026-11-07 added H7.58 to H7.63, whose *Old steps* cell reads `new`. The re-slicing changes
+of 2026-11-07 added H7.58 to H7.64, whose *Old steps* cell reads `new`. The re-slicing changes
 no design. Each re-sliced
 PR carries the full text of every old step it absorbs, from the collapsed list under *The old
 step list*, with that step's verification, rollback note, operator-only gate and share of the
@@ -1855,13 +1856,13 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.45 Scripts for the operator playbooks | H7.16a, H7.16b | yes | R4 |
 | H7.46 The last Ansible imports | H7.17 | yes | R4, D6.13 |
 | H7.47 Closing the readers | H7.18a, H7.18b, H7.18d | yes | H7.36, H7.40, H5 |
-| H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H2.2c, H2.3d, H2.3f, H2.4c, H2.5b to H2.5d, H2.8b, D5 |
+| H7.48 Absent arms become legacy entries; `k8s_host_files` empties | H7.18c | no: its list of record is H7.23's report taken after every row has moved | H7.25, H7.35, H7.36, H7.40, H7.64, H2.2c, H2.3d, H2.3f, H2.4c, H2.5b to H2.5d, H2.8b, D5 |
 | H7.49a land.sh stops running the tick | H7.19a's third PR | yes | H7.41, D6 |
 | H7.49b monitor-bridge's gitops checks go | H7.19a's first PR | yes; it merges only when H7.52 is ready to merge next, because it leaves the deployer unwatched until H7.52's merge | H7.49a, H7.51 live, and every other edge of H7.52 |
 | H7.50 deploy_ui retires | H7.19a's second PR | yes | H7.37, H7.41, D6 |
 | H7.51 `homelab-checkout-sync` beside the deployer | H7.19a's fourth PR | yes | H7.41, H7.47, D6, the H6 PR that lands the window test |
 | H7.52 The deployer's timer retires | H7.19a's fifth PR | no: it deletes H6's seven deployer-coupled items, so it starts once they merge | H7.49a, H7.49b live, H7.51 live, H7.24a, H7.24b, H7.25, H7.29, H7.32, H7.33, H7.35, H7.36, H7.37, H7.40, H7.41, H7.48, H7.60, H7.62, H6 |
-| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.63 |
+| H7.53 Re-home and delete the deployer; the setup census turns strict | H7.19b, H7.19c | the re-home half yes | H7.52 live on daniel-box, H7.24a to H7.41, H7.24b, H7.44, H7.45, H7.48, H7.50, H7.58 to H7.64 |
 | H7.54 The test env leaves ansible-core | H7.19d | no: its parity proof runs over the suite as H7.48 and H7.52 leave it | H7.46, H7.48, H7.52 |
 | H7.55 Delete the playbooks and the role directories | H7.20a | no: it deletes what H7.53 leaves | H7.53 live on daniel-box, H7.43, H7.44, H7.45 |
 | H7.56 ansible-core leaves, and so does the Pi's `containers_list` key | H7.20b, H7.20d | no: its two census greps run at its base | H7.54, H7.55, H5 |
@@ -1869,9 +1870,10 @@ runbook too, and H2.8c's step follows the runbook.
 | H7.58 Pi: `initial_setup`, part 3 | new | yes | H7.26, H7.30, H7.42 |
 | H7.59 daniel-server: `initial_setup`, part 3, and its Loki witness | new | yes, with H7.58 | H7.58 live, H7.31, H4 |
 | H7.60 daniel-box: `initial_setup`, part 3 | new | yes, with H7.58 | H7.59 live, H7.32, H6.2 |
-| H7.61 daniel-server: dev tooling and the worktree holder scan | new | yes | H7.38, H7.39, H7.41a |
+| H7.61 daniel-server: dev tooling and the worktree holder scan; `/usr/bin/uv` on both cluster hosts | new | yes | H7.38, H7.39, H7.41a |
 | H7.62 daniel-box: dev tooling, the worktree holder scan, `chezmoi_setup` and `github_cli` | new | yes, with H7.61 | H7.61 live, H7.40, H6.2 |
 | H7.63 The last setup tasks: the setup-drift check, the collections install and `common/tasks/` | new | no: it deletes what H7.52's timer retirement and every importer of `common/tasks/` leave | H7.35, H7.37, H7.48, H7.50, H7.52 live, H7.60, H7.62 |
+| H7.64 daniel-box: the mirror registries' garbage collection | new | yes | H6.2 |
 
 ### The task files each row owns
 
@@ -1887,13 +1889,14 @@ items inside each file. Every path sits under `ansible/roles/setup/`.
 | H7.37 | `fake_remux/tasks/main.yml`, `gitops_deploy/tasks/github_checks.yml`, `renovate_agent/tasks/code.yml`, `renovate_agent/tasks/main.yml`, `renovate_agent/tasks/service.yml`, `renovate_notify/tasks/code.yml`, `renovate_notify/tasks/main.yml`, `renovate_notify/tasks/service.yml` |
 | H7.44 | `k3s/tasks/coredns.yml`, `k3s/tasks/main.yml`, `k3s/tasks/server.yml` |
 | H7.45 | `k3s/tasks/storage_smoke.yml` |
-| H7.48 | `docker_install/tasks/main.yml`, `docker_install/tasks/teardown.yml`, `k8s_host_files/tasks/configarr.yml`, `k8s_host_files/tasks/crowdsec.yml`, `k8s_host_files/tasks/janitorr.yml`, `k8s_host_files/tasks/main.yml`, `k8s_host_files/tasks/observability.yml`, `k8s_host_files/tasks/qbittorrent.yml`, `k8s_host_files/tasks/registry.yml`, `k8s_host_files/tasks/traefik.yml`; the cron absent arms of `initial_setup/tasks/crons.yml` and `k3s/tasks/health-crons.yml` |
+| H7.48 | `docker_install/tasks/main.yml`, `docker_install/tasks/teardown.yml`, `k8s_host_files/tasks/configarr.yml`, `k8s_host_files/tasks/crowdsec.yml`, `k8s_host_files/tasks/janitorr.yml`, `k8s_host_files/tasks/main.yml`, `k8s_host_files/tasks/observability.yml`, `k8s_host_files/tasks/qbittorrent.yml`, `k8s_host_files/tasks/registry.yml`, `k8s_host_files/tasks/traefik.yml`; the cron absent arms of `initial_setup/tasks/crons.yml` and `k3s/tasks/health-crons.yml`; the two absent arms of `k8s_host_files/tasks/registry.yml` |
 | H7.50 | `deploy_ui/tasks/code.yml`, `deploy_ui/tasks/firewall.yml`, `deploy_ui/tasks/main.yml`, `deploy_ui/tasks/service.yml` |
 | H7.52 | `gitops_deploy/tasks/code.yml`, `gitops_deploy/tasks/install.yml`, `gitops_deploy/tasks/main.yml`, `gitops_deploy/tasks/service.yml`, `gitops_deploy/tasks/teardown.yml` |
 | H7.55, which deletes these `end_role` stubs with their roles | `claude_code/tasks/main.yml`, `config_files/tasks/main.yml`, `homelab_builder/tasks/main.yml`, `nut_host/tasks/main.yml`, `optimize_pi/tasks/main.yml`, `sops_setup/tasks/main.yml` |
 | H7.58 to H7.60 | `initial_setup/tasks/access.yml`, `initial_setup/tasks/accounting.yml`, `initial_setup/tasks/audit-and-kernel.yml`, `initial_setup/tasks/integrity.yml`; `initial_setup/tasks/system-tuning.yml` without its git hooks; the swap, apt and package tasks of `initial_setup/tasks/host-basics.yml`; the witness, the file absent arms and the `ansible.log` tasks of `initial_setup/tasks/crons.yml` |
 | H7.61 and H7.62 | `chezmoi_setup/tasks/main.yml` and `github_cli/tasks/main.yml` (H7.62); the tooling tasks of `initial_setup/tasks/host-basics.yml`, the git hooks of `initial_setup/tasks/system-tuning.yml` and the worktree holder tasks of `initial_setup/tasks/crons.yml` |
 | H7.63 | `common/tasks/agent_user.yml`, `common/tasks/alert_unit.yml`, `common/tasks/check_timer.yml`, `common/tasks/install_host_lib.yml`, `common/tasks/release_bin.yml`, `common/tasks/stamp_deployed.yml`, `common/tasks/stamp_render.yml`, `initial_setup/tasks/main.yml`; what `initial_setup/tasks/crons.yml` and `initial_setup/tasks/host-basics.yml` still hold |
+| H7.64 | the `Manage the registry garbage collection` block of `k8s_host_files/tasks/registry.yml` |
 
 ### What each re-sliced PR carries
 
@@ -2183,7 +2186,9 @@ the `manual_plane` clearing, and *Rollback*'s
     `diff -r`.
 24. **H7.48** stays alone. It carries the retired-crons census and empties `k8s_host_files`.
     It also turns the rest of `docker_install/tasks/teardown.yml`, the role's last work, into
-    legacy entries on the cluster nodes.
+    legacy entries on the cluster nodes. Old H7.18c counts registry's three GC crons among
+    the absent arms, but D5's operator ruling kept the mirrors' GC as a host script. H7.64
+    moves it, and this row takes only `registry.yml`'s two absent arms.
 25. **H7.49 splits in two, ruled on 2026-11-07.** Both halves remove a consumer of the running
     tick outside the deployer's role, and both precede H7.52. Only monitor-bridge's half opens
     a gap, so land.sh's half no longer waits for it.
@@ -2227,11 +2232,15 @@ the `manual_plane` clearing, and *Rollback*'s
     means new work: these rows edit `hosts/bootstrap-host.sh` and its container test, because
     the script as merged does none of it.
     - **`access.yml`.** The component ships `/etc/sudoers.d/10-timestamp`. A `tmpfiles.d` `Z`
-      line with mode `~0700` holds the sys user's `.ssh`. A `sysusers.d` file declares
-      `ssh-users` and the sys user's membership, which replaces the note in the `sshd`
+      line with mode `~0700` holds the sys user's `.ssh`. Bootstrap step 4
+      creates `ssh-users` and adds the sys user to it, which replaces the note in the `sshd`
       component's header. `10-homelab.conf` sets `AllowGroups ssh-users`, so this subject can
-      lock a host out. Each PR reads `id <sys_user>` and opens a new SSH session before it
-      merges. On 2026-11-07 the group lists `ubuntu` on the Pi and daniel-box, and `root`,
+      lock a host out, and step 4 runs before step 5 installs that file. A `sysusers.d` file
+      does not fit: the users arm runs `systemd-sysusers` only on its own file and only for a
+      missing user, the arm declares no membership, and no bootstrap step runs it. The live
+      hosts already hold the group, so `id <sys_user>` proves nothing about a rebuild. The
+      container test therefore asserts the membership after step 4 from a clean image, and
+      each PR also reads `id <sys_user>` and opens a new SSH session before it merges. On 2026-11-07 the group lists `ubuntu` on the Pi and daniel-box, and `root`,
       `ubuntu` and `claude` on daniel-server. No tracked script under `hosts/` or `scripts/`
       names a `root@` login, so the file does not declare root, and daniel-server's entry stays
       host history. `Give root back its own SSH directory` is deleted, because it repairs damage the
@@ -2251,9 +2260,12 @@ the `manual_plane` clearing, and *Rollback*'s
     - **`integrity.yml`.** The component ships `coredump.conf.d/disable.conf`. Bootstrap step 4
       masks `networkd-dispatcher.service` on all three hosts, and the mask persists on the live
       hosts.
-    - **`system-tuning.yml`.** The `host-tuning` component ships the rsyslog filter under
-      `has_rsyslog`, with `try-restart:rsyslog.service`, because the journald cap and the
-      filter are one change. `test_journald_syslog_forwarding.py` retargets. H7.59 deletes the
+    - **`system-tuning.yml`.** A new `rsyslog-filter` component ships the filter, with
+      `try-restart:rsyslog.service`. H7.59 lists it on daniel-server and H7.60 on daniel-box,
+      because `host-tuning` is shared, so a file added there would reach daniel-box with
+      H7.59. The journald cap and the filter are one change, so
+      `test_journald_syslog_forwarding.py` retargets and holds the component's hosts to
+      `has_rsyslog`. H7.59 deletes the
       governor tasks and the LXD removal, which read host history. Both had converged on
       2026-11-07: daniel-server has no `cpu-governor-performance.service`, its live governor
       reads `powersave`, and `snap list` shows only snapd. Bootstrap step 4 removes those three
@@ -2282,7 +2294,12 @@ the `manual_plane` clearing, and *Rollback*'s
       its tasks. Reverting any of the three rows follows *Rollback*'s per-host order.
 35. **H7.61 and H7.62 land the dev tooling and the worktree holder scan in canary order.**
     Only `dev_tooling_hosts` and the `has_claude_code` hosts run these tasks, and both lists
-    name daniel-server and daniel-box. H7.62 deletes the tasks.
+    name daniel-server and daniel-box. H7.61 adds daniel-server to
+    `initial_setup_packaged_hosts` under `dev_tooling`, `vale` and `worktree_holders`, and
+    each task of those subjects gains the guard, so an apply there stops rewriting the
+    paths reconcile retires. H7.62 deletes the tasks and the map entries. Vale and the
+    holder scan ship in components each host's package lists separately, so canary order
+    holds for them. Only `/usr/bin/uv` reaches daniel-box with H7.61, as stated below.
     - **Deleted, because the dotfiles repo owns them.** [DanielH2018/dotfiles#997](https://github.com/DanielH2018/dotfiles/pull/997)
       merged on 2026-10-26, and its `tools.toml` holds uv, prek and Python at this repo's pins.
       The per-user uv install, `prek` in `Install Python CLI tooling` and `Install the pinned
@@ -2295,8 +2312,10 @@ the `manual_plane` clearing, and *Rollback*'s
       `scripts/backup/etcd_restore_drill.sh`, `k8s/manifests/tasks/release_digest.yml` and setup
       role templates. H7.61 adds a `uv` component on `hosts/components/sops/`'s pattern to both
       hosts: `/usr/bin/uv` is an exec of `/usr/lib/homelab/bin/uv`. H7.61 repoints every reader
-      `git grep -l /usr/local/bin/uv` prints. Each PR lists `/usr/local/bin/uv` as a legacy
-      entry on its host.
+      `git grep -l /usr/local/bin/uv` prints. Those readers include templates both hosts
+      render, so `/usr/bin/uv` must arrive on both in that PR, and this one step takes no
+      canary. It only adds a path, and daniel-box's `/usr/local/bin/uv` stays. Each PR lists
+      `/usr/local/bin/uv` as a legacy entry on its own host.
     - **Vale** takes the same shape, as *The component checklist and the setup census* states.
       `homelab-tools` pins it, a `vale` component ships `/usr/bin/vale`,
       `/usr/local/bin/vale` becomes a legacy entry, and `test_vale_matches_the_ci_pin.py`
@@ -2304,12 +2323,16 @@ the `manual_plane` clearing, and *Rollback*'s
     - **`Install Git hooks`** leaves no live state to manage, because its `creates:` guard
       makes it a once-per-clone step. `docs/break-glass.md`'s cluster-node procedure runs `prek
       install` after the clone.
-    - **The worktree holder scan** moves into `claude-code`, as the `worktree-sweep` component
-      header says. The script ships at `/usr/lib/homelab/worktree-holders`, because dpkg ships
+    - **The worktree holder scan** gets its own `worktree-holders` component, which H7.61
+      lists on daniel-server and H7.62 on daniel-box. The `worktree-sweep` component header
+      says it moves with `claude_code`, but both hosts list that component, so a file added
+      there would reach daniel-box with H7.61. The header changes in H7.61. The script ships at `/usr/lib/homelab/worktree-holders`, because dpkg ships
       nothing under `/usr/local`, and the unit reads that path. `/etc/worktree-holders.json`,
       `worktree-holders.socket` and `worktree-holders@.service` keep their names, so
-      `/run/worktree-holders.sock` does not change. A `sysusers.d` file declares the group and
-      the sys user's membership, `netcat-openbsd` is a `Depends`, and *Ruling 3* hands the
+      `/run/worktree-holders.sock` does not change. `ExecStartPre=+` lines on the socket create the
+      group and add the sys user, so both exist before systemd binds the socket with
+      `SocketGroup=`. `claude-agent-setup` already creates the group for the agent's own
+      membership. `netcat-openbsd` is a `Depends`, and *Ruling 3* hands the
       `/etc/systemd/system` copies to the package. `test_worktree_holders_install.py` retargets.
     - **H7.62 alone takes `chezmoi_setup` and `github_cli`**, which `has_chezmoi` and
       `has_github_cli` set only on daniel-box. Each role empties to the `end_role` stub.
@@ -2339,6 +2362,24 @@ the `manual_plane` clearing, and *Rollback*'s
       uninstall` for the two tools (**operator-only**).
     - **`common/tasks/`** empties, because H7.35, H7.37, H7.50, H7.52 and this PR remove every
       importer. H7.53's census reads that directory on every host, so these files must go first.
+
+37. **H7.64 moves the mirror registries' garbage collection.** A new `registry-gc` component in
+    `homelab-daniel-box` takes the block from `k8s_host_files/tasks/registry.yml`. Nothing else
+    collects the mirror stores, so deleting the block would let them grow without limit.
+    D5's operator ruling on [#5680](https://github.com/DanielH2018/server/issues/5680) and
+    [#5732](https://github.com/DanielH2018/server/issues/5732) keeps it a host script.
+    - **What ships.** `homelab-registry-gc.timer` replaces the `Registry garbage collection`
+      cron at the schedule the `registry_k8s_gc_cron_*` keys hold. The service keeps the
+      `registry-gc` log tag. The script moves to `/usr/lib/homelab/registry-gc.sh`, with
+      `git mv` of the two Job templates and `files/ghcr-mirror-prune.sh`. A `tmpfiles.d` line
+      creates `/var/lib/registry-gc`. `registry_k8s_manage_gc` becomes the `when:` of each file
+      and of the enable link.
+    - **What retires.** The cron file and `/usr/local/bin/registry-gc.sh` become legacy entries.
+      `homelab_rootq.py`'s path allowlist and its test follow the script.
+    - **Contract.** The GC scales two Deployments with no human in the loop, so its
+      `## Autonomous-role contract` moves into `component.yml`. The PR runs the service once by
+      hand on daniel-box and reads both mirrors back at their replica count.
+    - **Ordering.** H7.48 waits on this row, because it empties `k8s_host_files`.
 
 ### The old step list
 
