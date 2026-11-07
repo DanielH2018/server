@@ -40,7 +40,6 @@ DEP_TYPE = ANNOTATION_MANAGER["depTypeTemplate"]
 # matching fails by name instead of shrinking the census to nothing.
 KNOWN_ANNOTATED = frozenset(
     {
-        "twpayne/chezmoi",
         "k3s-io/k3s",
         "coredns/coredns",
         "docker-ce",
@@ -60,7 +59,7 @@ UNTRACKED_BY_DECISION: dict[str, str] = {
 
 _ANNOTATION_LINE = re.compile(r"^\s*#\s*renovate:", re.MULTILINE)
 
-CHEZMOI_DEFAULTS = "ansible/roles/setup/chezmoi_setup/defaults/main.yml"
+K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 TRAEFIK_DEFAULTS = "ansible/roles/k8s/traefik/defaults/main.yml"
 PI_TOOL_PINS = "hosts/packages/homelab-tools/package.yml"
 NODE_EXPORTER_DEFAULTS = "ansible/roles/k8s/node-exporter/defaults/main.yml"
@@ -126,7 +125,7 @@ def test_every_annotation_comment_in_role_defaults_is_read():
         for p in (_REPO / "ansible/roles").glob("*/*/defaults/main.yml")
     )
     scanned = [rel for rel in defaults if any(p.search(rel) for p in patterns)]
-    assert CHEZMOI_DEFAULTS in scanned and TRAEFIK_DEFAULTS in scanned
+    assert K3S_DEFAULTS in scanned and TRAEFIK_DEFAULTS in scanned
     unread = [rel for rel in scanned if unread_annotations(_read(rel))]
     assert not unread, (
         "a `# renovate:` comment the annotation manager does not read: its keys must be "
@@ -152,7 +151,7 @@ def test_every_version_a_pin_renders_from_is_tracked():
     pins, _ = discover_pins()
     with_versions = [p for p in pins if any(k.endswith("_version") for k in p.inputs)]
     assert {
-        "chezmoi_setup_installer",
+        "k3s_host_coredns",
         "k3s_install_script",
     } <= {p.name for p in with_versions}
     problems = untracked_pin_versions(
@@ -205,8 +204,8 @@ def test_a_pin_version_no_manager_matches_is_flagged():
 
 def test_an_annotated_pin_is_a_manual_pr_naming_the_refresh_command():
     group = _resolve_group_name(
-        "twpayne/chezmoi",
-        CHEZMOI_DEFAULTS,
+        "coredns/coredns",
+        K3S_DEFAULTS,
         "minor",
         "github-releases",
         dep_type=DEP_TYPE,
@@ -214,8 +213,8 @@ def test_an_annotated_pin_is_a_manual_pr_naming_the_refresh_command():
     assert group is not None and "asset_pins.py --refresh {{depName}}" in group, group
     automerge = _resolve_setting(
         "automerge",
-        "twpayne/chezmoi",
-        CHEZMOI_DEFAULTS,
+        "coredns/coredns",
+        K3S_DEFAULTS,
         "minor",
         "github-releases",
         dep_type=DEP_TYPE,

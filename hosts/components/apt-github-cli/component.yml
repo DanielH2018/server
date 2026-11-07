@@ -1,9 +1,13 @@
-# The GitHub CLI's apt source and key (H7.24a, old step H7.1). daniel-box and daniel-server
-# install `gh`, so both packages list this component and daniel-pi does not. The files land at the
-# paths github_cli wrote, so dpkg takes them over; none is a conffile.
+# The GitHub CLI's apt source and key (H7.24a, old step H7.1), and `gh` itself (H7.62). daniel-box
+# and daniel-server run `gh`, so both packages list this component and daniel-pi does not. The files
+# land at the paths github_cli wrote, so dpkg takes them over; none is a conffile. A first install
+# resolves `gh` from Ubuntu's universe, because this package ships the source, and the next apt
+# upgrade moves it to GitHub's.
 #
 # The keyring's sha256 is 6084d5d7...811b, the digest github_cli pinned.
 # scripts/renderer/tests/test_apt_source_components.py holds it.
+depends:
+  - gh
 files:
   - {src: github-cli.sources, dst: /etc/apt/sources.list.d/github-cli.sources}
   - {src: gh-cli-archive-keyring.gpg, dst: /etc/apt/keyrings/githubcli-archive-keyring.gpg}

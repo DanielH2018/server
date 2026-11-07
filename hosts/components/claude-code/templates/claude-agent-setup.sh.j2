@@ -185,8 +185,8 @@ fi
 
 {% if claude_code_agent_dotfiles %}
 # The dotfiles source. The dotfiles sync applies it on its timer.
-if [ ! -x "$home/.local/bin/chezmoi" ] && [ -x "/home/$operator/.local/bin/chezmoi" ]; then
-  place "$agent" "$operator" 0755 "/home/$operator/.local/bin/chezmoi" "$home/.local/bin/chezmoi"
+if [ ! -x "$home/.local/bin/chezmoi" ]; then
+  place "$agent" "$operator" 0755 /usr/lib/homelab/bin/chezmoi "$home/.local/bin/chezmoi"
 fi
 if [ ! -e "$home/.local/share/chezmoi/.git" ]; then
   as_agent "$home/.local/bin/chezmoi" init --no-tty {{ claude_code_agent_dotfiles_repo }}

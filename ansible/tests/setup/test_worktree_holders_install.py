@@ -2,19 +2,17 @@
 
 `lib.worktrees.privileged_holders` and `fanout_lib.clean.live_process_scan` connect to
 `WORKTREE_HOLDERS_SOCKET`; the socket unit listens there, and its per-connection service runs
-the helper the package or the role installs. If those drift apart, every caller falls back to the
+the helper the package installs. If those drift apart, every caller falls back to the
 unprivileged scan, or every removal is refused. The root map both the helper and the caller
 read names each user's worktree root, and it must name every agent user a host package
 declares (#4295, #6831). The sudo grant the socket replaced must be gone from every host (#4297).
 
-daniel-server gets all of it from the `worktree-holders` component (H7.61), and daniel-box from
-the role until H7.62.
+Both hosts get all of it from the `worktree-holders` component (H7.61, H7.62).
 
 Run: uv run pytest ansible/tests/setup/test_worktree_holders_install.py
 """
 
 import json
-from pathlib import PurePosixPath
 
 import pytest
 from _helpers import (
@@ -22,10 +20,8 @@ from _helpers import (
     REPO,
     SETUP_ROLES,
     load_tasks,
-    render_expr,
     task_named,
 )
-from _setup_render import render_setup_text, rendered_setup_text
 from lib import yaml_fast
 from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
 from renderer.renderer_lib import host as host_mode
@@ -42,13 +38,7 @@ RETIRED_PATHS = {
     "/usr/local/libexec/worktree-holders",
     "/var/lib/homelab/setup-deployed-manifest.d/worktree-holders",
 }
-HELPER = "/usr/local/libexec/worktree-holders"
-INSTALL = "Install the root-run worktree holder scan"
-AGENTS = "Name the agent users granted the worktree holder scan"
-USERS = "List the worktree holder scan's users"
-ROOT_MAP = "Map each user of the worktree holder scan"
 SUDOERS = "Remove the worktree holder scan's old sudoers rule"
-GROUP = "initial_setup_worktree_holders_group"
 # A has_claude_code host the agent-list copy must cover, so an empty host census fails.
 KNOWN_CLAUDE_HOSTS = {"daniel-box", "daniel-server"}
 
@@ -61,15 +51,6 @@ def _directives(text: str) -> dict[str, str]:
             key, _, value = line.partition("=")
             found[key.strip()] = value.strip()
     return found
-
-
-def _socket_and_service() -> tuple[dict[str, str], dict[str, str]]:
-    return (
-        _directives(rendered_setup_text("initial_setup", "worktree-holders.socket.j2")),
-        _directives(
-            rendered_setup_text("initial_setup", "worktree-holders@.service.j2")
-        ),
-    )
 
 
 def _units_meet_the_callers(socket: dict, service: dict, installed: str) -> bool:
@@ -88,97 +69,8 @@ def _units_meet_the_callers(socket: dict, service: dict, installed: str) -> bool
     )
 
 
-def test_the_socket_listens_where_the_callers_connect_and_runs_the_helper_is_clean():
-    install = task_named(load_tasks(CRONS), INSTALL)["ansible.builtin.copy"]
-    socket, service = _socket_and_service()
-
-    assert install["dest"] == HELPER
-    assert _units_meet_the_callers(socket, service, install["dest"])
-
-
-def test_a_service_whose_stdout_reaches_the_socket_is_flagged():
-    socket, service = _socket_and_service()
-
-    assert not _units_meet_the_callers(
-        socket, {**service, "StandardOutput": "socket"}, HELPER
-    )
-    assert not _units_meet_the_callers(
-        {**socket, "ListenStream": "/run/elsewhere.sock"}, service, HELPER
-    )
-
-
 def _only_the_group_may_connect(socket: dict) -> bool:
     return socket.get("SocketMode") == "0660" and socket.get("SocketUser") == "root"
-
-
-def test_only_the_sockets_group_may_connect_is_clean():
-    # The operator's ruling (2026-10-10): a group-restricted socket mode decides who may
-    # connect. The group is the role's variable, the one the claude-code
-    # component's claude-agent-setup gives each agent user.
-    socket, _ = _socket_and_service()
-    moved = _directives(
-        render_setup_text(
-            "initial_setup", "worktree-holders.socket.j2", {GROUP: "sentinel-group"}
-        )
-    )
-
-    assert _only_the_group_may_connect(socket)
-    assert moved["SocketGroup"] == "sentinel-group"
-
-
-def test_a_world_writable_socket_is_flagged():
-    socket, _ = _socket_and_service()
-
-    assert not _only_the_group_may_connect({**socket, "SocketMode": "0666"})
-
-
-def _parent_created_before_install(tasks: list[dict], dest: str) -> bool:
-    parent = str(PurePosixPath(dest).parent)
-    for task in tasks:
-        if task.get("ansible.builtin.copy", {}).get("dest") == dest:
-            return False
-        made = task.get("ansible.builtin.file", {})
-        if made.get("path") == parent and made.get("state") == "directory":
-            return True
-    raise AssertionError(f"no task installs {dest}")
-
-
-def test_the_install_directory_is_created_before_the_copy_is_clean():
-    # `copy` does not create a missing parent, and Ubuntu ships no /usr/local/libexec. The first
-    # apply failed on daniel-box for exactly that and held the initial_setup plane.
-    assert _parent_created_before_install(load_tasks(CRONS), HELPER)
-
-
-def test_an_install_with_no_directory_task_before_it_is_flagged():
-    install = {"ansible.builtin.copy": {"dest": HELPER}}
-    late_dir = {
-        "ansible.builtin.file": {
-            "path": str(PurePosixPath(HELPER).parent),
-            "state": "directory",
-        }
-    }
-    assert not _parent_created_before_install([install, late_dir], HELPER)
-
-
-def _rendered_roots(tasks: list[dict], host: str) -> dict[str, str]:
-    """The root map the role writes on `host`, from its own per-host copy of the agent users."""
-    agents = task_named(tasks, AGENTS)
-    users = task_named(tasks, USERS)["ansible.builtin.set_fact"]
-    context = {"sys_user": "ubuntu", "inventory_hostname": host, **agents["vars"]}
-    context["initial_setup_worktree_holders_agents"] = render_expr(
-        agents["ansible.builtin.set_fact"]["initial_setup_worktree_holders_agents"],
-        **context,
-    )
-    context["initial_setup_worktree_holders_users"] = render_expr(
-        users["initial_setup_worktree_holders_users"], **context
-    )
-    context["initial_setup_worktree_holders_checkouts"] = render_expr(
-        users["initial_setup_worktree_holders_checkouts"], **context
-    )
-    text = render_expr(
-        task_named(tasks, ROOT_MAP)["ansible.builtin.copy"]["content"], **context
-    )
-    return json.loads(text) if isinstance(text, str) else text
 
 
 def _package_agent_roots() -> dict[str, dict[str, str]]:
@@ -195,50 +87,6 @@ def _package_agent_roots() -> dict[str, dict[str, str]]:
             u["name"]: f"{u['home']}/server/.claude/worktrees" for u in users
         }
     return out
-
-
-def _covers_every_package_agent(
-    tasks: list[dict], packages: dict[str, dict[str, str]]
-) -> bool:
-    """Whether each host's root map names exactly its package's agent users, at their clones."""
-    return all(
-        {u: r for u, r in _rendered_roots(tasks, host).items() if u != "ubuntu"}
-        == declared
-        for host, declared in packages.items()
-    )
-
-
-def test_the_root_map_names_the_operator_and_every_package_agent_is_clean():
-    # #6831: each host's copy of the agent users matches its package's `users:` entry. The map
-    # is where the service looks a caller up, so an agent missing from it is refused every scan.
-    tasks = load_tasks(CRONS)
-    copy = task_named(tasks, ROOT_MAP)["ansible.builtin.copy"]
-    packages = _package_agent_roots()
-
-    assert (copy["dest"], copy["owner"]) == (WORKTREE_HOLDER_ROOTS, "root")
-    assert set(packages) >= KNOWN_CLAUDE_HOSTS
-    assert _rendered_roots(tasks, "daniel-box")["ubuntu"] == (
-        "/home/ubuntu/server/.claude/worktrees"
-    )
-    assert _covers_every_package_agent(tasks, packages)
-
-
-def test_a_package_agent_missing_from_the_copy_is_flagged():
-    packages = _package_agent_roots()
-    packages["daniel-box"] = {
-        **packages["daniel-box"],
-        "claude2": "/var/lib/claude2/server/.claude/worktrees",
-    }
-
-    assert not _covers_every_package_agent(load_tasks(CRONS), packages)
-
-
-def test_an_agent_one_host_switched_off_but_the_copy_still_grants_is_flagged():
-    # Switching the agent off on one host deletes its `users:` entry there; the map must follow.
-    packages = _package_agent_roots()
-    packages["daniel-server"] = {}
-
-    assert not _covers_every_package_agent(load_tasks(CRONS), packages)
 
 
 def _sudoers_removed_everywhere(tasks: list[dict]) -> bool:
@@ -270,59 +118,90 @@ def test_a_sudoers_removal_only_off_claude_hosts_is_flagged():
     assert not _sudoers_removed_everywhere(gated)
 
 
-@pytest.fixture(scope="module")
-def server_package() -> host_mode.Package:
-    return host_mode.render_host("daniel-server")
+@pytest.fixture(scope="module", params=sorted(KNOWN_CLAUDE_HOSTS))
+def package(request) -> tuple[str, host_mode.Package]:
+    return request.param, host_mode.render_host(request.param)
 
 
 def _text(package: host_mode.Package, dst: str) -> str:
     return package.files[dst][0].decode()
 
 
-def test_the_packaged_socket_and_service_meet_the_callers_is_clean(server_package):
-    socket = _directives(_text(server_package, f"{UNITS}/worktree-holders.socket"))
-    service = _directives(_text(server_package, f"{UNITS}/worktree-holders@.service"))
+def _socket_and_service(package: host_mode.Package) -> tuple[dict, dict]:
+    return (
+        _directives(_text(package, f"{UNITS}/worktree-holders.socket")),
+        _directives(_text(package, f"{UNITS}/worktree-holders@.service")),
+    )
+
+
+def test_the_packaged_socket_and_service_meet_the_callers_is_clean(package):
+    _, rendered = package
+    socket, service = _socket_and_service(rendered)
 
     assert _units_meet_the_callers(socket, service, PACKAGED_HELPER)
     assert _only_the_group_may_connect(socket)
     assert socket["SocketGroup"] == "worktree-holders"
-    assert server_package.files[PACKAGED_HELPER][1] == 0o700
-    assert HELPER not in server_package.files
+    assert rendered.files[PACKAGED_HELPER][1] == 0o700
 
 
-def test_the_packaged_socket_makes_its_group_before_systemd_binds(server_package):
+def test_a_service_whose_stdout_reaches_the_socket_is_flagged(package):
+    socket, service = _socket_and_service(package[1])
+
+    assert not _units_meet_the_callers(
+        socket, {**service, "StandardOutput": "socket"}, PACKAGED_HELPER
+    )
+    assert not _units_meet_the_callers(
+        {**socket, "ListenStream": "/run/elsewhere.sock"}, service, PACKAGED_HELPER
+    )
+
+
+def test_a_world_writable_socket_is_flagged(package):
+    socket, _ = _socket_and_service(package[1])
+
+    assert not _only_the_group_may_connect({**socket, "SocketMode": "0666"})
+
+
+def test_the_packaged_socket_makes_its_group_before_systemd_binds(package):
     # SocketGroup= fails the socket on a host where the group does not exist yet.
-    lines = _text(server_package, f"{UNITS}/worktree-holders.socket").splitlines()
+    lines = _text(package[1], f"{UNITS}/worktree-holders.socket").splitlines()
     assert [line for line in lines if line.startswith("ExecStartPre=")] == [
         "ExecStartPre=+/usr/sbin/groupadd -f -r worktree-holders",
         "ExecStartPre=+/usr/sbin/usermod -aG worktree-holders ubuntu",
     ]
 
 
-def test_the_packaged_root_map_names_the_operator_and_the_package_agents(
-    server_package,
-):
-    packaged = json.loads(_text(server_package, WORKTREE_HOLDER_ROOTS))
+def test_the_packaged_root_map_names_the_operator_and_the_package_agents(package):
+    # #6831: each host's map matches its package's `users:` entry. The map is where the service
+    # looks a caller up, so an agent missing from it is refused every scan.
+    host, rendered = package
+    packaged = json.loads(_text(rendered, WORKTREE_HOLDER_ROOTS))
 
     assert packaged == {
         "ubuntu": "/home/ubuntu/server/.claude/worktrees",
-        **_package_agent_roots()["daniel-server"],
+        **_package_agent_roots()[host],
     }
 
 
-def test_reconcile_retires_what_the_role_installed_and_only_daniel_server_lists_it(
-    server_package,
-):
-    manifest = json.loads(server_package.files["/usr/lib/homelab/manifest.json"][0])
+def test_reconcile_retires_what_the_role_installed(package):
+    _, rendered = package
+    manifest = json.loads(rendered.files["/usr/lib/homelab/manifest.json"][0])
 
     assert RETIRED_PATHS <= {e.get("path") for e in manifest["legacy"]}
     assert "worktree-holders.socket" in manifest["enable_links"]
-    assert "netcat-openbsd" in server_package.depends
+    assert "netcat-openbsd" in rendered.depends
     # The way out: every installed path follows the flag the role's teardown read.
     spec = yaml_fast.safe_load(COMPONENT.read_text())
     assert {f.get("when") for f in spec["files"]} == {"has_claude_code"}
     assert spec["enable"]["worktree-holders.socket"]["when"] == "has_claude_code"
-    # Canary order: daniel-box keeps the role's copy until H7.62.
-    box = host_mode.render_host("daniel-box")
-    assert WORKTREE_HOLDER_ROOTS not in box.files
-    assert f"{UNITS}/worktree-holders.socket" not in box.files
+
+
+def test_the_role_writes_nothing_of_the_scan_on_a_claude_host():
+    # Only the sudoers removal and the `not has_claude_code` absent arms stay in the role.
+    writers = [
+        t["name"]
+        for t in load_tasks(CRONS)
+        if "worktree-sweep" in (t.get("tags") or [])
+        and t["name"] != SUDOERS
+        and "not has_claude_code" not in str(t.get("when"))
+    ]
+    assert writers == []

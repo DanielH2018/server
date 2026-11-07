@@ -85,12 +85,6 @@ SETUP_FILES_SHIPPED_BY_OTHER_ROLES: dict[str, frozenset[str]] = {
     "ansible/roles/setup/gitops_deploy/files/gitops_hold.py": frozenset(
         {"deploy_ui", "renovate_agent"}
     ),
-    # A `defaults/` file whose variable another role reads. renovate_agent copies the uv binary
-    # `initial_setup_uv_version` pins, and names that key where it checks the copy, so a uv bump
-    # re-applies it after initial_setup (#5945).
-    "ansible/roles/setup/initial_setup/defaults/main.yml": frozenset(
-        {"renovate_agent"}
-    ),
     # deploy_ui's firewall sources include `k3s_agent_node_ips` (#4357). Only `k3s-bringup.yml`
     # runs k3s, so a change here records k3s in `manual_plane` and the tick applies deploy_ui.
     "ansible/roles/setup/k3s/defaults/main.yml": frozenset({"deploy_ui"}),

@@ -30,7 +30,6 @@ AGENTS = {
         "agent_user_home": "{{ renovate_agent_home }}",
         "agent_user_clone_dir": "{{ renovate_agent_clone_dir }}",
         "agent_user_repo": "{{ renovate_agent_repo }}",
-        "agent_user_uv_version": "{{ initial_setup_uv_version }}",
     },
 }
 # The user module's keys that add a user to a group beyond its own.

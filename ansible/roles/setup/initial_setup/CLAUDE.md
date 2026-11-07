@@ -1,15 +1,15 @@
 # initial_setup — host baseline + security hardening
 
-The host-bring-up role: base packages, per-user Python tooling, the sudo credential cache,
+The host-bring-up role: base packages, `ansible-core` and `ansible-lint`, the sudo credential cache,
 auditd and kernel-module hardening, and the two host checks. The host packages own the rest of
 the baseline (sshd, fail2ban, unattended upgrades, sysctls, the journald cap, the maintenance
 jobs, the integrity scans and the firewall), and this role keeps no task for them. On daniel-pi
 the `host-hardening` component and step 4 of `hosts/bootstrap-host.sh` also own the base packages,
 the sudo cache, auditd and the kernel modules, so
 `ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_packaged_hosts` skips those
-tasks there, and no setup apply upgrades the Pi's packages. daniel-server's package also owns the
-dev tooling, Vale and the worktree holder scan, so the same map skips those three subjects there,
-and the role still writes them on daniel-box.
+tasks there, and no setup apply upgrades the Pi's packages. The cluster hosts' packages and the
+dotfiles repo own the dev tooling, Vale and the worktree holder scan (H7.61, H7.62), so the role
+keeps no task for them. `files/worktree_holders.py` stays here as the component's input.
 **Not a container role** — a host-setup role under `ansible/roles/setup/`, run by
 `initial_setup.yml`, not `deploy.yml`. It is a large setup role, so **`--check` first** and scope
 with `--tags` when iterating. `docs/host-baseline-record.md` carries the per-block traps, the two
@@ -62,8 +62,7 @@ The record page says what the non-obvious ones cover. No task is reachable only 
 `crons`: each also has a subject tag.
 **Fact-dependency rule:** a task whose `register:` feeds other blocks carries ALL its
 consumers' tags, or a tag-scoped run dies on an undefined variable.
-`docs/host-baseline-record.md`'s *Tooling, pins and the root HOME trap* has the home-dir
-resolver example and the ENFORCED test.
+`docs/host-baseline-record.md`'s *Tooling, pins and the root HOME trap* has the ENFORCED test.
 
 ## Rules the task files do not state
 `tasks/` is the inventory — one file per subject, and the tag list above says which file a tag

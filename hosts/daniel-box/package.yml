@@ -71,9 +71,10 @@ components:
   - k3s-server
   - claude-code
   - sops
-  # H7.61: this package's own units name /usr/bin/uv. initial_setup keeps writing
-  # /usr/local/bin/uv here until this host's own move, H7.62, for the setup roles still reading it.
+  # H7.61: this package's own units name /usr/bin/uv. H7.62: the setup roles read it too.
   - uv
+  - vale
+  - worktree-holders
 units:
   k3s.service: {policy: windowed}
 credentials:
@@ -119,6 +120,18 @@ enable:
 depends:
   - homelab-tools
   - libyaml-dev
+  # H7.62: what the dotfiles' install-cli-tools script wants and cannot install itself: it shells
+  # out to sudo, which has no TTY on a non-interactive apply. Its PKGS list is the source.
+  - bat
+  - fd-find
+  - gron
+  - shellcheck
+  - lua5.4
+  - btop
+  - chafa
+  - zsh
+  - zsh-autosuggestions
+  - zsh-syntax-highlighting
 files:
   # The lock the deployer's tick takes, created at boot as the deployer's user (item 7).
   - {src: tmpfiles.d/homelab-k3s-restart.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-k3s-restart.conf}
@@ -129,6 +142,10 @@ files:
 legacy:
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
+  # H7.62: the copy initial_setup installed, which sits ahead of /usr/bin/vale on PATH.
+  # /usr/local/bin/uv is not listed: k3s's health script reads it until an apply of that role,
+  # which the tick cannot run, and a package install does not wait for that apply.
+  - {path: /usr/local/bin/vale}
   # H7.32: the maintenance wrapper the crons ran, and the firmware cron, which host-maintenance's
   # own legacy list cannot name because only a `has_fwupd` host carries it. /etc/healthchecks
   # stays: the k3s role's health crons on this host read the key file in it.

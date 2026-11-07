@@ -8,9 +8,8 @@
 #
 # Each architecture block carries its own annotation, version and digest, because the Renovate
 # manager in renovate.json moves one version and one digest per match. The two blocks of a tool
-# pin one version, which the renderer enforces. Renovate bumps these pins apart from the
-# chezmoi_setup defaults, which install the same chezmoi on a fresh host. The sops component
-# puts this package's sops on PATH as /usr/bin/sops.
+# pin one version, which the renderer enforces. The sops component puts this package's sops on
+# PATH as /usr/bin/sops.
 #
 # DECIDED: chezmoi is pinned as its .tar.gz. Upstream publishes a bare binary for amd64 only,
 # and `member` names the file the builder installs from inside the archive.
@@ -109,7 +108,7 @@ tools:
       sha256: a9a75213763783b7669719e505474c748c5ad7dc66591a195619deb50f85c2f4
       url: https://github.com/goreleaser/nfpm/releases/download/{version}/nfpm_{bare}_Linux_arm64.tar.gz
       member: nfpm
-  # H7.41a: daniel-box's builder runs uv, at the version `initial_setup_uv_version` pins. The uv
+  # H7.41a: daniel-box's builder runs uv. The uv
   # component puts it on PATH as /usr/bin/uv for the units and scripts that name it. uv ships
   # tarballs only, with the binary one directory down. Both digests come from the release's
   # uv-<arch>-unknown-linux-gnu.tar.gz.sha256 files.

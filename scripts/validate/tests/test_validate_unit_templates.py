@@ -161,12 +161,10 @@ def test_discover_templates_finds_the_known_set():
         "check-timer-boot.service.j2",
         "check-timer.timer.j2",
         "unit-failure-alert.service.j2",
-        "worktree-holders.socket.j2",
-        "worktree-holders@.service.j2",
         "homelab-rootq.socket.j2",
         "homelab-rootq@.service.j2",
     } <= names
-    assert len(names) == 38
+    assert len(names) == 36
 
 
 def test_unit_context_layers_the_owning_roles_real_defaults():

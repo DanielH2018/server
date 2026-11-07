@@ -35,9 +35,9 @@ RENOVATE_TEMPLATE = "ansible/roles/setup/renovate_notify/templates/notify.sh.j2"
 # `ansible/requirements.yml` is the setup-plane path that maps to no role directory at all —
 # `initial_setup` installs the collections, and the tag is `collections`.
 REQUIREMENTS = "ansible/requirements.yml"
-# Another role's defaults file a setup role reads one key of, so every edit to it names that
-# role beside the owner (#4303): claude_code here, and deploy_ui for k3s's.
-INITIAL_SETUP_DEFAULTS = "ansible/roles/setup/initial_setup/defaults/main.yml"
+# A file another role copies, so every edit to it names that role beside the owner (#3312).
+SHIPPED_FILE = "ansible/roles/setup/gitops_deploy/files/gitops_hold.py"
+# Another role's defaults file a setup role reads one key of (#4303): deploy_ui for k3s's.
 K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 # What `narrow_setup.py` answers for a role the range reaches no host through (#4361).
 NOTHING = (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, deploy_narrow.NARROWED_TO_NOTHING)
@@ -299,25 +299,27 @@ def test_a_role_needing_no_tag_is_left_out_of_the_apply_and_the_hold(
     the whole `renovate_agent` tag, and a failure there held the deployer over a change
     renovate_agent never read.
     """
-    tick.paths = [INITIAL_SETUP_DEFAULTS]
+    tick.paths = [SHIPPED_FILE]
     tick.narrow_setup = {
         "renovate_agent": NOTHING,
-        "initial_setup": (0, "prune"),
+        "deploy_ui": NOTHING,
+        "gitops_deploy": (0, "prune"),
     }
     tick.playbook_outcomes = [RuntimeError("boom")]
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1] == "prune"
-    assert state.hold_plane == "ansible/initial_setup.yml initial_setup:prune"
+    assert state.hold_plane == "ansible/initial_setup.yml gitops_deploy:prune"
 
 
 def test_exit_three_without_the_nothing_line_applies_the_whole_role_tag(
     gitops_deploy, tick, state
 ):
     """The rejecting half: the exit code alone is not the answer, so it stays doubt."""
-    tick.paths = [INITIAL_SETUP_DEFAULTS]
+    tick.paths = [SHIPPED_FILE]
     tick.narrow_setup = {
         "renovate_agent": (deploy_narrow.NARROW_SETUP_NOTHING_EXIT, ""),
-        "initial_setup": (0, "prune"),
+        "deploy_ui": NOTHING,
+        "gitops_deploy": (0, "prune"),
     }
     assert gitops_deploy.main(tick.tools, tick.config, state) == 0
     assert _playbook_argv(tick)[-1] == "prune,renovate_agent"

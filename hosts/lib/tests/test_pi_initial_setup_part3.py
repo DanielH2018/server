@@ -198,5 +198,3 @@ def test_the_setup_apply_runs_no_apt_upgrade_on_the_pi():
     upgrade = _task("host-basics.yml", "Update and upgrade system packages")
     hosts = ("daniel-pi", "daniel-box", "daniel-server")
     assert packaged_guard_hosts([upgrade["when"]], hosts, ROLE) == {"daniel-pi"}
-    tooling = _task("host-basics.yml", "Install the pinned host Python")
-    assert packaged_guard_hosts(tooling["when"], hosts, ROLE) == {"daniel-server"}

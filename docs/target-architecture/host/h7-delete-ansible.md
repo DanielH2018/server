@@ -2346,6 +2346,16 @@ the `manual_plane` clearing, and *Rollback*'s
       old path and H7.62 repoints them. daniel-server's Ansible-era witness still runs the old
       path and no tick re-renders it there, so H7.59 lists `/usr/local/bin/uv` as that host's
       legacy entry when it moves the witness.
+      **Amended at H7.62:** the PR repoints daniel-box's readers and does not list the path. The
+      k3s health script only reaches a host through a hand apply of `k3s-bringup.yml`, and a package
+      install waits on no such apply, so a legacy entry here could delete the binary under a live
+      script, or under the deployer's own unit if a tick is parked. A follow-up lists the path once
+      `rootq` shows no live unit or script naming it.
+    - **Amended at H7.62: `initial_setup_uv_version` goes too.** Its only other reader was
+      `agent_user.yml`'s assert that the operator's uv equals the pin. The dotfiles repo writes that
+      binary after this row, so the next Renovate bump would have failed `renovate_agent`'s apply and
+      written a `hold_sha`. The assert goes with it, and the agent copies the operator's uv as it
+      stands.
     - **Vale** takes the same shape, as *The component checklist and the setup census* states.
       `homelab-tools` pins it, a `vale` component ships `/usr/bin/vale`,
       `/usr/local/bin/vale` becomes a legacy entry, and `test_vale_matches_the_ci_pin.py`
@@ -2373,7 +2383,9 @@ the `manual_plane` clearing, and *Rollback*'s
           step 5 installs the binary. The cluster-node procedure runs `chezmoi init --apply`
           with H7.38's three prompt flags (**operator-only**). The seed and the agent-prompt
           tasks lose their purpose with it. The PR body says what keeps daniel-box's dotfiles
-          source current once the role stops applying it.
+          source current once the role stops applying it. **Amended at H7.62:**
+          `claude-agent-setup` takes the agent's chezmoi from `/usr/lib/homelab/bin/chezmoi`,
+          because nothing installs `~/.local/bin/chezmoi` on a rebuilt host once the role stops.
     - **What stays until H7.63:** `Resolve the deploy user's home directory` and `Install
       Python CLI tooling`, narrowed to `ansible-core` and `ansible-lint`.
 36. **H7.63 lands after the deployer's timer, as one PR.** It deletes read-only checks and tasks

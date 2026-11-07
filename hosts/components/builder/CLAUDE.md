@@ -54,8 +54,8 @@ home with no signing key removes the file and exits 0, so the builder then refus
 on the builder's next run, with no Ansible apply.
 
 **The three tools come from packages.** nfpm and uv are pinned in `hosts/packages/homelab-tools/`, and
-`hosts/lib/tests/test_builder_component.py::test_the_nfpm_pin_is_ci_s_and_uv_matches_initial_setup`
-holds nfpm equal to CI's pin and uv equal to `initial_setup_uv_version`. The unit's second
+`hosts/lib/tests/test_builder_component.py::test_the_nfpm_pin_is_ci_s` holds nfpm equal to CI's
+pin. The unit's second
 `ExecStartPre=` installs the pinned `host_python_version` into the state directory. Only
 `ExecStart=` sets `UV_PYTHON_DOWNLOADS=never`, through `env`, because the install itself downloads.
 

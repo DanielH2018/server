@@ -189,23 +189,3 @@ def test_a_check_timer_template_change_reaches_the_roles_importing_its_task_file
     consumers = {"gitops_deploy", "initial_setup"}
     assert setup_roles_for(path) == consumers
     assert setup_tags_for([path]) == consumers
-
-
-def test_an_initial_setup_defaults_change_reaches_its_readers():
-    """renovate_agent copies the uv `initial_setup_uv_version` pins, so a uv bump left its copy
-    on the old version (#5945)."""
-    path = "ansible/roles/setup/initial_setup/defaults/main.yml"
-    assert services_from_changed_paths([path]).setup_roles == {
-        "initial_setup",
-        "renovate_agent",
-    }
-    assert setup_roles_for(path) == {
-        "initial_setup",
-        "renovate_agent",
-    }
-    assert setup_tags_for([path]) == {
-        "initial_setup",
-        "renovate_agent",
-    }
-    tasks = "ansible/roles/setup/initial_setup/tasks/crons.yml"
-    assert setup_roles_for(tasks) == {"initial_setup"}

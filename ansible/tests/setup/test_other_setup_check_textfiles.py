@@ -174,11 +174,9 @@ def _run_fake_remux(tmp_path):
     )
     uv = tmp_path / "uv"
     write_exec(uv, STATE_PUSH)
-    for literal in (CHECK_LIB_PATH, "/usr/local/bin/uv"):
+    for literal in (CHECK_LIB_PATH, "/usr/bin/uv"):
         assert literal in body, f"fake-remux-health.sh no longer references {literal}"
-    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(
-        "/usr/local/bin/uv", str(uv)
-    )
+    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace("/usr/bin/uv", str(uv))
     textfile_dir, env = _env(tmp_path, "unused")
     run(["bash", str(write_exec(tmp_path / "fr.sh", body))], env=env, check=True)
     return textfile_dir

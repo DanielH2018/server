@@ -25,7 +25,7 @@ CRONS = K3S_ROLE / "tasks" / "health-crons.yml"
 CHECK_LIB = "/usr/local/lib/homelab-check-lib.sh"
 REAL_CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh"
 HC_ENV = "/etc/healthchecks/ping.env"
-UV = "/usr/local/bin/uv"
+UV = "/usr/bin/uv"
 SHELL_PRODUCERS = {
     "longhorn-backup-health": "longhorn-backup-health.sh.j2",
     "etcd-snapshot-offbox": "etcd-token-drift.sh.j2",

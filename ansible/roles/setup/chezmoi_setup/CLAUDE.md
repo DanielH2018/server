@@ -1,41 +1,26 @@
-# `setup/chezmoi_setup` — the connecting user's dotfiles, via chezmoi
+# `setup/chezmoi_setup` — emptied; the dotfiles repo and the host package own this
 
-Installs the chezmoi binary into `~/.local/bin`, seeds `~/.config/chezmoi/chezmoi.toml` from
-`templates/chezmoi-seed.toml.j2` so `chezmoi init` never waits on a TTY, then clones
-`chezmoi_setup_repo` (`DanielH2018/dotfiles`, public) and applies it. Applied by
-`initial_setup.yml` (`--tags chezmoi`) where `has_chezmoi` is set.
+The role's tasks are one unconditional `meta: end_role`, under a `# DECIDED` marker in
+`ansible/roles/setup/chezmoi_setup/tasks/main.yml`. H7.62 emptied it. It stays until H7.20a,
+because `ansible/initial_setup.yml` names it and an edit to that playbook parks the deployer.
+Repo-root `CLAUDE.md` has the conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
-- **Applied by:** `initial_setup.yml --tags "chezmoi"` when `has_chezmoi`
-- **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
-  `templates/*.timer.j2`)
+- **Applied by:** `initial_setup.yml --tags "chezmoi"` when `has_chezmoi`; ends on hosts where
+  `True` (leading `meta: end_role`)
+- **Crons / timers:** none (the role ends on every host before its first task)
 <!-- /generated_from -->
 
-- **The release and its installer are pinned** (`chezmoi_setup_version`,
-  `chezmoi_setup_installer_sha256` in `defaults/main.yml`, #2147). `get.chezmoi.io` serves
-  master's installer and the installer defaults to the newest release, so a fresh host used to
-  get whichever chezmoi the day served. Renovate raises the version bump with no automerge;
-  the sha256 of the tag's `assets/scripts/install.sh` is the manual finish, which
-  `scripts/validate/asset_pins.py --refresh twpayne/chezmoi` writes. The bump changes
-  nothing on a host that already has the binary — the install task is `creates:`-guarded.
-- **Every task is `become: false`.** chezmoi manages a USER's home, and the play runs escalated
-  for the OS hardening; inheriting `become` deploys the dotfiles into `/root`.
-- **The home directory is `/home/{{ sys_user }}`, not `ansible_env.HOME`.** Facts are
-  gathered under the play's `become: true`, so `ansible_env.HOME` reads `/root` even inside a
-  `become: false` task — it failed on daniel-box with `Permission denied: /root/.local`.
-- **The seed answers the three `promptOnce` questions** in the dotfiles' `.chezmoi.toml.tmpl`
-  (`chezmoi_setup_profile`, `chezmoi_setup_work`, and `agent`, always `false` here). chezmoi
-  records them on first init and reuses them; changing a seed value after that needs the
-  config edited on the host, not just a re-run.
-- **A prompt the dotfiles add later breaks every apply on an existing host.** The seed is
-  `force: false`, so the new key never reaches a config rendered before the prompt existed,
-  and init dies on `could not open a new TTY`. `agent` (dotfiles, 2026-10-10) did this
-  and held the deployer, so a task enforces it on an existing config. A new prompt needs a
-  line in the seed and the same kind of task. The agent user's seed in `claude_code` answers
-  the same questions, and
-  `ansible/tests/setup/test_chezmoi_setup_seed.py::test_the_operator_seed_answers_every_prompt_the_agent_seed_answers`
-  fails when the two seeds disagree.
-- **The distro packages the dotfiles scripts cannot install themselves** are one apt task
-  here (`chezmoi_setup_distro_packages`); a new dotfiles dependency that needs root goes
-  there, never into a hand install on the host.
+## Where the work went
+
+- `hosts/packages/homelab-tools/package.yml` pins the chezmoi binary, at
+  `/usr/lib/homelab/bin/chezmoi`. Step 5 of `hosts/bootstrap-host.sh` installs that package.
+- `hosts/daniel-box/package.yml` depends on the distro packages the dotfiles' `install-cli-tools`
+  script cannot install itself, because `sudo` has no TTY there.
+- `docs/host-packages.md`, *Rebuilding daniel-box*, has the hand step that runs `chezmoi init
+  --apply` (**operator-only**). `bin/land` in the dotfiles repo moves daniel-box's chezmoi source
+  onto its `main`, and the operator's `chezmoi apply` deploys it. No timer applies the operator's
+  dotfiles.
+- The agent user's chezmoi seed is the claude-code component's
+  `hosts/components/claude-code/templates/agent-chezmoi-seed.toml.j2`.

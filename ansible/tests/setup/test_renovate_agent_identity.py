@@ -98,8 +98,8 @@ _REACHING = ("User", "WorkingDirectory", "Environment", "EnvironmentFile", "Exec
 def operator_reach(unit_text: str, operator: str) -> list[str]:
     """Every directive value naming the operator's user or home. Empty means none does.
 
-    `/usr/local/bin/uv` counts: it is the operator's uv install, which `initial_setup` copies
-    out of their home. The agent runs its own copy and Python under its own home.
+    `/usr/local/bin/uv` counts: it is a copy of the operator's uv install. The agent runs its own
+    copy and Python under its own home.
     """
     return [
         f"{key}={value}"

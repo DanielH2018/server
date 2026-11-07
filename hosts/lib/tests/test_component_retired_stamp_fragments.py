@@ -32,6 +32,8 @@ KINDS = {
 RECORDED = {
     # 94d0fb13a^:ansible/roles/setup/homelab_builder/tasks/builder.yml
     "builder": {("deployed", "homelab-builder"), ("render", "homelab-builder")},
+    # cb61ae0d94:ansible/roles/setup/initial_setup/tasks/crons.yml
+    "worktree-holders": {("deployed", "worktree-holders")},
     # 39f4bd5c4^:ansible/roles/setup/initial_setup/tasks/crons.yml
     "docs-refresh": {("render", "docs-refresh")},
     "eval-sweep": {("render", "eval-run")},
@@ -60,7 +62,6 @@ RECORDED = {
 # (task file, tag) pairs.
 DERIVED = {
     "loki-route-witness": ((CRONS, "loki_route_witness"),),
-    "worktree-holders": ((CRONS, "worktree-sweep"),),
 }
 
 
