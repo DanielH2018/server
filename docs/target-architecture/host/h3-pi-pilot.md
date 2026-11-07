@@ -511,7 +511,9 @@ and every host slice applies it.
 3. **The package retires what it replaces.** `homelab-reconcile` removes each legacy entry
    after the package that replaces it has unpacked and its units have started. Ordering is
    therefore package first by construction. No hand-run Ansible absent arm is needed, which
-   matters on daniel-server and the Pi, where `has_gitops: false`.
+   matters on daniel-server and the Pi, where `has_gitops: false`. An entry stays while a unit
+   its own component or package spec ships failed to start in that run, so a failed replacement
+   leaves the old scheduler running.
 4. **Legacy entries are explicit.** A legacy entry names one of four things:
     - a file path;
     - a cron name, which removes the `#Ansible: <name>` line and the job line after it from

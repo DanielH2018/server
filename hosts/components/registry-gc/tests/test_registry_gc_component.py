@@ -111,6 +111,16 @@ def test_the_package_retires_the_cron_and_the_old_script(package):
     assert {"path": "/usr/local/bin/registry-gc.sh"} in package.legacy
 
 
+def test_a_timer_that_fails_to_start_keeps_the_cron_and_the_old_script(package):
+    handoff = next(
+        group
+        for group in package.handoffs
+        if {"cron_file": "registry-gc"} in group["legacy"]
+    )
+    assert "homelab-registry-gc.timer" in handoff["units"]
+    assert {"path": "/usr/local/bin/registry-gc.sh"} in handoff["legacy"]
+
+
 def test_the_toggle_drops_the_files_the_link_and_the_policy(tmp_path):
     root = tmp_path / "hosts"
     (root / "daniel-box").mkdir(parents=True)

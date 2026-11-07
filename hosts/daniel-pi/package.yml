@@ -85,12 +85,6 @@ legacy:
   - {path: /etc/homelab/interim}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
-  # H7.30: the maintenance wrapper the crons ran, and the Healthchecks.io key file they sourced. The
-  # cluster nodes keep both until their own PRs: daniel-box's k3s role and worktree sweep read the
-  # key file there.
-  - {path: /usr/local/bin/host-maintenance.sh}
-  - {path: /etc/healthchecks/ping.env}
-  - {path: /etc/healthchecks}
   # H7.58: the absent arms of initial_setup's crons.yml. Each names what the role removes from a host
   # with no Claude sessions, no gitops and no witness.
   - {unit: worktree-holders.socket}

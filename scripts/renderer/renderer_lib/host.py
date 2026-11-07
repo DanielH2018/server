@@ -338,6 +338,7 @@ def _render_unit(
     Files come from `directory`, from `lib`, from the `keys` directory beside `lib`, or from
     the `SHARED_FILES` under the repo root that holds `lib`'s parent.
     """
+    units_before, legacy_before = package.spec_units(), len(package.legacy)
     files = spec.get("files") or []
     add_credentials(package, directory, spec.get("credentials") or [], withheld)
     enable = spec.get("enable") or {}
@@ -486,6 +487,7 @@ def _render_unit(
         else:
             content = source.read_bytes()
         package.files[dst] = (content, mode)
+    package.add_handoff(units_before, legacy_before)
 
 
 def host_context(
