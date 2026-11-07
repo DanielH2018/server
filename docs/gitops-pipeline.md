@@ -71,7 +71,7 @@ line is about, such as `ci:`, `hold:`, `narrow:`, `denylist:` or
 `ansible/roles/setup/gitops_deploy/tests/test_deployer_log_subjects.py` holds every `log()` call
 to that shape (#4507).
 
-`./scripts/deploy_tools/gitops_tick.sh` prints three values after it runs. Read them before concluding
+`uv run python scripts/diagnostics/probe.py gitops-state` prints these values. Read them before concluding
 anything.
 
 | Field | Means |
@@ -106,7 +106,8 @@ aside, tick, then move it back once the rule has arrived:
 
 ```bash
 mv <file> /var/tmp/<name>.hold
-./scripts/deploy_tools/gitops_tick.sh
+systemctl start --no-block gitops-deploy.service
+cc-wait systemd gitops-deploy.service
 mv /var/tmp/<name>.hold <file>
 ```
 
@@ -366,7 +367,7 @@ A role the tick DOES apply can still owe another host (#6510). `hypervisor` rout
 daniel-box, where only its teardown half runs, so its install half on daniel-server went
 unapplied with nothing durable naming it (#6411). After the ff-merge the tick runs
 `scripts/deploy_tools/setup_reach_hosts.py` over the range. That script reads the same
-derivation as `land.sh`'s "also reaches" note (`land_reach.remaining_setup_hosts`). The tick
+derivation as the retired `land.sh` "also reaches" note (`land_reach.remaining_setup_hosts`). The tick
 then writes a `manual_plane` line for each role it names, with the other hosts in the line's
 `hosts` key. The script drops a host that already holds the changed file, as `land.sh` does
 (`docs/landing.md`), so a host that cannot be read inside 10 seconds stays named.
@@ -527,16 +528,10 @@ applying a setup-plane change you did not write.
 To run a tick without waiting for the timer, on `daniel-box`:
 
 ```bash
-./scripts/deploy_tools/gitops_tick.sh
+systemctl start --no-block gitops-deploy.service
 ```
 
 It runs the identical code path the timer runs. **There is no dry-run mode** — this deploys.
-
-`--no-wait` starts the tick and returns at once, without watching it or printing its journal.
-That is what a landing uses: `promote` applies the merge commit of the landing's pull request,
-so `land.sh` needs the tick only to converge the primary checkout, which the timer does within
-ten minutes whether the request landed or not. It kicks the tick before it waits on the
-promotion, so the checkout converges during that wait.
 
 To apply a green master commit that no promotion followed, dispatch `promote` with the commit's
 full 40-hex SHA. `promote` refuses a commit without green CI:
@@ -547,7 +542,7 @@ gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<sha>
 
 ## Gating on CI correctly
 
-Do not hand-poll CI. `land.sh` owns the merge, the CI wait, the tick and the verify step, and
+Do not hand-poll CI. `land.sh` owns the merge, the CI wait, the promotion wait and the verify step, and
 `scripts/deploy_tools/await_ci.py` is the CI waiter it uses; the `land-after-merge` skill has the
 invocation. Both read the check runs of the merge commit, the same endpoint the deployer reads,
 so your verdict and the tick's agree by construction.
@@ -733,9 +728,6 @@ To clear it once diagnosed, run `uv run python scripts/deploy_tools/gitops_state
     returns, so `behind_since` names the tip and a tail that never goes green still pages at 6 h.
     Readers state the meaning in their own prose: `scripts/lib/deployer_park.py` (shared by
     `deploy.sh` exit 4 and the SessionStart banner) and `monitor-bridge/files/checks/gitops.py`.
-    `Landing.tick_state` checks the PR's own merge commit against the primary checkout before it
-    believes `behind_since`, so `land.sh` does not report `deferred` for a PR the tick landed at
-    an ancestor.
   - **A wedge cannot game the re-stamp.** Every path that stops the deployer converging (a park,
     a hold at the tip, a dirty tree, a diverged tree, a tail with no green ancestor or a
     contention reset) leaves HEAD where the tick found it, so `fast_forwarded` is false. A
@@ -964,7 +956,7 @@ generator writes, when a consumer's ship list lacks the module, or when the sour
 import (it runs in a pod, a hook and three `/opt` directories, so only the stdlib is common
 ground). To change a basename or a line format, edit the source, run the generator, and commit
 the copy in the same PR. The shell and manifest literals that cannot import anything
-(`gitops_tick.sh`, `deploy-ui.service.j2`, monitor-bridge's hostPath) are pinned to `STATE_DIR`
+(`deploy-ui.service.j2`, monitor-bridge's hostPath) are pinned to `STATE_DIR`
 by the same test.
 
 ### Which apply clears a hold
@@ -1016,8 +1008,7 @@ none, refuses with exit 1. It journals `event=clear-hold` under `-t gitops-state
 verb rather than a `clear-owed hold_plane` class, because a `hold_plane` line dropped without
 `hold_sha`, or `hold_sha` without its lines, is the orphaning above. `clear-hold --orphaned`
 removes `hold_plane` lines an earlier hand `rm` left with no `hold_sha`, and refuses while a hold
-is set. `probe.py gitops-state` prints the command with the held SHA filled in, and so does
-`gitops_tick.sh` after every tick.
+is set. `probe.py gitops-state` prints the command with the held SHA filled in.
 
 **The cost: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns `run=False`
 for any non-empty `hold_sha`). That is intended, because an unapplied plane is not the moment to
@@ -1069,8 +1060,7 @@ started` returns rc 0 and the play recaps green. Nothing deploys, `last_run` doe
 deployer never starts so no Discord message goes out, and no `OnFailure` fires. The first alert
 is GitOps-Alive, once `last_run` ages past `GITOPS_MAX_AGE_S` (grep that name in
 `ansible/roles/k8s/monitor-bridge/files/check.py`). The one immediate signal is the unit's
-`ExecStopPost` journal marker, `tick skipped (lock contention)`, which
-`scripts/deploy_tools/gitops_tick.sh` also reads to exit 3.
+`ExecStopPost` journal marker, `tick skipped (lock contention)`.
 
 Before `SuccessExitStatus=75`, the same contention failed the play: `Run gitops-deploy once` timed
 out at 180.30 s, the flock wait (2026-08-20).

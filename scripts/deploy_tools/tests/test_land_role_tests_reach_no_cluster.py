@@ -14,9 +14,9 @@ WHAT THIS KEEPS, and why the reject halves below are `tasks/` cases. Dropping a 
 which puts that role's own example in the REPORTED set.
 
 THE VERDICT IS ASSERTED for the tests-only half, not just `plane_note`, for the reason
-`test_land_doc_change_reaches_a_verdict.py` asserts it: `no_tag_outcome` reads `plane_note`
-together with `self_applied`, and only their combination decides between `nothing-to-deploy`
-(exit 0) and `needs-manual-apply` (exit 1).
+`test_land_doc_change_reaches_a_verdict.py` asserts it: `no_tag_outcome` reads `plane_note`,
+and only its answer decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply`
+(exit 1).
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_role_tests_reach_no_cluster.py
 """
@@ -115,9 +115,6 @@ def _verdict(landing, files: list[str]) -> Outcome:
     quiet = land_tags.quiet_paths(files, "")
     ln.classification = Classification(
         plane=land_tags.plane_note(files, quiet=quiet),
-        self_applied=land_tags.self_applied(files, quiet=quiet),
-        self_applied_command=land_tags.self_applied_command(files, quiet=quiet),
-        remaining_setup="",
     )
     with pytest.raises(Outcome) as exc:
         deploy.no_tag_outcome(ln)

@@ -187,7 +187,11 @@ def offline_order_problems(branch: str) -> list[str]:
 
 def branch_1_revert_command_problems(branch_1: str) -> list[str]:
     """Branch 1 runs the post's per-role blocks, so it must hold no revert command of its own."""
-    problems = [cmd for cmd in commands(branch_1) if "volume-revert.yml" in cmd]
+    problems = [
+        cmd
+        for cmd in commands(branch_1)
+        if "volume-revert.yml" in cmd or "volume_revert.py" in cmd
+    ]
     if "ansible-playbook" in branch_1:
         problems.append("Branch 1 names `ansible-playbook`")
     return problems
@@ -367,8 +371,8 @@ def test_a_one_role_revert_command_in_branch_1_fails(runbook: str) -> None:
     red = mutate(
         branch_1,
         "Run the revert line of each role's block in the",
-        "Run `uv run ansible-playbook ansible/volume-revert.yml -e volume_revert_service=<s> "
-        "-e volume_revert_sha=<digest8>`, then the revert line of each role's block in the",
+        "Run `sudo .venv/bin/python -B scripts/backup/volume_revert.py --service <s> "
+        "--sha <digest8> --apply`, then the revert line of each role's block in the",
     )
     assert branch_1_revert_command_problems(red)
 

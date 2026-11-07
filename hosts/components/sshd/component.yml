@@ -11,9 +11,9 @@
 # body names them for removal by hand. Each file activates `reload:ssh.service`, which runs
 # `sshd -t` first, so a config sshd rejects leaves the running daemon untouched and holds the host.
 #
-# The `ssh-users` group and the sys user's membership stay Ansible tasks until the users arm
-# declares them: AllowGroups admits only that group, so a rebuilt host needs both before sshd
-# reloads.
+# Step 4 of hosts/bootstrap-host.sh creates the `ssh-users` group and adds the sys user, because
+# AllowGroups admits only that group and a rebuilt host needs both before sshd reloads. Until H7.60,
+# initial_setup also writes both on a host outside `initial_setup_packaged_hosts`.
 files:
   - {src: templates/10-homelab.conf, dst: /etc/ssh/sshd_config.d/10-homelab.conf, activate: "reload:ssh.service"}
   - {src: templates/90-homelab-match.conf.j2, dst: /etc/ssh/sshd_config.d/90-homelab-match.conf, activate: "reload:ssh.service"}

@@ -227,8 +227,8 @@ SECRET_ROTATION_SOPS_FAILED = 3
 SECRET_ROTATION_BAD_ARGS = USAGE_ERROR
 
 # -- scripts/backup/b2_drain.py ---------------------------------------------------------
-# `prune_backups/tasks/b2-drain.yml` fails the play on anything but 0 and 1, so a refused
-# volume reports while a usage error or a mid-run B2 failure stops the run.
+# `prune_backups.py` syncs the target only on 0 and 1, so a refused volume reports while a
+# usage error or a mid-run B2 failure stops the run.
 B2_DRAIN_OK = OK
 B2_DRAIN_REFUSED = FAILED
 B2_DRAIN_ERRORED = 2
@@ -411,15 +411,15 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             LAND_FAILED,
             "LAND_FAILED",
-            "CI red or unproven, a change needing a hand, a tag no k8s entry declares, a failed tick "
-            "or promotion, a failed health gate, or a PR closed, conflicting or with red CI.",
+            "CI red or unproven, a change needing a hand, a tag no k8s entry declares, "
+            "a held or failed promotion, a failed health gate, or a PR closed, conflicting or with red CI.",
         ),
         _c(LAND_BAD_ARGS, "LAND_BAD_ARGS", "the command line is wrong."),
         _c(
             LAND_GAVE_UP,
             "LAND_GAVE_UP",
-            "gave up waiting — a budget elapsed, the tick was skipped for lock contention every "
-            "time, the tick has not yet crossed origin, no promotion covered the merge in time, "
+            "gave up waiting — a budget elapsed, no promotion covered the merge in time, "
+            "the health gate could not read its store, "
             "or no host package containing the merge is published.",
         ),
     ),

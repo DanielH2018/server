@@ -40,9 +40,9 @@ and the failure message says so.
     volume_revert_sha: 1a2b3c4d            # the deploy tag the snapshot was named with
 ```
 
-`ansible/volume-revert.yml` is the role's one caller, an operator-only entry point, and takes
-all three as `-e` inputs: the hold post prints one command per changed
-snapshot role, with that role's `digest8` as the SHA. The runbook that runs it is *The revert
+`ansible/volume-revert.yml` is the role's one caller, the fallback entry point for a flux-owned
+role until the snapshot drill passes through `scripts/backup/volume_revert.py`, the script the
+hold post prints, and takes all three as `-e` inputs. The runbook is *The revert
 runbook* in `docs/volume-snapshot-drills.md`. The playbook includes this role alone, never runs
 `deploy.yml`, and gathers facts through the shared preamble, because `k8s/longhorn-api` reads
 `ansible_hostname`.
@@ -59,8 +59,8 @@ would fail to match a nine-character name.
 
 A flux-owned role has no automated caller. Its snapshot Job names snapshots with the role's
 `digest8`, not a commit, so its revert passes `volume_revert_sha=<digest8>`. The stateful hold's
-Discord post prints that value and the claims in each changed role's command block, and the
-operator runs the block by hand (`docs/flux-deploy-plane.md`, *Snapshot roles hold without a
+Discord post prints that value and the claims in each changed role's command block, which calls
+the script, and the operator runs the block by hand (`docs/flux-deploy-plane.md`, *Snapshot roles hold without a
 reset*).
 
 ## The sequence, and why every step is there

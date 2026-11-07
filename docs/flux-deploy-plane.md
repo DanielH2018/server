@@ -718,7 +718,7 @@ step 6 applies. The Ansible k8s play creates neither object.
 
     ```bash
     uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent
-    uv run ansible-playbook ansible/k3s-storage-smoke.yml -e storage_smoke=daniel-box
+    sudo .venv/bin/python -B scripts/diagnostics/storage_smoke.py
     ```
 
 7. Force the backupstore sync and wait for both targets to read available, as
@@ -1133,14 +1133,14 @@ input*.
   every failed name, each marked as a snapshot role or not, and, when `soak` failed, the soak
   Job and the command that reads the services it named. Then, for each changed snapshot
   role, it prints the `digest8`, each claim's snapshot prefix, and a command block in the
-  revert runbook's Branch 1 order: classify, two suspends, the `volume-revert.yml` run, two
+  revert runbook's Branch 1 order: classify, two suspends, the `volume_revert.py` run, two
   resumes. Beside the classify command it prints `prod@sha256:<digest of sha-<T>>`, the
   string a role that attempted T reads in `.status.lastAttemptedRevision`. CI cannot read the
   cluster, so every changed snapshot role gets a block, and the classify step picks which to
   revert. A message never passes Discord's 2,000 characters: a header that lists every tag
   splits across messages, and no line or block is cut. Each block runs the revert once per
-  claim namespace, passing `k8s_namespace`, and the header says so when the checkout lacks
-  `ansible/volume-revert.yml`. A 429
+  claim namespace, passing `--namespace`, and the header says so when the checkout lacks
+  `scripts/backup/volume_revert.py`. A 429
   gets one retry after its `retry_after`, up to 10 seconds. A failed post fails the run red;
   the hold is already written by then.
 - **The way out** is **operator-only**: the runbook in `docs/volume-snapshot-drills.md`, then

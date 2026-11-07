@@ -419,40 +419,37 @@ def test_no_manifests_service_claims_a_reserved_sibling_name():
 # ── the half-move: a path baked into a script the guard above cannot read ────────────────────
 #
 # `staged_files` reads tasks files. `registry-gc.sh` is a script template, so a move that
-# retargets the gc render's `dest:` and leaves `MIRROR_JOB_MANIFEST` pointing at the old
-# directory passes every assertion above and breaks GC at CRON time — which is why a
+# retargets the Job manifest's `dst:` and leaves `MIRROR_JOB_MANIFEST` pointing at the old
+# directory passes every assertion above and breaks GC at run time — which is why a
 # `ghcr-mirror-gc-job.yaml` move is more than cosmetic. One targeted pair rather than a wider
 # glob: manifest templates mention paths too, and reading them all would only add noise.
 
-HOST_FILES = K8S_ROLES.parent / "setup" / "k8s_host_files"
-GC_SCRIPT = HOST_FILES / "templates" / "registry-gc.sh.j2"
+GC_COMPONENT = K8S_ROLES.parents[2] / "hosts" / "components" / "registry-gc"
+GC_SCRIPT = GC_COMPONENT / "templates" / "registry-gc.sh.j2"
 # Rendered rather than read: MIRROR_JOB_MANIFEST's path could move into a role default, where a
 # source-text match on it would read `{{ ... }}` and pass on nothing (#3178).
-GC_SCRIPT_TEXT = rendered_shell_text("setup", "k8s_host_files", "registry-gc.sh.j2")
-REGISTRY_TASKS = HOST_FILES / "tasks" / "registry.yml"
+GC_SCRIPT_TEXT = rendered_shell_text("components", "registry-gc", "registry-gc.sh.j2")
+GC_SPEC = GC_COMPONENT / "component.yml"
 
 _JOB_MANIFEST_RE = re.compile(r"^MIRROR_JOB_MANIFEST=(\S+)", re.MULTILINE)
 _GC_NAME = "/ghcr-mirror-gc-job.yaml"
 _GC_STAGED = f"{MANIFEST_ROOT}/registry-jobs{_GC_NAME}"
 
 
-def gc_manifest_paths(tasks_text: str, script_text: str) -> tuple[str, str]:
-    """`(the path the render stages, the path the cron script reads)`, or '' for each miss."""
-    staged = [p for p in _PATH_RE.findall(tasks_text) if p.endswith(_GC_NAME)]
+def gc_manifest_paths(spec_text: str, script_text: str) -> tuple[str, str]:
+    """`(the path the package ships, the path the script reads)`, or '' for each miss."""
+    staged = [p for p in _PATH_RE.findall(spec_text) if p.endswith(_GC_NAME)]
     read = _JOB_MANIFEST_RE.findall(script_text)
     return (staged[0] if staged else "", read[0] if read else "")
 
 
-_GC_RENDER = """---
-- name: Render the ghcr-mirror garbage-collection job
-  ansible.builtin.template:
-    src: ghcr-mirror-gc-job.yaml.j2
-    dest: {path}
+_GC_RENDER = """files:
+  - {{src: templates/ghcr-mirror-gc-job.yaml.j2, dst: {path}, when: registry_k8s_manage_gc}}
 """
 _GC_SCRIPT = "MIRROR_JOB_MANIFEST={path}\n"
 
 
-def test_gc_render_and_cron_script_agreeing_is_clean():
+def test_gc_render_and_script_agreeing_is_clean():
     staged, read = gc_manifest_paths(
         _GC_RENDER.format(path=_GC_STAGED),
         _GC_SCRIPT.format(path=_GC_STAGED),
@@ -460,7 +457,7 @@ def test_gc_render_and_cron_script_agreeing_is_clean():
     assert staged == read != ""
 
 
-def test_gc_render_moved_without_the_cron_script_is_flagged():
+def test_gc_render_moved_without_the_script_is_flagged():
     staged, read = gc_manifest_paths(
         _GC_RENDER.format(path=_GC_STAGED),
         _GC_SCRIPT.format(path=f"{MANIFEST_ROOT}/registry{_GC_NAME}"),
@@ -470,16 +467,16 @@ def test_gc_render_moved_without_the_cron_script_is_flagged():
 
 def test_the_gc_reader_finds_both_real_paths():
     """Non-vacuity: two empty strings would make the invariant below pass on nothing."""
-    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT_TEXT)
-    assert staged, f"no ghcr-mirror-gc-job.yaml render found in {REGISTRY_TASKS}"
+    staged, read = gc_manifest_paths(GC_SPEC.read_text(), GC_SCRIPT_TEXT)
+    assert staged, f"no ghcr-mirror-gc-job.yaml entry found in {GC_SPEC}"
     assert read, f"no MIRROR_JOB_MANIFEST assignment found in {GC_SCRIPT}"
 
 
 def test_registry_gc_reads_the_manifest_the_deploy_stages():
-    staged, read = gc_manifest_paths(REGISTRY_TASKS.read_text(), GC_SCRIPT_TEXT)
+    staged, read = gc_manifest_paths(GC_SPEC.read_text(), GC_SCRIPT_TEXT)
     assert staged == read, (
-        f"{REGISTRY_TASKS} stages the GC job at {staged} while {GC_SCRIPT} reads {read}; the "
-        "cron would apply a manifest the deploy never writes (#1669)"
+        f"{GC_SPEC} ships the GC job at {staged} while {GC_SCRIPT} reads {read}; the "
+        "script would apply a manifest the package never installs (#1669)"
     )
 
 

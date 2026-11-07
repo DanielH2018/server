@@ -3,7 +3,7 @@
 WHY (#3960). The land phase used to resume the implementer with the brief's Landing section
 and let it run `land.sh --detach && cc-wait land <n>` itself. The model got the mechanics
 wrong: eight exit-75 re-runs, calls to the retired `--await-verdict`, a bad cc-wait source. A
-session holding its turn open through CI and the tick also kept the batch's 2 GiB
+session holding its turn open through CI and the promotion also kept the batch's 2 GiB
 reservation, which bounds fan-out width. The pipeline now starts the landing and waits on it,
 and resumes the implementer only for a verdict that needs judgement: `RESUME_VERDICTS`.
 
@@ -29,8 +29,8 @@ LAND_SH = Path("scripts") / "deploy_tools" / "land.sh"
 RESUME_VERDICTS = frozenset(
     {"unhealthy", "deploy-failed", "needs-manual-apply", "blocked"}
 )
-# The verdicts after which the PR is merged and nothing more is owed. `deferred` is one: the
-# next tick applies the PR, and cc-wait ends it with exit 4, not 0.
+# The verdicts after which the PR is merged and nothing more is owed. `deferred` is one: a host's
+# updater applies its package, and cc-wait ends it with exit 4, not 0.
 FINISHED_VERDICTS = frozenset({"settled", "nothing-to-deploy", "deferred"})
 # cc-wait's "still running, re-run this wait". land.sh's own give-up reaches it as 3.
 STILL_WAITING = 75

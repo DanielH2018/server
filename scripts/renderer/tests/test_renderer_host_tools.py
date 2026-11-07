@@ -22,11 +22,12 @@ from lib.repo_paths import REPO
 NAMED_MEMBERS = frozenset(
     {
         f"{BIN_DIR}/{t}"
-        for t in ("sops", "chezmoi", "nfpm", "node-exporter", "uv", "flux")
+        for t in ("sops", "chezmoi", "nfpm", "node-exporter", "uv", "flux", "vale")
     }
 )
-# nfpm and uv name the amd64 build x86_64, and uv names the arm64 build aarch64.
-UPSTREAM_ARCH = {"amd64": ("x86_64",), "arm64": ("aarch64",)}
+# nfpm and uv name the amd64 build x86_64, Vale names it 64-bit, and uv names the arm64 build
+# aarch64.
+UPSTREAM_ARCH = {"amd64": ("x86_64", "64-bit"), "arm64": ("aarch64",)}
 DIGEST = "a" * 64
 PACKAGE_SPEC = REPO / "hosts/packages/homelab-tools/package.yml"
 
@@ -75,6 +76,7 @@ def test_a_package_that_moves_sops_is_missing_a_named_member(hosts):
                 "node-exporter": dict.fromkeys(ARCHES, pin()),
                 "uv": dict.fromkeys(ARCHES, pin()),
                 "flux": dict.fromkeys(ARCHES, pin()),
+                "vale": dict.fromkeys(ARCHES, pin()),
                 "sops-old": dict.fromkeys(ARCHES, pin()),
             }
         },
@@ -92,7 +94,15 @@ def test_a_render_writes_one_tree_per_architecture_with_its_own_pins(tmp_path):
         assert nfpm["arch"] == arch
         assert {c["dst"] for c in nfpm["contents"]} == NAMED_MEMBERS
         pins = json.loads((tree / PINS_FILE).read_text())
-        assert set(pins) == {"sops", "chezmoi", "nfpm", "node-exporter", "uv", "flux"}
+        assert set(pins) == {
+            "sops",
+            "chezmoi",
+            "nfpm",
+            "node-exporter",
+            "uv",
+            "flux",
+            "vale",
+        }
         assert all(
             arch in p["url"] or any(a in p["url"] for a in UPSTREAM_ARCH[arch])
             for p in pins.values()

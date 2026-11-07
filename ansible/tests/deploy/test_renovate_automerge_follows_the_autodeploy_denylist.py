@@ -22,7 +22,7 @@ broad plane — which applies every role reading the key with no denylist check.
 safe in this rule only while every `_image:` pin in group_vars belongs to denied roles, so the
 census below reads each pin's Jinja readers out of the role trees and asserts they are all
 denied. A pin no role reads fails too: an unmappable pin must not pass as "not eligible".
-`setup/k8s_host_files` defaults are the other: they copy registry's pins, and
+The `registry-gc` component's defaults are the other: they copy registry's pins, and
 `scripts/tests/test_renovate_host_file_copies.py` holds each copy resolving like its source.
 
 A second rule carries the same marker for a denied role's BASE image. The
@@ -76,7 +76,7 @@ FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX = "crowdsec bouncer plugin (manual"
 # The manual paths that are not a denied role's defaults. Fixed here rather than tolerated
 # as "any extra": another path added by hand has to be argued for the way these were.
 ALL_VARS_REL = ALL_VARS.relative_to(REPO).as_posix()
-HOST_FILES_REL = "ansible/roles/setup/k8s_host_files/defaults/main.yml"
+HOST_FILES_REL = "hosts/components/registry-gc/defaults/main.yml"
 _K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
 
 # The pin the census must find, so a group_vars with no `_image:` key (renamed, moved back to

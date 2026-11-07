@@ -19,7 +19,7 @@ One command. Do not write the redirect and do not poll CI.
 ```
 
 It merges the PR directly once its CI is green, waits for master CI on the merge
-commit, deploys that commit, kicks the tick, gates the health, and prints the landing's
+commit, waits on the promotion that applies it, gates the health, and prints the landing's
 `VERDICT:` line. `--detach` names its own logfile, forks into it and returns. `cc-wait land <n>`
 is the wait: it prints the landing's `VERDICT:` line and exits with the landing's own code.
 `land.sh` arms no PR for GitHub's auto-merge. Its direct merge is pinned to the head SHA it
@@ -53,7 +53,7 @@ the rule.
 `cc-wait` waits at most 570s per run. Exit 75 means the landing is still running: re-run only
 `cc-wait land <n>`, never `land.sh`, which would start a second landing. State `gave-up` (exit 3)
 is `land.sh`'s own give-up, a resume point for the whole command. State `deferred` (exit 4) is
-not: the PR landed, and the next tick applies it, so there is nothing to re-run. Where a task notification can
+not: a host's updater applies its package, so there is nothing to re-run. Where a task notification can
 wake the session, run the command with `run_in_background: true`. A headless `claude -p` agent
 cannot be woken once its turn ends, so it runs the command in the foreground with
 `timeout: 600000` and does not end its turn on it.
@@ -119,7 +119,7 @@ The `VERDICT:` line is the last line of the log. `land.sh --help` lists the clos
 |---|---|
 | `settled` | Exercise the thing you actually changed. The gate sees the workload, not your change. |
 | `needs-manual-apply` | **Read every remediation line, not the first.** One PR can reach two, and each prints its own. |
-| `deferred` | Nothing is wrong; the next tick applies it. Re-run only if the line says this run stopped watching a tick mid-apply. With cause `promote-timeout`, no promotion covered a flux-owned tag in time: read the `promote` workflow's failed `publish` jobs first. If the line says the health gate could not read its store, the deploy went ungraded: re-run `land.sh`. |
+| `deferred` | The landing gave up waiting. With cause `promote-timeout`, no promotion covered a flux-owned tag in time: read the `promote` workflow's failed `publish` jobs first, then re-run. If the line says the health gate could not read its store, the deploy went ungraded: re-run `land.sh`. |
 | `deferred`, for a host | A PR that changes a host's package waits for that host to apply it. When the line names the updater's start command, the host's timer is not armed yet, or its next fire is more than 45 minutes away. Start the updater on that host, then re-run the same `land.sh` command: its first query finds the host settled. |
 | `refused` | The landing stopped before it deployed anything, and the detail says why: the landing policy, a closed PR, changes requested, a read that failed. Fix what it names, then re-run. |
 | `ci-unproven` | GitHub never ran CI for the merge commit, and no later master commit can stand in for it, so a re-run alone never converges. The detail names the tip and the way out. When no commit has run CI, dispatch it with `gh workflow run ci.yml --ref master`, dispatch `promote` for the tip once CI is green, and re-run. When a red commit sits between the merge commit and a green one, dispatch `promote` for the tip with the `gh workflow run promote.yml` command it prints. `promote` refuses a commit without green CI, so no route skips CI. |
@@ -134,16 +134,22 @@ promotion, and clearing it is **operator-only**: stop and name the hold. Cause
 report the services the printed `kubectl` command names, and stop. A
 `nothing-to-deploy` whose detail says a tag "is suspended" means Flux applies nothing for that
 tag until a PR removes its `flux_suspend`; the suspend PR itself ends this way. The same wait on a
-PR that also owes a plane or a setup role's other hosts ends `needs-manual-apply`, one that
-changes a host package goes on to the host wait, and the tick's state grades one the tick applies
-part of.
+PR that also owes a plane ends `needs-manual-apply`, and one that changes a host package goes
+on to the host wait.
+
+**A `nothing-to-deploy` for a PR that changes a setup role does not say the role applied.**
+`land.sh` starts no tick and reads none of the deployer's markers. The deployer's own 10-minute
+timer applies the role, so read the host for the outcome: the changed state itself, or
+`uv run python scripts/diagnostics/probe.py gitops-state` for `hold_sha` and `owed.jsonl`. A role
+the deployer cannot apply (`k3s`) leaves a `manual_plane` line there, and a role whose change
+reaches another host leaves one too. CLAUDE.md *When to wait* says who clears it.
 A PR that changes `cluster-vars.sops.env` or `cluster-vars.source` waits on promotion too,
 for the `cluster-vars` Kustomization and every Kustomization that depends on it
 (`docs/landing.md`, *A tag Flux applies waits on promotion*).
 
 `deploy-failed` has one variant that is **not** a resume point — `a playbook task failed AFTER
 applying; some changes are live`. Every other `deploy-failed`, and every give-up
-(`merge-timeout`, `ci-red`, `ci-timeout`, `lock-busy`, `merge-conflict`, `pr-ci-red`), deployed
+(`merge-timeout`, `ci-red`, `ci-timeout`, `merge-conflict`, `pr-ci-red`), deployed
 nothing and re-runs safely.
 
 **If the task comes back "stopped because the system is running low on memory", the landing was

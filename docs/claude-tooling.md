@@ -601,7 +601,7 @@ script through one `NOPASSWD` sudoers line, and its verbs come in two tiers:
 
 - **Tier 1 prints no content.** `stat PATH`, `sha256 PATH` and `matches PATH REPO_FILE` take
   a file on an explicit allowlist, such as `/etc/netplan/*.yaml`, `/etc/cron.d/*` or
-  `/usr/local/bin/registry-gc.sh`. `matches` exits 0 when the live file is byte-identical to
+  `/usr/lib/homelab/registry-gc.sh`. `matches` exits 0 when the live file is byte-identical to
   REPO_FILE in your checkout. The shim hashes REPO_FILE, so root never opens it. On a
   credential path that matches `DENY`, only `stat` answers, with mode, type, owner and group
   and never size or mtime. It answers only when the allowlist names the path.

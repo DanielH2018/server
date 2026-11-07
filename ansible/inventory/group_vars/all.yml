@@ -367,8 +367,9 @@ loki_route_witness_boot_grace_s: 600
 
 # Hosts that get the developer tooling `initial_setup --tags tooling` installs: uv, the uv-
 # managed CLI tools (ansible-core, ansible-lint, prek), the pinned host Python, the
-# /usr/local/bin/uv symlink systemd and cron read, and the pinned Vale binary the prek `vale`
-# hook runs. The same list gates `Install Git hooks`, because prek is what that task runs.
+# /usr/local/bin/uv copy, and the pinned Vale binary the prek `vale` hook runs. The same list gates
+# `Install Git hooks`, because prek is what that task runs. A member whose package owns a subject
+# skips it through `initial_setup_packaged_hosts` (roles/setup/initial_setup/defaults/main.yml).
 #
 # The predicate is "somebody commits from this host", not "this host holds a checkout".
 # daniel-pi is deliberately absent: it holds a checkout, but it is driven remotely over ssh and

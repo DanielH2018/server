@@ -270,14 +270,15 @@ def test_every_k8s_role_image_is_renovate_tracked() -> None:
     # cluster image would be structurally blind to the one image (the WAF core) whose staleness
     # is a security problem.
     #
-    # roles/setup/*/defaults/main.yml is included for the same reason: registry_k8s_image and
-    # registry_k8s_netpol_probe_image (roles/setup/k8s_host_files/defaults/main.yml) sit one
-    # directory over from the k8s role defaults, so a role-defaults-only glob would leave them
-    # matched by no manager and by no test. The restore drill's busybox probe image was the first
-    # such pin and moved into the k8s tree at H2.3d.
+    # The setup roles' defaults and the registry-gc component's are included for the same reason:
+    # registry_k8s_image and registry_k8s_netpol_probe_image
+    # (hosts/components/registry-gc/defaults/main.yml) sit outside the k8s role defaults, so a
+    # role-defaults-only glob would leave them matched by no manager and by no test. The restore
+    # drill's busybox probe image was the first such pin and moved into the k8s tree at H2.3d.
     defaults = sorted((_REPO / "ansible/roles/k8s").glob("*/defaults/main.yml"))
     assert defaults, "no k8s role defaults found"
     defaults += sorted((_REPO / "ansible/roles/setup").glob("*/defaults/main.yml"))
+    defaults.append(_REPO / "hosts/components/registry-gc/defaults/main.yml")
     defaults.append(ALL_VARS)
     untracked = []
     for f in defaults:

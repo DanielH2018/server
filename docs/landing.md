@@ -1,7 +1,7 @@
 # Landing a merged PR
 
 `land.sh` follows a merged PR through to a verified deploy in one invocation: arm the merge,
-wait for master CI on the merge commit, deploy that commit, kick the tick, gate the health, and
+wait for master CI on the merge commit, wait on the promotion, gate the health, and
 print a `VERDICT:` line. The `land-after-merge` skill carries the invocation and the verdict
 decoder. This page carries the reasoning behind each rule, and the incident that put it there.
 
@@ -304,12 +304,12 @@ gh workflow run promote.yml -R DanielH2018/server --ref master -f sha=<master ti
   either. To give the tip a verdict, run `gh workflow run ci.yml --ref master`, then re-run
   land.sh. A green tip then ends the landing on the shape above.
 
-**It waits on your merge commit rather than on the tip**, because the tick fast-forwards to the
+**It waits on your merge commit rather than on the tip**, because the deployer's timer fast-forwards to the
 newest GREEN commit in its range rather than only to a green tip. A later merge whose CI is
 still running no longer holds your PR. Waiting on the tip cost six landings in the 14 days to
 2026-09-11 400-614s each, chasing a tip that moved again.
 
-## The promotion wait, and the tick beside it
+## The promotion wait
 
 **No landing runs `deploy.sh`.** Every `containers_list` entry is `platform: k8s`, so `promote`
 and Flux apply every tag, and a change to a host's package waits for that host
@@ -317,26 +317,19 @@ and Flux apply every tag, and a change to a host's package waits for that host
 entry at the merge commit ends the landing `deploy-failed` with the cause `tag-miss`, because
 nothing would apply it.
 
-**A PR reaching service tags and nothing the tick applies itself kicks the tick and does not
-await it.** Step 4 waits for nothing. Step 5 starts the tick with `--no-wait`, so the checkout
-converges while the landing waits on the promotion and runs the health gate, and the deployer's
-own 10-minute timer covers a kick that failed. A kick that finds a tick already in flight starts
-nothing, so `land.sh` asks again after the health gate. `kick=` on the Landings board says which
-happened: `started`, `rearmed` (the second request started one), `joined` (both joined; the timer
-converges the checkout, this landing did not), `failed`. `tick=0` on the board means step 4
-awaited no tick. Eleven landings in the 14 days to 2026-09-11 spent the full 540s in step 4
-watching a deployer busy with another session's apply.
+**`land.sh` starts no GitOps tick and reads none of the deployer's markers** (H7.49a). The
+deployer's own 10-minute timer still fast-forwards the primary checkout and applies a setup
+role, and `land.sh` neither starts, awaits nor grades that. A landing waits on the promotion
+for a PR's k8s tags, on the host wait for a host package, and on the health gate, and nothing
+else. `tick=0` stays on the Landings board so its columns hold, and `lock` reads 0, `holder` and
+`kick` read empty.
 
-**Two shapes keep waiting for the tick**, because there the tick is the apply and the verdict
-reads the deployer's own markers straight afterwards. A PR with **no** service tag is one. A PR
-reaching service tags **and** something the tick applies itself — the deploy plane, or a setup
-role `initial_setup.yml` includes — is the other: it awaits the tick in step 4. Taking the fast
-path there would grade a tick that had not run, and print `needs-manual-apply` (or `deferred`)
-for work the kicked tick applies a minute later. `--tags` does not opt out: the derivation is
-skipped, the classification is not.
-
-A change **no** tick can apply — the `plane` a hand must run, which `needs-manual-apply` names —
-does not push a landing off the fast path. Nothing about awaiting a tick would settle it.
+**A PR that reaches only a setup role the deployer applies waits for master CI and the
+promotion, then ends `nothing-to-deploy`.** Its author reads the outcome on the host: the changed
+state itself, or a `manual_plane` line in
+`owed.jsonl` for a role the deployer cannot apply (`k3s`). `probe.py gitops-state` prints every
+marker, read-only. A change to a plane nobody applies on its own, which `plane` names, still
+ends `needs-manual-apply` with the command that applies it.
 
 **It scopes the derivation to the PR's own file list rather than a SHA range**, so another session's
 merged work is not swept in. `gh` paginates that list at 100 files, so it falls back to
@@ -347,7 +340,7 @@ reaches ships in the `homelab-daniel-pi` package. `--tags` overrides the scope e
 
 ### Every landing waits on promotion
 
-**A k8s tag never reaches `deploy.sh`.** Step 5 reads the k8s entries at the merge commit
+**A k8s tag never reaches `deploy.sh`.** Step 4 reads the k8s entries at the merge commit
 (`land_lib/promotion.py:split_k8s`) and takes every such tag out of the list.
 
 **The changed set names the k8s tags, not the PR's paths.** `split_k8s` drops a path-derived
@@ -356,8 +349,8 @@ on the promotion (`land_lib/promotion.py:moves_the_bundle`), and land-wait's cha
 with any `--tags`, names the `owner: flux` tags the gate grades and the annotation names. A
 shared template, an inventory edit or a `manifests` change therefore gates exactly the tags whose
 render moved. A PR that moves no bundle file waits on `homelab` alone and gates nothing. The
-gate renders the merge commit from a snapshot, and `land.sh` kicks the tick to converge the
-primary checkout. A `cluster-vars` change moves the footprint of every substituting tag, so
+gate renders the merge commit from a snapshot, because the primary checkout may not hold it yet.
+A `cluster-vars` change moves the footprint of every substituting tag, so
 D3.4's interim `--also cluster-vars` went in the same PR.
 
 `land.sh` runs `promote.py land-wait <merge commit>`. The wait never follows one
@@ -397,10 +390,7 @@ Instead it reads the cluster every 30 seconds:
   the PR is `suspended` in the merge commit's `digests.json`, so Flux applies nothing for
   them until a PR removes their `flux_suspend`. The wait ends at the first poll that reads
   that file and a `none` `DEPLOY_HOLD`, rather than polling to `gave-up`. A hold still ends
-  it `deploy-failed`. When the tick applies part of the PR, the tick's state decides the
-  verdict: a hold ends it `deploy-failed`, cause `tick-held`, a tick behind origin ends it
-  `deferred`, a recorded apply ends it `settled`, and an unreadable state or no recorded apply
-  ends it `needs-manual-apply`. When only some of the PR's Flux tags are suspended, the wait leaves
+  it `deploy-failed`. When only some of the PR's Flux tags are suspended, the wait leaves
   the suspended ones out and settles on the rest, and the gate leaves them out too. The
   suspend PR itself ends this way, before any promotion applies it: the suspend takes hold only once `last-good`
   carries it, so check that `probe.py landing` shows `last-good` at or past the merge commit.
@@ -555,8 +545,6 @@ was, and each one leaves a different state:
 - `tag-miss`: no k8s entry declares a tag named on `--tags` at the merge commit, so nothing applies
   that tag. `promote` and Flux still apply the rest of the merge, so a tag named beside it can be
   live. To gate the rest, re-run with the tag corrected.
-- `tick-failed` or `tick-held`: the tick's setup play failed. It may have applied tasks before the
-  failure, so read the deployer's journal before you re-run anything.
 - `promote-held`: `DEPLOY_HOLD` stops every promotion, and the hold does not say whether this merge
   went live. `decide` writes a forward-only or `suspended-changed` hold before `prod` moves, and
   a hold set by hand moves nothing. A failed verification's hold follows a move of `prod`, so
@@ -600,89 +588,34 @@ middleware before the backend is reached, and 19 dead Grafana panels sat behind 
 
 ## `deferred`, `needs-manual-apply`, and what a hand still has to run
 
-`deferred` (`LAND_GAVE_UP`) means the tick applies this PR itself — a setup role `initial_setup.yml`
-includes, or the deploy plane — and has not crossed this PR's merge commit yet, almost always
-because the CI of a newer merge is still running. The next tick does it. `land.sh` reads that from
-the deployer's `behind_since` and `hold_sha` markers, and checks the merge commit against the
-primary checkout before believing `behind_since`, because the tick lands at the newest green
-ancestor and so sits behind the TIP on most ticks while working normally (issue #1786). A held
-`hold_sha` is `deploy-failed`. If the verdict says the run stopped watching a tick that was
-still applying, the markers were read mid-apply and a hold cannot be ruled out (issue #1607):
-re-run, because no later tick crosses a hold. A `deferred` from the health gate means
-`probe.py health` could not read its store (see *The health gate*); re-run that one too.
+`deferred` (`LAND_GAVE_UP`, exit 75) means the landing gave up waiting and a re-run of
+`land.sh` completes it: no promotion covered the merge commit in time (cause `promote-timeout`),
+a host's package is not yet applied, or the health gate could not read its store (see *The
+health gate*). `cc-wait land` ends the wait as `gave-up`, exit 3, for each of those that
+prints a note naming the re-run, and as `deferred`, exit 4, for any other.
 
-`cc-wait land` tells the two apart for its caller (#3932). A plain `deferred` ends the wait as
-state `deferred`, exit 4. A `deferred` that abandoned a mid-apply tick ends it as `gave-up`,
-exit 3, the same as every other `LAND_GAVE_UP` that asks for a re-run of `land.sh`. So does
-a `deferred` whose health gate could not read.
+`nothing-to-deploy` also covers a PR that reaches only a setup role the deployer applies.
+`land.sh` starts no tick and reads none of the deployer's state, so it reports neither the
+apply nor a failure of it, and it names no other host the role reaches. Read the host: the
+changed state itself, or `probe.py gitops-state`, which prints `last_run`, `hold_sha` and
+`owed.jsonl`. The deployer records a `manual_plane` line for a role it cannot apply, and for a
+role it applied on daniel-box whose change reaches another host (#6510). A `hold_sha` pages
+**GitOps Deploy — Status**, so a failed apply does not go unseen.
 
-**Converging is not applying.** `behind_since` empty says local == origin, which any session's
-`git merge --ff-only` produces too — and once it holds, `next_action()` returns `noop` for every
-later tick, so a plane the tick never applied is stranded permanently. PR #1529 read `settled`
-that way on 2026-09-10 while `/opt/renovate-agent/renovate_agent.py` was four days stale (issue
-#1537). A self-applied landing also requires the receipt of the tick that crossed the PR's merge
-commit to record an applied plane. `deploy_handlers.handle_broad` writes that half of the
-receipt only after the apply returned. With no such receipt, the verdict is
-`needs-manual-apply`. That includes a range another session's `git merge --ff-only` crossed,
-which no tick ever applied (#3391).
+**Read every remediation line, not the first one.** One PR can reach two of these at once, for
+example a plane a hand applies and a host package, and the verdict then prints one line per
+half.
 
-**Read every remediation line, not the first one.** One PR can reach two of these at once — a
-plane a hand applies, and a self-applied setup role the tick installed on its own host alone —
-and the verdict then prints one line per half. PR #2568 carried exactly that pairing, and until
-#2569 the plane's line suppressed the other: daniel-server and daniel-pi kept the old
-`kuma-push-lib.sh`, since deleted by #7109, behind a printed remediation that named neither.
-
-Three things sit in that position:
+Two things sit in the position of needing a hand:
 
 - **A setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`; `common`
   is include-only, so the note names each consumer's playbook and tag), or a bring-up playbook.
-  The tick applies every other setup role itself, and `deploy.yml` is a `containers_list` loop.
+  The deployer applies every other setup role itself, and `deploy.yml` is a `containers_list`
+  loop.
 - **A rotated secret** has no path to match: a secret's value lives in no role's template, so
   `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run
   `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a
   stale copy and the repair command per plane.
-- **A self-applied setup role reaching a host beyond the tick's own** (issue #1009).
-  `initial_setup.yml`'s `hosts:` is one target per run, and the tick runs it on whichever host
-  `land.sh` executes on — so a role with no `when:` gate (`initial_setup` itself, plus
-  `config_files`, `sops_setup`, `docker_install`, `hypervisor`) reaches all three hosts, and a
-  role's own `when:` can reach more than one (`claude_code`: daniel-box and daniel-server,
-  through `has_claude_code`). A `when:` that admits a host is not proof that the role changes
-  anything there. `nut_host`'s `when:` admits both cluster nodes, but its only task is the
-  unconditional `meta: end_role` under
-  `ansible/roles/setup/nut_host/tasks/main.yml:DECIDED: this role is emptied`, so an apply
-  changes nothing on either host. Each node's NUT client arrives through its host package
-  (`hosts/components/nut-secondary/`, in `homelab-daniel-box` and `homelab-daniel-server`). The
-  tick converging says only that the LOCAL host is current; PR #1002 changed the shared Kuma
-  push library, the tick converged on daniel-box, and `land.sh` read `settled` while
-  daniel-server and daniel-pi kept the old library for three days. The line names each remaining
-  host and its exact apply command. **This is not the failure PR #723 hit**: #723's self-applied
-  roles (`gitops_deploy`, `renovate_notify`) are gated true only on daniel-box, so a role
-  reaching just the tick's own host still reads `settled` — reporting every self-applied role as
-  unfinished was tried and reverted for exactly that PR (`plane_note`'s docstring in
-  `land_tags.py`).
-
-  **The line reads the host before it names it.** A host another apply already reached
-  owes nothing. `setup_lib/deployed_copies.py` drops the host from a changed file's reach when the
-  host's own record shows the merge commit's bytes (#7398). For a `stamp_deployed.yml` pair that
-  record is the live copy. For a `stamp_render.yml` template it is the line in the host's render
-  fragment. That line counts only when writing the fragment also runs every task in the role that
-  may render the template, which the tasks' tags decide (#7406). A shared template also rendered
-  under a tag whose group does not list it therefore stays owed. A template several groups list
-  counts only when every fragment shows the merge commit's hash, as `check-timer.service.j2`
-  does for `initial_setup`: the `loki_route_witness` and `setup_drift` tags each render it, and
-  each tag's group lists it. A stamp or a render whose `when:` skips a host asks nothing of that
-  host, so daniel-box, whose witness is packaged, holds the template on its `setup-drift-check`
-  fragment alone. Any other file stays owed: an unstamped file, a task file, a moved
-  key, a pair whose `live` is not a literal path. A host that cannot be read also stays owed. To
-  clear the line after a hand apply, re-run `land.sh`.
-
-  **The line names a host only where the shared task file renders the template.** A role that
-  imports `check_timer.yml` passes `check_timer_state`, and the file's renders are gated on
-  `present`. `setup_lib/setup_role_chains.py:task_gates_shipping_owner_file` reads each render's
-  gate with the import's `vars:` in place. A template change therefore names no host on the
-  teardown half of `gitops_deploy`, and names `initial_setup` only on the hosts its check lists
-  hold. A `vars:` value this read cannot express keeps the host named. A change to
-  `check_timer.yml` itself keeps every importer's reach, because its absent arm runs there.
 
 **A setup role the deployer cannot apply also needs its marker cleared.** For `k3s` and `common`
 the tick fast-forwards the range and records a `manual_plane` line in the `owed` ledger.
@@ -690,8 +623,8 @@ the tick fast-forwards the range and records a `manual_plane` line in the `owed`
 step, and `--dry-run` shows them first. It refuses a line whose apply arms more than the change, a role
 applied by hand, and a primary checkout behind `origin/master`, so run those as printed, including any
 `--applied <tags>` on the clear. A bring-up
-playbook gets no such line, because the tick parks on those and writes no marker. A landing
-behind a recorded role reads `settled`, because the tree converged. A role the tick DID apply
+playbook gets no such line, because the tick parks on those and writes no marker. A landing does
+not read the line, so it ends `nothing-to-deploy` beside a recorded role. A role the tick DID apply
 on daniel-box gets a line too when its change reaches another host (#6510): the line's `hosts`
 key names the hosts the "also reaches" note names, and the banner and monitor-bridge print the
 apply for each. Apply it there, then `clear-owed manual_plane <role>`. The clear, `--applied` and
@@ -713,11 +646,10 @@ When no host differs, the candidate is cleared and the landing ends
 `nothing-to-deploy`. A render or snapshot that fails makes every host a target, so a failure
 waits rather than skips.
 
-A PR with host targets and no service tag deploys nothing, because the tick fast-forwards its
-empty change set at step 4. A PR that also carries a plane a hand applies still ends
+A PR with host targets and no service tag deploys nothing in step 4. A PR that also carries a plane a hand applies still ends
 `needs-manual-apply`, and the output names each host it did not wait on.
 
-Step 6, `host_wait.wait_for_hosts`, queries Prometheus on loopback and then on the ClusterIP.
+Step 5, `host_wait.wait_for_hosts`, queries Prometheus on loopback and then on the ClusterIP.
 A host settles when `homelab_host_applied_info` equals or descends from the merge commit and
 `homelab_host_reconcile_ok` is 1. A `homelab_host_reconcile_ok` of 0 ends the landing
 `deploy-failed` and names the host's `homelab-updater --clear-hold` command. The step queries
@@ -758,9 +690,11 @@ timer periods plus the unit's `TimeoutStartSec`. Past that deadline the reason s
 ## `nothing-to-deploy`
 
 Decided from the PR's file list right after the merge, before any CI wait: a PR that reaches no
-service tag, no plane a hand applies and nothing the tick applies itself has nothing to wait on,
-and the deployer's own tick fast-forwards it. The one exception is a file list GitHub truncated,
-which is derived from the diff after the tick as before.
+service tag, no plane a hand applies, no host package and no path outside documents and tests has
+nothing to wait on. A PR that reaches a setup role is a path outside both, so it waits for master CI
+and for a promotion of `homelab` alone, then ends `nothing-to-deploy` in step 4: the deployer's
+own timer applies the role, and `land.sh` does not watch the apply. The one exception to the early
+decision is a file list GitHub truncated, which is derived from the diff in step 4.
 
 **A document under a role is not a manual apply.** A `.md` — a role's `CLAUDE.md`, a
 `README.md`, one under `files/` — maps to no role and to no plane, because no playbook applies
@@ -778,14 +712,10 @@ and `./scripts/deploy.sh --tags pihole-exporter` deployed it a minute later (iss
 
 Every run writes one logfmt line to syslog on exit (`logger -t landing-annotation`): the PR, the
 merge SHA, the verdict, and seconds spent in each phase — `wait_merge`, `wait_ci`, `tick`,
-`deploy`, `total` — plus `lock`, the seconds spent waiting on the tree lock (a sub-part of
-`tick`, not a fifth phase), and `holder`, the command that held it. `deploy` is step 5's time,
-which is the promotion wait.
-
-`lock` books two kinds of wait: an attempt that LOST the lock and exited 75, and a wait
-`gitops_tick.sh` rode out and then reported itself, watching a tick another actor had already
-started. The second exits 0, so before it reported the wait the seconds landed in `tick` and
-every row read `lock=0`.
+`deploy`, `total` — plus `lock`, `holder` and `kick`. `deploy` is step 4's time, which is the
+promotion wait. `tick`, `lock`, `holder` and `kick` described the GitOps tick that `land.sh`
+no longer runs: `tick` and `lock` read 0, and `holder` and `kick` read empty, so the board's
+columns hold.
 
 Promtail ships it to Loki and the **Landings** Grafana board (Infrastructure folder) plots it, so
 "sessions wait too long" is answered by the phase medians there rather than by memory:

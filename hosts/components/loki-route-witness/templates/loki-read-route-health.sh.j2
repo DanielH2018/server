@@ -66,7 +66,7 @@ RC=$?
 # `--no-project`, so the reader runs on the pinned interpreter without resolving whatever project
 # the working directory sits in — a broken lockfile in the checkout above must not read as a broken
 # route. Same shape as the Longhorn backup-health reader in the k3s role.
-if MSG="$(printf '%s' "$BODY" | /usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/loki_route_health.py "$RC")"; then
+if MSG="$(printf '%s' "$BODY" | /usr/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /usr/lib/homelab/loki_route_health.py "$RC")"; then
   STATUS=up
 else
   STATUS=down

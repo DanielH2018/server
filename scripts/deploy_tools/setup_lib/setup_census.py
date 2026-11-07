@@ -15,8 +15,9 @@ again after every row has moved.
 
 An item resolves to a package path or a legacy entry its host's packages carry, a unit or a
 `Depends` entry for the modules that name one, or an entry of `ALLOWLIST`, which names each
-deleted item with its reason. The arms that take the other modules (ufw, libvirt, users and
-lines) are other PRs. Until they land, an item for such a module stays in the report.
+deleted item with its reason. A line-arm edit carries its path, and a `modules-load.d` file
+carries its module. The arms that take the other modules (ufw, libvirt and users) are other PRs.
+Until they land, an item for such a module stays in the report.
 """
 
 import sys as _sys
@@ -42,10 +43,27 @@ from lib.repo_paths import REPO
 from renderer.renderer_lib import host as host_mode
 
 # The items the migration deletes rather than moves, each with the reason. A name here is an
-# item's `name`, whatever its role or host.
+# item's `name`, whatever its role or host, so a name that still runs on another host stays out.
+_PI_SWAP = (
+    "moved: bootstrap-host.sh step 4 creates the Pi's swap file, and a live Pi keeps it"
+)
 ALLOWLIST = {
     "Clear ansible log file": (
         "deleted: the log it clears belongs to ansible-playbook, which H7.20a removes"
+    ),
+    "Create swap file (Pi)": _PI_SWAP,
+    "Secure swap file permissions (Pi)": _PI_SWAP,
+    "Format swap file (Pi)": _PI_SWAP,
+    "Persist swap file in fstab (Pi)": _PI_SWAP,
+    "Activate swap file (Pi)": _PI_SWAP,
+    "Stop the hardware watchdog during provisioning (Pi)": (
+        "deleted: it guards only the dist-upgrade, which a package cannot run"
+    ),
+    "Hold the Docker engine packages (Docker hosts)": (
+        "deleted: homelab-docker-engine.service sets the hold when it installs the packages"
+    ),
+    "Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)": (
+        "deleted: no tracked file reads its output, and nothing installs it on the Pi"
     ),
 }
 
@@ -60,7 +78,8 @@ class HostSide:
     """What a host's packages carry, as the census resolves items against.
 
     Attributes:
-        paths: Every path the packages install, and every path a legacy entry retires.
+        paths: Every path the packages install, every path a line-arm edit reaches, and every
+            path a legacy entry retires.
         crons: The name of every legacy cron entry.
         units: Every unit the packages install, enable or retire, by file name.
         depends: Every `Depends` entry of every package.
@@ -86,6 +105,7 @@ def package_side(hosts_root: _Path, hosts: tuple[str, ...]) -> dict[str, HostSid
             packages.append(host_mode.render_host(host, hosts_root=hosts_root))
         for package in packages:
             side.paths.update(package.installed_paths())
+            side.paths.update(edit["path"] for edit in package.lines)
             side.units.update(package.units())
             side.units.update(package.enable_links())
             side.depends.update(package.depends)
@@ -113,6 +133,8 @@ def resolved(item: Item, side: HostSide, allowlist: dict[str, str] = ALLOWLIST) 
         return (item.name if item.kind == "timer" else item.target) in side.units
     if item.kind in _PATH_WRITERS:
         return item.target in side.paths
+    if item.kind == "modprobe":
+        return f"/etc/modules-load.d/{item.target}.conf" in side.paths
     if item.kind == "apt" and not item.absent:
         names = [
             n

@@ -1,0 +1,53 @@
+# The host baseline initial_setup applied on every host (H7.58 to H7.60,
+# docs/target-architecture/host/h7-delete-ansible.md, step 34). daniel-pi lists it first. The role's
+# `access`, `accounting`, `audit_and_kernel`, `integrity` and `host_basics` subjects skip a host
+# named in `initial_setup_packaged_hosts`.
+#
+# Owners, measured on the live Pi with `dpkg -S` on 2026-11-07:
+#
+# - /etc/sudoers.d/10-timestamp, /etc/audit/rules.d/hardening.rules,
+#   /etc/modules-load.d/wireguard.conf and /etc/systemd/coredump.conf.d/disable.conf are unowned, so
+#   they ship as files with the bytes the tasks wrote, and dpkg takes them over.
+# - /etc/modprobe.d/blacklist-rare-network.conf is a conffile of kmod, and /etc/issue is a conffile
+#   of base-files. dpkg refuses to unpack a path another package owns, so each takes the line arm.
+#   The first banner regexp also matches base-files' `Ubuntu <version>` line, so a rebuilt host
+#   shows no release string on its console.
+# - /etc/issue.net has no declaration. No tracked sshd configuration sets `Banner`, so no SSH login
+#   shows it.
+#
+# The `ssh-users` group and the sys user's membership are step 4 of hosts/bootstrap-host.sh, which
+# runs before the `sshd` component's AllowGroups line lands. A `.ssh` owner drifted to root returns
+# at the next boot, through the tmpfiles.d line.
+#
+# Keep the sudoers file valid: a malformed drop-in locks sudo out. `visudo -cf` in
+# hosts/lib/tests/test_pi_initial_setup_part3.py holds it where classic sudo is installed, which
+# excludes the ubuntu-26.04 runner. That runner's visudo rejects `timestamp_type`.
+#
+# unattended-upgrades is a Depends here. Its origin policy is the `unattended-upgrades` component's.
+# 53homelab-keep-conffiles sets `--force-confold` for every apt run on the host. Without a force-conf
+# option, unattended-upgrade skips any package whose conffile would prompt, which includes base-files
+# and kmod once the line arm edits theirs. The option keeps the edited file. A caller's own
+# `--force-confnew`, such as bootstrap's log2ram install, is still answered without a prompt.
+depends:
+  - auditd
+  - debsums
+  - jq
+  - libpam-tmpdir
+  - unattended-upgrades
+  - unzip
+  - update-notifier-common
+files:
+  - {src: templates/10-timestamp, dst: /etc/sudoers.d/10-timestamp, mode: "0440"}
+  - {src: templates/hardening.rules, dst: /etc/audit/rules.d/hardening.rules, mode: "0640", activate: "try-restart:auditd.service"}
+  - {src: templates/wireguard.conf, dst: /etc/modules-load.d/wireguard.conf, activate: modules-load}
+  - {src: templates/coredump-disable.conf, dst: /etc/systemd/coredump.conf.d/disable.conf}
+  - {src: tmpfiles.d/homelab-hardening.conf.j2, dst: /usr/lib/tmpfiles.d/homelab-hardening.conf}
+  - {src: templates/53homelab-keep-conffiles, dst: /etc/apt/apt.conf.d/53homelab-keep-conffiles}
+lines:
+  - {path: /etc/issue, line: "WARNING: Unauthorized access to this system is prohibited.", regexp: '^(Ubuntu |WARNING: Unauthorized access)'}
+  - {path: /etc/issue, line: "All connections are monitored and recorded.", regexp: '^All connections are monitored'}
+  - {path: /etc/issue, line: "Disconnect immediately if you are not an authorized user.", regexp: '^Disconnect immediately'}
+  - {path: /etc/modprobe.d/blacklist-rare-network.conf, line: "install dccp /bin/true", regexp: '^install dccp\s'}
+  - {path: /etc/modprobe.d/blacklist-rare-network.conf, line: "install sctp /bin/true", regexp: '^install sctp\s'}
+  - {path: /etc/modprobe.d/blacklist-rare-network.conf, line: "install rds /bin/true", regexp: '^install rds\s'}
+  - {path: /etc/modprobe.d/blacklist-rare-network.conf, line: "install tipc /bin/true", regexp: '^install tipc\s'}

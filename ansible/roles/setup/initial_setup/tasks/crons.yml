@@ -106,7 +106,9 @@
   # Ubuntu does not ship /usr/local/libexec, and `copy` does not create a missing parent. The
   # first apply of the install below failed on daniel-box with "Destination directory
   # /usr/local/libexec does not exist" and held the initial_setup plane.
-  when: has_claude_code
+  when:
+    - has_claude_code
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
   ansible.builtin.file:
     path: /usr/local/libexec
     state: directory
@@ -120,7 +122,9 @@
   # fanout_lib.clean.live_process_scan runs in a shell chain before any interpreter, and a shell
   # has no unix-socket redirect, so it connects with `nc -U`. Ubuntu ships this package by
   # default; naming it keeps a minimal image from turning every fan-out clean into a refusal.
-  when: has_claude_code
+  when:
+    - has_claude_code
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
   ansible.builtin.apt:
     name: netcat-openbsd
     state: present
@@ -141,7 +145,9 @@
   # repo, so a root unit naming a file there is root for whoever edits it. 0700, because only
   # the service runs it. On a file that carries an ACL, the group bits of the mode are the ACL
   # mask, so 0700 leaves any `user:claude` entry the sudo grant added with no permission.
-  when: has_claude_code
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
+    - has_claude_code
   ansible.builtin.copy:
     src: worktree_holders.py
     dest: /usr/local/libexec/worktree-holders
@@ -168,7 +174,9 @@
   # an agent, and an entry for a user with no uid matches no caller. Filtering it out would
   # leave a new agent in the socket's group but refused by the service, so every removal it
   # ran would be refused until the next apply.
-  when: has_claude_code
+  when:
+    - has_claude_code
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
   vars:
     initial_setup_worktree_holders_agents_by_host:
       daniel-box:
@@ -181,7 +189,9 @@
 
 - name: List the worktree holder scan's users and the checkout each one works in
   tags: [crons, worktree-sweep]
-  when: has_claude_code
+  when:
+    - has_claude_code
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
   ansible.builtin.set_fact:
     initial_setup_worktree_holders_users: >-
       {{ [sys_user] + initial_setup_worktree_holders_agents | map(attribute='name') | list }}
@@ -201,7 +211,9 @@
   # Root-owned: the service runs as root and trusts this file for the directory it reports on.
   # World-readable, because lib.worktrees.holder_root reads it as the caller, to ask only about
   # a tree inside the root the service scans.
-  when: has_claude_code
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
+    - has_claude_code
   ansible.builtin.copy:
     dest: /etc/worktree-holders.json
     content: >-
@@ -214,7 +226,9 @@
 
 - name: Create the group that may connect to the worktree holder scan's socket
   tags: [crons, worktree-sweep]
-  when: has_claude_code
+  when:
+    - has_claude_code
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
   ansible.builtin.group:
     name: "{{ initial_setup_worktree_holders_group }}"
     system: true
@@ -228,6 +242,7 @@
   # --check run that has not created the group, because usermod refuses a group it cannot
   # find even when it only reports.
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
     - has_claude_code
     - not (ansible_check_mode and initial_setup_worktree_holders_group_made is changed)
   ansible.builtin.user:
@@ -240,7 +255,9 @@
   tags: [crons, worktree-sweep]
   # The operator ruled on 2026-10-10 that a socket replaces the sudo grant (#4297): sudo cannot
   # gain root under claude-rc.service's NoNewPrivileges=yes, and a socket needs no setuid.
-  when: has_claude_code
+  when:
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
+    - has_claude_code
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"
@@ -258,6 +275,7 @@
   # Restarted when a unit changed, because a running socket keeps its old SocketGroup and mode.
   # Skipped by a --check run that has not written a changed unit, which systemd cannot load.
   when:
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
     - has_claude_code
     - not (ansible_check_mode and initial_setup_worktree_holders_units is changed)
   ansible.builtin.systemd_service:
@@ -278,7 +296,9 @@
 
 - name: Record the deployed worktree holder scan
   tags: [crons, worktree-sweep]
-  when: has_claude_code
+  when:
+    - has_claude_code
+    - inventory_hostname not in initial_setup_packaged_hosts['worktree_holders']
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
     stamp_deployed_name: worktree-holders

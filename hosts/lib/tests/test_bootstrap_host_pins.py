@@ -35,6 +35,20 @@ def package_pins(package: str) -> str:
     return "\n".join(line for line in tail if not line.startswith("  #"))
 
 
+def test_the_sys_user_and_swap_file_equal_the_inventory():
+    inventory = REPO / "ansible" / "inventory"
+    all_vars = (inventory / "group_vars" / "all.yml").read_text()
+    pi_vars = (inventory / "host_vars" / "daniel-pi.yml").read_text()
+    for name, value in (
+        ("SYS_USER", group(r"^sys_user: (\S+)", all_vars, re.MULTILINE)),
+        ("PI_SWAPFILE", group(r"^pi_swapfile_path: (\S+)", pi_vars, re.MULTILINE)),
+        ("PI_SWAPFILE_SIZE", group(r"^pi_swapfile_size: (\S+)", pi_vars, re.MULTILINE)),
+    ):
+        assert group(rf"^{name}=(\S+)$", SCRIPT, re.MULTILINE) == value.strip("\"'"), (
+            name
+        )
+
+
 def k3s_pins(defaults: str) -> tuple[str, ...]:
     version = group(r"^k3s_version: (\S+)", defaults, re.MULTILINE)
     url = group(r'^k3s_install_script_url: "(.+?)"', defaults, re.MULTILINE)
