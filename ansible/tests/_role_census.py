@@ -15,10 +15,6 @@ kind from being written inline.
 
 from pathlib import Path
 
-import yaml
-
-from lib import yaml_fast
-from lib.k8s_roles import RENDER_KEYS
 from lib.k8s_roles import role_dirs as _role_dirs
 
 from _helpers import K8S_ROLES, ROLES
@@ -113,21 +109,3 @@ def manifests_service_of(task: dict, role: str) -> str | None:
     if not isinstance(include, dict) or include.get("name") != "k8s/manifests":
         return None
     return str((task.get("vars") or {}).get("manifests_service", role)).strip()
-
-
-def write_fixture_role(root: Path, name: str, tasks_text: str) -> Path:
-    """Write role `name` under `root`, with each task's `RENDER_KEYS` vars moved to its defaults.
-
-    A fixture states a role as one tasks file, and the readers take these keys from defaults alone.
-    """
-    tasks = yaml_fast.safe_load(tasks_text)
-    defaults = {}
-    for task in tasks:
-        task_vars = task.get("vars") or {}
-        for key in RENDER_KEYS & task_vars.keys():
-            defaults[key] = task_vars.pop(key)
-    (root / name / "tasks").mkdir(parents=True)
-    (root / name / "defaults").mkdir()
-    (root / name / "tasks" / "main.yml").write_text(yaml.safe_dump(tasks))
-    (root / name / "defaults" / "main.yml").write_text(yaml.safe_dump(defaults))
-    return root

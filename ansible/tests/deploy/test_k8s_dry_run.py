@@ -33,7 +33,6 @@ from lib import yaml_fast
 from _helpers import ALL_VARS, REPO
 from _role_census import role_dirs, role_task_files
 
-# The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
 from _k8s_guards import (
     _GUARD_FACT,
     _chunk_mutates,
