@@ -1,4 +1,4 @@
-"""Crediting a Deployment or DaemonSet as gated by roles/k8s/manifests.
+"""Crediting a Deployment or DaemonSet as gated by a role's rollout entries.
 
 `manifests` waits on the primary rollout plus every `manifests_extra_rollouts` entry, and
 matching is by `metadata.name`. So a rendered Deployment is gated only if its name is in that
@@ -20,11 +20,9 @@ from _autodeploy import (
     _template_texts,
 )
 from _autodeploy_rollout import (
-    _MANIFEST_KIND_TO_ROLLOUT_KIND,
     _deployment_docs,
     _deployments_missing_readiness_probe,
     _gated_names,
-    _primary_rollout_kind,
     _primary_rollout_name,
     _rollout_gate_offender,
     _sets_empty_rollout,
@@ -65,41 +63,6 @@ def test_auto_deployable_roles_gate_every_deployment_they_render() -> None:
     )
 
 
-def test_auto_deployable_roles_gate_the_right_kind() -> None:
-    """Name-only gating passes a role whose rollout kind is wrong.
-
-    `_gated_names` compares names and nothing else, so a role setting
-    `manifests_rollout: node-exporter` without `manifests_rollout_kind: daemonset` reports zero
-    offenders while the shared role runs `rollout status deploy/node-exporter` against a
-    Deployment that does not exist. kubectl fails loudly at deploy time; CI stays green, which
-    is the failure this file exists to prevent.
-    """
-    offenders = []
-    for role in _roles():
-        if not _auto_deployable(role):
-            continue
-        primary = _primary_rollout_name(role)
-        if not primary:
-            continue
-        declared = _primary_rollout_kind(role)
-        texts = _template_texts(role)
-        for name in _deployment_templates(role):
-            for kind, rendered_name in _deployment_docs(texts[name]):
-                if rendered_name != primary:
-                    continue
-                expected = _MANIFEST_KIND_TO_ROLLOUT_KIND[kind]
-                if expected != declared:
-                    offenders.append(
-                        f"{role.name}: {name} renders a {kind}, so the rollout gate "
-                        f"needs manifests_rollout_kind: {expected}, but the role declares "
-                        f"{declared!r}"
-                    )
-    assert not offenders, (
-        "Auto-deployable role(s) whose rollout gate names the wrong kind — `rollout status` "
-        "would target a workload that does not exist:\n" + "\n".join(offenders)
-    )
-
-
 def test_auto_deployable_roles_declare_a_readiness_probe() -> None:
     offenders = []
     for role in _roles():
@@ -127,12 +90,9 @@ def test_readiness_probe_check_covers_every_gated_deployment(widget_role) -> Non
     what catches the extra.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_extra_rollouts:\n"
-        "      - name: widget-cache\n",
+        defaults="manifests_service: widget\n"
+        "manifests_extra_rollouts:\n"
+        "  - name: widget-cache\n",
         templates={},
     )
     (role / "templates" / "deployment.yaml.j2").write_text(
@@ -180,12 +140,8 @@ def test_rollout_gate_credits_a_fully_gated_batch_role(widget_role) -> None:
     is the positive-proof case `_rollout_gate_offender` exists to recognise.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''\n"
-        "- ansible.builtin.command:\n"
+        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
+        tasks="- ansible.builtin.command:\n"
         "    cmd: kubectl wait --for=condition=complete job/widget --timeout=180s\n",
         templates={},
     )
@@ -204,11 +160,7 @@ def test_rollout_gate_flags_a_batch_role_that_does_not_gate_its_workload(
     that workload's own name, or nothing here has proven anything.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''\n",
+        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
         templates={},
     )
     (role / "templates" / "job.yaml.j2").write_text(
@@ -226,11 +178,7 @@ def test_rollout_gate_flags_a_role_rendering_no_workloads(widget_role) -> None:
     fail-closed rather than earning the same pass a fully-gated role gets.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''\n",
+        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
         templates={},
     )
     assert _rollout_gate_offender(role) is True
@@ -247,11 +195,8 @@ def test_rollout_gate_tolerates_a_trailing_comment_on_the_empty_rollout(
     invisible to the check.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''  # nothing to roll\n",
+        defaults="manifests_service: widget\n"
+        "manifests_rollout: ''  # nothing to roll\n",
         templates={},
     )
     assert _sets_empty_rollout(role) is True
@@ -270,11 +215,7 @@ def test_primary_rollout_name_agrees_with_sets_empty_rollout_on_a_comment(
     Deployment check happens to catch every affected role.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''  # nothing to roll\n"
+        defaults="manifests_service: widget\nmanifests_rollout: ''  # nothing to roll\n"
     )
     assert _primary_rollout_name(role) == ""
 
@@ -289,12 +230,8 @@ def _widget_with_a_deployment(
     document.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''\n"
-        "- name: Wait for widget-job\n"
+        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
+        tasks="- name: Wait for widget-job\n"
         "  tags: [deploy]\n"
         "  ansible.builtin.command:\n"
         "    cmd: k3s kubectl wait --for=condition=complete job/widget-job --timeout=120s\n",
@@ -360,12 +297,8 @@ def test_rollout_gate_flags_one_gated_and_one_ungated_batch_workload(
     fixture goes red under that substitution.
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''\n"
-        "- name: Wait for widget-a\n"
+        defaults="manifests_service: widget\nmanifests_rollout: ''\n",
+        tasks="- name: Wait for widget-a\n"
         "  tags: [deploy]\n"
         "  ansible.builtin.command:\n"
         "    cmd: k3s kubectl wait --for=condition=complete job/widget-a --timeout=120s\n",
@@ -392,13 +325,10 @@ def test_rollout_gate_does_not_falsely_accuse_a_role_gated_via_extras(
     primary-or-extra) instead of "renders any Deployment at all".
     """
     role = widget_role(
-        "- ansible.builtin.include_role:\n"
-        "    name: k8s/manifests\n"
-        "  vars:\n"
-        "    manifests_service: widget\n"
-        "    manifests_rollout: ''\n"
-        "    manifests_extra_rollouts:\n"
-        "      - name: widget-extra\n",
+        defaults="manifests_service: widget\n"
+        "manifests_rollout: ''\n"
+        "manifests_extra_rollouts:\n"
+        "  - name: widget-extra\n",
         templates={},
     )
     (role / "templates" / "deployment-extra.yaml.j2").write_text(

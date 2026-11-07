@@ -10,7 +10,7 @@ An entry opts out with `probe: false`, and says why in a comment. That is the ke
 
 No Ansible import, so `probe_lib/health_alerts.py` reads the same function the playbook runs.
 `FilterModule` registers the filter through `_as_filter`, so a refusal reaches the operator as
-`AnsibleFilterError("ingress_probe_targets: ...")` (#4505).
+`FilterError("ingress_probe_targets: ...")` (#4505).
 """
 
 import sys as _sys

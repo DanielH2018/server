@@ -14,8 +14,7 @@ THE MODEL, measured on ansible-core against a probe playbook:
     included from a caller's `apply`-tagged role ran its untagged tasks under the caller's tag.
 
 So the walk only descends where nothing is inherited: into an `include_*` without `apply`,
-whose target must then tag every task itself. `k8s/manifests/tasks/drain.yml` is the live instance, and
-its CLAUDE.md records why its `tags: [always]` are load-bearing.
+whose target must then tag every task itself.
 
 A shared role inside a workload role is covered by this model, but its tag is the caller's.
 
@@ -130,12 +129,7 @@ def unselectable(ansible: Path, playbooks=PLAYBOOKS) -> tuple[list[str], set[str
 # The files the walk must descend into on the real tree. Its result is expected to be empty,
 # and an empty result is also what a walker that stopped descending returns.
 MUST_VISIT = frozenset(
-    {
-        "tasks/k8s_batch.yml",
-        "post_tasks/k8s_stabilise_gate.yml",
-        "post_tasks/k8s_image_drift_gate.yml",
-        "roles/k8s/manifests/tasks/drain.yml",
-    }
+    {"roles/setup/k3s/tasks/agent.yml", "roles/setup/k3s/tasks/agent_verify.yml"}
 )
 
 

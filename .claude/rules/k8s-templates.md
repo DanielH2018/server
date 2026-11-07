@@ -14,8 +14,7 @@ a `lookup('template')` naming a `templates/` path outside `config/` (a `*.sh.j2`
 that renders a document with no `kind` — and `is_manifest_template` in
 `scripts/lib/k8s_roles.py` names the two shapes it exempts (`Dockerfile*`, `*.sh.j2`).
 
-The shared render → apply → queue contract every k8s role includes is
-`ansible/roles/k8s/manifests/CLAUDE.md`.
+`docs/homelab-render.md`, *The file rules*, has the render contract every k8s role meets.
 
 ## Removing a key from a Secret template
 

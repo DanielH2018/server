@@ -39,7 +39,6 @@ __all__ = [
     "MANIFESTS_PRUNE_DEFAULT",
     "ROLLOUT_TIMEOUT_DEFAULT",
     "SHARED_MANIFEST_DEFAULTS",
-    "SHARED_ROLES",
     "SKIP_ROLES",
     "claim_contexts",
     "is_leftover_dir",
@@ -55,7 +54,6 @@ __all__ = [
     "role_dirs",
     "OWNER_VALUES",
     "RENDER_KEYS",
-    "refuse_moved_keys_in_tasks",
     "tag_owners",
 ]
 
@@ -92,57 +90,14 @@ def role_dirs(roles_dir: Path = K8S_ROLES, exclude: Collection[str] = ()) -> lis
     """Every real role directory under `roles_dir`, sorted, minus the names in `exclude`.
 
     A retired role's debris is always dropped (`is_leftover_dir`). `exclude` is how a reader
-    states the roles it skips on purpose: the validator passes `SKIP_ROLES`, the stance count
-    passes `SHARED_ROLES`. `roles_dir` may be any plane's tree, so the setup-role readers walk
-    through here too.
+    states the roles it skips on purpose: the validator passes `SKIP_ROLES`. `roles_dir` may be
+    any plane's tree, so the setup-role readers walk through here too.
     """
     return sorted(
         d
         for d in roles_dir.iterdir()
         if d.is_dir() and d.name not in exclude and not is_leftover_dir(d)
     )
-
-
-# Roles under roles/k8s/ that deploy no service of their own: other roles include them. They
-# carry no defaults/main.yml and declare no stance. Every other role must declare one.
-#
-# No role named here may pin an `_image:` var, because a pin makes a role Renovate-visible and
-# so a candidate for automerge.
-SHARED_ROLES = frozenset({"manifests"})
-
-
-def _check_shared_roles(roles_dir: Path) -> None:
-    """Raise when a `SHARED_ROLES` member is missing from `roles_dir` or pins an image.
-
-    A misspelt member excludes nothing, and iterating the directory never notices a name that
-    is not there. Only defaults/main.yml is read, because Renovate's manager reads image pins
-    from there.
-    """
-    for member in sorted(SHARED_ROLES):
-        if not (roles_dir / member).is_dir():
-            raise ValueError(
-                f"k8s_autodeploy_denylist: SHARED_ROLES member '{member}' is not a "
-                f"directory under {roles_dir}. Fix the name in SHARED_ROLES or remove the "
-                f"entry."
-            )
-        defaults = roles_dir / member / "defaults" / "main.yml"
-        if not defaults.is_file():
-            continue
-        try:
-            data = yaml_fast.safe_load(defaults.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
-            raise ValueError(
-                f"k8s_autodeploy_denylist: cannot read SHARED_ROLES member '{member}' "
-                f"defaults ({defaults}): {exc}"
-            ) from exc
-        if isinstance(data, dict):
-            image_keys = [key for key in data if str(key).endswith("_image")]
-            if image_keys:
-                raise ValueError(
-                    f"k8s_autodeploy_denylist: SHARED_ROLES member '{member}' pins "
-                    f"{image_keys} in {defaults}. Remove it from SHARED_ROLES and let it "
-                    f"declare k8s_autodeploy like any other role."
-                )
 
 
 def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
@@ -157,13 +112,11 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
 
     Raises:
         ValueError: a role declares no boolean stance or no reason, its defaults cannot be
-            read, an entry is not a directory, `SHARED_ROLES` is wrong, or the list is empty.
+            read, an entry is not a directory, or the list is empty.
     """
     roles_dir = Path(ansible_dir) / "roles" / "k8s"
     if not roles_dir.is_dir():
         raise ValueError(f"k8s_autodeploy_denylist: no such directory: {roles_dir}")
-
-    _check_shared_roles(roles_dir)
 
     denied = []
     for entry in sorted(roles_dir.iterdir()):
@@ -176,7 +129,7 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
                 f"roles/k8s/ must be a real role directory declaring `k8s_autodeploy`; a "
                 f"dangling symlink is one likely cause."
             )
-        if is_leftover_dir(entry) or role in SHARED_ROLES:
+        if is_leftover_dir(entry):
             continue
 
         path = entry / "defaults" / "main.yml"
@@ -184,8 +137,7 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
             raise ValueError(
                 f"k8s_autodeploy_denylist: role '{role}' has no defaults/main.yml and so "
                 f"declares no `k8s_autodeploy` stance. Add one (copy the shape from a "
-                f"sibling role), or add the role to SHARED_ROLES if it deploys no service "
-                f"of its own."
+                f"sibling role)."
             )
         try:
             data = yaml_fast.safe_load(path.read_text(encoding="utf-8"))
@@ -229,7 +181,7 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
 #
 # volume-snapshot applies one Longhorn Snapshot CR per claim, built inline and piped to `kubectl
 # apply -f -` — per-deploy state rather than part of a service's manifest set, and
-# `ansible/tests/longhorn/test_volume_snapshot.py` is what checks its shape instead.
+# `scripts/renderer/tests/test_renderer_snapshot.py` is what checks its shape instead.
 #
 # Split into the two classes the comment above already distinguishes, because they rot in
 # opposite directions and a single set cannot be checked either way. NO_MANIFEST_ROLES makes a
@@ -238,7 +190,6 @@ def k8s_autodeploy_denylist(ansible_dir: Path | str) -> list[str]:
 # claim, asserted the opposite way, so an entry that stops carrying templates is caught as a
 # stale exemption rather than left as a name nobody can justify.
 NO_MANIFEST_ROLES = {
-    "manifests",
     "volume-snapshot",
     "longhorn-api",  # resolves a fact only, same as volume-snapshot
     "volume-revert",  # reverts a volume through kubectl and the Longhorn API
@@ -386,7 +337,7 @@ def k8s_tags(host_vars: Path = K8S_HOST_VARS) -> set[str]:
     }
 
 
-# Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`
+# Manifest basenames the renderer renders from a shared template under `ansible/templates/`
 # when the owning role ships none of its own, mapped to that template's file name. Mirrors
 # The manifests role's two defaults the render reads. A role with no `manifests_prune` of its own
 # arms the prune and renders the `homelab/role` label, and one with no
@@ -394,12 +345,7 @@ def k8s_tags(host_vars: Path = K8S_HOST_VARS) -> set[str]:
 MANIFESTS_PRUNE_DEFAULT = True
 ROLLOUT_TIMEOUT_DEFAULT = "600s"
 
-# `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml, which
-# `ansible/tests/k8s/test_shared_manifest_defaults.py` holds it equal to.
-#
-# Duplicated here rather than read out of that YAML because every consumer is an offline render
-# harness: reading the role default would make the harnesses depend on parsing a file whose
-# other keys they have no use for, and the guard catches the drift either way.
+# The template that renders each manifest a role ships no template for.
 SHARED_MANIFEST_DEFAULTS = {
     "service.yaml": "service-default.yaml.j2",
     "ingressroute.yaml": "ingressroute-default.yaml.j2",
@@ -414,9 +360,7 @@ _MANIFEST_FILE_KEY = re.compile(
 _MANIFEST_BASENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml\b")
 _YAML_COMMENT = re.compile(r"(^|\s)#.*$")
 
-# The derivation `k8s/manifests` applies to a role that sets no `manifests_files` (#3662).
-# ansible/roles/k8s/manifests/tasks/main.yml ("Resolve the manifest file lists") is the deploy's
-# copy, and ansible/tests/k8s/test_derived_manifest_files.py holds the two in step.
+# The derivation for a role that sets no `manifests_files` (#3662).
 #
 # A role's own manifests are its top-level `templates/*.yaml.j2`. A Dockerfile, a `.sh.j2` and a
 # `templates/config/` file are not, by their name or their depth.
@@ -431,8 +375,7 @@ SECRET_MANIFEST_NAME = re.compile(r"(^|-)secret[-.]")
 SHARED_DEFAULT_TRIGGERS = {"service.yaml": "port", "ingressroute.yaml": "hostname"}
 
 
-# The render metadata a role sets in its defaults/main.yml, and the keys of the image builds it
-# sets there. A key the renderer starts reading joins this set, and so joins the refusal.
+# The render metadata a role sets in its defaults/main.yml.
 RENDER_KEYS = frozenset(
     {
         "manifests_deferred_dir_name",
@@ -447,62 +390,6 @@ RENDER_KEYS = frozenset(
         "manifests_self_rollouts",
     }
 )
-# `role_fields` reads the timeout from defaults alone, so one set in `tasks/` renders 600s (#5464).
-_MOVED_KEYS = RENDER_KEYS | {
-    "image_builder_builds",
-    "image_builder_name",
-    "manifests_rollout_timeout",
-}
-
-
-def _moved_keys(node: object) -> set[str]:
-    """The moved keys anywhere in parsed YAML, and any `image_builder_*` var on its include."""
-    if isinstance(node, list):
-        return {key for item in node for key in _moved_keys(item)}
-    if not isinstance(node, dict):
-        return set()
-    found = set(_MOVED_KEYS & node.keys())
-    task_vars = node.get("vars")
-    if isinstance(task_vars, dict) and any(
-        isinstance(args, dict) and args.get("name") == "k8s/image-builder"
-        for args in node.values()
-    ):
-        found |= {key for key in task_vars if str(key).startswith("image_builder_")}
-    return found | {key for value in node.values() for key in _moved_keys(value)}
-
-
-# Keyed on the text, so an edit between two renders reaches the second, and a render reads each
-# role's tasks once per reader (#5900).
-@functools.lru_cache(maxsize=512)
-def _moved_keys_in_text(text: str) -> frozenset[str]:
-    return frozenset(_moved_keys(yaml_fast.safe_load(text)))
-
-
-def refuse_moved_keys_in_tasks(role_dir: Path, entry: dict | None = None) -> None:
-    """Raise when `role_dir`'s `tasks/` still sets a key the renderer reads from defaults.
-
-    The renderer takes no value from `tasks/`, so such a key would silently stop rendering.
-    This refusal is the one read of a task file on the render path. A `manifests_*` key only
-    Ansible reads is outside the set and passes. So does a role whose `containers_list` entry
-    is not flux-owned: Flux applies nothing of its render, so the keys belong on its include.
-
-    Args:
-        role_dir: The role directory.
-        entry: The role's `containers_list` entry. Omitted, it is read from the k8s host's vars.
-
-    Raises:
-        ValueError: A file under `tasks/` sets a key of the set.
-    """
-    entry = _real_entry(role_dir.name) if entry is None else entry
-    if entry and entry.get("owner") != "flux":
-        return
-    for path in sorted((role_dir / "tasks").glob("*.y*ml")):
-        found = sorted(_moved_keys_in_text(path.read_text()))
-        if found:
-            raise ValueError(
-                f"{role_dir.name} sets {found} in tasks/{path.name}, and the renderer reads "
-                "them from defaults/main.yml"
-            )
 
 
 def _named_files(role, roles_dir: Path) -> dict[str, set[str]]:
@@ -512,7 +399,6 @@ def _named_files(role, roles_dir: Path) -> dict[str, set[str]]:
         ValueError: The role has no defaults/main.yml, or its `tasks/` sets a moved key.
     """
     role_dir = roles_dir / role
-    refuse_moved_keys_in_tasks(role_dir)
     defaults = role_dir / "defaults" / "main.yml"
     if not defaults.is_file():
         raise ValueError(f"{role} has no defaults/main.yml")
@@ -558,7 +444,7 @@ def _cached_k8s_entries() -> dict[str, dict]:
 def resolved_manifest_files(
     role, k8s_roles=None, entry=None
 ) -> tuple[set[str], set[str]]:
-    """`(manifests_files, manifests_secret_files)` as `k8s/manifests` resolves them for `role`.
+    """`(manifests_files, manifests_secret_files)` as the renderer resolves them for `role`.
 
     A list the role sets wins. Otherwise the list is derived:
 
@@ -607,7 +493,7 @@ def resolved_manifest_files(
 
 
 def declared_manifest_files(role, k8s_roles=None, entry=None) -> set[str]:
-    """Every manifest basename `k8s/manifests` renders into `role`'s staging directory.
+    """Every manifest basename the renderer renders for `role`.
 
     Its files and its secret files, as `resolved_manifest_files` resolves them. The deploy
     renders exactly these, so this is also the list an offline harness has to cover to render
@@ -618,7 +504,7 @@ def declared_manifest_files(role, k8s_roles=None, entry=None) -> set[str]:
 
 
 def manifest_template(role, basename, k8s_roles=None, entry=None) -> Path | None:
-    """The template `k8s/manifests` renders `basename` from for `role`, or None if it renders none.
+    """The template the renderer renders `basename` from for `role`, or None if it renders none.
 
     The role's own `templates/<basename>.j2` first, then the shared default under
     `ansible/templates/` for a basename the role resolves into `manifests_files` and ships
@@ -641,7 +527,7 @@ def manifest_template(role, basename, k8s_roles=None, entry=None) -> Path | None
 
 
 def shared_default_templates(role, k8s_roles=None, entry=None) -> list[Path]:
-    """The shared templates `k8s/manifests` renders for `role` because it ships none itself.
+    """The shared templates the renderer renders for `role` because it ships none itself.
 
     Sorted, so a harness iterating this renders in a stable order.
     """
@@ -655,7 +541,7 @@ def shared_default_templates(role, k8s_roles=None, entry=None) -> list[Path]:
     )
 
 
-# The shared template `k8s/manifests` renders once per entry of a role's `k8s_claims`, as
+# The shared template the renderer renders once per entry of a role's `k8s_claims`, as
 # `claim-<name>.yaml`. One template, many renders, so a harness cannot find these claims by
 # walking templates: it renders this once per context `claim_contexts` returns.
 CLAIM_TEMPLATE = SHARED_TPL / "claim-default.yaml.j2"

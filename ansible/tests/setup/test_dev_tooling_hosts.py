@@ -38,6 +38,7 @@ KNOWN_TOOLING_TASKS = frozenset(
     {
         "Install uv (per-user; PEP 668-safe on 24.04+)",
         "Install Python CLI tooling as uv tools",
+        "Install prek as a uv tool",
         "Install the pinned host Python",
         "Publish uv at a stable path for systemd and cron",
         "Pin the Vale version this host installs",

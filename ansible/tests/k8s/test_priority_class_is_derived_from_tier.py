@@ -11,7 +11,7 @@ Run: uv run pytest ansible/tests/k8s/test_priority_class_is_derived_from_tier.py
 import re
 
 import pytest
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 
 from _helpers import K8S_ROLES
 from _k8s_render import k8s_entries
@@ -135,9 +135,8 @@ def test_every_tier_names_a_declared_priority_class():
         "claims-unknown-tier",
     ],
 )
-def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
     """A render failure names the filter that refused, through the filter Ansible calls (#4480)."""
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         FilterModule().filters()[name](*args)
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)

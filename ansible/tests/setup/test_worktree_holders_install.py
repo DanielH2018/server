@@ -2,10 +2,13 @@
 
 `lib.worktrees.privileged_holders` and `fanout_lib.clean.live_process_scan` connect to
 `WORKTREE_HOLDERS_SOCKET`; the socket unit listens there, and its per-connection service runs
-the helper the role installs. If those drift apart, every caller falls back to the
+the helper the package or the role installs. If those drift apart, every caller falls back to the
 unprivileged scan, or every removal is refused. The root map both the helper and the caller
 read names each user's worktree root, and it must name every agent user a host package
 declares (#4295, #6831). The sudo grant the socket replaced must be gone from every host (#4297).
+
+daniel-server gets all of it from the `worktree-holders` component (H7.61), and daniel-box from
+the role until H7.62.
 
 Run: uv run pytest ansible/tests/setup/test_worktree_holders_install.py
 """
@@ -13,6 +16,7 @@ Run: uv run pytest ansible/tests/setup/test_worktree_holders_install.py
 import json
 from pathlib import PurePosixPath
 
+import pytest
 from _helpers import (
     HOST_VARS,
     REPO,
@@ -24,8 +28,20 @@ from _helpers import (
 from _setup_render import render_setup_text, rendered_setup_text
 from lib import yaml_fast
 from lib.worktrees import WORKTREE_HOLDER_ROOTS, WORKTREE_HOLDERS_SOCKET
+from renderer.renderer_lib import host as host_mode
 
 CRONS = SETUP_ROLES / "initial_setup" / "tasks" / "crons.yml"
+COMPONENT = REPO / "hosts" / "components" / "worktree-holders" / "component.yml"
+UNITS = "/usr/lib/systemd/system"
+PACKAGED_HELPER = "/usr/lib/homelab/worktree-holders"
+# What the role wrote on the host, each of which reconcile must retire.
+RETIRED_PATHS = {
+    "/etc/systemd/system/worktree-holders.socket",
+    "/etc/systemd/system/worktree-holders@.service",
+    "/etc/systemd/system/sockets.target.wants/worktree-holders.socket",
+    "/usr/local/libexec/worktree-holders",
+    "/var/lib/homelab/setup-deployed-manifest.d/worktree-holders",
+}
 HELPER = "/usr/local/libexec/worktree-holders"
 INSTALL = "Install the root-run worktree holder scan"
 AGENTS = "Name the agent users granted the worktree holder scan"
@@ -252,3 +268,61 @@ def test_a_sudoers_removal_only_off_claude_hosts_is_flagged():
     gated = [{**t, "when": "not has_claude_code"} if t is task else t for t in tasks]
 
     assert not _sudoers_removed_everywhere(gated)
+
+
+@pytest.fixture(scope="module")
+def server_package() -> host_mode.Package:
+    return host_mode.render_host("daniel-server")
+
+
+def _text(package: host_mode.Package, dst: str) -> str:
+    return package.files[dst][0].decode()
+
+
+def test_the_packaged_socket_and_service_meet_the_callers_is_clean(server_package):
+    socket = _directives(_text(server_package, f"{UNITS}/worktree-holders.socket"))
+    service = _directives(_text(server_package, f"{UNITS}/worktree-holders@.service"))
+
+    assert _units_meet_the_callers(socket, service, PACKAGED_HELPER)
+    assert _only_the_group_may_connect(socket)
+    assert socket["SocketGroup"] == "worktree-holders"
+    assert server_package.files[PACKAGED_HELPER][1] == 0o700
+    assert HELPER not in server_package.files
+
+
+def test_the_packaged_socket_makes_its_group_before_systemd_binds(server_package):
+    # SocketGroup= fails the socket on a host where the group does not exist yet.
+    lines = _text(server_package, f"{UNITS}/worktree-holders.socket").splitlines()
+    assert [line for line in lines if line.startswith("ExecStartPre=")] == [
+        "ExecStartPre=+/usr/sbin/groupadd -f -r worktree-holders",
+        "ExecStartPre=+/usr/sbin/usermod -aG worktree-holders ubuntu",
+    ]
+
+
+def test_the_packaged_root_map_names_the_operator_and_the_package_agents(
+    server_package,
+):
+    packaged = json.loads(_text(server_package, WORKTREE_HOLDER_ROOTS))
+
+    assert packaged == {
+        "ubuntu": "/home/ubuntu/server/.claude/worktrees",
+        **_package_agent_roots()["daniel-server"],
+    }
+
+
+def test_reconcile_retires_what_the_role_installed_and_only_daniel_server_lists_it(
+    server_package,
+):
+    manifest = json.loads(server_package.files["/usr/lib/homelab/manifest.json"][0])
+
+    assert RETIRED_PATHS <= {e.get("path") for e in manifest["legacy"]}
+    assert "worktree-holders.socket" in manifest["enable_links"]
+    assert "netcat-openbsd" in server_package.depends
+    # The way out: every installed path follows the flag the role's teardown read.
+    spec = yaml_fast.safe_load(COMPONENT.read_text())
+    assert {f.get("when") for f in spec["files"]} == {"has_claude_code"}
+    assert spec["enable"]["worktree-holders.socket"]["when"] == "has_claude_code"
+    # Canary order: daniel-box keeps the role's copy until H7.62.
+    box = host_mode.render_host("daniel-box")
+    assert WORKTREE_HOLDER_ROOTS not in box.files
+    assert f"{UNITS}/worktree-holders.socket" not in box.files

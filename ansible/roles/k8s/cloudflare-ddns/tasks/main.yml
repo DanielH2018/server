@@ -1,4 +1,0 @@
----
-- name: Deploy cloudflare-ddns to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests

@@ -1,7 +1,7 @@
 """`declared_manifest_files` reads every value shape a caller writes a file list in.
 
 The offline render harnesses ask this which manifests a role renders, so they can render
-the shared default `k8s/manifests` would render for a basename the role ships no template for.
+the shared default the renderer would render for a basename the role ships no template for.
 A shape it fails to read returns fewer names, the harness renders one manifest fewer,
 and every guard built on the corpus passes with less coverage than yesterday.
 
@@ -209,13 +209,3 @@ def test_a_folded_list_in_defaults_is_read(tmp_path):
         {"deployment.yaml", "route.yaml"},
         {"secret.yaml"},
     )
-
-
-def test_a_file_list_set_in_tasks_is_flagged(tmp_path):
-    role = _role(tmp_path, "widget", "---\n")
-    (role / "tasks").mkdir()
-    (role / "tasks" / "main.yml").write_text(
-        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [a.yaml]\n"
-    )
-    with pytest.raises(ValueError, match=r"manifests_files.*tasks/main\.yml"):
-        resolved_manifest_files("widget", tmp_path)

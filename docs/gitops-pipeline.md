@@ -144,11 +144,8 @@ The setup/deploy split exists because `deploy.yml` is a `containers_list` loop a
 nothing for the setup plane, so pointing an operator at it for a `roles/setup/` change is a
 no-op that leaves the change unapplied.
 
-That loop skips an entry that carries `owner`. The k8s play batches `containers_list |
-ansible_owned`, and `ansible_owned` in `ansible/filter_plugins/toposort.py` keeps only the
-entries without `owner`. Flux applies an entry with `owner: flux`. The `containers_list` fact keeps
-every entry, because templates read it. A `deploy.yml` or `toposort.py` change is still
-broad, so the deployer applies none of it.
+Flux applies an entry with `owner: flux`. A `deploy.yml` or `toposort.py` change is broad, so the
+deployer applies none of it.
 
 A setup role the deployer cannot apply is a fourth case. `k3s` lives in `k3s-bringup.yml` and
 `common` in no playbook, so `setup_tags_for` derives nothing for either. Such a range
@@ -232,7 +229,7 @@ applied. D6.15 removed the `narrow` subcommand. The two rules below remain in
 
 - **A shared template maps to the roles that import it.** A name inside a Jinja `{# #}` comment is
   not an import. `claim-default.yaml.j2` maps to the roles whose `defaults/main.yml` declares
-  `k8s_claims`, not to every caller of `k8s/manifests`, and the derivation refuses if
+  `k8s_claims`, not to every k8s role, and the derivation refuses if
   `k8s_claims` is set anywhere but a role's defaults. An edit that changes only a shared
   template's Jinja comments maps to no tags: the rule compares the template's `jinja2` lexer
   token streams without comments, under both `trim_blocks` settings.
@@ -240,8 +237,8 @@ applied. D6.15 removed the `narrow` subcommand. The two rules below remain in
 - **A filter plugin maps to the roles that call its filters.** `ansible/filter_plugins/` is a
   play-level prefix, so without this rule every change under it refuses. The rule reads the names the
   plugin's `FilterModule.filters()` returns, at both refs, and greps the role trees, the shared
-  templates and the play's own trees for each one. A call from `deploy.yml`, `pre_tasks/`,
-  `tasks/` or `post_tasks/` still refuses, as do an inventory value that calls the filter, a
+  templates and the play's own trees for each one. A call from `deploy.yml` or `pre_tasks/`
+  still refuses, as do an inventory value that calls the filter, a
   `filters()` that is not a literal dict, a deleted plugin and a plugin another plugin imports.
   An edit to comments, docstrings or layout alone reaches no caller in either plane (#4412).
   `filters.comment_only` compares the module's parse tree, less its docstrings, at both refs.
@@ -271,9 +268,8 @@ A `containers_list` entry that sets `owner` is not Ansible-owned: with `owner: f
 applies the tag through `promote`. The tick skips such a tag, so the deployer never
 applies, defers, alerts on or owes it. D2's plan has the design:
 [The ownership flag and its three readers](target-architecture/deploy/d2-first-leaf.md#the-ownership-flag-and-its-three-readers).
-`ansible/tests/deploy/test_owner_readers_agree.py` holds the two readers that remain equal,
-`scripts/lib/k8s_roles.py:tag_owners` and the `ansible_owned` filter. Each raises on an `owner`
-value other than `flux`.
+`scripts/lib/k8s_roles.py:tag_owners` reads the flag and raises on an `owner` value other than
+`flux`.
 
 ### Both apply arms are forward-only
 

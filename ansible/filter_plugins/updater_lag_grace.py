@@ -16,8 +16,7 @@ drop-in over it, plus the timer's `RandomizedDelaySec`, plus the service's `Time
 on the schedule, such as a trust refusal or a red master, so a dense schedule never lowers it.
 
 The schedule reader is `scripts/lib/systemd_timer.py`, which Ansible cannot import by name.
-This module loads it by path, as `standalone_guard.py` does for its resolver, so `scripts/`
-stays off `sys.path`.
+This module loads it by path, so `scripts/` stays off `sys.path`.
 
 `FilterModule.filters()` returns one literal dict, because
 `scripts/deploy_tools/narrow_lib/filters.py:filter_names` reads the filter names statically.

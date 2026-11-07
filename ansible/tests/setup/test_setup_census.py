@@ -23,6 +23,7 @@ from deploy_tools.setup_lib.setup_census import (
     ALLOWLIST,
     HostSide,
     items_left,
+    package_side,
     resolved,
     strict_exit,
 )
@@ -79,7 +80,7 @@ NAMED_MEMBERS = [
     ("template", "Install the host forwarder's unit"),
     ("template", "Pin the node's LAN address in netplan"),
     ("get_url", "Download the pinned CoreDNS release"),
-    ("systemd_service", "Disable the legacy performance-governor unit (daniel-server)"),
+    ("systemd_service", "Listen on the worktree holder scan's socket"),
     ("sysctl", "Raise the inotify instance limit for pod log tailing"),
     ("ufw", "Allow cluster traffic from agent nodes"),
 ]
@@ -239,6 +240,25 @@ def test_a_path_a_package_installs_resolves_and_another_path_does_not():
     item = Item("daniel-box", "r", "template", "Unit", target="/etc/demo.conf")
     assert resolved(item, _side(paths={"/etc/demo.conf"}))
     assert not resolved(item, _side(paths={"/etc/other.conf"}))
+
+
+def test_a_line_arm_path_resolves_a_copy_of_that_path(tmp_path):
+    package = tmp_path / "daniel-pi"
+    package.mkdir()
+    (package / "package.yml").write_text(
+        "description: d\n"
+        "lines:\n"
+        "  - {path: /etc/issue, line: banner, regexp: '^banner'}\n"
+    )
+    side = package_side(tmp_path, ("daniel-pi",))["daniel-pi"]
+    assert "/etc/issue" in side.paths
+    assert "/etc/issue.net" not in side.paths
+
+
+def test_a_modprobe_item_resolves_only_through_its_modules_load_file():
+    item = Item("daniel-pi", "r", "modprobe", "Load", target="wireguard")
+    assert resolved(item, _side(paths={"/etc/modules-load.d/wireguard.conf"}))
+    assert not resolved(item, _side(paths={"/etc/modules-load.d/other.conf"}))
 
 
 def test_a_legacy_cron_resolves_the_cron_with_that_name():

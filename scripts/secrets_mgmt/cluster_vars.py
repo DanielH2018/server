@@ -121,19 +121,18 @@ def fleet_expected() -> Expected:
     """The expectations of a placeholder render of every k8s render target.
 
     The renderer is imported here rather than at the top, so `--no-render` and
-    `--ciphertext-only` never pay for loading Ansible.
+    `--ciphertext-only` never pay for loading it.
 
     Raises:
         RenderError: A template fails to render.
     """
-    from renderer.homelab_render import ansible_local_temp, secret_keys
+    from renderer.homelab_render import secret_keys
     from renderer.renderer_lib.cluster import select_tags
     from renderer.renderer_lib.placeholders import Sentinels, render_placeholders
     from renderer.renderer_lib.sops_entries import SOPS_MANIFEST_KEYS
 
     keys = secret_keys()
-    with ansible_local_temp():
-        render = render_placeholders(select_tags(None), keys)
+    render = render_placeholders(select_tags(None), keys)
     referenced = frozenset().union(*render.key_sets.values()) - SOPS_MANIFEST_KEYS
     sentinels = Sentinels(keys)
     entries = tuple(

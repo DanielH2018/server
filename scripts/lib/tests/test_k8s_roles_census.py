@@ -27,5 +27,5 @@ def test_an_excluded_name_is_dropped(tmp_path):
 
 def test_the_live_tree_census_names_known_roles():
     names = {d.name for d in role_dirs(K8S_ROLES)}
-    assert {"traefik", "authelia", "manifests"} <= names
+    assert {"traefik", "authelia", "flux"} <= names
     assert not SKIP_ROLES & {d.name for d in role_dirs(K8S_ROLES, exclude=SKIP_ROLES)}

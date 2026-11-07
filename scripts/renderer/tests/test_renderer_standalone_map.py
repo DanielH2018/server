@@ -1,7 +1,6 @@
 """The standalone-value guard's committed map covers every standalone use (target slice R2).
 
-The deploy path reads `ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, not the
-render, so a template change that adds a standalone use would leave the map short. This test
+`scripts/renderer/job_files/standalone_secret_keys.json` is committed, so a template change that adds a standalone use would leave the map short. This test
 renders the fleet in placeholder mode once and holds the map to it.
 
 Run: uv run pytest scripts/renderer/tests/test_renderer_standalone_map.py

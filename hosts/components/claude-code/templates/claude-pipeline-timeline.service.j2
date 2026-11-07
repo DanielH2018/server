@@ -27,7 +27,7 @@ SyslogLevel=notice
 # rows supersede an earlier one's for the same PR. One rsync of daniel-server's review records
 # per run stays inside the `ufw limit ssh` budget.
 TimeoutStartSec=30min
-ExecStart=/usr/local/bin/uv run --no-python-downloads python scripts/dev/pipeline_timeline.py --days {{ claude_code_pipeline_timeline_days }} --pull-reviews {{ claude_code_pipeline_timeline_server_host }}
+ExecStart=/usr/bin/uv run --no-python-downloads python scripts/dev/pipeline_timeline.py --days {{ claude_code_pipeline_timeline_days }} --pull-reviews {{ claude_code_pipeline_timeline_server_host }}
 # The textfile that tells a timer which stopped firing from one that runs clean (#6165).
 # timer-textfile.j2 has the shape and the deadline rule.
 # 1800 is TimeoutStartSec above, the longest a healthy run may take.

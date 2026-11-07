@@ -3,10 +3,8 @@
 # took before a failed revision applied. This is the revert runbook's entry point, and every
 # run of it is operator-only.
 #
-# WHY A PLAYBOOK OF ITS OWN. Under Ansible, `roles/k8s/manifests` includes `k8s/volume-revert`
-# between the snapshot and the apply. A flux-owned role has no such play: `promote` holds
-# without resetting `prod`, and the operator reverts each changed snapshot role by hand
-# before the reset. This play includes the role alone and never runs `deploy.yml`. The
+# WHY A PLAYBOOK OF ITS OWN. `promote` holds without resetting `prod`, and the operator reverts
+# each changed snapshot role by hand before the reset. This play includes the role alone. The
 # runbook is "The revert runbook" in docs/volume-snapshot-drills.md, and the hold post prints
 # this command once per role, with that role's own digest8 and claims.
 #
@@ -41,8 +39,7 @@
       tags: always
 
   tasks:
-    # The same guard as the manifests role's call site: under `--check` or `-e
-    # k8s_dry_run=true` the role never starts. The role's own input assert refuses a missing
+    # Under `--check` or `-e k8s_dry_run=true` the role never starts. The role's own input assert refuses a missing
     # service, a claim list that is not a list, and a digest that is not 8+ hex digits.
     - name: Revert the volumes for {{ volume_revert_service | default('(no service given)') }}
       ansible.builtin.include_role:

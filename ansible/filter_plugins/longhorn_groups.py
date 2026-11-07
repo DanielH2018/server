@@ -23,7 +23,7 @@ same way a key would, and the task still reads as the label it writes (#3946).
 Each raises `ValueError` on a group or shard the module does not define, so a typo fails the
 render instead of writing a label no RecurringJob selects. `FilterModule` registers each
 filter through `_as_filter`, which re-raises the `ValueError` as
-`AnsibleFilterError("<filter>: ...")` (#4505).
+`FilterError("<filter>: ...")` (#4505).
 
 No Ansible import at load time, so the tests call the same functions the playbook runs.
 """

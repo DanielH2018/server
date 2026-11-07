@@ -54,8 +54,13 @@
 # Since #7065 it ships pi-updater-poll: a 15-minute timer that starts homelab-updater.service once
 # the builder publishes a newer homelab-daniel-pi, so a Pi canary no longer holds the rollout gate
 # until the daily fire. The daily timer below stays the fallback. No file here needs a credential.
+#
+# Since H7.58 it ships the host baseline (host-hardening): the sudo cache, auditd's rules, the module
+# blacklist, the core-dump drop-in, the login banner and the base packages. initial_setup skips each
+# on this host through `initial_setup_packaged_hosts`, which ends the role's dist-upgrade here. No
+# file here needs a credential.
 description: daniel-pi's homelab host package
-components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall]
+components: [reconcile, secrets-unit, pi-heartbeats, pi-updater-poll, crowdsec-probe, pi-compose, unattended-upgrades, sshd, host-tuning, apt-docker, apt-azlux, pi-tuning, pi-node-exporter, pi-resolver, pi-peer-backup-target, pi-docker, sops, fail2ban, integrity-scans, postfix, accounting, host-maintenance, ssh-firewall, host-hardening]
 credentials:
   - healthchecks_ping_key
 # H3.11: the Pi is the arm64 pilot of homelab-tools, which ships sops and chezmoi under
@@ -63,6 +68,8 @@ credentials:
 # so homelab-updater's steps 4 and 5 cover every installed homelab-* package.
 depends:
   - homelab-tools
+  - linux-raspi
+  - wireguard
 maintainer_scripts: [preinst, postinst, prerm]
 files:
   - {src: units/homelab-updater.timer.conf, dst: /usr/lib/systemd/system/homelab-updater.timer.d/50-homelab.conf}
@@ -81,12 +88,17 @@ legacy:
   - {path: /etc/homelab/interim}
   # H7.24b: the binary sops_setup installed, which sits ahead of the packaged /usr/bin/sops on PATH.
   - {path: /usr/local/bin/sops}
-  # H7.30: the maintenance wrapper the crons ran, and the Healthchecks.io key file they sourced. The
-  # cluster nodes keep both until their own PRs: daniel-box's k3s role and worktree sweep read the
-  # key file there.
-  - {path: /usr/local/bin/host-maintenance.sh}
-  - {path: /etc/healthchecks/ping.env}
-  - {path: /etc/healthchecks}
+  # H7.58: the absent arms of initial_setup's crons.yml. Each names what the role removes from a host
+  # with no Claude sessions, no gitops and no witness.
+  - {unit: worktree-holders.socket}
+  - {unit: worktree-holders@.service}
+  - {path: /usr/local/libexec/worktree-holders}
+  - {path: /etc/worktree-holders.json}
+  - {path: /var/lib/homelab/setup-deployed-manifest.d/worktree-holders}
+  - {path: /etc/sudoers.d/20-worktree-holders}
+  - {path: /usr/local/bin/secret-rotation-audit.sh}
+  - {path: /usr/local/bin/secret-rotate.sh}
+  - {path: /etc/homelab/cert-expiry-webhook.env}
 # H7.30: the Pi's own LAN rules, beside ssh-firewall's two SSH rules. Each spec is what `ufw show
 # added` prints for the Ansible task that added it, and each legacy entry names that rule by its
 # exact spec and comment. A legacy rule that shares a declared spec is the one the arm adopts: it

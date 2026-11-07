@@ -2,11 +2,10 @@
 """Write the standalone-value guard's key map from a placeholder render (target slice R2).
 
 A standalone use is a placeholder that is the whole scalar of a field, such as
-`email: ${email}`. Flux types a substituted standalone value by its text, so the shared
-`k8s/manifests` role refuses, before it renders, a value of such a key that a YAML reader
-would type as anything but the same string. The deploy path never runs the renderer, so it
-reads the renderer's standalone key sets through this projection: the committed file
-`ansible/roles/k8s/manifests/files/standalone_secret_keys.json`, which maps each deploy tag
+`email: ${email}`. Flux types a substituted standalone value by its text, so a value of such
+a key that a YAML reader would type as anything but the same string must be refused. This
+is the projection of the renderer's standalone key sets: the committed file
+`scripts/renderer/job_files/standalone_secret_keys.json`, which maps each deploy tag
 to the sorted keys that stand alone in its directories, every one of them. A tag with no
 such key is left out.
 
@@ -32,7 +31,7 @@ import json
 
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
-from renderer.homelab_render import ansible_local_temp, secret_keys
+from renderer.homelab_render import secret_keys
 from renderer.renderer_lib.cluster import select_tags
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import split_kind
@@ -105,8 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        with ansible_local_temp():
-            text = map_text(guard_map(fleet_render()))
+        text = map_text(guard_map(fleet_render()))
     except (RenderError, ValueError) as exc:
         print(f"standalone_map: {exc}. Nothing was written.", file=sys.stderr)
         return FAILED

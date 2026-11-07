@@ -2,8 +2,7 @@
 
 Ansible's shared `rollout restart` does not exist under Flux, so the renderer stamps
 `checksum/restart` on the pod template of each restart target of a flux-owned tag, and the
-pod rolls when the value moves. The targets are those the shared `k8s/manifests` role
-restarts on a render change: the `manifests_rollout` workload when it is non-empty, and each
+pod rolls when the value moves. The targets are the `manifests_rollout` workload when it is non-empty, and each
 `manifests_extra_rollouts` entry whose `restart_on` names `config` or `secret`
 (`restart_targets`). An entry's `restart_on` also narrows its inputs, as it narrows Ansible's
 restart: `config` admits its ConfigMaps and `secret` its Secrets.

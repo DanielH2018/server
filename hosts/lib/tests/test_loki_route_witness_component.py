@@ -1,10 +1,9 @@
-"""The rendered `loki-route-witness` component: daniel-box's Loki read-route witness (H7.10c).
+"""The rendered `loki-route-witness` component: each cluster node's Loki read-route witness.
 
 The script's behaviour is run against stubs in `ansible/tests/setup/test_loki_route_witness.py`.
 These tests hold what the move added: the unit that runs it, which loads no credential since
 M6 batch B2's Cutover-2 dropped the Kuma push, the timer and boot-rerun shape of the kuma-check form M6 left, and the legacy entries that retire
-the Ansible-era timer on daniel-box. daniel-server keeps that timer, so the role's tasks skip
-daniel-box through `initial_setup_packaged_hosts`.
+the Ansible-era timer. Both cluster nodes list the component, and the role keeps no witness task.
 
 Run: uv run pytest hosts/lib/tests/test_loki_route_witness_component.py
 """
@@ -13,7 +12,6 @@ import pytest
 import yaml
 from _secret_rotation_package import LIB, UNITS, render_fixture, text
 
-from lib.estate import role_defaults
 from lib.repo_paths import REPO
 
 COMPONENT = REPO / "hosts" / "components" / "loki-route-witness" / "component.yml"
@@ -82,13 +80,18 @@ def test_the_package_retires_the_ansible_era_timer_cron_and_files(package):
     }
 
 
-def test_the_role_skips_daniel_box_and_keeps_daniel_server():
-    defaults = role_defaults(REPO / "ansible" / "roles" / "setup" / "initial_setup")
-    assert defaults["initial_setup_packaged_hosts"]["loki_route_witness"] == [
-        "daniel-box"
-    ]
-    spec = yaml.safe_load(COMPONENT.read_text())
-    assert "credentials" not in spec
+def test_both_cluster_nodes_witness_and_the_pi_does_not():
+    # One host cannot see a route that is dead only from the other, and daniel-pi is not in its
+    # ClientIP set.
+    listing = {
+        host: "loki-route-witness"
+        in yaml.safe_load((REPO / "hosts" / host / "package.yml").read_text())[
+            "components"
+        ]
+        for host in ("daniel-box", "daniel-server", "daniel-pi")
+    }
+    assert listing == {"daniel-box": True, "daniel-server": True, "daniel-pi": False}
+    assert "credentials" not in yaml.safe_load(COMPONENT.read_text())
 
 
 def test_the_component_header_carries_the_contract():

@@ -15,7 +15,7 @@ import pytest
 from _helpers import load_defaults
 from lib.repo_paths import LONGHORN_RECONCILE_ROLE
 import longhorn_groups
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 from lib.service_tiers import resolved_tier_lists
 
 # Each volume of the replaced weekly list, with its index mod 7 in that list.
@@ -110,9 +110,8 @@ def test_the_nobackup_set_is_the_list_it_replaced():
         "unknown-name",
     ],
 )
-def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
     """A render failure names the filter that refused, through the filter Ansible calls."""
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         longhorn_groups.FilterModule().filters()[name](*args)
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)

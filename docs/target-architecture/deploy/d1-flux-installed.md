@@ -976,7 +976,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
     - Add a test in `ansible/tests/k8s/` that the vendored file's header names
       `flux_version`, with a fixture of a mismatched header as its red half.
     - Add a self-rollout test in `ansible/tests/k8s/`, over the harness in
-      `ansible/tests/_release_expectation.py`. A changed secret render with an unchanged
+      `_release_expectation.py`. A changed secret render with an unchanged
       apply expects none of the three controllers to roll. Its red half is the same render
       with `restart_on` removed from each entry, which expects all three.
     - Create `docs/flux-deploy-plane.md` with its `mkdocs.yml` nav entry. Add a dated line
@@ -1193,7 +1193,7 @@ check. Flux owns no object outside `flux-system` until D2's flip PR.
     - Add the task that deletes `ocirepository/verify-drill` while the lever is false, from
       *Decisions*.
     - Add `"flux-sync": "flux"` to `KNOWN_DEFERRED_DIRS` in
-      `ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py`.
+      `test_deferred_manifest_dir_is_reserved.py`, deleted with the role tasks it read.
     - The self-rollout test from D1.2 gains a case over this PR's render: the new
       `secret.yaml.j2` changes the secret render, and no controller is expected to roll.
     - Land with `land.sh --tags flux`. Within two minutes the OCIRepository resolves `prod`.

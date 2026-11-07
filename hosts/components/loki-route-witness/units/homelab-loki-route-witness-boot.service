@@ -1,4 +1,4 @@
-# Shipped by homelab-daniel-box with its enable link. Reruns homelab-loki-route-witness.service
+# Shipped with its enable link. Reruns homelab-loki-route-witness.service
 # once at boot, only when its last verdict was not up (#4495). The service's ExecStopPost= writes
 # the marker below after any run that did not exit 0 and removes it after one that did. Without
 # this, a reboot kills the pending Restart=on-failure rerun, and the timer's Persistent=true

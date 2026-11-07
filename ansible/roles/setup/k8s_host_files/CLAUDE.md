@@ -88,8 +88,8 @@ into the `pi-peer-backup-target` component's authorized-key line.
 `ansible/tests/setup/test_k8s_host_files_rows.py` names every moved row by task
 file and task name with its whole argument map. It fails when a row is no longer imported or
 its path, owner, group or mode changes, and pins a looped row's `loop`. Each
-conversion PR adds its rows there. A row that moves back to its k8s role fails the host-write
-census in `ansible/tests/repo/_host_write_rows.py`, whose `allow` entry the move dropped.
+conversion PR adds its rows there. A row cannot move back to its k8s role, because
+`scripts/renderer/tests/test_renderer_runbook_allowlist.py` refuses the role a task file.
 
 ## Autonomous-role contract (it will remove crons with no human in the loop)
 

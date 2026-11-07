@@ -48,7 +48,7 @@ __all__ = [
 #      (no role's template carries one since media-volume moved to `k8s_claims`; the shape stays
 #      read so a new one is classified);
 #   2. a `k8s_claims` entry in the role's defaults/main.yml, `{name, size, storage_class}`,
-#      which k8s/manifests renders from the shared claim-default.yaml.j2 (every other claim).
+#      which the renderer renders from the shared claim-default.yaml.j2 (every other claim).
 #
 # A `claimName:` reference in a pod spec is the third pattern. It declares nothing — it names
 # a claim one of the two shapes above declares, in this role or another (`media-data` is

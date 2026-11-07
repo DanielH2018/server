@@ -20,10 +20,9 @@ value such as `1:20`, which PyYAML reads as the integer 80, so the union refuses
 CLI changes. `FLUX_KEEPS_BUT_REFUSED` in `renderer/renderer_lib/flux_probe.py` names each such
 corpus value, and CI's flux probe holds both readers to the pinned CLI.
 
-Two producers import this module: the deploy-time guard in
-`ansible/filter_plugins/standalone_guard.py`, which loads it by path, and D3's
-`cluster_vars.py write`. It imports the standard library and PyYAML only, so the filter plugin
-can load it inside Ansible. `docs/homelab-render.md` is the operator's page.
+D3's `cluster_vars.py write` imports this module, and the flux probe holds it to the pinned
+CLI. It imports the standard library and PyYAML only. `docs/homelab-render.md` is the
+operator's page.
 """
 
 import re

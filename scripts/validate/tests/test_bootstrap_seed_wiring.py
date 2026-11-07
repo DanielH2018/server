@@ -66,7 +66,7 @@ def test_each_online_case_mounts_the_seed_and_no_offline_case_does(tmp_path):
     (green / "k3s").write_text("k3s")
     seed_mount = f"{green / 'tools-cache'}:{case.TOOLS_SEED}:ro"
     cases = SimpleNamespace(image="img", work=tmp_path, python="3.12")
-    clones = {"green": tmp_path, "red-depends": tmp_path}
+    clones = {"green": tmp_path, "red-depends": tmp_path, "fixture-host": tmp_path}
 
     planned = case.plan(tmp_path, green)
     seeded = {

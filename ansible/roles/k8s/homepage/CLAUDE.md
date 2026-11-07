@@ -4,7 +4,7 @@ The landing dashboard (gethomepage) with service tiles, widgets and bookmarks. L
 daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=homepage` with exit 5
 - **Images:** `ghcr.io/gethomepage/homepage` (`homepage_k8s_image`), `alpine`
@@ -15,20 +15,18 @@ daniel-box since E3 (2026-08-12). See repo-root `CLAUDE.md` for shared conventio
 
 - **Depends on:** traefik, authelia
 - **Flux applies it, not Ansible** (D5.7, the third Wave A PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Its
   image-bump PRs therefore draw no `land-wait` and no `probe.py health` run. Both dependencies stay
   Ansible-owned, so the
   Kustomization records them in its `homelab/ansible-owned-deps` annotation, not in
   `dependsOn`.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. Flux applies the same render, and the
+- **Where the task went.** Flux applies the same render, and the
   Kustomization's `wait` replaces the rollout wait. `k8s_autodeploy` no longer gates an
   apply, because the deployer skips the tag. It still decides whether Renovate automerges the
   image bump.
-- **Flux prunes the cluster-scoped RBAC.** The task's comment says the namespaced prune
-  allowlist in `k8s/manifests` never selects the ClusterRole and ClusterRoleBinding. Flux
-  prunes by its own inventory instead, and that inventory holds both, so dropping one from
+- **Flux prunes the cluster-scoped RBAC.** Flux prunes by its own inventory, which holds the ClusterRole and
+  ClusterRoleBinding, so dropping one from
   `rbac.yaml.j2` deletes it live at the next promotion. Deleting the Kustomization deletes them
   too, because the tag takes the default deletion policy.
 - **The config Secret substitutes from `homelab-cluster-vars`.** Every credential the widgets

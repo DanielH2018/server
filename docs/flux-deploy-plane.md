@@ -1260,8 +1260,8 @@ against each other:
 A wait shorter than a verification is safe and costs a promotion. `decide` gives up as
 `current` and moves nothing, and the commit waits for the next run.
 
-**The size.** At the defaults, each Kustomization's `timeout` is the manifests role's
-`manifests_rollout_timeout_default`, 10 minutes:
+**The size.** At the defaults, each Kustomization's `timeout` is
+`scripts/lib/k8s_roles.py:ROLLOUT_TIMEOUT_DEFAULT`, 10 minutes:
 
 - a change to bento-pdf alone expects bento-pdf: one timeout and one queueing round, 23
   minutes with the interval and the retry;
@@ -1322,7 +1322,7 @@ The bundle holds:
   byte copy of each SOPS manifest its role lists (*SOPS manifests* below).
 - `flux/<tag>.yaml`, the Kustomization `<tag>` in `flux-system`. It applies
   `./cluster/<tag>` from the `OCIRepository` `homelab` with `prune: true`, `wait: true`, the
-  default deletion policy and the manifests role's `manifests_rollout_timeout_default`.
+  default deletion policy and `scripts/lib/k8s_roles.py:ROLLOUT_TIMEOUT_DEFAULT`.
   The default policy follows `prune`, so deleting the Kustomization deletes the objects it
   applied. `flux` and every other Kustomization in the bundle set `deletionPolicy: Orphan`
   (`docs/target-architecture/contracts.md`, *Deletion policy*).
@@ -1389,7 +1389,7 @@ placeholder gets both fields, one without gets neither and keeps `${HOME}` as wr
 
 ### Ordering: `dependsOn`
 
-The renderer generates every `dependsOn` from the play's own dependency map, and no template
+The renderer generates every `dependsOn` from its own dependency map, and no template
 writes one. The `no-template-hand-writes-depends-on` row of
 `ansible/tests/repo/test_census_rows_text.py` fails a template that does.
 `scripts/renderer/renderer_lib/cluster.py:bundle_ordering` builds the map with `build_k8s_dep_map` over the full k8s
@@ -1430,24 +1430,20 @@ dependent's render. The plan is `docs/target-architecture/deploy/d4-ordering.md`
 
 ### Restart triggers: `checksum/restart`
 
-Ansible's shared `rollout restart` does not run for a flux-owned tag. The renderer therefore
-stamps the annotation `checksum/restart` on the pod template of each restart target of a
+The renderer stamps the annotation `checksum/restart` on the pod template of each restart target of a
 flux-owned tag, and Kubernetes rolls the pod when the value moves.
 `scripts/renderer/renderer_lib/restart.py` holds the rule.
 
-- **The targets** are the workloads the shared `k8s/manifests` role restarts on a render
-  change, read from the role's defaults. They are the `manifests_rollout`
+- **The targets** are read from the role's defaults. They are the `manifests_rollout`
   workload when it is non-empty, and each `manifests_extra_rollouts` entry whose
   `restart_on` names `config` or `secret`. An entry with `restart_on: []`, such as Scrutiny's
-  InfluxDB, is one Ansible waits on and never restarts, so it gets no annotation.
-- **Every `manifests_self_rollouts` entry is a target too** (D5.1e). pihole and observability
-  restart those workloads in their own tasks, and a flux-owned tag runs no task. Such an
-  entry admits both ConfigMaps and Secrets, whatever its `restart_on` names, because there
-  `restart_on` shapes only the Ansible release record. pihole's instance 2 gets its
+  InfluxDB, gets no annotation.
+- **Every `manifests_self_rollouts` entry is a target too** (D5.1e). Such an entry admits both
+  ConfigMaps and Secrets, whatever its `restart_on` names. pihole's instance 2 gets its
   annotation in `pihole-deferred`, which waits on `pihole`, so a shared ConfigMap edit rolls
   instance 2 only after instance 1 is Ready.
 - **`restart_on` also narrows the inputs.** `config` admits the workload's ConfigMaps into its
-  value and `secret` its Secrets, as the same list narrows Ansible's restart.
+  value and `secret` its Secrets.
 - **The value is per workload.** It is one SHA-256 over the admitted ConfigMaps and Secrets
   that the workload's own pod template names through `envFrom`, `env[].valueFrom` or
   `volumes`, each re-serialised in canonical form. It also covers the `.source` digest of
@@ -1572,11 +1568,6 @@ census fails a bundle that lacks either. Each member needs a footprint rule in
   `k8s_default_limitrange` renders no LimitRange, and the kind's prune then deletes the live one.
 - `flux/homelab-namespace.yaml` sets a tag's fields and no edge. Its `deletionPolicy: Orphan`
   keeps both objects if the kind leaves the bundle, as a revert of D5's namespace PR makes it.
-- `ansible/deploy.yml` applies neither object. Its two namespace `pre_tasks` went in the same
-  commit that added this kind, rather than staying behind a gate on role ownership.
-  `ansible/tests/deploy/test_k8s_play_applies_no_namespace.py` evaluates every `pre_tasks` entry
-  of the k8s play against an all-flux inventory and one with an entry that has no `owner`, and fails on a task that
-  would apply a Namespace or a LimitRange.
 - Its footprint rule counts its files for every flux-owned tag, because both objects admit
   every tag's pods.
 
@@ -1713,7 +1704,7 @@ under *Rules for every Job Flux applies (D5.1a3)*.
 - **Rerun safety.** A mutation Job carries `homelab/rerun-safe`, naming as `<path>::<test>`
   the test that runs it twice and finds the second run changes nothing.
 - **Connections.** A Python script in a ConfigMap the Job mounts opens every connection
-  through `open_url` in `ansible/roles/k8s/manifests/files/flux_job_connect.py`, shipped
+  through `open_url` in `scripts/renderer/job_files/flux_job_connect.py`, shipped
   byte-identical beside it. A script imports only the modules in the census's
   `ALLOWED_IMPORTS`, none of which can connect, and builds its request with the helper's
   `Request`. It reads from the helper only the names in its `__all__`, reaches `urllib` only
@@ -1797,7 +1788,7 @@ during a slow week. A Docker Hub role's budget stays minutes.
 
 A flux-owned role that declares `k8s_autodeploy_snapshot_pvcs` gets the Kustomization
 `<tag>-snapshot`, which `<tag>` depends on. It holds one Job, `snapshot-<tag>-<spec digest8>`,
-in `flux-system`, which runs `ansible/roles/k8s/manifests/files/flux_snapshot.py`
+in `flux-system`, which runs `scripts/renderer/job_files/flux_snapshot.py`
 (`scripts/renderer/renderer_lib/snapshot.py` renders it). The Job's spec carries the role's
 `digest8`, the first 8 hex digits of the tag's `own` digest in `digests.json`, so every change
 to `cluster/<tag>/` renames the Job and Flux runs it again before the change applies.
@@ -1836,7 +1827,7 @@ to `cluster/<tag>/` renames the Job and Flux runs it again before the change app
 
 Every bundle carries the shared kind `soak` (`scripts/renderer/renderer_lib/soak.py`). Its
 Kustomization holds one Job, `soak-<spec digest8>`, in `flux-system`, which runs
-`ansible/roles/k8s/manifests/files/flux_soak.py` against R, the commit the bundle was rendered
+`scripts/renderer/job_files/flux_soak.py` against R, the commit the bundle was rendered
 from. The Job's exit is the `flux/soak` status. The design is D5's *The soak as a Job*.
 
 - **No `dependsOn`.** The Job waits at run time until every Kustomization R changed reads
@@ -1962,12 +1953,7 @@ checks share one implementation of them, `stem` and `prune_disabled` in
 
 ## Retiring a flux-owned service
 
-`ansible/tasks/k8s_retire.yml` deletes the last render Ansible staged for a service. For a
-flux-owned service that render predates the flip, and Flux at the old `prod` keeps applying
-the tag until promotion, so it re-creates what the teardown deleted. Arm 4 of the
-render-diff gates therefore refuses a PR that adds a name to `k8s_retired_services`
-whose entry reads `owner: flux` on the PR's base. A flux-owned service retires in this order
-instead:
+A flux-owned service retires through its own render, in this order:
 
 1. **If the tag renders `<tag>-deferred`, `<tag>-verify` or `<tag>-precheck`, a first PR empties
    those templates.** These kinds keep `deletionPolicy: Orphan`, so their objects outlive a
@@ -1986,7 +1972,7 @@ instead:
    `Removes-Object:` line for each object with no prune exemption in every directory the tag
    still renders: `cluster/<tag>/` and each suffixed kind, whose objects arm 3 counts for
    `<tag>`, including those `Orphan` keeps. The next bundle omits `flux/<tag>.yaml`, and the
-   root prunes `<tag>`, whose finalizer deletes the objects of `cluster/<tag>/`. The name never joins `k8s_retired_services`. The Kustomization still exists
+   root prunes `<tag>`, whose finalizer deletes the objects of `cluster/<tag>/`. The Kustomization still exists
    when this PR merges, and the merge is what makes the root prune it. `land.sh` does not read
    the Kustomization before the merge.
 1. **Delete what the kept kinds leave behind by hand (operator-only).** The renderer derives

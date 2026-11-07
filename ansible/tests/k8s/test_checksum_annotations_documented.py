@@ -64,7 +64,7 @@ MACRO_CALL_RE = re.compile(r"checksum_annotation\(\s*['\"]([a-zA-Z0-9._-]+)['\"]
 def _rendered_by_role() -> dict[str, dict[str, str]]:
     """Every rendered manifest text, keyed by role name then template name.
 
-    The names a role renders include the shared defaults `k8s/manifests` renders on its behalf
+    The names a role renders include the shared defaults the renderer renders on its behalf
     (`service.yaml.j2` for 25 roles), which have no file in the role at all. That is extra
     coverage, and it is also why the fallback below keys on the template NAME rather than on
     the path.

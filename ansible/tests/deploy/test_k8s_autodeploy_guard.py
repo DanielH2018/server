@@ -1,8 +1,8 @@
 """Guards on which k8s roles Renovate may automerge an image bump for.
 
-`roles/k8s/manifests` waits on the primary rollout —
+A role's rollouts are the primary —
 `{{ manifests_rollout_kind | default('deploy') }}/{{ manifests_rollout | default(manifests_service) }}` — plus every
-`manifests_extra_rollouts` entry, and runs `assert_stable.yml` against each. A rendered
+`manifests_extra_rollouts` entry. A rendered
 Deployment is gated only if its own `metadata.name` matches the primary rollout name or one of
 the declared extras; a name that can't be resolved statically (a Jinja expression) counts as
 ungated, the fail-closed direction. Four role shapes therefore auto-deploy without a working
@@ -51,10 +51,9 @@ These guards are the only thing standing between a role shape and an ungated aut
 The synthetic-role unit tests for the two gate kinds live in
 test_k8s_autodeploy_batch_gates.py and test_k8s_autodeploy_rollout_gates.py, and the derivation
 they share is _autodeploy.py. What stays here is what reads the live tree — the declaration
-partition, the roles/k8s/manifests contract, and the PVC/claim accounting.
+partition, and the PVC/claim accounting.
 """
 
-import re
 from pathlib import Path
 
 from _autodeploy import (
@@ -105,71 +104,6 @@ def test_every_role_is_either_denied_or_declares_itself_deployable() -> None:
     deployable = {p.name for p in _roles() if _auto_deployable(p)}
     assert denied | deployable == all_roles
     assert denied & deployable == set()
-
-
-def test_manifests_rollout_kind_defaults_to_deploy() -> None:
-    """Every existing caller omits manifests_rollout_kind, so the shared role's default is
-    what keeps ~50 roles behaving exactly as before."""
-    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
-    assert re.search(
-        r"manifests_rollout_kind\s*\|\s*default\(\s*['\"]deploy['\"]\s*\)", text
-    ), "roles/k8s/manifests must default manifests_rollout_kind to 'deploy'"
-
-
-def test_manifests_rollout_no_longer_hardcodes_the_deploy_kind() -> None:
-    """The six hardcoded `deploy`/`deployment.apps` sites must all read the variable.
-
-    Three in the primary rollout (restart command, batch-drain kind, apply-output check) and
-    three more in the manifests_extra_rollouts loop, which duplicates the same pattern. The
-    apply-output check is the one that matters most: it needs `daemonset.apps/` for a
-    DaemonSet, a different string from the `daemonset` kubectl kind, and getting it wrong
-    restarts a freshly created workload mid-creation.
-    """
-    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
-    assert not re.search(r"rollout restart\s+deploy/", text), (
-        "a rollout restart still hardcodes deploy/ — this matches regardless of line wrapping, "
-        "and covers the manifests_extra_rollouts site as well as the primary one"
-    )
-    assert "'kind': 'deploy'," not in text, (
-        "the batch-drain set_fact still hardcodes 'kind': 'deploy'"
-    )
-    assert "search('deployment.apps/'" not in text, (
-        "the apply-output check still hardcodes deployment.apps/"
-    )
-
-
-def test_the_apply_output_ternary_maps_daemonset_to_the_daemonset_prefix() -> None:
-    """The absence assertions cannot see a swapped ternary.
-
-    `ternary('deployment.apps/', 'daemonset.apps/')` passes every other test in this file while
-    making `kubectl apply`'s output never match — the `when:` then passes and a freshly created
-    workload is `rollout restart`ed mid-creation, which is the race the condition prevents.
-    """
-    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
-    swapped = "ternary('deployment.apps/', 'daemonset.apps/')"
-    correct = "ternary('daemonset.apps/', 'deployment.apps/')"
-    assert swapped not in text, (
-        "the apply-output ternary is swapped: a daemonset would search for deployment.apps/"
-    )
-    assert text.count(correct) == 2, (
-        f"expected the correct ternary at both the primary and extras sites, found "
-        f"{text.count(correct)}"
-    )
-
-
-def test_manifests_rollout_kind_is_constrained_to_known_values() -> None:
-    """kubectl accepts 'ds' and 'DaemonSet'; three consumers here match only 'daemonset'.
-
-    Without this assert an alias gives a green deploy whose stabilisation gate read a
-    Deployment's jsonpath off a DaemonSet and compared 0 == 0 — passing vacuously.
-    """
-    text = (_K8S_ROLES / "manifests/tasks/main.yml").read_text()
-    assert (
-        "manifests_rollout_kind | default('deploy') in ['deploy', 'daemonset']" in text
-    ), (
-        "roles/k8s/manifests must assert manifests_rollout_kind against the two values its "
-        "consumers understand"
-    )
 
 
 def test_daemonset_alias_matcher_flags_kubectl_args_but_not_manifest_kind_fields() -> (

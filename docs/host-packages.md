@@ -101,6 +101,20 @@ design is [the H4 plan](target-architecture/host/h4-secrets-unit.md), *The resta
   a blocking `systemctl restart homelab-secrets.service` before step 2. Legacy entries retire only
   once that unit is active and every credential and output in `secrets.json` exists. A package
   without the field makes no call that names `homelab-secrets`, as the Pi's did until H4.5.
+- **A legacy entry whose replacement failed to start.** Reconcile keeps the entry while a unit
+  the same component or package spec ships failed to start in that run, and logs
+  `keeping <entry>: <unit> failed to start`. The failed start already fails the run, so the host
+  holds, and the entry retires on the first run after the unit starts. A held host runs no
+  reconcile until `--clear-hold`. A unit reconcile did not try to start blocks nothing: a
+  `manual`, `windowed` or masked one. An `/etc` copy that shadows a packaged unit is the exception.
+  Reconcile removes it whatever the start did, because that copy may be why the unit failed, then
+  restarts the unit on the packaged file before it retires the spec's other entries.
+- **The overlap while a host holds.** The keep is per spec, so old and new schedulers can both run
+  until `--clear-hold`. A failed timer keeps every cron of its spec, including one whose own timer
+  started: a failed `homelab-apt-autoremove.timer` keeps `Weekly system restart` beside a running
+  `homelab-reboot.timer`. A kept cron also overlaps its own timer once that timer starts outside
+  reconcile, by hand or at boot. The trade favours a job that runs twice over one that does not
+  run, and the hold pages the operator.
 - **A legacy directory.** A `path` entry naming a directory retires only once the directory is
   empty: reconcile runs `rmdir`, never a recursive delete. A non-empty one stays and fails the
   run. A package therefore lists the directory after the files in it, as the Pi's does for
@@ -635,6 +649,15 @@ what completes a daniel-server rebuild during an outage.
     sudo apt-get install -y age git gnupg curl
     ```
 
+1. To give the root volume the whole disk, extend it. The Ubuntu installer creates the one LVM
+   volume a node uses, `ubuntu-vg/ubuntu-lv`, and leaves it at about half the disk. Neither
+   `bootstrap-host.sh` nor a package changes it. Skip this when `sudo vgs` shows no free space:
+
+    ```bash
+    sudo lvextend -l +100%FREE /dev/ubuntu-vg/ubuntu-lv
+    sudo resize2fs /dev/ubuntu-vg/ubuntu-lv
+    ```
+
 1. Clone the repository from GitHub, or from the kit's repo bundle
    ([the break-glass doc](break-glass.md), item 8). Copy the script and the keyring into one
    directory, because the script reads the keyring beside itself:
@@ -692,7 +715,8 @@ daniel-box serves the repository, so it builds its own packages from the clone.
    `<r2_account_id>.r2.cloudflarestorage.com`. Then follow *Restoring* in
    [the etcd restore doc](k3s-etcd-restore.md), which also reads the config the package installed.
 1. Start k3s. No package enable link names `k3s.service`, and reconcile never starts a `windowed`
-   unit, so this hand command is the only start on the package path:
+   unit, so this hand command is the only start on the package path. A link would start k3s at any
+   reboot before the restores above, and this command also writes the link every later boot reads:
 
     ```bash
     sudo systemctl enable --now k3s.service
@@ -739,6 +763,33 @@ daniel-server installs from daniel-box's repository, so daniel-box and the repos
     sudo k3s kubectl get node daniel-server
     ```
 
+1. To load the i915 option the package ships, rebuild the initramfs and reboot. i915 loads from the
+   initramfs, so `/etc/modprobe.d/i915.conf` reaches it only then, and QuickSync needs the GuC
+   firmware the option enables:
+
+    ```bash
+    sudo update-initramfs -u
+    sudo reboot
+    ```
+
+1. As the operator, apply the dotfiles. They install the per-user uv, `prek` and the pinned Python,
+   which the host's `uv` units read because they run with `--no-python-downloads`. The chezmoi
+   binary comes from `homelab-tools`:
+
+    ```bash
+    /usr/lib/homelab/bin/chezmoi init --apply --promptBool work=false,agent=false \
+        --promptString profile=server DanielH2018/dotfiles
+    ~/.local/bin/uv python list --only-installed
+    ```
+
+1. To commit from the host, clone the repo and install its git hooks. No package or role runs this:
+
+    ```bash
+    git clone https://github.com/DanielH2018/server.git ~/server
+    cd ~/server
+    ~/.local/bin/prek install
+    ```
+
 Until H7.34 lands, the node this section builds lacks the items that *What the packages do not hold
 yet* lists, so it does not yet serve the cluster.
 
@@ -761,7 +812,7 @@ To rebuild without GitHub or GHCR, take every fetch from the break-glass kit:
 
 The guest drill proves daniel-box's procedure above on production hardware. It waits for the k3s
 upgrade. No script in the tree runs it yet, so the operator cannot run it from this page until
-[#7515](https://github.com/DanielH2018/server/issues/7515) adds the runner. *The proofs* in
+[#7554](https://github.com/DanielH2018/server/issues/7554) adds the runner. *The proofs* in
 [H7](target-architecture/host/h7-delete-ansible.md) holds its fence, its identity and its three
 guest-local deviations.
 
@@ -850,6 +901,10 @@ arm64 only.
     ```bash
     sudo ./bootstrap-host.sh <host>
     ```
+
+`hosts/lib/tests/test_host_census.py` fails when a directory under `hosts/` is missing from `NAMED`,
+`CANARY_ORDER` or `HOSTS`, or has no creation rule of its own. It names the set. The `host_packages`
+job builds a fixture host from step 1's file list, so the YAML block above stays one that renders.
 
 ## Upgrading a host's Ubuntu release
 

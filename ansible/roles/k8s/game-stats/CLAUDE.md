@@ -11,7 +11,7 @@ cluster object kept its name, so the scrape jobs, the netpol-baseline Loki polic
 claims are unchanged.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates or containers_list entry, or the Longhorn tier lists in ansible/roles/k8s/longhorn-reconcile/defaults/main.yml. -->
 - **Applied by:** Flux, through `promote` (`owner: flux`); `deploy.sh` refuses
   `--tags=game-stats` with exit 5
 - **Image:** `python` (`game_stats_k8s_image`)
@@ -21,24 +21,22 @@ claims are unchanged.
 <!-- /generated_from -->
 
 - **Flux applies it, not Ansible** (D5.19, the first Wave D PR). Its `containers_list` entry
-  carries `owner: flux`, so `deploy.sh`, the play and the GitOps deployer all skip it, and a
+  carries `owner: flux`, so `deploy.sh` refuses it and the GitOps deployer skips it, and a
   merged change reaches the cluster when `promote` publishes and verifies the next bundle. Both
   Deployments are `Recreate` over
   an RWO claim, so a roll stops the old pod before the new one starts and the exporter's
   metrics gap for that interval, as they did under Ansible. `k8s_autodeploy: false` gates no
   apply. It stops Renovate automerging the image bump.
-- **Where the task went.** `tasks/main.yml` holds one task, the include of `k8s/manifests`,
-  and no Flux path runs it. It stays until R4 deletes it. The Kustomization's `wait` replaces the
+- **Where the task went.** The Kustomization's `wait` replaces the
   rollout wait, and the
   restart checksum the renderer stamps on each Deployment replaces the shared restart.
 
 - **Must sort AFTER `loki-homelab`**: `depends_on: [loki-homelab]` on the `containers_list`
   entry, pinned by
   `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
-- **One `k8s/manifests` include for both games.** `defaults/main.yml` names
-  `terraria-stats` as the rollout and `valheim-stats` in `manifests_extra_rollouts`; a second
-  include under the same service would prune the first one's staged files. A render change to
-  either game therefore restarts both pods.
+- **One Flux tag for both games.** `defaults/main.yml` names
+  `terraria-stats` as the rollout and `valheim-stats` in `manifests_extra_rollouts`. A render
+  change to either game therefore restarts both pods.
 - **Scraped by:** observability prometheus, `job_name: terraria-stats` and `valheim-stats`.
   Both jobs render from the `metrics` items on this role's `containers_list` entry, which is
   where `:9420` is defined; the Deployments and Services read it back through `metrics_port`.
@@ -55,8 +53,7 @@ claims are unchanged.
   entry script and `stats_lib.py` with `lookup('file')`. The scripts are Jinja-hostile, since
   Prometheus exposition carries `{…}`, and the lookup's text is never templated again.
 - **A script edit rolls the pods with no annotation of the role's own.** The edit changes the
-  render, so `k8s/manifests`' rollout restart rolls both Deployments while Ansible owns the
-  role. Under Flux, the renderer stamps a restart checksum that hashes the ConfigMap each pod
+  render, and the renderer's restart checksum hashes the ConfigMap each pod
   mounts (`docs/flux-deploy-plane.md`, *Restart triggers*).
   `scripts/renderer/tests/test_renderer_game_stats_restart.py` holds both ConfigMaps to that.
 
