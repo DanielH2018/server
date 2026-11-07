@@ -214,13 +214,12 @@ def test_the_alert_template_reaches_gitops_deploy_through_its_install_half_only(
 
 
 @pytest.mark.parametrize("template", _CHECK_TIMER_TEMPLATES)
-def test_a_check_timer_template_reaches_gitops_deploy_through_its_install_half_only(
-    template,
-):
-    """teardown.yml imports `check_timer.yml` with state absent, so it renders nothing (#7416)."""
-    assert land_reach.setup_shipped_file_hosts("gitops_deploy", template) == {
-        "daniel-box"
-    }
+def test_a_check_timer_template_reaches_no_gitops_deploy_host(template):
+    """teardown.yml imports `check_timer.yml` with state absent, so it renders nothing (#7416).
+
+    install.yml rendered the GitHub checks' timers until H7.37 moved them to a component.
+    """
+    assert land_reach.setup_shipped_file_hosts("gitops_deploy", template) == frozenset()
     note = land_reach.remaining_setup_hosts_note([template], "daniel-box")
     assert "`gitops_deploy`" not in note, note
 
