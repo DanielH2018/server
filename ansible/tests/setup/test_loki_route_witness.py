@@ -68,12 +68,12 @@ def _render() -> str:
 def _run_witness(tmp_path, route_rc: int) -> int:
     """Render the witness and run it with the reader stubbed to exit `route_rc`.
 
-    Only absolute paths are repointed: the check library (the role's real one) and the two `uv`
-    binaries, whose stub answers the reader invocation with `route_rc` and prints a body for
+    Only absolute paths are repointed: the check library (the role's real one) and `uv`, whose
+    stub answers the reader invocation with `route_rc` and prints a body for
     anything else. Returns the exit code. The run's textfile lands in `tmp_path / "textfile"`.
     """
     body = _render()
-    for needle in (CHECK_LIB_PATH, "/home/ubuntu/.local/bin/uv", UV_PATH):
+    for needle in (CHECK_LIB_PATH, UV_PATH):
         assert needle in body, (
             f"{needle} is no longer in the witness; this harness repoints it"
         )
@@ -84,11 +84,7 @@ def _run_witness(tmp_path, route_rc: int) -> int:
         " *) echo body ;; esac\n",
     )
     binstub = fake_bin(tmp_path / "bin", logger="#!/bin/sh\nexit 0\n")
-    body = (
-        body.replace(CHECK_LIB_PATH, str(CHECK_LIB))
-        .replace("/home/ubuntu/.local/bin/uv", str(uv))
-        .replace(UV_PATH, str(uv))
-    )
+    body = body.replace(CHECK_LIB_PATH, str(CHECK_LIB)).replace(UV_PATH, str(uv))
     script = write_exec(tmp_path / "loki-read-route-health.sh", body)
     (tmp_path / "textfile").mkdir()
     result = run(

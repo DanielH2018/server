@@ -56,9 +56,10 @@ fi
 DEADLINE_S=7200
 
 REPO_DIR=/home/{{ sys_user }}/server
-# UV absolute-pathed: cron's PATH lacks ~/.local/bin. --frozen: never rewrite uv.lock on this
-# host — a rewrite would dirty the tree and wedge the GitOps deployer's dirty-skip.
-UV=/home/{{ sys_user }}/.local/bin/uv
+# The uv component's path: a rebuilt host has no per-user uv until the dotfiles step. --frozen: never
+# rewrite uv.lock on this host — a rewrite would dirty the tree and wedge the GitOps deployer's
+# dirty-skip.
+UV=/usr/bin/uv
 BODY="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py loki-labels 2>&1)"
 RC=$?
 

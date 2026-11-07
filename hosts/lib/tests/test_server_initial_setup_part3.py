@@ -35,7 +35,10 @@ def _legacy(package: host_mode.Package) -> list[dict]:
 def test_a_rebuilt_daniel_servers_witness_names_a_uv_its_package_ships(package):
     script = package.files[WITNESS][0].decode()
     assert "/usr/bin/uv run" in script
+    assert "UV=/usr/bin/uv\n" in script
     assert "/usr/local/bin/uv" not in script
+    # The dotfiles write the per-user uv in a hand step, after the package starts this timer.
+    assert ".local/bin/uv" not in script
     assert "/usr/bin/uv" in package.files
 
 
