@@ -80,17 +80,17 @@ secret can touch.
 
 ### Rotating a value the cluster reads
 
-Flux applies every k8s consumer, as it does for `peanut_password`'s homepage and peanut. Every
-step that handles the value is **operator-only**.
+A value can have several consumers Flux applies, as `peanut_password` does for homepage and
+peanut, and a setup role or host package can read it too. Every step that handles the value is **operator-only**.
 
 1. Set the new value with `sops set` (**operator-only**).
 2. Run `uv run python scripts/secrets_mgmt/cluster_vars.py write` (**operator-only**). Commit
    `secrets.yml`, the cluster files it rewrote and the registry together, then open the PR.
 3. Run `uv run python scripts/secrets_mgmt/secret_rotation.py consumers <key>`. It prints the
-   Flux path for each `owner: flux` consumer, and the command for each setup role and host
-   package.
+   Flux path for each k8s consumer, and a command for each setup role and host package.
 4. Land the PR with `land.sh`. A PR that changes either cluster file waits on the
    `cluster-vars` Kustomization and on every Kustomization that depends on it.
+5. Run any setup-role or host-package command from step 3.
 
 The weekly cron needs no `write` step: `rotate --commit` runs it in process. `rotate` runs no
 deploy. It prints that Flux applies each `owner: flux` consumer's value once the commit lands,
@@ -188,9 +188,8 @@ to its `tier` in the registry after that `sync`, and `sync` preserves the edit.
 ## `auto` — automated
 
 `rotate --commit` generates a new 32-char token, writes it via `sops set`, and records the
-date. Then every reader must render again. `secret_rotation.py consumers <key>` prints the
-`deploy.sh` line for an Ansible-owned reader. A Flux-owned reader, such as monitor-bridge,
-takes the value once the commit lands, and `deploy.sh` exits 5 on its tag.
+date. Then every reader must render again. A reader Flux applies, such as monitor-bridge, takes
+the value once the commit lands, and `deploy.sh` exits 5 on its tag.
 Because only **coming-due** secrets rotate (due within `ROTATE_LEAD_DAYS` = 8 —
 one weekly cron interval, so a token rotates the Sunday *before* it goes overdue and the
 daily audit never pages DOWN on a rotation the cron was about to do), runs stay staggered.

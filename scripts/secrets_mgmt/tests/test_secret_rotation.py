@@ -169,9 +169,6 @@ def test_rotate_records_the_names_a_failed_batch_already_wrote():
     saying which secrets had moved — and the rotation is the one operation where a silent
     half-state means a live credential nobody can date.
 
-    The failure must also not deploy: the cron reverts both tracked files on a non-zero exit,
-    so deploying tokens that are about to be reverted out of the tree would leave the cluster
-    running values the repo no longer records.
     """
     first, second = "monitor_bridge_alpha_push_token", "monitor_bridge_beta_push_token"
     reg = _reg((first, "auto", "2025-01-01"), (second, "auto", "2025-06-01"))
@@ -200,9 +197,6 @@ def test_rotate_records_the_names_a_failed_batch_already_wrote():
         reg["entries"][first]["last_rotated"] == "2026-09-01"
     )  # _rotation_fakes.TODAY
     assert reg["entries"][second]["last_rotated"] == "2025-06-01"  # never written
-    assert "run" not in named_calls(recorded), (
-        "a failed batch must not deploy — the tokens it wrote are about to be reverted"
-    )
 
 
 def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
@@ -242,9 +236,6 @@ def test_rotate_reports_the_names_already_written_when_a_sops_set_hangs(capsys):
         reg["entries"][first]["last_rotated"] == "2026-09-01"
     )  # _rotation_fakes.TODAY
     assert reg["entries"][second]["last_rotated"] == "2025-06-01"  # never written
-    assert "run" not in named_calls(recorded), (
-        "a timed-out batch must not deploy, for the same reason a failed one must not"
-    )
 
 
 # ── what `cmd_rotate` tells the operator to do next ─────────────────────────

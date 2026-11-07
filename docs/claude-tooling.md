@@ -186,8 +186,7 @@ After a passing rollout verdict, the gate reads the alert plane (M6 B-1,
 `docs/target-architecture/contracts.md`, which D5's soak shares. A firing alert labelled
 `service="<tag>"` fails the gate when it is `critical` or carries `verify="true"`, is not a
 shadow rule or the Watchdog, and became active after the tag's reference time. That time is
-`applied_at` for an Ansible-owned tag. For an `owner: flux` tag it is when the tag's
-Kustomization first reported its current revision. Each ingress probe of the tag must then
+when the tag's Kustomization first reported its current revision. Each ingress probe of the tag must then
 report a `probe_success` of 1 sampled after the rollout. The gate waits up to 90s for that
 sample and re-reads a failing verdict once after 60s. A tag whose entry renders no ingress
 route skips the probe half. A routed tag with no series at all fails when Prometheus has
@@ -225,12 +224,11 @@ create a Job (the `view` ClusterRole it is bound to refuses it), so this only ev
 It reads the Jobs the CronJob owns and the gate Job Flux runs in `<tag>-verify`, which names no
 owner.
 
-What "the deploy" means depends on the role's owner. For an `owner: flux` role, the gate Job of
-the revision Flux applies is the one whose pod template's `homelab/role-digest8` equals the first
-eight characters of Kustomization `<tag>`'s `homelab/content-digest`. With no such gate Job the
-check fails, and otherwise it judges the newest Job, which is that gate or a later firing. For
-any other role the reference is the `release_stamp.yml` record's `applied_at`. When no Job has
-landed since then, the check falls back to the CronJob's own daily/weekly schedule: the
+"The deploy" is the revision Flux applies. Its gate Job is the one whose pod template's
+`homelab/role-digest8` equals the first eight characters of Kustomization `<tag>`'s
+`homelab/content-digest`. With no such gate Job the check fails, and otherwise it judges the
+newest Job, which is that gate or a later firing. When no Job has landed since that revision, the
+check falls back to the CronJob's own daily/weekly schedule: the
 previous run must have succeeded and not be more than twice its interval old. Any other
 schedule shape fails closed rather than guess an interval. A role with neither a workload nor a CronJob (media-volume, netpol-baseline) still
 reports "declares no rollout-checkable workload," which the deploy notifier skips.
