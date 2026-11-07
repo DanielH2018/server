@@ -32,6 +32,8 @@ KINDS = {
 RECORDED = {
     # 94d0fb13a^:ansible/roles/setup/homelab_builder/tasks/builder.yml
     "builder": {("deployed", "homelab-builder"), ("render", "homelab-builder")},
+    # cb61ae0d94:ansible/roles/setup/initial_setup/tasks/crons.yml
+    "worktree-holders": {("deployed", "worktree-holders")},
     # cb61ae0d9:ansible/roles/setup/initial_setup/tasks/crons.yml
     "loki-route-witness": {
         ("render", "loki-route-witness"),
@@ -63,9 +65,7 @@ RECORDED = {
 }
 # A component whose Ansible tasks still run on another host; its row comes from those tasks, as
 # (task file, tag) pairs.
-DERIVED = {
-    "worktree-holders": ((CRONS, "worktree-sweep"),),
-}
+DERIVED = {}
 
 
 def retired_fragments(spec: dict) -> set[tuple[str, str]]:

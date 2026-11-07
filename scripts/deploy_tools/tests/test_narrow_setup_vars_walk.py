@@ -356,21 +356,6 @@ def test_a_comment_edit_to_defaults_alone_needs_nothing(tree):
         narrow(tree, *_refs(tree))
 
 
-@pytest.mark.parametrize(
-    ("role", "tags"),
-    [
-        ("renovate_agent", {"renovate-agent-code", "renovate-agent-service"}),
-    ],
-)
-def test_the_real_uv_pin_reaches_every_role_copying_the_operators_uv(role, tags):
-    """Each role copies the uv initial_setup pins, so a bump of the pin keeps its copy's tag
-    (#5945). Before, a uv bump narrowed claude_code to nothing and never reached the other
-    two, and all three copies stayed on the old version. claude_code left the list in H7.40,
-    whose package installs no uv of its own."""
-    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
-    assert index.key_readers("initial_setup_uv_version") == frozenset(tags)
-
-
 # ── a key or path the range deletes together with its last reader (#5930) ──────────────
 #
 # Each clean test reads the deleted path's own line from stderr. The range's union cannot show

@@ -99,14 +99,12 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned prek version in CI (`pip install prek==X` in .github/actions/setup/action.yml, which every CI job installs prek through since #3723) and, since #2148, the copy the hosts install as a uv tool (`- prek==X` in initial_setup's host-basics.yml). The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently. One manager for both files, so the two copies land in one `{{depName}}` PR (the file-scoped rule below names host-basics.yml); ansible/tests/repo/test_host_tool_pins_match_their_twins.py fails when they disagree anyway.",
+      "description": "Pinned prek version in CI (`pip install prek==X` in .github/actions/setup/action.yml, which every CI job installs prek through since #3723) The pin keeps the hook toolchain reproducible; track it on PyPI so the pin doesn't age silently. One manager for both files, so the two copies land in one `{{depName}}` PR (the file-scoped rule below names host-basics.yml); ansible/tests/repo/test_host_tool_pins_match_their_twins.py fails when they disagree anyway.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/actions/setup/action\\.yml$/",
-        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
+        "/(^|/)\\.github/actions/setup/action\\.yml$/"
       ],
       "matchStrings": [
-        "pip install prek==(?<currentValue>[\\d.]+)",
-        "- prek==(?<currentValue>[\\d.]+)"
+        "pip install prek==(?<currentValue>[\\d.]+)"
       ],
       "depNameTemplate": "prek",
       "datasourceTemplate": "pypi"
@@ -124,15 +122,13 @@
     },
     {
       "customType": "regex",
-      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases. Two more copies live on the host side, because they install the binary the prek hook runs and a bump that moved only ci.yml would leave every workstation on the old rules (#1703): `initial_setup_vale_version` in roles/setup/initial_setup/tasks/host-basics.yml until H7.62 deletes it, and the `vale` tool of hosts/packages/homelab-tools/package.yml, which the github-release-attachments manager moves. The `{{depName}}` group puts both managers' bumps in one PR, and ansible/tests/repo/test_vale_matches_the_ci_pin.py ENFORCES that the three agree.",
+      "description": "Pinned Vale binary in the CI workflow. TWO matchStrings on purpose: the download URL carries the version TWICE (the tag `v3.18.0` and the asset name `vale_3.18.0_Linux_64-bit.tar.gz`), and a manager that rewrites only the tag produces a 404 URL. That 404 used to surface two lines later as `tar xzf`'s \"not in gzip format\", because the curl carried no `-f`; the workflow now runs `curl -fsSL`, so a partial rewrite fails at the download naming the URL. The two matchStrings are still the fix — failing loudly is not the same as not breaking. Asset naming is stable across releases. One more copy lives on the host side, because it installs the binary the prek hook runs and a bump that moved only ci.yml would leave every workstation on the old rules (#1703): the `vale` tool of hosts/packages/homelab-tools/package.yml, which the github-release-attachments manager moves. The `{{depName}}` group puts both managers' bumps in one PR, and ansible/tests/repo/test_vale_matches_the_ci_pin.py ENFORCES that the copies agree.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/",
-        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
+        "/(^|/)\\.github/workflows/ci\\.yml$/"
       ],
       "matchStrings": [
         "vale-cli/vale/releases/download/v(?<currentValue>[\\d.]+)/",
-        "vale_(?<currentValue>[\\d.]+)_Linux",
-        "initial_setup_vale_version:\\s*\"(?<currentValue>[\\d.]+)\""
+        "vale_(?<currentValue>[\\d.]+)_Linux"
       ],
       "depNameTemplate": "vale-cli/vale",
       "datasourceTemplate": "github-releases"

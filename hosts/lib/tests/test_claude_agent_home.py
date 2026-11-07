@@ -74,12 +74,17 @@ def rendered(tmp_path_factory):
     script.write_bytes(package.files[SCRIPT][0])
     script.chmod(0o755)
     paths["raw"] = {name: package.files[name][0].decode() for name in (SETUP, SCRIPT)}
+    # The packaged chezmoi exists only on a host, so the script copies a stand-in from the root.
+    chezmoi = root / "packaged-chezmoi"
+    chezmoi.write_text("#!/bin/sh\nexit 0\n")
+    chezmoi.chmod(0o755)
     # The setup script's fixed paths move under the temporary root.
     paths["setup_text"] = (
         paths["raw"][SETUP]
         .replace(
             "templates=/usr/lib/homelab/claude-agent", f"templates={paths['templates']}"
         )
+        .replace("/usr/lib/homelab/bin/chezmoi", str(chezmoi))
         .replace(SCRIPT, str(script))
         .replace("/home/$operator/", f"{paths['operator_home']}/")
     )

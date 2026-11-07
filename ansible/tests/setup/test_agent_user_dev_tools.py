@@ -17,7 +17,7 @@ from lib import yaml_fast
 SETUP = ANSIBLE / "roles" / "setup"
 SHARED = SETUP / "common" / "tasks" / "agent_user.yml"
 CLONE_SYNC = CLAUDE_CODE / "files" / "claude-clone-sync.sh"
-PREK_COPY = "Give the agent user the operator's pinned prek"
+PREK_COPY = "Give the agent user the operator's prek"
 
 
 def tasks(path) -> list[dict]:
@@ -36,7 +36,7 @@ def test_the_agent_gets_the_operators_prek_binary_not_its_symlink() -> None:
     copy = named(shared, PREK_COPY)["ansible.builtin.copy"]
     assert copy["src"] == "/home/{{ sys_user }}/.local/share/uv/tools/prek/bin/prek"
     assert copy["dest"] == "{{ agent_user_home }}/.local/bin/prek"
-    uv = named(shared, "Give the agent user the operator's pinned uv and uvx")
+    uv = named(shared, "Give the agent user the operator's uv and uvx")
     assert uv["loop"] == ["uv", "uvx"]
 
 

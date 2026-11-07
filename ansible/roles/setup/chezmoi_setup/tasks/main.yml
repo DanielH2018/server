@@ -1,125 +1,14 @@
 ---
-# chezmoi manages a USER's home directory, so every task here runs as the connecting
-# user with become: false. The play sets become: true for OS hardening; inheriting it
-# would deploy the dotfiles into /root instead.
-#
-# The home directory is /home/{{ sys_user }}, NOT ansible_env.HOME. ansible_env reports
-# the environment of the user facts were GATHERED as, and initial_setup.yml gathers them
-# escalated (its setup: pre_task runs under the play's become: true) — so ansible_env.HOME
-# is /root even inside a become: false task, and using it here fails with
-# "Permission denied: /root/.local". Same reason config_files hardcodes the path.
+# The dotfiles repo declares the operator's home, and the operator applies it with `chezmoi apply`.
+# homelab-tools ships the chezmoi binary, and homelab-daniel-box depends on the distro packages the
+# dotfiles scripts cannot install themselves. docs/target-architecture/host/h7-delete-ansible.md,
+# H7.62.
 
-- name: Ensure the per-user directories exist
-  tags: [chezmoi]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - /home/{{ sys_user }}/.local/bin
-    - /home/{{ sys_user }}/.local/share/installers
-    - /home/{{ sys_user }}/.config/chezmoi
-  become: false
-
-- name: Download the chezmoi installer
-  tags: [chezmoi]
-  # Fetched to a user-owned directory rather than /tmp: this script is executed, and /tmp
-  # is world-writable. The script at the pinned release's tag, not get.chezmoi.io, which
-  # serves whatever master holds; the checksum re-fetches a copy on the host that hashes
-  # differently and fails a fetch that does, so a re-run is quiet until the pin moves.
-  ansible.builtin.get_url:
-    url: "{{ chezmoi_setup_installer_url }}"
-    dest: /home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh
-    mode: "0755"
-    checksum: "sha256:{{ chezmoi_setup_installer_sha256 }}"
-  become: false
-
-- name: Install the chezmoi binary
-  tags: [chezmoi]
-  # Pinned to ~/.local/bin to match daniel-server. `creates` makes it run-once; upgrading
-  # chezmoi is a deliberate act, not a side effect of every play. `-t` names the release,
-  # because the script's default is the newest one at run time -- so a fresh host would get
-  # a chezmoi the other hosts were never provisioned with.
-  ansible.builtin.command:
-    cmd: >-
-      /home/{{ sys_user }}/.local/share/installers/chezmoi-install.sh
-      -b /home/{{ sys_user }}/.local/bin
-      -t {{ chezmoi_setup_version }}
-  args:
-    creates: /home/{{ sys_user }}/.local/bin/chezmoi
-  become: false
-
-- name: Install the distro packages the dotfiles scripts cannot install themselves
-  tags: [chezmoi]
-  # become: true is the exception in this role. install-cli-tools.sh shells out to sudo for
-  # these, but sudo has no TTY under Ansible and ubuntu has no NOPASSWD, so the script
-  # defers them and exits 1 — which, being a run_once_after script, means chezmoi never
-  # records success and retries the failure on every later apply. Ansible already has the
-  # become password from SOPS, so it does the job the script cannot.
-  ansible.builtin.apt:
-    name: "{{ chezmoi_setup_distro_packages }}"
-    state: present
-  become: true
-
-- name: Seed the chezmoi config data so init never needs a TTY
-  tags: [chezmoi]
-  # promptBoolOnce/promptStringOnce only prompt when the value is absent from the config
-  # data, so seeding the two answers is what makes a non-interactive init possible. The
-  # --promptBool/--promptString flags do NOT cover this: they were passed on daniel-box
-  # (chezmoi v2.71.1) and init prompted anyway, dying on "could not open a new TTY".
-  #
-  # force: false — once init has rendered the real config from .chezmoi.toml.tmpl, this
-  # must not clobber it on every later run.
-  ansible.builtin.template:
-    src: chezmoi-seed.toml.j2
-    dest: /home/{{ sys_user }}/.config/chezmoi/chezmoi.toml
-    mode: "0644"
-    force: false
-  register: chezmoi_setup_seed
-  become: false
-
-# Skipped by a --check run that has not written the seed: check mode reports the template
-# changed but creates nothing, and lineinfile fails on a destination that does not exist.
-# Where the config exists the seed reports ok, so the task still runs, and diffs, under --check.
-- name: Answer the agent prompt in a config seeded before the dotfiles asked it
-  tags: [chezmoi]
-  # The dotfiles added `promptBoolOnce . "agent"` on 2026-10-10. The seed above is
-  # force: false, so a config rendered before then never gains the key, and every later init
-  # dies on that prompt's TTY. The deployer held 943faa50 on exactly this. Unlike work and
-  # profile, the answer is not a host choice: this role manages sys_user, and the agent user's
-  # `agent = true` is claude_code's (agent-chezmoi-seed.toml.j2). So it is enforced, not
-  # seeded once.
-  when: not (ansible_check_mode and chezmoi_setup_seed is changed)
-  ansible.builtin.lineinfile:
-    path: /home/{{ sys_user }}/.config/chezmoi/chezmoi.toml
-    regexp: '^\s*agent\s*='
-    line: "    agent = false"
-    insertafter: '^\[data\]'
-  become: false
-
-- name: Initialise chezmoi from the dotfiles repo and apply
-  tags: [chezmoi]
-  # Unconditional rather than gated on the source directory being absent. A failed init
-  # leaves a COMPLETE clone but no rendered config (exactly what happened on daniel-box:
-  # the clone succeeded, then the config template hit the TTY error). Gating on the source
-  # would then skip init forever and fall through to a bare `apply`, running without the
-  # umask pin and [interpreters.sh] that .chezmoi.toml.tmpl provides. Re-running init is
-  # safe and re-renders the full config, so the role self-heals instead of needing a
-  # manual rm of the partial state.
-  #
-  # --force: overwrite locally-modified targets instead of prompting. Without it, init dies
-  # with "chezmoi: .bashrc: could not open a new TTY" the moment any managed file has drifted
-  # — and one had: uv's installer appends `export PATH="$PATH:$HOME/.local/bin"` to .bashrc
-  # during bring-up, before chezmoi ever runs here.
-  #
-  # This is the right call for a host whose home directory is DECLARED by the dotfiles repo:
-  # the repo is the source of truth and local edits are drift by definition. It does mean
-  # every apply silently discards hand-edits to managed files, so anything host-specific
-  # belongs in the dotfiles (or in one of the *.local.* files .chezmoiignore already excludes),
-  # not edited in place here.
-  ansible.builtin.command:
-    cmd: >-
-      /home/{{ sys_user }}/.local/bin/chezmoi init {{ chezmoi_setup_repo }} --apply --force
-  register: chezmoi_setup_init
-  become: false
-  changed_when: chezmoi_setup_init.stdout | length > 0
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line, and the tick applies the role on daniel-box as a no-op.
+# setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count
+# the role as empty on every host.
+- name: End the role, whose work the host packages and the dotfiles repo own
+  ansible.builtin.meta: end_role

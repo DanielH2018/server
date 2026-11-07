@@ -1,51 +1,13 @@
 ---
-# The GitHub CLI, plus the git credential helper that authenticates this host to GitHub.
-# The readers are gitops_deploy's CI gate, its two GitHub crons, and renovate_agent — each
-# reaches the token through `gh auth token`. daniel-server carries the same config by hand:
-# credential.helper = !gh auth git-credential.
-#
-# chezmoi_setup is NOT one of the readers. DanielH2018/dotfiles is public and clones
-# anonymously, so the dotfiles land whether or not this host has logged in.
+# The apt-github-cli host component ships the apt source and the keyring and depends on `gh`. The
+# dotfiles repo's .gitconfig sets the credential helper. docs/target-architecture/host/
+# h7-delete-ansible.md, H7.62.
 
-# The GitHub CLI apt source and its key come from the apt-github-cli component of the host package (H7.24a).
-- name: Install the GitHub CLI
-  tags: [github_cli]
-  ansible.builtin.apt:
-    name: gh
-    state: present
-    update_cache: true
-  become: true
-
-- name: Point git at the gh credential helper
-  tags: [github_cli]
-  # become: false — this is the CONNECTING user's git config, not root's. Matches
-  # daniel-server, where credential.helper is "!gh auth git-credential" globally.
-  community.general.git_config:
-    name: credential.helper
-    scope: global
-    value: "!gh auth git-credential"
-  become: false
-
-- name: Check whether this host has authenticated to GitHub
-  tags: [github_cli]
-  ansible.builtin.command:
-    cmd: gh auth status
-  register: github_cli_auth
-  become: false
-  changed_when: false
-  failed_when: false
-  # A read of gh's stored credential, so it runs under --check too: skipped, it leaves no rc
-  # and the report below errors on the attribute.
-  check_mode: false
-
-- name: Report that an interactive GitHub login is still required
-  tags: [github_cli]
-  # Like `claude login`, this cannot be automated without introducing a long-lived token.
-  # Reported rather than failed so the play can still finish the tasks that don't need it.
-  ansible.builtin.debug:
-    msg: >-
-      gh is installed but this host is not authenticated to GitHub, so everything that reads
-      `gh auth token` runs anonymous at 60 requests/hour — gitops_deploy's CI gate, its two
-      GitHub crons, and renovate_agent. Run `gh auth login` once, by hand, on
-      {{ inventory_hostname }}, then re-run this play.
-  when: github_cli_auth.rc != 0
+# DECIDED: this role is emptied, never deleted, until H7.20a. A play that names a missing role
+# fails to parse, so deleting the role would mean editing initial_setup.yml, which is in the
+# deployer's _BROAD_MANUAL_PREFIXES and parks every session's landing. An unconditional end_role
+# keeps the playbook line, and the tick applies the role on daniel-box as a no-op.
+# setup_gates.role_end_guard reads this task, so the two-writer census and the setup census count
+# the role as empty on every host.
+- name: End the role, whose work the host packages and the dotfiles repo own
+  ansible.builtin.meta: end_role
