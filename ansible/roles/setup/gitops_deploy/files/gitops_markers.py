@@ -297,9 +297,6 @@ class ManualPlaneEntry(NamedTuple):
             already listed.
         host: the one host the playbook gates the role onto, for a role the tick's host
             does not run, else None.
-        agent_hosts: the hosts the playbook's join plays apply the role's agent half to, from
-            the routing when the deployer recorded the line (#5627). No printer reads it
-            since H7.34 handed the agent half to daniel-server's package.
         hosts: the hosts beyond the tick's own that a change to a role the tick applied
             still reaches (#6510). The tick's own apply never clears such a line.
 
@@ -311,7 +308,6 @@ class ManualPlaneEntry(NamedTuple):
     role: str
     at: float
     host: str | None = None
-    agent_hosts: tuple[str, ...] = ()
     hosts: tuple[str, ...] = ()
 
     def apply_hosts(self) -> tuple[str, ...]:

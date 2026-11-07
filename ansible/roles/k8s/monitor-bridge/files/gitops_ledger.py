@@ -270,12 +270,9 @@ def _manual_plane_tags(obj: dict) -> frozenset[str]:
     return frozenset(w for w in words if w is not None)
 
 
-def _agent_hosts(obj: dict, key: str = "agent_hosts") -> tuple[str, ...]:
-    """The `agent_hosts` key of a `manual_plane` line, or () when it is missing or torn.
-
-    A torn key reads as no known host. `key` reads the `hosts` key the same way.
-    """
-    hosts = obj.get(key)
+def _hosts(obj: dict) -> tuple[str, ...]:
+    """The `hosts` key of a `manual_plane` line, or () when it is missing or torn."""
+    hosts = obj.get("hosts")
     if not isinstance(hosts, list):
         return ()
     words = [_token(h) for h in hosts]
@@ -312,8 +309,7 @@ def manual_plane_entries(
                 role,
                 entry.at,
                 host,
-                _agent_hosts(obj),
-                _agent_hosts(obj, "hosts"),
+                _hosts(obj),
             )
         )
         tags[role] = _manual_plane_tags(obj)
@@ -338,6 +334,7 @@ def put_manual_plane(
         "playbook",
         "tags",
         "host",
+        # No longer written; listed so a rewrite drops it from a line an older deployer wrote.
         "agent_hosts",
         "hosts",
     )
@@ -367,7 +364,6 @@ def _manual_plane_line(entry: ManualPlaneEntry, tags: frozenset[str], extra) -> 
         playbook=entry.playbook,
         tags=sorted(tags),
         **({"host": entry.host} if entry.host else {}),
-        **({"agent_hosts": list(entry.agent_hosts)} if entry.agent_hosts else {}),
         **({"hosts": list(entry.hosts)} if entry.hosts else {}),
     )
 
