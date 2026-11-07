@@ -1,6 +1,6 @@
 """Guard: every prek hook that runs through `uv run` carries `--frozen`.
 
-The unattended production paths (`gitops_deploy`, `secret-rotate`, `secret-rotation-audit`)
+The unattended production paths (`gitops_deploy`, `secret-rotation-audit`)
 run `uv run --frozen`, which installs the committed `uv.lock` as-is. A bare `uv run` in a
 hook re-resolves instead, so the gate could pass against an environment the deployer never
 builds. `uv lock --check` catches the lock drifting; this keeps the hooks resolving from the

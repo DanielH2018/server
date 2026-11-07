@@ -1,16 +1,12 @@
 """The unattended crons that commit must publish through a PR, and must say why they failed.
 
 A repository ruleset rejects a direct write to the default branch ("Required status check ...
-is expected"), so docs-refresh.sh and secret-rotate.sh must publish through a PR. A failure
+is expected"), so docs-refresh.sh and eval-run.sh must publish through a PR. A failure
 sent to /dev/null leaves an alert that says it failed and nothing that says why, so the cause
 stays invisible until the rejected command is run by hand.
 
-secret-rotate is the more consequential of the two: it writes a new credential value and the
-value reaches the cluster only when the commit lands, so an unpublished rotation never goes
-live and the token keeps its old value.
-
 The publish sequence itself -- branch, push, reset master, `gh pr create`, `gh pr merge
---auto` -- lives in scripts/deploy_tools/publish_pr.py, which the three crons call, and is
+--auto` -- lives in scripts/deploy_tools/publish_pr.py, which the two crons call, and is
 EXECUTED by scripts/deploy_tools/tests/test_publish_pr.py. What stays here is text
 assertions over the templates, the weaker kind of guard, kept because the regression they
 cover is someone reinstating an inline direct write, and that is a literal line of shell.
@@ -30,16 +26,13 @@ from _shell_render import rendered_or_source_text, rendered_shell_text
 TEMPLATES = REPO / "ansible/roles/setup/initial_setup/templates"
 COMPONENTS = REPO / "hosts/components"
 DOCS_REFRESH = COMPONENTS / "docs-refresh/templates/docs-refresh.sh.j2"
-SECRET_ROTATE = COMPONENTS / "secret-rotation/templates/secret-rotate.sh.j2"
 ROTATION_AUDIT = COMPONENTS / "secret-rotation/templates/secret-rotation-audit.sh.j2"
 EVAL_RUN = COMPONENTS / "eval-sweep/templates/eval-run.sh.j2"
 PUBLISH_PR = REPO / "scripts/deploy_tools/publish_pr.py"
 
-# (path, the commit invocation as it appears in that script). secret-rotate splits its commit
-# across lines and passes --no-verify, so a single shared marker would silently match neither.
+# (path, the commit invocation as it appears in that script).
 SCRIPTS = [
     pytest.param(DOCS_REFRESH, 'git commit -m "docs:', id="docs-refresh"),
-    pytest.param(SECRET_ROTATE, "commit --no-verify -m", id="secret-rotate"),
     pytest.param(EVAL_RUN, 'git commit -m "evals:', id="eval-run"),
 ]
 
@@ -77,7 +70,7 @@ def _joined_code(path: Path) -> str:
 
 @pytest.mark.parametrize(("path", "commit_marker"), SCRIPTS)
 def test_it_publishes_through_the_shared_publisher(path, commit_marker):
-    """One implementation of branch-push-reset-PR-auto-merge, executed under test, not three."""
+    """One implementation of branch-push-reset-PR-auto-merge, executed under test, not one per cron."""
     calls = [line for line in _joined_code(path).splitlines() if PUBLISHER in line]
     assert len(calls) == 1, (
         f"{path.name} calls the publisher {len(calls)} times; expected exactly one, after the commit"
@@ -154,91 +147,6 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
     )
 
 
-def test_secret_rotate_refuses_to_stack_an_unlanded_rotation():
-    """Rotating again while a previous rotation is unpublished moves the live credential a
-    second time while the first is still unrecorded. It must refuse, not skip quietly.
-
-    The gate is the REMOTE BRANCH, not an open PR. `gh pr create` runs after `git push`, so a
-    create failure leaves the branch on origin with no PR at all — and the publish block's
-    `git reset --hard HEAD~1` then erases every local trace. An open-PR check passes cleanly
-    in exactly the state that most needs to refuse.
-    """
-    text = read(SECRET_ROTATE)
-    assert "git ls-remote --heads origin" in text, (
-        "no remote-branch check; a rotation whose `gh pr create` failed leaves no local "
-        "evidence, so a local-only guard cannot see it and the next run stacks on it"
-    )
-    guard = text.split("git ls-remote --heads origin", 1)[1]
-    assert "exit 1" in guard, (
-        "the in-flight branch must exit non-zero — a silent skip hides that the live value "
-        "and origin disagree"
-    )
-
-
-def test_secret_rotate_fails_closed_when_origin_is_unreachable():
-    """`git ls-remote ...
-
-    || true` would read an unreachable origin as "no stale branch" and
-    rotate straight into the state the guard exists to refuse. The exit status must be tested.
-    """
-    text = read(SECRET_ROTATE)
-    line = next(
-        line for line in code_lines(SECRET_ROTATE) if "git ls-remote --heads" in line
-    )
-    assert "|| true" not in line, (
-        f"the remote-branch check swallows its exit status, so an unreachable origin fails "
-        f"OPEN rather than closed: {line!r}"
-    )
-    assert line.lstrip().startswith("if !"), (
-        f"the remote-branch check must branch on its exit status: {line!r}"
-    )
-    assert "cannot reach origin" in text, (
-        "no distinct alert for an unreachable origin; it would be indistinguishable from a "
-        "clean run"
-    )
-
-
-def test_secret_rotate_failed_publish_does_not_claim_a_deploy():
-    """The rotation writes files only, so a failed publish leaves the value unapplied.
-
-    An alert or PR body that says "deployed" or "live" sends the operator to check a cluster
-    that never changed. The alert must still carry the publisher's message ($PUB_MSG).
-    """
-    claims = [
-        line
-        for line in code_lines(SECRET_ROTATE)
-        if re.search(r"\b(alert|logger|say_failure)\b|--body", line)
-        and re.search(r"\bdeployed\b|\bredeployed\b|ALREADY live", line)
-    ]
-    assert not claims, f"a message claims a deploy the script does not run: {claims!r}"
-    failed = next(
-        line
-        for line in code_lines(SECRET_ROTATE)
-        if line.lstrip().startswith("alert") and "$PUB_MSG" in line
-    )
-    assert "not yet live" in failed, failed
-
-
-def test_secret_rotate_never_reverts_a_committed_rotation():
-    """Reverting after the commit spends the token's one eligible run for the week.
-
-    ROTATE_LEAD_DAYS exceeds the weekly cadence by one day, so a discarded value is not
-    retried before the token is overdue; a human can still land the commit the publisher left.
-    """
-    lines = code_lines(SECRET_ROTATE)
-    starts = [i for i, line in enumerate(lines) if "commit --no-verify -m" in line]
-    assert len(starts) == 1, f"expected one commit invocation, found {len(starts)}"
-    # Comments only, deliberately excluded: the header and the publish block both discuss
-    # reverting in order to rule it out, and matching prose would fail on the explanation.
-    after = [
-        line for line in lines[starts[0] :] if re.search(r"(^|\s|;)revert\b", line)
-    ]
-    assert not after, (
-        f"the publish path calls revert after the commit, which discards the written "
-        f"value: {after!r}"
-    )
-
-
 def test_the_audit_watches_for_an_unlanded_rotation_branch():
     """The weekly gate refuses to stack, but nothing would REPORT the stuck state between Sundays.
 
@@ -254,7 +162,7 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
 
 # --- Every variable a cron reads is one it can see ------------------------------------------
 #
-# All four scripts run under `set -uo pipefail`, so reading an unset variable aborts the script
+# All three scripts run under `set -uo pipefail`, so reading an unset variable aborts the script
 # at that line. Every other check misses it: the templates render, ansible-lint passes, and the
 # abort only happens on the branch that reads the variable, such as the DEGRADED-run branch.
 #
@@ -267,7 +175,7 @@ CHECK_LIB = REPO / "ansible/roles/setup/initial_setup/files/homelab-check-lib.sh
 
 # Environment the unit supplies, with provenance (test_the_cron_env_allowlist_is_still_exported).
 _CRON_ENV = {
-    "PATH": "Environment= of the component services, exported by secret-rotate.sh.j2",
+    "PATH": "Environment= of homelab-docs-refresh.service",
     "KUBECONFIG": "Environment= of homelab-docs-refresh.service",
     "HOME": "Environment= of homelab-eval-sweep.service",
 }
@@ -278,7 +186,6 @@ _CRON_ENV = {
 _READ_CENSUS_MUST_FIND = {
     DOCS_REFRESH: frozenset({"PUSH_STATUS", "PUSH_MSG", "PUB_MSG", "UV", "REPO"}),
     EVAL_RUN: frozenset({"PUSH_STATUS", "PUB_MSG", "UNLANDED_RC", "REPO", "TREND_RC"}),
-    SECRET_ROTATE: frozenset({"PUB_MSG", "STALE_HEADS", "TRACKED", "UV"}),
     ROTATION_AUDIT: frozenset({"AUDIT_RC", "EXTRA_DOWN", "STALE_HEADS", "UV"}),
 }
 
@@ -550,7 +457,7 @@ def test_the_audit_watches_the_gh_token_both_crons_depend_on():
     keep running, both fail at `gh pr create`, and both stop publishing silently."""
     text = read(ROTATION_AUDIT)
     assert "gh auth status" in text, (
-        "nothing checks the credential secret-rotate and docs-refresh publish with"
+        "nothing checks the credential docs-refresh and eval-run publish with"
     )
     line = next(
         line
@@ -559,28 +466,6 @@ def test_the_audit_watches_the_gh_token_both_crons_depend_on():
     )
     assert "if !" in line, (
         f"the gh check must branch on its exit status, not on its output: {line!r}"
-    )
-
-
-def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
-    """The grace period must not swallow the first audit after a failed publish.
-
-    rotate is Sunday 09:00 and the audit is daily 08:30 (crons.yml), so that first audit is
-    23h30m later. A 24h grace would let it push UP -- green on the operator's Monday morning, with
-    the sticky DOWN not appearing until Tuesday.
-    """
-    units = COMPONENTS / "secret-rotation/units/homelab-secret-rotation"
-    assert "OnCalendar=*-*-* 08:30:00" in Path(f"{units}-audit.timer").read_text()
-    assert "OnCalendar=Sun *-*-* 09:00:00" in Path(f"{units}.timer").read_text(), (
-        "the schedule moved; re-derive the grace period against the new times"
-    )
-    text = read(ROTATION_AUDIT)
-    seconds = [int(m) for m in re.findall(r"-gt (\d{4,})", text)]
-    assert seconds, "no age threshold found in the stray-branch arm"
-    assert max(seconds) < 23 * 3600, (
-        "the grace period is at least 23h, within reach of the 23h30m gap between a Sunday "
-        "09:00 rotate and the next 08:30 audit, so the first audit after a failed publish reports UP: %s"
-        % seconds
     )
 
 

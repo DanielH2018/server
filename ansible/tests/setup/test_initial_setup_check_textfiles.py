@@ -43,13 +43,11 @@ KUMA_PUSH_MARKERS = (
     "PUSH_TOKEN",
     "kuma-push.env",
 )
-# Every B2 shell producer this module covers, with the check its textfile names. secret-rotate
-# writes no textfile, and the daily audit reports what it leaves behind.
+# Every B2 shell producer this module covers, with the check its textfile names.
 PRODUCERS = {
     "docs-refresh.sh.j2": "docs-refresh",
     "eval-run.sh.j2": "eval-run",
     "secret-rotation-audit.sh.j2": "secret-rotation-audit",
-    "secret-rotate.sh.j2": None,
     "setup-drift-check.sh.j2": "setup-drift-check",
 }
 
@@ -73,12 +71,8 @@ def test_no_b2_producer_pushes_to_kuma(template):
     # RED if a push, its library, its token or its credential returns: the tiles are gone, so a
     # push would be refused (`by=kuma`) every run.
     body = _render(template)
-    check = PRODUCERS[template]
     # Non-vacuity: the render is the real script, which still records its verdict.
-    if check:
-        assert f"write_check_textfile {check}" in body
-    else:
-        assert 'logger -t secret-rotate "status=down $1"' in body
+    assert f"write_check_textfile {PRODUCERS[template]}" in body
     assert kuma_push_markers(body) == []
 
 

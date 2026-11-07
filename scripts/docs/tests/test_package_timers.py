@@ -91,7 +91,7 @@ def test_the_live_packages_ship_the_named_timers_to_the_hosts_that_run_them():
     for timer in p.package_timers():
         hosts.setdefault(timer.unit, set()).add(timer.host)
     assert hosts["homelab-docs-refresh.timer"] == {"daniel-box"}
-    assert hosts["homelab-secret-rotation.timer"] == {"daniel-box"}
+    assert hosts["homelab-secret-rotation-audit.timer"] == {"daniel-box"}
     assert hosts["homelab-updater.timer"] == {
         "daniel-box",
         "daniel-pi",

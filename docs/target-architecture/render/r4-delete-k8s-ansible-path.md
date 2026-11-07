@@ -828,6 +828,9 @@ tier has a row again. Retiring the job is a host package change with its own lan
 commit does not do it. The finding names the job, that doc and the dormant test, and its owner
 decides whether the tier stays for a future generated secret. If the tier stays, the test stays
 to catch a new `auto` key with no consumer. If the tier goes, the test goes with it.
+The operator retired the tier on 2026-11-07
+([#7480](https://github.com/DanielH2018/server/issues/7480)). The weekly job, the doc section and
+the test went in one host-package change.
 
 The commit's description quotes the reads for M6's exit criterion 2:
 `grep -c '_push_token:' ansible/secret_rotation.yml` and the same read on
