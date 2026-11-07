@@ -166,7 +166,8 @@ covers every caller: `etcd-token-drift` runs as root, the other two as
 `{{ sys_user }}`. Same shape as `/etc/renovate-notify/config.env`.
 
 `registry-gc.sh` is `0700 root:root` and reads the key from its unit's
-`healthchecks_ping_key` credential instead, as every packaged timer does.
+`healthchecks_ping_key` credential instead. Its unit uses `ImportCredential=`, so a missing key
+skips the ping and the collection still runs.
 
 For `pi-peer-backup` the URL is a key in the existing k8s Secret, not a file on a host.
 

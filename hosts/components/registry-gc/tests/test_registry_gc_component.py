@@ -59,11 +59,8 @@ def test_the_service_runs_the_script_as_root_and_loads_the_ping_key(package):
     assert f"ExecStart={SCRIPT}\n" in service
     assert "User=" not in service
     assert "SyslogIdentifier=registry-gc\n" in service
-    assert (
-        "LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key\n"
-        in service
-    )
-    assert "healthchecks_ping_key" in package.credentials
+    assert "ImportCredential=healthchecks_ping_key\n" in service
+    assert "LoadCredential=" not in service
     assert f"--create {TMPFILES}\n" in service
 
 
@@ -82,7 +79,9 @@ def test_a_stop_leaves_the_exit_trap_time_to_restore_the_mirror(package):
 
 def test_the_script_reads_the_credential_and_the_packaged_check_lib(package):
     script = _text(package, SCRIPT)
-    assert "source /usr/lib/homelab/homelab-check-lib.sh" in script
+    check_lib = "/usr/lib/homelab/homelab-check-lib.sh"
+    assert f"source {check_lib}" in script
+    assert check_lib in package.files
     assert '"$CREDENTIALS_DIRECTORY/healthchecks_ping_key"' in script
     assert "/etc/healthchecks" not in script
 

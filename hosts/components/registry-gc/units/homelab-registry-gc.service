@@ -13,5 +13,6 @@ SyslogIdentifier=registry-gc
 # SIGTERM runs the script's EXIT trap, which restores the mirror: up to 120s to delete the Job and
 # 180s for the rollout. The default 90s would SIGKILL it partway and strand the mirror at zero.
 TimeoutStopSec=360s
-# The Healthchecks.io key. The script reads it from $CREDENTIALS_DIRECTORY.
-LoadCredential=healthchecks_ping_key:/run/credstore/healthchecks_ping_key
+# The Healthchecks.io key. Import, not Load: Load fails the unit with 243/CREDENTIALS on a missing
+# file, and a missing ping key must not stop the only collector of the mirror stores.
+ImportCredential=healthchecks_ping_key
