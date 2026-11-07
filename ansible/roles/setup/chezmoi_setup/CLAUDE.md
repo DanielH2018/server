@@ -19,7 +19,7 @@ Repo-root `CLAUDE.md` has the conventions.
 - `hosts/daniel-box/package.yml` depends on the distro packages the dotfiles' `install-cli-tools`
   script cannot install itself, because `sudo` has no TTY there.
 - `docs/host-packages.md`, *Rebuilding daniel-box*, has the hand step that runs `chezmoi init
-  --apply` (**operator-only**). `bin/land` in the dotfiles repo moves daniel-box's chezmoi source
+  --apply` (**operator-only**). A `bin/land` run on daniel-box moves its chezmoi source
   onto its `main`, and the operator's `chezmoi apply` deploys it. No timer applies the operator's
   dotfiles.
 - The agent user's chezmoi seed is the claude-code component's
