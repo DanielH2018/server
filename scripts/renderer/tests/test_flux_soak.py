@@ -172,6 +172,46 @@ def test_the_deadline_fails_naming_every_kustomization_not_ready_at_r(world, tmp
     assert "not Ready at R by the deadline: authelia, authelia-verify" in message
 
 
+# A k3s upgrade restarts the API server under the wait (#7586).
+
+
+def _api_error_while_waiting(world, error):
+    world.kustomizations[0] = kustomization("authelia", ready=False)
+
+    def upgrade(w):
+        w.api_errors[flux_soak.KUSTOMIZATIONS] = [error]
+        w.kustomizations[0] = kustomization("authelia")
+        w.on_sleep = lambda w: None
+
+    world.on_sleep = upgrade
+
+
+def test_a_503_while_waiting_reads_as_not_ready_and_the_wait_passes(world, tmp_path):
+    _api_error_while_waiting(
+        world, flux_soak.TransientError(f"{flux_soak.KUSTOMIZATIONS}: HTTP 503")
+    )
+    assert run(world, tmp_path) == (0, "")
+    assert world.sleeps[:2] == [flux_soak.POLL_SECONDS] * 2
+
+
+def test_a_403_while_waiting_still_fails(world, tmp_path):
+    _api_error_while_waiting(
+        world, flux_soak.SoakError(f"{flux_soak.KUSTOMIZATIONS}: HTTP 403")
+    )
+    code, message = run(world, tmp_path)
+    assert code == 1
+    assert "HTTP 403" in message
+
+
+def test_a_503_that_outlasts_the_deadline_fails_naming_it(world, tmp_path):
+    world.api_errors[flux_soak.KUSTOMIZATIONS] = [
+        flux_soak.TransientError("HTTP 503") for _ in range(10)
+    ]
+    code, message = run(world, tmp_path, wait_seconds=60)
+    assert code == 1
+    assert "HTTP 503, still failing at the deadline" in message
+
+
 def test_a_kustomization_the_root_prunes_after_the_scope_read_settles(
     world, tmp_path, capsys
 ):

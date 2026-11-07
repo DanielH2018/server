@@ -13,9 +13,9 @@ docs/target-architecture/deploy/d5-bulk-move.md, *The soak as a Job (D5.3)*. The
   outlives it;
 - `cluster/soak/`: the Job `soak-<spec digest8>` in `flux-system`, which runs
   `scripts/renderer/job_files/flux_soak.py` with R's SHA in its arguments; the ConfigMap
-  `soak-<content digest8>` holding that script, byte copies of `flux_job_connect.py` and
-  `scripts/deploy_tools/changed_set.py`, and `services.json`, the per-service map W reads; and
-  the ServiceAccount `soak` with its RBAC, whose pod and ReplicaSet reads are a ClusterRole.
+  `soak-<content digest8>` holding that script, its read layer `soak_reads.py`, byte copies of
+  `flux_job_connect.py` and `scripts/deploy_tools/changed_set.py`, and `services.json`, the
+  per-service map W reads; and the ServiceAccount `soak` with its RBAC, whose pod and ReplicaSet reads are a ClusterRole.
 
 `services.json` maps each published tag to the longest `for:` among the Prometheus rules that
 can page for it, critical or `verify="true"` and not `shadow`, and to the namespaces its tag
@@ -68,6 +68,7 @@ from renderer.renderer_lib.ordering import (
 SOAK = "soak"
 FILES = JOB_FILES
 SCRIPT = FILES / "flux_soak.py"
+READS = FILES / "soak_reads.py"
 HELPER = FILES / "flux_job_connect.py"
 CHANGED_SET = SCRIPTS / "deploy_tools" / "changed_set.py"
 SERVICES = "services.json"
@@ -341,6 +342,7 @@ def soak_files(
         "metadata": {"name": "", "namespace": FLUX_NAMESPACE},
         "data": {
             SCRIPT.name: SCRIPT.read_text(),
+            READS.name: READS.read_text(),
             HELPER.name: HELPER.read_text(),
             CHANGED_SET.name: CHANGED_SET.read_text(),
             SERVICES: json.dumps(services, sort_keys=True, indent=1) + "\n",

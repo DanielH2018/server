@@ -114,6 +114,8 @@ class World:
         self.pods = {"authelia": [pod("authelia", "authelia-1")], "media": []}
         self.replicasets = {}
         self.forbidden = set()
+        # Each path's queued errors, raised one per read before the path answers.
+        self.api_errors = {}
         self.unmapped = set()
         self.ready_samples = None
         self.scrape_gaps = []
@@ -142,6 +144,8 @@ class World:
 
     def api(self, path):
         self.reads_of.append(path)
+        if self.api_errors.get(path):
+            raise self.api_errors[path].pop(0)
         if path == flux_soak.OCIREPOSITORIES:
             return {"items": self._sources()}
         if path == flux_soak.KUSTOMIZATIONS:
