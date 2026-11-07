@@ -20,7 +20,7 @@ rendered, so labelling a workload rolls no pods and touches no Service selector.
 
 No Ansible import at load time, so the tests call the same function the playbook runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
-`AnsibleFilterError("homelab_role_label: ...")` and fails the render task before any apply
+`FilterError("homelab_role_label: ...")` and fails the render task before any apply
 (#4505).
 """
 

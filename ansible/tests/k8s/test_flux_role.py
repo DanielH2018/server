@@ -26,7 +26,7 @@ import re
 
 import chained_timeout
 import pytest
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 
 from _helpers import ALL_VARS, ROLES, load_defaults
 from lib import yaml_fast
@@ -217,9 +217,8 @@ spec:
     ids=["unnamed-volume", "no-deployment"],
 )
 def test_flux_components_refuses_an_install_it_cannot_fit(text):
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         FilterModule().filters()["flux_components"](text, {}, "homelab-critical", {})
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith("flux_components: "), str(caught.value)
 
 
@@ -269,7 +268,7 @@ def test_a_controller_flag_replaces_upstreams_value_for_it():
 
 
 def test_a_flag_for_a_deployment_the_install_lacks_is_refused():
-    with pytest.raises(AnsibleFilterError, match="kustomize-controller"):
+    with pytest.raises(FilterError, match="kustomize-controller"):
         FilterModule().filters()["flux_components"](
             _DEPLOYMENT,
             {},
@@ -318,7 +317,7 @@ def test_a_controller_resources_patch_replaces_only_the_keys_it_names():
 
 
 def test_resources_for_a_deployment_the_install_lacks_are_refused():
-    with pytest.raises(AnsibleFilterError, match="kustomize-controller"):
+    with pytest.raises(FilterError, match="kustomize-controller"):
         FilterModule().filters()["flux_components"](
             _DEPLOYMENT,
             {},

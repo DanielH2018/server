@@ -795,14 +795,12 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             SHADOW_DIFFERENT,
             "SHADOW_DIFFERENT",
-            "a difference, a file lacking a stub token, or a failed fluxprobe case.",
-            "Never copy or post a tree stubcheck fails.",
+            "a round-trip difference or a failed fluxprobe case.",
         ),
         _c(
             SHADOW_REFUSED,
             "SHADOW_REFUSED",
-            "refused: an empty set, a missing named member or file, a busy --out, no flux.",
-            "Render every tag on both sides, then compare again.",
+            "refused: a tree with no cluster/, a busy --out, no flux, or a failed render.",
         ),
         _c(SHADOW_BAD_ARGS, "SHADOW_BAD_ARGS", "the command line is wrong."),
     ),

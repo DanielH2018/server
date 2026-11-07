@@ -31,7 +31,7 @@ import json
 
 from lib.cli_help import ArgumentParser
 from lib.exit_codes import FAILED, OK
-from renderer.homelab_render import ansible_local_temp, secret_keys
+from renderer.homelab_render import secret_keys
 from renderer.renderer_lib.cluster import select_tags
 from renderer.renderer_lib.environment import RenderError
 from renderer.renderer_lib.ordering import split_kind
@@ -104,8 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        with ansible_local_temp():
-            text = map_text(guard_map(fleet_render()))
+        text = map_text(guard_map(fleet_render()))
     except (RenderError, ValueError) as exc:
         print(f"standalone_map: {exc}. Nothing was written.", file=sys.stderr)
         return FAILED

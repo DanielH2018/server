@@ -16,7 +16,7 @@ either would otherwise drop a row, and a dropped row is a check no generated fra
 
 No Ansible import at load time, so the tests call the same function the playbook runs.
 `FilterModule` registers it through `_as_filter`, which re-raises a `ValueError` as
-`AnsibleFilterError("py_table: ...")` and fails the render before anything applies (#4505).
+`FilterError("py_table: ...")` and fails the render before anything applies (#4505).
 """
 
 import ast

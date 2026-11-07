@@ -44,7 +44,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import jinja2
-from ansible.errors import AnsibleError
 
 from renderer.renderer_lib.targets import render_targets, vendored_paths
 from lib import yaml_fast
@@ -342,7 +341,7 @@ def role_context(
         # The stub file's extra vars outrank them in turn.
         facts = derived_facts(role_dir, ctx, built)
         ctx = tag_context(role_dir, tag, {**facts, **stubs}, host, inventory)
-    except (ValueError, jinja2.TemplateError, AnsibleError) as exc:
+    except (ValueError, jinja2.TemplateError) as exc:
         raise RenderError(f"{tag}: {exc}") from exc
     try:
         raw = include_vars(role_dir)
@@ -409,7 +408,7 @@ def render_tag(
             path = LABEL_WRAPPER
         try:
             return render_file(env, loader_name(env, path), vars_)
-        except (jinja2.TemplateError, ValueError, AnsibleError) as exc:
+        except (jinja2.TemplateError, ValueError) as exc:
             raise RenderError(f"{tag}/{out_name} from {path.name}: {exc}") from exc
 
     rendered = {}

@@ -4,7 +4,6 @@ Run: uv run pytest scripts/lib/tests/test_ansible_jinja_env.py
 """
 
 import sys
-from pathlib import Path
 
 import pytest
 
@@ -15,14 +14,13 @@ from lib.proc_testing import run
 
 # Every filter and test a template in this tree reaches for, mapped to the implementation it
 # must resolve to. A roster rather than a count, so a filter that silently stops being
-# registered fails by name. `to_json` is the one entry that is not ansible-core's: the real
-# one raises on the StubUndefined a guard renders secrets as.
+# registered fails by name.
 EXPECTED_FILTERS = {
-    "bool": "ansible.plugins.filter.core.to_bool",
-    "comment": "ansible.plugins.filter.core.comment",
-    "hash": "ansible.plugins.filter.core.get_hash",
-    "mandatory": "ansible.plugins.filter.core.mandatory",
-    "to_uuid": "ansible.plugins.filter.core.to_uuid",
+    "bool": "lib.ansible_jinja_env.ansible_bool",
+    "comment": "renderer.renderer_lib.jinja_filters.comment",
+    "hash": "renderer.renderer_lib.jinja_filters.hash_text",
+    "mandatory": "renderer.renderer_lib.jinja_filters.mandatory",
+    "to_uuid": "renderer.renderer_lib.jinja_filters.to_uuid",
     "filter_by_platform": "toposort.filter_by_platform",
     "authelia_service_rules": "authelia_access.authelia_service_rules",
     "lan_hostnames": "entry_fields.lan_hostnames",
@@ -31,23 +29,19 @@ EXPECTED_FILTERS = {
 
 
 @pytest.mark.parametrize("name,dotted", sorted(EXPECTED_FILTERS.items()))
-def test_every_registered_filter_is_the_real_implementation(name: str, dotted: str):
-    """The point of the module: a guard agrees with a deploy by identity, not by a shim.
-
-    A hand-written stub agrees with the real filter on the ordinary inputs a test reaches for
-    and diverges on exactly the ones the filter exists for — `bool("false")` being the case
-    that started this.
-    """
+def test_every_registered_filter_is_the_implementation_on_the_roster(
+    name: str, dotted: str
+):
+    """A guard and the renderer read one set, which `test_renderer_filters.py` holds to Ansible's."""
     env = aje.make_ansible_env([SHARED_TPL])
     registered = env.filters[name]
     assert f"{registered.__module__}.{registered.__name__}" == dotted
 
 
 def test_to_json_is_the_stub_that_tolerates_an_undefined_value():
-    """The one filter that is deliberately not ansible-core's.
+    """A guard renders every SOPS secret as StubUndefined, which plain-data JSON refuses.
 
-    A guard renders every SOPS secret as StubUndefined, which ansible-core's `to_json` refuses
-    to serialize — it would abort the render this environment exists to complete.
+    That would abort the render this environment exists to complete.
     """
     env = aje.make_ansible_env([SHARED_TPL])
     assert env.filters["to_json"] is to_json_stub
@@ -168,8 +162,7 @@ def test_ansible_bool_filter_mirrors_ansible_semantics(value, expected: bool):
 
 
 def test_ansible_bool_tables_are_to_bool_tables():
-    """The shim copies the tables rather than importing them (the import-cost `DECIDED:` in
-    `lib/k8s_context.py`), so this is the pin that fails when ansible-core moves them."""
+    """The pin that fails when ansible-core moves its tables, until H7 removes it."""
     from ansible.plugins.filter import core
 
     assert aje.BOOLEANS_TRUE == core._valid_bool_true
@@ -188,13 +181,10 @@ def test_ansible_bool_agrees_with_ansible_core_to_bool(value):
 
 
 def test_the_light_tier_loads_no_ansible_core():
-    """`lib.k8s_context`'s `DECIDED:` marker costs ~190 ms if ansible-core leaks into it.
+    """`probe_lib/health.py` imports `k8s_context`, so importing these stays cheap.
 
-    `probe_lib/health.py` imports `k8s_context`, and `probe.py health` loads no
-    ansible-core today. `k8s_context` takes `ansible_bool` from this module, so importing
-    `lib.ansible_jinja_env` must load none either: ansible-core waits for the first
-    `register_ansible_filters` call. A subprocess rather than `sys.modules` in-process, because pytest has
-    already imported ansible-core by the time this test runs.
+    A subprocess rather than `sys.modules` in-process, because pytest has already imported
+    ansible-core by the time this test runs.
     """
     proc = run(
         [
@@ -207,35 +197,8 @@ def test_the_light_tier_loads_no_ansible_core():
     )
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.strip() == "[]", (
-        "the light tier now imports ansible-core — see the DECIDED: marker in "
-        f"scripts/lib/k8s_context.py\n{proc.stdout}"
+        f"the light tier now imports ansible-core\n{proc.stdout}"
     )
-
-
-# Registers the filters, as every render guard prek runs does, then exits through `os._exit`,
-# which skips atexit the way a guard killed under a background `git commit` does (#5904).
-def test_registering_the_filters_keeps_ansible_temp_out_of_the_home_directory(tmp_path):
-    """A guard killed after loading ansible-core leaves its directory under the temp dir."""
-    home, tmp = tmp_path / "home", tmp_path / "tmp"
-    home.mkdir()
-    tmp.mkdir()
-    script = (
-        "import os, sys\n"
-        "sys.path.insert(0, 'scripts')\n"
-        "import jinja2\n"
-        "from lib.ansible_jinja_env import register_ansible_filters\n"
-        "register_ansible_filters(jinja2.Environment())\n"
-        "import ansible.constants\n"
-        "print(ansible.constants.DEFAULT_LOCAL_TMP, 'ANSIBLE_LOCAL_TEMP' in os.environ)\n"
-        "sys.stdout.flush()\n"
-        "os._exit(0)\n"
-    )
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(home), "TMPDIR": str(tmp)}
-    proc = run([sys.executable, "-c", script], cwd=REPO, env=env, check=True)
-    local_tmp, still_set = proc.stdout.split()
-    assert not list(home.glob(".ansible/tmp/ansible-local-*"))
-    assert Path(local_tmp).parent == tmp
-    assert still_set == "False"
 
 
 @pytest.mark.parametrize(
@@ -258,12 +221,11 @@ def test_registering_the_filters_keeps_ansible_temp_out_of_the_home_directory(tm
 )
 def test_a_guard_refusal_names_its_filter_as_a_deploy_does(name: str, args: tuple):
     """The guard env registers the FilterModule versions, so its refusal reads as a deploy's (#4505)."""
-    from ansible.errors import AnsibleFilterError
+    from filter_errors import FilterError
 
     env = aje.make_ansible_env([SHARED_TPL])
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         env.filters[name](*args)
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)
 
 

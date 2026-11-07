@@ -21,7 +21,7 @@ import pytest
 
 from _homepage_config import config_urls, namespace
 from _k8s_render import host_context, rendered_docs
-from ansible.errors import AnsibleFilterError
+from filter_errors import FilterError
 from homepage_tiles import (
     FilterModule,
     homepage_href,
@@ -198,9 +198,8 @@ def test_caller_fences_skip_what_a_role_renders_itself():
     ],
     ids=["widget-missing", "widget-unflagged", "href-missing", "href-no-hostname"],
 )
-def test_a_refusal_is_an_ansible_filter_error_named_for_its_filter(name, args):
+def test_a_refusal_is_a_filter_error_named_for_its_filter(name, args):
     """A render failure names the filter that refused, through the filter Ansible calls."""
-    with pytest.raises((ValueError, AnsibleFilterError)) as caught:
+    with pytest.raises(FilterError) as caught:
         FilterModule().filters()[name](ENTRIES, *args)
-    assert isinstance(caught.value, AnsibleFilterError), type(caught.value)
     assert str(caught.value).startswith(f"{name}: "), str(caught.value)
