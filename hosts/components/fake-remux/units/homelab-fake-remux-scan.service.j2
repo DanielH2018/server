@@ -3,10 +3,15 @@
 Description=Scan the media library for fake remuxes and seed the replacement ledger
 After=network-online.target homelab-secrets.service
 Wants=network-online.target homelab-secrets.service
+# A missing or dangling config otherwise reads as `disabled` and exits 0. A failed start leaves
+# the state file to age, and fake-remux-health reports that.
+AssertPathExists=/etc/autofix-fake-remux/config.env
 
 [Service]
 SyslogLevel=notice
 Type=oneshot
+StateDirectory=autofix-fake-remux
+StateDirectoryMode=0755
 User={{ sys_user }}
 SyslogIdentifier=fake-remux-scan
 # ONE lock with the reconcile and the repair: the scan seeds the ledger the reconcile acts on.

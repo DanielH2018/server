@@ -64,7 +64,10 @@ what is specific to the host timers: the schedule, the lock, and the contract be
 - **Config paths are the ones autofix-bridge used**, on purpose: both scripts fall back to
   `/etc/autofix-fake-remux/config.env`, so the units carry no override. A first attempt
   at renaming them read a config that did not exist and reported `disabled (no Sonarr API
-  key)` — green, scanning nothing.
+  key)` — green, scanning nothing. The output is a link into `/run/homelab-secrets`, so a host
+  SOPS file lacking the key leaves it dangling, and the scripts read that the same way. Each
+  media unit's `AssertPathExists=` fails the start instead, and `fake-remux-health` reports
+  the state file aging.
 - **Sonarr is reached by its pinned ClusterIP**, not by name: the host has no cluster DNS, and
   the `-k8s` ingress name mis-resolves on this node. A package cannot read the cluster when it
   renders, so `sonarr_k8s_cluster_ip` in `ansible/roles/k8s/sonarr/defaults/main.yml` and

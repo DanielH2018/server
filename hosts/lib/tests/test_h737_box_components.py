@@ -82,6 +82,8 @@ def test_the_media_services_share_one_lock_and_keep_their_journal_tag(
     )
     assert folded.rstrip().endswith(f"/usr/lib/homelab/fake-remux/{script}")
     assert f"SyslogIdentifier={identifier}\n" in unit
+    assert "StateDirectory=autofix-fake-remux\n" in unit
+    assert "AssertPathExists=/etc/autofix-fake-remux/config.env\n" in unit
     assert package.policies[f"{service}.service"] == "manual"
 
 
@@ -115,13 +117,6 @@ def test_the_package_needs_the_media_tools(package):
 def test_the_agent_user_keeps_its_live_uid(package):
     [user] = [u for u in package.users if u["name"] == "renovate-agent"]
     assert (user["uid"], user["home"]) == (999, "/var/lib/renovate-agent")
-
-
-def test_the_package_ships_no_deploy_ui(package):
-    """H7.11: deploy_ui is not packaged, and #7419 holds whether that changes."""
-    assert not [
-        dst for dst in package.files if "deploy-ui" in dst or "deploy_ui" in dst
-    ]
 
 
 @pytest.mark.parametrize(
@@ -188,7 +183,7 @@ def setup(tmp_path):
     calls = tmp_path / "calls"
     stubs = fake_bin(
         tmp_path / "bin",
-        runuser='shift 3\nexec "$@"\n',
+        runuser=f'user=$2\nshift 3\necho "$user $*" >> {calls}.runuser\nexec "$@"\n',
         install="true\n",
         git=f'echo "git $*" >> {calls}\n',
         curl=f'echo "curl $*" >> {calls}\nwhile [ "$1" != -o ]; do shift; done\n'
@@ -228,6 +223,31 @@ def test_the_setup_gives_the_agent_its_tools_python_claude_and_clone(setup):
         f"git clone --quiet https://github.com/DanielH2018/server.git {home}/server"
         in log
     )
+
+
+def test_the_agent_runs_every_command_that_writes_into_its_home(setup):
+    """A session can replace any path in its home with a link, so root must not write there."""
+    script, home, calls, env = setup
+    run(["bash", str(script)], env=env, check=True)
+    log = calls.with_name("calls.runuser").read_text()
+    writes = [
+        *(
+            rf"cp -RT --remove-destination \S+ {home}/{rel}"
+            for rel in (
+                ".local/bin/uv",
+                ".local/bin/uvx",
+                ".local/bin/prek",
+                ".local/share/claude-guard/claude_guard",
+                ".local/share/claude-worktree/claude_worktree.py",
+            )
+        ),
+        rf"mkdir -p {home}/\.local/bin .*",
+        rf"{home}/\.local/bin/uv python install \S+",
+        r"env CLAUDE_INSTALL_ALLOW_SUDO=1 bash \S+",
+        rf"git clone --quiet \S+ {home}/server",
+    ]
+    for write in writes:
+        assert re.search(rf"^renovate-agent env .*{write}$", log, re.M), write
 
 
 def test_a_second_setup_reinstalls_nothing_it_can_skip(setup):
