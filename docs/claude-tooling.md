@@ -962,13 +962,12 @@ A headless `claude -p` batch runs without isolation and draws none of these refu
 
 ## `auto-mode-bridge` internals
 
-The two places auto mode and this repo have to talk (`PermissionDenied` + `PostToolUseFailure`,
-both Bash).
+The places auto mode and this repo have to talk (`PostToolUseFailure` and, for a `git push`,
+`PostToolUse`, both Bash).
 
-On a **denial**, it retries `gitops_tick.sh` and nothing else: the tick is allow-listed and still
-denied about 1 run in 7 on identical text, which is classifier variance rather than a rule, so
-`retry: true` reissues the call and the classifier judges it again. Two retries per session, and
-a compound command that merely contains the tick gets none — the classifier judged the whole line.
+It grants no retry on a classifier **denial**. A `PermissionDenied` branch used to retry
+`gitops_tick.sh`, which the classifier denied about 1 run in 7 on identical text in 2026-08. It
+was removed on 2026-11-07, after a week with no retry ledger in any session.
 
 On a **failure**, it names a `deploy.sh` exit a refusal rather than a playbook failure, and
 points at the wrapper's own last two lines for what it was. `deploy_lib/run.py:report` prints the name, the meaning and the remedy from

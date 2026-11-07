@@ -48,9 +48,9 @@ started, so re-run once the run ends.
 judges it on its own text and denied it once in seven runs on identical input (measured
 2026-08-22). `Bash()` allow rules are suspended while `autoMode.classifyAllShell` is on, so the
 allow-list entry in `.claude/settings.json` decides only outside auto mode. A denial is
-classifier variance, not a broken script or a missing polkit rule.
-`auto-mode-bridge.py` retries it automatically, twice per session; a compound command that
-merely contains the tick gets no retry, because the classifier judged the whole line.
+classifier variance, not a broken script or a missing polkit rule. Nothing retries it for you.
+Run the tick on its own line: the classifier judges the whole command, so a compound one gives
+it more to object to.
 
 Re-run it, and **check `last_run` before assuming nothing happened.**
 

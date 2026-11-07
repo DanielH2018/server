@@ -21,7 +21,6 @@
 # To see a file's count, lower its entry here by 1 and run the guard -- the failure names
 # the real number:
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
-.claude/hooks/tests/test_auto_mode_bridge.py 1
 .claude/hooks/tests/test_block_footguns.py 2
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 12
