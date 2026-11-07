@@ -5,7 +5,7 @@ H1 hands the cluster's own plumbing to Flux, one tag per PR, and each PR deletes
 `docs/target-architecture/host/h1-cluster-config-to-flux.md`, H1.1h. This row counts those
 writers per task file. Its `allow` map starts with every file that holds one, each naming the PR
 that removes its writers, and each H1 PR drops its entry in the same commit. At the end of H1
-only `storage_smoke.yml` and `agent_verify.yml` keep an entry.
+only `storage_smoke.yml` keeps an entry.
 
 The row is what refuses a new cluster writer in `setup/k3s`: a writer in any other file fails
 it, with no guard to register with (#5957 retired the stale-checkout guard). The predicate is

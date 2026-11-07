@@ -69,6 +69,9 @@ files:
 enable:
   homelab-updater.timer: timers.target
 legacy:
+  # The hypervisor role's teardown half kept this host free of the network source directory until
+  # H7.34 emptied the role. Nothing recreates it, so the entry stays a no-op on a clean host.
+  - {path: /etc/libvirt/declared-networks}
   # The Pi's three heartbeats read their push tokens from /run/credstore since H4.5, and nothing
   # reads the interim copies optimize_pi staged (pi-heartbeats/component.yml). H4.6's retirement
   # lands here with the role that wrote them. The directory comes after its files, because

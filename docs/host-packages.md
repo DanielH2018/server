@@ -608,19 +608,20 @@ this section is **operator-only**, and the guest drill below has not run yet. Th
 
 ### What the packages do not hold yet
 
-The two packages do not rebuild a whole node until H7.34 (daniel-server) and H7.35 (daniel-box)
-land. A node rebuilt from them alone lacks:
+`homelab-daniel-server` holds the agent's join rules, the Longhorn host prerequisites, the
+`multipathd` blacklist and the static LAN address since H7.34. A rebuilt daniel-server lacks only
+its LVM volumes, which `bootstrap-host.sh` step 4 does not create yet.
 
-- the UFW rules for k3s's join ports and for Prometheus's scrapes. The UFW arm of reconcile enables
-  UFW on a rebuilt host, so daniel-box cannot reach a rebuilt agent's VXLAN, kubelet or metrics
-  ports until the rules exist;
+`homelab-daniel-box` does not rebuild a whole node until H7.35 lands. A daniel-box rebuilt from it
+alone lacks:
+
+- the UFW rules for k3s's join ports and for Prometheus's scrapes;
 - the Longhorn host prerequisites and the `multipathd` blacklist;
 - the static LAN address, the host CoreDNS forwarder and the read-only kubeconfig;
 - `/etc/rancher/k3s/etcd-s3.env`, which *Restoring* in [the etcd restore doc](k3s-etcd-restore.md)
-  sources;
-- daniel-server's LVM volumes, which `bootstrap-host.sh` step 4 does not create yet.
+  sources.
 
-Until those two slices land, a node rebuilt from this section is not a working node.
+Until that slice lands, a daniel-box rebuilt from this section is not a working node.
 [The break-glass doc](break-glass.md), *Scenario: daniel-server is dead, daniel-box survives*, says
 what completes a daniel-server rebuild during an outage.
 
