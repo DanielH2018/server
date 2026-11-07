@@ -29,7 +29,7 @@ and stopped, because the operator starts it by hand (`docs/host-packages.md`). T
 simulation, so a package's enable link never lands here. `hosts/lib/tests/test_bootstrap_host_k3s.py`
 reads the rendered links instead.
 
-The script runs unmodified, with three stand-ins around it:
+The script runs unmodified, with four stand-ins around it:
 
   * The scratch clone is one commit of the checkout's tree with `hosts/lib/bootstrap_anchor.py`
     replaced by ANCHOR_STUB. The real check reads GitHub, and a pull request's head is on no
@@ -37,6 +37,10 @@ The script runs unmodified, with three stand-ins around it:
   * An `apt-get` on PATH ahead of the real one records each call and turns `install` into
     `install --simulate`. A real install of a cluster node's package starts reconcile, whose arms
     a container cannot satisfy, so these cases run no maintainer script.
+  * A `dig` on PATH (DIG_SHIM) answers step 6's probe of daniel-box's forwarder. The simulated
+    install leaves no coredns-host.service to answer it, and the offline case has no network for
+    the forwarder to reach. On a real host the package installs it and reconcile starts it.
+    `hosts/lib/tests/test_bootstrap_host_k3s.py` holds the probe's refusal.
   * The script runs with SUDO_UID set to the clone's owner, as `sudo` sets it, because git
     refuses a repository that another user owns unless it was reached through sudo.
 
@@ -87,6 +91,7 @@ fi
 exec /usr/bin/apt-get "$@"
 """
 SWAPON_SHIM = "/usr/local/sbin/swapon"
+DIG_SHIM = "/usr/local/sbin/dig"
 COPY = "/root/bootstrap"
 TOOLS_SEED = "/srv/tools-seed"
 # A join address and token for the agent, which the installer writes and nothing contacts.
@@ -213,13 +218,15 @@ def _download(
 
 
 def install_apt_shim(c: Container) -> None:
-    """Put APT_SHIM ahead of the real apt-get, and a stand-in swapon ahead of the real one.
+    """Put APT_SHIM ahead of the real apt-get, and stand-in swapon and dig commands on PATH.
 
-    The image's overlay filesystem holds no swap file, so a real swapon fails in every case.
+    The image's overlay filesystem holds no swap file, so a real swapon fails in every case. The
+    dig stand-in answers with a TEST-NET address, because the simulated install starts no forwarder.
     """
     c.ok(f"cat > /usr/local/sbin/apt-get << 'EOF'\n{APT_SHIM}EOF\n")
     c.ok(f"printf '#!/bin/sh\\nexit 0\\n' > {SWAPON_SHIM}")
-    c.ok(f"chmod 0755 /usr/local/sbin/apt-get {SWAPON_SHIM}")
+    c.ok(f"printf '#!/bin/sh\\necho 192.0.2.1\\n' > {DIG_SHIM}")
+    c.ok(f"chmod 0755 /usr/local/sbin/apt-get {SWAPON_SHIM} {DIG_SHIM}")
 
 
 def seed_kit(cases, kit: Path) -> Path:
