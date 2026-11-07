@@ -49,19 +49,16 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 _sys.path.insert(0, str(HOST_LIB_FILES))
 
 from deployer_lib.deploy_state import STATE_DIR, DeployerState
-from gitops_markers import on_host
 
 # What a role, tag or host on a ledger line may spell before this puts it in a shell command.
 # The ledger is a file the deploy user can write and this is the command auto mode allows, so
 # a line is data to check, never a command to trust.
 SAFE_WORD = re.compile(r"[A-Za-z0-9_.:-]+")
-# What `agent_join_cmds` and `agent_pin_cmds` print for a line that names no agent host.
-AGENT_HOST_PLACEHOLDER = "<agent host>"
 
 
 def _line_refusal(entry, remedy: ManualPlaneRemedy) -> str | None:
     """Why this line's commands must not run, or None when they may."""
-    hosts = set(entry.apply_hosts()) | set(entry.agent_hosts)
+    hosts = set(entry.apply_hosts())
     words = {entry.role, *remedy.tags, *hosts}
     if bad := sorted(w for w in words if not SAFE_WORD.fullmatch(w)):
         return f"the line carries a value no role, tag or host spells: {bad}"
@@ -73,11 +70,6 @@ def _line_refusal(entry, remedy: ManualPlaneRemedy) -> str | None:
         return f"it names hosts the inventory does not: {unknown}"
     if remedy.warning:
         return f"the apply arms more than the change, so the operator runs it: {remedy.warning}"
-    commands = [remedy.apply, *remedy.agents, *(cmd for _, cmd in remedy.pins)]
-    if any(AGENT_HOST_PLACEHOLDER in c for c in commands):
-        return "the line names no agent host, so a join or pin command has no target"
-    if not any(commands):
-        return "the line yields no command to run"
     return None
 
 
@@ -159,11 +151,7 @@ def run_owed(
     if refusal := _line_refusal(entry, remedy):
         print(f"refused {key}: {refusal}. Nothing was run.", file=sys.stderr)
         return 1
-    commands = [
-        *([remedy.apply] if remedy.apply else []),
-        *remedy.agents,
-        *(on_host(cmd, host) for host, cmd in remedy.pins),
-    ]
+    commands = [remedy.apply]
     if dry_run:
         for cmd in commands:
             print(cmd)

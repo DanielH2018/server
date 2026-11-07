@@ -270,8 +270,7 @@ def _manual_plane_tags(obj: dict) -> frozenset[str]:
 def _agent_hosts(obj: dict, key: str = "agent_hosts") -> tuple[str, ...]:
     """The `agent_hosts` key of a `manual_plane` line, or () when it is missing or torn.
 
-    A torn key reads as no known host, which `agent_join_cmds` prints as a placeholder
-    rather than as no agent command at all. `key` reads the `hosts` key the same way.
+    A torn key reads as no known host. `key` reads the `hosts` key the same way.
     """
     hosts = obj.get(key)
     if not isinstance(hosts, list):

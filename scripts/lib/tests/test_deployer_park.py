@@ -9,7 +9,6 @@ Run: uv run pytest scripts/lib/tests/test_deployer_park.py
 
 import json
 
-import pytest
 
 from lib.deployer_park import (
     BEHIND_PARK_SECONDS,
@@ -20,14 +19,6 @@ from lib.deployer_park import (
     read_manual_plane_marker,
 )
 from gitops_markers import MARKERS
-import gitops_markers
-
-
-@pytest.fixture(autouse=True)
-def _agent_tables_hold_k3s(monkeypatch):
-    """The printers' tables are empty since H7.34, and H7.53 deletes the printers with the deployer."""
-    monkeypatch.setitem(gitops_markers.AGENT_JOIN_TAGS, "k3s", "k3s_agent")
-    monkeypatch.setitem(gitops_markers.AGENT_PIN_TAGS, "k3s", "node-address")
 
 
 # The shape the deployer writes: the origin SHA it is behind, then when it first saw it.
@@ -163,96 +154,3 @@ def test_the_playbook_prefix_is_defined_only_in_gitops_markers():
         "ansible/roles/setup/gitops_deploy/files/gitops_markers.py",
         "ansible/roles/k8s/monitor-bridge/files/gitops_markers.py",
     }
-
-
-def _in_order(text: str, *parts: str) -> None:
-    """Each of `parts` appears in `text`, first occurrences in the order given."""
-    at = [text.find(p) for p in parts]
-    assert -1 not in at, (
-        f"missing {[p for p, i in zip(parts, at, strict=True) if i < 0]} in {text}"
-    )
-    assert at == sorted(at), f"{parts} out of order in {text}"
-
-
-def test_a_whole_role_k3s_line_names_the_agent_join_before_the_clear(tmp_path):
-    """#5627: `--tags k3s` on daniel-box never reaches an agent node (#5606).
-
-    The deployer carries the agent hosts on the line, as it carries `host`, because this
-    banner cannot import the routing that names them.
-    """
-    line = {
-        "class": "manual_plane",
-        "subject": "k3s",
-        "origin": "f" * 40,
-        "at": 500,
-        "playbook": "ansible/k3s-bringup.yml",
-        "tags": [],
-        "agent_hosts": ["daniel-server"],
-    }
-    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
-    (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)
-    _in_order(
-        line_text,
-        "ansible/k3s-bringup.yml --tags k3s",
-        "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent",
-        "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address",
-        "clear-owed manual_plane k3s",
-    )
-
-
-_JOIN = "ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent"
-_PIN = "ansible/k3s-bringup.yml -e pin_agent_address=daniel-server --tags node-address"
-
-# A narrowed k3s row splits: `k3s_agent` goes on the join command, the rest on the server
-# command, and a row of `k3s_agent` alone prints no server command at all (#5628). A row of
-# `node-address` keeps the server command and adds the pin play, run on the agent (#5918). The
-# clear names the whole row either way.
-_SPLIT_ROWS = [
-    pytest.param(
-        ["k3s_agent"],
-        (_JOIN, "clear-owed manual_plane k3s --applied k3s_agent"),
-        "k3s-bringup.yml --tags",
-        id="agent-only",
-    ),
-    pytest.param(
-        ["k3s_agent", "k3s_server"],
-        (
-            "ansible/k3s-bringup.yml --tags k3s_server",
-            _JOIN,
-            "clear-owed manual_plane k3s --applied k3s_agent,k3s_server",
-        ),
-        "--tags k3s_agent,",
-        id="both-halves",
-    ),
-    pytest.param(
-        ["node-address"],
-        (
-            "ansible/k3s-bringup.yml --tags node-address",
-            _PIN,
-            "(run on daniel-server)",
-            "clear-owed manual_plane k3s --applied node-address",
-        ),
-        "join_agent",
-        id="pin-play",
-    ),
-]
-
-
-@pytest.mark.parametrize(("tags", "parts", "absent"), _SPLIT_ROWS)
-def test_a_narrowed_k3s_line_puts_its_agent_tag_on_the_join(
-    tmp_path, tags, parts, absent
-):
-    line = {
-        "class": "manual_plane",
-        "subject": "k3s",
-        "origin": "f" * 40,
-        "at": 500,
-        "playbook": "ansible/k3s-bringup.yml",
-        "tags": tags,
-        "agent_hosts": ["daniel-server"],
-    }
-    (tmp_path / MARKERS["owed"]).write_text(json.dumps(line) + "\n")
-    (line_text,) = manual_plane_lines(read_manual_plane_marker(str(tmp_path)), 4000)
-    _in_order(line_text, *parts)
-    assert absent not in line_text, line_text
-    assert "``" not in line_text, line_text
